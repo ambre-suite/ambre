@@ -1,0 +1,12 @@
+[package]
+name = "ambre-core"
+version = "0.1.0"
+edition = "2024"
+description = "Types fondamentaux d'Ambre (UUID, DocType, PublicKey)"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# Aucune dépendance WASM spécifique

@@ -1,0 +1,17 @@
+[package]
+name = "ambre-murmure"
+version = "0.1.0"
+edition = "2024"
+description = "Secure messaging application for Ambre — E2EE channels, segments"
+
+[dependencies]
+ambre-core = { path = "../ambre-core" }
+ambre-bus = { path = "../ambre-bus" }
+ambre-draw = { path = "../ambre-draw" }
+serde = { workspace = true }
+postcard = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+
+# CRDT
+loro = { workspace = true }

@@ -1,0 +1,11 @@
+[package]
+name = "ambre-protocol"
+version = "0.1.0"
+edition = "2024"
+description = "Wire protocol types for Ambre client-server communication"
+
+[dependencies]
+ambre-core = { path = "../ambre-core" }
+serde = { workspace = true, features = ["derive"] }
+postcard = { workspace = true }
+thiserror = { workspace = true }

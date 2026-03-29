@@ -1,0 +1,27 @@
+[package]
+name = "ambre-server"
+version = "0.1.0"
+edition = "2024"
+description = "Blind Relay server for Ambre — Axum, PostgreSQL, Valkey, S3"
+
+[dependencies]
+ambre-core = { path = "../ambre-core" }
+ambre-protocol = { path = "../ambre-protocol" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+postcard = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+async-trait = { workspace = true }
+
+# Server dependencies
+tokio = { workspace = true, features = ["full"] }
+axum = { workspace = true }
+sqlx = { workspace = true }
+rustis = { workspace = true }
+aws-sdk-s3 = { workspace = true }
+ed25519-dalek = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
