@@ -6,3 +6,20 @@
 //! This crate is the single source of truth for wire types; neither `ambre-sync`
 //! nor `ambre-server` redefine these structures.
 
+pub mod error;
+pub mod messages;
+pub mod public_data;
+pub mod signaling;
+pub mod version;
+pub mod ws;
+
+// Re‑exports for convenient consumption.
+pub use error::Error;
+pub use messages::{CommitmentTag, Ephemeral, Nonce, SeqUpdate, Signature, Snapshot, Update};
+pub use public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
+pub use signaling::{SignalingClientMsg, SignalingServerMsg};
+pub use version::{check_version, CURRENT_VERSION};
+pub use ws::{WsClientMsg, WsServerMsg};
+
+#[cfg(test)]
+mod tests;
