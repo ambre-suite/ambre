@@ -1,0 +1,10 @@
+[package]
+name = "ambre-draw"
+version = "0.1.0"
+edition = "2024"
+description = "Abstraction trait for shared rendering (screen & PDF) in Ambre"
+
+[dependencies]
+kurbo = { workspace = true }
+peniko = { workspace = true }
+parley = { workspace = true }

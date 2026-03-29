@@ -1,0 +1,17 @@
+[package]
+name = "ambre-prose"
+version = "0.1.0"
+edition = "2024"
+description = "Word processing application for Ambre — rich text, layout, import/export"
+
+[dependencies]
+ambre-core = { path = "../ambre-core" }
+ambre-bus = { path = "../ambre-bus" }
+ambre-draw = { path = "../ambre-draw" }
+serde = { workspace = true }
+postcard = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+
+# CRDT
+loro = { workspace = true }
