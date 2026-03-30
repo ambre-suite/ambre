@@ -1,6 +1,6 @@
-# AMBRE — Collaborative Office Suite
+# AMBRE - E2EE collaborative office suite, 100% Rust.
 
-**End-to-End Encrypted, 100% Rust, European Cloud**
+**End-to-End Encrypted, 100% Rust**
 
 AMBRE is a next-generation collaborative office suite built entirely in Rust, featuring real-time collaboration with CRDTs, end-to-end encryption (E2EE), and GPU-accelerated rendering via WebGPU. It runs as a single-page WebAssembly application with a Rust-native server backend.
 
@@ -60,17 +60,6 @@ All targets calibrated for a mid‑range 2024 smartphone.
 | **HTTP transport** | HTTP/2 minimum, HTTP/3 (QUIC) targeted | Multiplexing (HTTP/2), reduced mobile latency (QUIC eliminates TCP head‑of‑line blocking). |
 | **Encryption** | Modern pure‑Rust primitives | AEAD (XChaCha20‑Poly1305), signatures (Ed25519), key exchange (X25519), hash (BLAKE2b), KDF (Argon2). No OpenSSL bindings. |
 | **Compression** | zstd, pure Rust implementation | Applied before encryption. WASM‑compatible. |
-
-## Rejected Alternatives (Do Not Propose)
-
-| Alternative | Reason |
-|-------------|--------|
-| **JavaScript / TypeScript** | Incompatible with Rust‑first pillar. No memory‑safety guarantees. Insufficient performance for intensive client‑side computation (formulas, CRDT, crypto). |
-| **DOM / HTML for application UI** | Insufficient performance for 60 FPS rendering of complex documents (100k‑cell spreadsheet, infinite whiteboard). DOM is not designed for custom high‑performance rendering. |
-| **WebGL** | Low‑level API without 2D abstraction. WebGPU is its successor with a modern programming model and better performance. |
-| **OnlyOffice** | No native E2EE. Server‑centric architecture incompatible with the Blind Relay model. |
-| **CryptPad** | JavaScript stack, no CRDT (OT), DOM rendering. Does not satisfy Rust‑first and Performance pillars. |
-| **Electron / Tauri** | AMBRE is a web application (browser PWA). No native desktop client – single codebase, single deployment. |
 
 ## Project Structure
 
