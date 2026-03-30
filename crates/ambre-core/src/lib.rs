@@ -9,6 +9,7 @@
 pub mod doc_type;
 pub mod error;
 pub mod public_key;
+pub mod role;
 pub mod uuid;
 pub mod version;
 
@@ -16,5 +17,6 @@ pub mod version;
 pub use doc_type::DocType;
 pub use error::{DocTypeError, Error, PublicKeyError, UuidError, VersionError};
 pub use public_key::PublicKey;
+pub use role::Role;
 pub use uuid::Uuid;
 pub use version::Version;
