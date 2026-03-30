@@ -23,6 +23,10 @@ pub enum Error {
     /// Version byte validation failed.
     #[error("version error: {0}")]
     Version(#[from] VersionError),
+
+    /// Role validation failed.
+    #[error("role error: {0}")]
+    Role(#[from] RoleError),
 }
 
 /// Errors related to UUID operations.
@@ -63,4 +67,16 @@ pub enum VersionError {
     /// The version byte is out of allowed range (0‑127).
     #[error("version byte out of range: must be 0‑127, got {0}")]
     OutOfRange(u8),
+}
+
+/// Errors related to role operations.
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
+pub enum RoleError {
+    /// The provided discriminant is not a valid role.
+    #[error("invalid role discriminant: {0}")]
+    InvalidDiscriminant(u8),
+
+    /// The provided string is not a valid role.
+    #[error("invalid role string: {0}")]
+    InvalidString(String),
 }
