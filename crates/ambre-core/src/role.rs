@@ -61,20 +61,6 @@ impl Role {
         }
     }
 
-    /// Parses a role from a string (case‑insensitive).
-    ///
-    /// Returns `None` if the string does not match any known role.
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_ascii_lowercase().as_str() {
-            "owner" => Some(Self::Owner),
-            "editor" => Some(Self::Editor),
-            "viewer" => Some(Self::Viewer),
-            "admin" => Some(Self::Admin),
-            "member" => Some(Self::Member),
-            _ => None,
-        }
-    }
-
     /// Returns `true` if this role is allowed for documents.
     pub const fn is_valid_for_document(self) -> bool {
         matches!(self, Self::Owner | Self::Editor | Self::Viewer)
@@ -120,11 +106,21 @@ impl std::convert::TryFrom<u8> for Role {
     }
 }
 
+/// Parses a role from a string (case‑insensitive).
+///
+/// Returns `RoleError::InvalidString` if the string does not match any known role.
 impl FromStr for Role {
     type Err = RoleError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::from_str(s).ok_or_else(|| RoleError::InvalidString(s.to_string()))
+        match s.to_ascii_lowercase().as_str() {
+            "owner" => Ok(Self::Owner),
+            "editor" => Ok(Self::Editor),
+            "viewer" => Ok(Self::Viewer),
+            "admin" => Ok(Self::Admin),
+            "member" => Ok(Self::Member),
+            _ => Err(RoleError::InvalidString(s.to_string())),
+        }
     }
 }
 
@@ -162,12 +158,12 @@ mod tests {
 
     #[test]
     fn test_from_str() {
-        assert_eq!(Role::from_str("owner"), Some(Role::Owner));
-        assert_eq!(Role::from_str("EDITOR"), Some(Role::Editor));
-        assert_eq!(Role::from_str("Viewer"), Some(Role::Viewer));
-        assert_eq!(Role::from_str("admin"), Some(Role::Admin));
-        assert_eq!(Role::from_str("member"), Some(Role::Member));
-        assert_eq!(Role::from_str("guest"), None);
+        assert_eq!(Role::from_str("owner"), Ok(Role::Owner));
+        assert_eq!(Role::from_str("EDITOR"), Ok(Role::Editor));
+        assert_eq!(Role::from_str("Viewer"), Ok(Role::Viewer));
+        assert_eq!(Role::from_str("admin"), Ok(Role::Admin));
+        assert_eq!(Role::from_str("member"), Ok(Role::Member));
+        assert_eq!(Role::from_str("guest"), Err(RoleError::InvalidString("guest".to_string())));
     }
 
     #[test]
