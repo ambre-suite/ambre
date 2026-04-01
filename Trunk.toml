@@ -1,0 +1,13 @@
+[build]
+target = "index.html"
+filehash = false
+
+[serve]
+port = 8080
+open = true
+
+[profile.dev]
+wasm_opt = false # disable wasm optimization for faster builds during development
+
+[profile.release]
+wasm_opt = "z" # optimize for size
