@@ -19,6 +19,7 @@ unified = ["dep:ambre-logic-worker", "dep:ambre-sync-worker"]
 [dependencies]
 ambre-bus          = { path = "../ambre-bus" }
 ambre-core         = { path = "../ambre-core" }
+ambre-trame        = { path = "../ambre-trame" }
 ambre-logic-worker = { path = "../ambre-logic-worker", optional = true }
 ambre-sync-worker  = { path = "../ambre-sync-worker", optional = true }
 

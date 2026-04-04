@@ -32,9 +32,13 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{DedicatedWorkerGlobalScope, MessageEvent, MessagePort};
 
+mod trame;
+
 use ambre_bus::{
     AppController, CommandSink, DocType, LogicEnvelope, LogicEvent, SyncCommand, UiEnvelope, Uuid,
+    IPC_TEST_DOC_ID,
 };
+use trame::TrameController;
 
 // -----------------------------------------------------------------------------
 // PortCommandSink - concrete CommandSink backed by a Web Worker MessagePort
@@ -64,6 +68,21 @@ impl CommandSink for PortCommandSink {
 }
 
 // -----------------------------------------------------------------------------
+// RcCommandSink - thin CommandSink adapter over a shared PortCommandSink
+// -----------------------------------------------------------------------------
+
+/// Wraps the shared [`PortCommandSink`] in an `Rc` so that each [`AppController`]
+/// can hold an owned `Box<dyn CommandSink>` without duplicating the underlying
+/// `MessagePort`.
+struct RcCommandSink(Rc<PortCommandSink>);
+
+impl CommandSink for RcCommandSink {
+    fn send(&self, cmd: SyncCommand) {
+        self.0.send(cmd);
+    }
+}
+
+// -----------------------------------------------------------------------------
 // LogicWorkerState
 // -----------------------------------------------------------------------------
 
@@ -76,17 +95,37 @@ struct LogicWorkerState {
     /// Active document controllers, keyed by `document_id`.
     ///
     /// A controller is inserted when the first [`LogicEvent::RemoteSnapshot`]
-    /// arrives for a document (via `ControllerRegistry::create`, not yet wired)
-    /// and removed on `CloseDocument` or `DeleteDocument`.
+    /// arrives for a document and removed on `CloseDocument` or `DeleteDocument`.
     controllers: HashMap<Uuid, Box<dyn AppController>>,
+    /// `DocType` received from `DocumentCreated` before the first snapshot.
+    ///
+    /// When the Sync Worker opens a document it emits `DocumentCreated` (which
+    /// carries the `doc_type`) followed by `RemoteSnapshot`. The Logic Worker
+    /// stores the `doc_type` here so that `make_controller` can pick the right
+    /// implementation when the snapshot arrives.
+    ///
+    /// The entry is removed once the controller is created.
+    pending_doc_types: HashMap<Uuid, DocType>,
 }
 
 impl LogicWorkerState {
     fn new(global: DedicatedWorkerGlobalScope, sync_port: MessagePort) -> Self {
+        let sync_sink = Rc::new(PortCommandSink { port: sync_port });
+
+        // Pre-seed a TrameController for the IPC smoke-test document so that
+        // key events from the UI Thread are dispatched without going through
+        // the full auth + document-open flow. Remove once that flow is wired.
+        let mut controllers: HashMap<Uuid, Box<dyn AppController>> = HashMap::new();
+        controllers.insert(
+            IPC_TEST_DOC_ID,
+            Box::new(TrameController::new(Box::new(RcCommandSink(Rc::clone(&sync_sink))))),
+        );
+
         Self {
             global,
-            sync_sink: Rc::new(PortCommandSink { port: sync_port }),
-            controllers: HashMap::new(),
+            sync_sink,
+            controllers,
+            pending_doc_types: HashMap::new(),
         }
     }
 
@@ -102,6 +141,28 @@ impl LogicWorkerState {
         self.global
             .post_message_with_transfer(&ab, &transfer)
             .expect("postMessage LogicEnvelope to UI Thread");
+    }
+
+    // -- Controller factory ----------------------------------------------------
+
+    /// Instantiate the right [`AppController`] for `doc_type`, wired to the
+    /// Sync Worker sink, ready to receive its first snapshot.
+    ///
+    /// Returns `None` for doc types whose controller is not yet implemented.
+    fn make_controller(&self, doc_type: DocType) -> Option<Box<dyn AppController>> {
+        match doc_type {
+            DocType::Trame => Some(Box::new(TrameController::new(Box::new(RcCommandSink(
+                Rc::clone(&self.sync_sink),
+            ))))),
+            DocType::Prose | DocType::Toile | DocType::Murmure => {
+                log::warn!(
+                    "Logic Worker: no controller implemented for {:?}, \
+                     document will not render",
+                    doc_type
+                );
+                None
+            }
+        }
     }
 
     // -- Inbound: UI Thread -> Logic Worker ------------------------------------
@@ -332,6 +393,9 @@ impl LogicWorkerState {
                 self.send_to_ui(&LogicEnvelope::DocumentList { documents });
             }
             LogicEvent::DocumentCreated { document_id, doc_type } => {
+                // Store the doc_type so the controller factory can use it when
+                // the first RemoteSnapshot arrives for this document.
+                self.pending_doc_types.insert(document_id, doc_type);
                 self.send_to_ui(&LogicEnvelope::DocumentCreated { document_id, doc_type });
             }
             LogicEvent::DocumentDeleted { document_id } => {
@@ -344,14 +408,22 @@ impl LogicWorkerState {
             // -- Real-time sync ------------------------------------------------
 
             LogicEvent::RemoteSnapshot { document_id, payload } => {
-                // The controller must already exist (created by ControllerRegistry
-                // upon OpenDocument + DocumentCreated). If it doesn't, the snapshot
-                // is silently dropped - the Sync Worker will re-send on reconnect.
+                // Create the controller on first snapshot if not already present.
+                // The doc_type was stored by the DocumentCreated handler above.
+                if !self.controllers.contains_key(&document_id) {
+                    if let Some(doc_type) = self.pending_doc_types.remove(&document_id) {
+                        if let Some(ctrl) = self.make_controller(doc_type) {
+                            self.controllers.insert(document_id, ctrl);
+                        }
+                    } else {
+                        log::warn!(
+                            "Logic Worker: no pending doc_type for {document_id}, \
+                             dropping RemoteSnapshot"
+                        );
+                        return;
+                    }
+                }
                 let Some(ctrl) = self.controllers.get_mut(&document_id) else {
-                    log::warn!(
-                        "Logic Worker: no controller for {document_id}, \
-                         dropping RemoteSnapshot (ControllerRegistry not yet wired)"
-                    );
                     return;
                 };
                 for resp in

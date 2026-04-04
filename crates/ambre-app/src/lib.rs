@@ -26,8 +26,9 @@
 //   is single-threaded: no atomics, no Send/Sync requirement, O(1) push/drain.
 // ============================================================================
 
-use ambre_bus::LogicEnvelope;
-use std::cell::RefCell;
+use ambre_bus::{IPC_TEST_DOC_ID, LogicEnvelope, UiEnvelope};
+use ambre_trame::{TrameCommand, TrameViewUpdate};
+use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::rc::Rc;
 use wasm_bindgen::JsCast;
@@ -90,7 +91,6 @@ struct UiState {
     // vello_renderer: vello::Renderer,
     // masonry_root:   masonry::RootWidget,
     // router:         Router,
-    // pending_raf:    bool,
 }
 
 #[allow(dead_code)]
@@ -112,12 +112,21 @@ impl UiState {
     /// Dispatch a single [`LogicEnvelope`] received from the Logic Worker.
     fn handle_logic_envelope(&mut self, envelope: LogicEnvelope) {
         match envelope {
-            LogicEnvelope::ViewportUpdate {
-                document_id: _,
-                payload: _,
-            } => {
-                // Submit display list to the Vello/wgpu render pipeline.
-                // self.request_frame();
+            LogicEnvelope::ViewportUpdate { document_id: _, payload } => {
+                // IPC smoke-test: log key count and round-trip latency.
+                // Remove once the Vello/wgpu render pipeline is wired.
+                if let Ok(update) = postcard::from_bytes::<TrameViewUpdate>(&payload) {
+                    let TrameViewUpdate::KeyCount { count, seq, t0_ms } = update;
+                    let t1_ms = web_sys::window()
+                        .and_then(|w| w.performance())
+                        .map(|p| p.now())
+                        .unwrap_or(0.0);
+                    log::info!(
+                        "[IPC] key_count={count} seq={seq} rtt={:.2}ms",
+                        t1_ms - t0_ms
+                    );
+                }
+                // TODO: submit display list to the Vello/wgpu render pipeline.
             }
             LogicEnvelope::PresenceUpdate {
                 document_id: _,
@@ -260,6 +269,32 @@ pub fn main() {
     ui_main();
 }
 
+// -----------------------------------------------------------------------------
+// rAF loop
+// -----------------------------------------------------------------------------
+
+/// Schedule a single `requestAnimationFrame` callback that calls `render()` and
+/// then reschedules itself.
+///
+/// Each frame allocates and `forget()`s a `Closure` — the browser holds it alive
+/// for exactly one frame then drops it. This is the standard pattern for a
+/// continuous rAF loop from WASM when the closure must capture an `Rc`.
+///
+/// Conditional rendering (skipping paint when there is no invalidation) will be
+/// added once the Masonry dirty-flag plumbing is in place.
+fn schedule_raf(state: Rc<RefCell<UiState>>) {
+    let state_for_frame = Rc::clone(&state);
+    let cb = Closure::<dyn FnMut(f64)>::new(move |_timestamp: f64| {
+        state_for_frame.borrow_mut().render();
+        schedule_raf(Rc::clone(&state_for_frame));
+    });
+    web_sys::window()
+        .expect("no window in UI Thread")
+        .request_animation_frame(cb.as_ref().unchecked_ref())
+        .expect("requestAnimationFrame");
+    cb.forget();
+}
+
 fn ui_main() {
     log::info!("Ambre UI Thread starting");
 
@@ -366,13 +401,46 @@ fn ui_main() {
     //   LoginButton.on_click -> UiEnvelope::Unlock { passphrase }
     //   -> send_to_worker(&logic_worker, &envelope)
 
-    // Suppress unused variable warnings until rAF loop is wired.
-    let _ = state;
+    // -- IPC smoke-test: keydown -> TrameController -> RTT log -----------------
+    // Temporary DOM listener: exercises the full IPC round-trip before
+    // Winit/Masonry input capture is wired. Replaced by on_event in
+    // ambre-app/src/trame/ once the GPU surface is initialized.
+    {
+        let logic_worker = state.borrow().logic_worker.clone();
+        let seq = Rc::new(Cell::new(0u64));
+        let cb =
+            Closure::<dyn FnMut(web_sys::KeyboardEvent)>::new(move |_: web_sys::KeyboardEvent| {
+                let t0_ms = web_sys::window()
+                    .and_then(|w| w.performance())
+                    .map(|p| p.now())
+                    .unwrap_or(0.0);
+                let n = seq.get();
+                seq.set(n + 1);
+                let payload = postcard::to_allocvec(&TrameCommand::KeyPress { seq: n, t0_ms })
+                    .expect("serialize TrameCommand");
+                send_to_worker(
+                    &logic_worker,
+                    &UiEnvelope::AppCommand { document_id: IPC_TEST_DOC_ID, payload },
+                );
+            });
+        web_sys::window()
+            .expect("no window")
+            .document()
+            .expect("no document")
+            .add_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref())
+            .expect("add keydown listener");
+        cb.forget();
+    }
 
     log::info!("Ambre UI Thread ready");
 
-    // Hide the loading screen. Once the rAF loop and GPU surface are wired,
-    // this call moves to the first successful frame present instead.
+    // Start the requestAnimationFrame loop. Each frame drains the inbound
+    // LogicEnvelope queue and runs the Masonry/Vello pipeline (steps 2-7 are
+    // stubs until the GPU surface is wired).
+    schedule_raf(state);
+
+    // Hide the loading screen. Moves to after surface_texture.present() once
+    // the GPU surface is wired, so the screen only disappears on a real frame.
     if let Some(window) = web_sys::window()
         && let Ok(f) = js_sys::Reflect::get(&window, &"ambreReady".into())
         && let Ok(f) = f.dyn_into::<js_sys::Function>()
