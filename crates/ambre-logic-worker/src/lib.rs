@@ -10,13 +10,13 @@
 //
 // Out of scope:
 //   - Cryptography, compression, network — handled exclusively by the Sync Worker.
-//   - Rendering — handled by the Render Worker / UI Thread (Vello + wgpu).
+//   - Rendering — handled by the UI Thread (Vello + wgpu).
 //
 // IPC topology:
-//   UI Thread  ──UiEnvelope (postMessage)──▶  Logic Worker
-//   UI Thread  ◀──LogicEnvelope (postMessage)──  Logic Worker
-//   Logic Worker  ──SyncCommand (MessagePort)──▶  Sync Worker
-//   Logic Worker  ◀──LogicEvent (MessagePort)──  Sync Worker
+//   UI Thread    ---UiEnvelope (postMessage)---->  Logic Worker
+//   UI Thread    <---LogicEnvelope (postMessage)-- Logic Worker
+//   Logic Worker ---SyncCommand (MessagePort)---->  Sync Worker
+//   Logic Worker <---LogicEvent (MessagePort)----  Sync Worker
 //
 // Bootstrap (2-phase):
 //   Phase 1 — global.onmessage (once): receive the MessagePort to the Sync Worker.
@@ -347,22 +347,17 @@ impl LogicWorkerState {
                 // The controller must already exist (created by ControllerRegistry
                 // upon OpenDocument + DocumentCreated). If it doesn't, the snapshot
                 // is silently dropped — the Sync Worker will re-send on reconnect.
-                if !self.controllers.contains_key(&document_id) {
+                let Some(ctrl) = self.controllers.get_mut(&document_id) else {
                     log::warn!(
                         "Logic Worker: no controller for {document_id}, \
                          dropping RemoteSnapshot (ControllerRegistry not yet wired)"
                     );
                     return;
-                }
-                if let Some(ctrl) = self.controllers.get_mut(&document_id) {
-                    for resp in
-                        ctrl.on_logic_event(LogicEvent::RemoteSnapshot { document_id, payload })
-                    {
-                        self.send_to_ui(&LogicEnvelope::ViewportUpdate {
-                            document_id,
-                            payload: resp,
-                        });
-                    }
+                };
+                for resp in
+                    ctrl.on_logic_event(LogicEvent::RemoteSnapshot { document_id, payload })
+                {
+                    self.send_to_ui(&LogicEnvelope::ViewportUpdate { document_id, payload: resp });
                 }
             }
 

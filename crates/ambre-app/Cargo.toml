@@ -8,11 +8,19 @@ description = "UI Thread WASM — Vello/Masonry rendering, rAF loop, input captu
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+# In dev, one WASM binary serves all three roles (UI Thread + Logic + Sync).
+# The dispatcher in main() routes to the correct worker start() based on
+# DedicatedWorkerGlobalScope::name(). Disable for standalone (split) builds
+# where each worker is compiled as its own independent binary.
+default = ["unified"]
+unified = ["dep:ambre-logic-worker", "dep:ambre-sync-worker"]
+
 [dependencies]
 ambre-bus          = { path = "../ambre-bus" }
 ambre-core         = { path = "../ambre-core" }
-ambre-logic-worker = { path = "../ambre-logic-worker" }
-ambre-sync-worker  = { path = "../ambre-sync-worker" }
+ambre-logic-worker = { path = "../ambre-logic-worker", optional = true }
+ambre-sync-worker  = { path = "../ambre-sync-worker", optional = true }
 
 serde    = { workspace = true }
 postcard = { workspace = true }
