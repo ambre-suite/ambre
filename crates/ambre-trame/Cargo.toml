@@ -2,19 +2,7 @@
 name = "ambre-trame"
 version = "0.1.0"
 edition = "2024"
-description = "Spreadsheet application for Ambre — grid, formulas, DAG"
+description = "Trame IPC types -- TrameCommand, TrameViewUpdate, DisplayCell (serde only, no CRDT/GPU deps)"
 
 [dependencies]
-ambre-core = { path = "../ambre-core" }
-ambre-bus = { path = "../ambre-bus" }
-ambre-draw = { path = "../ambre-draw" }
 serde = { workspace = true }
-postcard = { workspace = true }
-thiserror = { workspace = true }
-log = { workspace = true }
-
-# CRDT
-loro = { workspace = true }
-
-# Graph for formula DAG
-petgraph = { workspace = true }

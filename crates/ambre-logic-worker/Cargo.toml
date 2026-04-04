@@ -14,8 +14,13 @@ crate-type = ["cdylib", "rlib"]
 standalone = []
 
 [dependencies]
-ambre-bus  = { path = "../ambre-bus" }
-ambre-core = { path = "../ambre-core" }
+ambre-bus   = { path = "../ambre-bus" }
+ambre-core  = { path = "../ambre-core" }
+ambre-trame = { path = "../ambre-trame" }
+
+# App logic deps (heavy -- must not appear in ambre-trame or ambre-app)
+loro     = { workspace = true }
+petgraph = { workspace = true }
 
 serde    = { workspace = true }
 postcard = { workspace = true }

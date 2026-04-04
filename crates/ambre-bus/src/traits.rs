@@ -54,22 +54,9 @@ pub trait CommandSink {
 pub trait AppController {
     /// Returns the document type this controller handles.
     ///
-    /// Used by the `ControllerRegistry` to instantiate the correct controller
-    /// when the first [`LogicEvent::RemoteSnapshot`] arrives for a document.
-    ///
-    /// [`LogicEvent::RemoteSnapshot`]: crate::LogicEvent::RemoteSnapshot
+    /// Used by the controller factory to verify the correct type is being
+    /// constructed for a given document.
     fn doc_type(&self) -> DocType;
-
-    /// Wire the controller to the Sync Worker command channel.
-    ///
-    /// Called once immediately after construction, before any messages are
-    /// dispatched. The controller stores `sync_tx` for the lifetime of the
-    /// document session and uses it to emit [`SyncCommand::SendUpdate`],
-    /// [`SyncCommand::SendEphemeral`], etc. in response to user edits.
-    ///
-    /// [`SyncCommand::SendUpdate`]: crate::SyncCommand::SendUpdate
-    /// [`SyncCommand::SendEphemeral`]: crate::SyncCommand::SendEphemeral
-    fn init(&mut self, sync_tx: Box<dyn CommandSink>);
 
     /// Process a UI command and return display updates for the UI Thread.
     ///

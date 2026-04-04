@@ -51,10 +51,15 @@ winit = "0.30"
 gloo-net = { version = "0.7", features = ["http", "websocket"] }
 web-sys = { version = "0.3.85", features = [
     "DedicatedWorkerGlobalScope",
+    "Document",
+    "EventTarget",
+    "KeyboardEvent",
     "MessageChannel",
     "MessageEvent",
     "MessagePort",
+    "Performance",
     "WebSocket",
+    "Window",
     "Worker",
     "WorkerOptions",
     "WorkerType",

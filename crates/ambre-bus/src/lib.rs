@@ -17,6 +17,17 @@ pub use traits::{AppController, CommandSink};
 // Re‑export core types so that users don't need to depend on ambre‑core directly.
 pub use ambre_core::{DocType, PublicKey, Role, Uuid};
 
+/// Fixed document_id used for end-to-end IPC smoke-testing before the full
+/// auth and document-open flow is wired.
+///
+/// Both the UI Thread and the Logic Worker reference this constant so the
+/// pre-seeded test controller and the keydown event listener stay in sync.
+/// Remove once real document management is operational.
+pub const IPC_TEST_DOC_ID: Uuid = Uuid::from_bytes([
+    0x01, 0x96, 0x00, 0x00, 0x00, 0x00, 0x70, 0x00,
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+]);
+
 #[cfg(test)]
 mod tests {
     use super::*;
