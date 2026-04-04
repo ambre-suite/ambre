@@ -1,6 +1,6 @@
 // ambre-app/src/lib.rs
 // ============================================================================
-// UI Thread entry point — main JS thread (cdylib, #[wasm_bindgen(start)]).
+// UI Thread entry point - main JS thread (cdylib, #[wasm_bindgen(start)]).
 //
 // Responsibilities:
 //   - Own HTMLCanvasElement, GPUDevice, Vello renderer, Masonry widget tree.
@@ -9,12 +9,12 @@
 //   - Spawn the Logic Worker and Sync Worker; wire the MessageChannel between them.
 //
 // Out of scope:
-//   - fetch(), WebSocket, crypto, compression — exclusively in the Sync Worker.
-//   - CRDT mutations, formula evaluation — exclusively in the Logic Worker.
+//   - fetch(), WebSocket, crypto, compression - exclusively in the Sync Worker.
+//   - CRDT mutations, formula evaluation - exclusively in the Logic Worker.
 //
 // IPC:
-//   UiEnvelope  (postcard + ArrayBuffer transfer) → Logic Worker
-//   LogicEnvelope (postcard + ArrayBuffer transfer) ← Logic Worker
+//   UiEnvelope  (postcard + ArrayBuffer transfer) -> Logic Worker
+//   LogicEnvelope (postcard + ArrayBuffer transfer) <- Logic Worker
 //
 // Inbound queue:
 //   The Logic Worker's `onmessage` callback fires outside the rAF loop.
@@ -38,9 +38,9 @@ use web_sys::{MessageChannel, MessageEvent, Worker, WorkerOptions, WorkerType};
 #[cfg(feature = "unified")]
 use web_sys::DedicatedWorkerGlobalScope;
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Bridge helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /// Serialize `msg` with postcard and transfer its `ArrayBuffer` to `worker`.
 ///
@@ -69,9 +69,9 @@ fn extract_logic_envelope(event: &MessageEvent) -> Option<LogicEnvelope> {
     postcard::from_bytes(&bytes).ok()
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // UiState
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 struct UiState {
     /// Handle used to send UiEnvelopes to the Logic Worker.
@@ -82,7 +82,7 @@ struct UiState {
     ///
     /// Shared (`Rc` clone) between `UiState` and the `onmessage` closure.
     pending: Rc<RefCell<VecDeque<LogicEnvelope>>>,
-    // ── Real fields (wired in a future commit) ────────────────────────────
+    // -- Real fields (wired in a future commit) ----------------------------
     // canvas:         web_sys::HtmlCanvasElement,
     // gpu_device:     wgpu::Device,
     // gpu_queue:      wgpu::Queue,
@@ -95,7 +95,7 @@ struct UiState {
 
 #[allow(dead_code)]
 impl UiState {
-    // ── Step 1 — drain inbound queue ─────────────────────────────────────────
+    // -- Step 1 - drain inbound queue -----------------------------------------
 
     /// Drain all `LogicEnvelope`s queued since the last frame and dispatch them.
     ///
@@ -171,14 +171,14 @@ impl UiState {
         }
     }
 
-    // ── Step 2–7 — Masonry + Vello + GPU ─────────────────────────────────────
+    // -- Step 2-7 - Masonry + Vello + GPU -------------------------------------
 
     /// Schedule a rAF callback if not already pending.
     fn request_frame(&mut self) {
         // if !self.pending_raf {
         //     self.pending_raf = true;
         //     let window = web_sys::window().unwrap();
-        //     // closure holding Rc<RefCell<UiState>> — wired at bootstrap
+        //     // closure holding Rc<RefCell<UiState>> - wired at bootstrap
         //     window.request_animation_frame(...).unwrap();
         // }
     }
@@ -187,12 +187,12 @@ impl UiState {
     ///
     /// ```text
     /// 1. drain_pending()                       (~0.1 ms)
-    /// 2. Masonry on_event → update             (~0.2 ms)
-    ///    drain widget VecDeques → send_to_worker (UiEnvelope batch)
-    /// 3. Masonry layout (invalidated subtrees) (~0.5–2 ms)
+    /// 2. Masonry on_event -> update             (~0.2 ms)
+    ///    drain widget VecDeques -> send_to_worker (UiEnvelope batch)
+    /// 3. Masonry layout (invalidated subtrees) (~0.5-2 ms)
     /// 4. AccessKit diff                        (~0.1 ms)
-    /// 5. Masonry paint → vello::Scene          (~0.5–1 ms)
-    /// 6. Vello render → wgpu intermediate      (~0.3–1 ms)
+    /// 5. Masonry paint -> vello::Scene          (~0.5-1 ms)
+    /// 6. Vello render -> wgpu intermediate      (~0.3-1 ms)
     /// 7. surface_texture.present()
     /// ```
     fn render(&mut self) {
@@ -227,11 +227,11 @@ impl UiState {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Entry point dispatcher + bootstrap
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
-/// Entry point — behaviour differs between build modes.
+/// Entry point - behaviour differs between build modes.
 ///
 /// unified (default, dev): one binary loaded three times. The JS bootstrap
 /// passes `{ name: "logic" | "sync" }` to the Worker constructor; the main
@@ -263,7 +263,7 @@ pub fn main() {
 fn ui_main() {
     log::info!("Ambre UI Thread starting");
 
-    // ── Spawn Workers (each is a separate WASM module, isolated linear memory) ─
+    // -- Spawn Workers (each is a separate WASM module, isolated linear memory) -
 
     // Workers are ES module workers. The name is the discriminant used by the
     // dispatcher in #[wasm_bindgen(start)] to route to the correct start().
@@ -283,9 +283,9 @@ fn ui_main() {
     let sync_worker =
         Worker::new_with_options("./sync_worker.js", &sync_opts).expect("spawn Sync Worker");
 
-    // ── MessageChannel: direct Logic ↔ Sync (bypasses UI Thread) ─────────────
+    // -- MessageChannel: direct Logic <-> Sync (bypasses UI Thread) ------------
     //
-    // port1 → Logic Worker, port2 → Sync Worker.
+    // port1 -> Logic Worker, port2 -> Sync Worker.
     // Ports are transferred inside the ready handlers below, not immediately,
     // because postMessage races WASM initialization (the workers set their
     // onmessage handler asynchronously after init() resolves).
@@ -301,7 +301,7 @@ fn ui_main() {
 
     let pending: Rc<RefCell<VecDeque<LogicEnvelope>>> = Rc::new(RefCell::new(VecDeque::new()));
 
-    // ── Logic Worker ready handler ────────────────────────────────────────────
+    // -- Logic Worker ready handler --------------------------------------------
     {
         let port1 = channel.port1();
         let pending = Rc::clone(&pending);
@@ -327,7 +327,7 @@ fn ui_main() {
         on_ready.forget();
     }
 
-    // ── Sync Worker ready handler ─────────────────────────────────────────────
+    // -- Sync Worker ready handler ---------------------------------------------
     // The Sync Worker never messages the UI Thread directly; no steady-state
     // handler is needed on this side.
     {
@@ -345,26 +345,26 @@ fn ui_main() {
         on_ready.forget();
     }
 
-    // ── Build UiState ─────────────────────────────────────────────────────────
+    // -- Build UiState ---------------------------------------------------------
 
     let state = Rc::new(RefCell::new(UiState {
         logic_worker,
         pending: Rc::clone(&pending),
     }));
 
-    // ── Input events (wired when Masonry/Winit bootstrap is complete) ─────────
+    // -- Input events (wired when Masonry/Winit bootstrap is complete) ---------
     //
-    // P1 — Scroll (< 15 ms):
-    //   Portal.on_scroll → UiEnvelope::ScrollTo { document_id, top_row, … }
-    //   → send_to_worker(&logic_worker, &envelope)
+    // P1 - Scroll (< 15 ms):
+    //   Portal.on_scroll -> UiEnvelope::ScrollTo { document_id, top_row, … }
+    //   -> send_to_worker(&logic_worker, &envelope)
     //
-    // P2 — Edit:
-    //   Grid2D.on_double_click → UiEnvelope::AppCommand { document_id, payload }
-    //   → send_to_worker(&logic_worker, &envelope)
+    // P2 - Edit:
+    //   Grid2D.on_double_click -> UiEnvelope::AppCommand { document_id, payload }
+    //   -> send_to_worker(&logic_worker, &envelope)
     //
-    // P3 — Session:
-    //   LoginButton.on_click → UiEnvelope::Unlock { passphrase }
-    //   → send_to_worker(&logic_worker, &envelope)
+    // P3 - Session:
+    //   LoginButton.on_click -> UiEnvelope::Unlock { passphrase }
+    //   -> send_to_worker(&logic_worker, &envelope)
 
     // Suppress unused variable warnings until rAF loop is wired.
     let _ = state;
