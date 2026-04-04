@@ -1,29 +1,29 @@
 // ambre-sync-worker/src/lib.rs
 // ============================================================================
-// Sync Worker entry point — dedicated Web Worker, isolated linear memory.
+// Sync Worker entry point - dedicated Web Worker, isolated linear memory.
 //
 // Responsibilities:
-//   - Own ALL cryptographic material (MasterSeed, DocumentKeys) — never leaves
+//   - Own ALL cryptographic material (MasterSeed, DocumentKeys) - never leaves
 //     this Worker.
 //   - Own the single session-level WebSocket (one WS, N document subscriptions).
 //   - Perform HTTP REST calls (fetch via gloo-net).
 //   - Encrypt/decrypt/compress/decompress every outbound and inbound payload.
 //
 // Out of scope:
-//   - CRDT mutations — exclusively in the Logic Worker.
-//   - Rendering, input — exclusively in the UI Thread.
+//   - CRDT mutations - exclusively in the Logic Worker.
+//   - Rendering, input - exclusively in the UI Thread.
 //
 // IPC:
-//   SyncCommand  (postcard + ArrayBuffer via MessagePort) ← Logic Worker
-//   LogicEvent   (postcard + ArrayBuffer via MessagePort) → Logic Worker
+//   SyncCommand  (postcard + ArrayBuffer via MessagePort) <- Logic Worker
+//   LogicEvent   (postcard + ArrayBuffer via MessagePort) -> Logic Worker
 //
 // Bootstrap (2-phase):
-//   Phase 1 — global.onmessage (once): receive the MessagePort to the Logic Worker.
-//   Phase 2 — port.onmessage (steady-state): dispatch SyncCommand messages.
+//   Phase 1 - global.onmessage (once): receive the MessagePort to the Logic Worker.
+//   Phase 2 - port.onmessage (steady-state): dispatch SyncCommand messages.
 //
 // WebSocket topology:
 //   ONE WebSocket per session, opened at Unlock, closed at Logout.
-//   OpenDocument / CloseDocument → Subscribe / Unsubscribe on the shared WS.
+//   OpenDocument / CloseDocument -> Subscribe / Unsubscribe on the shared WS.
 //   All documents are demultiplexed by document_id on incoming WsServerMsg.
 // ============================================================================
 
@@ -41,9 +41,9 @@ use ambre_protocol::{
     ws::{WsClientMsg, WsServerMsg, decode_server_msg, encode_client_msg},
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Crypto types (placeholders — real implementations in ambre-crypto)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// Crypto types (placeholders - real implementations in ambre-crypto)
+// -----------------------------------------------------------------------------
 
 /// 32-byte master seed derived from the user's passphrase via Argon2id.
 ///
@@ -53,9 +53,9 @@ struct MasterSeed([u8; 32]);
 /// Per-document symmetric encryption key (XChaCha20-Poly1305). Zeroized on drop.
 struct DocumentKey([u8; 32]);
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Per-document sync session
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /// State for one open document sync session.
 ///
@@ -69,7 +69,7 @@ struct SyncDocumentState {
     local_clock: u64,
     /// Last server sequence number seen (used for delta-sync on reconnect).
     last_seq: Seq,
-    /// Updates received before their parent snapshot — bounded to 1000 entries
+    /// Updates received before their parent snapshot - bounded to 1000 entries
     /// to prevent unbounded memory growth.
     quarantine: Vec<(u64, Vec<u8>)>,
 }
@@ -80,9 +80,9 @@ impl SyncDocumentState {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // SyncWorkerState
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /// All mutable state owned by the Sync Worker after bootstrap.
 struct SyncWorkerState {
@@ -91,17 +91,17 @@ struct SyncWorkerState {
     /// Base URL for REST API calls (e.g. `"api.ambre.app"`).
     api_base: String,
 
-    // ── Session-level crypto (derived once at Unlock, zeroized at Logout) ────
+    // -- Session-level crypto (derived once at Unlock, zeroized at Logout) ----
     master_seed: Option<MasterSeed>,
     // signing_key:  Option<ed25519_dalek::SigningKey>,
     // exchange_key: Option<x25519_dalek::StaticSecret>,
 
-    // ── Single multiplexed WebSocket ─────────────────────────────────────────
+    // -- Single multiplexed WebSocket -----------------------------------------
     ws: Option<WebSocket>,
     /// JS closures attached to the WebSocket. Must be kept alive to prevent GC.
     _ws_closures: Vec<Closure<dyn FnMut(MessageEvent)>>,
 
-    // ── Per-document sync sessions ────────────────────────────────────────────
+    // -- Per-document sync sessions --------------------------------------------
     documents: HashMap<Uuid, SyncDocumentState>,
 }
 
@@ -117,7 +117,7 @@ impl SyncWorkerState {
         }
     }
 
-    // ── Outbound: Sync Worker → Logic Worker ─────────────────────────────────
+    // -- Outbound: Sync Worker -> Logic Worker ---------------------------------
 
     /// Serialize `event` with postcard and transfer it to the Logic Worker.
     fn send_to_logic(&self, event: &LogicEvent) {
@@ -131,7 +131,7 @@ impl SyncWorkerState {
             .expect("postMessage LogicEvent to Logic Worker");
     }
 
-    // ── Outbound: Sync Worker → Server (WebSocket) ───────────────────────────
+    // -- Outbound: Sync Worker -> Server (WebSocket) ---------------------------
 
     /// Serialize `msg` with postcard (prefixed with wire version byte) and send
     /// over the multiplexed WebSocket.
@@ -141,7 +141,7 @@ impl SyncWorkerState {
         ws.send_with_u8_array(&wire).expect("WebSocket send");
     }
 
-    // ── Inbound: Logic Worker → Sync Worker ──────────────────────────────────
+    // -- Inbound: Logic Worker -> Sync Worker ----------------------------------
 
     /// Deserialize a [`SyncCommand`] from `bytes` and dispatch it.
     fn handle_command(&mut self, bytes: &[u8]) {
@@ -149,7 +149,7 @@ impl SyncWorkerState {
             postcard::from_bytes(bytes).expect("postcard deserialize SyncCommand");
 
         match cmd {
-            // ── Session ───────────────────────────────────────────────────────
+            // -- Session -------------------------------------------------------
             SyncCommand::Unlock { passphrase } => self.handle_unlock(passphrase),
             SyncCommand::SetupAccount { passphrase } => self.handle_setup_account(passphrase),
             SyncCommand::ChangePassphrase { current_passphrase, new_passphrase } => {
@@ -160,7 +160,7 @@ impl SyncWorkerState {
             }
             SyncCommand::Logout => self.handle_logout(),
 
-            // ── Document CRUD ─────────────────────────────────────────────────
+            // -- Document CRUD -------------------------------------------------
             SyncCommand::ListDocuments => self.handle_list_documents(),
             SyncCommand::CreateDocument { doc_type, name } => {
                 self.handle_create_document(doc_type, name);
@@ -172,7 +172,7 @@ impl SyncWorkerState {
                 self.handle_rename_document(document_id, name);
             }
 
-            // ── Document sync session ─────────────────────────────────────────
+            // -- Document sync session -----------------------------------------
             SyncCommand::OpenDocument { document_id } => {
                 self.handle_open_document(document_id);
             }
@@ -192,7 +192,7 @@ impl SyncWorkerState {
                 self.handle_reconnect(document_id);
             }
 
-            // ── Sharing ───────────────────────────────────────────────────────
+            // -- Sharing -------------------------------------------------------
             SyncCommand::InviteToDocument { document_id, invitee_email, role } => {
                 self.handle_invite_to_document(document_id, invitee_email, role);
             }
@@ -207,12 +207,12 @@ impl SyncWorkerState {
                 let _ = role;
             }
 
-            // ── Users ─────────────────────────────────────────────────────────
+            // -- Users ---------------------------------------------------------
             SyncCommand::SearchUsers { query } => {
                 log::info!("Sync Worker: SearchUsers '{query}'");
             }
 
-            // ── Media ─────────────────────────────────────────────────────────
+            // -- Media ---------------------------------------------------------
             SyncCommand::UploadMedia { document_id, data, mime_type } => {
                 log::info!(
                     "Sync Worker: UploadMedia {document_id:?} {mime_type} len={}",
@@ -223,7 +223,7 @@ impl SyncWorkerState {
                 log::info!("Sync Worker: DownloadMedia {document_id:?} {content_hash}");
             }
 
-            // ── Channels ─────────────────────────────────────────────────────
+            // -- Channels -----------------------------------------------------
             SyncCommand::ListChannels => {
                 log::info!("Sync Worker: ListChannels");
             }
@@ -268,7 +268,7 @@ impl SyncWorkerState {
                 log::info!("Sync Worker: GetUnreadCounts");
             }
 
-            // ── Meetings ─────────────────────────────────────────────────────
+            // -- Meetings -----------------------------------------------------
             SyncCommand::CreateMeeting { name } => {
                 log::info!("Sync Worker: CreateMeeting '{name}'");
             }
@@ -282,31 +282,31 @@ impl SyncWorkerState {
                 log::info!("Sync Worker: EndMeeting {meeting_id:?}");
             }
 
-            // ── Lifecycle ─────────────────────────────────────────────────────
+            // -- Lifecycle -----------------------------------------------------
             SyncCommand::Shutdown => {
                 self.handle_logout();
             }
         }
     }
 
-    // ── Session handlers ──────────────────────────────────────────────────────
+    // -- Session handlers ------------------------------------------------------
 
     fn handle_unlock(&mut self, passphrase: Vec<u8>) {
         // Full async pipeline (via wasm_bindgen_futures::spawn_local):
-        // 1. GET /api/auth/me                           — verify session cookie
-        // 2. GET /api/keys/master                       — fetch { master_key_enc, salt }
-        // 3. Argon2id(passphrase, salt)                 → user_key
-        // 4. XChaCha20-Poly1305 decrypt(user_key, master_key_enc) → master_seed
+        // 1. GET /api/auth/me                           - verify session cookie
+        // 2. GET /api/keys/master                       - fetch { master_key_enc, salt }
+        // 3. Argon2id(passphrase, salt)                 -> user_key
+        // 4. XChaCha20-Poly1305 decrypt(user_key, master_key_enc) -> master_seed
         // 5. Derive Ed25519 signing_key + X25519 exchange_key from master_seed
-        // 6. WebSocket::new("wss://{api_base}/api/ws")  — open session WS
-        // 7. Wire ws.onmessage → handle_ws_message
-        // 8. Wire ws.onclose  → reconnect_and_resubscribe (exponential backoff)
+        // 6. WebSocket::new("wss://{api_base}/api/ws")  - open session WS
+        // 7. Wire ws.onmessage -> handle_ws_message
+        // 8. Wire ws.onclose  -> reconnect_and_resubscribe (exponential backoff)
         // 9. Send LogicEvent::SessionReady
 
         log::info!("Sync Worker: Unlock (passphrase len={})", passphrase.len());
         self.open_websocket();
 
-        // Placeholder — replace with real session once crypto is wired.
+        // Placeholder - replace with real session once crypto is wired.
         self.send_to_logic(&LogicEvent::SessionReady {
             user_id: Uuid::new_v7(),
             display_name: "placeholder".into(),
@@ -317,11 +317,11 @@ impl SyncWorkerState {
     fn handle_setup_account(&mut self, passphrase: Vec<u8>) {
         // 1. Generate MasterSeed (CSPRNG, 32 bytes)
         // 2. Derive Ed25519 signing_key + X25519 exchange_key
-        // 3. Argon2id(passphrase, random_salt) → user_key
-        // 4. XChaCha20-Poly1305 encrypt(user_key, master_seed) → master_key_enc
+        // 3. Argon2id(passphrase, random_salt) -> user_key
+        // 4. XChaCha20-Poly1305 encrypt(user_key, master_seed) -> master_key_enc
         // 5. PUT /api/keys/master { master_key_enc, salt, signing_pubkey, exchange_pubkey }
-        // 6. BIP39 encode(master_seed) → 24 recovery_words
-        // 7. Open WebSocket (same as Unlock step 6–8)
+        // 6. BIP39 encode(master_seed) -> 24 recovery_words
+        // 7. Open WebSocket (same as Unlock step 6-8)
         // 8. Send LogicEvent::AccountCreated { recovery_words }
 
         log::info!("Sync Worker: SetupAccount (passphrase len={})", passphrase.len());
@@ -333,9 +333,9 @@ impl SyncWorkerState {
         new_passphrase: Vec<u8>,
     ) {
         // 1. Re-derive user_key from current_passphrase
-        // 2. Decrypt master_seed → verify integrity
-        // 3. Argon2id(new_passphrase, new_salt) → new_user_key
-        // 4. Re-encrypt master_seed → master_key_enc
+        // 2. Decrypt master_seed -> verify integrity
+        // 3. Argon2id(new_passphrase, new_salt) -> new_user_key
+        // 4. Re-encrypt master_seed -> master_key_enc
         // 5. PUT /api/keys/master/rotate { master_key_enc, salt }
         // 6. Send LogicEvent::PassphraseChanged
 
@@ -344,9 +344,9 @@ impl SyncWorkerState {
     }
 
     fn handle_recover_account(&mut self, recovery_words: String, new_passphrase: Vec<u8>) {
-        // 1. BIP39 decode(recovery_words) → master_seed
-        // 2. Argon2id(new_passphrase, new_salt) → user_key
-        // 3. Encrypt master_seed → master_key_enc
+        // 1. BIP39 decode(recovery_words) -> master_seed
+        // 2. Argon2id(new_passphrase, new_salt) -> user_key
+        // 3. Encrypt master_seed -> master_key_enc
         // 4. PUT /api/keys/master/rotate
         // 5. Send LogicEvent::AccountRecovered
 
@@ -356,9 +356,9 @@ impl SyncWorkerState {
 
     fn handle_logout(&mut self) {
         // 1. POST /api/auth/logout
-        // 2. ws.close() — triggers onclose, no reconnect
+        // 2. ws.close() - triggers onclose, no reconnect
         // 3. Zeroize master_seed, signing_key, exchange_key
-        // 4. Drop documents → ZeroizeOnDrop zeroes all DocumentKeys
+        // 4. Drop documents -> ZeroizeOnDrop zeroes all DocumentKeys
         // 5. Send LogicEvent::LoggedOut
 
         if let Some(ws) = self.ws.take() {
@@ -371,7 +371,7 @@ impl SyncWorkerState {
         log::info!("Sync Worker: logged out, all keys zeroized");
     }
 
-    // ── WebSocket lifecycle ───────────────────────────────────────────────────
+    // -- WebSocket lifecycle ---------------------------------------------------
 
     fn open_websocket(&mut self) {
         // let ws_url = format!("wss://{}/api/ws", self.api_base);
@@ -418,7 +418,7 @@ impl SyncWorkerState {
         log::info!("Sync Worker: reconnecting ({} active docs)", self.documents.len());
     }
 
-    // ── Inbound: Server → Sync Worker (WebSocket demux) ──────────────────────
+    // -- Inbound: Server -> Sync Worker (WebSocket demux) ----------------------
 
     /// Demultiplex an inbound WebSocket frame by `document_id`.
     ///
@@ -449,7 +449,7 @@ impl SyncWorkerState {
                     // 1. Ed25519 verify signature
                     // 2. HMAC verify commitment_tag
                     // 3. XChaCha20-Poly1305 decrypt(doc_key, ciphertext, nonce)
-                    // 4. Strip version byte: 0x01 → ruzstd decompress, 0x00 → raw
+                    // 4. Strip version byte: 0x01 -> ruzstd decompress, 0x00 -> raw
                     // 5. Send plaintext CRDT delta to Logic Worker
 
                     // let plaintext = self.decrypt_update(&doc_state.doc_key, &update);
@@ -484,17 +484,17 @@ impl SyncWorkerState {
 
             WsServerMsg::SnapshotAvailable { document_id, snapshot_id } => {
                 // Async download pipeline:
-                // 1. POST /api/documents/{id}/snapshot → presigned GET URL
-                // 2. GET S3 (presigned) → ciphertext blob
-                // 3. Verify + decrypt + decompress → plaintext CRDT state
+                // 1. POST /api/documents/{id}/snapshot -> presigned GET URL
+                // 2. GET S3 (presigned) -> ciphertext blob
+                // 3. Verify + decrypt + decompress -> plaintext CRDT state
                 // 4. Send LogicEvent::RemoteSnapshot { document_id, payload }
                 let _ = snapshot_id;
                 log::info!("Sync Worker: SnapshotAvailable for {document_id:?}");
             }
 
             WsServerMsg::KeyRotationRequired { document_id, revoked_user_id } => {
-                // 1. GET /api/documents/{id}/members → new doc_key_enc for self
-                // 2. ECDH decrypt → new DocumentKey
+                // 1. GET /api/documents/{id}/members -> new doc_key_enc for self
+                // 2. ECDH decrypt -> new DocumentKey
                 // 3. Replace doc_key in SyncDocumentState
                 // 4. Notify Logic Worker to trigger a snapshot at this boundary
                 if let Some(_doc_state) = self.documents.get_mut(&document_id) {
@@ -514,7 +514,7 @@ impl SyncWorkerState {
             }
 
             WsServerMsg::ChannelUpdate { channel_id, seq: _, update } => {
-                // Decrypt + decompress → send LogicEvent::ChannelRemoteUpdate when wired.
+                // Decrypt + decompress -> send LogicEvent::ChannelRemoteUpdate when wired.
                 let _ = (channel_id, update);
             }
 
@@ -533,18 +533,18 @@ impl SyncWorkerState {
         }
     }
 
-    // ── Document lifecycle ────────────────────────────────────────────────────
+    // -- Document lifecycle ----------------------------------------------------
 
     fn handle_open_document(&mut self, document_id: Uuid) {
         // Full async pipeline (spawn_local):
-        // 1. GET /api/documents/{id}/members → find self, fetch doc_key_enc
-        // 2. ECDH(exchange_key, owner_pubkey) → shared_secret
-        // 3. Decrypt doc_key_enc → DocumentKey
-        // 4. GET /api/documents/{id}/snapshot → presigned GET URL → S3 → ciphertext
-        // 5. Decrypt + decompress → plaintext CRDT state
+        // 1. GET /api/documents/{id}/members -> find self, fetch doc_key_enc
+        // 2. ECDH(exchange_key, owner_pubkey) -> shared_secret
+        // 3. Decrypt doc_key_enc -> DocumentKey
+        // 4. GET /api/documents/{id}/snapshot -> presigned GET URL -> S3 -> ciphertext
+        // 5. Decrypt + decompress -> plaintext CRDT state
         // 6. Send LogicEvent::RemoteSnapshot { document_id, payload }
         // 7. GET /api/documents/{id}/deltas?after_seq={snapshot_seq}
-        // 8. Decrypt each delta → LogicEvent::RemoteUpdate (in order)
+        // 8. Decrypt each delta -> LogicEvent::RemoteUpdate (in order)
         // 9. ws_send(Subscribe { document_id })
         // 10. ws_send(RequestMissing { document_id, after_seq: last received seq })
 
@@ -560,7 +560,7 @@ impl SyncWorkerState {
         if self.ws.is_some() {
             self.ws_send(&WsClientMsg::Unsubscribe { document_id });
         }
-        // Drop SyncDocumentState → DocumentKey is zeroized on drop.
+        // Drop SyncDocumentState -> DocumentKey is zeroized on drop.
         self.documents.remove(&document_id);
         log::info!("Sync Worker: CloseDocument {document_id:?}");
     }
@@ -575,7 +575,7 @@ impl SyncWorkerState {
         }
     }
 
-    // ── Outbound sync ─────────────────────────────────────────────────────────
+    // -- Outbound sync ---------------------------------------------------------
 
     fn handle_send_update(&mut self, document_id: Uuid, payload: Vec<u8>) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
@@ -588,10 +588,10 @@ impl SyncWorkerState {
         // Outbound pipeline:
         // 1. Prepend version byte (0x01 = zstd if > 64 B, 0x00 = raw)
         // 2. ruzstd compress if version = 0x01
-        // 3. XChaCha20-Poly1305 AEAD encrypt(doc_key) → ciphertext + nonce
+        // 3. XChaCha20-Poly1305 AEAD encrypt(doc_key) -> ciphertext + nonce
         // 4. Build WireUpdatePublicData { document_id, pub_key, snapshot_id, clock }
-        // 5. postcard serialize public_data → bytes
-        // 6. HMAC-SHA256(doc_key, nonce || ciphertext || public_data_bytes) → commitment_tag
+        // 5. postcard serialize public_data -> bytes
+        // 6. HMAC-SHA256(doc_key, nonce || ciphertext || public_data_bytes) -> commitment_tag
         // 7. Ed25519 sign(nonce || ciphertext || public_data_bytes || commitment_tag)
         // 8. ws_send(WsClientMsg::Update(WireUpdate { ... }))
 
@@ -606,7 +606,7 @@ impl SyncWorkerState {
             return;
         }
         // Same pipeline as SendUpdate but for the full CRDT state.
-        // Upload via presigned S3 URL → server broadcasts SnapshotAvailable.
+        // Upload via presigned S3 URL -> server broadcasts SnapshotAvailable.
         log::info!("Sync Worker: SendSnapshot {document_id:?} len={}", payload.len());
     }
 
@@ -619,23 +619,23 @@ impl SyncWorkerState {
         log::debug!("Sync Worker: SendEphemeral {document_id:?} len={}", payload.len());
     }
 
-    // ── Document CRUD (HTTP REST) ─────────────────────────────────────────────
+    // -- Document CRUD (HTTP REST) ---------------------------------------------
 
     fn handle_list_documents(&self) {
-        // GET /api/documents → Vec<{ id, doc_type, name_enc, role, updated_at }>
+        // GET /api/documents -> Vec<{ id, doc_type, name_enc, role, updated_at }>
         // For each document: decrypt name_enc with DocumentKey
-        // Build Vec<DocumentSummary> → Send LogicEvent::DocumentList
+        // Build Vec<DocumentSummary> -> Send LogicEvent::DocumentList
 
-        // Placeholder — real implementation uses gloo-net + spawn_local.
+        // Placeholder - real implementation uses gloo-net + spawn_local.
         self.send_to_logic(&LogicEvent::DocumentList { documents: vec![] });
         log::info!("Sync Worker: ListDocuments");
     }
 
     fn handle_create_document(&self, doc_type: DocType, name: String) {
         // 1. Generate DocumentKey (CSPRNG)
-        // 2. Encrypt name with DocumentKey → name_enc
-        // 3. POST /api/documents { doc_type, name_enc } → document_id
-        // 4. Encrypt DocumentKey with own exchange_pubkey → doc_key_enc
+        // 2. Encrypt name with DocumentKey -> name_enc
+        // 3. POST /api/documents { doc_type, name_enc } -> document_id
+        // 4. Encrypt DocumentKey with own exchange_pubkey -> doc_key_enc
         // 5. POST /api/documents/{id}/share { user_id: self, role: Owner, doc_key_enc }
         // 6. Send LogicEvent::DocumentCreated { document_id, doc_type }
         log::info!("Sync Worker: CreateDocument {doc_type:?} '{name}'");
@@ -648,13 +648,13 @@ impl SyncWorkerState {
     }
 
     fn handle_rename_document(&self, document_id: Uuid, name: String) {
-        // Encrypt name with DocumentKey → name_enc
+        // Encrypt name with DocumentKey -> name_enc
         // PATCH /api/documents/{id} { name_enc }
         // Send LogicEvent::DocumentRenamed { document_id }
         log::info!("Sync Worker: RenameDocument {document_id:?} '{name}'");
     }
 
-    // ── Sharing (HTTP REST + crypto) ──────────────────────────────────────────
+    // -- Sharing (HTTP REST + crypto) ------------------------------------------
 
     fn handle_invite_to_document(
         &self,
@@ -662,9 +662,9 @@ impl SyncWorkerState {
         invitee_email: String,
         role: ambre_bus::Role,
     ) {
-        // 1. GET /api/users/search?email={email} → invitee exchange_pubkey
-        // 2. ECDH(exchange_key, invitee_pubkey) → shared_secret
-        // 3. Encrypt DocumentKey → doc_key_enc
+        // 1. GET /api/users/search?email={email} -> invitee exchange_pubkey
+        // 2. ECDH(exchange_key, invitee_pubkey) -> shared_secret
+        // 3. Encrypt DocumentKey -> doc_key_enc
         // 4. POST /api/documents/{id}/share { user_id, role, doc_key_enc }
         // 5. Send LogicEvent::InviteSent { document_id, user_id, display_name }
         log::info!("Sync Worker: InviteToDocument {document_id:?} {invitee_email} {role:?}");
@@ -674,8 +674,8 @@ impl SyncWorkerState {
         // Full key rotation sequence (see ambre-spec-sync.md):
         // 1. DELETE /api/documents/{id}/share/{uid}
         // 2. Generate new DocumentKey
-        // 3. GET /api/documents/{id}/members → remaining members
-        // 4. For each: ECDH encrypt new key → doc_key_enc
+        // 3. GET /api/documents/{id}/members -> remaining members
+        // 4. For each: ECDH encrypt new key -> doc_key_enc
         // 5. POST /api/documents/{id}/rotate-key { [(user_id, doc_key_enc)] }
         // 6. Server broadcasts WsServerMsg::KeyRotationRequired
         // 7. Send LogicEvent::RevocationComplete { document_id }
@@ -688,7 +688,7 @@ impl SyncWorkerState {
         log::info!("Sync Worker: ListDocumentMembers {document_id:?}");
     }
 
-    // ── Channels ─────────────────────────────────────────────────────────────
+    // -- Channels -------------------------------------------------------------
 
     fn handle_open_channel(&mut self, channel_id: Uuid) {
         // Same flow as OpenDocument: fetch channel key, load history, Subscribe WS.
@@ -715,9 +715,9 @@ impl SyncWorkerState {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Bootstrap — 2-phase init
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// Bootstrap - 2-phase init
+// -----------------------------------------------------------------------------
 
 /// Entry point for the Sync Worker.
 ///
@@ -735,7 +735,7 @@ pub fn start() {
     let state: Rc<RefCell<Option<SyncWorkerState>>> = Rc::new(RefCell::new(None));
     let state_init = Rc::clone(&state);
 
-    // Phase 1: one-shot init handler — receive the Logic Worker MessagePort.
+    // Phase 1: one-shot init handler - receive the Logic Worker MessagePort.
     let on_init = Closure::<dyn FnMut(MessageEvent)>::once(move |event: MessageEvent| {
         let data = event.data();
         let logic_port: MessagePort = js_sys::Reflect::get(&data, &"logicPort".into())
@@ -763,13 +763,13 @@ pub fn start() {
             cb.forget();
         }
 
-        log::info!("Ambre Sync Worker initialized — Logic Worker port connected");
+        log::info!("Ambre Sync Worker initialized - Logic Worker port connected");
     });
 
     global.set_onmessage(Some(on_init.as_ref().unchecked_ref()));
     on_init.forget();
 
-    // Handshake: onmessage is now set — tell the UI Thread it can safely
+    // Handshake: onmessage is now set - tell the UI Thread it can safely
     // transfer the logicPort.
     global
         .post_message(&JsValue::from_str("ready"))

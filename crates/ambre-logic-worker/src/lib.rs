@@ -1,6 +1,6 @@
 // ambre-logic-worker/src/lib.rs
 // ============================================================================
-// Logic Worker entry point — dedicated Web Worker, isolated linear memory.
+// Logic Worker entry point - dedicated Web Worker, isolated linear memory.
 //
 // Responsibilities:
 //   - Own all LoroDoc instances via the AppController/ControllerRegistry.
@@ -9,8 +9,8 @@
 //   - Forward SyncCommands to the Sync Worker and dispatch LogicEvents back.
 //
 // Out of scope:
-//   - Cryptography, compression, network — handled exclusively by the Sync Worker.
-//   - Rendering — handled by the UI Thread (Vello + wgpu).
+//   - Cryptography, compression, network - handled exclusively by the Sync Worker.
+//   - Rendering - handled by the UI Thread (Vello + wgpu).
 //
 // IPC topology:
 //   UI Thread    ---UiEnvelope (postMessage)---->  Logic Worker
@@ -19,8 +19,8 @@
 //   Logic Worker <---LogicEvent (MessagePort)----  Sync Worker
 //
 // Bootstrap (2-phase):
-//   Phase 1 — global.onmessage (once): receive the MessagePort to the Sync Worker.
-//   Phase 2 — global.onmessage (steady-state): dispatch UiEnvelope messages.
+//   Phase 1 - global.onmessage (once): receive the MessagePort to the Sync Worker.
+//   Phase 2 - global.onmessage (steady-state): dispatch UiEnvelope messages.
 //   The Sync Worker MessagePort is wired immediately after Phase 1.
 // ============================================================================
 
@@ -36,9 +36,9 @@ use ambre_bus::{
     AppController, CommandSink, DocType, LogicEnvelope, LogicEvent, SyncCommand, UiEnvelope, Uuid,
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PortCommandSink — concrete CommandSink backed by a Web Worker MessagePort
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// PortCommandSink - concrete CommandSink backed by a Web Worker MessagePort
+// -----------------------------------------------------------------------------
 
 /// Sends [`SyncCommand`]s to the Sync Worker via the `MessagePort` established
 /// during the bootstrap handshake.
@@ -63,9 +63,9 @@ impl CommandSink for PortCommandSink {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // LogicWorkerState
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /// All mutable state owned by the Logic Worker after bootstrap.
 struct LogicWorkerState {
@@ -90,7 +90,7 @@ impl LogicWorkerState {
         }
     }
 
-    // ── Outbound: Logic Worker → UI Thread ────────────────────────────────────
+    // -- Outbound: Logic Worker -> UI Thread ------------------------------------
 
     /// Serialize `envelope` with postcard and transfer it to the UI Thread.
     fn send_to_ui(&self, envelope: &LogicEnvelope) {
@@ -104,7 +104,7 @@ impl LogicWorkerState {
             .expect("postMessage LogicEnvelope to UI Thread");
     }
 
-    // ── Inbound: UI Thread → Logic Worker ────────────────────────────────────
+    // -- Inbound: UI Thread -> Logic Worker ------------------------------------
 
     /// Deserialize a [`UiEnvelope`] from `bytes` and dispatch it.
     fn handle_ui_envelope(&mut self, bytes: &[u8]) {
@@ -112,7 +112,7 @@ impl LogicWorkerState {
             postcard::from_bytes(bytes).expect("postcard deserialize UiEnvelope");
 
         match envelope {
-            // ── P1 — Viewport ─────────────────────────────────────────────────
+            // -- P1 - Viewport -------------------------------------------------
             UiEnvelope::ScrollTo {
                 document_id,
                 top_row,
@@ -136,7 +136,7 @@ impl LogicWorkerState {
                 }
             }
 
-            // ── P2 — Application command ───────────────────────────────────────
+            // -- P2 - Application command ---------------------------------------
             UiEnvelope::AppCommand { document_id, payload } => {
                 // Dispatch the opaque command to the registered AppController.
                 // The controller mutates its LoroDoc, sends a SyncCommand::SendUpdate
@@ -151,7 +151,7 @@ impl LogicWorkerState {
                 }
             }
 
-            // ── P3 — Session ───────────────────────────────────────────────────
+            // -- P3 - Session ---------------------------------------------------
             UiEnvelope::Unlock { passphrase } => {
                 self.sync_sink.send(SyncCommand::Unlock { passphrase });
             }
@@ -173,7 +173,7 @@ impl LogicWorkerState {
                 self.sync_sink.send(SyncCommand::Logout);
             }
 
-            // ── P3 — Document CRUD ─────────────────────────────────────────────
+            // -- P3 - Document CRUD ---------------------------------------------
             UiEnvelope::ListDocuments => {
                 self.sync_sink.send(SyncCommand::ListDocuments);
             }
@@ -188,7 +188,7 @@ impl LogicWorkerState {
                 self.sync_sink.send(SyncCommand::RenameDocument { document_id, name });
             }
 
-            // ── P3 — Document sync session ─────────────────────────────────────
+            // -- P3 - Document sync session -------------------------------------
             UiEnvelope::OpenDocument { document_id } => {
                 // The controller is created when the first RemoteSnapshot arrives,
                 // not here, because we need the doc_type from the snapshot metadata.
@@ -199,7 +199,7 @@ impl LogicWorkerState {
                 self.sync_sink.send(SyncCommand::CloseDocument { document_id });
             }
 
-            // ── P3 — Sharing ───────────────────────────────────────────────────
+            // -- P3 - Sharing ---------------------------------------------------
             UiEnvelope::InviteToDocument { document_id, invitee_email, role } => {
                 self.sync_sink
                     .send(SyncCommand::InviteToDocument { document_id, invitee_email, role });
@@ -218,12 +218,12 @@ impl LogicWorkerState {
                 });
             }
 
-            // ── P3 — Users ─────────────────────────────────────────────────────
+            // -- P3 - Users -----------------------------------------------------
             UiEnvelope::SearchUsers { query } => {
                 self.sync_sink.send(SyncCommand::SearchUsers { query });
             }
 
-            // ── P3 — Media ─────────────────────────────────────────────────────
+            // -- P3 - Media -----------------------------------------------------
             UiEnvelope::UploadMedia { document_id, data, mime_type } => {
                 self.sync_sink.send(SyncCommand::UploadMedia { document_id, data, mime_type });
             }
@@ -231,7 +231,7 @@ impl LogicWorkerState {
                 self.sync_sink.send(SyncCommand::DownloadMedia { document_id, content_hash });
             }
 
-            // ── P3 — Channels ──────────────────────────────────────────────────
+            // -- P3 - Channels --------------------------------------------------
             UiEnvelope::ListChannels => {
                 self.sync_sink.send(SyncCommand::ListChannels);
             }
@@ -277,7 +277,7 @@ impl LogicWorkerState {
                 self.sync_sink.send(SyncCommand::GetUnreadCounts);
             }
 
-            // ── P3 — Meetings ──────────────────────────────────────────────────
+            // -- P3 - Meetings --------------------------------------------------
             UiEnvelope::CreateMeeting { name } => {
                 self.sync_sink.send(SyncCommand::CreateMeeting { name });
             }
@@ -293,7 +293,7 @@ impl LogicWorkerState {
         }
     }
 
-    // ── Inbound: Sync Worker → Logic Worker ──────────────────────────────────
+    // -- Inbound: Sync Worker -> Logic Worker ----------------------------------
 
     /// Deserialize a [`LogicEvent`] from `bytes` and dispatch it.
     ///
@@ -307,7 +307,7 @@ impl LogicWorkerState {
             postcard::from_bytes(bytes).expect("postcard deserialize LogicEvent");
 
         match event {
-            // ── Session ───────────────────────────────────────────────────────
+            // -- Session -------------------------------------------------------
             LogicEvent::SessionReady { user_id, display_name, email } => {
                 self.send_to_ui(&LogicEnvelope::SessionReady { user_id, display_name, email });
             }
@@ -327,7 +327,7 @@ impl LogicWorkerState {
                 self.send_to_ui(&LogicEnvelope::LoggedOut);
             }
 
-            // ── Document CRUD ─────────────────────────────────────────────────
+            // -- Document CRUD -------------------------------------------------
             LogicEvent::DocumentList { documents } => {
                 self.send_to_ui(&LogicEnvelope::DocumentList { documents });
             }
@@ -341,12 +341,12 @@ impl LogicWorkerState {
                 self.send_to_ui(&LogicEnvelope::DocumentRenamed { document_id });
             }
 
-            // ── Real-time sync ────────────────────────────────────────────────
+            // -- Real-time sync ------------------------------------------------
 
             LogicEvent::RemoteSnapshot { document_id, payload } => {
                 // The controller must already exist (created by ControllerRegistry
                 // upon OpenDocument + DocumentCreated). If it doesn't, the snapshot
-                // is silently dropped — the Sync Worker will re-send on reconnect.
+                // is silently dropped - the Sync Worker will re-send on reconnect.
                 let Some(ctrl) = self.controllers.get_mut(&document_id) else {
                     log::warn!(
                         "Logic Worker: no controller for {document_id}, \
@@ -406,7 +406,7 @@ impl LogicWorkerState {
                 self.send_to_ui(&LogicEnvelope::SyncWarning { document_id, code, message });
             }
 
-            // ── Sharing ───────────────────────────────────────────────────────
+            // -- Sharing -------------------------------------------------------
             LogicEvent::InviteSent { document_id, user_id, display_name } => {
                 self.send_to_ui(&LogicEnvelope::InviteSent {
                     document_id,
@@ -427,12 +427,12 @@ impl LogicWorkerState {
                 self.send_to_ui(&LogicEnvelope::MemberRoleUpdated { document_id, user_id, role });
             }
 
-            // ── Users ─────────────────────────────────────────────────────────
+            // -- Users ---------------------------------------------------------
             LogicEvent::UserSearchResults { users } => {
                 self.send_to_ui(&LogicEnvelope::UserSearchResults { users });
             }
 
-            // ── Media ─────────────────────────────────────────────────────────
+            // -- Media ---------------------------------------------------------
             LogicEvent::MediaUploaded { document_id, content_hash } => {
                 self.send_to_ui(&LogicEnvelope::MediaUploaded { document_id, content_hash });
             }
@@ -444,7 +444,7 @@ impl LogicWorkerState {
                 });
             }
 
-            // ── Channels ──────────────────────────────────────────────────────
+            // -- Channels ------------------------------------------------------
             LogicEvent::ChannelList { channels } => {
                 self.send_to_ui(&LogicEnvelope::ChannelList { channels });
             }
@@ -493,7 +493,7 @@ impl LogicWorkerState {
                 self.send_to_ui(&LogicEnvelope::UnreadCounts { counts });
             }
 
-            // ── Meetings ──────────────────────────────────────────────────────
+            // -- Meetings ------------------------------------------------------
             LogicEvent::MeetingCreated { meeting_id } => {
                 self.send_to_ui(&LogicEnvelope::MeetingCreated { meeting_id });
             }
@@ -513,7 +513,7 @@ impl LogicWorkerState {
                 self.send_to_ui(&LogicEnvelope::MeetingParticipantLeft { meeting_id, user_id });
             }
 
-            // ── Errors ────────────────────────────────────────────────────────
+            // -- Errors --------------------------------------------------------
             LogicEvent::AuthError { message } => {
                 self.send_to_ui(&LogicEnvelope::AuthError { message });
             }
@@ -524,9 +524,9 @@ impl LogicWorkerState {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Bootstrap — 2-phase init
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// Bootstrap - 2-phase init
+// -----------------------------------------------------------------------------
 
 /// Entry point for the Logic Worker.
 ///
@@ -545,7 +545,7 @@ pub fn start() {
     let state_init = Rc::clone(&state);
     let global_clone = global.clone();
 
-    // Phase 1: one-shot init handler — receive the Sync Worker MessagePort.
+    // Phase 1: one-shot init handler - receive the Sync Worker MessagePort.
     let on_init = Closure::<dyn FnMut(MessageEvent)>::once(move |event: MessageEvent| {
         let data = event.data();
         let sync_port: MessagePort = js_sys::Reflect::get(&data, &"syncPort".into())
@@ -556,7 +556,7 @@ pub fn start() {
         *state_init.borrow_mut() =
             Some(LogicWorkerState::new(global_clone.clone(), sync_port.clone()));
 
-        // Wire: Sync Worker → Logic Worker (via MessagePort).
+        // Wire: Sync Worker -> Logic Worker (via MessagePort).
         {
             let state = Rc::clone(&state_init);
             let cb = Closure::<dyn FnMut(MessageEvent)>::new(move |event: MessageEvent| {
@@ -596,7 +596,7 @@ pub fn start() {
     global.set_onmessage(Some(on_init.as_ref().unchecked_ref()));
     on_init.forget();
 
-    // Handshake: onmessage is now set — tell the UI Thread it can safely
+    // Handshake: onmessage is now set - tell the UI Thread it can safely
     // transfer the syncPort. The UI Thread's one-shot ready handler will
     // respond with { syncPort } and then replace itself with the steady-state
     // LogicEnvelope handler.
