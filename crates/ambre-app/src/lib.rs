@@ -275,21 +275,13 @@ fn ui_main() {
     sync_opts.set_type(WorkerType::Module);
     sync_opts.set_name("sync");
 
-    let logic_script = if cfg!(feature = "unified") {
-        "./ambre-app.js"
-    } else {
-        "./logic_worker.js"
-    };
-    let sync_script = if cfg!(feature = "unified") {
-        "./ambre-app.js"
-    } else {
-        "./sync_worker.js"
-    };
-
+    // Both modes use the same bootstrap filenames. The content differs:
+    //   unified:    logic_worker.js imports ./ambre-app.js (same binary, "logic" role)
+    //   standalone: logic_worker.js imports ./logic/logic_worker.js (dedicated binary)
     let logic_worker =
-        Worker::new_with_options(logic_script, &logic_opts).expect("spawn Logic Worker");
+        Worker::new_with_options("./logic_worker.js", &logic_opts).expect("spawn Logic Worker");
     let sync_worker =
-        Worker::new_with_options(sync_script, &sync_opts).expect("spawn Sync Worker");
+        Worker::new_with_options("./sync_worker.js", &sync_opts).expect("spawn Sync Worker");
 
     // ── MessageChannel: direct Logic ↔ Sync (bypasses UI Thread) ─────────────
     //
