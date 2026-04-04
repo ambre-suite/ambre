@@ -32,9 +32,11 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
-use web_sys::{
-    DedicatedWorkerGlobalScope, MessageChannel, MessageEvent, Worker, WorkerOptions, WorkerType,
-};
+use web_sys::{MessageChannel, MessageEvent, Worker, WorkerOptions, WorkerType};
+
+// Only needed by the unified dispatcher.
+#[cfg(feature = "unified")]
+use web_sys::DedicatedWorkerGlobalScope;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Bridge helpers
@@ -229,28 +231,36 @@ impl UiState {
 // Entry point dispatcher + bootstrap
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Single entry point for all three roles (UI Thread, Logic Worker, Sync Worker).
+/// Entry point — behaviour differs between build modes.
 ///
-/// In dev the same WASM binary is loaded three times. The JS bootstrap passes
-/// `{ name: "logic" | "sync" }` to the Worker constructor; the main thread has
-/// no name. `DedicatedWorkerGlobalScope::name()` is the discriminant.
+/// unified (default, dev): one binary loaded three times. The JS bootstrap
+/// passes `{ name: "logic" | "sync" }` to the Worker constructor; the main
+/// thread has no name. `DedicatedWorkerGlobalScope::name()` is the discriminant.
+///
+/// standalone (release): this binary is only ever loaded by the UI Thread.
+/// Workers have their own binaries and their own `#[wasm_bindgen(start)]`.
 #[wasm_bindgen(start)]
 pub fn main() {
-    let global = js_sys::global();
-    if let Ok(scope) = global.dyn_into::<DedicatedWorkerGlobalScope>() {
-        match scope.name().as_str() {
-            "logic" => ambre_logic_worker::start(),
-            "sync" => ambre_sync_worker::start(),
-            name => panic!("unknown worker name: {name}"),
+    // Logging and panic hooks must be initialized in EVERY thread/worker separately.
+    console_log::init_with_level(log::Level::Debug).ok();
+    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+
+    #[cfg(feature = "unified")]
+    {
+        let global = js_sys::global();
+        if let Ok(scope) = global.dyn_into::<DedicatedWorkerGlobalScope>() {
+            match scope.name().as_str() {
+                "logic" => ambre_logic_worker::start(),
+                "sync"  => ambre_sync_worker::start(),
+                name    => panic!("unknown worker name: {name}"),
+            }
+            return;
         }
-    } else {
-        ui_main();
     }
+    ui_main();
 }
 
 fn ui_main() {
-    console_log::init_with_level(log::Level::Debug).ok();
-    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
     log::info!("Ambre UI Thread starting");
 
     // ── Spawn Workers (each is a separate WASM module, isolated linear memory) ─
@@ -265,10 +275,21 @@ fn ui_main() {
     sync_opts.set_type(WorkerType::Module);
     sync_opts.set_name("sync");
 
+    let logic_script = if cfg!(feature = "unified") {
+        "./ambre-app.js"
+    } else {
+        "./logic_worker.js"
+    };
+    let sync_script = if cfg!(feature = "unified") {
+        "./ambre-app.js"
+    } else {
+        "./sync_worker.js"
+    };
+
     let logic_worker =
-        Worker::new_with_options("./logic_worker.js", &logic_opts).expect("spawn Logic Worker");
+        Worker::new_with_options(logic_script, &logic_opts).expect("spawn Logic Worker");
     let sync_worker =
-        Worker::new_with_options("./sync_worker.js", &sync_opts).expect("spawn Sync Worker");
+        Worker::new_with_options(sync_script, &sync_opts).expect("spawn Sync Worker");
 
     // ── MessageChannel: direct Logic ↔ Sync (bypasses UI Thread) ─────────────
     //

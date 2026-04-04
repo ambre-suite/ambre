@@ -11,26 +11,29 @@
 
 set -e
 
-WORKERS_DIR="crates/ambre-app/workers"
 TARGET="wasm32-unknown-unknown"
+OUT="target/wasm-workers"
 
 echo "==> Building Logic Worker (release, standalone)..."
 cargo build --target "$TARGET" --release --features standalone -p ambre-logic-worker
-mkdir -p "$WORKERS_DIR/logic"
+mkdir -p "$OUT/logic"
 wasm-bindgen --target web \
-    --out-dir "$WORKERS_DIR/logic" \
+    --out-dir "$OUT/logic" \
     --out-name logic_worker \
     "target/$TARGET/release/ambre_logic_worker.wasm"
 
 echo "==> Building Sync Worker (release, standalone)..."
 cargo build --target "$TARGET" --release --features standalone -p ambre-sync-worker
-mkdir -p "$WORKERS_DIR/sync"
+mkdir -p "$OUT/sync"
 wasm-bindgen --target web \
-    --out-dir "$WORKERS_DIR/sync" \
+    --out-dir "$OUT/sync" \
     --out-name sync_worker \
     "target/$TARGET/release/ambre_sync_worker.wasm"
 
-echo "==> Trunk release build (UI Thread)..."
-cd crates/ambre-app && trunk build --release
+cp crates/ambre-app/logic_worker_standalone.js "$OUT/logic_worker.js"
+cp crates/ambre-app/sync_worker_standalone.js  "$OUT/sync_worker.js"
 
-echo "==> Release bundle in crates/ambre-app/dist/"
+echo "==> Trunk release build (UI Thread, standalone)..."
+trunk build --release --config Trunk.standalone.toml
+
+echo "==> Release bundle in dist/"
