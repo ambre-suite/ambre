@@ -1,5 +1,5 @@
 [build]
-target = "index.html"
+target = "crates/ambre-app/index.html"
 filehash = false
 
 [serve]

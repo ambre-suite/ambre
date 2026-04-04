@@ -41,10 +41,11 @@ mod tests {
     #[test]
     fn test_envelope_serialization() {
         let uuid = Uuid::new_v7();
-        let envelope = UiEnvelope::document(uuid, vec![1, 2, 3]);
+        let envelope = UiEnvelope::AppCommand { document_id: uuid, payload: vec![1, 2, 3] };
         let bytes = to_allocvec(&envelope).unwrap();
         let decoded: UiEnvelope = from_bytes(&bytes).unwrap();
-        assert_eq!(decoded.doc_id, Some(uuid));
-        assert_eq!(decoded.payload, vec![1, 2, 3]);
+        assert!(
+            matches!(decoded, UiEnvelope::AppCommand { document_id, payload } if document_id == uuid && payload == [1, 2, 3])
+        );
     }
 }
