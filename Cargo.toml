@@ -13,6 +13,8 @@ members = [
     "crates/ambre-toile",
     "crates/ambre-murmure",
     "crates/ambre-app",
+    "crates/ambre-logic-worker",
+    "crates/ambre-sync-worker",
 ]
 
 [workspace.dependencies]
@@ -21,7 +23,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_bytes = "0.11"
 hex = "0.4"
-uuid = { version = "1.0", features = ["v7"] }
+uuid = { version = "1.0", features = ["v7", "js"] }
 postcard = { version = "1.0", features = ["alloc"] }
 thiserror = "2.0"
 log = "0.4"
@@ -32,7 +34,7 @@ async-trait = "0.1"
 # Crypto
 chacha20poly1305 = { version = "0.10" }
 ed25519-dalek = { version = "2.0" }
-x25519-dalek = { version = "2.0"} 
+x25519-dalek = { version = "2.0" }
 blake2 = { version = "0.10" }
 argon2 = { version = "0.5" }
 
@@ -47,7 +49,16 @@ winit = "0.30"
 
 # WASM
 gloo-net = { version = "0.7", features = ["http", "websocket"] }
-web-sys = { version = "0.3.85" }
+web-sys = { version = "0.3.85", features = [
+    "DedicatedWorkerGlobalScope",
+    "MessageChannel",
+    "MessageEvent",
+    "MessagePort",
+    "WebSocket",
+    "Worker",
+    "WorkerOptions",
+    "WorkerType",
+] }
 js-sys = "0.3.85"
 wasm-bindgen = "0.2"
 console_log = "1.0"
@@ -66,16 +77,17 @@ rstar = "0.12"
 
 # Import/export
 docx-rs = "0.4"
-krilla = "0.6"
+krilla = "0.7"
 html5ever = "0.39"
 pulldown-cmark = "0.13"
 
 # Server
 tokio = { version = "1.0", features = ["full"] }
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
+futures-util = "0.3"
 sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-native-tls"] }
 rustis = "0.19.3"
-aws-sdk-s3 = "1.0"
+aws-sdk-s3 = "1.128"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
@@ -86,8 +98,14 @@ license = "AGPL-3.0"
 
 [profile.release]
 opt-level = 3
-lto = true 
-codegen-units = 1    
+lto = true
+codegen-units = 1
 
 [profile.release.package.ambre-app]
-opt-level = "z" # size optimizations for the WASM binary
+opt-level = "z" # size optimizations for WASM binaries
+
+[profile.release.package.ambre-logic-worker]
+opt-level = "z"
+
+[profile.release.package.ambre-sync-worker]
+opt-level = "z"

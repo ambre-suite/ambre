@@ -1,42 +1,34 @@
 [package]
 name = "ambre-app"
-version = "0.1.0"
-edition = "2024"
-description = "Entry point WASM for Ambre — bootstrap 3 workers, UI thread rendering"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "UI Thread WASM — Vello/Masonry rendering, rAF loop, input capture, Worker bootstrap"
+
+[lib]
+crate-type = ["cdylib"]
 
 [dependencies]
-ambre-core = { path = "../ambre-core" }
-ambre-crypto = { path = "../ambre-crypto" }
-ambre-protocol = { path = "../ambre-protocol" }
-ambre-bus = { path = "../ambre-bus" }
-ambre-draw = { path = "../ambre-draw" }
-ambre-sync = { path = "../ambre-sync" }
-ambre-trame = { path = "../ambre-trame" }
-ambre-prose = { path = "../ambre-prose" }
-ambre-toile = { path = "../ambre-toile" }
-ambre-murmure = { path = "../ambre-murmure" }
-serde = { workspace = true }
+ambre-bus          = { path = "../ambre-bus" }
+ambre-core         = { path = "../ambre-core" }
+ambre-logic-worker = { path = "../ambre-logic-worker" }
+ambre-sync-worker  = { path = "../ambre-sync-worker" }
+
+serde    = { workspace = true }
 postcard = { workspace = true }
-thiserror = { workspace = true }
-log = { workspace = true }
-cfg-if = { workspace = true }
+log      = { workspace = true }
+cfg-if   = { workspace = true }
 
 # UI rendering (Vello, Masonry, wgpu, winit)
-vello = { workspace = true }
+vello   = { workspace = true }
 masonry = { workspace = true }
-wgpu = { workspace = true }
-winit = { workspace = true }
-console_log = { workspace = true }
-console_error_panic_hook = { workspace = true }
+wgpu    = { workspace = true }
+winit   = { workspace = true }
 
 # Web APIs
-web-sys = { workspace = true }
-js-sys = { workspace = true }
+web-sys = { workspace = true, features = ["WorkerOptions", "WorkerType"] }
+js-sys  = { workspace = true }
 wasm-bindgen = { workspace = true }
-gloo-net = { workspace = true, features = ["http", "websocket"] }
 
-# import/export
-docx-rs = { workspace = true }
-krilla = { workspace = true }
-html5ever = { workspace = true}
-pulldown-cmark = { workspace = true }
+console_log              = { workspace = true }
+console_error_panic_hook = { workspace = true }

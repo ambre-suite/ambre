@@ -1,67 +1,159 @@
-//! WebSocket frames for real‑time document synchronization.
-//!
-//! These messages travel over the persistent WebSocket connection between the
-//! Sync Worker and the Blind Relay. Snapshots are **not** sent via WebSocket;
-//! they are transferred through S3 presigned URLs.
+// ============================================================================
+// WebSocket protocol — single multiplexed connection per client session.
+//
+// Endpoint: GET /api/ws -> upgrade WebSocket
+// One connection carries messages for ALL open documents + channels.
+// Demux by document_id / channel_id in each message.
+// ============================================================================
 
-use crate::messages::{Ephemeral, Seq, SeqUpdate, Update};
+use crate::{Ephemeral, SeqUpdate, Update};
+use crate::messages::Seq;
 use ambre_core::Uuid;
 use serde::{Deserialize, Serialize};
 
-/// WebSocket error codes (custom protocol, not HTTP).
-#[repr(u16)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum WsErrorCode {
-    /// Generic invalid message format.
-    InvalidMessage = 4000,
-    /// Signature verification failed.
-    InvalidSignature,
-    /// Clock mismatch (non‑sequential update).
-    ClockMismatch,
-    /// Too many pending updates; snapshot required.
-    SnapshotRequired,
-    /// Insufficient permissions.
-    Forbidden,
-    /// Internal server error.
-    Internal,
-}
+// ---------------------------------------------------------------------------
+// Client -> Server
+// ---------------------------------------------------------------------------
 
-/// Client‑to‑server WebSocket messages.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub enum WsClientMsg {
-    /// Send a new update (encrypted CRDT delta).
+    /// Start receiving real-time events for a document.
+    /// Server adds this doc to the connection's subscription set.
+    /// Server responds with Subscribed { document_id }.
+    Subscribe { document_id: Uuid },
+
+    /// Stop receiving events for a document.
+    /// Server removes this doc from the subscription set.
+    Unsubscribe { document_id: Uuid },
+
+    /// Encrypted CRDT delta. document_id is inside update.public_data.
     Update(Update),
-    /// Send an ephemeral message (cursor, presence, etc.).
+
+    /// Encrypted ephemeral (cursor/presence). document_id is inside public_data.
     Ephemeral(Ephemeral),
-    /// Request missing updates after a given sequence number.
-    RequestMissing {
-        /// Request updates with sequence numbers greater than this value.
-        after_seq: Seq,
+
+    /// Request missing updates for a specific document after a known seq.
+    RequestMissing { document_id: Uuid, after_seq: Seq },
+
+    /// Subscribe to a channel (Murmure). Same WS, different subscription set.
+    SubscribeChannel { channel_id: Uuid },
+
+    /// Unsubscribe from a channel.
+    UnsubscribeChannel { channel_id: Uuid },
+
+    /// Encrypted channel update. Routed to the active segment by the server.
+    ChannelUpdate { channel_id: Uuid, update: Update },
+
+    /// Encrypted channel ephemeral (typing indicator).
+    ChannelEphemeral {
+        channel_id: Uuid,
+        ephemeral: Ephemeral,
     },
 }
 
-/// Server‑to‑client WebSocket messages.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+// ---------------------------------------------------------------------------
+// Server -> Client
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Deserialize)]
 pub enum WsServerMsg {
-    /// Broadcast an update to all connected clients.
-    ///
-    /// The `seq` field is the server‑assigned monotonic sequence number.
+    /// Subscription confirmed.
+    Subscribed { document_id: Uuid },
+
+    /// Encrypted CRDT delta with server-assigned seq.
     Update { seq: Seq, update: Update },
-    /// Broadcast an ephemeral message to all connected clients.
+
+    /// Encrypted ephemeral.
     Ephemeral(Ephemeral),
-    /// Response to a `RequestMissing` message.
-    MissingUpdates { updates: Vec<SeqUpdate> },
-    /// Notify the client that it has accumulated too many pending updates
-    /// and must create a snapshot.
-    SnapshotRequired,
-    /// Notify the client that a new snapshot is available for download.
-    ///
-    /// The snapshot itself is stored in S3; the client must fetch it via a
-    /// presigned URL obtained through the REST API.
-    SnapshotAvailable { snapshot_id: Uuid },
-    /// Notify all clients that a user has been revoked and that a key rotation
-    /// is required before any further updates can be accepted.
-    KeyRotationRequired { revoked_user_id: Uuid },
-    /// Generic WebSocket‑level error.
-    Error { code: WsErrorCode, message: String },
+
+    /// Response to RequestMissing.
+    MissingUpdates {
+        document_id: Uuid,
+        updates: Vec<SeqUpdate>,
+    },
+
+    /// Too many deltas accumulated — client must compact.
+    SnapshotRequired { document_id: Uuid },
+
+    /// New snapshot available for download via S3.
+    SnapshotAvailable {
+        document_id: Uuid,
+        snapshot_id: Uuid,
+    },
+
+    /// A member was revoked — fetch new doc_key_enc.
+    KeyRotationRequired {
+        document_id: Uuid,
+        revoked_user_id: Uuid,
+    },
+
+    /// Channel subscription confirmed.
+    ChannelSubscribed { channel_id: Uuid },
+
+    /// Channel update with server-assigned seq.
+    ChannelUpdate {
+        channel_id: Uuid,
+        seq: Seq,
+        update: Update,
+    },
+
+    /// Channel ephemeral.
+    ChannelEphemeral {
+        channel_id: Uuid,
+        ephemeral: Ephemeral,
+    },
+
+    /// Error (may be global or scoped to a document/channel).
+    Error { code: u16, message: String },
+}
+
+// ---------------------------------------------------------------------------
+// Wire encoding (postcard + version byte)
+// ---------------------------------------------------------------------------
+
+/// Encode a client message for the wire.
+pub fn encode_client_msg(msg: &WsClientMsg) -> Vec<u8> {
+    let buf = vec![0x01]; // wire version
+    postcard::to_extend(msg, buf).expect("postcard encode WsClientMsg")
+}
+
+/// Decode a client message from the wire.
+pub fn decode_client_msg(data: &[u8]) -> Result<WsClientMsg, WireDecodeError> {
+    if data.is_empty() {
+        return Err(WireDecodeError::Empty);
+    }
+    match data[0] {
+        0x01 => Ok(postcard::from_bytes(&data[1..])?),
+        v => Err(WireDecodeError::UnsupportedVersion(v)),
+    }
+}
+
+/// Encode a server message for the wire.
+pub fn encode_server_msg(msg: &WsServerMsg) -> Vec<u8> {
+    let buf = vec![0x01];
+    postcard::to_extend(msg, buf).expect("postcard encode WsServerMsg")
+}
+
+/// Decode a server message from the wire.
+pub fn decode_server_msg(data: &[u8]) -> Result<WsServerMsg, WireDecodeError> {
+    if data.is_empty() {
+        return Err(WireDecodeError::Empty);
+    }
+    match data[0] {
+        0x01 => Ok(postcard::from_bytes(&data[1..])?),
+        v => Err(WireDecodeError::UnsupportedVersion(v)),
+    }
+}
+
+#[derive(Debug)]
+pub enum WireDecodeError {
+    Empty,
+    UnsupportedVersion(u8),
+    Postcard(postcard::Error),
+}
+
+impl From<postcard::Error> for WireDecodeError {
+    fn from(e: postcard::Error) -> Self {
+        WireDecodeError::Postcard(e)
+    }
 }

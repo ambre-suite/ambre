@@ -18,6 +18,7 @@ async-trait = { workspace = true }
 # Server dependencies
 tokio = { workspace = true, features = ["full"] }
 axum = { workspace = true }
+futures-util = { workspace = true }
 sqlx = { workspace = true }
 rustis = { workspace = true }
 aws-sdk-s3 = { workspace = true }

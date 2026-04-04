@@ -1,43 +1,114 @@
-//! Core traits for application controllers and command sinks.
+//! Core traits for the Logic Worker dispatch layer.
 //!
-//! - `AppController`: implemented by each application controller in the Logic Worker.
-//! - `CommandSink`: abstraction for sending `SyncCommand`s to the Sync Worker.
+//! - [`AppController`]: implemented once per document type by each application
+//!   crate (`ambre-trame`, `ambre-prose`, `ambre-toile`, `ambre-murmure`).
+//! - [`CommandSink`]: abstraction that lets an `AppController` send
+//!   [`SyncCommand`]s to the Sync Worker without depending on web-sys.
 
 use crate::{DocType, LogicEvent, SyncCommand};
 
-/// Abstraction for sending commands to the Sync Worker.
+// ─────────────────────────────────────────────────────────────────────────────
+// CommandSink
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Abstraction for sending [`SyncCommand`]s to the Sync Worker.
 ///
-/// Implemented by a wrapper that serializes the command and sends it via
-/// `postMessage` (see `ambre‑app/src/bridge_sync.rs`).
+/// The concrete implementation wraps a `web_sys::MessagePort` and serializes
+/// the command with postcard before calling `postMessage` (see
+/// `ambre-app/src/bridge_sync.rs`). `AppController` implementations receive a
+/// boxed `CommandSink` via [`AppController::init`] and store it for the lifetime
+/// of the document session.
 pub trait CommandSink {
-    /// Send a command to the Sync Worker.
+    /// Serialize `cmd` with postcard and transfer it to the Sync Worker.
     fn send(&self, cmd: SyncCommand);
 }
 
-/// Implemented by each application controller in the Logic Worker.
+// ─────────────────────────────────────────────────────────────────────────────
+// AppController
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Per-document-type controller living in the Logic Worker.
 ///
-/// Controllers are registered in the `ControllerRegistry` and receive
-/// UI commands (as opaque `Vec<u8>`) and LogicEvents from the Sync Worker.
+/// One `AppController` instance is created for each open document and stored
+/// in the `ControllerRegistry` keyed by `document_id`. The Logic Worker
+/// dispatcher routes:
+/// - [`UiEnvelope::AppCommand`] → [`handle_ui_command`]
+/// - [`UiEnvelope::ScrollTo`] → [`handle_ui_command`] (scroll params serialized by
+///   the dispatcher)
+/// - [`LogicEvent::RemoteSnapshot`] / [`RemoteUpdate`] / [`RemoteEphemeral`] →
+///   [`on_logic_event`]
+/// - [`LogicEvent::SnapshotNeeded`] → [`export_snapshot`]
+///
+/// All return values are postcard-serialized display lists forwarded to the UI
+/// Thread as [`LogicEnvelope::ViewportUpdate`] or [`LogicEnvelope::PresenceUpdate`].
+///
+/// [`UiEnvelope::AppCommand`]: crate::UiEnvelope::AppCommand
+/// [`UiEnvelope::ScrollTo`]: crate::UiEnvelope::ScrollTo
+/// [`handle_ui_command`]: AppController::handle_ui_command
+/// [`on_logic_event`]: AppController::on_logic_event
+/// [`export_snapshot`]: AppController::export_snapshot
+/// [`RemoteUpdate`]: crate::LogicEvent::RemoteUpdate
+/// [`RemoteEphemeral`]: crate::LogicEvent::RemoteEphemeral
+/// [`LogicEnvelope::ViewportUpdate`]: crate::LogicEnvelope::ViewportUpdate
+/// [`LogicEnvelope::PresenceUpdate`]: crate::LogicEnvelope::PresenceUpdate
 pub trait AppController {
     /// Returns the document type this controller handles.
+    ///
+    /// Used by the `ControllerRegistry` to instantiate the correct controller
+    /// when the first [`LogicEvent::RemoteSnapshot`] arrives for a document.
+    ///
+    /// [`LogicEvent::RemoteSnapshot`]: crate::LogicEvent::RemoteSnapshot
     fn doc_type(&self) -> DocType;
 
-    /// Initializes the controller with a sink to the Sync Worker.
+    /// Wire the controller to the Sync Worker command channel.
     ///
-    /// Called once when the controller is registered. The controller may store
-    /// the sink for later use.
+    /// Called once immediately after construction, before any messages are
+    /// dispatched. The controller stores `sync_tx` for the lifetime of the
+    /// document session and uses it to emit [`SyncCommand::SendUpdate`],
+    /// [`SyncCommand::SendEphemeral`], etc. in response to user edits.
+    ///
+    /// [`SyncCommand::SendUpdate`]: crate::SyncCommand::SendUpdate
+    /// [`SyncCommand::SendEphemeral`]: crate::SyncCommand::SendEphemeral
     fn init(&mut self, sync_tx: Box<dyn CommandSink>);
 
-    /// Handles a UI command (serialized with postcard).
+    /// Process a UI command and return display updates for the UI Thread.
     ///
-    /// The command is application‑specific; the bus does not interpret it.
-    /// Returns zero or more events (also serialized with postcard) that should
-    /// be dispatched to the UI Thread.
+    /// `cmd` is a postcard-serialized command whose schema is defined by the
+    /// implementing crate. The return value is zero or more postcard-serialized
+    /// display lists. Each one is wrapped in a [`LogicEnvelope::ViewportUpdate`]
+    /// by the Logic Worker dispatcher before being sent to the UI Thread.
+    ///
+    /// This method must complete in < 50 ms (P2 budget). For scroll requests
+    /// (P1) the dispatcher serializes the scroll parameters and calls this
+    /// method too; the controller must respond in < 10 ms in that case.
+    ///
+    /// [`LogicEnvelope::ViewportUpdate`]: crate::LogicEnvelope::ViewportUpdate
     fn handle_ui_command(&mut self, cmd: Vec<u8>) -> Vec<Vec<u8>>;
 
-    /// Receives an event from the Sync Worker.
+    /// Receive an event from the Sync Worker and return display updates.
     ///
-    /// Returns zero or more events (serialized with postcard) that should be
-    /// dispatched to the UI Thread – symmetric with `handle_ui_command`.
+    /// Called for [`LogicEvent::RemoteSnapshot`], [`LogicEvent::RemoteUpdate`],
+    /// and [`LogicEvent::RemoteEphemeral`]. The controller applies the CRDT
+    /// delta to the local `LoroDoc`, recomputes the affected display region,
+    /// and returns postcard-serialized display lists. The dispatcher wraps each
+    /// one in [`LogicEnvelope::ViewportUpdate`] (or [`LogicEnvelope::PresenceUpdate`]
+    /// for ephemeral data) before forwarding to the UI Thread.
+    ///
+    /// [`LogicEvent::RemoteSnapshot`]: crate::LogicEvent::RemoteSnapshot
+    /// [`LogicEvent::RemoteUpdate`]: crate::LogicEvent::RemoteUpdate
+    /// [`LogicEvent::RemoteEphemeral`]: crate::LogicEvent::RemoteEphemeral
+    /// [`LogicEnvelope::ViewportUpdate`]: crate::LogicEnvelope::ViewportUpdate
+    /// [`LogicEnvelope::PresenceUpdate`]: crate::LogicEnvelope::PresenceUpdate
     fn on_logic_event(&mut self, event: LogicEvent) -> Vec<Vec<u8>>;
+
+    /// Export the full CRDT state for snapshot compaction.
+    ///
+    /// Called by the Logic Worker dispatcher when the Sync Worker emits
+    /// [`LogicEvent::SnapshotNeeded`]. The return value must be a valid
+    /// `LoroDoc::export_snapshot()` payload. The dispatcher wraps it in
+    /// [`SyncCommand::SendSnapshot`] and forwards it to the Sync Worker.
+    ///
+    /// [`LogicEvent::SnapshotNeeded`]: crate::LogicEvent::SnapshotNeeded
+    /// [`SyncCommand::SendSnapshot`]: crate::SyncCommand::SendSnapshot
+    fn export_snapshot(&self) -> Vec<u8>;
 }

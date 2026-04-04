@@ -1,0 +1,28 @@
+[package]
+name = "ambre-logic-worker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Logic Worker WASM — CRDT dispatch, AppController registry, viewport computation"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# Enables the #[wasm_bindgen(start)] shim for standalone builds (release pipeline).
+# Not set when ambre-app depends on this crate as a library (dev unified build).
+standalone = []
+
+[dependencies]
+ambre-bus  = { path = "../ambre-bus" }
+ambre-core = { path = "../ambre-core" }
+
+serde    = { workspace = true }
+postcard = { workspace = true }
+log      = { workspace = true }
+
+wasm-bindgen            = { workspace = true }
+js-sys                  = { workspace = true }
+web-sys                 = { workspace = true }
+console_log             = { workspace = true }
+console_error_panic_hook = { workspace = true }
