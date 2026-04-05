@@ -15,9 +15,7 @@ pub use parley::{Alignment, AlignmentOptions, FontContext, Layout, LayoutContext
 
 /// Brush type used inside Parley layouts across Ambre.
 ///
-/// Parley requires B: Clone + PartialEq + Default + Debug.  peniko::Color
-/// (AlphaColor<Srgb>) does not implement Default, so we use raw RGBA bytes
-/// as a lightweight token.  The actual render color is passed separately to
-/// DrawSurface::draw_glyphs as &peniko::Brush -- the in-layout brush value
-/// is not read back by the rendering path.
-pub type ParleyBrush = [u8; 4];
+/// peniko::Brush (the enum) implements Default (returns Brush::Solid(TRANSPARENT))
+/// and satisfies all parley::Brush bounds.  Note: peniko::Color = AlphaColor<Srgb>
+/// does NOT implement Default and cannot be used as a layout brush type.
+pub type ParleyBrush = Brush;
