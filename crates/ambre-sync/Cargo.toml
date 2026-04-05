@@ -12,7 +12,7 @@ ambre-bus = { path = "../ambre-bus" }
 serde = { workspace = true }
 postcard = { workspace = true }
 thiserror = { workspace = true }
-log = { workspace = true }
+tracing = { workspace = true }
 zeroize = { workspace = true }
 
 # Network & compression (WASM only)

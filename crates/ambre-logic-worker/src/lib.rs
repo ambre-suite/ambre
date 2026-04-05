@@ -155,7 +155,7 @@ impl LogicWorkerState {
                 Rc::clone(&self.sync_sink),
             ))))),
             DocType::Prose | DocType::Toile | DocType::Murmure => {
-                log::warn!(
+                tracing::warn!(
                     "Logic Worker: no controller implemented for {:?}, \
                      document will not render",
                     doc_type
@@ -416,7 +416,7 @@ impl LogicWorkerState {
                             self.controllers.insert(document_id, ctrl);
                         }
                     } else {
-                        log::warn!(
+                        tracing::warn!(
                             "Logic Worker: no pending doc_type for {document_id}, \
                              dropping RemoteSnapshot"
                         );
@@ -559,7 +559,7 @@ impl LogicWorkerState {
             }
             LogicEvent::ChannelSnapshotNeeded { channel_id: _ } => {
                 // Channel snapshot compaction is not yet implemented.
-                log::warn!("Logic Worker: ChannelSnapshotNeeded is not yet implemented");
+                tracing::warn!("Logic Worker: ChannelSnapshotNeeded is not yet implemented");
             }
             LogicEvent::UnreadCounts { counts } => {
                 self.send_to_ui(&LogicEnvelope::UnreadCounts { counts });
@@ -606,9 +606,12 @@ impl LogicWorkerState {
 /// - directly by `#[wasm_bindgen(start)]` in standalone builds (release pipeline), or
 /// - by the dispatcher in `ambre-app` when the worker name is "logic" (dev unified build).
 pub fn start() {
-    console_log::init_with_level(log::Level::Debug).ok();
-    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-    log::info!("Ambre Logic Worker starting");
+    #[cfg(feature = "standalone")]
+    {
+        tracing_wasm::set_as_global_default();
+        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+    }
+    tracing::info!("Ambre Logic Worker starting");
 
     let global: DedicatedWorkerGlobalScope =
         js_sys::global().dyn_into().expect("not running in a Worker");
@@ -662,7 +665,7 @@ pub fn start() {
             cb.forget();
         }
 
-        log::info!("Ambre Logic Worker initialized");
+        tracing::info!("Ambre Logic Worker initialized");
     });
 
     global.set_onmessage(Some(on_init.as_ref().unchecked_ref()));

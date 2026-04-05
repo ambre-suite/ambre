@@ -165,7 +165,7 @@ impl UiState {
             if let Err(e) =
                 renderer.render_to_texture(device, queue, scene, target_view, &params)
             {
-                log::error!("vello render_to_texture: {e:?}");
+                tracing::error!("vello render_to_texture: {e:?}");
                 return;
             }
         }
@@ -173,7 +173,7 @@ impl UiState {
         let surface_tex = match gpu.surface.get_current_texture() {
             Ok(t) => t,
             Err(e) => {
-                log::error!("get_current_texture: {e:?}");
+                tracing::error!("get_current_texture: {e:?}");
                 return;
             }
         };
@@ -284,7 +284,7 @@ async fn bootstrap_gpu(canvas: HtmlCanvasElement) -> GpuState {
     )
     .expect("create vello Renderer");
 
-    log::info!("GPU initialized: {width}x{height} format={format:?}");
+    tracing::info!("GPU initialized: {width}x{height} format={format:?}");
 
     GpuState {
         device,
@@ -307,7 +307,7 @@ async fn bootstrap_gpu(canvas: HtmlCanvasElement) -> GpuState {
 
 #[wasm_bindgen(start)]
 pub fn main() {
-    console_log::init_with_level(log::Level::Debug).ok();
+    tracing_wasm::set_as_global_default();
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
     #[cfg(feature = "unified")]
@@ -330,7 +330,7 @@ pub fn main() {
 // -----------------------------------------------------------------------------
 
 fn ui_main() {
-    log::info!("Ambre UI Thread starting");
+    tracing::info!("Ambre UI Thread starting");
 
     let logic_opts = WorkerOptions::new();
     logic_opts.set_type(WorkerType::Module);
@@ -487,7 +487,7 @@ fn ui_main() {
         cb.forget();
     }
 
-    log::info!("Ambre UI Thread ready");
+    tracing::info!("Ambre UI Thread ready");
 
     // Start the rAF loop. Frames before GPU init return immediately without
     // rendering (UiState::render() guards on self.gpu.is_some()).
