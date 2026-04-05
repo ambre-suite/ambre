@@ -64,6 +64,40 @@ fn extract_logic_envelope(event: &MessageEvent) -> Option<LogicEnvelope> {
 }
 
 // -----------------------------------------------------------------------------
+// TextState
+// -----------------------------------------------------------------------------
+
+/// Long-lived Parley font and layout context.
+///
+/// `FontContext` holds the registered font database; `LayoutContext` is scratch
+/// space that amortizes allocations between layout calls.  Both are expensive
+/// to create -- they live in `GpuState` and are reused every frame.
+///
+/// Font loading is performed once in `bootstrap_gpu` via `fetch()`.  If the
+/// fetch fails (network error, 404) text is simply not rendered -- the grid
+/// still shows correctly without labels.
+struct TextState {
+    font_cx: parley::FontContext,
+    /// Parameterized on [u8; 4] (ParleyBrush) -- peniko::Color does not
+    /// implement Default which is required by parley::Brush.
+    layout_cx: parley::LayoutContext<[u8; 4]>,
+}
+
+impl TextState {
+    fn new() -> Self {
+        Self {
+            font_cx: parley::FontContext::new(),
+            layout_cx: parley::LayoutContext::new(),
+        }
+    }
+
+    /// Register a font from raw TTF/OTF bytes.
+    fn register_font(&mut self, bytes: Vec<u8>) {
+        self.font_cx.collection.register_fonts(bytes.into(), None);
+    }
+}
+
+// -----------------------------------------------------------------------------
 // GpuState
 // -----------------------------------------------------------------------------
 
@@ -88,6 +122,8 @@ struct GpuState {
     format: wgpu::TextureFormat,
     width: u32,
     height: u32,
+    /// Parley font + layout context.  Populated after the font fetch completes.
+    text: TextState,
 }
 
 // -----------------------------------------------------------------------------
@@ -149,7 +185,9 @@ impl UiState {
         let Some(ref mut gpu) = self.gpu else { return };
 
         gpu.scene.reset();
-        trame::renderer::draw_grid(&mut gpu.scene, &self.trame);
+        // Destructure to satisfy the borrow checker (scene + text are independent fields).
+        let GpuState { scene, text, .. } = &mut *gpu;
+        trame::renderer::draw_grid(scene, &self.trame, &mut text.font_cx, &mut text.layout_cx);
 
         let params = vello::RenderParams {
             base_color: vello::peniko::Color::WHITE,
@@ -284,6 +322,17 @@ async fn bootstrap_gpu(canvas: HtmlCanvasElement) -> GpuState {
     )
     .expect("create vello Renderer");
 
+    // Font loading -- fetch NotoSans from the static asset directory served by
+    // Trunk at /fonts/.  Failure is non-fatal: text simply won't render.
+    let mut text = TextState::new();
+    match fetch_bytes("/fonts/NotoSans-Regular.ttf").await {
+        Some(bytes) => {
+            text.register_font(bytes);
+            tracing::info!("NotoSans-Regular.ttf loaded");
+        }
+        None => tracing::warn!("Failed to fetch /fonts/NotoSans-Regular.ttf -- text disabled"),
+    }
+
     tracing::info!("GPU initialized: {width}x{height} format={format:?}");
 
     GpuState {
@@ -298,7 +347,30 @@ async fn bootstrap_gpu(canvas: HtmlCanvasElement) -> GpuState {
         format,
         width,
         height,
+        text,
     }
+}
+
+// -----------------------------------------------------------------------------
+// Font fetch helper
+// -----------------------------------------------------------------------------
+
+/// Fetch a URL and return its body as raw bytes.
+///
+/// Returns `None` on any network or protocol error (including non-2xx status).
+async fn fetch_bytes(url: &str) -> Option<Vec<u8>> {
+    use wasm_bindgen::JsCast as _;
+    let window = web_sys::window()?;
+    let resp_val =
+        wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(url)).await.ok()?;
+    let resp: web_sys::Response = resp_val.dyn_into().ok()?;
+    if !resp.ok() {
+        return None;
+    }
+    let ab_val =
+        wasm_bindgen_futures::JsFuture::from(resp.array_buffer().ok()?).await.ok()?;
+    let ab: js_sys::ArrayBuffer = ab_val.dyn_into().ok()?;
+    Some(js_sys::Uint8Array::new(&ab).to_vec())
 }
 
 // -----------------------------------------------------------------------------

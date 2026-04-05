@@ -24,6 +24,9 @@
     <link data-trunk rel="copy-file" href="logic_worker.js" />
     <link data-trunk rel="copy-file" href="sync_worker.js" />
 
+    <!-- Font assets served at /fonts/ — loaded at runtime via fetch() (no include_bytes!) -->
+    <link data-trunk rel="copy-dir" href="fonts" />
+
     <!-- Inter font — embedded in WASM bundle for production, loaded via CSS for shell fallback -->
     <!-- <link data-trunk rel="copy-file" href="assets/inter.woff2" /> -->
 
