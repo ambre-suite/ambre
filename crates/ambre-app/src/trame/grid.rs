@@ -91,6 +91,7 @@ impl TrameUiState {
     // -------------------------------------------------------------------------
 
     /// Update canvas dimensions and recompute the visible range.
+    #[allow(dead_code)]
     pub fn resize(&mut self, width: f64, height: f64) {
         self.canvas_width = width;
         self.canvas_height = height;

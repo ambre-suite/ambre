@@ -18,6 +18,11 @@ cargo clippy \
     -p ambre-toile \
     -p ambre-murmure \
     --message-format=json 2>&1
+# For the native server check, filter out registry dep messages:
+# RA's project model is built with wasm32 target, so native-only transitive
+# deps (mio, parking, etc.) are unknown to it. We only forward messages from
+# workspace crates (path+ package IDs) to avoid "unknown package" log spam.
 cargo clippy \
     -p ambre-server \
-    --message-format=json 2>&1
+    --message-format=json 2>&1 \
+    | grep -v '"package_id":"registry+'

@@ -39,7 +39,7 @@ struct WsConnectionState {
     channel_subscriptions: HashSet<Uuid>,
 }
 
-async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>, session: Session) {
+async fn handle_ws(socket: WebSocket, _state: Arc<AppState>, session: Session) {
     let (outbound_tx, mut outbound_rx) = mpsc::channel::<Vec<u8>>(256);
 
     let mut conn = WsConnectionState {
@@ -157,7 +157,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>, session: Session
 
             WsClientMsg::RequestMissing {
                 document_id,
-                after_seq,
+                after_seq: _,
             } => {
                 if !conn.doc_subscriptions.contains(&document_id) {
                     continue;
@@ -179,7 +179,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>, session: Session
                 conn.channel_subscriptions.remove(&channel_id);
             }
 
-            WsClientMsg::ChannelUpdate { channel_id, update } => {
+            WsClientMsg::ChannelUpdate { channel_id, update: _ } => {
                 if !conn.channel_subscriptions.contains(&channel_id) {
                     continue;
                 }
@@ -188,7 +188,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>, session: Session
 
             WsClientMsg::ChannelEphemeral {
                 channel_id,
-                ephemeral,
+                ephemeral: _,
             } => {
                 if !conn.channel_subscriptions.contains(&channel_id) {
                     continue;
@@ -200,11 +200,11 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>, session: Session
 
     // -- Cleanup on disconnect --
     // Remove session from all subscribed documents in Redis.
-    for doc_id in &conn.doc_subscriptions {
+    for _doc_id in &conn.doc_subscriptions {
         // state.redis.hdel(format!("doc:{doc_id}:sessions"), &conn.session_id).await;
         // state.redis.hdel(format!("doc:{doc_id}:presence"), &hex_pubkey).await;
     }
-    for ch_id in &conn.channel_subscriptions {
+    for _ch_id in &conn.channel_subscriptions {
         // same cleanup for channels
     }
     outbound_handle.abort();

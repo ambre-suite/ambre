@@ -77,12 +77,14 @@ struct GpuState {
     /// wgpu surface backed by the HTML canvas element.
     surface: wgpu::Surface<'static>,
     /// Intermediate Rgba8Unorm texture that Vello renders into (compute shader).
+    #[allow(dead_code)]
     target_texture: wgpu::Texture,
     target_view: wgpu::TextureView,
     /// Blits `target_view` → surface texture each frame.
     blitter: wgpu::util::TextureBlitter,
     renderer: vello::Renderer,
     scene: vello::Scene,
+    #[allow(dead_code)]
     format: wgpu::TextureFormat,
     width: u32,
     height: u32,
@@ -117,14 +119,10 @@ impl UiState {
     }
 
     fn handle_logic_envelope(&mut self, envelope: LogicEnvelope) {
-        match envelope {
-            LogicEnvelope::ViewportUpdate { document_id: _, payload } => {
-                if let Ok(update) = postcard::from_bytes::<TrameViewUpdate>(&payload) {
-                    self.trame.on_viewport_data(update);
-                }
-            }
-            // All other variants handled when their features are implemented.
-            _ => {}
+        if let LogicEnvelope::ViewportUpdate { document_id: _, payload } = envelope
+            && let Ok(update) = postcard::from_bytes::<TrameViewUpdate>(&payload)
+        {
+            self.trame.on_viewport_data(update);
         }
     }
 

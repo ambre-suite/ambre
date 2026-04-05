@@ -48,9 +48,11 @@ use ambre_protocol::{
 /// 32-byte master seed derived from the user's passphrase via Argon2id.
 ///
 /// Derives Ed25519 signing key + X25519 exchange key. Zeroized on drop.
+#[allow(dead_code)]
 struct MasterSeed([u8; 32]);
 
 /// Per-document symmetric encryption key (XChaCha20-Poly1305). Zeroized on drop.
+#[allow(dead_code)]
 struct DocumentKey([u8; 32]);
 
 // -----------------------------------------------------------------------------
@@ -62,6 +64,7 @@ struct DocumentKey([u8; 32]);
 /// A session is created on `SyncCommand::OpenDocument` and destroyed on
 /// `SyncCommand::CloseDocument` (or `Logout`). The `DocumentKey` is zeroized
 /// on drop.
+#[allow(dead_code)]
 struct SyncDocumentState {
     document_id: Uuid,
     doc_key: DocumentKey,
@@ -89,6 +92,7 @@ struct SyncWorkerState {
     /// MessagePort to the Logic Worker (established during bootstrap).
     logic_port: MessagePort,
     /// Base URL for REST API calls (e.g. `"api.ambre.app"`).
+    #[allow(dead_code)]
     api_base: String,
 
     // -- Session-level crypto (derived once at Unlock, zeroized at Logout) ----
@@ -401,6 +405,7 @@ impl SyncWorkerState {
     /// Reconnect the WebSocket and re-subscribe to all active documents.
     ///
     /// Called by the onclose handler with exponential backoff.
+    #[allow(dead_code)]
     fn reconnect_and_resubscribe(&mut self) {
         // 1. open_websocket()
         // 2. For each doc_id in self.documents:
@@ -423,6 +428,7 @@ impl SyncWorkerState {
     /// Demultiplex an inbound WebSocket frame by `document_id`.
     ///
     /// Wire format: `[version_byte: u8] [postcard(WsServerMsg)]`
+    #[allow(dead_code)]
     fn handle_ws_message(&mut self, wire: &[u8]) {
         let server_msg = match decode_server_msg(wire) {
             Ok(msg) => msg,
@@ -602,7 +608,7 @@ impl SyncWorkerState {
     }
 
     fn handle_send_snapshot(&mut self, document_id: Uuid, payload: Vec<u8>) {
-        if self.documents.get(&document_id).is_none() {
+        if !self.documents.contains_key(&document_id) {
             return;
         }
         // Same pipeline as SendUpdate but for the full CRDT state.
@@ -611,7 +617,7 @@ impl SyncWorkerState {
     }
 
     fn handle_send_ephemeral(&mut self, document_id: Uuid, payload: Vec<u8>) {
-        if self.documents.get(&document_id).is_none() {
+        if !self.documents.contains_key(&document_id) {
             return;
         }
         // Same encrypt pipeline, but sent as WsClientMsg::Ephemeral.
