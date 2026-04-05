@@ -1,13 +1,14 @@
 //! Trame IPC types shared between the Logic Worker and the UI Thread.
 //!
-//! This crate is intentionally thin: only pure serde types, no CRDT, no GPU.
-//! - [`TrameCommand`] / [`TrameViewUpdate`]: postcard-serialized payloads
-//!   transported as opaque `Vec<u8>` inside [`ambre_bus`] envelopes.
+//! Intentionally thin: only pure serde types, no CRDT, no GPU.
+//! - [`TrameCommand`]: postcard-serialized payloads UI Thread -> Logic Worker.
+//! - [`TrameViewUpdate`]: postcard-serialized payloads Logic Worker -> UI Thread.
+//! - [`DisplayCell`]: flat cell data ready for rendering.
 //!
 //! Heavy dependencies live in their consumer:
-//! - `loro`, `petgraph`, `FormulaEngine` -> `ambre-logic-worker/src/trame/`
-//! - `masonry`, `vello`, widgets          -> `ambre-app/src/trame/`
+//! - `loro`, `petgraph`, formula engine -> `ambre-logic-worker/src/trame/`
+//! - `vello`, `wgpu`, GPU rendering     -> `ambre-app/src/trame/`
 
 pub mod events;
 
-pub use events::{TrameCommand, TrameViewUpdate};
+pub use events::{DisplayCell, TrameCommand, TrameViewUpdate};

@@ -5,4 +5,5 @@ edition = "2024"
 description = "Trame IPC types -- TrameCommand, TrameViewUpdate, DisplayCell (serde only, no CRDT/GPU deps)"
 
 [dependencies]
-serde = { workspace = true }
+serde    = { workspace = true }
+ambre-draw = { path = "../ambre-draw" }
