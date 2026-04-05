@@ -24,10 +24,10 @@ petgraph = { workspace = true }
 
 serde    = { workspace = true }
 postcard = { workspace = true }
-log      = { workspace = true }
+tracing      = { workspace = true }
+tracing-wasm = { workspace = true }
 
-wasm-bindgen            = { workspace = true }
-js-sys                  = { workspace = true }
-web-sys                 = { workspace = true }
-console_log             = { workspace = true }
+wasm-bindgen             = { workspace = true }
+js-sys                   = { workspace = true }
+web-sys                  = { workspace = true }
 console_error_panic_hook = { workspace = true }

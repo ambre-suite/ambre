@@ -22,11 +22,11 @@ ambre-protocol = { path = "../ambre-protocol" }
 
 serde    = { workspace = true }
 postcard = { workspace = true }
-log      = { workspace = true }
+tracing      = { workspace = true }
+tracing-wasm = { workspace = true }
 
 wasm-bindgen             = { workspace = true }
 js-sys                   = { workspace = true }
 web-sys                  = { workspace = true, features = ["WebSocket", "BinaryType", "CloseEvent"] }
-console_log              = { workspace = true }
 console_error_panic_hook = { workspace = true }
 gloo-net                 = { workspace = true, features = ["http", "websocket"] }

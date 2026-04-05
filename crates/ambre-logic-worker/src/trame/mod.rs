@@ -50,7 +50,7 @@ impl AppController for TrameController {
         let cmd = match postcard::from_bytes::<TrameCommand>(&cmd) {
             Ok(c) => c,
             Err(e) => {
-                log::warn!("TrameController: deserialize TrameCommand: {e}");
+                tracing::warn!("TrameController: deserialize TrameCommand: {e}");
                 return vec![];
             }
         };
@@ -89,7 +89,7 @@ impl AppController for TrameController {
                 match postcard::to_allocvec(&update) {
                     Ok(bytes) => vec![bytes],
                     Err(e) => {
-                        log::error!("TrameController: serialize TrameViewUpdate: {e}");
+                        tracing::error!("TrameController: serialize TrameViewUpdate: {e}");
                         vec![]
                     }
                 }

@@ -207,35 +207,35 @@ impl SyncWorkerState {
                 self.handle_list_document_members(document_id);
             }
             SyncCommand::UpdateDocumentMemberRole { document_id, user_id, role } => {
-                log::info!("Sync Worker: UpdateDocumentMemberRole {document_id:?} {user_id:?}");
+                tracing::info!("Sync Worker: UpdateDocumentMemberRole {document_id:?} {user_id:?}");
                 let _ = role;
             }
 
             // -- Users ---------------------------------------------------------
             SyncCommand::SearchUsers { query } => {
-                log::info!("Sync Worker: SearchUsers '{query}'");
+                tracing::info!("Sync Worker: SearchUsers '{query}'");
             }
 
             // -- Media ---------------------------------------------------------
             SyncCommand::UploadMedia { document_id, data, mime_type } => {
-                log::info!(
+                tracing::info!(
                     "Sync Worker: UploadMedia {document_id:?} {mime_type} len={}",
                     data.len()
                 );
             }
             SyncCommand::DownloadMedia { document_id, content_hash } => {
-                log::info!("Sync Worker: DownloadMedia {document_id:?} {content_hash}");
+                tracing::info!("Sync Worker: DownloadMedia {document_id:?} {content_hash}");
             }
 
             // -- Channels -----------------------------------------------------
             SyncCommand::ListChannels => {
-                log::info!("Sync Worker: ListChannels");
+                tracing::info!("Sync Worker: ListChannels");
             }
             SyncCommand::CreateChannel { name } => {
-                log::info!("Sync Worker: CreateChannel '{name}'");
+                tracing::info!("Sync Worker: CreateChannel '{name}'");
             }
             SyncCommand::DeleteChannel { channel_id } => {
-                log::info!("Sync Worker: DeleteChannel {channel_id:?}");
+                tracing::info!("Sync Worker: DeleteChannel {channel_id:?}");
             }
             SyncCommand::OpenChannel { channel_id } => {
                 self.handle_open_channel(channel_id);
@@ -244,18 +244,18 @@ impl SyncWorkerState {
                 self.handle_close_channel(channel_id);
             }
             SyncCommand::InviteToChannel { channel_id, invitee_email, role } => {
-                log::info!(
+                tracing::info!(
                     "Sync Worker: InviteToChannel {channel_id:?} {invitee_email} {role:?}"
                 );
             }
             SyncCommand::RevokeFromChannel { channel_id, user_id } => {
-                log::info!("Sync Worker: RevokeFromChannel {channel_id:?} {user_id:?}");
+                tracing::info!("Sync Worker: RevokeFromChannel {channel_id:?} {user_id:?}");
             }
             SyncCommand::ListChannelMembers { channel_id } => {
-                log::info!("Sync Worker: ListChannelMembers {channel_id:?}");
+                tracing::info!("Sync Worker: ListChannelMembers {channel_id:?}");
             }
             SyncCommand::UpdateChannelMemberRole { channel_id, user_id, role } => {
-                log::info!(
+                tracing::info!(
                     "Sync Worker: UpdateChannelMemberRole {channel_id:?} {user_id:?} {role:?}"
                 );
             }
@@ -266,24 +266,24 @@ impl SyncWorkerState {
                 self.handle_send_channel_ephemeral(channel_id, payload);
             }
             SyncCommand::UpdateReadCursor { channel_id, last_seq } => {
-                log::debug!("Sync Worker: UpdateReadCursor {channel_id:?} seq={last_seq}");
+                tracing::debug!("Sync Worker: UpdateReadCursor {channel_id:?} seq={last_seq}");
             }
             SyncCommand::GetUnreadCounts => {
-                log::info!("Sync Worker: GetUnreadCounts");
+                tracing::info!("Sync Worker: GetUnreadCounts");
             }
 
             // -- Meetings -----------------------------------------------------
             SyncCommand::CreateMeeting { name } => {
-                log::info!("Sync Worker: CreateMeeting '{name}'");
+                tracing::info!("Sync Worker: CreateMeeting '{name}'");
             }
             SyncCommand::JoinMeeting { meeting_id } => {
-                log::info!("Sync Worker: JoinMeeting {meeting_id:?}");
+                tracing::info!("Sync Worker: JoinMeeting {meeting_id:?}");
             }
             SyncCommand::LeaveMeeting { meeting_id } => {
-                log::info!("Sync Worker: LeaveMeeting {meeting_id:?}");
+                tracing::info!("Sync Worker: LeaveMeeting {meeting_id:?}");
             }
             SyncCommand::EndMeeting { meeting_id } => {
-                log::info!("Sync Worker: EndMeeting {meeting_id:?}");
+                tracing::info!("Sync Worker: EndMeeting {meeting_id:?}");
             }
 
             // -- Lifecycle -----------------------------------------------------
@@ -307,7 +307,7 @@ impl SyncWorkerState {
         // 8. Wire ws.onclose  -> reconnect_and_resubscribe (exponential backoff)
         // 9. Send LogicEvent::SessionReady
 
-        log::info!("Sync Worker: Unlock (passphrase len={})", passphrase.len());
+        tracing::info!("Sync Worker: Unlock (passphrase len={})", passphrase.len());
         self.open_websocket();
 
         // Placeholder - replace with real session once crypto is wired.
@@ -328,7 +328,7 @@ impl SyncWorkerState {
         // 7. Open WebSocket (same as Unlock step 6-8)
         // 8. Send LogicEvent::AccountCreated { recovery_words }
 
-        log::info!("Sync Worker: SetupAccount (passphrase len={})", passphrase.len());
+        tracing::info!("Sync Worker: SetupAccount (passphrase len={})", passphrase.len());
     }
 
     fn handle_change_passphrase(
@@ -343,7 +343,7 @@ impl SyncWorkerState {
         // 5. PUT /api/keys/master/rotate { master_key_enc, salt }
         // 6. Send LogicEvent::PassphraseChanged
 
-        log::info!("Sync Worker: ChangePassphrase");
+        tracing::info!("Sync Worker: ChangePassphrase");
         let _ = (current_passphrase, new_passphrase);
     }
 
@@ -354,7 +354,7 @@ impl SyncWorkerState {
         // 4. PUT /api/keys/master/rotate
         // 5. Send LogicEvent::AccountRecovered
 
-        log::info!("Sync Worker: RecoverAccount");
+        tracing::info!("Sync Worker: RecoverAccount");
         let _ = (recovery_words, new_passphrase);
     }
 
@@ -372,7 +372,7 @@ impl SyncWorkerState {
         self.documents.clear();
         self.master_seed = None;
         self.send_to_logic(&LogicEvent::LoggedOut);
-        log::info!("Sync Worker: logged out, all keys zeroized");
+        tracing::info!("Sync Worker: logged out, all keys zeroized");
     }
 
     // -- WebSocket lifecycle ---------------------------------------------------
@@ -399,7 +399,7 @@ impl SyncWorkerState {
         //
         // self.ws = Some(ws);
 
-        log::info!("Sync Worker: WebSocket opened (multiplexed)");
+        tracing::info!("Sync Worker: WebSocket opened (multiplexed)");
     }
 
     /// Reconnect the WebSocket and re-subscribe to all active documents.
@@ -420,7 +420,7 @@ impl SyncWorkerState {
                 connected: false,
             });
         }
-        log::info!("Sync Worker: reconnecting ({} active docs)", self.documents.len());
+        tracing::info!("Sync Worker: reconnecting ({} active docs)", self.documents.len());
     }
 
     // -- Inbound: Server -> Sync Worker (WebSocket demux) ----------------------
@@ -433,7 +433,7 @@ impl SyncWorkerState {
         let server_msg = match decode_server_msg(wire) {
             Ok(msg) => msg,
             Err(e) => {
-                log::error!("Sync Worker: wire decode error: {e:?}");
+                tracing::error!("Sync Worker: wire decode error: {e:?}");
                 return;
             }
         };
@@ -495,7 +495,7 @@ impl SyncWorkerState {
                 // 3. Verify + decrypt + decompress -> plaintext CRDT state
                 // 4. Send LogicEvent::RemoteSnapshot { document_id, payload }
                 let _ = snapshot_id;
-                log::info!("Sync Worker: SnapshotAvailable for {document_id:?}");
+                tracing::info!("Sync Worker: SnapshotAvailable for {document_id:?}");
             }
 
             WsServerMsg::KeyRotationRequired { document_id, revoked_user_id } => {
@@ -529,7 +529,7 @@ impl SyncWorkerState {
             }
 
             WsServerMsg::Error { code, message } => {
-                log::error!("Sync Worker: server error {code}: {message}");
+                tracing::error!("Sync Worker: server error {code}: {message}");
                 self.send_to_logic(&LogicEvent::ApiError {
                     request: "websocket".into(),
                     code,
@@ -559,7 +559,7 @@ impl SyncWorkerState {
         if self.ws.is_some() {
             self.ws_send(&WsClientMsg::Subscribe { document_id });
         }
-        log::info!("Sync Worker: OpenDocument {document_id:?}");
+        tracing::info!("Sync Worker: OpenDocument {document_id:?}");
     }
 
     fn handle_close_document(&mut self, document_id: Uuid) {
@@ -568,7 +568,7 @@ impl SyncWorkerState {
         }
         // Drop SyncDocumentState -> DocumentKey is zeroized on drop.
         self.documents.remove(&document_id);
-        log::info!("Sync Worker: CloseDocument {document_id:?}");
+        tracing::info!("Sync Worker: CloseDocument {document_id:?}");
     }
 
     fn handle_reconnect(&mut self, document_id: Uuid) {
@@ -585,7 +585,7 @@ impl SyncWorkerState {
 
     fn handle_send_update(&mut self, document_id: Uuid, payload: Vec<u8>) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
-            log::warn!("Sync Worker: SendUpdate for unknown doc {document_id:?}");
+            tracing::warn!("Sync Worker: SendUpdate for unknown doc {document_id:?}");
             return;
         };
         doc_state.local_clock += 1;
@@ -601,7 +601,7 @@ impl SyncWorkerState {
         // 7. Ed25519 sign(nonce || ciphertext || public_data_bytes || commitment_tag)
         // 8. ws_send(WsClientMsg::Update(WireUpdate { ... }))
 
-        log::debug!(
+        tracing::debug!(
             "Sync Worker: SendUpdate {document_id:?} clock={clock} len={}",
             payload.len()
         );
@@ -613,7 +613,7 @@ impl SyncWorkerState {
         }
         // Same pipeline as SendUpdate but for the full CRDT state.
         // Upload via presigned S3 URL -> server broadcasts SnapshotAvailable.
-        log::info!("Sync Worker: SendSnapshot {document_id:?} len={}", payload.len());
+        tracing::info!("Sync Worker: SendSnapshot {document_id:?} len={}", payload.len());
     }
 
     fn handle_send_ephemeral(&mut self, document_id: Uuid, payload: Vec<u8>) {
@@ -622,7 +622,7 @@ impl SyncWorkerState {
         }
         // Same encrypt pipeline, but sent as WsClientMsg::Ephemeral.
         // Never persisted server-side; no commitment_tag sequence tracking needed.
-        log::debug!("Sync Worker: SendEphemeral {document_id:?} len={}", payload.len());
+        tracing::debug!("Sync Worker: SendEphemeral {document_id:?} len={}", payload.len());
     }
 
     // -- Document CRUD (HTTP REST) ---------------------------------------------
@@ -634,7 +634,7 @@ impl SyncWorkerState {
 
         // Placeholder - real implementation uses gloo-net + spawn_local.
         self.send_to_logic(&LogicEvent::DocumentList { documents: vec![] });
-        log::info!("Sync Worker: ListDocuments");
+        tracing::info!("Sync Worker: ListDocuments");
     }
 
     fn handle_create_document(&self, doc_type: DocType, name: String) {
@@ -644,20 +644,20 @@ impl SyncWorkerState {
         // 4. Encrypt DocumentKey with own exchange_pubkey -> doc_key_enc
         // 5. POST /api/documents/{id}/share { user_id: self, role: Owner, doc_key_enc }
         // 6. Send LogicEvent::DocumentCreated { document_id, doc_type }
-        log::info!("Sync Worker: CreateDocument {doc_type:?} '{name}'");
+        tracing::info!("Sync Worker: CreateDocument {doc_type:?} '{name}'");
     }
 
     fn handle_delete_document(&self, document_id: Uuid) {
         // DELETE /api/documents/{id}
         // Send LogicEvent::DocumentDeleted { document_id }
-        log::info!("Sync Worker: DeleteDocument {document_id:?}");
+        tracing::info!("Sync Worker: DeleteDocument {document_id:?}");
     }
 
     fn handle_rename_document(&self, document_id: Uuid, name: String) {
         // Encrypt name with DocumentKey -> name_enc
         // PATCH /api/documents/{id} { name_enc }
         // Send LogicEvent::DocumentRenamed { document_id }
-        log::info!("Sync Worker: RenameDocument {document_id:?} '{name}'");
+        tracing::info!("Sync Worker: RenameDocument {document_id:?} '{name}'");
     }
 
     // -- Sharing (HTTP REST + crypto) ------------------------------------------
@@ -673,7 +673,7 @@ impl SyncWorkerState {
         // 3. Encrypt DocumentKey -> doc_key_enc
         // 4. POST /api/documents/{id}/share { user_id, role, doc_key_enc }
         // 5. Send LogicEvent::InviteSent { document_id, user_id, display_name }
-        log::info!("Sync Worker: InviteToDocument {document_id:?} {invitee_email} {role:?}");
+        tracing::info!("Sync Worker: InviteToDocument {document_id:?} {invitee_email} {role:?}");
     }
 
     fn handle_revoke_from_document(&self, document_id: Uuid, user_id: Uuid) {
@@ -685,13 +685,13 @@ impl SyncWorkerState {
         // 5. POST /api/documents/{id}/rotate-key { [(user_id, doc_key_enc)] }
         // 6. Server broadcasts WsServerMsg::KeyRotationRequired
         // 7. Send LogicEvent::RevocationComplete { document_id }
-        log::info!("Sync Worker: RevokeFromDocument {document_id:?} {user_id:?}");
+        tracing::info!("Sync Worker: RevokeFromDocument {document_id:?} {user_id:?}");
     }
 
     fn handle_list_document_members(&self, document_id: Uuid) {
         // GET /api/documents/{id}/members
         // Send LogicEvent::DocumentMembers { document_id, members: Vec<MemberInfo> }
-        log::info!("Sync Worker: ListDocumentMembers {document_id:?}");
+        tracing::info!("Sync Worker: ListDocumentMembers {document_id:?}");
     }
 
     // -- Channels -------------------------------------------------------------
@@ -701,23 +701,23 @@ impl SyncWorkerState {
         if self.ws.is_some() {
             self.ws_send(&WsClientMsg::Subscribe { document_id: channel_id });
         }
-        log::info!("Sync Worker: OpenChannel {channel_id:?}");
+        tracing::info!("Sync Worker: OpenChannel {channel_id:?}");
     }
 
     fn handle_close_channel(&mut self, channel_id: Uuid) {
         if self.ws.is_some() {
             self.ws_send(&WsClientMsg::Unsubscribe { document_id: channel_id });
         }
-        log::info!("Sync Worker: CloseChannel {channel_id:?}");
+        tracing::info!("Sync Worker: CloseChannel {channel_id:?}");
     }
 
     fn handle_send_channel_update(&self, channel_id: Uuid, payload: Vec<u8>) {
         // Encrypt + route to active segment (segment management is internal to ambre-sync).
-        log::debug!("Sync Worker: SendChannelUpdate {channel_id:?} len={}", payload.len());
+        tracing::debug!("Sync Worker: SendChannelUpdate {channel_id:?} len={}", payload.len());
     }
 
     fn handle_send_channel_ephemeral(&self, channel_id: Uuid, payload: Vec<u8>) {
-        log::debug!("Sync Worker: SendChannelEphemeral {channel_id:?} len={}", payload.len());
+        tracing::debug!("Sync Worker: SendChannelEphemeral {channel_id:?} len={}", payload.len());
     }
 }
 
@@ -731,9 +731,12 @@ impl SyncWorkerState {
 /// - directly by `#[wasm_bindgen(start)]` in standalone builds (release pipeline), or
 /// - by the dispatcher in `ambre-app` when the worker name is "sync" (dev unified build).
 pub fn start() {
-    console_log::init_with_level(log::Level::Debug).ok();
-    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-    log::info!("Ambre Sync Worker starting");
+    #[cfg(feature = "standalone")]
+    {
+        tracing_wasm::set_as_global_default();
+        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+    }
+    tracing::info!("Ambre Sync Worker starting");
 
     let global: DedicatedWorkerGlobalScope =
         js_sys::global().dyn_into().expect("not running in a Worker");
@@ -769,7 +772,7 @@ pub fn start() {
             cb.forget();
         }
 
-        log::info!("Ambre Sync Worker initialized - Logic Worker port connected");
+        tracing::info!("Ambre Sync Worker initialized - Logic Worker port connected");
     });
 
     global.set_onmessage(Some(on_init.as_ref().unchecked_ref()));
