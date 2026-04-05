@@ -19,6 +19,7 @@ unified = ["dep:ambre-logic-worker", "dep:ambre-sync-worker"]
 [dependencies]
 ambre-bus          = { path = "../ambre-bus" }
 ambre-core         = { path = "../ambre-core" }
+ambre-draw         = { path = "../ambre-draw" }
 ambre-trame        = { path = "../ambre-trame" }
 ambre-logic-worker = { path = "../ambre-logic-worker", optional = true }
 ambre-sync-worker  = { path = "../ambre-sync-worker", optional = true }
@@ -37,7 +38,8 @@ winit   = { workspace = true }
 # Web APIs
 web-sys = { workspace = true, features = ["WorkerOptions", "WorkerType"] }
 js-sys  = { workspace = true }
-wasm-bindgen = { workspace = true }
+wasm-bindgen         = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
 
 console_log              = { workspace = true }
 console_error_panic_hook = { workspace = true }
