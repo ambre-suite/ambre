@@ -18,7 +18,8 @@ unified = ["dep:ambre-logic-worker", "dep:ambre-sync-worker"]
 
 [dependencies]
 ambre-bus          = { path = "../ambre-bus" }
-parley = { workspace = true }
+parley      = { workspace = true }
+rustc-hash  = { workspace = true }
 ambre-core         = { path = "../ambre-core" }
 ambre-draw         = { path = "../ambre-draw" }
 ambre-trame        = { path = "../ambre-trame" }

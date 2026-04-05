@@ -136,10 +136,9 @@ impl TrameUiState {
         if changed {
             Some(self.scroll_viewport_cmd())
         } else {
-            // Active cell is still within the cached range: no new request needed,
-            // but we still return a command so the caller can decide.
-            // (The Logic Worker will reply with an empty or identical ViewportData.)
-            Some(self.scroll_viewport_cmd())
+            // Active cell is within the cached range: cursor highlight moves
+            // without a Logic Worker round-trip.
+            None
         }
     }
 

@@ -67,31 +67,26 @@ fn extract_logic_envelope(event: &MessageEvent) -> Option<LogicEnvelope> {
 // TextState
 // -----------------------------------------------------------------------------
 
-/// Long-lived Parley font and layout context.
+/// Long-lived Parley font database + shaped-layout cache.
 ///
-/// `FontContext` holds the registered font database; `LayoutContext` is scratch
-/// space that amortizes allocations between layout calls.  Both are expensive
-/// to create -- they live in `GpuState` and are reused every frame.
-///
-/// Font loading is performed once in `bootstrap_gpu` via `fetch()`.  If the
-/// fetch fails (network error, 404) text is simply not rendered -- the grid
-/// still shows correctly without labels.
+/// `FontContext` is expensive to create and holds the registered fonts.
+/// `TextCache` wraps `LayoutContext` and a `FxHashMap` that stores shaped
+/// `Layout<Brush>` objects keyed by (text, size, width, align).  After the
+/// first frame the cache absorbs all repeated cell/header strings with zero
+/// shaping cost.
 struct TextState {
     font_cx: parley::FontContext,
-    /// Parameterized on [u8; 4] (ParleyBrush) -- peniko::Color does not
-    /// implement Default which is required by parley::Brush.
-    layout_cx: parley::LayoutContext<[u8; 4]>,
+    text_cache: trame::text_cache::TextCache,
 }
 
 impl TextState {
     fn new() -> Self {
         Self {
             font_cx: parley::FontContext::new(),
-            layout_cx: parley::LayoutContext::new(),
+            text_cache: trame::text_cache::TextCache::new(1.0),
         }
     }
 
-    /// Register a font from raw TTF/OTF bytes.
     fn register_font(&mut self, bytes: Vec<u8>) {
         self.font_cx.collection.register_fonts(bytes.into(), None);
     }
@@ -108,21 +103,17 @@ impl TextState {
 struct GpuState {
     device: wgpu::Device,
     queue: wgpu::Queue,
-    /// wgpu surface backed by the HTML canvas element.
     surface: wgpu::Surface<'static>,
-    /// Intermediate Rgba8Unorm texture that Vello renders into (compute shader).
-    #[allow(dead_code)]
+    /// Intermediate texture: Vello renders here (STORAGE_BINDING).
     target_texture: wgpu::Texture,
     target_view: wgpu::TextureView,
-    /// Blits `target_view` → surface texture each frame.
+    /// Blits target_view -> surface texture via a render pass.
     blitter: wgpu::util::TextureBlitter,
     renderer: vello::Renderer,
     scene: vello::Scene,
-    #[allow(dead_code)]
     format: wgpu::TextureFormat,
     width: u32,
     height: u32,
-    /// Parley font + layout context.  Populated after the font fetch completes.
     text: TextState,
 }
 
@@ -135,16 +126,39 @@ struct UiState {
     pending: Rc<RefCell<VecDeque<LogicEnvelope>>>,
     gpu: Option<GpuState>,
     trame: trame::TrameUiState,
-    /// Set to true once the Logic Worker ready handshake completes (syncPort
-    /// transferred, steady-state handler installed). The initial ScrollViewport
-    /// is deferred until this flag is set to avoid sending during Phase-1 init.
     logic_worker_ready: bool,
-    /// Set to true after the first ScrollViewport is sent on startup.
     initial_viewport_sent: bool,
+    /// Timestamps of actually-rendered frames in the last second (dirty-flag aware).
+    render_times: std::collections::VecDeque<f64>,
+    /// Rendered frame rate (1-second sliding window).
+    render_fps: f32,
+    /// CPU time of the last rendered frame in milliseconds (scene build + GPU encode).
+    last_frame_ms: f32,
+    /// Toggle: render cell/header text (T key). Always true in production;
+    /// used here to isolate the Parley shaping cost from GPU cost.
+    text_enabled: bool,
+    /// Per-frame timing breakdown (ms), logged to console.
+    perf: web_sys::Performance,
+    /// True when the scene must be re-rendered on the next rAF.
+    /// Set by key events, incoming data, and resize. Cleared after each render.
+    dirty: bool,
 }
 
 impl UiState {
     // -- Inbound queue --------------------------------------------------------
+
+    /// Push `now` into a time-based 1-second sliding window and recompute FPS.
+    fn tick_fps(times: &mut std::collections::VecDeque<f64>, fps: &mut f32, now: f64) {
+        times.push_back(now);
+        while times.front().is_some_and(|&t| now - t > 1000.0) {
+            times.pop_front();
+        }
+        *fps = if times.len() >= 2 {
+            (times.len() - 1) as f32 / ((now - times.front().unwrap()) / 1000.0) as f32
+        } else {
+            0.0
+        };
+    }
 
     fn drain_pending(&mut self) {
         let mut batch = VecDeque::new();
@@ -154,25 +168,58 @@ impl UiState {
         }
     }
 
+    fn handle_resize(&mut self, width: u32, height: u32) {
+        self.trame.resize(width as f64, height as f64);
+        self.dirty = true;
+
+        let Some(ref mut gpu) = self.gpu else { return };
+        if gpu.width == width && gpu.height == height { return; }
+
+        tracing::info!("GPU resize: {width}x{height}");
+
+        gpu.surface.configure(&gpu.device, &wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: gpu.format,
+            width,
+            height,
+            present_mode: wgpu::PresentMode::AutoVsync,
+            desired_maximum_frame_latency: 2,
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            view_formats: vec![],
+        });
+
+        gpu.target_texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("vello_target"),
+            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        gpu.target_view = gpu.target_texture.create_view(&Default::default());
+        gpu.width = width;
+        gpu.height = height;
+    }
+
     fn handle_logic_envelope(&mut self, envelope: LogicEnvelope) {
         if let LogicEnvelope::ViewportUpdate { document_id: _, payload } = envelope
             && let Ok(update) = postcard::from_bytes::<TrameViewUpdate>(&payload)
         {
             self.trame.on_viewport_data(update);
+            self.dirty = true;
         }
     }
 
     // -- Render ---------------------------------------------------------------
 
-    fn render(&mut self) {
+    fn render(&mut self, raf_timestamp: f64) {
         self.drain_pending();
 
-        // Send the initial viewport request on the first frame where both the
-        // GPU and the Logic Worker are ready. Doing this here (rather than in
-        // the GPU-init async block) avoids a race where the message is sent
-        // before the Logic Worker has finished its Phase-1 handshake.
         if self.gpu.is_some() && self.logic_worker_ready && !self.initial_viewport_sent {
             self.initial_viewport_sent = true;
+            self.dirty = true;
             let cmd = self.trame.scroll_viewport_cmd();
             let payload = postcard::to_allocvec(&cmd).expect("serialize TrameCommand");
             let logic_worker = self.logic_worker.clone();
@@ -184,22 +231,36 @@ impl UiState {
 
         let Some(ref mut gpu) = self.gpu else { return };
 
+        Self::tick_fps(&mut self.render_times, &mut self.render_fps, raf_timestamp);
+
+        let t0 = self.perf.now();
+
         gpu.scene.reset();
-        // Destructure to satisfy the borrow checker (scene + text are independent fields).
         let GpuState { scene, text, .. } = &mut *gpu;
-        trame::renderer::draw_grid(scene, &self.trame, &mut text.font_cx, &mut text.layout_cx);
+        text.text_cache.reset_frame_stats();
+        trame::renderer::draw_grid(
+            scene,
+            &self.trame,
+            &mut text.font_cx,
+            &mut text.text_cache,
+            self.text_enabled,
+            self.render_fps,
+            self.last_frame_ms,
+        );
+        text.text_cache.evict_if_oversized(5_000);
+
+        let t1 = self.perf.now();
 
         let params = vello::RenderParams {
             base_color: vello::peniko::Color::WHITE,
             width: gpu.width,
             height: gpu.height,
-            antialiasing_method: vello::AaConfig::Area,
+            antialiasing_method: vello::AaConfig::Msaa8,
         };
 
-        // render_to_texture needs &mut Renderer + &Device + &Queue + &Scene + &TextureView.
-        // Destructure gpu so the borrow checker sees them as independent field borrows.
         {
             let GpuState { device, queue, target_view, renderer, scene, .. } = &mut *gpu;
+
             if let Err(e) =
                 renderer.render_to_texture(device, queue, scene, target_view, &params)
             {
@@ -207,6 +268,8 @@ impl UiState {
                 return;
             }
         }
+
+        let t2 = self.perf.now();
 
         let surface_tex = match gpu.surface.get_current_texture() {
             Ok(t) => t,
@@ -220,6 +283,13 @@ impl UiState {
         gpu.blitter.copy(&gpu.device, &mut encoder, &gpu.target_view, &dst_view);
         gpu.queue.submit(std::iter::once(encoder.finish()));
         surface_tex.present();
+
+        let t3 = self.perf.now();
+        self.last_frame_ms = (t3 - t0) as f32;
+        tracing::debug!(
+            "frame {:.1}ms | scene={:.1}ms vello={:.1}ms blit+present={:.1}ms",
+            t3 - t0, t1 - t0, t2 - t1, t3 - t2
+        );
     }
 }
 
@@ -229,8 +299,8 @@ impl UiState {
 
 fn schedule_raf(state: Rc<RefCell<UiState>>) {
     let state_for_frame = Rc::clone(&state);
-    let cb = Closure::<dyn FnMut(f64)>::new(move |_: f64| {
-        state_for_frame.borrow_mut().render();
+    let cb = Closure::<dyn FnMut(f64)>::new(move |ts: f64| {
+        state_for_frame.borrow_mut().render(ts);
         schedule_raf(Rc::clone(&state_for_frame));
     });
     web_sys::window()
@@ -260,7 +330,7 @@ async fn bootstrap_gpu(canvas: HtmlCanvasElement) -> GpuState {
 
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::None,
+            power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: Some(&surface),
             force_fallback_adapter: false,
         })
@@ -297,7 +367,10 @@ async fn bootstrap_gpu(canvas: HtmlCanvasElement) -> GpuState {
         },
     );
 
-    // Intermediate texture: Vello renders into this (compute shader requirement).
+    // Intermediate texture: Vello renders here (STORAGE_BINDING).
+    // TEXTURE_BINDING is needed by the TextureBlitter.
+    // Note: RENDER_ATTACHMENT cannot be combined with STORAGE_BINDING on
+    // Rgba8Unorm in all WebGPU implementations -- do not add it.
     let target_texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("vello_target"),
         size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
@@ -315,7 +388,7 @@ async fn bootstrap_gpu(canvas: HtmlCanvasElement) -> GpuState {
         &device,
         vello::RendererOptions {
             use_cpu: false,
-            antialiasing_support: vello::AaSupport::area_only(),
+            antialiasing_support: vello::AaSupport::all(),
             num_init_threads: std::num::NonZeroUsize::new(1),
             pipeline_cache: None,
         },
@@ -333,7 +406,11 @@ async fn bootstrap_gpu(canvas: HtmlCanvasElement) -> GpuState {
         None => tracing::warn!("Failed to fetch /fonts/NotoSans-Regular.ttf -- text disabled"),
     }
 
-    tracing::info!("GPU initialized: {width}x{height} format={format:?}");
+    let info = adapter.get_info();
+    tracing::info!(
+        "GPU initialized: {} ({:?}) | {width}x{height} format={format:?}",
+        info.name, info.backend
+    );
 
     GpuState {
         device,
@@ -438,6 +515,11 @@ fn ui_main() {
     // State is created before the on_ready closures so they can capture
     // Rc::clone(&state) and flip logic_worker_ready once the handshake completes.
 
+    let perf = web_sys::window()
+        .expect("no window")
+        .performance()
+        .expect("no Performance API");
+
     let state = Rc::new(RefCell::new(UiState {
         logic_worker,
         pending: Rc::clone(&pending),
@@ -445,6 +527,12 @@ fn ui_main() {
         trame: trame::TrameUiState::new(canvas_w, canvas_h),
         logic_worker_ready: false,
         initial_viewport_sent: false,
+        render_times: std::collections::VecDeque::with_capacity(120),
+        render_fps: 0.0,
+        last_frame_ms: 0.0,
+        text_enabled: true,
+        perf,
+        dirty: true,
     }));
 
     // -- Logic Worker ready handshake -----------------------------------------
@@ -531,11 +619,18 @@ fn ui_main() {
                     "ArrowDown" => (1, 0),
                     "ArrowLeft" => (0, -1),
                     "ArrowRight" => (0, 1),
+                    "t" | "T" => {
+                        let mut s = state_c.borrow_mut();
+                        s.text_enabled ^= true;
+                        s.dirty = true;
+                        return;
+                    }
                     _ => return,
                 };
                 event.prevent_default(); // prevent page scroll
 
                 let mut state = state_c.borrow_mut();
+                state.dirty = true;
                 if let Some(cmd) = state.trame.move_cursor(dr, dc) {
                     let payload =
                         postcard::to_allocvec(&cmd).expect("serialize TrameCommand");
@@ -556,6 +651,25 @@ fn ui_main() {
             .expect("no document")
             .add_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref())
             .expect("add keydown listener");
+        cb.forget();
+    }
+
+    // -- Canvas resize → reconfigure GPU surface ------------------------------
+    {
+        let state_c = Rc::clone(&state);
+        let canvas_c = canvas.clone();
+        let cb = Closure::<dyn FnMut()>::new(move || {
+            let w = canvas_c.client_width() as u32;
+            let h = canvas_c.client_height() as u32;
+            if w > 0 && h > 0 {
+                canvas_c.set_width(w);
+                canvas_c.set_height(h);
+                state_c.borrow_mut().handle_resize(w, h);
+            }
+        });
+        web_sys::window()
+            .expect("no window")
+            .set_onresize(Some(cb.as_ref().unchecked_ref()));
         cb.forget();
     }
 
