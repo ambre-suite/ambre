@@ -1,6 +1,6 @@
-/Cargo.lock
-/target
-/.vscode
+Cargo.lock
+target
+.vscode
 dist
 .ai
 specs

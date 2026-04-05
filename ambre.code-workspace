@@ -1,0 +1,15 @@
+{
+    "folders": [
+        {
+            "name": "ambre (wasm)",
+            "path": "."
+        },
+        {
+            "name": "ambre-server (native)",
+            "path": "crates/ambre-server"
+        }
+    ],
+    "settings": {
+        "makefile.configureOnOpen": false
+    }
+}

@@ -7,7 +7,6 @@ members = [
     "crates/ambre-bus",
     "crates/ambre-draw",
     "crates/ambre-sync",
-    "crates/ambre-server",
     "crates/ambre-trame",
     "crates/ambre-prose",
     "crates/ambre-toile",
