@@ -1,0 +1,24 @@
+[package]
+name = "ambre-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Widget framework and GPU rendering pipeline for Ambre UI Thread"
+
+[dependencies]
+ambre-draw = { path = "../ambre-draw" }
+
+# Rendering
+wgpu       = { workspace = true }
+bytemuck   = { workspace = true }
+swash      = { workspace = true }
+parley     = { workspace = true }
+rustc-hash = { workspace = true }
+
+# Widget framework
+taffy     = { workspace = true }
+accesskit = { workspace = true }
+smallvec  = { workspace = true }
+slotmap   = { workspace = true }
+kurbo     = { workspace = true }
+peniko    = { workspace = true }

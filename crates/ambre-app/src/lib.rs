@@ -25,7 +25,6 @@
 //   LogicEnvelope (postcard + ArrayBuffer transfer) <- Logic Worker
 // ============================================================================
 
-mod render;
 mod trame;
 
 use ambre_bus::{IPC_TEST_DOC_ID, LogicEnvelope, UiEnvelope};
@@ -79,9 +78,9 @@ struct GpuState {
     surface_format: wgpu::TextureFormat,
     width:          u32,
     height:         u32,
-    quad_renderer:  render::QuadRenderer,
+    quad_renderer:  ambre_ui::QuadRenderer,
     font_cx:        parley::FontContext,
-    text_cache:     trame::text_cache::TextCache,
+    text_cache:     ambre_ui::TextCache,
 }
 
 // -----------------------------------------------------------------------------
@@ -197,7 +196,7 @@ impl UiState {
             gpu.text_cache.reset_frame_stats();
             gpu.quad_renderer.begin_frame(gpu.width as f32, gpu.height as f32);
             {
-                let mut surface = render::WgpuSurface::new(&mut gpu.quad_renderer);
+                let mut surface = ambre_ui::WgpuSurface::new(&mut gpu.quad_renderer);
                 trame::renderer::draw_grid(
                     &mut surface,
                     &self.trame,
@@ -245,6 +244,7 @@ impl UiState {
 /// an `Rc<RefCell<Option<…>>>` so the same JS function object is reused every
 /// frame with zero allocation overhead.
 fn start_raf_loop(state: Rc<RefCell<UiState>>) {
+    #[allow(clippy::type_complexity)]
     let cb: Rc<RefCell<Option<Closure<dyn FnMut(f64)>>>> = Rc::new(RefCell::new(None));
     let cb_clone = Rc::clone(&cb);
 
@@ -377,7 +377,7 @@ async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -
         },
     );
 
-    let quad_renderer = render::QuadRenderer::new(&device, format);
+    let quad_renderer = ambre_ui::QuadRenderer::new(&device, format);
 
     let mut font_cx = parley::FontContext::new();
     match fetch_bytes("/fonts/NotoSans-Regular.ttf").await {
@@ -403,7 +403,7 @@ async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -
         height,
         quad_renderer,
         font_cx,
-        text_cache: trame::text_cache::TextCache::new(1.0),
+        text_cache: ambre_ui::TextCache::new(1.0),
     })
 }
 
