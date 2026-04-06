@@ -10,7 +10,7 @@
 //
 // Out of scope:
 //   - Cryptography, compression, network - handled exclusively by the Sync Worker.
-//   - Rendering - handled by the UI Thread (Vello + wgpu).
+//   - Rendering - handled by the UI Thread (wgpu + QuadRenderer + GlyphAtlas).
 //
 // IPC topology:
 //   UI Thread    ---UiEnvelope (postMessage)---->  Logic Worker

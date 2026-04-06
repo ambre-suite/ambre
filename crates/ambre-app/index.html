@@ -31,7 +31,7 @@
     <!-- <link data-trunk rel="copy-file" href="assets/inter.woff2" /> -->
 
     <style>
-        /* Reset — the entire viewport belongs to the WebGPU canvas */
+        /* Reset — the entire viewport belongs to the wgpu canvas */
         *,
         *::before,
         *::after {
@@ -129,23 +129,21 @@
         <p>Chargement...</p>
     </div>
 
-    <!-- WebGPU / wgpu render target — Vello draws here -->
+    <!-- wgpu render target (WebGL2 by default, WebGPU opt-in via ?webgpu) -->
     <canvas id="ambre-canvas" tabindex="0"></canvas>
 
     <!--
-        Fallback message for browsers without WebGPU AND without viable CPU fallback.
-        In practice, Vello CPU (WASM SIMD, AaConfig::Area) covers all modern browsers.
-        This is a last-resort for very old browsers.
+        Fallback message for browsers without WebGL2 (extremely rare — IE11 and below).
+        wgpu uses WebGL2 by default; WebGPU is opt-in via ?webgpu in the URL.
+        This div is never shown in practice on any modern browser.
     -->
     <div id="no-webgpu">
         <h1>Navigateur non compatible</h1>
         <p>
-            Ambre utilise WebGPU pour le rendu. Votre navigateur ne semble pas le supporter.
+            Ambre utilise WebGL2 pour le rendu. Votre navigateur ne semble pas le supporter.
         </p>
         <p>
-            Navigateurs compatibles : Chrome 113+, Edge 113+, Firefox 141+ (Nightly),
-            Safari 18+. Sur Linux, activez <code>dom.webgpu.enabled</code> dans Firefox
-            ou lancez Chrome avec <code>--enable-unsafe-webgpu</code>.
+            Navigateurs compatibles : Chrome 56+, Firefox 51+, Safari 15+, Edge 79+.
         </p>
     </div>
 
@@ -154,15 +152,15 @@
         // Minimal JS bootstrap — everything else is in Rust/WASM.
         //
         // This script:
-        // 1. Detects WebGPU support (informational — Vello CPU is the real fallback)
+        // 1. Detects GPU support (informational — WebGL2 is the default backend)
         // 2. Hides the loading screen once WASM signals readiness
         // 3. Handles canvas resize via ResizeObserver
         //
-        // The WASM entry point (main.rs / wasm_bindgen(start)) handles:
+        // The WASM entry point (lib.rs / wasm_bindgen(start)) handles:
         // - Spawning Logic Worker + Sync Worker
         // - Creating the MessageChannel for Logic <-> Sync
-        // - Initializing wgpu, Vello, Masonry
-        // - Starting the rAF render loop
+        // - Initializing wgpu (WebGL2 backend) + QuadRenderer + GlyphAtlas
+        // - Starting the rAF render loop (after GPU init)
         // ------------------------------------------------------------------
 
         // Expose a global callback for WASM to signal "ready" and hide the loading screen.
@@ -174,9 +172,9 @@
             }
         };
 
-        // Canvas resize — notify WASM of new dimensions.
-        // Masonry/winit may handle this internally via web_sys::ResizeObserver,
-        // but we set the canvas backing store size here as a safety net.
+        // Canvas resize — set the backing store size (physical pixels).
+        // WASM handles the GPU surface reconfigure via window.onresize.
+        // ResizeObserver here ensures the canvas dimensions are correct before WASM fires.
         const canvas = document.getElementById("ambre-canvas");
         const observer = new ResizeObserver(entries => {
             for (const entry of entries) {

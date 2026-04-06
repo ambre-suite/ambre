@@ -1,100 +1,36 @@
 // ambre-app/src/trame/renderer.rs
 // ============================================================================
-// Trame grid renderer -- UI Thread, Vello backend.
+// Trame grid draw_grid -- UI Thread, WgpuSurface backend.
 //
-// `VelloSurface` wraps a `&mut vello::Scene` and implements `DrawSurface`.
+// draw_grid is generic over DrawSurface so the same code path drives both
+// WgpuSurface (screen) and KrillaSurface (PDF export, Logic Worker).
 //
-// `draw_grid` renders one frame via `TextCache` (cached Parley layouts) so
-// that shaping only happens on cache misses -- not every frame.
+// Text layout is provided by TextCache (cached Parley layouts) and glyph
+// rasterisation by SwashScaler into the GlyphAtlas (R8Unorm GPU texture).
 // ============================================================================
 
-use ambre_draw::{Affine, Alignment, Brush, Color, DrawSurface, Fill, FontContext, GlyphRun,
-                 ParleyBrush, Rect, Stroke};
-use vello::kurbo::Affine as VelloAffine;
+use ambre_draw::{
+    Affine, Alignment, Brush, Color, DrawSurface, FontContext, Layout, ParleyBrush,
+    PositionedLayoutItem, Rect,
+};
 
 use super::grid::{COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT, TOTAL_COLS, TOTAL_ROWS};
-use super::text_cache::{TextCache, render_layout};
+use super::text_cache::TextCache;
 use super::TrameUiState;
 
 // -----------------------------------------------------------------------------
 // Colors
 // -----------------------------------------------------------------------------
 
-const COLOR_WHITE: Color = Color::from_rgba8(255, 255, 255, 255);
-const COLOR_PENDING: Color = Color::from_rgba8(235, 237, 240, 255);
-const COLOR_HEADER_BG: Color = Color::from_rgba8(242, 244, 248, 255);
+const COLOR_WHITE:         Color = Color::from_rgba8(255, 255, 255, 255);
+const COLOR_PENDING:       Color = Color::from_rgba8(235, 237, 240, 255);
+const COLOR_HEADER_BG:     Color = Color::from_rgba8(242, 244, 248, 255);
 const COLOR_HEADER_ACTIVE: Color = Color::from_rgba8(207, 220, 240, 255);
-const COLOR_GRID_LINE: Color = Color::from_rgba8(210, 213, 218, 255);
+const COLOR_GRID_LINE:     Color = Color::from_rgba8(210, 213, 218, 255);
 const COLOR_HEADER_BORDER: Color = Color::from_rgba8(178, 183, 193, 255);
-const COLOR_ACTIVE_BORDER: Color = Color::from_rgba8(60, 120, 210, 255);
-const COLOR_CELL_TEXT: Color = Color::from_rgba8(51, 51, 51, 255);
-const COLOR_HEADER_TEXT: Color = Color::from_rgba8(85, 85, 85, 255);
-
-// -----------------------------------------------------------------------------
-// VelloSurface
-// -----------------------------------------------------------------------------
-
-pub struct VelloSurface<'s> {
-    pub scene: &'s mut vello::Scene,
-}
-
-impl<'s> VelloSurface<'s> {
-    pub fn new(scene: &'s mut vello::Scene) -> Self {
-        Self { scene }
-    }
-}
-
-impl DrawSurface for VelloSurface<'_> {
-    fn fill_rect(&mut self, rect: Rect, color: Color) {
-        self.scene.fill(Fill::NonZero, VelloAffine::IDENTITY, color, None, &rect);
-    }
-
-    fn stroke_rect(&mut self, rect: Rect, color: Color, width: f64) {
-        self.scene.stroke(&Stroke::new(width), VelloAffine::IDENTITY, color, None, &rect);
-    }
-
-    fn stroke_line(&mut self, x0: f64, y0: f64, x1: f64, y1: f64, color: Color, width: f64) {
-        use ambre_draw::Line;
-        self.scene.stroke(
-            &Stroke::new(width),
-            VelloAffine::IDENTITY,
-            color,
-            None,
-            &Line::new((x0, y0), (x1, y1)),
-        );
-    }
-
-    fn draw_glyphs(&mut self, run: &GlyphRun<'_, ParleyBrush>, brush: &Brush, transform: Affine) {
-        // This path is kept for DrawSurface completeness (e.g. KrillaSurface).
-        // The hot path in draw_grid goes through TextCache::render_cell_text
-        // which calls render_layout() directly on the scene -- bypassing the
-        // trait to avoid re-wrapping the cached layout.
-        let mut pen_x = 0.0_f32;
-        let glyphs = run.glyphs().map(move |g| {
-            let out = vello::Glyph { id: g.id, x: pen_x + g.x, y: g.y };
-            pen_x += g.advance;
-            out
-        });
-        let coords: Vec<_> = run.run().normalized_coords().to_vec();
-        self.scene
-            .draw_glyphs(run.run().font())
-            .font_size(run.run().font_size())
-            .transform(transform)
-            .glyph_transform(None)
-            .normalized_coords(&coords)
-            .brush(brush)
-            .hint(true)
-            .draw(Fill::NonZero, glyphs);
-    }
-
-    fn push_clip(&mut self, rect: Rect) {
-        self.scene.push_clip_layer(Fill::NonZero, VelloAffine::IDENTITY, &rect);
-    }
-
-    fn pop_clip(&mut self) {
-        self.scene.pop_layer();
-    }
-}
+const COLOR_ACTIVE_BORDER: Color = Color::from_rgba8(60,  120, 210, 255);
+const COLOR_CELL_TEXT:     Color = Color::from_rgba8(51,  51,  51,  255);
+const COLOR_HEADER_TEXT:   Color = Color::from_rgba8(85,  85,  85,  255);
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -111,28 +47,58 @@ fn col_label(col: u32) -> String {
     label.chars().rev().collect()
 }
 
+/// Iterate the positioned glyph runs in a Parley layout and call draw_glyphs
+/// for each run. This is the correct DrawSurface path; text_cache no longer
+/// holds a direct reference to any rendering backend.
+fn draw_text<S: DrawSurface>(
+    surface:   &mut S,
+    font_cx:   &mut FontContext,
+    cache:     &mut TextCache,
+    text:      &str,
+    font_size: f32,
+    max_width: f32,
+    align:     Alignment,
+    origin_x:  f64,
+    origin_y:  f64,
+    color:     Color,
+) {
+    if text.is_empty() {
+        return;
+    }
+    let layout: &Layout<ParleyBrush> =
+        cache.get_or_build(font_cx, text, font_size, max_width, align);
+    let brush = Brush::Solid(color);
+    for line in layout.lines() {
+        for item in line.items() {
+            let PositionedLayoutItem::GlyphRun(run) = item else { continue };
+            let tx = origin_x + run.offset() as f64;
+            let ty = origin_y + run.baseline() as f64;
+            surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // draw_grid
 // -----------------------------------------------------------------------------
 
-pub fn draw_grid(
-    scene: &mut vello::Scene,
-    state: &TrameUiState,
-    font_cx: &mut FontContext,
-    text_cache: &mut TextCache,
-    text_enabled: bool,
-    render_fps: f32,
-    last_frame_ms: f32,
+pub fn draw_grid<S: DrawSurface>(
+    surface:        &mut S,
+    state:          &TrameUiState,
+    font_cx:        &mut FontContext,
+    text_cache:     &mut TextCache,
+    text_enabled:   bool,
+    render_fps:     f32,
+    last_frame_ms:  f32,
 ) {
-    let mut s = VelloSurface::new(scene);
     let w = state.canvas_width;
     let h = state.canvas_height;
 
     // 1. White background.
-    s.fill_rect(Rect::new(0.0, 0.0, w, h), COLOR_WHITE);
+    surface.fill_rect(Rect::new(0.0, 0.0, w, h), COLOR_WHITE);
 
-    // 2. Grey pending area.
-    s.fill_rect(Rect::new(HEADER_WIDTH, HEADER_HEIGHT, w, h), COLOR_PENDING);
+    // 2. Grey "pending / not-yet-received" cell area.
+    surface.fill_rect(Rect::new(HEADER_WIDTH, HEADER_HEIGHT, w, h), COLOR_PENDING);
 
     // 3. White fill for received cells.
     let row_end = (state.top_row + state.viewport_rows + 1).min(TOTAL_ROWS);
@@ -143,7 +109,7 @@ pub fn draw_grid(
             if state.cell_cache.contains_key(&(row, col)) {
                 let x = HEADER_WIDTH + (col - state.left_col) as f64 * COL_WIDTH;
                 let y = HEADER_HEIGHT + (row - state.top_row) as f64 * ROW_HEIGHT;
-                s.fill_rect(Rect::new(x, y, x + COL_WIDTH, y + ROW_HEIGHT), COLOR_WHITE);
+                surface.fill_rect(Rect::new(x, y, x + COL_WIDTH, y + ROW_HEIGHT), COLOR_WHITE);
             }
         }
     }
@@ -154,7 +120,7 @@ pub fn draw_grid(
         if col > TOTAL_COLS { break; }
         let x = HEADER_WIDTH + i as f64 * COL_WIDTH;
         if x > w { break; }
-        s.stroke_line(x, HEADER_HEIGHT, x, h, COLOR_GRID_LINE, 1.0);
+        surface.stroke_line(x, HEADER_HEIGHT, x, h, COLOR_GRID_LINE, 1.0);
     }
 
     // 5. Horizontal grid lines.
@@ -163,55 +129,55 @@ pub fn draw_grid(
         if row > TOTAL_ROWS { break; }
         let y = HEADER_HEIGHT + i as f64 * ROW_HEIGHT;
         if y > h { break; }
-        s.stroke_line(HEADER_WIDTH, y, w, y, COLOR_GRID_LINE, 1.0);
+        surface.stroke_line(HEADER_WIDTH, y, w, y, COLOR_GRID_LINE, 1.0);
     }
 
-    // 6a. Active column tint.
+    // 6a. Active column header tint.
     let active_col_visible = state.active_col >= state.left_col
         && state.active_col < state.left_col + state.viewport_cols;
     if active_col_visible {
         let x = HEADER_WIDTH + (state.active_col - state.left_col) as f64 * COL_WIDTH;
-        s.fill_rect(Rect::new(x, 0.0, x + COL_WIDTH, HEADER_HEIGHT), COLOR_HEADER_ACTIVE);
+        surface.fill_rect(Rect::new(x, 0.0, x + COL_WIDTH, HEADER_HEIGHT), COLOR_HEADER_ACTIVE);
     }
 
-    // 6b. Active row tint.
+    // 6b. Active row header tint.
     let active_row_visible = state.active_row >= state.top_row
         && state.active_row < state.top_row + state.viewport_rows;
     if active_row_visible {
         let y = HEADER_HEIGHT + (state.active_row - state.top_row) as f64 * ROW_HEIGHT;
-        s.fill_rect(Rect::new(0.0, y, HEADER_WIDTH, y + ROW_HEIGHT), COLOR_HEADER_ACTIVE);
+        surface.fill_rect(Rect::new(0.0, y, HEADER_WIDTH, y + ROW_HEIGHT), COLOR_HEADER_ACTIVE);
     }
 
-    // 7. Column header background.
-    s.fill_rect(Rect::new(0.0, 0.0, w, HEADER_HEIGHT), COLOR_HEADER_BG);
+    // 7. Column header background (over the tints).
+    surface.fill_rect(Rect::new(0.0, 0.0, w, HEADER_HEIGHT), COLOR_HEADER_BG);
 
     // 8. Row header background.
-    s.fill_rect(Rect::new(0.0, 0.0, HEADER_WIDTH, h), COLOR_HEADER_BG);
+    surface.fill_rect(Rect::new(0.0, 0.0, HEADER_WIDTH, h), COLOR_HEADER_BG);
 
-    // Re-apply active tints on top of header backgrounds.
+    // Re-apply active tints on top of the opaque header backgrounds.
     if active_col_visible {
         let x = HEADER_WIDTH + (state.active_col - state.left_col) as f64 * COL_WIDTH;
-        s.fill_rect(Rect::new(x, 0.0, x + COL_WIDTH, HEADER_HEIGHT), COLOR_HEADER_ACTIVE);
+        surface.fill_rect(Rect::new(x, 0.0, x + COL_WIDTH, HEADER_HEIGHT), COLOR_HEADER_ACTIVE);
     }
     if active_row_visible {
         let y = HEADER_HEIGHT + (state.active_row - state.top_row) as f64 * ROW_HEIGHT;
-        s.fill_rect(Rect::new(0.0, y, HEADER_WIDTH, y + ROW_HEIGHT), COLOR_HEADER_ACTIVE);
+        surface.fill_rect(Rect::new(0.0, y, HEADER_WIDTH, y + ROW_HEIGHT), COLOR_HEADER_ACTIVE);
     }
 
     // 9. Header separator lines.
-    s.stroke_line(0.0, HEADER_HEIGHT, w, HEADER_HEIGHT, COLOR_HEADER_BORDER, 1.0);
-    s.stroke_line(HEADER_WIDTH, 0.0, HEADER_WIDTH, h, COLOR_HEADER_BORDER, 1.0);
+    surface.stroke_line(0.0, HEADER_HEIGHT, w, HEADER_HEIGHT, COLOR_HEADER_BORDER, 1.0);
+    surface.stroke_line(HEADER_WIDTH, 0.0, HEADER_WIDTH, h, COLOR_HEADER_BORDER, 1.0);
 
     // 10. Active cell border.
     if let Some((x, y, cw, ch)) = state.cell_pixel_rect(state.active_row, state.active_col) {
-        s.stroke_rect(Rect::new(x, y, x + cw, y + ch), COLOR_ACTIVE_BORDER, 2.0);
+        surface.stroke_rect(Rect::new(x, y, x + cw, y + ch), COLOR_ACTIVE_BORDER, 2.0);
     }
 
     // -------------------------------------------------------------------------
-    // 11. Text via TextCache (cached Parley layouts -- no per-frame shaping)
+    // 11. Text
     // -------------------------------------------------------------------------
 
-    const BODY_SIZE: f32 = 12.0;
+    const BODY_SIZE:   f32 = 12.0;
     const HEADER_SIZE: f32 = 11.0;
 
     if text_enabled {
@@ -222,79 +188,93 @@ pub fn draw_grid(
                     if content.is_empty() { continue; }
                     let cx = HEADER_WIDTH + (col - state.left_col) as f64 * COL_WIDTH;
                     let cy = HEADER_HEIGHT + (row - state.top_row) as f64 * ROW_HEIGHT;
-                    s.push_clip(Rect::new(cx, cy, cx + COL_WIDTH, cy + ROW_HEIGHT));
-                    let layout = text_cache.get_or_build(
+                    let layout: &Layout<ParleyBrush> = text_cache.get_or_build(
                         font_cx, content, BODY_SIZE, (COL_WIDTH - 8.0) as f32, Alignment::Start,
                     );
-                    let text_h = layout.height() as f64;
-                    let y_off = ((ROW_HEIGHT - text_h) / 2.0).max(0.0);
-                    render_layout(
-                        s.scene, layout,
-                        VelloAffine::translate((cx + 4.0, cy + y_off)),
-                        &Brush::Solid(COLOR_CELL_TEXT),
-                    );
-                    s.pop_clip();
+                    let text_h  = layout.height() as f64;
+                    let y_off   = ((ROW_HEIGHT - text_h) / 2.0).max(0.0);
+                    let brush   = Brush::Solid(COLOR_CELL_TEXT);
+                    surface.push_clip(Rect::new(cx, cy, cx + COL_WIDTH, cy + ROW_HEIGHT));
+                    for line in layout.lines() {
+                        for item in line.items() {
+                            let PositionedLayoutItem::GlyphRun(run) = item else { continue };
+                            let tx = cx + 4.0 + run.offset() as f64;
+                            let ty = cy + y_off + run.baseline() as f64;
+                            surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+                        }
+                    }
+                    surface.pop_clip();
                 }
             }
         }
 
-        // 11b. Column header labels.
+        // 11b. Column header labels (A, B, C...).
         for i in 0..=(state.viewport_cols + 1) {
             let col = state.left_col + i;
             if col >= TOTAL_COLS { break; }
             let col_x = HEADER_WIDTH + i as f64 * COL_WIDTH;
             if col_x >= w { break; }
             let label = col_label(col);
-            s.push_clip(Rect::new(col_x, 0.0, col_x + COL_WIDTH, HEADER_HEIGHT));
-            let layout = text_cache.get_or_build(
+            let layout: &Layout<ParleyBrush> = text_cache.get_or_build(
                 font_cx, &label, HEADER_SIZE, COL_WIDTH as f32, Alignment::Center,
             );
             let text_h = layout.height() as f64;
-            let y_off = ((HEADER_HEIGHT - text_h) / 2.0).max(0.0);
-            render_layout(
-                s.scene, layout,
-                VelloAffine::translate((col_x, y_off)),
-                &Brush::Solid(COLOR_HEADER_TEXT),
-            );
-            s.pop_clip();
+            let y_off  = ((HEADER_HEIGHT - text_h) / 2.0).max(0.0);
+            let brush  = Brush::Solid(COLOR_HEADER_TEXT);
+            surface.push_clip(Rect::new(col_x, 0.0, col_x + COL_WIDTH, HEADER_HEIGHT));
+            for line in layout.lines() {
+                for item in line.items() {
+                    let PositionedLayoutItem::GlyphRun(run) = item else { continue };
+                    let tx = col_x + run.offset() as f64;
+                    let ty = y_off + run.baseline() as f64;
+                    surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+                }
+            }
+            surface.pop_clip();
         }
 
-        // 11c. Row header numbers.
+        // 11c. Row header numbers (1, 2, 3...).
         for i in 0..=(state.viewport_rows + 1) {
             let row = state.top_row + i;
             if row >= TOTAL_ROWS { break; }
             let row_y = HEADER_HEIGHT + i as f64 * ROW_HEIGHT;
             if row_y >= h { break; }
             let label = (row + 1).to_string();
-            s.push_clip(Rect::new(0.0, row_y, HEADER_WIDTH, row_y + ROW_HEIGHT));
-            let layout = text_cache.get_or_build(
+            let layout: &Layout<ParleyBrush> = text_cache.get_or_build(
                 font_cx, &label, HEADER_SIZE, (HEADER_WIDTH - 8.0) as f32, Alignment::End,
             );
             let text_h = layout.height() as f64;
-            let y_off = ((ROW_HEIGHT - text_h) / 2.0).max(0.0);
-            render_layout(
-                s.scene, layout,
-                VelloAffine::translate((4.0, row_y + y_off)),
-                &Brush::Solid(COLOR_HEADER_TEXT),
-            );
-            s.pop_clip();
+            let y_off  = ((ROW_HEIGHT - text_h) / 2.0).max(0.0);
+            let brush  = Brush::Solid(COLOR_HEADER_TEXT);
+            surface.push_clip(Rect::new(0.0, row_y, HEADER_WIDTH, row_y + ROW_HEIGHT));
+            for line in layout.lines() {
+                for item in line.items() {
+                    let PositionedLayoutItem::GlyphRun(run) = item else { continue };
+                    let tx = 4.0 + run.offset() as f64;
+                    let ty = row_y + y_off + run.baseline() as f64;
+                    surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+                }
+            }
+            surface.pop_clip();
         }
     }
 
     // -------------------------------------------------------------------------
-    // 12. FPS counter (always visible)
+    // 12. FPS counter overlay
     // -------------------------------------------------------------------------
 
-    let text_tag = if text_enabled { "" } else { " [T=text]" };
-    let fps_label = format!("{render_fps:.0} fps  {last_frame_ms:.1}ms{text_tag}");
     let fps_bg = Rect::new(4.0, h - 20.0, 180.0, h - 4.0);
-    s.fill_rect(fps_bg, Color::from_rgba8(0, 0, 0, 160));
-    let layout = text_cache.get_or_build(
-        font_cx, &fps_label, 11.0, 174.0, Alignment::Start,
+    surface.fill_rect(fps_bg, Color::from_rgba8(0, 0, 0, 160));
+
+    let text_tag  = if text_enabled { "" } else { " [T=text]" };
+    let fps_label = format!(
+        "{render_fps:.0} fps  {last_frame_ms:.1}ms  miss={}{text_tag}",
+        text_cache.frame_misses,
     );
-    render_layout(
-        s.scene, layout,
-        VelloAffine::translate((6.0, h - 19.0)),
-        &Brush::Solid(Color::from_rgba8(255, 220, 0, 255)),
+    draw_text(
+        surface, font_cx, text_cache,
+        &fps_label, 11.0, 174.0, Alignment::Start,
+        6.0, h - 19.0,
+        Color::from_rgba8(255, 220, 0, 255),
     );
 }

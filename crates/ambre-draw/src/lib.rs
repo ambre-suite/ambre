@@ -3,14 +3,15 @@
 // Abstraction trait for shared rendering in Ambre.
 //
 // `DrawSurface` is the GPU- and PDF-agnostic drawing interface used by
-// application-level rendering code (Trame grid, Prose page, ...).
+// application-level rendering code (Trame grid, Prose page, Toile canvas, ...).
 //
-// Implementations live in the crates that own the rendering backend:
-//   - `VelloSurface` in `ambre-app/src/trame/renderer.rs`  (wraps vello::Scene)
-//   - `KrillaSurface` in `ambre-logic-worker/src/trame/`   (wraps krilla, PDF)
+// Implementations:
+//   - `WgpuSurface`   in `ambre-app`           (lyon tessellation + wgpu, screen)
+//   - `KrillaSurface` in `ambre-logic-worker`  (krilla, PDF export)
 //
 // Dependency rule: ambre-draw depends only on kurbo + peniko + parley.
-// No GPU code, no WASM glue, no vello, no wgpu.
+// No GPU code, no WASM glue, no wgpu, no lyon, no krilla. This keeps the core 
+// drawing logic portable and testable.
 // ============================================================================
 
 pub mod types;
@@ -21,25 +22,26 @@ pub use types::*;
 /// All coordinates are in logical pixels (f64). The origin is the top-left
 /// corner of the rendering surface; Y increases downward.
 ///
-/// The surface is stateless: each `draw_*` call appends a draw command.
-/// There is no concept of current position or path accumulation -- each call
-/// is self-contained, except for `push_clip`/`pop_clip` which form a stack.
+/// Each `draw_*` call appends a draw command -- the surface is append-only
+/// within a frame. The only stateful mechanism is the clip stack
+/// (`push_clip`/`pop_clip`) and the transform stack
+/// (`push_transform`/`pop_transform`), which must always be balanced.
 ///
 /// ## Text rendering
 ///
-/// Text layout (Parley `Layout<Color>`) is performed by the caller: create a
-/// `LayoutContext`, shape the text, then iterate over `GlyphRun`s and call
-/// `draw_glyphs` for each. This keeps shaping logic out of the trait and allows
-/// the caller to cache layouts across frames.
+/// Text layout (Parley `Layout<ParleyBrush>`) is the caller's responsibility.
+/// Shape once, cache the `Layout`, then call `draw_glyphs` for each `GlyphRun`
+/// every frame. This keeps shaping out of the trait and enables per-frame
+/// zero-allocation rendering on cache hits.
 ///
-/// ## Deferred methods
+/// ## Path rendering
 ///
-/// `fill_path`, `stroke_path`, `draw_image`, `push_transform`/`pop_transform`
-/// are defined in the spec but not yet implemented -- they will be added when
-/// `KrillaSurface` (PDF export) is introduced.
+/// `fill_path` and `stroke_path` accept `kurbo::BezPath`. On screen this is
+/// tessellated by lyon; in PDF it maps to krilla path primitives. Callers never
+/// depend on lyon directly.
 pub trait DrawSurface {
     // -------------------------------------------------------------------------
-    // Geometry
+    // Geometry -- primitives
     // -------------------------------------------------------------------------
 
     /// Fill a rectangle with a solid color.
@@ -48,34 +50,58 @@ pub trait DrawSurface {
     /// Stroke a rectangle outline.
     fn stroke_rect(&mut self, rect: Rect, color: Color, width: f64);
 
-    /// Stroke a line segment from (x0, y0) to (x1, y1).
+    /// Stroke a line segment.
     fn stroke_line(&mut self, x0: f64, y0: f64, x1: f64, y1: f64, color: Color, width: f64);
 
     // -------------------------------------------------------------------------
     // Text
     // -------------------------------------------------------------------------
 
-    /// Render a pre-shaped Parley glyph run.
+    /// Render a pre-shaped Parley glyph run at the given transform.
     ///
-    /// `transform` positions the run origin on the surface (typically
-    /// `Affine::translate((text_x, text_y))` where text_y is the top of the
-    /// text area; the run's own baseline offset is embedded in `run.baseline()`
-    /// and already applied by `GlyphRun::positioned_glyphs()`).
+    /// `transform` positions the run origin (typically
+    /// `Affine::translate((x, baseline_y))`). The run's own advance offsets
+    /// are embedded in `GlyphRun::positioned_glyphs()`.
     ///
-    /// `brush` is the fill color/gradient for the glyphs. For solid text,
-    /// use `&Brush::Solid(color)`.
+    /// On screen: glyphs are rasterized via Swash into a GPU atlas and drawn
+    /// as textured quads. In PDF: mapped to krilla glyph placement.
     fn draw_glyphs(&mut self, run: &GlyphRun<'_, ParleyBrush>, brush: &Brush, transform: Affine);
 
     // -------------------------------------------------------------------------
     // Clip stack
     // -------------------------------------------------------------------------
 
-    /// Push a rectangular clip region. All subsequent draw calls are clipped
-    /// to `rect` until the matching `pop_clip`.
-    ///
-    /// Calls must be balanced: every `push_clip` requires exactly one `pop_clip`.
+    /// Push a rectangular clip. All subsequent draw calls are scissored to
+    /// `rect` until the matching `pop_clip`. Calls must be balanced.
     fn push_clip(&mut self, rect: Rect);
 
     /// Pop the most recently pushed clip region.
     fn pop_clip(&mut self);
+
+    // -------------------------------------------------------------------------
+    // Geometry -- arbitrary paths (default no-ops until lyon is wired)
+    // -------------------------------------------------------------------------
+
+    /// Fill an arbitrary path. Default no-op -- override when lyon is available.
+    #[allow(unused_variables)]
+    fn fill_path(&mut self, path: &BezPath, brush: &Brush) {}
+
+    /// Stroke an arbitrary path. Default no-op -- override when lyon is available.
+    #[allow(unused_variables)]
+    fn stroke_path(&mut self, path: &BezPath, brush: &Brush, stroke: &Stroke) {}
+
+    // -------------------------------------------------------------------------
+    // Transform stack (default no-ops until Toile needs it)
+    // -------------------------------------------------------------------------
+
+    /// Push an affine transform. Subsequent draw calls are in the transformed
+    /// coordinate space. Calls must be balanced with `pop_transform`.
+    ///
+    /// Used by Toile (infinite canvas pan/zoom) and Prose (page margins).
+    /// Default no-op -- override when transform support is implemented.
+    #[allow(unused_variables)]
+    fn push_transform(&mut self, transform: Affine) {}
+
+    /// Pop the most recently pushed transform. Default no-op.
+    fn pop_transform(&mut self) {}
 }

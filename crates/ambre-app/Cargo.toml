@@ -3,7 +3,7 @@ name = "ambre-app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "UI Thread WASM — Vello/Masonry rendering, rAF loop, input capture, Worker bootstrap"
+description = "UI Thread WASM — wgpu/lyon rendering, rAF loop, input capture, Worker bootstrap"
 
 [lib]
 crate-type = ["cdylib"]
@@ -32,11 +32,10 @@ cfg-if   = { workspace = true }
 tracing      = { workspace = true }
 tracing-wasm = { workspace = true }
 
-# UI rendering (Vello, Masonry, wgpu, winit)
-vello   = { workspace = true }
-masonry = { workspace = true }
-wgpu    = { workspace = true }
-winit   = { workspace = true }
+# UI rendering (wgpu + lyon quad/path renderer)
+wgpu     = { workspace = true }
+bytemuck = { workspace = true }
+swash    = { workspace = true }
 
 # Web APIs
 web-sys = { workspace = true, features = ["WorkerOptions", "WorkerType"] }
