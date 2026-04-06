@@ -2,7 +2,7 @@
 
 **End-to-End Encrypted, 100% Rust**
 
-AMBRE is a next-generation collaborative office suite built entirely in Rust, featuring real-time collaboration with CRDTs, end-to-end encryption (E2EE), and GPU-accelerated rendering via WebGPU. It runs as a single-page WebAssembly application with a Rust-native server backend.
+AMBRE is a next-generation collaborative office suite built entirely in Rust, featuring real-time collaboration with CRDTs, end-to-end encryption (E2EE), and GPU-accelerated rendering via wgpu (WebGL2/WebGPU). It runs as a single-page WebAssembly application with a Rust-native server backend.
 
 ## Vision & Identity
 
@@ -11,7 +11,7 @@ AMBRE is a collaborative office suite that is:
 - **End-to-End Encrypted (Zero-Knowledge)** – the server acts as a blind relay
 - **Open Source** – fully transparent development
 
-**Differentiator:** The only suite combining CRDT + Rust/WASM/WebGPU + native E2EE without privacy compromises.
+**Differentiator:** The only suite combining CRDT + Rust/WASM/wgpu + native E2EE without privacy compromises.
 
 ## Applications
 
@@ -46,14 +46,14 @@ All targets calibrated for a mid‑range 2024 smartphone.
 | **Initial load time** | < 3 s on 4G | First interactive display. WASM binary < 2 MB gzipped. |
 | **Client memory** | < 100 MB | For a typical document. Proportional to document size, not its history. |
 
-**Architectural orientation:** 3 isolated WASM workers (render / business logic / encrypted sync), GPU rendering via WebGPU, real‑time CRDT collaboration.
+**Architectural orientation:** 3 isolated WASM workers (render / business logic / encrypted sync), GPU rendering via wgpu (WebGL2 default, WebGPU opt-in), real‑time CRDT collaboration.
 
 ## Technology Choices
 
 | Domain | Choice | Justification |
 |--------|--------|---------------|
 | **Language** | Rust → WebAssembly (client), native Rust (server) | Memory safety without GC, performance, compiler as safety net for AI‑generated code. |
-| **Rendering** | WebGPU | Native GPU pipeline in the browser. High‑performance 2D vector rendering. No DOM HTML for application UI. |
+| **Rendering** | wgpu + lyon + Parley/Swash | Vertex/fragment shaders only (no compute overhead). WebGL2 by default, WebGPU opt-in. Path tessellation via lyon, text via Parley/Swash glyph atlas. No DOM HTML for application UI. |
 | **Collaboration** | CRDT | Conflict resolution without a central truth server. Compatible with E2EE (no server content understanding). Offline‑first editing. |
 | **Internal serialization** | Compact binary format | IPC between workers and network protocol. Small, fast to parse, no textual overhead. JSON only for REST API. |
 | **Real‑time transport** | Binary WebSocket | CRDT deltas, presence, cursors. Persistent connection, low per‑message overhead. |
@@ -71,7 +71,7 @@ AMBRE is organized as a Cargo workspace with the following crates:
 | `ambre-crypto` | Cryptographic primitives (AEAD, signatures, KDF) |
 | `ambre-protocol` | Wire format, WebSocket messages, signaling |
 | `ambre-bus` | Inter‑worker communication |
-| `ambre-draw` | 2D vector rendering with WebGPU/Vello |
+| `ambre-draw` | `DrawSurface` trait + shared primitives (kurbo, peniko, parley types) |
 | `ambre-sync` | CRDT synchronization layer |
 | `ambre-server` | Blind‑relay server (Axum, PostgreSQL, Redis) |
 | `ambre-trame` | Spreadsheet application |

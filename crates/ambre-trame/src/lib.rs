@@ -7,7 +7,7 @@
 //!
 //! Heavy dependencies live in their consumer:
 //! - `loro`, `petgraph`, formula engine -> `ambre-logic-worker/src/trame/`
-//! - `vello`, `wgpu`, GPU rendering     -> `ambre-app/src/trame/`
+//! - `wgpu`, `lyon`, GPU rendering      -> `ambre-app/src/trame/`
 
 pub mod events;
 
