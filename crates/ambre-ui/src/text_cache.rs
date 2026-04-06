@@ -1,6 +1,6 @@
-// ambre-app/src/trame/text_cache.rs
+// ambre-ui/src/text_cache.rs
 // ============================================================================
-// Cached Parley text layouts for Trame grid rendering.
+// Cached Parley text layouts for UI rendering.
 //
 // Re-shaping text every frame is expensive: on a typical viewport with ~200
 // visible cells at 60 FPS that would be 12 000 Parley shape calls per second.
@@ -9,9 +9,6 @@
 // `(text, font_size_x100, max_width_x10, align)`. After the first frame,
 // header labels and repeated cell values are served from the cache with zero
 // shaping cost. Only new or changed strings trigger a shape call.
-//
-// GlyphAtlas sits alongside this cache: the shaped Layout is rasterized via
-// Swash into a GPU texture atlas and drawn as textured quads.
 // ============================================================================
 
 use ambre_draw::{Brush, Color};

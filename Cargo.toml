@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/ambre-core",
+    "crates/ambre-ui",
     "crates/ambre-crypto",
     "crates/ambre-protocol",
     "crates/ambre-bus",
@@ -40,6 +41,10 @@ blake2 = { version = "0.10" }
 argon2 = { version = "0.5" }
 
 # UI
+taffy     = "0.10"
+accesskit = "0.24"
+smallvec  = { version = "1", features = ["union"] }
+slotmap   = "1.0"
 wgpu    = { version = "28.0", features = ["webgl"] }
 parley  = "0.7"
 kurbo   = "0.13"

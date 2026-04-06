@@ -9,6 +9,5 @@
 
 pub mod grid;
 pub mod renderer;
-pub mod text_cache;
 
 pub use grid::TrameUiState;

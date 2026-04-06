@@ -14,8 +14,9 @@ use ambre_draw::{
     PositionedLayoutItem, Rect,
 };
 
+use ambre_ui::TextCache;
+
 use super::grid::{COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT, TOTAL_COLS, TOTAL_ROWS};
-use super::text_cache::TextCache;
 use super::TrameUiState;
 
 // -----------------------------------------------------------------------------
@@ -50,6 +51,7 @@ fn col_label(col: u32) -> String {
 /// Iterate the positioned glyph runs in a Parley layout and call draw_glyphs
 /// for each run. This is the correct DrawSurface path; text_cache no longer
 /// holds a direct reference to any rendering backend.
+#[allow(clippy::too_many_arguments)]
 fn draw_text<S: DrawSurface>(
     surface:   &mut S,
     font_cx:   &mut FontContext,
