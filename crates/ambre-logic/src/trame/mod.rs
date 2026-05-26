@@ -1,4 +1,4 @@
-// ambre-logic-worker/src/trame/mod.rs
+// ambre-logic/src/trame/mod.rs
 // ============================================================================
 // Trame (spreadsheet) AppController -- Logic Worker side.
 //

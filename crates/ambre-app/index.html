@@ -8,13 +8,18 @@
 
     <!--
         Trunk processes this file at build time.
-        - <link data-trunk rel="rust">     builds crates/ambre-app (UI Thread, src/lib.rs)
-        - <link data-trunk rel="copy-file"> copies the worker bootstrap JS files
-        - <link data-trunk rel="copy-dir">  copies pre-built worker WASM packages into dist/
+        - <link data-trunk rel="rust">     builds crates/ambre-app, which exports
+                                            ui_main (top-level scope) and the
+                                            in-process Worker dispatchers for the
+                                            "logic" and "sync" roles.
+        - <link data-trunk rel="copy-file"> copies the Worker JS bootstraps that
+                                            re-import the same ambre-app.wasm.
+        - <link data-trunk rel="copy-dir">  copies static assets (fonts).
 
-        Worker WASM binaries (ambre-logic-worker, ambre-sync-worker) are built
-        separately with wasm-pack before running Trunk. Run `make workers` first,
-        then `trunk serve` or `trunk build`.
+        Single .wasm binary, three roles. The bootstrap JS files will be
+        removed in Phase 3 of the multi-threaded WASM migration (see
+        specs/ambre-multithreaded-wasm-migration.md) once Web Workers are
+        replaced by wasm_thread::spawn over a shared linear memory.
     -->
 
     <!-- UI Thread WASM — Trunk builds src/lib.rs (#[wasm_bindgen(start)]) -->

@@ -3,29 +3,22 @@ name = "ambre-app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "UI Thread WASM — wgpu/lyon rendering, rAF loop, input capture, Worker bootstrap"
+description = "UI Thread entry point + Worker dispatcher. Owns wgpu/lyon rendering, rAF loop, input capture, and routes the in-process Worker bootstrap to ambre-logic / ambre-sync."
 
 [lib]
 crate-type = ["cdylib"]
 
-[features]
-# In dev, one WASM binary serves all three roles (UI Thread + Logic + Sync).
-# The dispatcher in main() routes to the correct worker start() based on
-# DedicatedWorkerGlobalScope::name(). Disable for standalone (split) builds
-# where each worker is compiled as its own independent binary.
-default = ["unified"]
-unified = ["dep:ambre-logic-worker", "dep:ambre-sync-worker"]
-
 [dependencies]
-ambre-bus          = { path = "../ambre-bus" }
-parley      = { workspace = true }
-rustc-hash  = { workspace = true }
-ambre-core         = { path = "../ambre-core" }
-ambre-draw         = { path = "../ambre-draw" }
-ambre-ui           = { path = "../ambre-ui" }
-ambre-trame        = { path = "../ambre-trame" }
-ambre-logic-worker = { path = "../ambre-logic-worker", optional = true }
-ambre-sync-worker  = { path = "../ambre-sync-worker", optional = true }
+ambre-bus   = { path = "../ambre-bus" }
+ambre-core  = { path = "../ambre-core" }
+ambre-draw  = { path = "../ambre-draw" }
+ambre-ui    = { path = "../ambre-ui" }
+ambre-trame = { path = "../ambre-trame" }
+ambre-logic = { path = "../ambre-logic" }
+ambre-sync  = { path = "../ambre-sync" }
+
+parley     = { workspace = true }
+rustc-hash = { workspace = true }
 
 serde    = { workspace = true }
 postcard = { workspace = true }
@@ -34,7 +27,7 @@ tracing      = { workspace = true }
 tracing-wasm = { workspace = true }
 
 # UI rendering -- wgpu kept for GPU bootstrap; renderer lives in ambre-ui
-wgpu     = { workspace = true }
+wgpu = { workspace = true }
 
 # Web APIs
 web-sys = { workspace = true, features = ["WorkerOptions", "WorkerType"] }

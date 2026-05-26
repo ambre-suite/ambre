@@ -7,7 +7,7 @@
 //
 // Implementations:
 //   - `WgpuSurface`   in `ambre-app`           (lyon tessellation + wgpu, screen)
-//   - `KrillaSurface` in `ambre-logic-worker`  (krilla, PDF export)
+//   - `KrillaSurface` in `ambre-logic`         (krilla, PDF export)
 //
 // Dependency rule: ambre-draw depends only on kurbo + peniko + parley.
 // No GPU code, no WASM glue, no wgpu, no lyon, no krilla. This keeps the core 

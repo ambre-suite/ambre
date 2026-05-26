@@ -34,10 +34,10 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
-use web_sys::{HtmlCanvasElement, MessageChannel, MessageEvent, Worker, WorkerOptions, WorkerType};
-
-#[cfg(feature = "unified")]
-use web_sys::DedicatedWorkerGlobalScope;
+use web_sys::{
+    DedicatedWorkerGlobalScope, HtmlCanvasElement, MessageChannel, MessageEvent, Worker,
+    WorkerOptions, WorkerType,
+};
 
 // -----------------------------------------------------------------------------
 // Bridge helpers
@@ -443,17 +443,22 @@ pub fn main() {
     );
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
-    #[cfg(feature = "unified")]
-    {
-        let global = js_sys::global();
-        if let Ok(scope) = global.dyn_into::<DedicatedWorkerGlobalScope>() {
-            match scope.name().as_str() {
-                "logic" => ambre_logic_worker::start(),
-                "sync"  => ambre_sync_worker::start(),
-                name    => panic!("unknown worker name: {name}"),
-            }
-            return;
+    // Single WASM binary, three roles. The same `.wasm` is loaded by the UI
+    // Thread and by each Web Worker; the dispatch below routes Worker-scope
+    // entries to the right per-role `start()` based on the Worker name set by
+    // the parent. The UI Thread (non-Worker scope) falls through to `ui_main`.
+    //
+    // This dispatcher will go away in Phase 3 when we switch to native threads
+    // sharing one heap — at that point `start()` becomes `run(channels…)` and
+    // is called directly from `ui_main` via `wasm_thread::spawn`.
+    let global = js_sys::global();
+    if let Ok(scope) = global.dyn_into::<DedicatedWorkerGlobalScope>() {
+        match scope.name().as_str() {
+            "logic" => ambre_logic::start(),
+            "sync"  => ambre_sync::start(),
+            name    => panic!("unknown worker name: {name}"),
         }
+        return;
     }
     ui_main();
 }
