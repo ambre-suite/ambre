@@ -9,3 +9,5 @@ ambre-core = { path = "../ambre-core" }
 serde = { workspace = true, features = ["derive"] }
 postcard = { workspace = true }
 thiserror = { workspace = true }
+flume = { workspace = true }
+tracing = { workspace = true }
