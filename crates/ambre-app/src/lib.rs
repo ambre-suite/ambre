@@ -1,76 +1,42 @@
 // ambre-app/src/lib.rs
 // ============================================================================
-// UI Thread entry point -- main JS thread (cdylib, #[wasm_bindgen(start)]).
+// UI Thread entry point — runs on the page's main JS thread (cdylib,
+// #[wasm_bindgen(start)]).
 //
 // Responsibilities:
 //   - Own HTMLCanvasElement, wgpu Device/Queue/Surface, QuadRenderer.
 //   - Drive the requestAnimationFrame render loop.
 //   - Capture keyboard input (arrow keys -> TrameCommand::ScrollViewport).
-//   - Spawn Logic Worker + Sync Worker; wire the MessageChannel between them.
+//   - Spawn the Logic and Sync threads via wasm_thread and own the channel
+//     pair that connects them to this UI Thread.
 //
 // GPU bootstrap is async (wgpu::Adapter::request_device is a Future even on
 // WASM). It runs via wasm_bindgen_futures::spawn_local and writes into
 // `UiState::gpu: Option<GpuState>` once complete. The rAF loop is started
-// immediately; frames before GPU init return early with no rendering.
+// after GPU init so Firefox doesn't throttle to 60 Hz from empty frames.
 //
-// Render pipeline (each frame, once GPU is ready):
-//   1. drain_pending()          -- apply incoming LogicEnvelopes
-//   2. send initial ScrollViewport if GPU + Logic Worker are both ready
-//   3. quad_renderer.begin_frame()
-//   4. draw_grid() via WgpuSurface -- fills CPU-side vertex batch
-//   5. quad_renderer.flush()    -- upload + single draw call + present
-//
-// IPC:
-//   UiEnvelope   (postcard + ArrayBuffer transfer) -> Logic Worker
-//   LogicEnvelope (postcard + ArrayBuffer transfer) <- Logic Worker
+// IPC: post-Phase-3, four `flume` channels carry typed Rust values directly.
+// No postcard on the inter-thread path. The application payloads
+// (TrameCommand etc.) remain postcard-encoded internally because their
+// schema is owned by the app crates and not part of the bus.
 // ============================================================================
 
 mod trame;
 
-use ambre_bus::{IPC_TEST_DOC_ID, LogicEnvelope, UiEnvelope};
+use ambre_bus::{IPC_TEST_DOC_ID, LogicEnvelope, LogicEvent, SyncCommand, UiEnvelope};
 use ambre_trame::TrameViewUpdate;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
-use web_sys::{
-    DedicatedWorkerGlobalScope, HtmlCanvasElement, MessageChannel, MessageEvent, Worker,
-    WorkerOptions, WorkerType,
-};
-
-// -----------------------------------------------------------------------------
-// Bridge helpers
-// -----------------------------------------------------------------------------
-
-fn send_to_worker<T: serde::Serialize>(worker: &Worker, msg: &T) {
-    let bytes    = postcard::to_allocvec(msg).expect("postcard serialize");
-    let js_bytes = js_sys::Uint8Array::new_with_length(bytes.len() as u32);
-    js_bytes.copy_from(&bytes);
-    let ab       = js_bytes.buffer();
-    let transfer = js_sys::Array::of1(&ab);
-    worker
-        .post_message_with_transfer(&ab, &transfer)
-        .expect("postMessage to worker");
-}
-
-fn extract_logic_envelope(event: &MessageEvent) -> Option<LogicEnvelope> {
-    let ab       = event.data().dyn_into::<js_sys::ArrayBuffer>().ok()?;
-    let js_bytes = js_sys::Uint8Array::new(&ab);
-    let mut bytes = vec![0u8; js_bytes.length() as usize];
-    js_bytes.copy_to(&mut bytes);
-    postcard::from_bytes(&bytes).ok()
-}
+use web_sys::HtmlCanvasElement;
 
 // -----------------------------------------------------------------------------
 // GpuState
 // -----------------------------------------------------------------------------
 
 /// All wgpu resources needed to render one frame.
-///
-/// Created asynchronously in `bootstrap_gpu()`; stored as `Option<GpuState>`
-/// in `UiState`.
-/// QuadRenderer owns the wgpu pipeline and writes directly to the surface.
 struct GpuState {
     device:         wgpu::Device,
     queue:          wgpu::Queue,
@@ -88,11 +54,13 @@ struct GpuState {
 // -----------------------------------------------------------------------------
 
 struct UiState {
-    logic_worker:          Worker,
-    pending:               Rc<RefCell<VecDeque<LogicEnvelope>>>,
+    /// Outbound channel to the Logic thread.
+    logic_tx:              flume::Sender<UiEnvelope>,
+    /// Inbound channel from the Logic thread. Drained at the top of each rAF
+    /// frame via `try_iter()`.
+    logic_rx:              flume::Receiver<LogicEnvelope>,
     gpu:                   Option<GpuState>,
     trame:                 trame::TrameUiState,
-    logic_worker_ready:    bool,
     initial_viewport_sent: bool,
     render_times:          VecDeque<f64>,
     render_fps:            f32,
@@ -119,9 +87,9 @@ impl UiState {
     }
 
     fn drain_pending(&mut self) {
-        let mut batch = VecDeque::new();
-        std::mem::swap(&mut batch, &mut self.pending.borrow_mut());
-        for envelope in batch {
+        // `try_iter` pulls every queued LogicEnvelope without blocking,
+        // ending as soon as the channel is empty.
+        while let Ok(envelope) = self.logic_rx.try_recv() {
             self.handle_logic_envelope(envelope);
         }
     }
@@ -148,8 +116,6 @@ impl UiState {
 
         gpu.width  = width;
         gpu.height = height;
-        // QuadRenderer reads width/height from begin_frame() each frame --
-        // no additional state to update here.
     }
 
     fn handle_logic_envelope(&mut self, envelope: LogicEnvelope) {
@@ -167,21 +133,19 @@ impl UiState {
         // rAF only fires after GPU init, so self.gpu is always Some here.
         let Some(ref mut gpu) = self.gpu else { return };
 
-        if self.logic_worker_ready && !self.initial_viewport_sent {
+        if !self.initial_viewport_sent {
             self.initial_viewport_sent = true;
             self.dirty = true;
             let cmd     = self.trame.scroll_viewport_cmd();
             let payload = postcard::to_allocvec(&cmd).expect("serialize TrameCommand");
-            let worker  = self.logic_worker.clone();
-            send_to_worker(
-                &worker,
-                &UiEnvelope::AppCommand { document_id: IPC_TEST_DOC_ID, payload },
-            );
+            let _ = self.logic_tx.send(UiEnvelope::AppCommand {
+                document_id: IPC_TEST_DOC_ID,
+                payload,
+            });
         }
 
         Self::tick_fps(&mut self.render_times, &mut self.render_fps, raf_timestamp);
 
-        // Refresh the HUD (FPS overlay) at most every 500ms.
         if raf_timestamp - self.last_hud_update_ms >= 500.0 {
             self.last_hud_update_ms = raf_timestamp;
             self.dirty = true;
@@ -189,7 +153,6 @@ impl UiState {
 
         let t0 = self.perf.now();
 
-        // -- Build CPU-side vertex batch (only when dirty) ---
         let upload = self.dirty;
         if self.dirty {
             self.dirty = false;
@@ -210,7 +173,6 @@ impl UiState {
             gpu.text_cache.evict_if_oversized(5_000);
         }
 
-        // -- GPU: upload (if dirty) + render pass + present ---
         let surface_tex = match gpu.surface.get_current_texture() {
             Ok(t)  => t,
             Err(e) => {
@@ -270,7 +232,6 @@ fn start_raf_loop(state: Rc<RefCell<UiState>>) {
         )
         .expect("rAF");
 
-    // Keep the closure alive forever (one forget for the app lifetime).
     cb.borrow().as_ref().unwrap().as_ref().unchecked_ref::<js_sys::Function>();
     std::mem::forget(cb);
 }
@@ -301,7 +262,6 @@ async fn bootstrap_gpu(canvas: HtmlCanvasElement) -> Option<GpuState> {
     create_gpu_state(canvas, backends).await
 }
 
-/// Returns `true` if the current page URL contains `?webgpu` or `&webgpu`.
 fn url_flag(flag: &str) -> bool {
     web_sys::window()
         .and_then(|w| w.location().search().ok())
@@ -312,7 +272,6 @@ fn url_flag(flag: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Initialise the full GPU stack on `canvas` using the given `backends`.
 async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -> Option<GpuState> {
     let width  = canvas.width();
     let height = canvas.height();
@@ -427,7 +386,7 @@ async fn fetch_bytes(url: &str) -> Option<Vec<u8>> {
 }
 
 // -----------------------------------------------------------------------------
-// Entry point dispatcher
+// Entry point
 // -----------------------------------------------------------------------------
 
 #[wasm_bindgen(start)]
@@ -443,23 +402,6 @@ pub fn main() {
     );
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
-    // Single WASM binary, three roles. The same `.wasm` is loaded by the UI
-    // Thread and by each Web Worker; the dispatch below routes Worker-scope
-    // entries to the right per-role `start()` based on the Worker name set by
-    // the parent. The UI Thread (non-Worker scope) falls through to `ui_main`.
-    //
-    // This dispatcher will go away in Phase 3 when we switch to native threads
-    // sharing one heap — at that point `start()` becomes `run(channels…)` and
-    // is called directly from `ui_main` via `wasm_thread::spawn`.
-    let global = js_sys::global();
-    if let Ok(scope) = global.dyn_into::<DedicatedWorkerGlobalScope>() {
-        match scope.name().as_str() {
-            "logic" => ambre_logic::start(),
-            "sync"  => ambre_sync::start(),
-            name    => panic!("unknown worker name: {name}"),
-        }
-        return;
-    }
     ui_main();
 }
 
@@ -470,22 +412,31 @@ pub fn main() {
 fn ui_main() {
     tracing::info!("Ambre UI Thread starting");
 
-    let logic_opts = WorkerOptions::new();
-    logic_opts.set_type(WorkerType::Module);
-    logic_opts.set_name("logic");
+    // Inter-thread channels.
+    //   UI    --UiEnvelope--->  Logic
+    //   Logic --LogicEnvelope-> UI
+    //   Logic --SyncCommand--->  Sync
+    //   Sync  --LogicEvent---->  Logic
+    let (ui_to_logic_tx, ui_to_logic_rx) = flume::unbounded::<UiEnvelope>();
+    let (logic_to_ui_tx, logic_to_ui_rx) = flume::unbounded::<LogicEnvelope>();
+    let (logic_to_sync_tx, logic_to_sync_rx) = flume::unbounded::<SyncCommand>();
+    let (sync_to_logic_tx, sync_to_logic_rx) = flume::unbounded::<LogicEvent>();
 
-    let sync_opts = WorkerOptions::new();
-    sync_opts.set_type(WorkerType::Module);
-    sync_opts.set_name("sync");
+    // Spawn the Logic thread. Owns its half of every channel from here on.
+    wasm_thread::Builder::new()
+        .name("logic".to_owned())
+        .spawn(move || {
+            ambre_logic::run(ui_to_logic_rx, logic_to_ui_tx, logic_to_sync_tx, sync_to_logic_rx);
+        })
+        .expect("spawn Logic thread");
 
-    let logic_worker =
-        Worker::new_with_options("./logic_worker.js", &logic_opts).expect("spawn Logic Worker");
-    let sync_worker =
-        Worker::new_with_options("./sync_worker.js", &sync_opts).expect("spawn Sync Worker");
-
-    let channel = MessageChannel::new().expect("create MessageChannel");
-    let pending: Rc<RefCell<VecDeque<LogicEnvelope>>> =
-        Rc::new(RefCell::new(VecDeque::new()));
+    // Spawn the Sync thread.
+    wasm_thread::Builder::new()
+        .name("sync".to_owned())
+        .spawn(move || {
+            ambre_sync::run(logic_to_sync_rx, sync_to_logic_tx);
+        })
+        .expect("spawn Sync thread");
 
     let canvas: HtmlCanvasElement = web_sys::window()
         .expect("no window")
@@ -505,11 +456,10 @@ fn ui_main() {
         .expect("no Performance API");
 
     let state = Rc::new(RefCell::new(UiState {
-        logic_worker,
-        pending:               Rc::clone(&pending),
+        logic_tx:              ui_to_logic_tx,
+        logic_rx:              logic_to_ui_rx,
         gpu:                   None,
         trame:                 trame::TrameUiState::new(canvas_w, canvas_h),
-        logic_worker_ready:    false,
         initial_viewport_sent: false,
         render_times:          VecDeque::with_capacity(120),
         render_fps:            0.0,
@@ -519,51 +469,6 @@ fn ui_main() {
         perf,
         dirty:                 true,
     }));
-
-    // -- Logic Worker ready handshake -----------------------------------------
-    {
-        let port1         = channel.port1();
-        let pending       = Rc::clone(&pending);
-        let state_c       = Rc::clone(&state);
-        let worker_c      = state.borrow().logic_worker.clone();
-        let worker_c2     = worker_c.clone();
-        let on_ready = Closure::<dyn FnMut(MessageEvent)>::once(move |_: MessageEvent| {
-            let init_msg = js_sys::Object::new();
-            js_sys::Reflect::set(&init_msg, &"syncPort".into(), &port1).unwrap();
-            let transfer = js_sys::Array::of1(&port1);
-            worker_c
-                .post_message_with_transfer(&init_msg, &transfer)
-                .expect("transfer syncPort to Logic Worker");
-
-            let cb = Closure::<dyn FnMut(MessageEvent)>::new(move |event: MessageEvent| {
-                if let Some(envelope) = extract_logic_envelope(&event) {
-                    pending.borrow_mut().push_back(envelope);
-                }
-            });
-            worker_c2.set_onmessage(Some(cb.as_ref().unchecked_ref()));
-            cb.forget();
-
-            state_c.borrow_mut().logic_worker_ready = true;
-        });
-        state.borrow().logic_worker.set_onmessage(Some(on_ready.as_ref().unchecked_ref()));
-        on_ready.forget();
-    }
-
-    // -- Sync Worker ready handshake ------------------------------------------
-    {
-        let port2      = channel.port2();
-        let sync_c     = sync_worker.clone();
-        let on_ready = Closure::<dyn FnMut(MessageEvent)>::once(move |_: MessageEvent| {
-            let init_msg = js_sys::Object::new();
-            js_sys::Reflect::set(&init_msg, &"logicPort".into(), &port2).unwrap();
-            let transfer = js_sys::Array::of1(&port2);
-            sync_c
-                .post_message_with_transfer(&init_msg, &transfer)
-                .expect("transfer logicPort to Sync Worker");
-        });
-        sync_worker.set_onmessage(Some(on_ready.as_ref().unchecked_ref()));
-        on_ready.forget();
-    }
 
     // -- Async GPU init -------------------------------------------------------
     {
@@ -610,14 +515,10 @@ fn ui_main() {
                 s.dirty = true;
                 if let Some(cmd) = s.trame.move_cursor(dr, dc) {
                     let payload = postcard::to_allocvec(&cmd).expect("serialize TrameCommand");
-                    let worker  = s.logic_worker.clone();
-                    send_to_worker(
-                        &worker,
-                        &UiEnvelope::AppCommand {
-                            document_id: IPC_TEST_DOC_ID,
-                            payload,
-                        },
-                    );
+                    let _ = s.logic_tx.send(UiEnvelope::AppCommand {
+                        document_id: IPC_TEST_DOC_ID,
+                        payload,
+                    });
                 }
             },
         );
@@ -650,8 +551,6 @@ fn ui_main() {
     }
 
     tracing::info!("Ambre UI Thread ready");
-    // rAF loop is started inside the GPU bootstrap spawn_local above,
-    // after the GPU is fully initialized.
 
     if let Some(window) = web_sys::window()
         && let Ok(f) = js_sys::Reflect::get(&window, &"ambreReady".into())

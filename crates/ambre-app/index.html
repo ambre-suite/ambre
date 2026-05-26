@@ -8,26 +8,16 @@
 
     <!--
         Trunk processes this file at build time.
-        - <link data-trunk rel="rust">     builds crates/ambre-app, which exports
-                                            ui_main (top-level scope) and the
-                                            in-process Worker dispatchers for the
-                                            "logic" and "sync" roles.
-        - <link data-trunk rel="copy-file"> copies the Worker JS bootstraps that
-                                            re-import the same ambre-app.wasm.
-        - <link data-trunk rel="copy-dir">  copies static assets (fonts).
 
-        Single .wasm binary, three roles. The bootstrap JS files will be
-        removed in Phase 3 of the multi-threaded WASM migration (see
-        specs/ambre-multithreaded-wasm-migration.md) once Web Workers are
-        replaced by wasm_thread::spawn over a shared linear memory.
+        Single ambre-app.wasm hosts all three roles (UI Thread + Logic +
+        Sync) and shares one linear memory across them via wasm_thread.
+        wasm-bindgen produces the JS glue that instantiates the shared
+        Memory; wasm_thread spawns the worker threads internally — no
+        per-role JS bootstrap file is needed any more.
     -->
 
-    <!-- UI Thread WASM — Trunk builds src/lib.rs (#[wasm_bindgen(start)]) -->
+    <!-- ambre-app WASM — Trunk builds src/lib.rs (#[wasm_bindgen(start)]) -->
     <link data-trunk rel="rust" data-wasm-opt="z" />
-
-    <!-- Worker bootstrap JS files (served at root, referenced by Worker::new_with_options) -->
-    <link data-trunk rel="copy-file" href="logic_worker.js" />
-    <link data-trunk rel="copy-file" href="sync_worker.js" />
 
     <!-- Font assets served at /fonts/ — loaded at runtime via fetch() (no include_bytes!) -->
     <link data-trunk rel="copy-dir" href="fonts" />

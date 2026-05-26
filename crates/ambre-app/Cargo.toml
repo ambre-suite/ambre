@@ -23,6 +23,7 @@ rustc-hash = { workspace = true }
 serde    = { workspace = true }
 postcard = { workspace = true }
 cfg-if   = { workspace = true }
+flume    = { workspace = true }
 tracing      = { workspace = true }
 tracing-wasm = { workspace = true }
 

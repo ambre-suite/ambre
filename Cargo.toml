@@ -86,6 +86,11 @@ console_error_panic_hook = "0.1"
 # the hood. Required for the shared-linear-memory threading model documented
 # in specs/ambre-multithreaded-wasm-migration.md.
 wasm_thread = "0.3"
+# Native MPMC channels used between UI / Logic / Sync threads. Replaces the
+# postMessage + postcard transport from Model A (Phase 3 of the migration).
+# Default features include `select` (Selector for waiting on multiple receivers)
+# which the Logic and Sync threads rely on.
+flume = "0.11"
 
 # Compression
 ruzstd = "0.8"
