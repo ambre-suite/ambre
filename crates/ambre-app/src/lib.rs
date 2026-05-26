@@ -65,6 +65,17 @@ struct UiState {
     render_times:          VecDeque<f64>,
     render_fps:            f32,
     last_frame_ms:         f32,
+    /// Time spent draining inbound `LogicEnvelope` messages this frame.
+    last_drain_ms:         f32,
+    /// Time spent in `draw_grid` (CPU-side: lyon tessellation, parley shaping,
+    /// glyph atlas updates). Zero when the frame is not dirty.
+    last_draw_ms:          f32,
+    /// Time spent on the GPU path (`get_current_texture` + buffer upload +
+    /// `flush` + `submit` + `present`).
+    last_gpu_ms:           f32,
+    /// Per-sub-phase breakdown of the last `draw_grid` call. Populated by
+    /// `draw_grid` itself; consumed by the next frame's HUD render.
+    draw_stats:            trame::renderer::DrawStats,
     /// rAF timestamp of the last HUD rebuild. We refresh the FPS overlay at most
     /// every 500ms so idle frames never trigger a full vertex rebuild.
     last_hud_update_ms:    f64,
@@ -128,7 +139,9 @@ impl UiState {
     }
 
     fn render(&mut self, raf_timestamp: f64) {
+        let t_drain = self.perf.now();
         self.drain_pending();
+        let t_after_drain = self.perf.now();
 
         // rAF only fires after GPU init, so self.gpu is always Some here.
         let Some(ref mut gpu) = self.gpu else { return };
@@ -154,10 +167,12 @@ impl UiState {
         let t0 = self.perf.now();
 
         let upload = self.dirty;
+        let t_draw_ms;
         if self.dirty {
             self.dirty = false;
             gpu.text_cache.reset_frame_stats();
             gpu.quad_renderer.begin_frame(gpu.width as f32, gpu.height as f32);
+            let t_draw_start = self.perf.now();
             {
                 let mut surface = ambre_ui::WgpuSurface::new(&mut gpu.quad_renderer);
                 trame::renderer::draw_grid(
@@ -168,11 +183,20 @@ impl UiState {
                     self.text_enabled,
                     self.render_fps,
                     self.last_frame_ms,
+                    self.last_drain_ms,
+                    self.last_draw_ms,
+                    self.last_gpu_ms,
+                    &self.perf,
+                    &mut self.draw_stats,
                 );
             }
             gpu.text_cache.evict_if_oversized(5_000);
+            t_draw_ms = (self.perf.now() - t_draw_start) as f32;
+        } else {
+            t_draw_ms = 0.0;
         }
 
+        let t_gpu_start = self.perf.now();
         let surface_tex = match gpu.surface.get_current_texture() {
             Ok(t)  => t,
             Err(e) => {
@@ -189,7 +213,10 @@ impl UiState {
         surface_tex.present();
 
         let t2 = self.perf.now();
-        self.last_frame_ms = (t2 - t0) as f32;
+        self.last_frame_ms  = (t2 - t0) as f32;
+        self.last_drain_ms  = (t_after_drain - t_drain) as f32;
+        self.last_draw_ms   = t_draw_ms;
+        self.last_gpu_ms    = (t2 - t_gpu_start) as f32;
     }
 }
 
@@ -464,6 +491,10 @@ fn ui_main() {
         render_times:          VecDeque::with_capacity(120),
         render_fps:            0.0,
         last_frame_ms:         0.0,
+        last_drain_ms:         0.0,
+        last_draw_ms:          0.0,
+        last_gpu_ms:           0.0,
+        draw_stats:            trame::renderer::DrawStats::default(),
         last_hud_update_ms:    0.0,
         text_enabled:          true,
         perf,

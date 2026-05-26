@@ -3,7 +3,7 @@
 // Trame grid draw_grid -- UI Thread, WgpuSurface backend.
 //
 // draw_grid is generic over DrawSurface so the same code path drives both
-// WgpuSurface (screen) and KrillaSurface (PDF export, Logic Worker).
+// WgpuSurface (screen) and KrillaSurface (PDF export, ambre-logic).
 //
 // Text layout is provided by TextCache (cached Parley layouts) and glyph
 // rasterisation by SwashScaler into the GlyphAtlas (R8Unorm GPU texture).
@@ -32,6 +32,35 @@ const COLOR_HEADER_BORDER: Color = Color::from_rgba8(178, 183, 193, 255);
 const COLOR_ACTIVE_BORDER: Color = Color::from_rgba8(60,  120, 210, 255);
 const COLOR_CELL_TEXT:     Color = Color::from_rgba8(51,  51,  51,  255);
 const COLOR_HEADER_TEXT:   Color = Color::from_rgba8(85,  85,  85,  255);
+
+// -----------------------------------------------------------------------------
+// DrawStats — per-frame breakdown of draw_grid
+// -----------------------------------------------------------------------------
+
+/// Sub-phase timings for one `draw_grid` invocation.
+///
+/// All times are wall-clock milliseconds measured via `performance.now()`,
+/// so they include CPU time spent in lyon tessellation, parley shaping,
+/// glyph rasterisation, vertex batching, and our own iteration overhead.
+/// The GPU `flush` / `present` happens *after* `draw_grid` returns and is
+/// measured separately as `last_gpu_ms` in `UiState`.
+#[derive(Default, Clone, Copy)]
+pub struct DrawStats {
+    /// Phases 1-10: white background, pending area, received-cell fills,
+    /// grid lines, header backgrounds + active-row/col tints, active-cell
+    /// border. All `fill_rect` / `stroke_line` / `stroke_rect`.
+    pub bg_ms: f32,
+    /// Phase 11a: cell body text (parley shaping + push_clip + draw_glyphs
+    /// + pop_clip per non-empty cell). Zero when `text_enabled` is false.
+    pub cells_ms: f32,
+    /// Phases 11b + 11c: column header labels (A, B, ...) and row header
+    /// numbers (1, 2, ...). Zero when `text_enabled` is false.
+    pub hdrs_ms: f32,
+    /// Phase 12: the on-canvas HUD overlay itself.
+    pub hud_ms: f32,
+    /// Number of cells with non-empty text actually drawn this frame.
+    pub cells_drawn: u32,
+}
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -84,6 +113,7 @@ fn draw_text<S: DrawSurface>(
 // draw_grid
 // -----------------------------------------------------------------------------
 
+#[allow(clippy::too_many_arguments)]
 pub fn draw_grid<S: DrawSurface>(
     surface:        &mut S,
     state:          &TrameUiState,
@@ -92,9 +122,20 @@ pub fn draw_grid<S: DrawSurface>(
     text_enabled:   bool,
     render_fps:     f32,
     last_frame_ms:  f32,
+    last_drain_ms:  f32,
+    last_draw_ms:   f32,
+    last_gpu_ms:    f32,
+    perf:           &web_sys::Performance,
+    stats:          &mut DrawStats,
 ) {
     let w = state.canvas_width;
     let h = state.canvas_height;
+
+    // -------------------------------------------------------------------------
+    // Phase BG: backgrounds, fills, grid lines, header tints, active border.
+    // No text, no parley, no atlas. Pure lyon tessellation via DrawSurface.
+    // -------------------------------------------------------------------------
+    let t0 = perf.now();
 
     // 1. White background.
     surface.fill_rect(Rect::new(0.0, 0.0, w, h), COLOR_WHITE);
@@ -175,14 +216,18 @@ pub fn draw_grid<S: DrawSurface>(
         surface.stroke_rect(Rect::new(x, y, x + cw, y + ch), COLOR_ACTIVE_BORDER, 2.0);
     }
 
+    let t_bg = perf.now();
+
     // -------------------------------------------------------------------------
-    // 11. Text
+    // Phases CELLS + HDRS: text.
     // -------------------------------------------------------------------------
 
     const BODY_SIZE:   f32 = 12.0;
     const HEADER_SIZE: f32 = 11.0;
 
-    if text_enabled {
+    let mut cells_drawn = 0u32;
+
+    let t_hdrs = if text_enabled {
         // 11a. Cell body text.
         for row in state.top_row..row_end {
             for col in state.left_col..col_end {
@@ -206,9 +251,12 @@ pub fn draw_grid<S: DrawSurface>(
                         }
                     }
                     surface.pop_clip();
+                    cells_drawn += 1;
                 }
             }
         }
+        let t_cells = perf.now();
+        stats.cells_ms = (t_cells - t_bg) as f32;
 
         // 11b. Column header labels (A, B, C...).
         for i in 0..=(state.viewport_cols + 1) {
@@ -259,24 +307,48 @@ pub fn draw_grid<S: DrawSurface>(
             }
             surface.pop_clip();
         }
-    }
+        let t_hdrs = perf.now();
+        stats.hdrs_ms = (t_hdrs - t_cells) as f32;
+        t_hdrs
+    } else {
+        stats.cells_ms = 0.0;
+        stats.hdrs_ms  = 0.0;
+        t_bg
+    };
 
     // -------------------------------------------------------------------------
-    // 12. FPS counter overlay
+    // Phase HUD: FPS counter overlay (2 lines: high-level + sub-phase).
     // -------------------------------------------------------------------------
 
-    let fps_bg = Rect::new(4.0, h - 20.0, 180.0, h - 4.0);
+    let fps_bg = Rect::new(4.0, h - 38.0, 520.0, h - 4.0);
     surface.fill_rect(fps_bg, Color::from_rgba8(0, 0, 0, 160));
 
     let text_tag  = if text_enabled { "" } else { " [T=text]" };
-    let fps_label = format!(
-        "{render_fps:.0} fps  {last_frame_ms:.1}ms  miss={}{text_tag}",
+    let line1 = format!(
+        "{render_fps:.0}fps {last_frame_ms:.1}ms  \
+         drain:{last_drain_ms:.1} draw:{last_draw_ms:.1} gpu:{last_gpu_ms:.1}  \
+         miss:{}{text_tag}",
         text_cache.frame_misses,
+    );
+    let line2 = format!(
+        "bg:{:.2} cells:{:.2} hdrs:{:.2} hud:{:.2}  drawn:{}",
+        stats.bg_ms, stats.cells_ms, stats.hdrs_ms, stats.hud_ms, cells_drawn,
     );
     draw_text(
         surface, font_cx, text_cache,
-        &fps_label, 11.0, 174.0, Alignment::Start,
-        6.0, h - 19.0,
+        &line1, 11.0, 514.0, Alignment::Start,
+        6.0, h - 37.0,
         Color::from_rgba8(255, 220, 0, 255),
     );
+    draw_text(
+        surface, font_cx, text_cache,
+        &line2, 11.0, 514.0, Alignment::Start,
+        6.0, h - 21.0,
+        Color::from_rgba8(180, 220, 255, 255),
+    );
+
+    let t_hud_end = perf.now();
+    stats.bg_ms      = (t_bg - t0) as f32;
+    stats.hud_ms     = (t_hud_end - t_hdrs) as f32;
+    stats.cells_drawn = cells_drawn;
 }
