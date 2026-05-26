@@ -6,7 +6,7 @@
 //! - [`DisplayCell`]: flat cell data ready for rendering.
 //!
 //! Heavy dependencies live in their consumer:
-//! - `loro`, `petgraph`, formula engine -> `ambre-logic-worker/src/trame/`
+//! - `loro`, `petgraph`, formula engine -> `ambre-logic/src/trame/`
 //! - `wgpu`, `lyon`, GPU rendering      -> `ambre-app/src/trame/`
 
 pub mod events;

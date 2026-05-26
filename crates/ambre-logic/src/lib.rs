@@ -1,4 +1,4 @@
-// ambre-logic-worker/src/lib.rs
+// ambre-logic/src/lib.rs
 // ============================================================================
 // Logic Worker entry point - dedicated Web Worker, isolated linear memory.
 //
@@ -602,15 +602,10 @@ impl LogicWorkerState {
 
 /// Entry point for the Logic Worker.
 ///
-/// Called either:
-/// - directly by `#[wasm_bindgen(start)]` in standalone builds (release pipeline), or
-/// - by the dispatcher in `ambre-app` when the worker name is "logic" (dev unified build).
+/// Called by the dispatcher in `ambre-app::main` when the worker name is
+/// `"logic"`. Logging and panic hook are set up by the parent `main`, no
+/// per-worker setup needed.
 pub fn start() {
-    #[cfg(feature = "standalone")]
-    {
-        tracing_wasm::set_as_global_default();
-        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-    }
     tracing::info!("Ambre Logic Worker starting");
 
     let global: DedicatedWorkerGlobalScope =
@@ -680,8 +675,3 @@ pub fn start() {
         .expect("post ready signal to UI Thread");
 }
 
-#[cfg(feature = "standalone")]
-#[wasm_bindgen(start)]
-pub fn main() {
-    start();
-}
