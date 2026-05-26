@@ -22,4 +22,8 @@ open = true
 wasm_opt = false # disable wasm optimization for faster builds during development
 
 [profile.release]
-wasm_opt = "z" # optimize for size
+# wasm_opt disabled — Binaryen 116 (shipped with Trunk 0.21.13) cannot parse
+# wasm modules built with `+atomics` from rustc nightly. See the rationale in
+# crates/ambre-app/index.html. Re-enable once Trunk ships Binaryen 117+ or
+# wire a manual post-step against a newer binaryen.
+wasm_opt = false

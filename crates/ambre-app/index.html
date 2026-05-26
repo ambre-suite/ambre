@@ -16,8 +16,19 @@
         per-role JS bootstrap file is needed any more.
     -->
 
-    <!-- ambre-app WASM — Trunk builds src/lib.rs (#[wasm_bindgen(start)]) -->
-    <link data-trunk rel="rust" data-wasm-opt="z" />
+    <!--
+        ambre-app WASM — Trunk builds src/lib.rs (#[wasm_bindgen(start)]).
+
+        wasm-opt is disabled: Trunk 0.21.13 ships Binaryen 116, which cannot
+        parse the wasm instructions emitted by rustc nightly with `+atomics`
+        (fails with `[parse exception: invalid code after misc prefix: 17]`).
+        Re-enable once Trunk picks up Binaryen 117+, or wire a manual
+        wasm-opt post-step with a newer binaryen.
+
+        Impact: release binary stays at ~6.4 MB instead of ~4.8 MB. Runtime
+        performance is unaffected (`-Oz` is a size optimisation).
+    -->
+    <link data-trunk rel="rust" data-wasm-opt="0" />
 
     <!-- Font assets served at /fonts/ — loaded at runtime via fetch() (no include_bytes!) -->
     <link data-trunk rel="copy-dir" href="fonts" />
