@@ -1,0 +1,40 @@
+# Atomics + bulk-memory + mutable-globals are required to compile std with
+# threading support on wasm32. Combined with `-Z build-std` below, this rebuilds
+# the standard library against `+atomics`, which is the prerequisite for
+# `WebAssembly.Memory` backed by a `SharedArrayBuffer` and for `std::thread`
+# semantics in the browser.
+#
+# Active only on wasm32 targets to avoid affecting host-side builds (workspace
+# tests on x86_64, etc.).
+[target.wasm32-unknown-unknown]
+rustflags = [
+    # Enable atomic ops, bulk memory and mutable globals on wasm — required to
+    # compile std with threading support.
+    "-C", "target-feature=+atomics,+bulk-memory,+mutable-globals",
+    # Without these two flags, LLD emits a non-shared memory even when atomics
+    # are on. A non-shared WebAssembly.Memory cannot be transferred to a Worker
+    # via postMessage (DataCloneError), so wasm_thread::spawn panics on the
+    # first thread it tries to start.
+    #
+    # `--shared-memory` flips the memory section to `(memory (shared ...))`.
+    # `--max-memory` is mandatory for shared memories; 4 GiB is the wasm32 cap.
+    # `--import-memory` makes the wasm import its memory from JS instead of
+    # defining it locally — required by wasm-bindgen's `threads` transform,
+    # which asserts `mem.import.is_some()`. JS creates one shared Memory and
+    # hands it to every worker that instantiates the same module, giving them
+    # a common heap.
+    "-C", "link-arg=--shared-memory",
+    "-C", "link-arg=--max-memory=4294967296",
+    "-C", "link-arg=--import-memory",
+    # wasm-bindgen's threads transform expects these TLS helpers to be exported
+    # by wasm-ld. LLD generates them when atomics + TLS are in scope, but won't
+    # export them by name unless asked. Without these exports, wasm-bindgen
+    # fails with `failed to find __wasm_init_tls`.
+    "-C", "link-arg=--export=__wasm_init_tls",
+    "-C", "link-arg=--export=__tls_size",
+    "-C", "link-arg=--export=__tls_align",
+    "-C", "link-arg=--export=__tls_base",
+]
+
+[unstable]
+build-std = ["std", "panic_abort"]
