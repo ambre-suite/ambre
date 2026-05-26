@@ -1,4 +1,8 @@
 [toolchain]
-channel = "stable"
+# Pinned date — bump deliberately. Required for `-Z build-std` to rebuild
+# `std` with `+atomics` (multi-threaded WASM). See
+# specs/ambre-multithreaded-wasm-migration.md.
+channel = "nightly-2026-03-29"
 targets = ["wasm32-unknown-unknown"]
+components = ["rust-src"]
 profile = "minimal"

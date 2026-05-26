@@ -66,6 +66,7 @@ web-sys = { version = "0.3.85", features = [
     "HtmlCanvasElement",
     "ImageData",
     "KeyboardEvent",
+    "Location",
     "MessageChannel",
     "MessageEvent",
     "MessagePort",
@@ -82,6 +83,10 @@ js-sys = "0.3.85"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 console_error_panic_hook = "0.1"
+# Multi-threaded WASM — std::thread replacement that spawns Web Workers under
+# the hood. Required for the shared-linear-memory threading model documented
+# in specs/ambre-multithreaded-wasm-migration.md.
+wasm_thread = "0.3"
 
 # Compression
 ruzstd = "0.8"
