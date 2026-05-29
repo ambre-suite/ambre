@@ -229,6 +229,12 @@ pub fn draw_grid<S: DrawSurface>(
 
     let t_hdrs = if text_enabled {
         // 11a. Cell body text.
+        // Brush + max_width hoisted out of the per-cell loop. The clip rect is
+        // only pushed when text overflows the cell vertically (multi-line) —
+        // parley already bounds the layout horizontally by `max_width`, so a
+        // single-line layout cannot overflow and the clip is pure overhead.
+        let cell_brush     = Brush::Solid(COLOR_CELL_TEXT);
+        let cell_max_width = (COL_WIDTH - 8.0) as f32;
         for row in state.top_row..row_end {
             for col in state.left_col..col_end {
                 if let Some(content) = state.cell_cache.get(&(row, col)) {
@@ -236,27 +242,34 @@ pub fn draw_grid<S: DrawSurface>(
                     let cx = HEADER_WIDTH + (col - state.left_col) as f64 * COL_WIDTH;
                     let cy = HEADER_HEIGHT + (row - state.top_row) as f64 * ROW_HEIGHT;
                     let layout: &Layout<ParleyBrush> = text_cache.get_or_build(
-                        font_cx, content, BODY_SIZE, (COL_WIDTH - 8.0) as f32, Alignment::Start,
+                        font_cx, content, BODY_SIZE, cell_max_width, Alignment::Start,
                     );
                     let text_h  = layout.height() as f64;
                     let y_off   = ((ROW_HEIGHT - text_h) / 2.0).max(0.0);
-                    let brush   = Brush::Solid(COLOR_CELL_TEXT);
-                    surface.push_clip(Rect::new(cx, cy, cx + COL_WIDTH, cy + ROW_HEIGHT));
+                    let needs_clip = text_h > ROW_HEIGHT;
+                    if needs_clip {
+                        surface.push_clip(Rect::new(cx, cy, cx + COL_WIDTH, cy + ROW_HEIGHT));
+                    }
                     for line in layout.lines() {
                         for item in line.items() {
                             let PositionedLayoutItem::GlyphRun(run) = item else { continue };
                             let tx = cx + 4.0 + run.offset() as f64;
                             let ty = cy + y_off + run.baseline() as f64;
-                            surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+                            surface.draw_glyphs(&run, &cell_brush, Affine::translate((tx, ty)));
                         }
                     }
-                    surface.pop_clip();
+                    if needs_clip {
+                        surface.pop_clip();
+                    }
                     cells_drawn += 1;
                 }
             }
         }
         let t_cells = perf.now();
         stats.cells_ms = (t_cells - t_bg) as f32;
+
+        // 11b + 11c. Header labels share a brush; clip skipped when text fits.
+        let header_brush = Brush::Solid(COLOR_HEADER_TEXT);
 
         // 11b. Column header labels (A, B, C...).
         for i in 0..=(state.viewport_cols + 1) {
@@ -270,20 +283,25 @@ pub fn draw_grid<S: DrawSurface>(
             );
             let text_h = layout.height() as f64;
             let y_off  = ((HEADER_HEIGHT - text_h) / 2.0).max(0.0);
-            let brush  = Brush::Solid(COLOR_HEADER_TEXT);
-            surface.push_clip(Rect::new(col_x, 0.0, col_x + COL_WIDTH, HEADER_HEIGHT));
+            let needs_clip = text_h > HEADER_HEIGHT;
+            if needs_clip {
+                surface.push_clip(Rect::new(col_x, 0.0, col_x + COL_WIDTH, HEADER_HEIGHT));
+            }
             for line in layout.lines() {
                 for item in line.items() {
                     let PositionedLayoutItem::GlyphRun(run) = item else { continue };
                     let tx = col_x + run.offset() as f64;
                     let ty = y_off + run.baseline() as f64;
-                    surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+                    surface.draw_glyphs(&run, &header_brush, Affine::translate((tx, ty)));
                 }
             }
-            surface.pop_clip();
+            if needs_clip {
+                surface.pop_clip();
+            }
         }
 
         // 11c. Row header numbers (1, 2, 3...).
+        let row_hdr_max_width = (HEADER_WIDTH - 8.0) as f32;
         for i in 0..=(state.viewport_rows + 1) {
             let row = state.top_row + i;
             if row >= TOTAL_ROWS { break; }
@@ -291,21 +309,25 @@ pub fn draw_grid<S: DrawSurface>(
             if row_y >= h { break; }
             let label = (row + 1).to_string();
             let layout: &Layout<ParleyBrush> = text_cache.get_or_build(
-                font_cx, &label, HEADER_SIZE, (HEADER_WIDTH - 8.0) as f32, Alignment::End,
+                font_cx, &label, HEADER_SIZE, row_hdr_max_width, Alignment::End,
             );
             let text_h = layout.height() as f64;
             let y_off  = ((ROW_HEIGHT - text_h) / 2.0).max(0.0);
-            let brush  = Brush::Solid(COLOR_HEADER_TEXT);
-            surface.push_clip(Rect::new(0.0, row_y, HEADER_WIDTH, row_y + ROW_HEIGHT));
+            let needs_clip = text_h > ROW_HEIGHT;
+            if needs_clip {
+                surface.push_clip(Rect::new(0.0, row_y, HEADER_WIDTH, row_y + ROW_HEIGHT));
+            }
             for line in layout.lines() {
                 for item in line.items() {
                     let PositionedLayoutItem::GlyphRun(run) = item else { continue };
                     let tx = 4.0 + run.offset() as f64;
                     let ty = row_y + y_off + run.baseline() as f64;
-                    surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+                    surface.draw_glyphs(&run, &header_brush, Affine::translate((tx, ty)));
                 }
             }
-            surface.pop_clip();
+            if needs_clip {
+                surface.pop_clip();
+            }
         }
         let t_hdrs = perf.now();
         stats.hdrs_ms = (t_hdrs - t_cells) as f32;
