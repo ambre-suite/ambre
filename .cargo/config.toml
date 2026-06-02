@@ -11,6 +11,14 @@ rustflags = [
     # Enable atomic ops, bulk memory and mutable globals on wasm — required to
     # compile std with threading support.
     "-C", "target-feature=+atomics,+bulk-memory,+mutable-globals",
+    # `+atomics` is still an *unstable* wasm target-feature, so rustc emits a
+    # hard-coded, non-actionable warning ("unstable feature specified for
+    # `-Ctarget-feature`: `atomics`") for every single crate. It has no lint
+    # name, so it can't be `#[allow]`-ed; `-A warnings` is the only switch that
+    # silences it. Scoped to wasm32 ONLY: host builds (cargo check/clippy/test
+    # on x86_64) keep all warnings, so the only blind spot is wasm-exclusive
+    # code (ambre-app, ambre-ui::host). Remove this line to audit those.
+    "-A", "warnings",
     # Without these two flags, LLD emits a non-shared memory even when atomics
     # are on. A non-shared WebAssembly.Memory cannot be transferred to a Worker
     # via postMessage (DataCloneError), so wasm_thread::spawn panics on the
