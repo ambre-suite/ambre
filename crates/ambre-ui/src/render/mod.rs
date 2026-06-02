@@ -319,7 +319,7 @@ impl GlyphAtlas {
 /// directly to the swapchain on top of the blitted cells texture.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Layer {
-    Cells,
+    Content,
     Overlay,
 }
 
@@ -501,18 +501,18 @@ impl OffscreenTarget {
 }
 
 // ============================================================================
-// RepaintMode
+// ContentRepaint
 // ============================================================================
 
-/// How to repaint the CELLS (persistent) layer this frame.
+/// How to repaint the CONTENT (persistent) layer this frame.
 ///
 /// `Scroll` shifts the previous frame's offscreen via `copy_texture_to_texture`
-/// then renders the freshly pushed cells geometry on top (typically the strip
-/// of cells entering the viewport). `Reuse` skips all cells work and re-blits
-/// the existing offscreen unchanged — the orchestrator must NOT have called
-/// `begin_layer(Layer::Cells)` in this case.
+/// then renders the freshly pushed content geometry on top (typically the strip
+/// entering the viewport). `Reuse` skips all content work and re-blits the
+/// existing offscreen unchanged — the orchestrator must NOT have called
+/// `begin_layer(Layer::Content)` in this case.
 #[derive(Clone, Copy, Debug)]
-pub enum CellsRepaint {
+pub enum ContentRepaint {
     Full,
     Scroll { dx_px: i32, dy_px: i32 },
     Reuse,
@@ -529,9 +529,6 @@ pub enum OverlayRepaint {
     Reuse,
 }
 
-/// Backwards-compatible alias kept for orchestrator code that thinks in
-/// "cells repaint mode". Prefer `CellsRepaint` directly.
-pub type RepaintMode = CellsRepaint;
 
 // ============================================================================
 // QuadRenderer
@@ -843,7 +840,7 @@ impl QuadRenderer {
             atlas,
             cells,
             overlay,
-            active_layer: Layer::Cells,
+            active_layer: Layer::Content,
             offscreen_format,
             offscreens,
             blit_bind_groups,
@@ -857,7 +854,7 @@ impl QuadRenderer {
 
     /// Resize the ping-pong offscreens. Must be called whenever the canvas
     /// size changes. Both offscreens are reallocated and their content lost;
-    /// the next frame must use `RepaintMode::Full`.
+    /// the next frame must use `ContentRepaint::Full`.
     pub fn resize_offscreens(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         self.offscreens = [
             OffscreenTarget::new(device, self.offscreen_format, width, height, "cells_offscreen_a"),
@@ -890,7 +887,7 @@ impl QuadRenderer {
 
     fn batches_mut(&mut self, layer: Layer) -> &mut LayerBatches {
         match layer {
-            Layer::Cells   => &mut self.cells,
+            Layer::Content   => &mut self.cells,
             Layer::Overlay => &mut self.overlay,
         }
     }
@@ -986,7 +983,7 @@ impl QuadRenderer {
     ///                the cells geometry over the exposed strip.
     ///   - `Reuse`  : skip both. The existing offscreen is blitted unchanged.
     ///                The orchestrator must NOT have called
-    ///                `begin_layer(Layer::Cells)` this frame.
+    ///                `begin_layer(Layer::Content)` this frame.
     ///
     /// `overlay`:
     ///   - `Redraw` : upload the freshly pushed overlay geometry and re-issue
@@ -1001,7 +998,7 @@ impl QuadRenderer {
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
         swapchain_view: &wgpu::TextureView,
-        cells:   CellsRepaint,
+        cells:   ContentRepaint,
         overlay: OverlayRepaint,
     ) {
         // -- 0. Uniform + atlas + conditional batch uploads. ------------------
@@ -1015,14 +1012,14 @@ impl QuadRenderer {
         }
 
         // -- 1. Cells layer: shift + render to the destination offscreen. -----
-        let cells_dirty = !matches!(cells, CellsRepaint::Reuse);
+        let cells_dirty = !matches!(cells, ContentRepaint::Reuse);
         let dst_idx = if cells_dirty {
             1 - self.current_offscreen_idx
         } else {
             self.current_offscreen_idx
         };
 
-        if let CellsRepaint::Scroll { dx_px, dy_px } = cells {
+        if let ContentRepaint::Scroll { dx_px, dy_px } = cells {
             let src = &self.offscreens[self.current_offscreen_idx].texture;
             let dst = &self.offscreens[dst_idx].texture;
             copy_offscreen_with_offset(
@@ -1034,9 +1031,9 @@ impl QuadRenderer {
 
         if cells_dirty {
             let load_op = match cells {
-                CellsRepaint::Full          => wgpu::LoadOp::Clear(wgpu::Color::WHITE),
-                CellsRepaint::Scroll { .. } => wgpu::LoadOp::Load,
-                CellsRepaint::Reuse         => unreachable!(),
+                ContentRepaint::Full          => wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                ContentRepaint::Scroll { .. } => wgpu::LoadOp::Load,
+                ContentRepaint::Reuse         => unreachable!(),
             };
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("cells_pass"),

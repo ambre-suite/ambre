@@ -1,26 +1,21 @@
-// ambre-logic/src/trame/mod.rs
+// ambre-trame/src/logic.rs
 // ============================================================================
-// Trame (spreadsheet) AppController -- Logic Worker side.
+// Trame (spreadsheet) AppController -- Logic thread side.
 //
-// Lives here rather than in ambre-trame because it will eventually require
-// heavy deps (loro, petgraph) that must not pollute the UI Thread binary.
+// Behind the `logic` feature so that crates wiring only the UI side
+// (ambre-app) don't pull the CRDT / formula-engine dependency tree.
+//
 // The shared IPC types (TrameCommand, TrameViewUpdate, DisplayCell) live in
-// ambre-trame which has only serde/ambre-draw as dependencies.
-//
-// Grid dimensions:
-//   TOTAL_COLS = 1_000   (A..ALN)
-//   TOTAL_ROWS = 100_000
+// `crate::events` and are always compiled; the grid dimensions shared with the
+// UI live in the crate root (`crate::TOTAL_ROWS` / `crate::TOTAL_COLS`).
 //
 // Cell content (hardcoded for now): standard spreadsheet reference notation,
 // e.g. column 0 row 0 -> "A1", column 26 row 99 -> "AA100".
 // ============================================================================
 
 use ambre_bus::{AppController, CommandSink, DocType, LogicEvent};
-use ambre_trame::{DisplayCell, TrameCommand, TrameViewUpdate};
 
-// Grid bounds enforced by the controller when clamping requested ranges.
-const TOTAL_ROWS: u32 = 100_000;
-const TOTAL_COLS: u32 = 1_000;
+use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameViewUpdate};
 
 // -----------------------------------------------------------------------------
 // TrameController
@@ -28,9 +23,10 @@ const TOTAL_COLS: u32 = 1_000;
 
 /// Controller for Trame (spreadsheet) documents.
 ///
-/// Owned by [`super::LogicWorkerState::controllers`], keyed by `document_id`.
+/// Instantiated by the Logic thread's controller registry, keyed by
+/// `document_id`.
 pub struct TrameController {
-    /// Sink to the Sync Worker. Will be used when CRDT edits are implemented.
+    /// Sink to the Sync thread. Will be used when CRDT edits are implemented.
     #[allow(dead_code)]
     sync_tx: Box<dyn CommandSink>,
 }

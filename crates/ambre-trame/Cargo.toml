@@ -2,8 +2,20 @@
 name = "ambre-trame"
 version = "0.1.0"
 edition = "2024"
-description = "Trame IPC types -- TrameCommand, TrameViewUpdate, DisplayCell (serde only, no CRDT/GPU deps)"
+description = "Trame (spreadsheet) application -- IPC types, logic controller, and UI renderer"
 
 [dependencies]
 serde    = { workspace = true }
+postcard = { workspace = true }
+tracing  = { workspace = true }
+
+# Logic side (Logic thread): AppController, CRDT / formula engine.
+ambre-bus = { path = "../ambre-bus" }
+loro      = { workspace = true }
+petgraph  = { workspace = true }
+
+# UI side (UI Thread): DrawSurface renderer, text layout, frame channels.
 ambre-draw = { path = "../ambre-draw" }
+ambre-ui   = { path = "../ambre-ui" }
+web-sys    = { workspace = true }
+flume      = { workspace = true }
