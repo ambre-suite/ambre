@@ -37,7 +37,7 @@ use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, WebSocket};
 
-use ambre_bus::{DocType, LogicEvent, SyncCommand, Uuid};
+use ambre_bus::{ChannelId, DocType, DocumentId, LogicEvent, SyncCommand, UserId};
 use ambre_protocol::{
     messages::Seq,
     ws::{WsClientMsg, WsServerMsg, decode_server_msg, encode_client_msg},
@@ -59,7 +59,7 @@ struct DocumentKey([u8; 32]);
 
 #[allow(dead_code)]
 struct SyncDocumentState {
-    document_id: Uuid,
+    document_id: DocumentId,
     doc_key: DocumentKey,
     local_clock: u64,
     last_seq: Seq,
@@ -67,7 +67,7 @@ struct SyncDocumentState {
 }
 
 impl SyncDocumentState {
-    fn new(document_id: Uuid, doc_key: DocumentKey) -> Self {
+    fn new(document_id: DocumentId, doc_key: DocumentKey) -> Self {
         Self {
             document_id,
             doc_key,
@@ -98,7 +98,7 @@ struct SyncState {
     _ws_closures: Vec<Closure<dyn FnMut(MessageEvent)>>,
 
     // -- Per-document sync sessions --------------------------------------------
-    documents: HashMap<Uuid, SyncDocumentState>,
+    documents: HashMap<DocumentId, SyncDocumentState>,
 }
 
 impl SyncState {
@@ -269,7 +269,7 @@ impl SyncState {
         self.open_websocket();
 
         self.send_to_logic(LogicEvent::SessionReady {
-            user_id: Uuid::new_v7(),
+            user_id: UserId::new(),
             display_name: "placeholder".into(),
             email: "placeholder@example.com".into(),
         });
@@ -423,7 +423,7 @@ impl SyncState {
 
     // -- Document lifecycle ----------------------------------------------------
 
-    fn handle_open_document(&mut self, document_id: Uuid) {
+    fn handle_open_document(&mut self, document_id: DocumentId) {
         let doc_key = DocumentKey([0; 32]); // placeholder
         self.documents
             .insert(document_id, SyncDocumentState::new(document_id, doc_key));
@@ -433,7 +433,7 @@ impl SyncState {
         tracing::info!("Sync: OpenDocument {document_id:?}");
     }
 
-    fn handle_close_document(&mut self, document_id: Uuid) {
+    fn handle_close_document(&mut self, document_id: DocumentId) {
         if self.ws.is_some() {
             self.ws_send(&WsClientMsg::Unsubscribe { document_id });
         }
@@ -441,7 +441,7 @@ impl SyncState {
         tracing::info!("Sync: CloseDocument {document_id:?}");
     }
 
-    fn handle_reconnect(&mut self, document_id: Uuid) {
+    fn handle_reconnect(&mut self, document_id: DocumentId) {
         if self.ws.is_some() {
             let last_seq =
                 self.documents.get(&document_id).map(|d| d.last_seq).unwrap_or(Seq(0));
@@ -452,7 +452,7 @@ impl SyncState {
 
     // -- Outbound sync ---------------------------------------------------------
 
-    fn handle_send_update(&mut self, document_id: Uuid, payload: Vec<u8>) {
+    fn handle_send_update(&mut self, document_id: DocumentId, payload: Vec<u8>) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             tracing::warn!("Sync: SendUpdate for unknown doc {document_id:?}");
             return;
@@ -465,14 +465,14 @@ impl SyncState {
         );
     }
 
-    fn handle_send_snapshot(&mut self, document_id: Uuid, payload: Vec<u8>) {
+    fn handle_send_snapshot(&mut self, document_id: DocumentId, payload: Vec<u8>) {
         if !self.documents.contains_key(&document_id) {
             return;
         }
         tracing::info!("Sync: SendSnapshot {document_id:?} len={}", payload.len());
     }
 
-    fn handle_send_ephemeral(&mut self, document_id: Uuid, payload: Vec<u8>) {
+    fn handle_send_ephemeral(&mut self, document_id: DocumentId, payload: Vec<u8>) {
         if !self.documents.contains_key(&document_id) {
             return;
         }
@@ -490,11 +490,11 @@ impl SyncState {
         tracing::info!("Sync: CreateDocument {doc_type:?} '{name}'");
     }
 
-    fn handle_delete_document(&self, document_id: Uuid) {
+    fn handle_delete_document(&self, document_id: DocumentId) {
         tracing::info!("Sync: DeleteDocument {document_id:?}");
     }
 
-    fn handle_rename_document(&self, document_id: Uuid, name: String) {
+    fn handle_rename_document(&self, document_id: DocumentId, name: String) {
         tracing::info!("Sync: RenameDocument {document_id:?} '{name}'");
     }
 
@@ -502,42 +502,42 @@ impl SyncState {
 
     fn handle_invite_to_document(
         &self,
-        document_id: Uuid,
+        document_id: DocumentId,
         invitee_email: String,
         role: ambre_bus::Role,
     ) {
         tracing::info!("Sync: InviteToDocument {document_id:?} {invitee_email} {role:?}");
     }
 
-    fn handle_revoke_from_document(&self, document_id: Uuid, user_id: Uuid) {
+    fn handle_revoke_from_document(&self, document_id: DocumentId, user_id: UserId) {
         tracing::info!("Sync: RevokeFromDocument {document_id:?} {user_id:?}");
     }
 
-    fn handle_list_document_members(&self, document_id: Uuid) {
+    fn handle_list_document_members(&self, document_id: DocumentId) {
         tracing::info!("Sync: ListDocumentMembers {document_id:?}");
     }
 
     // -- Channels --------------------------------------------------------------
 
-    fn handle_open_channel(&mut self, channel_id: Uuid) {
+    fn handle_open_channel(&mut self, channel_id: ChannelId) {
         if self.ws.is_some() {
-            self.ws_send(&WsClientMsg::Subscribe { document_id: channel_id });
+            self.ws_send(&WsClientMsg::SubscribeChannel { channel_id });
         }
         tracing::info!("Sync: OpenChannel {channel_id:?}");
     }
 
-    fn handle_close_channel(&mut self, channel_id: Uuid) {
+    fn handle_close_channel(&mut self, channel_id: ChannelId) {
         if self.ws.is_some() {
-            self.ws_send(&WsClientMsg::Unsubscribe { document_id: channel_id });
+            self.ws_send(&WsClientMsg::UnsubscribeChannel { channel_id });
         }
         tracing::info!("Sync: CloseChannel {channel_id:?}");
     }
 
-    fn handle_send_channel_update(&self, channel_id: Uuid, payload: Vec<u8>) {
+    fn handle_send_channel_update(&self, channel_id: ChannelId, payload: Vec<u8>) {
         tracing::debug!("Sync: SendChannelUpdate {channel_id:?} len={}", payload.len());
     }
 
-    fn handle_send_channel_ephemeral(&self, channel_id: Uuid, payload: Vec<u8>) {
+    fn handle_send_channel_ephemeral(&self, channel_id: ChannelId, payload: Vec<u8>) {
         tracing::debug!(
             "Sync: SendChannelEphemeral {channel_id:?} len={}",
             payload.len()

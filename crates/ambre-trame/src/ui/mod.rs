@@ -8,8 +8,8 @@
 //   grid     -- virtual-scroll navigation state (TrameUiState).
 //   renderer -- DrawSurface rendering of the grid (draw_cells / draw_overlay).
 //
-// The shared IPC types live in `crate::events`; the grid dimensions shared with
-// the controller live in the crate root (`crate::TOTAL_ROWS` / `TOTAL_COLS`).
+// The shared IPC types live in `ambre-bus` (re-exported from the crate root);
+// the grid dimensions live in the crate root (`crate::TOTAL_ROWS` / `TOTAL_COLS`).
 // ============================================================================
 
 pub mod grid;

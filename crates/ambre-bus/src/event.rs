@@ -1,10 +1,10 @@
-//! `LogicEvent` – events sent from the Sync Worker to the Logic Worker.
+//! `LogicEvent` – events sent from the Sync thread to the Logic thread.
 //!
 //! This enum contains every kind of response, notification, or error that the
-//! Sync Worker can send back to the Logic Worker after processing a command
+//! Sync thread can send back to the Logic thread after processing a command
 //! or receiving data from the network.
 
-use crate::{DocType, Role, Uuid};
+use crate::{ChannelId, DocType, DocumentId, MeetingId, Role, UserId};
 use serde::{Deserialize, Serialize};
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -13,12 +13,12 @@ use serde::{Deserialize, Serialize};
 
 /// Summary of a document (for lists and navigation).
 ///
-/// The `name` is decrypted by the Sync Worker – the Logic Worker sees it in plaintext.
+/// The `name` is decrypted by the Sync thread – the Logic thread sees it in plaintext.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentSummary {
-    pub document_id: Uuid,
+    pub document_id: DocumentId,
     pub doc_type: DocType,
-    /// Decrypted from `name_enc` by the Sync Worker.
+    /// Decrypted from `name_enc` by the Sync thread.
     pub name: Option<String>,
     pub role: Role,
     /// Epoch milliseconds.
@@ -28,7 +28,7 @@ pub struct DocumentSummary {
 /// Member of a document or channel.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemberInfo {
-    pub user_id: Uuid,
+    pub user_id: UserId,
     pub display_name: String,
     pub email: String,
     pub role: Role,
@@ -37,7 +37,7 @@ pub struct MemberInfo {
 /// User (search result).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserInfo {
-    pub user_id: Uuid,
+    pub user_id: UserId,
     pub display_name: String,
     pub email: String,
 }
@@ -45,7 +45,7 @@ pub struct UserInfo {
 /// Summary of a Murmure channel.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChannelSummary {
-    pub channel_id: Uuid,
+    pub channel_id: ChannelId,
     /// Decrypted from `name_enc`.
     pub name: Option<String>,
     pub role: Role,
@@ -54,7 +54,7 @@ pub struct ChannelSummary {
 /// Unread message count per channel.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnreadCount {
-    pub channel_id: Uuid,
+    pub channel_id: ChannelId,
     pub count: u64,
 }
 
@@ -62,19 +62,19 @@ pub struct UnreadCount {
 // LogicEvent
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Event sent from the Sync Worker to the Logic Worker.
+/// Event sent from the Sync thread to the Logic thread.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LogicEvent {
     // ── Session ──────────────────────────────────────────────────────────────
     /// Login successful – session ready, documents can be opened.
     SessionReady {
-        user_id: Uuid,
+        user_id: UserId,
         display_name: String,
         email: String,
     },
 
     /// First‑time connection detected – no keys on the server.
-    /// The Logic Worker must ask the UI to display the SetupAccount flow.
+    /// The Logic thread must ask the UI to display the SetupAccount flow.
     AccountSetupRequired,
 
     /// Account created – display the 24‑word recovery phrase **once**.
@@ -104,91 +104,91 @@ pub enum LogicEvent {
 
     /// Document created successfully.
     DocumentCreated {
-        document_id: Uuid,
+        document_id: DocumentId,
         doc_type: DocType,
     },
 
     /// Document deleted.
     DocumentDeleted {
-        document_id: Uuid,
+        document_id: DocumentId,
     },
 
     /// Document renamed.
     DocumentRenamed {
-        document_id: Uuid,
+        document_id: DocumentId,
     },
 
     // ── Sync temps réel ──────────────────────────────────────────────────────
     /// Decrypted and decompressed CRDT delta, ready for `LoroDoc::import()`.
     RemoteUpdate {
-        document_id: Uuid,
+        document_id: DocumentId,
         payload: Vec<u8>,
     },
 
     /// Decrypted and decompressed CRDT snapshot.
     RemoteSnapshot {
-        document_id: Uuid,
+        document_id: DocumentId,
         payload: Vec<u8>,
     },
 
     /// Decrypted ephemeral data (cursor, collaborator presence).
     RemoteEphemeral {
-        document_id: Uuid,
+        document_id: DocumentId,
         payload: Vec<u8>,
     },
 
     /// WebSocket connection status for a document.
     ConnectionStatus {
-        document_id: Uuid,
+        document_id: DocumentId,
         connected: bool,
     },
 
     /// Non‑fatal warning (quarantine overflow, unknown version, etc.).
     SyncWarning {
-        document_id: Uuid,
+        document_id: DocumentId,
         code: u16,
         message: String,
     },
 
     /// The server requests a snapshot (too many accumulated deltas).
-    /// The Logic Worker must produce `LoroDoc::export_snapshot()` and respond
+    /// The Logic thread must produce `LoroDoc::export_snapshot()` and respond
     /// with `SyncCommand::SendSnapshot { document_id, payload }`.
     SnapshotNeeded {
-        document_id: Uuid,
+        document_id: DocumentId,
     },
 
     // ── Partage ──────────────────────────────────────────────────────────────
     /// Invitation sent successfully.
     InviteSent {
-        document_id: Uuid,
-        user_id: Uuid,
+        document_id: DocumentId,
+        user_id: UserId,
         display_name: String,
     },
 
     /// A member has been revoked and consolidation is complete.
-    /// Translated from `WsServerMsg::KeyRotationRequired` by the Sync Worker
+    /// Translated from `WsServerMsg::KeyRotationRequired` by the Sync thread
     /// **after** the rotation is complete (new keys are in DB).
-    /// The Logic Worker may trigger a snapshot to seal the state.
+    /// The Logic thread may trigger a snapshot to seal the state.
     MemberRevoked {
-        document_id: Uuid,
-        revoked_user_id: Uuid,
+        document_id: DocumentId,
+        revoked_user_id: UserId,
     },
 
     /// Revocation initiated by **this** client is complete.
     RevocationComplete {
-        document_id: Uuid,
+        document_id: DocumentId,
     },
 
     /// List of members of a document.
     DocumentMembers {
-        document_id: Uuid,
+        document_id: DocumentId,
         members: Vec<MemberInfo>,
     },
 
     /// Member role updated.
     MemberRoleUpdated {
-        document_id: Uuid,
-        user_id: Uuid,
+        document_id: DocumentId,
+        user_id: UserId,
         role: Role,
     },
 
@@ -201,13 +201,13 @@ pub enum LogicEvent {
     // ── Médias ───────────────────────────────────────────────────────────────
     /// Media uploaded – returns the content‑addressable hash.
     MediaUploaded {
-        document_id: Uuid,
+        document_id: DocumentId,
         content_hash: String,
     },
 
     /// Media downloaded and decrypted – raw data ready for display.
     MediaDownloaded {
-        document_id: Uuid,
+        document_id: DocumentId,
         content_hash: String,
         data: Vec<u8>,
     },
@@ -217,45 +217,45 @@ pub enum LogicEvent {
         channels: Vec<ChannelSummary>,
     },
     ChannelCreated {
-        channel_id: Uuid,
+        channel_id: ChannelId,
     },
     ChannelDeleted {
-        channel_id: Uuid,
+        channel_id: ChannelId,
     },
     ChannelInviteSent {
-        channel_id: Uuid,
-        user_id: Uuid,
+        channel_id: ChannelId,
+        user_id: UserId,
     },
     ChannelMemberRevoked {
-        channel_id: Uuid,
-        revoked_user_id: Uuid,
+        channel_id: ChannelId,
+        revoked_user_id: UserId,
     },
     ChannelRevocationComplete {
-        channel_id: Uuid,
+        channel_id: ChannelId,
     },
     ChannelMembers {
-        channel_id: Uuid,
+        channel_id: ChannelId,
         members: Vec<MemberInfo>,
     },
     ChannelMemberRoleUpdated {
-        channel_id: Uuid,
-        user_id: Uuid,
+        channel_id: ChannelId,
+        user_id: UserId,
         role: Role,
     },
     ChannelRemoteUpdate {
-        channel_id: Uuid,
+        channel_id: ChannelId,
         payload: Vec<u8>,
     },
     ChannelRemoteEphemeral {
-        channel_id: Uuid,
+        channel_id: ChannelId,
         payload: Vec<u8>,
     },
     ChannelConnectionStatus {
-        channel_id: Uuid,
+        channel_id: ChannelId,
         connected: bool,
     },
     ChannelSnapshotNeeded {
-        channel_id: Uuid,
+        channel_id: ChannelId,
     },
     UnreadCounts {
         counts: Vec<UnreadCount>,
@@ -263,24 +263,24 @@ pub enum LogicEvent {
 
     // ── Meetings (Rendez‑Vous) ───────────────────────────────────────────────
     MeetingCreated {
-        meeting_id: Uuid,
+        meeting_id: MeetingId,
     },
     MeetingJoined {
-        meeting_id: Uuid,
+        meeting_id: MeetingId,
     },
     MeetingLeft {
-        meeting_id: Uuid,
+        meeting_id: MeetingId,
     },
     MeetingEnded {
-        meeting_id: Uuid,
+        meeting_id: MeetingId,
     },
     MeetingParticipantJoined {
-        meeting_id: Uuid,
-        user_id: Uuid,
+        meeting_id: MeetingId,
+        user_id: UserId,
     },
     MeetingParticipantLeft {
-        meeting_id: Uuid,
-        user_id: Uuid,
+        meeting_id: MeetingId,
+        user_id: UserId,
     },
 
     // ── Erreurs ──────────────────────────────────────────────────────────────

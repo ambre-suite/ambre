@@ -7,5 +7,4 @@ description = "IPC message types for inter-worker communication in Ambre"
 [dependencies]
 ambre-core = { path = "../ambre-core" }
 serde = { workspace = true, features = ["derive"] }
-postcard = { workspace = true }
 thiserror = { workspace = true }

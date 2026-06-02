@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 
-use crate::{TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameViewUpdate};
+use crate::{TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 
 // Cell layout.
 pub const ROW_HEIGHT: f64 = 20.0;
@@ -192,8 +192,8 @@ impl TrameUiState {
     /// Merge a `ViewportData` batch into the local cache.
     ///
     /// Older responses (stale version) are silently discarded.
-    pub fn on_viewport_data(&mut self, update: TrameViewUpdate) {
-        let TrameViewUpdate::ViewportData { version, cells, .. } = update;
+    pub fn on_viewport_data(&mut self, update: TrameEvent) {
+        let TrameEvent::ViewportData { version, cells, .. } = update;
         if version < self.accepted_version {
             return;
         }

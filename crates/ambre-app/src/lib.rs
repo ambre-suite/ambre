@@ -16,7 +16,7 @@
 
 use wasm_bindgen::prelude::*;
 
-use ambre_bus::{LogicEnvelope, LogicEvent, SyncCommand, UiEnvelope};
+use ambre_bus::{LogicCommand, LogicEvent, SyncCommand, UiEvent};
 use ambre_trame::ui::TrameView;
 
 #[wasm_bindgen(start)]
@@ -33,12 +33,12 @@ pub fn main() {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
     // Inter-thread channels.
-    //   UI    --UiEnvelope--->  Logic
-    //   Logic --LogicEnvelope-> UI
+    //   UI    --LogicCommand--->  Logic
+    //   Logic --UiEvent-> UI
     //   Logic --SyncCommand--->  Sync
     //   Sync  --LogicEvent---->  Logic
-    let (ui_to_logic_tx, ui_to_logic_rx) = flume::unbounded::<UiEnvelope>();
-    let (logic_to_ui_tx, logic_to_ui_rx) = flume::unbounded::<LogicEnvelope>();
+    let (ui_to_logic_tx, ui_to_logic_rx) = flume::unbounded::<LogicCommand>();
+    let (logic_to_ui_tx, logic_to_ui_rx) = flume::unbounded::<UiEvent>();
     let (logic_to_sync_tx, logic_to_sync_rx) = flume::unbounded::<SyncCommand>();
     let (sync_to_logic_tx, sync_to_logic_rx) = flume::unbounded::<LogicEvent>();
 

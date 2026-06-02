@@ -15,7 +15,6 @@ ambre-protocol = { path = "../ambre-protocol" }
 # resolution.
 
 serde    = { workspace = true }
-postcard = { workspace = true }
 flume    = { workspace = true }
 thiserror    = { workspace = true }
 tracing      = { workspace = true }
