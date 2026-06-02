@@ -21,7 +21,7 @@ impl Uuid {
     ///
     /// This uses the `uuid` crate's `Uuid::now_v7()` which guarantees monotonicity
     /// within the same millisecond.
-    pub fn new_v7() -> Self {
+    pub fn new() -> Self {
         let uuid = ExternalUuid::now_v7();
         Self(*uuid.as_bytes())
     }
@@ -76,8 +76,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_new_v7() {
-        let uuid = Uuid::new_v7();
+    fn test_new() {
+        let uuid = Uuid::new();
         let bytes = uuid.as_bytes();
         // UUID v7 has version bits 0b0111 in byte 6 (index 6)
         assert_eq!(bytes[6] >> 4, 0b0111);
@@ -101,7 +101,7 @@ mod tests {
 
     #[test]
     fn test_serde() {
-        let uuid = Uuid::new_v7();
+        let uuid = Uuid::new();
         let serialized = serde_json::to_string(&uuid).unwrap();
         let deserialized: Uuid = serde_json::from_str(&serialized).unwrap();
         assert_eq!(uuid, deserialized);

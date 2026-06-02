@@ -2,7 +2,8 @@
 // Multiplexed WebSocket handler — ONE connection per client session.
 //
 // Endpoint: GET /api/ws -> upgrade WebSocket
-// The handler maintains a subscription set (HashSet<Uuid>) per connection.
+// The handler maintains typed subscription sets (HashSet<DocumentId> /
+// HashSet<ChannelId>) per connection.
 // Subscribe/Unsubscribe messages add/remove documents from the set.
 // Redis PubSub channels are subscribed/unsubscribed dynamically.
 // ============================================================================
@@ -14,7 +15,7 @@ use futures_util::{SinkExt, StreamExt};
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use ambre_core::Uuid;
+use ambre_core::{ChannelId, DocumentId, UserId};
 
 use crate::state::AppState;
 use ambre_protocol::ws::{WsClientMsg, WsServerMsg, decode_client_msg, encode_server_msg};
@@ -31,12 +32,12 @@ pub async fn ws_upgrade(
 
 /// Per-connection state.
 struct WsConnectionState {
-    user_id: Uuid,
+    user_id: UserId,
     session_id: String,
     /// Documents this connection is subscribed to.
-    doc_subscriptions: HashSet<Uuid>,
+    doc_subscriptions: HashSet<DocumentId>,
     /// Channels this connection is subscribed to.
-    channel_subscriptions: HashSet<Uuid>,
+    channel_subscriptions: HashSet<ChannelId>,
 }
 
 async fn handle_ws(socket: WebSocket, _state: Arc<AppState>, session: Session) {
@@ -230,6 +231,6 @@ async fn handle_ws(socket: WebSocket, _state: Arc<AppState>, session: Session) {
 
 // Placeholder types for compilation sketch:
 struct Session {
-    user_id: Uuid,
+    user_id: UserId,
     session_id: String,
 }

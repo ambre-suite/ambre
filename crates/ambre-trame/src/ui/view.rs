@@ -9,23 +9,22 @@
 // spreadsheets.
 // ============================================================================
 
-use ambre_bus::{IPC_TEST_DOC_ID, LogicEnvelope, UiEnvelope};
+use ambre_bus::{AppCommand, AppEvent, IPC_TEST_DOC_ID, LogicCommand, TrameCommand, UiEvent};
 use ambre_draw::{FontContext, Rect};
 use ambre_ui::{
     ContentRepaint, DocView, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache,
     WgpuSurface,
 };
 
-use crate::TrameViewUpdate;
 use super::grid::{COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT, TrameUiState};
 use super::renderer::{self, DrawStats};
 
 /// Trame's `DocView`: a virtual-scroll spreadsheet grid.
 pub struct TrameView {
     /// Outbound channel to the Logic thread.
-    logic_tx: flume::Sender<UiEnvelope>,
+    to_logic: flume::Sender<LogicCommand>,
     /// Inbound channel from the Logic thread, drained each frame in `update`.
-    logic_rx: flume::Receiver<LogicEnvelope>,
+    from_logic: flume::Receiver<UiEvent>,
 
     /// Grid navigation + cell cache.
     state: TrameUiState,
@@ -52,8 +51,8 @@ pub struct TrameView {
 
 impl TrameView {
     pub fn new(
-        logic_tx: flume::Sender<UiEnvelope>,
-        logic_rx: flume::Receiver<LogicEnvelope>,
+        to_logic: flume::Sender<LogicCommand>,
+        from_logic: flume::Receiver<UiEvent>,
         canvas_width: f64,
         canvas_height: f64,
     ) -> Self {
@@ -63,8 +62,8 @@ impl TrameView {
             .expect("no Performance API");
 
         Self {
-            logic_tx,
-            logic_rx,
+            to_logic,
+            from_logic,
             state: TrameUiState::new(canvas_width, canvas_height),
             perf,
             text_enabled: true,
@@ -78,23 +77,20 @@ impl TrameView {
         }
     }
 
-    /// Send a postcard-encoded `TrameCommand` to the Logic thread.
-    fn send_command(&self, cmd: &crate::TrameCommand) {
-        let payload = postcard::to_allocvec(cmd).expect("serialize TrameCommand");
-        let _ = self.logic_tx.send(UiEnvelope::AppCommand {
+    /// Send a typed `TrameCommand` to the Logic thread.
+    fn send_command(&self, cmd: TrameCommand) {
+        let _ = self.to_logic.send(LogicCommand::App {
             document_id: IPC_TEST_DOC_ID,
-            payload,
+            command: AppCommand::Trame(cmd),
         });
     }
 }
 
 impl DocView for TrameView {
     fn update(&mut self) {
-        // Drain every queued LogicEnvelope without blocking.
-        while let Ok(env) = self.logic_rx.try_recv() {
-            if let LogicEnvelope::ViewportUpdate { payload, .. } = env
-                && let Ok(update) = postcard::from_bytes::<TrameViewUpdate>(&payload)
-            {
+        // Drain every queued UiEvent without blocking.
+        while let Ok(event) = self.from_logic.try_recv() {
+            if let UiEvent::Viewport { event: AppEvent::Trame(update), .. } = event {
                 self.state.on_viewport_data(update);
                 // Just flag data dirty. If a scroll happens the same frame the
                 // strip path reads the refreshed cache; otherwise plan_repaint
@@ -107,7 +103,7 @@ impl DocView for TrameView {
             self.initial_viewport_sent = true;
             self.needs_full = true;
             let cmd = self.state.scroll_viewport_cmd();
-            self.send_command(&cmd);
+            self.send_command(cmd);
         }
     }
 
@@ -258,7 +254,7 @@ impl DocView for TrameView {
         // vs Full from the actual delta.
         self.viewport_changed = true;
         if let Some(cmd) = self.state.move_cursor(dr, dc) {
-            self.send_command(&cmd);
+            self.send_command(cmd);
         }
         true
     }

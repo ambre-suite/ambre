@@ -5,11 +5,9 @@ edition = "2024"
 description = "Trame (spreadsheet) application -- IPC types, logic controller, and UI renderer"
 
 [dependencies]
-serde    = { workspace = true }
-postcard = { workspace = true }
 tracing  = { workspace = true }
 
-# Logic side (Logic thread): AppController, CRDT / formula engine.
+# Logic side (Logic thread): TrameState, CRDT / formula engine.
 ambre-bus = { path = "../ambre-bus" }
 loro      = { workspace = true }
 petgraph  = { workspace = true }

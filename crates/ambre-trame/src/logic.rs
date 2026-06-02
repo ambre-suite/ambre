@@ -1,56 +1,45 @@
 // ambre-trame/src/logic.rs
 // ============================================================================
-// Trame (spreadsheet) AppController -- Logic thread side.
+// Trame (spreadsheet) per-document model -- Logic thread side.
 //
-// Behind the `logic` feature so that crates wiring only the UI side
-// (ambre-app) don't pull the CRDT / formula-engine dependency tree.
+// `TrameState` owns everything the Logic thread needs for one open Trame
+// document (CRDT / formula engine, once wired). The Logic dispatcher
+// (`ambre-logic`) holds it inside `DocState::Trame` and calls the handlers
+// below with **typed** `TrameCommand`s, getting back typed `TrameEvent`s --
+// no trait object, no postcard, no `Vec<u8>` on this path.
 //
-// The shared IPC types (TrameCommand, TrameViewUpdate, DisplayCell) live in
-// `crate::events` and are always compiled; the grid dimensions shared with the
-// UI live in the crate root (`crate::TOTAL_ROWS` / `crate::TOTAL_COLS`).
+// The shared IPC types (TrameCommand, TrameEvent, DisplayCell) live in
+// `ambre-bus`; the grid dimensions shared with the UI live in the crate root
+// (`crate::TOTAL_ROWS` / `crate::TOTAL_COLS`).
 //
 // Cell content (hardcoded for now): standard spreadsheet reference notation,
 // e.g. column 0 row 0 -> "A1", column 26 row 99 -> "AA100".
 // ============================================================================
 
-use ambre_bus::{AppController, CommandSink, DocType, LogicEvent};
-
-use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameViewUpdate};
+use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 
 // -----------------------------------------------------------------------------
-// TrameController
+// TrameState
 // -----------------------------------------------------------------------------
 
-/// Controller for Trame (spreadsheet) documents.
+/// Per-document state for a Trame (spreadsheet) document.
 ///
-/// Instantiated by the Logic thread's controller registry, keyed by
-/// `document_id`.
-pub struct TrameController {
-    /// Sink to the Sync thread. Will be used when CRDT edits are implemented.
-    #[allow(dead_code)]
-    sync_tx: Box<dyn CommandSink>,
-}
+/// One instance per open document, owned by the Logic thread's `DocState`
+/// registry keyed by `document_id`. Empty for now (cell content is generated
+/// from coordinates); it will hold the `LoroDoc` and formula engine once CRDT
+/// editing is wired.
+#[derive(Default)]
+pub struct TrameState {}
 
-impl TrameController {
-    pub fn new(sync_tx: Box<dyn CommandSink>) -> Self {
-        Self { sync_tx }
-    }
-}
-
-impl AppController for TrameController {
-    fn doc_type(&self) -> DocType {
-        DocType::Trame
+impl TrameState {
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    fn handle_ui_command(&mut self, cmd: Vec<u8>) -> Vec<Vec<u8>> {
-        let cmd = match postcard::from_bytes::<TrameCommand>(&cmd) {
-            Ok(c) => c,
-            Err(e) => {
-                tracing::warn!("TrameController: deserialize TrameCommand: {e}");
-                return vec![];
-            }
-        };
-
+    /// Handle a UI command and return display events for the UI Thread.
+    ///
+    /// Must complete in < 50 ms (P2); scroll requests in < 10 ms (P1).
+    pub fn handle_command(&mut self, cmd: TrameCommand) -> Vec<TrameEvent> {
         match cmd {
             TrameCommand::ScrollViewport { version, row_start, row_end, col_start, col_end } => {
                 // Clamp to grid bounds.
@@ -75,29 +64,32 @@ impl AppController for TrameController {
                     }
                 }
 
-                let update = TrameViewUpdate::ViewportData {
-                    version,
-                    row_start,
-                    col_start,
-                    cells,
-                };
-
-                match postcard::to_allocvec(&update) {
-                    Ok(bytes) => vec![bytes],
-                    Err(e) => {
-                        tracing::error!("TrameController: serialize TrameViewUpdate: {e}");
-                        vec![]
-                    }
-                }
+                vec![TrameEvent::ViewportData { version, row_start, col_start, cells }]
             }
         }
     }
 
-    fn on_logic_event(&mut self, _event: LogicEvent) -> Vec<Vec<u8>> {
+    /// Apply a remote CRDT delta / snapshot and return display events.
+    ///
+    /// `payload` is the raw (decrypted) Loro binary delta forwarded by the Sync
+    /// thread. Stubbed until CRDT editing is wired.
+    pub fn apply_remote(&mut self, _payload: &[u8]) -> Vec<TrameEvent> {
+        // TODO: import the Loro delta and recompute the affected viewport.
         vec![]
     }
 
-    fn export_snapshot(&self) -> Vec<u8> {
+    /// Apply a remote ephemeral (presence) payload and return presence events.
+    ///
+    /// Stubbed until collaborator presence is wired.
+    pub fn apply_ephemeral(&mut self, _payload: &[u8]) -> Vec<TrameEvent> {
+        vec![]
+    }
+
+    /// Export the full CRDT state for snapshot compaction.
+    ///
+    /// Must be a valid `LoroDoc::export_snapshot()` payload. Stubbed (empty)
+    /// until CRDT editing is wired.
+    pub fn export_snapshot(&self) -> Vec<u8> {
         vec![]
     }
 }

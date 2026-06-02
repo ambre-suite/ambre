@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::messages::{Ciphertext, Clock, Counter, Seq};
-use ambre_core::{PublicKey, Uuid};
+use ambre_core::{DocumentId, PublicKey, SnapshotId, UserId};
 
 #[test]
 fn update_roundtrip() {
@@ -10,9 +10,9 @@ fn update_roundtrip() {
         ciphertext: Ciphertext(vec![1, 2, 3, 4]),
         nonce: Nonce([0u8; 24]),
         public_data: UpdatePublicData {
-            document_id: Uuid::new_v7(),
+            document_id: DocumentId::new(),
             pub_key: PublicKey::from_array([5u8; 32]),
-            snapshot_id: Uuid::new_v7(),
+            snapshot_id: SnapshotId::new(),
             clock: Clock(42),
         },
         commitment_tag: CommitmentTag([6u8; 32]),
@@ -38,9 +38,9 @@ fn snapshot_roundtrip() {
         ciphertext: Ciphertext(vec![8, 9, 10]),
         nonce: Nonce([11u8; 24]),
         public_data: SnapshotPublicData {
-            document_id: Uuid::new_v7(),
+            document_id: DocumentId::new(),
             pub_key: PublicKey::from_array([12u8; 32]),
-            snapshot_id: Uuid::new_v7(),
+            snapshot_id: SnapshotId::new(),
             parent_snapshot_proof: vec![13, 14],
             parent_snapshot_update_clocks: vec![
                 (PublicKey::from_array([15u8; 32]), Clock(16)),
@@ -71,7 +71,7 @@ fn ephemeral_roundtrip() {
         ciphertext: Ciphertext(vec![21, 22, 23]),
         nonce: Nonce([24u8; 24]),
         public_data: EphemeralPublicData {
-            document_id: Uuid::new_v7(),
+            document_id: DocumentId::new(),
             pub_key: PublicKey::from_array([25u8; 32]),
             counter: Counter(26),
         },
@@ -97,9 +97,9 @@ fn ws_messages_roundtrip() {
         ciphertext: Ciphertext(vec![1]),
         nonce: Nonce([2u8; 24]),
         public_data: UpdatePublicData {
-            document_id: Uuid::new_v7(),
+            document_id: DocumentId::new(),
             pub_key: PublicKey::from_array([3u8; 32]),
-            snapshot_id: Uuid::new_v7(),
+            snapshot_id: SnapshotId::new(),
             clock: Clock(4),
         },
         commitment_tag: CommitmentTag([5u8; 32]),
@@ -131,7 +131,7 @@ fn ws_messages_roundtrip() {
 #[test]
 fn signaling_messages_roundtrip() {
     let client_msg = SignalingClientMsg::Offer {
-        target_user_id: Uuid::new_v7(),
+        target_user_id: UserId::new(),
         sdp: "test sdp".to_string(),
     };
     let bytes = postcard::to_allocvec(&client_msg).unwrap();
@@ -144,7 +144,7 @@ fn signaling_messages_roundtrip() {
     }
 
     let server_msg = SignalingServerMsg::ParticipantJoined {
-        user_id: Uuid::new_v7(),
+        user_id: UserId::new(),
     };
     let bytes = postcard::to_allocvec(&server_msg).unwrap();
     let decoded: SignalingServerMsg = postcard::from_bytes(&bytes).unwrap();

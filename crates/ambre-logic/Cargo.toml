@@ -3,15 +3,13 @@ name = "ambre-logic"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Logic layer — CRDT dispatch, AppController registry, viewport computation. Runs as a Worker today; will become a thread in the multi-threaded WASM migration."
+description = "Logic thread — typed command dispatch, per-document state registry, viewport computation. Runs as a dedicated thread sharing the WASM heap."
 
 [dependencies]
 ambre-bus   = { path = "../ambre-bus" }
 ambre-core  = { path = "../ambre-core" }
 ambre-trame = { path = "../ambre-trame" }
 
-serde    = { workspace = true }
-postcard = { workspace = true }
 flume    = { workspace = true }
 tracing      = { workspace = true }
 tracing-wasm = { workspace = true }
