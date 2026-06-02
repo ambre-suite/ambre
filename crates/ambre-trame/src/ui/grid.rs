@@ -1,21 +1,18 @@
-// ambre-app/src/trame/grid.rs
+// ambre-trame/src/ui/grid.rs
 // ============================================================================
 // Trame virtual-scroll grid state -- UI Thread side.
 //
 // Tracks the active cell, the scroll position (top-left of the visible area),
 // and a local cache of received DisplayCells. The cache is keyed by (row, col)
-// and grows as the Logic Worker responds to ScrollViewport requests.
+// and grows as the Logic thread responds to ScrollViewport requests.
 //
 // Arrow key presses call `move_cursor()`, which returns a `TrameCommand` to
-// send to the Logic Worker whenever the visible range changes.
+// send to the Logic thread whenever the visible range changes.
 // ============================================================================
 
 use std::collections::HashMap;
-use ambre_trame::{TrameCommand, TrameViewUpdate};
 
-// Grid dimensions (match the Logic Worker constants).
-pub const TOTAL_ROWS: u32 = 100_000;
-pub const TOTAL_COLS: u32 = 1_000;
+use crate::{TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameViewUpdate};
 
 // Cell layout.
 pub const ROW_HEIGHT: f64 = 20.0;
@@ -118,7 +115,7 @@ impl TrameUiState {
     ///
     /// Scrolls the viewport if the new position falls outside the visible area.
     /// Returns a `TrameCommand::ScrollViewport` if the visible range changed,
-    /// so the caller can forward it to the Logic Worker.
+    /// so the caller can forward it to the Logic thread.
     pub fn move_cursor(&mut self, dr: i32, dc: i32) -> Option<TrameCommand> {
         let new_row = (self.active_row as i64 + dr as i64)
             .clamp(0, (TOTAL_ROWS - 1) as i64) as u32;
@@ -137,7 +134,7 @@ impl TrameUiState {
             Some(self.scroll_viewport_cmd())
         } else {
             // Active cell is within the cached range: cursor highlight moves
-            // without a Logic Worker round-trip.
+            // without a Logic thread round-trip.
             None
         }
     }
@@ -171,7 +168,7 @@ impl TrameUiState {
     ///
     /// Evicts cached cells that fall outside the new requested range so that
     /// cells scrolled into view from an un-fetched area appear grey until the
-    /// Logic Worker responds. Cells already within the new range stay white,
+    /// Logic thread responds. Cells already within the new range stay white,
     /// avoiding flicker on slow continuous scrolling.
     pub fn scroll_viewport_cmd(&mut self) -> TrameCommand {
         let row_start = self.top_row.saturating_sub(PADDING_ROWS);

@@ -1,4 +1,4 @@
-// ambre-app/src/trame/renderer.rs
+// ambre-trame/src/ui/renderer.rs
 // ============================================================================
 // Trame grid renderer -- UI Thread.
 //
@@ -13,8 +13,8 @@
 //       column/row header backgrounds + active tints + separator lines
 //       + active cell border + column/row header labels + on-canvas HUD.
 //
-// The orchestrator (UiState::render) detects what changed since the previous
-// frame and selects the appropriate combination:
+// The orchestrator (UiState::render in ambre-app) detects what changed since
+// the previous frame and selects the appropriate combination:
 //   - Full repaint:      draw_cells(strip=None) + draw_overlay
 //   - Pure scroll:       draw_cells(strip=Some(strip_rect)) + draw_overlay
 //   - Overlay-only diff: draw_overlay
@@ -27,8 +27,9 @@ use ambre_draw::{
 
 use ambre_ui::TextCache;
 
-use super::grid::{COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT, TOTAL_COLS, TOTAL_ROWS};
+use super::grid::{COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT};
 use super::TrameUiState;
+use crate::{TOTAL_COLS, TOTAL_ROWS};
 
 // -----------------------------------------------------------------------------
 // Colors

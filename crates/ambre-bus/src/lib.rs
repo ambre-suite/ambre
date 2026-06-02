@@ -4,14 +4,12 @@
 //! `UiEnvelope` (UI → Logic), `LogicEnvelope` (Logic → UI), and the
 //! `AppController` / `CommandSink` traits.
 
-pub mod channel;
 pub mod command;
 pub mod envelope;
 pub mod event;
 pub mod traits;
 
 // Re‑export the main types for convenient use.
-pub use channel::SendCommandSink;
 pub use command::SyncCommand;
 pub use envelope::{LogicEnvelope, UiEnvelope};
 pub use event::{ChannelSummary, DocumentSummary, LogicEvent, MemberInfo, UnreadCount, UserInfo};

@@ -11,15 +11,14 @@ use crate::{DocType, LogicEvent, SyncCommand};
 // CommandSink
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Abstraction for sending [`SyncCommand`]s to the Sync Worker.
+/// Abstraction for sending [`SyncCommand`]s to the Sync thread.
 ///
-/// The concrete implementation wraps a `web_sys::MessagePort` and serializes
-/// the command with postcard before calling `postMessage` (see
-/// `ambre-app/src/bridge_sync.rs`). `AppController` implementations receive a
-/// boxed `CommandSink` via [`AppController::init`] and store it for the lifetime
-/// of the document session.
+/// The concrete implementation (`SendCommandSink` in `ambre-logic`) moves the
+/// command into a `flume` channel — no serialisation, no copy. An
+/// `AppController` receives a boxed `CommandSink` at construction and keeps it
+/// for the lifetime of the document session.
 pub trait CommandSink {
-    /// Serialize `cmd` with postcard and transfer it to the Sync Worker.
+    /// Send `cmd` to the Sync thread.
     fn send(&self, cmd: SyncCommand);
 }
 

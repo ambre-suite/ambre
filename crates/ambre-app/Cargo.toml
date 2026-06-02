@@ -3,38 +3,24 @@ name = "ambre-app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "UI Thread entry point + Worker dispatcher. Owns wgpu/lyon rendering, rAF loop, input capture, and routes the in-process Worker bootstrap to ambre-logic / ambre-sync."
+description = "UI Thread entry point: creates the inter-thread channels, spawns the Logic/Sync threads, and drives an ambre_ui::FrameHost over the app's DocView."
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
 ambre-bus   = { path = "../ambre-bus" }
-ambre-core  = { path = "../ambre-core" }
-ambre-draw  = { path = "../ambre-draw" }
 ambre-ui    = { path = "../ambre-ui" }
 ambre-trame = { path = "../ambre-trame" }
 ambre-logic = { path = "../ambre-logic" }
 ambre-sync  = { path = "../ambre-sync" }
 
-parley     = { workspace = true }
-rustc-hash = { workspace = true }
-
-serde    = { workspace = true }
-postcard = { workspace = true }
-cfg-if   = { workspace = true }
-flume    = { workspace = true }
+flume        = { workspace = true }
 tracing      = { workspace = true }
 tracing-wasm = { workspace = true }
 
-# UI rendering -- wgpu kept for GPU bootstrap; renderer lives in ambre-ui
-wgpu = { workspace = true }
-
-# Web APIs
-web-sys = { workspace = true, features = ["WorkerOptions", "WorkerType"] }
-js-sys  = { workspace = true }
-wasm-bindgen         = { workspace = true }
-wasm-bindgen-futures = { workspace = true }
-wasm_thread          = { workspace = true }
+# Entry point + thread spawning.
+wasm-bindgen = { workspace = true }
+wasm_thread  = { workspace = true }
 
 console_error_panic_hook = { workspace = true }

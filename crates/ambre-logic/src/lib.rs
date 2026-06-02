@@ -21,15 +21,15 @@
 // ============================================================================
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
-mod trame;
+mod sink;
 
 use ambre_bus::{
-    AppController, DocType, IPC_TEST_DOC_ID, LogicEnvelope, LogicEvent, SendCommandSink,
-    SyncCommand, UiEnvelope, Uuid,
+    AppController, DocType, IPC_TEST_DOC_ID, LogicEnvelope, LogicEvent, SyncCommand, UiEnvelope,
+    Uuid,
 };
-use trame::TrameController;
+use ambre_trame::TrameController;
+use sink::SendCommandSink;
 
 // -----------------------------------------------------------------------------
 // LogicState
@@ -534,10 +534,6 @@ impl LogicState {
 /// it through [`LogicState`], and loops. Exits when **both** inbound channels
 /// disconnect (i.e. the UI Thread and the Sync thread are both gone),
 /// signalling app teardown.
-///
-/// The `_unused` arc-binding is there to keep the worker name visible in
-/// stack traces — `wasm_thread::Builder::name` already does that, but
-/// `tracing` spans on top would be redundant for now.
 pub fn run(
     ui_rx: flume::Receiver<UiEnvelope>,
     ui_tx: flume::Sender<LogicEnvelope>,
@@ -587,7 +583,4 @@ pub fn run(
     // Drop `state` here: controllers are released, the outbound Senders are
     // closed, which the UI and Sync threads observe as `Disconnected` too.
     let _ = state;
-    // Force `Arc` import to be live until LoroDoc storage uses it — silences
-    // dead-code warning during the transition. Remove in Phase 3 follow-up.
-    let _ = std::any::type_name::<Arc<()>>();
 }
