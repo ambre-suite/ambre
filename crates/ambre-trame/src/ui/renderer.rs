@@ -86,6 +86,7 @@ fn col_label(col: u32) -> String {
     label.chars().rev().collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_text<S: DrawSurface>(
     surface:   &mut S,
     font_cx:   &mut FontContext,
