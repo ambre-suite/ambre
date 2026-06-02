@@ -38,7 +38,7 @@ pub use event::{
 };
 pub use focus::FocusManager;
 pub use layer::{LayerManager, OverlayId, OverlayKind};
-pub use render::{QuadRenderer, WgpuSurface};
+pub use render::{CellsRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurface};
 pub use text_cache::TextCache;
 pub use theme::{Theme, ThemeKey, ThemeValue};
 pub use widget::{Widget, WidgetId};

@@ -67,21 +67,40 @@ struct UiState {
     last_frame_ms:         f32,
     /// Time spent draining inbound `LogicEnvelope` messages this frame.
     last_drain_ms:         f32,
-    /// Time spent in `draw_grid` (CPU-side: lyon tessellation, parley shaping,
-    /// glyph atlas updates). Zero when the frame is not dirty.
+    /// Time spent in `draw_cells` + `draw_overlay` (CPU-side: tessellation,
+    /// parley shaping, glyph atlas updates). Zero on idle frames.
     last_draw_ms:          f32,
     /// Time spent on the GPU path (`get_current_texture` + buffer upload +
-    /// `flush` + `submit` + `present`).
+    /// `flush_dirty_rect` + `submit` + `present`).
     last_gpu_ms:           f32,
-    /// Per-sub-phase breakdown of the last `draw_grid` call. Populated by
-    /// `draw_grid` itself; consumed by the next frame's HUD render.
+    /// Per-sub-phase breakdown of the last frame. Populated by `draw_cells`
+    /// and `draw_overlay`; consumed by the next frame's HUD render.
     draw_stats:            trame::renderer::DrawStats,
     /// rAF timestamp of the last HUD rebuild. We refresh the FPS overlay at most
     /// every 500ms so idle frames never trigger a full vertex rebuild.
     last_hud_update_ms:    f64,
     text_enabled:          bool,
     perf:                  web_sys::Performance,
-    dirty:                 bool,
+
+    // -- Dirty-rect bookkeeping --------------------------------------------
+    /// Cells layer requires a full repaint this frame. Set by resize, text-
+    /// mode toggle, and the initial frame.
+    needs_full:            bool,
+    /// Viewport state (scroll/cursor) changed this frame. The render path
+    /// inspects `prev_top_row` / `prev_left_col` deltas to decide between
+    /// Scroll and Full for the cells layer.
+    viewport_changed:      bool,
+    /// New cell data landed via `LogicEnvelope::ViewportUpdate`. Decoupled
+    /// from `needs_full` because data arrival during a scroll should NOT
+    /// downgrade Scroll to Full: the strip will pick up the fresh cache
+    /// entries automatically. Only frames with data but no scroll need Full.
+    data_dirty:            bool,
+    /// HUD timer fired (≥ 500ms since last refresh). Only the overlay needs
+    /// to redraw; the cells layer can reuse its previous offscreen.
+    hud_tick:              bool,
+    /// Last rendered scroll position, used to compute the scroll delta.
+    prev_top_row:          u32,
+    prev_left_col:         u32,
 }
 
 impl UiState {
@@ -107,7 +126,7 @@ impl UiState {
 
     fn handle_resize(&mut self, width: u32, height: u32) {
         self.trame.resize(width as f64, height as f64);
-        self.dirty = true;
+        self.needs_full = true;
 
         let Some(ref mut gpu) = self.gpu else { return };
         if gpu.width == width && gpu.height == height { return; }
@@ -124,6 +143,9 @@ impl UiState {
             alpha_mode:                   wgpu::CompositeAlphaMode::Auto,
             view_formats:                 vec![],
         });
+        // Reallocate the ping-pong offscreens at the new size. Previous content
+        // is lost, so the next frame is forced to RepaintMode::Full above.
+        gpu.quad_renderer.resize_offscreens(&gpu.device, width, height);
 
         gpu.width  = width;
         gpu.height = height;
@@ -134,7 +156,10 @@ impl UiState {
             && let Ok(update) = postcard::from_bytes::<TrameViewUpdate>(&payload)
         {
             self.trame.on_viewport_data(update);
-            self.dirty = true;
+            // Just flag data dirty. If a scroll happens in the same frame the
+            // strip path will read the refreshed cache; otherwise the render
+            // path promotes data_dirty to a Full repaint.
+            self.data_dirty = true;
         }
     }
 
@@ -148,7 +173,7 @@ impl UiState {
 
         if !self.initial_viewport_sent {
             self.initial_viewport_sent = true;
-            self.dirty = true;
+            self.needs_full = true;
             let cmd     = self.trame.scroll_viewport_cmd();
             let payload = postcard::to_allocvec(&cmd).expect("serialize TrameCommand");
             let _ = self.logic_tx.send(UiEnvelope::AppCommand {
@@ -161,41 +186,149 @@ impl UiState {
 
         if raf_timestamp - self.last_hud_update_ms >= 500.0 {
             self.last_hud_update_ms = raf_timestamp;
-            self.dirty = true;
+            self.hud_tick = true;
         }
+
+        // -- Decide what to repaint this frame. -------------------------------
+        let any_dirty = self.needs_full
+            || self.viewport_changed
+            || self.data_dirty
+            || self.hud_tick;
+
+        let (cells_repaint, cells_strip): (ambre_ui::CellsRepaint, Option<ambre_draw::Rect>) =
+            if self.needs_full {
+                (ambre_ui::CellsRepaint::Full, None)
+            } else if self.viewport_changed {
+                let dr = self.trame.top_row  as i64 - self.prev_top_row  as i64;
+                let dc = self.trame.left_col as i64 - self.prev_left_col as i64;
+                if dr == 0 && dc == 0 {
+                    // Cursor moved within the viewport without scrolling. If
+                    // data also arrived this frame the visible cells need a
+                    // refresh; otherwise the cells offscreen is still valid
+                    // (the active border lives in the overlay).
+                    if self.data_dirty {
+                        (ambre_ui::CellsRepaint::Full, None)
+                    } else {
+                        (ambre_ui::CellsRepaint::Reuse, None)
+                    }
+                } else if dr != 0 && dc != 0 {
+                    // Diagonal scroll: would require an L-shaped strip.
+                    // Fall back to a full repaint instead.
+                    (ambre_ui::CellsRepaint::Full, None)
+                } else {
+                    let dy_px = -(dr as i32) * trame::grid::ROW_HEIGHT as i32;
+                    let dx_px = -(dc as i32) * trame::grid::COL_WIDTH  as i32;
+                    let w = self.trame.canvas_width;
+                    let h = self.trame.canvas_height;
+                    // If the scroll exceeds the viewport, nothing useful to
+                    // shift -- go full.
+                    let abs_dx = dx_px.unsigned_abs();
+                    let abs_dy = dy_px.unsigned_abs();
+                    if abs_dx as f64 >= w || abs_dy as f64 >= h {
+                        (ambre_ui::CellsRepaint::Full, None)
+                    } else {
+                        // Strip rect = the area of the destination offscreen
+                        // exposed by the shift, restricted to the cell area.
+                        let hh = trame::grid::HEADER_HEIGHT;
+                        let hw = trame::grid::HEADER_WIDTH;
+                        let strip = if dy_px > 0 {
+                            // Content shifted down: strip at top of cell area.
+                            ambre_draw::Rect::new(hw, hh, w, hh + dy_px as f64)
+                        } else if dy_px < 0 {
+                            // Content shifted up: strip at bottom.
+                            ambre_draw::Rect::new(hw, h + dy_px as f64, w, h)
+                        } else if dx_px > 0 {
+                            // Content shifted right: strip at left of cell area.
+                            ambre_draw::Rect::new(hw, hh, hw + dx_px as f64, h)
+                        } else {
+                            // dx_px < 0: content shifted left: strip at right.
+                            ambre_draw::Rect::new(w + dx_px as f64, hh, w, h)
+                        };
+                        (ambre_ui::CellsRepaint::Scroll { dx_px, dy_px }, Some(strip))
+                    }
+                }
+            } else if self.data_dirty {
+                // Data arrived without scroll or cursor movement (e.g. a late
+                // ViewportData response after the user stopped). Repaint cells
+                // so the freshly cached text shows up.
+                (ambre_ui::CellsRepaint::Full, None)
+            } else {
+                // Just a HUD tick or nothing.
+                (ambre_ui::CellsRepaint::Reuse, None)
+            };
+
+        let overlay_repaint = if any_dirty {
+            ambre_ui::OverlayRepaint::Redraw
+        } else {
+            ambre_ui::OverlayRepaint::Reuse
+        };
+
+        // Consume the per-frame flags.
+        self.needs_full       = false;
+        self.viewport_changed = false;
+        self.data_dirty       = false;
+        self.hud_tick         = false;
+        self.prev_top_row     = self.trame.top_row;
+        self.prev_left_col    = self.trame.left_col;
 
         let t0 = self.perf.now();
 
-        let upload = self.dirty;
-        let t_draw_ms;
-        if self.dirty {
-            self.dirty = false;
+        // -- Build CPU batches for whichever layers are being rebuilt. --------
+        let t_draw_ms = if any_dirty {
             gpu.text_cache.reset_frame_stats();
             gpu.quad_renderer.begin_frame(gpu.width as f32, gpu.height as f32);
             let t_draw_start = self.perf.now();
             {
                 let mut surface = ambre_ui::WgpuSurface::new(&mut gpu.quad_renderer);
-                trame::renderer::draw_grid(
-                    &mut surface,
-                    &self.trame,
-                    &mut gpu.font_cx,
-                    &mut gpu.text_cache,
-                    self.text_enabled,
-                    self.render_fps,
-                    self.last_frame_ms,
-                    self.last_drain_ms,
-                    self.last_draw_ms,
-                    self.last_gpu_ms,
-                    &self.perf,
-                    &mut self.draw_stats,
-                );
+
+                // Cells layer (persistent).
+                let cells_active = !matches!(cells_repaint, ambre_ui::CellsRepaint::Reuse);
+                if cells_active {
+                    surface.begin_layer(ambre_ui::Layer::Cells);
+                    trame::renderer::draw_cells(
+                        &mut surface,
+                        &self.trame,
+                        &mut gpu.font_cx,
+                        &mut gpu.text_cache,
+                        self.text_enabled,
+                        cells_strip,
+                        &self.perf,
+                        &mut self.draw_stats,
+                    );
+                } else {
+                    // Carry forward the previous frame's cells timings on the
+                    // HUD overlay so it doesn't flicker to zero.
+                    self.draw_stats.bg_ms        = 0.0;
+                    self.draw_stats.cells_ms     = 0.0;
+                    self.draw_stats.cells_drawn  = 0;
+                }
+
+                // Overlay layer (transient, swapchain).
+                if matches!(overlay_repaint, ambre_ui::OverlayRepaint::Redraw) {
+                    surface.begin_layer(ambre_ui::Layer::Overlay);
+                    trame::renderer::draw_overlay(
+                        &mut surface,
+                        &self.trame,
+                        &mut gpu.font_cx,
+                        &mut gpu.text_cache,
+                        self.text_enabled,
+                        self.render_fps,
+                        self.last_frame_ms,
+                        self.last_drain_ms,
+                        self.last_draw_ms,
+                        self.last_gpu_ms,
+                        &self.perf,
+                        &mut self.draw_stats,
+                    );
+                }
             }
             gpu.text_cache.evict_if_oversized(5_000);
-            t_draw_ms = (self.perf.now() - t_draw_start) as f32;
+            (self.perf.now() - t_draw_start) as f32
         } else {
-            t_draw_ms = 0.0;
-        }
+            0.0
+        };
 
+        // -- GPU encoding + present. ------------------------------------------
         let t_gpu_start = self.perf.now();
         let surface_tex = match gpu.surface.get_current_texture() {
             Ok(t)  => t,
@@ -204,10 +337,14 @@ impl UiState {
                 return;
             }
         };
-        let target_view  = surface_tex.texture.create_view(&Default::default());
-        let mut encoder  = gpu.device.create_command_encoder(&Default::default());
+        let target_view = surface_tex.texture.create_view(&Default::default());
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
 
-        gpu.quad_renderer.flush(&gpu.device, &gpu.queue, &mut encoder, &target_view, upload);
+        gpu.quad_renderer.flush_dirty_rect(
+            &gpu.device, &gpu.queue,
+            &mut encoder, &target_view,
+            cells_repaint, overlay_repaint,
+        );
 
         gpu.queue.submit(std::iter::once(encoder.finish()));
         surface_tex.present();
@@ -363,7 +500,11 @@ async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -
         },
     );
 
-    let quad_renderer = ambre_ui::QuadRenderer::new(&device, format);
+    let mut quad_renderer = ambre_ui::QuadRenderer::new(&device, format);
+    // Size the ping-pong offscreens to the initial canvas; ResizeObserver
+    // doesn't fire on startup so handle_resize wouldn't get a chance to
+    // initialize them before the first render otherwise.
+    quad_renderer.resize_offscreens(&device, width, height);
 
     let mut font_cx = parley::FontContext::new();
     match fetch_bytes("/fonts/NotoSans-Regular.ttf").await {
@@ -498,7 +639,12 @@ fn ui_main() {
         last_hud_update_ms:    0.0,
         text_enabled:          true,
         perf,
-        dirty:                 true,
+        needs_full:            true,
+        viewport_changed:      false,
+        data_dirty:            false,
+        hud_tick:              false,
+        prev_top_row:          0,
+        prev_left_col:         0,
     }));
 
     // -- Async GPU init -------------------------------------------------------
@@ -535,7 +681,8 @@ fn ui_main() {
                     "t" | "T" => {
                         let mut s = state_c.borrow_mut();
                         s.text_enabled ^= true;
-                        s.dirty = true;
+                        // Text toggle affects every cell -- full repaint.
+                        s.needs_full = true;
                         return;
                     }
                     _ => return,
@@ -543,7 +690,9 @@ fn ui_main() {
                 event.prevent_default();
 
                 let mut s = state_c.borrow_mut();
-                s.dirty = true;
+                // Cursor or scroll move: viewport_changed, the render path
+                // decides Scroll vs Full from the actual delta.
+                s.viewport_changed = true;
                 if let Some(cmd) = s.trame.move_cursor(dr, dc) {
                     let payload = postcard::to_allocvec(&cmd).expect("serialize TrameCommand");
                     let _ = s.logic_tx.send(UiEnvelope::AppCommand {
