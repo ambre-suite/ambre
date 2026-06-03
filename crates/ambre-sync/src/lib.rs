@@ -37,7 +37,10 @@ use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, WebSocket};
 
-use ambre_bus::{ChannelId, DocType, DocumentId, LogicEvent, SyncCommand, UserId};
+use ambre_bus::{
+    ChannelId, DocType, DocumentId, LogicEvent, RequestId, RestCommand, RestEvent, SyncCommand,
+    UserId,
+};
 use ambre_protocol::{
     messages::Seq,
     ws::{WsClientMsg, WsServerMsg, decode_server_msg, encode_client_msg},
@@ -126,40 +129,32 @@ impl SyncState {
 
     // -- Outbound: Sync → Server (WebSocket) -----------------------------------
 
+    /// Encode and push a client message onto the WebSocket.
+    ///
+    /// A missing socket or a failed `send` is a transient network condition, not
+    /// a programmer error: it must **not** panic (a panic is `panic=abort` and
+    /// would tear the Sync thread down silently). Callers already gate on
+    /// `self.ws.is_some()`; this only logs if that race is lost. The reconnect
+    /// path (onclose → backoff) re-establishes the socket.
     fn ws_send(&self, msg: &WsClientMsg) {
-        let ws = self.ws.as_ref().expect("WebSocket not connected");
+        let Some(ws) = self.ws.as_ref() else {
+            tracing::warn!("Sync: ws_send called with no socket connected, dropping message");
+            return;
+        };
         let wire = encode_client_msg(msg);
-        ws.send_with_u8_array(&wire).expect("WebSocket send");
+        if let Err(e) = ws.send_with_u8_array(&wire) {
+            tracing::warn!("Sync: WebSocket send failed ({e:?}); reconnect will retry");
+        }
     }
 
     // -- Inbound: Logic → Sync -------------------------------------------------
 
     fn handle_command(&mut self, cmd: SyncCommand) {
         match cmd {
-            // -- Session -------------------------------------------------------
-            SyncCommand::Unlock { passphrase } => self.handle_unlock(passphrase),
-            SyncCommand::SetupAccount { passphrase } => self.handle_setup_account(passphrase),
-            SyncCommand::ChangePassphrase { current_passphrase, new_passphrase } => {
-                self.handle_change_passphrase(current_passphrase, new_passphrase);
-            }
-            SyncCommand::RecoverAccount { recovery_words, new_passphrase } => {
-                self.handle_recover_account(recovery_words, new_passphrase);
-            }
-            SyncCommand::Logout => self.handle_logout(),
+            // -- Service plane: the relayed request/response family ------------
+            SyncCommand::Rest { id, cmd } => self.handle_rest(id, cmd),
 
-            // -- Document CRUD -------------------------------------------------
-            SyncCommand::ListDocuments => self.handle_list_documents(),
-            SyncCommand::CreateDocument { doc_type, name } => {
-                self.handle_create_document(doc_type, name);
-            }
-            SyncCommand::DeleteDocument { document_id } => {
-                self.handle_delete_document(document_id);
-            }
-            SyncCommand::RenameDocument { document_id, name } => {
-                self.handle_rename_document(document_id, name);
-            }
-
-            // -- Document sync session -----------------------------------------
+            // -- Document sync session (control) -------------------------------
             SyncCommand::OpenDocument { document_id } => self.handle_open_document(document_id),
             SyncCommand::CloseDocument { document_id } => self.handle_close_document(document_id),
             SyncCommand::SendUpdate { document_id, payload } => {
@@ -173,88 +168,14 @@ impl SyncState {
             }
             SyncCommand::Reconnect { document_id } => self.handle_reconnect(document_id),
 
-            // -- Sharing -------------------------------------------------------
-            SyncCommand::InviteToDocument { document_id, invitee_email, role } => {
-                self.handle_invite_to_document(document_id, invitee_email, role);
-            }
-            SyncCommand::RevokeFromDocument { document_id, user_id } => {
-                self.handle_revoke_from_document(document_id, user_id);
-            }
-            SyncCommand::ListDocumentMembers { document_id } => {
-                self.handle_list_document_members(document_id);
-            }
-            SyncCommand::UpdateDocumentMemberRole { document_id, user_id, role } => {
-                tracing::info!(
-                    "Sync: UpdateDocumentMemberRole {document_id:?} {user_id:?}"
-                );
-                let _ = role;
-            }
-
-            // -- Users ---------------------------------------------------------
-            SyncCommand::SearchUsers { query } => {
-                tracing::info!("Sync: SearchUsers '{query}'");
-            }
-
-            // -- Media ---------------------------------------------------------
-            SyncCommand::UploadMedia { document_id, data, mime_type } => {
-                tracing::info!(
-                    "Sync: UploadMedia {document_id:?} {mime_type} len={}",
-                    data.len()
-                );
-            }
-            SyncCommand::DownloadMedia { document_id, content_hash } => {
-                tracing::info!("Sync: DownloadMedia {document_id:?} {content_hash}");
-            }
-
-            // -- Channels ------------------------------------------------------
-            SyncCommand::ListChannels => tracing::info!("Sync: ListChannels"),
-            SyncCommand::CreateChannel { name } => {
-                tracing::info!("Sync: CreateChannel '{name}'");
-            }
-            SyncCommand::DeleteChannel { channel_id } => {
-                tracing::info!("Sync: DeleteChannel {channel_id:?}");
-            }
+            // -- Channel sync session (control) --------------------------------
             SyncCommand::OpenChannel { channel_id } => self.handle_open_channel(channel_id),
             SyncCommand::CloseChannel { channel_id } => self.handle_close_channel(channel_id),
-            SyncCommand::InviteToChannel { channel_id, invitee_email, role } => {
-                tracing::info!(
-                    "Sync: InviteToChannel {channel_id:?} {invitee_email} {role:?}"
-                );
-            }
-            SyncCommand::RevokeFromChannel { channel_id, user_id } => {
-                tracing::info!("Sync: RevokeFromChannel {channel_id:?} {user_id:?}");
-            }
-            SyncCommand::ListChannelMembers { channel_id } => {
-                tracing::info!("Sync: ListChannelMembers {channel_id:?}");
-            }
-            SyncCommand::UpdateChannelMemberRole { channel_id, user_id, role } => {
-                tracing::info!(
-                    "Sync: UpdateChannelMemberRole {channel_id:?} {user_id:?} {role:?}"
-                );
-            }
             SyncCommand::SendChannelUpdate { channel_id, payload } => {
                 self.handle_send_channel_update(channel_id, payload);
             }
             SyncCommand::SendChannelEphemeral { channel_id, payload } => {
                 self.handle_send_channel_ephemeral(channel_id, payload);
-            }
-            SyncCommand::UpdateReadCursor { channel_id, last_seq } => {
-                tracing::debug!("Sync: UpdateReadCursor {channel_id:?} seq={last_seq}");
-            }
-            SyncCommand::GetUnreadCounts => tracing::info!("Sync: GetUnreadCounts"),
-
-            // -- Meetings ------------------------------------------------------
-            SyncCommand::CreateMeeting { name } => {
-                tracing::info!("Sync: CreateMeeting '{name}'");
-            }
-            SyncCommand::JoinMeeting { meeting_id } => {
-                tracing::info!("Sync: JoinMeeting {meeting_id:?}");
-            }
-            SyncCommand::LeaveMeeting { meeting_id } => {
-                tracing::info!("Sync: LeaveMeeting {meeting_id:?}");
-            }
-            SyncCommand::EndMeeting { meeting_id } => {
-                tracing::info!("Sync: EndMeeting {meeting_id:?}");
             }
 
             // -- Lifecycle -----------------------------------------------------
@@ -262,13 +183,110 @@ impl SyncState {
         }
     }
 
+    /// Reply to a service request, echoing its [`RequestId`].
+    fn reply(&self, id: RequestId, evt: RestEvent) {
+        self.send_to_logic(LogicEvent::Rest { id, evt });
+    }
+
+    /// Dispatch a relayed [`RestCommand`]. Most arms are placeholders today; the
+    /// ones that already produce data answer via [`reply`](Self::reply).
+    fn handle_rest(&mut self, id: RequestId, cmd: RestCommand) {
+        match cmd {
+            // -- Session -------------------------------------------------------
+            RestCommand::Unlock { passphrase } => self.handle_unlock(id, passphrase),
+            RestCommand::SetupAccount { passphrase } => self.handle_setup_account(passphrase),
+            RestCommand::ChangePassphrase { current_passphrase, new_passphrase } => {
+                self.handle_change_passphrase(current_passphrase, new_passphrase);
+            }
+            RestCommand::RecoverAccount { recovery_words, new_passphrase } => {
+                self.handle_recover_account(recovery_words, new_passphrase);
+            }
+            RestCommand::Logout => {
+                self.handle_logout();
+                self.reply(id, RestEvent::LoggedOut);
+            }
+
+            // -- Document CRUD -------------------------------------------------
+            RestCommand::ListDocuments => self.handle_list_documents(id),
+            RestCommand::CreateDocument { doc_type, name } => {
+                self.handle_create_document(doc_type, name);
+            }
+            RestCommand::DeleteDocument { document_id } => {
+                self.handle_delete_document(document_id);
+            }
+            RestCommand::RenameDocument { document_id, name } => {
+                self.handle_rename_document(document_id, name);
+            }
+
+            // -- Sharing -------------------------------------------------------
+            RestCommand::InviteToDocument { document_id, invitee_email, role } => {
+                self.handle_invite_to_document(document_id, invitee_email, role);
+            }
+            RestCommand::RevokeFromDocument { document_id, user_id } => {
+                self.handle_revoke_from_document(document_id, user_id);
+            }
+            RestCommand::ListDocumentMembers { document_id } => {
+                self.handle_list_document_members(document_id);
+            }
+            RestCommand::UpdateDocumentMemberRole { document_id, user_id, role } => {
+                tracing::info!("Sync: UpdateDocumentMemberRole {document_id:?} {user_id:?} {role:?}");
+            }
+
+            // -- Users ---------------------------------------------------------
+            RestCommand::SearchUsers { query } => tracing::info!("Sync: SearchUsers '{query}'"),
+
+            // -- Media ---------------------------------------------------------
+            RestCommand::UploadMedia { document_id, data, mime_type } => {
+                tracing::info!("Sync: UploadMedia {document_id:?} {mime_type} len={}", data.len());
+            }
+            RestCommand::DownloadMedia { document_id, content_hash } => {
+                tracing::info!("Sync: DownloadMedia {document_id:?} {content_hash}");
+            }
+
+            // -- Channels (CRUD & sharing) -------------------------------------
+            RestCommand::ListChannels => tracing::info!("Sync: ListChannels"),
+            RestCommand::CreateChannel { name } => tracing::info!("Sync: CreateChannel '{name}'"),
+            RestCommand::DeleteChannel { channel_id } => {
+                tracing::info!("Sync: DeleteChannel {channel_id:?}");
+            }
+            RestCommand::InviteToChannel { channel_id, invitee_email, role } => {
+                tracing::info!("Sync: InviteToChannel {channel_id:?} {invitee_email} {role:?}");
+            }
+            RestCommand::RevokeFromChannel { channel_id, user_id } => {
+                tracing::info!("Sync: RevokeFromChannel {channel_id:?} {user_id:?}");
+            }
+            RestCommand::ListChannelMembers { channel_id } => {
+                tracing::info!("Sync: ListChannelMembers {channel_id:?}");
+            }
+            RestCommand::UpdateChannelMemberRole { channel_id, user_id, role } => {
+                tracing::info!("Sync: UpdateChannelMemberRole {channel_id:?} {user_id:?} {role:?}");
+            }
+            RestCommand::UpdateReadCursor { channel_id, last_seq } => {
+                tracing::debug!("Sync: UpdateReadCursor {channel_id:?} seq={last_seq}");
+            }
+            RestCommand::GetUnreadCounts => tracing::info!("Sync: GetUnreadCounts"),
+
+            // -- Meetings ------------------------------------------------------
+            RestCommand::CreateMeeting { name } => tracing::info!("Sync: CreateMeeting '{name}'"),
+            RestCommand::JoinMeeting { meeting_id } => {
+                tracing::info!("Sync: JoinMeeting {meeting_id:?}");
+            }
+            RestCommand::LeaveMeeting { meeting_id } => {
+                tracing::info!("Sync: LeaveMeeting {meeting_id:?}");
+            }
+            RestCommand::EndMeeting { meeting_id } => {
+                tracing::info!("Sync: EndMeeting {meeting_id:?}");
+            }
+        }
+    }
+
     // -- Session handlers ------------------------------------------------------
 
-    fn handle_unlock(&mut self, passphrase: Vec<u8>) {
+    fn handle_unlock(&mut self, id: RequestId, passphrase: Vec<u8>) {
         tracing::info!("Sync: Unlock (passphrase len={})", passphrase.len());
         self.open_websocket();
 
-        self.send_to_logic(LogicEvent::SessionReady {
+        self.reply(id, RestEvent::SessionReady {
             user_id: UserId::new(),
             display_name: "placeholder".into(),
             email: "placeholder@example.com".into(),
@@ -293,6 +311,9 @@ impl SyncState {
         let _ = (recovery_words, new_passphrase);
     }
 
+    /// Tear down the session (WebSocket, document sessions, keys). The
+    /// `LoggedOut` response — when there is a request to answer — is sent by the
+    /// caller (`Shutdown` performs the teardown without replying).
     fn handle_logout(&mut self) {
         if let Some(ws) = self.ws.take() {
             let _ = ws.close();
@@ -300,7 +321,6 @@ impl SyncState {
         self._ws_closures.clear();
         self.documents.clear();
         self.master_seed = None;
-        self.send_to_logic(LogicEvent::LoggedOut);
         tracing::info!("Sync: logged out, all keys zeroized");
     }
 
@@ -481,8 +501,8 @@ impl SyncState {
 
     // -- Document CRUD (HTTP REST) ---------------------------------------------
 
-    fn handle_list_documents(&self) {
-        self.send_to_logic(LogicEvent::DocumentList { documents: vec![] });
+    fn handle_list_documents(&self, id: RequestId) {
+        self.reply(id, RestEvent::DocumentList { documents: vec![] });
         tracing::info!("Sync: ListDocuments");
     }
 

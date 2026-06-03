@@ -37,6 +37,15 @@ pub struct TrameView {
     draw_stats: DrawStats,
     initial_viewport_sent: bool,
 
+    /// Latest viewport request awaiting send, coalesced to ≤1 per frame so a
+    /// fast key-repeat can't outrun the Logic thread. Set in `handle_input`,
+    /// flushed in `update`. Only the newest is kept (it carries the highest
+    /// `version`, which supersedes any it replaces).
+    pending_viewport: Option<TrameCommand>,
+    /// Set once the inbound Logic channel disconnects (Logic thread gone) or a
+    /// [`UiEvent::FatalError`] arrives. Halts all further sends; logged once.
+    fatal: bool,
+
     // -- Dirty-rect bookkeeping -------------------------------------------------
     /// Cells layer needs a full repaint (resize, text toggle, first frame).
     needs_full: bool,
@@ -69,6 +78,8 @@ impl TrameView {
             text_enabled: true,
             draw_stats: DrawStats::default(),
             initial_viewport_sent: false,
+            pending_viewport: None,
+            fatal: false,
             needs_full: true,
             viewport_changed: false,
             data_dirty: false,
@@ -78,25 +89,72 @@ impl TrameView {
     }
 
     /// Send a typed `TrameCommand` to the Logic thread.
+    ///
+    /// Runs on the page's main thread, so it must never block: a full channel
+    /// drops the command (a viewport request is superseded by the next one via
+    /// `version`; nothing here is a non-idempotent P3 mutation). A disconnect
+    /// is surfaced by `update`'s drain, which sets `fatal`.
     fn send_command(&self, cmd: TrameCommand) {
-        let _ = self.to_logic.send(LogicCommand::App {
+        if self.fatal {
+            return;
+        }
+        let msg = LogicCommand::App {
             document_id: IPC_TEST_DOC_ID,
             command: AppCommand::Trame(cmd),
-        });
+        };
+        match self.to_logic.try_send(msg) {
+            Ok(()) => {}
+            Err(flume::TrySendError::Full(_)) => {
+                tracing::warn!("Trame: UI→Logic channel full, dropping viewport command");
+            }
+            Err(flume::TrySendError::Disconnected(_)) => {
+                tracing::error!("Trame: UI→Logic channel disconnected");
+            }
+        }
+    }
+
+    /// Enter the inert fatal state: a worker thread is gone, so no command can
+    /// be answered. Logged exactly once; the page may surface a fatal screen
+    /// (see the `ambre-spec-architecture` "thread failure" section).
+    fn signal_fatal(&mut self, reason: &str) {
+        if self.fatal {
+            return;
+        }
+        self.fatal = true;
+        tracing::error!("Trame: fatal — {reason}; the UI is now inert");
     }
 }
 
 impl DocView for TrameView {
     fn update(&mut self) {
-        // Drain every queued UiEvent without blocking.
-        while let Ok(event) = self.from_logic.try_recv() {
-            if let UiEvent::Viewport { event: AppEvent::Trame(update), .. } = event {
-                self.state.on_viewport_data(update);
-                // Just flag data dirty. If a scroll happens the same frame the
-                // strip path reads the refreshed cache; otherwise plan_repaint
-                // promotes data_dirty to a Full repaint.
-                self.data_dirty = true;
+        // Drain every queued UiEvent without blocking. A `Disconnected` error
+        // means the Logic thread is gone (panic=abort or shutdown) — there is
+        // no recovery, so flip to the fatal state instead of silently looping.
+        loop {
+            match self.from_logic.try_recv() {
+                Ok(UiEvent::Viewport { event: AppEvent::Trame(update), .. }) => {
+                    self.state.on_viewport_data(update);
+                    // Just flag data dirty. If a scroll happens the same frame the
+                    // strip path reads the refreshed cache; otherwise plan_repaint
+                    // promotes data_dirty to a Full repaint.
+                    self.data_dirty = true;
+                }
+                Ok(UiEvent::FatalError { message }) => self.signal_fatal(&message),
+                // Other UiEvent variants (session, CRUD, channels…) are not yet
+                // consumed by the Trame view; ignore them for now.
+                Ok(_) => {}
+                Err(flume::TryRecvError::Empty) => break,
+                Err(flume::TryRecvError::Disconnected) => {
+                    self.signal_fatal("Logic thread disconnected");
+                    break;
+                }
             }
+        }
+
+        // Flush the coalesced viewport request: at most one ScrollViewport per
+        // frame, regardless of how many arrow keys fired since the last frame.
+        if let Some(cmd) = self.pending_viewport.take() {
+            self.send_command(cmd);
         }
 
         if !self.initial_viewport_sent {
@@ -254,7 +312,10 @@ impl DocView for TrameView {
         // vs Full from the actual delta.
         self.viewport_changed = true;
         if let Some(cmd) = self.state.move_cursor(dr, dc) {
-            self.send_command(cmd);
+            // Coalesce: keep only the latest request; `update` sends it once
+            // this frame. Intermediate requests are superseded (their cache
+            // eviction already happened inside `move_cursor`).
+            self.pending_viewport = Some(cmd);
         }
         true
     }
