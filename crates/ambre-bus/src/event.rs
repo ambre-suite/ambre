@@ -5,7 +5,6 @@
 //! or receiving data from the network.
 
 use crate::{ChannelId, DocType, DocumentId, MeetingId, Role, UserId};
-use serde::{Deserialize, Serialize};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Business‑shared types (zero crypto)
@@ -14,7 +13,7 @@ use serde::{Deserialize, Serialize};
 /// Summary of a document (for lists and navigation).
 ///
 /// The `name` is decrypted by the Sync thread – the Logic thread sees it in plaintext.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DocumentSummary {
     pub document_id: DocumentId,
     pub doc_type: DocType,
@@ -26,7 +25,7 @@ pub struct DocumentSummary {
 }
 
 /// Member of a document or channel.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct MemberInfo {
     pub user_id: UserId,
     pub display_name: String,
@@ -35,7 +34,7 @@ pub struct MemberInfo {
 }
 
 /// User (search result).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct UserInfo {
     pub user_id: UserId,
     pub display_name: String,
@@ -43,7 +42,7 @@ pub struct UserInfo {
 }
 
 /// Summary of a Murmure channel.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ChannelSummary {
     pub channel_id: ChannelId,
     /// Decrypted from `name_enc`.
@@ -52,7 +51,7 @@ pub struct ChannelSummary {
 }
 
 /// Unread message count per channel.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct UnreadCount {
     pub channel_id: ChannelId,
     pub count: u64,
@@ -63,7 +62,7 @@ pub struct UnreadCount {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Event sent from the Sync thread to the Logic thread.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum LogicEvent {
     // ── Session ──────────────────────────────────────────────────────────────
     /// Login successful – session ready, documents can be opened.

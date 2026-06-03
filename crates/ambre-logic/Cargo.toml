@@ -7,14 +7,7 @@ description = "Logic thread — typed command dispatch, per-document state regis
 
 [dependencies]
 ambre-bus   = { path = "../ambre-bus" }
-ambre-core  = { path = "../ambre-core" }
 ambre-trame = { path = "../ambre-trame" }
 
-flume    = { workspace = true }
-tracing      = { workspace = true }
-tracing-wasm = { workspace = true }
-
-wasm-bindgen             = { workspace = true }
-js-sys                   = { workspace = true }
-web-sys                  = { workspace = true }
-console_error_panic_hook = { workspace = true }
+flume   = { workspace = true }
+tracing = { workspace = true }
