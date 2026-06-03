@@ -58,7 +58,6 @@ swash = "0.2"
 gloo-net = { version = "0.7", features = ["http", "websocket"] }
 web-sys = { version = "0.3.85", features = [
     "CanvasRenderingContext2d",
-    "DedicatedWorkerGlobalScope",
     "Document",
     "Element",
     "EventTarget",
@@ -66,17 +65,12 @@ web-sys = { version = "0.3.85", features = [
     "ImageData",
     "KeyboardEvent",
     "Location",
-    "MessageChannel",
     "MessageEvent",
-    "MessagePort",
     "Performance",
     "WebSocket",
     "Window",
     "Request",
     "Response",
-    "Worker",
-    "WorkerOptions",
-    "WorkerType",
 ] }
 js-sys = "0.3.85"
 wasm-bindgen = "0.2"

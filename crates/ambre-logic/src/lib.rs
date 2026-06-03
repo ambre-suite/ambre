@@ -24,7 +24,7 @@ use std::collections::HashMap;
 
 use ambre_bus::{
     AppCommand, AppEvent, DocType, DocumentId, IPC_TEST_DOC_ID, LogicCommand, LogicEvent,
-    SyncCommand, UiEvent,
+    RestCommand, RestEvent, SyncCommand, UiEvent,
 };
 use ambre_trame::TrameState;
 
@@ -177,48 +177,30 @@ impl LogicState {
 
     fn handle_logic_command(&mut self, command: LogicCommand) {
         match command {
-            // -- P2 — Application command --------------------------------------
+            // -- P2 — Content plane --------------------------------------------
             LogicCommand::App { document_id, command } => {
                 self.handle_app_command(document_id, command);
             }
 
-            // -- P3 — Session --------------------------------------------------
-            LogicCommand::Unlock { passphrase } => {
-                self.send_to_sync(SyncCommand::Unlock { passphrase });
-            }
-            LogicCommand::SetupAccount { passphrase } => {
-                self.send_to_sync(SyncCommand::SetupAccount { passphrase });
-            }
-            LogicCommand::ChangePassphrase { current_passphrase, new_passphrase } => {
-                self.send_to_sync(SyncCommand::ChangePassphrase {
-                    current_passphrase,
-                    new_passphrase,
-                });
-            }
-            LogicCommand::RecoverAccount { recovery_words, new_passphrase } => {
-                self.send_to_sync(SyncCommand::RecoverAccount { recovery_words, new_passphrase });
-            }
-            LogicCommand::Logout => {
-                // Drop all document state before telling the Sync thread to log
-                // out, so no in-flight handler can emit further SyncCommands.
-                self.docs.clear();
-                self.send_to_sync(SyncCommand::Logout);
+            // -- P3 — Service plane: forward verbatim, with state hooks --------
+            //
+            // The whole relayed request/response family collapses to one arm.
+            // A few ops also mutate Logic state before forwarding; those are the
+            // only special cases (everything else is a pure relay).
+            LogicCommand::Rest { id, cmd } => {
+                match &cmd {
+                    // Drop all document state before logging out so no in-flight
+                    // handler can emit further commands against it.
+                    RestCommand::Logout => self.docs.clear(),
+                    RestCommand::DeleteDocument { document_id } => {
+                        self.docs.remove(document_id);
+                    }
+                    _ => {}
+                }
+                self.send_to_sync(SyncCommand::Rest { id, cmd });
             }
 
-            // -- P3 — Document CRUD --------------------------------------------
-            LogicCommand::ListDocuments => self.send_to_sync(SyncCommand::ListDocuments),
-            LogicCommand::CreateDocument { doc_type, name } => {
-                self.send_to_sync(SyncCommand::CreateDocument { doc_type, name });
-            }
-            LogicCommand::DeleteDocument { document_id } => {
-                self.docs.remove(&document_id);
-                self.send_to_sync(SyncCommand::DeleteDocument { document_id });
-            }
-            LogicCommand::RenameDocument { document_id, name } => {
-                self.send_to_sync(SyncCommand::RenameDocument { document_id, name });
-            }
-
-            // -- P3 — Document sync session ------------------------------------
+            // -- P3 — Control plane: explicit (no correlatable response) -------
             LogicCommand::OpenDocument { document_id } => {
                 self.send_to_sync(SyncCommand::OpenDocument { document_id });
             }
@@ -226,96 +208,14 @@ impl LogicState {
                 self.docs.remove(&document_id);
                 self.send_to_sync(SyncCommand::CloseDocument { document_id });
             }
-
-            // -- P3 — Sharing --------------------------------------------------
-            LogicCommand::InviteToDocument { document_id, invitee_email, role } => {
-                self.send_to_sync(SyncCommand::InviteToDocument {
-                    document_id,
-                    invitee_email,
-                    role,
-                });
-            }
-            LogicCommand::RevokeFromDocument { document_id, user_id } => {
-                self.send_to_sync(SyncCommand::RevokeFromDocument { document_id, user_id });
-            }
-            LogicCommand::ListDocumentMembers { document_id } => {
-                self.send_to_sync(SyncCommand::ListDocumentMembers { document_id });
-            }
-            LogicCommand::UpdateDocumentMemberRole { document_id, user_id, role } => {
-                self.send_to_sync(SyncCommand::UpdateDocumentMemberRole {
-                    document_id,
-                    user_id,
-                    role,
-                });
-            }
-
-            // -- P3 — Users ----------------------------------------------------
-            LogicCommand::SearchUsers { query } => {
-                self.send_to_sync(SyncCommand::SearchUsers { query });
-            }
-
-            // -- P3 — Media ----------------------------------------------------
-            LogicCommand::UploadMedia { document_id, data, mime_type } => {
-                self.send_to_sync(SyncCommand::UploadMedia { document_id, data, mime_type });
-            }
-            LogicCommand::DownloadMedia { document_id, content_hash } => {
-                self.send_to_sync(SyncCommand::DownloadMedia { document_id, content_hash });
-            }
-
-            // -- P3 — Channels -------------------------------------------------
-            LogicCommand::ListChannels => self.send_to_sync(SyncCommand::ListChannels),
-            LogicCommand::CreateChannel { name } => {
-                self.send_to_sync(SyncCommand::CreateChannel { name });
-            }
-            LogicCommand::DeleteChannel { channel_id } => {
-                self.send_to_sync(SyncCommand::DeleteChannel { channel_id });
-            }
             LogicCommand::OpenChannel { channel_id } => {
                 self.send_to_sync(SyncCommand::OpenChannel { channel_id });
             }
             LogicCommand::CloseChannel { channel_id } => {
                 self.send_to_sync(SyncCommand::CloseChannel { channel_id });
             }
-            LogicCommand::InviteToChannel { channel_id, invitee_email, role } => {
-                self.send_to_sync(SyncCommand::InviteToChannel {
-                    channel_id,
-                    invitee_email,
-                    role,
-                });
-            }
-            LogicCommand::RevokeFromChannel { channel_id, user_id } => {
-                self.send_to_sync(SyncCommand::RevokeFromChannel { channel_id, user_id });
-            }
-            LogicCommand::ListChannelMembers { channel_id } => {
-                self.send_to_sync(SyncCommand::ListChannelMembers { channel_id });
-            }
-            LogicCommand::UpdateChannelMemberRole { channel_id, user_id, role } => {
-                self.send_to_sync(SyncCommand::UpdateChannelMemberRole {
-                    channel_id,
-                    user_id,
-                    role,
-                });
-            }
             LogicCommand::SendChannelMessage { channel_id, payload } => {
                 self.send_to_sync(SyncCommand::SendChannelUpdate { channel_id, payload });
-            }
-            LogicCommand::UpdateReadCursor { channel_id, last_seq } => {
-                self.send_to_sync(SyncCommand::UpdateReadCursor { channel_id, last_seq });
-            }
-            LogicCommand::GetUnreadCounts => self.send_to_sync(SyncCommand::GetUnreadCounts),
-
-            // -- P3 — Meetings -------------------------------------------------
-            LogicCommand::CreateMeeting { name } => {
-                self.send_to_sync(SyncCommand::CreateMeeting { name });
-            }
-            LogicCommand::JoinMeeting { meeting_id } => {
-                self.send_to_sync(SyncCommand::JoinMeeting { meeting_id });
-            }
-            LogicCommand::LeaveMeeting { meeting_id } => {
-                self.send_to_sync(SyncCommand::LeaveMeeting { meeting_id });
-            }
-            LogicCommand::EndMeeting { meeting_id } => {
-                self.send_to_sync(SyncCommand::EndMeeting { meeting_id });
             }
         }
     }
@@ -324,36 +224,19 @@ impl LogicState {
 
     fn handle_logic_event(&mut self, event: LogicEvent) {
         match event {
-            // -- Session -------------------------------------------------------
-            LogicEvent::SessionReady { user_id, display_name, email } => {
-                self.send_to_ui(UiEvent::SessionReady { user_id, display_name, email });
-            }
-            LogicEvent::AccountSetupRequired => {
-                self.send_to_ui(UiEvent::AccountSetupRequired);
-            }
-            LogicEvent::AccountCreated { recovery_words } => {
-                self.send_to_ui(UiEvent::AccountCreated { recovery_words });
-            }
-            LogicEvent::PassphraseChanged => self.send_to_ui(UiEvent::PassphraseChanged),
-            LogicEvent::AccountRecovered => self.send_to_ui(UiEvent::AccountRecovered),
-            LogicEvent::LoggedOut => self.send_to_ui(UiEvent::LoggedOut),
-
-            // -- Document CRUD -------------------------------------------------
-            LogicEvent::DocumentList { documents } => {
-                self.send_to_ui(UiEvent::DocumentList { documents });
-            }
-            LogicEvent::DocumentCreated { document_id, doc_type } => {
-                self.pending_doc_types.insert(document_id, doc_type);
-                self.send_to_ui(UiEvent::DocumentCreated { document_id, doc_type });
-            }
-            LogicEvent::DocumentDeleted { document_id } => {
-                self.send_to_ui(UiEvent::DocumentDeleted { document_id });
-            }
-            LogicEvent::DocumentRenamed { document_id } => {
-                self.send_to_ui(UiEvent::DocumentRenamed { document_id });
+            // -- Service plane: forward verbatim, with state hooks -------------
+            //
+            // The whole relayed response family collapses to one arm. Only
+            // `DocumentCreated` also mutates Logic state (it records the new
+            // document's type until its first snapshot arrives).
+            LogicEvent::Rest { id, evt } => {
+                if let RestEvent::DocumentCreated { document_id, doc_type } = &evt {
+                    self.pending_doc_types.insert(*document_id, *doc_type);
+                }
+                self.send_to_ui(UiEvent::Rest { id, evt });
             }
 
-            // -- Real-time sync ------------------------------------------------
+            // -- Real-time sync (server push) ----------------------------------
             LogicEvent::RemoteSnapshot { document_id, payload } => {
                 if !self.docs.contains_key(&document_id) {
                     match self.pending_doc_types.remove(&document_id).and_then(DocState::new) {
@@ -393,61 +276,12 @@ impl LogicState {
                 self.send_to_ui(UiEvent::SyncWarning { document_id, code, message });
             }
 
-            // -- Sharing -------------------------------------------------------
-            LogicEvent::InviteSent { document_id, user_id, display_name } => {
-                self.send_to_ui(UiEvent::InviteSent { document_id, user_id, display_name });
-            }
+            // -- Sharing (server push) -----------------------------------------
             LogicEvent::MemberRevoked { document_id, revoked_user_id } => {
                 self.send_to_ui(UiEvent::MemberRevoked { document_id, revoked_user_id });
             }
-            LogicEvent::RevocationComplete { document_id } => {
-                self.send_to_ui(UiEvent::RevocationComplete { document_id });
-            }
-            LogicEvent::DocumentMembers { document_id, members } => {
-                self.send_to_ui(UiEvent::DocumentMembers { document_id, members });
-            }
-            LogicEvent::MemberRoleUpdated { document_id, user_id, role } => {
-                self.send_to_ui(UiEvent::MemberRoleUpdated { document_id, user_id, role });
-            }
 
-            // -- Users ---------------------------------------------------------
-            LogicEvent::UserSearchResults { users } => {
-                self.send_to_ui(UiEvent::UserSearchResults { users });
-            }
-
-            // -- Media ---------------------------------------------------------
-            LogicEvent::MediaUploaded { document_id, content_hash } => {
-                self.send_to_ui(UiEvent::MediaUploaded { document_id, content_hash });
-            }
-            LogicEvent::MediaDownloaded { document_id, content_hash, data } => {
-                self.send_to_ui(UiEvent::MediaDownloaded { document_id, content_hash, data });
-            }
-
-            // -- Channels ------------------------------------------------------
-            LogicEvent::ChannelList { channels } => {
-                self.send_to_ui(UiEvent::ChannelList { channels });
-            }
-            LogicEvent::ChannelCreated { channel_id } => {
-                self.send_to_ui(UiEvent::ChannelCreated { channel_id });
-            }
-            LogicEvent::ChannelDeleted { channel_id } => {
-                self.send_to_ui(UiEvent::ChannelDeleted { channel_id });
-            }
-            LogicEvent::ChannelInviteSent { channel_id, user_id } => {
-                self.send_to_ui(UiEvent::ChannelInviteSent { channel_id, user_id });
-            }
-            LogicEvent::ChannelMemberRevoked { channel_id, revoked_user_id } => {
-                self.send_to_ui(UiEvent::ChannelMemberRevoked { channel_id, revoked_user_id });
-            }
-            LogicEvent::ChannelRevocationComplete { channel_id } => {
-                self.send_to_ui(UiEvent::ChannelRevocationComplete { channel_id });
-            }
-            LogicEvent::ChannelMembers { channel_id, members } => {
-                self.send_to_ui(UiEvent::ChannelMembers { channel_id, members });
-            }
-            LogicEvent::ChannelMemberRoleUpdated { channel_id, user_id, role } => {
-                self.send_to_ui(UiEvent::ChannelMemberRoleUpdated { channel_id, user_id, role });
-            }
+            // -- Channels (server push) ----------------------------------------
             LogicEvent::ChannelRemoteUpdate { channel_id, payload } => {
                 self.send_to_ui(UiEvent::ChannelMessage { channel_id, payload });
             }
@@ -460,23 +294,8 @@ impl LogicState {
             LogicEvent::ChannelSnapshotNeeded { channel_id: _ } => {
                 tracing::warn!("Logic: ChannelSnapshotNeeded is not yet implemented");
             }
-            LogicEvent::UnreadCounts { counts } => {
-                self.send_to_ui(UiEvent::UnreadCounts { counts });
-            }
 
-            // -- Meetings ------------------------------------------------------
-            LogicEvent::MeetingCreated { meeting_id } => {
-                self.send_to_ui(UiEvent::MeetingCreated { meeting_id });
-            }
-            LogicEvent::MeetingJoined { meeting_id } => {
-                self.send_to_ui(UiEvent::MeetingJoined { meeting_id });
-            }
-            LogicEvent::MeetingLeft { meeting_id } => {
-                self.send_to_ui(UiEvent::MeetingLeft { meeting_id });
-            }
-            LogicEvent::MeetingEnded { meeting_id } => {
-                self.send_to_ui(UiEvent::MeetingEnded { meeting_id });
-            }
+            // -- Meetings (participant push) -----------------------------------
             LogicEvent::MeetingParticipantJoined { meeting_id, user_id } => {
                 self.send_to_ui(UiEvent::MeetingParticipantJoined { meeting_id, user_id });
             }
@@ -553,4 +372,162 @@ pub fn run(
     // Drop `state` here: document state is released, the outbound Senders are
     // closed, which the UI and Sync threads observe as `Disconnected` too.
     let _ = state;
+}
+
+// -----------------------------------------------------------------------------
+// Tests — the dispatcher is 100% pure Rust (no wasm glue), so the whole routing
+// layer is exercisable on the host with mock flume channels. These pin the
+// command/event mapping that is otherwise hand-written boilerplate (see the
+// "P3 pass-through" open question in ambre-spec-architecture).
+// -----------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ambre_bus::{DocumentId, RequestId, RestCommand, TrameCommand};
+
+    /// A `LogicState` wired to two drainable receivers (UI-bound, Sync-bound).
+    fn harness() -> (LogicState, flume::Receiver<UiEvent>, flume::Receiver<SyncCommand>) {
+        let (to_ui, ui_rx) = flume::unbounded();
+        let (to_sync, sync_rx) = flume::unbounded();
+        (LogicState::new(to_ui, to_sync), ui_rx, sync_rx)
+    }
+
+    /// Wrap a `RestCommand` in a `LogicCommand::Rest` with a fresh id.
+    fn rest(cmd: RestCommand) -> LogicCommand {
+        LogicCommand::Rest { id: RequestId::next(), cmd }
+    }
+
+    fn scroll(version: u64) -> AppCommand {
+        AppCommand::Trame(TrameCommand::ScrollViewport {
+            version,
+            row_start: 0,
+            row_end: 4,
+            col_start: 0,
+            col_end: 4,
+        })
+    }
+
+    #[test]
+    fn rest_command_forwards_to_sync_with_id() {
+        let (mut state, _ui, sync_rx) = harness();
+        let id = RequestId::next();
+        state.handle_logic_command(LogicCommand::Rest { id, cmd: RestCommand::ListDocuments });
+        match sync_rx.try_recv() {
+            // The envelope forwards verbatim, echoing the same id.
+            Ok(SyncCommand::Rest { id: got, cmd: RestCommand::ListDocuments }) => {
+                assert_eq!(got, id);
+            }
+            other => panic!("unexpected SyncCommand: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn create_document_preserves_fields() {
+        let (mut state, _ui, sync_rx) = harness();
+        state.handle_logic_command(rest(RestCommand::CreateDocument {
+            doc_type: DocType::Trame,
+            name: "Budget".into(),
+        }));
+        match sync_rx.try_recv() {
+            Ok(SyncCommand::Rest { cmd: RestCommand::CreateDocument { doc_type, name }, .. }) => {
+                assert_eq!(doc_type, DocType::Trame);
+                assert_eq!(name, "Budget");
+            }
+            other => panic!("unexpected SyncCommand: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn close_document_drops_state_and_forwards() {
+        let (mut state, _ui, sync_rx) = harness();
+        // IPC_TEST_DOC_ID is pre-seeded by LogicState::new.
+        assert!(state.docs.contains_key(&IPC_TEST_DOC_ID));
+        state.handle_logic_command(LogicCommand::CloseDocument { document_id: IPC_TEST_DOC_ID });
+        assert!(!state.docs.contains_key(&IPC_TEST_DOC_ID));
+        assert!(matches!(
+            sync_rx.try_recv(),
+            Ok(SyncCommand::CloseDocument { .. })
+        ));
+    }
+
+    #[test]
+    fn rest_event_forwards_to_ui_with_id() {
+        let (mut state, ui_rx, _sync) = harness();
+        let id = RequestId::next();
+        state.handle_logic_event(LogicEvent::Rest { id, evt: RestEvent::DocumentList { documents: vec![] } });
+        match ui_rx.try_recv() {
+            Ok(UiEvent::Rest { id: got, evt: RestEvent::DocumentList { .. } }) => {
+                assert_eq!(got, id);
+            }
+            other => panic!("unexpected UiEvent: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn app_command_on_live_doc_yields_viewport() {
+        let (mut state, ui_rx, _sync) = harness();
+        state.handle_logic_command(LogicCommand::App {
+            document_id: IPC_TEST_DOC_ID,
+            command: scroll(1),
+        });
+        match ui_rx.try_recv() {
+            Ok(UiEvent::Viewport { document_id, event: AppEvent::Trame(_) }) => {
+                assert_eq!(document_id, IPC_TEST_DOC_ID);
+            }
+            other => panic!("expected Viewport, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn app_command_on_unknown_doc_is_dropped() {
+        let (mut state, ui_rx, _sync) = harness();
+        let unknown = DocumentId::from_bytes([9; 16]);
+        state.handle_logic_command(LogicCommand::App { document_id: unknown, command: scroll(1) });
+        assert!(ui_rx.try_recv().is_err(), "no event should be emitted for an unknown doc");
+    }
+
+    #[test]
+    fn snapshot_creates_state_for_pending_doc_type() {
+        let (mut state, ui_rx, _sync) = harness();
+        let id = DocumentId::from_bytes([7; 16]);
+
+        // No live state, and no app command can route yet.
+        state.handle_logic_command(LogicCommand::App { document_id: id, command: scroll(1) });
+        assert!(ui_rx.try_recv().is_err());
+
+        // DocumentCreated registers the pending doc_type (hook in the Rest arm)…
+        state.handle_logic_event(LogicEvent::Rest {
+            id: RequestId::next(),
+            evt: RestEvent::DocumentCreated { document_id: id, doc_type: DocType::Trame },
+        });
+        let _ = ui_rx.try_recv(); // drains the forwarded UiEvent::Rest(DocumentCreated)
+
+        // …and the first snapshot promotes it to live state.
+        state.handle_logic_event(LogicEvent::RemoteSnapshot { document_id: id, payload: vec![] });
+        state.handle_logic_command(LogicCommand::App { document_id: id, command: scroll(2) });
+        assert!(matches!(ui_rx.try_recv(), Ok(UiEvent::Viewport { .. })));
+    }
+
+    #[test]
+    fn snapshot_required_triggers_send_snapshot() {
+        let (mut state, _ui, sync_rx) = harness();
+        // IPC_TEST_DOC_ID is live, so export_snapshot returns Some.
+        state.handle_logic_event(LogicEvent::SnapshotNeeded { document_id: IPC_TEST_DOC_ID });
+        assert!(matches!(
+            sync_rx.try_recv(),
+            Ok(SyncCommand::SendSnapshot { .. })
+        ));
+    }
+
+    #[test]
+    fn logout_clears_docs_and_forwards() {
+        let (mut state, _ui, sync_rx) = harness();
+        state.handle_logic_command(rest(RestCommand::Logout));
+        assert!(state.docs.is_empty());
+        assert!(matches!(
+            sync_rx.try_recv(),
+            Ok(SyncCommand::Rest { cmd: RestCommand::Logout, .. })
+        ));
+    }
 }
