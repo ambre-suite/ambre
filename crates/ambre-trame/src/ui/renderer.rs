@@ -13,8 +13,9 @@
 //       column/row header backgrounds + active tints + separator lines
 //       + active cell border + column/row header labels + on-canvas HUD.
 //
-// The orchestrator (UiState::render in ambre-app) detects what changed since
-// the previous frame and selects the appropriate combination:
+// The orchestrator (`TrameView::plan_repaint`, driven by `ambre_ui::FrameHost`)
+// detects what changed since the previous frame and selects the appropriate
+// combination:
 //   - Full repaint:      draw_cells(strip=None) + draw_overlay
 //   - Pure scroll:       draw_cells(strip=Some(strip_rect)) + draw_overlay
 //   - Overlay-only diff: draw_overlay

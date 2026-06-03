@@ -3,29 +3,25 @@ name = "ambre-sync"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Sync layer — E2EE crypto, single multiplexed WebSocket, HTTP REST, compression. Runs as a Worker today; will become a thread in the multi-threaded WASM migration."
+description = "Sync thread — E2EE crypto, single multiplexed WebSocket, HTTP REST, compression. Runs as a dedicated thread sharing the WASM heap."
 
 [dependencies]
 ambre-bus      = { path = "../ambre-bus" }
-ambre-core     = { path = "../ambre-core" }
 ambre-protocol = { path = "../ambre-protocol" }
 # ambre-crypto will be added when the crypto pipeline is wired (see open
 # question in specs/ambre-multithreaded-wasm-migration.md). It pulls in
 # getrandom without the "js" feature, which still needs WASM-specific feature
 # resolution.
 
-serde    = { workspace = true }
-flume    = { workspace = true }
-thiserror    = { workspace = true }
-tracing      = { workspace = true }
-tracing-wasm = { workspace = true }
-zeroize      = { workspace = true }
-
-wasm-bindgen             = { workspace = true }
-js-sys                   = { workspace = true }
-web-sys                  = { workspace = true, features = ["WebSocket", "BinaryType", "CloseEvent"] }
-console_error_panic_hook = { workspace = true }
-
-# Network & compression
+flume   = { workspace = true }
+tracing = { workspace = true }
+# Forward-looking placeholders for the not-yet-wired crypto/network pipeline:
+#   zeroize  → wipe DocumentKey / MasterSeed on Logout
+#   gloo-net → HTTP REST (fetch) + WebSocket
+#   ruzstd   → payload decompression
+zeroize  = { workspace = true }
 gloo-net = { workspace = true, features = ["http", "websocket"] }
 ruzstd   = { workspace = true }
+
+wasm-bindgen = { workspace = true }
+web-sys      = { workspace = true, features = ["WebSocket", "BinaryType", "CloseEvent"] }

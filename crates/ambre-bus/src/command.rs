@@ -4,15 +4,19 @@
 //! of the Logic thread: session management, document CRUD, real‑time sync,
 //! sharing, users, media, channels, meetings, and lifecycle.
 //!
-//! All payloads are opaque `Vec<u8>` that the Sync thread must interpret
-//! (e.g., CRDT deltas, media blobs). The Sync thread is responsible for
-//! encryption, compression, and network transmission.
+//! Binary fields (`Vec<u8>`) carry genuine **network** bytes the Sync thread
+//! must interpret (CRDT deltas, snapshots, media blobs); every other field is a
+//! typed value. The Sync thread is responsible for encryption, compression, and
+//! network transmission.
+//!
+//! Carried over a `flume` channel in shared memory as a typed Rust value by
+//! move — nothing here is serialized (postcard lives only on the network path,
+//! in `ambre-protocol`).
 
 use crate::{ChannelId, DocType, DocumentId, MeetingId, Role, UserId};
-use serde::{Deserialize, Serialize};
 
 /// Command sent from the Logic thread to the Sync thread.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum SyncCommand {
     // ── Session ──────────────────────────────────────────────────────────────
     /// Bootstrap auth after OIDC callback.

@@ -2,9 +2,7 @@
 name = "ambre-bus"
 version = "0.1.0"
 edition = "2024"
-description = "IPC message types for inter-worker communication in Ambre"
+description = "IPC message types for inter-thread communication in Ambre"
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }
-serde = { workspace = true, features = ["derive"] }
-thiserror = { workspace = true }

@@ -6,11 +6,11 @@
 // application-level rendering code (Trame grid, Prose page, Toile canvas, ...).
 //
 // Implementations:
-//   - `WgpuSurface`   in `ambre-app`           (lyon tessellation + wgpu, screen)
-//   - `KrillaSurface` in `ambre-logic`         (krilla, PDF export)
+//   - `WgpuSurface`   in `ambre-ui` (lyon tessellation + wgpu, on-screen) — live.
+//   - a future `KrillaSurface` (krilla, PDF export) — planned, not yet written.
 //
 // Dependency rule: ambre-draw depends only on kurbo + peniko + parley.
-// No GPU code, no WASM glue, no wgpu, no lyon, no krilla. This keeps the core 
+// No GPU code, no WASM glue, no wgpu, no lyon, no krilla. This keeps the core
 // drawing logic portable and testable.
 // ============================================================================
 
