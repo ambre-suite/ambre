@@ -151,6 +151,117 @@
     flex: 1;
 }
 
+/* Native <dialog> modal (ambre-chrome::Dialog). Padding lives on the body so
+   the dialog element is only directly hit on its backdrop (for click-to-close);
+   the frozen canvas behind makes the backdrop blur free. */
+.ambre-dialog {
+    /* The global `* { margin: 0 }` reset kills the UA `margin: auto` that
+       centers a modal <dialog>, so center it explicitly. */
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text);
+    max-width: min(90vw, 460px);
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.55);
+}
+
+.ambre-dialog::backdrop {
+    background: rgba(10, 10, 20, 0.45);
+    backdrop-filter: blur(3px);
+}
+
+.ambre-dialog-body {
+    padding: 20px 22px;
+}
+
+.ambre-dialog-body h2 {
+    font-size: 1.05rem;
+    margin-bottom: 10px;
+}
+
+.ambre-dialog-body p {
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin-bottom: 16px;
+}
+
+.ambre-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.ambre-dialog-actions button {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--accent);
+    color: #fff;
+    font: inherit;
+    padding: 6px 14px;
+    border-radius: 7px;
+    cursor: pointer;
+}
+
+/* Header icon button (e.g. "about"). */
+.ambre-header button.icon {
+    appearance: none;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.ambre-header button.icon:hover {
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+/* Context menu (ambre-chrome::ContextMenu). The backdrop catches clicks
+   outside the menu (close) and right-clicks (reposition). */
+.ambre-ctx-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+}
+
+.ambre-ctx-menu {
+    position: fixed;
+    z-index: 1001;
+    min-width: 184px;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+}
+
+.ambre-ctx-item {
+    padding: 6px 12px;
+    border-radius: 5px;
+    color: var(--text);
+    cursor: pointer;
+    outline: none;
+    user-select: none;
+}
+
+.ambre-ctx-item:hover,
+.ambre-ctx-item:focus {
+    background: var(--accent);
+    color: #fff;
+}
+
 /* Shared keyboard-chord chip (ambre-chrome::Kbd). */
 .ambre-kbd {
     font: 11px ui-monospace, monospace;

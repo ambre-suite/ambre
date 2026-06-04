@@ -104,7 +104,7 @@ fn draw_text<S: DrawSurface>(
         return;
     }
     let layout: &Layout<ParleyBrush> =
-        cache.get_or_build(font_cx, text, font_size, max_width, align);
+        cache.get_or_build(font_cx, text, font_size, max_width, align, false, false);
     let brush = Brush::Solid(color);
     for line in layout.lines() {
         for item in line.items() {
@@ -160,8 +160,10 @@ pub fn draw_cells<S: DrawSurface>(
     state:        &TrameUiState,
     font_cx:      &mut FontContext,
     text_cache:   &mut TextCache,
-    text_enabled: bool,
-    strip_rect:   Option<Rect>,
+    text_enabled:   bool,
+    bold_enabled:   bool,
+    italic_enabled: bool,
+    strip_rect:     Option<Rect>,
     perf:         &web_sys::Performance,
     stats:        &mut DrawStats,
 ) {
@@ -243,8 +245,14 @@ pub fn draw_cells<S: DrawSurface>(
                     if content.is_empty() { continue; }
                     let cx = HEADER_WIDTH + (col - state.left_col) as f64 * COL_WIDTH;
                     let cy = HEADER_HEIGHT + (row - state.top_row) as f64 * ROW_HEIGHT;
+                    // Bold/italic apply to the active cell only -- it is what
+                    // the "Bold"/"Italic" toolbar commands target.
+                    let is_active = row == state.active_row && col == state.active_col;
+                    let cell_bold = bold_enabled && is_active;
+                    let cell_italic = italic_enabled && is_active;
                     let layout: &Layout<ParleyBrush> = text_cache.get_or_build(
                         font_cx, content, BODY_SIZE, cell_max_width, Alignment::Start,
+                        cell_bold, cell_italic,
                     );
                     let text_h  = layout.height() as f64;
                     let y_off   = ((ROW_HEIGHT - text_h) / 2.0).max(0.0);
@@ -356,7 +364,7 @@ pub fn draw_overlay<S: DrawSurface>(
             if col_x >= w { break; }
             let label = col_label(col);
             let layout: &Layout<ParleyBrush> = text_cache.get_or_build(
-                font_cx, &label, HEADER_SIZE, COL_WIDTH as f32, Alignment::Center,
+                font_cx, &label, HEADER_SIZE, COL_WIDTH as f32, Alignment::Center, false, false,
             );
             let text_h = layout.height() as f64;
             let y_off  = ((HEADER_HEIGHT - text_h) / 2.0).max(0.0);
@@ -386,7 +394,7 @@ pub fn draw_overlay<S: DrawSurface>(
             if row_y >= h { break; }
             let label = (row + 1).to_string();
             let layout: &Layout<ParleyBrush> = text_cache.get_or_build(
-                font_cx, &label, HEADER_SIZE, row_hdr_max_width, Alignment::End,
+                font_cx, &label, HEADER_SIZE, row_hdr_max_width, Alignment::End, false, false,
             );
             let text_h = layout.height() as f64;
             let y_off  = ((ROW_HEIGHT - text_h) / 2.0).max(0.0);

@@ -8,3 +8,6 @@ description = "Shared, app-agnostic Leptos chrome toolkit: AppShell, command pal
 [dependencies]
 ambre-commands = { path = "../ambre-commands" }
 leptos         = { workspace = true }
+# DOM keyboard event -> KeyBinding translation, native <dialog> control.
+web-sys        = { workspace = true }
+wasm-bindgen   = { workspace = true }

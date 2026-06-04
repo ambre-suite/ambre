@@ -9,7 +9,7 @@
 // spreadsheets.
 // ============================================================================
 
-use ambre_bus::{AppCommand, AppEvent, IPC_TEST_DOC_ID, LogicCommand, TrameCommand, UiEvent};
+use ambre_bus::{AppCommand, AppEvent, IPC_TEST_DOC_ID, LogicCommand, TrameCommand, TrameEvent, UiEvent};
 use ambre_draw::{FontContext, Rect};
 use ambre_canvas::{
     ContentRepaint, DocView, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache,
@@ -56,6 +56,14 @@ pub struct TrameView {
     /// Last rendered scroll position, used to compute the scroll delta.
     prev_top_row: u32,
     prev_left_col: u32,
+
+    /// Bold/italic render state for the active cell, mirrored from the Logic
+    /// thread's [`TrameEvent::BoldState`] / [`TrameEvent::ItalicState`]. The
+    /// chrome gets the same events from the UI-thread dispatcher, so buttons and
+    /// canvas stay in sync without sharing state here (single source of truth =
+    /// the Logic thread).
+    bold: bool,
+    italic: bool,
 }
 
 impl TrameView {
@@ -85,6 +93,8 @@ impl TrameView {
             data_dirty: false,
             prev_top_row: 0,
             prev_left_col: 0,
+            bold: false,
+            italic: false,
         }
     }
 
@@ -132,6 +142,14 @@ impl DocView for TrameView {
         // no recovery, so flip to the fatal state instead of silently looping.
         loop {
             match self.from_logic.try_recv() {
+                Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::BoldState { enabled }), .. }) => {
+                    self.bold = enabled;
+                    self.needs_full = true;
+                }
+                Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::ItalicState { enabled }), .. }) => {
+                    self.italic = enabled;
+                    self.needs_full = true;
+                }
                 Ok(UiEvent::Viewport { event: AppEvent::Trame(update), .. }) => {
                     self.state.on_viewport_data(update);
                     // Just flag data dirty. If a scroll happens the same frame the
@@ -166,6 +184,14 @@ impl DocView for TrameView {
     }
 
     fn plan_repaint(&mut self, hud_tick: bool) -> RepaintPlan {
+        // Bold lives in the persistent cell layer and follows the active cell
+        // (the "Bold" command emphasizes the current selection). An active-cell
+        // move therefore needs a full content repaint to re-weight the cell it
+        // left and the one it entered, not the cheap scroll/reuse path.
+        if self.viewport_changed && (self.bold || self.italic) {
+            self.needs_full = true;
+        }
+
         let any_dirty =
             self.needs_full || self.viewport_changed || self.data_dirty || hud_tick;
 
@@ -258,6 +284,8 @@ impl DocView for TrameView {
             font_cx,
             text_cache,
             self.text_enabled,
+            self.bold,
+            self.italic,
             strip,
             &self.perf,
             &mut self.draw_stats,
@@ -293,7 +321,9 @@ impl DocView for TrameView {
     }
 
     fn handle_input(&mut self, ev: &InputEvent) -> bool {
-        let InputEvent::Key { key } = ev;
+        // Command keybindings (e.g. Ctrl+B) are resolved by the chrome's
+        // keymap, not here -- this handler is for content navigation only.
+        let InputEvent::Key { key, .. } = ev else { return false };
         let (dr, dc): (i32, i32) = match key.as_str() {
             "ArrowUp" => (-1, 0),
             "ArrowDown" => (1, 0),

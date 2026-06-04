@@ -12,7 +12,7 @@
 // ============================================================================
 
 use ambre_draw::{Brush, Color};
-use parley::style::{FontFamily, FontStack, StyleProperty};
+use parley::style::{FontFamily, FontStack, FontStyle, FontWeight, StyleProperty};
 use parley::{Alignment, AlignmentOptions, FontContext, Layout, LayoutContext};
 use rustc_hash::FxHashMap;
 
@@ -26,6 +26,8 @@ struct CacheKey {
     font_size_x100: u32,
     max_width_x10:  u32,
     align:          u8, // 0=Start, 1=Center, 2=End
+    bold:           bool,
+    italic:         bool,
 }
 
 // -----------------------------------------------------------------------------
@@ -74,6 +76,10 @@ impl TextCache {
     }
 
     /// Return a shaped `Layout` for `text`, building it on first access.
+    ///
+    /// `bold` / `italic` select the matching real face of the family (not faux
+    /// bold/oblique) and are part of the cache key, so each style combination of
+    /// the same string is stored separately.
     pub fn get_or_build(
         &mut self,
         font_cx:   &mut FontContext,
@@ -81,6 +87,8 @@ impl TextCache {
         font_size: f32,
         max_width: f32,
         align:     Alignment,
+        bold:      bool,
+        italic:    bool,
     ) -> &Layout<Brush> {
         let align_u8 = match align {
             Alignment::Center           => 1,
@@ -92,6 +100,8 @@ impl TextCache {
             font_size_x100: (font_size * 100.0) as u32,
             max_width_x10:  (max_width * 10.0) as u32,
             align:          align_u8,
+            bold,
+            italic,
         };
 
         use std::collections::hash_map::Entry;
@@ -104,13 +114,14 @@ impl TextCache {
                 self.frame_misses += 1;
                 let layout = Self::build_layout(
                     &mut self.layout_cx, font_cx, &e.key().text,
-                    font_size, max_width, align, self.scale,
+                    font_size, max_width, align, bold, italic, self.scale,
                 );
                 e.insert(layout)
             }
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn build_layout(
         layout_cx: &mut LayoutContext<Brush>,
         font_cx:   &mut FontContext,
@@ -118,6 +129,8 @@ impl TextCache {
         font_size: f32,
         max_width: f32,
         align:     Alignment,
+        bold:      bool,
+        italic:    bool,
         scale:     f32,
     ) -> Layout<Brush> {
         let mut builder = layout_cx.ranged_builder(font_cx, text, scale, true);
@@ -125,6 +138,12 @@ impl TextCache {
             FontFamily::Named("Noto Sans".into()),
         )));
         builder.push_default(StyleProperty::FontSize(font_size));
+        if bold {
+            builder.push_default(StyleProperty::FontWeight(FontWeight::BOLD));
+        }
+        if italic {
+            builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
+        }
         builder.push_default(StyleProperty::Brush(Brush::Solid(Color::BLACK)));
         let mut layout = builder.build(text);
         layout.break_all_lines(Some(max_width));

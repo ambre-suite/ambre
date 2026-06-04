@@ -143,4 +143,10 @@ pub enum TrameCommand {
         col_start: u32,
         col_end: u32,
     },
+
+    /// Toggle bold formatting for the active cell.
+    ToggleBold,
+
+    /// Toggle italic formatting for the active cell.
+    ToggleItalic,
 }
