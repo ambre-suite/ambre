@@ -9,13 +9,15 @@ description = "UI Thread entry point: creates the inter-thread channels, spawns 
 crate-type = ["cdylib"]
 
 [dependencies]
-ambre-bus   = { path = "../ambre-bus" }
-ambre-canvas    = { path = "../ambre-canvas" }
-ambre-trame = { path = "../ambre-trame" }
-ambre-logic = { path = "../ambre-logic" }
-ambre-sync  = { path = "../ambre-sync" }
+ambre-bus    = { path = "../ambre-bus" }
+ambre-canvas = { path = "../ambre-canvas" }
+ambre-chrome = { path = "../ambre-chrome" }
+ambre-trame  = { path = "../ambre-trame" }
+ambre-logic  = { path = "../ambre-logic" }
+ambre-sync   = { path = "../ambre-sync" }
 
 flume        = { workspace = true }
+leptos       = { workspace = true }
 tracing      = { workspace = true }
 tracing-wasm = { workspace = true }
 
