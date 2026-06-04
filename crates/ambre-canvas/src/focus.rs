@@ -1,4 +1,4 @@
-// ambre-ui/src/focus.rs
+// ambre-canvas/src/focus.rs
 // ============================================================================
 // FocusManager -- keyboard focus and Tab order.
 //

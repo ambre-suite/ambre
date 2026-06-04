@@ -1,4 +1,4 @@
-// ambre-ui/src/widget.rs
+// ambre-canvas/src/widget.rs
 // ============================================================================
 // Widget trait -- the contract every UI component implements.
 //

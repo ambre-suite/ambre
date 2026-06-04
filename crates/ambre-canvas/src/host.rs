@@ -1,4 +1,4 @@
-// ambre-ui/src/host.rs
+// ambre-canvas/src/host.rs
 // ============================================================================
 // UI Thread host plumbing — generic, app-agnostic.
 //

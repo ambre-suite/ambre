@@ -13,7 +13,7 @@
 //       column/row header backgrounds + active tints + separator lines
 //       + active cell border + column/row header labels + on-canvas HUD.
 //
-// The orchestrator (`TrameView::plan_repaint`, driven by `ambre_ui::FrameHost`)
+// The orchestrator (`TrameView::plan_repaint`, driven by `ambre_canvas::FrameHost`)
 // detects what changed since the previous frame and selects the appropriate
 // combination:
 //   - Full repaint:      draw_cells(strip=None) + draw_overlay
@@ -26,7 +26,7 @@ use ambre_draw::{
     PositionedLayoutItem, Rect,
 };
 
-use ambre_ui::TextCache;
+use ambre_canvas::TextCache;
 
 use super::grid::{COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT};
 use super::TrameUiState;

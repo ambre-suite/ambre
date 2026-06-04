@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
     "crates/ambre-core",
-    "crates/ambre-ui",
+    "crates/ambre-canvas",
     "crates/ambre-crypto",
     "crates/ambre-protocol",
     "crates/ambre-bus",

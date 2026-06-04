@@ -1,4 +1,4 @@
-// ambre-ui/src/context.rs
+// ambre-canvas/src/context.rs
 // ============================================================================
 // LayoutCtx and PaintCtx -- passed to Widget::layout and Widget::paint.
 // Both are immutable from the widget's perspective (no framework mutation
