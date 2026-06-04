@@ -14,10 +14,10 @@
 // beyond choosing which view to instantiate.
 // ============================================================================
 
-use wasm_bindgen::prelude::*;
-
 use ambre_bus::{LogicCommand, LogicEvent, SyncCommand, UiEvent};
 use ambre_trame::ui::TrameView;
+use leptos::prelude::*;
+use wasm_bindgen::prelude::*;
 
 /// Capacity of every inter-thread channel.
 ///
@@ -40,6 +40,11 @@ pub fn main() {
     );
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
+    // Mount the DOM chrome (ambre-chrome AppShell) onto the page body. This
+    // creates the full-viewport grid AND the `<canvas>` cell that the UI thread
+    // attaches wgpu to below, so it must run before `ambre_canvas::run`.
+    mount_app_shell();
+
     // Inter-thread channels.
     //   UI    --LogicCommand--->  Logic
     //   Logic --UiEvent-> UI
@@ -59,7 +64,12 @@ pub fn main() {
     wasm_thread::Builder::new()
         .name("logic".to_owned())
         .spawn(move || {
-            ambre_logic::run(ui_to_logic_rx, logic_to_ui_tx, logic_to_sync_tx, sync_to_logic_rx);
+            ambre_logic::run(
+                ui_to_logic_rx,
+                logic_to_ui_tx,
+                logic_to_sync_tx,
+                sync_to_logic_rx,
+            );
         })
         .expect("spawn Logic thread");
 
@@ -74,5 +84,44 @@ pub fn main() {
     // Run the UI thread on this (main) thread, driving the Trame view.
     ambre_canvas::run("ambre-canvas", move |w, h| {
         TrameView::new(ui_to_logic_tx, logic_to_ui_rx, w, h)
+    });
+}
+
+/// Mount the application shell (ambre-chrome `AppShell`) onto the page body.
+///
+/// The shell is app-agnostic; this is where the Trame app fills its chrome
+/// regions. Header/toolbar/status content here is still static placeholder --
+/// the toolbar buttons become live registry commands at the end-to-end wiring
+/// step. The shell owns the `<canvas id="ambre-canvas">` cell that
+/// `ambre_canvas::run` then drives.
+fn mount_app_shell() {
+    use ambre_chrome::commands::KeyBinding;
+    use ambre_chrome::{AppShell, Header, Kbd, StatusBar, Toolbar};
+
+    leptos::mount::mount_to_body(|| {
+        view! {
+            <AppShell>
+                <Header slot>
+                    <span class="title">"Ambre"</span>
+                    <span class="spacer"></span>
+                    <span class="ambre-sync">
+                        <span class="dot"></span>
+                        "Synchronise"
+                    </span>
+                    <span class="ambre-avatar">"MC"</span>
+                </Header>
+                <Toolbar slot>
+                    <button title="Gras">"B"</button>
+                    <button title="Italique"><em>"I"</em></button>
+                    <span class="sep"></span>
+                    <Kbd binding=KeyBinding::ctrl('b') />
+                </Toolbar>
+                <StatusBar slot>
+                    <span>"Trame"</span>
+                    <span class="spacer"></span>
+                    <span>"100 %"</span>
+                </StatusBar>
+            </AppShell>
+        }
     });
 }

@@ -1,0 +1,11 @@
+[package]
+name = "ambre-commands"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Shared command registry: CommandId/Command/CommandState/CommandSource plus keybinding resolution. Leaf affordance crate with zero UI dependencies (ambre-spec-ui.md 2.B/2.C)."
+
+[dependencies]
+# Intentionally empty. This is the leaf of the UI-thread crate graph: depended
+# on by every app AND by ambre-chrome, it must stay framework-agnostic. Pure
+# data + pure functions, fully testable on the host.

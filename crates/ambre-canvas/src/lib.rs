@@ -1,16 +1,16 @@
 // ambre-canvas/src/lib.rs
 // ============================================================================
-// Widget framework + GPU rendering pipeline for the Ambre UI Thread.
+// Content rendering runtime for the Ambre UI thread.
 //
-// Two sub-systems, one crate:
+// Scope is the canvas *content* renderer only -- the widget framework was
+// removed in favour of the DOM Leptos chrome (ambre-chrome). The UI chrome
+// (menus, toolbars, dialogs, palette) lives in the DOM; this crate owns the
+// wgpu surface, the quad/glyph pipeline and the per-app DocView contract.
 //
-//   render/       -- QuadRenderer, GlyphAtlas, WgpuSurface (wgpu-dependent)
+//   render/       -- QuadRenderer, GlyphAtlas, WgpuSurface (wgpu + swash)
 //   text_cache    -- Parley layout cache (parley-dependent)
-//   widget system -- Widget trait, WidgetPod, layout (taffy), events,
-//                    overlays, focus, theme, display mode (GPU-agnostic)
-//
-// The widget system depends only on ambre-draw::DrawSurface for painting.
-// It never imports wgpu, parley, or swash directly.
+//   view          -- DocView trait: the per-app UI contract (GPU-agnostic)
+//   host          -- UI-thread host plumbing: GPU bootstrap + rAF loop (wasm)
 // ============================================================================
 
 // -- Rendering pipeline (wgpu + parley + swash) ------------------------------
@@ -24,32 +24,9 @@ pub mod view;
 #[cfg(target_arch = "wasm32")]
 pub mod host;
 
-// -- Widget framework (GPU-agnostic) -----------------------------------------
-pub mod constraints;
-pub mod context;
-pub mod display_mode;
-pub mod event;
-pub mod focus;
-pub mod layer;
-pub mod theme;
-pub mod widget;
-pub mod widget_pod;
-
 // -- Convenience re-exports --------------------------------------------------
-pub use constraints::BoxConstraints;
-pub use context::{LayoutCtx, PaintCtx};
-pub use display_mode::DisplayMode;
-pub use event::{
-    apply_response, CursorIcon, EventResponse, KeyEvent, KeyModifiers, PointerButton,
-    PointerEvent, PointerEventKind,
-};
-pub use focus::FocusManager;
-pub use layer::{LayerManager, OverlayId, OverlayKind};
 pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurface};
 pub use text_cache::TextCache;
 pub use view::{DocView, FrameStats, InputEvent, RepaintPlan};
 #[cfg(target_arch = "wasm32")]
 pub use host::{FrameHost, GpuState, bootstrap_gpu, run, start_raf_loop};
-pub use theme::{Theme, ThemeKey, ThemeValue};
-pub use widget::{Widget, WidgetId};
-pub use widget_pod::{WidgetPod, WidgetState};

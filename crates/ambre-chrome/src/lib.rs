@@ -1,0 +1,30 @@
+// ambre-chrome/src/lib.rs
+// ============================================================================
+// Shared, app-agnostic Leptos chrome toolkit (ambre-spec-chrome.md, 2.B).
+//
+// This crate owns the chrome components reused across every Ambre app:
+// AppShell, command palette, menus/context menus, dialogs, toolbars, toasts,
+// sidebar, status bar -- each a *view* over the command registry from
+// `ambre-commands`. App-SPECIFIC chrome (Trame's formula bar, a cell-format
+// dialog) lives in the app crate and is built on top of this toolkit.
+//
+// The toolkit never reaches across the canvas/DOM boundary: it invokes
+// `CommandId`s and reflects state via Leptos signals (ambre-spec-ui.md 2.A).
+// It depends on no app crate (dependency inversion, symmetric to `DocView`).
+//
+// Module map (filled in across Phase 1+ of ambre-spec-chrome.md 7):
+//   shortcut    -- keybinding presentation (the <Kbd> component)            [done]
+//   app_shell   -- CSS-grid shell: header, command bar, status bar, canvas  [done]
+//   command_*   -- palette / context menu / menu                           [step 6 / Phase 2]
+//   dialog/...  -- <dialog> wrapper, toolbar, toast, sidebar               [Phase 1/2]
+// ============================================================================
+
+// Re-export the registry so app/chrome code has a single `ambre_chrome`-rooted
+// path to command types when convenient.
+pub use ambre_commands as commands;
+
+mod app_shell;
+mod shortcut;
+
+pub use app_shell::{AppShell, Header, StatusBar, Toolbar};
+pub use shortcut::Kbd;

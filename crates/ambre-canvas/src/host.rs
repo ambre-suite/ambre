@@ -460,6 +460,13 @@ where
         .performance()
         .expect("no Performance API");
 
+    // Size the backing store to the canvas cell before the first frame. The
+    // chrome (ambre-chrome AppShell) creates this `<canvas>` at its CSS layout
+    // size; left untouched it would default to 300x150. Reading `client_width`
+    // forces the pending layout, so the dimensions are exact. Subsequent cell
+    // resizes are handled by the resize listener below.
+    size_backing_store(&canvas);
+
     let view = make_view(canvas.width() as f64, canvas.height() as f64);
     let host = Rc::new(RefCell::new(FrameHost::new(view, perf)));
 
@@ -497,15 +504,12 @@ where
     }
 
     // -- Canvas resize -> host. -----------------------------------------------
+    // Window-driven for now (cell-driven ResizeObserver is the bootstrap step).
     {
         let host_c   = Rc::clone(&host);
         let canvas_c = canvas.clone();
         let cb = Closure::<dyn FnMut()>::new(move || {
-            let w = canvas_c.client_width()  as u32;
-            let h = canvas_c.client_height() as u32;
-            if w > 0 && h > 0 {
-                canvas_c.set_width(w);
-                canvas_c.set_height(h);
+            if let Some((w, h)) = size_backing_store(&canvas_c) {
                 host_c.borrow_mut().resize(w, h);
             }
         });
@@ -524,4 +528,20 @@ where
     {
         let _ = f.call0(&window);
     }
+}
+
+/// Set a canvas backing store to its CSS layout size scaled by the device pixel
+/// ratio, so rendering is crisp on HiDPI displays. Returns the new physical
+/// `(width, height)` in device pixels, or `None` if the cell has zero area
+/// (detached / display:none) -- in which case the caller skips the resize.
+fn size_backing_store(canvas: &HtmlCanvasElement) -> Option<(u32, u32)> {
+    let dpr = web_sys::window().map(|w| w.device_pixel_ratio()).unwrap_or(1.0);
+    let w = (canvas.client_width() as f64 * dpr).round() as u32;
+    let h = (canvas.client_height() as f64 * dpr).round() as u32;
+    if w == 0 || h == 0 {
+        return None;
+    }
+    canvas.set_width(w);
+    canvas.set_height(h);
+    Some((w, h))
 }

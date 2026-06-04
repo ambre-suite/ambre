@@ -12,32 +12,25 @@
         Single ambre-app.wasm hosts all three roles (UI Thread + Logic +
         Sync) and shares one linear memory across them via wasm_thread.
         wasm-bindgen produces the JS glue that instantiates the shared
-        Memory; wasm_thread spawns the worker threads internally — no
-        per-role JS bootstrap file is needed any more.
-    -->
-
-    <!--
-        ambre-app WASM — Trunk builds src/lib.rs (#[wasm_bindgen(start)]).
+        Memory; wasm_thread spawns the worker threads internally.
 
         wasm-opt is disabled: Trunk 0.21.13 ships Binaryen 116, which cannot
         parse the wasm instructions emitted by rustc nightly with `+atomics`
         (fails with `[parse exception: invalid code after misc prefix: 17]`).
         Re-enable once Trunk picks up Binaryen 117+, or wire a manual
         wasm-opt post-step with a newer binaryen.
-
-        Impact: release binary stays at ~6.4 MB instead of ~4.8 MB. Runtime
-        performance is unaffected (`-Oz` is a size optimisation).
     -->
     <link data-trunk rel="rust" data-wasm-opt="0" />
 
-    <!-- Font assets served at /fonts/ — loaded at runtime via fetch() (no include_bytes!) -->
+    <!-- App-shell chrome styling (Phase 1; tokens.ron -> theme.css in Phase 3). -->
+    <link data-trunk rel="css" href="styles.css" />
+
+    <!-- Font assets served at /fonts/ -- loaded at runtime via fetch(). -->
     <link data-trunk rel="copy-dir" href="fonts" />
 
-    <!-- Inter font — embedded in WASM bundle for production, loaded via CSS for shell fallback -->
-    <!-- <link data-trunk rel="copy-file" href="assets/inter.woff2" /> -->
-
     <style>
-        /* Reset — the entire viewport belongs to the wgpu canvas */
+        /* Reset. The Leptos AppShell (ambre-chrome) owns the full-viewport
+           grid; the wgpu canvas is a cell inside it. */
         *,
         *::before,
         *::after {
@@ -52,21 +45,11 @@
             height: 100%;
             overflow: hidden;
             background: #1a1a2e;
-            /* Prevent pull-to-refresh and overscroll on mobile */
+            /* Prevent pull-to-refresh and overscroll on mobile. */
             overscroll-behavior: none;
-            touch-action: none;
         }
 
-        canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-            /* Prevent canvas selection highlight on mobile */
-            -webkit-tap-highlight-color: transparent;
-            outline: none;
-        }
-
-        /* Loading screen — visible until WASM takes over the canvas */
+        /* Loading screen -- visible until WASM signals readiness. */
         #loading {
             position: fixed;
             inset: 0;
@@ -102,7 +85,7 @@
             }
         }
 
-        /* Fallback message if WebGPU is completely unavailable */
+        /* Fallback message if WebGL2 is unavailable (extremely rare). */
         #no-webgpu {
             display: none;
             position: fixed;
@@ -129,20 +112,20 @@
 </head>
 
 <body>
-    <!-- Loading screen (removed by WASM after GPU init) -->
+    <!-- Loading screen (hidden by WASM via window.ambreReady after GPU init). -->
     <div id="loading">
         <div class="spinner"></div>
         <p>Chargement...</p>
     </div>
 
-    <!-- wgpu render target (WebGL2 by default, WebGPU opt-in via ?webgpu) -->
-    <canvas id="ambre-canvas" tabindex="0"></canvas>
-
     <!--
-        Fallback message for browsers without WebGL2 (extremely rare — IE11 and below).
-        wgpu uses WebGL2 by default; WebGPU is opt-in via ?webgpu in the URL.
-        This div is never shown in practice on any modern browser.
+        The app shell and its <canvas> cell are created by the Leptos
+        AppShell (ambre-chrome), mounted from lib.rs once WASM starts. The
+        canvas backing store is sized to its grid cell in Rust
+        (ambre-canvas::host), so no JS ResizeObserver is needed here.
     -->
+
+    <!-- Fallback for browsers without WebGL2 (IE11 and below). -->
     <div id="no-webgpu">
         <h1>Navigateur non compatible</h1>
         <p>
@@ -154,22 +137,12 @@
     </div>
 
     <script type="module">
-        // ------------------------------------------------------------------
-        // Minimal JS bootstrap — everything else is in Rust/WASM.
+        // Minimal JS bootstrap. Everything else is Rust/WASM:
+        //   - lib.rs (wasm_bindgen start) mounts the Leptos AppShell, spawns the
+        //     Logic/Sync workers, and runs the UI thread (wgpu init + rAF loop).
+        //   - ambre-canvas::host sizes the canvas backing store to its grid cell.
         //
-        // This script:
-        // 1. Detects GPU support (informational — WebGL2 is the default backend)
-        // 2. Hides the loading screen once WASM signals readiness
-        // 3. Handles canvas resize via ResizeObserver
-        //
-        // The WASM entry point (lib.rs / wasm_bindgen(start)) handles:
-        // - Spawning Logic Worker + Sync Worker
-        // - Creating the MessageChannel for Logic <-> Sync
-        // - Initializing wgpu (WebGL2 backend) + QuadRenderer + GlyphAtlas
-        // - Starting the rAF render loop (after GPU init)
-        // ------------------------------------------------------------------
-
-        // Expose a global callback for WASM to signal "ready" and hide the loading screen.
+        // This only exposes the "ready" hook that hides the loading screen.
         window.ambreReady = function () {
             const loading = document.getElementById("loading");
             if (loading) {
@@ -177,26 +150,6 @@
                 setTimeout(() => loading.remove(), 300);
             }
         };
-
-        // Canvas resize — set the backing store size (physical pixels).
-        // WASM handles the GPU surface reconfigure via window.onresize.
-        // ResizeObserver here ensures the canvas dimensions are correct before WASM fires.
-        const canvas = document.getElementById("ambre-canvas");
-        const observer = new ResizeObserver(entries => {
-            for (const entry of entries) {
-                const dpr = window.devicePixelRatio || 1;
-                const width = Math.round(entry.contentRect.width * dpr);
-                const height = Math.round(entry.contentRect.height * dpr);
-                canvas.width = width;
-                canvas.height = height;
-            }
-        });
-        observer.observe(canvas);
-
-        // Initial size
-        const dpr = window.devicePixelRatio || 1;
-        canvas.width = Math.round(canvas.clientWidth * dpr);
-        canvas.height = Math.round(canvas.clientHeight * dpr);
     </script>
 </body>
 

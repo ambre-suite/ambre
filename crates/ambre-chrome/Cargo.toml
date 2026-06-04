@@ -1,0 +1,10 @@
+[package]
+name = "ambre-chrome"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Shared, app-agnostic Leptos chrome toolkit: AppShell, command palette, menus, dialogs, toolbars, toasts, status bar. Built on leptos + ambre-commands; depends on no app crate."
+
+[dependencies]
+ambre-commands = { path = "../ambre-commands" }
+leptos         = { workspace = true }

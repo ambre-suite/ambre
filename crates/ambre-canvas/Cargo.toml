@@ -3,7 +3,7 @@ name = "ambre-canvas"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Widget framework and GPU rendering pipeline for Ambre UI Thread"
+description = "GPU content-rendering runtime for the Ambre UI thread (wgpu surface, quad/glyph pipeline, DocView contract). Chrome lives in the DOM (ambre-chrome)."
 
 [dependencies]
 ambre-draw = { path = "../ambre-draw" }
@@ -14,14 +14,12 @@ bytemuck   = { workspace = true }
 swash      = { workspace = true }
 parley     = { workspace = true }
 rustc-hash = { workspace = true }
+kurbo      = { workspace = true }
+peniko     = { workspace = true }
 
-# Widget framework
-taffy     = { workspace = true }
-accesskit = { workspace = true }
-smallvec  = { workspace = true }
-slotmap   = { workspace = true }
-kurbo     = { workspace = true }
-peniko    = { workspace = true }
+# Content a11y: AccessKit exposes the canvas content tree to screen readers
+# (scoped to content; chrome a11y is native DOM in ambre-chrome).
+accesskit  = { workspace = true }
 
 # UI Thread host plumbing (GPU bootstrap + rAF loop). wasm32-only: surface
 # creation from a canvas and the web_sys glue don't exist on native.
