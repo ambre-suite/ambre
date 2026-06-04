@@ -18,6 +18,8 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
@@ -47,40 +49,76 @@ pub struct GpuState {
 // rAF loop
 // -----------------------------------------------------------------------------
 
-/// Start the requestAnimationFrame loop, invoking `frame(timestamp)` once per
-/// frame.
+/// Handle to gate the rAF loop, so the chrome can freeze the canvas behind a
+/// fullscreen `<dialog>`: while paused the loop keeps ticking but does no work
+/// (no dispatch, no render), so the canvas holds its last frame -- a
+/// `backdrop-filter: blur()` over it is then free and the GPU stays idle.
 ///
-/// The naive recursive pattern (allocate closure → forget → repeat) leaks one
-/// JS closure object per frame. At 240 Hz Firefox sees the JS heap grow, GC
-/// pressure rises, and it throttles rAF down to 60 Hz as a self-protection
-/// measure. Instead we keep one `Closure` alive for the lifetime of the app via
-/// an `Rc<RefCell<Option<…>>>` so the same JS function object is reused every
-/// frame with zero allocation overhead.
-pub fn start_raf_loop(mut frame: impl FnMut(f64) + 'static) {
+/// Backed by an `Arc<AtomicBool>` so it is `Send + Sync` and can ride inside a
+/// Leptos `Callback`. (A literal `cancelAnimationFrame` would stop the loop
+/// entirely, but resuming it needs main-thread access to the JS closure, which
+/// is `!Send` and cannot cross a Leptos callback boundary; gating is the clean
+/// equivalent here.)
+#[derive(Clone)]
+pub struct RafControl {
+    running: Arc<AtomicBool>,
+}
+
+impl Default for RafControl {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RafControl {
+    pub fn new() -> Self {
+        Self { running: Arc::new(AtomicBool::new(true)) }
+    }
+
+    /// Freeze the canvas: the loop ticks but skips all per-frame work.
+    pub fn pause(&self) {
+        self.running.store(false, Ordering::Relaxed);
+    }
+
+    /// Resume rendering.
+    pub fn resume(&self) {
+        self.running.store(true, Ordering::Relaxed);
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.running.load(Ordering::Relaxed)
+    }
+}
+
+/// Start the requestAnimationFrame loop, invoking `frame(timestamp)` once per
+/// frame while `control` is running (skipped while paused).
+///
+/// One `Closure` is kept alive for the app lifetime and reused every frame
+/// (zero per-frame allocation): the naive allocate-and-forget pattern leaks a
+/// closure per frame, which at 240 Hz grows the JS heap and makes Firefox
+/// throttle rAF down to 60 Hz as self-protection.
+pub fn start_raf_loop(mut frame: impl FnMut(f64) + 'static, control: RafControl) {
     #[allow(clippy::type_complexity)]
     let cb: Rc<RefCell<Option<Closure<dyn FnMut(f64)>>>> = Rc::new(RefCell::new(None));
     let cb_clone = Rc::clone(&cb);
 
     *cb.borrow_mut() = Some(Closure::new(move |ts: f64| {
-        frame(ts);
+        if control.is_running() {
+            frame(ts);
+        }
+        // Always reschedule: a paused frame is just a flag check, and keeping
+        // the loop alive is what lets `resume` take effect without re-arming.
         web_sys::window()
             .expect("no window")
             .request_animation_frame(
-                cb_clone
-                    .borrow()
-                    .as_ref()
-                    .unwrap()
-                    .as_ref()
-                    .unchecked_ref(),
+                cb_clone.borrow().as_ref().unwrap().as_ref().unchecked_ref(),
             )
             .expect("rAF");
     }));
 
     web_sys::window()
         .expect("no window")
-        .request_animation_frame(
-            cb.borrow().as_ref().unwrap().as_ref().unchecked_ref(),
-        )
+        .request_animation_frame(cb.borrow().as_ref().unwrap().as_ref().unchecked_ref())
         .expect("rAF");
 
     std::mem::forget(cb);
@@ -199,6 +237,22 @@ async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -
             tracing::info!("NotoSans-Regular.ttf loaded");
         }
         None => tracing::warn!("Failed to fetch /fonts/NotoSans-Regular.ttf -- text disabled"),
+    }
+    // Bold / italic / bold-italic faces of the same "Noto Sans" family --
+    // selected by FontWeight / FontStyle (real faces, not faux bold/oblique),
+    // covering every combination of the bold and italic toggles.
+    for (file, label) in [
+        ("/fonts/NotoSans-Bold.ttf", "NotoSans-Bold.ttf"),
+        ("/fonts/NotoSans-Italic.ttf", "NotoSans-Italic.ttf"),
+        ("/fonts/NotoSans-BoldItalic.ttf", "NotoSans-BoldItalic.ttf"),
+    ] {
+        match fetch_bytes(file).await {
+            Some(bytes) => {
+                font_cx.collection.register_fonts(bytes.into(), None);
+                tracing::info!("{label} loaded");
+            }
+            None => tracing::warn!("Failed to fetch {file}"),
+        }
     }
 
     let info = adapter.get_info();
@@ -443,6 +497,20 @@ where
     V: DocView + 'static,
     F: FnOnce(f64, f64) -> V,
 {
+    run_with(canvas_id, make_view, || {}, RafControl::new());
+}
+
+/// Like [`run`], but invokes `pre_frame` once per animation frame on the UI
+/// thread, immediately before the view's per-frame update. The launcher uses
+/// this to pump the UI-thread command dispatcher (drain Logic->UI events,
+/// mirror command state into the chrome signals, forward content to the view)
+/// without this generic renderer knowing anything about commands or Leptos.
+pub fn run_with<V, F, P>(canvas_id: &str, make_view: F, mut pre_frame: P, raf: RafControl)
+where
+    V: DocView + 'static,
+    F: FnOnce(f64, f64) -> V,
+    P: FnMut() + 'static,
+{
     tracing::info!("Ambre UI thread starting");
 
     let document = web_sys::window()
@@ -474,13 +542,22 @@ where
     {
         let host_c = Rc::clone(&host);
         let canvas_c = canvas.clone();
+        let raf_c = raf.clone();
         // Start the rAF loop only after the GPU is ready so Firefox sees active
         // GPU frames from frame 1 (empty early frames make it lock to 60 Hz).
         wasm_bindgen_futures::spawn_local(async move {
             if let Some(gpu) = bootstrap_gpu(canvas_c).await {
                 host_c.borrow_mut().install_gpu(gpu);
             }
-            start_raf_loop(move |ts| host_c.borrow_mut().render(ts));
+            start_raf_loop(
+                move |ts| {
+                    // Pump the UI-thread dispatcher first, so command-state and
+                    // content events landed this frame are visible to the update.
+                    pre_frame();
+                    host_c.borrow_mut().render(ts);
+                },
+                raf_c,
+            );
         });
     }
 
@@ -491,7 +568,13 @@ where
             move |event: web_sys::KeyboardEvent| {
                 let consumed = host_c
                     .borrow_mut()
-                    .handle_input(&InputEvent::Key { key: event.key() });
+                    .handle_input(&InputEvent::Key {
+                        key: event.key(),
+                        ctrl: event.ctrl_key(),
+                        alt: event.alt_key(),
+                        shift: event.shift_key(),
+                        meta: event.meta_key(),
+                    });
                 if consumed {
                     event.prevent_default();
                 }
@@ -503,19 +586,93 @@ where
         cb.forget();
     }
 
-    // -- Canvas resize -> host. -----------------------------------------------
-    // Window-driven for now (cell-driven ResizeObserver is the bootstrap step).
+    // -- Canvas resize -> host (ResizeObserver). ------------------------------
     {
-        let host_c   = Rc::clone(&host);
-        let canvas_c = canvas.clone();
-        let cb = Closure::<dyn FnMut()>::new(move || {
+        let host_c    = Rc::clone(&host);
+        let canvas_c  = canvas.clone();
+        let canvas_c2 = canvas.clone();
+        let cb = Closure::<dyn FnMut(js_sys::Array, web_sys::ResizeObserver)>::new(
+            move |_entries, _observer| {
+                if let Some((w, h)) = size_backing_store(&canvas_c2) {
+                    host_c.borrow_mut().resize(w, h);
+                }
+            },
+        );
+        let observer = web_sys::ResizeObserver::new(cb.as_ref().unchecked_ref())
+            .expect("ResizeObserver");
+        observer.observe(&canvas_c);
+        cb.forget();
+    }
+
+    // -- DPI change -> host (matchMedia). --------------------------------------
+    // When the window moves between displays of different density, the canvas
+    // CSS size stays the same but devicePixelRatio changes. ResizeObserver does
+    // not fire in that case, so we watch resolution changes separately.
+    {
+        let host_c    = Rc::clone(&host);
+        let canvas_c  = canvas.clone();
+        let cb = Closure::<dyn FnMut(web_sys::MediaQueryListEvent)>::new(move |_event| {
             if let Some((w, h)) = size_backing_store(&canvas_c) {
                 host_c.borrow_mut().resize(w, h);
             }
         });
-        web_sys::window()
-            .expect("no window")
-            .set_onresize(Some(cb.as_ref().unchecked_ref()));
+        if let Some(mql) = web_sys::window()
+            .and_then(|w| w.match_media("(resolution)").ok())
+            .flatten()
+        {
+            let _ = mql.add_event_listener_with_callback("change", cb.as_ref().unchecked_ref());
+        }
+        cb.forget();
+    }
+
+    // -- Pointer events -> view. -----------------------------------------------
+    {
+        let host_c = Rc::clone(&host);
+        let dpr = web_sys::window().map(|w| w.device_pixel_ratio()).unwrap_or(1.0);
+
+        let cb = Closure::<dyn FnMut(web_sys::PointerEvent)>::new(
+            move |event: web_sys::PointerEvent| {
+                let x = event.offset_x() as f64 * dpr;
+                let y = event.offset_y() as f64 * dpr;
+                let ev = match event.type_().as_str() {
+                    "pointerdown" => InputEvent::PointerDown { x, y, button: event.button() },
+                    "pointermove" => InputEvent::PointerMove { x, y },
+                    "pointerup"   => InputEvent::PointerUp { x, y, button: event.button() },
+                    _ => return,
+                };
+                let consumed = host_c.borrow_mut().handle_input(&ev);
+                if consumed {
+                    event.prevent_default();
+                }
+            },
+        );
+        for event_type in &["pointerdown", "pointermove", "pointerup"] {
+            canvas
+                .add_event_listener_with_callback(event_type, cb.as_ref().unchecked_ref())
+                .expect("add pointer listener");
+        }
+        cb.forget();
+    }
+
+    // -- Wheel event -> view. -------------------------------------------------
+    {
+        let host_c = Rc::clone(&host);
+        let cb = Closure::<dyn FnMut(web_sys::WheelEvent)>::new(
+            move |event: web_sys::WheelEvent| {
+                let ev = InputEvent::Wheel {
+                    dx: event.delta_x(),
+                    dy: event.delta_y(),
+                    ctrl_key: event.ctrl_key(),
+                };
+                let consumed = host_c.borrow_mut().handle_input(&ev);
+                if consumed {
+                    event.prevent_default();
+                }
+            },
+        );
+        canvas
+            .add_event_listener_with_callback("wheel", cb.as_ref().unchecked_ref())
+            .expect("add wheel listener");
         cb.forget();
     }
 

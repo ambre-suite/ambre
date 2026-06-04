@@ -193,7 +193,7 @@ impl TrameUiState {
     ///
     /// Older responses (stale version) are silently discarded.
     pub fn on_viewport_data(&mut self, update: TrameEvent) {
-        let TrameEvent::ViewportData { version, cells, .. } = update;
+        let TrameEvent::ViewportData { version, cells, .. } = update else { return };
         if version < self.accepted_version {
             return;
         }

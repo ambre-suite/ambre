@@ -28,12 +28,14 @@ use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 /// registry keyed by `document_id`. Empty for now (cell content is generated
 /// from coordinates); it will hold the `LoroDoc` and formula engine once CRDT
 /// editing is wired.
-#[derive(Default)]
-pub struct TrameState {}
+pub struct TrameState {
+    bold_enabled: bool,
+    italic_enabled: bool,
+}
 
 impl TrameState {
     pub fn new() -> Self {
-        Self::default()
+        Self { bold_enabled: false, italic_enabled: false }
     }
 
     /// Handle a UI command and return display events for the UI Thread.
@@ -41,6 +43,14 @@ impl TrameState {
     /// Must complete in < 50 ms (P2); scroll requests in < 10 ms (P1).
     pub fn handle_command(&mut self, cmd: TrameCommand) -> Vec<TrameEvent> {
         match cmd {
+            TrameCommand::ToggleBold => {
+                self.bold_enabled = !self.bold_enabled;
+                vec![TrameEvent::BoldState { enabled: self.bold_enabled }]
+            }
+            TrameCommand::ToggleItalic => {
+                self.italic_enabled = !self.italic_enabled;
+                vec![TrameEvent::ItalicState { enabled: self.italic_enabled }]
+            }
             TrameCommand::ScrollViewport { version, row_start, row_end, col_start, col_end } => {
                 // Clamp to grid bounds.
                 let row_end = row_end.min(TOTAL_ROWS.saturating_sub(1));

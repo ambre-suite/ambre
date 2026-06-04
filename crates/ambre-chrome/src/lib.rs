@@ -15,8 +15,10 @@
 // Module map (filled in across Phase 1+ of ambre-spec-chrome.md 7):
 //   shortcut    -- keybinding presentation (the <Kbd> component)            [done]
 //   app_shell   -- CSS-grid shell: header, command bar, status bar, canvas  [done]
-//   command_*   -- palette / context menu / menu                           [step 6 / Phase 2]
-//   dialog/...  -- <dialog> wrapper, toolbar, toast, sidebar               [Phase 1/2]
+//   command     -- command-state store + keybinding manager                [done]
+//   dialog      -- native <dialog> modal (rAF-suspending)                   [done]
+//   context_menu -- canvas right-click DOM menu (flip, keyboard nav)        [done]
+//   palette/...  -- palette / toolbar / toast / sidebar                     [Phase 1/2]
 // ============================================================================
 
 // Re-export the registry so app/chrome code has a single `ambre_chrome`-rooted
@@ -24,7 +26,13 @@
 pub use ambre_commands as commands;
 
 mod app_shell;
+mod command;
+mod context_menu;
+mod dialog;
 mod shortcut;
 
 pub use app_shell::{AppShell, Header, StatusBar, Toolbar};
+pub use command::{keybinding_from_event, CommandStates};
+pub use context_menu::{ContextMenu, MenuEntry};
+pub use dialog::Dialog;
 pub use shortcut::Kbd;

@@ -29,4 +29,4 @@ pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurfac
 pub use text_cache::TextCache;
 pub use view::{DocView, FrameStats, InputEvent, RepaintPlan};
 #[cfg(target_arch = "wasm32")]
-pub use host::{FrameHost, GpuState, bootstrap_gpu, run, start_raf_loop};
+pub use host::{FrameHost, GpuState, RafControl, bootstrap_gpu, run, run_with, start_raf_loop};

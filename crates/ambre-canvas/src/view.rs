@@ -42,11 +42,12 @@ pub struct RepaintPlan {
 }
 
 /// A raw input event forwarded from the DOM by the host's event listeners.
-///
-/// Intentionally minimal for now (Trame only needs keys). Pointer/touch
-/// variants land when an app needs them.
 pub enum InputEvent {
-    Key { key: String },
+    Key { key: String, ctrl: bool, alt: bool, shift: bool, meta: bool },
+    PointerDown { x: f64, y: f64, button: i16 },
+    PointerMove { x: f64, y: f64 },
+    PointerUp { x: f64, y: f64, button: i16 },
+    Wheel { dx: f64, dy: f64, ctrl_key: bool },
 }
 
 /// Per-application UI logic driven once per animation frame by [`FrameHost`].

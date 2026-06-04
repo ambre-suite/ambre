@@ -171,6 +171,20 @@ pub enum TrameEvent {
         col_start: u32,
         cells: Vec<DisplayCell>,
     },
+
+    /// Current bold formatting state after a [`ToggleBold`] command.
+    ///
+    /// [`ToggleBold`]: crate::logic::TrameCommand::ToggleBold
+    BoldState {
+        enabled: bool,
+    },
+
+    /// Current italic formatting state after a [`ToggleItalic`] command.
+    ///
+    /// [`ToggleItalic`]: crate::logic::TrameCommand::ToggleItalic
+    ItalicState {
+        enabled: bool,
+    },
 }
 
 /// A single cell ready for display.
