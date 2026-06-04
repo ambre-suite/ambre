@@ -1,4 +1,4 @@
-// ambre-ui/src/lib.rs
+// ambre-canvas/src/lib.rs
 // ============================================================================
 // Widget framework + GPU rendering pipeline for the Ambre UI Thread.
 //

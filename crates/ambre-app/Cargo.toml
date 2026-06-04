@@ -3,14 +3,14 @@ name = "ambre-app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "UI Thread entry point: creates the inter-thread channels, spawns the Logic/Sync threads, and drives an ambre_ui::FrameHost over the app's DocView."
+description = "UI Thread entry point: creates the inter-thread channels, spawns the Logic/Sync threads, and drives an ambre_canvas::FrameHost over the app's DocView."
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
 ambre-bus   = { path = "../ambre-bus" }
-ambre-ui    = { path = "../ambre-ui" }
+ambre-canvas    = { path = "../ambre-canvas" }
 ambre-trame = { path = "../ambre-trame" }
 ambre-logic = { path = "../ambre-logic" }
 ambre-sync  = { path = "../ambre-sync" }

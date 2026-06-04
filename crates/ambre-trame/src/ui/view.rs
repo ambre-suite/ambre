@@ -1,17 +1,17 @@
 // ambre-trame/src/ui/view.rs
 // ============================================================================
-// TrameView -- the Trame implementation of `ambre_ui::DocView`.
+// TrameView -- the Trame implementation of `ambre_canvas::DocView`.
 //
 // Owns everything that used to live in ambre-app's `UiState`: the grid
 // navigation state, the inbound/outbound logic-thread channels, the dirty-rect
 // bookkeeping, and the per-frame repaint decision. The generic FrameHost in
-// ambre-ui drives it (update → plan_repaint → paint_*), knowing nothing about
+// ambre-canvas drives it (update → plan_repaint → paint_*), knowing nothing about
 // spreadsheets.
 // ============================================================================
 
 use ambre_bus::{AppCommand, AppEvent, IPC_TEST_DOC_ID, LogicCommand, TrameCommand, UiEvent};
 use ambre_draw::{FontContext, Rect};
-use ambre_ui::{
+use ambre_canvas::{
     ContentRepaint, DocView, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache,
     WgpuSurface,
 };

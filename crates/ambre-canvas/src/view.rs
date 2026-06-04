@@ -1,4 +1,4 @@
-// ambre-ui/src/view.rs
+// ambre-canvas/src/view.rs
 // ============================================================================
 // DocView — the per-application UI contract driven by the generic FrameHost.
 //

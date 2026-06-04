@@ -1,4 +1,4 @@
-// ambre-ui/src/layer.rs
+// ambre-canvas/src/layer.rs
 // ============================================================================
 // LayerManager -- overlay Z-layers (dropdowns, modals, tooltips).
 //

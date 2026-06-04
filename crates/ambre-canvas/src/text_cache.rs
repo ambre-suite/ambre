@@ -1,4 +1,4 @@
-// ambre-ui/src/text_cache.rs
+// ambre-canvas/src/text_cache.rs
 // ============================================================================
 // Cached Parley text layouts for UI rendering.
 //

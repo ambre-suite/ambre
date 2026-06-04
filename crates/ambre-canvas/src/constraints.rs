@@ -1,4 +1,4 @@
-// ambre-ui/src/constraints.rs
+// ambre-canvas/src/constraints.rs
 // ============================================================================
 // BoxConstraints -- min/max size passed from parent to child during layout.
 // ============================================================================

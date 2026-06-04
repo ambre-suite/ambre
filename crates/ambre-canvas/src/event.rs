@@ -1,4 +1,4 @@
-// ambre-ui/src/event.rs
+// ambre-canvas/src/event.rs
 // ============================================================================
 // Input events (pointer, keyboard) and EventResponse.
 //

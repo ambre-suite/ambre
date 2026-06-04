@@ -1,4 +1,4 @@
-// ambre-ui/src/widget_pod.rs
+// ambre-canvas/src/widget_pod.rs
 // ============================================================================
 // WidgetPod<W> -- composition primitive wrapping a concrete widget with
 // framework state (layout cache, hot/focus flags).

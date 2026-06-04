@@ -1,4 +1,4 @@
-// ambre-ui/src/theme.rs
+// ambre-canvas/src/theme.rs
 // ============================================================================
 // Theme system -- resolution of colors and metrics via ThemeKey.
 // Zero hardcoding in widgets. The theme is a flat HashMap passed in PaintCtx.

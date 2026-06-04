@@ -6,7 +6,7 @@
 // application-level rendering code (Trame grid, Prose page, Toile canvas, ...).
 //
 // Implementations:
-//   - `WgpuSurface`   in `ambre-ui` (lyon tessellation + wgpu, on-screen) — live.
+//   - `WgpuSurface`   in `ambre-canvas` (lyon tessellation + wgpu, on-screen) — live.
 //   - a future `KrillaSurface` (krilla, PDF export) — planned, not yet written.
 //
 // Dependency rule: ambre-draw depends only on kurbo + peniko + parley.

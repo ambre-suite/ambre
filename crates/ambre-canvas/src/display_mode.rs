@@ -1,4 +1,4 @@
-// ambre-ui/src/display_mode.rs
+// ambre-canvas/src/display_mode.rs
 // ============================================================================
 // Adaptive display mode derived from canvas logical width (dp).
 // Passed in LayoutCtx and PaintCtx -- widgets adapt their rendering.

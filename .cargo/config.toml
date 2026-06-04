@@ -17,7 +17,7 @@ rustflags = [
     # name, so it can't be `#[allow]`-ed; `-A warnings` is the only switch that
     # silences it. Scoped to wasm32 ONLY: host builds (cargo check/clippy/test
     # on x86_64) keep all warnings, so the only blind spot is wasm-exclusive
-    # code (ambre-app, ambre-ui::host). Remove this line to audit those.
+    # code (ambre-app, ambre-canvas::host). Remove this line to audit those.
     "-A", "warnings",
     # Without these two flags, LLD emits a non-shared memory even when atomics
     # are on. A non-shared WebAssembly.Memory cannot be transferred to a Worker

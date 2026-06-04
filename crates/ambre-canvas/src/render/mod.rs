@@ -1,4 +1,4 @@
-// ambre-ui/src/render/mod.rs
+// ambre-canvas/src/render/mod.rs
 // ============================================================================
 // CPU-batched renderer backed by wgpu vertex/fragment shaders.
 //

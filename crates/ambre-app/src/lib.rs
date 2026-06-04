@@ -6,10 +6,10 @@
 // Its entire job is to wire the three threads together:
 //   - Create the four inter-thread `flume` channels.
 //   - Spawn the Logic and Sync threads (ambre_logic::run / ambre_sync::run).
-//   - Run the UI thread (ambre_ui::run) on this thread, injecting the Trame
+//   - Run the UI thread (ambre_canvas::run) on this thread, injecting the Trame
 //     view as the application's DocView.
 //
-// All UI behaviour lives in ambre_ui::run (generic driver) and TrameView
+// All UI behaviour lives in ambre_canvas::run (generic driver) and TrameView
 // (the DocView impl). This file knows nothing about rendering or spreadsheets
 // beyond choosing which view to instantiate.
 // ============================================================================
@@ -72,7 +72,7 @@ pub fn main() {
         .expect("spawn Sync thread");
 
     // Run the UI thread on this (main) thread, driving the Trame view.
-    ambre_ui::run("ambre-canvas", move |w, h| {
+    ambre_canvas::run("ambre-canvas", move |w, h| {
         TrameView::new(ui_to_logic_tx, logic_to_ui_rx, w, h)
     });
 }
