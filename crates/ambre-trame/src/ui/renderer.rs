@@ -69,6 +69,9 @@ pub struct DrawStats {
     pub hud_ms: f32,
     /// Number of cells with non-empty text actually drawn this frame.
     pub cells_drawn: u32,
+    /// Latest measured input->caret latency (keydown to caret paint), in ms.
+    /// Target < 50 ms, acceptable < 100 ms (ambre-spec-chrome 7, Phase 3).
+    pub input_latency_ms: f32,
 }
 
 // -----------------------------------------------------------------------------
@@ -424,8 +427,9 @@ pub fn draw_overlay<S: DrawSurface>(
         text_cache.frame_misses,
     );
     let line2 = format!(
-        "bg:{:.2} cells:{:.2} hdrs:{:.2} hud:{:.2}  drawn:{}",
+        "bg:{:.2} cells:{:.2} hdrs:{:.2} hud:{:.2}  drawn:{}  inlat:{:.1}ms",
         stats.bg_ms, stats.cells_ms, stats.hdrs_ms, stats.hud_ms, stats.cells_drawn,
+        stats.input_latency_ms,
     );
     draw_text(
         surface, font_cx, text_cache,
