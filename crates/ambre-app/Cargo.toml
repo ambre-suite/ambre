@@ -18,6 +18,8 @@ ambre-sync   = { path = "../ambre-sync" }
 
 flume        = { workspace = true }
 leptos       = { workspace = true }
+leptos_icons = { workspace = true }
+icondata     = { workspace = true }
 tracing      = { workspace = true }
 tracing-wasm = { workspace = true }
 

@@ -46,6 +46,10 @@ argon2 = { version = "0.5" }
 # browser-target reactive runtime; default features (ssr/hydrate plumbing) are
 # off to keep the WASM bundle lean and avoid server-only deps.
 leptos    = { version = "0.8", default-features = false, features = ["csr"] }
+# Tree-shaken SVG icons: only the `icondata` constants we reference are
+# embedded in the WASM bundle (one <Icon icon=.../> -> one inlined <svg>).
+leptos_icons = { version = "0.7" }
+icondata     = { version = "0.7" }
 wgpu    = { version = "28.0", features = ["webgl"] }
 parley  = "0.7"
 kurbo   = "0.13"
