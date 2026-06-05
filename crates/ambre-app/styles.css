@@ -6,15 +6,10 @@
    emitted by ambre-chrome::AppShell.
    --------------------------------------------------------------------------- */
 
+/* Colour, spacing, radius and font tokens come from the generated theme.css
+   (tokens.ron -> build.rs), injected at startup into <head> as CSS custom
+   properties. Only layout constants specific to the shell live here. */
 :root {
-    --bg: #1a1a2e;
-    --surface: #20203a;
-    --surface-2: #26264a;
-    --border: #33335a;
-    --text: #e0e0e0;
-    --text-dim: #9a9ab0;
-    --accent: #7c6ef0;
-    --ok: #4ad295;
     --header-h: 44px;
     --status-h: 26px;
 }
@@ -62,7 +57,7 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--ok);
+    background: var(--success);
 }
 
 .ambre-avatar {

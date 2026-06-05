@@ -31,6 +31,9 @@ pub mod text_input;
 // -- Selection anchor: canvas->DOM channel for floating chrome UI ------------
 pub mod anchor;
 
+// -- Design tokens (generated from tokens.ron): Palette + Theme + ThemeControl
+pub mod theme;
+
 // -- Convenience re-exports --------------------------------------------------
 pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurface};
 pub use text_cache::TextCache;
@@ -39,3 +42,4 @@ pub use view::{DocView, FrameStats, InputEvent, RepaintPlan};
 pub use host::{FrameHost, GpuState, RafControl, bootstrap_gpu, run, run_with, start_raf_loop};
 pub use text_input::TextInput;
 pub use anchor::{Anchor, AnchorPublisher};
+pub use theme::{Palette, Theme, ThemeControl};

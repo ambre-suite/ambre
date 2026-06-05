@@ -22,7 +22,8 @@
     -->
     <link data-trunk rel="rust" data-wasm-opt="0" />
 
-    <!-- App-shell chrome styling (Phase 1; tokens.ron -> theme.css in Phase 3). -->
+    <!-- App-shell layout styling. Colour/spacing/font tokens are injected at
+         startup from the generated theme.css (tokens.ron -> build.rs). -->
     <link data-trunk rel="css" href="styles.css" />
 
     <!-- Font assets served at /fonts/ -- loaded at runtime via fetch(). -->

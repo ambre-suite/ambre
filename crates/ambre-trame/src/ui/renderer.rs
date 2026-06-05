@@ -26,7 +26,7 @@ use ambre_draw::{
     PositionedLayoutItem, Rect,
 };
 
-use ambre_canvas::TextCache;
+use ambre_canvas::{Palette, TextCache};
 
 use super::grid::{CellEditor, COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT};
 use super::TrameUiState;
@@ -35,18 +35,10 @@ use crate::{TOTAL_COLS, TOTAL_ROWS};
 // -----------------------------------------------------------------------------
 // Colors
 // -----------------------------------------------------------------------------
-
-const COLOR_WHITE:         Color = Color::from_rgba8(255, 255, 255, 255);
-const COLOR_PENDING:       Color = Color::from_rgba8(235, 237, 240, 255);
-const COLOR_HEADER_BG:     Color = Color::from_rgba8(242, 244, 248, 255);
-const COLOR_HEADER_ACTIVE: Color = Color::from_rgba8(207, 220, 240, 255);
-const COLOR_GRID_LINE:     Color = Color::from_rgba8(210, 213, 218, 255);
-const COLOR_HEADER_BORDER: Color = Color::from_rgba8(178, 183, 193, 255);
-const COLOR_ACTIVE_BORDER: Color = Color::from_rgba8(60,  120, 210, 255);
-const COLOR_CELL_TEXT:     Color = Color::from_rgba8(51,  51,  51,  255);
-const COLOR_HEADER_TEXT:   Color = Color::from_rgba8(85,  85,  85,  255);
-const COLOR_CARET:         Color = Color::from_rgba8(20,  20,  20,  255);
-const COLOR_COMPOSITION:   Color = Color::from_rgba8(60,  120, 210, 255);
+//
+// Product colours come from the active `Palette` (generated from tokens.ron,
+// theme-switched at runtime). Only the debug HUD keeps hardcoded colours -- it
+// is a developer overlay, not themed product chrome.
 
 /// Cell text left padding (also the caret's x origin inside a cell).
 const CELL_PAD_X: f64 = 4.0;
@@ -165,6 +157,7 @@ fn rows_cols_in_strip(
 pub fn draw_cells<S: DrawSurface>(
     surface:      &mut S,
     state:        &TrameUiState,
+    palette:      &Palette,
     font_cx:      &mut FontContext,
     text_cache:   &mut TextCache,
     text_enabled:   bool,
@@ -191,16 +184,16 @@ pub fn draw_cells<S: DrawSurface>(
     let t0 = perf.now();
 
     // -- 1. Pending grey over the strip. ---------------------------------------
-    surface.fill_rect(strip, COLOR_PENDING);
+    surface.fill_rect(strip, palette.content_pending);
 
-    // -- 2. White fill for received cells in the strip. ------------------------
+    // -- 2. Content fill for received cells in the strip. ----------------------
     let (row_start, row_end, col_start, col_end) = rows_cols_in_strip(state, strip);
     for row in row_start..row_end {
         for col in col_start..col_end {
             if state.cell_cache.contains_key(&(row, col)) {
                 let x = HEADER_WIDTH + (col - state.left_col) as f64 * COL_WIDTH;
                 let y = HEADER_HEIGHT + (row - state.top_row) as f64 * ROW_HEIGHT;
-                surface.fill_rect(Rect::new(x, y, x + COL_WIDTH, y + ROW_HEIGHT), COLOR_WHITE);
+                surface.fill_rect(Rect::new(x, y, x + COL_WIDTH, y + ROW_HEIGHT), palette.content_bg);
             }
         }
     }
@@ -217,7 +210,7 @@ pub fn draw_cells<S: DrawSurface>(
             let x = HEADER_WIDTH + i as f64 * COL_WIDTH;
             if x > w { break; }
             if x < strip.x0 || x > strip.x1 { continue; }
-            surface.stroke_line(x, line_y0, x, line_y1, COLOR_GRID_LINE, 1.0);
+            surface.stroke_line(x, line_y0, x, line_y1, palette.grid_line, 1.0);
         }
     }
 
@@ -231,7 +224,7 @@ pub fn draw_cells<S: DrawSurface>(
             let y = HEADER_HEIGHT + i as f64 * ROW_HEIGHT;
             if y > h { break; }
             if y < strip.y0 || y > strip.y1 { continue; }
-            surface.stroke_line(line_x0, y, line_x1, y, COLOR_GRID_LINE, 1.0);
+            surface.stroke_line(line_x0, y, line_x1, y, palette.grid_line, 1.0);
         }
     }
 
@@ -241,7 +234,7 @@ pub fn draw_cells<S: DrawSurface>(
     let mut cells_drawn = 0u32;
 
     if text_enabled {
-        let cell_brush     = Brush::Solid(COLOR_CELL_TEXT);
+        let cell_brush     = Brush::Solid(palette.cell_text);
         let cell_max_width = (COL_WIDTH - 8.0) as f32;
         for row in row_start..row_end {
             for col in col_start..col_end {
@@ -295,6 +288,7 @@ pub fn draw_cells<S: DrawSurface>(
 pub fn draw_overlay<S: DrawSurface>(
     surface:        &mut S,
     state:          &TrameUiState,
+    palette:        &Palette,
     font_cx:        &mut FontContext,
     text_cache:     &mut TextCache,
     text_enabled:   bool,
@@ -320,42 +314,42 @@ pub fn draw_overlay<S: DrawSurface>(
 
     if active_col_visible {
         let x = HEADER_WIDTH + (state.active_col - state.left_col) as f64 * COL_WIDTH;
-        surface.fill_rect(Rect::new(x, 0.0, x + COL_WIDTH, HEADER_HEIGHT), COLOR_HEADER_ACTIVE);
+        surface.fill_rect(Rect::new(x, 0.0, x + COL_WIDTH, HEADER_HEIGHT), palette.header_active);
     }
     if active_row_visible {
         let y = HEADER_HEIGHT + (state.active_row - state.top_row) as f64 * ROW_HEIGHT;
-        surface.fill_rect(Rect::new(0.0, y, HEADER_WIDTH, y + ROW_HEIGHT), COLOR_HEADER_ACTIVE);
+        surface.fill_rect(Rect::new(0.0, y, HEADER_WIDTH, y + ROW_HEIGHT), palette.header_active);
     }
 
     // -- 2. Header backgrounds (cover the tint outside the active cells). -----
-    surface.fill_rect(Rect::new(0.0, 0.0, w, HEADER_HEIGHT), COLOR_HEADER_BG);
-    surface.fill_rect(Rect::new(0.0, 0.0, HEADER_WIDTH, h), COLOR_HEADER_BG);
+    surface.fill_rect(Rect::new(0.0, 0.0, w, HEADER_HEIGHT), palette.header_bg);
+    surface.fill_rect(Rect::new(0.0, 0.0, HEADER_WIDTH, h), palette.header_bg);
 
     // Re-apply active tints over the opaque header backgrounds.
     if active_col_visible {
         let x = HEADER_WIDTH + (state.active_col - state.left_col) as f64 * COL_WIDTH;
-        surface.fill_rect(Rect::new(x, 0.0, x + COL_WIDTH, HEADER_HEIGHT), COLOR_HEADER_ACTIVE);
+        surface.fill_rect(Rect::new(x, 0.0, x + COL_WIDTH, HEADER_HEIGHT), palette.header_active);
     }
     if active_row_visible {
         let y = HEADER_HEIGHT + (state.active_row - state.top_row) as f64 * ROW_HEIGHT;
-        surface.fill_rect(Rect::new(0.0, y, HEADER_WIDTH, y + ROW_HEIGHT), COLOR_HEADER_ACTIVE);
+        surface.fill_rect(Rect::new(0.0, y, HEADER_WIDTH, y + ROW_HEIGHT), palette.header_active);
     }
 
     // -- 3. Header separator lines. -------------------------------------------
-    surface.stroke_line(0.0, HEADER_HEIGHT, w, HEADER_HEIGHT, COLOR_HEADER_BORDER, 1.0);
-    surface.stroke_line(HEADER_WIDTH, 0.0, HEADER_WIDTH, h, COLOR_HEADER_BORDER, 1.0);
+    surface.stroke_line(0.0, HEADER_HEIGHT, w, HEADER_HEIGHT, palette.header_border, 1.0);
+    surface.stroke_line(HEADER_WIDTH, 0.0, HEADER_WIDTH, h, palette.header_border, 1.0);
 
     // -- 4. Active cell border. -----------------------------------------------
     // Lives in the overlay so it tracks the active cell on every frame
     // regardless of scroll shifts in the persistent layer.
     if let Some((x, y, cw, ch)) = state.cell_pixel_rect(state.active_row, state.active_col) {
-        surface.stroke_rect(Rect::new(x, y, x + cw, y + ch), COLOR_ACTIVE_BORDER, 2.0);
+        surface.stroke_rect(Rect::new(x, y, x + cw, y + ch), palette.selection, 2.0);
     }
 
     // -- 5. Header text labels. -----------------------------------------------
     const HEADER_SIZE: f32 = 11.0;
     if text_enabled {
-        let header_brush = Brush::Solid(COLOR_HEADER_TEXT);
+        let header_brush = Brush::Solid(palette.header_text);
 
         // 5a. Column header labels (A, B, C...).
         for i in 0..=(state.viewport_cols + 1) {
@@ -479,6 +473,7 @@ fn measure(
 pub fn draw_edit<S: DrawSurface>(
     surface:       &mut S,
     state:         &TrameUiState,
+    palette:       &Palette,
     editor:        &CellEditor,
     caret_visible: bool,
     font_cx:       &mut FontContext,
@@ -498,8 +493,8 @@ pub fn draw_edit<S: DrawSurface>(
     let cell = Rect::new(x, y, x + cw, y + ch);
     surface.push_clip(cell);
 
-    // White field over the underlying cell + active border interior.
-    surface.fill_rect(cell, COLOR_WHITE);
+    // Content-coloured field over the underlying cell + active border interior.
+    surface.fill_rect(cell, palette.content_bg);
 
     // Text: prefix + preview + suffix, baseline-centred in the row.
     let display = editor.display();
@@ -509,7 +504,7 @@ pub fn draw_edit<S: DrawSurface>(
         );
         let text_h = layout.height() as f64;
         let y_off  = ((ch - text_h) / 2.0).max(0.0);
-        let brush  = Brush::Solid(COLOR_CELL_TEXT);
+        let brush  = Brush::Solid(palette.cell_text);
         for line in layout.lines() {
             for item in line.items() {
                 let PositionedLayoutItem::GlyphRun(run) = item else { continue };
@@ -531,7 +526,7 @@ pub fn draw_edit<S: DrawSurface>(
         let mut dx = ux0;
         while dx < ux1 {
             let seg_end = (dx + 3.0).min(ux1);
-            surface.stroke_line(dx, uy, seg_end, uy, COLOR_COMPOSITION, 1.0);
+            surface.stroke_line(dx, uy, seg_end, uy, palette.selection, 1.0);
             dx += 5.0;
         }
     }
@@ -541,7 +536,7 @@ pub fn draw_edit<S: DrawSurface>(
     if caret_visible {
         let caret_w = measure(font_cx, cache, &editor.before_caret(), bold, italic);
         let caret_x = x + CELL_PAD_X + caret_w;
-        surface.stroke_line(caret_x, y + 3.0, caret_x, y + ch - 3.0, COLOR_CARET, 1.0);
+        surface.stroke_line(caret_x, y + 3.0, caret_x, y + ch - 3.0, palette.caret, 1.0);
     }
 
     surface.pop_clip();

@@ -88,6 +88,12 @@ pub fn main() {
     // and the floating selection toolbar transform-syncs onto it.
     let anchor_pub = ambre_canvas::AnchorPublisher::new();
 
+    // Design tokens: inject the generated CSS custom properties (theme.css) and
+    // boot the dark theme. `theme_ctl` is the single source of truth for the
+    // active scheme, shared with the chrome toggle and the canvas view.
+    let theme_ctl = ambre_canvas::ThemeControl::new(ambre_canvas::Theme::Dark);
+    inject_theme(theme_ctl.get());
+
     // Reactive state created during mount (needs a Leptos owner) and pulled back
     // out here for the dispatcher to drive: the command-state store and the
     // floating-toolbar anchor signal.
@@ -98,6 +104,7 @@ pub fn main() {
         ui_to_logic_tx.clone(),
         Rc::clone(&store_slot),
         Rc::clone(&anchor_slot),
+        theme_ctl.clone(),
         raf.clone(),
     );
     let store = store_slot
@@ -159,7 +166,7 @@ pub fn main() {
     ambre_canvas::run_with(
         "ambre-canvas",
         move |w, h, text_input| {
-            TrameView::new(ui_to_logic_tx, view_rx, w, h, text_input, anchor_pub)
+            TrameView::new(ui_to_logic_tx, view_rx, w, h, text_input, anchor_pub, theme_ctl)
         },
         pre_frame,
         raf,
@@ -195,6 +202,7 @@ fn mount_app_shell(
     to_logic: flume::Sender<LogicCommand>,
     store_slot: Rc<RefCell<Option<CommandStates>>>,
     anchor_slot: Rc<RefCell<Option<RwSignal<Option<(f64, f64)>>>>>,
+    theme_ctl: ambre_canvas::ThemeControl,
     raf: ambre_canvas::RafControl,
 ) {
     leptos::mount::mount_to_body(move || {
@@ -210,6 +218,11 @@ fn mount_app_shell(
         // (via the dispatcher). The floating toolbar transform-syncs onto it.
         let anchor_pos = RwSignal::new(None::<(f64, f64)>);
         *anchor_slot.borrow_mut() = Some(anchor_pos);
+
+        // Theme toggle: flips `theme_ctl` (read by the canvas) and the document's
+        // `data-theme` (drives the CSS custom properties). `theme_sig` only
+        // drives the button's own glyph.
+        let theme_sig = RwSignal::new(theme_ctl.get());
 
         // About modal: opening it suspends the canvas rAF (frozen behind the
         // blurred backdrop), closing it resumes.
@@ -269,6 +282,20 @@ fn mount_app_shell(
                         <span class="dot"></span>
                         "Synced"
                     </span>
+                    <button
+                        class="icon"
+                        title="Toggle theme"
+                        on:click={
+                            let theme_ctl = theme_ctl.clone();
+                            move |_| {
+                                let next = theme_ctl.toggle();
+                                theme_sig.set(next);
+                                apply_theme_attr(next);
+                            }
+                        }
+                    >
+                        {move || if theme_sig.get() == ambre_canvas::Theme::Dark { "☾" } else { "☀" }}
+                    </button>
                     <button
                         class="icon"
                         title="About"
@@ -355,6 +382,32 @@ fn mount_app_shell(
             </div>
         }
     });
+}
+
+/// Inject the generated token stylesheet (`theme.css`) into `<head>` and set the
+/// initial `data-theme`. The chrome then reads colours/spacings as CSS custom
+/// properties; the canvas reads the matching `Palette` -- one source, `tokens.ron`.
+fn inject_theme(theme: ambre_canvas::Theme) {
+    let Some(document) = web_sys::window().and_then(|w| w.document()) else { return };
+    if let Ok(Some(head)) = document.query_selector("head") {
+        if let Ok(style) = document.create_element("style") {
+            style.set_id("ambre-theme");
+            style.set_text_content(Some(ambre_canvas::theme::THEME_CSS));
+            let _ = head.append_child(&style);
+        }
+    }
+    apply_theme_attr(theme);
+}
+
+/// Set the document element's `data-theme`, switching the active CSS custom-property
+/// set (`:root` light vs `:root[data-theme="dark"]`).
+fn apply_theme_attr(theme: ambre_canvas::Theme) {
+    if let Some(el) = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.document_element())
+    {
+        let _ = el.set_attribute("data-theme", theme.data_attr());
+    }
 }
 
 /// Attach a `contextmenu` listener to the canvas: right-click opens the DOM
