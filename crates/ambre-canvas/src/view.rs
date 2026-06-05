@@ -50,7 +50,11 @@ pub enum InputEvent {
     /// Native double-click (respects the platform's double-click speed). Used to
     /// enter cell edit mode.
     DoubleClick { x: f64, y: f64 },
-    Wheel { dx: f64, dy: f64, ctrl_key: bool },
+    /// Wheel / two-finger touchpad scroll. `dx`/`dy` are already scaled to
+    /// physical pixels (CSS px × dpr). `delta_mode` is the DOM `WheelEvent`
+    /// unit: 0 = pixel (touchpad, modern mice), 1 = line, 2 = page; the view
+    /// normalises lines/pages to pixels before scrolling.
+    Wheel { dx: f64, dy: f64, delta_mode: u32, ctrl_key: bool },
 
     /// Committed text from the transparent `<textarea>` pipe: latin typing,
     /// autocomplete or a plaintext paste. Insert it at the caret. The canvas

@@ -22,6 +22,36 @@ use super::renderer::{self, DrawStats};
 /// Caret blink half-period: the standard ~530 ms on/off toggle (period ~1.06 s).
 const BLINK_MS: f64 = 530.0;
 
+// -- Kinetic (momentum) touchpad scrolling ------------------------------------
+// Firefox/Linux does not deliver an OS momentum phase after a two-finger flick,
+// so we synthesise it: track the scroll velocity while the fingers drive, then
+// coast with friction once the wheel events stop.
+//
+/// Gap (ms) with no `wheel` event after which the gesture is considered ended
+/// and coasting may begin. Continuous touchpad scrolling fires well under this.
+const FLING_GAP_MS: f64 = 60.0;
+/// Velocity retained per 16.667 ms of coasting (≈ exponential friction). This
+/// is a *time constant*, not a per-frame factor: the decay is raised to
+/// `dt / 16.667` each frame, so the deceleration curve over wall-clock time is
+/// identical at 60 Hz, 240 Hz, or any variable refresh rate.
+const FLING_FRICTION: f64 = 0.94;
+/// Minimum speed (physical px/ms) at gesture end to bother coasting at all.
+const FLING_START_PX_PER_MS: f64 = 0.05;
+/// Speed (physical px/ms) below which coasting stops.
+const FLING_STOP_PX_PER_MS: f64 = 0.012;
+/// Smoothing for the running velocity estimate: weight of the newest sample.
+const FLING_VELOCITY_BLEND: f64 = 0.8;
+
+/// Result of folding the pixel accumulator into a viewport pan.
+enum ScrollOutcome {
+    /// Less than a whole row/col accumulated; nothing to do yet.
+    Idle,
+    /// The viewport moved.
+    Moved,
+    /// A full row/col was due but the viewport is pinned against a grid border.
+    Edge,
+}
+
 /// Spreadsheet column label for a 0-based index (0 -> "A", 26 -> "AA"). Used for
 /// the screen-reader cell announcement.
 fn col_label(mut col: u32) -> String {
@@ -103,6 +133,24 @@ pub struct TrameView {
     /// Last rendered scroll position, used to compute the scroll delta.
     prev_top_row: u32,
     prev_left_col: u32,
+
+    // -- Wheel / touchpad scroll ------------------------------------------------
+    /// Sub-cell wheel residue (physical px) carried between events, so slow
+    /// touchpad scrolls still accumulate into whole rows/cols rather than being
+    /// truncated away each frame.
+    scroll_accum_x: f64,
+    scroll_accum_y: f64,
+    /// Running scroll velocity estimate (physical px/ms) from recent wheel
+    /// events; drives the momentum coast once the fingers lift.
+    fling_vx: f64,
+    fling_vy: f64,
+    /// Timestamp (perf ms) of the last wheel event; `>0` means a gesture is in
+    /// progress / just ended and we should watch for the fling gap.
+    last_wheel_ms: f64,
+    /// True while coasting after a flick; cleared by a new wheel or a stop.
+    coasting: bool,
+    /// Timestamp (perf ms) of the last coast step, for the per-frame integration.
+    last_coast_ms: f64,
 }
 
 impl TrameView {
@@ -150,6 +198,13 @@ impl TrameView {
             data_dirty: false,
             prev_top_row: 0,
             prev_left_col: 0,
+            scroll_accum_x: 0.0,
+            scroll_accum_y: 0.0,
+            fling_vx: 0.0,
+            fling_vy: 0.0,
+            last_wheel_ms: 0.0,
+            coasting: false,
+            last_coast_ms: 0.0,
         }
     }
 
@@ -331,6 +386,10 @@ impl DocView for TrameView {
                 }
             }
         }
+
+        // Advance any touchpad momentum coast before the viewport flush, so the
+        // ScrollViewport it produces ships this same frame.
+        self.step_momentum();
 
         // Flush the coalesced viewport request: at most one ScrollViewport per
         // frame, regardless of how many arrow keys fired since the last frame.
@@ -532,6 +591,11 @@ impl DocView for TrameView {
     }
 
     fn handle_input(&mut self, ev: &InputEvent) -> bool {
+        // Wheel / two-finger touchpad scroll pans the viewport in any mode and
+        // never disturbs the cursor or an open editor.
+        if let InputEvent::Wheel { dx, dy, delta_mode, ctrl_key } = ev {
+            return self.handle_wheel(*dx, *dy, *delta_mode, *ctrl_key);
+        }
         // An open edit session owns text, IME and the editing keys.
         if self.editor.is_some() {
             return self.handle_input_editing(ev);
@@ -554,6 +618,16 @@ impl TrameView {
                     self.select_cell(row, col);
                 }
                 true
+            }
+            // A right-click selects the cell under the cursor before the DOM
+            // context menu opens on it (standard spreadsheet behaviour). We don't
+            // preventDefault here -- the `contextmenu` listener owns the menu.
+            InputEvent::PointerDown { x, y, button: 2 } => {
+                self.text_input.focus();
+                if let Some((row, col)) = self.state.cell_at(*x, *y) {
+                    self.select_cell(row, col);
+                }
+                false
             }
             // Double-click opens an editor on the clicked cell's current text.
             InputEvent::DoubleClick { x, y } => {
@@ -614,6 +688,133 @@ impl TrameView {
             },
             _ => false,
         }
+    }
+
+    /// Pan the viewport from a wheel / two-finger touchpad scroll. Pixel deltas
+    /// (touchpad, modern mice) accumulate sub-cell residue across events; line
+    /// and page deltas (`delta_mode` 1/2) are normalised to pixels first.
+    /// Returns `true` when consumed (so the page itself doesn't scroll).
+    fn handle_wheel(&mut self, dx: f64, dy: f64, delta_mode: u32, ctrl_key: bool) -> bool {
+        // Leave Ctrl+wheel to the browser (pinch-zoom gesture); not ours yet.
+        if ctrl_key {
+            return false;
+        }
+        // Normalise the unit to physical pixels. Deltas already include dpr.
+        let (sx, sy) = match delta_mode {
+            1 => (COL_WIDTH, ROW_HEIGHT),                              // DOM_DELTA_LINE
+            2 => (self.state.canvas_width, self.state.canvas_height),  // DOM_DELTA_PAGE
+            _ => (1.0, 1.0),                                           // DOM_DELTA_PIXEL
+        };
+        let (px, py) = (dx * sx, dy * sy);
+
+        // The fingers are driving: any active momentum is overridden by the
+        // direct input, so cancel the coast.
+        self.coasting = false;
+
+        // Update the velocity estimate (physical px/ms) from this sample's
+        // interval, smoothed to ride out jitter. A long gap means a fresh
+        // gesture, so seed from the sample alone rather than blending stale
+        // velocity; clamp dt so a near-zero interval can't blow it up.
+        let now = self.perf.now();
+        let gap = now - self.last_wheel_ms;
+        if self.last_wheel_ms == 0.0 || gap > FLING_GAP_MS {
+            let dt = gap.clamp(1.0, 16.0);
+            self.fling_vx = px / dt;
+            self.fling_vy = py / dt;
+        } else {
+            let dt = gap.clamp(1.0, 100.0);
+            let b = FLING_VELOCITY_BLEND;
+            self.fling_vx = b * (px / dt) + (1.0 - b) * self.fling_vx;
+            self.fling_vy = b * (py / dt) + (1.0 - b) * self.fling_vy;
+        }
+        self.last_wheel_ms = now;
+
+        // Apply the delta immediately for a 1:1 feel while the fingers move.
+        self.scroll_accum_x += px;
+        self.scroll_accum_y += py;
+        self.apply_scroll_accum();
+        true
+    }
+
+    /// Peel whole rows/cols out of the pixel accumulator and pan the viewport,
+    /// keeping the sub-cell remainder. Shared by direct wheel input and the
+    /// momentum coast.
+    fn apply_scroll_accum(&mut self) -> ScrollOutcome {
+        let dc = (self.scroll_accum_x / COL_WIDTH) as i32;
+        let dr = (self.scroll_accum_y / ROW_HEIGHT) as i32;
+        if dr == 0 && dc == 0 {
+            return ScrollOutcome::Idle;
+        }
+        self.scroll_accum_x -= dc as f64 * COL_WIDTH;
+        self.scroll_accum_y -= dr as f64 * ROW_HEIGHT;
+        if self.state.scroll_by(dr, dc) {
+            self.viewport_changed = true;
+            self.pending_viewport = Some(self.state.scroll_viewport_cmd());
+            ScrollOutcome::Moved
+        } else {
+            // Pinned against a grid border: the motion had nowhere to go.
+            ScrollOutcome::Edge
+        }
+    }
+
+    /// Advance the momentum coast by one frame. Called every frame from
+    /// `update`. Starts coasting when a flick's velocity outlives the gesture,
+    /// integrates the decaying velocity into the scroll accumulator, and stops
+    /// once the speed dies down or the viewport hits an edge.
+    fn step_momentum(&mut self) {
+        let now = self.perf.now();
+
+        // Begin a coast: the gesture ended (gap elapsed) but the fingers left
+        // with enough speed. `last_wheel_ms == 0` means no gesture is pending.
+        if !self.coasting {
+            if self.last_wheel_ms == 0.0 || now - self.last_wheel_ms < FLING_GAP_MS {
+                return;
+            }
+            // Gesture window closed: decide whether to fling or just disarm.
+            self.last_wheel_ms = 0.0;
+            if self.fling_vx.hypot(self.fling_vy) < FLING_START_PX_PER_MS {
+                self.fling_vx = 0.0;
+                self.fling_vy = 0.0;
+                return;
+            }
+            self.coasting = true;
+            self.last_coast_ms = now;
+            // Don't integrate on the launch frame: `dt` would be 0. Start
+            // moving next frame, once a real interval has elapsed.
+            return;
+        }
+
+        let dt = now - self.last_coast_ms;
+        self.last_coast_ms = now;
+        if dt <= 0.0 {
+            return;
+        }
+        let dt = dt.min(100.0);
+
+        // Integrate over the *measured* frame dt and apply friction scaled to
+        // that same dt, so the coast is identical at 60 Hz or 240 Hz (it just
+        // runs in finer steps at higher refresh rates).
+        self.scroll_accum_x += self.fling_vx * dt;
+        self.scroll_accum_y += self.fling_vy * dt;
+        let decay = FLING_FRICTION.powf(dt / 16.667);
+        self.fling_vx *= decay;
+        self.fling_vy *= decay;
+
+        // Stop on a border, or once the speed has bled off.
+        if matches!(self.apply_scroll_accum(), ScrollOutcome::Edge)
+            || self.fling_vx.hypot(self.fling_vy) < FLING_STOP_PX_PER_MS
+        {
+            self.stop_fling();
+        }
+    }
+
+    /// Halt any momentum coast and clear its residue.
+    fn stop_fling(&mut self) {
+        self.coasting = false;
+        self.fling_vx = 0.0;
+        self.fling_vy = 0.0;
+        self.scroll_accum_x = 0.0;
+        self.scroll_accum_y = 0.0;
     }
 
     /// Move the active cell by `(dr, dc)`; returns `true` (consumed).
@@ -679,6 +880,17 @@ impl TrameView {
                     self.select_cell(row, col);
                 }
                 true
+            }
+            // A right-click commits and selects the cell under the cursor, so the
+            // DOM context menu opens on it. We don't preventDefault (the
+            // `contextmenu` listener owns the menu).
+            InputEvent::PointerDown { x, y, button: 2 } => {
+                self.commit_edit();
+                self.text_input.focus();
+                if let Some((row, col)) = self.state.cell_at(*x, *y) {
+                    self.select_cell(row, col);
+                }
+                false
             }
             InputEvent::Key { key, ctrl, meta, .. } => {
                 // Leave command chords (Ctrl/Cmd+X) to the chrome keymap.
