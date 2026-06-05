@@ -210,6 +210,21 @@
     color: transparent;
 }
 
+/* Content a11y live region (ambre-canvas TextInput): visually hidden but
+   exposed to assistive tech, announcing the focused cell as it changes. */
+.ambre-a11y-live {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
 /* Status bar. */
 .ambre-statusbar {
     display: flex;

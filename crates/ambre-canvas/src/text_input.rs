@@ -1,15 +1,21 @@
 // ambre-canvas/src/text_input.rs
 // ============================================================================
 // The transparent `<textarea>` keyboard/IME/clipboard pipe (ambre-spec-chrome
-// 2.C). It renders NOTHING -- the canvas draws caret, selection and the IME
-// composition string. The element exists only to capture key events, drive the
-// platform IME and carry the clipboard.
+// 2.C) and the content a11y mirror (2.F). The textarea renders NOTHING -- the
+// canvas draws caret, selection and the IME composition string -- but it is the
+// real keyboard FOCUS, so it doubles as the accessibility entry point to the
+// canvas content: an accessible textbox plus a paired polite live region that
+// announces the focused cell as the selection moves.
+//
+// This is the web-pragmatic stand-in for "AccessKit scoped to content": on the
+// web the accessibility tree IS the DOM, so content a11y means mirroring the
+// focused content into the DOM rather than pushing a tree to a platform adapter
+// (AccessKit has no web adapter). Scope is deliberately the focused cell, not a
+// full 100k-row mirror.
 //
 // Ownership: created and positioned by the host (host.rs) under the canvas's
 // positioned container; the per-app `DocView` drives WHERE it sits (caret
-// follow) and WHEN it has focus through the `TextInput` handle below. Event
-// listeners are installed in host.rs (they need the `FrameHost`), funnelling
-// into `InputEvent::{Text, CompositionUpdate, CompositionEnd}`.
+// follow), WHEN it has focus, and WHAT it announces through the handle below.
 //
 // wasm32-only: it is pure web_sys DOM glue.
 // ============================================================================
@@ -20,11 +26,14 @@ use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use web_sys::{Document, Element, HtmlTextAreaElement};
 
-/// Handle to the transparent input pipe. Cheap to clone (an element ref plus a
-/// shared composing flag); lives on the UI thread only, so it stays `!Send`.
+/// Handle to the transparent input pipe + content a11y mirror. Cheap to clone
+/// (element refs plus a shared flag); lives on the UI thread only, so `!Send`.
 #[derive(Clone)]
 pub struct TextInput {
     textarea: HtmlTextAreaElement,
+    /// Visually-hidden `aria-live="polite"` region announcing the focused cell
+    /// to screen readers as the selection moves (content a11y, 2.F).
+    live: Element,
     /// True between `compositionstart` and `compositionend`. Shared with the
     /// host's `input` listener so it skips the half-formed value mid-composition
     /// (the canvas shows the preview from the composition events instead).
@@ -45,20 +54,34 @@ impl TextInput {
             .expect("textarea cast");
         textarea.set_class_name("ambre-input");
         // Kill the mobile keyboard's "helpful" rewriting -- the model is the
-        // source of truth, not the textarea buffer.
+        // source of truth, not the textarea buffer. NOT `aria-hidden`: this is
+        // the keyboard focus and the content's a11y entry point, so it must be
+        // reachable. `tabindex="0"` puts the content in the page tab order.
         for (k, v) in [
             ("autocapitalize", "off"),
             ("autocomplete", "off"),
             ("autocorrect", "off"),
             ("spellcheck", "false"),
-            ("aria-hidden", "true"),
-            ("tabindex", "-1"),
+            ("tabindex", "0"),
             ("wrap", "off"),
+            ("aria-label", "Spreadsheet cell"),
+            ("aria-roledescription", "spreadsheet cell"),
         ] {
             let _ = textarea.set_attribute(k, v);
         }
         parent.append_child(&textarea).expect("attach textarea");
-        Self { textarea, composing: Rc::new(Cell::new(false)) }
+
+        // Polite live region: announces the focused cell as the selection moves.
+        // Visually hidden (`.ambre-a11y-live` in the app stylesheet) but exposed
+        // to assistive tech.
+        let live = document.create_element("div").expect("create a11y live region");
+        live.set_class_name("ambre-a11y-live");
+        for (k, v) in [("role", "status"), ("aria-live", "polite"), ("aria-atomic", "true")] {
+            let _ = live.set_attribute(k, v);
+        }
+        parent.append_child(&live).expect("attach a11y live region");
+
+        Self { textarea, live, composing: Rc::new(Cell::new(false)) }
     }
 
     /// The underlying element (host listeners attach here).
@@ -91,5 +114,13 @@ impl TextInput {
     /// edit session clears on open, so the textarea never accumulates state.
     pub fn clear(&self) {
         self.textarea.set_value("");
+    }
+
+    /// Announce the focused content (e.g. `"B2, 42"`) to screen readers via the
+    /// polite live region. Called by the view when the selection moves or a cell
+    /// edit commits -- the content a11y mirror (2.F). Replacing the text content
+    /// of an `aria-live` region is what triggers the announcement.
+    pub fn announce(&self, text: &str) {
+        self.live.set_text_content(Some(text));
     }
 }
