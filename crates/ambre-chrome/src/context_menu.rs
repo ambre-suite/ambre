@@ -17,6 +17,7 @@ use ambre_commands::CommandId;
 use leptos::html;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
+use wasm_bindgen::closure::Closure;
 
 /// One entry: a command to invoke and its display label.
 #[derive(Clone)]
@@ -72,6 +73,36 @@ pub fn ContextMenu(
         menu_x.set(lx);
         menu_y.set(ty);
     });
+
+    // Close on any pointerdown outside the menu. A document-level capture
+    // listener (rather than a full-viewport backdrop) lets the click reach
+    // whatever is underneath: a right-click on the canvas reaches the canvas, so
+    // it re-selects the cell (pointerdown) and reopens the menu at the new point
+    // (contextmenu). A backdrop would have swallowed both -- the menu moved but
+    // the selection stayed on the old cell. Registered once (the menu is a shell
+    // singleton); it no-ops while closed and ignores clicks inside the menu.
+    {
+        let doc = web_sys::window().unwrap().document().unwrap();
+        let cb = Closure::<dyn FnMut(web_sys::PointerEvent)>::new(move |e: web_sys::PointerEvent| {
+            if pos.get_untracked().is_none() {
+                return;
+            }
+            // A click inside the menu is the item handlers' business; ignore it.
+            if let (Some(menu), Some(target)) = (menu_ref.get_untracked(), e.target())
+                && let Ok(node) = target.dyn_into::<web_sys::Node>()
+                && menu.contains(Some(&node))
+            {
+                return;
+            }
+            pos.set(None);
+        });
+        let _ = doc.add_event_listener_with_callback_and_bool(
+            "pointerdown",
+            cb.as_ref().unchecked_ref(),
+            true,
+        );
+        cb.forget();
+    }
 
     // Move DOM focus to the highlighted item (roving tabindex).
     Effect::new(move |_| {
@@ -172,15 +203,6 @@ pub fn ContextMenu(
             .collect_view();
 
         Some(view! {
-            // Full-viewport layer: left-click closes, right-click repositions.
-            <div
-                class="ambre-ctx-backdrop"
-                on:click=move |_| pos.set(None)
-                on:contextmenu=move |e: web_sys::MouseEvent| {
-                    e.prevent_default();
-                    pos.set(Some((e.client_x() as f64, e.client_y() as f64)));
-                }
-            ></div>
             <ul
                 node_ref=menu_ref
                 class="ambre-ctx-menu"
