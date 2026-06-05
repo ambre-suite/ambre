@@ -257,6 +257,8 @@
     border-radius: 12px;
     background: var(--surface);
     color: var(--text);
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 13px;
     max-width: min(90vw, 460px);
     box-shadow: 0 12px 48px rgba(0, 0, 0, 0.55);
 }
@@ -271,7 +273,7 @@
 }
 
 .ambre-dialog-body h2 {
-    font-size: 1.05rem;
+    font-size: 14px;
     margin-bottom: 10px;
 }
 
@@ -331,6 +333,8 @@
     margin: 0;
     padding: 4px;
     list-style: none;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 12px;
     background: var(--surface-2);
     border: 1px solid var(--border);
     border-radius: 8px;
