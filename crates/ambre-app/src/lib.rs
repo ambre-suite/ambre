@@ -32,6 +32,7 @@ use ambre_chrome::{
 };
 use ambre_trame::ui::TrameView;
 use leptos::prelude::*;
+use leptos_icons::Icon;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
@@ -306,7 +307,14 @@ fn mount_app_shell(
                             }
                         }
                     >
-                        {move || if theme_sig.get() == ambre_canvas::Theme::Dark { "☾" } else { "☀" }}
+                        {move || {
+                            let icon = if theme_sig.get() == ambre_canvas::Theme::Dark {
+                                icondata::AiMoonFilled
+                            } else {
+                                icondata::AiSunFilled
+                            };
+                            view! { <Icon icon=icon /> }
+                        }}
                     </button>
                     <button
                         class="icon"
