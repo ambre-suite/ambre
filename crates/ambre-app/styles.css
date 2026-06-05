@@ -410,8 +410,10 @@
 
 .ambre-ctx-item:hover,
 .ambre-ctx-item:focus {
-    background: var(--accent);
-    color: #fff;
+    /* Neutral highlight: amber is reserved for the cell-selection signature,
+       not standard chrome interaction (cf. Google Sheets' grey menu hover). */
+    background: var(--border);
+    color: var(--text);
 }
 
 /* Shared keyboard-chord chip (ambre-chrome::Kbd). */
