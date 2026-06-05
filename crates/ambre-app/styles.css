@@ -347,6 +347,51 @@
     padding: 1px 5px;
 }
 
+/* Toasts -- ARIA live-region notifications (ambre-chrome::ToastHost). Stacked
+   bottom-right; entrance is a compositor transform/opacity animation, off the
+   canvas rAF budget. */
+.ambre-toasts {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+}
+
+.ambre-toast {
+    pointer-events: auto;
+    min-width: 200px;
+    max-width: 360px;
+    padding: 10px 14px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--info);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    font-size: var(--font-body);
+    cursor: pointer;
+    animation: ambre-toast-in 0.18s ease;
+}
+
+.ambre-toast.success { border-left-color: var(--success); }
+.ambre-toast.warning { border-left-color: var(--warning); }
+.ambre-toast.error   { border-left-color: var(--error); }
+
+@keyframes ambre-toast-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 /* ============================================================================
    Adaptive breakpoints (ambre-spec-chrome 2.E)
      Mobile  : < 600 dp   |   Tablet : 600-1024 dp   |   Desktop : > 1024 dp
