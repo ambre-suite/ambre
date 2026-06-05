@@ -16,6 +16,8 @@
 // e.g. column 0 row 0 -> "A1", column 26 row 99 -> "AA100".
 // ============================================================================
 
+use std::collections::HashSet;
+
 use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 
 // -----------------------------------------------------------------------------
@@ -29,13 +31,25 @@ use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 /// from coordinates); it will hold the `LoroDoc` and formula engine once CRDT
 /// editing is wired.
 pub struct TrameState {
-    bold_enabled: bool,
-    italic_enabled: bool,
+    /// Active cell (selection), kept in sync by the UI via
+    /// [`TrameCommand::SetActiveCell`]. Formatting toggles target this cell.
+    active: (u32, u32),
+    /// Cells carrying a bold run. Keyed by `(row, col)`; absence means regular
+    /// weight. A `HashSet` (not a flag on the cell) because cell content is
+    /// generated on the fly -- formatting is the only per-cell state we persist
+    /// until the CRDT model lands.
+    bold: HashSet<(u32, u32)>,
+    /// Cells carrying an italic run.
+    italic: HashSet<(u32, u32)>,
 }
 
 impl TrameState {
     pub fn new() -> Self {
-        Self { bold_enabled: false, italic_enabled: false }
+        Self {
+            active: (0, 0),
+            bold: HashSet::new(),
+            italic: HashSet::new(),
+        }
     }
 
     /// Handle a UI command and return display events for the UI Thread.
@@ -43,13 +57,38 @@ impl TrameState {
     /// Must complete in < 50 ms (P2); scroll requests in < 10 ms (P1).
     pub fn handle_command(&mut self, cmd: TrameCommand) -> Vec<TrameEvent> {
         match cmd {
+            TrameCommand::SetActiveCell { row, col } => {
+                self.active = (row, col);
+                // Report the new active cell's formatting so the chrome toggle
+                // buttons reflect the selection.
+                vec![
+                    TrameEvent::BoldState { enabled: self.bold.contains(&self.active) },
+                    TrameEvent::ItalicState { enabled: self.italic.contains(&self.active) },
+                ]
+            }
             TrameCommand::ToggleBold => {
-                self.bold_enabled = !self.bold_enabled;
-                vec![TrameEvent::BoldState { enabled: self.bold_enabled }]
+                let enabled = toggle(&mut self.bold, self.active);
+                vec![
+                    TrameEvent::BoldState { enabled },
+                    TrameEvent::CellFormat {
+                        row: self.active.0,
+                        col: self.active.1,
+                        bold: enabled,
+                        italic: self.italic.contains(&self.active),
+                    },
+                ]
             }
             TrameCommand::ToggleItalic => {
-                self.italic_enabled = !self.italic_enabled;
-                vec![TrameEvent::ItalicState { enabled: self.italic_enabled }]
+                let enabled = toggle(&mut self.italic, self.active);
+                vec![
+                    TrameEvent::ItalicState { enabled },
+                    TrameEvent::CellFormat {
+                        row: self.active.0,
+                        col: self.active.1,
+                        bold: self.bold.contains(&self.active),
+                        italic: enabled,
+                    },
+                ]
             }
             TrameCommand::ScrollViewport { version, row_start, row_end, col_start, col_end } => {
                 // Clamp to grid bounds.
@@ -70,6 +109,8 @@ impl TrameState {
                             row,
                             col,
                             text: format!("{}{}", col_to_alpha(col), row + 1),
+                            bold: self.bold.contains(&(row, col)),
+                            italic: self.italic.contains(&(row, col)),
                         });
                     }
                 }
@@ -108,6 +149,16 @@ impl TrameState {
 // Helpers
 // -----------------------------------------------------------------------------
 
+/// Toggle `cell`'s membership in `set`, returning whether it is now present.
+fn toggle(set: &mut HashSet<(u32, u32)>, cell: (u32, u32)) -> bool {
+    if set.remove(&cell) {
+        false
+    } else {
+        set.insert(cell);
+        true
+    }
+}
+
 /// Convert a 0-based column index to a spreadsheet column label (A, B, ..., Z,
 /// AA, AB, ...).
 ///
@@ -127,7 +178,46 @@ fn col_to_alpha(mut col: u32) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::col_to_alpha;
+    use super::{col_to_alpha, TrameState};
+    use crate::{TrameCommand, TrameEvent};
+
+    /// Bold a cell, then move the selection elsewhere: the formatting must stay
+    /// pinned to the cell it was applied to, not follow the cursor. This is the
+    /// regression the per-cell model fixes.
+    #[test]
+    fn bold_stays_on_the_cell_not_the_selection() {
+        let mut state = TrameState::new();
+
+        // Select A1 (0,0) and bold it.
+        state.handle_command(TrameCommand::SetActiveCell { row: 0, col: 0 });
+        let evts = state.handle_command(TrameCommand::ToggleBold);
+        assert!(matches!(evts[0], TrameEvent::BoldState { enabled: true }));
+        assert!(matches!(
+            evts[1],
+            TrameEvent::CellFormat { row: 0, col: 0, bold: true, italic: false }
+        ));
+
+        // Move the selection to B2 (1,1): the active cell is not bold, so the
+        // button reports false -- A1 keeps its bold.
+        let evts = state.handle_command(TrameCommand::SetActiveCell { row: 1, col: 1 });
+        assert!(matches!(evts[0], TrameEvent::BoldState { enabled: false }));
+
+        // A viewport covering both cells: only A1 carries the bold run.
+        let evts = state.handle_command(TrameCommand::ScrollViewport {
+            version: 1,
+            row_start: 0,
+            row_end: 1,
+            col_start: 0,
+            col_end: 1,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts[0] else {
+            panic!("expected ViewportData");
+        };
+        let a1 = cells.iter().find(|c| c.row == 0 && c.col == 0).unwrap();
+        let b2 = cells.iter().find(|c| c.row == 1 && c.col == 1).unwrap();
+        assert!(a1.bold, "A1 must stay bold");
+        assert!(!b2.bold, "B2 must not become bold");
+    }
 
     #[test]
     fn col_alpha_basics() {
