@@ -1,6 +1,31 @@
 //! Cryptographic primitives for Ambre.
 //!
-//! Provides AEAD (XChaCha20‑Poly1305), signatures (Ed25519), hashing (BLAKE2b),
-//! key derivation (Argon2id), Diffie‑Hellman (X25519), and key storage with zeroization.
+//! Provides AEAD (XChaCha20-Poly1305), signatures (Ed25519), hashing (BLAKE2b),
+//! key derivation (Argon2id), Diffie-Hellman (X25519), and key storage with
+//! zeroization.
 //!
-//! This crate is used exclusively by the Sync thread; no other crate imports it.
+//! The crate is deliberately standalone: it does **not** depend on
+//! `ambre-protocol`. Envelope functions operate on raw byte slices (`aad` =
+//! serialized public metadata supplied by the caller), so the three wire
+//! messages (Update, Snapshot, Ephemeral) are covered by a single seal/open
+//! pair. Assembly into protocol types and the compression version byte live in
+//! the Sync thread.
+
+pub mod aead;
+pub mod commitment;
+pub mod ecdh;
+pub mod envelope;
+pub mod error;
+pub mod hash;
+pub mod keys;
+pub mod passphrase;
+mod random;
+pub mod signature;
+
+pub use ecdh::WrappedKey;
+pub use envelope::{open, seal, Sealed};
+pub use error::CryptoError;
+pub use keys::{DocumentKey, MasterSeed};
+
+#[cfg(test)]
+mod tests;

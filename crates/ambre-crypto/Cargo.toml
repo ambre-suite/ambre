@@ -16,3 +16,20 @@ ed25519-dalek = { workspace = true }
 x25519-dalek = { workspace = true }
 blake2 = { workspace = true }
 argon2 = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+getrandom = { workspace = true }
+
+# getrandom 0.2 is pulled in transitively (rand_core, via the RustCrypto
+# stack). On wasm32 it needs its "js" backend enabled; declaring it here with
+# the feature lets Cargo's feature unification turn it on for the whole graph.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
+
+[dev-dependencies]
+proptest = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "crypto"
+harness = false
