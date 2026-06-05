@@ -25,6 +25,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
+use crate::text_input::TextInput;
 use crate::view::{DocView, FrameStats, InputEvent};
 use crate::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, TextCache, WgpuSurface};
 
@@ -490,12 +491,13 @@ impl<V: DocView> FrameHost<V> {
 /// concrete view via `make_view`, so this stays free of any app dependency and
 /// no dependency cycle is introduced.
 ///
-/// `make_view` receives the canvas size in physical pixels and returns the view
-/// to drive. It runs on this (UI) thread before the GPU is ready.
+/// `make_view` receives the canvas size in physical pixels plus the transparent
+/// [`TextInput`] pipe (so the view can focus it and follow it to the caret), and
+/// returns the view to drive. It runs on this (UI) thread before the GPU is ready.
 pub fn run<V, F>(canvas_id: &str, make_view: F)
 where
     V: DocView + 'static,
-    F: FnOnce(f64, f64) -> V,
+    F: FnOnce(f64, f64, TextInput) -> V,
 {
     run_with(canvas_id, make_view, || {}, RafControl::new());
 }
@@ -508,7 +510,7 @@ where
 pub fn run_with<V, F, P>(canvas_id: &str, make_view: F, mut pre_frame: P, raf: RafControl)
 where
     V: DocView + 'static,
-    F: FnOnce(f64, f64) -> V,
+    F: FnOnce(f64, f64, TextInput) -> V,
     P: FnMut() + 'static,
 {
     tracing::info!("Ambre UI thread starting");
@@ -535,7 +537,17 @@ where
     // resizes are handled by the resize listener below.
     size_backing_store(&canvas);
 
-    let view = make_view(canvas.width() as f64, canvas.height() as f64);
+    // The transparent <textarea> pipe (keyboard + IME + clipboard). Attached
+    // under the canvas's positioned cell so a `transform` caret-follow is
+    // measured against the same box; it renders nothing (see text_input.rs).
+    let input_parent: web_sys::Element = canvas
+        .parent_node()
+        .expect("canvas has a parent cell")
+        .dyn_into()
+        .expect("canvas parent is an Element");
+    let text_input = TextInput::create(&document, &input_parent);
+
+    let view = make_view(canvas.width() as f64, canvas.height() as f64, text_input.clone());
     let host = Rc::new(RefCell::new(FrameHost::new(view, perf)));
 
     // -- Async GPU init, then start the rAF loop. -----------------------------
@@ -583,6 +595,84 @@ where
         document
             .add_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref())
             .expect("add keydown listener");
+        cb.forget();
+    }
+
+    // -- Textarea pipe: committed text + IME composition -> view. -------------
+    // `input` fires for latin typing / paste / autocomplete; outside a
+    // composition we read the buffer, forward it as `Text`, and clear it so the
+    // textarea never accumulates. During a composition the buffer is half-formed,
+    // so we skip it and let the composition events drive the preview instead.
+    {
+        let host_c    = Rc::clone(&host);
+        let composing = text_input.composing();
+        let ta        = text_input.element().clone();
+        let ta_read   = ta.clone();
+        let cb = Closure::<dyn FnMut(web_sys::InputEvent)>::new(move |_event| {
+            if composing.get() {
+                return;
+            }
+            let value = ta_read.value();
+            if !value.is_empty() {
+                host_c.borrow_mut().handle_input(&InputEvent::Text { text: value });
+                ta_read.set_value("");
+            }
+        });
+        ta.add_event_listener_with_callback("input", cb.as_ref().unchecked_ref())
+            .expect("add input listener");
+        cb.forget();
+    }
+
+    // compositionstart: enter the composing window (gate the `input` listener).
+    {
+        let composing = text_input.composing();
+        let cb = Closure::<dyn FnMut(web_sys::CompositionEvent)>::new(move |_event| {
+            composing.set(true);
+        });
+        text_input
+            .element()
+            .add_event_listener_with_callback("compositionstart", cb.as_ref().unchecked_ref())
+            .expect("add compositionstart listener");
+        cb.forget();
+    }
+
+    // compositionupdate: forward the running preview; canvas renders it styled.
+    {
+        let host_c = Rc::clone(&host);
+        let cb = Closure::<dyn FnMut(web_sys::CompositionEvent)>::new(
+            move |event: web_sys::CompositionEvent| {
+                let text = event.data().unwrap_or_default();
+                host_c
+                    .borrow_mut()
+                    .handle_input(&InputEvent::CompositionUpdate { text });
+            },
+        );
+        text_input
+            .element()
+            .add_event_listener_with_callback("compositionupdate", cb.as_ref().unchecked_ref())
+            .expect("add compositionupdate listener");
+        cb.forget();
+    }
+
+    // compositionend: commit the final text, leave the composing window, clear.
+    {
+        let host_c    = Rc::clone(&host);
+        let composing = text_input.composing();
+        let ta        = text_input.element().clone();
+        let cb = Closure::<dyn FnMut(web_sys::CompositionEvent)>::new(
+            move |event: web_sys::CompositionEvent| {
+                composing.set(false);
+                let text = event.data().unwrap_or_default();
+                host_c
+                    .borrow_mut()
+                    .handle_input(&InputEvent::CompositionEnd { text });
+                ta.set_value("");
+            },
+        );
+        text_input
+            .element()
+            .add_event_listener_with_callback("compositionend", cb.as_ref().unchecked_ref())
+            .expect("add compositionend listener");
         cb.forget();
     }
 
@@ -651,6 +741,31 @@ where
                 .add_event_listener_with_callback(event_type, cb.as_ref().unchecked_ref())
                 .expect("add pointer listener");
         }
+        cb.forget();
+    }
+
+    // -- Double-click -> view. ------------------------------------------------
+    // A separate `dblclick` listener so the platform's own double-click timing
+    // (the OS setting) decides what counts as a double-click -- no hand-rolled
+    // threshold. `MouseEvent::offset_*` is in CSS px; scale to physical like the
+    // pointer path.
+    {
+        let host_c = Rc::clone(&host);
+        let dpr = web_sys::window().map(|w| w.device_pixel_ratio()).unwrap_or(1.0);
+        let cb = Closure::<dyn FnMut(web_sys::MouseEvent)>::new(
+            move |event: web_sys::MouseEvent| {
+                let ev = InputEvent::DoubleClick {
+                    x: event.offset_x() as f64 * dpr,
+                    y: event.offset_y() as f64 * dpr,
+                };
+                if host_c.borrow_mut().handle_input(&ev) {
+                    event.prevent_default();
+                }
+            },
+        );
+        canvas
+            .add_event_listener_with_callback("dblclick", cb.as_ref().unchecked_ref())
+            .expect("add dblclick listener");
         cb.forget();
     }
 

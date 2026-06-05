@@ -61,6 +61,8 @@ swash = "0.2"
 gloo-net = { version = "0.7", features = ["http", "websocket"] }
 web-sys = { version = "0.3.85", features = [
     "CanvasRenderingContext2d",
+    "CompositionEvent",
+    "CssStyleDeclaration",
     "Document",
     "DomRect",
     "DomRectReadOnly",
@@ -69,8 +71,11 @@ web-sys = { version = "0.3.85", features = [
     "HtmlCanvasElement",
     "HtmlDialogElement",
     "HtmlElement",
+    "HtmlTextAreaElement",
     "ImageData",
+    "InputEvent",
     "KeyboardEvent",
+    "Node",
     "Location",
     "MediaQueryList",
     "MediaQueryListEvent",

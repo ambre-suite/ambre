@@ -28,7 +28,7 @@ use ambre_draw::{
 
 use ambre_canvas::TextCache;
 
-use super::grid::{COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT};
+use super::grid::{CellEditor, COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT};
 use super::TrameUiState;
 use crate::{TOTAL_COLS, TOTAL_ROWS};
 
@@ -45,6 +45,13 @@ const COLOR_HEADER_BORDER: Color = Color::from_rgba8(178, 183, 193, 255);
 const COLOR_ACTIVE_BORDER: Color = Color::from_rgba8(60,  120, 210, 255);
 const COLOR_CELL_TEXT:     Color = Color::from_rgba8(51,  51,  51,  255);
 const COLOR_HEADER_TEXT:   Color = Color::from_rgba8(85,  85,  85,  255);
+const COLOR_CARET:         Color = Color::from_rgba8(20,  20,  20,  255);
+const COLOR_COMPOSITION:   Color = Color::from_rgba8(60,  120, 210, 255);
+
+/// Cell text left padding (also the caret's x origin inside a cell).
+const CELL_PAD_X: f64 = 4.0;
+/// Body font size, shared by the cell renderer and the edit overlay.
+const BODY_SIZE: f32 = 12.0;
 
 // -----------------------------------------------------------------------------
 // DrawStats — per-frame breakdown
@@ -231,7 +238,6 @@ pub fn draw_cells<S: DrawSurface>(
     let t_bg = perf.now();
 
     // -- 5. Cell body text. ----------------------------------------------------
-    const BODY_SIZE: f32 = 12.0;
     let mut cells_drawn = 0u32;
 
     if text_enabled {
@@ -443,4 +449,100 @@ pub fn draw_overlay<S: DrawSurface>(
     let t_end = perf.now();
     stats.hdrs_ms = (t_after_hdrs - t0) as f32;
     stats.hud_ms  = (t_end - t_after_hdrs) as f32;
+}
+
+// -----------------------------------------------------------------------------
+// draw_edit -- in-progress cell edit (overlay, above everything)
+// -----------------------------------------------------------------------------
+
+/// Width in pixels of `text` shaped at the body size, or 0 for empty text.
+fn measure(
+    font_cx: &mut FontContext,
+    cache:   &mut TextCache,
+    text:    &str,
+    bold:    bool,
+    italic:  bool,
+) -> f64 {
+    if text.is_empty() {
+        return 0.0;
+    }
+    let layout: &Layout<ParleyBrush> =
+        cache.get_or_build(font_cx, text, BODY_SIZE, f32::MAX, Alignment::Start, bold, italic);
+    layout.width() as f64
+}
+
+/// Draw the active edit session over the cell: a white field, the buffer with
+/// its IME composition preview, the caret, and a dotted underline under the
+/// composition. Called on the overlay layer after `draw_overlay`, so it sits
+/// above the active-cell border and the grid. Clipped to the cell, which is
+/// itself clipped to the scrollable area (never under the header strip).
+pub fn draw_edit<S: DrawSurface>(
+    surface:       &mut S,
+    state:         &TrameUiState,
+    editor:        &CellEditor,
+    caret_visible: bool,
+    font_cx:       &mut FontContext,
+    cache:         &mut TextCache,
+) {
+    let Some((x, y, cw, ch)) = state.cell_pixel_rect(editor.row, editor.col) else {
+        return; // active cell scrolled out of view; nothing to draw
+    };
+
+    // Match the cell's pinned formatting so the edit looks like the result.
+    let (bold, italic) = state
+        .cell_cache
+        .get(&(editor.row, editor.col))
+        .map(|c| (c.bold, c.italic))
+        .unwrap_or((false, false));
+
+    let cell = Rect::new(x, y, x + cw, y + ch);
+    surface.push_clip(cell);
+
+    // White field over the underlying cell + active border interior.
+    surface.fill_rect(cell, COLOR_WHITE);
+
+    // Text: prefix + preview + suffix, baseline-centred in the row.
+    let display = editor.display();
+    if !display.is_empty() {
+        let layout: &Layout<ParleyBrush> = cache.get_or_build(
+            font_cx, &display, BODY_SIZE, f32::MAX, Alignment::Start, bold, italic,
+        );
+        let text_h = layout.height() as f64;
+        let y_off  = ((ch - text_h) / 2.0).max(0.0);
+        let brush  = Brush::Solid(COLOR_CELL_TEXT);
+        for line in layout.lines() {
+            for item in line.items() {
+                let PositionedLayoutItem::GlyphRun(run) = item else { continue };
+                let tx = x + CELL_PAD_X + run.offset() as f64;
+                let ty = y + y_off + run.baseline() as f64;
+                surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+            }
+        }
+    }
+
+    // Composition underline: a dotted line under the preview run.
+    if !editor.preview.is_empty() {
+        let pre_w  = measure(font_cx, cache, &editor.buffer[..editor.caret], bold, italic);
+        let prev_w = measure(font_cx, cache, &editor.preview, bold, italic);
+        let ux0 = x + CELL_PAD_X + pre_w;
+        let ux1 = ux0 + prev_w;
+        let uy  = (y + ch - 3.0).min(y + ch);
+        // Dotted: 3px dash, 2px gap.
+        let mut dx = ux0;
+        while dx < ux1 {
+            let seg_end = (dx + 3.0).min(ux1);
+            surface.stroke_line(dx, uy, seg_end, uy, COLOR_COMPOSITION, 1.0);
+            dx += 5.0;
+        }
+    }
+
+    // Caret: a 1px vertical bar after the prefix + preview, drawn only on the
+    // visible half of the blink cycle.
+    if caret_visible {
+        let caret_w = measure(font_cx, cache, &editor.before_caret(), bold, italic);
+        let caret_x = x + CELL_PAD_X + caret_w;
+        surface.stroke_line(caret_x, y + 3.0, caret_x, y + ch - 3.0, COLOR_CARET, 1.0);
+    }
+
+    surface.pop_clip();
 }

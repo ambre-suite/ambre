@@ -135,6 +135,37 @@
     touch-action: none;
 }
 
+/* Transparent <textarea> keyboard/IME/clipboard pipe (ambre-spec-chrome 2.C).
+   It renders NOTHING: the canvas draws caret, selection and the IME composition
+   string. Positioned at the caret via `transform` (never top/left) so the IME
+   popup anchors under the caret; pointer-events disabled so it never steals a
+   click from the canvas (focus is driven programmatically). */
+.ambre-input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1px;
+    height: 20px;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    color: transparent;
+    caret-color: transparent;       /* the caret is drawn by wgpu */
+    background: transparent;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    white-space: pre;
+    pointer-events: none;
+    will-change: transform;
+    z-index: 1;
+}
+
+.ambre-input::selection {
+    background: transparent;
+    color: transparent;
+}
+
 /* Status bar. */
 .ambre-statusbar {
     display: flex;
