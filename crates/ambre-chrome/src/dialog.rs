@@ -29,6 +29,9 @@ pub fn Dialog(
     /// Fired after the modal closes (e.g. to resume the canvas rAF).
     #[prop(optional, into)]
     on_close: Option<Callback<()>>,
+    /// Extra class on the `<dialog>` element, for per-dialog styling.
+    #[prop(optional, into)]
+    class: Option<String>,
     children: ChildrenFn,
 ) -> impl IntoView {
     let dialog_ref = NodeRef::<html::Dialog>::new();
@@ -70,10 +73,14 @@ pub fn Dialog(
         }
     };
 
+    let class = class
+        .map(|c| format!("ambre-dialog {c}"))
+        .unwrap_or_else(|| "ambre-dialog".to_string());
+
     view! {
         <dialog
             node_ref=dialog_ref
-            class="ambre-dialog"
+            class=class
             on:close=handle_close
             on:click=handle_click
         >

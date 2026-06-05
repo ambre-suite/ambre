@@ -361,15 +361,15 @@ fn mount_app_shell(
                 </StatusBar>
             </AppShell>
 
-            <Dialog open=about_open on_open=on_open on_close=on_close>
-                <h2>"Ambre"</h2>
-                <p>
-                    "Collaborative office suite, 100% Rust, E2EE encrypted. "
-                    "The canvas is frozen while this modal is open "
-                    "(rAF suspended)."
-                </p>
-                <div class="ambre-dialog-actions">
-                    <button on:click=move |_| about_open.set(false)>"Close"</button>
+            <Dialog open=about_open on_open=on_open on_close=on_close class="ambre-about">
+                <div class="ambre-about-panel">
+                    <h2>"Ambre"</h2>
+                    <p>
+                        "Collaborative office suite, 100% Rust, E2EE encrypted."
+                    </p>
+                    <div class="ambre-dialog-actions">
+                        <button on:click=move |_| about_open.set(false)>"Close"</button>
+                    </div>
                 </div>
             </Dialog>
 
