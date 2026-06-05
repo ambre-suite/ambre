@@ -57,6 +57,10 @@ pub struct TrameView {
     caret_on: bool,
     /// `performance.now()` of the last blink toggle (or blink reset).
     last_blink_ms: f64,
+    /// `performance.now()` of the input awaiting its caret paint, set by an edit
+    /// interaction and consumed once the caret is next drawn -- the keydown->caret
+    /// latency probe (ambre-spec-chrome 7, Phase 3 profiling). `None` when idle.
+    pending_input_mark: Option<f64>,
 
     /// `performance.now()` handle for the renderer's sub-phase timings.
     perf: web_sys::Performance,
@@ -120,6 +124,7 @@ impl TrameView {
             edit_dirty: false,
             caret_on: true,
             last_blink_ms: 0.0,
+            pending_input_mark: None,
             perf,
             text_enabled: true,
             draw_stats: DrawStats::default(),
@@ -192,11 +197,16 @@ impl TrameView {
     }
 
     /// Show the caret solid and restart its blink clock. Called on every edit
-    /// interaction so the caret never blinks mid-keystroke.
+    /// interaction (typing, IME, caret motion) -- the one chokepoint where user
+    /// input mutates the editor, so it also arms the input->caret latency probe.
     fn reset_blink(&mut self) {
         self.caret_on = true;
         self.last_blink_ms = self.perf.now();
         self.edit_dirty = true;
+        // Arm the latency probe: timestamp now (~keydown), and drop a
+        // `performance.mark` so the measure shows in the browser Performance panel.
+        self.pending_input_mark = Some(self.perf.now());
+        let _ = self.perf.mark("ambre:input");
     }
 
     /// Seed text for an editor opened on `(row, col)`: the cell's current text,
@@ -470,6 +480,18 @@ impl DocView for TrameView {
                 font_cx,
                 text_cache,
             );
+
+            // The caret was just drawn: close the input->caret latency probe.
+            // Measured at CPU-paint completion (one GPU submit, ~0.5-1 ms, still
+            // ahead). The `performance.measure` lands in the browser Performance
+            // panel; the duration also feeds the HUD (`inlat`). A 10 KB paste
+            // travels the same Text path, so it is covered too.
+            if let Some(t0) = self.pending_input_mark.take() {
+                self.draw_stats.input_latency_ms = (self.perf.now() - t0) as f32;
+                let _ = self
+                    .perf
+                    .measure_with_start_mark("ambre:input-to-caret", "ambre:input");
+            }
         }
     }
 
