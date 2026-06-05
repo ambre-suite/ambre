@@ -12,8 +12,8 @@
 use ambre_bus::{AppCommand, AppEvent, IPC_TEST_DOC_ID, LogicCommand, TrameCommand, TrameEvent, UiEvent};
 use ambre_draw::{FontContext, Rect};
 use ambre_canvas::{
-    ContentRepaint, DocView, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache,
-    TextInput, WgpuSurface,
+    Anchor, AnchorPublisher, ContentRepaint, DocView, FrameStats, InputEvent, OverlayRepaint,
+    RepaintPlan, TextCache, TextInput, WgpuSurface,
 };
 
 use super::grid::{CellEditor, COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT, TrameUiState};
@@ -38,6 +38,11 @@ pub struct TrameView {
     /// devicePixelRatio: the grid works in physical pixels, the textarea
     /// positions in CSS pixels, so caret coords are divided by this.
     dpr: f64,
+    /// Publishes the active cell's on-screen anchor (CSS px) so the chrome can
+    /// transform-sync a floating selection toolbar onto it.
+    anchor: AnchorPublisher,
+    /// Last anchor published, so it is only re-published on change.
+    last_anchor: Option<Anchor>,
     /// Active in-cell edit session, or `None` in navigation mode.
     editor: Option<CellEditor>,
     /// The edit overlay changed this frame (keystroke, caret move, IME pass).
@@ -84,6 +89,7 @@ impl TrameView {
         canvas_width: f64,
         canvas_height: f64,
         text_input: TextInput,
+        anchor: AnchorPublisher,
     ) -> Self {
         let window = web_sys::window().expect("no window");
         let perf = window.performance().expect("no Performance API");
@@ -99,6 +105,8 @@ impl TrameView {
             state: TrameUiState::new(canvas_width, canvas_height),
             text_input,
             dpr,
+            anchor,
+            last_anchor: None,
             editor: None,
             edit_dirty: false,
             caret_on: true,
@@ -154,6 +162,25 @@ impl TrameView {
     }
 
     // -- Edit session ----------------------------------------------------------
+
+    /// Recompute the active cell's on-screen anchor and publish it for the
+    /// floating selection toolbar -- the centre of the cell's top edge in CSS
+    /// px, or `None` when the cell is scrolled out of the grid area. Cheap;
+    /// called every frame so the toolbar tracks pans, but only forwarded to the
+    /// chrome on change.
+    fn publish_anchor(&mut self) {
+        let next = self
+            .state
+            .cell_pixel_rect(self.state.active_row, self.state.active_col)
+            .map(|(x, y, w, _h)| Anchor {
+                x: (x + w / 2.0) / self.dpr,
+                y: y / self.dpr,
+            });
+        if next != self.last_anchor {
+            self.last_anchor = next;
+            self.anchor.publish(next);
+        }
+    }
 
     /// Show the caret solid and restart its blink clock. Called on every edit
     /// interaction so the caret never blinks mid-keystroke.
@@ -267,6 +294,10 @@ impl DocView for TrameView {
             let cmd = self.state.scroll_viewport_cmd();
             self.send_command(cmd);
         }
+
+        // Keep the floating selection toolbar glued to the active cell as the
+        // viewport pans (published on change only).
+        self.publish_anchor();
 
         // Caret blink: while editing, flip the phase every half-period and dirty
         // the overlay so it redraws. Costs one overlay redraw per ~530 ms; idle

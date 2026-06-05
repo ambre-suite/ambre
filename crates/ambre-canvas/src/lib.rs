@@ -28,6 +28,9 @@ pub mod host;
 //    on every target so app crates can name the handle in host-side tests) ----
 pub mod text_input;
 
+// -- Selection anchor: canvas->DOM channel for floating chrome UI ------------
+pub mod anchor;
+
 // -- Convenience re-exports --------------------------------------------------
 pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurface};
 pub use text_cache::TextCache;
@@ -35,3 +38,4 @@ pub use view::{DocView, FrameStats, InputEvent, RepaintPlan};
 #[cfg(target_arch = "wasm32")]
 pub use host::{FrameHost, GpuState, RafControl, bootstrap_gpu, run, run_with, start_raf_loop};
 pub use text_input::TextInput;
+pub use anchor::{Anchor, AnchorPublisher};

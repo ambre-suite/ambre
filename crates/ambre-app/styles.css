@@ -119,6 +119,55 @@
     background: var(--border);
 }
 
+/* Floating selection toolbar (ambre-spec-chrome 2.E -- UI flottante ancree au
+   pan/zoom). `position: fixed` so it is never clipped by the content cell's
+   overflow; the anchor div carries the dynamic translate (viewport px), the
+   inner pill lifts itself above and centres over the cell. */
+.ambre-selbar-anchor {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 50;
+    will-change: transform;
+    pointer-events: none;   /* only the pill is interactive */
+}
+
+.ambre-selbar {
+    /* Centre over the anchor x, lift above the cell top with an 8px gap. */
+    transform: translate(-50%, calc(-100% - 8px));
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    pointer-events: auto;
+}
+
+.ambre-selbar button {
+    appearance: none;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    min-width: 28px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.ambre-selbar button:hover {
+    background: var(--surface-2);
+    border-color: var(--border);
+}
+
+.ambre-selbar button[aria-pressed="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
 /* Content: the wgpu canvas cell. */
 .ambre-content {
     position: relative;

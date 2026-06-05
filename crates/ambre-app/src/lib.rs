@@ -83,14 +83,30 @@ pub fn main() {
     // Handle to the canvas rAF loop, so a fullscreen modal can suspend it.
     let raf = ambre_canvas::RafControl::new();
 
-    // Reactive command-state store. Created during mount (needs a Leptos owner)
-    // and pulled back out here for the dispatcher to drive.
+    // Canvas->DOM selection anchor: the view publishes the active cell's screen
+    // position, the dispatcher mirrors it into the chrome's `anchor_pos` signal,
+    // and the floating selection toolbar transform-syncs onto it.
+    let anchor_pub = ambre_canvas::AnchorPublisher::new();
+
+    // Reactive state created during mount (needs a Leptos owner) and pulled back
+    // out here for the dispatcher to drive: the command-state store and the
+    // floating-toolbar anchor signal.
     let store_slot: Rc<RefCell<Option<CommandStates>>> = Rc::new(RefCell::new(None));
-    mount_app_shell(ui_to_logic_tx.clone(), Rc::clone(&store_slot), raf.clone());
+    let anchor_slot: Rc<RefCell<Option<RwSignal<Option<(f64, f64)>>>>> =
+        Rc::new(RefCell::new(None));
+    mount_app_shell(
+        ui_to_logic_tx.clone(),
+        Rc::clone(&store_slot),
+        Rc::clone(&anchor_slot),
+        raf.clone(),
+    );
     let store = store_slot
         .borrow()
         .clone()
         .expect("CommandStates created during mount");
+    let anchor_pos = anchor_slot
+        .borrow()
+        .expect("anchor signal created during mount");
 
     // Keyboard: resolve registered chords and dispatch the matching command.
     install_command_keys(keymap, ui_to_logic_tx.clone());
@@ -115,6 +131,8 @@ pub fn main() {
     // mirror command-state events into the chrome store, forward everything to
     // the canvas view. Being the sole writer of the chrome's toggle state is
     // what keeps every trigger in sync.
+    let anchor_pub_pump = anchor_pub.clone();
+    let mut last_anchor: Option<(f64, f64)> = None;
     let pre_frame = move || {
         while let Ok(ev) = logic_to_ui_rx.try_recv() {
             if let UiEvent::Viewport { event: AppEvent::Trame(te), .. } = &ev {
@@ -127,12 +145,22 @@ pub fn main() {
             // Content (and everything else) still flows to the view unchanged.
             let _ = view_tx.try_send(ev);
         }
+
+        // Mirror the view's published selection anchor into the chrome signal,
+        // only on change so the floating toolbar repositions just when it moves.
+        let next = anchor_pub_pump.read().map(|a| (a.x, a.y));
+        if next != last_anchor {
+            last_anchor = next;
+            anchor_pos.set(next);
+        }
     };
 
     // Run the UI thread on this (main) thread, driving the Trame view.
     ambre_canvas::run_with(
         "ambre-canvas",
-        move |w, h, text_input| TrameView::new(ui_to_logic_tx, view_rx, w, h, text_input),
+        move |w, h, text_input| {
+            TrameView::new(ui_to_logic_tx, view_rx, w, h, text_input, anchor_pub)
+        },
         pre_frame,
         raf,
     );
@@ -157,7 +185,8 @@ fn dispatch_command(id: CommandId, to_logic: &flume::Sender<LogicCommand>) {
 }
 
 /// Mount the application shell (ambre-chrome `AppShell`) onto the page body and
-/// publish its command-state store via `store_slot`.
+/// publish its command-state store via `store_slot` and the floating-toolbar
+/// anchor signal via `anchor_slot`.
 ///
 /// The shell owns the `<canvas id="ambre-canvas">` cell that `ambre_canvas`
 /// drives. Toolbar surfaces are pure *views* of the registry: they invoke a
@@ -165,6 +194,7 @@ fn dispatch_command(id: CommandId, to_logic: &flume::Sender<LogicCommand>) {
 fn mount_app_shell(
     to_logic: flume::Sender<LogicCommand>,
     store_slot: Rc<RefCell<Option<CommandStates>>>,
+    anchor_slot: Rc<RefCell<Option<RwSignal<Option<(f64, f64)>>>>>,
     raf: ambre_canvas::RafControl,
 ) {
     leptos::mount::mount_to_body(move || {
@@ -175,6 +205,11 @@ fn mount_app_shell(
 
         let bold = store.toggled_signal(BOLD).expect("bold registered");
         let italic = store.toggled_signal(ITALIC).expect("italic registered");
+
+        // Selection-anchor signal: canvas-relative CSS px published by the view
+        // (via the dispatcher). The floating toolbar transform-syncs onto it.
+        let anchor_pos = RwSignal::new(None::<(f64, f64)>);
+        *anchor_slot.borrow_mut() = Some(anchor_pos);
 
         // About modal: opening it suspends the canvas rAF (frozen behind the
         // blurred backdrop), closing it resumes.
@@ -201,6 +236,29 @@ fn mount_app_shell(
             MenuEntry::new(BOLD, "Bold"),
             MenuEntry::new(ITALIC, "Italic"),
         ];
+
+        // The floating toolbar is a separate view root, so it needs its own
+        // sender: the AppShell slot's reactive children closure moves `to_logic`.
+        let to_logic_sel = to_logic.clone();
+
+        // Floating selection toolbar position. `anchor_pos` is canvas-relative
+        // CSS px; the bar is `position: fixed`, so add the canvas's viewport
+        // offset (its bounding rect) to land in viewport space. Reading the rect
+        // here -- only when the anchor changes -- keeps it glued through pans
+        // without per-frame DOM reads in the renderer.
+        let selbar_style = move || match anchor_pos.get() {
+            Some((x, y)) => {
+                let (ox, oy) = leptos::prelude::document()
+                    .get_element_by_id("ambre-canvas")
+                    .map(|c| {
+                        let r = c.get_bounding_client_rect();
+                        (r.left(), r.top())
+                    })
+                    .unwrap_or((0.0, 0.0));
+                format!("transform: translate({}px, {}px)", ox + x, oy + y)
+            }
+            None => "display: none".to_owned(),
+        };
 
         view! {
             <AppShell>
@@ -266,6 +324,35 @@ fn mount_app_shell(
             </Dialog>
 
             <ContextMenu pos=ctx_menu entries=ctx_entries on_command=ctx_on_command />
+
+            // Floating selection toolbar, transform-synced onto the active cell.
+            // Same command model as the top toolbar: invoke a CommandId, read
+            // toggle state from the store. The outer anchor carries the dynamic
+            // translate; the inner pill lifts itself above the cell (CSS).
+            <div class="ambre-selbar-anchor" style=selbar_style>
+                <div class="ambre-selbar">
+                    <button
+                        title="Bold"
+                        aria-pressed=move || bold.get().then_some("true")
+                        on:click={
+                            let tx = to_logic_sel.clone();
+                            move |_| dispatch_command(BOLD, &tx)
+                        }
+                    >
+                        "B"
+                    </button>
+                    <button
+                        title="Italic"
+                        aria-pressed=move || italic.get().then_some("true")
+                        on:click={
+                            let tx = to_logic_sel.clone();
+                            move |_| dispatch_command(ITALIC, &tx)
+                        }
+                    >
+                        <em>"I"</em>
+                    </button>
+                </div>
+            </div>
         }
     });
 }
