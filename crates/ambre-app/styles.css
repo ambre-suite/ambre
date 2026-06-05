@@ -346,3 +346,62 @@
     border-radius: 4px;
     padding: 1px 5px;
 }
+
+/* ============================================================================
+   Adaptive breakpoints (ambre-spec-chrome 2.E)
+     Mobile  : < 600 dp   |   Tablet : 600-1024 dp   |   Desktop : > 1024 dp
+   Mobile-first: the rules above target the smallest screen; the queries below
+   progressively enhance. "dp" == CSS px (device-independent pixels). The canvas
+   reads its logical width separately for content layout (ambre-spec-chrome 2.E).
+   ============================================================================ */
+
+/* -- Mobile defaults: shown everywhere, restored upward ---------------------
+   Mobile = icons only (no shortcut hints, no sync label) per the 2.E table. */
+.ambre-kbd {
+    display: none;
+}
+
+.ambre-sync .label {
+    display: none;
+}
+
+/* Phone-only: tighten the chrome and turn the context menu into a full-width
+   bottom sheet with larger touch targets (2.E: "Bottom sheet plein width"). */
+@media (max-width: 599px) {
+    .ambre-header {
+        gap: 6px;
+        padding: 0 8px;
+    }
+
+    .ambre-commandbar {
+        padding: 4px 6px;
+    }
+
+    .ambre-ctx-menu {
+        left: 0 !important;
+        right: 0 !important;
+        top: auto !important;
+        bottom: 0 !important;
+        min-width: 0;
+        border-radius: 12px 12px 0 0;
+        padding: 8px;
+    }
+
+    .ambre-ctx-item {
+        padding: 12px 14px;
+    }
+}
+
+/* -- Tablet (>= 600 dp): icons + short labels -- restore the sync label. ---- */
+@media (min-width: 600px) {
+    .ambre-sync .label {
+        display: inline;
+    }
+}
+
+/* -- Desktop (> 1024 dp): icons + labels + shortcuts -- restore Kbd hints. -- */
+@media (min-width: 1025px) {
+    .ambre-kbd {
+        display: inline-block;
+    }
+}
