@@ -280,7 +280,7 @@ fn mount_app_shell(
                     <span class="spacer"></span>
                     <span class="ambre-sync">
                         <span class="dot"></span>
-                        "Synced"
+                        <span class="label">"Synced"</span>
                     </span>
                     <button
                         class="icon"
