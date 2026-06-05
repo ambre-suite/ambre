@@ -13,7 +13,7 @@ use ambre_bus::{AppCommand, AppEvent, IPC_TEST_DOC_ID, LogicCommand, TrameComman
 use ambre_draw::{FontContext, Rect};
 use ambre_canvas::{
     Anchor, AnchorPublisher, ContentRepaint, DocView, FrameStats, InputEvent, OverlayRepaint,
-    RepaintPlan, TextCache, TextInput, WgpuSurface,
+    RepaintPlan, TextCache, TextInput, Theme, ThemeControl, WgpuSurface,
 };
 
 use super::grid::{CellEditor, COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT, TrameUiState};
@@ -43,6 +43,11 @@ pub struct TrameView {
     anchor: AnchorPublisher,
     /// Last anchor published, so it is only re-published on change.
     last_anchor: Option<Anchor>,
+
+    /// Shared theme switch (chrome toggles it, the canvas reads it).
+    theme_ctl: ThemeControl,
+    /// Theme used to render the last frame; a change forces a full repaint.
+    theme: Theme,
     /// Active in-cell edit session, or `None` in navigation mode.
     editor: Option<CellEditor>,
     /// The edit overlay changed this frame (keystroke, caret move, IME pass).
@@ -90,10 +95,12 @@ impl TrameView {
         canvas_height: f64,
         text_input: TextInput,
         anchor: AnchorPublisher,
+        theme_ctl: ThemeControl,
     ) -> Self {
         let window = web_sys::window().expect("no window");
         let perf = window.performance().expect("no Performance API");
         let dpr = window.device_pixel_ratio();
+        let theme = theme_ctl.get();
 
         // Focus the pipe up front so the keyboard works without a click; park it
         // on the active cell so a first keystroke or IME opens there.
@@ -107,6 +114,8 @@ impl TrameView {
             dpr,
             anchor,
             last_anchor: None,
+            theme_ctl,
+            theme,
             editor: None,
             edit_dirty: false,
             caret_on: true,
@@ -295,6 +304,14 @@ impl DocView for TrameView {
             self.send_command(cmd);
         }
 
+        // Pick up a theme switch (chrome toggled it): repaint everything with
+        // the new palette.
+        let theme = self.theme_ctl.get();
+        if theme != self.theme {
+            self.theme = theme;
+            self.needs_full = true;
+        }
+
         // Keep the floating selection toolbar glued to the active cell as the
         // viewport pans (published on change only).
         self.publish_anchor();
@@ -409,6 +426,7 @@ impl DocView for TrameView {
         renderer::draw_cells(
             surface,
             &self.state,
+            self.theme.palette(),
             font_cx,
             text_cache,
             self.text_enabled,
@@ -428,6 +446,7 @@ impl DocView for TrameView {
         renderer::draw_overlay(
             surface,
             &self.state,
+            self.theme.palette(),
             font_cx,
             text_cache,
             self.text_enabled,
@@ -442,7 +461,15 @@ impl DocView for TrameView {
 
         // The in-cell edit field sits above everything (after the active border).
         if let Some(editor) = &self.editor {
-            renderer::draw_edit(surface, &self.state, editor, self.caret_on, font_cx, text_cache);
+            renderer::draw_edit(
+                surface,
+                &self.state,
+                self.theme.palette(),
+                editor,
+                self.caret_on,
+                font_cx,
+                text_cache,
+            );
         }
     }
 

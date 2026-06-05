@@ -1,0 +1,82 @@
+// ambre-canvas/tokens.ron
+// ============================================================================
+// SINGLE SOURCE of Ambre's design tokens (ambre-spec-ui 2.D). `build.rs` reads
+// this file and generates BOTH:
+//   - theme.css : CSS custom properties for the DOM chrome (ambre-chrome).
+//   - theme.rs  : Rust `Palette` constants for the wgpu content (ambre-canvas).
+// One source => canvas/DOM coherence by construction. Light is the unmarked
+// `:root` default; dark is `:root[data-theme="dark"]` and the canvas DARK palette.
+//
+// Colours are `#rrggbb`. Scales are unitless integers (px for CSS, f32 for Rust).
+// ============================================================================
+Tokens(
+    // -- Chrome (DOM) colours -> CSS custom properties ------------------------
+    chrome: (
+        light: (
+            bg:        "#f4f5f8",
+            surface:   "#ffffff",
+            surface_2: "#eef0f4",
+            border:    "#d4d8e0",
+            text:      "#1a1a2e",
+            text_dim:  "#5a5a72",
+            accent:    "#6a5cf0",
+            success:   "#2b9d6a",
+            warning:   "#c08a1e",
+            error:     "#cc4444",
+            info:      "#2b7ad0",
+        ),
+        dark: (
+            bg:        "#1a1a2e",
+            surface:   "#20203a",
+            surface_2: "#26264a",
+            border:    "#33335a",
+            text:      "#e0e0e0",
+            text_dim:  "#9a9ab0",
+            accent:    "#7c6ef0",
+            success:   "#4ad295",
+            warning:   "#e0b341",
+            error:     "#e05a5a",
+            info:      "#5a9ae0",
+        ),
+    ),
+
+    // -- Canvas (wgpu content) colours -> Rust Palette -----------------------
+    canvas: (
+        light: (
+            content_bg:      "#ffffff",
+            content_pending: "#ebedf0",
+            header_bg:       "#f2f4f8",
+            header_active:   "#cfdcf0",
+            grid_line:       "#d2d5da",
+            header_border:   "#b2b7c1",
+            selection:       "#3c78d2",
+            cell_text:       "#333333",
+            header_text:     "#555555",
+            caret:           "#141414",
+        ),
+        dark: (
+            content_bg:      "#1f1f33",
+            content_pending: "#2a2a44",
+            header_bg:       "#26264a",
+            header_active:   "#3a3a66",
+            grid_line:       "#3a3a5a",
+            header_border:   "#44446a",
+            selection:       "#7c6ef0",
+            cell_text:       "#e0e0e0",
+            header_text:     "#b0b0c8",
+            caret:           "#f0f0f0",
+        ),
+    ),
+
+    // -- Theme-independent scales (px in CSS, f32 in Rust) -------------------
+    scale: (
+        space_xs:     4,
+        space_sm:     8,
+        space_md:     12,
+        space_lg:     16,
+        radius:       6,
+        font_small:   12,
+        font_body:    14,
+        font_heading: 20,
+    ),
+)
