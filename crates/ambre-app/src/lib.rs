@@ -27,7 +27,8 @@ use ambre_bus::{
 };
 use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
 use ambre_chrome::{
-    AppShell, CommandStates, ContextMenu, Dialog, Header, Kbd, MenuEntry, StatusBar, Toolbar,
+    AppShell, CommandStates, ContextMenu, Dialog, Header, Kbd, MenuEntry, StatusBar, ToastHost,
+    Toasts, Toolbar,
 };
 use ambre_trame::ui::TrameView;
 use leptos::prelude::*;
@@ -219,6 +220,10 @@ fn mount_app_shell(
         let anchor_pos = RwSignal::new(None::<(f64, f64)>);
         *anchor_slot.borrow_mut() = Some(anchor_pos);
 
+        // Transient notifications in an ARIA live region (announced to screen
+        // readers without stealing focus). Demonstrated on the theme toggle.
+        let toasts = Toasts::new();
+
         // Theme toggle: flips `theme_ctl` (read by the canvas) and the document's
         // `data-theme` (drives the CSS custom properties). `theme_sig` only
         // drives the button's own glyph.
@@ -285,12 +290,19 @@ fn mount_app_shell(
                     <button
                         class="icon"
                         title="Toggle theme"
+                        aria-label="Toggle colour theme"
                         on:click={
                             let theme_ctl = theme_ctl.clone();
                             move |_| {
                                 let next = theme_ctl.toggle();
                                 theme_sig.set(next);
                                 apply_theme_attr(next);
+                                let label = if next == ambre_canvas::Theme::Dark {
+                                    "Dark theme"
+                                } else {
+                                    "Light theme"
+                                };
+                                toasts.info(label);
                             }
                         }
                     >
@@ -299,6 +311,9 @@ fn mount_app_shell(
                     <button
                         class="icon"
                         title="About"
+                        aria-label="About Ambre"
+                        aria-haspopup="dialog"
+                        aria-expanded=move || about_open.get().then_some("true")
                         on:click=move |_| about_open.set(true)
                     >
                         "?"
@@ -380,6 +395,9 @@ fn mount_app_shell(
                     </button>
                 </div>
             </div>
+
+            // Live-region toast host (announces transient messages politely).
+            <ToastHost toasts=toasts />
         }
     });
 }

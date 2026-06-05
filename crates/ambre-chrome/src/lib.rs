@@ -30,9 +30,11 @@ mod command;
 mod context_menu;
 mod dialog;
 mod shortcut;
+mod toast;
 
 pub use app_shell::{AppShell, Header, StatusBar, Toolbar};
 pub use command::{keybinding_from_event, CommandStates};
 pub use context_menu::{ContextMenu, MenuEntry};
 pub use dialog::Dialog;
 pub use shortcut::Kbd;
+pub use toast::{ToastHost, ToastKind, Toasts};

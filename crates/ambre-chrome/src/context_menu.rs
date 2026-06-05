@@ -45,6 +45,11 @@ pub fn ContextMenu(
     let menu_x = RwSignal::new(0.0_f64);
     let menu_y = RwSignal::new(0.0_f64);
     let commands: Vec<CommandId> = entries.iter().map(|e| e.command).collect();
+    // Lowercased first chars for first-letter typeahead (WAI-ARIA menu pattern).
+    let initials: Vec<char> = entries
+        .iter()
+        .map(|e| e.label.chars().next().unwrap_or(' ').to_ascii_lowercase())
+        .collect();
 
     // On open: reset highlight, then place at the click point and flip if the
     // menu would overflow the viewport (measured after it renders).
@@ -89,32 +94,57 @@ pub fn ContextMenu(
 
         let len = commands.len();
         let cmds = commands.clone();
-        let on_keydown = move |ev: web_sys::KeyboardEvent| match ev.key().as_str() {
-            "ArrowDown" => {
-                ev.prevent_default();
-                focused.update(|i| *i = (*i + 1) % len.max(1));
-            }
-            "ArrowUp" => {
-                ev.prevent_default();
-                focused.update(|i| *i = (*i + len.saturating_sub(1)) % len.max(1));
-            }
-            "Home" => {
-                ev.prevent_default();
-                focused.set(0);
-            }
-            "End" => {
-                ev.prevent_default();
-                focused.set(len.saturating_sub(1));
-            }
-            "Escape" => pos.set(None),
-            "Enter" | " " => {
-                ev.prevent_default();
-                if let Some(&cmd) = cmds.get(focused.get_untracked()) {
-                    on_command.run(cmd);
+        let initials = initials.clone();
+        let on_keydown = move |ev: web_sys::KeyboardEvent| {
+            let key = ev.key();
+            match key.as_str() {
+                "ArrowDown" => {
+                    ev.prevent_default();
+                    focused.update(|i| *i = (*i + 1) % len.max(1));
                 }
-                pos.set(None);
+                "ArrowUp" => {
+                    ev.prevent_default();
+                    focused.update(|i| *i = (*i + len.saturating_sub(1)) % len.max(1));
+                }
+                // Tab is trapped inside the menu (it is a transient popup): cycle
+                // like the arrows rather than letting focus escape to the page.
+                "Tab" => {
+                    ev.prevent_default();
+                    if ev.shift_key() {
+                        focused.update(|i| *i = (*i + len.saturating_sub(1)) % len.max(1));
+                    } else {
+                        focused.update(|i| *i = (*i + 1) % len.max(1));
+                    }
+                }
+                "Home" => {
+                    ev.prevent_default();
+                    focused.set(0);
+                }
+                "End" => {
+                    ev.prevent_default();
+                    focused.set(len.saturating_sub(1));
+                }
+                "Escape" => pos.set(None),
+                "Enter" | " " => {
+                    ev.prevent_default();
+                    if let Some(&cmd) = cmds.get(focused.get_untracked()) {
+                        on_command.run(cmd);
+                    }
+                    pos.set(None);
+                }
+                // First-letter typeahead: jump to the next item whose label
+                // starts with the typed character, wrapping around.
+                _ if key.chars().count() == 1 => {
+                    let ch = key.chars().next().unwrap().to_ascii_lowercase();
+                    let start = focused.get_untracked();
+                    if let Some(off) = (1..=len).find(|&o| {
+                        initials.get((start + o) % len.max(1)) == Some(&ch)
+                    }) {
+                        focused.set((start + off) % len.max(1));
+                    }
+                }
+                _ => {}
             }
-            _ => {}
         };
 
         let items = entries
@@ -155,6 +185,8 @@ pub fn ContextMenu(
                 node_ref=menu_ref
                 class="ambre-ctx-menu"
                 role="menu"
+                aria-orientation="vertical"
+                aria-label="Context menu"
                 tabindex="-1"
                 style=move || format!("left:{}px; top:{}px;", menu_x.get(), menu_y.get())
                 on:keydown=on_keydown
