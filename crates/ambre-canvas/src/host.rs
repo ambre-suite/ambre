@@ -770,13 +770,19 @@ where
     }
 
     // -- Wheel event -> view. -------------------------------------------------
+    // The browser emits `wheel` for the mouse wheel *and* for two-finger
+    // touchpad scrolling, so this single listener covers both. Deltas are in
+    // CSS px (pixel mode) or lines/pages; scale to physical px like the pointer
+    // path and forward `delta_mode` so the view can normalise lines/pages.
     {
         let host_c = Rc::clone(&host);
+        let dpr = web_sys::window().map(|w| w.device_pixel_ratio()).unwrap_or(1.0);
         let cb = Closure::<dyn FnMut(web_sys::WheelEvent)>::new(
             move |event: web_sys::WheelEvent| {
                 let ev = InputEvent::Wheel {
-                    dx: event.delta_x(),
-                    dy: event.delta_y(),
+                    dx: event.delta_x() * dpr,
+                    dy: event.delta_y() * dpr,
+                    delta_mode: event.delta_mode(),
                     ctrl_key: event.ctrl_key(),
                 };
                 let consumed = host_c.borrow_mut().handle_input(&ev);
