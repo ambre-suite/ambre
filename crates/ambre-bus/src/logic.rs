@@ -158,6 +158,18 @@ pub enum TrameCommand {
         col: u32,
     },
 
+    /// Set the plaintext content of cell `(row, col)`.
+    ///
+    /// Emitted when the UI commits an edit session on the transparent textarea
+    /// pipe. The Logic thread stores the text in the document CRDT (the source
+    /// of truth); an empty `text` clears the cell. The UI updates its own cache
+    /// optimistically, so no echo event is required.
+    SetCellText {
+        row: u32,
+        col: u32,
+        text: String,
+    },
+
     /// Toggle bold formatting for the active cell (set by
     /// [`SetActiveCell`](TrameCommand::SetActiveCell)).
     ToggleBold,

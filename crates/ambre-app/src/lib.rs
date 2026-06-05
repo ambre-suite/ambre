@@ -132,7 +132,7 @@ pub fn main() {
     // Run the UI thread on this (main) thread, driving the Trame view.
     ambre_canvas::run_with(
         "ambre-canvas",
-        move |w, h| TrameView::new(ui_to_logic_tx, view_rx, w, h),
+        move |w, h, text_input| TrameView::new(ui_to_logic_tx, view_rx, w, h, text_input),
         pre_frame,
         raf,
     );

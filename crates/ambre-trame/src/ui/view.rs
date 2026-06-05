@@ -13,11 +13,14 @@ use ambre_bus::{AppCommand, AppEvent, IPC_TEST_DOC_ID, LogicCommand, TrameComman
 use ambre_draw::{FontContext, Rect};
 use ambre_canvas::{
     ContentRepaint, DocView, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache,
-    WgpuSurface,
+    TextInput, WgpuSurface,
 };
 
-use super::grid::{COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT, TrameUiState};
+use super::grid::{CellEditor, COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT, TrameUiState};
 use super::renderer::{self, DrawStats};
+
+/// Caret blink half-period: the standard ~530 ms on/off toggle (period ~1.06 s).
+const BLINK_MS: f64 = 530.0;
 
 /// Trame's `DocView`: a virtual-scroll spreadsheet grid.
 pub struct TrameView {
@@ -28,6 +31,22 @@ pub struct TrameView {
 
     /// Grid navigation + cell cache.
     state: TrameUiState,
+
+    /// Transparent textarea pipe (keyboard + IME + clipboard). The view focuses
+    /// it on a content click and slides it to the caret during an edit session.
+    text_input: TextInput,
+    /// devicePixelRatio: the grid works in physical pixels, the textarea
+    /// positions in CSS pixels, so caret coords are divided by this.
+    dpr: f64,
+    /// Active in-cell edit session, or `None` in navigation mode.
+    editor: Option<CellEditor>,
+    /// The edit overlay changed this frame (keystroke, caret move, IME pass).
+    edit_dirty: bool,
+    /// Caret blink phase: `true` = caret drawn. Toggled every `BLINK_MS`, reset
+    /// to `true` (solid) on any edit interaction, as platforms do.
+    caret_on: bool,
+    /// `performance.now()` of the last blink toggle (or blink reset).
+    last_blink_ms: f64,
 
     /// `performance.now()` handle for the renderer's sub-phase timings.
     perf: web_sys::Performance,
@@ -64,16 +83,26 @@ impl TrameView {
         from_logic: flume::Receiver<UiEvent>,
         canvas_width: f64,
         canvas_height: f64,
+        text_input: TextInput,
     ) -> Self {
-        let perf = web_sys::window()
-            .expect("no window")
-            .performance()
-            .expect("no Performance API");
+        let window = web_sys::window().expect("no window");
+        let perf = window.performance().expect("no Performance API");
+        let dpr = window.device_pixel_ratio();
+
+        // Focus the pipe up front so the keyboard works without a click; park it
+        // on the active cell so a first keystroke or IME opens there.
+        text_input.focus();
 
         Self {
             to_logic,
             from_logic,
             state: TrameUiState::new(canvas_width, canvas_height),
+            text_input,
+            dpr,
+            editor: None,
+            edit_dirty: false,
+            caret_on: true,
+            last_blink_ms: 0.0,
             perf,
             text_enabled: true,
             draw_stats: DrawStats::default(),
@@ -122,6 +151,72 @@ impl TrameView {
         }
         self.fatal = true;
         tracing::error!("Trame: fatal — {reason}; the UI is now inert");
+    }
+
+    // -- Edit session ----------------------------------------------------------
+
+    /// Show the caret solid and restart its blink clock. Called on every edit
+    /// interaction so the caret never blinks mid-keystroke.
+    fn reset_blink(&mut self) {
+        self.caret_on = true;
+        self.last_blink_ms = self.perf.now();
+        self.edit_dirty = true;
+    }
+
+    /// Seed text for an editor opened on `(row, col)`: the cell's current text,
+    /// or empty if not cached.
+    fn cell_seed(&self, row: u32, col: u32) -> String {
+        self.state
+            .cell_cache
+            .get(&(row, col))
+            .map(|c| c.text.clone())
+            .unwrap_or_default()
+    }
+
+    /// Slide the textarea pipe onto a cell (CSS px) so the IME popup anchors
+    /// there. The grid works in physical px; the DOM positions in CSS px.
+    fn park_input_on(&self, row: u32, col: u32) {
+        if let Some((x, y, _, _)) = self.state.cell_pixel_rect(row, col) {
+            self.text_input
+                .set_caret(x / self.dpr, y / self.dpr, ROW_HEIGHT / self.dpr);
+        }
+    }
+
+    /// Open an edit session on the active cell, seeded with `seed`. Focuses the
+    /// pipe (clearing its buffer) and positions it on the cell.
+    fn begin_edit(&mut self, seed: String) {
+        let (row, col) = (self.state.active_row, self.state.active_col);
+        self.editor = Some(CellEditor::new(row, col, seed));
+        self.text_input.clear();
+        self.text_input.focus();
+        self.park_input_on(row, col);
+        self.reset_blink();
+    }
+
+    /// Commit the current edit into the CRDT (via Logic) and update the local
+    /// cache optimistically, then leave edit mode. No-op if not editing.
+    fn commit_edit(&mut self) {
+        let Some(editor) = self.editor.take() else { return };
+        self.send_command(TrameCommand::SetCellText {
+            row: editor.row,
+            col: editor.col,
+            text: editor.buffer.clone(),
+        });
+        self.state.set_cell_text(editor.row, editor.col, editor.buffer);
+        // Content layer must repaint to show the committed text; overlay too, to
+        // drop the edit field.
+        self.needs_full = true;
+        self.edit_dirty = true;
+        self.text_input.clear();
+    }
+
+    /// Abandon the current edit without writing anything, then leave edit mode.
+    fn cancel_edit(&mut self) {
+        if self.editor.take().is_some() {
+            // Content is untouched; only the overlay field must be cleared.
+            self.edit_dirty = true;
+            self.text_input.clear();
+        }
     }
 }
 
@@ -172,14 +267,29 @@ impl DocView for TrameView {
             let cmd = self.state.scroll_viewport_cmd();
             self.send_command(cmd);
         }
+
+        // Caret blink: while editing, flip the phase every half-period and dirty
+        // the overlay so it redraws. Costs one overlay redraw per ~530 ms; idle
+        // (non-editing) frames never touch it.
+        if self.editor.is_some() {
+            let now = self.perf.now();
+            if now - self.last_blink_ms >= BLINK_MS {
+                self.caret_on = !self.caret_on;
+                self.last_blink_ms = now;
+                self.edit_dirty = true;
+            }
+        }
     }
 
     fn plan_repaint(&mut self, hud_tick: bool) -> RepaintPlan {
         // Formatting lives per-cell in the persistent cell layer, so a cursor
         // move needs no special repaint -- the cells keep their runs as they
         // shift. Only a CellFormat event (handled in `update`) dirties content.
-        let any_dirty =
-            self.needs_full || self.viewport_changed || self.data_dirty || hud_tick;
+        let any_dirty = self.needs_full
+            || self.viewport_changed
+            || self.data_dirty
+            || self.edit_dirty
+            || hud_tick;
 
         let (content, content_strip): (ContentRepaint, Option<Rect>) = if self.needs_full {
             (ContentRepaint::Full, None)
@@ -243,6 +353,7 @@ impl DocView for TrameView {
         self.needs_full = false;
         self.viewport_changed = false;
         self.data_dirty = false;
+        self.edit_dirty = false;
         self.prev_top_row = self.state.top_row;
         self.prev_left_col = self.state.left_col;
 
@@ -297,6 +408,11 @@ impl DocView for TrameView {
             &self.perf,
             &mut self.draw_stats,
         );
+
+        // The in-cell edit field sits above everything (after the active border).
+        if let Some(editor) = &self.editor {
+            renderer::draw_edit(surface, &self.state, editor, self.caret_on, font_cx, text_cache);
+        }
     }
 
     fn resize(&mut self, width: u32, height: u32) {
@@ -305,38 +421,209 @@ impl DocView for TrameView {
     }
 
     fn handle_input(&mut self, ev: &InputEvent) -> bool {
-        // Command keybindings (e.g. Ctrl+B) are resolved by the chrome's
-        // keymap, not here -- this handler is for content navigation only.
-        let InputEvent::Key { key, .. } = ev else { return false };
-        let (dr, dc): (i32, i32) = match key.as_str() {
-            "ArrowUp" => (-1, 0),
-            "ArrowDown" => (1, 0),
-            "ArrowLeft" => (0, -1),
-            "ArrowRight" => (0, 1),
-            "t" | "T" => {
-                self.text_enabled ^= true;
-                // Text toggle affects every cell -- full repaint, no preventDefault.
-                self.needs_full = true;
-                return false;
-            }
-            _ => return false,
-        };
+        // An open edit session owns text, IME and the editing keys.
+        if self.editor.is_some() {
+            return self.handle_input_editing(ev);
+        }
+        self.handle_input_nav(ev)
+    }
+}
 
-        // Cursor or scroll move: viewport_changed; plan_repaint decides Scroll
-        // vs Full from the actual delta.
+impl TrameView {
+    // -- Navigation mode -------------------------------------------------------
+
+    /// Input routing while NOT editing a cell.
+    fn handle_input_nav(&mut self, ev: &InputEvent) -> bool {
+        match ev {
+            // A content click focuses the pipe and selects the clicked cell, so
+            // typing or IME can start there (spec: canvas click -> textarea.focus).
+            InputEvent::PointerDown { x, y, button: 0 } => {
+                self.text_input.focus();
+                if let Some((row, col)) = self.state.cell_at(*x, *y) {
+                    self.select_cell(row, col);
+                }
+                true
+            }
+            // Double-click opens an editor on the clicked cell's current text.
+            InputEvent::DoubleClick { x, y } => {
+                self.text_input.focus();
+                if let Some((row, col)) = self.state.cell_at(*x, *y) {
+                    self.select_cell(row, col);
+                    let seed = self.cell_seed(row, col);
+                    self.begin_edit(seed);
+                }
+                true
+            }
+            // First printable text (latin or IME commit) opens an edit replacing
+            // the cell, then applies the text.
+            InputEvent::Text { text } => {
+                self.begin_edit(String::new());
+                if let Some(ed) = self.editor.as_mut() {
+                    ed.insert(text);
+                }
+                self.edit_dirty = true;
+                true
+            }
+            InputEvent::CompositionUpdate { text } => {
+                self.begin_edit(String::new());
+                if let Some(ed) = self.editor.as_mut() {
+                    ed.preview = text.clone();
+                }
+                self.edit_dirty = true;
+                true
+            }
+            InputEvent::CompositionEnd { text } => {
+                self.begin_edit(String::new());
+                if let Some(ed) = self.editor.as_mut() {
+                    ed.insert(text);
+                }
+                self.edit_dirty = true;
+                true
+            }
+            InputEvent::Key { key, alt, .. } => match key.as_str() {
+                "ArrowUp" => self.nav_move(-1, 0),
+                "ArrowDown" => self.nav_move(1, 0),
+                "ArrowLeft" => self.nav_move(0, -1),
+                "ArrowRight" => self.nav_move(0, 1),
+                // Enter / F2 open an editor on the cell's current text.
+                "Enter" | "F2" => {
+                    let seed = self.cell_seed(self.state.active_row, self.state.active_col);
+                    self.begin_edit(seed);
+                    true
+                }
+                // Debug HUD text toggle, moved behind Alt so plain letters type.
+                "t" | "T" if *alt => {
+                    self.text_enabled ^= true;
+                    self.needs_full = true;
+                    true
+                }
+                // Let plain printable keys fall through (no preventDefault) so the
+                // focused textarea receives them and emits an `input` -> `Text`.
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    /// Move the active cell by `(dr, dc)`; returns `true` (consumed).
+    fn nav_move(&mut self, dr: i32, dc: i32) -> bool {
         self.viewport_changed = true;
         if let Some(mv) = self.state.move_cursor(dr, dc) {
-            // Inform Logic of the new active cell so formatting toggles retarget
-            // and the chrome buttons track the selection. Cheap and idempotent;
-            // sent immediately (one per keypress, bounded by key-repeat rate).
             self.send_command(mv.active);
-            // Coalesce the viewport fetch: keep only the latest; `update` sends
-            // it once this frame. Intermediate requests are superseded (their
-            // cache eviction already happened inside `move_cursor`).
             if let Some(scroll) = mv.scroll {
                 self.pending_viewport = Some(scroll);
             }
+            self.park_input_on(self.state.active_row, self.state.active_col);
         }
         true
+    }
+
+    /// Select a cell directly (pointer hit), keeping Logic and the pipe in sync.
+    fn select_cell(&mut self, row: u32, col: u32) {
+        if row == self.state.active_row && col == self.state.active_col {
+            self.park_input_on(row, col);
+            return;
+        }
+        self.state.active_row = row;
+        self.state.active_col = col;
+        self.viewport_changed = true;
+        self.send_command(TrameCommand::SetActiveCell { row, col });
+        self.park_input_on(row, col);
+    }
+
+    // -- Edit mode -------------------------------------------------------------
+
+    /// Input routing while editing a cell.
+    fn handle_input_editing(&mut self, ev: &InputEvent) -> bool {
+        match ev {
+            InputEvent::Text { text } => {
+                if let Some(ed) = self.editor.as_mut() {
+                    ed.insert(text);
+                }
+                self.reset_blink();
+                true
+            }
+            InputEvent::CompositionUpdate { text } => {
+                if let Some(ed) = self.editor.as_mut() {
+                    ed.preview = text.clone();
+                }
+                self.reset_blink();
+                true
+            }
+            InputEvent::CompositionEnd { text } => {
+                if let Some(ed) = self.editor.as_mut() {
+                    ed.preview.clear();
+                    ed.insert(text);
+                }
+                self.reset_blink();
+                true
+            }
+            // A click outside commits and reselects the clicked cell.
+            InputEvent::PointerDown { x, y, button: 0 } => {
+                self.commit_edit();
+                self.text_input.focus();
+                if let Some((row, col)) = self.state.cell_at(*x, *y) {
+                    self.select_cell(row, col);
+                }
+                true
+            }
+            InputEvent::Key { key, ctrl, meta, .. } => {
+                // Leave command chords (Ctrl/Cmd+X) to the chrome keymap.
+                if *ctrl || *meta {
+                    return false;
+                }
+                match key.as_str() {
+                    "Enter" => {
+                        self.commit_edit();
+                        self.nav_move(1, 0);
+                        true
+                    }
+                    "Tab" => {
+                        self.commit_edit();
+                        self.nav_move(0, 1);
+                        true
+                    }
+                    "Escape" => {
+                        self.cancel_edit();
+                        true
+                    }
+                    "Backspace" => {
+                        if let Some(ed) = self.editor.as_mut() {
+                            ed.backspace();
+                        }
+                        self.reset_blink();
+                        true
+                    }
+                    "ArrowLeft" => {
+                        if let Some(ed) = self.editor.as_mut() {
+                            ed.move_left();
+                        }
+                        self.reset_blink();
+                        true
+                    }
+                    "ArrowRight" => {
+                        if let Some(ed) = self.editor.as_mut() {
+                            ed.move_right();
+                        }
+                        self.reset_blink();
+                        true
+                    }
+                    // Up/Down commit and move, as in a spreadsheet.
+                    "ArrowUp" => {
+                        self.commit_edit();
+                        self.nav_move(-1, 0);
+                        true
+                    }
+                    "ArrowDown" => {
+                        self.commit_edit();
+                        self.nav_move(1, 0);
+                        true
+                    }
+                    // Printable keys fall through to the textarea -> `Text`.
+                    _ => false,
+                }
+            }
+            _ => false,
+        }
     }
 }

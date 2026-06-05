@@ -24,9 +24,14 @@ pub mod view;
 #[cfg(target_arch = "wasm32")]
 pub mod host;
 
+// -- Transparent <textarea> keyboard/IME pipe (pure web_sys DOM glue; compiles
+//    on every target so app crates can name the handle in host-side tests) ----
+pub mod text_input;
+
 // -- Convenience re-exports --------------------------------------------------
 pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurface};
 pub use text_cache::TextCache;
 pub use view::{DocView, FrameStats, InputEvent, RepaintPlan};
 #[cfg(target_arch = "wasm32")]
 pub use host::{FrameHost, GpuState, RafControl, bootstrap_gpu, run, run_with, start_raf_loop};
+pub use text_input::TextInput;

@@ -21,11 +21,15 @@ peniko     = { workspace = true }
 # (scoped to content; chrome a11y is native DOM in ambre-chrome).
 accesskit  = { workspace = true }
 
+# DOM glue for the transparent <textarea> pipe (text_input.rs). Pure web_sys
+# bindings: they compile on every target, so app crates can name `TextInput`
+# in host-side tests even though it only does anything in the browser.
+web-sys      = { workspace = true }
+wasm-bindgen = { workspace = true }
+
 # UI Thread host plumbing (GPU bootstrap + rAF loop). wasm32-only: surface
-# creation from a canvas and the web_sys glue don't exist on native.
+# creation from a canvas and the rest of the web_sys glue don't exist on native.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-web-sys              = { workspace = true }
 js-sys               = { workspace = true }
-wasm-bindgen         = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
 tracing              = { workspace = true }

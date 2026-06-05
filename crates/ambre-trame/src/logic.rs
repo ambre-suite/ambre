@@ -18,7 +18,17 @@
 
 use std::collections::HashSet;
 
+use loro::{LoroDoc, LoroValue};
+
 use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
+
+/// Name of the Loro map holding edited cell text, keyed by `"row:col"`.
+const CELLS_MAP: &str = "cells";
+
+/// Loro map key for a cell. Stable, collision-free (decimal, single separator).
+fn cell_key(row: u32, col: u32) -> String {
+    format!("{row}:{col}")
+}
 
 // -----------------------------------------------------------------------------
 // TrameState
@@ -41,6 +51,11 @@ pub struct TrameState {
     bold: HashSet<(u32, u32)>,
     /// Cells carrying an italic run.
     italic: HashSet<(u32, u32)>,
+    /// CRDT source of truth for **edited** cell text: a Loro map keyed by
+    /// `"row:col"` -> plaintext. A cell absent from the map shows its generated
+    /// coordinate label (A1, B2, ...). This is the first wiring of the document
+    /// model; bold/italic stay in the sets above until they move to Loro runs.
+    doc: LoroDoc,
 }
 
 impl TrameState {
@@ -49,6 +64,17 @@ impl TrameState {
             active: (0, 0),
             bold: HashSet::new(),
             italic: HashSet::new(),
+            doc: LoroDoc::new(),
+        }
+    }
+
+    /// Display text for a cell: the edited value from the CRDT if present,
+    /// otherwise the generated coordinate label.
+    fn cell_text(&self, row: u32, col: u32) -> String {
+        let map = self.doc.get_map(CELLS_MAP);
+        match map.get(&cell_key(row, col)).map(|v| v.get_deep_value()) {
+            Some(LoroValue::String(s)) => s.to_string(),
+            _ => format!("{}{}", col_to_alpha(col), row + 1),
         }
     }
 
@@ -65,6 +91,20 @@ impl TrameState {
                     TrameEvent::BoldState { enabled: self.bold.contains(&self.active) },
                     TrameEvent::ItalicState { enabled: self.italic.contains(&self.active) },
                 ]
+            }
+            TrameCommand::SetCellText { row, col, text } => {
+                // Commit the edit into the CRDT. Empty text clears the cell back
+                // to its generated label. The UI already updated its cache
+                // optimistically, so no display event is echoed.
+                let map = self.doc.get_map(CELLS_MAP);
+                let key = cell_key(row, col);
+                if text.is_empty() {
+                    let _ = map.delete(&key);
+                } else {
+                    let _ = map.insert(&key, text);
+                }
+                self.doc.commit();
+                vec![]
             }
             TrameCommand::ToggleBold => {
                 let enabled = toggle(&mut self.bold, self.active);
@@ -108,7 +148,7 @@ impl TrameState {
                         cells.push(DisplayCell {
                             row,
                             col,
-                            text: format!("{}{}", col_to_alpha(col), row + 1),
+                            text: self.cell_text(row, col),
                             bold: self.bold.contains(&(row, col)),
                             italic: self.italic.contains(&(row, col)),
                         });
@@ -217,6 +257,40 @@ mod tests {
         let b2 = cells.iter().find(|c| c.row == 1 && c.col == 1).unwrap();
         assert!(a1.bold, "A1 must stay bold");
         assert!(!b2.bold, "B2 must not become bold");
+    }
+
+    /// An edited cell stores its text in the CRDT and overrides the generated
+    /// label; clearing it falls back to the coordinate label.
+    #[test]
+    fn edited_text_overrides_generated_label() {
+        let mut state = TrameState::new();
+
+        // A1 starts as its generated label.
+        let evts = state.handle_command(TrameCommand::ScrollViewport {
+            version: 1, row_start: 0, row_end: 0, col_start: 0, col_end: 0,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts[0] else { panic!() };
+        assert_eq!(cells[0].text, "A1");
+
+        // Edit A1, then read it back: the stored text wins.
+        state.handle_command(TrameCommand::SetCellText {
+            row: 0, col: 0, text: "hello".to_owned(),
+        });
+        let evts = state.handle_command(TrameCommand::ScrollViewport {
+            version: 2, row_start: 0, row_end: 0, col_start: 0, col_end: 0,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts[0] else { panic!() };
+        assert_eq!(cells[0].text, "hello");
+
+        // Clearing it restores the generated label.
+        state.handle_command(TrameCommand::SetCellText {
+            row: 0, col: 0, text: String::new(),
+        });
+        let evts = state.handle_command(TrameCommand::ScrollViewport {
+            version: 3, row_start: 0, row_end: 0, col_start: 0, col_end: 0,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts[0] else { panic!() };
+        assert_eq!(cells[0].text, "A1");
     }
 
     #[test]

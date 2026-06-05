@@ -47,7 +47,22 @@ pub enum InputEvent {
     PointerDown { x: f64, y: f64, button: i16 },
     PointerMove { x: f64, y: f64 },
     PointerUp { x: f64, y: f64, button: i16 },
+    /// Native double-click (respects the platform's double-click speed). Used to
+    /// enter cell edit mode.
+    DoubleClick { x: f64, y: f64 },
     Wheel { dx: f64, dy: f64, ctrl_key: bool },
+
+    /// Committed text from the transparent `<textarea>` pipe: latin typing,
+    /// autocomplete or a plaintext paste. Insert it at the caret. The canvas
+    /// owns the visual caret/selection; the textarea renders nothing.
+    Text { text: String },
+    /// IME composition in progress (CJK/Korean/Vietnamese). `text` is the full
+    /// preview string for this composition pass; it replaces the previous
+    /// preview and is rendered with a composition style until committed.
+    CompositionUpdate { text: String },
+    /// IME composition committed: the final `text` replaces the preview and is
+    /// inserted into the model.
+    CompositionEnd { text: String },
 }
 
 /// Per-application UI logic driven once per animation frame by [`FrameHost`].
