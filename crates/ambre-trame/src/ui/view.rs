@@ -22,6 +22,20 @@ use super::renderer::{self, DrawStats};
 /// Caret blink half-period: the standard ~530 ms on/off toggle (period ~1.06 s).
 const BLINK_MS: f64 = 530.0;
 
+/// Spreadsheet column label for a 0-based index (0 -> "A", 26 -> "AA"). Used for
+/// the screen-reader cell announcement.
+fn col_label(mut col: u32) -> String {
+    let mut label = String::new();
+    loop {
+        label.insert(0, (b'A' + (col % 26) as u8) as char);
+        if col < 26 {
+            break;
+        }
+        col = col / 26 - 1;
+    }
+    label
+}
+
 /// Trame's `DocView`: a virtual-scroll spreadsheet grid.
 pub struct TrameView {
     /// Outbound channel to the Logic thread.
@@ -177,6 +191,21 @@ impl TrameView {
 
     // -- Edit session ----------------------------------------------------------
 
+    /// Announce the active cell to screen readers via the live region (content
+    /// a11y, 2.F): the cell reference plus its value, e.g. `"B2, 42"`. Called on
+    /// every selection change so navigating the grid is audible, like a native
+    /// spreadsheet.
+    fn announce_active(&self) {
+        let (row, col) = (self.state.active_row, self.state.active_col);
+        let value = self.cell_seed(row, col);
+        let desc = if value.is_empty() {
+            format!("{}{}, empty", col_label(col), row + 1)
+        } else {
+            format!("{}{}, {}", col_label(col), row + 1, value)
+        };
+        self.text_input.announce(&desc);
+    }
+
     /// Recompute the active cell's on-screen anchor and publish it for the
     /// floating selection toolbar -- the centre of the cell's top edge in CSS
     /// px, or `None` when the cell is scrolled out of the grid area. Cheap;
@@ -254,6 +283,8 @@ impl TrameView {
         self.needs_full = true;
         self.edit_dirty = true;
         self.text_input.clear();
+        // Announce the committed value to assistive tech.
+        self.announce_active();
     }
 
     /// Abandon the current edit without writing anything, then leave edit mode.
@@ -594,6 +625,7 @@ impl TrameView {
                 self.pending_viewport = Some(scroll);
             }
             self.park_input_on(self.state.active_row, self.state.active_col);
+            self.announce_active();
         }
         true
     }
@@ -609,6 +641,7 @@ impl TrameView {
         self.viewport_changed = true;
         self.send_command(TrameCommand::SetActiveCell { row, col });
         self.park_input_on(row, col);
+        self.announce_active();
     }
 
     // -- Edit mode -------------------------------------------------------------

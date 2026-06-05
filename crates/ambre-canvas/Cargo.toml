@@ -22,10 +22,6 @@ rustc-hash = { workspace = true }
 kurbo      = { workspace = true }
 peniko     = { workspace = true }
 
-# Content a11y: AccessKit exposes the canvas content tree to screen readers
-# (scoped to content; chrome a11y is native DOM in ambre-chrome).
-accesskit  = { workspace = true }
-
 # DOM glue for the transparent <textarea> pipe (text_input.rs). Pure web_sys
 # bindings: they compile on every target, so app crates can name `TextInput`
 # in host-side tests even though it only does anything in the browser.
