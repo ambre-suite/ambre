@@ -56,14 +56,6 @@ pub struct TrameView {
     /// Last rendered scroll position, used to compute the scroll delta.
     prev_top_row: u32,
     prev_left_col: u32,
-
-    /// Bold/italic render state for the active cell, mirrored from the Logic
-    /// thread's [`TrameEvent::BoldState`] / [`TrameEvent::ItalicState`]. The
-    /// chrome gets the same events from the UI-thread dispatcher, so buttons and
-    /// canvas stay in sync without sharing state here (single source of truth =
-    /// the Logic thread).
-    bold: bool,
-    italic: bool,
 }
 
 impl TrameView {
@@ -93,8 +85,6 @@ impl TrameView {
             data_dirty: false,
             prev_top_row: 0,
             prev_left_col: 0,
-            bold: false,
-            italic: false,
         }
     }
 
@@ -142,14 +132,15 @@ impl DocView for TrameView {
         // no recovery, so flip to the fatal state instead of silently looping.
         loop {
             match self.from_logic.try_recv() {
-                Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::BoldState { enabled }), .. }) => {
-                    self.bold = enabled;
+                Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::CellFormat { row, col, bold, italic }), .. }) => {
+                    // Formatting is pinned to the cell, not the selection.
+                    self.state.set_cell_format(row, col, bold, italic);
                     self.needs_full = true;
                 }
-                Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::ItalicState { enabled }), .. }) => {
-                    self.italic = enabled;
-                    self.needs_full = true;
-                }
+                // BoldState / ItalicState target the chrome toggle buttons; the
+                // UI-thread dispatcher consumes them. The canvas ignores them --
+                // it renders per-cell formatting from the cache instead.
+                Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::BoldState { .. } | TrameEvent::ItalicState { .. }), .. }) => {}
                 Ok(UiEvent::Viewport { event: AppEvent::Trame(update), .. }) => {
                     self.state.on_viewport_data(update);
                     // Just flag data dirty. If a scroll happens the same frame the
@@ -184,14 +175,9 @@ impl DocView for TrameView {
     }
 
     fn plan_repaint(&mut self, hud_tick: bool) -> RepaintPlan {
-        // Bold lives in the persistent cell layer and follows the active cell
-        // (the "Bold" command emphasizes the current selection). An active-cell
-        // move therefore needs a full content repaint to re-weight the cell it
-        // left and the one it entered, not the cheap scroll/reuse path.
-        if self.viewport_changed && (self.bold || self.italic) {
-            self.needs_full = true;
-        }
-
+        // Formatting lives per-cell in the persistent cell layer, so a cursor
+        // move needs no special repaint -- the cells keep their runs as they
+        // shift. Only a CellFormat event (handled in `update`) dirties content.
         let any_dirty =
             self.needs_full || self.viewport_changed || self.data_dirty || hud_tick;
 
@@ -284,8 +270,6 @@ impl DocView for TrameView {
             font_cx,
             text_cache,
             self.text_enabled,
-            self.bold,
-            self.italic,
             strip,
             &self.perf,
             &mut self.draw_stats,
@@ -341,11 +325,17 @@ impl DocView for TrameView {
         // Cursor or scroll move: viewport_changed; plan_repaint decides Scroll
         // vs Full from the actual delta.
         self.viewport_changed = true;
-        if let Some(cmd) = self.state.move_cursor(dr, dc) {
-            // Coalesce: keep only the latest request; `update` sends it once
-            // this frame. Intermediate requests are superseded (their cache
-            // eviction already happened inside `move_cursor`).
-            self.pending_viewport = Some(cmd);
+        if let Some(mv) = self.state.move_cursor(dr, dc) {
+            // Inform Logic of the new active cell so formatting toggles retarget
+            // and the chrome buttons track the selection. Cheap and idempotent;
+            // sent immediately (one per keypress, bounded by key-repeat rate).
+            self.send_command(mv.active);
+            // Coalesce the viewport fetch: keep only the latest; `update` sends
+            // it once this frame. Intermediate requests are superseded (their
+            // cache eviction already happened inside `move_cursor`).
+            if let Some(scroll) = mv.scroll {
+                self.pending_viewport = Some(scroll);
+            }
         }
         true
     }

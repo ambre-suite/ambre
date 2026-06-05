@@ -172,18 +172,36 @@ pub enum TrameEvent {
         cells: Vec<DisplayCell>,
     },
 
-    /// Current bold formatting state after a [`ToggleBold`] command.
+    /// Bold formatting state of the **active cell**, emitted after a
+    /// [`ToggleBold`] or [`SetActiveCell`] command. Drives the chrome's "Bold"
+    /// toggle button (which always reflects the current selection).
     ///
     /// [`ToggleBold`]: crate::logic::TrameCommand::ToggleBold
+    /// [`SetActiveCell`]: crate::logic::TrameCommand::SetActiveCell
     BoldState {
         enabled: bool,
     },
 
-    /// Current italic formatting state after a [`ToggleItalic`] command.
+    /// Italic formatting state of the **active cell**, emitted after a
+    /// [`ToggleItalic`] or [`SetActiveCell`] command. Drives the chrome's
+    /// "Italic" toggle button.
     ///
     /// [`ToggleItalic`]: crate::logic::TrameCommand::ToggleItalic
+    /// [`SetActiveCell`]: crate::logic::TrameCommand::SetActiveCell
     ItalicState {
         enabled: bool,
+    },
+
+    /// A single cell's formatting changed (after a toggle). The UI Thread
+    /// updates that cell in its cache and repaints, so the bold/italic run stays
+    /// pinned to the cell it was applied to -- independent of where the cursor
+    /// moves next. Carries the full per-cell flags (not a delta) so it is
+    /// order-independent.
+    CellFormat {
+        row: u32,
+        col: u32,
+        bold: bool,
+        italic: bool,
     },
 }
 
@@ -198,4 +216,8 @@ pub struct DisplayCell {
     pub col: u32,
     /// Display text (formula result or raw string).
     pub text: String,
+    /// Bold run applied to this cell (pinned to the cell, not the selection).
+    pub bold: bool,
+    /// Italic run applied to this cell.
+    pub italic: bool,
 }

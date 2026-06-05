@@ -144,9 +144,25 @@ pub enum TrameCommand {
         col_end: u32,
     },
 
-    /// Toggle bold formatting for the active cell.
+    /// Move the active cell (selection) to `(row, col)`.
+    ///
+    /// Formatting commands ([`ToggleBold`](TrameCommand::ToggleBold) /
+    /// [`ToggleItalic`](TrameCommand::ToggleItalic)) target whatever cell is
+    /// active in the Logic thread, so the UI Thread must keep it informed when
+    /// the cursor moves. The Logic thread replies with the active cell's current
+    /// formatting ([`TrameEvent::BoldState`](crate::ui::TrameEvent::BoldState) /
+    /// [`ItalicState`](crate::ui::TrameEvent::ItalicState)) so the chrome toggle
+    /// buttons track the selection.
+    SetActiveCell {
+        row: u32,
+        col: u32,
+    },
+
+    /// Toggle bold formatting for the active cell (set by
+    /// [`SetActiveCell`](TrameCommand::SetActiveCell)).
     ToggleBold,
 
-    /// Toggle italic formatting for the active cell.
+    /// Toggle italic formatting for the active cell (set by
+    /// [`SetActiveCell`](TrameCommand::SetActiveCell)).
     ToggleItalic,
 }

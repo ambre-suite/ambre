@@ -161,8 +161,6 @@ pub fn draw_cells<S: DrawSurface>(
     font_cx:      &mut FontContext,
     text_cache:   &mut TextCache,
     text_enabled:   bool,
-    bold_enabled:   bool,
-    italic_enabled: bool,
     strip_rect:     Option<Rect>,
     perf:         &web_sys::Performance,
     stats:        &mut DrawStats,
@@ -241,18 +239,15 @@ pub fn draw_cells<S: DrawSurface>(
         let cell_max_width = (COL_WIDTH - 8.0) as f32;
         for row in row_start..row_end {
             for col in col_start..col_end {
-                if let Some(content) = state.cell_cache.get(&(row, col)) {
-                    if content.is_empty() { continue; }
+                if let Some(cell) = state.cell_cache.get(&(row, col)) {
+                    if cell.text.is_empty() { continue; }
                     let cx = HEADER_WIDTH + (col - state.left_col) as f64 * COL_WIDTH;
                     let cy = HEADER_HEIGHT + (row - state.top_row) as f64 * ROW_HEIGHT;
-                    // Bold/italic apply to the active cell only -- it is what
-                    // the "Bold"/"Italic" toolbar commands target.
-                    let is_active = row == state.active_row && col == state.active_col;
-                    let cell_bold = bold_enabled && is_active;
-                    let cell_italic = italic_enabled && is_active;
+                    // Formatting is pinned per-cell in the cache -- it stays on
+                    // the cell it was applied to, not on the moving selection.
                     let layout: &Layout<ParleyBrush> = text_cache.get_or_build(
-                        font_cx, content, BODY_SIZE, cell_max_width, Alignment::Start,
-                        cell_bold, cell_italic,
+                        font_cx, &cell.text, BODY_SIZE, cell_max_width, Alignment::Start,
+                        cell.bold, cell.italic,
                     );
                     let text_h  = layout.height() as f64;
                     let y_off   = ((ROW_HEIGHT - text_h) / 2.0).max(0.0);

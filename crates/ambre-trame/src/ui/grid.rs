@@ -26,6 +26,22 @@ pub const HEADER_WIDTH: f64 = 50.0;
 const PADDING_ROWS: u32 = 20;
 const PADDING_COLS: u32 = 5;
 
+/// A cached cell ready to render: text plus its pinned formatting runs.
+#[derive(Clone, Default)]
+pub struct CellData {
+    pub text: String,
+    pub bold: bool,
+    pub italic: bool,
+}
+
+/// Outcome of a cursor move: the two commands the view forwards to Logic.
+pub struct CursorMove {
+    /// Always present -- the new active cell, so formatting toggles retarget.
+    pub active: TrameCommand,
+    /// Present only when the visible range changed and new cells must be fetched.
+    pub scroll: Option<TrameCommand>,
+}
+
 // -----------------------------------------------------------------------------
 // TrameUiState
 // -----------------------------------------------------------------------------
@@ -50,12 +66,12 @@ pub struct TrameUiState {
     pub canvas_width: f64,
     pub canvas_height: f64,
 
-    /// Cache of received cells: (row, col) -> display text.
+    /// Cache of received cells: (row, col) -> display data (text + formatting).
     ///
     /// A cell absent from the cache is shown as "pending" (grey background).
     /// Only cells within the last requested range + padding should be queried;
     /// we never evict entries because the grid is read-only for now.
-    pub cell_cache: HashMap<(u32, u32), String>,
+    pub cell_cache: HashMap<(u32, u32), CellData>,
 
     /// Version of the last accepted `ViewportData` response (anti-flicker).
     pub accepted_version: u64,
@@ -114,9 +130,11 @@ impl TrameUiState {
     /// Move the active cell by `(dr, dc)`.
     ///
     /// Scrolls the viewport if the new position falls outside the visible area.
-    /// Returns a `TrameCommand::ScrollViewport` if the visible range changed,
-    /// so the caller can forward it to the Logic thread.
-    pub fn move_cursor(&mut self, dr: i32, dc: i32) -> Option<TrameCommand> {
+    /// Returns `None` if the cursor did not move (clamped at an edge); otherwise
+    /// a [`CursorMove`] carrying the new active cell (always, so the Logic thread
+    /// can retarget formatting) plus an optional `ScrollViewport` to fetch newly
+    /// exposed cells.
+    pub fn move_cursor(&mut self, dr: i32, dc: i32) -> Option<CursorMove> {
         let new_row = (self.active_row as i64 + dr as i64)
             .clamp(0, (TOTAL_ROWS - 1) as i64) as u32;
         let new_col = (self.active_col as i64 + dc as i64)
@@ -128,15 +146,16 @@ impl TrameUiState {
         self.active_row = new_row;
         self.active_col = new_col;
 
-        // Scroll viewport so the active cell stays visible.
-        let changed = self.scroll_to_include(new_row, new_col);
-        if changed {
-            Some(self.scroll_viewport_cmd())
-        } else {
-            // Active cell is within the cached range: cursor highlight moves
-            // without a Logic thread round-trip.
-            None
-        }
+        // Scroll viewport so the active cell stays visible. When the active cell
+        // is still within the cached range the highlight moves without a Logic
+        // round-trip, but we still report the new active cell (formatting target).
+        let scroll = self
+            .scroll_to_include(new_row, new_col)
+            .then(|| self.scroll_viewport_cmd());
+        Some(CursorMove {
+            active: TrameCommand::SetActiveCell { row: new_row, col: new_col },
+            scroll,
+        })
     }
 
     /// Adjust top_row / left_col so that (row, col) is visible.
@@ -199,7 +218,22 @@ impl TrameUiState {
         }
         self.accepted_version = version;
         for cell in cells {
-            self.cell_cache.insert((cell.row, cell.col), cell.text);
+            self.cell_cache.insert(
+                (cell.row, cell.col),
+                CellData { text: cell.text, bold: cell.bold, italic: cell.italic },
+            );
+        }
+    }
+
+    /// Apply a single-cell formatting change (from `TrameEvent::CellFormat`).
+    ///
+    /// Pins the run to the cell regardless of where the cursor moves next. A
+    /// no-op if the cell is not cached (it will arrive formatted on its next
+    /// `ViewportData`).
+    pub fn set_cell_format(&mut self, row: u32, col: u32, bold: bool, italic: bool) {
+        if let Some(cell) = self.cell_cache.get_mut(&(row, col)) {
+            cell.bold = bold;
+            cell.italic = italic;
         }
     }
 
