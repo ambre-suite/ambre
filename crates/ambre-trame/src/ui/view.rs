@@ -208,13 +208,14 @@ impl TrameView {
         }
     }
 
-    /// Send a typed `TrameCommand` to the Logic thread.
+    /// Send a lossy `TrameCommand` to the Logic thread (viewport requests).
     ///
-    /// Runs on the page's main thread, so it must never block: a full channel
-    /// drops the command (a viewport request is superseded by the next one via
-    /// `version`; nothing here is a non-idempotent P3 mutation). A disconnect
-    /// is surfaced by `update`'s drain, which sets `fatal`.
-    fn send_command(&self, cmd: TrameCommand) {
+    /// Lossy: drops the command when the channel is full. Viewport requests are
+    /// idempotent and coalesced (only the latest `pending_viewport` is kept), so
+    /// a dropped frame is naturally superseded by the next one.
+    ///
+    /// Runs on the page's main thread, so it must never block.
+    fn send_command_lossy(&self, cmd: TrameCommand) {
         if self.fatal {
             return;
         }
@@ -225,12 +226,32 @@ impl TrameView {
         match self.to_logic.try_send(msg) {
             Ok(()) => {}
             Err(flume::TrySendError::Full(_)) => {
-                tracing::warn!("Trame: UI→Logic channel full, dropping viewport command");
+                tracing::warn!("Trame: UI→Logic channel full, dropping lossy command");
             }
             Err(flume::TrySendError::Disconnected(_)) => {
                 tracing::error!("Trame: UI→Logic channel disconnected");
             }
         }
+    }
+
+    /// Send a lossless `TrameCommand` to the Logic thread (edits, cell
+    /// selection).
+    ///
+    /// Lossless: returns the `TrySendError` on `Full` so the caller can decide
+    /// whether to retry or alert the user. The UI thread never blocks; backpressure
+    /// is surfaced synchronously at the call-site.
+    fn send_command_lossless(
+        &self,
+        cmd: TrameCommand,
+    ) -> Result<(), flume::TrySendError<LogicCommand>> {
+        if self.fatal {
+            return Ok(());
+        }
+        let msg = LogicCommand::App {
+            document_id: DocumentId::new(),
+            command: AppCommand::Trame(cmd),
+        };
+        self.to_logic.try_send(msg)
     }
 
     /// Enter the inert fatal state: a worker thread is gone, so no command can
@@ -327,11 +348,13 @@ impl TrameView {
     /// cache optimistically, then leave edit mode. No-op if not editing.
     fn commit_edit(&mut self) {
         let Some(editor) = self.editor.take() else { return };
-        self.send_command(TrameCommand::SetCellText {
+        if let Err(flume::TrySendError::Full(_)) = self.send_command_lossless(TrameCommand::SetCellText {
             row: editor.row,
             col: editor.col,
             text: editor.buffer.clone(),
-        });
+        }) {
+            tracing::error!("Trame: UI→Logic channel full, edit dropped — retry next frame");
+        }
         self.state.set_cell_text(editor.row, editor.col, editor.buffer);
         // Content layer must repaint to show the committed text; overlay too, to
         // drop the edit field.
@@ -394,14 +417,14 @@ impl DocView for TrameView {
         // Flush the coalesced viewport request: at most one ScrollViewport per
         // frame, regardless of how many arrow keys fired since the last frame.
         if let Some(cmd) = self.pending_viewport.take() {
-            self.send_command(cmd);
+            self.send_command_lossy(cmd);
         }
 
         if !self.initial_viewport_sent {
             self.initial_viewport_sent = true;
             self.needs_full = true;
             let cmd = self.state.scroll_viewport_cmd();
-            self.send_command(cmd);
+            self.send_command_lossy(cmd);
         }
 
         // Pick up a theme switch (chrome toggled it): repaint everything with
@@ -821,7 +844,9 @@ impl TrameView {
     fn nav_move(&mut self, dr: i32, dc: i32) -> bool {
         self.viewport_changed = true;
         if let Some(mv) = self.state.move_cursor(dr, dc) {
-            self.send_command(mv.active);
+            if let Err(flume::TrySendError::Full(_)) = self.send_command_lossless(mv.active) {
+                tracing::error!("Trame: UI→Logic channel full, cursor move dropped");
+            }
             if let Some(scroll) = mv.scroll {
                 self.pending_viewport = Some(scroll);
             }
@@ -840,7 +865,9 @@ impl TrameView {
         self.state.active_row = row;
         self.state.active_col = col;
         self.viewport_changed = true;
-        self.send_command(TrameCommand::SetActiveCell { row, col });
+        if let Err(flume::TrySendError::Full(_)) = self.send_command_lossless(TrameCommand::SetActiveCell { row, col }) {
+            tracing::error!("Trame: UI→Logic channel full, cell selection dropped");
+        }
         self.park_input_on(row, col);
         self.announce_active();
     }

@@ -11,6 +11,7 @@
 //   text_cache    -- Parley layout cache (parley-dependent)
 //   view          -- DocView trait: the per-app UI contract (GPU-agnostic)
 //   host          -- UI-thread host plumbing: GPU bootstrap + rAF loop (wasm)
+//   request_registry -- P3 request/response correlator (ARCH P1)
 // ============================================================================
 
 // -- Rendering pipeline (wgpu + parley + swash) ------------------------------
@@ -34,6 +35,9 @@ pub mod anchor;
 // -- Design tokens (generated from tokens.ron): Palette + Theme + ThemeControl
 pub mod theme;
 
+// -- P3 request/response correlator for the UI thread -----------------------
+pub mod request_registry;
+
 // -- Convenience re-exports --------------------------------------------------
 pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurface};
 pub use text_cache::TextCache;
@@ -43,3 +47,4 @@ pub use host::{FrameHost, GpuState, RafControl, bootstrap_gpu, run, run_with, st
 pub use text_input::TextInput;
 pub use anchor::{Anchor, AnchorPublisher};
 pub use theme::{Palette, Theme, ThemeControl};
+pub use request_registry::{RequestRegistry, RequestTag};

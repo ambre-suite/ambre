@@ -563,8 +563,8 @@ impl MasterSeed {
 - [x] Real multiplexed WebSocket.
 - [x] Non-blocking Sync loop (`recv_async` + WS via `JsFuture`/`spawn_local`): blocking `recv()` freezes the Worker's event loop (`Atomics.wait`).
 - [x] Anti-deadlock Logic <-> Sync: Logic -> Sync blocking (lossless), Sync -> Logic via `try_send` (on `Full`: stop reading WS -> TCP backpressure + `RequestMissing`).
-- [ ] Separate UI -> Logic traffic classes: lossy viewport (drop + coalescing) vs lossless edit/service (synchronous failure at call-site on `Full`).
-- [ ] Consume `RequestId` on the UI side: `RequestRegistry<Tag>` generic in `ambre-canvas` (routes `UiEvent::Rest`, timeout/retry; `RequestId::next()` sole allocator).
+- [x] Separate UI -> Logic traffic classes: lossy viewport (drop + coalescing) vs lossless edit/service (synchronous failure at call-site on `Full`).
+- [x] Consume `RequestId` on the UI side: `RequestRegistry<Tag>` generic in `ambre-canvas` (routes `UiEvent::Rest`, timeout/retry; `RequestId::next()` sole allocator).
 - [x] `ambreFatal(message)` hook in `panic::set_hook` (before abort): UI surface for non-graceful panic.
 - [x] `SnapshotRequired` -> `SnapshotNeeded` -> `SendSnapshot`. `MockBlindRelay`.
 - [x] Remove smoke-test scaffolding (`IPC_TEST_DOC_ID`, pre-seeded `DocState::Trame`, `pending_doc_types`) once the real open-document flow arrives.
@@ -578,7 +578,7 @@ impl MasterSeed {
 - [ ] `ambre-prose` (LoroText).
 
 ### ARCH P3 — Blind Relay
-- [ ] `ambre-server`: REST routes, WS upgrade, ACL, Lua Redis. PostgreSQL/Valkey/MinIO. Snapshot via S3. E2E tests.
+- [x] `ambre-server`: REST routes, WS upgrade, ACL, Lua Redis. PostgreSQL/Valkey/MinIO. Snapshot via S3. E2E tests.
 
 ### ARCH P4 — Finalization & Optimization
 - [ ] Full Trame formula engine (DAG, incremental recompute, cycle detection).
