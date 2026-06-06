@@ -16,6 +16,29 @@ members = [
     "crates/ambre-toile",
     "crates/ambre-murmure",
     "crates/ambre-app",
+    "crates/ambre-server",
+]
+# Server excluded from default builds: it's a native target (tokio/mio)
+# and would fail wasm32 compilations. Build it explicitly:
+#   cargo check -p ambre-server
+# or with the host target:
+#   cargo check --target x86_64-unknown-linux-gnu
+default-members = [
+    "crates/ambre-core",
+    "crates/ambre-commands",
+    "crates/ambre-chrome",
+    "crates/ambre-canvas",
+    "crates/ambre-crypto",
+    "crates/ambre-protocol",
+    "crates/ambre-bus",
+    "crates/ambre-draw",
+    "crates/ambre-logic",
+    "crates/ambre-sync",
+    "crates/ambre-trame",
+    "crates/ambre-prose",
+    "crates/ambre-toile",
+    "crates/ambre-murmure",
+    "crates/ambre-app",
 ]
 
 [workspace.dependencies]
@@ -126,6 +149,21 @@ loro = "1.10"
 # Graph
 petgraph = "0.8"
 rstar = "0.12"
+
+# Server (native target, not wasm32)
+tokio             = { version = "1.0", features = ["full"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+axum              = { version = "0.8", features = ["ws"] }
+axum-extra        = { version = "0.10", features = ["cookie"] }
+tower             = "0.5"
+tower-http        = { version = "0.6", features = ["cors"] }
+futures-util      = "0.3"
+sqlx              = { version = "0.8", features = ["postgres", "uuid", "chrono", "runtime-tokio-native-tls"] }
+rustis            = "0.19.3"
+aws-sdk-s3        = "1.128"
+chrono            = { version = "0.4", features = ["serde"] }
+base64            = "0.22"
+time              = "0.3"
 
 # Import/export
 docx-rs = "0.4"

@@ -1,0 +1,261 @@
+use rustis::client::Client;
+use rustis::commands::{
+    GenericCommands, HashCommands, ListCommands, PubSubCommands,
+    ScriptingCommands, StringCommands,
+};
+use crate::error::AppError;
+
+/// Atomic Lua script that validates a client clock and assigns a
+/// global monotonic sequence number.
+///
+/// - `KEYS[1]` = `doc:{id}:clocks` (hash: pub_key_hex -> last_clock)
+/// - `KEYS[2]` = `doc:{id}:seq`   (counter)
+/// - `ARGV[1]` = pub_key_hex
+/// - `ARGV[2]` = incoming clock (must be last_clock + 1)
+///
+/// Rejects the update if the clock is not strictly sequential.
+pub const CLOCK_AND_SEQ_LUA: &str = r#"
+local current  = tonumber(redis.call('HGET', KEYS[1], ARGV[1])) or 0
+local incoming = tonumber(ARGV[2])
+if incoming ~= current + 1 then
+    return redis.error_reply('CLOCK_MISMATCH:' .. current)
+end
+redis.call('HSET', KEYS[1], ARGV[1], incoming)
+return redis.call('INCR', KEYS[2])
+"#;
+
+/// Validates a client's logical clock and assigns a global sequence number.
+///
+/// Executes `CLOCK_AND_SEQ_LUA` atomically in Redis. Returns the assigned
+/// global `seq` if the clock is exactly `last_clock + 1`, otherwise returns
+/// `AppError::Redis` with a `CLOCK_MISMATCH` detail.
+pub async fn verify_clock_and_assign_seq(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+    pub_key_hex: &str,
+    clock: u64,
+) -> Result<u64, AppError> {
+    let clocks_key = format!("doc:{document_id}:clocks");
+    let seq_key = format!("doc:{document_id}:seq");
+
+    let result: i64 = redis
+        .eval::<i64>(
+            CLOCK_AND_SEQ_LUA,
+            [clocks_key.as_str(), seq_key.as_str()],
+            [pub_key_hex, &clock.to_string()],
+        )
+        .await
+        .map_err(|e| AppError::Redis(format!("clock validation failed: {e}")))?;
+
+    Ok(result as u64)
+}
+
+/// Appends a delta entry to the pending list for this document.
+///
+/// The entry is a small JSON blob `{ seq, s3_key, ciphertext_size }`
+/// that the global S3 flusher picks up every 15 seconds.
+pub async fn append_pending_delta(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+    seq: u64,
+    s3_key: &str,
+    ciphertext_size: usize,
+) -> Result<(), AppError> {
+    let key = format!("doc:{document_id}:pending");
+    let blob = serde_json::json!({
+        "seq": seq,
+        "s3_key": s3_key,
+        "ciphertext_size": ciphertext_size,
+    })
+    .to_string();
+    redis
+        .rpush(&key, [&blob])
+        .await
+        .map_err(|e| AppError::Redis(format!("pending push failed: {e}")))?;
+    Ok(())
+}
+
+/// Retrieves a session hash from Redis.
+///
+/// Session keys follow the pattern `session:{session_id}` with fields
+/// `user_id` and `signing_pubkey_hex`.
+pub async fn session_get(
+    redis: &Client,
+    session_id: &str,
+) -> Result<Option<SessionData>, AppError> {
+    let key = format!("session:{session_id}");
+    let fields: Vec<String> = redis
+        .hgetall(&key)
+        .await
+        .map_err(|e| AppError::Redis(format!("session get failed: {e}")))?;
+
+    if fields.is_empty() {
+        return Ok(None);
+    }
+
+    let mut user_id = String::new();
+    let mut signing_pubkey_hex = String::new();
+    let mut chunks = fields.chunks(2);
+    while let Some([field, value]) = chunks.next() {
+        match field.as_str() {
+            "user_id" => user_id = value.clone(),
+            "signing_pubkey_hex" => signing_pubkey_hex = value.clone(),
+            _ => {}
+        }
+    }
+
+    let user_id = ambre_core::Uuid::parse_str(&user_id)
+        .map(ambre_core::UserId::from_uuid)
+        .map_err(|e| AppError::Redis(format!("invalid user_id in session: {e}")))?;
+
+    let signing_pubkey = ambre_core::PublicKey::from_hex(&signing_pubkey_hex)
+        .map_err(|e| AppError::Redis(format!("invalid pubkey in session: {e}")))?;
+
+    Ok(Some(SessionData {
+        user_id,
+        signing_pubkey,
+        session_id: session_id.to_string(),
+    }))
+}
+
+/// Creates a session hash in Redis with the configured TTL.
+pub async fn session_create(
+    redis: &Client,
+    session_id: &str,
+    data: &SessionData,
+    ttl_secs: u64,
+) -> Result<(), AppError> {
+    let key = format!("session:{session_id}");
+
+    redis
+        .hset(
+            &key,
+            [
+                ("user_id", data.user_id.to_string().as_str()),
+                ("signing_pubkey_hex", data.signing_pubkey.to_hex().as_str()),
+            ],
+        )
+        .await
+        .map_err(|e| AppError::Redis(format!("session create hset: {e}")))?;
+
+    redis
+        .expire(&key, ttl_secs, None)
+        .await
+        .map_err(|e| AppError::Redis(format!("session create expire: {e}")))?;
+    Ok(())
+}
+
+/// Deletes a session key from Redis.
+pub async fn session_delete(redis: &Client, session_id: &str) -> Result<(), AppError> {
+    let key = format!("session:{session_id}");
+    redis
+        .del([&key])
+        .await
+        .map_err(|e| AppError::Redis(format!("session delete failed: {e}")))?;
+    Ok(())
+}
+
+/// Registers this WebSocket session as an active subscriber of the document.
+///
+/// Used for per-document presence tracking and broadcast targeting.
+pub async fn doc_subscribe_session(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+    session_id: &str,
+) -> Result<(), AppError> {
+    let key = format!("doc:{document_id}:sessions");
+    redis
+        .hset(&key, [(session_id, "1")])
+        .await
+        .map_err(|e| AppError::Redis(format!("doc subscribe session: {e}")))?;
+    Ok(())
+}
+
+/// Removes this WebSocket session from the document's active subscribers.
+pub async fn doc_unsubscribe_session(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+    session_id: &str,
+) -> Result<(), AppError> {
+    let key = format!("doc:{document_id}:sessions");
+    redis
+        .hdel(&key, [session_id])
+        .await
+        .map_err(|e| AppError::Redis(format!("doc unsubscribe session: {e}")))?;
+    Ok(())
+}
+
+/// Publishes a message to the Redis PubSub channel for the given document.
+///
+/// All active subscribers (across Axum instances) receive the message.
+pub async fn doc_broadcast(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+    payload: &[u8],
+) -> Result<(), AppError> {
+    let channel = format!("doc:{document_id}");
+    redis
+        .publish(&channel, payload)
+        .await
+        .map_err(|e| AppError::Redis(format!("doc broadcast: {e}")))?;
+    Ok(())
+}
+
+/// Publishes a message to the Redis PubSub channel for the given channel.
+pub async fn chan_broadcast(
+    redis: &Client,
+    channel_id: &ambre_core::ChannelId,
+    payload: &[u8],
+) -> Result<(), AppError> {
+    let chan = format!("chan:{channel_id}");
+    redis
+        .publish(&chan, payload)
+        .await
+        .map_err(|e| AppError::Redis(format!("channel broadcast: {e}")))?;
+    Ok(())
+}
+
+/// Stores an opaque presence blob in Redis and sets a TTL.
+///
+/// The blob is the encrypted ephemeral ciphertext -- the server never
+/// sees the plaintext cursor position or display name.
+pub async fn doc_presence_update(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+    pub_key_hex: &str,
+    presence_enc_b64: &str,
+    ttl_secs: u64,
+) -> Result<(), AppError> {
+    let key = format!("doc:{document_id}:presence");
+    redis
+        .hset(&key, [(pub_key_hex, presence_enc_b64)])
+        .await
+        .map_err(|e| AppError::Redis(format!("presence update: {e}")))?;
+
+    let ts_key = format!("doc:{document_id}:presence_ts:{pub_key_hex}");
+    redis
+        .set(&ts_key, "1")
+        .await
+        .map_err(|e| AppError::Redis(format!("presence ts set: {e}")))?;
+    redis
+        .expire(&ts_key, ttl_secs, None)
+        .await
+        .map_err(|e| AppError::Redis(format!("presence ts expire: {e}")))?;
+    Ok(())
+}
+
+/// Redis key for the per-document clock hash.
+pub fn format_doc_clocks_key(document_id: &ambre_core::DocumentId) -> String {
+    format!("doc:{document_id}:clocks")
+}
+
+/// Deserialized session data stored in Redis.
+///
+/// Kept as a simple struct so callers do not need to manually parse
+/// the flat HGETALL response.
+#[derive(Debug, Clone)]
+pub struct SessionData {
+    pub user_id: ambre_core::UserId,
+    pub signing_pubkey: ambre_core::PublicKey,
+    pub session_id: String,
+}

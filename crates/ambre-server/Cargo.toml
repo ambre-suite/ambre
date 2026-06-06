@@ -1,29 +1,36 @@
-[workspace]
-resolver = "2"
-
 [package]
 name = "ambre-server"
 version = "0.1.0"
-edition = "2024"
-description = "Blind Relay server for Ambre — Axum, PostgreSQL, Valkey, S3"
+edition.workspace = true
+license.workspace = true
+description = "Blind Relay server for Ambre - Axum, PostgreSQL, Valkey, S3"
 
 [dependencies]
 ambre-core     = { path = "../ambre-core" }
 ambre-protocol = { path = "../ambre-protocol" }
-serde             = { version = "1.0", features = ["derive"] }
-serde_json        = "1.0"
-postcard          = { version = "1.0", features = ["alloc"] }
-thiserror         = "2.0"
-tracing           = "0.1"
-tracing-subscriber = "0.3"
-async-trait       = "0.1"
-tokio             = { version = "1.0", features = ["full"] }
-axum              = { version = "0.8", features = ["ws"] }
-futures-util      = "0.3"
-sqlx              = { version = "0.8", features = ["postgres", "runtime-tokio-native-tls"] }
-rustis            = "0.19.3"
-aws-sdk-s3        = "1.128"
-ed25519-dalek     = "2.0"
+serde             = { workspace = true }
+serde_json        = { workspace = true }
+serde_bytes       = { workspace = true }
+postcard          = { workspace = true }
+thiserror         = { workspace = true }
+tracing           = { workspace = true }
+tracing-subscriber = { workspace = true }
+async-trait       = { workspace = true }
+tokio             = { workspace = true }
+axum              = { workspace = true }
+axum-extra        = { workspace = true }
+tower             = { workspace = true }
+tower-http        = { workspace = true }
+futures-util      = { workspace = true }
+sqlx              = { workspace = true }
+rustis            = { workspace = true }
+aws-sdk-s3        = { workspace = true }
+ed25519-dalek     = { workspace = true }
+chrono            = { workspace = true }
+base64            = { workspace = true }
+hex               = { workspace = true }
+uuid              = { workspace = true, features = ["v4", "v7"] }
+time              = { workspace = true }
 
 [dev-dependencies]
-tokio = { version = "1.0", features = ["full"] }
+tokio = { workspace = true }

@@ -86,7 +86,7 @@ ambre/
 └── specs/
 ```
 
-> **`ambre-server` hors `members` du workspace racine** : choix volontaire. Le serveur est une cible **native** (Axum/Tokio) ; le workspace racine cible `wasm32` avec des rustflags incompatibles (`+atomics`, `--shared-memory`). Le sortir des members évite que `cargo build` du workspace tente de le compiler en wasm.
+> **`ambre-server` est dans les `members` du workspace racine** : le serveur est une cible native (Axum/Tokio) alors que les autres crates ciblent `wasm32-unknown-unknown`, mais les rustflags (`+atomics`, `--shared-memory`) sont scopés par target (`[target.wasm32-unknown-unknown]`) et n'affectent pas les builds natifs. `build-std` n'est pas implicite : il ne s'active que lorsque `-Z build-std` est passé explicitement. Intégrer le serveur dans le workspace simplifie la gestion des dépendances (`workspace = true` partagé), le tooling (`cargo fmt`, `cargo clippy`, `cargo check` unifiés) et le CI (une seule workspace).
 
 > **Build workflow :** un seul build cdylib (`ambre-app`). Les crates `*-worker` du Modèle A (`ambre-logic-worker`, `ambre-sync-worker`) **n'existent plus** ; plus de `make workers` ni d'étape wasm-pack séparée. Trunk (ou équivalent) build `ambre-app` et copie les assets (`fonts/`).
 
