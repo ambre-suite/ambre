@@ -25,8 +25,10 @@ tracing-wasm = { workspace = true }
 
 # Entry point + thread spawning.
 wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
 wasm_thread  = { workspace = true }
 # Command keybinding listener (keydown on document).
 web-sys      = { workspace = true }
+js-sys = { workspace = true }
 
 console_error_panic_hook = { workspace = true }

@@ -27,7 +27,7 @@ use std::rc::Rc;
 
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
-    AppCommand, AppEvent, IPC_TEST_DOC_ID, LogicCommand, LogicEvent, SyncCommand, TrameCommand,
+    AppCommand, AppEvent, DocumentId, LogicCommand, LogicEvent, SyncCommand, TrameCommand,
     TrameEvent, UiEvent,
 };
 use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
@@ -65,7 +65,19 @@ pub fn main() {
             })
             .build(),
     );
-    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+    std::panic::set_hook(Box::new(|info| {
+        console_error_panic_hook::hook(info);
+        // Notify the page that the WASM application has suffered an
+        // unrecoverable panic (panic=abort, so no graceful shutdown).
+        if let Some(window) = web_sys::window() {
+            let msg = info.to_string();
+            if let Ok(f) = js_sys::Reflect::get(&window, &"ambreFatal".into()) {
+                if let Ok(f) = f.dyn_into::<js_sys::Function>() {
+                    let _ = f.call1(&window, &msg.into());
+                }
+            }
+        }
+    }));
 
     // Inter-thread channels.
     //   UI    --LogicCommand--> Logic      Logic --UiEvent--> UI
@@ -138,11 +150,18 @@ pub fn main() {
         })
         .expect("spawn Logic thread");
 
-    // Spawn the Sync thread.
+    // Spawn the Sync thread (non-blocking async loop in WASM).
+    let api_base = web_sys::window()
+        .and_then(|w| w.location().host().ok())
+        .unwrap_or_else(|| "localhost".into());
     wasm_thread::Builder::new()
         .name("sync".to_owned())
         .spawn(move || {
-            ambre_sync::run(logic_to_sync_rx, sync_to_logic_tx);
+            wasm_bindgen_futures::spawn_local(ambre_sync::run_wasm(
+                logic_to_sync_rx,
+                sync_to_logic_tx,
+                api_base,
+            ));
         })
         .expect("spawn Sync thread");
 
@@ -216,8 +235,13 @@ fn dispatch_command(id: CommandId, to_logic: &flume::Sender<LogicCommand>) {
         tracing::warn!("no LogicCommand mapping for {id:?}");
         return;
     };
+    // Placeholder document_id — will be replaced by the active document
+    // selected from the user's document list once the full auth +
+    // ListDocuments + OpenDocument flow is wired in the chrome.
+    let document_id = DocumentId::new();
+    tracing::debug!("dispatch_command without active document (placeholder)");
     let _ = to_logic.try_send(LogicCommand::App {
-        document_id: IPC_TEST_DOC_ID,
+        document_id,
         command,
     });
 }

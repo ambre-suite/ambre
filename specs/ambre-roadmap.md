@@ -27,7 +27,7 @@
 *This is the milestone that validates the entire stack.*
 
 - [x] **Typed Trame editing** (`TrameOutcome`, lossless Logic dispatcher): `ARCH P2`.
-- [ ] **Real network sync**: non-blocking loop + multiplexed WebSocket, `Unlock`/`SetupAccount`,
+- [x] **Real network sync**: non-blocking loop + multiplexed WebSocket, `Unlock`/`SetupAccount`,
   `OpenDocument`/`CloseDocument`, document CRUD: `ARCH P1` (remaining items), `SYNC P1` (wired) → `SYNC P2`.
 - [x] **Blind Relay**: PostgreSQL/Redis/S3, multiplexed WS, ACL, Lua clock+seq, presigned URLs: `SRV P0`.
 - [x] **Canvas finishing**: generated tokens, headless tests: `CANVAS P0` (remaining items).

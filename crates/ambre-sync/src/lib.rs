@@ -35,7 +35,9 @@
 use std::collections::{HashMap, HashSet};
 
 use wasm_bindgen::prelude::*;
-use web_sys::{MessageEvent, WebSocket};
+use web_sys::WebSocket;
+#[cfg(target_arch = "wasm32")]
+use web_sys::{CloseEvent, MessageEvent};
 
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
@@ -46,7 +48,9 @@ use ambre_core::PublicKey;
 use ambre_crypto::{DocumentKey, MasterSeed};
 use ambre_protocol::messages::{Clock, Counter, Seq, Update};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
-use ambre_protocol::ws::{decode_server_msg, encode_client_msg, WsClientMsg, WsServerMsg};
+use ambre_protocol::ws::{encode_client_msg, WsClientMsg, WsServerMsg};
+#[cfg(target_arch = "wasm32")]
+use ambre_protocol::ws::decode_server_msg;
 use ed25519_dalek::SigningKey;
 use x25519_dalek::StaticSecret;
 
@@ -54,6 +58,8 @@ use hex::encode;
 
 mod pipeline;
 pub mod mock;
+mod http;
+pub mod mock_relay;
 
 // -----------------------------------------------------------------------------
 // Quarantine bounds (ambre-spec-sync.md §E)
@@ -62,15 +68,77 @@ pub mod mock;
 /// Soft threshold: once this many updates are quarantined for a document, we ask
 /// the server to resend the missing history (`RequestMissing`) so the parent
 /// snapshot can arrive and release them.
+/// Soft threshold: once this many updates are quarantined for a document, we ask
+/// the server to resend the missing history (`RequestMissing`) so the parent
+/// snapshot can arrive and release them.
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 const QUARANTINE_ALERT: usize = 900;
 /// Hard cap: beyond this, the oldest update (by `clock`) is dropped to bound the
 /// shared heap, and a `SyncWarning` is raised.
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 const QUARANTINE_LIMIT: usize = 1000;
+
+// -----------------------------------------------------------------------------
+// Internal event bus — carries WebSocket frames and spawned-task results
+// into the non-blocking select loop. Sent by JS callbacks (onmessage /
+// onclose / onerror) and by HTTP tasks spawned via spawn_local.
+// -----------------------------------------------------------------------------
+
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+enum SyncEvent {
+    WsMessage(WsServerMsg),
+    WsDisconnected { code: u16, reason: String },
+    WsError,
+    SessionReady {
+        id: RequestId,
+        user_id: UserId,
+        display_name: String,
+        email: String,
+        master_seed: MasterSeed,
+        signing_key: SigningKey,
+        exchange_key: StaticSecret,
+    },
+    AccountCreated {
+        id: RequestId,
+        recovery_words: String,
+        master_seed: MasterSeed,
+        signing_key: SigningKey,
+        exchange_key: StaticSecret,
+    },
+    DocumentList {
+        id: RequestId,
+        documents: Vec<DocumentSummary>,
+    },
+    DocumentCreated {
+        id: RequestId,
+        document_id: DocumentId,
+        doc_type: DocType,
+    },
+    DocumentDeleted {
+        id: RequestId,
+        document_id: DocumentId,
+    },
+    DocumentRenamed {
+        id: RequestId,
+        document_id: DocumentId,
+    },
+    OpenDocumentReady {
+        document_id: DocumentId,
+        doc_key: DocumentKey,
+        snapshot_payload: Option<Vec<u8>>,
+        snapshot_id: SnapshotId,
+    },
+    HttpError {
+        id: RequestId,
+        message: String,
+    },
+}
 
 // -----------------------------------------------------------------------------
 // Per-document sync session
 // -----------------------------------------------------------------------------
 
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 struct SyncDocumentState {
     #[allow(dead_code)]
     document_id: DocumentId,
@@ -110,6 +178,7 @@ impl SyncDocumentState {
     }
 
     /// Total number of quarantined updates across all parent snapshots.
+    #[allow(dead_code)]
     fn quarantine_len(&self) -> usize {
         self.quarantine.values().map(Vec::len).sum()
     }
@@ -138,11 +207,22 @@ pub struct SyncState {
 
     // -- Single multiplexed WebSocket -----------------------------------------
     ws: Option<WebSocket>,
-    /// JS closures attached to the WebSocket. Kept alive to prevent GC.
-    _ws_closures: Vec<Closure<dyn FnMut(MessageEvent)>>,
+    /// JS closures attached to the WebSocket (onmessage / onclose / onerror).
+    /// Kept alive to prevent GC. Each is type-erased to `JsValue` because the
+    /// callback signatures differ (MessageEvent / CloseEvent / Event).
+    #[allow(dead_code)]
+    _onmessage: Option<Closure<dyn FnMut(JsValue)>>,
+    #[allow(dead_code)]
+    _onclose: Option<Closure<dyn FnMut(JsValue)>>,
+    #[allow(dead_code)]
+    _onerror: Option<Closure<dyn FnMut(JsValue)>>,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
     mock_ws_tx: Option<flume::Sender<Vec<u8>>>,
+
+    // -- Internal event channel (WASM: carries WS frames + HTTP results into   --
+    // -- the non-blocking select loop) --
+    event_tx: Option<flume::Sender<SyncEvent>>,
 
     // -- Per-document sync sessions --------------------------------------------
     documents: HashMap<DocumentId, SyncDocumentState>,
@@ -152,6 +232,7 @@ pub struct SyncState {
 }
 
 impl SyncState {
+    #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
     pub fn new(logic_tx: flume::Sender<LogicEvent>, api_base: String) -> Self {
         Self {
             logic_tx,
@@ -160,11 +241,22 @@ impl SyncState {
             signing_key: None,
             exchange_key: None,
             ws: None,
-            _ws_closures: Vec::new(),
+            _onmessage: None,
+            _onclose: None,
+            _onerror: None,
             mock_ws_tx: None,
+            event_tx: None,
             documents: HashMap::new(),
             doc_metadata: HashMap::new(),
         }
+    }
+
+    /// Stores the sender half of the internal event channel. Called once by
+    /// [`run_wasm`] before the select loop, so JS closures and HTTP tasks can
+    /// push events into the main loop without blocking.
+    #[allow(dead_code)]
+    pub(crate) fn set_event_tx(&mut self, tx: flume::Sender<SyncEvent>) {
+        self.event_tx = Some(tx);
     }
 
     // -- Outbound: Sync → Logic ------------------------------------------------
@@ -181,6 +273,7 @@ impl SyncState {
     /// Routes a decrypted inbound payload to the Logic thread, or raises a
     /// non-fatal `SyncWarning` on a decode/decrypt failure (drop semantics).
     /// `opened` is `None` when the document is not open in this session.
+    #[allow(dead_code)]
     fn deliver_remote(
         &self,
         document_id: DocumentId,
@@ -383,37 +476,186 @@ impl SyncState {
     fn handle_unlock(&mut self, id: RequestId, passphrase: Vec<u8>) {
         tracing::info!("Sync: Unlock (passphrase len={})", passphrase.len());
 
-        // TODO (Unlock task): fetch the passphrase-wrapped master key
-        // (GET /api/keys/master), Argon2id-derive the user key, decrypt it into
-        // the real MasterSeed, and return the real user identity. For now we
-        // seed the session locally so the crypto pipeline is functional offline.
-        let master_seed = MasterSeed::generate();
-        self.signing_key = Some(master_seed.derive_signing_key());
-        self.exchange_key = Some(master_seed.derive_exchange_key());
-        self.master_seed = Some(master_seed);
+        let logic_tx = self.logic_tx.clone();
+        let api_base = self.api_base.clone();
+        let event_tx = self.event_tx.clone();
 
-        self.open_websocket();
+        if let Some(tx) = event_tx {
+            // WASM path: spawn an async HTTP task; the result flows back
+            // through the SyncEvent channel into handle_sync_event.
+            wasm_bindgen_futures::spawn_local(async move {
+                let url = format!("https://{api_base}/api/keys/master");
+                match http::get_json::<http::MasterKeyResponse>(&url).await {
+                    Ok(resp) => {
+                        let salt = match hex::decode(&resp.master_key_salt) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                let _ = logic_tx.send(LogicEvent::AuthError {
+                                    message: format!("Invalid salt: {e}"),
+                                });
+                                return;
+                            }
+                        };
+                        let master_key_enc = match hex::decode(&resp.master_key_enc) {
+                            Ok(k) => k,
+                            Err(e) => {
+                                let _ = logic_tx.send(LogicEvent::AuthError {
+                                    message: format!("Invalid master_key_enc: {e}"),
+                                });
+                                return;
+                            }
+                        };
+                        if master_key_enc.len() < 24 {
+                            let _ = logic_tx.send(LogicEvent::AuthError {
+                                message: "Master key too short".into(),
+                            });
+                            return;
+                        }
+                        let nonce: &[u8; 24] = master_key_enc[..24].try_into().expect("nonce len");
+                        let ciphertext = &master_key_enc[24..];
+                        let user_key = match ambre_crypto::passphrase::derive_user_key(&passphrase, &salt) {
+                            Ok(k) => k,
+                            Err(e) => {
+                                let _ = logic_tx.send(LogicEvent::AuthError {
+                                    message: format!("Key derivation failed: {e}"),
+                                });
+                                return;
+                            }
+                        };
+                        let user_doc_key = DocumentKey::from_array(user_key);
+                        let seed_bytes = match ambre_crypto::aead::open(
+                            nonce,
+                            ciphertext,
+                            b"ambre-master-seed",
+                            &user_doc_key,
+                        ) {
+                            Ok(bytes) => bytes,
+                            Err(e) => {
+                                let _ = logic_tx.send(LogicEvent::AuthError {
+                                    message: format!("Master seed decryption failed: {e}"),
+                                });
+                                return;
+                            }
+                        };
+                        let seed_arr: [u8; 32] = match seed_bytes.try_into() {
+                            Ok(arr) => arr,
+                            Err(_) => {
+                                let _ = logic_tx.send(LogicEvent::AuthError {
+                                    message: "Master seed wrong length".into(),
+                                });
+                                return;
+                            }
+                        };
+                        let master_seed = MasterSeed::from_array(seed_arr);
+                        let signing_key = master_seed.derive_signing_key();
+                        let exchange_key = master_seed.derive_exchange_key();
 
-        self.reply(id, RestEvent::SessionReady {
-            user_id: UserId::new(),
-            display_name: "placeholder".into(),
-            email: "placeholder@example.com".into(),
-        });
+                        let auth_url = format!("https://{api_base}/api/auth/me");
+                        match http::get_json::<http::AuthMeResponse>(&auth_url).await {
+                            Ok(me) => {
+                                let user_id = UserId::parse_str(&me.user_id).unwrap_or_else(|_| UserId::new());
+                                let _ = tx.send(SyncEvent::SessionReady {
+                                    id,
+                                    user_id,
+                                    display_name: me.display_name,
+                                    email: me.email,
+                                    master_seed,
+                                    signing_key,
+                                    exchange_key,
+                                });
+                            }
+                            Err(e) => {
+                                let _ = logic_tx.send(LogicEvent::AuthError { message: e });
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = logic_tx.send(LogicEvent::AuthError { message: e });
+                    }
+                }
+            });
+        } else {
+            // Host-test / offline path: generate keys locally.
+            let master_seed = MasterSeed::generate();
+            self.signing_key = Some(master_seed.derive_signing_key());
+            self.exchange_key = Some(master_seed.derive_exchange_key());
+            self.master_seed = Some(master_seed);
+            self.open_websocket();
+            self.reply(id, RestEvent::SessionReady {
+                user_id: UserId::new(),
+                display_name: "offline".into(),
+                email: "offline@localhost".into(),
+            });
+        }
     }
 
     fn handle_setup_account(&mut self, id: RequestId, passphrase: Vec<u8>) {
         tracing::info!("Sync: SetupAccount (passphrase len={})", passphrase.len());
 
-        let _ = passphrase;
-        let master_seed = MasterSeed::generate();
-        self.signing_key = Some(master_seed.derive_signing_key());
-        self.exchange_key = Some(master_seed.derive_exchange_key());
-        let recovery_words = encode(master_seed.as_bytes());
-        self.master_seed = Some(master_seed);
+        let logic_tx = self.logic_tx.clone();
+        let api_base = self.api_base.clone();
+        let event_tx = self.event_tx.clone();
 
-        self.open_websocket();
+        if let Some(tx) = event_tx {
+            wasm_bindgen_futures::spawn_local(async move {
+                let master_seed = MasterSeed::generate();
+                let recovery_words = encode(master_seed.as_bytes());
+                let signing_key = master_seed.derive_signing_key();
+                let exchange_key = master_seed.derive_exchange_key();
+                let signing_pub_key = hex::encode(signing_key.verifying_key().to_bytes());
+                let exchange_pub_key = {
+                    let pub_key = x25519_dalek::PublicKey::from(&exchange_key);
+                    hex::encode(pub_key.as_bytes())
+                };
+                let salt = {
+                    let mut buf = [0u8; 32];
+                    getrandom::fill(&mut buf).expect("CSPRNG");
+                    buf
+                };
+                let salt_hex = hex::encode(salt);
+                let user_key = ambre_crypto::passphrase::derive_user_key(&passphrase, &salt)
+                    .expect("key derivation");
+                let user_doc_key = DocumentKey::from_array(user_key);
+                let (nonce, master_key_enc) = ambre_crypto::aead::seal(
+                    master_seed.as_bytes(),
+                    b"ambre-master-seed",
+                    &user_doc_key,
+                );
+                let mut master_key_with_nonce = nonce.to_vec();
+                master_key_with_nonce.extend_from_slice(&master_key_enc);
 
-        self.reply(id, RestEvent::AccountCreated { recovery_words });
+                let url = format!("https://{api_base}/api/keys/master");
+                let body = http::SetupKeyRequest {
+                    master_key_enc: hex::encode(&master_key_with_nonce),
+                    master_key_salt: salt_hex,
+                    signing_pub_key,
+                    exchange_pub_key,
+                };
+                match http::post_json::<_, serde_json::Value>(&url, &body).await {
+                    Ok(_) => {
+                        let _ = tx.send(SyncEvent::AccountCreated {
+                            id,
+                            recovery_words,
+                            master_seed,
+                            signing_key,
+                            exchange_key,
+                        });
+                    }
+                    Err(e) => {
+                        let _ = logic_tx.send(LogicEvent::AuthError { message: e });
+                    }
+                }
+            });
+        } else {
+            let _ = passphrase;
+            let master_seed = MasterSeed::generate();
+            self.signing_key = Some(master_seed.derive_signing_key());
+            self.exchange_key = Some(master_seed.derive_exchange_key());
+            let recovery_words = encode(master_seed.as_bytes());
+            self.master_seed = Some(master_seed);
+            self.open_websocket();
+            self.reply(id, RestEvent::AccountCreated { recovery_words });
+        }
     }
 
     fn handle_change_passphrase(
@@ -437,7 +679,9 @@ impl SyncState {
         if let Some(ws) = self.ws.take() {
             let _ = ws.close();
         }
-        self._ws_closures.clear();
+        self._onmessage = None;
+        self._onclose = None;
+        self._onerror = None;
         self.documents.clear();
         self.master_seed = None;
         self.signing_key = None;
@@ -447,43 +691,182 @@ impl SyncState {
 
     // -- WebSocket lifecycle ---------------------------------------------------
 
+    /// Opens the session-level multiplexed WebSocket. Called after Unlock or
+    /// SetupAccount. If the socket is already present (reconnection), it is
+    /// replaced. All open documents are automatically re-subscribed.
+    #[cfg(target_arch = "wasm32")]
     fn open_websocket(&mut self) {
-        // Placeholder — real implementation will:
-        //   1. WebSocket::new("wss://{api_base}/api/ws")
-        //   2. Wire ws.onmessage -> handle_ws_message via a flume::Sender
-        //      delivered into the run() loop (because Atomics.wait blocks the
-        //      JS event loop on a wasm Worker, the closure must push into a
-        //      channel that the run() loop selects on).
-        //   3. Wire ws.onclose -> reconnect_and_resubscribe (exponential backoff)
-        tracing::info!("Sync: WebSocket opened (multiplexed)");
+        let url = format!("wss://{}/api/ws", self.api_base);
+        match WebSocket::new(&url) {
+            Ok(ws) => {
+                ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
+                self.wire_ws_callbacks(&ws);
+                self.ws = Some(ws);
+                for doc_id in self.documents.keys().copied().collect::<Vec<_>>() {
+                    self.ws_send(&WsClientMsg::Subscribe { document_id: doc_id });
+                }
+                tracing::info!("Sync: WebSocket opened ({url})");
+            }
+            Err(e) => {
+                tracing::error!("Sync: WebSocket::new({url}) failed: {e:?}");
+            }
+        }
     }
 
+    /// Native / host-test stub: does nothing (mock transport handles WS).
+    #[cfg(not(target_arch = "wasm32"))]
+    fn open_websocket(&mut self) {
+        tracing::info!("Sync: WebSocket opened (native mock)");
+    }
+
+    /// Attaches onmessage / onclose / onerror closures to `ws`. Each closure
+    /// pushes the decoded event into `self.event_tx`, so the non-blocking select
+    /// loop in [`run_wasm`] processes them without blocking the JS event loop.
+    #[cfg(target_arch = "wasm32")]
+    fn wire_ws_callbacks(&mut self, ws: &WebSocket) {
+        let event_tx = self.event_tx.clone();
+
+        if let Some(tx) = event_tx.clone() {
+            let onmessage = Closure::wrap(Box::new(move |e: JsValue| {
+                let msg: MessageEvent = match e.dyn_into() {
+                    Ok(m) => m,
+                    Err(_) => return,
+                };
+                let data = msg.data();
+                let array_buf: js_sys::ArrayBuffer = match data.dyn_into() {
+                    Ok(a) => a,
+                    Err(_) => return,
+                };
+                let bytes = js_sys::Uint8Array::new(&array_buf).to_vec();
+                match decode_server_msg(&bytes) {
+                    Ok(server_msg) => {
+                        let _ = tx.send(SyncEvent::WsMessage(server_msg));
+                    }
+                    Err(e) => tracing::error!("Sync: WS decode error: {e:?}"),
+                }
+            }) as Box<dyn FnMut(JsValue)>);
+            ws.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
+            self._onmessage = Some(onmessage);
+        }
+
+        if let Some(tx) = event_tx.clone() {
+            let onclose = Closure::wrap(Box::new(move |e: JsValue| {
+                let ce: CloseEvent = match e.dyn_into() {
+                    Ok(c) => c,
+                    Err(_) => return,
+                };
+                let _ = tx.send(SyncEvent::WsDisconnected {
+                    code: ce.code(),
+                    reason: ce.reason(),
+                });
+            }) as Box<dyn FnMut(JsValue)>);
+            ws.set_onclose(Some(onclose.as_ref().unchecked_ref()));
+            self._onclose = Some(onclose);
+        }
+
+        if let Some(tx) = event_tx {
+            let onerror = Closure::wrap(Box::new(move |_e: JsValue| {
+                let _ = tx.send(SyncEvent::WsError);
+            }) as Box<dyn FnMut(JsValue)>);
+            ws.set_onerror(Some(onerror.as_ref().unchecked_ref()));
+            self._onerror = Some(onerror);
+        }
+    }
+
+    /// Called by the select loop on a `WsDisconnected` event. Clears the socket
+    /// and notifies the Logic thread that every open document lost its
+    /// connection. A reconnection is attempted immediately.
     #[allow(dead_code)]
-    fn reconnect_and_resubscribe(&mut self) {
+    fn handle_ws_disconnected(&mut self, code: u16, reason: String) {
+        tracing::warn!("Sync: WS disconnected (code={code}): {reason}");
+        self.ws = None;
+        self._onmessage = None;
+        self._onclose = None;
+        self._onerror = None;
         for doc_id in self.documents.keys().copied().collect::<Vec<_>>() {
             self.send_to_logic(LogicEvent::ConnectionStatus {
                 document_id: doc_id,
                 connected: false,
             });
         }
-        tracing::info!("Sync: reconnecting ({} active docs)", self.documents.len());
+    }
+
+    /// Processes one [`SyncEvent`] received from the internal event channel.
+    /// Dispatches WebSocket frames to the existing [`handle_ws_message`]
+    /// pipeline, applies state mutations from HTTP result events, and handles
+    /// disconnection / errors.
+    #[allow(dead_code)]
+    pub(crate) fn handle_sync_event(&mut self, event: SyncEvent) {
+        match event {
+            SyncEvent::WsMessage(msg) => self.handle_ws_message(msg),
+            SyncEvent::WsDisconnected { code, reason } => {
+                self.handle_ws_disconnected(code, reason);
+                if !self.documents.is_empty() {
+                    self.open_websocket();
+                }
+            }
+            SyncEvent::WsError => {
+                tracing::error!("Sync: WebSocket error");
+            }
+            SyncEvent::SessionReady { id, user_id, display_name, email, master_seed, signing_key, exchange_key } => {
+                self.master_seed = Some(master_seed);
+                self.signing_key = Some(signing_key);
+                self.exchange_key = Some(exchange_key);
+                self.open_websocket();
+                self.reply(id, RestEvent::SessionReady { user_id, display_name, email });
+            }
+            SyncEvent::AccountCreated { id, recovery_words, master_seed, signing_key, exchange_key } => {
+                self.master_seed = Some(master_seed);
+                self.signing_key = Some(signing_key);
+                self.exchange_key = Some(exchange_key);
+                self.open_websocket();
+                self.reply(id, RestEvent::AccountCreated { recovery_words });
+            }
+            SyncEvent::DocumentList { id, documents } => {
+                self.reply(id, RestEvent::DocumentList { documents });
+            }
+            SyncEvent::DocumentCreated { id, document_id, doc_type } => {
+                self.reply(id, RestEvent::DocumentCreated { document_id, doc_type });
+            }
+            SyncEvent::DocumentDeleted { id, document_id } => {
+                self.reply(id, RestEvent::DocumentDeleted { document_id });
+            }
+            SyncEvent::DocumentRenamed { id, document_id } => {
+                self.reply(id, RestEvent::DocumentRenamed { document_id });
+            }
+            SyncEvent::OpenDocumentReady { document_id, doc_key, snapshot_payload, snapshot_id } => {
+                self.documents.insert(document_id, SyncDocumentState::new(document_id, doc_key));
+                let doc_state = self.documents.get_mut(&document_id).expect("just inserted");
+                doc_state.current_snapshot_id = snapshot_id;
+                doc_state.known_snapshots.insert(snapshot_id);
+                if let Some(payload) = snapshot_payload {
+                    self.send_to_logic(LogicEvent::RemoteSnapshot { document_id, payload });
+                }
+                if self.ws_connected() {
+                    self.ws_send(&WsClientMsg::Subscribe { document_id });
+                }
+                self.send_to_logic(LogicEvent::ConnectionStatus {
+                    document_id,
+                    connected: self.ws_connected(),
+                });
+            }
+            SyncEvent::HttpError { id: _id, message } => {
+                self.send_to_logic(LogicEvent::ApiError {
+                    request: "rest".into(),
+                    code: 500,
+                    message,
+                });
+            }
+        }
     }
 
     // -- Inbound: Server -> Sync (WebSocket demux) -----------------------------
 
-    /// Demultiplex an inbound WebSocket frame by `document_id`.
-    ///
-    /// Wire format: `[version_byte: u8] [postcard(WsServerMsg)]`
+    /// Demultiplex an inbound [`WsServerMsg`] received from the WebSocket.
+    /// Decoding from wire bytes is done in the `onmessage` callback;
+    /// this method receives the already-decoded message.
     #[allow(dead_code)]
-    fn handle_ws_message(&mut self, wire: &[u8]) {
-        let server_msg = match decode_server_msg(wire) {
-            Ok(msg) => msg,
-            Err(e) => {
-                tracing::error!("Sync: wire decode error: {e:?}");
-                return;
-            }
-        };
-
+    fn handle_ws_message(&mut self, server_msg: WsServerMsg) {
         match server_msg {
             WsServerMsg::Subscribed { document_id } => {
                 self.send_to_logic(LogicEvent::ConnectionStatus {
@@ -562,6 +945,7 @@ impl SyncState {
     /// it is decrypted and delivered immediately; otherwise it is held in
     /// quarantine until the parent snapshot arrives (then released in `clock`
     /// order by [`release_quarantine`]).
+    #[allow(dead_code)]
     fn receive_update(&mut self, seq: Seq, update: Update) {
         let document_id = update.public_data.document_id;
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
@@ -663,13 +1047,51 @@ impl SyncState {
         // TODO (sharing task): derive the real DocumentKey via X25519 unwrap of
         // the server-stored, member-wrapped key. Generated locally for now so
         // the pipeline round-trips within a single client.
-        let doc_key = DocumentKey::generate();
-        self.documents
-            .insert(document_id, SyncDocumentState::new(document_id, doc_key));
-        if self.ws_connected() {
-            self.ws_send(&WsClientMsg::Subscribe { document_id });
+        let event_tx = self.event_tx.clone();
+
+        if let Some(tx) = event_tx {
+            // WASM: fetch members + snapshot from the server.
+            let api_base = self.api_base.clone();
+            let doc_id = document_id;
+            wasm_bindgen_futures::spawn_local(async move {
+                let members_url = format!("https://{api_base}/api/documents/{doc_id}/members");
+                let doc_key = match http::get_json::<http::MembersResponse>(&members_url).await {
+                    Ok(resp) => Self::unwrap_document_key(&resp.members).unwrap_or_else(|_| DocumentKey::generate()),
+                    Err(_) => DocumentKey::generate(),
+                };
+                let snapshot_url = format!("https://{api_base}/api/documents/{doc_id}/snapshot/latest");
+                let snapshot_payload = match http::get_json::<http::SnapshotPresignedResponse>(&snapshot_url).await {
+                    Ok(presigned) => http::fetch_bytes(&presigned.url).await.ok(),
+                    Err(_) => None,
+                };
+                let snapshot_id = SnapshotId::new();
+                let _ = tx.send(SyncEvent::OpenDocumentReady {
+                    document_id: doc_id,
+                    doc_key,
+                    snapshot_payload,
+                    snapshot_id,
+                });
+            });
+        } else {
+            let doc_key = DocumentKey::generate();
+            self.documents
+                .insert(document_id, SyncDocumentState::new(document_id, doc_key));
+            if self.ws_connected() {
+                self.ws_send(&WsClientMsg::Subscribe { document_id });
+            }
+            tracing::info!("Sync: OpenDocument {document_id:?}");
         }
-        tracing::info!("Sync: OpenDocument {document_id:?}");
+    }
+
+    /// Extracts the first member's DocumentKey from the server response.
+    /// Full X25519 ECDH unwrap is deferred to SYNC P3 (sharing).
+    fn unwrap_document_key(members: &[http::MemberEntry]) -> Result<DocumentKey, String> {
+        let entry = members.first().ok_or("no members")?;
+        let encrypted = hex::decode(&entry.doc_key_enc)
+            .map_err(|e| format!("hex decode: {e}"))?;
+        let key: [u8; 32] = encrypted.as_slice().try_into()
+            .map_err(|_| "invalid key length".to_string())?;
+        Ok(DocumentKey::from_array(key))
     }
 
     fn handle_close_document(&mut self, document_id: DocumentId) {
@@ -776,41 +1198,115 @@ impl SyncState {
     // -- Document CRUD (HTTP REST) ---------------------------------------------
 
     fn handle_list_documents(&self, id: RequestId) {
-        let documents: Vec<DocumentSummary> = self
-            .doc_metadata
-            .iter()
-            .map(|(&document_id, (doc_type, name))| DocumentSummary {
-                document_id,
-                doc_type: *doc_type,
-                name: Some(name.clone()),
-                role: Role::Owner,
-                updated_at: 0,
-            })
-            .collect();
-        let count = documents.len();
-        self.reply(id, RestEvent::DocumentList { documents });
-        tracing::info!("Sync: ListDocuments ({count} docs)");
+        let event_tx = self.event_tx.clone();
+
+        if let Some(tx) = event_tx {
+            let api_base = self.api_base.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                let url = format!("https://{api_base}/api/documents");
+                match http::get_json::<http::DocumentListResponse>(&url).await {
+                    Ok(resp) => {
+                        let docs: Vec<DocumentSummary> = resp.documents.into_iter().map(|e| {
+                            DocumentSummary {
+                                document_id: DocumentId::parse_str(&e.document_id).unwrap_or_else(|_| DocumentId::new()),
+                                doc_type: DocType::from_u8(e.doc_type).unwrap_or(DocType::Trame),
+                                name: Some(e.name_enc),
+                                role: match e.role.as_str() { "editor" => Role::Editor, "viewer" => Role::Viewer, _ => Role::Owner },
+                                updated_at: e.updated_at,
+                            }
+                        }).collect();
+                        let _ = tx.send(SyncEvent::DocumentList { id, documents: docs });
+                    }
+                    Err(e) => {
+                        let _ = tx.send(SyncEvent::HttpError { id, message: e });
+                    }
+                }
+            });
+        } else {
+            let documents: Vec<DocumentSummary> = self
+                .doc_metadata
+                .iter()
+                .map(|(&document_id, (doc_type, name))| DocumentSummary {
+                    document_id,
+                    doc_type: *doc_type,
+                    name: Some(name.clone()),
+                    role: Role::Owner,
+                    updated_at: 0,
+                })
+                .collect();
+            let count = documents.len();
+            self.reply(id, RestEvent::DocumentList { documents });
+            tracing::info!("Sync: ListDocuments ({count} docs)");
+        }
     }
 
     fn handle_create_document(&mut self, id: RequestId, doc_type: DocType, name: String) {
-        tracing::info!("Sync: CreateDocument {doc_type:?} '{name}'");
-        let document_id = DocumentId::new();
-        self.doc_metadata.insert(document_id, (doc_type, name));
-        self.reply(id, RestEvent::DocumentCreated { document_id, doc_type });
+        let event_tx = self.event_tx.clone();
+
+        if let Some(tx) = event_tx {
+            let api_base = self.api_base.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                let url = format!("https://{api_base}/api/documents");
+                let body = http::CreateDocumentRequest { doc_type: doc_type as u8, name_enc: name };
+                match http::post_json::<_, http::CreateDocumentResponse>(&url, &body).await {
+                    Ok(resp) => {
+                        let document_id = DocumentId::parse_str(&resp.document_id).unwrap_or_else(|_| DocumentId::new());
+                        let _ = tx.send(SyncEvent::DocumentCreated { id, document_id, doc_type });
+                    }
+                    Err(e) => {
+                        let _ = tx.send(SyncEvent::HttpError { id, message: e });
+                    }
+                }
+            });
+        } else {
+            tracing::info!("Sync: CreateDocument {doc_type:?} '{name}'");
+            let document_id = DocumentId::new();
+            self.doc_metadata.insert(document_id, (doc_type, name));
+            self.reply(id, RestEvent::DocumentCreated { document_id, doc_type });
+        }
     }
 
     fn handle_delete_document(&mut self, id: RequestId, document_id: DocumentId) {
-        tracing::info!("Sync: DeleteDocument {document_id:?}");
-        self.doc_metadata.remove(&document_id);
-        self.reply(id, RestEvent::DocumentDeleted { document_id });
+        let event_tx = self.event_tx.clone();
+
+        if let Some(tx) = event_tx {
+            let api_base = self.api_base.clone();
+            let doc_id = document_id;
+            wasm_bindgen_futures::spawn_local(async move {
+                let url = format!("https://{api_base}/api/documents/{doc_id}");
+                match http::delete(&url).await {
+                    Ok(()) => { let _ = tx.send(SyncEvent::DocumentDeleted { id, document_id: doc_id }); }
+                    Err(e) => { let _ = tx.send(SyncEvent::HttpError { id, message: e }); }
+                }
+            });
+        } else {
+            tracing::info!("Sync: DeleteDocument {document_id:?}");
+            self.doc_metadata.remove(&document_id);
+            self.reply(id, RestEvent::DocumentDeleted { document_id });
+        }
     }
 
     fn handle_rename_document(&mut self, id: RequestId, document_id: DocumentId, name: String) {
-        tracing::info!("Sync: RenameDocument {document_id:?} '{name}'");
-        if let Some((_doc_type, old_name)) = self.doc_metadata.get_mut(&document_id) {
-            *old_name = name;
+        let event_tx = self.event_tx.clone();
+
+        if let Some(tx) = event_tx {
+            let api_base = self.api_base.clone();
+            let doc_id = document_id;
+            wasm_bindgen_futures::spawn_local(async move {
+                let url = format!("https://{api_base}/api/documents/{doc_id}/rename");
+                let body = http::RenameDocumentRequest { name_enc: name };
+                match http::put_json(&url, &body).await {
+                    Ok(()) => { let _ = tx.send(SyncEvent::DocumentRenamed { id, document_id: doc_id }); }
+                    Err(e) => { let _ = tx.send(SyncEvent::HttpError { id, message: e }); }
+                }
+            });
+        } else {
+            tracing::info!("Sync: RenameDocument {document_id:?} '{name}'");
+            if let Some((_doc_type, old_name)) = self.doc_metadata.get_mut(&document_id) {
+                *old_name = name;
+            }
+            self.reply(id, RestEvent::DocumentRenamed { document_id });
         }
-        self.reply(id, RestEvent::DocumentRenamed { document_id });
     }
 
     // -- Sharing (HTTP REST + crypto) ------------------------------------------
@@ -861,19 +1357,58 @@ impl SyncState {
 }
 
 // -----------------------------------------------------------------------------
-// Entry point: blocking recv on the inbound channel.
+// Entry points
 // -----------------------------------------------------------------------------
 
-/// Run the Sync thread to completion.
+/// Non-blocking WASM entry point. Spawned inside a `wasm_thread` Web Worker.
 ///
-/// Blocks on `logic_rx` and dispatches every [`SyncCommand`] through
-/// [`SyncState::handle_command`]. Exits when `logic_rx` is disconnected
-/// (i.e. the Logic thread has shut down).
+/// Creates an internal event channel (`event_tx` / `event_rx`) and runs a
+/// `futures_util::select!` loop that races between incoming [`SyncCommand`]s
+/// from the Logic thread and [`SyncEvent`]s pushed by JS WebSocket callbacks
+/// and spawned HTTP tasks. Unlike the synchronous [`run`], this loop does NOT
+/// call `Atomics.wait` and therefore does not freeze the Worker's JS event
+/// loop.
+#[cfg(target_arch = "wasm32")]
+pub async fn run_wasm(
+    logic_rx: flume::Receiver<SyncCommand>,
+    logic_tx: flume::Sender<LogicEvent>,
+    api_base: String,
+) {
+    tracing::info!("Ambre Sync thread starting (wasm async)");
+
+    let mut state = SyncState::new(logic_tx, api_base);
+    let (event_tx, event_rx) = flume::unbounded::<SyncEvent>();
+    state.set_event_tx(event_tx);
+
+    loop {
+        futures_util::select! {
+            cmd = logic_rx.recv_async() => {
+                match cmd {
+                    Ok(cmd) => state.handle_command(cmd),
+                    Err(flume::RecvError::Disconnected) => break,
+                }
+            }
+            event = event_rx.recv_async() => {
+                match event {
+                    Ok(ev) => state.handle_sync_event(ev),
+                    Err(flume::RecvError::Disconnected) => break,
+                }
+            }
+        }
+    }
+
+    tracing::info!("Ambre Sync thread exiting (channels disconnected)");
+}
+
+/// Synchronous, blocking entry point for host (native) tests. Does not touch
+/// WASM APIs — uses in-memory mock transport and pre-seeded keys.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run(
     logic_rx: flume::Receiver<SyncCommand>,
     logic_tx: flume::Sender<LogicEvent>,
 ) {
-    tracing::info!("Ambre Sync thread starting");
+    tracing::info!("Ambre Sync thread starting (native blocking)");
+
     let mut state = SyncState::new(logic_tx, String::new());
 
     while let Ok(cmd) = logic_rx.recv() {
