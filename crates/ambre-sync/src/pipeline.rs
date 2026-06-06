@@ -136,6 +136,7 @@ pub fn seal_update(
 }
 
 /// Verifies, decrypts and decompresses an [`Update`] back to its CRDT payload.
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 pub fn open_update(update: &Update, doc_key: &DocumentKey) -> Result<Vec<u8>, PipelineError> {
     let aad = aad_of(&update.public_data)?;
     let sealed = sealed_from(&update.ciphertext, &update.nonce, &update.commitment_tag, &update.signature);
@@ -184,6 +185,7 @@ pub fn seal_ephemeral(
 }
 
 /// Verifies, decrypts and decompresses an [`Ephemeral`] back to its payload.
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 pub fn open_ephemeral(ephemeral: &Ephemeral, doc_key: &DocumentKey) -> Result<Vec<u8>, PipelineError> {
     let aad = aad_of(&ephemeral.public_data)?;
     let sealed = sealed_from(

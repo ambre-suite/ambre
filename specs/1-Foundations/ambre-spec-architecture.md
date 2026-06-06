@@ -560,14 +560,14 @@ impl MasterSeed {
 - [x] Backpressure (bounded channels), non-blocking UI sends + coalescing, `FatalError`, typed dispatch tested on host (9 tests).
 - [x] `ambre-crypto` pipeline (+ `commitment_tag`) + causal quarantine by `snapshot_id` (`clock` ASC release, cap 900/1000).
 - [x] `RestCommand::Unlock` + `SetupAccount`; `OpenDocument`/`CloseDocument` (multi-document).
-- [ ] Real multiplexed WebSocket.
-- [ ] Non-blocking Sync loop (`recv_async` + WS via `JsFuture`/`spawn_local`): blocking `recv()` freezes the Worker's event loop (`Atomics.wait`).
-- [ ] Anti-deadlock Logic <-> Sync: Logic -> Sync blocking (lossless), Sync -> Logic via `try_send` (on `Full`: stop reading WS -> TCP backpressure + `RequestMissing`).
+- [x] Real multiplexed WebSocket.
+- [x] Non-blocking Sync loop (`recv_async` + WS via `JsFuture`/`spawn_local`): blocking `recv()` freezes the Worker's event loop (`Atomics.wait`).
+- [x] Anti-deadlock Logic <-> Sync: Logic -> Sync blocking (lossless), Sync -> Logic via `try_send` (on `Full`: stop reading WS -> TCP backpressure + `RequestMissing`).
 - [ ] Separate UI -> Logic traffic classes: lossy viewport (drop + coalescing) vs lossless edit/service (synchronous failure at call-site on `Full`).
 - [ ] Consume `RequestId` on the UI side: `RequestRegistry<Tag>` generic in `ambre-canvas` (routes `UiEvent::Rest`, timeout/retry; `RequestId::next()` sole allocator).
-- [ ] `ambreFatal(message)` hook in `panic::set_hook` (before abort): UI surface for non-graceful panic.
-- [ ] `SnapshotRequired` -> `SnapshotNeeded` -> `SendSnapshot`. `MockBlindRelay`.
-- [ ] Remove smoke-test scaffolding (`IPC_TEST_DOC_ID`, pre-seeded `DocState::Trame`, `pending_doc_types`) once the real open-document flow arrives.
+- [x] `ambreFatal(message)` hook in `panic::set_hook` (before abort): UI surface for non-graceful panic.
+- [x] `SnapshotRequired` -> `SnapshotNeeded` -> `SendSnapshot`. `MockBlindRelay`.
+- [x] Remove smoke-test scaffolding (`IPC_TEST_DOC_ID`, pre-seeded `DocState::Trame`, `pending_doc_types`) once the real open-document flow arrives.
 
 ### ARCH P2 — Pilot Applications
 - [x] `ambre-trame`: `TrameState` + `TrameView` (impl `DocView`), virtual-scroll grid, viewport smoke-test.

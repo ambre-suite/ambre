@@ -36,14 +36,3 @@ pub use ui::{AppEvent, DisplayCell, TrameEvent, UiEvent};
 pub use ambre_core::{
     ChannelId, DocType, DocumentId, MeetingId, PublicKey, Role, SnapshotId, UserId, Uuid,
 };
-
-/// Fixed document_id used for end-to-end IPC smoke-testing before the full
-/// auth and document-open flow is wired.
-///
-/// Both the UI Thread and the Logic thread reference this constant so the
-/// pre-seeded test document state and the keydown event listener stay in sync.
-/// Remove once real document management is operational.
-pub const IPC_TEST_DOC_ID: DocumentId = DocumentId::from_bytes([
-    0x01, 0x96, 0x00, 0x00, 0x00, 0x00, 0x70, 0x00,
-    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
-]);

@@ -23,7 +23,7 @@
 use std::collections::HashMap;
 
 use ambre_bus::{
-    AppCommand, AppEvent, DocType, DocumentId, IPC_TEST_DOC_ID, LogicCommand, LogicEvent,
+    AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent,
     RestCommand, RestEvent, SyncCommand, UiEvent,
 };
 use ambre_trame::TrameState;
@@ -83,13 +83,7 @@ struct LogicState {
 
 impl LogicState {
     fn new(to_ui: flume::Sender<UiEvent>, to_sync: flume::Sender<SyncCommand>) -> Self {
-        // Pre-seed a Trame document for the IPC smoke-test so key events from
-        // the UI Thread are dispatched without going through the full auth +
-        // document-open flow. Remove once that flow is wired.
-        let mut docs: HashMap<DocumentId, DocState> = HashMap::new();
-        docs.insert(IPC_TEST_DOC_ID, DocState::Trame(TrameState::new()));
-
-        Self { to_ui, to_sync, docs, pending_doc_types: HashMap::new() }
+        Self { to_ui, to_sync, docs: HashMap::new(), pending_doc_types: HashMap::new() }
     }
 
     // -- Outbound --------------------------------------------------------------
@@ -449,10 +443,10 @@ mod tests {
     #[test]
     fn close_document_drops_state_and_forwards() {
         let (mut state, _ui, sync_rx) = harness();
-        // IPC_TEST_DOC_ID is pre-seeded by LogicState::new.
-        assert!(state.docs.contains_key(&IPC_TEST_DOC_ID));
-        state.handle_logic_command(LogicCommand::CloseDocument { document_id: IPC_TEST_DOC_ID });
-        assert!(!state.docs.contains_key(&IPC_TEST_DOC_ID));
+        let doc_id = DocumentId::new();
+        state.docs.insert(doc_id, DocState::Trame(TrameState::new()));
+        state.handle_logic_command(LogicCommand::CloseDocument { document_id: doc_id });
+        assert!(!state.docs.contains_key(&doc_id));
         assert!(matches!(
             sync_rx.try_recv(),
             Ok(SyncCommand::CloseDocument { .. })
@@ -475,13 +469,15 @@ mod tests {
     #[test]
     fn app_command_on_live_doc_yields_viewport() {
         let (mut state, ui_rx, _sync) = harness();
+        let doc_id = DocumentId::new();
+        state.docs.insert(doc_id, DocState::Trame(TrameState::new()));
         state.handle_logic_command(LogicCommand::App {
-            document_id: IPC_TEST_DOC_ID,
+            document_id: doc_id,
             command: scroll(1),
         });
         match ui_rx.try_recv() {
             Ok(UiEvent::Viewport { document_id, event: AppEvent::Trame(_) }) => {
-                assert_eq!(document_id, IPC_TEST_DOC_ID);
+                assert_eq!(document_id, doc_id);
             }
             other => panic!("expected Viewport, got {other:?}"),
         }
@@ -520,8 +516,9 @@ mod tests {
     #[test]
     fn snapshot_required_triggers_send_snapshot() {
         let (mut state, _ui, sync_rx) = harness();
-        // IPC_TEST_DOC_ID is live, so export_snapshot returns Some.
-        state.handle_logic_event(LogicEvent::SnapshotNeeded { document_id: IPC_TEST_DOC_ID });
+        let doc_id = DocumentId::new();
+        state.docs.insert(doc_id, DocState::Trame(TrameState::new()));
+        state.handle_logic_event(LogicEvent::SnapshotNeeded { document_id: doc_id });
         assert!(matches!(
             sync_rx.try_recv(),
             Ok(SyncCommand::SendSnapshot { .. })

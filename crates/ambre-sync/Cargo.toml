@@ -13,21 +13,26 @@ ambre-core     = { path = "../ambre-core" }
 # ambre-crypto's own target-specific dependency, so nothing extra is needed here.
 ambre-crypto   = { path = "../ambre-crypto" }
 
-flume    = { workspace = true }
+flume    = { workspace = true, features = ["async"] }
 tracing  = { workspace = true }
 serde    = { workspace = true }
+serde_json = { workspace = true }
 postcard = { workspace = true }
 thiserror = { workspace = true }
 # Session keypair types held in SyncState (derived from the MasterSeed).
 ed25519-dalek = { workspace = true }
 x25519-dalek  = { workspace = true }
 # zeroize  → wipe DocumentKey / MasterSeed on Logout
-# gloo-net → HTTP REST (fetch) + WebSocket (not-yet-wired network pipeline)
+# gloo-net → HTTP REST (fetch) + WebSocket
 # ruzstd   → payload compression / decompression
 zeroize  = { workspace = true }
 gloo-net = { workspace = true, features = ["http", "websocket"] }
 ruzstd   = { workspace = true }
 hex      = { workspace = true }
+getrandom = { workspace = true }
 
 wasm-bindgen = { workspace = true }
-web-sys      = { workspace = true, features = ["WebSocket", "BinaryType", "CloseEvent"] }
+wasm-bindgen-futures = { workspace = true }
+js-sys = { workspace = true }
+web-sys      = { workspace = true, features = ["WebSocket", "BinaryType", "CloseEvent", "Event", "ErrorEvent"] }
+futures-util = { workspace = true }

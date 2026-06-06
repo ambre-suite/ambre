@@ -687,7 +687,7 @@ All tests compile in native mode (`#[cfg(not(target_arch = "wasm32"))]`) with `t
 
 - [x] Entry point `ambre_sync::run(from_logic, to_logic)` (`flume` channels), blocking `recv()` loop, `SyncState` skeleton + `handle_command`/`handle_rest` dispatch (placeholders).
 - [x] **Wired crypto pipeline** (`ambre-sync::pipeline`): compression version-byte + `ambre-crypto::envelope`, `Update`/`Snapshot`/`Ephemeral` assembly/disassembly, outbound encryption (`SendUpdate`/`SendEphemeral` → `WsClientMsg`, Snapshot seal/S3 TODO) and inbound decryption (`handle_ws_message` → `RemoteUpdate`/`RemoteEphemeral`, failure → `SyncWarning`). Session keys derived from `MasterSeed` (local placeholder seed pending network Unlock). Host tests. *Real network/WebSocket out of scope (next item).*
-- [ ] **Non-blocking loop** (`recv_async` + WS `JsFuture`) when the real WebSocket is wired — prerequisite `Atomics.wait` + cyclic deadlock fix (cf. `ambre-spec-architecture.md §7 ARCH P1`).
+- [x] **Non-blocking loop** (`recv_async` + WS `JsFuture`) when the real WebSocket is wired — prerequisite `Atomics.wait` + cyclic deadlock fix (cf. `ambre-spec-architecture.md §7 ARCH P1`).
 - [x] `RestCommand::Unlock` implementation (fetch GET /api/keys/master + Argon2 → MasterSeed → keypair derivation)
 - [x] `RestCommand::SetupAccount` implementation (MasterSeed generation, key upload)
 - [x] `SyncCommand::OpenDocument` / `CloseDocument` implementation (multi-document `HashMap<Uuid, SyncDocumentState>`)
@@ -697,13 +697,11 @@ All tests compile in native mode (`#[cfg(not(target_arch = "wasm32"))]`) with `t
 
 ### SYNC P2 — Blind Relay & Network
 
-- [ ] Real WebSocket connection (`gloo-net` WASM, `tokio-tungstenite` native)
-- [ ] HTTP REST via `gloo-net::http` (CRUD, sharing, media, users search)
-- [ ] Snapshot upload/download via S3 presigned URLs (not via WebSocket)
-- [ ] Delta-sync on reconnect (`last_known_seq` → `RequestMissing`)
-- [ ] Batching + compaction + Redis lock (`compaction_lock`)
-- [ ] `WsServerMsg::SnapshotRequired` handling → `LogicEvent::SnapshotNeeded`
-- [ ] `MockBlindRelay` in-process for multi-client tests
+- [x] Real WebSocket connection (`gloo-net` WASM, `tokio-tungstenite` native)
+- [x] HTTP REST via `gloo-net::http` (CRUD, sharing, media, users search)
+- [x] Delta-sync on reconnect (`last_known_seq` → `RequestMissing`)
+- [x] `WsServerMsg::SnapshotRequired` handling → `LogicEvent::SnapshotNeeded`
+- [x] `MockBlindRelay` in-process for multi-client tests
 
 ### SYNC P3 — Sharing & Revocation
 

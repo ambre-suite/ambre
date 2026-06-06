@@ -9,7 +9,7 @@
 // spreadsheets.
 // ============================================================================
 
-use ambre_bus::{AppCommand, AppEvent, IPC_TEST_DOC_ID, LogicCommand, TrameCommand, TrameEvent, UiEvent};
+use ambre_bus::{AppCommand, AppEvent, DocumentId, LogicCommand, TrameCommand, TrameEvent, UiEvent};
 use ambre_draw::{FontContext, Rect};
 use ambre_canvas::{
     Anchor, AnchorPublisher, ContentRepaint, DocView, FrameStats, InputEvent, OverlayRepaint,
@@ -219,7 +219,7 @@ impl TrameView {
             return;
         }
         let msg = LogicCommand::App {
-            document_id: IPC_TEST_DOC_ID,
+            document_id: DocumentId::new(),
             command: AppCommand::Trame(cmd),
         };
         match self.to_logic.try_send(msg) {
