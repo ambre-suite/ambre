@@ -20,6 +20,7 @@ pub mod command;
 pub mod event;
 pub mod logic;
 pub mod rest;
+pub mod sync_warning;
 pub mod ui;
 
 // Re‑export the main types for convenient use.

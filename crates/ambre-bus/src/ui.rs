@@ -17,6 +17,7 @@
 //! - **Push & status** (`ConnectionStatus`, `SyncWarning`, `MemberRevoked`,
 //!   channel/meeting push, `AuthError`, `ApiError`, `FatalError`): unsolicited.
 
+use crate::sync_warning::SyncWarningCode;
 use crate::{ChannelId, DocumentId, MeetingId, RequestId, RestEvent, UserId};
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -57,10 +58,10 @@ pub enum UiEvent {
         connected: bool,
     },
 
-    /// Non-fatal sync warning (quarantine overflow, unknown schema version, …).
+    /// Non-fatal sync warning (quarantine overflow, decrypt failure, …).
     SyncWarning {
         document_id: DocumentId,
-        code: u16,
+        code: SyncWarningCode,
         message: String,
     },
 

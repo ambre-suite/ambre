@@ -11,6 +11,7 @@
 //!
 //! [`SyncCommand::Rest`]: crate::SyncCommand::Rest
 
+use crate::sync_warning::SyncWarningCode;
 use crate::{ChannelId, DocumentId, RequestId, RestEvent, UserId};
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -52,10 +53,10 @@ pub enum LogicEvent {
         connected: bool,
     },
 
-    /// Non-fatal warning (quarantine overflow, unknown version, etc.).
+    /// Non-fatal warning (quarantine overflow, decrypt failure, etc.).
     SyncWarning {
         document_id: DocumentId,
-        code: u16,
+        code: SyncWarningCode,
         message: String,
     },
 
