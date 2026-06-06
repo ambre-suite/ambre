@@ -190,7 +190,6 @@ async fn handle_update(
     let pub_key_hex = author_pubkey.to_hex();
     let clock = update.public_data.clock.0;
     let snapshot_id = update.public_data.snapshot_id;
-    let ciphertext_len = update.ciphertext.0.len();
 
     let seq = match redis_ops::verify_clock_and_assign_seq(&state.redis, &doc_id, &pub_key_hex, clock).await {
         Ok(s) => s,
@@ -207,7 +206,7 @@ async fn handle_update(
         &snapshot_id, clock as i64, seq as i64, &s3_key,
     ).await;
 
-    let _ = redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, ciphertext_len).await;
+    let _ = redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update.ciphertext.0).await;
 
     let broadcast = encode_server_msg(&WsServerMsg::Update {
         seq: ambre_protocol::messages::Seq(seq),
@@ -346,4 +345,297 @@ fn verify_update_signature(
         .map_err(|_| AppError::InvalidSignature)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod postcard_tests {
+    use ambre_core::{DocumentId, PublicKey, SnapshotId, UserId};
+    use ambre_protocol::messages::{
+        Ciphertext, Clock, CommitmentTag, Counter, Ephemeral, Nonce,
+        Seq, SeqUpdate, Signature, Update,
+    };
+    use ambre_protocol::public_data::{EphemeralPublicData, UpdatePublicData};
+    use ambre_protocol::ws::{encode_client_msg, decode_client_msg, encode_server_msg, decode_server_msg, WsClientMsg, WsServerMsg};
+
+    fn make_update() -> Update {
+        Update {
+            ciphertext: Ciphertext(vec![1, 2, 3]),
+            nonce: Nonce([4u8; 24]),
+            public_data: UpdatePublicData {
+                document_id: DocumentId::from_bytes([5u8; 16]),
+                pub_key: PublicKey::from_array([6u8; 32]),
+                snapshot_id: SnapshotId::from_bytes([7u8; 16]),
+                clock: Clock(42),
+            },
+            commitment_tag: CommitmentTag([8u8; 32]),
+            signature: Signature([9u8; 64]),
+        }
+    }
+
+    fn make_ephemeral() -> Ephemeral {
+        Ephemeral {
+            ciphertext: Ciphertext(vec![10, 11]),
+            nonce: Nonce([12u8; 24]),
+            public_data: EphemeralPublicData {
+                document_id: DocumentId::from_bytes([13u8; 16]),
+                pub_key: PublicKey::from_array([14u8; 32]),
+                counter: Counter(15),
+            },
+            commitment_tag: CommitmentTag([16u8; 32]),
+            signature: Signature([17u8; 64]),
+        }
+    }
+
+    #[test]
+    fn roundtrip_client_subscribe() {
+        let msg = WsClientMsg::Subscribe { document_id: DocumentId::from_bytes([0u8; 16]) };
+        let bytes = encode_client_msg(&msg);
+        assert_eq!(bytes[0], 0x01);
+        let decoded = decode_client_msg(&bytes).unwrap();
+        assert!(matches!(decoded, WsClientMsg::Subscribe { .. }));
+    }
+
+    #[test]
+    fn roundtrip_client_unsubscribe() {
+        let msg = WsClientMsg::Unsubscribe { document_id: DocumentId::from_bytes([1u8; 16]) };
+        let decoded = decode_client_msg(&encode_client_msg(&msg)).unwrap();
+        assert!(matches!(decoded, WsClientMsg::Unsubscribe { .. }));
+    }
+
+    #[test]
+    fn roundtrip_client_update() {
+        let update = make_update();
+        let msg = WsClientMsg::Update(update);
+        let decoded = decode_client_msg(&encode_client_msg(&msg)).unwrap();
+        assert!(matches!(decoded, WsClientMsg::Update(_)));
+    }
+
+    #[test]
+    fn roundtrip_client_ephemeral() {
+        let eph = make_ephemeral();
+        let msg = WsClientMsg::Ephemeral(eph);
+        let decoded = decode_client_msg(&encode_client_msg(&msg)).unwrap();
+        assert!(matches!(decoded, WsClientMsg::Ephemeral(_)));
+    }
+
+    #[test]
+    fn roundtrip_client_request_missing() {
+        let msg = WsClientMsg::RequestMissing {
+            document_id: DocumentId::from_bytes([1u8; 16]),
+            after_seq: Seq(5),
+        };
+        let decoded = decode_client_msg(&encode_client_msg(&msg)).unwrap();
+        assert!(matches!(decoded, WsClientMsg::RequestMissing { .. }));
+    }
+
+    #[test]
+    fn roundtrip_server_subscribed() {
+        let msg = WsServerMsg::Subscribed { document_id: DocumentId::from_bytes([2u8; 16]) };
+        let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
+        assert!(matches!(decoded, WsServerMsg::Subscribed { .. }));
+    }
+
+    #[test]
+    fn roundtrip_server_update() {
+        let msg = WsServerMsg::Update { seq: Seq(100), update: make_update() };
+        let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
+        assert!(matches!(decoded, WsServerMsg::Update { seq: _, update: _ }));
+    }
+
+    #[test]
+    fn roundtrip_server_ephemeral() {
+        let msg = WsServerMsg::Ephemeral(make_ephemeral());
+        let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
+        assert!(matches!(decoded, WsServerMsg::Ephemeral(_)));
+    }
+
+    #[test]
+    fn roundtrip_server_missing_updates() {
+        let msg = WsServerMsg::MissingUpdates {
+            document_id: DocumentId::from_bytes([3u8; 16]),
+            updates: vec![SeqUpdate {
+                seq: Seq(1),
+                update: make_update(),
+            }],
+        };
+        let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
+        assert!(matches!(decoded, WsServerMsg::MissingUpdates { .. }));
+    }
+
+    #[test]
+    fn roundtrip_server_snapshot_required() {
+        let msg = WsServerMsg::SnapshotRequired { document_id: DocumentId::from_bytes([4u8; 16]) };
+        let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
+        assert!(matches!(decoded, WsServerMsg::SnapshotRequired { .. }));
+    }
+
+    #[test]
+    fn roundtrip_server_snapshot_available() {
+        let msg = WsServerMsg::SnapshotAvailable {
+            document_id: DocumentId::from_bytes([5u8; 16]),
+            snapshot_id: SnapshotId::from_bytes([6u8; 16]),
+        };
+        let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
+        assert!(matches!(decoded, WsServerMsg::SnapshotAvailable { .. }));
+    }
+
+    #[test]
+    fn roundtrip_server_key_rotation_required() {
+        let msg = WsServerMsg::KeyRotationRequired {
+            document_id: DocumentId::from_bytes([7u8; 16]),
+            revoked_user_id: UserId::from_bytes([8u8; 16]),
+        };
+        let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
+        assert!(matches!(decoded, WsServerMsg::KeyRotationRequired { .. }));
+    }
+
+    #[test]
+    fn roundtrip_server_error() {
+        let msg = WsServerMsg::Error { code: 409, message: "conflict".into() };
+        let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
+        match decoded {
+            WsServerMsg::Error { code, message } => {
+                assert_eq!(code, 409);
+                assert_eq!(message, "conflict");
+            }
+            _ => panic!("expected Error variant"),
+        }
+    }
+
+    #[test]
+    fn version_byte_is_01() {
+        let msg = WsClientMsg::Subscribe { document_id: DocumentId::from_bytes([0u8; 16]) };
+        let bytes = encode_client_msg(&msg);
+        assert_eq!(bytes[0], 0x01);
+    }
+
+    #[test]
+    fn empty_frame_is_error() {
+        assert!(decode_client_msg(&[]).is_err());
+    }
+
+    #[test]
+    fn wrong_version_byte_is_error() {
+        let msg = vec![0x02, 0x00];
+        assert!(decode_client_msg(&msg).is_err());
+    }
+
+    #[test]
+    fn garbage_data_returns_error_not_panics() {
+        let result = decode_client_msg(&[0x01, 0xFF, 0xFE, 0xFD]);
+        assert!(result.is_err());
+    }
+}
+
+#[cfg(test)]
+mod ed25519_tests {
+    use super::*;
+    use ambre_core::{DocumentId, PublicKey, SnapshotId};
+    use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Signature, Update};
+    use ambre_protocol::public_data::UpdatePublicData;
+    use ed25519_dalek::{Signer, SigningKey};
+
+    #[test]
+    fn valid_signature_is_accepted() {
+        let secret_bytes: [u8; 32] = [
+            0xcd, 0x06, 0x85, 0x43, 0x6b, 0xa1, 0xf7, 0x1e,
+            0x32, 0xce, 0x9a, 0x84, 0xbd, 0xc6, 0xfe, 0xa0,
+            0xb6, 0x49, 0x12, 0x1d, 0x8b, 0xf8, 0x43, 0xa2,
+            0xdd, 0xc6, 0x9f, 0x14, 0xf3, 0x5a, 0x3c, 0xb9,
+        ];
+        let signing_key = SigningKey::from_bytes(&secret_bytes);
+        let pubkey_bytes: [u8; 32] = signing_key.verifying_key().to_bytes();
+        let pubkey = PublicKey::from_array(pubkey_bytes);
+
+        let public_data = UpdatePublicData {
+            document_id: DocumentId::from_bytes([0u8; 16]),
+            pub_key: pubkey.clone(),
+            snapshot_id: SnapshotId::from_bytes([1u8; 16]),
+            clock: Clock(1),
+        };
+        let nonce = Nonce([3u8; 24]);
+        let ciphertext = Ciphertext(vec![4, 5, 6]);
+        let commitment_tag = CommitmentTag([7u8; 32]);
+
+        let public_data_bytes = postcard::to_allocvec(&public_data).unwrap();
+        let mut signed_data = Vec::new();
+        signed_data.extend_from_slice(&nonce.0);
+        signed_data.extend_from_slice(&ciphertext.0);
+        signed_data.extend_from_slice(&public_data_bytes);
+        signed_data.extend_from_slice(&commitment_tag.0);
+
+        let sig = signing_key.sign(&signed_data);
+        let signature = Signature(sig.to_bytes());
+
+        let update = Update {
+            ciphertext,
+            nonce,
+            public_data,
+            commitment_tag,
+            signature,
+        };
+
+        verify_update_signature(&pubkey, &update).expect("valid signature must be accepted");
+    }
+
+    #[test]
+    fn invalid_signature_is_rejected() {
+        let pubkey = PublicKey::from_array([42u8; 32]);
+
+        let update = Update {
+            ciphertext: Ciphertext(vec![1u8]),
+            nonce: Nonce([0u8; 24]),
+            public_data: UpdatePublicData {
+                document_id: DocumentId::from_bytes([0u8; 16]),
+                pub_key: pubkey,
+                snapshot_id: SnapshotId::from_bytes([0u8; 16]),
+                clock: Clock(0),
+            },
+            commitment_tag: CommitmentTag([0u8; 32]),
+            signature: Signature([0u8; 64]),
+        };
+
+        assert!(verify_update_signature(&update.public_data.pub_key, &update).is_err());
+    }
+
+    #[test]
+    fn tampered_ciphertext_rejects_signature() {
+        let secret_bytes: [u8; 32] = [
+            0xab, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde,
+            0xf0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+            0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        ];
+        let signing_key = SigningKey::from_bytes(&secret_bytes);
+        let pubkey = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+
+        let public_data = UpdatePublicData {
+            document_id: DocumentId::from_bytes([0u8; 16]),
+            pub_key: pubkey.clone(),
+            snapshot_id: SnapshotId::from_bytes([0u8; 16]),
+            clock: Clock(0),
+        };
+        let nonce = Nonce([0u8; 24]);
+        let ciphertext = Ciphertext(vec![1, 2, 3]);
+        let commitment_tag = CommitmentTag([0u8; 32]);
+
+        let public_data_bytes = postcard::to_allocvec(&public_data).unwrap();
+        let mut signed_data = vec![];
+        signed_data.extend_from_slice(&nonce.0);
+        signed_data.extend_from_slice(&ciphertext.0);
+        signed_data.extend_from_slice(&public_data_bytes);
+        signed_data.extend_from_slice(&commitment_tag.0);
+
+        let sig = signing_key.sign(&signed_data);
+
+        let tampered = Update {
+            ciphertext: Ciphertext(vec![9, 9, 9]),
+            nonce,
+            public_data,
+            commitment_tag,
+            signature: Signature(sig.to_bytes()),
+        };
+
+        assert!(verify_update_signature(&pubkey, &tampered).is_err());
+    }
 }

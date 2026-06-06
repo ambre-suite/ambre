@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 description = "Blind Relay server for Ambre - Axum, PostgreSQL, Valkey, S3"
 
+[features]
+test-helpers = []
+
 [dependencies]
 ambre-core     = { path = "../ambre-core" }
 ambre-protocol = { path = "../ambre-protocol" }
@@ -31,6 +34,9 @@ base64            = { workspace = true }
 hex               = { workspace = true }
 uuid              = { workspace = true, features = ["v4", "v7"] }
 time              = { workspace = true }
+openidconnect     = { workspace = true }
+reqwest           = { workspace = true }
+url               = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

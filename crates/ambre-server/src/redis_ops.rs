@@ -52,20 +52,22 @@ pub async fn verify_clock_and_assign_seq(
 
 /// Appends a delta entry to the pending list for this document.
 ///
-/// The entry is a small JSON blob `{ seq, s3_key, ciphertext_size }`
-/// that the global S3 flusher picks up every 15 seconds.
+/// The entry is a JSON blob `{ seq, s3_key, ciphertext_b64 }` that
+/// the global S3 flusher picks up every 15 seconds and uploads to S3.
 pub async fn append_pending_delta(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
     seq: u64,
     s3_key: &str,
-    ciphertext_size: usize,
+    ciphertext: &[u8],
 ) -> Result<(), AppError> {
+    use base64::Engine;
     let key = format!("doc:{document_id}:pending");
+    let ciphertext_b64 = base64::engine::general_purpose::URL_SAFE.encode(ciphertext);
     let blob = serde_json::json!({
         "seq": seq,
         "s3_key": s3_key,
-        "ciphertext_size": ciphertext_size,
+        "ciphertext_b64": ciphertext_b64,
     })
     .to_string();
     redis
@@ -260,4 +262,197 @@ pub struct SessionData {
     pub signing_pubkey: ambre_core::PublicKey,
     #[allow(dead_code)]
     pub session_id: String,
+}
+
+/// Stores OIDC authorization state in Redis with a 10-minute TTL.
+///
+/// The state is keyed by the CSRF token secret so it can be retrieved
+/// during the callback to validate the PKCE verifier and nonce.
+pub async fn oidc_state_set(
+    redis: &Client,
+    csrf_state: &str,
+    pkce_verifier_secret: &str,
+    nonce: &str,
+) -> Result<(), AppError> {
+    let key = format!("oidc:state:{csrf_state}");
+    redis
+        .hset(
+            &key,
+            [
+                ("pkce_verifier", pkce_verifier_secret),
+                ("nonce", nonce),
+            ],
+        )
+        .await
+        .map_err(|e| AppError::Redis(format!("oidc state set: {e}")))?;
+    redis
+        .expire(&key, 600, None)
+        .await
+        .map_err(|e| AppError::Redis(format!("oidc state expire: {e}")))?;
+    Ok(())
+}
+
+/// Retrieves and deletes OIDC authorization state from Redis.
+///
+/// Returns `(pkce_verifier_secret, nonce)` on success, or an error if the state
+/// expired or was not found.
+pub async fn oidc_state_take(
+    redis: &Client,
+    csrf_state: &str,
+) -> Result<(String, String), AppError> {
+    let key = format!("oidc:state:{csrf_state}");
+    let fields: Vec<String> = redis
+        .hgetall(&key)
+        .await
+        .map_err(|e| AppError::Redis(format!("oidc state get: {e}")))?;
+
+    if fields.is_empty() {
+        return Err(AppError::SessionExpired);
+    }
+
+    let mut pkce_verifier = String::new();
+    let mut nonce = String::new();
+    let mut chunks = fields.chunks(2);
+    while let Some([field, value]) = chunks.next() {
+        match field.as_str() {
+            "pkce_verifier" => pkce_verifier = value.clone(),
+            "nonce" => nonce = value.clone(),
+            _ => {}
+        }
+    }
+
+    redis
+        .del([&key])
+        .await
+        .map_err(|e| AppError::Redis(format!("oidc state delete: {e}")))?;
+
+    Ok((pkce_verifier, nonce))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_doc_clocks_key_contains_doc_id() {
+        let doc_id = ambre_core::DocumentId::from_bytes([0xabu8; 16]);
+        let key = format_doc_clocks_key(&doc_id);
+        assert!(key.starts_with("doc:"));
+        assert!(key.ends_with(":clocks"));
+        assert!(key.contains(&doc_id.to_string()));
+    }
+}
+
+#[cfg(all(test, feature = "test-helpers"))]
+mod lua_tests {
+    use super::*;
+
+    async fn connect_redis() -> Option<rustis::client::Client> {
+        let url = std::env::var("REDIS_URL")
+            .unwrap_or_else(|_| "redis://localhost:6379".into());
+        rustis::client::Client::connect(url.as_str()).await.ok()
+    }
+
+    #[tokio::test]
+    #[ignore = "needs redis"]
+    async fn first_update_succeeds() {
+        let redis = match connect_redis().await {
+            Some(c) => c,
+            None => return,
+        };
+        let doc_id = ambre_core::DocumentId::new();
+        let pk_hex = "abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc1";
+
+        let seq = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, 1)
+            .await
+            .expect("first update should succeed");
+        assert_eq!(seq, 1);
+
+        let _ = redis.del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")]).await.unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore = "needs redis"]
+    async fn sequential_clock_succeeds() {
+        let redis = match connect_redis().await {
+            Some(c) => c,
+            None => return,
+        };
+        let doc_id = ambre_core::DocumentId::new();
+        let pk = "def456def456def456def456def456def456def456def456def456def456def4";
+
+        let s1 = verify_clock_and_assign_seq(&redis, &doc_id, pk, 1).await.unwrap();
+        let s2 = verify_clock_and_assign_seq(&redis, &doc_id, pk, 2).await.unwrap();
+        let s3 = verify_clock_and_assign_seq(&redis, &doc_id, pk, 3).await.unwrap();
+        assert_eq!(s1, 1);
+        assert_eq!(s2, 2);
+        assert_eq!(s3, 3);
+
+        let _ = redis.del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")]).await.unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore = "needs redis"]
+    async fn clock_mismatch_rejected() {
+        let redis = match connect_redis().await {
+            Some(c) => c,
+            None => return,
+        };
+        let doc_id = ambre_core::DocumentId::new();
+        let pk = "1111111111111111111111111111111111111111111111111111111111111111";
+
+        verify_clock_and_assign_seq(&redis, &doc_id, pk, 1).await.unwrap();
+        let err = verify_clock_and_assign_seq(&redis, &doc_id, pk, 3).await.unwrap_err();
+        assert!(matches!(err, AppError::Redis(_)));
+
+        let _ = redis.del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")]).await.unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore = "needs redis"]
+    async fn duplicate_clock_rejected() {
+        let redis = match connect_redis().await {
+            Some(c) => c,
+            None => return,
+        };
+        let doc_id = ambre_core::DocumentId::new();
+        let pk = "2222222222222222222222222222222222222222222222222222222222222222";
+
+        verify_clock_and_assign_seq(&redis, &doc_id, pk, 1).await.unwrap();
+        let err = verify_clock_and_assign_seq(&redis, &doc_id, pk, 1).await.unwrap_err();
+        assert!(matches!(err, AppError::Redis(_)));
+
+        let _ = redis.del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")]).await.unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore = "needs redis"]
+    async fn independent_clients_have_independent_clocks() {
+        let redis = match connect_redis().await {
+            Some(c) => c,
+            None => return,
+        };
+        let doc_id = ambre_core::DocumentId::new();
+        let pk_a = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let pk_b = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+        let s_a = verify_clock_and_assign_seq(&redis, &doc_id, pk_a, 1).await.unwrap();
+        let s_b = verify_clock_and_assign_seq(&redis, &doc_id, pk_b, 1).await.unwrap();
+        let s_a2 = verify_clock_and_assign_seq(&redis, &doc_id, pk_a, 2).await.unwrap();
+
+        assert_eq!(s_a, 1);
+        assert_eq!(s_b, 2);
+        assert_eq!(s_a2, 3);
+
+        let _ = redis.del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")]).await.unwrap();
+    }
+
+    #[test]
+    fn lua_script_contains_key_validation() {
+        assert!(CLOCK_AND_SEQ_LUA.contains("CLOCK_MISMATCH"));
+        assert!(CLOCK_AND_SEQ_LUA.contains("HGET"));
+        assert!(CLOCK_AND_SEQ_LUA.contains("INCR"));
+        assert!(CLOCK_AND_SEQ_LUA.contains("+ 1"));
+        assert!(CLOCK_AND_SEQ_LUA.contains("HSET"));
+    }
 }

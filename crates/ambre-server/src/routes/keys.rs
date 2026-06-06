@@ -6,6 +6,7 @@ use std::sync::Arc;
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
+use crate::redis_ops;
 use crate::state::AppState;
 
 /// Request body for first-time master key upload.
@@ -28,6 +29,11 @@ pub async fn store_master_keys(
     db::update_master_key(&state.db, &s.user_id, &mk_enc, &mk_salt).await?;
     let uid = uuid::Uuid::from_bytes(*s.user_id.as_uuid().as_bytes());
     sqlx::query("UPDATE users SET signing_pubkey = $2, exchange_pubkey = $3 WHERE id = $1").bind(uid).bind(&spk).bind(&epk).execute(&state.db).await?;
+
+    let new_signing_pubkey = ambre_core::PublicKey::from_slice(&spk).map_err(|e| AppError::Conflict{detail:e.to_string()})?;
+    let sd = redis_ops::SessionData { user_id: s.user_id, signing_pubkey: new_signing_pubkey, session_id: s.session_id.clone() };
+    redis_ops::session_create(&state.redis, &s.session_id, &sd, state.config.session_ttl_secs).await?;
+
     Ok(axum::Json(serde_json::json!({"status":"stored"})))
 }
 
@@ -44,8 +50,8 @@ pub async fn get_master_keys(
     let s = auth::authenticate(&state, &jar).await?;
     let u = db::get_user(&state.db, &s.user_id).await?.ok_or(AppError::NotFound{resource:"user"})?;
     Ok(axum::Json(MasterKeysResponse {
-        master_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&u.master_key_enc),
-        master_key_salt: base64::engine::general_purpose::URL_SAFE.encode(&u.master_key_salt),
+        master_key_enc: u.master_key_enc.as_ref().map(|v| base64::engine::general_purpose::URL_SAFE.encode(v)).unwrap_or_default(),
+        master_key_salt: u.master_key_salt.as_ref().map(|v| base64::engine::general_purpose::URL_SAFE.encode(v)).unwrap_or_default(),
         signing_pubkey: hex::encode(&u.signing_pubkey),
         exchange_pubkey: hex::encode(&u.exchange_pubkey),
     }))

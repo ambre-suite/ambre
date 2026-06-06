@@ -3,11 +3,15 @@
 mod auth;
 mod db;
 mod error;
+mod oidc;
 mod redis_ops;
 mod routes;
 mod s3;
 mod state;
 mod ws;
+
+#[cfg(any(test, feature = "test-helpers"))]
+mod test_helpers;
 
 use axum::Router;
 use std::sync::Arc;
@@ -58,10 +62,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let s3 = aws_sdk_s3::Client::from_conf(s3_config.build());
 
+    let oidc_google_client_id = std::env::var("OIDC_GOOGLE_CLIENT_ID").unwrap_or_default();
+    let oidc_google_client_secret = std::env::var("OIDC_GOOGLE_CLIENT_SECRET").unwrap_or_default();
+    let oidc_google_redirect_uri = std::env::var("OIDC_GOOGLE_REDIRECT_URI").unwrap_or_default();
+
     let config = Config {
         s3_env_prefix,
+        oidc_google_client_id: oidc_google_client_id.clone(),
+        oidc_google_client_secret: oidc_google_client_secret.clone(),
+        oidc_google_redirect_uri: oidc_google_redirect_uri.clone(),
         ..Default::default()
     };
+
+    let oidc_clients = oidc::init_oidc_clients(
+        &oidc_google_client_id,
+        &oidc_google_client_secret,
+        &oidc_google_redirect_uri,
+    )
+    .await
+    .ok()
+    .unwrap_or_default();
 
     let state = Arc::new(AppState {
         db,
@@ -69,6 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         s3,
         s3_bucket,
         config: Arc::new(config.clone()),
+        oidc_clients: oidc_clients.clone(),
     });
 
     // Spawn S3 flusher
@@ -78,6 +99,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         s3: state.s3.clone(),
         s3_bucket: state.s3_bucket.clone(),
         config: Arc::new(config),
+        oidc_clients: oidc_clients.clone(),
     };
     tokio::spawn(s3::global_s3_flusher(flush_state));
 
@@ -87,6 +109,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .allow_headers(Any);
 
     let api_router = Router::new()
+        .route("/auth/google/login", axum::routing::get(routes::oidc_login))
+        .route("/auth/google/callback", axum::routing::post(routes::oidc_callback))
         .route("/auth/setup", axum::routing::post(routes::setup_account))
         .route("/auth/me", axum::routing::get(routes::me))
         .route("/auth/logout", axum::routing::post(routes::logout))

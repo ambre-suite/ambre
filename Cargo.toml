@@ -164,6 +164,9 @@ aws-sdk-s3        = "1.128"
 chrono            = { version = "0.4", features = ["serde"] }
 base64            = "0.22"
 time              = "0.3"
+openidconnect     = "4"
+reqwest           = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+url               = "2"
 
 # Import/export
 docx-rs = "0.4"

@@ -85,7 +85,7 @@ impl IntoResponse for AppError {
         tracing::error!(error = %self, code = code);
 
         let message = match &self {
-            AppError::Database(_) | AppError::Redis(_) | AppError::S3(_) => {
+            AppError::Database(_) | AppError::Redis(_) | AppError::S3(_) | AppError::Decode(_) | AppError::Oidc(_) => {
                 "Internal server error".to_string()
             }
             other => other.to_string(),
@@ -101,3 +101,135 @@ impl IntoResponse for AppError {
             .into_response()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::to_bytes;
+
+    async fn extract_body(resp: Response) -> serde_json::Value {
+        let body = resp.into_body();
+        let bytes = to_bytes(body, usize::MAX).await.unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    #[tokio::test]
+    async fn unauthorized_returns_401() {
+        let r = AppError::Unauthorized.into_response();
+        assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
+        let b = extract_body(r).await;
+        assert_eq!(b["error"], "UNAUTHORIZED");
+    }
+
+    #[tokio::test]
+    async fn session_expired_returns_401() {
+        let r = AppError::SessionExpired.into_response();
+        assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
+        let b = extract_body(r).await;
+        assert_eq!(b["error"], "UNAUTHORIZED");
+    }
+
+    #[tokio::test]
+    async fn forbidden_returns_403() {
+        let r = AppError::Forbidden.into_response();
+        assert_eq!(r.status(), StatusCode::FORBIDDEN);
+        let b = extract_body(r).await;
+        assert_eq!(b["error"], "FORBIDDEN");
+    }
+
+    #[tokio::test]
+    async fn not_found_returns_404() {
+        let r = AppError::NotFound { resource: "document" }.into_response();
+        assert_eq!(r.status(), StatusCode::NOT_FOUND);
+        let b = extract_body(r).await;
+        assert_eq!(b["error"], "NOT_FOUND");
+    }
+
+    #[tokio::test]
+    async fn conflict_returns_409() {
+        let r = AppError::Conflict { detail: "already exists".into() }.into_response();
+        assert_eq!(r.status(), StatusCode::CONFLICT);
+        let b = extract_body(r).await;
+        assert_eq!(b["error"], "CONFLICT");
+    }
+
+    #[tokio::test]
+    async fn clock_mismatch_returns_409() {
+        let r = AppError::ClockMismatch { expected: 5, got: 7 }.into_response();
+        assert_eq!(r.status(), StatusCode::CONFLICT);
+        let b = extract_body(r).await;
+        assert_eq!(b["error"], "CLOCK_MISMATCH");
+    }
+
+    #[tokio::test]
+    async fn invalid_signature_returns_422() {
+        let r = AppError::InvalidSignature.into_response();
+        assert_eq!(r.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let b = extract_body(r).await;
+        assert_eq!(b["error"], "INVALID_SIGNATURE");
+    }
+
+    #[test]
+    fn snapshot_required_returns_409() {
+        let r = AppError::SnapshotRequired.into_response();
+        assert_eq!(r.status(), StatusCode::CONFLICT);
+    }
+
+    #[test]
+    fn compaction_lock_held_returns_409() {
+        let r = AppError::CompactionLockHeld.into_response();
+        assert_eq!(r.status(), StatusCode::CONFLICT);
+    }
+
+    #[test]
+    fn unknown_provider_returns_400() {
+        let r = AppError::UnknownProvider("gitlab".into()).into_response();
+        assert_eq!(r.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn infrastructure_errors_return_internal_server_error_message() {
+        for err in [
+            AppError::Database(sqlx::Error::PoolTimedOut),
+            AppError::Redis("connection refused".into()),
+            AppError::S3("access denied".into()),
+            AppError::Decode(postcard::Error::SerdeDeCustom),
+        ] {
+            let r = err.into_response();
+            assert_eq!(r.status(), StatusCode::INTERNAL_SERVER_ERROR);
+            let b = extract_body(r).await;
+            assert_eq!(b["error"], "INTERNAL_ERROR");
+            assert_eq!(b["message"], "Internal server error");
+        }
+    }
+
+    #[tokio::test]
+    async fn application_errors_return_their_message() {
+        let r = AppError::NotFound { resource: "user" }.into_response();
+        let b = extract_body(r).await;
+        assert_eq!(b["message"], "Not found: user");
+    }
+
+    #[tokio::test]
+    async fn oidc_error_is_infrastructure_level() {
+        let r = AppError::Oidc("provider timeout".into()).into_response();
+        assert_eq!(r.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let b = extract_body(r).await;
+        assert_eq!(b["error"], "INTERNAL_ERROR");
+        assert_eq!(b["message"], "Internal server error");
+    }
+
+    #[test]
+    fn database_from_sqlx_error() {
+        use sqlx::Error as SqlxError;
+        let e: AppError = SqlxError::PoolTimedOut.into();
+        assert!(matches!(e, AppError::Database(_)));
+    }
+
+    #[test]
+    fn decode_from_postcard_error() {
+        let e: AppError = postcard::Error::SerdeDeCustom.into();
+        assert!(matches!(e, AppError::Decode(_)));
+    }
+}
+
