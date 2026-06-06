@@ -18,7 +18,7 @@
 
 use std::collections::HashSet;
 
-use loro::{LoroDoc, LoroValue};
+use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
 
 use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 
@@ -34,12 +34,41 @@ fn cell_key(row: u32, col: u32) -> String {
 // TrameState
 // -----------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------
+// TrameOutcome -- typed editing result
+// -----------------------------------------------------------------------------
+
+/// Outcome of processing a [`TrameCommand`]: display events for the UI Thread,
+/// plus optional CRDT and ephemeral payloads to forward to the Sync thread.
+///
+/// The Logic dispatcher sends `display` to the UI, `update` / `ephemeral` to
+/// Sync as [`SyncCommand::SendUpdate`] / [`SyncCommand::SendEphemeral`].  This
+/// is the *lossless* path required by the architecture: no app content is
+/// silently dropped.
+pub struct TrameOutcome {
+    /// Display events destined for the UI Thread.
+    pub display: Vec<TrameEvent>,
+    /// Binary CRDT delta (Loro `ExportMode::Updates`) to encrypt and broadcast.
+    pub update: Option<Vec<u8>>,
+    /// Ephemeral (presence) payload to encrypt and broadcast.
+    pub ephemeral: Option<Vec<u8>>,
+}
+
+impl TrameOutcome {
+    /// Convenience: display events only, no sync payloads.
+    pub fn display_only(events: Vec<TrameEvent>) -> Self {
+        Self { display: events, update: None, ephemeral: None }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// TrameState
+// -----------------------------------------------------------------------------
+
 /// Per-document state for a Trame (spreadsheet) document.
 ///
 /// One instance per open document, owned by the Logic thread's `DocState`
-/// registry keyed by `document_id`. Empty for now (cell content is generated
-/// from coordinates); it will hold the `LoroDoc` and formula engine once CRDT
-/// editing is wired.
+/// registry keyed by `document_id`.
 pub struct TrameState {
     /// Active cell (selection), kept in sync by the UI via
     /// [`TrameCommand::SetActiveCell`]. Formatting toggles target this cell.
@@ -56,6 +85,9 @@ pub struct TrameState {
     /// coordinate label (A1, B2, ...). This is the first wiring of the document
     /// model; bold/italic stay in the sets above until they move to Loro runs.
     doc: LoroDoc,
+    /// Last CRDT version vector exported to Sync. Used to produce incremental
+    /// deltas via [`ExportMode::Updates`].
+    last_exported_vv: VersionVector,
 }
 
 impl TrameState {
@@ -65,6 +97,7 @@ impl TrameState {
             bold: HashSet::new(),
             italic: HashSet::new(),
             doc: LoroDoc::new(),
+            last_exported_vv: VersionVector::default(),
         }
     }
 
@@ -78,19 +111,19 @@ impl TrameState {
         }
     }
 
-    /// Handle a UI command and return display events for the UI Thread.
+    /// Handle a UI command and return a typed outcome.
     ///
     /// Must complete in < 50 ms (P2); scroll requests in < 10 ms (P1).
-    pub fn handle_command(&mut self, cmd: TrameCommand) -> Vec<TrameEvent> {
+    pub fn handle_command(&mut self, cmd: TrameCommand) -> TrameOutcome {
         match cmd {
             TrameCommand::SetActiveCell { row, col } => {
                 self.active = (row, col);
                 // Report the new active cell's formatting so the chrome toggle
                 // buttons reflect the selection.
-                vec![
+                TrameOutcome::display_only(vec![
                     TrameEvent::BoldState { enabled: self.bold.contains(&self.active) },
                     TrameEvent::ItalicState { enabled: self.italic.contains(&self.active) },
-                ]
+                ])
             }
             TrameCommand::SetCellText { row, col, text } => {
                 // Commit the edit into the CRDT. Empty text clears the cell back
@@ -104,11 +137,12 @@ impl TrameState {
                     let _ = map.insert(&key, text);
                 }
                 self.doc.commit();
-                vec![]
+                let update = self.flush_delta();
+                TrameOutcome { display: vec![], update, ephemeral: None }
             }
             TrameCommand::ToggleBold => {
                 let enabled = toggle(&mut self.bold, self.active);
-                vec![
+                TrameOutcome::display_only(vec![
                     TrameEvent::BoldState { enabled },
                     TrameEvent::CellFormat {
                         row: self.active.0,
@@ -116,11 +150,11 @@ impl TrameState {
                         bold: enabled,
                         italic: self.italic.contains(&self.active),
                     },
-                ]
+                ])
             }
             TrameCommand::ToggleItalic => {
                 let enabled = toggle(&mut self.italic, self.active);
-                vec![
+                TrameOutcome::display_only(vec![
                     TrameEvent::ItalicState { enabled },
                     TrameEvent::CellFormat {
                         row: self.active.0,
@@ -128,7 +162,7 @@ impl TrameState {
                         bold: self.bold.contains(&self.active),
                         italic: enabled,
                     },
-                ]
+                ])
             }
             TrameCommand::ScrollViewport { version, row_start, row_end, col_start, col_end } => {
                 // Clamp to grid bounds.
@@ -136,7 +170,7 @@ impl TrameState {
                 let col_end = col_end.min(TOTAL_COLS.saturating_sub(1));
 
                 if row_start > row_end || col_start > col_end {
-                    return vec![];
+                    return TrameOutcome::display_only(vec![]);
                 }
 
                 let mut cells = Vec::with_capacity(
@@ -155,9 +189,21 @@ impl TrameState {
                     }
                 }
 
-                vec![TrameEvent::ViewportData { version, row_start, col_start, cells }]
+                TrameOutcome::display_only(vec![TrameEvent::ViewportData { version, row_start, col_start, cells }])
             }
         }
+    }
+
+    /// Export any new CRDT ops since `last_exported_vv` and bump the tracking
+    /// cursor. Returns `Some` binary delta if there were new ops.
+    fn flush_delta(&mut self) -> Option<Vec<u8>> {
+        let current = self.doc.oplog_vv();
+        if current == self.last_exported_vv {
+            return None;
+        }
+        let delta = self.doc.export(ExportMode::updates(&self.last_exported_vv)).ok();
+        self.last_exported_vv = current;
+        delta
     }
 
     /// Apply a remote CRDT delta / snapshot and return display events.
@@ -177,11 +223,8 @@ impl TrameState {
     }
 
     /// Export the full CRDT state for snapshot compaction.
-    ///
-    /// Must be a valid `LoroDoc::export_snapshot()` payload. Stubbed (empty)
-    /// until CRDT editing is wired.
     pub fn export_snapshot(&self) -> Vec<u8> {
-        vec![]
+        self.doc.export(ExportMode::Snapshot).unwrap_or_default()
     }
 }
 
@@ -231,16 +274,16 @@ mod tests {
         // Select A1 (0,0) and bold it.
         state.handle_command(TrameCommand::SetActiveCell { row: 0, col: 0 });
         let evts = state.handle_command(TrameCommand::ToggleBold);
-        assert!(matches!(evts[0], TrameEvent::BoldState { enabled: true }));
+        assert!(matches!(evts.display[0], TrameEvent::BoldState { enabled: true }));
         assert!(matches!(
-            evts[1],
+            evts.display[1],
             TrameEvent::CellFormat { row: 0, col: 0, bold: true, italic: false }
         ));
 
         // Move the selection to B2 (1,1): the active cell is not bold, so the
         // button reports false -- A1 keeps its bold.
         let evts = state.handle_command(TrameCommand::SetActiveCell { row: 1, col: 1 });
-        assert!(matches!(evts[0], TrameEvent::BoldState { enabled: false }));
+        assert!(matches!(evts.display[0], TrameEvent::BoldState { enabled: false }));
 
         // A viewport covering both cells: only A1 carries the bold run.
         let evts = state.handle_command(TrameCommand::ScrollViewport {
@@ -250,7 +293,7 @@ mod tests {
             col_start: 0,
             col_end: 1,
         });
-        let TrameEvent::ViewportData { cells, .. } = &evts[0] else {
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
             panic!("expected ViewportData");
         };
         let a1 = cells.iter().find(|c| c.row == 0 && c.col == 0).unwrap();
@@ -269,7 +312,7 @@ mod tests {
         let evts = state.handle_command(TrameCommand::ScrollViewport {
             version: 1, row_start: 0, row_end: 0, col_start: 0, col_end: 0,
         });
-        let TrameEvent::ViewportData { cells, .. } = &evts[0] else { panic!() };
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
         assert_eq!(cells[0].text, "A1");
 
         // Edit A1, then read it back: the stored text wins.
@@ -279,7 +322,7 @@ mod tests {
         let evts = state.handle_command(TrameCommand::ScrollViewport {
             version: 2, row_start: 0, row_end: 0, col_start: 0, col_end: 0,
         });
-        let TrameEvent::ViewportData { cells, .. } = &evts[0] else { panic!() };
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
         assert_eq!(cells[0].text, "hello");
 
         // Clearing it restores the generated label.
@@ -289,7 +332,7 @@ mod tests {
         let evts = state.handle_command(TrameCommand::ScrollViewport {
             version: 3, row_start: 0, row_end: 0, col_start: 0, col_end: 0,
         });
-        let TrameEvent::ViewportData { cells, .. } = &evts[0] else { panic!() };
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
         assert_eq!(cells[0].text, "A1");
     }
 

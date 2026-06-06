@@ -20,7 +20,7 @@ pub mod logic;
 pub mod ui;
 
 pub use ambre_bus::{DisplayCell, TrameCommand, TrameEvent};
-pub use logic::TrameState;
+pub use logic::{TrameOutcome, TrameState};
 
 /// Total number of rows in a Trame grid (0-based indices `0..TOTAL_ROWS`).
 pub const TOTAL_ROWS: u32 = 100_000;
