@@ -27,6 +27,7 @@ x25519-dalek  = { workspace = true }
 zeroize  = { workspace = true }
 gloo-net = { workspace = true, features = ["http", "websocket"] }
 ruzstd   = { workspace = true }
+hex      = { workspace = true }
 
 wasm-bindgen = { workspace = true }
 web-sys      = { workspace = true, features = ["WebSocket", "BinaryType", "CloseEvent"] }

@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 // Client -> Server
 // ---------------------------------------------------------------------------
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum WsClientMsg {
     /// Start receiving real-time events for a document.
     /// Server adds this doc to the connection's subscription set.
@@ -55,7 +55,7 @@ pub enum WsClientMsg {
 // Server -> Client
 // ---------------------------------------------------------------------------
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum WsServerMsg {
     /// Subscription confirmed.
     Subscribed { document_id: DocumentId },

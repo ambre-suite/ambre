@@ -58,8 +58,12 @@ impl MasterSeed {
     /// Derives the X25519 exchange key (deterministic for a given seed).
     pub fn derive_exchange_key(&self) -> StaticSecret {
         let sk = derive32(EXCH_DOMAIN, &self.0);
-        // StaticSecret::from clamps internally; copy the derived bytes in.
         StaticSecret::from(sk)
+    }
+
+    /// Returns the raw seed bytes. Available for recovery-word generation.
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
     }
 }
 
