@@ -21,6 +21,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
     AppCommand, AppEvent, IPC_TEST_DOC_ID, LogicCommand, LogicEvent, SyncCommand, TrameCommand,
     TrameEvent, UiEvent,
@@ -102,10 +103,12 @@ pub fn main() {
     let store_slot: Rc<RefCell<Option<CommandStates>>> = Rc::new(RefCell::new(None));
     let anchor_slot: Rc<RefCell<Option<RwSignal<Option<(f64, f64)>>>>> =
         Rc::new(RefCell::new(None));
+    let toasts_slot: Rc<RefCell<Option<Toasts>>> = Rc::new(RefCell::new(None));
     mount_app_shell(
         ui_to_logic_tx.clone(),
         Rc::clone(&store_slot),
         Rc::clone(&anchor_slot),
+        Rc::clone(&toasts_slot),
         theme_ctl.clone(),
         raf.clone(),
     );
@@ -116,6 +119,9 @@ pub fn main() {
     let anchor_pos = anchor_slot
         .borrow()
         .expect("anchor signal created during mount");
+    let toasts = toasts_slot
+        .borrow()
+        .expect("Toasts created during mount");
 
     // Keyboard: resolve registered chords and dispatch the matching command.
     install_command_keys(keymap, ui_to_logic_tx.clone());
@@ -144,12 +150,18 @@ pub fn main() {
     let mut last_anchor: Option<(f64, f64)> = None;
     let pre_frame = move || {
         while let Ok(ev) = logic_to_ui_rx.try_recv() {
-            if let UiEvent::Viewport { event: AppEvent::Trame(te), .. } = &ev {
-                match te {
+            match &ev {
+                UiEvent::Viewport { event: AppEvent::Trame(te), .. } => match te {
                     TrameEvent::BoldState { enabled } => store.set_toggled(BOLD, *enabled),
                     TrameEvent::ItalicState { enabled } => store.set_toggled(ITALIC, *enabled),
                     _ => {}
-                }
+                },
+                // Non-fatal sync warnings surface as a transient warning toast.
+                // They never reach the fatal path: the session keeps running and
+                // the CRDT reconverges (a dropped/quarantined update is re-fetched
+                // via RequestMissing once its parent snapshot lands).
+                UiEvent::SyncWarning { code, .. } => toasts.warning(sync_warning_message(*code)),
+                _ => {}
             }
             // Content (and everything else) still flows to the view unchanged.
             let _ = view_tx.try_send(ev);
@@ -173,6 +185,19 @@ pub fn main() {
         pre_frame,
         raf,
     );
+}
+
+/// Map a `SyncWarningCode` (the closed `ambre-bus` contract) to a user-facing
+/// notice. All are non-fatal and self-correcting, so the wording reassures
+/// rather than alarms. Exhaustive by design: a new variant is a compile error
+/// here until it gets a message.
+fn sync_warning_message(code: SyncWarningCode) -> &'static str {
+    match code {
+        SyncWarningCode::QuarantineOverflow => {
+            "Syncing is catching up - some changes are taking longer to arrive."
+        }
+        SyncWarningCode::DecryptFailed => "A remote change could not be read and was skipped.",
+    }
 }
 
 /// Translate a `CommandId` into its `LogicCommand` and send it to the Logic
@@ -204,6 +229,7 @@ fn mount_app_shell(
     to_logic: flume::Sender<LogicCommand>,
     store_slot: Rc<RefCell<Option<CommandStates>>>,
     anchor_slot: Rc<RefCell<Option<RwSignal<Option<(f64, f64)>>>>>,
+    toasts_slot: Rc<RefCell<Option<Toasts>>>,
     theme_ctl: ambre_canvas::ThemeControl,
     raf: ambre_canvas::RafControl,
 ) {
@@ -224,6 +250,9 @@ fn mount_app_shell(
         // Transient notifications in an ARIA live region (announced to screen
         // readers without stealing focus). Demonstrated on the theme toggle.
         let toasts = Toasts::new();
+        // Published back to the dispatcher so inbound UiEvents (e.g. SyncWarning)
+        // can raise toasts. Same slot pattern as the command-state store.
+        *toasts_slot.borrow_mut() = Some(toasts);
 
         // Theme toggle: flips `theme_ctl` (read by the canvas) and the document's
         // `data-theme` (drives the CSS custom properties). `theme_sig` only
