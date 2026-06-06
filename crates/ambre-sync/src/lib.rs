@@ -38,23 +38,18 @@ use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, WebSocket};
 
 use ambre_bus::{
-    ChannelId, DocType, DocumentId, LogicEvent, RequestId, RestCommand, RestEvent, SyncCommand,
-    UserId,
+    ChannelId, DocType, DocumentId, LogicEvent, RequestId, RestCommand, RestEvent, SnapshotId,
+    SyncCommand, UserId,
 };
-use ambre_protocol::{
-    messages::Seq,
-    ws::{WsClientMsg, WsServerMsg, decode_server_msg, encode_client_msg},
-};
+use ambre_core::PublicKey;
+use ambre_crypto::{DocumentKey, MasterSeed};
+use ambre_protocol::messages::{Clock, Counter, Seq};
+use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
+use ambre_protocol::ws::{decode_server_msg, encode_client_msg, WsClientMsg, WsServerMsg};
+use ed25519_dalek::SigningKey;
+use x25519_dalek::StaticSecret;
 
-// -----------------------------------------------------------------------------
-// Crypto types (placeholders — real implementations land in ambre-crypto)
-// -----------------------------------------------------------------------------
-
-#[allow(dead_code)]
-struct MasterSeed([u8; 32]);
-
-#[allow(dead_code)]
-struct DocumentKey([u8; 32]);
+mod pipeline;
 
 // -----------------------------------------------------------------------------
 // Per-document sync session
@@ -64,7 +59,12 @@ struct DocumentKey([u8; 32]);
 struct SyncDocumentState {
     document_id: DocumentId,
     doc_key: DocumentKey,
+    /// Snapshot this document's updates are currently based on. Placeholder
+    /// until the snapshot flow lands; carried in every `UpdatePublicData`.
+    current_snapshot_id: SnapshotId,
     local_clock: u64,
+    /// Monotonic counter for outbound ephemerals (anti-replay at the receiver).
+    ephemeral_counter: u64,
     last_seq: Seq,
     quarantine: Vec<(u64, Vec<u8>)>,
 }
@@ -74,7 +74,9 @@ impl SyncDocumentState {
         Self {
             document_id,
             doc_key,
+            current_snapshot_id: SnapshotId::new(),
             local_clock: 0,
+            ephemeral_counter: 0,
             last_seq: Seq(0),
             quarantine: Vec::new(),
         }
@@ -94,6 +96,13 @@ struct SyncState {
 
     // -- Session-level crypto (derived once at Unlock, zeroized at Logout) ----
     master_seed: Option<MasterSeed>,
+    /// Ed25519 signing key, derived from the master seed. Signs every outbound
+    /// envelope; its public half is the author identity in `public_data`.
+    signing_key: Option<SigningKey>,
+    /// X25519 exchange key, derived from the master seed. Used to wrap/unwrap
+    /// document keys when sharing (not yet wired).
+    #[allow(dead_code)]
+    exchange_key: Option<StaticSecret>,
 
     // -- Single multiplexed WebSocket -----------------------------------------
     ws: Option<WebSocket>,
@@ -110,6 +119,8 @@ impl SyncState {
             logic_tx,
             api_base,
             master_seed: None,
+            signing_key: None,
+            exchange_key: None,
             ws: None,
             _ws_closures: Vec::new(),
             documents: HashMap::new(),
@@ -124,6 +135,29 @@ impl SyncState {
                 "Sync: Logic receiver dropped, discarding {:?}",
                 std::mem::discriminant(&ev),
             );
+        }
+    }
+
+    /// Routes a decrypted inbound payload to the Logic thread, or raises a
+    /// non-fatal `SyncWarning` on a decode/decrypt failure (drop semantics).
+    /// `opened` is `None` when the document is not open in this session.
+    fn deliver_remote(
+        &self,
+        document_id: DocumentId,
+        opened: Option<Result<Vec<u8>, pipeline::PipelineError>>,
+        make_event: impl FnOnce(Vec<u8>) -> LogicEvent,
+    ) {
+        match opened {
+            None => tracing::warn!("Sync: inbound message for unopened doc {document_id:?}, dropping"),
+            Some(Ok(payload)) => self.send_to_logic(make_event(payload)),
+            Some(Err(e)) => {
+                tracing::warn!("Sync: dropping inbound for {document_id:?}: {e}");
+                self.send_to_logic(LogicEvent::SyncWarning {
+                    document_id,
+                    code: 1,
+                    message: e.to_string(),
+                });
+            }
         }
     }
 
@@ -284,6 +318,16 @@ impl SyncState {
 
     fn handle_unlock(&mut self, id: RequestId, passphrase: Vec<u8>) {
         tracing::info!("Sync: Unlock (passphrase len={})", passphrase.len());
+
+        // TODO (Unlock task): fetch the passphrase-wrapped master key
+        // (GET /api/keys/master), Argon2id-derive the user key, decrypt it into
+        // the real MasterSeed, and return the real user identity. For now we
+        // seed the session locally so the crypto pipeline is functional offline.
+        let master_seed = MasterSeed::generate();
+        self.signing_key = Some(master_seed.derive_signing_key());
+        self.exchange_key = Some(master_seed.derive_exchange_key());
+        self.master_seed = Some(master_seed);
+
         self.open_websocket();
 
         self.reply(id, RestEvent::SessionReady {
@@ -321,6 +365,8 @@ impl SyncState {
         self._ws_closures.clear();
         self.documents.clear();
         self.master_seed = None;
+        self.signing_key = None;
+        self.exchange_key = None;
         tracing::info!("Sync: logged out, all keys zeroized");
     }
 
@@ -373,27 +419,43 @@ impl SyncState {
 
             WsServerMsg::Update { seq, update } => {
                 let doc_id = update.public_data.document_id;
-                if let Some(doc_state) = self.documents.get_mut(&doc_id) {
-                    doc_state.last_seq = seq;
-                    let _ = update;
-                    // Pipeline: verify signature/HMAC → decrypt → decompress →
-                    // send LogicEvent::RemoteUpdate { document_id, payload }.
-                }
+                let opened = match self.documents.get_mut(&doc_id) {
+                    Some(doc_state) => {
+                        doc_state.last_seq = seq;
+                        Some(pipeline::open_update(&update, &doc_state.doc_key))
+                    }
+                    None => None,
+                };
+                self.deliver_remote(doc_id, opened, |payload| LogicEvent::RemoteUpdate {
+                    document_id: doc_id,
+                    payload,
+                });
             }
 
             WsServerMsg::Ephemeral(eph) => {
                 let doc_id = eph.public_data.document_id;
-                if let Some(doc_state) = self.documents.get(&doc_id) {
-                    let _ = doc_state;
-                }
+                let opened = self
+                    .documents
+                    .get(&doc_id)
+                    .map(|doc_state| pipeline::open_ephemeral(&eph, &doc_state.doc_key));
+                self.deliver_remote(doc_id, opened, |payload| LogicEvent::RemoteEphemeral {
+                    document_id: doc_id,
+                    payload,
+                });
             }
 
             WsServerMsg::MissingUpdates { document_id, updates } => {
-                if let Some(doc_state) = self.documents.get_mut(&document_id) {
-                    for seq_update in &updates {
-                        doc_state.last_seq = seq_update.seq;
-                        let _ = &seq_update.update;
-                    }
+                for seq_update in updates {
+                    let opened = match self.documents.get_mut(&document_id) {
+                        Some(doc_state) => {
+                            doc_state.last_seq = seq_update.seq;
+                            Some(pipeline::open_update(&seq_update.update, &doc_state.doc_key))
+                        }
+                        None => None,
+                    };
+                    self.deliver_remote(document_id, opened, |payload| {
+                        LogicEvent::RemoteUpdate { document_id, payload }
+                    });
                 }
             }
 
@@ -444,7 +506,10 @@ impl SyncState {
     // -- Document lifecycle ----------------------------------------------------
 
     fn handle_open_document(&mut self, document_id: DocumentId) {
-        let doc_key = DocumentKey([0; 32]); // placeholder
+        // TODO (sharing task): derive the real DocumentKey via X25519 unwrap of
+        // the server-stored, member-wrapped key. Generated locally for now so
+        // the pipeline round-trips within a single client.
+        let doc_key = DocumentKey::generate();
         self.documents
             .insert(document_id, SyncDocumentState::new(document_id, doc_key));
         if self.ws.is_some() {
@@ -472,31 +537,86 @@ impl SyncState {
 
     // -- Outbound sync ---------------------------------------------------------
 
+    /// The author identity (Ed25519 verifying key) for outbound messages, or
+    /// `None` before Unlock has seeded the session keys.
+    fn author_pub_key(&self) -> Option<PublicKey> {
+        self.signing_key
+            .as_ref()
+            .map(|sk| PublicKey::from_array(sk.verifying_key().to_bytes()))
+    }
+
     fn handle_send_update(&mut self, document_id: DocumentId, payload: Vec<u8>) {
+        let Some(signing_key) = self.signing_key.clone() else {
+            tracing::warn!("Sync: SendUpdate before session keys ready, dropping");
+            return;
+        };
+        let Some(pub_key) = self.author_pub_key() else { return };
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             tracing::warn!("Sync: SendUpdate for unknown doc {document_id:?}");
             return;
         };
         doc_state.local_clock += 1;
-        let clock = doc_state.local_clock;
-        tracing::debug!(
-            "Sync: SendUpdate {document_id:?} clock={clock} len={}",
-            payload.len()
-        );
+        let public_data = UpdatePublicData {
+            document_id,
+            pub_key,
+            snapshot_id: doc_state.current_snapshot_id,
+            clock: Clock(doc_state.local_clock),
+        };
+        match pipeline::seal_update(&payload, public_data, &doc_state.doc_key, &signing_key) {
+            Ok(update) => self.ws_send(&WsClientMsg::Update(update)),
+            Err(e) => tracing::error!("Sync: SendUpdate seal failed for {document_id:?}: {e}"),
+        }
     }
 
     fn handle_send_snapshot(&mut self, document_id: DocumentId, payload: Vec<u8>) {
-        if !self.documents.contains_key(&document_id) {
+        let Some(signing_key) = self.signing_key.clone() else {
+            tracing::warn!("Sync: SendSnapshot before session keys ready, dropping");
             return;
+        };
+        let Some(pub_key) = self.author_pub_key() else { return };
+        let Some(doc_state) = self.documents.get(&document_id) else {
+            tracing::warn!("Sync: SendSnapshot for unknown doc {document_id:?}");
+            return;
+        };
+        let public_data = SnapshotPublicData {
+            document_id,
+            pub_key,
+            snapshot_id: doc_state.current_snapshot_id,
+            // TODO (snapshot flow): real BLAKE2b parent proof + per-author clocks.
+            parent_snapshot_proof: Vec::new(),
+            parent_snapshot_update_clocks: Vec::new(),
+        };
+        match pipeline::seal_snapshot(&payload, public_data, &doc_state.doc_key, &signing_key) {
+            // TODO (snapshot transport): upload via S3 presigned PUT + POST
+            // metadata. Snapshots do not transit the WebSocket.
+            Ok(snapshot) => tracing::info!(
+                "Sync: SendSnapshot {document_id:?} sealed ({} bytes ciphertext), S3 upload pending",
+                snapshot.ciphertext.0.len()
+            ),
+            Err(e) => tracing::error!("Sync: SendSnapshot seal failed for {document_id:?}: {e}"),
         }
-        tracing::info!("Sync: SendSnapshot {document_id:?} len={}", payload.len());
     }
 
     fn handle_send_ephemeral(&mut self, document_id: DocumentId, payload: Vec<u8>) {
-        if !self.documents.contains_key(&document_id) {
+        let Some(signing_key) = self.signing_key.clone() else {
+            tracing::warn!("Sync: SendEphemeral before session keys ready, dropping");
             return;
+        };
+        let Some(pub_key) = self.author_pub_key() else { return };
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            tracing::warn!("Sync: SendEphemeral for unknown doc {document_id:?}");
+            return;
+        };
+        doc_state.ephemeral_counter += 1;
+        let public_data = EphemeralPublicData {
+            document_id,
+            pub_key,
+            counter: Counter(doc_state.ephemeral_counter),
+        };
+        match pipeline::seal_ephemeral(&payload, public_data, &doc_state.doc_key, &signing_key) {
+            Ok(ephemeral) => self.ws_send(&WsClientMsg::Ephemeral(ephemeral)),
+            Err(e) => tracing::error!("Sync: SendEphemeral seal failed for {document_id:?}: {e}"),
         }
-        tracing::debug!("Sync: SendEphemeral {document_id:?} len={}", payload.len());
     }
 
     // -- Document CRUD (HTTP REST) ---------------------------------------------
