@@ -1,3 +1,4 @@
+use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::Client as S3Client;
 use rustis::commands::{GenericCommands, ListCommands};
@@ -131,6 +132,7 @@ async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &str) {
         return;
     }
 
+    let mut uploaded_count: isize = 0;
     for blob_str in &blobs {
         let parsed: serde_json::Value = match serde_json::from_str(blob_str) {
             Ok(v) => v,
@@ -140,11 +142,113 @@ async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &str) {
             }
         };
 
-        let s3_key = parsed["s3_key"].as_str().unwrap_or("");
+        let s3_key = match parsed["s3_key"].as_str() {
+            Some(k) => k,
+            None => {
+                tracing::error!(blob = %blob_str, "flush: missing s3_key");
+                continue;
+            }
+        };
+
         let seq = parsed["seq"].as_u64().unwrap_or(0);
-        tracing::debug!(s3_key, seq, "flushed delta");
+
+        let ciphertext_b64 = match parsed["ciphertext_b64"].as_str() {
+            Some(c) => c,
+            None => {
+                tracing::error!(s3_key, seq, "flush: missing ciphertext_b64");
+                continue;
+            }
+        };
+
+        let ciphertext = {
+            use base64::Engine;
+            match base64::engine::general_purpose::URL_SAFE.decode(ciphertext_b64) {
+                Ok(data) => data,
+                Err(e) => {
+                    tracing::error!(s3_key, seq, error = %e, "flush: base64 decode failed");
+                    continue;
+                }
+            }
+        };
+
+        let body = ByteStream::from(ciphertext);
+        match state
+            .s3
+            .put_object()
+            .bucket(&state.s3_bucket)
+            .key(s3_key)
+            .body(body)
+            .send()
+            .await
+        {
+            Ok(_) => {
+                tracing::debug!(s3_key, seq, "flushed delta to S3");
+                uploaded_count += 1;
+            }
+            Err(e) => {
+                tracing::error!(s3_key, seq, error = %e, "flush: S3 upload failed");
+                break;
+            }
+        }
     }
 
-    let count = blobs.len() as isize;
-    let _: Result<(), _> = state.redis.ltrim(pending_key, count, -1).await;
+    if uploaded_count > 0 {
+        let _: Result<(), _> = state.redis.ltrim(pending_key, uploaded_count, -1).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ambre_core::{DocumentId, SnapshotId};
+
+    #[test]
+    fn snapshot_key_format() {
+        let doc_id = DocumentId::from_bytes([0u8; 16]);
+        let snap_id = SnapshotId::from_bytes([1u8; 16]);
+        let key = format_s3_snapshot_key("dev", &doc_id, &snap_id);
+        assert!(key.starts_with("dev/documents/"));
+        assert!(key.contains("/snapshots/"));
+        assert_eq!(key, format!("dev/documents/{doc_id}/snapshots/{snap_id}"));
+    }
+
+    #[test]
+    fn snapshot_key_differs_per_env() {
+        let doc_id = DocumentId::from_bytes([0u8; 16]);
+        let snap_id = SnapshotId::from_bytes([1u8; 16]);
+        let dev_key = format_s3_snapshot_key("dev", &doc_id, &snap_id);
+        let prod_key = format_s3_snapshot_key("prod", &doc_id, &snap_id);
+        assert_ne!(dev_key, prod_key);
+        assert!(prod_key.starts_with("prod/"));
+    }
+
+    #[test]
+    fn delta_key_zero_pads_seq() {
+        let doc_id = DocumentId::from_bytes([2u8; 16]);
+        let key = format_s3_delta_key("dev", &doc_id, 42);
+        assert!(key.ends_with("deltas/0000000042"));
+    }
+
+    #[test]
+    fn delta_key_pads_small_seq() {
+        let doc_id = DocumentId::from_bytes([2u8; 16]);
+        let key = format_s3_delta_key("dev", &doc_id, 7);
+        assert!(key.ends_with("deltas/0000000007"));
+    }
+
+    #[test]
+    fn delta_key_handles_large_seq() {
+        let doc_id = DocumentId::from_bytes([2u8; 16]);
+        let key = format_s3_delta_key("dev", &doc_id, 9999999999u64);
+        assert!(key.ends_with("deltas/9999999999"));
+    }
+
+    #[test]
+    fn media_key_content_addressed() {
+        let doc_id = DocumentId::from_bytes([3u8; 16]);
+        let hash = "abc123def456";
+        let key = format_s3_media_key("dev", &doc_id, hash);
+        assert!(key.ends_with("media/abc123def456"));
+        assert!(key.contains("/documents/"));
+    }
 }

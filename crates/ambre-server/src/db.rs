@@ -5,10 +5,14 @@ use crate::error::AppError;
 #[derive(Debug)]
 pub struct UserRow {
     pub id: uuid::Uuid,
+    #[allow(dead_code)]
+    pub oidc_provider: Option<String>,
+    #[allow(dead_code)]
+    pub oidc_subject: Option<String>,
     pub email: String,
     pub display_name: String,
-    pub master_key_enc: Vec<u8>,
-    pub master_key_salt: Vec<u8>,
+    pub master_key_enc: Option<Vec<u8>>,
+    pub master_key_salt: Option<Vec<u8>>,
     pub signing_pubkey: Vec<u8>,
     pub exchange_pubkey: Vec<u8>,
     #[allow(dead_code)]
@@ -131,7 +135,7 @@ fn id_to_uuid(id: impl Into<ambre_core::Uuid>) -> uuid::Uuid {
 pub async fn get_user(pool: &PgPool, user_id: &ambre_core::UserId) -> Result<Option<UserRow>, AppError> {
     let uid = id_to_uuid(*user_id);
     let row = sqlx::query(
-        "SELECT id, email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id FROM users WHERE id = $1"
+        "SELECT id, oidc_provider, oidc_subject, email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id FROM users WHERE id = $1"
     )
     .bind(uid)
     .fetch_optional(pool)
@@ -140,6 +144,8 @@ pub async fn get_user(pool: &PgPool, user_id: &ambre_core::UserId) -> Result<Opt
     match row {
         Some(r) => Ok(Some(UserRow {
             id: r.try_get("id")?,
+            oidc_provider: r.try_get("oidc_provider")?,
+            oidc_subject: r.try_get("oidc_subject")?,
             email: r.try_get("email")?,
             display_name: r.try_get("display_name")?,
             master_key_enc: r.try_get("master_key_enc")?,
@@ -155,7 +161,7 @@ pub async fn get_user(pool: &PgPool, user_id: &ambre_core::UserId) -> Result<Opt
 /// Fetches a user by email address.
 pub async fn get_user_by_email(pool: &PgPool, email: &str) -> Result<Option<UserRow>, AppError> {
     let row = sqlx::query(
-        "SELECT id, email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id FROM users WHERE email = $1"
+        "SELECT id, oidc_provider, oidc_subject, email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id FROM users WHERE email = $1"
     )
     .bind(email)
     .fetch_optional(pool)
@@ -164,6 +170,8 @@ pub async fn get_user_by_email(pool: &PgPool, email: &str) -> Result<Option<User
     match row {
         Some(r) => Ok(Some(UserRow {
             id: r.try_get("id")?,
+            oidc_provider: r.try_get("oidc_provider")?,
+            oidc_subject: r.try_get("oidc_subject")?,
             email: r.try_get("email")?,
             display_name: r.try_get("display_name")?,
             master_key_enc: r.try_get("master_key_enc")?,
@@ -187,7 +195,7 @@ pub async fn create_user(
     exchange_pubkey: &[u8],
 ) -> Result<UserRow, AppError> {
     let row = sqlx::query(
-        "INSERT INTO users (email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id"
+        "INSERT INTO users (email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, oidc_provider, oidc_subject, email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id"
     )
     .bind(email)
     .bind(display_name)
@@ -200,6 +208,48 @@ pub async fn create_user(
 
     Ok(UserRow {
         id: row.try_get("id")?,
+        oidc_provider: row.try_get("oidc_provider")?,
+        oidc_subject: row.try_get("oidc_subject")?,
+        email: row.try_get("email")?,
+        display_name: row.try_get("display_name")?,
+        master_key_enc: row.try_get("master_key_enc")?,
+        master_key_salt: row.try_get("master_key_salt")?,
+        signing_pubkey: row.try_get("signing_pubkey")?,
+        exchange_pubkey: row.try_get("exchange_pubkey")?,
+        org_id: row.try_get("org_id")?,
+    })
+}
+
+/// Upserts a user from an OIDC provider login.
+///
+/// Uses `ON CONFLICT (oidc_provider, oidc_subject)` to handle returning users.
+/// New users are inserted with placeholder (zero-filled) key columns because
+/// the master key, signing key, and exchange key are only set later via
+/// `PUT /keys/master`. The `ON CONFLICT DO UPDATE` refreshes `email` and
+/// `display_name` on each login but preserves existing key material.
+pub async fn upsert_user_from_oidc(
+    pool: &PgPool,
+    oidc_provider: &str,
+    oidc_subject: &str,
+    email: &str,
+    display_name: &str,
+) -> Result<UserRow, AppError> {
+    let row = sqlx::query(
+        "INSERT INTO users (oidc_provider, oidc_subject, email, display_name, signing_pubkey, exchange_pubkey) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $3, display_name = $4 RETURNING id, oidc_provider, oidc_subject, email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id"
+    )
+    .bind(oidc_provider)
+    .bind(oidc_subject)
+    .bind(email)
+    .bind(display_name)
+    .bind(vec![0u8; 32])
+    .bind(vec![0u8; 32])
+    .fetch_one(pool)
+    .await?;
+
+    Ok(UserRow {
+        id: row.try_get("id")?,
+        oidc_provider: row.try_get("oidc_provider")?,
+        oidc_subject: row.try_get("oidc_subject")?,
         email: row.try_get("email")?,
         display_name: row.try_get("display_name")?,
         master_key_enc: row.try_get("master_key_enc")?,

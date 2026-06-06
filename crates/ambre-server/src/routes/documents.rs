@@ -56,7 +56,7 @@ pub async fn setup_account(
     let sd = redis_ops::SessionData { user_id, signing_pubkey, session_id: session_id.clone() };
     redis_ops::session_create(&state.redis, &session_id, &sd, state.config.session_ttl_secs).await?;
 
-    let cookie = auth::create_session_cookie(&session_id);
+    let cookie = auth::create_session_cookie(&session_id, state.config.session_ttl_secs);
     Ok((jar.add(cookie), axum::Json(SetupAccountResponse { user_id: user_id.to_string(), session_id })))
 }
 

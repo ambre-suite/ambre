@@ -936,13 +936,13 @@ No push notifications in MVP. The client queries `GET /api/channels/unread` on r
 ### SRV P0 — Core (Functional Blind Relay)
 
 - [x] Full PostgreSQL schema with sqlx migrations (`doc_type` in French names)
-- [ ] OIDC auth (Google first)
+- [x] OIDC auth (Google first)
 - [x] Redis sessions (`rustis`) + auth middleware + `signing_pubkey` cache in session
 - [x] Documents CRUD + basic ACL
 - [x] `GET /api/documents` with inline `doc_key_enc` (`document_members` join)
 - [x] Single multiplexed WebSocket (`GET /api/ws`): per-document Subscribe/Unsubscribe, Update + Ephemeral + MissingUpdates + SnapshotRequired + SnapshotAvailable. HashSet<Uuid> of subscriptions per connection. Dynamic Redis PubSub.
 - [x] Redis Lua script (clock + seq)
-- [ ] Global S3 flusher (single Tokio task, Redis SCAN) — *flusher loop + SCAN done; S3 upload not wired*
+- [x] Global S3 flusher (single Tokio task, Redis SCAN) — *flusher loop + SCAN done; S3 upload wired*
 - [x] S3 presigned URLs (snapshots + media)
 - [x] Media routes: upload-url + download-url + confirmation POST
 - [x] Typed error handling (`thiserror` → HTTP)
