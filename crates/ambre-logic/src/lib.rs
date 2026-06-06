@@ -114,25 +114,33 @@ impl LogicState {
 
     // -- Application data plane -------------------------------------------------
 
-    /// Route a typed application command to its document's state and forward the
-    /// resulting display events to the UI Thread.
+    /// Route a typed application command to its document's state, send display
+    /// events to the UI Thread, and forward CRDT/ephemeral payloads to Sync.
     fn handle_app_command(&mut self, document_id: DocumentId, command: AppCommand) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             tracing::warn!("Logic: no live document {document_id} for app command");
             return;
         };
 
-        let events: Vec<AppEvent> = match (doc, command) {
+        match (doc, command) {
             (DocState::Trame(state), AppCommand::Trame(cmd)) => {
-                state.handle_command(cmd).into_iter().map(AppEvent::Trame).collect()
+                let outcome = state.handle_command(cmd);
+                for event in outcome.display {
+                    self.send_to_ui(UiEvent::Viewport {
+                        document_id,
+                        event: AppEvent::Trame(event),
+                    });
+                }
+                if let Some(payload) = outcome.update {
+                    self.send_to_sync(SyncCommand::SendUpdate { document_id, payload });
+                }
+                if let Some(payload) = outcome.ephemeral {
+                    self.send_to_sync(SyncCommand::SendEphemeral { document_id, payload });
+                }
             }
             // Once a second document type exists, add its `(DocState::X,
-            // AppCommand::X)` arm plus a `_ => { warn; vec![] }` catch-all for
+            // AppCommand::X)` arm plus a `_ => { warn; }` catch-all for
             // mismatched (state, command) pairs (impossible by routing).
-        };
-
-        for event in events {
-            self.send_to_ui(UiEvent::Viewport { document_id, event });
         }
     }
 
