@@ -935,30 +935,30 @@ No push notifications in MVP. The client queries `GET /api/channels/unread` on r
 
 ### SRV P0 — Core (Functional Blind Relay)
 
-- [ ] Full PostgreSQL schema with sqlx migrations (`doc_type` in French names)
+- [x] Full PostgreSQL schema with sqlx migrations (`doc_type` in French names)
 - [ ] OIDC auth (Google first)
-- [ ] Redis sessions (`rustis`) + auth middleware + `signing_pubkey` cache in session
-- [ ] Documents CRUD + basic ACL
-- [ ] `GET /api/documents` with inline `doc_key_enc` (`document_members` join)
-- [ ] Single multiplexed WebSocket (`GET /api/ws`): per-document Subscribe/Unsubscribe, Update + Ephemeral + MissingUpdates + SnapshotRequired + SnapshotAvailable. HashSet<Uuid> of subscriptions per connection. Dynamic Redis PubSub.
-- [ ] Redis Lua script (clock + seq)
-- [ ] Global S3 flusher (single Tokio task, Redis SCAN)
-- [ ] S3 presigned URLs (snapshots + media)
-- [ ] Media routes: upload-url + download-url + confirmation POST
-- [ ] Typed error handling (`thiserror` → HTTP)
-- [ ] Structured logging (`tracing` → JSON → Promtail → Loki)
+- [x] Redis sessions (`rustis`) + auth middleware + `signing_pubkey` cache in session
+- [x] Documents CRUD + basic ACL
+- [x] `GET /api/documents` with inline `doc_key_enc` (`document_members` join)
+- [x] Single multiplexed WebSocket (`GET /api/ws`): per-document Subscribe/Unsubscribe, Update + Ephemeral + MissingUpdates + SnapshotRequired + SnapshotAvailable. HashSet<Uuid> of subscriptions per connection. Dynamic Redis PubSub.
+- [x] Redis Lua script (clock + seq)
+- [ ] Global S3 flusher (single Tokio task, Redis SCAN) — *flusher loop + SCAN done; S3 upload not wired*
+- [x] S3 presigned URLs (snapshots + media)
+- [x] Media routes: upload-url + download-url + confirmation POST
+- [x] Typed error handling (`thiserror` → HTTP)
+- [x] Structured logging (`tracing` → JSON → Promtail → Loki)
 
 ### SRV P1 — Channels + Meetings
 
 - [ ] Channels CRUD + members + ACL
 - [ ] Channel Redis keys (seq, clocks, pending, presence, sessions, PubSub)
-- [ ] SubscribeChannel/UnsubscribeChannel on the existing multiplexed WS (same SecSync protocol, same connection)
+- [x] SubscribeChannel/UnsubscribeChannel on the existing multiplexed WS (same SecSync protocol, same connection)
 - [ ] Channel presigned URLs (meta snapshots + segment snapshots + media + confirmation POST)
 - [ ] Segments: sealing, history
 - [ ] Unread tracking (PostgreSQL cursors)
 - [ ] Meetings: creation, join/leave, WebSocket signaling (MVP: plaintext name)
-- [ ] Document Key rotation (server flow: DELETE share + POST rotate-key — broadcast on rotate-key)
-- [ ] `KeyRotationRequired` notifications via PubSub (emitted on POST /rotate-key, not DELETE /share)
+- [x] Document Key rotation (server flow: DELETE share + POST rotate-key — broadcast on rotate-key)
+- [x] `KeyRotationRequired` notifications via PubSub (emitted on POST /rotate-key, not DELETE /share)
 
 ### SRV P2 — Hardening & Organizations
 
