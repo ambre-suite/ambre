@@ -158,7 +158,7 @@ axum-extra        = { version = "0.10", features = ["cookie"] }
 tower             = "0.5"
 tower-http        = { version = "0.6", features = ["cors"] }
 futures-util      = "0.3"
-sqlx              = { version = "0.8", features = ["postgres", "uuid", "chrono", "runtime-tokio-native-tls"] }
+sqlx              = { version = "0.8", features = ["postgres", "uuid", "chrono", "runtime-tokio-rustls"] }
 rustis            = "0.19.3"
 aws-sdk-s3        = "1.128"
 chrono            = { version = "0.4", features = ["serde"] }
