@@ -226,24 +226,28 @@ fn sync_warning_message(code: SyncWarningCode) -> &'static str {
 /// Translate a `CommandId` into its `LogicCommand` and send it to the Logic
 /// thread. The single place where UI affordances become IPC payloads; every
 /// trigger routes through here.
-fn dispatch_command(id: CommandId, to_logic: &flume::Sender<LogicCommand>) {
+///
+/// Returns `Ok(())` when the command was enqueued, or an error when the Logic
+/// channel is full (lossless traffic class: formatting commands must not be
+/// silently dropped).
+fn dispatch_command(id: CommandId, to_logic: &flume::Sender<LogicCommand>) -> Result<(), flume::TrySendError<LogicCommand>> {
     let command = if id == BOLD {
         AppCommand::Trame(TrameCommand::ToggleBold)
     } else if id == ITALIC {
         AppCommand::Trame(TrameCommand::ToggleItalic)
     } else {
         tracing::warn!("no LogicCommand mapping for {id:?}");
-        return;
+        return Ok(());
     };
     // Placeholder document_id — will be replaced by the active document
     // selected from the user's document list once the full auth +
     // ListDocuments + OpenDocument flow is wired in the chrome.
     let document_id = DocumentId::new();
     tracing::debug!("dispatch_command without active document (placeholder)");
-    let _ = to_logic.try_send(LogicCommand::App {
+    to_logic.try_send(LogicCommand::App {
         document_id,
         command,
-    });
+    })
 }
 
 /// Mount the application shell (ambre-chrome `AppShell`) onto the page body and
@@ -306,7 +310,11 @@ fn mount_app_shell(
         install_canvas_context_menu(ctx_menu);
         let ctx_on_command = Callback::new({
             let tx = to_logic.clone();
-            move |id: CommandId| dispatch_command(id, &tx)
+            move |id: CommandId| {
+                if let Err(e) = dispatch_command(id, &tx) {
+                    tracing::warn!("Context menu: Logic channel full ({e:?})");
+                }
+            }
         });
         let ctx_entries = vec![
             MenuEntry::new(BOLD, "Bold"),
@@ -393,7 +401,11 @@ fn mount_app_shell(
                         aria-pressed=move || bold.get().then_some("true")
                         on:click={
                             let tx = to_logic.clone();
-                            move |_| dispatch_command(BOLD, &tx)
+                            move |_| {
+                                if let Err(e) = dispatch_command(BOLD, &tx) {
+                                    tracing::warn!("Bold button: Logic channel full ({e:?})");
+                                }
+                            }
                         }
                     >
                         "B"
@@ -403,7 +415,11 @@ fn mount_app_shell(
                         aria-pressed=move || italic.get().then_some("true")
                         on:click={
                             let tx = to_logic.clone();
-                            move |_| dispatch_command(ITALIC, &tx)
+                            move |_| {
+                                if let Err(e) = dispatch_command(ITALIC, &tx) {
+                                    tracing::warn!("Italic button: Logic channel full ({e:?})");
+                                }
+                            }
                         }
                     >
                         <em>"I"</em>
@@ -443,7 +459,11 @@ fn mount_app_shell(
                         aria-pressed=move || bold.get().then_some("true")
                         on:click={
                             let tx = to_logic_sel.clone();
-                            move |_| dispatch_command(BOLD, &tx)
+                            move |_| {
+                                if let Err(e) = dispatch_command(BOLD, &tx) {
+                                    tracing::warn!("Floating Bold: Logic channel full ({e:?})");
+                                }
+                            }
                         }
                     >
                         "B"
@@ -453,7 +473,11 @@ fn mount_app_shell(
                         aria-pressed=move || italic.get().then_some("true")
                         on:click={
                             let tx = to_logic_sel.clone();
-                            move |_| dispatch_command(ITALIC, &tx)
+                            move |_| {
+                                if let Err(e) = dispatch_command(ITALIC, &tx) {
+                                    tracing::warn!("Floating Italic: Logic channel full ({e:?})");
+                                }
+                            }
                         }
                     >
                         <em>"I"</em>
@@ -529,7 +553,9 @@ fn install_command_keys(keymap: Keymap, to_logic: flume::Sender<LogicCommand>) {
                 return;
             };
             event.prevent_default();
-            dispatch_command(id, &to_logic);
+            if let Err(e) = dispatch_command(id, &to_logic) {
+                tracing::warn!("Keybinding {id:?}: Logic channel full ({e:?})");
+            }
         },
     );
     document

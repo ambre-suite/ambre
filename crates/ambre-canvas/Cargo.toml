@@ -11,6 +11,7 @@ serde = { workspace = true }
 ron   = "0.8"
 
 [dependencies]
+ambre-bus  = { path = "../ambre-bus" }
 ambre-draw = { path = "../ambre-draw" }
 
 # Rendering
