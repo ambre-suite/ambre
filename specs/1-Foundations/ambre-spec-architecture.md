@@ -1,172 +1,172 @@
-# AMBRE — SPEC: ARCHITECTURE GÉNÉRALE
-**Type :** Horizontal (Foundation)
-**Statut :** Draft
+# AMBRE — SPEC: GENERAL ARCHITECTURE
+**Type:** Horizontal (Foundation)
+**Status:** Draft
 
-> Architecture technique d'AMBRE : modèle **3 threads à mémoire partagée** (un seul binaire WASM, `wasm_thread` + `SharedArrayBuffer`), découpage en crates et frontières de dépendance, transport IPC inter-thread **typé** (canaux `flume`, valeurs Rust de bout en bout), plan de données à trois plans (contenu / service / réseau), sécurité zero-knowledge, budgets de performance, et roadmap d'intégration.
+> Technical architecture of AMBRE: **3-thread shared-memory model** (single WASM binary, `wasm_thread` + `SharedArrayBuffer`), crate breakdown and dependency boundaries, **typed** inter-thread IPC transport (`flume` channels, Rust values end-to-end), three-plane data plane (content / service / network), zero-knowledge security, performance budgets, and integration roadmap.
 
 ---
 
-## 1. OBJECTIFS & CONTRAINTES
+## 1. OBJECTIVES & CONSTRAINTS
 
-* **Périmètre :** Cette spec définit l'architecture technique client-serveur d'Ambre : structure du workspace Rust, responsabilités de chaque crate, flux de données entre les trois threads, transport IPC, et règles de dépendance. Elle ne décrit pas l'implémentation interne des composants (ces détails sont dans les specs spécifiques comme `ambre-spec-sync.md`).
+* **Scope:** This spec defines AMBRE's client-server technical architecture: Rust workspace structure, responsibilities of each crate, data flow between the three threads, IPC transport, and dependency rules. It does not describe the internal implementation of components (those details are in specific specs like `ambre-spec-sync.md`).
 
-> **Note de modèle (lire en premier).** La première version de cette spec décrivait le **Modèle A** : 3 binaires WASM séparés (`shared-nothing`), communication par `postMessage` + transfert d'`ArrayBuffer` + sérialisation `postcard`. **Le code réel est en Modèle B** : **un seul binaire WASM**, trois threads `wasm_thread` partageant une **mémoire linéaire** (`SharedArrayBuffer`), communiquant par des **canaux `flume`** qui transportent des **valeurs Rust typées** de bout en bout. Toutes les justifications historiques du type « telle dépendance lourde ne doit pas polluer tel binaire » sont caduques — il n'y a qu'un binaire. **Les frontières sont désormais garanties par le graphe de dépendances des crates** (vérifié par le compilateur), pas par la séparation des binaires. Le Modèle A et ses corollaires (`postMessage`, Web Workers JS séparés) sont consignés en **§6** pour ne pas être re-proposés.
+> **Model note (read first).** The first version of this spec described **Model A**: 3 separate WASM binaries (`shared-nothing`), communication via `postMessage` + `ArrayBuffer` transfer + `postcard` serialization. **The actual code is Model B**: **a single WASM binary**, three `wasm_thread` threads sharing a **linear memory** (`SharedArrayBuffer`), communicating through **`flume` channels** carrying **typed Rust values** end-to-end. All historical justifications like "such-and-such heavy dependency must not pollute such-and-such binary" are moot — there is only one binary. **Boundaries are now enforced by the crate dependency graph** (verified by the compiler), not by binary separation. Model A and its corollaries (`postMessage`, separate JS Web Workers) are recorded in **§6** so they are not re-proposed.
 
-* **Dépendances (règles globales) :**
+* **Dependencies (global rules):**
 
-| Règle | Justification |
+| Rule | Rationale |
 |-------|---------------|
-| `ambre-server` dépend UNIQUEMENT de `ambre-core` + `ambre-protocol` + `ed25519-dalek` (direct) | Le Blind Relay ne doit pas connaître la structure des documents, ni les types crypto applicatifs (`DocumentKey`, `MasterSeed`). La seule opération crypto du serveur est la vérification de signature Ed25519 sur les updates — `ed25519-dalek` est tiré directement sans passer par `ambre-crypto`. |
-| `ambre-bus` dépend de `ambre-core` **uniquement** | Les 4 enveloppes IPC voyagent en **valeurs Rust sur `flume`** — rien n'est sérialisé. Plus aucune dépendance `serde`/`postcard`/`thiserror`/`flume`/`tracing`. Les payloads applicatifs sont **typés** (`AppCommand`/`AppEvent`) ; seuls les vrais octets réseau (deltas CRDT Loro, messages de canaux) restent `Vec<u8>`. Cette feuille en amont garantit qu'`ambre-bus` reste sans dépendances crypto/réseau. |
-| `ambre-draw` dépend de `kurbo`, `peniko`, `parley` uniquement (pas de `wgpu`, pas de `krilla`) | Trait `DrawSurface` et ré-exports de types géométriques/typographiques. Dépendances de types légers (maths, couleurs, text layout) — aucune dépendance GPU. Les implémentations concrètes (`WgpuSurface` côté UI, `KrillaSurface` côté Logic) vivent dans les crates consommatrices. |
-| `ambre-commands` ne dépend de **rien côté UI** (feuille ; `ambre-core` pour ids/`Locale` au besoin) | Registre de commandes partagé : `CommandId`, `Command`, `CommandState`, `CommandSource`, keybindings. Dépendue par **chaque crate d'app** (qui définit ses commandes) ET par `ambre-chrome` (qui les rend). Distinct du `AppCommand`/`LogicCommand` IPC d'`ambre-bus` : une `Command` invoquée *produit* un `LogicCommand`. |
-| `ambre-canvas` dépend de `ambre-draw` (+ wgpu/swash + accesskit ; + web-sys/js-sys/wasm-bindgen(-futures)/tracing en deps **target `cfg(wasm32)`** pour `host`) | **Runtime de rendu canvas** du thread UI : `WgpuSurface`/`QuadRenderer`/`GlyphAtlas`, `TextCache`, `FrameHost`/`DocView`, `theme.rs` généré. **NE dépend PAS de `leptos`.** `accesskit` est scopé à l'a11y du **contenu** canvas. **Aucune dépendance applicative** (couplage `DocView` + injection par closure). Nommé `ambre-canvas` (medium, symétrique de `ambre-chrome`) ; spec `ambre-spec-canvas.md`. |
-| `ambre-chrome` dépend de `leptos` + `ambre-commands` | **Toolkit chrome Leptos PARTAGÉ et app-agnostique** : `AppShell`, `CommandPalette`, primitives `Dialog`/`Menu`/`Toolbar`/`Toast`/`ContextMenu`/`Sidebar`/`StatusBar`, keybinding manager. Rend des vues sur le registre — **ne nomme aucune app** (même inversion que `DocView`). Le chrome **spécifique** à une app vit dans la crate de l'app, **pas ici**. |
-| Chaque crate applicative (`ambre-trame`, …) dépend de `ambre-bus` + `ambre-draw` + `ambre-canvas` + `ambre-chrome` + `ambre-commands` + `leptos` (PAS de `ambre-sync` ni `ambre-logic`) | Une crate par app, **monolithe assumé**, **sans features** : `logic` (`*State` + handlers, thread Logic) + `ui` (`*View` impl `DocView`, rendu contenu sur `ambre-canvas`) + `chrome` (composants Leptos **spécifiques** bâtis sur `ambre-chrome`) + définition des `Command` (`CommandSource`). Types IPC (`TrameCommand`/`TrameEvent`/`DisplayCell`) ré-exportés depuis `ambre-bus`. |
-| `ambre-logic` dépend de `ambre-bus` + la/les crate(s) app + `flume` + `tracing` | Runtime du thread Logic. **100 % Rust pur, zéro glue wasm** : les types fondamentaux arrivent par ré-export d'`ambre-bus` (pas de dép directe sur `ambre-core`). Le hook panic + le subscriber tracing sont posés dans `ambre-app`. |
-| `ambre-sync` dépend de `ambre-bus` + `ambre-protocol` + `flume` + `tracing` + `wasm-bindgen` + `web-sys` (+ placeholders `zeroize`/`gloo-net`/`ruzstd`, balisés) | Runtime du thread Sync. L'encodage wire vient d'`ambre-protocol` ; le crypto viendra d'`ambre-crypto`. |
-| `ambre-app` dépend de `ambre-bus` + `ambre-canvas` + `ambre-chrome` + `ambre-trame` + `ambre-logic` + `ambre-sync` + `flume` + `wasm-bindgen` + `wasm_thread` | LAUNCHER cdylib. **Monte l'`AppShell` Leptos** (`ambre-chrome`), crée les 4 canaux, spawn `ambre_logic::run` + `ambre_sync::run`, bootstrappe le canvas et injecte la vue contenu de l'app active. NE dépend pas de wgpu/postcard/ambre-core en direct. |
+| `ambre-server` depends ONLY on `ambre-core` + `ambre-protocol` + `ed25519-dalek` (direct) | The Blind Relay must not know document structures or application crypto types (`DocumentKey`, `MasterSeed`). The server's only crypto operation is Ed25519 signature verification on updates — `ed25519-dalek` is pulled directly, bypassing `ambre-crypto`. |
+| `ambre-bus` depends on `ambre-core` **only** | The 4 IPC envelopes travel as **Rust values over `flume`** — nothing is serialized. No more `serde`/`postcard`/`thiserror`/`flume`/`tracing` dependencies. Application payloads are **typed** (`AppCommand`/`AppEvent`); only real network bytes (Loro CRDT deltas, channel messages) remain `Vec<u8>`. This upstream leaf guarantees `ambre-bus` stays free of crypto/network dependencies. |
+| `ambre-draw` depends on `kurbo`, `peniko`, `parley` only (no `wgpu`, no `krilla`) | `DrawSurface` trait and re-exports of geometric/typographic types. Light type dependencies (math, colors, text layout) — no GPU dependency. Concrete implementations (`WgpuSurface` on the UI side, `KrillaSurface` on the Logic side) live in consumer crates. |
+| `ambre-commands` depends on **nothing UI-side** (leaf; `ambre-core` for ids/`Locale` as needed) | Shared command registry: `CommandId`, `Command`, `CommandState`, `CommandSource`, keybindings. Depended on by **every app crate** (which defines its commands) AND by `ambre-chrome` (which renders them). Distinct from `AppCommand`/`LogicCommand` IPC from `ambre-bus`: an invoked `Command` *produces* a `LogicCommand`. |
+| `ambre-canvas` depends on `ambre-draw` (+ wgpu/swash + accesskit ; + web-sys/js-sys/wasm-bindgen(-futures)/tracing as **`cfg(wasm32)`-targeted** deps for `host`) | **Canvas render runtime** of the UI thread: `WgpuSurface`/`QuadRenderer`/`GlyphAtlas`, `TextCache`, `FrameHost`/`DocView`, generated `theme.rs`. **Does NOT depend on `leptos`.** `accesskit` is scoped to canvas **content** a11y. **No application dependency** (coupling via `DocView` + closure injection). Named `ambre-canvas` (medium, symmetrical to `ambre-chrome`); spec `ambre-spec-canvas.md`. |
+| `ambre-chrome` depends on `leptos` + `ambre-commands` | **Shared, app-agnostic Leptos chrome toolkit**: `AppShell`, `CommandPalette`, `Dialog`/`Menu`/`Toolbar`/`Toast`/`ContextMenu`/`Sidebar`/`StatusBar` primitives, keybinding manager. Renders views over the registry — **names no app** (same inversion as `DocView`). App-**specific** chrome lives in the app crate, **not here**. |
+| Each app crate (`ambre-trame`, ...) depends on `ambre-bus` + `ambre-draw` + `ambre-canvas` + `ambre-chrome` + `ambre-commands` + `leptos` (NOT `ambre-sync` or `ambre-logic`) | One crate per app, **deliberate monolith**, **no features**: `logic` (`*State` + handlers, Logic thread) + `ui` (`*View` impl `DocView`, content rendering on `ambre-canvas`) + `chrome` (**specific** Leptos components built on `ambre-chrome`) + `Command` definition (`CommandSource`). IPC types (`TrameCommand`/`TrameEvent`/`DisplayCell`) re-exported from `ambre-bus`. |
+| `ambre-logic` depends on `ambre-bus` + the app crate(s) + `flume` + `tracing` | Logic thread runtime. **100% pure Rust, zero WASM glue**: fundamental types arrive via `ambre-bus` re-exports (no direct dep on `ambre-core`). The panic hook + tracing subscriber are set up in `ambre-app`. |
+| `ambre-sync` depends on `ambre-bus` + `ambre-protocol` + `flume` + `tracing` + `wasm-bindgen` + `web-sys` (+ `zeroize`/`gloo-net`/`ruzstd` placeholders, flagged) | Sync thread runtime. Wire encoding comes from `ambre-protocol`; crypto will come from `ambre-crypto`. |
+| `ambre-app` depends on `ambre-bus` + `ambre-canvas` + `ambre-chrome` + `ambre-trame` + `ambre-logic` + `ambre-sync` + `flume` + `wasm-bindgen` + `wasm_thread` | cdylib LAUNCHER. **Mounts the Leptos `AppShell`** (`ambre-chrome`), creates the 4 channels, spawns `ambre_logic::run` + `ambre_sync::run`, bootstraps the canvas and injects the active app's content view. Does NOT depend on wgpu/postcard/ambre-core directly. |
 
-* **Invariants :**
-- **Aucun cycle de dépendance** : le graphe est acyclique et vérifiable par `cargo tree`. C'est lui qui porte les frontières d'architecture (et non plus la séparation des binaires).
-- **Le thread Logic ne touche ni GPU ni DOM** : `ambre-logic` n'a **aucune dépendance directe** sur `ambre-canvas`/`ambre-chrome`, et son **chemin runtime** n'appelle jamais wgpu/leptos. (Transitivement, `ambre-logic → crate d'app → ambre-canvas/ambre-chrome` rend wgpu/leptos *atteignables* dans le graphe — sans conséquence : un seul binaire, la frontière est portée par les **deps directes + le runtime**, pas par le graphe transitif.) Le thread Sync ne compile ni UI ni CRDT en deps directes.
-- **Règle d'or — Séparation stricte des préoccupations entre threads :**
-  - **UI Thread** (thread principal de la page) : rendu (wgpu + QuadRenderer + GlyphAtlas + Parley/Swash), capture d'input, accessibilité (AccessKit). **Zéro appel API**, **zéro WebSocket**, **zéro crypto**, **zéro compression**. Les données lui arrivent déjà prêtes à l'affichage (valeurs `AppEvent` typées). Exception unique : le chargement de **fonts** (assets statiques, même origine). **Invariant nouveau : le thread UI ne doit JAMAIS bloquer** (il tourne sur le main thread de la page).
-  - **Logic Thread** : logique métier (CRDT Loro, pagination, moteur formules Trame, dispatch typé). **Zéro réseau**, **zéro crypto**, **zéro compression**. Aucun type `DocumentKey`, `ciphertext`, `WsClientMsg`, `WebSocket` dans les crates applicatives. Les `SyncCommand` ne portent que des `document_id` et des payloads CRDT bruts (`Vec<u8>`).
-  - **Sync Thread** : **tout** le réseau (HTTP, WebSocket, presigned URLs S3), **toute** la crypto (`ambre-crypto`), **toute** la compression (`ruzstd`). Seul consommateur d'`ambre-crypto` et d'`ambre-protocol` côté client.
-- **`ambre-protocol` est la source de vérité unique** pour tous les types du protocole réseau. Ni `ambre-sync` ni `ambre-server` ne les redéfinissent.
-- **Le serveur ne voit jamais le plaintext** : tous les types transitant par `ambre-protocol` sont des blocs opaques (ciphertext + metadata publiques).
-- **postcard reste sur le seul chemin réseau** (`ambre-protocol`, wire WebSocket). **Le chemin inter-thread ne porte aucun postcard** : les enveloppes `flume` voyagent en valeurs Rust typées. JSON uniquement pour l'API REST.
-- **Toolchain :** nightly pinné + `-Z build-std` (rebuild de `std` avec `+atomics`), `target-feature=+atomics,+bulk-memory,+mutable-globals`, link-args `--shared-memory/--max-memory/--import-memory` + exports TLS. Voir `rust-toolchain.toml` + `.cargo/config.toml`.
+* **Invariants:**
+- **No dependency cycles**: the graph is acyclic and verifiable via `cargo tree`. It is the graph that carries the architecture boundaries (no longer binary separation).
+- **The Logic thread touches neither GPU nor DOM**: `ambre-logic` has **no direct dependency** on `ambre-canvas`/`ambre-chrome`, and its **runtime path** never calls wgpu/leptos. (Transitively, `ambre-logic → app crate → ambre-canvas/ambre-chrome` makes wgpu/leptos *reachable* in the graph — without consequence: single binary, the boundary is carried by **direct deps + runtime**, not by the transitive graph.) The Sync thread compiles neither UI nor CRDT as direct deps.
+- **Golden rule — Strict separation of concerns between threads:**
+  - **UI Thread** (page's main thread): rendering (wgpu + QuadRenderer + GlyphAtlas + Parley/Swash), input capture, accessibility (AccessKit). **Zero API calls**, **zero WebSocket**, **zero crypto**, **zero compression**. Data arrives already display-ready (typed `AppEvent` values). Sole exception: **font** loading (static assets, same-origin). **New invariant: the UI thread must NEVER block** (it runs on the page's main thread).
+  - **Logic Thread**: business logic (Loro CRDT, pagination, Trame formula engine, typed dispatch). **Zero network**, **zero crypto**, **zero compression**. No `DocumentKey`, `ciphertext`, `WsClientMsg`, `WebSocket` types in app crates. `SyncCommand` only carries `document_id` and raw CRDT payloads (`Vec<u8>`).
+  - **Sync Thread**: **all** networking (HTTP, WebSocket, S3 presigned URLs), **all** crypto (`ambre-crypto`), **all** compression (`ruzstd`). Sole consumer of `ambre-crypto` and `ambre-protocol` client-side.
+- **`ambre-protocol` is the single source of truth** for all network protocol types. Neither `ambre-sync` nor `ambre-server` redefine them.
+- **The server never sees plaintext**: all types transiting through `ambre-protocol` are opaque blocks (ciphertext + public metadata).
+- **postcard stays on the network path only** (`ambre-protocol`, WebSocket wire). **The inter-thread path carries no postcard**: `flume` envelopes travel as typed Rust values. JSON only for the REST API.
+- **Toolchain:** pinned nightly + `-Z build-std` (rebuilding `std` with `+atomics`), `target-feature=+atomics,+bulk-memory,+mutable-globals`, link-args `--shared-memory/--max-memory/--import-memory` + TLS exports. See `rust-toolchain.toml` + `.cargo/config.toml`.
 
 ---
 
-## 2. CONCEPTION TECHNIQUE & ÉTAT (STATE)
+## 2. TECHNICAL DESIGN & STATE
 
-### A. Structure du Workspace
+### A. Workspace Structure
 
 ```
 ambre/
-├── Cargo.toml                    (workspace racine — members ci-dessous)
-├── rust-toolchain.toml           (nightly pinné, rust-src, wasm32 target)
-├── .cargo/config.toml            (rustflags wasm32 : +atomics, --shared-memory, …, build-std)
+├── Cargo.toml                    (root workspace — members below)
+├── rust-toolchain.toml           (pinned nightly, rust-src, wasm32 target)
+├── .cargo/config.toml            (wasm32 rustflags: +atomics, --shared-memory, ..., build-std)
 ├── crates/
-│   ├── ambre-core/               Types fondamentaux (Uuid/DocumentId/UserId/…, DocType, PublicKey, Role). Partagé client + serveur.
-│   ├── ambre-crypto/             Primitives crypto. ⚠️ STUB (lib.rs ~6 lignes, aucun consommateur réel).
-│   ├── ambre-protocol/           Types réseau (Update/Snapshot/Ephemeral, Ws*Msg, Signaling*, encode/decode). SOURCE DE VÉRITÉ (sync + serveur).
-│   ├── ambre-bus/                Contrat IPC client. Dépend de ambre-core UNIQUEMENT. Aucun serde/postcard/flume/tracing.
-│   │     ├── lib.rs              (ré-exports + IPC_TEST_DOC_ID)
+│   ├── ambre-core/               Fundamental types (Uuid/DocumentId/UserId/..., DocType, PublicKey, Role). Shared client + server.
+│   ├── ambre-crypto/             Crypto primitives. ⚠️ STUB (lib.rs ~6 lines, no real consumer).
+│   ├── ambre-protocol/           Network types (Update/Snapshot/Ephemeral, Ws*Msg, Signaling*, encode/decode). SOURCE OF TRUTH (sync + server).
+│   ├── ambre-bus/                Client IPC contract. Depends on ambre-core ONLY. No serde/postcard/flume/tracing.
+│   │     ├── lib.rs              (re-exports + IPC_TEST_DOC_ID)
 │   │     ├── logic.rs            (LogicCommand + AppCommand + TrameCommand)
 │   │     ├── ui.rs               (UiEvent + AppEvent + TrameEvent + DisplayCell)
 │   │     ├── command.rs          (SyncCommand)
 │   │     ├── event.rs            (LogicEvent)
-│   │     └── rest.rs             (RestCommand + RestEvent + RequestId + types métier partagés)
-│   ├── ambre-draw/               Trait DrawSurface + ré-exports kurbo/peniko/parley. Aucune dép GPU.
-│   ├── ambre-commands/           Registre de commandes partagé (CommandId/Command/CommandState/CommandSource/keybindings). Feuille, zéro dép UI.
-│   ├── ambre-canvas/                 Runtime de rendu canvas du thread UI (PAS de leptos) :
-│   │     ├── render/             (QuadRenderer, GlyphAtlas, WgpuSurface, modèle Layer 2-couches)
+│   │     └── rest.rs             (RestCommand + RestEvent + RequestId + shared business types)
+│   ├── ambre-draw/               DrawSurface trait + kurbo/peniko/parley re-exports. No GPU dep.
+│   ├── ambre-commands/           Shared command registry (CommandId/Command/CommandState/CommandSource/keybindings). Leaf, zero UI dep.
+│   ├── ambre-canvas/                 Canvas render runtime of the UI thread (NO leptos):
+│   │     ├── render/             (QuadRenderer, GlyphAtlas, WgpuSurface, 2-layer Layer model)
 │   │     ├── text_cache.rs       (TextCache Parley)
-│   │     ├── view.rs             (DocView trait + RepaintPlan + FrameStats + InputEvent)        [GPU-agnostique]
+│   │     ├── view.rs             (DocView trait + RepaintPlan + FrameStats + InputEvent)        [GPU-agnostic]
 │   │     ├── host.rs             (FrameHost<V> + GpuState + bootstrap_gpu + start_raf_loop + run) [cfg(wasm32)]
-│   │     └── theme.rs            (constantes tokens côté canvas, générées depuis tokens.ron ; accesskit scopé contenu)
-│   ├── ambre-chrome/             Toolkit chrome Leptos PARTAGÉ, app-agnostique : AppShell, CommandPalette,
+│   │     └── theme.rs            (canvas-side constant tokens, generated from tokens.ron ; accesskit scoped to content)
+│   ├── ambre-chrome/             Shared, app-agnostic Leptos chrome toolkit: AppShell, CommandPalette,
 │   │                             Dialog/Menu/Toolbar/Toast/ContextMenu/Sidebar/StatusBar, keybindings.
-│   │                             Dépend de leptos + ambre-commands. Le chrome SPÉCIFIQUE vit dans les crates d'app.
-│   ├── ambre-trame/              TOUTE l'app Trame (monolithe, pas de features) :
-│   │     ├── logic.rs            (TrameState + handlers, thread Logic)
-│   │     ├── ui/{grid,renderer,view}  (TrameView impl DocView, rendu contenu sur ambre-canvas)
-│   │     └── chrome/             (composants Leptos SPÉCIFIQUES sur ambre-chrome ; Command via ambre-commands)
-│   ├── ambre-prose / ambre-toile / ambre-murmure   Stubs (doc only, pas de logique).
-│   ├── ambre-logic/              Runtime thread Logic : run(from_ui, to_ui, to_sync, from_sync),
-│   │                             LogicState { docs: HashMap<Uuid, DocState>, … }, dispatch par match. 100 % Rust pur.
-│   ├── ambre-sync/               Runtime thread Sync : run(from_logic, to_logic), pipeline WS/crypto (placeholder).
-│   ├── ambre-app/                LAUNCHER cdylib : #[wasm_bindgen(start)], monte l'AppShell Leptos (ambre-chrome),
-│   │                             crée les 4 canaux, spawn logic + sync, bootstrappe le canvas + injecte la vue active.
-│   └── ambre-server/             Blind Relay natif (Axum). HORS workspace members (cible native, pas wasm32).
+│   │                             Depends on leptos + ambre-commands. App-SPECIFIC chrome lives in app crates.
+│   ├── ambre-trame/              ALL of the Trame app (monolith, no features):
+│   │     ├── logic.rs            (TrameState + handlers, Logic thread)
+│   │     ├── ui/{grid,renderer,view}  (TrameView impl DocView, content rendering on ambre-canvas)
+│   │     └── chrome/             (SPECIFIC Leptos components on ambre-chrome ; Command via ambre-commands)
+│   ├── ambre-prose / ambre-toile / ambre-murmure   Stubs (doc only, no logic).
+│   ├── ambre-logic/              Logic thread runtime: run(from_ui, to_ui, to_sync, from_sync),
+│   │                             LogicState { docs: HashMap<Uuid, DocState>, ... }, match dispatch. 100% pure Rust.
+│   ├── ambre-sync/               Sync thread runtime: run(from_logic, to_logic), WS/crypto pipeline (placeholder).
+│   ├── ambre-app/                cdylib LAUNCHER: #[wasm_bindgen(start)], mounts Leptos AppShell (ambre-chrome),
+│   │                             creates the 4 channels, spawns logic + sync, bootstraps the canvas + injects active view.
+│   └── ambre-server/             Native Blind Relay (Axum). OUTSIDE workspace members (native target, not wasm32).
 └── specs/
 ```
 
-> **`ambre-server` est dans les `members` du workspace racine** : le serveur est une cible native (Axum/Tokio) alors que les autres crates ciblent `wasm32-unknown-unknown`, mais les rustflags (`+atomics`, `--shared-memory`) sont scopés par target (`[target.wasm32-unknown-unknown]`) et n'affectent pas les builds natifs. `build-std` n'est pas implicite : il ne s'active que lorsque `-Z build-std` est passé explicitement. Intégrer le serveur dans le workspace simplifie la gestion des dépendances (`workspace = true` partagé), le tooling (`cargo fmt`, `cargo clippy`, `cargo check` unifiés) et le CI (une seule workspace).
+> **`ambre-server` is in the root workspace `members`**: the server is a native target (Axum/Tokio) while other crates target `wasm32-unknown-unknown`, but rustflags (`+atomics`, `--shared-memory`) are scoped by target (`[target.wasm32-unknown-unknown]`) and do not affect native builds. `build-std` is not implicit: it only activates when `-Z build-std` is passed explicitly. Integrating the server in the workspace simplifies dependency management (shared `workspace = true`), tooling (unified `cargo fmt`, `cargo clippy`, `cargo check`), and CI (single workspace).
 
-> **Build workflow :** un seul build cdylib (`ambre-app`). Les crates `*-worker` du Modèle A (`ambre-logic-worker`, `ambre-sync-worker`) **n'existent plus** ; plus de `make workers` ni d'étape wasm-pack séparée. Trunk (ou équivalent) build `ambre-app` et copie les assets (`fonts/`).
+> **Build workflow:** a single cdylib build (`ambre-app`). The Model A `*-worker` crates (`ambre-logic-worker`, `ambre-sync-worker`) **no longer exist**; no more `make workers` or separate wasm-pack step. Trunk (or equivalent) builds `ambre-app` and copies assets (`fonts/`).
 
-### B. Frontières, Flux de Données et Modèle 3 threads (mémoire partagée)
+### B. Boundaries, Data Flow, and 3-thread Model (shared memory)
 
-L'architecture client est organisée en **3 threads `wasm_thread`** au sein d'**un seul module WASM**, partageant une **unique mémoire linéaire** (`WebAssembly.Memory` `shared`, backée par `SharedArrayBuffer`). `wasm_thread::spawn` instancie un Web Worker sous le capot, mais tous chargent **le même module** et **importent la même mémoire** — d'où le heap commun. La communication inter-thread passe par des **canaux `flume`** transportant des **valeurs Rust typées par move** (zéro sérialisation, zéro copie de frontière) :
+The client architecture is organized into **3 `wasm_thread` threads** within a **single WASM module**, sharing a **single linear memory** (`WebAssembly.Memory` `shared`, backed by `SharedArrayBuffer`). `wasm_thread::spawn` instantiates a Web Worker under the hood, but all load **the same module** and **import the same memory** — hence the common heap. Inter-thread communication goes through **`flume` channels** carrying **typed Rust values by move** (zero serialization, zero boundary copy):
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  UI THREAD (thread principal de la page)                          │
-│  Chrome : Leptos DOM (ambre-chrome) — AppShell/menus/dialogs/…    │
-│  Contenu : ambre_canvas::run → FrameHost<V> dans le <canvas>          │
+│  UI THREAD (page's main thread)                                   │
+│  Chrome: Leptos DOM (ambre-chrome) — AppShell/menus/dialogs/...    │
+│  Content: ambre_canvas::run → FrameHost<V> in the <canvas>             │
 │  wgpu (QuadRenderer / GlyphAtlas / WgpuSurface), Parley/Swash     │
-│  HTMLCanvasElement, GPUDevice — !Send, confinés ici              │
+│  HTMLCanvasElement, GPUDevice — !Send, confined here              │
 │  requestAnimationFrame → DocView::{update, plan_repaint, paint*}  │
-│  ⚠️ ne bloque JAMAIS (try_send / try_recv côté UI)               │
+│  ⚠️ never BLOCKS (try_send / try_recv on the UI side)             │
 └───────────────┬──────────────────────────────▲──────────────────┘
    flume bounded │ LogicCommand (UI → Logic)    │ UiEvent (Logic → UI)
                  ▼                              │
 ┌───────────────────────────────────────────────────────────────────┐
-│  LOGIC THREAD (wasm_thread — heap partagé)                         │
-│  ambre_logic::run → LogicState { docs: HashMap<Uuid, DocState> }   │
-│  ambre-trame (TrameState) — LoroDoc, dispatch par match            │
-│  Selector::wait sur (from_ui, from_sync)                           │
+│  LOGIC THREAD (wasm_thread — shared heap)                          │
+│  ambre_logic::run → LogicState { docs: HashMap<Uuid, DocState> }    │
+│  ambre-trame (TrameState) — LoroDoc, match dispatch                 │
+│  Selector::wait on (from_ui, from_sync)                            │
 └───────────────┬──────────────────────────────▲──────────────────┘
    flume bounded │ SyncCommand (Logic → Sync)   │ LogicEvent (Sync → Logic)
                  ▼                              │
 ┌───────────────────────────────────────────────────────────────────┐
-│  SYNC THREAD (wasm_thread — heap partagé)                          │
+│  SYNC THREAD (wasm_thread — shared heap)                           │
 │  ambre_sync::run → SyncState                                       │
-│  web_sys::WebSocket — !Send, confiné ici                          │
-│  Pipeline crypto / compression (placeholder)                      │
+│  web_sys::WebSocket — !Send, confined here                        │
+│  Crypto / compression pipeline (placeholder)                      │
 └───────────────┬───────────────────────────────────────────────────┘
-                │  WebSocket binaire  ([version_byte] [postcard(WsServerMsg)])
+                │  Binary WebSocket  ([version_byte] [postcard(WsServerMsg)])
                 │  ambre-protocol : WsClientMsg / WsServerMsg
 ┌───────────────▼───────────────────────────────────────────────────┐
-│  BLIND RELAY (ambre-server — natif, Axum/Tokio)                    │
-│  Dépendances : ambre-core + ambre-protocol + ed25519-dalek         │
+│  BLIND RELAY (ambre-server — native, Axum/Tokio)                   │
+│  Dependencies: ambre-core + ambre-protocol + ed25519-dalek         │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
-**Symétrie des trois runtimes :**
+**Symmetry of the three runtimes:**
 ```
-ambre_canvas::run(canvas_id, make_view)                  ← thread UI (générique sur DocView)
-ambre_logic::run(from_ui, to_ui, to_sync, from_sync) ← thread Logic
-ambre_sync::run(from_logic, to_logic)                ← thread Sync
+ambre_canvas::run(canvas_id, make_view)                     ← UI thread (generic over DocView)
+ambre_logic::run(from_ui, to_ui, to_sync, from_sync)    ← Logic thread
+ambre_sync::run(from_logic, to_logic)                   ← Sync thread
 ```
-Le seul morceau app-aware côté UI (construire `TrameView`) est **injecté par closure** depuis `ambre-app` → pas de cycle (`ambre-canvas` ne dépend pas d'`ambre-trame`).
+The only app-aware piece on the UI side (constructing `TrameView`) is **injected via closure** from `ambre-app` → no cycle (`ambre-canvas` does not depend on `ambre-trame`).
 
-**Justification de la séparation Logic/Sync :** le déchiffrement + décompression d'un update distant (~0.5–2 ms sur mobile) ne doit pas interrompre la réponse aux events P1 (scroll) du thread Logic. Avec deux threads séparés et un heap partagé, ces opérations s'exécutent en parallèle réel **sans recopie de payload** : un `Vec<u8>` passe d'un thread à l'autre **par move** sur le canal `flume`, sans memcpy de frontière.
+**Rationale for Logic/Sync separation:** decryption + decompression of a remote update (~0.5–2 ms on mobile) must not interrupt the Logic thread's response to P1 events (scroll). With two separate threads and a shared heap, these operations execute in **true parallelism without payload recopy**: a `Vec<u8>` moves from one thread to another **by move** on the `flume` channel, with no boundary memcpy.
 
-**Justification du modèle à mémoire partagée (vs shared-nothing — §6) :** le transport `flume` déplace des valeurs Rust typées (y compris les payloads applicatifs) sans aucune sérialisation ni recopie — par opposition au `postMessage` du Modèle A qui imposait `postcard` + deux memcpy WASM↔JS par hop. Contrepartie : la **toolchain** (nightly + `-Z build-std` + flags `+atomics`) et les **headers HTTP COOP/COEP** requis par `SharedArrayBuffer`. La séparation des préoccupations reste garantie — non plus par l'isolation mémoire des binaires, mais par le **graphe de dépendances des crates**.
+**Rationale for the shared-memory model (vs shared-nothing — §6):** `flume` transport moves typed Rust values (including application payloads) with no serialization or recopy — in contrast to `postMessage` in Model A which imposed `postcard` + two WASM↔JS memcpy per hop. Trade-off: the **toolchain** (nightly + `-Z build-std` + `+atomics` flags) and the **HTTP COOP/COEP headers** required by `SharedArrayBuffer`. Separation of concerns remains guaranteed — no longer by binary memory isolation, but by the **crate dependency graph**.
 
-**Backpressure — canaux bornés.** Les 4 canaux `flume` sont `bounded(CHANNEL_CAPACITY = 1024)` (créés dans `ambre_app::main`). Un canal non borné laisserait un consommateur momentanément lent accumuler une file illimitée dans le heap partagé (ex. key-repeat de scroll empilant des `ScrollViewport` plus vite que Logic ne draine). Les **senders des threads worker (Logic, Sync) peuvent bloquer sur canal plein** = c'est la backpressure voulue. **Le thread UI ne bloque jamais** : `TrameView::send_command` utilise `try_send` et **droppe sur `Full`** (une requête viewport est superseded par la suivante via `version` ; aucune commande non-idempotente ne transite par ce chemin chaud aujourd'hui). De plus, les `ScrollViewport` sont **coalescés à ≤ 1 envoi par frame** (`handle_input` accumule dans `pending_viewport`, `update` flushe une fois par frame).
+**Backpressure — bounded channels.** The 4 `flume` channels are `bounded(CHANNEL_CAPACITY = 1024)` (created in `ambre_app::main`). An unbounded channel would let a momentarily slow consumer accumulate an unbounded queue in the shared heap (e.g., scroll key-repeat stacking `ScrollViewport` faster than Logic drains). **Worker thread senders (Logic, Sync) may block on a full channel** = this is the intended backpressure. **The UI thread never blocks**: `TrameView::send_command` uses `try_send` and **drops on `Full`** (a viewport request is superseded by the next one via `version`; no non-idempotent command transits this hot path today). Additionally, `ScrollViewport` are **coalesced to ≤ 1 send per frame** (`handle_input` accumulates in `pending_viewport`, `update` flushes once per frame).
 
-> ⚠️ **Limitation connue (`Atomics.wait`).** Bloquer sur `flume::Selector::wait` / `recv` dans un Worker WASM utilise `Atomics.wait`, ce qui **gèle l'event-loop JS du Worker** (WebSocket/`setTimeout`). C'est légal **hors** du thread principal (Logic et Sync sont des workers). OK tant que le pipeline WS est un placeholder ; **quand le vrai WebSocket sera câblé, le thread Sync devra passer à une boucle non-bloquante** (`recv_async` + WS piloté par `JsFuture`/`spawn_local`). Voir §7 ARCH P1.
+> ⚠️ **Known limitation (`Atomics.wait`).** Blocking on `flume::Selector::wait` / `recv` in a WASM Worker uses `Atomics.wait`, which **freezes the Worker's JS event loop** (WebSocket/`setTimeout`). This is legal **outside** the main thread (Logic and Sync are workers). OK as long as the WS pipeline is a placeholder; **when the real WebSocket is wired, the Sync thread will need to switch to a non-blocking loop** (`recv_async` + WS driven by `JsFuture`/`spawn_local`). See §7 ARCH P1.
 
-**Modèle « thread failure ».** Deux chemins :
-- **Gracieux** : un thread qui détecte une condition irrécupérable émet `UiEvent::FatalError { message }` **avant** de sortir. `TrameView::update` bascule alors en état `fatal` (plus aucun envoi, log unique).
-- **Non gracieux (panic)** : sous WASM multi-thread, `panic=abort` (via `build-std` + `panic_abort`). ⚠️ **Correctif d'une affirmation antérieure :** `panic=abort` **ne déroule pas la pile**, donc **aucun `Drop` ne s'exécute** et **aucun `Sender` n'est droppé** — le `Sender<UiEvent>` du thread Logic vit dans la mémoire **partagée** et est **fuité** sur abort. L'UI voit donc `Empty` pour toujours, **jamais `Disconnected`** : on **ne peut pas** s'appuyer sur la déconnexion de canal pour détecter un panic. La détection doit passer par un signal **hors-bande** : le `panic::set_hook` (déjà posé dans `ambre-app`) doit, en plus de logger, appeler un hook JS `ambreFatal(message)` (symétrique d'`ambreReady`) **avant** l'abort. *Reste à câbler (§7 ARCH P1).* La déconnexion de canal n'est, au mieux, qu'un signal de **shutdown propre** (teardown volontaire).
+**"Thread failure" model.** Two paths:
+- **Graceful**: a thread detecting an unrecoverable condition emits `UiEvent::FatalError { message }` **before** exiting. `TrameView::update` then switches to `fatal` state (no more sends, single log).
+- **Non-graceful (panic)**: under WASM multi-thread, `panic=abort` (via `build-std` + `panic_abort`). ⚠️ **Correction of a previous assertion:** `panic=abort` **does not unwind the stack**, so **no `Drop` runs** and **no `Sender` is dropped** — the Logic thread's `Sender<UiEvent>` lives in **shared** memory and is **leaked** on abort. The UI therefore sees `Empty` forever, **never `Disconnected`**: we **cannot** rely on channel disconnection to detect a panic. Detection must go through an **out-of-band** signal: `panic::set_hook` (already set in `ambre-app`) must, in addition to logging, call a JS hook `ambreFatal(message)` (symmetrical to `ambreReady`) **before** the abort. *Still to be wired (§7 ARCH P1).* Channel disconnection is, at best, only a **clean shutdown** signal (voluntary teardown).
 
-**Isolation par tab :** chaque tab instancie sa propre application complète (3 threads + 1 heap partagé). Deux tabs ouvrant le même document sont deux clients CRDT indépendants — convergence par le Blind Relay (même flow que deux utilisateurs). Loro gère cela nativement. Optimisation post-MVP : `BroadcastChannel` inter-tabs.
+**Per-tab isolation:** each tab instantiates its own complete application (3 threads + 1 shared heap). Two tabs opening the same document are two independent CRDT clients — convergence via the Blind Relay (same flow as two users). Loro handles this natively. Post-MVP optimization: inter-tab `BroadcastChannel`.
 
-**Sync multi-document :** le thread Sync gère **N sessions de sync en parallèle** (`HashMap<DocumentId, SyncDocumentState>`) sur un **unique WebSocket multiplexé**. Nécessaire pour les documents embarqués (une Toile peut inclure un Prose + un Trame, chacun avec sa `DocumentKey` et son `LoroDoc`). Démultiplexage par `document_id`. `OpenDocument` → `Subscribe`, `CloseDocument` → `Unsubscribe`. WS ouvert au `Unlock`, fermé au `Logout` ; reconnexion → resubscribe automatique.
+**Multi-document sync:** the Sync thread manages **N sync sessions in parallel** (`HashMap<DocumentId, SyncDocumentState>`) over a **single multiplexed WebSocket**. Required for embedded documents (a Toile can include a Prose + a Trame, each with its `DocumentKey` and `LoroDoc`). Demultiplexing by `document_id`. `OpenDocument` → `Subscribe`, `CloseDocument` → `Unsubscribe`. WS opened at `Unlock`, closed at `Logout`; reconnection → automatic resubscribe.
 
-**Documents embarqués (Toile → Prose/Trame) :** MVP read-only live (le thread Logic ouvre un état viewer, reçoit les `RemoteUpdate`, n'émet jamais de `SendUpdate`) ; post-MVP editable in-place (routage d'input par focus, spec dédiée). La relation d'imbrication est stockée dans le `LoroDoc` de la Toile (contenu chiffré, invisible serveur). Aucune table Postgres d'imbrication.
+**Embedded documents (Toile → Prose/Trame):** MVP read-only live (the Logic thread opens a viewer state, receives `RemoteUpdate`, never emits `SendUpdate`); post-MVP editable in-place (input routing by focus, dedicated spec). The nesting relationship is stored in the Toile's `LoroDoc` (encrypted content, server-invisible). No embedding Postgres table.
 
-### C. Transport inter-thread — canaux `flume` (`ambre-app::main`)
+### C. Inter-thread Transport — `flume` channels (`ambre-app::main`)
 
-`ambre-app/src/lib.rs` (`#[wasm_bindgen(start)]`) est le **seul point de création et de distribution** des canaux. Aucune autre crate n'en crée. Il n'existe plus de `worker.rs`/`bridge.rs`/`bridge_sync.rs` (Modèle A supprimé).
+`ambre-app/src/lib.rs` (`#[wasm_bindgen(start)]`) is the **single creation and distribution point** for channels. No other crate creates them. There is no more `worker.rs`/`bridge.rs`/`bridge_sync.rs` (Model A removed).
 
 ```rust
-// ambre-app/src/lib.rs (extrait)
+// ambre-app/src/lib.rs (excerpt)
 const CHANNEL_CAPACITY: usize = 1024;
 
 #[wasm_bindgen(start)]
 pub fn main() {
-    // tracing_wasm + console_error_panic_hook posés ici (hook panic ⇒ ambreFatal, à câbler).
+    // tracing_wasm + console_error_panic_hook set here (panic hook -> ambreFatal, to be wired).
 
-    // 4 canaux bornés (backpressure). Worker senders peuvent bloquer ; l'UI jamais.
+    // 4 bounded channels (backpressure). Worker senders may block; UI never.
     let (ui_to_logic_tx, ui_to_logic_rx) = flume::bounded::<LogicCommand>(CHANNEL_CAPACITY);
     let (logic_to_ui_tx, logic_to_ui_rx) = flume::bounded::<UiEvent>(CHANNEL_CAPACITY);
     let (logic_to_sync_tx, logic_to_sync_rx) = flume::bounded::<SyncCommand>(CHANNEL_CAPACITY);
@@ -180,30 +180,30 @@ pub fn main() {
         ambre_sync::run(logic_to_sync_rx, sync_to_logic_tx);
     }).expect("spawn Sync thread");
 
-    // UI tourne sur CE thread (le principal), pilotée par la closure qui injecte la vue.
+    // UI runs on THIS thread (the main one), driven by the closure that injects the view.
     ambre_canvas::run("ambre-canvas", move |w, h| {
         TrameView::new(ui_to_logic_tx, logic_to_ui_rx, w, h)
     });
 }
 ```
 
-**Le thread Logic** boucle sur `flume::Selector::wait` (attend la première des deux entrées `from_ui`/`from_sync`), dispatche, recommence ; sort quand **les deux** canaux entrants sont déconnectés. **Le thread Sync** boucle sur `from_logic.recv()` (bloquant) jusqu'à déconnexion. **Injection de dépendance par closure** : `ambre_canvas::run<V, F>(canvas_id, make_view)` reçoit `F: FnOnce(f64, f64) -> V` ; `ambre-canvas` ne nomme jamais `TrameView` — c'est ainsi qu'il reste en amont des apps sans cycle (cf. `DocView` vs `AppView`, §6).
+**The Logic thread** loops on `flume::Selector::wait` (waits for the first of the two inputs `from_ui`/`from_sync`), dispatches, repeats; exits when **both** input channels are disconnected. **The Sync thread** loops on `from_logic.recv()` (blocking) until disconnection. **Dependency injection via closure**: `ambre_canvas::run<V, F>(canvas_id, make_view)` receives `F: FnOnce(f64, f64) -> V`; `ambre-canvas` never names `TrameView` — this is how it stays upstream of apps without cycles (cf. `DocView` vs `AppView`, §6).
 
-> **Évolution hybride (UI Chrome — voir `ambre-spec-chrome.md`).** Le modèle threads/canaux ci-dessus est **inchangé** ; le chrome Leptos est **additif sur le thread UI**. Le bootstrap évolue : `ambre-app` monte d'abord l'`AppShell` Leptos (`ambre-chrome`) qui possède la cellule `<canvas id="ambre-canvas">` ; `ambre_canvas::run` s'attache à ce canvas pour le **contenu**, la closure `make_view` injectant toujours la `DocView` de l'app active. La coquille Leptos et la boucle rAF du canvas cohabitent sur le même thread. **Conséquence :** la coquille devenant propriétaire du canvas et décidant *quelle* vue est montée (onglets/multi-document), elle **rapproche l'échéance** de la bascule `DocView → AppView` (§6) — encore différée, mais plus pour longtemps. (Bootstrap exact à figer au POC, `ambre-spec-chrome.md §7`.)
+> **Hybrid evolution (UI Chrome — see `ambre-spec-chrome.md`).** The threads/channels model above is **unchanged**; Leptos chrome is **additive on the UI thread**. The bootstrap evolves: `ambre-app` first mounts the Leptos `AppShell` (`ambre-chrome`) which owns the `<canvas id="ambre-canvas">` cell; `ambre_canvas::run` attaches to this canvas for the **content**, the `make_view` closure still injecting the active app's `DocView`. The Leptos shell and the canvas rAF loop coexist on the same thread. **Consequence:** the shell becoming owner of the canvas and deciding *which* view is mounted (tabs/multi-document) **brings forward the deadline** for the `DocView → AppView` switch (§6) — still deferred, but not for much longer. (Exact bootstrap to be frozen at POC, `ambre-spec-chrome.md §7`.)
 
-### D. Modélisation des données — plan de données typé (3 plans) & contrats d'interface
+### D. Data Modeling — Typed Data Plane (3 planes) & Interface Contracts
 
-**Plus aucun `Vec<u8>` postcard sur le chemin UI ↔ Logic.** Les payloads applicatifs sont des **valeurs Rust typées**, dans un **monde fermé** (sommes sur les types de documents) défini **dans `ambre-bus`** (pas de nouvelle crate). L'IPC client se décompose en **trois plans** :
+**No more `Vec<u8>` postcard on the UI ↔ Logic path.** Application payloads are **typed Rust values**, in a **closed world** (sums over document types) defined **in `ambre-bus`** (no new crate). Client IPC breaks down into **three planes**:
 
-| Plan | Porté par | Payload | Routage Logic |
+| Plane | Carried by | Payload | Logic routing |
 |---|---|---|---|
-| **Contenu** | `LogicCommand::App` / `UiEvent::{Viewport,Presence}` | `AppCommand` / `AppEvent` (typés, fermés) | par `DocumentId` vers `DocState` |
-| **Service** | `…::Rest { id, … }` (4 directions) | `RestCommand` / `RestEvent` (**définis une fois**, `rest.rs`) | relais verbatim + hooks d'état |
-| **Réseau** | `SyncCommand::Send*` / `LogicEvent::Remote*` + push | `Vec<u8>` (octets réseau Loro / chiffrés) | appliqué au CRDT / forwardé |
+| **Content** | `LogicCommand::App` / `UiEvent::{Viewport,Presence}` | `AppCommand` / `AppEvent` (typed, closed) | by `DocumentId` to `DocState` |
+| **Service** | `…::Rest { id, … }` (4 directions) | `RestCommand` / `RestEvent` (**defined once**, `rest.rs`) | verbatim relay + state hooks |
+| **Network** | `SyncCommand::Send*` / `LogicEvent::Remote*` + push | `Vec<u8>` (Loro network / encrypted bytes) | applied to CRDT / forwarded |
 
-**Plan contenu (typé, fermé).** `enum AppCommand { Trame(TrameCommand), … }` (UI → Logic) ; `enum AppEvent { Trame(TrameEvent), … }` (Logic → UI). Ajouter un type de document = ajouter un variant (un seul point d'édition, **pas de trait-objet, pas de `Box<dyn Any>`, pas de cycle de crates**). **Composition** (embed Trame-dans-Toile, partage dans un Rendez-Vous) = **récursion** sur ces enums (ex. `ToileCommand::Embedded { child, command: Box<AppCommand> }`), routée par `Uuid` dans le thread Logic. Plugins futurs = variant `Plugin(Box<dyn Plugin>)`. Restent en `Vec<u8>` (vrais octets **réseau**) : payloads CRDT / snapshots Loro et messages de canaux Murmure, sur `SyncCommand`/`LogicEvent`.
+**Content plane (typed, closed).** `enum AppCommand { Trame(TrameCommand), … }` (UI → Logic); `enum AppEvent { Trame(TrameEvent), … }` (Logic → UI). Adding a document type = adding a variant (single edit point, **no trait-object, no `Box<dyn Any>`, no crate cycle**). **Composition** (embed Trame-in-Toile, sharing in a Rendez-Vous) = **recursion** on these enums (e.g. `ToileCommand::Embedded { child, command: Box<AppCommand> }`), routed by `Uuid` in the Logic thread. Future plugins = variant `Plugin(Box<dyn Plugin>)`. What stays `Vec<u8>` (real **network** bytes): Loro CRDT payloads/snapshots and Murmure channel messages, on `SyncCommand`/`LogicEvent`.
 
-**Plan service (relais corrélable).** La quasi-totalité du trafic P3 est un pur relais : l'UI demande une opération, Logic la forwarde verbatim à Sync (REST/crypto/WS), la réponse remonte par le même chemin. Plutôt que de modéliser chaque étape comme un variant d'enum dans chacune des 4 directions (la « triplication P3 » : ~300 lignes de recopie 1:1), la **famille service est définie une seule fois** (`RestCommand`/`RestEvent` + `RequestId` dans `rest.rs`) et **portée par des enveloppes minces** `…::Rest { id, … }` :
+**Service plane (correlatable relay).** Almost all P3 traffic is pure relay: the UI requests an operation, Logic forwards it verbatim to Sync (REST/crypto/WS), the response flows back the same path. Rather than modeling each step as an enum variant in each of the 4 directions (the "P3 triplication": ~300 lines of 1:1 copying), the **service family is defined once** (`RestCommand`/`RestEvent` + `RequestId` in `rest.rs`) and **carried by thin envelopes** `…::Rest { id, … }`:
 
 ```text
 LogicCommand::Rest { id, cmd: RestCommand }   // UI    → Logic
@@ -212,76 +212,76 @@ LogicEvent  ::Rest { id, evt: RestEvent }     // Sync  → Logic
 UiEvent     ::Rest { id, evt: RestEvent }     // Logic → UI
 ```
 
-Le dispatch P3 du thread Logic se réduit à **un seul bras** (`Rest { id, cmd } => send_to_sync(Rest{…})`), précédé d'un petit `match &cmd` pour les rares ops à effet d'état (`Logout` vide `docs`, `DeleteDocument` retire l'entrée). Ajouter une op = un variant `RestCommand` + un variant `RestEvent`, édités au même endroit. **`RequestId`** (newtype `u64`) est alloué par l'**UI** via `RequestId::next()` (un `AtomicU64` partagé entre threads — légal grâce à la mémoire partagée), **échoé inchangé** par Logic et Sync. Domicile unique = l'enveloppe `Rest`.
+The Logic thread's P3 dispatch reduces to **a single arm** (`Rest { id, cmd } => send_to_sync(Rest{…})`), preceded by a small `match &cmd` for the rare state-affecting ops (`Logout` clears `docs`, `DeleteDocument` removes the entry). Adding an op = one `RestCommand` variant + one `RestEvent` variant, edited in the same place. **`RequestId`** (newtype `u64`) is allocated by the **UI** via `RequestId::next()` (an `AtomicU64` shared between threads — legal thanks to shared memory), **echoed unchanged** by Logic and Sync. Single home = the `Rest` envelope.
 
-**Convention de nommage** — par **destination + rôle** (`Command` = requête vers le worker en aval, `Event` = notification qui remonte) ; endpoints nommés par direction (`to_ui`/`from_ui`/…, plus de `tx`/`rx`). Suffixe identique aux deux niveaux : `Command` voyage dans `Command`, `Event` dans `Event`.
+**Naming convention** — by **destination + role** (`Command` = request to the downstream worker, `Event` = notification flowing back upwards); endpoints named by direction (`to_ui`/`from_ui`/..., no more `tx`/`rx`). Same suffix at both levels: `Command` travels in `Command`, `Event` in `Event`.
 
-| Flux | Type | Fichier `ambre-bus/src/` |
+| Flow | Type | File `ambre-bus/src/` |
 |---|---|---|
 | UI → Logic | `LogicCommand` | `logic.rs` (+ `AppCommand`, `TrameCommand`) |
 | Logic → UI | `UiEvent` | `ui.rs` (+ `AppEvent`, `TrameEvent`, `DisplayCell`) |
 | Logic → Sync | `SyncCommand` | `command.rs` |
 | Sync → Logic | `LogicEvent` | `event.rs` |
-| (partagé) | `RestCommand`/`RestEvent`/`RequestId` + types métier | `rest.rs` |
+| (shared) | `RestCommand`/`RestEvent`/`RequestId` + business types | `rest.rs` |
 
-**Partition `Rest` vs explicite :**
-- **Dans `RestCommand`/`RestEvent`** = opérations **requête/réponse corrélables**, réponses de **succès uniquement** : session, document CRUD, partage, users, media, channels CRUD+partage, unread, meetings.
-- **Restent explicites sur l'enveloppe** : *contrôle/content-send* (`OpenDocument`/`CloseDocument`, `OpenChannel`/`CloseChannel`, `SendChannelMessage` — fire-and-forget) ; *push serveur* (`Remote*`, `ConnectionStatus`, `SyncWarning`, `MemberRevoked`, `Channel*`, `Meeting*Participant*`) ; *erreurs* (`AuthError`/`ApiError` — réponse **ou** spontanées ; corrélation par `id` = raffinement ultérieur).
+**`Rest` vs explicit partition:**
+- **In `RestCommand`/`RestEvent`** = **correlatable request/response** operations, **success responses only**: session, document CRUD, sharing, users, media, channels CRUD+sharing, unread, meetings.
+- **Remain explicit on the envelope**: *control/content-send* (`OpenDocument`/`CloseDocument`, `OpenChannel`/`CloseChannel`, `SendChannelMessage` — fire-and-forget); *server push* (`Remote*`, `ConnectionStatus`, `SyncWarning`, `MemberRevoked`, `Channel*`, `Meeting*Participant*`); *errors* (`AuthError`/`ApiError` — response **or** spontaneous; correlation by `id` = future refinement).
 
-#### Contrats d'interface
+#### Interface Contracts
 
-**`ambre-core` → toutes les crates**
+**`ambre-core` → all crates**
 
 ```rust
-pub enum DocType { Prose = 0, Trame = 1, Toile = 2, Murmure = 3 } // valeur SQL serveur identique
-pub struct PublicKey(pub [u8; 32]);   // Ed25519 ou X25519 selon contexte
-// Identifiants typés (newtypes sur Uuid v7) : DocumentId, UserId, ChannelId, MeetingId, SnapshotId.
+pub enum DocType { Prose = 0, Trame = 1, Toile = 2, Murmure = 3 } // identical server SQL value
+pub struct PublicKey(pub [u8; 32]);   // Ed25519 or X25519 depending on context
+// Typed identifiers (newtypes over Uuid v7): DocumentId, UserId, ChannelId, MeetingId, SnapshotId.
 pub enum Role { Owner, Editor, Viewer }
 ```
 
-**Rendez-Vous n'est pas un DocType** (meetings éphémères, table dédiée).
+**Rendez-Vous is not a DocType** (ephemeral meetings, dedicated table).
 
-**`ambre-draw`** — trait `DrawSurface` (source de vérité, détails en `ambre-spec-canvas.md §D`). Deps : kurbo/peniko/parley, aucune dép wgpu/krilla. Impls : `WgpuSurface` (`ambre-canvas::render`), `KrillaSurface` (PDF, futur, thread Logic, lazy-loaded).
+**`ambre-draw`** — `DrawSurface` trait (source of truth, details in `ambre-spec-canvas.md §D`). Deps: kurbo/peniko/parley, no wgpu/krilla dep. Impls: `WgpuSurface` (`ambre-canvas::render`), `KrillaSurface` (PDF, future, Logic thread, lazy-loaded).
 
-**`ambre-protocol` → `ambre-sync` + `ambre-server` (SOURCE DE VÉRITÉ)** — `Update`/`Snapshot`/`Ephemeral` (avec `commitment_tag` HMAC-SHA256 + `signature` Ed25519), `*PublicData`, `WsClientMsg`/`WsServerMsg` (WS multiplexé : `Subscribe`/`Unsubscribe`/`Update`/`Ephemeral`/`RequestMissing` + variantes channel), `Signaling*`. Encodage wire `[version_byte: u8] [postcard(msg)]` (`encode_client_msg`/`decode_server_msg`) — **seul endroit où postcard subsiste côté client**.
+**`ambre-protocol` → `ambre-sync` + `ambre-server` (SOURCE OF TRUTH)** — `Update`/`Snapshot`/`Ephemeral` (with `commitment_tag` HMAC-SHA256 + `signature` Ed25519), `*PublicData`, `WsClientMsg`/`WsServerMsg` (multiplexed WS: `Subscribe`/`Unsubscribe`/`Update`/`Ephemeral`/`RequestMissing` + channel variants), `Signaling*`. Wire encoding `[version_byte: u8] [postcard(msg)]` (`encode_client_msg`/`decode_server_msg`) — **only place where postcard remains client-side**.
 
 ```rust
 pub struct Update {
     pub ciphertext: Vec<u8>, pub nonce: [u8; 24], pub public_data: UpdatePublicData,
-    pub commitment_tag: [u8; 32], // HMAC-SHA256(doc_key, nonce||ciphertext||public_data) — anti key-commitment
-    pub signature: [u8; 64],      // Ed25519 sur (nonce||ciphertext||public_data||commitment_tag)
+    pub commitment_tag: [u8; 32], // HMAC-SHA256(doc_key, nonce||ciphertext||public_data) -- anti key-commitment
+    pub signature: [u8; 64],      // Ed25519 over (nonce||ciphertext||public_data||commitment_tag)
 }
 pub struct UpdatePublicData { pub document_id: Uuid, pub pub_key: [u8;32], pub snapshot_id: Uuid, pub clock: u64 }
-// Snapshot/SnapshotPublicData (parent_snapshot_proof BLAKE2b, parent_snapshot_update_clocks), Ephemeral/EphemeralPublicData : idem.
+// Snapshot/SnapshotPublicData (parent_snapshot_proof BLAKE2b, parent_snapshot_update_clocks), Ephemeral/EphemeralPublicData: same.
 ```
 
-> **`commitment_tag`** : XChaCha20-Poly1305 n'est pas key-committing ; le HMAC lie le message à une clé spécifique, empêchant un serveur compromis de réinjecter un ciphertext dans un autre contexte. **Snapshots** : via S3 presigned URLs (pas par WS) ; `SnapshotAvailable` notifie. **Signaling** : le serveur voit les SDP (qui appelle qui) — fuite de métadonnées acceptée pour le MVP ; l'E2EE media passe par SFrame.
+> **`commitment_tag`**: XChaCha20-Poly1305 is not key-committing; HMAC binds the message to a specific key, preventing a compromised server from re-injecting a ciphertext into another context. **Snapshots**: via S3 presigned URLs (not WS); `SnapshotAvailable` notifies. **Signaling**: the server sees SDPs (who is calling whom) — metadata leak accepted for MVP; E2EE media goes through SFrame.
 
-**`ambre-bus` → threads Logic / Sync / UI** — les **4 enveloppes** + le plan service partagé. **Rien n'y est sérialisé.** Les `Vec<u8>` ne subsistent que pour les vrais octets réseau.
+**`ambre-bus` → Logic / Sync / UI threads** — the **4 envelopes** + the shared service plane. **Nothing is serialized here.** `Vec<u8>` only remain for real network bytes.
 
 ```rust
-// ── UI → Logic : logic.rs ──────────────────────────────────────────────────
+// -- UI -> Logic: logic.rs --------------------------------------------------
 pub enum LogicCommand {
-    App { document_id: DocumentId, command: AppCommand },          // contenu (P2)
-    Rest { id: RequestId, cmd: RestCommand },                      // service (P3) relayé
-    OpenDocument { document_id: DocumentId },                      // contrôle (P3) fire-and-forget
+    App { document_id: DocumentId, command: AppCommand },          // content (P2)
+    Rest { id: RequestId, cmd: RestCommand },                      // service (P3) relayed
+    OpenDocument { document_id: DocumentId },                      // control (P3) fire-and-forget
     CloseDocument { document_id: DocumentId },
     OpenChannel { channel_id: ChannelId },
     CloseChannel { channel_id: ChannelId },
-    SendChannelMessage { channel_id: ChannelId, payload: Vec<u8> }, // payload opaque (ambre-murmure)
+    SendChannelMessage { channel_id: ChannelId, payload: Vec<u8> }, // opaque payload (ambre-murmure)
 }
-pub enum AppCommand { Trame(TrameCommand) /* , Prose, Toile, … ; futur Plugin(Box<dyn Plugin>) */ }
+pub enum AppCommand { Trame(TrameCommand) /* , Prose, Toile, ... ; future Plugin(Box<dyn Plugin>) */ }
 pub enum TrameCommand {
-    /// `version` monotone : l'UI jette toute réponse plus vieille que la dernière acceptée.
+    /// Monotonic `version`: UI discards any response older than the last accepted one.
     ScrollViewport { version: u64, row_start: u32, row_end: u32, col_start: u32, col_end: u32 },
 }
 
-// ── Logic → UI : ui.rs ─────────────────────────────────────────────────────
+// -- Logic -> UI: ui.rs -----------------------------------------------------
 pub enum UiEvent {
-    Viewport { document_id: DocumentId, event: AppEvent },         // contenu
+    Viewport { document_id: DocumentId, event: AppEvent },         // content
     Presence { document_id: DocumentId, event: AppEvent },
     Rest { id: RequestId, evt: RestEvent },                        // service
-    ConnectionStatus { document_id: DocumentId, connected: bool }, // push & statut
+    ConnectionStatus { document_id: DocumentId, connected: bool }, // push & status
     SyncWarning { document_id: DocumentId, code: u16, message: String },
     MemberRevoked { document_id: DocumentId, revoked_user_id: UserId },
     ChannelMessage { channel_id: ChannelId, payload: Vec<u8> },
@@ -291,21 +291,21 @@ pub enum UiEvent {
     MeetingParticipantLeft { meeting_id: MeetingId, user_id: UserId },
     AuthError { message: String },
     ApiError { request: String, code: u16, message: String },
-    /// Échec irrécupérable d'un thread (chemin GRACIEUX). Le panic, lui, est
-    /// panic=abort et NE se manifeste PAS comme un disconnect (cf. §2.B).
+    /// Unrecoverable thread failure (GRACEFUL path). Panic, however, is
+    /// panic=abort and does NOT manifest as a disconnect (cf. sec.2.B).
     FatalError { message: String },
 }
 pub enum AppEvent { Trame(TrameEvent) }
 pub enum TrameEvent { ViewportData { version: u64, row_start: u32, col_start: u32, cells: Vec<DisplayCell> } }
-pub struct DisplayCell { pub row: u32, pub col: u32, pub text: String } // plat, data-oriented
+pub struct DisplayCell { pub row: u32, pub col: u32, pub text: String } // flat, data-oriented
 
-// ── Logic → Sync : command.rs ──────────────────────────────────────────────
+// -- Logic -> Sync: command.rs ----------------------------------------------
 pub enum SyncCommand {
     Rest { id: RequestId, cmd: RestCommand },
     OpenDocument { document_id: DocumentId }, CloseDocument { document_id: DocumentId },
-    SendUpdate   { document_id: DocumentId, payload: Vec<u8> },   // delta CRDT Loro brut
-    SendSnapshot { document_id: DocumentId, payload: Vec<u8> },   // état complet → S3
-    SendEphemeral{ document_id: DocumentId, payload: Vec<u8> },   // curseur/présence (chiffré par Sync)
+    SendUpdate   { document_id: DocumentId, payload: Vec<u8> },   // raw Loro CRDT delta
+    SendSnapshot { document_id: DocumentId, payload: Vec<u8> },   // full state -> S3
+    SendEphemeral{ document_id: DocumentId, payload: Vec<u8> },   // cursor/presence (encrypted by Sync)
     Reconnect    { document_id: DocumentId },
     OpenChannel  { channel_id: ChannelId }, CloseChannel { channel_id: ChannelId },
     SendChannelUpdate    { channel_id: ChannelId, payload: Vec<u8> },
@@ -313,15 +313,15 @@ pub enum SyncCommand {
     Shutdown,
 }
 
-// ── Sync → Logic : event.rs ────────────────────────────────────────────────
+// -- Sync -> Logic: event.rs ------------------------------------------------
 pub enum LogicEvent {
     Rest { id: RequestId, evt: RestEvent },
-    RemoteUpdate   { document_id: DocumentId, payload: Vec<u8> },  // déchiffré/décompressé → LoroDoc::import
+    RemoteUpdate   { document_id: DocumentId, payload: Vec<u8> },  // decrypted/decompressed -> LoroDoc::import
     RemoteSnapshot { document_id: DocumentId, payload: Vec<u8> },
     RemoteEphemeral{ document_id: DocumentId, payload: Vec<u8> },
     ConnectionStatus { document_id: DocumentId, connected: bool },
     SyncWarning { document_id: DocumentId, code: u16, message: String },
-    SnapshotNeeded { document_id: DocumentId },                   // → export_snapshot → SendSnapshot
+    SnapshotNeeded { document_id: DocumentId },                   // -> export_snapshot -> SendSnapshot
     MemberRevoked { document_id: DocumentId, revoked_user_id: UserId },
     ChannelRemoteUpdate { channel_id: ChannelId, payload: Vec<u8> },
     ChannelRemoteEphemeral { channel_id: ChannelId, payload: Vec<u8> },
@@ -332,8 +332,8 @@ pub enum LogicEvent {
     AuthError { message: String }, ApiError { request: String, code: u16, message: String },
 }
 
-// ── Plan service partagé : rest.rs ─────────────────────────────────────────
-pub struct RequestId(pub u64); // alloué par l'UI (RequestId::next, AtomicU64 partagé), échoé par Logic/Sync
+// -- Shared service plane: rest.rs -----------------------------------------
+pub struct RequestId(pub u64); // allocated by UI (RequestId::next, shared AtomicU64), echoed by Logic/Sync
 pub enum RestCommand {
     // Session
     Unlock { passphrase: Vec<u8> }, SetupAccount { passphrase: Vec<u8> },
@@ -342,7 +342,7 @@ pub enum RestCommand {
     // Document CRUD
     ListDocuments, CreateDocument { doc_type: DocType, name: String },
     DeleteDocument { document_id: DocumentId }, RenameDocument { document_id: DocumentId, name: String },
-    // Partage
+    // Sharing
     InviteToDocument { document_id: DocumentId, invitee_email: String, role: Role },
     RevokeFromDocument { document_id: DocumentId, user_id: UserId },
     ListDocumentMembers { document_id: DocumentId },
@@ -351,7 +351,7 @@ pub enum RestCommand {
     SearchUsers { query: String },
     UploadMedia { document_id: DocumentId, data: Vec<u8>, mime_type: String },
     DownloadMedia { document_id: DocumentId, content_hash: String },
-    // Channels (CRUD & partage) + unread
+    // Channels (CRUD & sharing) + unread
     ListChannels, CreateChannel { name: String }, DeleteChannel { channel_id: ChannelId },
     InviteToChannel { channel_id: ChannelId, invitee_email: String, role: Role },
     RevokeFromChannel { channel_id: ChannelId, user_id: UserId },
@@ -362,12 +362,12 @@ pub enum RestCommand {
     CreateMeeting { name: String }, JoinMeeting { meeting_id: MeetingId },
     LeaveMeeting { meeting_id: MeetingId }, EndMeeting { meeting_id: MeetingId },
 }
-pub enum RestEvent { // réponses de SUCCÈS uniquement (échecs = AuthError/ApiError sur l'enveloppe)
+pub enum RestEvent { // SUCCESS responses only (failures = AuthError/ApiError on the envelope)
     SessionReady { user_id: UserId, display_name: String, email: String },
     AccountSetupRequired, AccountCreated { recovery_words: String },
     PassphraseChanged, AccountRecovered, LoggedOut,
     DocumentList { documents: Vec<DocumentSummary> },
-    DocumentCreated { document_id: DocumentId, doc_type: DocType }, // hook Logic: pending_doc_types
+    DocumentCreated { document_id: DocumentId, doc_type: DocType }, // Logic hook: pending_doc_types
     DocumentDeleted { document_id: DocumentId }, DocumentRenamed { document_id: DocumentId },
     InviteSent { document_id: DocumentId, user_id: UserId, display_name: String },
     RevocationComplete { document_id: DocumentId },
@@ -385,207 +385,207 @@ pub enum RestEvent { // réponses de SUCCÈS uniquement (échecs = AuthError/Api
     MeetingCreated { meeting_id: MeetingId }, MeetingJoined { meeting_id: MeetingId },
     MeetingLeft { meeting_id: MeetingId }, MeetingEnded { meeting_id: MeetingId },
 }
-// Types métier partagés (rest.rs) — zéro type crypto, noms déjà déchiffrés par Sync :
+// Shared business types (rest.rs) -- zero crypto types, names already decrypted by Sync:
 // DocumentSummary, MemberInfo, UserInfo, ChannelSummary, UnreadCount.
 ```
 
-> **Plus de `AppController` ni de `CommandSink`** (traits du Modèle A supprimés). Le registre des documents est **typé** : `HashMap<DocumentId, DocState>` où `enum DocState { Trame(TrameState), … }`, et le dispatch est un **`match`** sur `(DocState, AppCommand)` — pas de trait-objet, pas de `downcast`, pas de `Box<dyn Any>`. La logique envoie sur un `&flume::Sender<SyncCommand>` nu.
+> **No more `AppController` or `CommandSink`** (deleted Model A traits). The document registry is **typed**: `HashMap<DocumentId, DocState>` where `enum DocState { Trame(TrameState), … }`, and dispatch is a **`match`** on `(DocState, AppCommand)` — no trait-object, no `downcast`, no `Box<dyn Any>`. Logic sends on a bare `&flume::Sender<SyncCommand>`.
 
-**Dispatch du thread Logic (`ambre-logic::LogicState`)** : `handle_logic_command` route `App` vers `docs[document_id]` (drop si inconnu) → `UiEvent::Viewport` ; `Rest` → un seul bras forward `SyncCommand::Rest` (+ hooks `Logout`/`DeleteDocument`) ; contrôle → counterpart `SyncCommand`. `handle_logic_event` : `Rest` → forward `UiEvent::Rest` (+ hook `DocumentCreated` → `pending_doc_types`) ; `RemoteSnapshot` promeut un `pending_doc_type` en `DocState` vivant ; `SnapshotNeeded` → `export_snapshot` → `SendSnapshot` ; push/erreurs forwardés explicitement.
+**Logic thread dispatch (`ambre-logic::LogicState`)**: `handle_logic_command` routes `App` to `docs[document_id]` (drop if unknown) → `UiEvent::Viewport`; `Rest` → single arm forward `SyncCommand::Rest` (+ hooks `Logout`/`DeleteDocument`); control → counterpart `SyncCommand`. `handle_logic_event`: `Rest` → forward `UiEvent::Rest` (+ hook `DocumentCreated` → `pending_doc_types`); `RemoteSnapshot` promotes a `pending_doc_type` to a live `DocState`; `SnapshotNeeded` → `export_snapshot` → `SendSnapshot`; pushes/errors forwarded explicitly.
 
-### E. Crates et Dépendances Externes
+### E. Crates and External Dependencies
 
-**Serveur (`ambre-server`, natif) :** `rustis`, `sqlx`, `aws-sdk-s3`, `axum`/`tower`/`hyper`, `postcard`/`serde`/`serde_json`, `thiserror`/`tracing`, `ed25519-dalek` (direct).
+**Server (`ambre-server`, native):** `rustis`, `sqlx`, `aws-sdk-s3`, `axum`/`tower`/`hyper`, `postcard`/`serde`/`serde_json`, `thiserror`/`tracing`, `ed25519-dalek` (direct).
 
-**Client WASM (un seul binaire, dépendances mutualisées) :**
-- `wasm_thread` — spawn de threads WASM (Web Workers chargeant le même module + mémoire partagée).
-- `flume` (feature `select`) — canaux MPMC inter-thread (Logic/Sync s'appuient sur `Selector`).
-- `wgpu` (+ `webgl`) + `swash` — rendu GPU du **contenu** (thread UI). WebGL2 par défaut, WebGPU opt-in `?webgpu`.
-- `parley` — layout typographique (UI + pagination Logic). Fonts via `fetch()` même origine.
-- `leptos` — **chrome DOM** (thread UI ; `ambre-chrome` partagé + chrome spécifique des apps). `nucleo-matcher` — fuzzy palette.
-- `accesskit` — a11y du **contenu** canvas (scopé ; le chrome DOM est accessible nativement). `kurbo`/`peniko` — types (deps `ambre-draw`).
-- `loro` — CRDT (Logic). `petgraph` — DAG formules (Trame). `rstar` — R-Tree (Toile).
-- `web-sys`/`js-sys`/`wasm-bindgen`/`wasm-bindgen-futures` — glue navigateur (UI `host` + Sync).
-- `gloo-net` (websocket+http) — réseau (Sync). `ruzstd` — compression. `zeroize` — secrets.
-- `tracing` + `tracing-wasm` + `console_error_panic_hook` — logging + hook panic (posés dans `ambre-app`).
-- Crypto (futur, `ambre-crypto`) : `chacha20poly1305`/`ed25519-dalek`/`x25519-dalek`/`blake2`/`argon2`.
-- `krilla`/`docx-rs`/`html5ever`/`pulldown-cmark` — interop import/export (lazy-loaded, Logic).
-- `postcard` — **uniquement** le wire réseau (`ambre-protocol`).
+**WASM client (single binary, shared dependencies):**
+- `wasm_thread` — WASM thread spawning (Web Workers loading the same module + shared memory).
+- `flume` (`select` feature) — MPMC inter-thread channels (Logic/Sync rely on `Selector`).
+- `wgpu` (+ `webgl`) + `swash` — GPU rendering of **content** (UI thread). WebGL2 by default, WebGPU opt-in `?webgpu`.
+- `parley` — typographic layout (UI + Logic pagination). Fonts via same-origin `fetch()`.
+- `leptos` — **chrome DOM** (UI thread; shared `ambre-chrome` + app-specific chrome). `nucleo-matcher` — fuzzy palette.
+- `accesskit` — a11y of canvas **content** (scoped; chrome DOM is natively accessible). `kurbo`/`peniko` — types (`ambre-draw` deps).
+- `loro` — CRDT (Logic). `petgraph` — formula DAG (Trame). `rstar` — R-Tree (Toile).
+- `web-sys`/`js-sys`/`wasm-bindgen`/`wasm-bindgen-futures` — browser glue (UI `host` + Sync).
+- `gloo-net` (websocket+http) — network (Sync). `ruzstd` — compression. `zeroize` — secrets.
+- `tracing` + `tracing-wasm` + `console_error_panic_hook` — logging + panic hook (set in `ambre-app`).
+- Crypto (future, `ambre-crypto`): `chacha20poly1305`/`ed25519-dalek`/`x25519-dalek`/`blake2`/`argon2`.
+- `krilla`/`docx-rs`/`html5ever`/`pulldown-cmark` — import/export interop (lazy-loaded, Logic).
+- `postcard` — **only** the network wire (`ambre-protocol`).
 
 ---
 
-## 3. SÉCURITÉ & CONFIDENTIALITÉ (ZERO-KNOWLEDGE)
+## 3. SECURITY & CONFIDENTIALITY (ZERO-KNOWLEDGE)
 
-**Frontières du Blind Relay :**
+**Blind Relay boundaries:**
 
-| Composant | Données vues par le serveur | Jamais vues |
+| Component | Data seen by server | Never seen |
 |-----------|----------------------------|-------------|
-| `ambre-server` | `document_id`, `pub_key` (Ed25519), `clock`, `seq`, `snapshot_id`, `nonce` | Contenu CRDT, Document Key, Master Seed, User Key, passphrase |
+| `ambre-server` | `document_id`, `pub_key` (Ed25519), `clock`, `seq`, `snapshot_id`, `nonce` | CRDT content, Document Key, Master Seed, User Key, passphrase |
 
-**Vérification statique par `cargo tree` :** `ambre-server` n'importe aucun type de `ambre-trame`/`ambre-bus`/`ambre-crypto` ; il importe `ed25519-dalek` directement (pas `ambre-crypto`). Tous les `ciphertext` dans `ambre-protocol` sont `Vec<u8>` opaques.
+**Static verification via `cargo tree`:** `ambre-server` imports no type from `ambre-trame`/`ambre-bus`/`ambre-crypto`; it imports `ed25519-dalek` directly (not `ambre-crypto`). All `ciphertext` in `ambre-protocol` are opaque `Vec<u8>`.
 
-**Séparation des clés :**
-- `DocumentKey` et `MasterSeed` (`ambre-crypto`) implémentent `ZeroizeOnDrop`. Jamais sérialisés dans `ambre-protocol` ni `ambre-bus`.
-- Les canaux `flume` Logic ↔ Sync transportent des deltas CRDT **déchiffrés** (`Vec<u8>`, par move dans le heap partagé). Frontière interne considérée sûre : le heap n'est accessible que depuis l'intérieur du process navigateur de l'utilisateur. La mémoire **partagée** retire l'argument « isolation par binaire » du Modèle A — la confiance repose sur le sandbox du process et le graphe de crates (le thread UI ne compile pas la crypto, etc.).
-- Données de présence éphémère **chiffrées** avant envoi (payload `Ephemeral`).
+**Key separation:**
+- `DocumentKey` and `MasterSeed` (`ambre-crypto`) implement `ZeroizeOnDrop`. Never serialized in `ambre-protocol` or `ambre-bus`.
+- The `flume` Logic ↔ Sync channels carry **decrypted** CRDT deltas (`Vec<u8>`, by move in the shared heap). Internal boundary considered safe: the heap is only accessible from within the user's browser process. **Shared** memory removes Model A's "binary isolation" argument — trust rests on the process sandbox and the crate graph (the UI thread doesn't compile crypto, etc.).
+- Ephemeral presence data **encrypted** before sending (`Ephemeral` payload).
 
-> **Transit des secrets par le thread Logic (mineur, documenté).** La passphrase voyage `UI → Logic → Sync`. Logic la **move** sans copie ni usage, mais ces octets résident un instant dans le heap **partagé** et `zeroize` n'est pas encore câblé. **Pas de correctif code** : zeroizer côté `ambre-bus` imposerait une dép `zeroize`, **violant l'invariant `ambre-bus → ambre-core` uniquement**. La zeroization reste à la charge de `ambre-sync` (§7 ARCH P1). Choix assumé.
+> **Secret transit through the Logic thread (minor, documented).** The passphrase travels `UI → Logic → Sync`. Logic **moves** it without copy or use, but these bytes reside for an instant in the **shared** heap and `zeroize` is not yet wired. **No code fix**: zeroizing on the `ambre-bus` side would impose a `zeroize` dep, **violating the `ambre-bus → ambre-core` only invariant**. Zeroization remains `ambre-sync`'s responsibility (§7 ARCH P1). Assumed choice.
 
-**Cryptographie & gestion des clés.** Toutes les opérations crypto s'exécutent dans le **thread Sync** (seul consommateur d'`ambre-crypto`). Primitives : XChaCha20-Poly1305 (AEAD), Ed25519 (signature), X25519 (ECDH), BLAKE2b (dérivation/hash), Argon2id (KDF passphrase), HMAC-SHA256 (`commitment_tag`).
+**Cryptography & key management.** All crypto operations execute in the **Sync thread** (sole consumer of `ambre-crypto`). Primitives: XChaCha20-Poly1305 (AEAD), Ed25519 (signature), X25519 (ECDH), BLAKE2b (derivation/hash), Argon2id (KDF passphrase), HMAC-SHA256 (`commitment_tag`).
 
-**Hiérarchie des clés E2E (côté client) :** les champs Postgres (`master_key_enc`, `master_key_salt`, `doc_key_enc`, `org_master_key_enc`) sont des blobs opaques pour le Blind Relay (voir `ambre-spec-server.md §2.A`).
+**E2E key hierarchy (client-side):** Postgres fields (`master_key_enc`, `master_key_salt`, `doc_key_enc`, `org_master_key_enc`) are opaque blobs to the Blind Relay (see `ambre-spec-server.md §2.A`).
 
 ```
-Passphrase (saisie UI → transit canal flume → thread Sync, JAMAIS transmise au serveur)
-  │  Argon2id(salt=users.master_key_salt)  [thread Sync]
+Passphrase (UI input → flume channel transit → Sync thread, NEVER transmitted to server)
+  │  Argon2id(salt=users.master_key_salt)  [Sync thread]
   ▼
-User Key (éphémère, dérivée à chaque login)
-  │  XChaCha20-Poly1305 déchiffre users.master_key_enc
+User Key (ephemeral, derived at each login)
+  │  XChaCha20-Poly1305 decrypts users.master_key_enc
   ▼
-Master Seed (256 bits, permanente, stockée chiffrée côté serveur)
+Master Seed (256 bits, permanent, stored encrypted server-side)
   ├── BLAKE2b(b"ambre-signing-key-v1", seed)  → Signing Key Ed25519  → signing_pubkey (Postgres)
   └── BLAKE2b(b"ambre-exchange-key-v1", seed) → Exchange Key X25519   → exchange_pubkey (Postgres)
-                                                  │  X25519 ECDH avec exchange_pubkey du owner
-                                                  │  → déchiffre document_members.doc_key_enc
-                                                  ▼
-                                              Document Key (une par doc, 256 bits)
-                                                  │  XChaCha20-Poly1305
-                                                  ▼
-                                              Contenu CRDT (snapshots + updates + ephemeral)
+                                                   │  X25519 ECDH with owner's exchange_pubkey
+                                                   │  → decrypts document_members.doc_key_enc
+                                                   ▼
+                                               Document Key (one per doc, 256 bits)
+                                                   │  XChaCha20-Poly1305
+                                                   ▼
+                                               CRDT Content (snapshots + updates + ephemeral)
 ```
 
-**TOFU :** à la première invitation, l'UI affiche le fingerprint BLAKE2b-256 (base32) de l'`exchange_pubkey`. Clés acceptées stockées dans `IndexedDB` (`trusted_keys`). Toute divergence ultérieure alerte. Limite : substitution possible au premier échange si non vérifiée out-of-band.
+**TOFU:** on first invitation, the UI displays the BLAKE2b-256 fingerprint (base32) of the `exchange_pubkey`. Accepted keys stored in `IndexedDB` (`trusted_keys`). Any subsequent divergence alerts. Limitation: substitution possible on first exchange if not verified out-of-band.
 
-**Changement de passphrase :** nouvelle passphrase → Argon2id → nouvelle User Key → rechiffre `master_key_enc` uniquement (Master Seed inchangée) → `PUT /api/keys/master/rotate`. **Partage / rotation post-révocation** : `ambre-spec-sync.md §3` (15 étapes). **Multi-device, Recovery Key (24 mots BIP39), Org Recovery Key (post-MVP — escrow Shamir/Vault via trait `OrgKeyStore`)** : inchangés par le passage au Modèle B ; tables (`organizations`, `org_recovery_log`) et routes (`POST /api/organizations/{id}/recover/{uid}`) dans `ambre-spec-server.md §2`.
+**Passphrase change:** new passphrase → Argon2id → new User Key → re-encrypts `master_key_enc` only (Master Seed unchanged) → `PUT /api/keys/master/rotate`. **Sharing / post-revocation rotation**: `ambre-spec-sync.md §3` (15 steps). **Multi-device, Recovery Key (24-word BIP39), Org Recovery Key (post-MVP — Shamir/Vault escrow via `OrgKeyStore` trait)**: unchanged by the move to Model B; tables (`organizations`, `org_recovery_log`) and routes (`POST /api/organizations/{id}/recover/{uid}`) in `ambre-spec-server.md §2`.
 
 ```rust
-// ambre-crypto/src/key_store.rs (cible)
-pub struct MasterSeed(pub [u8; 32]); // ZeroizeOnDrop, 24 mots BIP39 (Recovery Key)
+// ambre-crypto/src/key_store.rs (target)
+pub struct MasterSeed(pub [u8; 32]); // ZeroizeOnDrop, 24 BIP39 words (Recovery Key)
 impl MasterSeed {
-    pub fn derive_signing_key(&self) -> ed25519_dalek::SigningKey { /* BLAKE2b ctx séparé */ }
-    pub fn derive_exchange_key(&self) -> x25519_dalek::StaticSecret { /* BLAKE2b ctx séparé */ }
+    pub fn derive_signing_key(&self) -> ed25519_dalek::SigningKey { /* separate BLAKE2b ctx */ }
+    pub fn derive_exchange_key(&self) -> x25519_dalek::StaticSecret { /* separate BLAKE2b ctx */ }
 }
 ```
 
 ---
 
-## 4. QUALITÉ & TESTABILITÉ
+## 4. QUALITY & TESTABILITY
 
-* **Tests unitaires / testabilité hôte.** Le thread Logic étant **100 % Rust pur** (zéro glue wasm), tout le routage commande/événement est exercé **sur l'hôte** (x86_64) avec des canaux `flume` mock : les rustflags wasm sont scopés `[target.wasm32-unknown-unknown]`, donc `cargo test -p ambre-logic` tourne nativement. **C'est un bénéfice de premier ordre du découpage** (pas seulement une propriété du graphe de deps). `ambre-logic` a **9 tests** (`#[cfg(test)]`) construisant `LogicState` avec deux receivers drainables et vérifiant : forward P3 → `SyncCommand` avec **écho de l'`id`** ; préservation des champs ; `App` routé / drop sur doc inconnu ; promotion `DocumentCreated` → `RemoteSnapshot` → état vivant ; `SnapshotNeeded` → `SendSnapshot` ; `Logout` vide `docs` ; `CloseDocument` drop + forward. Étendre à `ambre-sync` quand son pipeline sortira du placeholder.
+* **Unit tests / host testability.** As the Logic thread is **100% pure Rust** (zero WASM glue), all command/event routing is exercised **on the host** (x86_64) with mock `flume` channels: WASM rustflags are scoped `[target.wasm32-unknown-unknown]`, so `cargo test -p ambre-logic` runs natively. **This is a first-order benefit of the decomposition** (not just a dep graph property). `ambre-logic` has **9 tests** (`#[cfg(test)]`) building `LogicState` with two drainable receivers and verifying: P3 forward → `SyncCommand` with **`id` echo**; field preservation; `App` routed / drop on unknown doc; `DocumentCreated` → `RemoteSnapshot` → live state promotion; `SnapshotNeeded` → `SendSnapshot`; `Logout` clears `docs`; `CloseDocument` drop + forward. Extend to `ambre-sync` when its pipeline exits placeholder.
 
-* **Stratégie par crate :**
+* **Per-crate strategy:**
 
-| Crate | Tests unitaires | Tests d'intégration | Prop-tests | Benchmarks |
+| Crate | Unit tests | Integration tests | Prop-tests | Benchmarks |
 |-------|----------------|---------------------|------------|------------|
-| `ambre-core` | 100 % des types | — | — | — |
+| `ambre-core` | 100% of types | — | — | — |
 | `ambre-crypto` | Round-trip, tampering, zeroize | — | ✓ (proptest) | ✓ (criterion) |
-| `ambre-protocol` | Sérialisation round-trip | — | ✓ (postcard roundtrip) | — |
-| `ambre-bus` | Construction des enveloppes | — | — | — |
-| `ambre-logic` | **Dispatch typé sur hôte (9 tests, flume mock)** | — | — | — |
-| `ambre-sync` | Pipeline crypto, quarantaine, rotation | `MockBlindRelay` in-process | ✓ (clock monotonic) | ✓ (encrypt/decrypt 1KB) |
+| `ambre-protocol` | Serialization round-trip | — | ✓ (postcard roundtrip) | — |
+| `ambre-bus` | Envelope construction | — | — | — |
+| `ambre-logic` | **Typed dispatch on host (9 tests, flume mock)** | — | — | — |
+| `ambre-sync` | Crypto pipeline, quarantine, rotation | `MockBlindRelay` in-process | ✓ (clock monotonic) | ✓ (encrypt/decrypt 1KB) |
 | `ambre-canvas` | TextCache, WgpuSurface (MockSurface), dirty/RepaintPlan | headless | — | frame budget |
-| `ambre-commands` | Lookup registre, keybindings, état dérivé (`CommandState`) | — | — | — |
-| `ambre-chrome` | Composants Leptos (patterns a11y ARIA), positionnement menus (flip) | `wasm-bindgen-test` (DOM) | — | — |
+| `ambre-commands` | Registry lookup, keybindings, derived state (`CommandState`) | — | — | — |
+| `ambre-chrome` | Leptos components (ARIA a11y patterns), menu positioning (flip) | `wasm-bindgen-test` (DOM) | — | — |
 | `ambre-server` | Routes, ACL, Lua Redis | Docker Compose | ✓ (seq ordering) | ✓ (latency p99) |
-| `ambre-trame` | `TrameState` handlers, formules, cycle detection | via `ambre-logic` | ✓ (déterminisme) | ✓ (recalcul 10k) |
+| `ambre-trame` | `TrameState` handlers, formulas, cycle detection | via `ambre-logic` | ✓ (determinism) | ✓ (recalc 10k) |
 | `ambre-app` | — | End-to-end headless | — | — |
 
-* **Mocks & environnement :** tests natifs en `#[cfg(not(target_arch = "wasm32"))]` ; tests WASM (GPU/DOM) via `wasm-bindgen-test`.
+* **Mocks & environment:** native tests in `#[cfg(not(target_arch = "wasm32"))]`; WASM tests (GPU/DOM) via `wasm-bindgen-test`.
 
 ---
 
-## 5. PERFORMANCE & RESSOURCES
+## 5. PERFORMANCE & RESOURCES
 
-* **Budget par opération (target : hardware mobile 2024) :**
+* **Per-operation budget (target: mobile hardware 2024):**
 
-| Opération | Cible (P95 mobile) | Ceiling | Thread | Méthode |
+| Operation | Target (P95 mobile) | Ceiling | Thread | Method |
 |-----------|-------------------|---------|--------|---------|
-| Envoi/réception `flume` (move d'enveloppe typée, heap partagé) | < 1 µs | — | tous | benchmark |
-| Round-trip scroll UI → Logic → UI (P1) | < 2 ms | — | UI ↔ Logic | benchmark e2e |
-| Chiffrement outbound 1KB (compress+AEAD+HMAC+Ed25519) | < 200 µs | < 500 µs | Sync | criterion |
-| Déchiffrement inbound 1KB (verify+HMAC+AEAD+decompress) | < 350 µs | < 1 ms | Sync | criterion |
-| Round-trip crypto complet (hors réseau) | < 600 µs | < 1.5 ms | Sync | criterion |
-| Compression snapshot 100KB (ruzstd) | < 5 ms | — | Sync | criterion |
+| `flume` send/receive (typed envelope move, shared heap) | < 1 µs | — | all | benchmark |
+| Scroll round-trip UI → Logic → UI (P1) | < 2 ms | — | UI ↔ Logic | benchmark e2e |
+| Outbound encryption 1KB (compress+AEAD+HMAC+Ed25519) | < 200 µs | < 500 µs | Sync | criterion |
+| Inbound decryption 1KB (verify+HMAC+AEAD+decompress) | < 350 µs | < 1 ms | Sync | criterion |
+| Full crypto round-trip (excluding network) | < 600 µs | < 1.5 ms | Sync | criterion |
+| Snapshot compression 100KB (ruzstd) | < 5 ms | — | Sync | criterion |
 | `doc.import()` Loro update (1KB delta) | < 2 ms | — | Logic | criterion |
-| Recalcul DAG formules Trame (10k cellules) | < 50 ms | — | Logic | benchmark custom |
-| Réponse viewport scroll (P1, bout en bout) | < 15 ms | — | Logic → UI | benchmark e2e |
+| Trame formula DAG recompute (10k cells) | < 50 ms | — | Logic | custom benchmark |
+| Scroll viewport response (P1, end-to-end) | < 15 ms | — | Logic → UI | benchmark e2e |
 
-> Le `flume` à mémoire partagée **supprime** les coûts de frontière du Modèle A (sérialisation postcard + 2 memcpy WASM↔JS par hop) : un `Vec<u8>` change de thread **par move**. Coût dominant restant : scheduling du thread réveillé. Goulot crypto : Ed25519 (~80–250 µs). Smoke-test IPC : RTT ~1–17 ms (borné par la frontière rAF), overhead `flume` < 1 ms.
+> Shared-memory `flume` **eliminates** Model A's boundary costs (postcard serialization + 2 WASM↔JS memcpy per hop): a `Vec<u8>` changes thread **by move**. Dominant remaining cost: woke-thread scheduling. Crypto bottleneck: Ed25519 (~80–250 µs). IPC smoke-test: RTT ~1–17 ms (bounded by the rAF boundary), `flume` overhead < 1 ms.
 
-* **Impact WASM.** Modèle B = **un seul binaire** : dépendances dédupliquées une fois (plus de triple copie de RustCrypto/loro entre binaires comme le craignait le Modèle A). Budget total < 2 MB gzip ; « sans interop Prose » (~429 KB gzip) tient ; l'interop Prose (`docx-rs`/`krilla`/`html5ever`/`pulldown-cmark`) reste **lazy-loaded** (bundle splitting dans le thread Logic, pas un thread de plus). Heap : **partagé unique** (une seule `WebAssembly.Memory`, max 4 GiB) ; `SyncState` < 1 MB, `SyncDocumentState`/doc < 1 MB, `LoroDoc` < 10 MB cible, quarantaine bornée 1000 updates/doc, DAG Trame < 50 MB pour 100k cellules.
+* **WASM Impact.** Model B = **single binary**: dependencies deduplicated once (no more triple copy of RustCrypto/loro between binaries as Model A feared). Total budget < 2 MB gzip; "without Prose interop" (~429 KB gzip) fits; Prose interop (`docx-rs`/`krilla`/`html5ever`/`pulldown-cmark`) stays **lazy-loaded** (bundle splitting in the Logic thread, not an extra thread). Heap: **single shared** (one `WebAssembly.Memory`, max 4 GiB); `SyncState` < 1 MB, `SyncDocumentState`/doc < 1 MB, `LoroDoc` < 10 MB target, quarantine capped 1000 updates/doc, Trame DAG < 50 MB for 100k cells.
 
 ---
 
-## 6. DÉCISIONS ARCHITECTURALES ÉCARTÉES
+## 6. REJECTED ARCHITECTURAL DECISIONS
 
-> ⚠️ **Inversion par rapport à la v1 de cette spec.** Le Modèle A (shared-nothing, `postMessage`, 3 binaires) **était** l'architecture retenue et listait `SharedArrayBuffer`/`flume`/`wasm_thread` comme rejetés. Le code a basculé en **Modèle B** : ces trois technologies sont désormais **adoptées** (voir §1/§2). La table ci-dessous documente **ce qui reste écarté** — Modèle A inclus — pour ne pas le re-proposer.
+> ⚠️ **Reversal from v1 of this spec.** Model A (shared-nothing, `postMessage`, 3 binaries) **was** the chosen architecture and listed `SharedArrayBuffer`/`flume`/`wasm_thread` as rejected. The code has switched to **Model B**: these three technologies are now **adopted** (see §1/§2). The table below documents **what remains rejected** — Model A included — so it is not re-proposed.
 
-| Alternative | Rejetée car |
+| Alternative | Rejected because |
 |-------------|-------------|
-| **Modèle A — shared-nothing (3 binaires WASM, `postMessage` + transfert `ArrayBuffer` + `postcard`)** | Imposait une sérialisation `postcard` + **deux memcpy WASM↔JS par hop**, et **interdisait `flume`** (un `Arc` d'un Worker pointe vers une mémoire absente dans l'autre). Le Modèle B (mémoire partagée) déplace des **valeurs Rust typées par move**, sans sérialisation ni copie, payloads applicatifs inclus. Coût accepté du Modèle B : headers HTTP COOP/COEP (`SharedArrayBuffer`) + toolchain nightly `-Z build-std`. Ne pas revenir au shared-nothing : on perdrait le plan de données typé et la performance du transport. |
-| **Web Workers JS séparés + `postMessage` (Modèle A) / `MessageChannel`/`MessagePort`** | Remplacés par `wasm_thread::spawn` (Web Workers chargeant le **même** module + important la **même** mémoire partagée) et canaux `flume`. Plus de `worker.rs`/`bridge*.rs`, plus de features `web-sys` `MessageChannel`/`MessagePort`/`Worker*`. |
-| **`AppController` / `CommandSink` (trait-objets) + registry `HashMap<Uuid, Box<dyn AppController>>`** | Remplacés par le **plan de données typé** : `enum DocState` + `HashMap<Uuid, DocState>` + dispatch par `match`. Pas de trait-objet, pas de `downcast`. Un trait-objet réintroduirait un cycle de crates potentiel (l'enum fermé se résout en aval, dans `ambre-logic`) et empêcherait la testabilité hôte simple. |
-| **`Box<dyn Any>` / `Vec<u8>` postcard pour les payloads applicatifs** | Remplacés par `AppCommand`/`AppEvent` (sommes fermées, typées). Le compilateur garantit l'exhaustivité du dispatch ; ajouter un type de doc = un variant. Les `Vec<u8>` ne subsistent que pour les **vrais octets réseau** (deltas/snapshots Loro, messages de canaux). |
-| **Enums P3 par direction (4 enums quasi-identiques, « triplication »)** | ~300 lignes de recopie 1:1 sujettes au « mauvais champ recopié ». Remplacés par la famille `RestCommand`/`RestEvent` **définie une fois** et portée par l'enveloppe `…::Rest { id, … }` ; dispatch P3 = un seul bras. |
-| **Nouvelle crate pour le plan de données typé** | Inutile : `AppCommand`/`AppEvent` vivent dans `ambre-bus` (feuille en amont). Une crate dédiée créerait un cycle ou une dépendance superflue. |
-| **Effect-sink injecté pour l'outcome d'édition (vers Sync)** | Réintroduirait un trait-objet (l'inverse de la suppression de `CommandSink`). Choix : **retour outcome typé** (`TrameOutcome { display, update, ephemeral }`, octets domaine) éclaté par le dispatcher Logic — préserve la pureté + testabilité hôte. |
-| **Makepad** | macro `script_mod!` contournant le système de types Rust, incompatible avec le pilier sécurité (pas d'`unsafe` maison). |
-| **Crate unique (`ambre-all`)** | Temps de compilation excessif, violation séparation serveur/client. |
-| **JSON pour le wire réseau** | `postcard` ~10× plus compact, parsing plus rapide. (Sur le chemin inter-thread, **rien n'est sérialisé** : valeurs Rust sur `flume`.) |
-| **`ambre-crypto` dans `ambre-server`** | Moindre privilège : exposerait `DocumentKey`/`MasterSeed` au serveur. `ed25519-dalek` direct suffit. |
-| **Types wire redéfinis dans `ambre-sync`/`ambre-server`** | Divergence garantie (`[u8; 32]` vs `Vec<u8>`). Source de vérité unique = `ambre-protocol`. |
-| **`ambre-sync`/`ambre-logic` comme dépendance directe des apps** | Couplage fort logique↔infra. Les apps ne connaissent que les types IPC d'`ambre-bus`. |
-| **Logic + Sync fusionnés (un seul thread)** | Le déchiffrement/décompression bloquerait la réponse aux events P1 (scroll). Séparation obligatoire (< 15 ms). |
-| **`ambre-canvas` dépendant des apps (`AppView` enum fermé aujourd'hui)** | Créerait un cycle (`ambre-canvas` est en amont des apps). D'où `DocView` + injection par closure. La bascule vers `AppView` reste possible **mais impose de déplacer `FrameHost` hors d'`ambre-canvas`** — différée au multi-document (§7 ARCH P2). |
-| **UI 100 % canvas (framework widget maison) + Vello/Masonry/Xilem** | Rejeté au profit de l'**UI hybride** (chrome DOM Leptos + contenu wgpu, web-only). Détail et rejets associés : modèle UI (Masonry, Xilem, winit, WebGPU-only) en `ambre-spec-ui.md §6`, chrome (egui, ribbon) en `ambre-spec-chrome.md §6`, contenu (Vello) en `ambre-spec-canvas.md §6`. Le pipeline GPU/texte d'`ambre-canvas` est **conservé** ; seul le framework widget est retiré. |
-| **Un WebSocket par document** | Gaspillage (limites navigateur ~6 conns/origine, batterie). Un seul WS multiplexé, Subscribe/Unsubscribe par doc. |
-| **Séparation `ambre-sync` / `ambre-network`** | La couche réseau est assez légère pour rester dans `ambre-sync`. Séparer créerait un cycle ou de la complexité. |
-| **Framework DI complexe** | Le registre des documents est un `HashMap` ; l'injection (closure `make_view`, canaux) est explicite dans `ambre-app`. Pas de framework DI. |
-| **4e thread pour l'import/export** | Inutile : pendant un import/export l'UI affiche un waiting screen ; le thread Logic bloqué (sur version figée du `LoroDoc`) est le comportement voulu. Lazy loading WASM, pas un thread de plus. |
+| **Model A — shared-nothing (3 WASM binaries, `postMessage` + `ArrayBuffer` transfer + `postcard`)** | Imposed `postcard` serialization + **two WASM↔JS memcpy per hop**, and **forbade `flume`** (an `Arc` from one Worker points to memory absent in the other). Model B (shared memory) moves **typed Rust values by move**, without serialization or copy, including application payloads. Accepted cost of Model B: HTTP COOP/COEP headers (`SharedArrayBuffer`) + nightly toolchain `-Z build-std`. Do not go back to shared-nothing: we would lose the typed data plane and transport performance. |
+| **Separate JS Web Workers + `postMessage` (Model A) / `MessageChannel`/`MessagePort`** | Replaced by `wasm_thread::spawn` (Web Workers loading the **same** module + importing the **same** shared memory) and `flume` channels. No more `worker.rs`/`bridge*.rs`, no more `web-sys` `MessageChannel`/`MessagePort`/`Worker*` features. |
+| **`AppController` / `CommandSink` (trait-objects) + registry `HashMap<Uuid, Box<dyn AppController>>`** | Replaced by the **typed data plane**: `enum DocState` + `HashMap<Uuid, DocState>` + `match` dispatch. No trait-object, no `downcast`. A trait-object would reintroduce a potential crate cycle (the closed enum resolves downstream, in `ambre-logic`) and would prevent simple host testability. |
+| **`Box<dyn Any>` / `Vec<u8>` postcard for application payloads** | Replaced by `AppCommand`/`AppEvent` (closed typed sums). The compiler guarantees dispatch exhaustiveness; adding a doc type = one variant. `Vec<u8>` only remain for **real network bytes** (Loro deltas/snapshots, channel messages). |
+| **Per-direction P3 enums (4 nearly identical enums, "triplication")** | ~300 lines of 1:1 copying prone to "wrong field copied" bugs. Replaced by the `RestCommand`/`RestEvent` family **defined once** and carried by the `…::Rest { id, … }` envelope; P3 dispatch = a single arm. |
+| **New crate for the typed data plane** | Unnecessary: `AppCommand`/`AppEvent` live in `ambre-bus` (upstream leaf). A dedicated crate would create a cycle or superfluous dependency. |
+| **Injected effect-sink for edit outcome (towards Sync)** | Would reintroduce a trait-object (the inverse of removing `CommandSink`). Choice: **return typed outcome** (`TrameOutcome { display, update, ephemeral }`, domain bytes) decomposed by the Logic dispatcher — preserves purity + host testability. |
+| **Makepad** | `script_mod!` macro bypassing the Rust type system, incompatible with the security pillar (no homegrown `unsafe`). |
+| **Single crate (`ambre-all`)** | Excessive compile times, violation of server/client separation. |
+| **JSON for the network wire** | `postcard` ~10x more compact, faster parsing. (On the inter-thread path, **nothing is serialized**: Rust values on `flume`.) |
+| **`ambre-crypto` in `ambre-server`** | Least privilege: would expose `DocumentKey`/`MasterSeed` to the server. Direct `ed25519-dalek` suffices. |
+| **Wire types redefined in `ambre-sync`/`ambre-server`** | Guaranteed divergence (`[u8; 32]` vs `Vec<u8>`). Single source of truth = `ambre-protocol`. |
+| **`ambre-sync`/`ambre-logic` as direct dependency of apps** | Strong logic↔infra coupling. Apps only know `ambre-bus` IPC types. |
+| **Logic + Sync merged (single thread)** | Decryption/decompression would block response to P1 events (scroll). Separation mandatory (< 15 ms). |
+| **`ambre-canvas` depending on apps (`AppView` closed enum today)** | Would create a cycle (`ambre-canvas` is upstream of apps). Hence `DocView` + closure injection. Switching to `AppView` remains possible **but requires moving `FrameHost` out of `ambre-canvas`** — deferred to multi-document (§7 ARCH P2). |
+| **100% canvas UI (homemade widget framework) + Vello/Masonry/Xilem** | Rejected in favor of **hybrid UI** (Leptos DOM chrome + wgpu content, web-only). Details and related rejections: UI model (Masonry, Xilem, winit, WebGPU-only) in `ambre-spec-ui.md §6`, chrome (egui, ribbon) in `ambre-spec-chrome.md §6`, content (Vello) in `ambre-spec-canvas.md §6`. The `ambre-canvas` GPU/text pipeline is **preserved**; only the widget framework was removed. |
+| **One WebSocket per document** | Wastage (browser limits ~6 conns/origin, battery). Single multiplexed WS, Subscribe/Unsubscribe per doc. |
+| **Separation `ambre-sync` / `ambre-network`** | The network layer is lightweight enough to stay in `ambre-sync`. Separating would create a cycle or complexity. |
+| **Complex DI framework** | The document registry is a `HashMap`; injection (closure `make_view`, channels) is explicit in `ambre-app`. No DI framework. |
+| **4th thread for import/export** | Unnecessary: during an import/export the UI shows a waiting screen; the Logic thread blocked (on a frozen `LoroDoc` version) is the intended behavior. WASM lazy loading, not an extra thread. |
 
 ---
 
-## 7. PLAN D'INTÉGRATION (ROADMAP)
+## 7. INTEGRATION PLAN (ROADMAP)
 
-> Backlog détaillé de cette spec ; l'ordonnancement transversal (milestones) vit dans `specs/ambre-roadmap.md`.
+> Detailed backlog of this spec; cross-cutting scheduling (milestones) lives in `specs/ambre-roadmap.md`.
 
 ### ARCH P0 — Foundation
 - [x] Workspace + `rust-toolchain.toml` (nightly, `rust-src`, `wasm32`) + `.cargo/config.toml` (`+atomics`, `--shared-memory`, `-Z build-std`).
-- [x] Prototype threading shared-memory validé : 3 threads `wasm_thread` + 4 canaux `flume` + heap partagé. Smoke-test IPC opérationnel.
-- [x] `ambre-core` ; `ambre-protocol` (encode/decode, round-trip) ; `ambre-bus` (4 enveloppes + plan service, zéro serde) ; `ambre-draw`.
-- [x] `ambre-crypto` (wrappers RustCrypto, `ZeroizeOnDrop`, prop-tests, benchmarks ; enveloppe `seal`/`open` + primitives).
+- [x] Validated shared-memory threading prototype: 3 `wasm_thread` threads + 4 `flume` channels + shared heap. IPC smoke-test operational.
+- [x] `ambre-core`; `ambre-protocol` (encode/decode, round-trip); `ambre-bus` (4 envelopes + service plane, zero serde); `ambre-draw`.
+- [x] `ambre-crypto` (RustCrypto wrappers, `ZeroizeOnDrop`, prop-tests, benchmarks; `seal`/`open` envelope + primitives).
 
 ### ARCH P1 — Threading & Sync
-- [x] Runtimes découpés (`ambre_canvas`/`ambre_logic`/`ambre_sync::run`), launcher `ambre-app`.
-- [x] Backpressure (canaux bornés), envoi UI non-bloquant + coalescing, `FatalError`, dispatch typé testé sur hôte (9 tests).
-- [x] Pipeline `ambre-crypto` (+ `commitment_tag`) + quarantaine causale par `snapshot_id` (libération `clock` ASC, bornage 900/1000).
-- [x] `RestCommand::Unlock` + `SetupAccount` ; `OpenDocument`/`CloseDocument` (multi-document).
-- [ ] Vrai WebSocket multiplexé.
-- [ ] Boucle Sync non-bloquante (`recv_async` + WS via `JsFuture`/`spawn_local`) : `recv()` bloquant gèle l'event-loop du Worker (`Atomics.wait`).
-- [ ] Anti-deadlock Logic <-> Sync : Logic -> Sync bloquant (lossless), Sync -> Logic en `try_send` (sur `Full` : stop lecture WS -> backpressure TCP + `RequestMissing`).
-- [ ] Séparer les classes de trafic UI -> Logic : viewport lossy (drop + coalescing) vs édition/service lossless (échec synchrone au call-site sur `Full`).
-- [ ] Consommer `RequestId` côté UI : `RequestRegistry<Tag>` générique dans `ambre-canvas` (route `UiEvent::Rest`, timeout/retry ; `RequestId::next()` seul allocateur).
-- [ ] Hook `ambreFatal(message)` dans `panic::set_hook` (avant l'abort) : surface UI du panic non gracieux.
+- [x] Decoupled runtimes (`ambre_canvas`/`ambre_logic`/`ambre_sync::run`), `ambre-app` launcher.
+- [x] Backpressure (bounded channels), non-blocking UI sends + coalescing, `FatalError`, typed dispatch tested on host (9 tests).
+- [x] `ambre-crypto` pipeline (+ `commitment_tag`) + causal quarantine by `snapshot_id` (`clock` ASC release, cap 900/1000).
+- [x] `RestCommand::Unlock` + `SetupAccount`; `OpenDocument`/`CloseDocument` (multi-document).
+- [ ] Real multiplexed WebSocket.
+- [ ] Non-blocking Sync loop (`recv_async` + WS via `JsFuture`/`spawn_local`): blocking `recv()` freezes the Worker's event loop (`Atomics.wait`).
+- [ ] Anti-deadlock Logic <-> Sync: Logic -> Sync blocking (lossless), Sync -> Logic via `try_send` (on `Full`: stop reading WS -> TCP backpressure + `RequestMissing`).
+- [ ] Separate UI -> Logic traffic classes: lossy viewport (drop + coalescing) vs lossless edit/service (synchronous failure at call-site on `Full`).
+- [ ] Consume `RequestId` on the UI side: `RequestRegistry<Tag>` generic in `ambre-canvas` (routes `UiEvent::Rest`, timeout/retry; `RequestId::next()` sole allocator).
+- [ ] `ambreFatal(message)` hook in `panic::set_hook` (before abort): UI surface for non-graceful panic.
 - [ ] `SnapshotRequired` -> `SnapshotNeeded` -> `SendSnapshot`. `MockBlindRelay`.
-- [ ] Retirer l'échafaudage smoke-test (`IPC_TEST_DOC_ID`, `DocState::Trame` pré-seedé, `pending_doc_types`) à l'arrivée du flux open-document réel.
+- [ ] Remove smoke-test scaffolding (`IPC_TEST_DOC_ID`, pre-seeded `DocState::Trame`, `pending_doc_types`) once the real open-document flow arrives.
 
-### ARCH P2 — Applications pilotes
-- [x] `ambre-trame` : `TrameState` + `TrameView` (impl `DocView`), grille virtual-scroll, smoke-test viewport.
-- [x] Migration UI hybride : `ambre-commands` + `ambre-chrome` créés et montés par `ambre-app` ; framework widget maison retiré, `ambre-canvas` slimmé au runtime de rendu.
-- [x] Édition Trame : `TrameState::handle_command` retourne `TrameOutcome { display, update, ephemeral }`, éclaté par le dispatcher Logic (chemin lossless ; subsume l'export snapshot hors chemin chaud).
-- [ ] Extraire le chrome spécifique Trame d'`ambre-app` vers un module `chrome` d'`ambre-trame`.
-- [ ] Bascule `DocView` -> `AppView` (déplacer `FrameHost` hors d'`ambre-canvas`), au multi-document/onglets.
+### ARCH P2 — Pilot Applications
+- [x] `ambre-trame`: `TrameState` + `TrameView` (impl `DocView`), virtual-scroll grid, viewport smoke-test.
+- [x] Hybrid UI migration: `ambre-commands` + `ambre-chrome` created and mounted by `ambre-app`; homemade widget framework removed, `ambre-canvas` slimmed to render runtime.
+- [x] Trame editing: `TrameState::handle_command` returns `TrameOutcome { display, update, ephemeral }`, decomposed by the Logic dispatcher (lossless path; subsumes snapshot export off the hot path).
+- [ ] Extract Trame-specific chrome from `ambre-app` into `ambre-trame`'s `chrome` module.
+- [ ] `DocView` -> `AppView` switch (move `FrameHost` out of `ambre-canvas`), at multi-document/tabs.
 - [ ] `ambre-prose` (LoroText).
 
 ### ARCH P3 — Blind Relay
-- [ ] `ambre-server` : routes REST, WS upgrade, ACL, Lua Redis. PostgreSQL/Valkey/MinIO. Snapshot via S3. Tests e2e.
+- [ ] `ambre-server`: REST routes, WS upgrade, ACL, Lua Redis. PostgreSQL/Valkey/MinIO. Snapshot via S3. E2E tests.
 
-### ARCH P4 — Finalisation & Optimisation
-- [ ] Moteur formules Trame complet (DAG, recalcul incrémental, cycle detection).
-- [ ] Persistance Loro locale (IndexedDB) + durabilité offline : persister l'état Loro, compacter la file sortante hors-ligne, flush + `RequestMissing` au reconnect ; badge passif alimenté par `ConnectionStatus`.
-- [ ] Rotation de Document Key (15 étapes), CRUD/partage/médias complets. Benchmarks hot paths. Audit ZK (`cargo tree`).
-- [ ] Audit warnings wasm-only (`-A warnings` masque dead-code sur `ambre-app`/`ambre-canvas::host`/`ambre-sync`) ; confirmer morts `CanvasRenderingContext2d`/`ImageData`.
+### ARCH P4 — Finalization & Optimization
+- [ ] Full Trame formula engine (DAG, incremental recompute, cycle detection).
+- [ ] Local Loro persistence (IndexedDB) + offline durability: persist Loro state, compact offline outbound queue, flush + `RequestMissing` on reconnect; passive badge fed by `ConnectionStatus`.
+- [ ] Document Key rotation (15 steps), full CRUD/sharing/media. Hot path benchmarks. ZK audit (`cargo tree`).
+- [ ] Audit wasm-only warnings (`-A warnings` masks dead code on `ambre-app`/`ambre-canvas::host`/`ambre-sync`); confirm `CanvasRenderingContext2d`/`ImageData` are dead.
 
-### ARCH P5 — Applications restantes
-- [ ] `ambre-toile` (R-Tree + embarqués read-only), `ambre-murmure` (channels, segments gérés par Sync).
-- [ ] Composition (récursion `AppCommand`/`TrameOutcome` routée par `Uuid`). Présence chiffrée. TOFU UI. Meetings (signaling WebRTC).
+### ARCH P5 — Remaining Applications
+- [ ] `ambre-toile` (R-Tree + read-only embeds), `ambre-murmure` (channels, segments managed by Sync).
+- [ ] Composition (`AppCommand`/`TrameOutcome` recursion routed by `Uuid`). Encrypted presence. TOFU UI. Meetings (WebRTC signaling).
