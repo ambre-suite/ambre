@@ -32,18 +32,19 @@
 //   All documents are demultiplexed by document_id on incoming WsServerMsg.
 // ============================================================================
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, WebSocket};
 
+use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
     ChannelId, DocType, DocumentId, LogicEvent, RequestId, RestCommand, RestEvent, SnapshotId,
     SyncCommand, UserId,
 };
 use ambre_core::PublicKey;
 use ambre_crypto::{DocumentKey, MasterSeed};
-use ambre_protocol::messages::{Clock, Counter, Seq};
+use ambre_protocol::messages::{Clock, Counter, Seq, Update};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
 use ambre_protocol::ws::{decode_server_msg, encode_client_msg, WsClientMsg, WsServerMsg};
 use ed25519_dalek::SigningKey;
@@ -52,11 +53,23 @@ use x25519_dalek::StaticSecret;
 mod pipeline;
 
 // -----------------------------------------------------------------------------
+// Quarantine bounds (ambre-spec-sync.md §E)
+// -----------------------------------------------------------------------------
+
+/// Soft threshold: once this many updates are quarantined for a document, we ask
+/// the server to resend the missing history (`RequestMissing`) so the parent
+/// snapshot can arrive and release them.
+const QUARANTINE_ALERT: usize = 900;
+/// Hard cap: beyond this, the oldest update (by `clock`) is dropped to bound the
+/// shared heap, and a `SyncWarning` is raised.
+const QUARANTINE_LIMIT: usize = 1000;
+
+// -----------------------------------------------------------------------------
 // Per-document sync session
 // -----------------------------------------------------------------------------
 
-#[allow(dead_code)]
 struct SyncDocumentState {
+    #[allow(dead_code)]
     document_id: DocumentId,
     doc_key: DocumentKey,
     /// Snapshot this document's updates are currently based on. Placeholder
@@ -65,21 +78,37 @@ struct SyncDocumentState {
     local_clock: u64,
     /// Monotonic counter for outbound ephemerals (anti-replay at the receiver).
     ephemeral_counter: u64,
+    /// Highest server-assigned `seq` seen for this document. Used as
+    /// `after_seq` when requesting the missing history.
     last_seq: Seq,
-    quarantine: Vec<(u64, Vec<u8>)>,
+    /// Snapshots whose contents the Logic thread already holds. An inbound
+    /// `Update` whose parent `snapshot_id` is here can be applied immediately;
+    /// otherwise it is quarantined under that id.
+    known_snapshots: HashSet<SnapshotId>,
+    /// Updates held back because their parent snapshot is not yet known, keyed by
+    /// that parent `snapshot_id`. Stored sealed; decrypted only on release.
+    /// Bounded by [`QUARANTINE_LIMIT`] (oldest-by-`clock` dropped past the cap).
+    quarantine: HashMap<SnapshotId, Vec<Update>>,
 }
 
 impl SyncDocumentState {
     fn new(document_id: DocumentId, doc_key: DocumentKey) -> Self {
+        let current_snapshot_id = SnapshotId::new();
         Self {
             document_id,
             doc_key,
-            current_snapshot_id: SnapshotId::new(),
+            current_snapshot_id,
             local_clock: 0,
             ephemeral_counter: 0,
             last_seq: Seq(0),
-            quarantine: Vec::new(),
+            known_snapshots: HashSet::from([current_snapshot_id]),
+            quarantine: HashMap::new(),
         }
+    }
+
+    /// Total number of quarantined updates across all parent snapshots.
+    fn quarantine_len(&self) -> usize {
+        self.quarantine.values().map(Vec::len).sum()
     }
 }
 
@@ -154,7 +183,7 @@ impl SyncState {
                 tracing::warn!("Sync: dropping inbound for {document_id:?}: {e}");
                 self.send_to_logic(LogicEvent::SyncWarning {
                     document_id,
-                    code: 1,
+                    code: SyncWarningCode::DecryptFailed,
                     message: e.to_string(),
                 });
             }
@@ -417,20 +446,7 @@ impl SyncState {
                 });
             }
 
-            WsServerMsg::Update { seq, update } => {
-                let doc_id = update.public_data.document_id;
-                let opened = match self.documents.get_mut(&doc_id) {
-                    Some(doc_state) => {
-                        doc_state.last_seq = seq;
-                        Some(pipeline::open_update(&update, &doc_state.doc_key))
-                    }
-                    None => None,
-                };
-                self.deliver_remote(doc_id, opened, |payload| LogicEvent::RemoteUpdate {
-                    document_id: doc_id,
-                    payload,
-                });
-            }
+            WsServerMsg::Update { seq, update } => self.receive_update(seq, update),
 
             WsServerMsg::Ephemeral(eph) => {
                 let doc_id = eph.public_data.document_id;
@@ -444,18 +460,9 @@ impl SyncState {
                 });
             }
 
-            WsServerMsg::MissingUpdates { document_id, updates } => {
+            WsServerMsg::MissingUpdates { document_id: _, updates } => {
                 for seq_update in updates {
-                    let opened = match self.documents.get_mut(&document_id) {
-                        Some(doc_state) => {
-                            doc_state.last_seq = seq_update.seq;
-                            Some(pipeline::open_update(&seq_update.update, &doc_state.doc_key))
-                        }
-                        None => None,
-                    };
-                    self.deliver_remote(document_id, opened, |payload| {
-                        LogicEvent::RemoteUpdate { document_id, payload }
-                    });
+                    self.receive_update(seq_update.seq, seq_update.update);
                 }
             }
 
@@ -464,8 +471,8 @@ impl SyncState {
             }
 
             WsServerMsg::SnapshotAvailable { document_id, snapshot_id } => {
-                let _ = snapshot_id;
-                tracing::info!("Sync: SnapshotAvailable for {document_id:?}");
+                tracing::info!("Sync: SnapshotAvailable {snapshot_id:?} for {document_id:?}");
+                self.snapshot_known(document_id, snapshot_id);
             }
 
             WsServerMsg::KeyRotationRequired { document_id, revoked_user_id } => {
@@ -500,6 +507,107 @@ impl SyncState {
                     message,
                 });
             }
+        }
+    }
+
+    // -- Causal quarantine (ambre-spec-sync.md §E) -----------------------------
+
+    /// Ingest one server-sequenced [`Update`]. If its parent snapshot is known,
+    /// it is decrypted and delivered immediately; otherwise it is held in
+    /// quarantine until the parent snapshot arrives (then released in `clock`
+    /// order by [`release_quarantine`]).
+    fn receive_update(&mut self, seq: Seq, update: Update) {
+        let document_id = update.public_data.document_id;
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            tracing::warn!("Sync: Update for unopened doc {document_id:?}, dropping");
+            return;
+        };
+        doc_state.last_seq = seq;
+
+        let snapshot_id = update.public_data.snapshot_id;
+        if doc_state.known_snapshots.contains(&snapshot_id) {
+            let opened = pipeline::open_update(&update, &doc_state.doc_key);
+            self.deliver_remote(document_id, Some(opened), |payload| LogicEvent::RemoteUpdate {
+                document_id,
+                payload,
+            });
+            return;
+        }
+
+        doc_state.quarantine.entry(snapshot_id).or_default().push(update);
+        self.enforce_quarantine_bounds(document_id);
+    }
+
+    /// Keep a document's quarantine within [`QUARANTINE_LIMIT`]: request the
+    /// missing history at the soft threshold, and drop the oldest update (by
+    /// `clock`) past the hard cap, raising a `SyncWarning`.
+    fn enforce_quarantine_bounds(&mut self, document_id: DocumentId) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else { return };
+
+        if doc_state.quarantine_len() >= QUARANTINE_ALERT {
+            let after_seq = doc_state.last_seq;
+            if self.ws.is_some() {
+                self.ws_send(&WsClientMsg::RequestMissing { document_id, after_seq });
+            }
+        }
+
+        let doc_state = self.documents.get_mut(&document_id).expect("doc present");
+        if doc_state.quarantine_len() >= QUARANTINE_LIMIT {
+            // Drop the globally oldest quarantined update (smallest clock).
+            let oldest = doc_state
+                .quarantine
+                .iter()
+                .filter_map(|(snap, updates)| {
+                    updates
+                        .iter()
+                        .enumerate()
+                        .min_by_key(|(_, u)| u.public_data.clock.0)
+                        .map(|(idx, u)| (*snap, idx, u.public_data.clock.0))
+                })
+                .min_by_key(|&(_, _, clock)| clock);
+
+            if let Some((snap, idx, clock)) = oldest {
+                if let Some(updates) = doc_state.quarantine.get_mut(&snap) {
+                    updates.remove(idx);
+                    if updates.is_empty() {
+                        doc_state.quarantine.remove(&snap);
+                    }
+                }
+                self.send_to_logic(LogicEvent::SyncWarning {
+                    document_id,
+                    code: SyncWarningCode::QuarantineOverflow,
+                    message: format!("quarantine overflow, dropped oldest update (clock {clock})"),
+                });
+            }
+        }
+    }
+
+    /// Mark `snapshot_id` as known for `document_id` and release any updates that
+    /// were quarantined waiting for it, in ascending `clock` order.
+    fn snapshot_known(&mut self, document_id: DocumentId, snapshot_id: SnapshotId) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            tracing::warn!("Sync: SnapshotAvailable for unopened doc {document_id:?}");
+            return;
+        };
+        doc_state.known_snapshots.insert(snapshot_id);
+        doc_state.current_snapshot_id = snapshot_id;
+        self.release_quarantine(document_id, snapshot_id);
+    }
+
+    /// Decrypt and deliver every update quarantined under `snapshot_id`, oldest
+    /// `clock` first.
+    fn release_quarantine(&mut self, document_id: DocumentId, snapshot_id: SnapshotId) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else { return };
+        let Some(mut pending) = doc_state.quarantine.remove(&snapshot_id) else { return };
+        pending.sort_by_key(|u| u.public_data.clock.0);
+
+        let doc_key = doc_state.doc_key.clone();
+        for update in &pending {
+            let opened = pipeline::open_update(update, &doc_key);
+            self.deliver_remote(document_id, Some(opened), |payload| LogicEvent::RemoteUpdate {
+                document_id,
+                payload,
+            });
         }
     }
 
@@ -707,4 +815,122 @@ pub fn run(
 
     tracing::info!("Ambre Sync thread exiting (Logic thread disconnected)");
     let _ = state;
+}
+
+// -----------------------------------------------------------------------------
+// Tests — causal quarantine (host, no network / no WASM).
+// -----------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A `SyncState` with one opened document, a controlled `doc_key` and a known
+    /// signing key, plus the drainable Logic receiver and the document's known
+    /// snapshot id.
+    fn setup() -> (
+        SyncState,
+        flume::Receiver<LogicEvent>,
+        DocumentId,
+        DocumentKey,
+        SigningKey,
+        SnapshotId,
+    ) {
+        let (tx, rx) = flume::unbounded();
+        let mut state = SyncState::new(tx, String::new());
+        let document_id = DocumentId::new();
+        let doc_key = DocumentKey::generate();
+        let signing_key = MasterSeed::generate().derive_signing_key();
+        let doc_state = SyncDocumentState::new(document_id, doc_key.clone());
+        let known_snapshot = doc_state.current_snapshot_id;
+        state.documents.insert(document_id, doc_state);
+        (state, rx, document_id, doc_key, signing_key, known_snapshot)
+    }
+
+    fn make_update(
+        document_id: DocumentId,
+        snapshot_id: SnapshotId,
+        clock: u64,
+        payload: &[u8],
+        doc_key: &DocumentKey,
+        signing_key: &SigningKey,
+    ) -> Update {
+        let pub_key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let public_data = UpdatePublicData { document_id, pub_key, snapshot_id, clock: Clock(clock) };
+        pipeline::seal_update(payload, public_data, doc_key, signing_key).expect("seal")
+    }
+
+    fn drain(rx: &flume::Receiver<LogicEvent>) -> Vec<LogicEvent> {
+        rx.try_iter().collect()
+    }
+
+    #[test]
+    fn update_with_known_snapshot_delivered_immediately() {
+        let (mut state, rx, doc, key, sk, snap) = setup();
+        let update = make_update(doc, snap, 1, b"hello", &key, &sk);
+
+        state.receive_update(Seq(1), update);
+
+        let events = drain(&rx);
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            LogicEvent::RemoteUpdate { document_id, payload } => {
+                assert_eq!(*document_id, doc);
+                assert_eq!(payload, b"hello");
+            }
+            other => panic!("expected RemoteUpdate, got {other:?}"),
+        }
+        assert_eq!(state.documents[&doc].quarantine_len(), 0);
+    }
+
+    #[test]
+    fn update_with_unknown_snapshot_quarantined() {
+        let (mut state, rx, doc, key, sk, _snap) = setup();
+        let unknown = SnapshotId::new();
+        let update = make_update(doc, unknown, 1, b"later", &key, &sk);
+
+        state.receive_update(Seq(1), update);
+
+        assert!(drain(&rx).is_empty(), "nothing should be delivered yet");
+        assert_eq!(state.documents[&doc].quarantine_len(), 1);
+    }
+
+    #[test]
+    fn quarantine_released_in_clock_order() {
+        let (mut state, rx, doc, key, sk, _snap) = setup();
+        let parent = SnapshotId::new();
+        // Arrive out of clock order: clock 5 then clock 2.
+        state.receive_update(Seq(1), make_update(doc, parent, 5, b"five", &key, &sk));
+        state.receive_update(Seq(2), make_update(doc, parent, 2, b"two", &key, &sk));
+        assert!(drain(&rx).is_empty());
+        assert_eq!(state.documents[&doc].quarantine_len(), 2);
+
+        state.snapshot_known(doc, parent);
+
+        let payloads: Vec<Vec<u8>> = drain(&rx)
+            .into_iter()
+            .map(|e| match e {
+                LogicEvent::RemoteUpdate { payload, .. } => payload,
+                other => panic!("expected RemoteUpdate, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(payloads, vec![b"two".to_vec(), b"five".to_vec()]);
+        assert_eq!(state.documents[&doc].quarantine_len(), 0);
+    }
+
+    #[test]
+    fn quarantine_overflow_drops_oldest_and_warns() {
+        let (mut state, rx, doc, key, sk, _snap) = setup();
+        let parent = SnapshotId::new();
+        for clock in 1..=(QUARANTINE_LIMIT as u64) {
+            state.receive_update(Seq(clock), make_update(doc, parent, clock, b"x", &key, &sk));
+        }
+
+        let warnings = drain(&rx)
+            .into_iter()
+            .filter(|e| matches!(e, LogicEvent::SyncWarning { code, .. } if *code == SyncWarningCode::QuarantineOverflow))
+            .count();
+        assert_eq!(warnings, 1, "exactly one overflow warning at the hard cap");
+        assert_eq!(state.documents[&doc].quarantine_len(), QUARANTINE_LIMIT - 1);
+    }
 }
