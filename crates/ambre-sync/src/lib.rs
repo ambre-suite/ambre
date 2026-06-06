@@ -39,8 +39,8 @@ use web_sys::{MessageEvent, WebSocket};
 
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
-    ChannelId, DocType, DocumentId, LogicEvent, RequestId, RestCommand, RestEvent, SnapshotId,
-    SyncCommand, UserId,
+    ChannelId, DocType, DocumentId, DocumentSummary, LogicEvent, RequestId, RestCommand, RestEvent,
+    Role, SnapshotId, SyncCommand, UserId,
 };
 use ambre_core::PublicKey;
 use ambre_crypto::{DocumentKey, MasterSeed};
@@ -50,7 +50,10 @@ use ambre_protocol::ws::{decode_server_msg, encode_client_msg, WsClientMsg, WsSe
 use ed25519_dalek::SigningKey;
 use x25519_dalek::StaticSecret;
 
+use hex;
+
 mod pipeline;
+pub mod mock;
 
 // -----------------------------------------------------------------------------
 // Quarantine bounds (ambre-spec-sync.md §E)
@@ -116,7 +119,7 @@ impl SyncDocumentState {
 // SyncState
 // -----------------------------------------------------------------------------
 
-struct SyncState {
+pub struct SyncState {
     /// Outbound channel: Sync → Logic thread.
     logic_tx: flume::Sender<LogicEvent>,
     /// Base URL for REST API calls (e.g. `"api.ambre.app"`).
@@ -138,12 +141,18 @@ struct SyncState {
     /// JS closures attached to the WebSocket. Kept alive to prevent GC.
     _ws_closures: Vec<Closure<dyn FnMut(MessageEvent)>>,
 
+    // -- In-memory WS transport (test-only, off) -------------------------------
+    mock_ws_tx: Option<flume::Sender<Vec<u8>>>,
+
     // -- Per-document sync sessions --------------------------------------------
     documents: HashMap<DocumentId, SyncDocumentState>,
+
+    // -- Document metadata (in-memory mirror for mock mode) --------------------
+    doc_metadata: HashMap<DocumentId, (DocType, String)>,
 }
 
 impl SyncState {
-    fn new(logic_tx: flume::Sender<LogicEvent>, api_base: String) -> Self {
+    pub fn new(logic_tx: flume::Sender<LogicEvent>, api_base: String) -> Self {
         Self {
             logic_tx,
             api_base,
@@ -152,7 +161,9 @@ impl SyncState {
             exchange_key: None,
             ws: None,
             _ws_closures: Vec::new(),
+            mock_ws_tx: None,
             documents: HashMap::new(),
+            doc_metadata: HashMap::new(),
         }
     }
 
@@ -192,6 +203,18 @@ impl SyncState {
 
     // -- Outbound: Sync → Server (WebSocket) -----------------------------------
 
+    /// Hook the in-memory mock transport onto this SyncState. In test mode the
+    /// mock captures every WS message that would be sent, without touching
+    /// JS / WASM APIs.
+    pub fn set_mock_ws(&mut self, tx: flume::Sender<Vec<u8>>) {
+        self.mock_ws_tx = Some(tx);
+    }
+
+    /// Number of currently-open document sync sessions.
+    pub fn documents_len(&self) -> usize {
+        self.documents.len()
+    }
+
     /// Encode and push a client message onto the WebSocket.
     ///
     /// A missing socket or a failed `send` is a transient network condition, not
@@ -200,19 +223,31 @@ impl SyncState {
     /// `self.ws.is_some()`; this only logs if that race is lost. The reconnect
     /// path (onclose → backoff) re-establishes the socket.
     fn ws_send(&self, msg: &WsClientMsg) {
+        let wire = encode_client_msg(msg);
         let Some(ws) = self.ws.as_ref() else {
+            if self.mock_ws_tx.is_some() {
+                let _ = self.mock_ws_tx.as_ref().unwrap().send(wire);
+                return;
+            }
             tracing::warn!("Sync: ws_send called with no socket connected, dropping message");
             return;
         };
-        let wire = encode_client_msg(msg);
         if let Err(e) = ws.send_with_u8_array(&wire) {
             tracing::warn!("Sync: WebSocket send failed ({e:?}); reconnect will retry");
+        }
+        if let Some(tx) = &self.mock_ws_tx {
+            let _ = tx.send(wire);
         }
     }
 
     // -- Inbound: Logic → Sync -------------------------------------------------
 
-    fn handle_command(&mut self, cmd: SyncCommand) {
+    /// Whether a transport (real WebSocket or mock) is available.
+    fn ws_connected(&self) -> bool {
+        self.ws.is_some() || self.mock_ws_tx.is_some()
+    }
+
+    pub fn handle_command(&mut self, cmd: SyncCommand) {
         match cmd {
             // -- Service plane: the relayed request/response family ------------
             SyncCommand::Rest { id, cmd } => self.handle_rest(id, cmd),
@@ -257,7 +292,7 @@ impl SyncState {
         match cmd {
             // -- Session -------------------------------------------------------
             RestCommand::Unlock { passphrase } => self.handle_unlock(id, passphrase),
-            RestCommand::SetupAccount { passphrase } => self.handle_setup_account(passphrase),
+            RestCommand::SetupAccount { passphrase } => self.handle_setup_account(id, passphrase),
             RestCommand::ChangePassphrase { current_passphrase, new_passphrase } => {
                 self.handle_change_passphrase(current_passphrase, new_passphrase);
             }
@@ -272,13 +307,13 @@ impl SyncState {
             // -- Document CRUD -------------------------------------------------
             RestCommand::ListDocuments => self.handle_list_documents(id),
             RestCommand::CreateDocument { doc_type, name } => {
-                self.handle_create_document(doc_type, name);
+                self.handle_create_document(id, doc_type, name);
             }
             RestCommand::DeleteDocument { document_id } => {
-                self.handle_delete_document(document_id);
+                self.handle_delete_document(id, document_id);
             }
             RestCommand::RenameDocument { document_id, name } => {
-                self.handle_rename_document(document_id, name);
+                self.handle_rename_document(id, document_id, name);
             }
 
             // -- Sharing -------------------------------------------------------
@@ -366,8 +401,19 @@ impl SyncState {
         });
     }
 
-    fn handle_setup_account(&mut self, passphrase: Vec<u8>) {
+    fn handle_setup_account(&mut self, id: RequestId, passphrase: Vec<u8>) {
         tracing::info!("Sync: SetupAccount (passphrase len={})", passphrase.len());
+
+        let _ = passphrase;
+        let master_seed = MasterSeed::generate();
+        self.signing_key = Some(master_seed.derive_signing_key());
+        self.exchange_key = Some(master_seed.derive_exchange_key());
+        let recovery_words = hex::encode(master_seed.as_bytes());
+        self.master_seed = Some(master_seed);
+
+        self.open_websocket();
+
+        self.reply(id, RestEvent::AccountCreated { recovery_words });
     }
 
     fn handle_change_passphrase(
@@ -546,7 +592,7 @@ impl SyncState {
 
         if doc_state.quarantine_len() >= QUARANTINE_ALERT {
             let after_seq = doc_state.last_seq;
-            if self.ws.is_some() {
+            if self.ws_connected() {
                 self.ws_send(&WsClientMsg::RequestMissing { document_id, after_seq });
             }
         }
@@ -620,14 +666,14 @@ impl SyncState {
         let doc_key = DocumentKey::generate();
         self.documents
             .insert(document_id, SyncDocumentState::new(document_id, doc_key));
-        if self.ws.is_some() {
+        if self.ws_connected() {
             self.ws_send(&WsClientMsg::Subscribe { document_id });
         }
         tracing::info!("Sync: OpenDocument {document_id:?}");
     }
 
     fn handle_close_document(&mut self, document_id: DocumentId) {
-        if self.ws.is_some() {
+        if self.ws_connected() {
             self.ws_send(&WsClientMsg::Unsubscribe { document_id });
         }
         self.documents.remove(&document_id);
@@ -635,7 +681,7 @@ impl SyncState {
     }
 
     fn handle_reconnect(&mut self, document_id: DocumentId) {
-        if self.ws.is_some() {
+        if self.ws_connected() {
             let last_seq =
                 self.documents.get(&document_id).map(|d| d.last_seq).unwrap_or(Seq(0));
             self.ws_send(&WsClientMsg::Subscribe { document_id });
@@ -730,20 +776,41 @@ impl SyncState {
     // -- Document CRUD (HTTP REST) ---------------------------------------------
 
     fn handle_list_documents(&self, id: RequestId) {
-        self.reply(id, RestEvent::DocumentList { documents: vec![] });
-        tracing::info!("Sync: ListDocuments");
+        let documents: Vec<DocumentSummary> = self
+            .doc_metadata
+            .iter()
+            .map(|(&document_id, (doc_type, name))| DocumentSummary {
+                document_id,
+                doc_type: *doc_type,
+                name: Some(name.clone()),
+                role: Role::Owner,
+                updated_at: 0,
+            })
+            .collect();
+        let count = documents.len();
+        self.reply(id, RestEvent::DocumentList { documents });
+        tracing::info!("Sync: ListDocuments ({count} docs)");
     }
 
-    fn handle_create_document(&self, doc_type: DocType, name: String) {
+    fn handle_create_document(&mut self, id: RequestId, doc_type: DocType, name: String) {
         tracing::info!("Sync: CreateDocument {doc_type:?} '{name}'");
+        let document_id = DocumentId::new();
+        self.doc_metadata.insert(document_id, (doc_type, name));
+        self.reply(id, RestEvent::DocumentCreated { document_id, doc_type });
     }
 
-    fn handle_delete_document(&self, document_id: DocumentId) {
+    fn handle_delete_document(&mut self, id: RequestId, document_id: DocumentId) {
         tracing::info!("Sync: DeleteDocument {document_id:?}");
+        self.doc_metadata.remove(&document_id);
+        self.reply(id, RestEvent::DocumentDeleted { document_id });
     }
 
-    fn handle_rename_document(&self, document_id: DocumentId, name: String) {
+    fn handle_rename_document(&mut self, id: RequestId, document_id: DocumentId, name: String) {
         tracing::info!("Sync: RenameDocument {document_id:?} '{name}'");
+        if let Some((_doc_type, old_name)) = self.doc_metadata.get_mut(&document_id) {
+            *old_name = name;
+        }
+        self.reply(id, RestEvent::DocumentRenamed { document_id });
     }
 
     // -- Sharing (HTTP REST + crypto) ------------------------------------------
@@ -768,14 +835,14 @@ impl SyncState {
     // -- Channels --------------------------------------------------------------
 
     fn handle_open_channel(&mut self, channel_id: ChannelId) {
-        if self.ws.is_some() {
+        if self.ws_connected() {
             self.ws_send(&WsClientMsg::SubscribeChannel { channel_id });
         }
         tracing::info!("Sync: OpenChannel {channel_id:?}");
     }
 
     fn handle_close_channel(&mut self, channel_id: ChannelId) {
-        if self.ws.is_some() {
+        if self.ws_connected() {
             self.ws_send(&WsClientMsg::UnsubscribeChannel { channel_id });
         }
         tracing::info!("Sync: CloseChannel {channel_id:?}");
