@@ -16,7 +16,11 @@
 // a `UiEvent` and is fanned out by the dispatcher to BOTH the chrome signals
 // and the canvas view. No surface holds its own toggle truth, so the trigger
 // is fully decoupled from the effect.
+//
+// Compiles ONLY on wasm32 targets (depends on web_sys, wgpu, leptos).
 // ============================================================================
+
+#![cfg(target_arch = "wasm32")]
 
 use std::cell::RefCell;
 use std::rc::Rc;
