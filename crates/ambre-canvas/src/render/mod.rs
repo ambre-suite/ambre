@@ -976,19 +976,19 @@ impl QuadRenderer {
     /// Encode the three-pass dirty-rect rendering for this frame.
     ///
     /// `cells`:
-    ///   - `Full`   : clear the destination offscreen, render the freshly pushed
-    ///                cells geometry.
-    ///   - `Scroll` : `copy_texture_to_texture` from the current offscreen to
-    ///                the other with the requested pixel offset, then render
-    ///                the cells geometry over the exposed strip.
-    ///   - `Reuse`  : skip both. The existing offscreen is blitted unchanged.
-    ///                The orchestrator must NOT have called
-    ///                `begin_layer(Layer::Content)` this frame.
+    /// - `Full`   : clear the destination offscreen, render the freshly pushed
+    ///   cells geometry.
+    /// - `Scroll` : `copy_texture_to_texture` from the current offscreen to
+    ///   the other with the requested pixel offset, then render
+    ///   the cells geometry over the exposed strip.
+    /// - `Reuse`  : skip both. The existing offscreen is blitted unchanged.
+    ///   The orchestrator must NOT have called
+    ///   `begin_layer(Layer::Content)` this frame.
     ///
     /// `overlay`:
-    ///   - `Redraw` : upload the freshly pushed overlay geometry and re-issue
-    ///                the draw call.
-    ///   - `Reuse`  : reuse the previously uploaded GPU buffer (idle frames).
+    /// - `Redraw` : upload the freshly pushed overlay geometry and re-issue
+    ///   the draw call.
+    /// - `Reuse`  : reuse the previously uploaded GPU buffer (idle frames).
     ///
     /// The blit pass always runs because the swapchain texture is a fresh,
     /// undefined-content surface each frame.

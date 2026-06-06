@@ -119,9 +119,7 @@ pub fn ContextMenu(
     });
 
     move || {
-        if pos.get().is_none() {
-            return None;
-        }
+        pos.get()?;
 
         let len = commands.len();
         let cmds = commands.clone();

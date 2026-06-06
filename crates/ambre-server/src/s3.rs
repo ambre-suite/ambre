@@ -3,6 +3,7 @@ use aws_sdk_s3::Client as S3Client;
 use rustis::commands::{GenericCommands, ListCommands};
 use rustis::commands::ScanOptions;
 use std::time::Duration;
+#[allow(clippy::single_component_path_imports)]
 use tracing;
 
 use crate::error::AppError;

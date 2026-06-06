@@ -16,6 +16,7 @@ use futures_util::{SinkExt, StreamExt};
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::mpsc;
+#[allow(clippy::single_component_path_imports)]
 use tracing;
 
 use ambre_core::{ChannelId, DocumentId, UserId};
@@ -327,8 +328,8 @@ fn verify_update_signature(
 ) -> Result<(), AppError> {
     use ed25519_dalek::{Signature as DalekSig, Verifier, VerifyingKey};
 
-    let public_data_bytes = postcard::to_allocvec(&update.public_data)
-        .map_err(|e| AppError::Decode(e))?;
+    let public_data_bytes =
+        postcard::to_allocvec(&update.public_data).map_err(AppError::Decode)?;
 
     let mut signed_data = Vec::new();
     signed_data.extend_from_slice(&update.nonce.0);

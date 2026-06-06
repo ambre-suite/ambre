@@ -59,6 +59,12 @@ impl Uuid {
     }
 }
 
+impl Default for Uuid {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl fmt::Debug for Uuid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Uuid({})", self.to_hyphenated())

@@ -100,7 +100,15 @@ impl TrameState {
             last_exported_vv: VersionVector::default(),
         }
     }
+}
 
+impl Default for TrameState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TrameState {
     /// Display text for a cell: the edited value from the CRDT if present,
     /// otherwise the generated coordinate label.
     fn cell_text(&self, row: u32, col: u32) -> String {

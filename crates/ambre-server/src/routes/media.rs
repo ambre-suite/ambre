@@ -14,7 +14,7 @@ fn parse_doc_id(s: &str) -> Result<ambre_core::DocumentId, AppError> { ambre_cor
 /// Request for a presigned S3 upload URL. The client uploads the encrypted
 /// blob directly; the server inserts the `media` row on confirmation.
 #[derive(serde::Deserialize)]
-pub struct UploadUrlRequest { pub content_hash: String, pub mime_type: String, pub size_bytes: u64 }
+pub struct UploadUrlRequest { pub content_hash: String, #[allow(dead_code)] pub mime_type: String, #[allow(dead_code)] pub size_bytes: u64 }
 #[derive(serde::Serialize)]
 pub struct UploadUrlResponse { pub upload_url: String, pub s3_key: String }
 

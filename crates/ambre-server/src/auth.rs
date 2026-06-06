@@ -14,6 +14,7 @@ pub struct AuthSession {
     /// User the session belongs to.
     pub user_id: ambre_core::UserId,
     /// Cached Ed25519 public key -- avoids a Postgres lookup per WS message.
+    #[allow(dead_code)]
     pub signing_pubkey: ambre_core::PublicKey,
     /// Opaque session identifier stored in the `session_id` cookie.
     pub session_id: String,

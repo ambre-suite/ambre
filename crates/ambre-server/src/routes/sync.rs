@@ -31,7 +31,7 @@ pub async fn get_snapshot_metadata(
 /// Request to confirm a snapshot upload. The server inserts metadata and
 /// broadcasts `SnapshotAvailable` to all subscribers.
 #[derive(serde::Deserialize)]
-pub struct CreateSnapshotRequest { pub snapshot_id: String, pub author_pubkey: String, pub parent_hash: Option<String>, pub parent_snapshot_proof: Option<String>, pub update_clocks: serde_json::Value, pub s3_key: String }
+pub struct CreateSnapshotRequest { #[allow(dead_code)] pub snapshot_id: String, pub author_pubkey: String, pub parent_hash: Option<String>, pub parent_snapshot_proof: Option<String>, pub update_clocks: serde_json::Value, pub s3_key: String }
 #[derive(serde::Serialize)]
 pub struct CreateSnapshotResponse { pub snapshot_id: String }
 
