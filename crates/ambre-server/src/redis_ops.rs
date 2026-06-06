@@ -245,6 +245,7 @@ pub async fn doc_presence_update(
 }
 
 /// Redis key for the per-document clock hash.
+#[allow(dead_code)]
 pub fn format_doc_clocks_key(document_id: &ambre_core::DocumentId) -> String {
     format!("doc:{document_id}:clocks")
 }
@@ -257,5 +258,6 @@ pub fn format_doc_clocks_key(document_id: &ambre_core::DocumentId) -> String {
 pub struct SessionData {
     pub user_id: ambre_core::UserId,
     pub signing_pubkey: ambre_core::PublicKey,
+    #[allow(dead_code)]
     pub session_id: String,
 }

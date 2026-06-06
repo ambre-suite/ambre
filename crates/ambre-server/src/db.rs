@@ -11,6 +11,7 @@ pub struct UserRow {
     pub master_key_salt: Vec<u8>,
     pub signing_pubkey: Vec<u8>,
     pub exchange_pubkey: Vec<u8>,
+    #[allow(dead_code)]
     pub org_id: Option<uuid::Uuid>,
 }
 
@@ -50,10 +51,13 @@ pub struct DocumentSummaryRow {
 /// Row from `document_members`.
 #[derive(Debug)]
 pub struct MemberRow {
+    #[allow(dead_code)]
     pub document_id: uuid::Uuid,
+    #[allow(dead_code)]
     pub user_id: uuid::Uuid,
     pub role: String,
     pub doc_key_enc: Vec<u8>,
+    #[allow(dead_code)]
     pub invited_by: Option<uuid::Uuid>,
 }
 
@@ -64,6 +68,7 @@ pub struct MemberWithUserRow {
     pub email: String,
     pub display_name: String,
     pub role: String,
+    #[allow(dead_code)]
     pub invited_by: Option<uuid::Uuid>,
 }
 
@@ -71,34 +76,46 @@ pub struct MemberWithUserRow {
 #[derive(Debug)]
 pub struct SnapshotRow {
     pub id: uuid::Uuid,
+    #[allow(dead_code)]
     pub document_id: uuid::Uuid,
+    #[allow(dead_code)]
     pub author_pubkey: Vec<u8>,
+    #[allow(dead_code)]
     pub parent_hash: Option<Vec<u8>>,
+    #[allow(dead_code)]
     pub parent_snapshot_proof: Option<Vec<u8>>,
+    #[allow(dead_code)]
     pub update_clocks: serde_json::Value,
     pub s3_key: String,
+    #[allow(dead_code)]
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Row from `updates` (encrypted deltas indexed by seq).
 #[derive(Debug)]
 pub struct UpdateRow {
+    #[allow(dead_code)]
     pub id: uuid::Uuid,
+    #[allow(dead_code)]
     pub document_id: uuid::Uuid,
     pub author_pubkey: Vec<u8>,
+    #[allow(dead_code)]
     pub snapshot_id: uuid::Uuid,
     pub clock: i64,
     pub seq: i64,
     pub s3_key: String,
+    #[allow(dead_code)]
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 // Helpers -----------------------------------------------------------
 
+#[allow(dead_code)]
 fn uuid_to_core(u: uuid::Uuid) -> ambre_core::Uuid {
     ambre_core::Uuid::from_bytes(*u.as_bytes())
 }
 
+#[allow(dead_code)]
 fn uuid_row_to_id<T: From<ambre_core::Uuid>>(u: uuid::Uuid) -> T {
     T::from(uuid_to_core(u))
 }
@@ -590,6 +607,7 @@ pub async fn get_updates_after(pool: &PgPool, document_id: &ambre_core::Document
 }
 
 /// Deletes updates whose seq <= `before_seq` (called after compaction).
+#[allow(dead_code)]
 pub async fn purge_updates_before_seq(pool: &PgPool, document_id: &ambre_core::DocumentId, before_seq: i64) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     sqlx::query("DELETE FROM updates WHERE document_id = $1 AND seq <= $2")

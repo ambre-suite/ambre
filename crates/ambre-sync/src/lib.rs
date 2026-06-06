@@ -50,7 +50,7 @@ use ambre_protocol::ws::{decode_server_msg, encode_client_msg, WsClientMsg, WsSe
 use ed25519_dalek::SigningKey;
 use x25519_dalek::StaticSecret;
 
-use hex;
+use hex::encode;
 
 mod pipeline;
 pub mod mock;
@@ -225,8 +225,8 @@ impl SyncState {
     fn ws_send(&self, msg: &WsClientMsg) {
         let wire = encode_client_msg(msg);
         let Some(ws) = self.ws.as_ref() else {
-            if self.mock_ws_tx.is_some() {
-                let _ = self.mock_ws_tx.as_ref().unwrap().send(wire);
+            if let Some(tx) = &self.mock_ws_tx {
+                let _ = tx.send(wire);
                 return;
             }
             tracing::warn!("Sync: ws_send called with no socket connected, dropping message");
@@ -408,7 +408,7 @@ impl SyncState {
         let master_seed = MasterSeed::generate();
         self.signing_key = Some(master_seed.derive_signing_key());
         self.exchange_key = Some(master_seed.derive_exchange_key());
-        let recovery_words = hex::encode(master_seed.as_bytes());
+        let recovery_words = encode(master_seed.as_bytes());
         self.master_seed = Some(master_seed);
 
         self.open_websocket();

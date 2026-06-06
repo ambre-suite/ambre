@@ -1,5 +1,6 @@
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+#[allow(clippy::single_component_path_imports)]
 use tracing;
 
 /// Typed error covering all server failure modes.
@@ -24,18 +25,22 @@ pub enum AppError {
     #[error("Conflict: {detail}")]
     Conflict { detail: String },
 
+    #[allow(dead_code)]
     #[error("Clock mismatch: expected {expected}, got {got}")]
     ClockMismatch { expected: u64, got: u64 },
 
     #[error("Invalid signature")]
     InvalidSignature,
 
+    #[allow(dead_code)]
     #[error("Snapshot required")]
     SnapshotRequired,
 
+    #[allow(dead_code)]
     #[error("Compaction lock held")]
     CompactionLockHeld,
 
+    #[allow(dead_code)]
     #[error("Unknown OIDC provider: {0}")]
     UnknownProvider(String),
 
@@ -51,6 +56,7 @@ pub enum AppError {
     #[error("Postcard decode error: {0}")]
     Decode(#[from] postcard::Error),
 
+    #[allow(dead_code)]
     #[error("OIDC error: {0}")]
     Oidc(String),
 }

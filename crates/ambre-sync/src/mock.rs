@@ -33,7 +33,15 @@ impl MockWsTransport {
         let (server_tx, client_rx) = flume::unbounded();
         Self { client_tx, server_rx, server_tx, client_rx }
     }
+}
 
+impl Default for MockWsTransport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MockWsTransport {
     /// Convenience: decode the next pending client message.
     pub fn recv_client_msg(&self) -> Result<WsClientMsg, WireDecodeError> {
         let wire = self.server_rx.recv().expect("client channel disconnected");

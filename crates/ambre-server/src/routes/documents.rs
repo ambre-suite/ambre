@@ -25,6 +25,7 @@ fn parse_user_id(s: &str) -> Result<ambre_core::UserId, AppError> {
 /// derived from the master seed (Ed25519 for signing, X25519 for exchange).
 #[derive(serde::Deserialize)]
 pub struct SetupAccountRequest {
+    #[allow(dead_code)]
     pub passphrase: String,
     pub master_key_enc: String,
     pub master_key_salt: String,

@@ -23,6 +23,7 @@ pub struct AppState {
 #[derive(Clone, Debug)]
 pub struct Config {
     /// Base URL of this server, used for redirect callbacks (OIDC).
+    #[allow(dead_code)]
     pub base_url: String,
     /// Session lifetime in seconds (default 24h).
     pub session_ttl_secs: u64,

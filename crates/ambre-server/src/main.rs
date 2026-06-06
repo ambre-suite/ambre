@@ -12,6 +12,7 @@ mod ws;
 use axum::Router;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
+#[allow(clippy::single_component_path_imports)]
 use tracing_subscriber;
 
 use state::{AppState, Config};

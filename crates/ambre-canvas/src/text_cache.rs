@@ -80,6 +80,7 @@ impl TextCache {
     /// `bold` / `italic` select the matching real face of the family (not faux
     /// bold/oblique) and are part of the cache key, so each style combination of
     /// the same string is stored separately.
+    #[allow(clippy::too_many_arguments)]
     pub fn get_or_build(
         &mut self,
         font_cx:   &mut FontContext,
