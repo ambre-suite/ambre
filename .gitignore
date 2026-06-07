@@ -3,3 +3,4 @@ target
 .vscode
 dist
 AGENTS.md
+.env
