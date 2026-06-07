@@ -275,3 +275,48 @@ pub(crate) struct DocumentMemberEntry {
     pub doc_key_enc: String,
     pub role: String,
 }
+
+// -- Media ------------------------------------------------------------------
+
+/// Request body for `POST /api/documents/{id}/media/upload-url`: asks the
+/// server for a presigned S3 PUT URL. `content_hash` is the BLAKE2b-256 hex
+/// digest of the plaintext media bytes. `size_bytes` is the size of the
+/// *encrypted* blob (nonce 24 + ciphertext).
+#[derive(Serialize)]
+pub(crate) struct UploadUrlRequest {
+    pub content_hash: String,
+    pub mime_type: String,
+    pub size_bytes: u64,
+}
+
+/// Response from `POST /api/documents/{id}/media/upload-url`. The client PUTs
+/// the encrypted blob directly to `upload_url` (no server proxy).
+#[derive(Deserialize)]
+pub(crate) struct UploadUrlResponse {
+    pub upload_url: String,
+    #[allow(dead_code)]
+    pub s3_key: String,
+}
+
+/// Request body for `POST /api/documents/{id}/media/download-url`: asks the
+/// server for a presigned S3 GET URL by content hash.
+#[derive(Serialize)]
+pub(crate) struct DownloadUrlRequest {
+    pub content_hash: String,
+}
+
+/// Response from `POST /api/documents/{id}/media/download-url`. The client GETs
+/// the encrypted blob directly from `download_url`.
+#[derive(Deserialize)]
+pub(crate) struct DownloadUrlResponse {
+    pub download_url: String,
+}
+
+/// Request body for `POST /api/documents/{id}/media`: confirms that the
+/// upload completed so the server inserts a `media` row.
+#[derive(Serialize)]
+pub(crate) struct ConfirmUploadRequest {
+    pub content_hash: String,
+    pub mime_type: String,
+    pub size_bytes: i64,
+}
