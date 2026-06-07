@@ -176,3 +176,102 @@ pub(crate) struct SnapshotMetadataRequest {
     pub ciphertext_hash: String,
     pub size: u64,
 }
+
+// ── User search ────────────────────────────────────────────────────────────
+
+/// Response from `GET /api/users/search?query=...`.
+#[derive(Deserialize)]
+pub(crate) struct UserSearchResult {
+    pub users: Vec<UserInfoEntry>,
+}
+
+/// A single user returned by the user-search endpoint. Includes hex-encoded
+/// public keys so the sync thread can perform ECDH wrapping for invites.
+#[derive(Deserialize)]
+pub(crate) struct UserInfoEntry {
+    pub id: String,
+    pub email: String,
+    pub display_name: String,
+    #[allow(dead_code)]
+    pub signing_pubkey: String,
+    /// Hex-encoded X25519 public key used for document-key wrapping.
+    pub exchange_pubkey: String,
+}
+
+// ── Pubkeys ────────────────────────────────────────────────────────────────
+
+/// Response from `GET /api/users/{id}/pubkeys` — used to fetch a specific
+/// user's public keys during the sharing flow.
+#[derive(Deserialize)]
+#[allow(dead_code)]
+pub(crate) struct PubkeysResponse {
+    pub signing_pubkey: String,
+    pub exchange_pubkey: String,
+}
+
+// ── Sharing ────────────────────────────────────────────────────────────────
+
+/// Request body for `POST /api/documents/{id}/share`.
+/// `doc_key_enc` is the DocumentKey wrapped for the invitee via X25519 ECDH,
+/// base64 URL-safe encoded (nonce || ciphertext).
+#[derive(Serialize)]
+pub(crate) struct InviteRequest {
+    pub invitee_email: String,
+    pub role: String,
+    pub doc_key_enc: String,
+}
+
+/// Response from a successful `POST /api/documents/{id}/share`.
+#[derive(Deserialize)]
+pub(crate) struct InviteResponse {
+    pub user_id: String,
+    pub display_name: String,
+}
+
+/// Request body for `POST /api/documents/{id}/rotate-key` — carries the new
+/// DocumentKey wrapped for each remaining member after a revocation.
+#[derive(Serialize)]
+pub(crate) struct RotateKeyRequest {
+    pub keys: Vec<RotateKeyEntry>,
+}
+
+/// One entry in a [`RotateKeyRequest`]: a user and their re-encrypted
+/// DocumentKey (base64 URL-safe, nonce || ciphertext).
+#[derive(Serialize)]
+pub(crate) struct RotateKeyEntry {
+    pub user_id: String,
+    pub doc_key_enc: String,
+}
+
+/// Response from `POST /api/documents/{id}/rotate-key`.
+#[derive(Deserialize)]
+#[allow(dead_code)]
+pub(crate) struct RotateKeyResponse {
+    pub status: String,
+}
+
+// ── Document members (decoded) ─────────────────────────────────────────────
+
+/// Response from `GET /api/documents/{id}/members` (extended payload with
+/// plaintext display names and emails, already decrypted by the server).
+#[derive(Deserialize)]
+pub(crate) struct DocumentMembersResponse {
+    pub members: Vec<DocumentMemberEntry>,
+}
+
+/// A single member entry returned by the list-members endpoint. `doc_key_enc`
+/// is the hex-encoded DocumentKey wrapped for this member via X25519 ECDH
+/// (nonce || ciphertext). `exchange_pub_key` is the hex-encoded X25519 public
+/// key used for key unwrapping.
+#[derive(Deserialize)]
+pub(crate) struct DocumentMemberEntry {
+    pub user_id: String,
+    pub display_name: String,
+    pub email: String,
+    #[allow(dead_code)]
+    pub signing_pub_key: String,
+    pub exchange_pub_key: String,
+    #[allow(dead_code)]
+    pub doc_key_enc: String,
+    pub role: String,
+}

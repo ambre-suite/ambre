@@ -39,7 +39,7 @@
 
 *Objective: secured multi-user, sharing/revocation, foundation ready for Enterprise.*
 
-- [ ] Sharing & revocation (Document Key rotation, media, anti-replay): `SYNC P3`.
+- [x] Sharing & revocation (Document Key rotation, media, anti-replay): `SYNC P3`.
 - [ ] Server hardening (rate limiting, CSRF, organizations + Shamir, compaction): `SRV P2`.
 - [ ] Offline durability (Loro IndexedDB persistence, flush + `RequestMissing` on reconnect): `ARCH P4`.
 - [ ] Full Trame formula engine (DAG, incremental recomputation, cycle detection): `ARCH P4`.

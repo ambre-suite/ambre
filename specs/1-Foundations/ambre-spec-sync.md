@@ -705,10 +705,10 @@ All tests compile in native mode (`#[cfg(not(target_arch = "wasm32"))]`) with `t
 
 ### SYNC P3 — Sharing & Revocation
 
-- [ ] Full `InviteToDocument` flow (search user → fetch pubkeys → encrypt DocumentKey → POST /share)
-- [ ] Full `RevokeFromDocument` flow (DELETE /share → key rotation → POST /rotate-key → 15 steps, see §3)
-- [ ] LRU `old_keys` cache, 10 entries per document
-- [ ] Ephemeral anti-replay (`ephemeral_remote_counters`)
+- [x] Full `InviteToDocument` flow (search user → fetch pubkeys → ECDH wrap DocumentKey → POST /share)
+- [x] Full `RevokeFromDocument` flow (DELETE /share → key rotation → POST /rotate-key → 15 steps, see §3)
+- [x] LRU `old_keys` cache, 10 entries per document
+- [x] Ephemeral anti-replay (`ephemeral_remote_counters`)
 - [ ] Media flow: `UploadMedia` (encryption + presigned URL + S3 PUT + confirmation POST), `DownloadMedia` (S3 GET + decryption)
 
 ### SYNC P4 — Channels, Meetings & Optimization
