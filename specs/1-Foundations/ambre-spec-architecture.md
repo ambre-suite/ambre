@@ -581,7 +581,7 @@ impl MasterSeed {
 - [x] `ambre-server`: REST routes, WS upgrade, ACL, Lua Redis. PostgreSQL/Valkey/MinIO. Snapshot via S3. E2E tests.
 
 ### ARCH P4 — Finalization & Optimization
-- [ ] Full Trame formula engine (DAG, incremental recompute, cycle detection).
+- [x] Full Trame formula engine (DAG, incremental recompute, cycle detection).
 - [ ] Local Loro persistence (IndexedDB) + offline durability: persist Loro state, compact offline outbound queue, flush + `RequestMissing` on reconnect; passive badge fed by `ConnectionStatus`.
 - [ ] Document Key rotation (15 steps), full CRUD/sharing/media. Hot path benchmarks. ZK audit (`cargo tree`).
 - [ ] Audit wasm-only warnings (`-A warnings` masks dead code on `ambre-app`/`ambre-canvas::host`/`ambre-sync`); confirm `CanvasRenderingContext2d`/`ImageData` are dead.

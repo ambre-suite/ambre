@@ -3,7 +3,7 @@
 // Trame (spreadsheet) per-document model -- Logic thread side.
 //
 // `TrameState` owns everything the Logic thread needs for one open Trame
-// document (CRDT / formula engine, once wired). The Logic dispatcher
+// document: CRDT, formula engine, formatting. The Logic dispatcher
 // (`ambre-logic`) holds it inside `DocState::Trame` and calls the handlers
 // below with **typed** `TrameCommand`s, getting back typed `TrameEvent`s --
 // no trait object, no postcard, no `Vec<u8>` on this path.
@@ -11,15 +11,13 @@
 // The shared IPC types (TrameCommand, TrameEvent, DisplayCell) live in
 // `ambre-bus`; the grid dimensions shared with the UI live in the crate root
 // (`crate::TOTAL_ROWS` / `crate::TOTAL_COLS`).
-//
-// Cell content (hardcoded for now): standard spreadsheet reference notation,
-// e.g. column 0 row 0 -> "A1", column 26 row 99 -> "AA100".
 // ============================================================================
 
 use std::collections::HashSet;
 
 use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
 
+use crate::formula::{CellRef, FormulaEngine};
 use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 
 /// Name of the Loro map holding edited cell text, keyed by `"row:col"`.
@@ -88,6 +86,8 @@ pub struct TrameState {
     /// Last CRDT version vector exported to Sync. Used to produce incremental
     /// deltas via [`ExportMode::Updates`].
     last_exported_vv: VersionVector,
+    /// Formula engine: dependency graph, bytecode cache, dirty recomputation.
+    engine: FormulaEngine,
 }
 
 impl TrameState {
@@ -98,6 +98,7 @@ impl TrameState {
             italic: HashSet::new(),
             doc: LoroDoc::new(),
             last_exported_vv: VersionVector::default(),
+            engine: FormulaEngine::new(),
         }
     }
 }
@@ -109,9 +110,16 @@ impl Default for TrameState {
 }
 
 impl TrameState {
-    /// Display text for a cell: the edited value from the CRDT if present,
-    /// otherwise the generated coordinate label.
+    /// Display text for a cell: the formula evaluation result if it's a formula
+    /// cell, otherwise the edited value from the CRDT if present, otherwise the
+    /// generated coordinate label.
     fn cell_text(&self, row: u32, col: u32) -> String {
+        let cell = CellRef::new(row, col);
+        // Formula cells: return cached evaluation result.
+        if let Some(text) = self.engine.evaluated_text(cell) {
+            return text;
+        }
+        // Plain-text cells: return CRDT value or generated label.
         let map = self.doc.get_map(CELLS_MAP);
         match map.get(&cell_key(row, col)).map(|v| v.get_deep_value()) {
             Some(LoroValue::String(s)) => s.to_string(),
@@ -135,16 +143,19 @@ impl TrameState {
             }
             TrameCommand::SetCellText { row, col, text } => {
                 // Commit the edit into the CRDT. Empty text clears the cell back
-                // to its generated label. The UI already updated its cache
-                // optimistically, so no display event is echoed.
+                // to its generated label. Formulas (leading '=') are registered
+                // in the formula engine for evaluation.
                 let map = self.doc.get_map(CELLS_MAP);
                 let key = cell_key(row, col);
                 if text.is_empty() {
                     let _ = map.delete(&key);
+                    self.engine.on_cell_changed(CellRef::new(row, col), "");
                 } else {
-                    let _ = map.insert(&key, text);
+                    let _ = map.insert(&key, text.as_str());
+                    self.engine.on_cell_changed(CellRef::new(row, col), &text);
                 }
                 self.doc.commit();
+                self.engine.compute_all_dirty();
                 let update = self.flush_delta();
                 TrameOutcome { display: vec![], update, ephemeral: None }
             }
@@ -180,6 +191,10 @@ impl TrameState {
                 if row_start > row_end || col_start > col_end {
                     return TrameOutcome::display_only(vec![]);
                 }
+
+                // Synchronous recomputation of any dirty cells before serving
+                // the viewport. Ensures the UI displays up-to-date formula results.
+                self.engine.compute_all_dirty();
 
                 let mut cells = Vec::with_capacity(
                     ((row_end - row_start + 1) * (col_end - col_start + 1)) as usize,
