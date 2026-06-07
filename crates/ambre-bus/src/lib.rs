@@ -35,4 +35,5 @@ pub use ui::{AppEvent, DisplayCell, TrameEvent, UiEvent};
 // Re‑export core types so that users don't need to depend on ambre‑core directly.
 pub use ambre_core::{
     ChannelId, DocType, DocumentId, MeetingId, PublicKey, Role, SnapshotId, UserId, Uuid,
+    SMOKE_DOCUMENT_ID,
 };

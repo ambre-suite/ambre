@@ -68,6 +68,8 @@ fn col_label(mut col: u32) -> String {
 
 /// Trame's `DocView`: a virtual-scroll spreadsheet grid.
 pub struct TrameView {
+    /// Well-known document id for the IPC smoke test.
+    document_id: DocumentId,
     /// Outbound channel to the Logic thread.
     to_logic: flume::Sender<LogicCommand>,
     /// Inbound channel from the Logic thread, drained each frame in `update`.
@@ -155,6 +157,7 @@ pub struct TrameView {
 
 impl TrameView {
     pub fn new(
+        document_id: DocumentId,
         to_logic: flume::Sender<LogicCommand>,
         from_logic: flume::Receiver<UiEvent>,
         canvas_width: f64,
@@ -173,6 +176,7 @@ impl TrameView {
         text_input.focus();
 
         Self {
+            document_id,
             to_logic,
             from_logic,
             state: TrameUiState::new(canvas_width, canvas_height),
@@ -220,7 +224,7 @@ impl TrameView {
             return;
         }
         let msg = LogicCommand::App {
-            document_id: DocumentId::new(),
+            document_id: self.document_id,
             command: AppCommand::Trame(cmd),
         };
         match self.to_logic.try_send(msg) {
@@ -248,7 +252,7 @@ impl TrameView {
             return Ok(());
         }
         let msg = LogicCommand::App {
-            document_id: DocumentId::new(),
+            document_id: self.document_id,
             command: AppCommand::Trame(cmd),
         };
         self.to_logic.try_send(msg)
