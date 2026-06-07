@@ -9,5 +9,22 @@ description = "Logic thread — typed command dispatch, per-document state regis
 ambre-bus   = { path = "../ambre-bus" }
 ambre-trame = { path = "../ambre-trame" }
 
-flume   = { workspace = true }
-tracing = { workspace = true }
+flume         = { workspace = true, features = ["async"] }
+tracing       = { workspace = true }
+futures-util  = { workspace = true }
+
+wasm-bindgen        = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+js-sys              = { workspace = true }
+web-sys             = { workspace = true, features = [
+    "IdbDatabase",
+    "IdbFactory",
+    "IdbOpenDbRequest",
+    "IdbObjectStore",
+    "IdbRequest",
+    "IdbTransaction",
+    "IdbTransactionMode",
+    "IdbKeyRange",
+    "Storage",
+    "Window",
+] }
