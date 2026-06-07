@@ -41,8 +41,8 @@ use web_sys::{CloseEvent, MessageEvent};
 
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
-    ChannelId, DocType, DocumentId, DocumentSummary, LogicEvent, RequestId, RestCommand, RestEvent,
-    Role, SnapshotId, SyncCommand, UserId,
+    ChannelId, DocType, DocumentId, DocumentSummary, LogicEvent, MemberInfo, RequestId,
+    RestCommand, RestEvent, Role, SnapshotId, SyncCommand, UserId, UserInfo,
 };
 use ambre_core::PublicKey;
 use ambre_crypto::{DocumentKey, MasterSeed};
@@ -54,6 +54,7 @@ use ambre_protocol::ws::decode_server_msg;
 use ed25519_dalek::SigningKey;
 use x25519_dalek::StaticSecret;
 
+use base64::Engine;
 use hex::encode;
 
 mod pipeline;
@@ -132,6 +133,47 @@ enum SyncEvent {
         id: RequestId,
         message: String,
     },
+    /// Invite completed: the invitee's DocumentKey was wrapped via ECDH and the
+    /// server accepted the share request.
+    InviteSent {
+        id: RequestId,
+        document_id: DocumentId,
+        user_id: UserId,
+        display_name: String,
+    },
+    /// Key rotation initiated by this client is finished: the server has the new
+    /// `doc_key_enc` entries and the new key must be swapped locally.
+    RevocationComplete {
+        id: RequestId,
+        document_id: DocumentId,
+        new_doc_key: DocumentKey,
+    },
+    /// Member list for a document has been fetched from the server (decoded,
+    /// plaintext names/emails).
+    DocumentMembersReady {
+        id: RequestId,
+        document_id: DocumentId,
+        members: Vec<MemberInfo>,
+    },
+    /// User search results from the server (decoded, plaintext).
+    UserSearchReady {
+        id: RequestId,
+        users: Vec<UserInfo>,
+    },
+    /// A document member's role was updated server-side.
+    MemberRoleUpdatedEvent {
+        id: RequestId,
+        document_id: DocumentId,
+        user_id: UserId,
+        role: Role,
+    },
+    /// A remote key rotation was performed: the new DocumentKey has been fetched
+    /// and unwrapped via ECDH; the local key cache must be swapped.
+    KeyRotated {
+        document_id: DocumentId,
+        new_doc_key: DocumentKey,
+        revoked_user_id: UserId,
+    },
 }
 
 // -----------------------------------------------------------------------------
@@ -160,6 +202,15 @@ struct SyncDocumentState {
     /// that parent `snapshot_id`. Stored sealed; decrypted only on release.
     /// Bounded by [`QUARANTINE_LIMIT`] (oldest-by-`clock` dropped past the cap).
     quarantine: HashMap<SnapshotId, Vec<Update>>,
+    /// LRU cache of previous DocumentKeys (max 10). Used by
+    /// [`open_update_fallback`] and [`open_ephemeral_fallback`] to decrypt
+    /// messages sealed with a key that was rotated before the rotation
+    /// notification propagated to this client.
+    old_keys: Vec<DocumentKey>,
+    /// Per-author ephemeral anti-replay counter. Keyed by the author's Ed25519
+    /// verifying key bytes. An inbound ephemeral whose counter is ≤ the stored
+    /// value is silently dropped.
+    ephemeral_remote_counters: HashMap<[u8; 32], u64>,
 }
 
 impl SyncDocumentState {
@@ -174,6 +225,8 @@ impl SyncDocumentState {
             last_seq: Seq(0),
             known_snapshots: HashSet::from([current_snapshot_id]),
             quarantine: HashMap::new(),
+            old_keys: Vec::new(),
+            ephemeral_remote_counters: HashMap::new(),
         }
     }
 
@@ -182,18 +235,71 @@ impl SyncDocumentState {
     fn quarantine_len(&self) -> usize {
         self.quarantine.values().map(Vec::len).sum()
     }
+
+    /// Decrypts an ephemeral message with the active key, falling back to every
+    /// key in the [`old_keys`] LRU cache if the active key fails. Returns the
+    /// result of the last attempt (the active key) if all keys fail.
+    fn open_ephemeral_fallback(
+        &self,
+        eph: &ambre_protocol::Ephemeral,
+    ) -> Result<Vec<u8>, pipeline::PipelineError> {
+        match pipeline::open_ephemeral(eph, &self.doc_key) {
+            Ok(payload) => Ok(payload),
+            Err(_) => {
+                for old_key in &self.old_keys {
+                    if let Ok(payload) = pipeline::open_ephemeral(eph, old_key) {
+                        return Ok(payload);
+                    }
+                }
+                pipeline::open_ephemeral(eph, &self.doc_key)
+            }
+        }
+    }
+
+    /// Decrypts an update with the active key, falling back to every key in the
+    /// [`old_keys`] LRU cache.
+    fn open_update_fallback(
+        &self,
+        update: &ambre_protocol::Update,
+    ) -> Result<Vec<u8>, pipeline::PipelineError> {
+        match pipeline::open_update(update, &self.doc_key) {
+            Ok(payload) => Ok(payload),
+            Err(_) => {
+                for old_key in &self.old_keys {
+                    if let Ok(payload) = pipeline::open_update(update, old_key) {
+                        return Ok(payload);
+                    }
+                }
+                pipeline::open_update(update, &self.doc_key)
+            }
+        }
+    }
+
+    /// Replaces the active document key with `new_key`, pushing the previous
+    /// active key onto the front of the [`old_keys`] LRU cache. The cache is
+    /// bounded to 10 entries; excess keys are dropped and zeroized on
+    /// `DocumentKey`'s `Drop`.
+    fn rotate_key(&mut self, new_key: DocumentKey) {
+        let old_key = std::mem::replace(&mut self.doc_key, new_key);
+        self.old_keys.insert(0, old_key);
+        if self.old_keys.len() > 10 {
+            self.old_keys.truncate(10);
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
 // SyncState
 // -----------------------------------------------------------------------------
 
-pub struct SyncState {
+    pub struct SyncState {
     /// Outbound channel: Sync → Logic thread.
     logic_tx: flume::Sender<LogicEvent>,
     /// Base URL for REST API calls (e.g. `"api.ambre.app"`).
     #[allow(dead_code)]
     api_base: String,
+    /// Authenticated user id, set after Unlock/SetupAccount.
+    user_id: Option<UserId>,
 
     // -- Session-level crypto (derived once at Unlock, zeroized at Logout) ----
     master_seed: Option<MasterSeed>,
@@ -237,6 +343,7 @@ impl SyncState {
         Self {
             logic_tx,
             api_base,
+            user_id: None,
             master_seed: None,
             signing_key: None,
             exchange_key: None,
@@ -411,20 +518,20 @@ impl SyncState {
 
             // -- Sharing -------------------------------------------------------
             RestCommand::InviteToDocument { document_id, invitee_email, role } => {
-                self.handle_invite_to_document(document_id, invitee_email, role);
+                self.handle_invite_to_document(id, document_id, invitee_email, role);
             }
             RestCommand::RevokeFromDocument { document_id, user_id } => {
-                self.handle_revoke_from_document(document_id, user_id);
+                self.handle_revoke_from_document(id, document_id, user_id);
             }
             RestCommand::ListDocumentMembers { document_id } => {
-                self.handle_list_document_members(document_id);
+                self.handle_list_document_members(id, document_id);
             }
             RestCommand::UpdateDocumentMemberRole { document_id, user_id, role } => {
-                tracing::info!("Sync: UpdateDocumentMemberRole {document_id:?} {user_id:?} {role:?}");
+                self.handle_update_document_member_role(id, document_id, user_id, role);
             }
 
             // -- Users ---------------------------------------------------------
-            RestCommand::SearchUsers { query } => tracing::info!("Sync: SearchUsers '{query}'"),
+            RestCommand::SearchUsers { query } => self.handle_search_users(id, query),
 
             // -- Media ---------------------------------------------------------
             RestCommand::UploadMedia { document_id, data, mime_type } => {
@@ -809,6 +916,7 @@ impl SyncState {
                 tracing::error!("Sync: WebSocket error");
             }
             SyncEvent::SessionReady { id, user_id, display_name, email, master_seed, signing_key, exchange_key } => {
+                self.user_id = Some(user_id);
                 self.master_seed = Some(master_seed);
                 self.signing_key = Some(signing_key);
                 self.exchange_key = Some(exchange_key);
@@ -857,6 +965,30 @@ impl SyncState {
                     message,
                 });
             }
+            SyncEvent::InviteSent { id, document_id, user_id, display_name } => {
+                self.reply(id, RestEvent::InviteSent { document_id, user_id, display_name });
+            }
+            SyncEvent::RevocationComplete { id, document_id, new_doc_key } => {
+                if let Some(doc_state) = self.documents.get_mut(&document_id) {
+                    doc_state.rotate_key(new_doc_key);
+                }
+                self.reply(id, RestEvent::RevocationComplete { document_id });
+            }
+            SyncEvent::DocumentMembersReady { id, document_id, members } => {
+                self.reply(id, RestEvent::DocumentMembers { document_id, members });
+            }
+            SyncEvent::UserSearchReady { id, users } => {
+                self.reply(id, RestEvent::UserSearchResults { users });
+            }
+            SyncEvent::MemberRoleUpdatedEvent { id, document_id, user_id, role } => {
+                self.reply(id, RestEvent::MemberRoleUpdated { document_id, user_id, role });
+            }
+            SyncEvent::KeyRotated { document_id, new_doc_key, revoked_user_id } => {
+                if let Some(doc_state) = self.documents.get_mut(&document_id) {
+                    doc_state.rotate_key(new_doc_key);
+                }
+                self.send_to_logic(LogicEvent::MemberRevoked { document_id, revoked_user_id });
+            }
         }
     }
 
@@ -879,11 +1011,23 @@ impl SyncState {
 
             WsServerMsg::Ephemeral(eph) => {
                 let doc_id = eph.public_data.document_id;
-                let opened = self
-                    .documents
-                    .get(&doc_id)
-                    .map(|doc_state| pipeline::open_ephemeral(&eph, &doc_state.doc_key));
-                self.deliver_remote(doc_id, opened, |payload| LogicEvent::RemoteEphemeral {
+                let Some(doc_state) = self.documents.get_mut(&doc_id) else {
+                    return;
+                };
+
+                // Anti-replay: reject ephemerals with a non-monotonic counter
+                // for the same author.
+                let author_pk = *eph.public_data.pub_key.as_array();
+                let last_counter = doc_state.ephemeral_remote_counters.get(&author_pk).copied().unwrap_or(0);
+                if eph.public_data.counter.0 <= last_counter {
+                    tracing::debug!("Sync: dropping replayed ephemeral from {:?} (counter {})", author_pk, eph.public_data.counter.0);
+                    return;
+                }
+                doc_state.ephemeral_remote_counters.insert(author_pk, eph.public_data.counter.0);
+
+                let opened =
+                    doc_state.open_ephemeral_fallback(&eph);
+                self.deliver_remote(doc_id, Some(opened), |payload| LogicEvent::RemoteEphemeral {
                     document_id: doc_id,
                     payload,
                 });
@@ -905,10 +1049,91 @@ impl SyncState {
             }
 
             WsServerMsg::KeyRotationRequired { document_id, revoked_user_id } => {
-                if let Some(_doc_state) = self.documents.get_mut(&document_id) {
+                // If WE are the revoked user, close the document and notify.
+                if Some(revoked_user_id) == self.user_id {
+                    self.documents.remove(&document_id);
                     self.send_to_logic(LogicEvent::MemberRevoked {
                         document_id,
                         revoked_user_id,
+                    });
+                    return;
+                }
+
+                // Otherwise, fetch the new wrapped key from the server,
+                // unwrap it, and rotate locally.
+                let event_tx = self.event_tx.clone();
+                let api_base = self.api_base.clone();
+                let exchange_key = self.exchange_key.clone();
+                let doc_id = document_id;
+
+                if let Some(tx) = event_tx {
+                    let Some(ek) = exchange_key else { return };
+                    wasm_bindgen_futures::spawn_local(async move {
+                        let members_url =
+                            format!("https://{api_base}/api/documents/{doc_id}/members");
+                        let members =
+                            match http::get_json::<http::MembersResponse>(&members_url).await {
+                                Ok(resp) => resp.members,
+                                Err(e) => {
+                                    tracing::error!(
+                                        "Sync: KeyRotationRequired fetch members failed: {e}"
+                                    );
+                                    return;
+                                }
+                            };
+
+                        let our_exchange_pub = {
+                            let pk = x25519_dalek::PublicKey::from(&ek);
+                            hex::encode(pk.as_bytes())
+                        };
+
+                        let entry = match members
+                            .iter()
+                            .find(|m| m.exchange_pub_key == our_exchange_pub)
+                        {
+                            Some(e) => e,
+                            None => {
+                                tracing::warn!(
+                                    "Sync: KeyRotationRequired: own member entry not found"
+                                );
+                                return;
+                            }
+                        };
+
+                        let new_doc_key = match (|| -> Result<DocumentKey, String> {
+                            let encrypted = hex::decode(&entry.doc_key_enc)
+                                .map_err(|e| format!("hex decode: {e}"))?;
+                            if encrypted.len() < 24 {
+                                return Err("wrapped key too short".into());
+                            }
+                            let nonce: [u8; 24] = encrypted[..24]
+                                .try_into()
+                                .map_err(|_| "invalid nonce length")?;
+                            let ciphertext = encrypted[24..].to_vec();
+                            let peer_pub: [u8; 32] = hex::decode(&entry.exchange_pub_key)
+                                .map_err(|e| format!("hex decode pubkey: {e}"))?
+                                .try_into()
+                                .map_err(|_| "invalid pubkey length")?;
+                            let wrapped = ambre_crypto::WrappedKey { nonce, ciphertext };
+                            ambre_crypto::ecdh::unwrap_document_key(
+                                &ek, &peer_pub, &wrapped,
+                            )
+                            .map_err(|e| format!("ECDH unwrap: {e}"))
+                        })() {
+                            Ok(k) => k,
+                            Err(e) => {
+                                tracing::error!(
+                                    "Sync: KeyRotationRequired unwrap failed: {e}"
+                                );
+                                return;
+                            }
+                        };
+
+                        let _ = tx.send(SyncEvent::KeyRotated {
+                            document_id: doc_id,
+                            new_doc_key,
+                            revoked_user_id,
+                        });
                     });
                 }
             }
@@ -956,7 +1181,7 @@ impl SyncState {
 
         let snapshot_id = update.public_data.snapshot_id;
         if doc_state.known_snapshots.contains(&snapshot_id) {
-            let opened = pipeline::open_update(&update, &doc_state.doc_key);
+            let opened = doc_state.open_update_fallback(&update);
             self.deliver_remote(document_id, Some(opened), |payload| LogicEvent::RemoteUpdate {
                 document_id,
                 payload,
@@ -1027,13 +1252,17 @@ impl SyncState {
     /// Decrypt and deliver every update quarantined under `snapshot_id`, oldest
     /// `clock` first.
     fn release_quarantine(&mut self, document_id: DocumentId, snapshot_id: SnapshotId) {
-        let Some(doc_state) = self.documents.get_mut(&document_id) else { return };
-        let Some(mut pending) = doc_state.quarantine.remove(&snapshot_id) else { return };
+        let mut pending = {
+            let Some(doc_state) = self.documents.get_mut(&document_id) else { return };
+            doc_state.quarantine.remove(&snapshot_id).unwrap_or_default()
+        };
         pending.sort_by_key(|u| u.public_data.clock.0);
 
-        let doc_key = doc_state.doc_key.clone();
-        for update in &pending {
-            let opened = pipeline::open_update(update, &doc_key);
+        let results: Vec<Result<Vec<u8>, pipeline::PipelineError>> = {
+            let Some(doc_state) = self.documents.get(&document_id) else { return };
+            pending.iter().map(|u| doc_state.open_update_fallback(u)).collect()
+        };
+        for opened in results {
             self.deliver_remote(document_id, Some(opened), |payload| LogicEvent::RemoteUpdate {
                 document_id,
                 payload,
@@ -1044,19 +1273,22 @@ impl SyncState {
     // -- Document lifecycle ----------------------------------------------------
 
     fn handle_open_document(&mut self, document_id: DocumentId) {
-        // TODO (sharing task): derive the real DocumentKey via X25519 unwrap of
-        // the server-stored, member-wrapped key. Generated locally for now so
-        // the pipeline round-trips within a single client.
         let event_tx = self.event_tx.clone();
 
         if let Some(tx) = event_tx {
-            // WASM: fetch members + snapshot from the server.
             let api_base = self.api_base.clone();
             let doc_id = document_id;
+            let exchange_key = self.exchange_key.clone();
             wasm_bindgen_futures::spawn_local(async move {
                 let members_url = format!("https://{api_base}/api/documents/{doc_id}/members");
                 let doc_key = match http::get_json::<http::MembersResponse>(&members_url).await {
-                    Ok(resp) => Self::unwrap_document_key(&resp.members).unwrap_or_else(|_| DocumentKey::generate()),
+                    Ok(resp) => {
+                        match &exchange_key {
+                            Some(ek) => Self::unwrap_document_key(ek, &resp.members)
+                                .unwrap_or_else(|_| DocumentKey::generate()),
+                            None => DocumentKey::generate(),
+                        }
+                    }
                     Err(_) => DocumentKey::generate(),
                 };
                 let snapshot_url = format!("https://{api_base}/api/documents/{doc_id}/snapshot/latest");
@@ -1083,15 +1315,46 @@ impl SyncState {
         }
     }
 
-    /// Extracts the first member's DocumentKey from the server response.
-    /// Full X25519 ECDH unwrap is deferred to SYNC P3 (sharing).
-    fn unwrap_document_key(members: &[http::MemberEntry]) -> Result<DocumentKey, String> {
-        let entry = members.first().ok_or("no members")?;
+    /// Decrypts the DocumentKey from the server's member list using X25519 ECDH.
+    ///
+    /// 1. Computes the local exchange public key from `exchange_key`.
+    /// 2. Finds our own [`MemberEntry`] by matching `exchange_pub_key`.
+    /// 3. Hex-decodes the `doc_key_enc` blob (24-byte nonce + AEAD ciphertext
+    ///    with Poly1305 tag).
+    /// 4. Calls [`ambre_crypto::ecdh::unwrap_document_key`] to perform the
+    ///    ECDH shared-secret derivation, KEK derivation, and AEAD decryption.
+    fn unwrap_document_key(
+        exchange_key: &x25519_dalek::StaticSecret,
+        members: &[http::MemberEntry],
+    ) -> Result<DocumentKey, String> {
+        let our_exchange_pub = {
+            let pk = x25519_dalek::PublicKey::from(exchange_key);
+            hex::encode(pk.as_bytes())
+        };
+
+        let entry = members
+            .iter()
+            .find(|m| m.exchange_pub_key == our_exchange_pub)
+            .ok_or("own member entry not found")?;
+
         let encrypted = hex::decode(&entry.doc_key_enc)
-            .map_err(|e| format!("hex decode: {e}"))?;
-        let key: [u8; 32] = encrypted.as_slice().try_into()
-            .map_err(|_| "invalid key length".to_string())?;
-        Ok(DocumentKey::from_array(key))
+            .map_err(|e| format!("hex decode doc_key_enc: {e}"))?;
+        if encrypted.len() < 24 {
+            return Err("wrapped key too short".into());
+        }
+        let nonce: [u8; 24] = encrypted[..24]
+            .try_into()
+            .map_err(|_| "invalid nonce length")?;
+        let ciphertext = encrypted[24..].to_vec();
+
+        let peer_pub_bytes: [u8; 32] = hex::decode(&entry.exchange_pub_key)
+            .map_err(|e| format!("hex decode exchange_pub_key: {e}"))?
+            .try_into()
+            .map_err(|_| "invalid exchange pubkey length")?;
+
+        let wrapped = ambre_crypto::WrappedKey { nonce, ciphertext };
+        ambre_crypto::ecdh::unwrap_document_key(exchange_key, &peer_pub_bytes, &wrapped)
+            .map_err(|e| format!("ECDH unwrap: {e}"))
     }
 
     fn handle_close_document(&mut self, document_id: DocumentId) {
@@ -1311,21 +1574,382 @@ impl SyncState {
 
     // -- Sharing (HTTP REST + crypto) ------------------------------------------
 
+    /// Invites a user to a document:
+    /// 1. Searches for the invitee by email via `GET /api/users/search`.
+    /// 2. Wraps the document key for the invitee using X25519 ECDH.
+    /// 3. POSTs the wrapped key to `/api/documents/{id}/share`.
+    ///
+    /// On the WASM path, the async HTTP work is spawned via `spawn_local` and
+    /// the result flows back as [`SyncEvent::InviteSent`].
     fn handle_invite_to_document(
         &self,
+        id: RequestId,
         document_id: DocumentId,
         invitee_email: String,
-        role: ambre_bus::Role,
+        role: Role,
     ) {
-        tracing::info!("Sync: InviteToDocument {document_id:?} {invitee_email} {role:?}");
+        let event_tx = self.event_tx.clone();
+        let logic_tx = self.logic_tx.clone();
+        let api_base = self.api_base.clone();
+        let exchange_key = self.exchange_key.clone();
+        let doc_key = self.documents.get(&document_id).map(|ds| ds.doc_key.clone());
+
+        let Some(tx) = event_tx else {
+            self.reply(id, RestEvent::InviteSent {
+                document_id,
+                user_id: UserId::new(),
+                display_name: invitee_email.clone(),
+            });
+            return;
+        };
+        let Some(exchange_key) = exchange_key else {
+            let _ = logic_tx.send(LogicEvent::ApiError {
+                request: "InviteToDocument".into(),
+                code: 401,
+                message: "Not authenticated".into(),
+            });
+            return;
+        };
+        let Some(doc_key) = doc_key else {
+            let _ = logic_tx.send(LogicEvent::ApiError {
+                request: "InviteToDocument".into(),
+                code: 404,
+                message: "Document not open".into(),
+            });
+            return;
+        };
+
+        wasm_bindgen_futures::spawn_local(async move {
+            let search_url = format!(
+                "https://{api_base}/api/users/search?query={}",
+                invitee_email.replace('@', "%40")
+            );
+            let users = match http::get_json::<http::UserSearchResult>(&search_url).await {
+                Ok(resp) => resp.users,
+                Err(e) => {
+                    let _ = logic_tx.send(LogicEvent::ApiError {
+                        request: "InviteToDocument".into(),
+                        code: 500,
+                        message: format!("User search failed: {e}"),
+                    });
+                    return;
+                }
+            };
+            let invitee = match users.iter().find(|u| u.email == invitee_email) {
+                Some(u) => u,
+                None => {
+                    let _ = logic_tx.send(LogicEvent::ApiError {
+                        request: "InviteToDocument".into(),
+                        code: 404,
+                        message: "User not found".into(),
+                    });
+                    return;
+                }
+            };
+            let peer_pub_bytes: [u8; 32] = match hex::decode(&invitee.exchange_pubkey) {
+                Ok(b) => match b.try_into() {
+                    Ok(arr) => arr,
+                    Err(_) => {
+                        let _ = logic_tx.send(LogicEvent::ApiError {
+                            request: "InviteToDocument".into(),
+                            code: 500,
+                            message: "Invalid exchange pubkey".into(),
+                        });
+                        return;
+                    }
+                },
+                Err(e) => {
+                    let _ = logic_tx.send(LogicEvent::ApiError {
+                        request: "InviteToDocument".into(),
+                        code: 500,
+                        message: format!("Hex decode pubkey: {e}"),
+                    });
+                    return;
+                }
+            };
+
+            let wrapped = ambre_crypto::ecdh::wrap_document_key(&exchange_key, &peer_pub_bytes, &doc_key);
+            let mut enc = wrapped.nonce.to_vec();
+            enc.extend_from_slice(&wrapped.ciphertext);
+            let doc_key_enc = base64::engine::general_purpose::URL_SAFE.encode(&enc);
+
+            let invite_url = format!("https://{api_base}/api/documents/{document_id}/share");
+            let body = http::InviteRequest {
+                invitee_email: invitee_email.clone(),
+                role: role.to_string(),
+                doc_key_enc,
+            };
+            match http::post_json::<_, http::InviteResponse>(&invite_url, &body).await {
+                Ok(resp) => {
+                    let user_id = UserId::parse_str(&resp.user_id)
+                        .unwrap_or_else(|_| UserId::new());
+                    let _ = tx.send(SyncEvent::InviteSent {
+                        id,
+                        document_id,
+                        user_id,
+                        display_name: resp.display_name,
+                    });
+                }
+                Err(e) => {
+                    let _ = logic_tx.send(LogicEvent::ApiError {
+                        request: "InviteToDocument".into(),
+                        code: 500,
+                        message: e,
+                    });
+                }
+            }
+        });
     }
 
-    fn handle_revoke_from_document(&self, document_id: DocumentId, user_id: UserId) {
-        tracing::info!("Sync: RevokeFromDocument {document_id:?} {user_id:?}");
+    /// Revokes a member from a document and rotates the document key:
+    /// 1. DELETEs the share at `/api/documents/{id}/share/{uid}`.
+    /// 2. Generates a fresh [`DocumentKey`] via CSPRNG.
+    /// 3. GETs the remaining members from the server.
+    /// 4. Wraps the new key for each remaining member via X25519 ECDH.
+    /// 5. POSTs the wrapped keys to `/api/documents/{id}/rotate-key` (the
+    ///    server atomically replaces the stored `doc_key_enc` entries and
+    ///    broadcasts `WsServerMsg::KeyRotationRequired` to every client).
+    /// 6. Emits [`SyncEvent::RevocationComplete`], which causes
+    ///    [`handle_sync_event`] to swap the local key and push the old key
+    ///    into the [`SyncDocumentState::old_keys`] LRU cache.
+    fn handle_revoke_from_document(
+        &self,
+        id: RequestId,
+        document_id: DocumentId,
+        user_id: UserId,
+    ) {
+        let event_tx = self.event_tx.clone();
+        let logic_tx = self.logic_tx.clone();
+        let api_base = self.api_base.clone();
+        let exchange_key = self.exchange_key.clone();
+        let doc_state = self.documents.get(&document_id);
+        let old_doc_key = doc_state.map(|ds| ds.doc_key.clone());
+
+        let Some(tx) = event_tx else {
+            self.reply(id, RestEvent::RevocationComplete { document_id });
+            return;
+        };
+        let Some(exchange_key) = exchange_key else {
+            let _ = logic_tx.send(LogicEvent::ApiError {
+                request: "RevokeFromDocument".into(),
+                code: 401,
+                message: "Not authenticated".into(),
+            });
+            return;
+        };
+
+        wasm_bindgen_futures::spawn_local(async move {
+            // 1. DELETE /api/documents/{id}/share/{uid}
+            let revoke_url = format!(
+                "https://{api_base}/api/documents/{document_id}/share/{user_id}"
+            );
+            if let Err(e) = http::delete(&revoke_url).await {
+                let _ = logic_tx.send(LogicEvent::ApiError {
+                    request: "RevokeFromDocument".into(),
+                    code: 500,
+                    message: format!("Revoke failed: {e}"),
+                });
+                return;
+            }
+
+            // 2. Generate new DocumentKey
+            let new_doc_key = DocumentKey::generate();
+
+            // 3. GET remaining members
+            let members_url = format!(
+                "https://{api_base}/api/documents/{document_id}/members"
+            );
+            let members = match http::get_json::<http::DocumentMembersResponse>(&members_url).await
+            {
+                Ok(resp) => resp.members,
+                Err(e) => {
+                    let _ = logic_tx.send(LogicEvent::ApiError {
+                        request: "RevokeFromDocument".into(),
+                        code: 500,
+                        message: format!("Get members failed: {e}"),
+                    });
+                    return;
+                }
+            };
+
+            // 4. Wrap new key for each remaining member
+            let mut keys = Vec::with_capacity(members.len());
+            for member in &members {
+                let peer_pub_bytes: [u8; 32] = match hex::decode(&member.exchange_pub_key) {
+                    Ok(b) => match b.try_into() {
+                        Ok(arr) => arr,
+                        Err(_) => continue,
+                    },
+                    Err(_) => continue,
+                };
+                let wrapped =
+                    ambre_crypto::ecdh::wrap_document_key(&exchange_key, &peer_pub_bytes, &new_doc_key);
+                let mut enc = wrapped.nonce.to_vec();
+                enc.extend_from_slice(&wrapped.ciphertext);
+                let doc_key_enc = base64::engine::general_purpose::URL_SAFE.encode(&enc);
+                keys.push(http::RotateKeyEntry {
+                    user_id: member.user_id.clone(),
+                    doc_key_enc,
+                });
+            }
+
+            // 5. POST /api/documents/{id}/rotate-key
+            let rotate_url = format!(
+                "https://{api_base}/api/documents/{document_id}/rotate-key"
+            );
+            let body = http::RotateKeyRequest { keys };
+            if let Err(e) = http::post_json::<_, serde_json::Value>(&rotate_url, &body).await {
+                let _ = logic_tx.send(LogicEvent::ApiError {
+                    request: "RevokeFromDocument".into(),
+                    code: 500,
+                    message: format!("Rotate key failed: {e}"),
+                });
+                return;
+            }
+
+            // 6. Send back new key for swap
+            let _ = tx.send(SyncEvent::RevocationComplete {
+                id,
+                document_id,
+                new_doc_key,
+            });
+            // old_doc_key is dropped (zeroized) here — old_keys cache is
+            // populated by handle_sync_event when it swaps the keys.
+            let _ = old_doc_key;
+        });
     }
 
-    fn handle_list_document_members(&self, document_id: DocumentId) {
-        tracing::info!("Sync: ListDocumentMembers {document_id:?}");
+    /// Fetches the member list for a document via `GET /api/documents/{id}/members`,
+    /// maps the server response into [`MemberInfo`] values (plaintext names,
+    /// decoded roles), and replies with [`RestEvent::DocumentMembers`].
+    fn handle_list_document_members(&self, id: RequestId, document_id: DocumentId) {
+        let event_tx = self.event_tx.clone();
+        let api_base = self.api_base.clone();
+
+        if let Some(tx) = event_tx {
+            wasm_bindgen_futures::spawn_local(async move {
+                let url = format!(
+                    "https://{api_base}/api/documents/{document_id}/members"
+                );
+                match http::get_json::<http::DocumentMembersResponse>(&url).await {
+                    Ok(resp) => {
+                        let members: Vec<MemberInfo> = resp
+                            .members
+                            .into_iter()
+                            .map(|m| MemberInfo {
+                                user_id: UserId::parse_str(&m.user_id)
+                                    .unwrap_or_else(|_| UserId::new()),
+                                display_name: m.display_name,
+                                email: m.email,
+                                role: m.role.parse().unwrap_or(Role::Viewer),
+                            })
+                            .collect();
+                        let _ = tx.send(SyncEvent::DocumentMembersReady {
+                            id,
+                            document_id,
+                            members,
+                        });
+                    }
+                    Err(e) => {
+                        let _ = tx.send(SyncEvent::HttpError { id, message: e });
+                    }
+                }
+            });
+        } else {
+            self.reply(id, RestEvent::DocumentMembers {
+                document_id,
+                members: Vec::new(),
+            });
+        }
+    }
+
+    /// Updates a member's role via `PATCH /api/documents/{id}/members/{uid}`.
+    /// Sends the new role as a JSON body and replies with
+    /// [`RestEvent::MemberRoleUpdated`] on success.
+    fn handle_update_document_member_role(
+        &self,
+        id: RequestId,
+        document_id: DocumentId,
+        user_id: UserId,
+        role: Role,
+    ) {
+        let event_tx = self.event_tx.clone();
+        let logic_tx = self.logic_tx.clone();
+        let api_base = self.api_base.clone();
+
+        if let Some(tx) = event_tx {
+            wasm_bindgen_futures::spawn_local(async move {
+                let url = format!(
+                    "https://{api_base}/api/documents/{document_id}/members/{user_id}"
+                );
+                let body = serde_json::json!({ "role": role.to_string() });
+                match http::put_json(&url, &body).await {
+                    Ok(()) => {
+                        let _ = tx.send(SyncEvent::MemberRoleUpdatedEvent {
+                            id,
+                            document_id,
+                            user_id,
+                            role,
+                        });
+                    }
+                    Err(e) => {
+                        let _ = logic_tx.send(LogicEvent::ApiError {
+                            request: "UpdateDocumentMemberRole".into(),
+                            code: 500,
+                            message: e,
+                        });
+                    }
+                }
+            });
+        } else {
+            tracing::info!(
+                "Sync: UpdateDocumentMemberRole {document_id:?} {user_id:?} {role:?}"
+            );
+            self.reply(id, RestEvent::MemberRoleUpdated {
+                document_id,
+                user_id,
+                role,
+            });
+        }
+    }
+
+    /// Searches users via `GET /api/users/search?query=...`, maps the server
+    /// response into [`UserInfo`] values, and replies with
+    /// [`RestEvent::UserSearchResults`]. The query is percent-encoded for the
+    /// `@` character before being placed in the URL.
+    fn handle_search_users(&self, id: RequestId, query: String) {
+        let event_tx = self.event_tx.clone();
+        let api_base = self.api_base.clone();
+
+        if let Some(tx) = event_tx {
+            wasm_bindgen_futures::spawn_local(async move {
+                let url = format!(
+                    "https://{api_base}/api/users/search?query={}",
+                    query.replace('@', "%40")
+                );
+                match http::get_json::<http::UserSearchResult>(&url).await {
+                    Ok(resp) => {
+                        let users: Vec<UserInfo> = resp
+                            .users
+                            .into_iter()
+                            .map(|u| UserInfo {
+                                user_id: UserId::parse_str(&u.id)
+                                    .unwrap_or_else(|_| UserId::new()),
+                                display_name: u.display_name,
+                                email: u.email,
+                            })
+                            .collect();
+                        let _ = tx.send(SyncEvent::UserSearchReady { id, users });
+                    }
+                    Err(e) => {
+                        let _ = tx.send(SyncEvent::HttpError { id, message: e });
+                    }
+                }
+            });
+        } else {
+            tracing::info!("Sync: SearchUsers '{query}'");
+            self.reply(id, RestEvent::UserSearchResults { users: Vec::new() });
+        }
     }
 
     // -- Channels --------------------------------------------------------------

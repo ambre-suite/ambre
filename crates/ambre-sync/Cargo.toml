@@ -29,6 +29,7 @@ zeroize  = { workspace = true }
 gloo-net = { workspace = true, features = ["http", "websocket"] }
 ruzstd   = { workspace = true }
 hex      = { workspace = true }
+base64   = { workspace = true }
 getrandom = { workspace = true }
 
 wasm-bindgen = { workspace = true }
