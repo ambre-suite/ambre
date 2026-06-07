@@ -19,7 +19,7 @@ pub mod version;
 // Re‑export the main types for convenient use.
 pub use doc_type::DocType;
 pub use error::{DocTypeError, Error, PublicKeyError, UuidError, VersionError};
-pub use id::{ChannelId, DocumentId, MeetingId, SnapshotId, UserId};
+pub use id::{ChannelId, DocumentId, MeetingId, SnapshotId, UserId, SMOKE_DOCUMENT_ID};
 pub use public_key::PublicKey;
 pub use role::Role;
 pub use uuid::Uuid;

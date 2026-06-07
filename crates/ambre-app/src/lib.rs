@@ -28,7 +28,7 @@ use std::rc::Rc;
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
     AppCommand, AppEvent, DocumentId, LogicCommand, LogicEvent, SyncCommand, TrameCommand,
-    TrameEvent, UiEvent,
+    TrameEvent, UiEvent, SMOKE_DOCUMENT_ID,
 };
 use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
 use ambre_chrome::{
@@ -122,6 +122,7 @@ pub fn main() {
     let toasts_slot: Rc<RefCell<Option<Toasts>>> = Rc::new(RefCell::new(None));
     mount_app_shell(
         ui_to_logic_tx.clone(),
+        SMOKE_DOCUMENT_ID,
         Rc::clone(&store_slot),
         Rc::clone(&anchor_slot),
         Rc::clone(&toasts_slot),
@@ -140,7 +141,7 @@ pub fn main() {
         .expect("Toasts created during mount");
 
     // Keyboard: resolve registered chords and dispatch the matching command.
-    install_command_keys(keymap, ui_to_logic_tx.clone());
+    install_command_keys(keymap, SMOKE_DOCUMENT_ID, ui_to_logic_tx.clone());
 
     // Spawn the Logic thread. Owns its half of every channel from here on.
     wasm_thread::Builder::new()
@@ -203,7 +204,7 @@ pub fn main() {
     ambre_canvas::run_with(
         "ambre-canvas",
         move |w, h, text_input| {
-            TrameView::new(ui_to_logic_tx, view_rx, w, h, text_input, anchor_pub, theme_ctl)
+            TrameView::new(SMOKE_DOCUMENT_ID, ui_to_logic_tx, view_rx, w, h, text_input, anchor_pub, theme_ctl)
         },
         pre_frame,
         raf,
@@ -230,7 +231,11 @@ fn sync_warning_message(code: SyncWarningCode) -> &'static str {
 /// Returns `Ok(())` when the command was enqueued, or an error when the Logic
 /// channel is full (lossless traffic class: formatting commands must not be
 /// silently dropped).
-fn dispatch_command(id: CommandId, to_logic: &flume::Sender<LogicCommand>) -> Result<(), flume::TrySendError<LogicCommand>> {
+fn dispatch_command(
+    id: CommandId,
+    document_id: DocumentId,
+    to_logic: &flume::Sender<LogicCommand>,
+) -> Result<(), flume::TrySendError<LogicCommand>> {
     let command = if id == BOLD {
         AppCommand::Trame(TrameCommand::ToggleBold)
     } else if id == ITALIC {
@@ -239,11 +244,6 @@ fn dispatch_command(id: CommandId, to_logic: &flume::Sender<LogicCommand>) -> Re
         tracing::warn!("no LogicCommand mapping for {id:?}");
         return Ok(());
     };
-    // Placeholder document_id — will be replaced by the active document
-    // selected from the user's document list once the full auth +
-    // ListDocuments + OpenDocument flow is wired in the chrome.
-    let document_id = DocumentId::new();
-    tracing::debug!("dispatch_command without active document (placeholder)");
     to_logic.try_send(LogicCommand::App {
         document_id,
         command,
@@ -259,6 +259,7 @@ fn dispatch_command(id: CommandId, to_logic: &flume::Sender<LogicCommand>) -> Re
 /// `CommandId` and read toggle state from the store -- never their own copy.
 fn mount_app_shell(
     to_logic: flume::Sender<LogicCommand>,
+    document_id: DocumentId,
     store_slot: Rc<RefCell<Option<CommandStates>>>,
     anchor_slot: Rc<RefCell<Option<RwSignal<Option<(f64, f64)>>>>>,
     toasts_slot: Rc<RefCell<Option<Toasts>>>,
@@ -311,7 +312,7 @@ fn mount_app_shell(
         let ctx_on_command = Callback::new({
             let tx = to_logic.clone();
             move |id: CommandId| {
-                if let Err(e) = dispatch_command(id, &tx) {
+                if let Err(e) = dispatch_command(id, document_id, &tx) {
                     tracing::warn!("Context menu: Logic channel full ({e:?})");
                 }
             }
@@ -402,7 +403,7 @@ fn mount_app_shell(
                         on:click={
                             let tx = to_logic.clone();
                             move |_| {
-                                if let Err(e) = dispatch_command(BOLD, &tx) {
+                                if let Err(e) = dispatch_command(BOLD, document_id, &tx) {
                                     tracing::warn!("Bold button: Logic channel full ({e:?})");
                                 }
                             }
@@ -416,7 +417,7 @@ fn mount_app_shell(
                         on:click={
                             let tx = to_logic.clone();
                             move |_| {
-                                if let Err(e) = dispatch_command(ITALIC, &tx) {
+                                if let Err(e) = dispatch_command(ITALIC, document_id, &tx) {
                                     tracing::warn!("Italic button: Logic channel full ({e:?})");
                                 }
                             }
@@ -460,7 +461,7 @@ fn mount_app_shell(
                         on:click={
                             let tx = to_logic_sel.clone();
                             move |_| {
-                                if let Err(e) = dispatch_command(BOLD, &tx) {
+                                if let Err(e) = dispatch_command(BOLD, document_id, &tx) {
                                     tracing::warn!("Floating Bold: Logic channel full ({e:?})");
                                 }
                             }
@@ -474,7 +475,7 @@ fn mount_app_shell(
                         on:click={
                             let tx = to_logic_sel.clone();
                             move |_| {
-                                if let Err(e) = dispatch_command(ITALIC, &tx) {
+                                if let Err(e) = dispatch_command(ITALIC, document_id, &tx) {
                                     tracing::warn!("Floating Italic: Logic channel full ({e:?})");
                                 }
                             }
@@ -538,7 +539,7 @@ fn install_canvas_context_menu(ctx_menu: RwSignal<Option<(f64, f64)>>) {
 /// A `keydown` whose chord resolves in the keymap is owned: default prevented,
 /// command dispatched. Unmatched keys fall through to the canvas listener
 /// (content navigation), so this never steals arrow keys or typing.
-fn install_command_keys(keymap: Keymap, to_logic: flume::Sender<LogicCommand>) {
+fn install_command_keys(keymap: Keymap, document_id: DocumentId, to_logic: flume::Sender<LogicCommand>) {
     let document = web_sys::window()
         .expect("no window")
         .document()
@@ -553,7 +554,7 @@ fn install_command_keys(keymap: Keymap, to_logic: flume::Sender<LogicCommand>) {
                 return;
             };
             event.prevent_default();
-            if let Err(e) = dispatch_command(id, &to_logic) {
+            if let Err(e) = dispatch_command(id, document_id, &to_logic) {
                 tracing::warn!("Keybinding {id:?}: Logic channel full ({e:?})");
             }
         },

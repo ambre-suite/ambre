@@ -24,7 +24,7 @@ use std::collections::HashMap;
 
 use ambre_bus::{
     AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent,
-    RestCommand, RestEvent, SyncCommand, UiEvent,
+    RestCommand, RestEvent, SyncCommand, UiEvent, SMOKE_DOCUMENT_ID,
 };
 use ambre_trame::TrameState;
 
@@ -83,7 +83,9 @@ struct LogicState {
 
 impl LogicState {
     fn new(to_ui: flume::Sender<UiEvent>, to_sync: flume::Sender<SyncCommand>) -> Self {
-        Self { to_ui, to_sync, docs: HashMap::new(), pending_doc_types: HashMap::new() }
+        let mut docs = HashMap::new();
+        docs.insert(SMOKE_DOCUMENT_ID, DocState::Trame(TrameState::new()));
+        Self { to_ui, to_sync, docs, pending_doc_types: HashMap::new() }
     }
 
     // -- Outbound --------------------------------------------------------------
