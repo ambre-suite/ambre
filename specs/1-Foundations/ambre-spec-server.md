@@ -962,11 +962,11 @@ No push notifications in MVP. The client queries `GET /api/channels/unread` on r
 
 ### SRV P2 — Hardening & Organizations
 
-- [ ] Per-user/IP rate limiting (tower middleware)
-- [ ] CSRF protection (Double Submit Cookie on POST/PATCH/DELETE)
-- [ ] Organizations feature + Shamir's Secret Sharing (crate `sharks`)
-- [ ] Route `POST /api/organizations/{id}/recover/{uid}`
-- [ ] Server-side compaction (cron: purge old snapshots > 10 per document)
-- [ ] S3 lifecycle policies (messaging segments > 12 months)
-- [ ] Load tests (k6: 1000 simultaneous users, 100 active documents)
-- [ ] Valkey 8+ migration (per-field HEXPIRE for presence)
+- [x] Per-user/IP rate limiting (tower middleware)
+- [x] CSRF protection (Double Submit Cookie on POST/PATCH/DELETE)
+- [x] Organizations feature + Shamir's Secret Sharing (crate `sharks`)
+- [x] Route `POST /api/organizations/{id}/recover/{uid}`
+- [x] Server-side compaction (cron: purge old snapshots > 10 per document)
+- [x] S3 lifecycle policies (messaging segments > 12 months)
+- [x] Load tests (goose: 1000 simultaneous users, 100 active documents)
+- [x] Valkey 8+ migration (per-field HEXPIRE for presence)

@@ -57,7 +57,9 @@ pub async fn setup_account(
     redis_ops::session_create(&state.redis, &session_id, &sd, state.config.session_ttl_secs).await?;
 
     let cookie = auth::create_session_cookie(&session_id, state.config.session_ttl_secs);
-    Ok((jar.add(cookie), axum::Json(SetupAccountResponse { user_id: user_id.to_string(), session_id })))
+    let csrf_token = uuid::Uuid::new_v4().to_string();
+    let csrf_cookie = crate::middleware::csrf::create_csrf_cookie(&csrf_token, state.config.session_ttl_secs);
+    Ok((jar.add(cookie).add(csrf_cookie), axum::Json(SetupAccountResponse { user_id: user_id.to_string(), session_id })))
 }
 
 // -- Me ------------------------------------------------------------
@@ -85,7 +87,7 @@ pub async fn logout(
     if let Ok(s) = auth::authenticate(&state, &jar).await {
         redis_ops::session_delete(&state.redis, &s.session_id).await?;
     }
-    Ok((jar.add(auth::delete_session_cookie()), axum::Json(serde_json::json!({ "status": "logged_out" }))))
+    Ok((jar.add(auth::delete_session_cookie()).add(crate::middleware::csrf::delete_csrf_cookie()), axum::Json(serde_json::json!({ "status": "logged_out" }))))
 }
 
 // -- List Documents ------------------------------------------------

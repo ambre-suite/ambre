@@ -3,6 +3,7 @@
 mod auth;
 mod db;
 mod error;
+mod middleware;
 mod oidc;
 mod redis_ops;
 mod routes;
@@ -13,6 +14,7 @@ mod ws;
 #[cfg(any(test, feature = "test-helpers"))]
 mod test_helpers;
 
+use axum::middleware as axum_mw;
 use axum::Router;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
@@ -98,10 +100,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         redis: redis.clone(),
         s3: state.s3.clone(),
         s3_bucket: state.s3_bucket.clone(),
-        config: Arc::new(config),
+        config: Arc::new(config.clone()),
         oidc_clients: oidc_clients.clone(),
     };
     tokio::spawn(s3::global_s3_flusher(flush_state));
+
+    // Spawn snapshot compaction task (hourly)
+    let compact_state = AppState {
+        db: state.db.clone(),
+        redis: redis.clone(),
+        s3: state.s3.clone(),
+        s3_bucket: state.s3_bucket.clone(),
+        config: Arc::new(config),
+        oidc_clients: oidc_clients.clone(),
+    };
+    tokio::spawn(snapshot_compaction_task(compact_state));
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -132,7 +145,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/documents/{id}/media/upload-url", axum::routing::post(routes::media_upload_url))
         .route("/documents/{id}/media/download-url", axum::routing::post(routes::media_download_url))
         .route("/documents/{id}/media", axum::routing::post(routes::media_confirm_upload))
-        .route("/ws", axum::routing::get(ws::ws_upgrade));
+        .route("/organizations", axum::routing::get(routes::list_orgs).post(routes::create_org))
+        .route("/organizations/{id}", axum::routing::get(routes::get_org).patch(routes::update_org).delete(routes::delete_org))
+        .route("/organizations/{id}/members", axum::routing::post(routes::add_member).get(routes::list_members))
+        .route("/organizations/{id}/members/{uid}", axum::routing::delete(routes::remove_member).patch(routes::update_member_role))
+        .route("/organizations/{id}/recover/{uid}", axum::routing::post(routes::recover_master_key))
+        .route("/ws", axum::routing::get(ws::ws_upgrade))
+        .layer(axum_mw::from_fn(middleware::csrf::csrf_middleware))
+        .layer({
+            let state = state.clone();
+            axum_mw::from_fn(move |req: axum::extract::Request, next: axum_mw::Next| {
+                let state = Arc::clone(&state);
+                async move { middleware::rate_limit::rate_limit_inner(state, req, next).await }
+            })
+        });
 
     let app = Router::new()
         .nest("/api", api_router)
@@ -145,4 +171,63 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+/// Background task that periodically compacts old snapshots.
+///
+/// Runs once per Axum instance. Every hour it queries for snapshots
+/// beyond the configured keep limit per document (default 10), deletes
+/// them from S3 and PostgreSQL. Snapshots with most recent `created_at`
+/// are kept.
+async fn snapshot_compaction_task(state: state::AppState) {
+    const KEEP_PER_DOCUMENT: i64 = 10;
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+
+        let compactable = match db::find_compactable_snapshots(&state.db, KEEP_PER_DOCUMENT).await {
+            Ok(snapshots) => snapshots,
+            Err(e) => {
+                tracing::error!("compaction query failed: {e:?}");
+                continue;
+            }
+        };
+
+        if compactable.is_empty() {
+            tracing::debug!("compaction: no snapshots to delete");
+            continue;
+        }
+
+        tracing::info!(
+            count = compactable.len(),
+            "compaction: deleting old snapshots"
+        );
+
+        for snap in &compactable {
+            // Delete S3 object (best-effort; orphaned objects are harmless).
+            if let Err(e) = state
+                .s3
+                .delete_object()
+                .bucket(&state.s3_bucket)
+                .key(&snap.s3_key)
+                .send()
+                .await
+            {
+                tracing::warn!(
+                    snapshot_id = %snap.id,
+                    s3_key = %snap.s3_key,
+                    error = %e,
+                    "compaction: S3 delete failed, removing DB row anyway"
+                );
+            }
+
+            // Delete the snapshot row (cascades to updates via FK).
+            if let Err(e) = db::delete_snapshot(&state.db, snap.id).await {
+                tracing::error!(
+                    snapshot_id = %snap.id,
+                    error = %e,
+                    "compaction: DB delete failed"
+                );
+            }
+        }
+    }
 }

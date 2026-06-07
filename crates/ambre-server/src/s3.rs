@@ -1,3 +1,40 @@
+//! S3 utilities — presigned URLs, object keys, delta flusher.
+//!
+//! ## S3 Lifecycle Policies
+//!
+//! Recommended lifecycle rules for messaging segments (> 12 months):
+//!
+//! ```json
+//! {
+//!   "Rules": [
+//!     {
+//!       "Id": "expire-old-messaging-segments",
+//!       "Filter": { "Prefix": "<s3_env_prefix>/documents/*/deltas/" },
+//!       "Status": "Enabled",
+//!       "Expiration": { "Days": 365 }
+//!     },
+//!     {
+//!       "Id": "expire-old-snapshots",
+//!       "Filter": { "Prefix": "<s3_env_prefix>/documents/*/snapshots/" },
+//!       "Status": "Enabled",
+//!       "Expiration": { "Days": 365 }
+//!     }
+//!   ]
+//! }
+//! ```
+//!
+//! These are applied at the S3 bucket level (AWS Console / Terraform / Pulumi).
+//! They complement the server-side snapshot compaction which keeps at most
+//! 10 snapshots per document in PostgreSQL.
+//!
+//! ## Valkey 8+ Migration
+//!
+//! Current minimum: Redis 7.4+ / Valkey 8.0+.
+//! Valkey 8.0 adds per-field `HEXPIRE` (expire individual hash fields,
+//! useful for presence TTLs: expire `players:{doc_id}:{user_id}` per-field
+//! instead of whole-token TTL). Migration path: upgrade Valkey cluster,
+//! then replace `SETEX` with `HEXPIRE` in `redis_ops::presence_*` functions.
+
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::Client as S3Client;
