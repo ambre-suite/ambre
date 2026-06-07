@@ -104,8 +104,10 @@ pub async fn oidc_callback(
         .await?;
 
     let cookie = auth::create_session_cookie(&session_id, state.config.session_ttl_secs);
+    let csrf_token = uuid::Uuid::new_v4().to_string();
+    let csrf_cookie = crate::middleware::csrf::create_csrf_cookie(&csrf_token, state.config.session_ttl_secs);
     Ok((
-        jar.add(cookie),
+        jar.add(cookie).add(csrf_cookie),
         axum::Json(CallbackResponse {
             user_id: user_id.to_string(),
             email,
