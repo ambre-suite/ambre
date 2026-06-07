@@ -16,6 +16,7 @@
 //! The UI half is consumed by `ambre-app` and the logic half by `ambre-logic`;
 //! both link into the single WASM binary.
 
+pub mod formula;
 pub mod logic;
 pub mod ui;
 

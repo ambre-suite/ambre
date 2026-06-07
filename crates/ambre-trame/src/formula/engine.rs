@@ -1,0 +1,243 @@
+//! Formula engine — orchestrates parsing, compilation, dependency tracking,
+//! and evaluation for all formula cells in a Trame document.
+//!
+//! Owns the `DependencyGraph` (petgraph), `BytecodeCache`, formula result cache,
+//! and the `dirty` set. `compute_all_dirty()` is the single entry point for
+//! recomputation: topological sort on the cell DAG → recompile stale bytecode
+//! → evaluate via the stack VM.
+
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
+
+use petgraph::visit::Topo;
+
+use super::cache::BytecodeCache;
+use super::dag::DependencyGraph;
+use super::types::{CellRef, CellValue};
+use super::vm::EvalContext;
+
+/// Central orchestrator for the Trame formula engine.
+///
+/// All mutable state for formula computation lives here, separate from the
+/// CRDT (`LoroDoc`) and the UI-facing `TrameState`. Each `TrameState` holds
+/// one `FormulaEngine`.
+pub struct FormulaEngine {
+    /// Two-level dependency graph (cell-to-cell + ranges).
+    pub deps: DependencyGraph,
+    /// Compiled bytecode cache with incremental recompilation.
+    pub bytecode: BytecodeCache,
+    /// Persisted evaluation results keyed by `CellRef`. The UI reads from
+    /// here for display; recomputation updates entries for dirty cells.
+    /// Uses `RefCell` for interior mutability so `EvalContext` can hold an
+    /// immutable borrow while `compute_all_dirty` inserts results.
+    pub formula_cache: RefCell<HashMap<CellRef, CellValue>>,
+    /// Cells that need re-evaluation (directly edited or downstream of an edit).
+    pub dirty: HashSet<CellRef>,
+}
+
+impl FormulaEngine {
+    pub fn new() -> Self {
+        Self {
+            deps: DependencyGraph::new(),
+            bytecode: BytecodeCache::new(),
+            formula_cache: RefCell::new(HashMap::new()),
+            dirty: HashSet::new(),
+        }
+    }
+
+    /// Notify the engine that `cell`'s raw text changed.
+    ///
+    /// Invalidates its bytecode, marks it stale, collects all downstream
+    /// dependents, and extends the `dirty` set.
+    pub fn on_cell_changed(&mut self, cell: CellRef, raw: &str) {
+        self.bytecode.invalidate(cell);
+        let downstream = self.deps.collect_dirty(cell);
+        self.dirty.insert(cell);
+        self.dirty.extend(downstream);
+
+        // Recompile immediately to detect parse/cycle errors early; the
+        // result (error or success) is stored in formula_cache by
+        // compute_all_dirty.
+        let _ = self.bytecode.recompile_if_stale(cell, raw, &mut self.deps);
+    }
+
+    /// Recompute every cell in the `dirty` set in topological order.
+    ///
+    /// Cells are evaluated via the stack VM. Results are written to
+    /// `formula_cache`. This function is synchronous and runs inside the
+    /// Logic thread event handler.
+    pub fn compute_all_dirty(&mut self) {
+        if self.dirty.is_empty() {
+            return;
+        }
+
+        // Collect evaluated results in a temporary buffer so we can drop the
+        // immutable borrow on formula_cache before writing back.
+        let mut results: Vec<(CellRef, CellValue)> = Vec::new();
+
+        {
+            let cache_ref = self.formula_cache.borrow();
+            let mut ctx = EvalContext::new(&self.bytecode, &cache_ref);
+
+            let mut topo = Topo::new(&self.deps.cell_dag);
+            while let Some(node) = topo.next(&self.deps.cell_dag) {
+                let cell = self.deps.cell_dag[node];
+                if !self.dirty.remove(&cell) {
+                    continue;
+                }
+                let value = ctx.eval_cell(cell);
+                results.push((cell, value));
+            }
+        } // cache_ref and ctx dropped here.
+
+        // Flush results back to formula_cache. Only cache cells that have
+        // valid bytecode; cells whose formula was rejected (cycle, parse error)
+        // have no bytecode and should not appear in the cache.
+        let mut cache = self.formula_cache.borrow_mut();
+        for (cell, value) in results {
+            if self.bytecode.get(&cell).is_some() {
+                cache.insert(cell, value);
+            }
+        }
+
+        // Any remaining dirty cells not in the DAG.
+        for cell in self.dirty.drain() {
+            if let Some(value) = cache.get(&cell).cloned() {
+                cache.insert(cell, value);
+            }
+        }
+    }
+
+    /// Get the display text for a cell: its evaluated formula result if it
+    /// has a cached entry, otherwise `None` (caller falls back to raw text).
+    pub fn evaluated_text(&self, cell: CellRef) -> Option<String> {
+        self.formula_cache.borrow().get(&cell).map(|v| v.to_display())
+    }
+
+    /// Whether `cell` has a formula (as opposed to plain text).
+    pub fn is_formula_cell(&self, cell: CellRef) -> bool {
+        self.bytecode.get(&cell).is_some()
+    }
+
+    /// Number of cached formula cells.
+    pub fn formula_count(&self) -> usize {
+        self.bytecode.len()
+    }
+}
+
+impl Default for FormulaEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn literal_formula_evaluated() {
+        let mut engine = FormulaEngine::new();
+        let cell = CellRef::new(0, 0);
+
+        engine.on_cell_changed(cell, "=42");
+        engine.compute_all_dirty();
+
+        assert_eq!(engine.evaluated_text(cell).unwrap(), "42");
+        assert!(engine.is_formula_cell(cell));
+    }
+
+    #[test]
+    fn arithmetic_chain() {
+        let mut engine = FormulaEngine::new();
+
+        // A1 = 10
+        engine.on_cell_changed(CellRef::new(0, 0), "=10");
+        engine.compute_all_dirty();
+        engine.dirty.clear();
+
+        // B1 = A1 * 2
+        engine.on_cell_changed(CellRef::new(0, 1), "=A1*2");
+        engine.compute_all_dirty();
+
+        assert_eq!(engine.evaluated_text(CellRef::new(0, 1)).unwrap(), "20");
+    }
+
+    #[test]
+    fn cascade_after_edit() {
+        let mut engine = FormulaEngine::new();
+
+        // A1 = 5
+        engine.on_cell_changed(CellRef::new(0, 0), "=5");
+        engine.compute_all_dirty();
+        engine.dirty.clear();
+
+        // B1 = A1 + 3
+        engine.on_cell_changed(CellRef::new(0, 1), "=A1+3");
+        engine.compute_all_dirty();
+        assert_eq!(engine.evaluated_text(CellRef::new(0, 1)).unwrap(), "8");
+
+        // Edit A1 to 10: B1 should cascade.
+        engine.dirty.clear();
+        engine.on_cell_changed(CellRef::new(0, 0), "=10");
+        engine.compute_all_dirty();
+
+        assert_eq!(engine.evaluated_text(CellRef::new(0, 0)).unwrap(), "10");
+        assert_eq!(engine.evaluated_text(CellRef::new(0, 1)).unwrap(), "13");
+    }
+
+    #[test]
+    fn division_by_zero_displayed() {
+        let mut engine = FormulaEngine::new();
+        let cell = CellRef::new(0, 0);
+
+        engine.on_cell_changed(cell, "=1/0");
+        engine.compute_all_dirty();
+
+        assert_eq!(engine.evaluated_text(cell).unwrap(), "#DIV/0!");
+    }
+
+    #[test]
+    fn sum_range() {
+        let mut engine = FormulaEngine::new();
+
+        // A1 = 1, A2 = 2, A3 = 3
+        for i in 0..3 {
+            let cell = CellRef::new(i, 0);
+            engine.on_cell_changed(cell, &format!("={}", i + 1));
+        }
+        engine.compute_all_dirty();
+        engine.dirty.clear();
+
+        // C1 = SUM(A1:A3)
+        engine.on_cell_changed(CellRef::new(0, 2), "=SUM(A1:A3)");
+        engine.compute_all_dirty();
+
+        assert_eq!(engine.evaluated_text(CellRef::new(0, 2)).unwrap(), "6");
+    }
+
+    #[test]
+    fn static_cycle_rejected() {
+        let mut engine = FormulaEngine::new();
+
+        engine.on_cell_changed(CellRef::new(0, 0), "=B1");
+        engine.compute_all_dirty();
+        engine.dirty.clear();
+
+        engine.on_cell_changed(CellRef::new(0, 1), "=A1");
+        engine.compute_all_dirty();
+
+        // B1's parse/compile should have failed (cycle), so no cached result.
+        assert!(engine.evaluated_text(CellRef::new(0, 1)).is_none());
+    }
+
+    #[test]
+    fn function_if() {
+        let mut engine = FormulaEngine::new();
+
+        engine.on_cell_changed(CellRef::new(0, 0), "=IF(1>0, \"yes\", \"no\")");
+        engine.compute_all_dirty();
+
+        assert_eq!(engine.evaluated_text(CellRef::new(0, 0)).unwrap(), "yes");
+    }
+}
