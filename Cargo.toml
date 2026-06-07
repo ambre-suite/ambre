@@ -146,6 +146,9 @@ ruzstd = "0.8"
 # CRDT
 loro = "1.10"
 
+# Formula parsing
+nom = "8.0"
+
 # Graph
 petgraph = "0.8"
 rstar = "0.12"
@@ -167,6 +170,7 @@ time              = "0.3"
 openidconnect     = "4"
 reqwest           = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 url               = "2"
+sharks            = "0.2"
 
 # Import/export
 docx-rs = "0.4"
