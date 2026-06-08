@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::CsrfToken;
+
 /// HTTP GET → JSON deserialized response.
 pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, String> {
     let resp = gloo_net::http::Request::get(url)
@@ -17,14 +19,19 @@ pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(url: &str) -> Resul
 pub(crate) async fn post_json<T: Serialize, R: serde::de::DeserializeOwned>(
     url: &str,
     body: &T,
+    csrf_token: Option<&CsrfToken>,
 ) -> Result<R, String> {
     let body_json =
         serde_json::to_vec(body).map_err(|e| format!("POST {url}: serialize error: {e}"))?;
-    let req = gloo_net::http::Request::post(url)
-        .header("Content-Type", "application/json")
+    let mut req = gloo_net::http::Request::post(url)
+        .header("Content-Type", "application/json");
+    if let Some(token) = csrf_token {
+        req = req.header("X-CSRF-Token", &token.0);
+    }
+    let resp = req
         .body(body_json)
-        .map_err(|e| format!("POST {url}: body error: {e}"))?;
-    let resp = req.send()
+        .map_err(|e| format!("POST {url}: body error: {e}"))?
+        .send()
         .await
         .map_err(|e| format!("POST {url}: {e}"))?;
     if !resp.ok() {
@@ -35,13 +42,75 @@ pub(crate) async fn post_json<T: Serialize, R: serde::de::DeserializeOwned>(
         .map_err(|e| format!("POST {url}: parse error: {e}"))
 }
 
-pub(crate) async fn delete(url: &str) -> Result<(), String> {
-    let resp = gloo_net::http::Request::delete(url)
-        .send()
+pub(crate) async fn delete(url: &str, csrf_token: Option<&CsrfToken>) -> Result<(), String> {
+    let mut req = gloo_net::http::Request::delete(url);
+    if let Some(token) = csrf_token {
+        req = req.header("X-CSRF-Token", &token.0);
+    }
+    let resp = req.send()
         .await
         .map_err(|e| format!("DELETE {url}: {e}"))?;
     if !resp.ok() {
         return Err(format!("DELETE {url}: HTTP {}", resp.status()));
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
+pub(crate) async fn put_bytes(url: &str, data: &[u8], mime_type: &str, csrf_token: Option<&CsrfToken>) -> Result<(), String> {
+    let mut req = gloo_net::http::Request::put(url)
+        .header("Content-Type", mime_type);
+    if let Some(token) = csrf_token {
+        req = req.header("X-CSRF-Token", &token.0);
+    }
+    let resp = req
+        .body(data.to_vec())
+        .map_err(|e| format!("PUT {url}: body error: {e}"))?
+        .send()
+        .await
+        .map_err(|e| format!("PUT {url}: {e}"))?;
+    if !resp.ok() {
+        return Err(format!("PUT {url}: HTTP {}", resp.status()));
+    }
+    Ok(())
+}
+
+pub(crate) async fn put_json<T: Serialize>(url: &str, body: &T, csrf_token: Option<&CsrfToken>) -> Result<(), String> {
+    let body_json =
+        serde_json::to_vec(body).map_err(|e| format!("PUT {url}: serialize error: {e}"))?;
+    let mut req = gloo_net::http::Request::put(url)
+        .header("Content-Type", "application/json");
+    if let Some(token) = csrf_token {
+        req = req.header("X-CSRF-Token", &token.0);
+    }
+    let resp = req
+        .body(body_json)
+        .map_err(|e| format!("PUT {url}: body error: {e}"))?
+        .send()
+        .await
+        .map_err(|e| format!("PUT {url}: {e}"))?;
+    if !resp.ok() {
+        return Err(format!("PUT {url}: HTTP {}", resp.status()));
+    }
+    Ok(())
+}
+
+pub(crate) async fn patch_json<T: Serialize>(url: &str, body: &T, csrf_token: Option<&CsrfToken>) -> Result<(), String> {
+    let body_json =
+        serde_json::to_vec(body).map_err(|e| format!("PATCH {url}: serialize error: {e}"))?;
+    let mut req = gloo_net::http::Request::patch(url)
+        .header("Content-Type", "application/json");
+    if let Some(token) = csrf_token {
+        req = req.header("X-CSRF-Token", &token.0);
+    }
+    let resp = req
+        .body(body_json)
+        .map_err(|e| format!("PATCH {url}: body error: {e}"))?
+        .send()
+        .await
+        .map_err(|e| format!("PATCH {url}: {e}"))?;
+    if !resp.ok() {
+        return Err(format!("PATCH {url}: HTTP {}", resp.status()));
     }
     Ok(())
 }
@@ -59,40 +128,29 @@ pub(crate) async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
         .map_err(|e| format!("GET {url}: binary error: {e}"))
 }
 
-#[allow(dead_code)]
-pub(crate) async fn put_bytes(url: &str, data: &[u8], mime_type: &str) -> Result<(), String> {
-    let req = gloo_net::http::Request::put(url)
-        .header("Content-Type", mime_type)
-        .body(data.to_vec())
-        .map_err(|e| format!("PUT {url}: body error: {e}"))?;
-    let resp = req.send()
-        .await
-        .map_err(|e| format!("PUT {url}: {e}"))?;
-    if !resp.ok() {
-        return Err(format!("PUT {url}: HTTP {}", resp.status()));
-    }
-    Ok(())
-}
-
-pub(crate) async fn put_json<T: Serialize>(url: &str, body: &T) -> Result<(), String> {
-    let body_json =
-        serde_json::to_vec(body).map_err(|e| format!("PUT {url}: serialize error: {e}"))?;
-    let req = gloo_net::http::Request::put(url)
-        .header("Content-Type", "application/json")
-        .body(body_json)
-        .map_err(|e| format!("PUT {url}: body error: {e}"))?;
-    let resp = req.send()
-        .await
-        .map_err(|e| format!("PUT {url}: {e}"))?;
-    if !resp.ok() {
-        return Err(format!("PUT {url}: HTTP {}", resp.status()));
-    }
-    Ok(())
-}
-
 // ---------------------------------------------------------------------------
 // REST API types (JSON request/response bodies)
 // ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+#[allow(dead_code)]
+pub(crate) struct SetupAccountRequest {
+    pub passphrase: String,
+    pub master_key_enc: String,
+    pub master_key_salt: String,
+    pub signing_pubkey: String,
+    pub exchange_pubkey: String,
+}
+
+#[derive(Deserialize)]
+#[allow(dead_code)]
+pub(crate) struct SetupAccountResponse {
+    #[allow(dead_code)]
+    pub user_id: String,
+    #[allow(dead_code)]
+    pub session_id: String,
+    pub csrf_token: String,
+}
 
 #[derive(Deserialize)]
 pub(crate) struct MasterKeyResponse {
@@ -101,6 +159,7 @@ pub(crate) struct MasterKeyResponse {
 }
 
 #[derive(Serialize)]
+#[allow(dead_code)]
 pub(crate) struct SetupKeyRequest {
     pub master_key_enc: String,
     pub master_key_salt: String,
@@ -109,10 +168,15 @@ pub(crate) struct SetupKeyRequest {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub(crate) struct AuthMeResponse {
     pub user_id: String,
     pub display_name: String,
     pub email: String,
+    /// CSRF token echoed back in the response body. The Sync thread runs in a
+    /// Web Worker with no access to `document.cookie`, so the double-submit
+    /// token is delivered here and replayed in the `X-CSRF-Token` header.
+    pub csrf_token: String,
 }
 
 #[derive(Deserialize)]
@@ -131,15 +195,16 @@ pub(crate) struct DocumentEntry {
 
 #[derive(Serialize)]
 pub(crate) struct CreateDocumentRequest {
-    pub doc_type: u8,
-    pub name_enc: String,
+    pub doc_type: String,
+    pub name_enc: Option<String>,
+    pub doc_key_enc: String,
 }
 
 #[derive(Deserialize)]
 #[allow(dead_code)]
 pub(crate) struct CreateDocumentResponse {
     pub document_id: String,
-    pub doc_type: u8,
+    pub doc_type: String,
 }
 
 #[derive(Serialize)]
@@ -260,7 +325,7 @@ pub(crate) struct DocumentMembersResponse {
 }
 
 /// A single member entry returned by the list-members endpoint. `doc_key_enc`
-/// is the hex-encoded DocumentKey wrapped for this member via X25519 ECDH
+/// is the base64 url-safe DocumentKey wrapped for this member via X25519 ECDH
 /// (nonce || ciphertext). `exchange_pub_key` is the hex-encoded X25519 public
 /// key used for key unwrapping.
 #[derive(Deserialize)]

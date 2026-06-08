@@ -9,10 +9,12 @@
     <!--
         Trunk processes this file at build time.
 
-        Single ambre-app.wasm hosts all three roles (UI Thread + Logic +
-        Sync) and shares one linear memory across them via wasm_thread.
-        wasm-bindgen produces the JS glue that instantiates the shared
-        Memory; wasm_thread spawns the worker threads internally.
+        Two wasm artifacts:
+          - ambre-app  : the Main instance (UI Thread + Logic thread sharing one
+                         linear memory via wasm_thread).
+          - ambre-sync : the Sync worker -- a SEPARATE wasm instance with its own
+                         memory, run in a dedicated Web Worker and reached from
+                         Main over postMessage (data-type="worker").
 
         wasm-opt is disabled: Trunk 0.21.13 ships Binaryen 116, which cannot
         parse the wasm instructions emitted by rustc nightly with `+atomics`
@@ -21,6 +23,14 @@
         wasm-opt post-step with a newer binaryen.
     -->
     <link data-trunk rel="rust" data-wasm-opt="0" />
+
+    <!-- Sync worker: a SEPARATE wasm-bindgen artifact. Trunk emits
+         `ambre-sync_loader.js` (classic worker, `importScripts`); ambre-app
+         spawns it via `new Worker("/ambre-sync_loader.js")`. The loader runs
+         `wasm_bindgen(...)`, which creates the worker's own shared memory and
+         invokes `#[wasm_bindgen(start)]`. -->
+    <link data-trunk rel="rust" href="../ambre-sync/Cargo.toml" data-type="worker"
+          data-loader-shim="true" data-wasm-opt="0" />
 
     <!-- App-shell layout styling. Colour/spacing/font tokens are injected at
          startup from the generated theme.css (tokens.ron -> build.rs). -->

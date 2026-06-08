@@ -6,3 +6,7 @@ description = "IPC message types for inter-thread communication in Ambre"
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }
+# Serde derives on the Logic <-> Sync envelope (`SyncCommand` / `LogicEvent` and
+# their `Rest*` payloads): that link now crosses a `postMessage` boundary between
+# the Main instance and the separate Sync worker, so it is postcard-serialized.
+serde = { workspace = true }

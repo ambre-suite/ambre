@@ -11,6 +11,8 @@
 //!
 //! [`SyncCommand::Rest`]: crate::SyncCommand::Rest
 
+use serde::{Deserialize, Serialize};
+
 use crate::sync_warning::SyncWarningCode;
 use crate::{ChannelId, DocumentId, RequestId, RestEvent, UserId};
 
@@ -18,8 +20,9 @@ use crate::{ChannelId, DocumentId, RequestId, RestEvent, UserId};
 // LogicEvent
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Event sent from the Sync thread to the Logic thread.
-#[derive(Debug, Clone)]
+/// Event sent from the Sync thread to the Logic thread. Crosses the Sync-worker
+/// `postMessage` boundary, hence postcard-serialized (`Serialize`/`Deserialize`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LogicEvent {
     // ── Service plane (relayed request/response) ──────────────────────────────
     /// A [`RestEvent`] service response echoing the originating [`RequestId`].

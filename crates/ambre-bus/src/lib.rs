@@ -13,8 +13,11 @@
 //!   correlatable request/response family carried by `…::Rest { id, … }` on all
 //!   four envelopes, defined once and forwarded verbatim.
 //!
-//! These travel over `flume` channels in shared memory; nothing here is
-//! serialized (postcard lives only on the network path, in `ambre-protocol`).
+//! Transport split: `LogicCommand`/`UiEvent` travel UI <-> Logic over `flume`
+//! channels in shared memory (typed Rust values, no serialization). The
+//! `SyncCommand`/`LogicEvent` envelope crosses a `postMessage` boundary to the
+//! separate Sync worker, so it (and the `Rest*` payloads it carries) derives
+//! `Serialize`/`Deserialize` and is postcard-encoded on that hop.
 
 pub mod command;
 pub mod event;

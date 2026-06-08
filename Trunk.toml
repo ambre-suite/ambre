@@ -6,9 +6,13 @@ filehash = false
 port = 8080
 open = true
 
-[serve.proxy]
-"/api" = "http://127.0.0.1:3000"
-"/ws"  = "http://127.0.0.1:3000"
+[[serve.proxy]]
+rewrite = "/api/"
+backend = "http://127.0.0.1:3000/api/"
+
+[[serve.proxy]]
+rewrite = "/ws"
+backend = "http://127.0.0.1:3000/ws"
 
 # Cross-Origin Isolation: required to enable SharedArrayBuffer (and therefore
 # WebAssembly.Memory shared = true), the bedrock for the multi-threaded WASM

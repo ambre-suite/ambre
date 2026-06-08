@@ -9,17 +9,20 @@
 //!   encrypts/compresses/transmits).
 //! - **Lifecycle** — `Shutdown`.
 //!
-//! Carried over a `flume` channel in shared memory as a typed Rust value by
-//! move — nothing here is serialized (postcard lives only on the network path,
-//! in `ambre-protocol`).
+//! Crosses a `postMessage` boundary from the Main instance to the separate Sync
+//! worker, so it is postcard-serialized on that hop (hence `Serialize`/
+//! `Deserialize`). The `Vec<u8>` payloads are genuine network bytes; large ones
+//! ride a Transferable `ArrayBuffer` to stay zero-copy.
 //!
 //! [`LogicCommand::Rest`]: crate::LogicCommand::Rest
 //! [`LogicEvent::Rest`]: crate::LogicEvent::Rest
 
+use serde::{Deserialize, Serialize};
+
 use crate::{ChannelId, DocumentId, RequestId, RestCommand};
 
 /// Command sent from the Logic thread to the Sync thread.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SyncCommand {
     // ── Service plane (relayed request/response) ──────────────────────────────
     /// A [`RestCommand`] service operation forwarded from the Logic thread. The

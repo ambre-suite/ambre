@@ -1,7 +1,7 @@
 // ambre-sync/src/mock.rs
 // ============================================================================
 // In-memory WebSocket transport for testing the Sync pipeline without WASM or
-// network. Two flume channel pairs form a bidirectional client⇄server loop.
+// network. Two flume pairs form a bidirectional client⇄server loop.
 
 use ambre_protocol::ws::{decode_client_msg, WsClientMsg, WsServerMsg, WireDecodeError};
 

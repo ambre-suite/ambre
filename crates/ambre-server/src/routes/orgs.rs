@@ -82,13 +82,13 @@ pub struct UpdateOrgRequest {
 }
 
 fn parse_org_id(s: &str) -> Result<uuid::Uuid, AppError> {
-    uuid::Uuid::parse_str(s)
-        .map_err(|_| AppError::NotFound { resource: "organization" })
+    uuid::Uuid::parse_str(s).map_err(|_| AppError::NotFound {
+        resource: "organization",
+    })
 }
 
 fn parse_user_id_str(s: &str) -> Result<uuid::Uuid, AppError> {
-    uuid::Uuid::parse_str(s)
-        .map_err(|_| AppError::NotFound { resource: "user" })
+    uuid::Uuid::parse_str(s).map_err(|_| AppError::NotFound { resource: "user" })
 }
 
 async fn require_org_role(
@@ -119,14 +119,17 @@ pub async fn create_org(
         .map_err(|_| AppError::Unauthorized)?;
     let owner_id = ambre_core::UserId::from_uuid(owner_uid);
 
-    let org_pubkey = hex::decode(&req.org_pubkey)
-        .map_err(|e| AppError::Conflict { detail: format!("invalid org_pubkey hex: {e}") })?;
+    let org_pubkey = hex::decode(&req.org_pubkey).map_err(|e| AppError::Conflict {
+        detail: format!("invalid org_pubkey hex: {e}"),
+    })?;
     let owner_share_enc = req
         .owner_shamir_share_enc
         .as_deref()
         .map(hex::decode)
         .transpose()
-        .map_err(|e| AppError::Conflict { detail: format!("invalid share hex: {e}") })?;
+        .map_err(|e| AppError::Conflict {
+            detail: format!("invalid share hex: {e}"),
+        })?;
 
     let org = db::create_organization(
         &state.db,
@@ -139,7 +142,10 @@ pub async fn create_org(
     )
     .await?;
 
-    Ok((axum::http::StatusCode::CREATED, axum::Json(org_to_response(&org))))
+    Ok((
+        axum::http::StatusCode::CREATED,
+        axum::Json(org_to_response(&org)),
+    ))
 }
 
 /// `GET /organizations`
@@ -172,7 +178,9 @@ pub async fn get_org(
 
     let org = db::get_organization(&state.db, org_id)
         .await?
-        .ok_or(AppError::NotFound { resource: "organization" })?;
+        .ok_or(AppError::NotFound {
+            resource: "organization",
+        })?;
     Ok(axum::Json(org_to_response(&org)))
 }
 
@@ -191,7 +199,9 @@ pub async fn update_org(
 
     let org = db::update_organization(&state.db, org_id, &req.name)
         .await?
-        .ok_or(AppError::NotFound { resource: "organization" })?;
+        .ok_or(AppError::NotFound {
+            resource: "organization",
+        })?;
     Ok(axum::Json(org_to_response(&org)))
 }
 
@@ -209,7 +219,9 @@ pub async fn delete_org(
 
     let deleted = db::delete_organization(&state.db, org_id).await?;
     if !deleted {
-        return Err(AppError::NotFound { resource: "organization" });
+        return Err(AppError::NotFound {
+            resource: "organization",
+        });
     }
     Ok(axum::Json(serde_json::json!({ "status": "deleted" })))
 }
@@ -234,11 +246,23 @@ pub async fn add_member(
         .as_deref()
         .map(hex::decode)
         .transpose()
-        .map_err(|e| AppError::Conflict { detail: format!("invalid share hex: {e}") })?;
+        .map_err(|e| AppError::Conflict {
+            detail: format!("invalid share hex: {e}"),
+        })?;
 
-    db::add_org_member(&state.db, org_id, member_user_id, &req.role, share_enc.as_deref()).await?;
+    db::add_org_member(
+        &state.db,
+        org_id,
+        member_user_id,
+        &req.role,
+        share_enc.as_deref(),
+    )
+    .await?;
 
-    Ok((axum::http::StatusCode::CREATED, axum::Json(serde_json::json!({ "status": "added" }))))
+    Ok((
+        axum::http::StatusCode::CREATED,
+        axum::Json(serde_json::json!({ "status": "added" })),
+    ))
 }
 
 /// `GET /organizations/{id}/members`
@@ -274,7 +298,9 @@ pub async fn remove_member(
 
     let removed = db::remove_org_member(&state.db, org_id, target_uid).await?;
     if !removed {
-        return Err(AppError::NotFound { resource: "organization member" });
+        return Err(AppError::NotFound {
+            resource: "organization member",
+        });
     }
     Ok(axum::Json(serde_json::json!({ "status": "removed" })))
 }
@@ -324,12 +350,16 @@ pub async fn recover_master_key(
     // Verify target user is a member of this org.
     db::get_org_member(&state.db, org_id, target_uid)
         .await?
-        .ok_or(AppError::NotFound { resource: "organization member" })?;
+        .ok_or(AppError::NotFound {
+            resource: "organization member",
+        })?;
 
     // Get the target user's encrypted org master key.
     let org_master_key_enc = db::get_user_org_master_key_enc(&state.db, target_uid)
         .await?
-        .ok_or(AppError::NotFound { resource: "org master key" })?;
+        .ok_or(AppError::NotFound {
+            resource: "org master key",
+        })?;
 
     // Log the recovery.
     db::log_org_recovery(&state.db, org_id, target_uid, caller_uid, None).await?;
@@ -425,26 +455,36 @@ mod tests {
 
     #[cfg(test)]
     mod integration {
+        use crate::routes;
         use axum::Router;
         use axum::body::Body;
         use axum::http::{Request, StatusCode};
-        use std::sync::Arc;
         use tower::ServiceExt;
 
-        use crate::state::{AppState, Config};
-        use crate::routes;
-
-        fn empty_oidc_clients() -> crate::oidc::OidcClients {
-            Arc::new(std::collections::HashMap::new())
-        }
-
-        fn build_org_router(state: Arc<AppState>) -> Router {
+        fn build_org_router(state: std::sync::Arc<crate::state::AppState>) -> axum::Router {
             let api_router = Router::new()
-                .route("/organizations", axum::routing::get(routes::list_orgs).post(routes::create_org))
-                .route("/organizations/{id}", axum::routing::get(routes::get_org).patch(routes::update_org).delete(routes::delete_org))
-                .route("/organizations/{id}/members", axum::routing::post(routes::add_member).get(routes::list_members))
-                .route("/organizations/{id}/members/{uid}", axum::routing::delete(routes::remove_member).patch(routes::update_member_role))
-                .route("/organizations/{id}/recover/{uid}", axum::routing::post(routes::recover_master_key));
+                .route(
+                    "/organizations",
+                    axum::routing::get(routes::list_orgs).post(routes::create_org),
+                )
+                .route(
+                    "/organizations/{id}",
+                    axum::routing::get(routes::get_org)
+                        .patch(routes::update_org)
+                        .delete(routes::delete_org),
+                )
+                .route(
+                    "/organizations/{id}/members",
+                    axum::routing::post(routes::add_member).get(routes::list_members),
+                )
+                .route(
+                    "/organizations/{id}/members/{uid}",
+                    axum::routing::delete(routes::remove_member).patch(routes::update_member_role),
+                )
+                .route(
+                    "/organizations/{id}/recover/{uid}",
+                    axum::routing::post(routes::recover_master_key),
+                );
             Router::new().nest("/api", api_router).with_state(state)
         }
 
@@ -452,17 +492,14 @@ mod tests {
         #[ignore = "needs postgres"]
         #[allow(unreachable_code, unused_variables)]
         async fn list_organizations_requires_auth(pool: sqlx::PgPool) {
-            let state = Arc::new(AppState {
-                db: pool,
-                redis: todo!(),
-                s3: todo!(),
-                s3_bucket: "test".into(),
-                config: Arc::new(Config::default()),
-                oidc_clients: empty_oidc_clients(),
-            });
+            let state = crate::test_helpers::test_app_state(pool).await;
             let app = build_org_router(state);
             let resp = app
-                .oneshot(Request::get("/api/organizations").body(Body::empty()).unwrap())
+                .oneshot(
+                    Request::get("/api/organizations")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
                 .await
                 .unwrap();
             assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
@@ -472,14 +509,7 @@ mod tests {
         #[ignore = "needs postgres"]
         #[allow(unreachable_code, unused_variables)]
         async fn get_unknown_organization_returns_unauthorized(pool: sqlx::PgPool) {
-            let state = Arc::new(AppState {
-                db: pool,
-                redis: todo!("redis"),
-                s3: todo!("s3"),
-                s3_bucket: "test".into(),
-                config: Arc::new(Config::default()),
-                oidc_clients: empty_oidc_clients(),
-            });
+            let state = crate::test_helpers::test_app_state(pool).await;
             let app = build_org_router(state);
             let resp = app
                 .oneshot(
@@ -496,14 +526,7 @@ mod tests {
         #[ignore = "needs postgres"]
         #[allow(unreachable_code, unused_variables)]
         async fn delete_organization_requires_auth(pool: sqlx::PgPool) {
-            let state = Arc::new(AppState {
-                db: pool,
-                redis: todo!("redis"),
-                s3: todo!("s3"),
-                s3_bucket: "test".into(),
-                config: Arc::new(Config::default()),
-                oidc_clients: empty_oidc_clients(),
-            });
+            let state = crate::test_helpers::test_app_state(pool).await;
             let app = build_org_router(state);
             let resp = app
                 .oneshot(
@@ -520,14 +543,7 @@ mod tests {
         #[ignore = "needs postgres"]
         #[allow(unreachable_code, unused_variables)]
         async fn recovery_requires_auth(pool: sqlx::PgPool) {
-            let state = Arc::new(AppState {
-                db: pool,
-                redis: todo!("redis"),
-                s3: todo!("s3"),
-                s3_bucket: "test".into(),
-                config: Arc::new(Config::default()),
-                oidc_clients: empty_oidc_clients(),
-            });
+            let state = crate::test_helpers::test_app_state(pool).await;
             let app = build_org_router(state);
             let resp = app
                 .oneshot(

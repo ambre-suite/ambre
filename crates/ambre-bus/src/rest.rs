@@ -35,6 +35,8 @@
 
 use core::sync::atomic::{AtomicU64, Ordering};
 
+use serde::{Deserialize, Serialize};
+
 use crate::{ChannelId, DocType, DocumentId, MeetingId, Role, UserId};
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,7 +51,7 @@ use crate::{ChannelId, DocType, DocumentId, MeetingId, Role, UserId};
 /// operations in flight route each response to its call-site and apply
 /// per-request timeout / retry — impossible with the previous fire-and-forget,
 /// stringly-correlated model.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct RequestId(pub u64);
 
 impl RequestId {
@@ -71,7 +73,7 @@ impl RequestId {
 ///
 /// The `name` is decrypted by the Sync thread — the Logic and UI threads see it
 /// in plaintext.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentSummary {
     pub document_id: DocumentId,
     pub doc_type: DocType,
@@ -83,7 +85,7 @@ pub struct DocumentSummary {
 }
 
 /// Member of a document or channel.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemberInfo {
     pub user_id: UserId,
     pub display_name: String,
@@ -92,7 +94,7 @@ pub struct MemberInfo {
 }
 
 /// User (search result).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserInfo {
     pub user_id: UserId,
     pub display_name: String,
@@ -100,7 +102,7 @@ pub struct UserInfo {
 }
 
 /// Summary of a Murmure channel.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChannelSummary {
     pub channel_id: ChannelId,
     /// Decrypted from `name_enc`.
@@ -109,7 +111,7 @@ pub struct ChannelSummary {
 }
 
 /// Unread message count per channel.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnreadCount {
     pub channel_id: ChannelId,
     pub count: u64,
@@ -122,7 +124,7 @@ pub struct UnreadCount {
 /// A correlatable service request. Carried inside `LogicCommand::Rest` and
 /// forwarded verbatim as `SyncCommand::Rest`; the Sync thread answers with the
 /// matching [`RestEvent`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RestCommand {
     // ── Session ──────────────────────────────────────────────────────────────
     /// Bootstrap auth after OIDC callback. → `SessionReady` / `AccountSetupRequired`.
@@ -279,7 +281,7 @@ pub enum RestCommand {
 ///
 /// Success responses only: failures arrive as the explicit `AuthError` /
 /// `ApiError` envelope variants (which may also be spontaneous).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RestEvent {
     // ── Session ──────────────────────────────────────────────────────────────
     SessionReady {

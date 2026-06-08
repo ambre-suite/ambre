@@ -158,7 +158,7 @@ fn abs(args: &[CellValue]) -> CellValue {
 }
 
 fn round(args: &[CellValue]) -> CellValue {
-    if args.len() < 1 {
+    if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
     let num = match flatten_numeric(&args[..1]).first() {
@@ -503,7 +503,7 @@ mod tests {
     #[test]
     fn math_functions() {
         assert_eq!(abs(&[CellValue::Number(-5.0)]).to_display(), "5");
-        assert_eq!(round(&[CellValue::Number(3.14159), CellValue::Number(2.0)]).to_display(), "3.14");
+        assert_eq!(round(&[CellValue::Number(std::f64::consts::PI), CellValue::Number(2.0)]).to_display(), "3.14");
         assert_eq!(sqrt(&[CellValue::Number(16.0)]).to_display(), "4");
         assert_eq!(power(&[CellValue::Number(2.0), CellValue::Number(3.0)]).to_display(), "8");
     }

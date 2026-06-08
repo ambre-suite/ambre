@@ -116,6 +116,10 @@ web-sys = { version = "0.3.85", features = [
     "MediaQueryListEvent",
     "MessageEvent",
     "MouseEvent",
+    "DedicatedWorkerGlobalScope",
+    "Worker",
+    "WorkerOptions",
+    "WorkerType",
     "Performance",
     "PointerEvent",
     "Request",
@@ -134,11 +138,15 @@ console_error_panic_hook = "0.1"
 # the hood. Required for the shared-linear-memory threading model documented
 # in specs/ambre-multithreaded-wasm-migration.md.
 wasm_thread = "0.3"
-# Native MPMC channels used between UI / Logic / Sync threads. Replaces the
-# postMessage + postcard transport from Model A (Phase 3 of the migration).
-# Default features include `select` (Selector for waiting on multiple receivers)
-# which the Logic and Sync threads rely on.
-flume = "0.11"
+# Inter-thread channels for the shared-memory UI <-> Logic link (both in the
+# Main wasm instance). Logic blocks on `flume::Selector` (Atomics-backed, works
+# across the UI/Logic worker boundary); the UI polls `try_recv` per frame. The
+# Logic <-> Sync link is NOT a channel anymore -- Sync is a separate wasm worker
+# reached via `postMessage`, so flume's async-waker limitation no longer applies.
+# `async` => `recv_async` (Sync worker select loop + IndexedDB oneshots);
+# `select` => `Selector` (Logic blocks on UI + Sync at once). `eventual-fairness`
+# (default) is dropped: it pulls `nanorand`, unneeded for our usage.
+flume = { version = "0.11", default-features = false, features = ["async", "select"] }
 
 # Compression
 ruzstd = "0.8"

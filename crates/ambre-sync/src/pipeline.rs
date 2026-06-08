@@ -132,6 +132,11 @@ pub fn seal_update(
     let aad = aad_of(&public_data)?;
     let sealed = seal_payload(payload, &aad, doc_key, signing_key);
     let (ciphertext, nonce, commitment_tag, signature) = message_parts(sealed);
+    tracing::debug!(
+        "[Pipeline] seal_update: {} bytes plaintext → {} bytes ciphertext",
+        payload.len(),
+        ciphertext.0.len(),
+    );
     Ok(Update { ciphertext, nonce, public_data, commitment_tag, signature })
 }
 
@@ -140,7 +145,13 @@ pub fn seal_update(
 pub fn open_update(update: &Update, doc_key: &DocumentKey) -> Result<Vec<u8>, PipelineError> {
     let aad = aad_of(&update.public_data)?;
     let sealed = sealed_from(&update.ciphertext, &update.nonce, &update.commitment_tag, &update.signature);
-    open_payload(&sealed, &aad, doc_key, update.public_data.pub_key.as_array())
+    let plaintext = open_payload(&sealed, &aad, doc_key, update.public_data.pub_key.as_array())?;
+    tracing::debug!(
+        "[Pipeline] open_update: {} bytes ciphertext → {} bytes plaintext",
+        update.ciphertext.0.len(),
+        plaintext.len(),
+    );
+    Ok(plaintext)
 }
 
 // ── Snapshot ──────────────────────────────────────────────────────────────────
