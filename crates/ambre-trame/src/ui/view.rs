@@ -155,6 +155,7 @@ pub struct TrameView {
     last_coast_ms: f64,
 }
 
+#[allow(clippy::too_many_arguments)]
 impl TrameView {
     pub fn new(
         document_id: DocumentId,
@@ -352,12 +353,17 @@ impl TrameView {
     /// cache optimistically, then leave edit mode. No-op if not editing.
     fn commit_edit(&mut self) {
         let Some(editor) = self.editor.take() else { return };
+        tracing::info!(
+            "[UI] commit_edit → sending SetCellText row={} col={} text='{:.80}'",
+            editor.row, editor.col,
+            editor.buffer,
+        );
         if let Err(flume::TrySendError::Full(_)) = self.send_command_lossless(TrameCommand::SetCellText {
             row: editor.row,
             col: editor.col,
             text: editor.buffer.clone(),
         }) {
-            tracing::error!("Trame: UI→Logic channel full, edit dropped — retry next frame");
+            tracing::error!("[UI] channel full, edit dropped — retry next frame");
         }
         self.state.set_cell_text(editor.row, editor.col, editor.buffer);
         // Content layer must repaint to show the committed text; overlay too, to

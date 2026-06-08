@@ -67,6 +67,11 @@ impl RangeDep {
         let cols = self.col_end.saturating_sub(self.col_start).saturating_add(1) as usize;
         rows * cols
     }
+
+    /// Returns `true` when the range spans zero cells.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -364,7 +369,7 @@ mod tests {
     #[test]
     fn cell_value_display() {
         assert_eq!(CellValue::Number(42.0).to_display(), "42");
-        assert_eq!(CellValue::Number(3.14).to_display(), "3.14");
+        assert_eq!(CellValue::Number(1.23).to_display(), "1.23");
         assert_eq!(CellValue::Text("hello".into()).to_display(), "hello");
         assert_eq!(CellValue::Boolean(true).to_display(), "true");
         assert_eq!(CellValue::Empty.to_display(), "");

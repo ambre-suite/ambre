@@ -35,7 +35,7 @@ pub struct SetupAccountRequest {
 /// Response after successful account setup. Includes the session cookie
 /// and the newly assigned user ID.
 #[derive(serde::Serialize)]
-pub struct SetupAccountResponse { pub user_id: String, pub session_id: String }
+pub struct SetupAccountResponse { pub user_id: String, pub session_id: String, pub csrf_token: String }
 
 pub async fn setup_account(
     State(state): State<Arc<AppState>>,
@@ -59,14 +59,14 @@ pub async fn setup_account(
     let cookie = auth::create_session_cookie(&session_id, state.config.session_ttl_secs);
     let csrf_token = uuid::Uuid::new_v4().to_string();
     let csrf_cookie = crate::middleware::csrf::create_csrf_cookie(&csrf_token, state.config.session_ttl_secs);
-    Ok((jar.add(cookie).add(csrf_cookie), axum::Json(SetupAccountResponse { user_id: user_id.to_string(), session_id })))
+    Ok((jar.add(cookie).add(csrf_cookie), axum::Json(SetupAccountResponse { user_id: user_id.to_string(), session_id, csrf_token })))
 }
 
 // -- Me ------------------------------------------------------------
 
 /// Authenticated user profile returned by GET /auth/me.
 #[derive(serde::Serialize)]
-pub struct MeResponse { pub user_id: String, pub email: String, pub display_name: String }
+pub struct MeResponse { pub user_id: String, pub email: String, pub display_name: String, pub csrf_token: String }
 
 pub async fn me(
     State(state): State<Arc<AppState>>,
@@ -75,7 +75,14 @@ pub async fn me(
     let s = auth::authenticate(&state, &jar).await?;
     let u = db::get_user(&state.db, &s.user_id).await?.ok_or(AppError::NotFound { resource: "user" })?;
     let uid = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*u.id.as_bytes()));
-    Ok(axum::Json(MeResponse { user_id: uid.to_string(), email: u.email, display_name: u.display_name }))
+    // Echo the double-submit CSRF token in the body: the client's Sync Worker
+    // cannot read the (non-HttpOnly) cookie itself, so it relies on this to
+    // populate the `X-CSRF-Token` header on subsequent mutating requests.
+    let csrf_token = jar
+        .get(crate::middleware::csrf::CSRF_COOKIE)
+        .map(|c| c.value().to_string())
+        .unwrap_or_default();
+    Ok(axum::Json(MeResponse { user_id: uid.to_string(), email: u.email, display_name: u.display_name, csrf_token }))
 }
 
 // -- Logout --------------------------------------------------------
@@ -244,20 +251,36 @@ pub async fn get_pubkeys(
 // -- Members -------------------------------------------------------
 
 /// Document member details for the member list endpoint.
+/// Member entry for the member-list endpoint. Public keys are hex-encoded
+/// (matching the user-search / pubkeys endpoints); `doc_key_enc` is base64
+/// url-safe (matching the document list / create endpoints). A client locates
+/// its own entry by `exchange_pub_key` and unwraps `doc_key_enc` via ECDH.
 #[derive(serde::Serialize)]
-pub struct MemberInfoJson { pub user_id: String, pub email: String, pub display_name: String, pub role: String }
+pub struct MemberInfoJson {
+    pub user_id: String,
+    pub email: String,
+    pub display_name: String,
+    pub role: String,
+    pub signing_pub_key: String,
+    pub exchange_pub_key: String,
+    pub doc_key_enc: String,
+}
 
 pub async fn list_document_members(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,
     Path(document_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
+    use base64::Engine;
     let s = auth::authenticate(&state, &jar).await?;
     let doc_id = parse_doc_id(&document_id)?;
     let _m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
     let members = db::list_document_members(&state.db, &doc_id).await?;
     let json: Vec<_> = members.into_iter().map(|m| MemberInfoJson {
         user_id: m.user_id.to_string(), email: m.email, display_name: m.display_name, role: m.role,
+        signing_pub_key: hex::encode(&m.signing_pubkey),
+        exchange_pub_key: hex::encode(&m.exchange_pubkey),
+        doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&m.doc_key_enc),
     }).collect();
     Ok(axum::Json(serde_json::json!({"members":json})))
 }

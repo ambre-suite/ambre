@@ -65,13 +65,18 @@ pub struct MemberRow {
     pub invited_by: Option<uuid::Uuid>,
 }
 
-/// `document_members` joined with `users` for display purposes.
+/// `document_members` joined with `users` for display purposes. Carries the
+/// member's public keys and their wrapped copy of the document key so a client
+/// can locate its own entry and unwrap the key (or rewrap on rotation).
 #[derive(Debug)]
 pub struct MemberWithUserRow {
     pub user_id: uuid::Uuid,
     pub email: String,
     pub display_name: String,
     pub role: String,
+    pub signing_pubkey: Vec<u8>,
+    pub exchange_pubkey: Vec<u8>,
+    pub doc_key_enc: Vec<u8>,
     #[allow(dead_code)]
     pub invited_by: Option<uuid::Uuid>,
 }
@@ -455,7 +460,7 @@ pub async fn get_document_member(
 pub async fn list_document_members(pool: &PgPool, document_id: &ambre_core::DocumentId) -> Result<Vec<MemberWithUserRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let rows = sqlx::query(
-        "SELECT dm.user_id, u.email, u.display_name, dm.role, dm.invited_by FROM document_members dm INNER JOIN users u ON u.id = dm.user_id WHERE dm.document_id = $1"
+        "SELECT dm.user_id, u.email, u.display_name, dm.role, u.signing_pubkey, u.exchange_pubkey, dm.doc_key_enc, dm.invited_by FROM document_members dm INNER JOIN users u ON u.id = dm.user_id WHERE dm.document_id = $1"
     )
     .bind(did)
     .fetch_all(pool)
@@ -467,6 +472,9 @@ pub async fn list_document_members(pool: &PgPool, document_id: &ambre_core::Docu
             email: r.try_get("email")?,
             display_name: r.try_get("display_name")?,
             role: r.try_get("role")?,
+            signing_pubkey: r.try_get("signing_pubkey")?,
+            exchange_pubkey: r.try_get("exchange_pubkey")?,
+            doc_key_enc: r.try_get("doc_key_enc")?,
             invited_by: r.try_get("invited_by")?,
         })
     }).collect()

@@ -1033,7 +1033,7 @@ impl QuadRenderer {
             let load_op = match cells {
                 ContentRepaint::Full          => wgpu::LoadOp::Clear(wgpu::Color::WHITE),
                 ContentRepaint::Scroll { .. } => wgpu::LoadOp::Load,
-                ContentRepaint::Reuse         => unreachable!(),
+                ContentRepaint::Reuse         => wgpu::LoadOp::Load,
             };
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("cells_pass"),

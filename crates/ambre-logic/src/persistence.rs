@@ -6,7 +6,7 @@
 //!
 //! Architecture: all IndexedDB operations are async. Writes are fire-and-forget
 //! (spawned via `spawn_local`); reads block the async Logic loop via a oneshot
-//! `flume` channel bridged from the `onsuccess` callback.
+//! `flume` oneshot bridged from the `onsuccess` callback.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -34,7 +34,7 @@ pub struct PersistenceStore {
 impl PersistenceStore {
     /// Open the IndexedDB database, creating the object store on first visit.
     ///
-    /// Returns a `flume::Receiver` that resolves to the store once the database
+    /// Returns an `flume::Receiver` that resolves to the store once the database
     /// is ready (success or error). The Logic thread's async loop awaits this
     /// before processing commands.
     pub fn open() -> flume::Receiver<Result<Self, String>> {

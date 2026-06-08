@@ -6,10 +6,12 @@ license.workspace = true
 description = "Logic thread — typed command dispatch, per-document state registry, viewport computation. Runs as a dedicated thread sharing the WASM heap."
 
 [dependencies]
-ambre-bus   = { path = "../ambre-bus" }
-ambre-trame = { path = "../ambre-trame" }
+ambre-bus       = { path = "../ambre-bus" }
+ambre-trame     = { path = "../ambre-trame" }
+# UI <-> Logic channels in shared memory. Logic blocks on `flume::Selector`
+# (Atomics-backed, works across the UI/Logic worker boundary).
+flume           = { workspace = true }
 
-flume         = { workspace = true, features = ["async"] }
 tracing       = { workspace = true }
 futures-util  = { workspace = true }
 

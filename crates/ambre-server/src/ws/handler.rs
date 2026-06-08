@@ -103,6 +103,12 @@ async fn handle_ws(
                 handle_unsubscribe(&state, &mut conn, document_id).await;
             }
             WsClientMsg::Update(update) => {
+                tracing::info!(
+                    "[Server←Sync] WS Update doc={} author={} clock={}",
+                    update.public_data.document_id,
+                    update.public_data.pub_key.to_hex(),
+                    update.public_data.clock.0,
+                );
                 handle_update(&state, &conn, update, &outbound_tx).await;
             }
             WsClientMsg::Ephemeral(eph) => {
@@ -192,7 +198,10 @@ async fn handle_update(
     let snapshot_id = update.public_data.snapshot_id;
 
     let seq = match redis_ops::verify_clock_and_assign_seq(&state.redis, &doc_id, &pub_key_hex, clock).await {
-        Ok(s) => s,
+        Ok(s) => {
+            tracing::info!("[Server] seq assigned doc={doc_id} author={pub_key_hex} clock={clock} seq={s}");
+            s
+        }
         Err(e) => {
             let err = encode_server_msg(&WsServerMsg::Error { code: 409, message: e.to_string() });
             let _ = outbound_tx.send(err).await;
@@ -201,17 +210,20 @@ async fn handle_update(
     };
 
     let s3_key = crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, seq);
+    tracing::info!("[Server→Postgres] insert_update doc={doc_id} seq={seq} clock={clock}");
     let _ = db::insert_update(
         &state.db, &doc_id, author_pubkey.as_array(),
         &snapshot_id, clock as i64, seq as i64, &s3_key,
     ).await;
 
+    tracing::info!("[Server→Redis] append_pending_delta doc={doc_id} seq={seq} s3_key={s3_key}");
     let _ = redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update.ciphertext.0).await;
 
     let broadcast = encode_server_msg(&WsServerMsg::Update {
         seq: ambre_protocol::messages::Seq(seq),
         update,
     });
+    tracing::info!("[Server→RedisPubSub] broadcast Update doc={doc_id} seq={seq}");
     let _ = redis_ops::doc_broadcast(&state.redis, &doc_id, &broadcast).await;
 }
 

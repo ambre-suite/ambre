@@ -142,9 +142,10 @@ impl TrameState {
                 ])
             }
             TrameCommand::SetCellText { row, col, text } => {
-                // Commit the edit into the CRDT. Empty text clears the cell back
-                // to its generated label. Formulas (leading '=') are registered
-                // in the formula engine for evaluation.
+                tracing::info!(
+                    "[Logic] SetCellText row={} col={} text='{:.80}'",
+                    row, col, text,
+                );
                 let map = self.doc.get_map(CELLS_MAP);
                 let key = cell_key(row, col);
                 if text.is_empty() {
@@ -226,6 +227,9 @@ impl TrameState {
         }
         let delta = self.doc.export(ExportMode::updates(&self.last_exported_vv)).ok();
         self.last_exported_vv = current;
+        if let Some(ref d) = delta {
+            tracing::info!("[Logic] flush_delta → {} bytes of CRDT ops", d.len());
+        }
         delta
     }
 

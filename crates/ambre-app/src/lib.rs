@@ -3,8 +3,13 @@
 // Launcher -- the cdylib entry point (#[wasm_bindgen(start)]), running on the
 // page's main JS thread (the UI thread).
 //
-// Wires the three threads and the UI-thread command model:
-//   - Create the inter-thread `flume` channels; spawn Logic and Sync.
+// Wires the execution contexts and the UI-thread command model:
+//   - UI (this main thread) + Logic (a `wasm_thread` worker) share this Main
+//     wasm instance's memory and talk over `flume` channels.
+//   - Sync is a SEPARATE wasm instance in its own Web Worker (own memory),
+//     spawned here via `web_sys::Worker` and reached over `postMessage`. The
+//     main thread relays Logic<->Sync traffic (drain the Logic->Sync flume and
+//     postMessage it; decode worker messages into the Sync->Logic flume).
 //   - Mount the DOM chrome (ambre-chrome AppShell) + its command-state store.
 //   - Install the command keymap (keyboard -> CommandId).
 //   - Run the canvas (ambre_canvas::run_with), pumping a single UI-thread
@@ -79,12 +84,15 @@ pub fn main() {
         }
     }));
 
-    // Inter-thread channels.
+    // Inter-thread channels (all `flume`, in this Main instance's shared heap).
     //   UI    --LogicCommand--> Logic      Logic --UiEvent--> UI
-    //   Logic --SyncCommand---> Sync       Sync  --LogicEvent--> Logic
+    //   Logic --SyncCommand---> [main relay] --postMessage--> Sync worker
+    //   Sync worker --postMessage--> [main relay] --LogicEvent--> Logic
     //
-    // Bounded (backpressure). The UI runs on the page main thread and must
-    // never block, so sends use `try_send` and drop on `Full`.
+    // Bounded (backpressure). The UI runs on the page main thread and must never
+    // block, so its sends use `try_send` and drop on `Full`. Logic blocks on a
+    // `flume::Selector`. The Logic<->Sync halves on the main side (`logic_to_sync_rx`,
+    // `sync_to_logic_tx`) are owned by the per-frame relay below, NOT by a worker.
     let (ui_to_logic_tx, ui_to_logic_rx) = flume::bounded::<LogicCommand>(CHANNEL_CAPACITY);
     let (logic_to_ui_tx, logic_to_ui_rx) = flume::bounded::<UiEvent>(CHANNEL_CAPACITY);
     let (logic_to_sync_tx, logic_to_sync_rx) = flume::bounded::<SyncCommand>(CHANNEL_CAPACITY);
@@ -143,28 +151,26 @@ pub fn main() {
     // Keyboard: resolve registered chords and dispatch the matching command.
     install_command_keys(keymap, SMOKE_DOCUMENT_ID, ui_to_logic_tx.clone());
 
-    // Spawn the Logic thread. Owns its half of every channel from here on.
+    // Spawn the Logic thread (shares this instance's memory). Owns the UI/Sync
+    // halves of its channels; the Sync-bound half (`logic_to_sync_tx`) is relayed
+    // to the Sync worker by the per-frame loop, and `sync_to_logic_tx` is fed by
+    // the worker's onmessage handler.
     wasm_thread::Builder::new()
         .name("logic".to_owned())
         .spawn(move || {
-            ambre_logic::run(ui_to_logic_rx, logic_to_ui_tx, logic_to_sync_tx, sync_to_logic_rx);
+            ambre_logic::run(
+                ui_to_logic_rx,
+                logic_to_ui_tx,
+                logic_to_sync_tx,
+                sync_to_logic_rx,
+            );
         })
         .expect("spawn Logic thread");
 
-    // Spawn the Sync thread (non-blocking async loop in WASM).
-    let api_base = web_sys::window()
-        .and_then(|w| w.location().host().ok())
-        .unwrap_or_else(|| "localhost".into());
-    wasm_thread::Builder::new()
-        .name("sync".to_owned())
-        .spawn(move || {
-            wasm_bindgen_futures::spawn_local(ambre_sync::run_wasm(
-                logic_to_sync_rx,
-                sync_to_logic_tx,
-                api_base,
-            ));
-        })
-        .expect("spawn Sync thread");
+    // Spawn the Sync worker: a SEPARATE wasm instance in its own Web Worker.
+    // Its onmessage decodes `LogicEvent`s into `sync_to_logic_tx` (-> Logic).
+    // Kept alive for the whole session by being captured in the per-frame relay.
+    let sync_worker = spawn_sync_worker(sync_to_logic_tx);
 
     // The single UI-thread dispatcher, pumped once per frame: drain Logic->UI,
     // mirror command-state events into the chrome store, forward everything to
@@ -173,6 +179,16 @@ pub fn main() {
     let anchor_pub_pump = anchor_pub.clone();
     let mut last_anchor: Option<(f64, f64)> = None;
     let pre_frame = move || {
+        // Relay Logic -> Sync: drain commands and postMessage them to the Sync
+        // worker (postcard, big payloads transferred zero-copy). `sync_worker` is
+        // captured here, which is what keeps the worker alive for the session.
+        while let Ok(cmd) = logic_to_sync_rx.try_recv() {
+            match postcard::to_allocvec(&cmd) {
+                Ok(bytes) => post_to_worker(&sync_worker, &bytes),
+                Err(e) => tracing::error!("[UI->Sync] failed to encode SyncCommand: {e}"),
+            }
+        }
+
         while let Ok(ev) = logic_to_ui_rx.try_recv() {
             match &ev {
                 UiEvent::Viewport { event: AppEvent::Trame(te), .. } => match te {
@@ -221,6 +237,48 @@ fn sync_warning_message(code: SyncWarningCode) -> &'static str {
             "Syncing is catching up - some changes are taking longer to arrive."
         }
         SyncWarningCode::DecryptFailed => "A remote change could not be read and was skipped.",
+    }
+}
+
+/// URL of the Sync worker's loader. Trunk builds `ambre-sync` as a separate
+/// `data-type="worker"` wasm artifact and emits this `importScripts`-based
+/// loader (a CLASSIC worker; it calls `wasm_bindgen(...)`, which creates the
+/// worker's own shared `WebAssembly.Memory` and runs `#[wasm_bindgen(start)]`).
+/// `filehash` is off (Trunk.toml), so the path is stable.
+const SYNC_WORKER_URL: &str = "/ambre-sync_loader.js";
+
+/// Spawn the Sync worker (a separate wasm instance) and wire its inbound stream:
+/// each `postMessage` carries a postcard-encoded `LogicEvent`, decoded here and
+/// pushed onto `to_logic` (-> Logic thread). The returned `Worker` must be kept
+/// alive (it is, by the per-frame relay closure).
+fn spawn_sync_worker(to_logic: flume::Sender<LogicEvent>) -> web_sys::Worker {
+    // Classic worker (the Trunk loader uses `importScripts`); not a module worker.
+    let worker = web_sys::Worker::new(SYNC_WORKER_URL).expect("failed to spawn Sync worker");
+
+    let onmessage = Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |e: web_sys::MessageEvent| {
+        let bytes = js_sys::Uint8Array::new(&e.data()).to_vec();
+        match postcard::from_bytes::<LogicEvent>(&bytes) {
+            Ok(event) => {
+                let _ = to_logic.send(event);
+            }
+            Err(err) => tracing::error!("[Sync->UI] failed to decode LogicEvent: {err}"),
+        }
+    });
+    worker.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
+    // Leak the closure: it lives for the whole session (the worker never stops).
+    onmessage.forget();
+    worker
+}
+
+/// Encode-free postMessage of raw `bytes` to the Sync worker, transferring the
+/// backing `ArrayBuffer` (zero-copy move, no structured clone of the payload).
+fn post_to_worker(worker: &web_sys::Worker, bytes: &[u8]) {
+    let array = js_sys::Uint8Array::new_with_length(bytes.len() as u32);
+    array.copy_from(bytes);
+    let buffer = array.buffer();
+    let transfer = js_sys::Array::of1(&buffer);
+    if let Err(e) = worker.post_message_with_transfer(&buffer, &transfer) {
+        tracing::warn!("[UI->Sync] postMessage to Sync worker failed: {e:?}");
     }
 }
 

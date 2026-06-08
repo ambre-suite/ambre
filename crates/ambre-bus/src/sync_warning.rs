@@ -9,7 +9,7 @@
 //! consumer's `match` is exhaustive and the compiler flags any new variant.
 
 /// Why the Sync thread raised a (non-fatal) warning.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[repr(u16)]
 pub enum SyncWarningCode {
     /// A single inbound message failed to decrypt/decode and was dropped.

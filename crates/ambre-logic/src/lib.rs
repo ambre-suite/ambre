@@ -14,10 +14,11 @@
 //   - Cryptography, compression, network — handled exclusively by ambre-sync.
 //   - Rendering — handled by the UI Thread (wgpu + QuadRenderer + GlyphAtlas).
 //
-// Transport: native `flume` channels carry typed Rust values by move. No
-// postcard, no `Any`, no `Vec<u8>` on the application data plane — `App`
-// commands carry a typed `AppCommand`, viewport replies a typed `AppEvent`.
-// CRDT deltas / snapshots stay `Vec<u8>` (genuine network bytes).
+// Transport: UI <-> Logic uses `flume` channels in the shared memory of the
+// Main instance, carrying typed Rust values by move (no postcard, no `Any`).
+// Logic-bound `SyncCommand`s are sent to a `flume` channel whose receiver is on
+// the Main thread, which relays them to the separate Sync worker via
+// `postMessage`; `LogicEvent`s arrive the same way in reverse.
 // ============================================================================
 
 use std::collections::HashMap;
@@ -68,7 +69,8 @@ impl DocState {
 struct LogicState {
     /// Outbound channel: Logic → UI Thread.
     to_ui: flume::Sender<UiEvent>,
-    /// Outbound channel: Logic → Sync thread.
+    /// Outbound channel: Logic → Sync (drained by the Main thread, relayed to
+    /// the Sync worker via postMessage).
     to_sync: flume::Sender<SyncCommand>,
     /// Live document state, keyed by `document_id`.
     ///
@@ -93,7 +95,7 @@ impl LogicState {
     fn send_to_ui(&self, event: UiEvent) {
         if let Err(flume::SendError(event)) = self.to_ui.send(event) {
             tracing::warn!(
-                "Logic: UI receiver dropped, discarding {:?}",
+                "[Logic→UI] UI receiver dropped, discarding {:?}",
                 std::mem::discriminant(&event),
             );
         }
@@ -102,7 +104,7 @@ impl LogicState {
     fn send_to_sync(&self, cmd: SyncCommand) {
         if let Err(flume::SendError(cmd)) = self.to_sync.send(cmd) {
             tracing::warn!(
-                "Logic: Sync receiver dropped, discarding {:?}",
+                "[Logic→Sync] receiver dropped, discarding {:?}",
                 std::mem::discriminant(&cmd),
             );
         }
@@ -127,8 +129,12 @@ impl LogicState {
                         event: AppEvent::Trame(event),
                     });
                 }
-                if let Some(payload) = outcome.update {
-                    self.send_to_sync(SyncCommand::SendUpdate { document_id, payload });
+                if let Some(ref payload) = outcome.update {
+                    tracing::info!(
+                        "[Logic→Sync] pushing SendUpdate doc={document_id} delta_size={}",
+                        payload.len(),
+                    );
+                    self.send_to_sync(SyncCommand::SendUpdate { document_id, payload: payload.clone() });
                 }
                 if let Some(payload) = outcome.ephemeral {
                     self.send_to_sync(SyncCommand::SendEphemeral { document_id, payload });
@@ -319,62 +325,61 @@ impl LogicState {
 }
 
 // -----------------------------------------------------------------------------
-// Entry point: blocking select on the two inbound channels.
+// Entry point: drain both inbound channels, then park on the shared Waker.
 // -----------------------------------------------------------------------------
 
 /// Run the Logic thread to completion.
 ///
-/// Blocks on whichever inbound channel has a message available, dispatches it
-/// through [`LogicState`], and loops. Exits when **both** inbound channels
-/// disconnect (i.e. the UI Thread and the Sync thread are both gone),
-/// signalling app teardown.
+/// Blocks on `flume::Selector` waiting on both inbound channels at once,
+/// dispatching each message through [`LogicState`]. Exits when **both** inbound
+/// channels disconnect (the UI Thread and the Sync relay both gone).
+///
+/// `Selector::wait` parks the worker via flume's Atomics-backed blocking path,
+/// which wakes correctly across the UI/Logic worker boundary (only flume's
+/// *async* waker failed to cross workers — that path is gone, the Sync worker is
+/// now a separate wasm instance reached over postMessage). Legal off the main
+/// thread; the Logic worker has no browser callbacks to keep alive.
 pub fn run(
     from_ui: flume::Receiver<LogicCommand>,
     to_ui: flume::Sender<UiEvent>,
     to_sync: flume::Sender<SyncCommand>,
     from_sync: flume::Receiver<LogicEvent>,
 ) {
+    use flume::Selector;
+
     tracing::info!("Ambre Logic thread starting");
     let mut state = LogicState::new(to_ui, to_sync);
 
-    /// Result of one `Selector::wait` call. Returned by the per-channel
-    /// closures so the outer `match` can dispatch with a single `&mut state`
-    /// borrow — flume's `Selector` doesn't return the active branch, and the
-    /// borrow checker rejects two closures both capturing `&mut state`.
+    /// What the selector picked: a command from the UI, or an event from Sync.
     enum Inbound {
-        Ui(LogicCommand),
-        Sync(LogicEvent),
-        UiClosed,
-        SyncClosed,
+        Command(Result<LogicCommand, flume::RecvError>),
+        Event(Result<LogicEvent, flume::RecvError>),
     }
 
     let mut ui_open = true;
     let mut sync_open = true;
     while ui_open || sync_open {
-        // Block on whichever side has a message first. `Selector::wait` uses
-        // `Atomics.wait` under the hood, which is legal off the main thread.
-        let inbound = flume::Selector::new()
-            .recv(&from_ui, |msg| match msg {
-                Ok(command) => Inbound::Ui(command),
-                Err(flume::RecvError::Disconnected) => Inbound::UiClosed,
-            })
-            .recv(&from_sync, |msg| match msg {
-                Ok(event) => Inbound::Sync(event),
-                Err(flume::RecvError::Disconnected) => Inbound::SyncClosed,
-            })
-            .wait();
-
-        match inbound {
-            Inbound::Ui(command) => state.handle_logic_command(command),
-            Inbound::Sync(event) => state.handle_logic_event(event),
-            Inbound::UiClosed => ui_open = false,
-            Inbound::SyncClosed => sync_open = false,
+        // Build a selector over only the still-open channels and block until one
+        // yields. A closed channel resolves immediately with `Err`, which we map
+        // to "mark closed" -- so a single open channel keeps the loop running.
+        let mut selector = Selector::new();
+        if ui_open {
+            selector = selector.recv(&from_ui, Inbound::Command);
+        }
+        if sync_open {
+            selector = selector.recv(&from_sync, Inbound::Event);
+        }
+        match selector.wait() {
+            Inbound::Command(Ok(command)) => state.handle_logic_command(command),
+            Inbound::Command(Err(_)) => ui_open = false,
+            Inbound::Event(Ok(event)) => state.handle_logic_event(event),
+            Inbound::Event(Err(_)) => sync_open = false,
         }
     }
 
     tracing::info!("Ambre Logic thread exiting (both inbound channels disconnected)");
     // Drop `state` here: document state is released, the outbound Senders are
-    // closed, which the UI and Sync threads observe as `Disconnected` too.
+    // closed, which the UI thread and the Sync relay observe as `Disconnected`.
     let _ = state;
 }
 

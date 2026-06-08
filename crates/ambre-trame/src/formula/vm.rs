@@ -96,7 +96,7 @@ impl<'a> EvalContext<'a> {
                     let b = stack.pop().unwrap_or(CellValue::Empty);
                     let a = stack.pop().unwrap_or(CellValue::Empty);
                     stack.push(match (a.as_number(), b.as_number()) {
-                        (Ok(_), Ok(d)) if d == 0.0 => {
+                        (Ok(_), Ok(0.0)) => {
                             CellValue::Error(FormulaError::DivisionByZero)
                         }
                         (Ok(x), Ok(y)) => CellValue::Number(x / y),

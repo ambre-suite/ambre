@@ -25,8 +25,8 @@ fn setup(
     flume::Receiver<LogicEvent>,
     MockWsTransport,
 ) {
-    let (logic_tx, logic_rx) = flume::unbounded();
-    let mut state = ambre_sync::SyncState::new(logic_tx, String::new());
+    let (logic_sink, logic_rx) = ambre_sync::LogicSink::channel();
+    let mut state = ambre_sync::SyncState::new(logic_sink, String::new(), None);
     let mock = MockWsTransport::new();
     if with_mock {
         state.set_mock_ws(mock.client_tx.clone());

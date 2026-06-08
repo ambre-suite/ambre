@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use ambre_bus::{DocumentId, SnapshotId, UserId};
 use ambre_protocol::messages::{Seq, Update};
 use ambre_protocol::ws::{WsClientMsg, WsServerMsg};
-use flume;
 
 /// In-process Blind Relay simulator for multi-client integration tests.
 ///

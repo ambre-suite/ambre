@@ -1,7 +1,9 @@
 // ambre-sync/src/lib.rs
 // ============================================================================
-// Sync thread entry point — runs in a dedicated wasm_thread, shares the heap
-// with the UI Thread and the Logic thread.
+// Sync logic — runs in its OWN wasm instance (a dedicated Web Worker with its
+// own linear memory), separate from the Main instance (UI + Logic). The worker
+// shell lives in `ambre-sync-worker`; this crate owns `SyncState` and the
+// select loop ([`run_wasm`]).
 //
 // Responsibilities:
 //   - Own ALL cryptographic material (MasterSeed, DocumentKeys) — never leaves
@@ -14,17 +16,16 @@
 //   - CRDT mutations — exclusively in ambre-logic.
 //   - Rendering, input — exclusively in the UI Thread.
 //
-// Transport (post-Phase-3): native Rust channels. The Sync thread blocks on
-// `flume::Selector::wait` to consume `SyncCommand`s and emits `LogicEvent`s.
+// Transport: inbound `SyncCommand`s arrive over `postMessage` from the Main
+// instance, decoded by `ambre-sync-worker` and fed into [`run_wasm`] via an
+// in-worker `flume` channel. Outbound `LogicEvent`s are emitted through a
+// [`LogicSink`] (the worker posts them back to Main via `postMessage`).
 //
-// ⚠️ Known limitation: blocking on flume inside a wasm Worker uses
-// `Atomics.wait` under the hood, which prevents the Worker's JS event loop
-// from delivering WebSocket / setTimeout callbacks. Today this is fine —
-// the WS pipeline is still placeholder — but when the real WebSocket is
-// wired (after Phase 4), the Sync thread must switch to a non-blocking
-// loop (recv_async + JsFuture-driven WS reads, or yield via
-// `wasm_bindgen_futures::spawn_local`). See
-// specs/ambre-multithreaded-wasm-migration.md.
+// Because this is now a SINGLE worker, the internal event bus and the command
+// channel both have their producer and consumer on the same worker, so flume's
+// async waker fires correctly (the old cross-worker freeze that motivated
+// `sab_channel` cannot happen here). The select loop awaits both channels'
+// `recv_async`; the worker's JS event loop stays free for WebSocket / fetch.
 //
 // WebSocket topology (when implemented):
 //   ONE WebSocket per session, opened at Unlock, closed at Logout.
@@ -48,9 +49,9 @@ use ambre_core::PublicKey;
 use ambre_crypto::{DocumentKey, MasterSeed};
 use ambre_protocol::messages::{Clock, Counter, Seq, Update};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
-use ambre_protocol::ws::{encode_client_msg, WsClientMsg, WsServerMsg};
 #[cfg(target_arch = "wasm32")]
 use ambre_protocol::ws::decode_server_msg;
+use ambre_protocol::ws::{WsClientMsg, WsServerMsg, encode_client_msg};
 use ed25519_dalek::SigningKey;
 use x25519_dalek::StaticSecret;
 
@@ -58,10 +59,55 @@ use base64::Engine;
 use blake2::Digest;
 use hex::encode;
 
-mod pipeline;
-pub mod mock;
+/// A CSRF token received from the server (account setup or `/auth/me`), echoed
+/// as the `X-CSRF-Token` header on mutating requests.
+#[derive(Debug, Clone)]
+pub struct CsrfToken(pub String);
+
+/// Sink for events flowing Sync -> Logic. Sync no longer shares memory with the
+/// Logic thread, so it cannot hold a channel `Sender<LogicEvent>` directly:
+/// instead it calls this type-erased closure. In the wasm worker the closure
+/// postcard-encodes the event and `postMessage`s it to the Main instance; in
+/// native tests it pushes into a `flume` channel (see [`LogicSink::channel`]).
+///
+/// `Rc`-backed (clonable, `'static`) so it can be captured by the `spawn_local`
+/// HTTP tasks and JS callbacks. Single-threaded by construction (one worker).
+#[derive(Clone)]
+pub struct LogicSink(std::rc::Rc<dyn Fn(LogicEvent)>);
+
+/// Returned by [`LogicSink::send`]. The send is infallible in practice (the
+/// closure always accepts the event); the type mirrors a channel `SendError` so
+/// existing call sites are unchanged.
+pub struct SendError(pub LogicEvent);
+
+impl LogicSink {
+    /// Wrap an arbitrary emit closure.
+    pub fn new(f: impl Fn(LogicEvent) + 'static) -> Self {
+        Self(std::rc::Rc::new(f))
+    }
+
+    /// A sink backed by a fresh `flume` channel, returning the receiver so a
+    /// (native) test can drain what Sync emits.
+    pub fn channel() -> (Self, flume::Receiver<LogicEvent>) {
+        let (tx, rx) = flume::unbounded();
+        (Self::new(move |ev| { let _ = tx.send(ev); }), rx)
+    }
+
+    /// Emit one event to the Logic thread.
+    pub fn send(&self, event: LogicEvent) -> Result<(), SendError> {
+        (self.0)(event);
+        Ok(())
+    }
+}
+
 mod http;
+pub mod mock;
 pub mod mock_relay;
+mod pipeline;
+/// Web Worker entry point (`#[wasm_bindgen(start)]`): the postMessage bridge to
+/// the Main instance. wasm-only.
+#[cfg(target_arch = "wasm32")]
+mod worker;
 
 // -----------------------------------------------------------------------------
 // Quarantine bounds (ambre-spec-sync.md §E)
@@ -89,7 +135,10 @@ const QUARANTINE_LIMIT: usize = 1000;
 #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 enum SyncEvent {
     WsMessage(WsServerMsg),
-    WsDisconnected { code: u16, reason: String },
+    WsDisconnected {
+        code: u16,
+        reason: String,
+    },
     WsError,
     SessionReady {
         id: RequestId,
@@ -99,6 +148,7 @@ enum SyncEvent {
         master_seed: MasterSeed,
         signing_key: SigningKey,
         exchange_key: StaticSecret,
+        csrf_token: CsrfToken,
     },
     AccountCreated {
         id: RequestId,
@@ -106,6 +156,7 @@ enum SyncEvent {
         master_seed: MasterSeed,
         signing_key: SigningKey,
         exchange_key: StaticSecret,
+        csrf_token: CsrfToken,
     },
     DocumentList {
         id: RequestId,
@@ -308,12 +359,27 @@ impl SyncDocumentState {
 // SyncState
 // -----------------------------------------------------------------------------
 
-    pub struct SyncState {
-    /// Outbound channel: Sync → Logic thread.
-    logic_tx: flume::Sender<LogicEvent>,
+fn doc_type_to_api_string(doc_type: DocType) -> String {
+    match doc_type {
+        DocType::Prose => "prose",
+        DocType::Trame => "trame",
+        DocType::Toile => "toile",
+        DocType::Murmure => "murmure",
+    }
+    .into()
+}
+
+pub struct SyncState {
+    /// Outbound sink: Sync → Logic thread (postMessage in the worker).
+    logic_tx: LogicSink,
     /// Base URL for REST API calls (e.g. `"api.ambre.app"`).
     #[allow(dead_code)]
     api_base: String,
+    /// URL scheme: `"http"` on localhost, `"https"` otherwise.
+    #[allow(dead_code)]
+    url_scheme: &'static str,
+    /// CSRF token echoed as `X-CSRF-Token` header on mutating requests.
+    csrf_token: Option<CsrfToken>,
     /// Authenticated user id, set after Unlock/SetupAccount.
     user_id: Option<UserId>,
 
@@ -342,8 +408,8 @@ impl SyncDocumentState {
     // -- In-memory WS transport (test-only, off) -------------------------------
     mock_ws_tx: Option<flume::Sender<Vec<u8>>>,
 
-    // -- Internal event channel (WASM: carries WS frames + HTTP results into   --
-    // -- the non-blocking select loop) --
+    // -- Internal event channel (carries WS frames + HTTP results into the     --
+    // -- non-blocking select loop; producer and consumer are the same worker)  --
     event_tx: Option<flume::Sender<SyncEvent>>,
 
     // -- Per-document sync sessions --------------------------------------------
@@ -355,10 +421,21 @@ impl SyncDocumentState {
 
 impl SyncState {
     #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
-    pub fn new(logic_tx: flume::Sender<LogicEvent>, api_base: String) -> Self {
+    pub fn new(
+        logic_tx: LogicSink,
+        api_base: String,
+        csrf_token: Option<CsrfToken>,
+    ) -> Self {
+        let url_scheme = if api_base.starts_with("localhost") || api_base.starts_with("127.0.0.1") {
+            "http"
+        } else {
+            "https"
+        };
         Self {
             logic_tx,
             api_base,
+            url_scheme,
+            csrf_token,
             user_id: None,
             master_seed: None,
             signing_key: None,
@@ -385,7 +462,7 @@ impl SyncState {
     // -- Outbound: Sync → Logic ------------------------------------------------
 
     fn send_to_logic(&self, event: LogicEvent) {
-        if let Err(flume::SendError(ev)) = self.logic_tx.send(event) {
+        if let Err(SendError(ev)) = self.logic_tx.send(event) {
             tracing::warn!(
                 "Sync: Logic receiver dropped, discarding {:?}",
                 std::mem::discriminant(&ev),
@@ -404,7 +481,9 @@ impl SyncState {
         make_event: impl FnOnce(Vec<u8>) -> LogicEvent,
     ) {
         match opened {
-            None => tracing::warn!("Sync: inbound message for unopened doc {document_id:?}, dropping"),
+            None => {
+                tracing::warn!("Sync: inbound message for unopened doc {document_id:?}, dropping")
+            }
             Some(Ok(payload)) => self.send_to_logic(make_event(payload)),
             Some(Err(e)) => {
                 tracing::warn!("Sync: dropping inbound for {document_id:?}: {e}");
@@ -445,11 +524,12 @@ impl SyncState {
                 let _ = tx.send(wire);
                 return;
             }
-            tracing::warn!("Sync: ws_send called with no socket connected, dropping message");
+            tracing::warn!("[Sync→Server] ws_send called with no socket, dropping message");
             return;
         };
+        tracing::debug!("[Sync→Server] ws_send {:?} → {} bytes wire", std::mem::discriminant(msg), wire.len());
         if let Err(e) = ws.send_with_u8_array(&wire) {
-            tracing::warn!("Sync: WebSocket send failed ({e:?}); reconnect will retry");
+            tracing::warn!("[Sync→Server] WebSocket send failed ({e:?}); reconnect will retry");
         }
         if let Some(tx) = &self.mock_ws_tx {
             let _ = tx.send(wire);
@@ -471,13 +551,23 @@ impl SyncState {
             // -- Document sync session (control) -------------------------------
             SyncCommand::OpenDocument { document_id } => self.handle_open_document(document_id),
             SyncCommand::CloseDocument { document_id } => self.handle_close_document(document_id),
-            SyncCommand::SendUpdate { document_id, payload } => {
+            SyncCommand::SendUpdate {
+                document_id,
+                payload,
+            } => {
+                tracing::info!("[Sync] received SendUpdate doc={document_id} delta_size={}", payload.len());
                 self.handle_send_update(document_id, payload);
             }
-            SyncCommand::SendSnapshot { document_id, payload } => {
+            SyncCommand::SendSnapshot {
+                document_id,
+                payload,
+            } => {
                 self.handle_send_snapshot(document_id, payload);
             }
-            SyncCommand::SendEphemeral { document_id, payload } => {
+            SyncCommand::SendEphemeral {
+                document_id,
+                payload,
+            } => {
                 self.handle_send_ephemeral(document_id, payload);
             }
             SyncCommand::Reconnect { document_id } => self.handle_reconnect(document_id),
@@ -485,10 +575,16 @@ impl SyncState {
             // -- Channel sync session (control) --------------------------------
             SyncCommand::OpenChannel { channel_id } => self.handle_open_channel(channel_id),
             SyncCommand::CloseChannel { channel_id } => self.handle_close_channel(channel_id),
-            SyncCommand::SendChannelUpdate { channel_id, payload } => {
+            SyncCommand::SendChannelUpdate {
+                channel_id,
+                payload,
+            } => {
                 self.handle_send_channel_update(channel_id, payload);
             }
-            SyncCommand::SendChannelEphemeral { channel_id, payload } => {
+            SyncCommand::SendChannelEphemeral {
+                channel_id,
+                payload,
+            } => {
                 self.handle_send_channel_ephemeral(channel_id, payload);
             }
 
@@ -509,10 +605,16 @@ impl SyncState {
             // -- Session -------------------------------------------------------
             RestCommand::Unlock { passphrase } => self.handle_unlock(id, passphrase),
             RestCommand::SetupAccount { passphrase } => self.handle_setup_account(id, passphrase),
-            RestCommand::ChangePassphrase { current_passphrase, new_passphrase } => {
+            RestCommand::ChangePassphrase {
+                current_passphrase,
+                new_passphrase,
+            } => {
                 self.handle_change_passphrase(current_passphrase, new_passphrase);
             }
-            RestCommand::RecoverAccount { recovery_words, new_passphrase } => {
+            RestCommand::RecoverAccount {
+                recovery_words,
+                new_passphrase,
+            } => {
                 self.handle_recover_account(recovery_words, new_passphrase);
             }
             RestCommand::Logout => {
@@ -533,16 +635,27 @@ impl SyncState {
             }
 
             // -- Sharing -------------------------------------------------------
-            RestCommand::InviteToDocument { document_id, invitee_email, role } => {
+            RestCommand::InviteToDocument {
+                document_id,
+                invitee_email,
+                role,
+            } => {
                 self.handle_invite_to_document(id, document_id, invitee_email, role);
             }
-            RestCommand::RevokeFromDocument { document_id, user_id } => {
+            RestCommand::RevokeFromDocument {
+                document_id,
+                user_id,
+            } => {
                 self.handle_revoke_from_document(id, document_id, user_id);
             }
             RestCommand::ListDocumentMembers { document_id } => {
                 self.handle_list_document_members(id, document_id);
             }
-            RestCommand::UpdateDocumentMemberRole { document_id, user_id, role } => {
+            RestCommand::UpdateDocumentMemberRole {
+                document_id,
+                user_id,
+                role,
+            } => {
                 self.handle_update_document_member_role(id, document_id, user_id, role);
             }
 
@@ -550,10 +663,17 @@ impl SyncState {
             RestCommand::SearchUsers { query } => self.handle_search_users(id, query),
 
             // -- Media ---------------------------------------------------------
-            RestCommand::UploadMedia { document_id, data, mime_type } => {
+            RestCommand::UploadMedia {
+                document_id,
+                data,
+                mime_type,
+            } => {
                 self.handle_upload_media(id, document_id, data, mime_type);
             }
-            RestCommand::DownloadMedia { document_id, content_hash } => {
+            RestCommand::DownloadMedia {
+                document_id,
+                content_hash,
+            } => {
                 self.handle_download_media(id, document_id, content_hash);
             }
 
@@ -563,19 +683,33 @@ impl SyncState {
             RestCommand::DeleteChannel { channel_id } => {
                 tracing::info!("Sync: DeleteChannel {channel_id:?}");
             }
-            RestCommand::InviteToChannel { channel_id, invitee_email, role } => {
+            RestCommand::InviteToChannel {
+                channel_id,
+                invitee_email,
+                role,
+            } => {
                 tracing::info!("Sync: InviteToChannel {channel_id:?} {invitee_email} {role:?}");
             }
-            RestCommand::RevokeFromChannel { channel_id, user_id } => {
+            RestCommand::RevokeFromChannel {
+                channel_id,
+                user_id,
+            } => {
                 tracing::info!("Sync: RevokeFromChannel {channel_id:?} {user_id:?}");
             }
             RestCommand::ListChannelMembers { channel_id } => {
                 tracing::info!("Sync: ListChannelMembers {channel_id:?}");
             }
-            RestCommand::UpdateChannelMemberRole { channel_id, user_id, role } => {
+            RestCommand::UpdateChannelMemberRole {
+                channel_id,
+                user_id,
+                role,
+            } => {
                 tracing::info!("Sync: UpdateChannelMemberRole {channel_id:?} {user_id:?} {role:?}");
             }
-            RestCommand::UpdateReadCursor { channel_id, last_seq } => {
+            RestCommand::UpdateReadCursor {
+                channel_id,
+                last_seq,
+            } => {
                 tracing::debug!("Sync: UpdateReadCursor {channel_id:?} seq={last_seq}");
             }
             RestCommand::GetUnreadCounts => tracing::info!("Sync: GetUnreadCounts"),
@@ -636,15 +770,16 @@ impl SyncState {
                         }
                         let nonce: &[u8; 24] = master_key_enc[..24].try_into().expect("nonce len");
                         let ciphertext = &master_key_enc[24..];
-                        let user_key = match ambre_crypto::passphrase::derive_user_key(&passphrase, &salt) {
-                            Ok(k) => k,
-                            Err(e) => {
-                                let _ = logic_tx.send(LogicEvent::AuthError {
-                                    message: format!("Key derivation failed: {e}"),
-                                });
-                                return;
-                            }
-                        };
+                        let user_key =
+                            match ambre_crypto::passphrase::derive_user_key(&passphrase, &salt) {
+                                Ok(k) => k,
+                                Err(e) => {
+                                    let _ = logic_tx.send(LogicEvent::AuthError {
+                                        message: format!("Key derivation failed: {e}"),
+                                    });
+                                    return;
+                                }
+                            };
                         let user_doc_key = DocumentKey::from_array(user_key);
                         let seed_bytes = match ambre_crypto::aead::open(
                             nonce,
@@ -676,7 +811,8 @@ impl SyncState {
                         let auth_url = format!("https://{api_base}/api/auth/me");
                         match http::get_json::<http::AuthMeResponse>(&auth_url).await {
                             Ok(me) => {
-                                let user_id = UserId::parse_str(&me.user_id).unwrap_or_else(|_| UserId::new());
+                                let user_id = UserId::parse_str(&me.user_id)
+                                    .unwrap_or_else(|_| UserId::new());
                                 let _ = tx.send(SyncEvent::SessionReady {
                                     id,
                                     user_id,
@@ -685,6 +821,7 @@ impl SyncState {
                                     master_seed,
                                     signing_key,
                                     exchange_key,
+                                    csrf_token: CsrfToken(me.csrf_token),
                                 });
                             }
                             Err(e) => {
@@ -704,11 +841,14 @@ impl SyncState {
             self.exchange_key = Some(master_seed.derive_exchange_key());
             self.master_seed = Some(master_seed);
             self.open_websocket();
-            self.reply(id, RestEvent::SessionReady {
-                user_id: UserId::new(),
-                display_name: "offline".into(),
-                email: "offline@localhost".into(),
-            });
+            self.reply(
+                id,
+                RestEvent::SessionReady {
+                    user_id: UserId::new(),
+                    display_name: "offline".into(),
+                    email: "offline@localhost".into(),
+                },
+            );
         }
     }
 
@@ -747,6 +887,18 @@ impl SyncState {
                 let mut master_key_with_nonce = nonce.to_vec();
                 master_key_with_nonce.extend_from_slice(&master_key_enc);
 
+                // The OIDC session (and its CSRF cookie) already exist; the Worker
+                // cannot read the cookie, so fetch the token from /me first, then
+                // replay it on the mutating PUT /keys/master.
+                let me_url = format!("https://{api_base}/api/auth/me");
+                let csrf = match http::get_json::<http::AuthMeResponse>(&me_url).await {
+                    Ok(me) => CsrfToken(me.csrf_token),
+                    Err(e) => {
+                        let _ = logic_tx.send(LogicEvent::AuthError { message: e });
+                        return;
+                    }
+                };
+
                 let url = format!("https://{api_base}/api/keys/master");
                 let body = http::SetupKeyRequest {
                     master_key_enc: hex::encode(&master_key_with_nonce),
@@ -754,14 +906,15 @@ impl SyncState {
                     signing_pub_key,
                     exchange_pub_key,
                 };
-                match http::post_json::<_, serde_json::Value>(&url, &body).await {
-                    Ok(_) => {
+                match http::put_json(&url, &body, Some(&csrf)).await {
+                    Ok(()) => {
                         let _ = tx.send(SyncEvent::AccountCreated {
                             id,
                             recovery_words,
                             master_seed,
                             signing_key,
                             exchange_key,
+                            csrf_token: csrf,
                         });
                     }
                     Err(e) => {
@@ -781,11 +934,7 @@ impl SyncState {
         }
     }
 
-    fn handle_change_passphrase(
-        &mut self,
-        current_passphrase: Vec<u8>,
-        new_passphrase: Vec<u8>,
-    ) {
+    fn handle_change_passphrase(&mut self, current_passphrase: Vec<u8>, new_passphrase: Vec<u8>) {
         tracing::info!("Sync: ChangePassphrase");
         let _ = (current_passphrase, new_passphrase);
     }
@@ -826,7 +975,9 @@ impl SyncState {
                 self.wire_ws_callbacks(&ws);
                 self.ws = Some(ws);
                 for doc_id in self.documents.keys().copied().collect::<Vec<_>>() {
-                    self.ws_send(&WsClientMsg::Subscribe { document_id: doc_id });
+                    self.ws_send(&WsClientMsg::Subscribe {
+                        document_id: doc_id,
+                    });
                 }
                 tracing::info!("Sync: WebSocket opened ({url})");
             }
@@ -931,26 +1082,61 @@ impl SyncState {
             SyncEvent::WsError => {
                 tracing::error!("Sync: WebSocket error");
             }
-            SyncEvent::SessionReady { id, user_id, display_name, email, master_seed, signing_key, exchange_key } => {
+            SyncEvent::SessionReady {
+                id,
+                user_id,
+                display_name,
+                email,
+                master_seed,
+                signing_key,
+                exchange_key,
+                csrf_token,
+            } => {
                 self.user_id = Some(user_id);
                 self.master_seed = Some(master_seed);
                 self.signing_key = Some(signing_key);
                 self.exchange_key = Some(exchange_key);
+                self.csrf_token = Some(csrf_token);
                 self.open_websocket();
-                self.reply(id, RestEvent::SessionReady { user_id, display_name, email });
+                self.reply(
+                    id,
+                    RestEvent::SessionReady {
+                        user_id,
+                        display_name,
+                        email,
+                    },
+                );
             }
-            SyncEvent::AccountCreated { id, recovery_words, master_seed, signing_key, exchange_key } => {
+            SyncEvent::AccountCreated {
+                id,
+                recovery_words,
+                master_seed,
+                signing_key,
+                exchange_key,
+                csrf_token,
+            } => {
                 self.master_seed = Some(master_seed);
                 self.signing_key = Some(signing_key);
                 self.exchange_key = Some(exchange_key);
+                self.csrf_token = Some(csrf_token);
                 self.open_websocket();
                 self.reply(id, RestEvent::AccountCreated { recovery_words });
             }
             SyncEvent::DocumentList { id, documents } => {
                 self.reply(id, RestEvent::DocumentList { documents });
             }
-            SyncEvent::DocumentCreated { id, document_id, doc_type } => {
-                self.reply(id, RestEvent::DocumentCreated { document_id, doc_type });
+            SyncEvent::DocumentCreated {
+                id,
+                document_id,
+                doc_type,
+            } => {
+                self.reply(
+                    id,
+                    RestEvent::DocumentCreated {
+                        document_id,
+                        doc_type,
+                    },
+                );
             }
             SyncEvent::DocumentDeleted { id, document_id } => {
                 self.reply(id, RestEvent::DocumentDeleted { document_id });
@@ -958,13 +1144,22 @@ impl SyncState {
             SyncEvent::DocumentRenamed { id, document_id } => {
                 self.reply(id, RestEvent::DocumentRenamed { document_id });
             }
-            SyncEvent::OpenDocumentReady { document_id, doc_key, snapshot_payload, snapshot_id } => {
-                self.documents.insert(document_id, SyncDocumentState::new(document_id, doc_key));
+            SyncEvent::OpenDocumentReady {
+                document_id,
+                doc_key,
+                snapshot_payload,
+                snapshot_id,
+            } => {
+                self.documents
+                    .insert(document_id, SyncDocumentState::new(document_id, doc_key));
                 let doc_state = self.documents.get_mut(&document_id).expect("just inserted");
                 doc_state.current_snapshot_id = snapshot_id;
                 doc_state.known_snapshots.insert(snapshot_id);
                 if let Some(payload) = snapshot_payload {
-                    self.send_to_logic(LogicEvent::RemoteSnapshot { document_id, payload });
+                    self.send_to_logic(LogicEvent::RemoteSnapshot {
+                        document_id,
+                        payload,
+                    });
                 }
                 if self.ws_connected() {
                     self.ws_send(&WsClientMsg::Subscribe { document_id });
@@ -981,35 +1176,102 @@ impl SyncState {
                     message,
                 });
             }
-            SyncEvent::InviteSent { id, document_id, user_id, display_name } => {
-                self.reply(id, RestEvent::InviteSent { document_id, user_id, display_name });
+            SyncEvent::InviteSent {
+                id,
+                document_id,
+                user_id,
+                display_name,
+            } => {
+                self.reply(
+                    id,
+                    RestEvent::InviteSent {
+                        document_id,
+                        user_id,
+                        display_name,
+                    },
+                );
             }
-            SyncEvent::RevocationComplete { id, document_id, new_doc_key } => {
+            SyncEvent::RevocationComplete {
+                id,
+                document_id,
+                new_doc_key,
+            } => {
                 if let Some(doc_state) = self.documents.get_mut(&document_id) {
                     doc_state.rotate_key(new_doc_key);
                 }
                 self.reply(id, RestEvent::RevocationComplete { document_id });
             }
-            SyncEvent::DocumentMembersReady { id, document_id, members } => {
-                self.reply(id, RestEvent::DocumentMembers { document_id, members });
+            SyncEvent::DocumentMembersReady {
+                id,
+                document_id,
+                members,
+            } => {
+                self.reply(
+                    id,
+                    RestEvent::DocumentMembers {
+                        document_id,
+                        members,
+                    },
+                );
             }
             SyncEvent::UserSearchReady { id, users } => {
                 self.reply(id, RestEvent::UserSearchResults { users });
             }
-            SyncEvent::MemberRoleUpdatedEvent { id, document_id, user_id, role } => {
-                self.reply(id, RestEvent::MemberRoleUpdated { document_id, user_id, role });
+            SyncEvent::MemberRoleUpdatedEvent {
+                id,
+                document_id,
+                user_id,
+                role,
+            } => {
+                self.reply(
+                    id,
+                    RestEvent::MemberRoleUpdated {
+                        document_id,
+                        user_id,
+                        role,
+                    },
+                );
             }
-            SyncEvent::KeyRotated { document_id, new_doc_key, revoked_user_id } => {
+            SyncEvent::KeyRotated {
+                document_id,
+                new_doc_key,
+                revoked_user_id,
+            } => {
                 if let Some(doc_state) = self.documents.get_mut(&document_id) {
                     doc_state.rotate_key(new_doc_key);
                 }
-                self.send_to_logic(LogicEvent::MemberRevoked { document_id, revoked_user_id });
+                self.send_to_logic(LogicEvent::MemberRevoked {
+                    document_id,
+                    revoked_user_id,
+                });
             }
-            SyncEvent::MediaUploaded { id, document_id, content_hash } => {
-                self.reply(id, RestEvent::MediaUploaded { document_id, content_hash });
+            SyncEvent::MediaUploaded {
+                id,
+                document_id,
+                content_hash,
+            } => {
+                self.reply(
+                    id,
+                    RestEvent::MediaUploaded {
+                        document_id,
+                        content_hash,
+                    },
+                );
             }
-            SyncEvent::MediaDownloaded { id, document_id, content_hash, data } => {
-                self.reply(id, RestEvent::MediaDownloaded { document_id, content_hash, data });
+            SyncEvent::MediaDownloaded {
+                id,
+                document_id,
+                content_hash,
+                data,
+            } => {
+                self.reply(
+                    id,
+                    RestEvent::MediaDownloaded {
+                        document_id,
+                        content_hash,
+                        data,
+                    },
+                );
             }
         }
     }
@@ -1029,7 +1291,15 @@ impl SyncState {
                 });
             }
 
-            WsServerMsg::Update { seq, update } => self.receive_update(seq, update),
+            WsServerMsg::Update { seq, update } => {
+                tracing::debug!(
+                    "[Sync←Server] WS Update seq={} doc={} clock={}",
+                    seq.0,
+                    update.public_data.document_id,
+                    update.public_data.clock.0,
+                );
+                self.receive_update(seq, update);
+            }
 
             WsServerMsg::Ephemeral(eph) => {
                 let doc_id = eph.public_data.document_id;
@@ -1040,22 +1310,36 @@ impl SyncState {
                 // Anti-replay: reject ephemerals with a non-monotonic counter
                 // for the same author.
                 let author_pk = *eph.public_data.pub_key.as_array();
-                let last_counter = doc_state.ephemeral_remote_counters.get(&author_pk).copied().unwrap_or(0);
+                let last_counter = doc_state
+                    .ephemeral_remote_counters
+                    .get(&author_pk)
+                    .copied()
+                    .unwrap_or(0);
                 if eph.public_data.counter.0 <= last_counter {
-                    tracing::debug!("Sync: dropping replayed ephemeral from {:?} (counter {})", author_pk, eph.public_data.counter.0);
+                    tracing::debug!(
+                        "Sync: dropping replayed ephemeral from {:?} (counter {})",
+                        author_pk,
+                        eph.public_data.counter.0
+                    );
                     return;
                 }
-                doc_state.ephemeral_remote_counters.insert(author_pk, eph.public_data.counter.0);
+                doc_state
+                    .ephemeral_remote_counters
+                    .insert(author_pk, eph.public_data.counter.0);
 
-                let opened =
-                    doc_state.open_ephemeral_fallback(&eph);
-                self.deliver_remote(doc_id, Some(opened), |payload| LogicEvent::RemoteEphemeral {
-                    document_id: doc_id,
-                    payload,
+                let opened = doc_state.open_ephemeral_fallback(&eph);
+                self.deliver_remote(doc_id, Some(opened), |payload| {
+                    LogicEvent::RemoteEphemeral {
+                        document_id: doc_id,
+                        payload,
+                    }
                 });
             }
 
-            WsServerMsg::MissingUpdates { document_id: _, updates } => {
+            WsServerMsg::MissingUpdates {
+                document_id: _,
+                updates,
+            } => {
                 for seq_update in updates {
                     self.receive_update(seq_update.seq, seq_update.update);
                 }
@@ -1065,12 +1349,18 @@ impl SyncState {
                 self.send_to_logic(LogicEvent::SnapshotNeeded { document_id });
             }
 
-            WsServerMsg::SnapshotAvailable { document_id, snapshot_id } => {
+            WsServerMsg::SnapshotAvailable {
+                document_id,
+                snapshot_id,
+            } => {
                 tracing::info!("Sync: SnapshotAvailable {snapshot_id:?} for {document_id:?}");
                 self.snapshot_known(document_id, snapshot_id);
             }
 
-            WsServerMsg::KeyRotationRequired { document_id, revoked_user_id } => {
+            WsServerMsg::KeyRotationRequired {
+                document_id,
+                revoked_user_id,
+            } => {
                 // If WE are the revoked user, close the document and notify.
                 if Some(revoked_user_id) == self.user_id {
                     self.documents.remove(&document_id);
@@ -1123,8 +1413,9 @@ impl SyncState {
                         };
 
                         let new_doc_key = match (|| -> Result<DocumentKey, String> {
-                            let encrypted = hex::decode(&entry.doc_key_enc)
-                                .map_err(|e| format!("hex decode: {e}"))?;
+                            let encrypted = base64::engine::general_purpose::URL_SAFE
+                                .decode(&entry.doc_key_enc)
+                                .map_err(|e| format!("base64 decode doc_key_enc: {e}"))?;
                             if encrypted.len() < 24 {
                                 return Err("wrapped key too short".into());
                             }
@@ -1137,16 +1428,12 @@ impl SyncState {
                                 .try_into()
                                 .map_err(|_| "invalid pubkey length")?;
                             let wrapped = ambre_crypto::WrappedKey { nonce, ciphertext };
-                            ambre_crypto::ecdh::unwrap_document_key(
-                                &ek, &peer_pub, &wrapped,
-                            )
-                            .map_err(|e| format!("ECDH unwrap: {e}"))
+                            ambre_crypto::ecdh::unwrap_document_key(&ek, &peer_pub, &wrapped)
+                                .map_err(|e| format!("ECDH unwrap: {e}"))
                         })() {
                             Ok(k) => k,
                             Err(e) => {
-                                tracing::error!(
-                                    "Sync: KeyRotationRequired unwrap failed: {e}"
-                                );
+                                tracing::error!("Sync: KeyRotationRequired unwrap failed: {e}");
                                 return;
                             }
                         };
@@ -1167,11 +1454,18 @@ impl SyncState {
                 });
             }
 
-            WsServerMsg::ChannelUpdate { channel_id, seq: _, update } => {
+            WsServerMsg::ChannelUpdate {
+                channel_id,
+                seq: _,
+                update,
+            } => {
                 let _ = (channel_id, update);
             }
 
-            WsServerMsg::ChannelEphemeral { channel_id, ephemeral } => {
+            WsServerMsg::ChannelEphemeral {
+                channel_id,
+                ephemeral,
+            } => {
                 let _ = (channel_id, ephemeral);
             }
 
@@ -1204,14 +1498,30 @@ impl SyncState {
         let snapshot_id = update.public_data.snapshot_id;
         if doc_state.known_snapshots.contains(&snapshot_id) {
             let opened = doc_state.open_update_fallback(&update);
-            self.deliver_remote(document_id, Some(opened), |payload| LogicEvent::RemoteUpdate {
-                document_id,
-                payload,
+            tracing::info!(
+                "[Sync→Logic] delivering RemoteUpdate doc={document_id} seq={} clock={} size={}",
+                seq.0,
+                update.public_data.clock.0,
+                opened.as_ref().map(|b| b.len()).unwrap_or(0),
+            );
+            self.deliver_remote(document_id, Some(opened), |payload| {
+                LogicEvent::RemoteUpdate {
+                    document_id,
+                    payload,
+                }
             });
             return;
         }
 
-        doc_state.quarantine.entry(snapshot_id).or_default().push(update);
+        doc_state
+            .quarantine
+            .entry(snapshot_id)
+            .or_default()
+            .push(update);
+        tracing::debug!(
+            "[Sync] quarantined update doc={document_id} seq={} snapshot={snapshot_id:?}",
+            seq.0,
+        );
         self.enforce_quarantine_bounds(document_id);
     }
 
@@ -1219,12 +1529,17 @@ impl SyncState {
     /// missing history at the soft threshold, and drop the oldest update (by
     /// `clock`) past the hard cap, raising a `SyncWarning`.
     fn enforce_quarantine_bounds(&mut self, document_id: DocumentId) {
-        let Some(doc_state) = self.documents.get_mut(&document_id) else { return };
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
 
         if doc_state.quarantine_len() >= QUARANTINE_ALERT {
             let after_seq = doc_state.last_seq;
             if self.ws_connected() {
-                self.ws_send(&WsClientMsg::RequestMissing { document_id, after_seq });
+                self.ws_send(&WsClientMsg::RequestMissing {
+                    document_id,
+                    after_seq,
+                });
             }
         }
 
@@ -1275,19 +1590,31 @@ impl SyncState {
     /// `clock` first.
     fn release_quarantine(&mut self, document_id: DocumentId, snapshot_id: SnapshotId) {
         let mut pending = {
-            let Some(doc_state) = self.documents.get_mut(&document_id) else { return };
-            doc_state.quarantine.remove(&snapshot_id).unwrap_or_default()
+            let Some(doc_state) = self.documents.get_mut(&document_id) else {
+                return;
+            };
+            doc_state
+                .quarantine
+                .remove(&snapshot_id)
+                .unwrap_or_default()
         };
         pending.sort_by_key(|u| u.public_data.clock.0);
 
         let results: Vec<Result<Vec<u8>, pipeline::PipelineError>> = {
-            let Some(doc_state) = self.documents.get(&document_id) else { return };
-            pending.iter().map(|u| doc_state.open_update_fallback(u)).collect()
+            let Some(doc_state) = self.documents.get(&document_id) else {
+                return;
+            };
+            pending
+                .iter()
+                .map(|u| doc_state.open_update_fallback(u))
+                .collect()
         };
         for opened in results {
-            self.deliver_remote(document_id, Some(opened), |payload| LogicEvent::RemoteUpdate {
-                document_id,
-                payload,
+            self.deliver_remote(document_id, Some(opened), |payload| {
+                LogicEvent::RemoteUpdate {
+                    document_id,
+                    payload,
+                }
             });
         }
     }
@@ -1304,20 +1631,20 @@ impl SyncState {
             wasm_bindgen_futures::spawn_local(async move {
                 let members_url = format!("https://{api_base}/api/documents/{doc_id}/members");
                 let doc_key = match http::get_json::<http::MembersResponse>(&members_url).await {
-                    Ok(resp) => {
-                        match &exchange_key {
-                            Some(ek) => Self::unwrap_document_key(ek, &resp.members)
-                                .unwrap_or_else(|_| DocumentKey::generate()),
-                            None => DocumentKey::generate(),
-                        }
-                    }
+                    Ok(resp) => match &exchange_key {
+                        Some(ek) => Self::unwrap_document_key(ek, &resp.members)
+                            .unwrap_or_else(|_| DocumentKey::generate()),
+                        None => DocumentKey::generate(),
+                    },
                     Err(_) => DocumentKey::generate(),
                 };
-                let snapshot_url = format!("https://{api_base}/api/documents/{doc_id}/snapshot/latest");
-                let snapshot_payload = match http::get_json::<http::SnapshotPresignedResponse>(&snapshot_url).await {
-                    Ok(presigned) => http::fetch_bytes(&presigned.url).await.ok(),
-                    Err(_) => None,
-                };
+                let snapshot_url =
+                    format!("https://{api_base}/api/documents/{doc_id}/snapshot/latest");
+                let snapshot_payload =
+                    match http::get_json::<http::SnapshotPresignedResponse>(&snapshot_url).await {
+                        Ok(presigned) => http::fetch_bytes(&presigned.url).await.ok(),
+                        Err(_) => None,
+                    };
                 let snapshot_id = SnapshotId::new();
                 let _ = tx.send(SyncEvent::OpenDocumentReady {
                     document_id: doc_id,
@@ -1359,8 +1686,9 @@ impl SyncState {
             .find(|m| m.exchange_pub_key == our_exchange_pub)
             .ok_or("own member entry not found")?;
 
-        let encrypted = hex::decode(&entry.doc_key_enc)
-            .map_err(|e| format!("hex decode doc_key_enc: {e}"))?;
+        let encrypted = base64::engine::general_purpose::URL_SAFE
+            .decode(&entry.doc_key_enc)
+            .map_err(|e| format!("base64 decode doc_key_enc: {e}"))?;
         if encrypted.len() < 24 {
             return Err("wrapped key too short".into());
         }
@@ -1389,10 +1717,16 @@ impl SyncState {
 
     fn handle_reconnect(&mut self, document_id: DocumentId) {
         if self.ws_connected() {
-            let last_seq =
-                self.documents.get(&document_id).map(|d| d.last_seq).unwrap_or(Seq(0));
+            let last_seq = self
+                .documents
+                .get(&document_id)
+                .map(|d| d.last_seq)
+                .unwrap_or(Seq(0));
             self.ws_send(&WsClientMsg::Subscribe { document_id });
-            self.ws_send(&WsClientMsg::RequestMissing { document_id, after_seq: last_seq });
+            self.ws_send(&WsClientMsg::RequestMissing {
+                document_id,
+                after_seq: last_seq,
+            });
         }
     }
 
@@ -1408,12 +1742,14 @@ impl SyncState {
 
     fn handle_send_update(&mut self, document_id: DocumentId, payload: Vec<u8>) {
         let Some(signing_key) = self.signing_key.clone() else {
-            tracing::warn!("Sync: SendUpdate before session keys ready, dropping");
+            tracing::warn!("[Sync] SendUpdate before session keys ready, dropping");
             return;
         };
-        let Some(pub_key) = self.author_pub_key() else { return };
+        let Some(pub_key) = self.author_pub_key() else {
+            return;
+        };
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
-            tracing::warn!("Sync: SendUpdate for unknown doc {document_id:?}");
+            tracing::warn!("[Sync] SendUpdate for unknown doc {document_id:?}");
             return;
         };
         doc_state.local_clock += 1;
@@ -1424,8 +1760,15 @@ impl SyncState {
             clock: Clock(doc_state.local_clock),
         };
         match pipeline::seal_update(&payload, public_data, &doc_state.doc_key, &signing_key) {
-            Ok(update) => self.ws_send(&WsClientMsg::Update(update)),
-            Err(e) => tracing::error!("Sync: SendUpdate seal failed for {document_id:?}: {e}"),
+            Ok(update) => {
+                tracing::info!(
+                    "[Sync] seal_update ok doc={document_id} clock={} → {} bytes ciphertext",
+                    doc_state.local_clock,
+                    update.ciphertext.0.len(),
+                );
+                self.ws_send(&WsClientMsg::Update(update));
+            }
+            Err(e) => tracing::error!("[Sync] SendUpdate seal failed for {document_id:?}: {e}"),
         }
     }
 
@@ -1434,7 +1777,9 @@ impl SyncState {
             tracing::warn!("Sync: SendSnapshot before session keys ready, dropping");
             return;
         };
-        let Some(pub_key) = self.author_pub_key() else { return };
+        let Some(pub_key) = self.author_pub_key() else {
+            return;
+        };
         let Some(doc_state) = self.documents.get(&document_id) else {
             tracing::warn!("Sync: SendSnapshot for unknown doc {document_id:?}");
             return;
@@ -1443,13 +1788,10 @@ impl SyncState {
             document_id,
             pub_key,
             snapshot_id: doc_state.current_snapshot_id,
-            // TODO (snapshot flow): real BLAKE2b parent proof + per-author clocks.
             parent_snapshot_proof: Vec::new(),
             parent_snapshot_update_clocks: Vec::new(),
         };
         match pipeline::seal_snapshot(&payload, public_data, &doc_state.doc_key, &signing_key) {
-            // TODO (snapshot transport): upload via S3 presigned PUT + POST
-            // metadata. Snapshots do not transit the WebSocket.
             Ok(snapshot) => tracing::info!(
                 "Sync: SendSnapshot {document_id:?} sealed ({} bytes ciphertext), S3 upload pending",
                 snapshot.ciphertext.0.len()
@@ -1463,7 +1805,9 @@ impl SyncState {
             tracing::warn!("Sync: SendEphemeral before session keys ready, dropping");
             return;
         };
-        let Some(pub_key) = self.author_pub_key() else { return };
+        let Some(pub_key) = self.author_pub_key() else {
+            return;
+        };
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             tracing::warn!("Sync: SendEphemeral for unknown doc {document_id:?}");
             return;
@@ -1491,16 +1835,26 @@ impl SyncState {
                 let url = format!("https://{api_base}/api/documents");
                 match http::get_json::<http::DocumentListResponse>(&url).await {
                     Ok(resp) => {
-                        let docs: Vec<DocumentSummary> = resp.documents.into_iter().map(|e| {
-                            DocumentSummary {
-                                document_id: DocumentId::parse_str(&e.document_id).unwrap_or_else(|_| DocumentId::new()),
+                        let docs: Vec<DocumentSummary> = resp
+                            .documents
+                            .into_iter()
+                            .map(|e| DocumentSummary {
+                                document_id: DocumentId::parse_str(&e.document_id)
+                                    .unwrap_or_else(|_| DocumentId::new()),
                                 doc_type: DocType::from_u8(e.doc_type).unwrap_or(DocType::Trame),
                                 name: Some(e.name_enc),
-                                role: match e.role.as_str() { "editor" => Role::Editor, "viewer" => Role::Viewer, _ => Role::Owner },
+                                role: match e.role.as_str() {
+                                    "editor" => Role::Editor,
+                                    "viewer" => Role::Viewer,
+                                    _ => Role::Owner,
+                                },
                                 updated_at: e.updated_at,
-                            }
-                        }).collect();
-                        let _ = tx.send(SyncEvent::DocumentList { id, documents: docs });
+                            })
+                            .collect();
+                        let _ = tx.send(SyncEvent::DocumentList {
+                            id,
+                            documents: docs,
+                        });
                     }
                     Err(e) => {
                         let _ = tx.send(SyncEvent::HttpError { id, message: e });
@@ -1530,13 +1884,58 @@ impl SyncState {
 
         if let Some(tx) = event_tx {
             let api_base = self.api_base.clone();
+            let csrf = self.csrf_token.clone();
+            let exchange_key = self.exchange_key.clone();
             wasm_bindgen_futures::spawn_local(async move {
+                // E2EE: the server only ever stores ciphertext. Generate a fresh
+                // DocumentKey, seal the name with it, and wrap the key for the
+                // owner (ourselves) via X25519 so we can recover it on open.
+                let Some(exchange_key) = exchange_key else {
+                    let _ = tx.send(SyncEvent::HttpError {
+                        id,
+                        message: "CreateDocument: session locked (no exchange key)".into(),
+                    });
+                    return;
+                };
+                let doc_key = DocumentKey::generate();
+
+                let name_enc = if name.is_empty() {
+                    None
+                } else {
+                    let (nonce, ct) =
+                        ambre_crypto::aead::seal(name.as_bytes(), b"ambre-doc-name", &doc_key);
+                    let mut buf = nonce.to_vec();
+                    buf.extend_from_slice(&ct);
+                    Some(base64::engine::general_purpose::URL_SAFE.encode(&buf))
+                };
+
+                let own_pub = x25519_dalek::PublicKey::from(&exchange_key);
+                let wrapped = ambre_crypto::ecdh::wrap_document_key(
+                    &exchange_key,
+                    own_pub.as_bytes(),
+                    &doc_key,
+                );
+                let mut enc = wrapped.nonce.to_vec();
+                enc.extend_from_slice(&wrapped.ciphertext);
+                let doc_key_enc = base64::engine::general_purpose::URL_SAFE.encode(&enc);
+
                 let url = format!("https://{api_base}/api/documents");
-                let body = http::CreateDocumentRequest { doc_type: doc_type as u8, name_enc: name };
-                match http::post_json::<_, http::CreateDocumentResponse>(&url, &body).await {
+                let body = http::CreateDocumentRequest {
+                    doc_type: doc_type_to_api_string(doc_type),
+                    name_enc,
+                    doc_key_enc,
+                };
+                match http::post_json::<_, http::CreateDocumentResponse>(&url, &body, csrf.as_ref())
+                    .await
+                {
                     Ok(resp) => {
-                        let document_id = DocumentId::parse_str(&resp.document_id).unwrap_or_else(|_| DocumentId::new());
-                        let _ = tx.send(SyncEvent::DocumentCreated { id, document_id, doc_type });
+                        let document_id = DocumentId::parse_str(&resp.document_id)
+                            .unwrap_or_else(|_| DocumentId::new());
+                        let _ = tx.send(SyncEvent::DocumentCreated {
+                            id,
+                            document_id,
+                            doc_type,
+                        });
                     }
                     Err(e) => {
                         let _ = tx.send(SyncEvent::HttpError { id, message: e });
@@ -1547,7 +1946,13 @@ impl SyncState {
             tracing::info!("Sync: CreateDocument {doc_type:?} '{name}'");
             let document_id = DocumentId::new();
             self.doc_metadata.insert(document_id, (doc_type, name));
-            self.reply(id, RestEvent::DocumentCreated { document_id, doc_type });
+            self.reply(
+                id,
+                RestEvent::DocumentCreated {
+                    document_id,
+                    doc_type,
+                },
+            );
         }
     }
 
@@ -1556,12 +1961,20 @@ impl SyncState {
 
         if let Some(tx) = event_tx {
             let api_base = self.api_base.clone();
+            let csrf = self.csrf_token.clone();
             let doc_id = document_id;
             wasm_bindgen_futures::spawn_local(async move {
                 let url = format!("https://{api_base}/api/documents/{doc_id}");
-                match http::delete(&url).await {
-                    Ok(()) => { let _ = tx.send(SyncEvent::DocumentDeleted { id, document_id: doc_id }); }
-                    Err(e) => { let _ = tx.send(SyncEvent::HttpError { id, message: e }); }
+                match http::delete(&url, csrf.as_ref()).await {
+                    Ok(()) => {
+                        let _ = tx.send(SyncEvent::DocumentDeleted {
+                            id,
+                            document_id: doc_id,
+                        });
+                    }
+                    Err(e) => {
+                        let _ = tx.send(SyncEvent::HttpError { id, message: e });
+                    }
                 }
             });
         } else {
@@ -1576,13 +1989,37 @@ impl SyncState {
 
         if let Some(tx) = event_tx {
             let api_base = self.api_base.clone();
+            let csrf = self.csrf_token.clone();
             let doc_id = document_id;
+            let doc_key = self.documents.get(&document_id).map(|ds| ds.doc_key.clone());
             wasm_bindgen_futures::spawn_local(async move {
-                let url = format!("https://{api_base}/api/documents/{doc_id}/rename");
-                let body = http::RenameDocumentRequest { name_enc: name };
-                match http::put_json(&url, &body).await {
-                    Ok(()) => { let _ = tx.send(SyncEvent::DocumentRenamed { id, document_id: doc_id }); }
-                    Err(e) => { let _ = tx.send(SyncEvent::HttpError { id, message: e }); }
+                // E2EE: the new name is sealed with the document key before it
+                // leaves the client. The server only ever stores ciphertext.
+                let Some(doc_key) = doc_key else {
+                    let _ = tx.send(SyncEvent::HttpError {
+                        id,
+                        message: "RenameDocument: document not open (no key)".into(),
+                    });
+                    return;
+                };
+                let (nonce, ct) = ambre_crypto::aead::seal(name.as_bytes(), b"ambre-doc-name", &doc_key);
+                let mut buf = nonce.to_vec();
+                buf.extend_from_slice(&ct);
+                let name_enc = base64::engine::general_purpose::URL_SAFE.encode(&buf);
+
+                // PATCH /api/documents/{id} (matches the server route).
+                let url = format!("https://{api_base}/api/documents/{doc_id}");
+                let body = http::RenameDocumentRequest { name_enc };
+                match http::patch_json(&url, &body, csrf.as_ref()).await {
+                    Ok(()) => {
+                        let _ = tx.send(SyncEvent::DocumentRenamed {
+                            id,
+                            document_id: doc_id,
+                        });
+                    }
+                    Err(e) => {
+                        let _ = tx.send(SyncEvent::HttpError { id, message: e });
+                    }
                 }
             });
         } else {
@@ -1613,15 +2050,22 @@ impl SyncState {
         let event_tx = self.event_tx.clone();
         let logic_tx = self.logic_tx.clone();
         let api_base = self.api_base.clone();
+        let csrf = self.csrf_token.clone();
         let exchange_key = self.exchange_key.clone();
-        let doc_key = self.documents.get(&document_id).map(|ds| ds.doc_key.clone());
+        let doc_key = self
+            .documents
+            .get(&document_id)
+            .map(|ds| ds.doc_key.clone());
 
         let Some(tx) = event_tx else {
-            self.reply(id, RestEvent::InviteSent {
-                document_id,
-                user_id: UserId::new(),
-                display_name: invitee_email.clone(),
-            });
+            self.reply(
+                id,
+                RestEvent::InviteSent {
+                    document_id,
+                    user_id: UserId::new(),
+                    display_name: invitee_email.clone(),
+                },
+            );
             return;
         };
         let Some(exchange_key) = exchange_key else {
@@ -1690,7 +2134,8 @@ impl SyncState {
                 }
             };
 
-            let wrapped = ambre_crypto::ecdh::wrap_document_key(&exchange_key, &peer_pub_bytes, &doc_key);
+            let wrapped =
+                ambre_crypto::ecdh::wrap_document_key(&exchange_key, &peer_pub_bytes, &doc_key);
             let mut enc = wrapped.nonce.to_vec();
             enc.extend_from_slice(&wrapped.ciphertext);
             let doc_key_enc = base64::engine::general_purpose::URL_SAFE.encode(&enc);
@@ -1701,10 +2146,12 @@ impl SyncState {
                 role: role.to_string(),
                 doc_key_enc,
             };
-            match http::post_json::<_, http::InviteResponse>(&invite_url, &body).await {
+            match http::post_json::<_, http::InviteResponse>(&invite_url, &body, csrf.as_ref())
+                .await
+            {
                 Ok(resp) => {
-                    let user_id = UserId::parse_str(&resp.user_id)
-                        .unwrap_or_else(|_| UserId::new());
+                    let user_id =
+                        UserId::parse_str(&resp.user_id).unwrap_or_else(|_| UserId::new());
                     let _ = tx.send(SyncEvent::InviteSent {
                         id,
                         document_id,
@@ -1734,15 +2181,11 @@ impl SyncState {
     /// 6. Emits [`SyncEvent::RevocationComplete`], which causes
     ///    [`handle_sync_event`] to swap the local key and push the old key
     ///    into the [`SyncDocumentState::old_keys`] LRU cache.
-    fn handle_revoke_from_document(
-        &self,
-        id: RequestId,
-        document_id: DocumentId,
-        user_id: UserId,
-    ) {
+    fn handle_revoke_from_document(&self, id: RequestId, document_id: DocumentId, user_id: UserId) {
         let event_tx = self.event_tx.clone();
         let logic_tx = self.logic_tx.clone();
         let api_base = self.api_base.clone();
+        let csrf = self.csrf_token.clone();
         let exchange_key = self.exchange_key.clone();
         let doc_state = self.documents.get(&document_id);
         let old_doc_key = doc_state.map(|ds| ds.doc_key.clone());
@@ -1762,10 +2205,9 @@ impl SyncState {
 
         wasm_bindgen_futures::spawn_local(async move {
             // 1. DELETE /api/documents/{id}/share/{uid}
-            let revoke_url = format!(
-                "https://{api_base}/api/documents/{document_id}/share/{user_id}"
-            );
-            if let Err(e) = http::delete(&revoke_url).await {
+            let revoke_url =
+                format!("https://{api_base}/api/documents/{document_id}/share/{user_id}");
+            if let Err(e) = http::delete(&revoke_url, csrf.as_ref()).await {
                 let _ = logic_tx.send(LogicEvent::ApiError {
                     request: "RevokeFromDocument".into(),
                     code: 500,
@@ -1778,9 +2220,7 @@ impl SyncState {
             let new_doc_key = DocumentKey::generate();
 
             // 3. GET remaining members
-            let members_url = format!(
-                "https://{api_base}/api/documents/{document_id}/members"
-            );
+            let members_url = format!("https://{api_base}/api/documents/{document_id}/members");
             let members = match http::get_json::<http::DocumentMembersResponse>(&members_url).await
             {
                 Ok(resp) => resp.members,
@@ -1804,8 +2244,11 @@ impl SyncState {
                     },
                     Err(_) => continue,
                 };
-                let wrapped =
-                    ambre_crypto::ecdh::wrap_document_key(&exchange_key, &peer_pub_bytes, &new_doc_key);
+                let wrapped = ambre_crypto::ecdh::wrap_document_key(
+                    &exchange_key,
+                    &peer_pub_bytes,
+                    &new_doc_key,
+                );
                 let mut enc = wrapped.nonce.to_vec();
                 enc.extend_from_slice(&wrapped.ciphertext);
                 let doc_key_enc = base64::engine::general_purpose::URL_SAFE.encode(&enc);
@@ -1816,11 +2259,11 @@ impl SyncState {
             }
 
             // 5. POST /api/documents/{id}/rotate-key
-            let rotate_url = format!(
-                "https://{api_base}/api/documents/{document_id}/rotate-key"
-            );
+            let rotate_url = format!("https://{api_base}/api/documents/{document_id}/rotate-key");
             let body = http::RotateKeyRequest { keys };
-            if let Err(e) = http::post_json::<_, serde_json::Value>(&rotate_url, &body).await {
+            if let Err(e) =
+                http::post_json::<_, serde_json::Value>(&rotate_url, &body, csrf.as_ref()).await
+            {
                 let _ = logic_tx.send(LogicEvent::ApiError {
                     request: "RevokeFromDocument".into(),
                     code: 500,
@@ -1850,9 +2293,7 @@ impl SyncState {
 
         if let Some(tx) = event_tx {
             wasm_bindgen_futures::spawn_local(async move {
-                let url = format!(
-                    "https://{api_base}/api/documents/{document_id}/members"
-                );
+                let url = format!("https://{api_base}/api/documents/{document_id}/members");
                 match http::get_json::<http::DocumentMembersResponse>(&url).await {
                     Ok(resp) => {
                         let members: Vec<MemberInfo> = resp
@@ -1878,10 +2319,13 @@ impl SyncState {
                 }
             });
         } else {
-            self.reply(id, RestEvent::DocumentMembers {
-                document_id,
-                members: Vec::new(),
-            });
+            self.reply(
+                id,
+                RestEvent::DocumentMembers {
+                    document_id,
+                    members: Vec::new(),
+                },
+            );
         }
     }
 
@@ -1898,14 +2342,14 @@ impl SyncState {
         let event_tx = self.event_tx.clone();
         let logic_tx = self.logic_tx.clone();
         let api_base = self.api_base.clone();
+        let csrf = self.csrf_token.clone();
 
         if let Some(tx) = event_tx {
             wasm_bindgen_futures::spawn_local(async move {
-                let url = format!(
-                    "https://{api_base}/api/documents/{document_id}/members/{user_id}"
-                );
+                let url =
+                    format!("https://{api_base}/api/documents/{document_id}/members/{user_id}");
                 let body = serde_json::json!({ "role": role.to_string() });
-                match http::put_json(&url, &body).await {
+                match http::put_json(&url, &body, csrf.as_ref()).await {
                     Ok(()) => {
                         let _ = tx.send(SyncEvent::MemberRoleUpdatedEvent {
                             id,
@@ -1924,14 +2368,15 @@ impl SyncState {
                 }
             });
         } else {
-            tracing::info!(
-                "Sync: UpdateDocumentMemberRole {document_id:?} {user_id:?} {role:?}"
+            tracing::info!("Sync: UpdateDocumentMemberRole {document_id:?} {user_id:?} {role:?}");
+            self.reply(
+                id,
+                RestEvent::MemberRoleUpdated {
+                    document_id,
+                    user_id,
+                    role,
+                },
             );
-            self.reply(id, RestEvent::MemberRoleUpdated {
-                document_id,
-                user_id,
-                role,
-            });
         }
     }
 
@@ -1955,8 +2400,7 @@ impl SyncState {
                             .users
                             .into_iter()
                             .map(|u| UserInfo {
-                                user_id: UserId::parse_str(&u.id)
-                                    .unwrap_or_else(|_| UserId::new()),
+                                user_id: UserId::parse_str(&u.id).unwrap_or_else(|_| UserId::new()),
                                 display_name: u.display_name,
                                 email: u.email,
                             })
@@ -1993,7 +2437,11 @@ impl SyncState {
         let event_tx = self.event_tx.clone();
         let logic_tx = self.logic_tx.clone();
         let api_base = self.api_base.clone();
-        let doc_key = self.documents.get(&document_id).map(|ds| ds.doc_key.clone());
+        let csrf = self.csrf_token.clone();
+        let doc_key = self
+            .documents
+            .get(&document_id)
+            .map(|ds| ds.doc_key.clone());
 
         let Some(tx) = event_tx else {
             let content_hash = {
@@ -2001,7 +2449,13 @@ impl SyncState {
                 hasher.update(&data);
                 hex::encode(&hasher.finalize()[..32])
             };
-            self.reply(id, RestEvent::MediaUploaded { document_id, content_hash });
+            self.reply(
+                id,
+                RestEvent::MediaUploaded {
+                    document_id,
+                    content_hash,
+                },
+            );
             return;
         };
         let Some(doc_key) = doc_key else {
@@ -2014,8 +2468,7 @@ impl SyncState {
         };
 
         wasm_bindgen_futures::spawn_local(async move {
-            let (nonce, ciphertext) =
-                ambre_crypto::aead::seal(&data, b"ambre-media", &doc_key);
+            let (nonce, ciphertext) = ambre_crypto::aead::seal(&data, b"ambre-media", &doc_key);
             let encrypted_size = (ambre_crypto::aead::NONCE_LEN + ciphertext.len()) as u64;
 
             let content_hash = {
@@ -2024,9 +2477,8 @@ impl SyncState {
                 hex::encode(&hasher.finalize()[..32])
             };
 
-            let upload_url_req = format!(
-                "https://{api_base}/api/documents/{document_id}/media/upload-url"
-            );
+            let upload_url_req =
+                format!("https://{api_base}/api/documents/{document_id}/media/upload-url");
             let body = http::UploadUrlRequest {
                 content_hash: content_hash.clone(),
                 mime_type: mime_type.clone(),
@@ -2035,6 +2487,7 @@ impl SyncState {
             let upload_url = match http::post_json::<_, http::UploadUrlResponse>(
                 &upload_url_req,
                 &body,
+                csrf.as_ref(),
             )
             .await
             {
@@ -2051,8 +2504,10 @@ impl SyncState {
 
             let mut blob = nonce.to_vec();
             blob.extend_from_slice(&ciphertext);
-            if let Err(e) = http::put_bytes(&upload_url, &blob, "application/octet-stream")
-                .await
+            // S3 presigned PUT goes straight to object storage, not our API:
+            // no session, no CSRF header.
+            if let Err(e) =
+                http::put_bytes(&upload_url, &blob, "application/octet-stream", None).await
             {
                 let _ = logic_tx.send(LogicEvent::ApiError {
                     request: "UploadMedia".into(),
@@ -2062,16 +2517,15 @@ impl SyncState {
                 return;
             }
 
-            let confirm_url = format!(
-                "https://{api_base}/api/documents/{document_id}/media"
-            );
+            let confirm_url = format!("https://{api_base}/api/documents/{document_id}/media");
             let confirm_body = http::ConfirmUploadRequest {
                 content_hash: content_hash.clone(),
                 mime_type,
                 size_bytes: encrypted_size as i64,
             };
             if let Err(e) =
-                http::post_json::<_, serde_json::Value>(&confirm_url, &confirm_body).await
+                http::post_json::<_, serde_json::Value>(&confirm_url, &confirm_body, csrf.as_ref())
+                    .await
             {
                 let _ = logic_tx.send(LogicEvent::ApiError {
                     request: "UploadMedia".into(),
@@ -2095,23 +2549,25 @@ impl SyncState {
     /// 3. Splits the nonce (first [`ambre_crypto::aead::NONCE_LEN`] bytes) from
     ///    the ciphertext and decrypts with the document key.
     /// 4. Emits [`SyncEvent::MediaDownloaded`] with the plaintext data.
-    fn handle_download_media(
-        &self,
-        id: RequestId,
-        document_id: DocumentId,
-        content_hash: String,
-    ) {
+    fn handle_download_media(&self, id: RequestId, document_id: DocumentId, content_hash: String) {
         let event_tx = self.event_tx.clone();
         let logic_tx = self.logic_tx.clone();
         let api_base = self.api_base.clone();
-        let doc_key = self.documents.get(&document_id).map(|ds| ds.doc_key.clone());
+        let csrf = self.csrf_token.clone();
+        let doc_key = self
+            .documents
+            .get(&document_id)
+            .map(|ds| ds.doc_key.clone());
 
         let Some(tx) = event_tx else {
-            self.reply(id, RestEvent::MediaDownloaded {
-                document_id,
-                content_hash,
-                data: Vec::new(),
-            });
+            self.reply(
+                id,
+                RestEvent::MediaDownloaded {
+                    document_id,
+                    content_hash,
+                    data: Vec::new(),
+                },
+            );
             return;
         };
         let Some(doc_key) = doc_key else {
@@ -2124,15 +2580,15 @@ impl SyncState {
         };
 
         wasm_bindgen_futures::spawn_local(async move {
-            let download_url_req = format!(
-                "https://{api_base}/api/documents/{document_id}/media/download-url"
-            );
+            let download_url_req =
+                format!("https://{api_base}/api/documents/{document_id}/media/download-url");
             let body = http::DownloadUrlRequest {
                 content_hash: content_hash.clone(),
             };
             let download_url = match http::post_json::<_, http::DownloadUrlResponse>(
                 &download_url_req,
                 &body,
+                csrf.as_ref(),
             )
             .await
             {
@@ -2167,17 +2623,12 @@ impl SyncState {
                 });
                 return;
             }
-            let (nonce_bytes, ciphertext) =
-                blob.split_at(ambre_crypto::aead::NONCE_LEN);
+            let (nonce_bytes, ciphertext) = blob.split_at(ambre_crypto::aead::NONCE_LEN);
             let nonce: [u8; ambre_crypto::aead::NONCE_LEN] =
                 nonce_bytes.try_into().expect("nonce len");
 
-            let data = match ambre_crypto::aead::open(
-                &nonce,
-                ciphertext,
-                b"ambre-media",
-                &doc_key,
-            ) {
+            let data = match ambre_crypto::aead::open(&nonce, ciphertext, b"ambre-media", &doc_key)
+            {
                 Ok(d) => d,
                 Err(e) => {
                     let _ = logic_tx.send(LogicEvent::ApiError {
@@ -2215,7 +2666,10 @@ impl SyncState {
     }
 
     fn handle_send_channel_update(&self, channel_id: ChannelId, payload: Vec<u8>) {
-        tracing::debug!("Sync: SendChannelUpdate {channel_id:?} len={}", payload.len());
+        tracing::debug!(
+            "Sync: SendChannelUpdate {channel_id:?} len={}",
+            payload.len()
+        );
     }
 
     fn handle_send_channel_ephemeral(&self, channel_id: ChannelId, payload: Vec<u8>) {
@@ -2230,63 +2684,47 @@ impl SyncState {
 // Entry points
 // -----------------------------------------------------------------------------
 
-/// Non-blocking WASM entry point. Spawned inside a `wasm_thread` Web Worker.
+/// Async entry point for the Sync worker (`ambre-sync-worker` calls this from
+/// `spawn_local`). Single-worker model:
 ///
-/// Creates an internal event channel (`event_tx` / `event_rx`) and runs a
-/// `futures_util::select!` loop that races between incoming [`SyncCommand`]s
-/// from the Logic thread and [`SyncEvent`]s pushed by JS WebSocket callbacks
-/// and spawned HTTP tasks. Unlike the synchronous [`run`], this loop does NOT
-/// call `Atomics.wait` and therefore does not freeze the Worker's JS event
-/// loop.
+/// - `cmd_rx`: in-worker `flume` channel fed by the worker's `onmessage` handler
+///   (decoded `SyncCommand`s relayed from the Main instance via `postMessage`).
+/// - `logic_sink`: emits `LogicEvent`s back to Main (postMessage).
+///
+/// Internally it creates the event bus (`event_tx`/`event_rx`) into which WS /
+/// HTTP callbacks push `SyncEvent`s, then `select!`s over both `recv_async`
+/// futures. Producer and consumer share this worker, so the wakers fire; the
+/// worker's JS event loop stays free for WebSocket / fetch callbacks.
 #[cfg(target_arch = "wasm32")]
 pub async fn run_wasm(
-    logic_rx: flume::Receiver<SyncCommand>,
-    logic_tx: flume::Sender<LogicEvent>,
+    cmd_rx: flume::Receiver<SyncCommand>,
+    logic_sink: LogicSink,
     api_base: String,
 ) {
-    tracing::info!("Ambre Sync thread starting (wasm async)");
+    use futures_util::future::FutureExt;
 
-    let mut state = SyncState::new(logic_tx, api_base);
+    tracing::info!("Ambre Sync worker starting (wasm async)");
+
+    let mut state = SyncState::new(logic_sink, api_base, None);
     let (event_tx, event_rx) = flume::unbounded::<SyncEvent>();
     state.set_event_tx(event_tx);
 
     loop {
         futures_util::select! {
-            cmd = logic_rx.recv_async() => {
-                match cmd {
-                    Ok(cmd) => state.handle_command(cmd),
-                    Err(flume::RecvError::Disconnected) => break,
-                }
-            }
-            event = event_rx.recv_async() => {
-                match event {
-                    Ok(ev) => state.handle_sync_event(ev),
-                    Err(flume::RecvError::Disconnected) => break,
-                }
-            }
+            cmd = cmd_rx.recv_async().fuse() => match cmd {
+                Ok(cmd) => state.handle_command(cmd),
+                // Command channel closed: the Main instance is gone (teardown).
+                Err(_) => break,
+            },
+            ev = event_rx.recv_async().fuse() => match ev {
+                Ok(ev) => state.handle_sync_event(ev),
+                // event_tx is held by `state`, so this only errors at teardown.
+                Err(_) => {}
+            },
         }
     }
 
-    tracing::info!("Ambre Sync thread exiting (channels disconnected)");
-}
-
-/// Synchronous, blocking entry point for host (native) tests. Does not touch
-/// WASM APIs — uses in-memory mock transport and pre-seeded keys.
-#[cfg(not(target_arch = "wasm32"))]
-pub fn run(
-    logic_rx: flume::Receiver<SyncCommand>,
-    logic_tx: flume::Sender<LogicEvent>,
-) {
-    tracing::info!("Ambre Sync thread starting (native blocking)");
-
-    let mut state = SyncState::new(logic_tx, String::new());
-
-    while let Ok(cmd) = logic_rx.recv() {
-        state.handle_command(cmd);
-    }
-
-    tracing::info!("Ambre Sync thread exiting (Logic thread disconnected)");
-    let _ = state;
+    tracing::info!("Ambre Sync worker exiting (command channel closed)");
 }
 
 // -----------------------------------------------------------------------------
@@ -2308,8 +2746,8 @@ mod tests {
         SigningKey,
         SnapshotId,
     ) {
-        let (tx, rx) = flume::unbounded();
-        let mut state = SyncState::new(tx, String::new());
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(sink, String::new(), None);
         let document_id = DocumentId::new();
         let doc_key = DocumentKey::generate();
         let signing_key = MasterSeed::generate().derive_signing_key();
@@ -2328,7 +2766,12 @@ mod tests {
         signing_key: &SigningKey,
     ) -> Update {
         let pub_key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
-        let public_data = UpdatePublicData { document_id, pub_key, snapshot_id, clock: Clock(clock) };
+        let public_data = UpdatePublicData {
+            document_id,
+            pub_key,
+            snapshot_id,
+            clock: Clock(clock),
+        };
         pipeline::seal_update(payload, public_data, doc_key, signing_key).expect("seal")
     }
 
@@ -2346,7 +2789,10 @@ mod tests {
         let events = drain(&rx);
         assert_eq!(events.len(), 1);
         match &events[0] {
-            LogicEvent::RemoteUpdate { document_id, payload } => {
+            LogicEvent::RemoteUpdate {
+                document_id,
+                payload,
+            } => {
                 assert_eq!(*document_id, doc);
                 assert_eq!(payload, b"hello");
             }

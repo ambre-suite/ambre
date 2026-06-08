@@ -335,7 +335,7 @@ mod tests {
     fn literal_number() {
         assert!(matches!(parse("42"), Expr::Literal(CellValue::Number(42.0))));
         assert!(matches!(parse("-5"), Expr::UnaryOp { .. }));
-        assert!(matches!(parse("3.14"), Expr::Literal(CellValue::Number(v)) if (v - 3.14).abs() < 0.001));
+        assert!(matches!(parse("1.23"), Expr::Literal(CellValue::Number(v)) if (v - 1.23).abs() < 0.001));
     }
 
     #[test]
