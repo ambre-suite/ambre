@@ -204,6 +204,11 @@ pub enum TrameEvent {
         bold: bool,
         italic: bool,
     },
+
+    /// The document's content was replaced wholesale (local snapshot restore at
+    /// startup). The UI Thread re-requests the visible region: the initial
+    /// viewport response predated the restore, so the cache must be refreshed.
+    DataReset,
 }
 
 /// A single cell ready for display.

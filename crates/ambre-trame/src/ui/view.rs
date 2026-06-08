@@ -401,6 +401,13 @@ impl DocView for TrameView {
                 // UI-thread dispatcher consumes them. The canvas ignores them --
                 // it renders per-cell formatting from the cache instead.
                 Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::BoldState { .. } | TrameEvent::ItalicState { .. }), .. }) => {}
+                Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::DataReset), .. }) => {
+                    // Local snapshot restored: re-fetch the visible region so the
+                    // restored cells render, then full-repaint with the result.
+                    self.needs_full = true;
+                    let cmd = self.state.scroll_viewport_cmd();
+                    self.send_command_lossy(cmd);
+                }
                 Ok(UiEvent::Viewport { event: AppEvent::Trame(update), .. }) => {
                     self.state.on_viewport_data(update);
                     // Just flag data dirty. If a scroll happens the same frame the

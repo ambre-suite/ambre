@@ -51,6 +51,17 @@ pub enum LogicCommand {
         command: AppCommand,
     },
 
+    /// Restore a document's CRDT state from a locally persisted snapshot
+    /// (IndexedDB), dispatched by the Main thread at startup. Local-only: it
+    /// never reaches Sync or the server -- it lets an edit survive a refresh
+    /// without a network round-trip.
+    RestoreLocalSnapshot {
+        document_id: DocumentId,
+        /// Full Loro snapshot (`ExportMode::Snapshot`) read back from local
+        /// storage.
+        snapshot: Vec<u8>,
+    },
+
     // ── P3 — Service plane (relayed request/response) ─────────────────────────
     /// A [`RestCommand`] service operation. The Logic dispatcher applies any
     /// state hook (e.g. `Logout` clears the document registry) and forwards it
