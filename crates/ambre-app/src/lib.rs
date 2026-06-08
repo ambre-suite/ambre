@@ -97,6 +97,11 @@ pub fn main() {
     let (logic_to_ui_tx, logic_to_ui_rx) = flume::bounded::<UiEvent>(CHANNEL_CAPACITY);
     let (logic_to_sync_tx, logic_to_sync_rx) = flume::bounded::<SyncCommand>(CHANNEL_CAPACITY);
     let (sync_to_logic_tx, sync_to_logic_rx) = flume::bounded::<LogicEvent>(CHANNEL_CAPACITY);
+    // Logic -> Main, carrying full document snapshots for local persistence. The
+    // Main thread owns the IndexedDB store (its callbacks need a live event loop,
+    // which the blocking Logic loop cannot offer) and drains this in `pre_frame`.
+    let (logic_to_persist_tx, logic_to_persist_rx) =
+        flume::bounded::<(DocumentId, Vec<u8>)>(CHANNEL_CAPACITY);
 
     // Dispatcher -> canvas view: the content event stream, forwarded after the
     // dispatcher has mirrored command-state events into the chrome.
@@ -163,9 +168,44 @@ pub fn main() {
                 logic_to_ui_tx,
                 logic_to_sync_tx,
                 sync_to_logic_rx,
+                logic_to_persist_tx,
             );
         })
         .expect("spawn Logic thread");
+
+    // Local persistence: open the IndexedDB store on this (Main) thread, where
+    // the event loop is live. On open, restore the smoke document's snapshot so
+    // an edit survives a refresh without any network round-trip. The store is
+    // shared with the per-frame relay below, which saves snapshots Logic emits.
+    let persist_store: Rc<RefCell<Option<ambre_logic::persistence::PersistenceStore>>> =
+        Rc::new(RefCell::new(None));
+    {
+        let store_slot = Rc::clone(&persist_store);
+        let restore_tx = ui_to_logic_tx.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            let store = match ambre_logic::persistence::PersistenceStore::open().recv_async().await {
+                Ok(Ok(store)) => store,
+                Ok(Err(e)) => {
+                    tracing::warn!("Persistence: store unavailable ({e})");
+                    return;
+                }
+                Err(_) => {
+                    tracing::warn!("Persistence: open channel dropped");
+                    return;
+                }
+            };
+            if let Ok(Some(snapshot)) =
+                store.load_snapshot(*SMOKE_DOCUMENT_ID.as_bytes()).recv_async().await
+            {
+                tracing::info!("Persistence: restoring smoke doc ({} bytes)", snapshot.len());
+                let _ = restore_tx.try_send(LogicCommand::RestoreLocalSnapshot {
+                    document_id: SMOKE_DOCUMENT_ID,
+                    snapshot,
+                });
+            }
+            *store_slot.borrow_mut() = Some(store);
+        });
+    }
 
     // Spawn the Sync worker: a SEPARATE wasm instance in its own Web Worker.
     // Its onmessage decodes `LogicEvent`s into `sync_to_logic_tx` (-> Logic).
@@ -177,8 +217,17 @@ pub fn main() {
     // the canvas view. Being the sole writer of the chrome's toggle state is
     // what keeps every trigger in sync.
     let anchor_pub_pump = anchor_pub.clone();
+    let persist_store_frame = Rc::clone(&persist_store);
     let mut last_anchor: Option<(f64, f64)> = None;
     let pre_frame = move || {
+        // Persist Logic -> local store: drain snapshots and save them once the
+        // store is open. Best-effort; the put() commits as the event loop idles.
+        while let Ok((document_id, snapshot)) = logic_to_persist_rx.try_recv() {
+            if let Some(store) = persist_store_frame.borrow().as_ref() {
+                store.save_snapshot(*document_id.as_bytes(), snapshot);
+            }
+        }
+
         // Relay Logic -> Sync: drain commands and postMessage them to the Sync
         // worker (postcard, big payloads transferred zero-copy). `sync_worker` is
         // captured here, which is what keeps the worker alive for the session.

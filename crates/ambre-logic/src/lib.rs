@@ -23,6 +23,12 @@
 
 use std::collections::HashMap;
 
+/// IndexedDB-backed local snapshot store. Compiled only for wasm: its callbacks
+/// need a live event loop, so the store itself is driven by the Main thread (see
+/// `ambre-app`), not by this blocking Logic loop.
+#[cfg(target_arch = "wasm32")]
+pub mod persistence;
+
 use ambre_bus::{
     AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent,
     RestCommand, RestEvent, SyncCommand, UiEvent, SMOKE_DOCUMENT_ID,
@@ -72,6 +78,11 @@ struct LogicState {
     /// Outbound channel: Logic → Sync (drained by the Main thread, relayed to
     /// the Sync worker via postMessage).
     to_sync: flume::Sender<SyncCommand>,
+    /// Outbound channel: Logic → Main, carrying full document snapshots for
+    /// local persistence. The Main thread owns the IndexedDB store (its
+    /// callbacks need a live event loop, which this blocking loop cannot offer);
+    /// here we only export the bytes and hand them over.
+    to_persist: flume::Sender<(DocumentId, Vec<u8>)>,
     /// Live document state, keyed by `document_id`.
     ///
     /// Inserted on the first [`LogicEvent::RemoteSnapshot`] for a document
@@ -84,10 +95,14 @@ struct LogicState {
 }
 
 impl LogicState {
-    fn new(to_ui: flume::Sender<UiEvent>, to_sync: flume::Sender<SyncCommand>) -> Self {
+    fn new(
+        to_ui: flume::Sender<UiEvent>,
+        to_sync: flume::Sender<SyncCommand>,
+        to_persist: flume::Sender<(DocumentId, Vec<u8>)>,
+    ) -> Self {
         let mut docs = HashMap::new();
         docs.insert(SMOKE_DOCUMENT_ID, DocState::Trame(TrameState::new()));
-        Self { to_ui, to_sync, docs, pending_doc_types: HashMap::new() }
+        Self { to_ui, to_sync, to_persist, docs, pending_doc_types: HashMap::new() }
     }
 
     // -- Outbound --------------------------------------------------------------
@@ -110,6 +125,15 @@ impl LogicState {
         }
     }
 
+    /// Hand a full document snapshot to the Main thread for local persistence.
+    /// Best-effort: a dropped receiver only means no local save (the snapshot is
+    /// regenerated on the next edit), so it is non-fatal.
+    fn send_to_persist(&self, document_id: DocumentId, snapshot: Vec<u8>) {
+        if self.to_persist.send((document_id, snapshot)).is_err() {
+            tracing::warn!("[Logic→Persist] receiver dropped, snapshot not saved");
+        }
+    }
+
     // -- Application data plane -------------------------------------------------
 
     /// Route a typed application command to its document's state, send display
@@ -123,6 +147,10 @@ impl LogicState {
         match (doc, command) {
             (DocState::Trame(state), AppCommand::Trame(cmd)) => {
                 let outcome = state.handle_command(cmd);
+                // Capture a full snapshot for local persistence whenever the doc
+                // changed (an `update` was produced). Exported here, while the
+                // `state` borrow is live; persisted by the Main thread.
+                let snapshot = outcome.update.is_some().then(|| state.export_snapshot());
                 for event in outcome.display {
                     self.send_to_ui(UiEvent::Viewport {
                         document_id,
@@ -135,6 +163,9 @@ impl LogicState {
                         payload.len(),
                     );
                     self.send_to_sync(SyncCommand::SendUpdate { document_id, payload: payload.clone() });
+                }
+                if let Some(snapshot) = snapshot {
+                    self.send_to_persist(document_id, snapshot);
                 }
                 if let Some(payload) = outcome.ephemeral {
                     self.send_to_sync(SyncCommand::SendEphemeral { document_id, payload });
@@ -190,6 +221,24 @@ impl LogicState {
             // -- P2 — Content plane --------------------------------------------
             LogicCommand::App { document_id, command } => {
                 self.handle_app_command(document_id, command);
+            }
+
+            // -- Local restore (Main thread, startup) --------------------------
+            // Import a locally persisted snapshot into the document's state and
+            // forward the resulting viewport events to the UI. Local-only: never
+            // forwarded to Sync.
+            LogicCommand::RestoreLocalSnapshot { document_id, snapshot } => {
+                let Some(DocState::Trame(state)) = self.docs.get_mut(&document_id) else {
+                    tracing::warn!(
+                        "Logic: no live document {document_id} to restore snapshot into"
+                    );
+                    return;
+                };
+                let events: Vec<AppEvent> =
+                    state.import_snapshot(&snapshot).into_iter().map(AppEvent::Trame).collect();
+                for event in events {
+                    self.send_to_ui(UiEvent::Viewport { document_id, event });
+                }
             }
 
             // -- P3 — Service plane: forward verbatim, with state hooks --------
@@ -344,11 +393,12 @@ pub fn run(
     to_ui: flume::Sender<UiEvent>,
     to_sync: flume::Sender<SyncCommand>,
     from_sync: flume::Receiver<LogicEvent>,
+    to_persist: flume::Sender<(DocumentId, Vec<u8>)>,
 ) {
     use flume::Selector;
 
     tracing::info!("Ambre Logic thread starting");
-    let mut state = LogicState::new(to_ui, to_sync);
+    let mut state = LogicState::new(to_ui, to_sync, to_persist);
 
     /// What the selector picked: a command from the UI, or an event from Sync.
     enum Inbound {
@@ -399,7 +449,11 @@ mod tests {
     fn harness() -> (LogicState, flume::Receiver<UiEvent>, flume::Receiver<SyncCommand>) {
         let (to_ui, ui_rx) = flume::unbounded();
         let (to_sync, sync_rx) = flume::unbounded();
-        (LogicState::new(to_ui, to_sync), ui_rx, sync_rx)
+        // The persist channel is drained by the Main thread in production; tests
+        // keep the receiver alive so sends never fail.
+        let (to_persist, persist_rx) = flume::unbounded();
+        std::mem::forget(persist_rx);
+        (LogicState::new(to_ui, to_sync, to_persist), ui_rx, sync_rx)
     }
 
     /// Wrap a `RestCommand` in a `LogicCommand::Rest` with a fresh id.

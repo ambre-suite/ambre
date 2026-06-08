@@ -28,6 +28,12 @@ fn cell_key(row: u32, col: u32) -> String {
     format!("{row}:{col}")
 }
 
+/// Parse a `"row:col"` cell key back into coordinates. Inverse of [`cell_key`].
+fn parse_cell_key(key: &str) -> Option<(u32, u32)> {
+    let (row, col) = key.split_once(':')?;
+    Some((row.parse().ok()?, col.parse().ok()?))
+}
+
 // -----------------------------------------------------------------------------
 // TrameState
 // -----------------------------------------------------------------------------
@@ -252,6 +258,36 @@ impl TrameState {
     /// Export the full CRDT state for snapshot compaction.
     pub fn export_snapshot(&self) -> Vec<u8> {
         self.doc.export(ExportMode::Snapshot).unwrap_or_default()
+    }
+
+    /// Import a full CRDT snapshot (local restore from IndexedDB at startup).
+    ///
+    /// Imports the persisted Loro state into the live document, advances the
+    /// export cursor so the next edit still produces a correct incremental
+    /// delta, and reseeds the formula engine from the restored cells (so formula
+    /// cells evaluate instead of showing their literal source). Returns no
+    /// display events: the next viewport request re-renders the restored grid.
+    pub fn import_snapshot(&mut self, payload: &[u8]) -> Vec<TrameEvent> {
+        if payload.is_empty() {
+            return Vec::new();
+        }
+        if let Err(e) = self.doc.import(payload) {
+            tracing::warn!("[Logic] import_snapshot failed: {e:?}");
+            return Vec::new();
+        }
+        self.last_exported_vv = self.doc.oplog_vv();
+        // Reseed the formula engine from the restored cell values.
+        if let LoroValue::Map(cells) = self.doc.get_map(CELLS_MAP).get_value() {
+            for (key, value) in cells.iter() {
+                if let (Some((row, col)), LoroValue::String(text)) = (parse_cell_key(key), value) {
+                    self.engine.on_cell_changed(CellRef::new(row, col), text.as_str());
+                }
+            }
+        }
+        self.engine.compute_all_dirty();
+        // Tell the UI to re-fetch its viewport: its initial request predated this
+        // restore and returned an empty grid.
+        vec![TrameEvent::DataReset]
     }
 }
 
