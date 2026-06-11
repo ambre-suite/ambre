@@ -1,6 +1,5 @@
 use axum::extract::{Json, Path, State};
 use axum::response::IntoResponse;
-use axum_extra::extract::cookie::CookieJar;
 use std::sync::Arc;
 
 use crate::auth;
@@ -111,10 +110,10 @@ async fn require_org_role(
 /// `POST /organizations`
 pub async fn create_org(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Json(req): Json<CreateOrgRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let session = auth::authenticate(&state, &jar).await?;
+    let session = auth;
     let owner_uid = ambre_core::Uuid::parse_str(&session.user_id.to_string())
         .map_err(|_| AppError::Unauthorized)?;
     let owner_id = ambre_core::UserId::from_uuid(owner_uid);
@@ -151,9 +150,9 @@ pub async fn create_org(
 /// `GET /organizations`
 pub async fn list_orgs(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
 ) -> Result<impl IntoResponse, AppError> {
-    let session = auth::authenticate(&state, &jar).await?;
+    let session = auth;
     let uid = ambre_core::Uuid::parse_str(&session.user_id.to_string())
         .map_err(|_| AppError::Unauthorized)?;
     let user_id = ambre_core::UserId::from_uuid(uid);
@@ -166,10 +165,10 @@ pub async fn list_orgs(
 /// `GET /organizations/{id}`
 pub async fn get_org(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(org_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    let session = auth::authenticate(&state, &jar).await?;
+    let session = auth;
     let org_id = parse_org_id(&org_id)?;
     let uid = parse_user_id_str(&session.user_id.to_string())?;
 
@@ -187,11 +186,11 @@ pub async fn get_org(
 /// `PATCH /organizations/{id}`
 pub async fn update_org(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(org_id): Path<String>,
     Json(req): Json<UpdateOrgRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let session = auth::authenticate(&state, &jar).await?;
+    let session = auth;
     let org_id = parse_org_id(&org_id)?;
     let uid = parse_user_id_str(&session.user_id.to_string())?;
 
@@ -208,10 +207,10 @@ pub async fn update_org(
 /// `DELETE /organizations/{id}`
 pub async fn delete_org(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(org_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    let session = auth::authenticate(&state, &jar).await?;
+    let session = auth;
     let org_id = parse_org_id(&org_id)?;
     let uid = parse_user_id_str(&session.user_id.to_string())?;
 
@@ -229,11 +228,11 @@ pub async fn delete_org(
 /// `POST /organizations/{id}/members`
 pub async fn add_member(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(org_id): Path<String>,
     Json(req): Json<AddMemberRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let session = auth::authenticate(&state, &jar).await?;
+    let session = auth;
     let org_id = parse_org_id(&org_id)?;
     let uid = parse_user_id_str(&session.user_id.to_string())?;
 
@@ -268,10 +267,10 @@ pub async fn add_member(
 /// `GET /organizations/{id}/members`
 pub async fn list_members(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(org_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    let session = auth::authenticate(&state, &jar).await?;
+    let session = auth;
     let org_id = parse_org_id(&org_id)?;
     let uid = parse_user_id_str(&session.user_id.to_string())?;
 
@@ -285,10 +284,10 @@ pub async fn list_members(
 /// `DELETE /organizations/{id}/members/{uid}`
 pub async fn remove_member(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path((org_id, target_uid)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
-    let session = auth::authenticate(&state, &jar).await?;
+    let session = auth;
     let org_id = parse_org_id(&org_id)?;
     let uid = parse_user_id_str(&session.user_id.to_string())?;
     let target_uid = parse_user_id_str(&target_uid)?;
@@ -308,11 +307,11 @@ pub async fn remove_member(
 /// `PATCH /organizations/{id}/members/{uid}`
 pub async fn update_member_role(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path((org_id, target_uid)): Path<(String, String)>,
     Json(req): Json<UpdateMemberRoleRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let session = auth::authenticate(&state, &jar).await?;
+    let session = auth;
     let org_id = parse_org_id(&org_id)?;
     let uid = parse_user_id_str(&session.user_id.to_string())?;
     let target_uid = parse_user_id_str(&target_uid)?;
@@ -337,10 +336,10 @@ pub async fn update_member_role(
 /// future iteration as specified in the roadmap.
 pub async fn recover_master_key(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path((org_id, target_uid)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
-    let session = auth::authenticate(&state, &jar).await?;
+    let session = auth;
     let org_id = parse_org_id(&org_id)?;
     let caller_uid = parse_user_id_str(&session.user_id.to_string())?;
     let target_uid = parse_user_id_str(&target_uid)?;

@@ -10,38 +10,23 @@ use crate::state::AppState;
 
 /// Rate-limiting key derived from the request.
 ///
-/// Prefers the authenticated user id (extracted from the `session_id`
-/// cookie via Redis), falling back to the client IP address.
-async fn rate_limit_key(
+/// Prefers the authenticated user id (verified statelessly from the
+/// `Authorization: Bearer <jwt>` access token), falling back to the client IP
+/// address. No Redis lookup: the JWT carries the user id in its claims.
+fn rate_limit_key(
     state: &AppState,
-    cookie_header: &str,
+    auth_header: &str,
     x_forwarded_for: Option<&str>,
     remote_ip: &str,
-) -> Result<String, AppError> {
-    let session_id = extract_cookie_value(cookie_header, "session_id");
-
-    if let Some(sid) = session_id {
-        let session = crate::redis_ops::session_get(&state.redis, &sid).await?;
-        if let Some(s) = session {
-            return Ok(format!("user:{}", s.user_id));
-        }
+) -> String {
+    if let Some(token) = auth_header.strip_prefix("Bearer ")
+        && let Ok(claims) = state.jwt.verify(token.trim())
+    {
+        return format!("user:{}", claims.sub);
     }
 
     let ip = client_ip_str(x_forwarded_for, remote_ip);
-    Ok(format!("ip:{ip}"))
-}
-
-/// Extracts a single cookie value from a Cookie header string.
-fn extract_cookie_value(cookie_header: &str, name: &str) -> Option<String> {
-    for part in cookie_header.split(';') {
-        let part = part.trim();
-        if let Some((key, value)) = part.split_once('=')
-            && key.trim() == name
-        {
-            return Some(value.trim().to_string());
-        }
-    }
-    None
+    format!("ip:{ip}")
 }
 
 /// Extracts the client IP address from headers or socket address.
@@ -117,9 +102,9 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
     let (max_req, window_secs) = category.limits();
 
     // Extract request metadata before any await.
-    let cookie_header = req
+    let auth_header = req
         .headers()
-        .get("cookie")
+        .get("authorization")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .to_string();
@@ -134,22 +119,12 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
         .map(|a| a.0.ip().to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
-    let key = match rate_limit_key(
+    let key = rate_limit_key(
         &state,
-        &cookie_header,
+        &auth_header,
         x_forwarded_for.as_deref(),
         &remote_ip,
-    )
-    .await
-    {
-        Ok(k) => k,
-        Err(_) => {
-            // Routine when no client IP is available (e.g. behind the dev proxy
-            // with no X-Forwarded-For): we fail open. Not a fault -> debug.
-            tracing::debug!("Rate limiter: failed to derive key, allowing request");
-            return next.run(req).await;
-        }
-    };
+    );
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -238,43 +213,6 @@ async fn check_and_increment(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // -- extract_cookie_value -----------------------------------------------
-
-    #[test]
-    fn extract_single_cookie() {
-        assert_eq!(
-            extract_cookie_value("a=1", "a"),
-            Some("1".to_string())
-        );
-    }
-
-    #[test]
-    fn extract_cookie_with_whitespace() {
-        assert_eq!(
-            extract_cookie_value(" a = 1 ; b = 2 ", "b"),
-            Some("2".to_string())
-        );
-    }
-
-    #[test]
-    fn extract_cookie_not_found() {
-        assert_eq!(extract_cookie_value("a=1; b=2", "c"), None);
-    }
-
-    #[test]
-    fn extract_cookie_empty_header() {
-        assert_eq!(extract_cookie_value("", "a"), None);
-    }
-
-    #[test]
-    fn extract_session_id_from_full_header() {
-        let header = "session_id=abc123; csrf_token=xyz";
-        assert_eq!(
-            extract_cookie_value(header, "session_id"),
-            Some("abc123".to_string())
-        );
-    }
 
     // -- client_ip_str -----------------------------------------------------
 

@@ -56,6 +56,9 @@ pub enum AppError {
     #[error("S3 error: {0}")]
     S3(String),
 
+    #[error("Internal error: {0}")]
+    Internal(String),
+
     #[error("Postcard decode error: {0}")]
     Decode(#[from] postcard::Error),
 
@@ -96,7 +99,7 @@ impl IntoResponse for AppError {
         }
 
         let message = match &self {
-            AppError::Database(_) | AppError::Redis(_) | AppError::S3(_) | AppError::Decode(_) | AppError::Oidc(_) => {
+            AppError::Database(_) | AppError::Redis(_) | AppError::S3(_) | AppError::Decode(_) | AppError::Oidc(_) | AppError::Internal(_) => {
                 "Internal server error".to_string()
             }
             other => other.to_string(),

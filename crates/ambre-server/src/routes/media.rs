@@ -1,6 +1,5 @@
 use axum::extract::{Json, Path, State};
 use axum::response::IntoResponse;
-use axum_extra::extract::cookie::CookieJar;
 use std::sync::Arc;
 
 use crate::auth;
@@ -20,11 +19,11 @@ pub struct UploadUrlResponse { pub upload_url: String, pub s3_key: String }
 
 pub async fn media_upload_url(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(document_id): Path<String>,
     Json(req): Json<UploadUrlRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let s = auth::authenticate(&state, &jar).await?;
+    let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
     if !["owner","editor"].contains(&m.role.as_str()) { return Err(AppError::Forbidden); }
@@ -41,11 +40,11 @@ pub struct DownloadUrlResponse { pub download_url: String }
 
 pub async fn media_download_url(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(document_id): Path<String>,
     Json(req): Json<DownloadUrlRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let s = auth::authenticate(&state, &jar).await?;
+    let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
     let key = s3::format_s3_media_key(&state.config.s3_env_prefix, &doc_id, &req.content_hash);
@@ -60,11 +59,11 @@ pub struct ConfirmUploadRequest { pub content_hash: String, pub mime_type: Strin
 
 pub async fn media_confirm_upload(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(document_id): Path<String>,
     Json(req): Json<ConfirmUploadRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let s = auth::authenticate(&state, &jar).await?;
+    let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
     let key = s3::format_s3_media_key(&state.config.s3_env_prefix, &doc_id, &req.content_hash);

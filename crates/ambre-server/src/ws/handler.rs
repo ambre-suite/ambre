@@ -11,7 +11,6 @@
 use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::IntoResponse;
-use axum_extra::extract::cookie::CookieJar;
 use futures_util::{SinkExt, StreamExt};
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -28,40 +27,24 @@ use crate::error::AppError;
 use crate::redis_ops;
 use crate::state::AppState;
 
-/// Query parameters on the WS upgrade. `session_id` is a dev-only fallback (see
-/// [`ws_upgrade`]).
+/// Query parameters on the WS upgrade. The browser WebSocket API forbids custom
+/// headers, so the access JWT travels in the `token` query parameter; it is
+/// verified at the handshake exactly like a `Authorization: Bearer` on REST.
 #[derive(serde::Deserialize)]
 pub struct WsQuery {
-    session_id: Option<String>,
+    token: Option<String>,
 }
 
-/// HTTP upgrade handler. Authenticates via the session cookie, then hands off
-/// to `handle_ws` for the full lifecycle.
-///
-/// Dev-only fallback: when `dev_mode` is set and the request carries a
-/// `?session_id=` query parameter, the session is resolved from that id instead
-/// of the cookie. The browser does not attach the session cookie to a
-/// worker-initiated WebSocket handshake under COEP isolation, so the dev client
-/// passes the id explicitly. Ignored entirely in production.
+/// HTTP upgrade handler. Authenticates via the `?token=<jwt>` access token, then
+/// hands off to `handle_ws` for the full lifecycle.
 pub async fn ws_upgrade(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
     axum::extract::Query(query): axum::extract::Query<WsQuery>,
 ) -> impl IntoResponse {
-    let session = match query.session_id {
-        Some(session_id) if state.config.dev_mode => {
-            match redis_ops::session_get(&state.redis, &session_id).await {
-                Ok(Some(sd)) => Ok(auth::AuthSession {
-                    user_id: sd.user_id,
-                    signing_pubkey: sd.signing_pubkey,
-                    session_id: sd.session_id,
-                }),
-                Ok(None) => Err(AppError::SessionExpired),
-                Err(e) => Err(e),
-            }
-        }
-        _ => auth::authenticate(&state, &jar).await,
+    let session = match query.token {
+        Some(token) => auth::authenticate_token(&state, &token),
+        None => Err(AppError::Unauthorized),
     };
     // The WS upgrade always returns 101, then `handle_ws` drops the connection
     // if auth failed -- so the error never reaches `AppError::into_response` and
@@ -82,7 +65,9 @@ pub async fn ws_upgrade(
 /// is currently subscribed to.
 struct WsConnectionState {
     user_id: UserId,
-    session_id: String,
+    /// Identifies this socket in Redis presence/subscription sets. Generated
+    /// fresh per connection (the access token is stateless and carries no id).
+    connection_id: String,
     doc_subscriptions: HashSet<DocumentId>,
     channel_subscriptions: HashSet<ChannelId>,
 }
@@ -100,11 +85,11 @@ async fn handle_ws(
     let (outbound_tx, mut outbound_rx) = mpsc::channel::<Vec<u8>>(256);
 
     let user_id = session.user_id;
-    let session_id = session.session_id.clone();
+    let connection_id = uuid::Uuid::new_v4().to_string();
 
     let mut conn = WsConnectionState {
         user_id,
-        session_id: session_id.clone(),
+        connection_id: connection_id.clone(),
         doc_subscriptions: HashSet::new(),
         channel_subscriptions: HashSet::new(),
     };
@@ -181,7 +166,7 @@ async fn handle_ws(
     }
 
     for doc_id in &conn.doc_subscriptions {
-        let _ = redis_ops::doc_unsubscribe_session(&state.redis, doc_id, &session_id).await;
+        let _ = redis_ops::doc_unsubscribe_session(&state.redis, doc_id, &connection_id).await;
     }
     outbound_handle.abort();
 }
@@ -198,7 +183,7 @@ async fn handle_subscribe(
         return;
     }
     conn.doc_subscriptions.insert(document_id);
-    let _ = redis_ops::doc_subscribe_session(&state.redis, &document_id, &conn.session_id).await;
+    let _ = redis_ops::doc_subscribe_session(&state.redis, &document_id, &conn.connection_id).await;
     let ack = encode_server_msg(&WsServerMsg::Subscribed { document_id });
     let _ = outbound_tx.send(ack).await;
 }
@@ -209,7 +194,7 @@ async fn handle_unsubscribe(
     document_id: DocumentId,
 ) {
     conn.doc_subscriptions.remove(&document_id);
-    let _ = redis_ops::doc_unsubscribe_session(&state.redis, &document_id, &conn.session_id).await;
+    let _ = redis_ops::doc_unsubscribe_session(&state.redis, &document_id, &conn.connection_id).await;
 }
 
 async fn handle_update(

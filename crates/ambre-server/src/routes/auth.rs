@@ -1,6 +1,5 @@
 use axum::extract::{Json, Path, State};
 use axum::response::IntoResponse;
-use axum_extra::extract::cookie::CookieJar;
 use std::sync::Arc;
 
 use crate::auth;
@@ -9,6 +8,28 @@ use crate::error::AppError;
 use crate::oidc::{self, CallbackRequest, CallbackResponse};
 use crate::redis_ops;
 use crate::state::AppState;
+
+/// Response for the unauthenticated `GET /api/auth/config`.
+///
+/// Lets the SPA decide which sign-in affordance to show on the landing page
+/// before any session exists: a dev-login field when `dev_mode` is set, the
+/// OIDC button otherwise. Exposes only this one non-sensitive flag.
+#[derive(serde::Serialize)]
+pub struct AuthConfigResponse {
+    pub dev_mode: bool,
+}
+
+/// `GET /auth/config` (unauthenticated)
+///
+/// Public bootstrap flag for the SPA's login UI. Reveals nothing beyond whether
+/// dev login is enabled on this server.
+pub async fn auth_config(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, AppError> {
+    Ok(axum::Json(AuthConfigResponse {
+        dev_mode: state.config.dev_mode,
+    }))
+}
 
 /// Request body for the dev-only `POST /api/auth/dev/login`.
 ///
@@ -26,23 +47,23 @@ pub struct DevLoginRequest {
 pub struct DevLoginResponse {
     pub user_id: String,
     pub display_name: String,
-    pub csrf_token: String,
-    /// Opaque session id. Dev-only: the client carries it in the WS URL query
-    /// (`/api/ws?session_id=...`) because the browser does not attach the
-    /// session cookie to a worker-initiated WebSocket handshake under COEP.
-    pub session_id: String,
+    /// Access JWT, kept in client memory and sent as `Authorization: Bearer`.
+    pub access_token: String,
+    /// Opaque refresh token, exchanged at `/auth/refresh` for a new access JWT.
+    pub refresh_token: String,
+    /// Access-token lifetime in seconds, so the client can schedule a refresh.
+    pub access_expires_in: u64,
 }
 
 /// `POST /auth/dev/login` (dev only)
 ///
 /// Authenticates as `username`, creating the user on the fly. Bypasses OIDC and
 /// the passphrase/master-key dance: the client derives its keys deterministically
-/// from the username and submits the pubkeys here. Establishes a Redis session
-/// plus the session + CSRF cookies, exactly like `oidc_callback`. Returns 401
-/// unless `Config::dev_mode` is set, so a production server always rejects it.
+/// from the username and submits the pubkeys here. Mints an access JWT plus a
+/// revocable refresh token, exactly like `oidc_callback`. Returns 401 unless
+/// `Config::dev_mode` is set, so a production server always rejects it.
 pub async fn dev_login(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
     Json(req): Json<DevLoginRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     if !state.config.dev_mode {
@@ -64,37 +85,53 @@ pub async fn dev_login(
     let signing_pubkey = ambre_core::PublicKey::from_slice(&user.signing_pubkey)
         .unwrap_or(ambre_core::PublicKey::from_array([0u8; 32]));
 
-    let session_id = uuid::Uuid::new_v4().to_string();
-    let sd = redis_ops::SessionData {
-        user_id,
-        signing_pubkey,
-        session_id: session_id.clone(),
-    };
-    redis_ops::session_create(&state.redis, &session_id, &sd, state.config.session_ttl_secs)
-        .await?;
+    let tokens = auth::issue_session(&state, user_id, signing_pubkey).await?;
     tracing::debug!(user_id = %user_id, provider = "dev", "login");
 
-    let mut cookie = auth::create_session_cookie(&session_id, state.config.session_ttl_secs);
-    let csrf_token = uuid::Uuid::new_v4().to_string();
-    let mut csrf_cookie =
-        crate::middleware::csrf::create_csrf_cookie(&csrf_token, state.config.session_ttl_secs);
-    // Dev runs over plain http://localhost, where browsers (notably Firefox) drop
-    // `Secure` cookies and `SameSite=Strict` can block the cross-context worker
-    // fetch. Relax both: dev_login is gated by dev_mode anyway.
-    use axum_extra::extract::cookie::SameSite;
-    cookie.set_secure(false);
-    cookie.set_same_site(SameSite::Lax);
-    csrf_cookie.set_secure(false);
-    csrf_cookie.set_same_site(SameSite::Lax);
-    Ok((
-        jar.add(cookie).add(csrf_cookie),
-        axum::Json(DevLoginResponse {
-            user_id: user_id.to_string(),
-            display_name: user.display_name,
-            csrf_token,
-            session_id,
-        }),
-    ))
+    Ok(axum::Json(DevLoginResponse {
+        user_id: user_id.to_string(),
+        display_name: user.display_name,
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        access_expires_in: tokens.access_expires_in,
+    }))
+}
+
+/// Request body for `POST /api/auth/refresh`: the opaque refresh token.
+#[derive(serde::Deserialize)]
+pub struct RefreshRequest {
+    pub refresh_token: String,
+}
+
+/// Response for `POST /api/auth/refresh`: a freshly rotated token pair.
+#[derive(serde::Serialize)]
+pub struct RefreshResponse {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub access_expires_in: u64,
+}
+
+/// `POST /auth/refresh` (unauthenticated; the refresh token is the credential)
+///
+/// Looks up the refresh token in Redis, rotates it (delete + recreate inside
+/// `issue_session`) to detect replay, and returns a new access + refresh pair.
+/// A revoked or expired token yields 401.
+pub async fn refresh(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<RefreshRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let data = redis_ops::refresh_get(&state.redis, &req.refresh_token)
+        .await?
+        .ok_or(AppError::Unauthorized)?;
+    // Rotation: invalidate the presented token before minting the new pair, so a
+    // stolen-and-replayed token is rejected after its first legitimate use.
+    redis_ops::refresh_delete(&state.redis, &req.refresh_token).await?;
+    let tokens = auth::issue_session(&state, data.user_id, data.signing_pubkey).await?;
+    Ok(axum::Json(RefreshResponse {
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        access_expires_in: tokens.access_expires_in,
+    }))
 }
 
 /// `GET /auth/{provider}/login`
@@ -132,7 +169,6 @@ pub async fn oidc_login(
 /// creates a Redis session, and sets the session cookie.
 pub async fn oidc_callback(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
     Path(provider): Path<String>,
     Json(req): Json<CallbackRequest>,
 ) -> Result<impl IntoResponse, AppError> {
@@ -181,26 +217,16 @@ pub async fn oidc_callback(
     let signing_pubkey = ambre_core::PublicKey::from_slice(&user.signing_pubkey)
         .unwrap_or(ambre_core::PublicKey::from_array([0u8; 32]));
 
-    let session_id = uuid::Uuid::new_v4().to_string();
-    let sd = redis_ops::SessionData {
-        user_id,
-        signing_pubkey,
-        session_id: session_id.clone(),
-    };
-    redis_ops::session_create(&state.redis, &session_id, &sd, state.config.session_ttl_secs)
-        .await?;
+    let tokens = auth::issue_session(&state, user_id, signing_pubkey).await?;
     tracing::debug!(user_id = %user_id, provider = %provider, "login");
 
-    let cookie = auth::create_session_cookie(&session_id, state.config.session_ttl_secs);
-    let csrf_token = uuid::Uuid::new_v4().to_string();
-    let csrf_cookie = crate::middleware::csrf::create_csrf_cookie(&csrf_token, state.config.session_ttl_secs);
-    Ok((
-        jar.add(cookie).add(csrf_cookie),
-        axum::Json(CallbackResponse {
-            user_id: user_id.to_string(),
-            email,
-            display_name,
-            is_new_user: user.master_key_enc.is_none(),
-        }),
-    ))
+    Ok(axum::Json(CallbackResponse {
+        user_id: user_id.to_string(),
+        email,
+        display_name,
+        is_new_user: user.master_key_enc.is_none(),
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        access_expires_in: tokens.access_expires_in,
+    }))
 }

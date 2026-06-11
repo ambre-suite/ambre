@@ -180,6 +180,7 @@ openidconnect     = "4"
 reqwest           = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 url               = "2"
 sharks            = "0.2"
+jsonwebtoken      = "9"
 
 # Import/export
 docx-rs = "0.4"

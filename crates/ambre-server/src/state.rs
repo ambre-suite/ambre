@@ -17,6 +17,9 @@ pub struct AppState {
     pub s3: S3Client,
     pub s3_bucket: String,
     pub config: Arc<Config>,
+    /// Server Ed25519 keys for minting/verifying access JWTs. Derived once at
+    /// startup from `JWT_SIGNING_SEED` (shared across instances).
+    pub jwt: Arc<crate::jwt::JwtKeys>,
     /// Per-provider OIDC clients ("google" → `OidcProviderState`).
     /// Used by `GET /auth/{provider}/login` and `POST /auth/{provider}/callback`.
     pub oidc_clients: OidcClients,
@@ -31,8 +34,12 @@ pub struct Config {
     /// Base URL of this server, used for redirect callbacks (OIDC).
     #[allow(dead_code)]
     pub base_url: String,
-    /// Session lifetime in seconds (default 24h).
-    pub session_ttl_secs: u64,
+    /// Access-token (JWT) lifetime in seconds (default 15 min). Short: it is not
+    /// revocable before expiry, so the window of a leaked token is bounded.
+    pub access_ttl_secs: u64,
+    /// Refresh-token lifetime in seconds (default 30 days). Stored in Redis and
+    /// revocable (logout / rotation).
+    pub refresh_ttl_secs: u64,
     /// Presigned S3 URL lifetime in seconds (default 15 min).
     pub presigned_url_ttl_secs: u64,
     /// Prefix for S3 object keys (e.g. "dev-ambre").
@@ -56,7 +63,8 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             base_url: "http://localhost:3000".into(),
-            session_ttl_secs: 86400,
+            access_ttl_secs: 900,
+            refresh_ttl_secs: 30 * 24 * 3600,
             presigned_url_ttl_secs: 900,
             s3_env_prefix: "dev-ambre".into(),
             oidc_google_client_id: String::new(),

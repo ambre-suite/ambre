@@ -309,6 +309,7 @@ mod handler_tests {
             s3,
             s3_bucket: "test-bucket".into(),
             config: Arc::new(Config::default()),
+            jwt: Arc::new(crate::jwt::JwtKeys::from_seed(&[7u8; 32])),
             oidc_clients: empty_oidc_clients(),
         })
     }
@@ -330,6 +331,7 @@ mod handler_tests {
             s3,
             s3_bucket: "test-bucket".into(),
             config: Arc::new(config),
+            jwt: Arc::new(crate::jwt::JwtKeys::from_seed(&[7u8; 32])),
             oidc_clients: empty_oidc_clients(),
         })
     }

@@ -1,6 +1,5 @@
 use axum::extract::{Json, Path, Query, State};
 use axum::response::IntoResponse;
-use axum_extra::extract::cookie::CookieJar;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -32,14 +31,13 @@ pub struct SetupAccountRequest {
     pub signing_pubkey: String,
     pub exchange_pubkey: String,
 }
-/// Response after successful account setup. Includes the session cookie
-/// and the newly assigned user ID.
+/// Response after successful account setup. Carries the freshly minted token
+/// pair (kept in client memory) and the newly assigned user ID.
 #[derive(serde::Serialize)]
-pub struct SetupAccountResponse { pub user_id: String, pub session_id: String, pub csrf_token: String }
+pub struct SetupAccountResponse { pub user_id: String, pub access_token: String, pub refresh_token: String, pub access_expires_in: u64 }
 
 pub async fn setup_account(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
     Json(req): Json<SetupAccountRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
@@ -52,51 +50,50 @@ pub async fn setup_account(
     let user_id = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
     let signing_pubkey = ambre_core::PublicKey::from_slice(&spk).map_err(|e| AppError::Conflict { detail: e.to_string() })?;
 
-    let session_id = uuid::Uuid::new_v4().to_string();
-    let sd = redis_ops::SessionData { user_id, signing_pubkey, session_id: session_id.clone() };
-    redis_ops::session_create(&state.redis, &session_id, &sd, state.config.session_ttl_secs).await?;
+    let tokens = auth::issue_session(&state, user_id, signing_pubkey).await?;
     tracing::debug!(user_id = %user_id, provider = "setup", "login");
 
-    let cookie = auth::create_session_cookie(&session_id, state.config.session_ttl_secs);
-    let csrf_token = uuid::Uuid::new_v4().to_string();
-    let csrf_cookie = crate::middleware::csrf::create_csrf_cookie(&csrf_token, state.config.session_ttl_secs);
-    Ok((jar.add(cookie).add(csrf_cookie), axum::Json(SetupAccountResponse { user_id: user_id.to_string(), session_id, csrf_token })))
+    Ok(axum::Json(SetupAccountResponse {
+        user_id: user_id.to_string(),
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        access_expires_in: tokens.access_expires_in,
+    }))
 }
 
 // -- Me ------------------------------------------------------------
 
 /// Authenticated user profile returned by GET /auth/me.
 #[derive(serde::Serialize)]
-pub struct MeResponse { pub user_id: String, pub email: String, pub display_name: String, pub csrf_token: String }
+pub struct MeResponse { pub user_id: String, pub email: String, pub display_name: String }
 
 pub async fn me(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
 ) -> Result<impl IntoResponse, AppError> {
-    let s = auth::authenticate(&state, &jar).await?;
+    let s = auth;
     let u = db::get_user(&state.db, &s.user_id).await?.ok_or(AppError::NotFound { resource: "user" })?;
     let uid = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*u.id.as_bytes()));
-    // Echo the double-submit CSRF token in the body: the client's Sync Worker
-    // cannot read the (non-HttpOnly) cookie itself, so it relies on this to
-    // populate the `X-CSRF-Token` header on subsequent mutating requests.
-    let csrf_token = jar
-        .get(crate::middleware::csrf::CSRF_COOKIE)
-        .map(|c| c.value().to_string())
-        .unwrap_or_default();
-    Ok(axum::Json(MeResponse { user_id: uid.to_string(), email: u.email, display_name: u.display_name, csrf_token }))
+    Ok(axum::Json(MeResponse { user_id: uid.to_string(), email: u.email, display_name: u.display_name }))
 }
 
 // -- Logout --------------------------------------------------------
 
+/// Request body for logout: the refresh token to revoke. The access token
+/// stays valid until its short `exp`; revoking the refresh prevents renewal.
+#[derive(serde::Deserialize)]
+pub struct LogoutRequest { #[serde(default)] pub refresh_token: Option<String> }
+
 pub async fn logout(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
+    Json(req): Json<LogoutRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    if let Ok(s) = auth::authenticate(&state, &jar).await {
-        redis_ops::session_delete(&state.redis, &s.session_id).await?;
-        tracing::debug!(user_id = %s.user_id, "logout");
+    if let Some(token) = req.refresh_token.as_deref() {
+        redis_ops::refresh_delete(&state.redis, token).await?;
     }
-    Ok((jar.add(auth::delete_session_cookie()).add(crate::middleware::csrf::delete_csrf_cookie()), axum::Json(serde_json::json!({ "status": "logged_out" }))))
+    tracing::debug!(user_id = %auth.user_id, "logout");
+    Ok(axum::Json(serde_json::json!({ "status": "logged_out" })))
 }
 
 // -- List Documents ------------------------------------------------
@@ -112,10 +109,10 @@ pub struct DocumentListResponse { pub documents: Vec<DocumentSummaryJson> }
 
 pub async fn list_documents(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
-    let s = auth::authenticate(&state, &jar).await?;
+    let s = auth;
     let docs = db::list_documents_for_user(&state.db, &s.user_id).await?;
     let json: Vec<_> = docs.into_iter().map(|d| DocumentSummaryJson {
         id: d.id.to_string(), owner_id: d.owner_id.to_string(), doc_type: d.doc_type,
@@ -132,25 +129,40 @@ pub async fn list_documents(
 /// `doc_key_enc` is the DocumentKey encrypted for the owner's X25519
 /// exchange key, stored server-side for sharing.
 #[derive(serde::Deserialize)]
-pub struct CreateDocumentRequest { pub doc_type: String, pub name_enc: Option<String>, pub doc_key_enc: String }
+pub struct CreateDocumentRequest {
+    pub doc_type: String,
+    pub name_enc: Option<String>,
+    pub doc_key_enc: String,
+    /// Optional client-generated document id (lazy creation). When present the
+    /// server materializes the row under this id idempotently.
+    #[serde(default)]
+    pub document_id: Option<String>,
+}
 #[derive(serde::Serialize)]
 pub struct CreateDocumentResponse { pub document_id: String, pub doc_type: String }
 
 pub async fn create_document(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Json(req): Json<CreateDocumentRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
-    let s = auth::authenticate(&state, &jar).await?;
+    let s = auth;
     if !["prose","trame","toile","murmure"].contains(&req.doc_type.as_str()) { return Err(AppError::Conflict{detail:"invalid doc_type".into()}); }
 
     let name_enc = req.name_enc.map(|n| base64::engine::general_purpose::URL_SAFE.decode(&n).map_err(|e| AppError::Conflict{detail:e.to_string()})).transpose()?;
-    let doc = db::create_document(&state.db, &s.user_id, &req.doc_type, name_enc.as_deref()).await?;
+    let client_id = req.document_id.as_deref().map(parse_doc_id).transpose()?;
+    let (doc, created) = db::create_document(&state.db, &s.user_id, &req.doc_type, name_enc.as_deref(), client_id.as_ref()).await?;
     let doc_id = ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(*doc.id.as_bytes()));
-    let doc_key_enc = base64::engine::general_purpose::URL_SAFE.decode(&req.doc_key_enc).map_err(|e| AppError::Conflict{detail:e.to_string()})?;
-    db::add_document_member(&state.db, &doc_id, &s.user_id, "owner", &doc_key_enc, &s.user_id).await?;
-    tracing::info!(document_id = %doc_id, owner_id = %s.user_id, doc_type = %req.doc_type, "document created");
+    // Only the call that actually created the row (or an idempotent retry by the
+    // same owner) registers the owner membership. A foreign caller hitting an
+    // existing id never gains ownership.
+    let owner_uuid = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*doc.owner_id.as_bytes()));
+    if created || owner_uuid == s.user_id {
+        let doc_key_enc = base64::engine::general_purpose::URL_SAFE.decode(&req.doc_key_enc).map_err(|e| AppError::Conflict{detail:e.to_string()})?;
+        db::add_document_member(&state.db, &doc_id, &s.user_id, "owner", &doc_key_enc, &s.user_id).await?;
+    }
+    tracing::info!(document_id = %doc_id, owner_id = %s.user_id, doc_type = %req.doc_type, created, "document create");
     Ok(axum::Json(CreateDocumentResponse { document_id: doc_id.to_string(), doc_type: req.doc_type }))
 }
 
@@ -162,14 +174,18 @@ pub struct GetDocumentResponse { pub id: String, pub owner_id: String, pub doc_t
 
 pub async fn get_document(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth::OptionalAuthSession(auth): auth::OptionalAuthSession,
     Path(document_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
-    let s = auth::authenticate(&state, &jar).await?;
     let doc_id = parse_doc_id(&document_id)?;
     let doc = db::get_document(&state.db, &doc_id).await?.ok_or(AppError::NotFound{resource:"document"})?;
-    let mem = db::get_document_member(&state.db, &doc_id, &s.user_id).await?;
+    // Membership (role + wrapped doc key) is only resolved for an authenticated
+    // caller; an anonymous request gets the public routing metadata only.
+    let mem = match &auth {
+        Some(s) => db::get_document_member(&state.db, &doc_id, &s.user_id).await?,
+        None => None,
+    };
     Ok(axum::Json(GetDocumentResponse {
         id: doc.id.to_string(), owner_id: doc.owner_id.to_string(), doc_type: doc.doc_type,
         name_enc: doc.name_enc.map(|n| base64::engine::general_purpose::URL_SAFE.encode(&n)),
@@ -187,12 +203,12 @@ pub struct RenameDocumentRequest { pub name_enc: String }
 
 pub async fn rename_document(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(document_id): Path<String>,
     Json(req): Json<RenameDocumentRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
-    let s = auth::authenticate(&state, &jar).await?;
+    let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
     if !["owner","editor"].contains(&m.role.as_str()) { return Err(AppError::Forbidden); }
@@ -204,10 +220,10 @@ pub async fn rename_document(
 
 pub async fn delete_document(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(document_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    let s = auth::authenticate(&state, &jar).await?;
+    let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
     if m.role != "owner" { return Err(AppError::Forbidden); }
@@ -229,10 +245,10 @@ pub struct PubkeysResponse { pub signing_pubkey: String, pub exchange_pubkey: St
 
 pub async fn search_users(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let _s = auth::authenticate(&state, &jar).await?;
+    let _s = auth;
     let q = params.get("query").map(|s| s.as_str()).unwrap_or("");
     let users = db::search_users(&state.db, q).await?;
     let json: Vec<_> = users.into_iter().map(|u| UserInfoJson {
@@ -244,10 +260,10 @@ pub async fn search_users(
 
 pub async fn get_pubkeys(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(user_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    let _s = auth::authenticate(&state, &jar).await?;
+    let _s = auth;
     let uid = parse_user_id(&user_id)?;
     let u = db::get_user(&state.db, &uid).await?.ok_or(AppError::NotFound{resource:"user"})?;
     Ok(axum::Json(PubkeysResponse { signing_pubkey: hex::encode(&u.signing_pubkey), exchange_pubkey: hex::encode(&u.exchange_pubkey) }))
@@ -273,11 +289,11 @@ pub struct MemberInfoJson {
 
 pub async fn list_document_members(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(document_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
-    let s = auth::authenticate(&state, &jar).await?;
+    let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     let _m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
     let members = db::list_document_members(&state.db, &doc_id).await?;
@@ -296,11 +312,11 @@ pub struct UpdateMemberRoleRequest { pub role: String }
 
 pub async fn update_document_member_role(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path((document_id, user_id)): Path<(String, String)>,
     Json(req): Json<UpdateMemberRoleRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let s = auth::authenticate(&state, &jar).await?;
+    let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     let target = parse_user_id(&user_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;

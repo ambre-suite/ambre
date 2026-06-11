@@ -73,6 +73,12 @@ pub struct CallbackResponse {
     /// True when the user row was just created (no master key yet).
     /// The client should prompt the user to set up their master key.
     pub is_new_user: bool,
+    /// Access JWT, kept in client memory and sent as `Authorization: Bearer`.
+    pub access_token: String,
+    /// Opaque refresh token, exchanged at `/auth/refresh` for a new access JWT.
+    pub refresh_token: String,
+    /// Access-token lifetime in seconds, so the client can schedule a refresh.
+    pub access_expires_in: u64,
 }
 
 /// Transient OIDC authorization state stored in Redis (TTL 10 min).
