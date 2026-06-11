@@ -351,6 +351,11 @@ impl<V: DocView> FrameHost<V> {
         self.view.handle_input(ev)
     }
 
+    /// Switch the active document on the live view, keeping the GPU surface.
+    pub fn set_document(&mut self, document_id: ambre_bus::DocumentId) {
+        self.view.set_document(document_id);
+    }
+
     /// Reconfigure the GPU surface and notify the view of a canvas resize.
     pub fn resize(&mut self, width: u32, height: u32) {
         self.view.resize(width, height);
@@ -479,6 +484,26 @@ impl<V: DocView> FrameHost<V> {
 }
 
 // -----------------------------------------------------------------------------
+// DocSwitcher — route-driven document swap handle
+// -----------------------------------------------------------------------------
+
+/// A cloneable, type-erased handle that swaps the active document on the live
+/// canvas without recreating the GPU surface. Returned by [`run_with`] so the
+/// SPA shell (Leptos router) can point the persistent canvas at the routed
+/// document on navigation. Main-thread only (`!Send`), like every canvas handle.
+#[derive(Clone)]
+pub struct DocSwitcher {
+    set: Rc<dyn Fn(ambre_bus::DocumentId)>,
+}
+
+impl DocSwitcher {
+    /// Point the canvas at `document_id`. A no-op if it is already current.
+    pub fn set_document(&self, document_id: ambre_bus::DocumentId) {
+        (self.set)(document_id);
+    }
+}
+
+// -----------------------------------------------------------------------------
 // run — UI thread entry point
 // -----------------------------------------------------------------------------
 
@@ -494,12 +519,12 @@ impl<V: DocView> FrameHost<V> {
 /// `make_view` receives the canvas size in physical pixels plus the transparent
 /// [`TextInput`] pipe (so the view can focus it and follow it to the caret), and
 /// returns the view to drive. It runs on this (UI) thread before the GPU is ready.
-pub fn run<V, F>(canvas_id: &str, make_view: F)
+pub fn run<V, F>(canvas_id: &str, make_view: F) -> DocSwitcher
 where
     V: DocView + 'static,
     F: FnOnce(f64, f64, TextInput) -> V,
 {
-    run_with(canvas_id, make_view, || {}, RafControl::new());
+    run_with(canvas_id, make_view, || {}, RafControl::new())
 }
 
 /// Like [`run`], but invokes `pre_frame` once per animation frame on the UI
@@ -507,7 +532,12 @@ where
 /// this to pump the UI-thread command dispatcher (drain Logic->UI events,
 /// mirror command state into the chrome signals, forward content to the view)
 /// without this generic renderer knowing anything about commands or Leptos.
-pub fn run_with<V, F, P>(canvas_id: &str, make_view: F, mut pre_frame: P, raf: RafControl)
+pub fn run_with<V, F, P>(
+    canvas_id: &str,
+    make_view: F,
+    mut pre_frame: P,
+    raf: RafControl,
+) -> DocSwitcher
 where
     V: DocView + 'static,
     F: FnOnce(f64, f64, TextInput) -> V,
@@ -561,14 +591,18 @@ where
             if let Some(gpu) = bootstrap_gpu(canvas_c).await {
                 host_c.borrow_mut().install_gpu(gpu);
             }
+            // `pre_frame` is the route-independent relay (Logic<->Sync, the
+            // dispatcher, the SPA route poll); it must run EVERY frame, even when
+            // the canvas is frozen behind a modal or the landing overlay. So the
+            // outer loop is always-on and only the render is gated by `raf_c`.
             start_raf_loop(
                 move |ts| {
-                    // Pump the UI-thread dispatcher first, so command-state and
-                    // content events landed this frame are visible to the update.
                     pre_frame();
-                    host_c.borrow_mut().render(ts);
+                    if raf_c.is_running() {
+                        host_c.borrow_mut().render(ts);
+                    }
                 },
-                raf_c,
+                RafControl::new(),
             );
         });
     }
@@ -805,6 +839,13 @@ where
         && let Ok(f) = f.dyn_into::<js_sys::Function>()
     {
         let _ = f.call0(&window);
+    }
+
+    // Hand the caller a route-driven document-swap handle. It captures the host
+    // (kept alive by the rAF closure regardless), so swapping the active
+    // document never touches the GPU surface.
+    DocSwitcher {
+        set: Rc::new(move |id| host.borrow_mut().set_document(id)),
     }
 }
 

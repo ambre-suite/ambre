@@ -18,6 +18,7 @@ ambre-logic  = { path = "../ambre-logic" }
 # (its own instance/memory), reached over postMessage, not linked as a crate.
 
 leptos       = { workspace = true }
+leptos_router = { workspace = true }
 leptos_icons = { workspace = true }
 icondata     = { workspace = true }
 tracing      = { workspace = true }

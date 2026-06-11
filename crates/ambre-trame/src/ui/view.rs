@@ -386,6 +386,31 @@ impl TrameView {
 }
 
 impl DocView for TrameView {
+    /// Swap the active document in place (SPA route change). Drop every
+    /// document-scoped field back to its `new()` value while preserving the
+    /// shared, route-independent plumbing (channels, text pipe, anchor, theme)
+    /// and the current canvas size, then force a full repaint and a fresh
+    /// initial viewport fetch for the new document. No-op if already current.
+    fn set_document(&mut self, document_id: DocumentId) {
+        if self.document_id == document_id {
+            return;
+        }
+        self.document_id = document_id;
+        self.state = TrameUiState::new(self.state.canvas_width, self.state.canvas_height);
+        self.editor = None;
+        self.edit_dirty = false;
+        self.initial_viewport_sent = false;
+        self.pending_viewport = None;
+        self.needs_full = true;
+        self.viewport_changed = false;
+        self.data_dirty = false;
+        self.prev_top_row = 0;
+        self.prev_left_col = 0;
+        // Retract any floating-toolbar anchor from the previous document.
+        self.last_anchor = None;
+        self.anchor.publish(None);
+    }
+
     fn update(&mut self) {
         // Drain every queued UiEvent without blocking. A `Disconnected` error
         // means the Logic thread is gone (panic=abort or shutdown) — there is

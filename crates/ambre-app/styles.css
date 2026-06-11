@@ -531,12 +531,28 @@
 }
 
 /* -- Landing page: the document list shown at `/` (no canvas). ------------- */
+/* Full-bleed overlay on the `/` route: covers the persistent canvas (never
+   unmounted, only hidden behind this) with an opaque backdrop. */
 .ambre-landing {
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 32px 24px;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    overflow: auto;
+    background: var(--color-bg, #1e1e1e);
     color: var(--color-text, #e6e6e6);
     font-family: system-ui, sans-serif;
+}
+
+.ambre-landing > * {
+    max-width: 720px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+.ambre-landing-header {
+    padding-top: 32px;
 }
 
 .ambre-landing-header {

@@ -15,6 +15,7 @@
 
 use parley::FontContext;
 
+use ambre_bus::DocumentId;
 use ambre_draw::Rect;
 
 use crate::{ContentRepaint, OverlayRepaint, TextCache, WgpuSurface};
@@ -119,4 +120,10 @@ pub trait DocView {
     /// Handle an input event. Returns `true` if the host should call
     /// `preventDefault()` on the originating DOM event.
     fn handle_input(&mut self, ev: &InputEvent) -> bool;
+
+    /// Switch the active document in place, without tearing down the GPU surface
+    /// (the SPA router calls this on a `/trame/<id>` navigation). The view drops
+    /// its document-scoped state and re-fetches for `document_id`. Default no-op
+    /// for views that are not document-scoped.
+    fn set_document(&mut self, _document_id: DocumentId) {}
 }
