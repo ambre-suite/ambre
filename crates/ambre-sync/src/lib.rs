@@ -590,7 +590,13 @@ impl SyncState {
             return;
         };
         tracing::debug!("[Sync→Server] ws_send {:?} → {} bytes wire", std::mem::discriminant(msg), wire.len());
-        if let Err(e) = ws.send_with_u8_array(&wire) {
+        // `wire` lives in the wasm heap, which is a SharedArrayBuffer under the
+        // shared-memory threading model. Browsers reject `WebSocket.send` on a
+        // view backed by a SharedArrayBuffer, so copy into a fresh (non-shared)
+        // ArrayBuffer first.
+        let buf = js_sys::Uint8Array::new_with_length(wire.len() as u32);
+        buf.copy_from(&wire);
+        if let Err(e) = ws.send_with_array_buffer(&buf.buffer()) {
             tracing::warn!("[Sync→Server] WebSocket send failed ({e:?}); reconnect will retry");
         }
         if let Some(tx) = &self.mock_ws_tx {
