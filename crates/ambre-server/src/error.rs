@@ -13,6 +13,9 @@ pub enum AppError {
     #[error("Unauthorized")]
     Unauthorized,
 
+    #[error("Bad request: {0}")]
+    BadRequest(String),
+
     #[error("Session expired")]
     SessionExpired,
 
@@ -79,10 +82,18 @@ impl IntoResponse for AppError {
                 (StatusCode::CONFLICT, "COMPACTION_LOCK_HELD")
             }
             AppError::UnknownProvider(_) => (StatusCode::BAD_REQUEST, "UNKNOWN_PROVIDER"),
+            AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, "BAD_REQUEST"),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR"),
         };
 
-        tracing::error!(error = %self, code = code);
+        // Log by severity: a 5xx is a genuine server fault (Redis/DB/S3/...) and
+        // must be loud; a 4xx is client-caused (bad auth, not found, conflict)
+        // and is routine, so it stays at debug to keep `error` meaningful.
+        if status.is_server_error() {
+            tracing::error!(error = %self, code = code);
+        } else {
+            tracing::debug!(error = %self, code = code);
+        }
 
         let message = match &self {
             AppError::Database(_) | AppError::Redis(_) | AppError::S3(_) | AppError::Decode(_) | AppError::Oidc(_) => {

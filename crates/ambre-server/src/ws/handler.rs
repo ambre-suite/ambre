@@ -28,14 +28,53 @@ use crate::error::AppError;
 use crate::redis_ops;
 use crate::state::AppState;
 
+/// Query parameters on the WS upgrade. `session_id` is a dev-only fallback (see
+/// [`ws_upgrade`]).
+#[derive(serde::Deserialize)]
+pub struct WsQuery {
+    session_id: Option<String>,
+}
+
 /// HTTP upgrade handler. Authenticates via the session cookie, then hands off
 /// to `handle_ws` for the full lifecycle.
+///
+/// Dev-only fallback: when `dev_mode` is set and the request carries a
+/// `?session_id=` query parameter, the session is resolved from that id instead
+/// of the cookie. The browser does not attach the session cookie to a
+/// worker-initiated WebSocket handshake under COEP isolation, so the dev client
+/// passes the id explicitly. Ignored entirely in production.
 pub async fn ws_upgrade(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
     jar: CookieJar,
+    axum::extract::Query(query): axum::extract::Query<WsQuery>,
 ) -> impl IntoResponse {
-    let session = auth::authenticate(&state, &jar).await;
+    let session = match query.session_id {
+        Some(session_id) if state.config.dev_mode => {
+            match redis_ops::session_get(&state.redis, &session_id).await {
+                Ok(Some(sd)) => Ok(auth::AuthSession {
+                    user_id: sd.user_id,
+                    signing_pubkey: sd.signing_pubkey,
+                    session_id: sd.session_id,
+                }),
+                Ok(None) => Err(AppError::SessionExpired),
+                Err(e) => Err(e),
+            }
+        }
+        _ => auth::authenticate(&state, &jar).await,
+    };
+    // The WS upgrade always returns 101, then `handle_ws` drops the connection
+    // if auth failed -- so the error never reaches `AppError::into_response` and
+    // would otherwise be invisible. Log it here, by severity: a rejected session
+    // is routine (client), a server fault (Redis/DB) must be loud.
+    if let Err(e) = &session {
+        match e {
+            AppError::Unauthorized | AppError::SessionExpired => {
+                tracing::debug!("WS auth rejected: {e}")
+            }
+            _ => tracing::error!("WS auth failed (server fault): {e}"),
+        }
+    }
     ws.on_upgrade(move |socket| handle_ws(socket, state, session))
 }
 

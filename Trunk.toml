@@ -6,13 +6,22 @@ filehash = false
 port = 8080
 open = true
 
-[[serve.proxy]]
+# NOTE: proxies MUST be top-level `[[proxy]]`, not `[[serve.proxy]]`. Trunk
+# silently ignores the nested form, so every /api and /ws request falls through
+# to the static server (404 for GET, 405 for POST) instead of reaching the
+# backend on :3000.
+# The WebSocket endpoint is `/api/ws` (route `/ws` nested under `/api`). Its
+# proxy MUST set `ws = true` AND be declared before the catch-all `/api/` proxy,
+# otherwise the upgrade request matches the plain-HTTP `/api/` proxy, which
+# cannot switch protocols (the WS closes with code 1006). More specific first.
+[[proxy]]
+rewrite = "/api/ws"
+backend = "ws://127.0.0.1:3000/api/ws"
+ws = true
+
+[[proxy]]
 rewrite = "/api/"
 backend = "http://127.0.0.1:3000/api/"
-
-[[serve.proxy]]
-rewrite = "/ws"
-backend = "http://127.0.0.1:3000/ws"
 
 # Cross-Origin Isolation: required to enable SharedArrayBuffer (and therefore
 # WebAssembly.Memory shared = true), the bedrock for the multi-threaded WASM

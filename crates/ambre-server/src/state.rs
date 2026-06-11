@@ -46,6 +46,10 @@ pub struct Config {
     /// Google OIDC redirect URI (e.g. "http://localhost:3000/api/auth/google/callback").
     #[allow(dead_code)]
     pub oidc_google_redirect_uri: String,
+    /// Dev-only switch: when true, the `POST /api/auth/dev/login` endpoint is
+    /// enabled, letting `?user=<name>` authenticate as an on-the-fly user
+    /// (deterministic keys, no OIDC). MUST stay false in production.
+    pub dev_mode: bool,
 }
 
 impl Default for Config {
@@ -58,6 +62,7 @@ impl Default for Config {
             oidc_google_client_id: String::new(),
             oidc_google_client_secret: String::new(),
             oidc_google_redirect_uri: String::new(),
+            dev_mode: false,
         }
     }
 }

@@ -149,6 +149,9 @@ enum SyncEvent {
         signing_key: SigningKey,
         exchange_key: StaticSecret,
         csrf_token: CsrfToken,
+        /// Dev-only WS session id (see [`SyncState::dev_ws_session_id`]); `None`
+        /// for OIDC sessions.
+        dev_session_id: Option<String>,
     },
     AccountCreated {
         id: RequestId,
@@ -380,6 +383,11 @@ pub struct SyncState {
     url_scheme: &'static str,
     /// CSRF token echoed as `X-CSRF-Token` header on mutating requests.
     csrf_token: Option<CsrfToken>,
+    /// Dev-only: session id returned by `dev_login`, appended to the WS URL as
+    /// `?session_id=` so the handshake authenticates without relying on the
+    /// browser sending the cookie from the worker (which it does not under
+    /// COEP isolation). `None` for real (OIDC) sessions.
+    dev_ws_session_id: Option<String>,
     /// Authenticated user id, set after Unlock/SetupAccount.
     user_id: Option<UserId>,
 
@@ -436,6 +444,7 @@ impl SyncState {
             api_base,
             url_scheme,
             csrf_token,
+            dev_ws_session_id: None,
             user_id: None,
             master_seed: None,
             signing_key: None,
@@ -605,6 +614,7 @@ impl SyncState {
             // -- Session -------------------------------------------------------
             RestCommand::Unlock { passphrase } => self.handle_unlock(id, passphrase),
             RestCommand::SetupAccount { passphrase } => self.handle_setup_account(id, passphrase),
+            RestCommand::DevLogin { username } => self.handle_dev_login(id, username),
             RestCommand::ChangePassphrase {
                 current_passphrase,
                 new_passphrase,
@@ -822,6 +832,7 @@ impl SyncState {
                                     signing_key,
                                     exchange_key,
                                     csrf_token: CsrfToken(me.csrf_token),
+                                    dev_session_id: None,
                                 });
                             }
                             Err(e) => {
@@ -847,6 +858,81 @@ impl SyncState {
                     user_id: UserId::new(),
                     display_name: "offline".into(),
                     email: "offline@localhost".into(),
+                },
+            );
+        }
+    }
+
+    /// Dev-only login: authenticate as `username` with keys derived
+    /// deterministically from the username (no passphrase, no master-key
+    /// round-trip). The server creates the user on the fly and is the sole gate
+    /// (it rejects this unless `DEV_MODE` is set). Lets `?user=<name>` test
+    /// multi-user behaviour on one machine; an edit survives a refresh because
+    /// the same username always derives the same identity.
+    fn handle_dev_login(&mut self, id: RequestId, username: String) {
+        tracing::info!("Sync: DevLogin (username={username})");
+
+        let logic_tx = self.logic_tx.clone();
+        let api_base = self.api_base.clone();
+        let url_scheme = self.url_scheme;
+        let event_tx = self.event_tx.clone();
+
+        // Deterministic seed: domain-separated BLAKE2b of the username. The same
+        // username always yields the same keys, so a refresh re-derives the
+        // identity with no server-side key storage.
+        let master_seed = MasterSeed::from_array(ambre_crypto::hash::chain_hash(
+            b"ambre-dev-seed",
+            username.as_bytes(),
+        ));
+        let signing_key = master_seed.derive_signing_key();
+        let exchange_key = master_seed.derive_exchange_key();
+
+        if let Some(tx) = event_tx {
+            let signing_pub_key = hex::encode(signing_key.verifying_key().to_bytes());
+            let exchange_pub_key = {
+                let pub_key = x25519_dalek::PublicKey::from(&exchange_key);
+                hex::encode(pub_key.as_bytes())
+            };
+            wasm_bindgen_futures::spawn_local(async move {
+                let url = format!("{url_scheme}://{api_base}/api/auth/dev/login");
+                let body = http::DevLoginRequest {
+                    username,
+                    signing_pub_key,
+                    exchange_pub_key,
+                };
+                match http::post_json::<_, http::DevLoginResponse>(&url, &body, None).await {
+                    Ok(resp) => {
+                        let user_id =
+                            UserId::parse_str(&resp.user_id).unwrap_or_else(|_| UserId::new());
+                        let _ = tx.send(SyncEvent::SessionReady {
+                            id,
+                            user_id,
+                            display_name: resp.display_name,
+                            email: String::new(),
+                            master_seed,
+                            signing_key,
+                            exchange_key,
+                            csrf_token: CsrfToken(resp.csrf_token),
+                            dev_session_id: Some(resp.session_id),
+                        });
+                    }
+                    Err(e) => {
+                        let _ = logic_tx.send(LogicEvent::AuthError { message: e });
+                    }
+                }
+            });
+        } else {
+            // Host-test / offline path: adopt the deterministic keys locally.
+            self.signing_key = Some(signing_key);
+            self.exchange_key = Some(exchange_key);
+            self.master_seed = Some(master_seed);
+            self.open_websocket();
+            self.reply(
+                id,
+                RestEvent::SessionReady {
+                    user_id: UserId::new(),
+                    display_name: username,
+                    email: String::new(),
                 },
             );
         }
@@ -968,7 +1054,19 @@ impl SyncState {
     /// replaced. All open documents are automatically re-subscribed.
     #[cfg(target_arch = "wasm32")]
     fn open_websocket(&mut self) {
-        let url = format!("wss://{}/api/ws", self.api_base);
+        // Mirror the REST scheme: `ws` on localhost (http), `wss` otherwise.
+        // A hardcoded `wss://` fails on a localhost http dev server (TLS error,
+        // WS close code 1015).
+        let ws_scheme = if self.url_scheme == "http" { "ws" } else { "wss" };
+        let mut url = format!("{ws_scheme}://{}/api/ws", self.api_base);
+        // Dev fallback: the browser does not attach the session cookie to a
+        // worker-initiated WS handshake under COEP isolation, so carry the dev
+        // session id in the query string instead (the server accepts it only in
+        // dev_mode).
+        if let Some(sid) = &self.dev_ws_session_id {
+            url.push_str("?session_id=");
+            url.push_str(sid);
+        }
         match WebSocket::new(&url) {
             Ok(ws) => {
                 ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
@@ -1091,12 +1189,14 @@ impl SyncState {
                 signing_key,
                 exchange_key,
                 csrf_token,
+                dev_session_id,
             } => {
                 self.user_id = Some(user_id);
                 self.master_seed = Some(master_seed);
                 self.signing_key = Some(signing_key);
                 self.exchange_key = Some(exchange_key);
                 self.csrf_token = Some(csrf_token);
+                self.dev_ws_session_id = dev_session_id;
                 self.open_websocket();
                 self.reply(
                     id,

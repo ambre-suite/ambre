@@ -35,6 +35,8 @@ pub async fn invite_to_document(
     let invitee_id = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*invitee.id.as_bytes()));
     let doc_key_enc = base64::engine::general_purpose::URL_SAFE.decode(&req.doc_key_enc).map_err(|e| AppError::Conflict{detail:e.to_string()})?;
     db::add_document_member(&state.db, &doc_id, &invitee_id, &req.role, &doc_key_enc, &s.user_id).await?;
+    // Log the resolved invitee_id (UUID), never the email passed in the request.
+    tracing::info!(document_id = %doc_id, invitee = %invitee_id, role = %req.role, by = %s.user_id, "member invited");
     Ok(axum::Json(InviteResponse { user_id: invitee_id.to_string(), display_name: invitee.display_name }))
 }
 
@@ -49,6 +51,7 @@ pub async fn revoke_from_document(
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
     if m.role != "owner" { return Err(AppError::Forbidden); }
     db::remove_document_member(&state.db, &doc_id, &target).await?;
+    tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, "member revoked");
     Ok(axum::Json(serde_json::json!({"status":"revoked"})))
 }
 
@@ -79,6 +82,7 @@ pub async fn rotate_document_key(
         keys.push((uid, enc));
     }
     db::rotate_document_keys(&state.db, &doc_id, &keys).await?;
+    tracing::info!(document_id = %doc_id, by = %s.user_id, members = keys.len(), "document key rotated");
     let msg = ambre_protocol::ws::encode_server_msg(&ambre_protocol::ws::WsServerMsg::KeyRotationRequired { document_id: doc_id, revoked_user_id: s.user_id });
     let _ = crate::redis_ops::doc_broadcast(&state.redis, &doc_id, &msg).await;
     Ok(axum::Json(serde_json::json!({"status":"rotated"})))

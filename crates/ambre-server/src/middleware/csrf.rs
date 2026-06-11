@@ -35,9 +35,14 @@ fn is_csrf_exempt(path: &str, method: &Method) -> bool {
         return true;
     }
     // OIDC flow is protected by PKCE state, not by this cookie.
-    // setup_account creates the session and the CSRF cookie.
+    // setup_account / dev_login create the session and the CSRF cookie.
     // The WebSocket upgrade is a GET, already exempt above.
-    path.starts_with("/api/auth/")
+    //
+    // The middleware is layered INSIDE the `/api` nest, so `nest` has already
+    // stripped that prefix: the path seen here is `/auth/...`, not
+    // `/api/auth/...`. Match both so the exemption holds regardless of where the
+    // layer sits.
+    path.starts_with("/auth/") || path.starts_with("/api/auth/")
 }
 
 /// Tower middleware implementing Double Submit Cookie CSRF protection.
@@ -136,6 +141,18 @@ mod tests {
         assert!(is_csrf_exempt("/api/auth/setup", &post));
         assert!(is_csrf_exempt("/api/auth/logout", &post));
         assert!(is_csrf_exempt("/api/auth/me", &Method::GET));
+    }
+
+    #[test]
+    fn nested_auth_routes_are_exempt() {
+        // The middleware runs inside the `/api` nest, so `nest` strips the
+        // prefix and the path seen at runtime is `/auth/...` (no `/api`).
+        let post = Method::POST;
+        assert!(is_csrf_exempt("/auth/setup", &post));
+        assert!(is_csrf_exempt("/auth/dev/login", &post));
+        assert!(is_csrf_exempt("/auth/google/callback", &post));
+        // Non-auth nested routes must still require a token.
+        assert!(!is_csrf_exempt("/documents", &post));
     }
 
     #[test]

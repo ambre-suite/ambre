@@ -12,8 +12,8 @@
 //! thread awaits via `recv_async` (never blocking the page).
 
 use js_sys::Uint8Array;
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::*;
 use web_sys::{IdbDatabase, IdbOpenDbRequest, IdbTransactionMode};
 
 const DB_NAME: &str = "ambre-persistence";
@@ -152,15 +152,16 @@ impl PersistenceStore {
 
         let tx_ok = tx.clone();
         let req = request.clone();
-        let on_success = Closure::<dyn FnMut(web_sys::Event)>::new(move |_event: web_sys::Event| {
-            let data = req
-                .result()
-                .ok()
-                .filter(|v| !v.is_undefined() && !v.is_null())
-                .and_then(|v| v.dyn_into::<Uint8Array>().ok())
-                .map(|a| a.to_vec());
-            let _ = tx_ok.send(data);
-        });
+        let on_success =
+            Closure::<dyn FnMut(web_sys::Event)>::new(move |_event: web_sys::Event| {
+                let data = req
+                    .result()
+                    .ok()
+                    .filter(|v| !v.is_undefined() && !v.is_null())
+                    .and_then(|v| v.dyn_into::<Uint8Array>().ok())
+                    .map(|a| a.to_vec());
+                let _ = tx_ok.send(data);
+            });
         request.set_onsuccess(Some(on_success.as_ref().unchecked_ref()));
         on_success.forget();
 

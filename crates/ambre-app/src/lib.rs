@@ -32,8 +32,8 @@ use std::rc::Rc;
 
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
-    AppCommand, AppEvent, DocumentId, LogicCommand, LogicEvent, SyncCommand, TrameCommand,
-    TrameEvent, UiEvent, SMOKE_DOCUMENT_ID,
+    AppCommand, AppEvent, DocumentId, LogicCommand, LogicEvent, RequestId, RestCommand,
+    SyncCommand, TrameCommand, TrameEvent, UiEvent, SMOKE_DOCUMENT_ID,
 };
 use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
 use ambre_chrome::{
@@ -173,6 +173,18 @@ pub fn main() {
         })
         .expect("spawn Logic thread");
 
+    // Dev-only multi-user testing: `?user=<name>` in the page URL authenticates
+    // as that user (created on the fly server-side, keys derived deterministically
+    // from the name). Lets several browser profiles collaborate on one machine
+    // without OIDC. A prod server rejects the resulting `DevLogin` (DEV_MODE off).
+    if let Some(username) = dev_user_from_url() {
+        tracing::info!("Dev login requested for user '{username}'");
+        let _ = ui_to_logic_tx.try_send(LogicCommand::Rest {
+            id: RequestId::next(),
+            cmd: RestCommand::DevLogin { username },
+        });
+    }
+
     // Local persistence: open the IndexedDB store on this (Main) thread, where
     // the event loop is live. On open, restore the smoke document's snapshot so
     // an edit survives a refresh without any network round-trip. The store is
@@ -274,6 +286,20 @@ pub fn main() {
         pre_frame,
         raf,
     );
+}
+
+/// Dev-only: extract the `?user=<name>` query parameter from the page URL.
+///
+/// Returns the trimmed, non-empty username when present. The Sync worker cannot
+/// see the page URL (a dedicated worker's `location` is its own script), so the
+/// Main thread reads it here and forwards a `DevLogin` command.
+fn dev_user_from_url() -> Option<String> {
+    let search = web_sys::window()?.location().search().ok()?;
+    let params = web_sys::UrlSearchParams::new_with_str(&search).ok()?;
+    params
+        .get("user")
+        .map(|u| u.trim().to_string())
+        .filter(|u| !u.is_empty())
 }
 
 /// Map a `SyncWarningCode` (the closed `ambre-bus` contract) to a user-facing

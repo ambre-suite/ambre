@@ -86,7 +86,10 @@ pub async fn session_get(
     session_id: &str,
 ) -> Result<Option<SessionData>, AppError> {
     let key = format!("session:{session_id}");
-    let fields: Vec<String> = redis
+    // `hgetall` returns field/value pairs; rustis deserializes them as a map.
+    // (Reading into `Vec<String>` fails with "invalid type: sequence, expected a
+    // string" because each pair is itself a sequence.)
+    let fields: std::collections::HashMap<String, String> = redis
         .hgetall(&key)
         .await
         .map_err(|e| AppError::Redis(format!("session get failed: {e}")))?;
@@ -95,16 +98,8 @@ pub async fn session_get(
         return Ok(None);
     }
 
-    let mut user_id = String::new();
-    let mut signing_pubkey_hex = String::new();
-    let mut chunks = fields.chunks(2);
-    while let Some([field, value]) = chunks.next() {
-        match field.as_str() {
-            "user_id" => user_id = value.clone(),
-            "signing_pubkey_hex" => signing_pubkey_hex = value.clone(),
-            _ => {}
-        }
-    }
+    let user_id = fields.get("user_id").cloned().unwrap_or_default();
+    let signing_pubkey_hex = fields.get("signing_pubkey_hex").cloned().unwrap_or_default();
 
     let user_id = ambre_core::Uuid::parse_str(&user_id)
         .map(ambre_core::UserId::from_uuid)

@@ -211,6 +211,8 @@ pub async fn create_user(
     .fetch_one(pool)
     .await?;
 
+    tracing::info!(user_id = %row.try_get::<uuid::Uuid, _>("id")?, provider = "setup", "user created");
+
     Ok(UserRow {
         id: row.try_get("id")?,
         oidc_provider: row.try_get("oidc_provider")?,
@@ -240,7 +242,7 @@ pub async fn upsert_user_from_oidc(
     display_name: &str,
 ) -> Result<UserRow, AppError> {
     let row = sqlx::query(
-        "INSERT INTO users (oidc_provider, oidc_subject, email, display_name, signing_pubkey, exchange_pubkey) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $3, display_name = $4 RETURNING id, oidc_provider, oidc_subject, email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id"
+        "INSERT INTO users (oidc_provider, oidc_subject, email, display_name, signing_pubkey, exchange_pubkey) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $3, display_name = $4 RETURNING id, oidc_provider, oidc_subject, email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id, (xmax = 0) AS inserted"
     )
     .bind(oidc_provider)
     .bind(oidc_subject)
@@ -250,6 +252,57 @@ pub async fn upsert_user_from_oidc(
     .bind(vec![0u8; 32])
     .fetch_one(pool)
     .await?;
+
+    let inserted: bool = row.try_get("inserted")?;
+    if inserted {
+        tracing::info!(user_id = %row.try_get::<uuid::Uuid, _>("id")?, provider = %oidc_provider, "user created");
+    }
+
+    Ok(UserRow {
+        id: row.try_get("id")?,
+        oidc_provider: row.try_get("oidc_provider")?,
+        oidc_subject: row.try_get("oidc_subject")?,
+        email: row.try_get("email")?,
+        display_name: row.try_get("display_name")?,
+        master_key_enc: row.try_get("master_key_enc")?,
+        master_key_salt: row.try_get("master_key_salt")?,
+        signing_pubkey: row.try_get("signing_pubkey")?,
+        exchange_pubkey: row.try_get("exchange_pubkey")?,
+        org_id: row.try_get("org_id")?,
+    })
+}
+
+/// Dev-only: upserts a user identified by a `?user=<username>` parameter.
+///
+/// Stored under `oidc_provider = 'dev'`, `oidc_subject = username` so it shares
+/// the OIDC unique index and is idempotent across refreshes. The supplied
+/// pubkeys (derived deterministically client-side from the username) are written
+/// on insert and refreshed on conflict, so the server can verify the user's
+/// signatures. `master_key_*` stay NULL: dev keys never round-trip through the
+/// server. Gated by `Config::dev_mode` at the call site.
+pub async fn dev_upsert_user(
+    pool: &PgPool,
+    username: &str,
+    signing_pubkey: &[u8],
+    exchange_pubkey: &[u8],
+) -> Result<UserRow, AppError> {
+    let email = format!("{username}@dev.local");
+    // `(xmax = 0)` is true only for a freshly INSERTed row (vs an ON CONFLICT
+    // UPDATE), so we can log creation without a prior existence check.
+    let row = sqlx::query(
+        "INSERT INTO users (oidc_provider, oidc_subject, email, display_name, signing_pubkey, exchange_pubkey) VALUES ('dev', $1, $2, $1, $3, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $2, display_name = $1, signing_pubkey = $3, exchange_pubkey = $4 RETURNING id, oidc_provider, oidc_subject, email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id, (xmax = 0) AS inserted"
+    )
+    .bind(username)
+    .bind(&email)
+    .bind(signing_pubkey)
+    .bind(exchange_pubkey)
+    .fetch_one(pool)
+    .await?;
+
+    let inserted: bool = row.try_get("inserted")?;
+    if inserted {
+        tracing::info!(user_id = %row.try_get::<uuid::Uuid, _>("id")?, provider = "dev", "user created");
+    }
 
     Ok(UserRow {
         id: row.try_get("id")?,

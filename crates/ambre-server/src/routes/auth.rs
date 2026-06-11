@@ -10,6 +10,93 @@ use crate::oidc::{self, CallbackRequest, CallbackResponse};
 use crate::redis_ops;
 use crate::state::AppState;
 
+/// Request body for the dev-only `POST /api/auth/dev/login`.
+///
+/// The pubkeys are hex-encoded and derived deterministically client-side from
+/// the username; the server stores them so it can verify signatures.
+#[derive(serde::Deserialize)]
+pub struct DevLoginRequest {
+    pub username: String,
+    pub signing_pub_key: String,
+    pub exchange_pub_key: String,
+}
+
+/// Response for `POST /api/auth/dev/login`.
+#[derive(serde::Serialize)]
+pub struct DevLoginResponse {
+    pub user_id: String,
+    pub display_name: String,
+    pub csrf_token: String,
+    /// Opaque session id. Dev-only: the client carries it in the WS URL query
+    /// (`/api/ws?session_id=...`) because the browser does not attach the
+    /// session cookie to a worker-initiated WebSocket handshake under COEP.
+    pub session_id: String,
+}
+
+/// `POST /auth/dev/login` (dev only)
+///
+/// Authenticates as `username`, creating the user on the fly. Bypasses OIDC and
+/// the passphrase/master-key dance: the client derives its keys deterministically
+/// from the username and submits the pubkeys here. Establishes a Redis session
+/// plus the session + CSRF cookies, exactly like `oidc_callback`. Returns 401
+/// unless `Config::dev_mode` is set, so a production server always rejects it.
+pub async fn dev_login(
+    State(state): State<Arc<AppState>>,
+    jar: CookieJar,
+    Json(req): Json<DevLoginRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    if !state.config.dev_mode {
+        return Err(AppError::Unauthorized);
+    }
+    if req.username.is_empty() {
+        return Err(AppError::BadRequest("username must not be empty".into()));
+    }
+
+    let signing_pubkey = hex::decode(&req.signing_pub_key)
+        .map_err(|e| AppError::BadRequest(format!("invalid signing_pub_key: {e}")))?;
+    let exchange_pubkey = hex::decode(&req.exchange_pub_key)
+        .map_err(|e| AppError::BadRequest(format!("invalid exchange_pub_key: {e}")))?;
+
+    let user =
+        db::dev_upsert_user(&state.db, &req.username, &signing_pubkey, &exchange_pubkey).await?;
+
+    let user_id = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
+    let signing_pubkey = ambre_core::PublicKey::from_slice(&user.signing_pubkey)
+        .unwrap_or(ambre_core::PublicKey::from_array([0u8; 32]));
+
+    let session_id = uuid::Uuid::new_v4().to_string();
+    let sd = redis_ops::SessionData {
+        user_id,
+        signing_pubkey,
+        session_id: session_id.clone(),
+    };
+    redis_ops::session_create(&state.redis, &session_id, &sd, state.config.session_ttl_secs)
+        .await?;
+    tracing::debug!(user_id = %user_id, provider = "dev", "login");
+
+    let mut cookie = auth::create_session_cookie(&session_id, state.config.session_ttl_secs);
+    let csrf_token = uuid::Uuid::new_v4().to_string();
+    let mut csrf_cookie =
+        crate::middleware::csrf::create_csrf_cookie(&csrf_token, state.config.session_ttl_secs);
+    // Dev runs over plain http://localhost, where browsers (notably Firefox) drop
+    // `Secure` cookies and `SameSite=Strict` can block the cross-context worker
+    // fetch. Relax both: dev_login is gated by dev_mode anyway.
+    use axum_extra::extract::cookie::SameSite;
+    cookie.set_secure(false);
+    cookie.set_same_site(SameSite::Lax);
+    csrf_cookie.set_secure(false);
+    csrf_cookie.set_same_site(SameSite::Lax);
+    Ok((
+        jar.add(cookie).add(csrf_cookie),
+        axum::Json(DevLoginResponse {
+            user_id: user_id.to_string(),
+            display_name: user.display_name,
+            csrf_token,
+            session_id,
+        }),
+    ))
+}
+
 /// `GET /auth/{provider}/login`
 ///
 /// Generates an OIDC authorization URL (with PKCE, CSRF state, and nonce),
@@ -102,6 +189,7 @@ pub async fn oidc_callback(
     };
     redis_ops::session_create(&state.redis, &session_id, &sd, state.config.session_ttl_secs)
         .await?;
+    tracing::debug!(user_id = %user_id, provider = %provider, "login");
 
     let cookie = auth::create_session_cookie(&session_id, state.config.session_ttl_secs);
     let csrf_token = uuid::Uuid::new_v4().to_string();
