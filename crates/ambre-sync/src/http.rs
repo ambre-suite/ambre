@@ -152,6 +152,26 @@ pub(crate) struct SetupAccountResponse {
     pub csrf_token: String,
 }
 
+/// Request body for the dev-only `POST /api/auth/dev/login`. The pubkeys are
+/// hex-encoded and derived deterministically from `username`.
+#[derive(Serialize)]
+pub(crate) struct DevLoginRequest {
+    pub username: String,
+    pub signing_pub_key: String,
+    pub exchange_pub_key: String,
+}
+
+/// Response from `POST /api/auth/dev/login`.
+#[derive(Deserialize)]
+pub(crate) struct DevLoginResponse {
+    pub user_id: String,
+    pub display_name: String,
+    pub csrf_token: String,
+    /// Dev-only: opaque session id, carried in the WS URL query because the
+    /// browser will not send the cookie on a worker-initiated handshake.
+    pub session_id: String,
+}
+
 #[derive(Deserialize)]
 pub(crate) struct MasterKeyResponse {
     pub master_key_enc: String,

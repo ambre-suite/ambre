@@ -18,6 +18,7 @@ use axum::middleware as axum_mw;
 use axum::Router;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::trace::TraceLayer;
 #[allow(clippy::single_component_path_imports)]
 use tracing_subscriber;
 
@@ -67,12 +68,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let oidc_google_client_id = std::env::var("OIDC_GOOGLE_CLIENT_ID").unwrap_or_default();
     let oidc_google_client_secret = std::env::var("OIDC_GOOGLE_CLIENT_SECRET").unwrap_or_default();
     let oidc_google_redirect_uri = std::env::var("OIDC_GOOGLE_REDIRECT_URI").unwrap_or_default();
+    let dev_mode = std::env::var("DEV_MODE")
+        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
+        .unwrap_or(false);
+    if dev_mode {
+        tracing::warn!("DEV_MODE enabled: POST /api/auth/dev/login is active (insecure, dev only)");
+    }
 
     let config = Config {
         s3_env_prefix,
         oidc_google_client_id: oidc_google_client_id.clone(),
         oidc_google_client_secret: oidc_google_client_secret.clone(),
         oidc_google_redirect_uri: oidc_google_redirect_uri.clone(),
+        dev_mode,
         ..Default::default()
     };
 
@@ -125,6 +133,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/auth/google/login", axum::routing::get(routes::oidc_login))
         .route("/auth/google/callback", axum::routing::post(routes::oidc_callback))
         .route("/auth/setup", axum::routing::post(routes::setup_account))
+        .route("/auth/dev/login", axum::routing::post(routes::dev_login))
         .route("/auth/me", axum::routing::get(routes::me))
         .route("/auth/logout", axum::routing::post(routes::logout))
         .route("/keys/master", axum::routing::put(routes::store_master_keys).get(routes::get_master_keys))
@@ -163,6 +172,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .nest("/api", api_router)
         .layer(cors)
+        // Per-request access log (method, path, status, latency). Emits under
+        // the `tower_http::trace` target at DEBUG; enable with `tower_http=debug`.
+        .layer(TraceLayer::new_for_http())
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;

@@ -33,6 +33,7 @@ pub async fn store_master_keys(
     let new_signing_pubkey = ambre_core::PublicKey::from_slice(&spk).map_err(|e| AppError::Conflict{detail:e.to_string()})?;
     let sd = redis_ops::SessionData { user_id: s.user_id, signing_pubkey: new_signing_pubkey, session_id: s.session_id.clone() };
     redis_ops::session_create(&state.redis, &s.session_id, &sd, state.config.session_ttl_secs).await?;
+    tracing::info!(user_id = %s.user_id, "master key stored");
 
     Ok(axum::Json(serde_json::json!({"status":"stored"})))
 }
@@ -72,5 +73,6 @@ pub async fn rotate_master_keys(
     let mk_enc = base64::engine::general_purpose::URL_SAFE.decode(&req.master_key_enc).map_err(|e| AppError::Conflict{detail:e.to_string()})?;
     let mk_salt = base64::engine::general_purpose::URL_SAFE.decode(&req.master_key_salt).map_err(|e| AppError::Conflict{detail:e.to_string()})?;
     db::update_master_key(&state.db, &s.user_id, &mk_enc, &mk_salt).await?;
+    tracing::info!(user_id = %s.user_id, "master key rotated");
     Ok(axum::Json(serde_json::json!({"status":"rotated"})))
 }

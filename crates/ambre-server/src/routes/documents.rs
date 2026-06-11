@@ -55,6 +55,7 @@ pub async fn setup_account(
     let session_id = uuid::Uuid::new_v4().to_string();
     let sd = redis_ops::SessionData { user_id, signing_pubkey, session_id: session_id.clone() };
     redis_ops::session_create(&state.redis, &session_id, &sd, state.config.session_ttl_secs).await?;
+    tracing::debug!(user_id = %user_id, provider = "setup", "login");
 
     let cookie = auth::create_session_cookie(&session_id, state.config.session_ttl_secs);
     let csrf_token = uuid::Uuid::new_v4().to_string();
@@ -93,6 +94,7 @@ pub async fn logout(
 ) -> Result<impl IntoResponse, AppError> {
     if let Ok(s) = auth::authenticate(&state, &jar).await {
         redis_ops::session_delete(&state.redis, &s.session_id).await?;
+        tracing::debug!(user_id = %s.user_id, "logout");
     }
     Ok((jar.add(auth::delete_session_cookie()).add(crate::middleware::csrf::delete_csrf_cookie()), axum::Json(serde_json::json!({ "status": "logged_out" }))))
 }
@@ -148,6 +150,7 @@ pub async fn create_document(
     let doc_id = ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(*doc.id.as_bytes()));
     let doc_key_enc = base64::engine::general_purpose::URL_SAFE.decode(&req.doc_key_enc).map_err(|e| AppError::Conflict{detail:e.to_string()})?;
     db::add_document_member(&state.db, &doc_id, &s.user_id, "owner", &doc_key_enc, &s.user_id).await?;
+    tracing::info!(document_id = %doc_id, owner_id = %s.user_id, doc_type = %req.doc_type, "document created");
     Ok(axum::Json(CreateDocumentResponse { document_id: doc_id.to_string(), doc_type: req.doc_type }))
 }
 
@@ -195,6 +198,7 @@ pub async fn rename_document(
     if !["owner","editor"].contains(&m.role.as_str()) { return Err(AppError::Forbidden); }
     let name_enc = base64::engine::general_purpose::URL_SAFE.decode(&req.name_enc).map_err(|e| AppError::Conflict{detail:e.to_string()})?;
     db::rename_document(&state.db, &doc_id, &name_enc).await?;
+    tracing::debug!(document_id = %doc_id, by = %s.user_id, "document renamed");
     Ok(axum::Json(serde_json::json!({"status":"renamed"})))
 }
 
@@ -208,6 +212,7 @@ pub async fn delete_document(
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
     if m.role != "owner" { return Err(AppError::Forbidden); }
     db::delete_document(&state.db, &doc_id).await?;
+    tracing::info!(document_id = %doc_id, by = %s.user_id, "document deleted");
     Ok(axum::Json(serde_json::json!({"status":"deleted"})))
 }
 
@@ -302,5 +307,6 @@ pub async fn update_document_member_role(
     if m.role != "owner" { return Err(AppError::Forbidden); }
     if !["owner","editor","viewer"].contains(&req.role.as_str()) { return Err(AppError::Conflict{detail:"invalid role".into()}); }
     db::update_document_member_role(&state.db, &doc_id, &target, &req.role).await?;
+    tracing::info!(document_id = %doc_id, target_user = %target, role = %req.role, by = %s.user_id, "member role updated");
     Ok(axum::Json(serde_json::json!({"status":"role_updated"})))
 }

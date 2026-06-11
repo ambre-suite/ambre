@@ -17,6 +17,7 @@ mod handler_tests {
     fn build_test_router(state: Arc<AppState>) -> Router {
         let api_router = Router::new()
             .route("/auth/setup", axum::routing::post(routes::setup_account))
+            .route("/auth/dev/login", axum::routing::post(routes::dev_login))
             .route("/auth/me", axum::routing::get(routes::me))
             .route("/auth/logout", axum::routing::post(routes::logout))
             .route("/keys/master", axum::routing::put(routes::store_master_keys).get(routes::get_master_keys))
@@ -310,6 +311,75 @@ mod handler_tests {
             config: Arc::new(Config::default()),
             oidc_clients: empty_oidc_clients(),
         })
+    }
+
+    /// Like [`test_app_state`] but with `dev_mode` enabled, so the dev-login
+    /// endpoint is active.
+    async fn test_app_state_dev(pool: sqlx::PgPool) -> Arc<AppState> {
+        let redis = rustis::client::Client::connect("redis://localhost:6379")
+            .await
+            .expect("need Redis for tests");
+        let s3 = aws_sdk_s3::Client::from_conf(aws_sdk_s3::Config::builder().build());
+        let config = Config {
+            dev_mode: true,
+            ..Config::default()
+        };
+        Arc::new(AppState {
+            db: pool,
+            redis,
+            s3,
+            s3_bucket: "test-bucket".into(),
+            config: Arc::new(config),
+            oidc_clients: empty_oidc_clients(),
+        })
+    }
+
+    fn dev_login_body(username: &str) -> serde_json::Value {
+        serde_json::json!({
+            "username": username,
+            "signing_pub_key": hex::encode([7u8; 32]),
+            "exchange_pub_key": hex::encode([8u8; 32]),
+        })
+    }
+
+    #[sqlx::test]
+    #[ignore = "needs postgres"]
+    async fn dev_login_rejected_when_dev_mode_off(pool: sqlx::PgPool) {
+        // Default config has dev_mode = false.
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state);
+
+        let resp = app
+            .oneshot(
+                Request::post("/api/auth/dev/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(dev_login_body("alice").to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test]
+    #[ignore = "needs postgres"]
+    async fn dev_login_creates_user_and_returns_cookie(pool: sqlx::PgPool) {
+        let state = test_app_state_dev(pool).await;
+        let app = build_test_router(state);
+
+        let resp = app
+            .oneshot(
+                Request::post("/api/auth/dev/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(dev_login_body("alice").to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(resp.headers().get("set-cookie").is_some());
     }
 
     async fn setup_and_get_cookie(app: &Router) -> String {

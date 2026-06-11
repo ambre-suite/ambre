@@ -136,6 +136,13 @@ pub enum RestCommand {
     SetupAccount {
         passphrase: Vec<u8>,
     },
+    /// Dev-only: authenticate as `username` (created on the fly server-side),
+    /// deriving keys deterministically from the username. Triggered by the
+    /// `?user=<name>` URL param to test multi-user behaviour on one machine.
+    /// Rejected unless the server runs with `DEV_MODE`. → `SessionReady`.
+    DevLogin {
+        username: String,
+    },
     /// Change the account passphrase. → `PassphraseChanged`.
     ChangePassphrase {
         current_passphrase: Vec<u8>,

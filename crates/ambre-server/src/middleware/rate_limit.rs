@@ -144,7 +144,9 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
     {
         Ok(k) => k,
         Err(_) => {
-            tracing::warn!("Rate limiter: failed to derive key, allowing request");
+            // Routine when no client IP is available (e.g. behind the dev proxy
+            // with no X-Forwarded-For): we fail open. Not a fault -> debug.
+            tracing::debug!("Rate limiter: failed to derive key, allowing request");
             return next.run(req).await;
         }
     };
