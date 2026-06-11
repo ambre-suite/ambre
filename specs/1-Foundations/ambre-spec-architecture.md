@@ -598,7 +598,13 @@ impl MasterSeed {
 - [x] Consume `RequestId` on the UI side: `RequestRegistry<Tag>` generic in `ambre-canvas` (routes `UiEvent::Rest`, timeout/retry; `RequestId::next()` sole allocator).
 - [x] `ambreFatal(message)` hook in `panic::set_hook` (before abort): UI surface for non-graceful panic.
 - [x] `SnapshotRequired` -> `SnapshotNeeded` -> `SendSnapshot`. `MockBlindRelay`.
-- [x] Remove smoke-test scaffolding (`IPC_TEST_DOC_ID`, pre-seeded `DocState::Trame`, `pending_doc_types`) once the real open-document flow arrives.
+- [x] Client document lifecycle: URL routing (`/` landing, `/trame/<docid>`), client-generated
+  `DocumentId`, `OpenDocument { doc_type }` 404-tolerant (local-only), lazy server creation on
+  first edit (idempotent `POST /api/documents` with client id), per-document IndexedDB restore.
+- [ ] Remove smoke-test scaffolding (`SMOKE_DOCUMENT_ID`, pre-seeded `DocState::Trame`,
+  `pending_doc_types`). The real open-document flow now exists, but the smoke doc is intentionally
+  retained as a headless/dev fixture; drop it (and `pending_doc_types`) once headless tests no
+  longer depend on it.
 
 ### ARCH P2 — Pilot Applications
 - [x] `ambre-trame`: `TrameState` + `TrameView` (impl `DocView`), virtual-scroll grid, viewport smoke-test.
