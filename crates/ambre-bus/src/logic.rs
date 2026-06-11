@@ -19,7 +19,7 @@
 //!   `SendChannelMessage`): fire-and-forget session/content-send commands with
 //!   no single response to correlate — kept explicit.
 
-use crate::{ChannelId, DocumentId, RequestId, RestCommand};
+use crate::{ChannelId, DocType, DocumentId, RequestId, RestCommand};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LogicCommand — UI Thread → Logic thread
@@ -81,6 +81,10 @@ pub enum LogicCommand {
     /// [`crate::ui::UiEvent::Viewport`] after this indicates the document is ready.
     OpenDocument {
         document_id: DocumentId,
+        /// Document kind, known from the URL route (`/trame/<id>`). Carried so a
+        /// not-yet-on-server document can be lazily created with the right type
+        /// on its first modification.
+        doc_type: DocType,
     },
 
     /// Close the real-time sync session for a document. The Logic thread drops

@@ -19,7 +19,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ChannelId, DocumentId, RequestId, RestCommand};
+use crate::{ChannelId, DocType, DocumentId, RequestId, RestCommand};
 
 /// Command sent from the Logic thread to the Sync thread.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,6 +39,9 @@ pub enum SyncCommand {
     /// loads snapshot + deltas, opens a WebSocket subscription.
     OpenDocument {
         document_id: DocumentId,
+        /// Document kind, used to lazily create the document server-side (with the
+        /// right type) on its first modification if it does not yet exist.
+        doc_type: DocType,
     },
 
     /// Close the sync session. Unsubscribe, zeroize the DocumentKey.
