@@ -239,7 +239,7 @@ fn open_document_subscribes_via_mock_ws() {
     rx.try_iter().count(); // drain SessionReady
 
     let doc_id = ambre_core::DocumentId::new();
-    state.handle_command(SyncCommand::OpenDocument { document_id: doc_id });
+    state.handle_command(SyncCommand::OpenDocument { document_id: doc_id, doc_type: DocType::Trame });
 
     // No Rest event is expected (OpenDocument is fire-and-forget).
     assert!(rx.try_iter().count() == 0);
@@ -268,7 +268,7 @@ fn close_document_unsubscribes_via_mock_ws() {
     rx.try_iter().count();
 
     let doc_id = ambre_core::DocumentId::new();
-    state.handle_command(SyncCommand::OpenDocument { document_id: doc_id });
+    state.handle_command(SyncCommand::OpenDocument { document_id: doc_id, doc_type: DocType::Trame });
     mock.drain_client_msgs(); // drain Subscribe
 
     state.handle_command(SyncCommand::CloseDocument { document_id: doc_id });
@@ -296,8 +296,13 @@ fn send_update_after_open_document_encrypts_and_sends() {
     rx.try_iter().count();
 
     let doc_id = ambre_core::DocumentId::new();
-    state.handle_command(SyncCommand::OpenDocument { document_id: doc_id });
+    state.handle_command(SyncCommand::OpenDocument { document_id: doc_id, doc_type: DocType::Trame });
     mock.drain_client_msgs(); // drain Subscribe
+
+    // A freshly opened doc is local-only; the direct-send path requires it to
+    // exist server-side (otherwise the first update is buffered behind a lazy
+    // create). Establish that precondition explicitly.
+    state.mark_document_server_created(doc_id);
 
     state.handle_command(SyncCommand::SendUpdate {
         document_id: doc_id,
@@ -357,14 +362,17 @@ fn full_session_flow_unlock_create_open_close_logout() {
     mock.drain_client_msgs();
 
     // 4. Open the document
-    state.handle_command(SyncCommand::OpenDocument { document_id: doc_id });
+    state.handle_command(SyncCommand::OpenDocument { document_id: doc_id, doc_type: DocType::Trame });
     let open_msgs = mock.drain_client_msgs();
     assert!(
         open_msgs.iter().any(|m| matches!(m, ambre_protocol::ws::WsClientMsg::Subscribe { .. })),
         "OpenDocument should send Subscribe"
     );
 
-    // 5. Send an update
+    // 5. Send an update. The doc is local-only in this synchronous test, so mark
+    // it server-created first to exercise the direct-send path (lazy creation is
+    // covered separately and needs an async runtime).
+    state.mark_document_server_created(doc_id);
     state.handle_command(SyncCommand::SendUpdate {
         document_id: doc_id,
         payload: b"data".to_vec(),

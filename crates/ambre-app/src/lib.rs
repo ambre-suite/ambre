@@ -33,7 +33,7 @@ use std::rc::Rc;
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
     AppCommand, AppEvent, DocumentId, LogicCommand, LogicEvent, RequestId, RestCommand,
-    SyncCommand, TrameCommand, TrameEvent, UiEvent, SMOKE_DOCUMENT_ID,
+    SyncCommand, TrameCommand, TrameEvent, UiEvent,
 };
 use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
 use ambre_chrome::{
@@ -45,6 +45,9 @@ use leptos::prelude::*;
 use leptos_icons::Icon;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+
+mod landing;
+mod route;
 
 /// The Trame "Bold"/"Italic" commands. UI affordance ids (ambre-commands),
 /// distinct from the `TrameCommand` IPC payloads they dispatch to.
@@ -126,40 +129,16 @@ pub fn main() {
     let theme_ctl = ambre_canvas::ThemeControl::new(ambre_canvas::Theme::Dark);
     inject_theme(theme_ctl.get());
 
-    // Reactive state created during mount (needs a Leptos owner) and pulled back
-    // out here for the dispatcher to drive: the command-state store and the
-    // floating-toolbar anchor signal.
-    let store_slot: Rc<RefCell<Option<CommandStates>>> = Rc::new(RefCell::new(None));
-    let anchor_slot: Rc<RefCell<Option<RwSignal<Option<(f64, f64)>>>>> =
-        Rc::new(RefCell::new(None));
-    let toasts_slot: Rc<RefCell<Option<Toasts>>> = Rc::new(RefCell::new(None));
-    mount_app_shell(
-        ui_to_logic_tx.clone(),
-        SMOKE_DOCUMENT_ID,
-        Rc::clone(&store_slot),
-        Rc::clone(&anchor_slot),
-        Rc::clone(&toasts_slot),
-        theme_ctl.clone(),
-        raf.clone(),
-    );
-    let store = store_slot
-        .borrow()
-        .clone()
-        .expect("CommandStates created during mount");
-    let anchor_pos = anchor_slot
-        .borrow()
-        .expect("anchor signal created during mount");
-    let toasts = toasts_slot
-        .borrow()
-        .expect("Toasts created during mount");
-
-    // Keyboard: resolve registered chords and dispatch the matching command.
-    install_command_keys(keymap, SMOKE_DOCUMENT_ID, ui_to_logic_tx.clone());
+    // Resolve the page route once at boot. `/` is the landing (document list);
+    // `/trame/<id>` (etc.) is a specific document. Navigation between the two is a
+    // full page load, so each boot commits to one branch (see `route`).
+    let route = route::current();
 
     // Spawn the Logic thread (shares this instance's memory). Owns the UI/Sync
     // halves of its channels; the Sync-bound half (`logic_to_sync_tx`) is relayed
     // to the Sync worker by the per-frame loop, and `sync_to_logic_tx` is fed by
-    // the worker's onmessage handler.
+    // the worker's onmessage handler. Needed in BOTH branches (the landing lists
+    // documents over the same UI->Logic->Sync path), so it is spawned up front.
     wasm_thread::Builder::new()
         .name("logic".to_owned())
         .spawn(move || {
@@ -185,9 +164,127 @@ pub fn main() {
         });
     }
 
+    // Spawn the Sync worker: a SEPARATE wasm instance in its own Web Worker.
+    // Its onmessage decodes `LogicEvent`s into `sync_to_logic_tx` (-> Logic).
+    // Kept alive for the whole session by being captured in the relay closure.
+    let sync_worker = spawn_sync_worker(sync_to_logic_tx);
+
+    // Landing branch: mount the DOM document list and run a relay-only pump (no
+    // canvas). The pump forwards Logic->Sync commands and, on `SessionReady`,
+    // requests the document list; `DocumentList` fills the page's signal.
+    let (doc_type, document_id) = match route {
+        route::Route::Landing => {
+            let signals_slot: Rc<RefCell<Option<landing::LandingSignals>>> =
+                Rc::new(RefCell::new(None));
+            landing::mount_landing(Rc::clone(&signals_slot));
+            // The landing has no canvas, so the GPU-init path that normally
+            // hides the loading overlay (`window.ambreReady`) never runs here.
+            // Signal readiness directly once the DOM is mounted.
+            signal_ready();
+            let signals = signals_slot
+                .borrow()
+                .clone()
+                .expect("landing signals created during mount");
+
+            // Learn whether the server enables dev login, so the signed-out
+            // panel can show the right affordance. Unauthenticated, Main-thread
+            // fetch -- a pre-session concern, not routed through the Sync worker.
+            {
+                let dev_mode = signals.dev_mode;
+                wasm_bindgen_futures::spawn_local(async move {
+                    dev_mode.set(Some(fetch_dev_mode().await));
+                });
+            }
+
+            let mut list_requested = false;
+            run_raf_pump(move || {
+                while let Ok(cmd) = logic_to_sync_rx.try_recv() {
+                    match postcard::to_allocvec(&cmd) {
+                        Ok(bytes) => post_to_worker(&sync_worker, &bytes),
+                        Err(e) => tracing::error!("[UI->Sync] encode failed: {e}"),
+                    }
+                }
+                while let Ok(ev) = logic_to_ui_rx.try_recv() {
+                    if let UiEvent::Rest { evt, .. } = ev {
+                        match evt {
+                            ambre_bus::RestEvent::SessionReady { display_name, .. } => {
+                                signals.username.set(Some(display_name));
+                                if !list_requested {
+                                    list_requested = true;
+                                    let _ = ui_to_logic_tx.try_send(LogicCommand::Rest {
+                                        id: RequestId::next(),
+                                        cmd: RestCommand::ListDocuments,
+                                    });
+                                }
+                            }
+                            ambre_bus::RestEvent::DocumentList { documents } => {
+                                signals.docs.set(
+                                    documents
+                                        .into_iter()
+                                        .map(|d| landing::DocItem {
+                                            document_id: d.document_id,
+                                            doc_type: d.doc_type,
+                                        })
+                                        .collect(),
+                                );
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            });
+            return;
+        }
+        route::Route::Doc { doc_type, document_id } => {
+            // Open the routed document. The Sync thread treats a server 404 as a
+            // local-only doc (lazily created on the first edit); `doc_type` lets
+            // it create the right kind.
+            let _ = ui_to_logic_tx.try_send(LogicCommand::OpenDocument { document_id, doc_type });
+            (doc_type, document_id)
+        }
+    };
+    let _ = doc_type;
+
+    // ---- Document branch: mount the chrome + canvas around `document_id`. ----
+
+    // Reactive state created during mount (needs a Leptos owner) and pulled back
+    // out here for the dispatcher to drive: the command-state store and the
+    // floating-toolbar anchor signal.
+    let store_slot: Rc<RefCell<Option<CommandStates>>> = Rc::new(RefCell::new(None));
+    let anchor_slot: Rc<RefCell<Option<RwSignal<Option<(f64, f64)>>>>> =
+        Rc::new(RefCell::new(None));
+    let toasts_slot: Rc<RefCell<Option<Toasts>>> = Rc::new(RefCell::new(None));
+    let user_slot: Rc<RefCell<Option<RwSignal<Option<String>>>>> = Rc::new(RefCell::new(None));
+    mount_app_shell(
+        ui_to_logic_tx.clone(),
+        document_id,
+        Rc::clone(&store_slot),
+        Rc::clone(&anchor_slot),
+        Rc::clone(&toasts_slot),
+        Rc::clone(&user_slot),
+        theme_ctl.clone(),
+        raf.clone(),
+    );
+    let store = store_slot
+        .borrow()
+        .clone()
+        .expect("CommandStates created during mount");
+    let anchor_pos = anchor_slot
+        .borrow()
+        .expect("anchor signal created during mount");
+    let toasts = toasts_slot
+        .borrow()
+        .expect("Toasts created during mount");
+    let username = user_slot
+        .borrow()
+        .expect("user signal created during mount");
+
+    // Keyboard: resolve registered chords and dispatch the matching command.
+    install_command_keys(keymap, document_id, ui_to_logic_tx.clone());
+
     // Local persistence: open the IndexedDB store on this (Main) thread, where
-    // the event loop is live. On open, restore the smoke document's snapshot so
-    // an edit survives a refresh without any network round-trip. The store is
+    // the event loop is live. On open, restore THIS document's snapshot so an
+    // edit survives a refresh without any network round-trip. The store is
     // shared with the per-frame relay below, which saves snapshots Logic emits.
     let persist_store: Rc<RefCell<Option<ambre_logic::persistence::PersistenceStore>>> =
         Rc::new(RefCell::new(None));
@@ -207,22 +304,17 @@ pub fn main() {
                 }
             };
             if let Ok(Some(snapshot)) =
-                store.load_snapshot(*SMOKE_DOCUMENT_ID.as_bytes()).recv_async().await
+                store.load_snapshot(*document_id.as_bytes()).recv_async().await
             {
-                tracing::info!("Persistence: restoring smoke doc ({} bytes)", snapshot.len());
+                tracing::info!("Persistence: restoring doc ({} bytes)", snapshot.len());
                 let _ = restore_tx.try_send(LogicCommand::RestoreLocalSnapshot {
-                    document_id: SMOKE_DOCUMENT_ID,
+                    document_id,
                     snapshot,
                 });
             }
             *store_slot.borrow_mut() = Some(store);
         });
     }
-
-    // Spawn the Sync worker: a SEPARATE wasm instance in its own Web Worker.
-    // Its onmessage decodes `LogicEvent`s into `sync_to_logic_tx` (-> Logic).
-    // Kept alive for the whole session by being captured in the per-frame relay.
-    let sync_worker = spawn_sync_worker(sync_to_logic_tx);
 
     // The single UI-thread dispatcher, pumped once per frame: drain Logic->UI,
     // mirror command-state events into the chrome store, forward everything to
@@ -262,6 +354,10 @@ pub fn main() {
                 // the CRDT reconverges (a dropped/quarantined update is re-fetched
                 // via RequestMissing once its parent snapshot lands).
                 UiEvent::SyncWarning { code, .. } => toasts.warning(sync_warning_message(*code)),
+                // Session bootstrap (dev `?user=` or OIDC): show the user in the header.
+                UiEvent::Rest { evt: ambre_bus::RestEvent::SessionReady { display_name, .. }, .. } => {
+                    username.set(Some(display_name.clone()));
+                }
                 _ => {}
             }
             // Content (and everything else) still flows to the view unchanged.
@@ -281,23 +377,52 @@ pub fn main() {
     ambre_canvas::run_with(
         "ambre-canvas",
         move |w, h, text_input| {
-            TrameView::new(SMOKE_DOCUMENT_ID, ui_to_logic_tx, view_rx, w, h, text_input, anchor_pub, theme_ctl)
+            TrameView::new(document_id, ui_to_logic_tx, view_rx, w, h, text_input, anchor_pub, theme_ctl)
         },
         pre_frame,
         raf,
     );
 }
 
-/// Dev-only: extract the `?user=<name>` query parameter from the page URL.
+/// Dev-only: resolve the dev login identity for this page load.
 ///
-/// Returns the trimmed, non-empty username when present. The Sync worker cannot
-/// see the page URL (a dedicated worker's `location` is its own script), so the
-/// Main thread reads it here and forwards a `DevLogin` command.
+/// Prefers an explicit `?user=<name>` query parameter; when present it is also
+/// persisted to `localStorage`. When absent (e.g. a `/trame/<id>` document
+/// route, reached from the landing via a full-page navigation that drops the
+/// query string) it falls back to the persisted identity.
+///
+/// This matters because every route change is a full page load: each reload
+/// spawns a fresh Sync worker with no in-memory session keys, so the worker must
+/// re-run `DevLogin` to re-derive them. The session *cookie* survives the
+/// navigation, so REST GETs still authenticate -- but without re-login the
+/// worker has no `signing_key` and silently drops every outbound update.
+///
+/// The Sync worker cannot read the page URL (a dedicated worker's `location` is
+/// its own script), so the Main thread resolves it here and forwards `DevLogin`.
 fn dev_user_from_url() -> Option<String> {
-    let search = web_sys::window()?.location().search().ok()?;
-    let params = web_sys::UrlSearchParams::new_with_str(&search).ok()?;
-    params
-        .get("user")
+    let window = web_sys::window()?;
+    let storage = window.local_storage().ok().flatten();
+
+    let from_url = window
+        .location()
+        .search()
+        .ok()
+        .and_then(|s| web_sys::UrlSearchParams::new_with_str(&s).ok())
+        .and_then(|p| p.get("user"))
+        .map(|u| u.trim().to_string())
+        .filter(|u| !u.is_empty());
+
+    if let Some(user) = from_url {
+        // Remember the identity so the document routes (no query string) can
+        // re-authenticate the fresh worker they each spawn.
+        if let Some(s) = &storage {
+            let _ = s.set_item("ambre_dev_user", &user);
+        }
+        return Some(user);
+    }
+
+    storage
+        .and_then(|s| s.get_item("ambre_dev_user").ok().flatten())
         .map(|u| u.trim().to_string())
         .filter(|u| !u.is_empty())
 }
@@ -326,6 +451,72 @@ const SYNC_WORKER_URL: &str = "/ambre-sync_loader.js";
 /// each `postMessage` carries a postcard-encoded `LogicEvent`, decoded here and
 /// pushed onto `to_logic` (-> Logic thread). The returned `Worker` must be kept
 /// alive (it is, by the per-frame relay closure).
+/// Drive `tick` once per animation frame, forever. Used by the landing page,
+/// which has no canvas (and therefore no `ambre_canvas::run_with` loop) but still
+/// needs to pump the Logic<->Sync relay so the document list can load. The
+/// rescheduling `Closure` is leaked into the rAF callback chain to keep it (and
+/// everything `tick` captures) alive for the page's lifetime.
+/// Call the page's `window.ambreReady` hook, which hides the loading overlay.
+/// The canvas host calls this after GPU init on the document route; the landing
+/// route (no canvas) must call it explicitly once its DOM is mounted.
+fn signal_ready() {
+    if let Some(window) = web_sys::window()
+        && let Ok(f) = js_sys::Reflect::get(&window, &"ambreReady".into())
+        && let Ok(f) = f.dyn_into::<js_sys::Function>()
+    {
+        let _ = f.call0(&window);
+    }
+}
+
+/// Fetch the server's public auth config (`GET /api/auth/config`) and return
+/// its `dev_mode` flag. Same-origin, unauthenticated; on any failure (network,
+/// non-JSON, missing field) it defaults to `false`, so production falls back to
+/// the OIDC sign-in affordance.
+async fn fetch_dev_mode() -> bool {
+    async fn inner() -> Option<bool> {
+        let window = web_sys::window()?;
+        let req = web_sys::Request::new_with_str("/api/auth/config").ok()?;
+        let resp_val = wasm_bindgen_futures::JsFuture::from(window.fetch_with_request(&req))
+            .await
+            .ok()?;
+        let resp: web_sys::Response = resp_val.dyn_into().ok()?;
+        let json = wasm_bindgen_futures::JsFuture::from(resp.json().ok()?)
+            .await
+            .ok()?;
+        js_sys::Reflect::get(&json, &"dev_mode".into())
+            .ok()
+            .and_then(|v| v.as_bool())
+    }
+    inner().await.unwrap_or(false)
+}
+
+/// Up to two uppercase initials from a display name, for the header avatar.
+/// Empty / missing name falls back to a neutral dash.
+fn initials(name: Option<&str>) -> String {
+    let Some(name) = name else { return "-".to_owned() };
+    let letters: String = name
+        .split_whitespace()
+        .filter_map(|w| w.chars().next())
+        .take(2)
+        .collect::<String>()
+        .to_uppercase();
+    if letters.is_empty() { "-".to_owned() } else { letters }
+}
+
+fn run_raf_pump(mut tick: impl FnMut() + 'static) {
+    let holder: Rc<RefCell<Option<Closure<dyn FnMut()>>>> = Rc::new(RefCell::new(None));
+    let holder2 = Rc::clone(&holder);
+    *holder.borrow_mut() = Some(Closure::new(move || {
+        tick();
+        if let (Some(window), Some(cb)) = (web_sys::window(), holder2.borrow().as_ref()) {
+            let _ = window.request_animation_frame(cb.as_ref().unchecked_ref());
+        }
+    }));
+    if let (Some(window), Some(cb)) = (web_sys::window(), holder.borrow().as_ref()) {
+        let _ = window.request_animation_frame(cb.as_ref().unchecked_ref());
+    }
+}
+
 fn spawn_sync_worker(to_logic: flume::Sender<LogicEvent>) -> web_sys::Worker {
     // Classic worker (the Trunk loader uses `importScripts`); not a module worker.
     let worker = web_sys::Worker::new(SYNC_WORKER_URL).expect("failed to spawn Sync worker");
@@ -396,6 +587,7 @@ fn mount_app_shell(
     store_slot: Rc<RefCell<Option<CommandStates>>>,
     anchor_slot: Rc<RefCell<Option<RwSignal<Option<(f64, f64)>>>>>,
     toasts_slot: Rc<RefCell<Option<Toasts>>>,
+    user_slot: Rc<RefCell<Option<RwSignal<Option<String>>>>>,
     theme_ctl: ambre_canvas::ThemeControl,
     raf: ambre_canvas::RafControl,
 ) {
@@ -419,6 +611,11 @@ fn mount_app_shell(
         // Published back to the dispatcher so inbound UiEvents (e.g. SyncWarning)
         // can raise toasts. Same slot pattern as the command-state store.
         *toasts_slot.borrow_mut() = Some(toasts);
+
+        // Current user, filled by the dispatcher when `SessionReady` arrives.
+        // Drives the header avatar (initials) and its tooltip (display name).
+        let username = RwSignal::new(None::<String>);
+        *user_slot.borrow_mut() = Some(username);
 
         // Theme toggle: flips `theme_ctl` (read by the canvas) and the document's
         // `data-theme` (drives the CSS custom properties). `theme_sig` only
@@ -525,7 +722,12 @@ fn mount_app_shell(
                     >
                         "?"
                     </button>
-                    <span class="ambre-avatar">"MC"</span>
+                    <span
+                        class="ambre-avatar"
+                        title=move || username.get().unwrap_or_else(|| "Signed out".to_owned())
+                    >
+                        {move || initials(username.get().as_deref())}
+                    </span>
                 </Header>
                 <Toolbar slot>
                     // aria-pressed reflects the authoritative state, whatever
