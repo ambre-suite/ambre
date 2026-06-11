@@ -28,9 +28,14 @@
 
 - [x] **Typed Trame editing** (`TrameOutcome`, lossless Logic dispatcher): `ARCH P2`.
 - [x] **Real network sync**: non-blocking loop + multiplexed WebSocket, `Unlock`/`SetupAccount`,
-  `OpenDocument`/`CloseDocument`, document CRUD: `ARCH P1` (remaining items), `SYNC P1` (wired) → `SYNC P2`.
+  `OpenDocument`/`CloseDocument`, server-side document CRUD: `ARCH P1` (remaining items), `SYNC P1` (wired) → `SYNC P2`.
 - [x] **Blind Relay**: PostgreSQL/Redis/S3, multiplexed WS, ACL, Lua clock+seq, presigned URLs: `SRV P0`.
 - [x] **Canvas finishing**: generated tokens, headless tests: `CANVAS P0` (remaining items).
+- [x] **Client document lifecycle**: URL routing (`/` landing list, `/trame/<docid>`),
+  client-generated `DocumentId` (UUID v7), lazy server creation on first edit
+  (`POST /api/documents` idempotent with client id), per-document IndexedDB restore,
+  `OpenDocument` tolerant of a not-yet-created (404) document. Replaces the hardcoded
+  smoke document as the real entry path (smoke doc retained as headless-test fixture).
 
 > Dependencies: `SRV P0` precedes the network wiring of `SYNC P2` (need a target relay);
 > `SYNC P0` precedes `SYNC P1`/`P2` (crypto before integration).
