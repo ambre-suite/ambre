@@ -235,10 +235,14 @@ async fn handle_update(
 
     let s3_key = crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, seq);
     tracing::info!("[Server→Postgres] insert_update doc={doc_id} seq={seq} clock={clock}");
-    let _ = db::insert_update(
+    if let Err(e) = db::insert_update(
         &state.db, &doc_id, author_pubkey.as_array(),
         &snapshot_id, clock as i64, seq as i64, &s3_key,
-    ).await;
+    ).await {
+        // The delta index is how reconnecting clients replay missed updates;
+        // a failed insert silently loses durability, so it must be loud.
+        tracing::error!("insert_update failed doc={doc_id} seq={seq}: {e}");
+    }
 
     tracing::info!("[Server→Redis] append_pending_delta doc={doc_id} seq={seq} s3_key={s3_key}");
     let _ = redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update.ciphertext.0).await;
