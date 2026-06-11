@@ -3,6 +3,7 @@ use rustis::commands::{
     GenericCommands, HashCommands, ListCommands, PubSubCommands,
     ScriptingCommands, StringCommands,
 };
+use rustis::resp::RefBulkString;
 use crate::error::AppError;
 
 /// Atomic Lua script that validates a client clock and assigns a
@@ -188,8 +189,11 @@ pub async fn doc_broadcast(
     payload: &[u8],
 ) -> Result<(), AppError> {
     let channel = format!("doc:{document_id}");
+    // The payload is binary (encrypted ciphertext). rustis serializes a raw
+    // `&[u8]` as a sequence of integers (a serde limitation) and panics; wrap it
+    // in `RefBulkString` so it is sent as a single RESP bulk string.
     redis
-        .publish(&channel, payload)
+        .publish(&channel, RefBulkString::new(payload))
         .await
         .map_err(|e| AppError::Redis(format!("doc broadcast: {e}")))?;
     Ok(())
@@ -203,7 +207,7 @@ pub async fn chan_broadcast(
 ) -> Result<(), AppError> {
     let chan = format!("chan:{channel_id}");
     redis
-        .publish(&chan, payload)
+        .publish(&chan, RefBulkString::new(payload))
         .await
         .map_err(|e| AppError::Redis(format!("channel broadcast: {e}")))?;
     Ok(())
