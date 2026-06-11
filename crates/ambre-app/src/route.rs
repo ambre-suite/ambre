@@ -7,16 +7,17 @@
 //   /prose/<docid>     -> Doc { doc_type: Prose, document_id }   (future)
 //
 // The document type lives in the path so the client knows which engine to boot
-// before resolving the document. Navigation between routes is a full page load
-// (set `location.href`): the wgpu canvas, Logic thread and Sync worker are
-// created once per boot, so swapping the active document in a live canvas is out
-// of scope for this iteration. Browser back/forward work natively as a result.
+// before resolving the document. Navigation between routes is a CLIENT pushState
+// (see `lib.rs`, `leptos_router`): the wgpu canvas, Logic thread and Sync worker
+// are created once and the active document is swapped in place, so the worker's
+// in-memory session keys survive a route change. This module is reduced to the
+// pure path<->`Route` mapping reused by the router shell.
 // ============================================================================
 
 use ambre_bus::{DocType, DocumentId};
 
 /// The page the URL resolves to.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Route {
     /// Root: the document list / landing page.
     Landing,
@@ -25,6 +26,16 @@ pub enum Route {
         doc_type: DocType,
         document_id: DocumentId,
     },
+}
+
+impl Route {
+    /// The routed document, if this is a document route.
+    pub fn doc(&self) -> Option<(DocType, DocumentId)> {
+        match self {
+            Route::Doc { doc_type, document_id } => Some((*doc_type, *document_id)),
+            Route::Landing => None,
+        }
+    }
 }
 
 /// URL slug for a document type (lowercased name). Inverse of [`slug_to_type`].
@@ -61,7 +72,7 @@ pub fn current() -> Route {
 }
 
 /// Pure path parser, split out for testability.
-fn parse(path: &str) -> Route {
+pub fn parse(path: &str) -> Route {
     let mut segments = path.split('/').filter(|s| !s.is_empty());
     match (segments.next(), segments.next()) {
         (Some(type_slug), Some(id_str)) => {
@@ -80,21 +91,4 @@ fn parse(path: &str) -> Route {
 /// The canonical path for a document route (e.g. `/trame/<uuid>`).
 pub fn doc_path(doc_type: DocType, document_id: DocumentId) -> String {
     format!("/{}/{}", type_slug(doc_type), document_id)
-}
-
-/// Navigate to a document (full page load). Used by the landing's "open" /
-/// "new document" actions.
-pub fn navigate_to_doc(doc_type: DocType, document_id: DocumentId) {
-    if let Some(window) = web_sys::window() {
-        let _ = window
-            .location()
-            .set_href(&doc_path(doc_type, document_id));
-    }
-}
-
-/// Navigate back to the landing page (full page load).
-pub fn navigate_home() {
-    if let Some(window) = web_sys::window() {
-        let _ = window.location().set_href("/");
-    }
 }

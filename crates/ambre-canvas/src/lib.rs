@@ -43,7 +43,9 @@ pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurfac
 pub use text_cache::TextCache;
 pub use view::{DocView, FrameStats, InputEvent, RepaintPlan};
 #[cfg(target_arch = "wasm32")]
-pub use host::{FrameHost, GpuState, RafControl, bootstrap_gpu, run, run_with, start_raf_loop};
+pub use host::{
+    DocSwitcher, FrameHost, GpuState, RafControl, bootstrap_gpu, run, run_with, start_raf_loop,
+};
 pub use text_input::TextInput;
 pub use anchor::{Anchor, AnchorPublisher};
 pub use theme::{Palette, Theme, ThemeControl};

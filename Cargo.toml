@@ -78,6 +78,9 @@ criterion = { version = "0.5", default-features = false }
 # browser-target reactive runtime; default features (ssr/hydrate plumbing) are
 # off to keep the WASM bundle lean and avoid server-only deps.
 leptos    = { version = "0.8", default-features = false, features = ["csr"] }
+# Client-side router (pushState navigation, no full page load). CSR: no SSR
+# features, matching the pure-client leptos build.
+leptos_router = { version = "0.8", default-features = false }
 # Tree-shaken SVG icons: only the `icondata` constants we reference are
 # embedded in the WASM bundle (one <Icon icon=.../> -> one inlined <svg>).
 leptos_icons = { version = "0.7" }
