@@ -6,6 +6,7 @@ use std::sync::Arc;
 use sqlx::PgPool;
 
 use crate::db;
+use crate::jwt::JwtKeys;
 use crate::oidc::OidcClients;
 use crate::state::{AppState, Config};
 
@@ -29,6 +30,7 @@ pub async fn test_app_state(pool: sqlx::PgPool) -> Arc<AppState> {
         s3,
         s3_bucket: "test-bucket".into(),
         config: Arc::new(Config::default()),
+        jwt: Arc::new(JwtKeys::from_seed(&[9u8; 32])),
         oidc_clients: empty_oidc_clients(),
     })
 }
@@ -56,7 +58,7 @@ pub async fn create_test_document(
     owner_id: ambre_core::UserId,
     doc_type: &str,
 ) -> ambre_core::DocumentId {
-    let doc = db::create_document(pool, &owner_id, doc_type, None)
+    let (doc, _created) = db::create_document(pool, &owner_id, doc_type, None, None)
         .await
         .expect("failed to create test document");
     let doc_id = ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(*doc.id.as_bytes()));

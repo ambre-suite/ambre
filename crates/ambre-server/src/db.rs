@@ -407,30 +407,75 @@ pub async fn list_documents_for_user(pool: &PgPool, user_id: &ambre_core::UserId
 }
 
 /// Creates a document and returns the full row.
+/// Creates a document, optionally with a client-supplied id (lazy creation: the
+/// WASM client generates the `DocumentId` up front and only materializes the row
+/// on the first modification). Returns the row plus `created` = whether this call
+/// actually inserted it (false when an idempotent retry hit an existing id).
+///
+/// When `document_id` is provided the insert is idempotent (`ON CONFLICT DO
+/// NOTHING`): a second call with the same id returns the existing row without
+/// touching its `owner_id`, so a different caller can never seize ownership of an
+/// id that already exists.
 pub async fn create_document(
     pool: &PgPool,
     owner_id: &ambre_core::UserId,
     doc_type: &str,
     name_enc: Option<&[u8]>,
-) -> Result<DocumentRow, AppError> {
+    document_id: Option<&ambre_core::DocumentId>,
+) -> Result<(DocumentRow, bool), AppError> {
     let owner_uid = id_to_uuid(*owner_id);
-    let row = sqlx::query(
-        "INSERT INTO documents (owner_id, doc_type, name_enc) VALUES ($1, $2, $3) RETURNING id, owner_id, doc_type, name_enc, created_at, updated_at"
-    )
-    .bind(owner_uid)
-    .bind(doc_type)
-    .bind(name_enc)
-    .fetch_one(pool)
-    .await?;
 
-    Ok(DocumentRow {
-        id: row.try_get("id")?,
-        owner_id: row.try_get("owner_id")?,
-        doc_type: row.try_get("doc_type")?,
-        name_enc: row.try_get("name_enc")?,
-        created_at: row.try_get("created_at")?,
-        updated_at: row.try_get("updated_at")?,
-    })
+    let row_to_doc = |row: sqlx::postgres::PgRow| -> Result<DocumentRow, AppError> {
+        Ok(DocumentRow {
+            id: row.try_get("id")?,
+            owner_id: row.try_get("owner_id")?,
+            doc_type: row.try_get("doc_type")?,
+            name_enc: row.try_get("name_enc")?,
+            created_at: row.try_get("created_at")?,
+            updated_at: row.try_get("updated_at")?,
+        })
+    };
+
+    match document_id {
+        Some(did) => {
+            let did = id_to_uuid(*did);
+            // Idempotent insert: DO NOTHING returns no row on conflict.
+            let inserted = sqlx::query(
+                "INSERT INTO documents (id, owner_id, doc_type, name_enc) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING RETURNING id, owner_id, doc_type, name_enc, created_at, updated_at"
+            )
+            .bind(did)
+            .bind(owner_uid)
+            .bind(doc_type)
+            .bind(name_enc)
+            .fetch_optional(pool)
+            .await?;
+
+            match inserted {
+                Some(row) => Ok((row_to_doc(row)?, true)),
+                None => {
+                    // Already existed: return it untouched (owner preserved).
+                    let row = sqlx::query(
+                        "SELECT id, owner_id, doc_type, name_enc, created_at, updated_at FROM documents WHERE id = $1"
+                    )
+                    .bind(did)
+                    .fetch_one(pool)
+                    .await?;
+                    Ok((row_to_doc(row)?, false))
+                }
+            }
+        }
+        None => {
+            let row = sqlx::query(
+                "INSERT INTO documents (owner_id, doc_type, name_enc) VALUES ($1, $2, $3) RETURNING id, owner_id, doc_type, name_enc, created_at, updated_at"
+            )
+            .bind(owner_uid)
+            .bind(doc_type)
+            .bind(name_enc)
+            .fetch_one(pool)
+            .await?;
+            Ok((row_to_doc(row)?, true))
+        }
+    }
 }
 
 /// Updates the encrypted name of a document.

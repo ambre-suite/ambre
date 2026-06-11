@@ -3,6 +3,7 @@
 mod auth;
 mod db;
 mod error;
+mod jwt;
 mod middleware;
 mod oidc;
 mod redis_ops;
@@ -75,12 +76,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!("DEV_MODE enabled: POST /api/auth/dev/login is active (insecure, dev only)");
     }
 
+    // Access-token signing key. In a multi-instance deployment the seed MUST be
+    // shared so any instance can verify a token minted by another; absent (dev),
+    // generate an ephemeral one so a restart simply forces clients to refresh.
+    let jwt_seed: [u8; 32] = match std::env::var("JWT_SIGNING_SEED") {
+        Ok(hex_seed) => {
+            let bytes = hex::decode(hex_seed.trim())
+                .map_err(|e| format!("JWT_SIGNING_SEED is not valid hex: {e}"))?;
+            bytes
+                .try_into()
+                .map_err(|_| "JWT_SIGNING_SEED must be 32 bytes (64 hex chars)")?
+        }
+        Err(_) => {
+            tracing::warn!(
+                "JWT_SIGNING_SEED not set: generating an ephemeral signing key (tokens \
+                 do not survive a restart, and multi-instance verification will fail)"
+            );
+            let mut seed = [0u8; 32];
+            getrandom::fill(&mut seed).expect("CSPRNG");
+            seed
+        }
+    };
+    let jwt_keys = std::sync::Arc::new(jwt::JwtKeys::from_seed(&jwt_seed));
+
+    let env_ttl = |name: &str, default: u64| {
+        std::env::var(name).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+    };
+
     let config = Config {
         s3_env_prefix,
         oidc_google_client_id: oidc_google_client_id.clone(),
         oidc_google_client_secret: oidc_google_client_secret.clone(),
         oidc_google_redirect_uri: oidc_google_redirect_uri.clone(),
         dev_mode,
+        access_ttl_secs: env_ttl("ACCESS_TTL_SECS", 900),
+        refresh_ttl_secs: env_ttl("REFRESH_TTL_SECS", 30 * 24 * 3600),
         ..Default::default()
     };
 
@@ -99,6 +129,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         s3,
         s3_bucket,
         config: Arc::new(config.clone()),
+        jwt: jwt_keys.clone(),
         oidc_clients: oidc_clients.clone(),
     });
 
@@ -109,6 +140,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         s3: state.s3.clone(),
         s3_bucket: state.s3_bucket.clone(),
         config: Arc::new(config.clone()),
+        jwt: jwt_keys.clone(),
         oidc_clients: oidc_clients.clone(),
     };
     tokio::spawn(s3::global_s3_flusher(flush_state));
@@ -120,6 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         s3: state.s3.clone(),
         s3_bucket: state.s3_bucket.clone(),
         config: Arc::new(config),
+        jwt: jwt_keys.clone(),
         oidc_clients: oidc_clients.clone(),
     };
     tokio::spawn(snapshot_compaction_task(compact_state));
@@ -134,6 +167,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/auth/google/callback", axum::routing::post(routes::oidc_callback))
         .route("/auth/setup", axum::routing::post(routes::setup_account))
         .route("/auth/dev/login", axum::routing::post(routes::dev_login))
+        .route("/auth/config", axum::routing::get(routes::auth_config))
+        .route("/auth/refresh", axum::routing::post(routes::refresh))
         .route("/auth/me", axum::routing::get(routes::me))
         .route("/auth/logout", axum::routing::post(routes::logout))
         .route("/keys/master", axum::routing::put(routes::store_master_keys).get(routes::get_master_keys))
@@ -160,7 +195,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/organizations/{id}/members/{uid}", axum::routing::delete(routes::remove_member).patch(routes::update_member_role))
         .route("/organizations/{id}/recover/{uid}", axum::routing::post(routes::recover_master_key))
         .route("/ws", axum::routing::get(ws::ws_upgrade))
-        .layer(axum_mw::from_fn(middleware::csrf::csrf_middleware))
         .layer({
             let state = state.clone();
             axum_mw::from_fn(move |req: axum::extract::Request, next: axum_mw::Next| {

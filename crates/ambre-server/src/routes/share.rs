@@ -1,6 +1,5 @@
 use axum::extract::{Json, Path, State};
 use axum::response::IntoResponse;
-use axum_extra::extract::cookie::CookieJar;
 use std::sync::Arc;
 
 use crate::auth;
@@ -20,12 +19,12 @@ pub struct InviteResponse { pub user_id: String, pub display_name: String }
 
 pub async fn invite_to_document(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(document_id): Path<String>,
     Json(req): Json<InviteRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
-    let s = auth::authenticate(&state, &jar).await?;
+    let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
     if !["owner","editor"].contains(&m.role.as_str()) { return Err(AppError::Forbidden); }
@@ -42,10 +41,10 @@ pub async fn invite_to_document(
 
 pub async fn revoke_from_document(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path((document_id, user_id)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
-    let s = auth::authenticate(&state, &jar).await?;
+    let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     let target = parse_user_id(&user_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
@@ -65,12 +64,12 @@ pub struct RotateKeyEntry { pub user_id: String, pub doc_key_enc: String }
 
 pub async fn rotate_document_key(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(document_id): Path<String>,
     Json(req): Json<RotateKeyRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
-    let s = auth::authenticate(&state, &jar).await?;
+    let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
     if !["owner","editor"].contains(&m.role.as_str()) { return Err(AppError::Forbidden); }

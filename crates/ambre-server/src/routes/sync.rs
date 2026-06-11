@@ -1,6 +1,5 @@
 use axum::extract::{Json, Path, Query, State};
 use axum::response::IntoResponse;
-use axum_extra::extract::cookie::CookieJar;
 use std::sync::Arc;
 
 use crate::auth;
@@ -18,10 +17,10 @@ pub struct SnapshotResponse { pub snapshot_id: String, pub s3_key: String }
 
 pub async fn get_snapshot_metadata(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(document_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    let s = auth::authenticate(&state, &jar).await?;
+    let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
     let snap = db::get_latest_snapshot(&state.db, &doc_id).await?.ok_or(AppError::NotFound{resource:"snapshot"})?;
@@ -37,12 +36,12 @@ pub struct CreateSnapshotResponse { pub snapshot_id: String }
 
 pub async fn create_snapshot(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(document_id): Path<String>,
     Json(req): Json<CreateSnapshotRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
-    let s = auth::authenticate(&state, &jar).await?;
+    let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
     if !["owner","editor"].contains(&m.role.as_str()) { return Err(AppError::Forbidden); }
@@ -63,10 +62,10 @@ pub struct SnapshotUploadUrlResponse { pub upload_url: String, pub s3_key: Strin
 
 pub async fn snapshot_upload_url(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(document_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    let s = auth::authenticate(&state, &jar).await?;
+    let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
     if !["owner","editor"].contains(&m.role.as_str()) { return Err(AppError::Forbidden); }
@@ -85,11 +84,11 @@ pub struct SnapshotDownloadUrlResponse { pub download_url: String }
 
 pub async fn snapshot_download_url(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(document_id): Path<String>,
     Json(req): Json<SnapshotDownloadUrlRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let s = auth::authenticate(&state, &jar).await?;
+    let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
     let snap_id = parse_snap_id(&req.snapshot_id)?;
@@ -109,11 +108,11 @@ pub struct DeltasResponse { pub deltas: Vec<DeltaEntry> }
 
 pub async fn get_deltas(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    auth: auth::AuthSession,
     Path(document_id): Path<String>,
     Query(params): Query<DeltasQuery>,
 ) -> Result<impl IntoResponse, AppError> {
-    let s = auth::authenticate(&state, &jar).await?;
+    let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
     let after = params.after_seq.unwrap_or(0);

@@ -77,22 +77,23 @@ pub async fn append_pending_delta(
     Ok(())
 }
 
-/// Retrieves a session hash from Redis.
+/// Retrieves a refresh-token record from Redis.
 ///
-/// Session keys follow the pattern `session:{session_id}` with fields
-/// `user_id` and `signing_pubkey_hex`.
-pub async fn session_get(
+/// Refresh keys follow the pattern `refresh:{token}` with fields `user_id` and
+/// `signing_pubkey_hex`. Returns `None` when the token is unknown, expired, or
+/// was revoked (logout / rotation).
+pub async fn refresh_get(
     redis: &Client,
-    session_id: &str,
-) -> Result<Option<SessionData>, AppError> {
-    let key = format!("session:{session_id}");
+    token: &str,
+) -> Result<Option<RefreshData>, AppError> {
+    let key = format!("refresh:{token}");
     // `hgetall` returns field/value pairs; rustis deserializes them as a map.
     // (Reading into `Vec<String>` fails with "invalid type: sequence, expected a
     // string" because each pair is itself a sequence.)
     let fields: std::collections::HashMap<String, String> = redis
         .hgetall(&key)
         .await
-        .map_err(|e| AppError::Redis(format!("session get failed: {e}")))?;
+        .map_err(|e| AppError::Redis(format!("refresh get failed: {e}")))?;
 
     if fields.is_empty() {
         return Ok(None);
@@ -103,26 +104,22 @@ pub async fn session_get(
 
     let user_id = ambre_core::Uuid::parse_str(&user_id)
         .map(ambre_core::UserId::from_uuid)
-        .map_err(|e| AppError::Redis(format!("invalid user_id in session: {e}")))?;
+        .map_err(|e| AppError::Redis(format!("invalid user_id in refresh: {e}")))?;
 
     let signing_pubkey = ambre_core::PublicKey::from_hex(&signing_pubkey_hex)
-        .map_err(|e| AppError::Redis(format!("invalid pubkey in session: {e}")))?;
+        .map_err(|e| AppError::Redis(format!("invalid pubkey in refresh: {e}")))?;
 
-    Ok(Some(SessionData {
-        user_id,
-        signing_pubkey,
-        session_id: session_id.to_string(),
-    }))
+    Ok(Some(RefreshData { user_id, signing_pubkey }))
 }
 
-/// Creates a session hash in Redis with the configured TTL.
-pub async fn session_create(
+/// Creates a refresh-token record in Redis with the configured TTL.
+pub async fn refresh_create(
     redis: &Client,
-    session_id: &str,
-    data: &SessionData,
+    token: &str,
+    data: &RefreshData,
     ttl_secs: u64,
 ) -> Result<(), AppError> {
-    let key = format!("session:{session_id}");
+    let key = format!("refresh:{token}");
 
     redis
         .hset(
@@ -133,22 +130,22 @@ pub async fn session_create(
             ],
         )
         .await
-        .map_err(|e| AppError::Redis(format!("session create hset: {e}")))?;
+        .map_err(|e| AppError::Redis(format!("refresh create hset: {e}")))?;
 
     redis
         .expire(&key, ttl_secs, None)
         .await
-        .map_err(|e| AppError::Redis(format!("session create expire: {e}")))?;
+        .map_err(|e| AppError::Redis(format!("refresh create expire: {e}")))?;
     Ok(())
 }
 
-/// Deletes a session key from Redis.
-pub async fn session_delete(redis: &Client, session_id: &str) -> Result<(), AppError> {
-    let key = format!("session:{session_id}");
+/// Deletes a refresh-token record (logout, or the old token during rotation).
+pub async fn refresh_delete(redis: &Client, token: &str) -> Result<(), AppError> {
+    let key = format!("refresh:{token}");
     redis
         .del([&key])
         .await
-        .map_err(|e| AppError::Redis(format!("session delete failed: {e}")))?;
+        .map_err(|e| AppError::Redis(format!("refresh delete failed: {e}")))?;
     Ok(())
 }
 
@@ -247,16 +244,14 @@ pub fn format_doc_clocks_key(document_id: &ambre_core::DocumentId) -> String {
     format!("doc:{document_id}:clocks")
 }
 
-/// Deserialized session data stored in Redis.
+/// Identity bound to a refresh token in Redis.
 ///
-/// Kept as a simple struct so callers do not need to manually parse
-/// the flat HGETALL response.
+/// Kept as a simple struct so callers do not need to manually parse the flat
+/// HGETALL response. Mirrors what a minted access JWT carries in its claims.
 #[derive(Debug, Clone)]
-pub struct SessionData {
+pub struct RefreshData {
     pub user_id: ambre_core::UserId,
     pub signing_pubkey: ambre_core::PublicKey,
-    #[allow(dead_code)]
-    pub session_id: String,
 }
 
 /// Stores OIDC authorization state in Redis with a 10-minute TTL.
