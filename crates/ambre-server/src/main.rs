@@ -60,7 +60,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .map_err(|e| format!("failed to connect to Redis: {e}"))?;
 
-    let mut s3_config = aws_sdk_s3::Config::builder();
+    // `Config::builder()` alone carries no region or credentials, so the SDK
+    // falls back to the default chain (ending at the EC2 metadata endpoint),
+    // which is unreachable off-EC2 and surfaces as a "dispatch failure" on every
+    // request. Set both explicitly. Credentials come from the environment; when
+    // an endpoint override is present (local MinIO) we default to its dev root
+    // user so the stack works out of the box.
+    let aws_region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_owned());
+    let mut s3_config = aws_sdk_s3::Config::builder()
+        .region(aws_sdk_s3::config::Region::new(aws_region));
+    let local_dev = s3_endpoint.is_some();
+    let default_cred = || if local_dev { "minioadmin".to_owned() } else { String::new() };
+    let access_key = std::env::var("AWS_ACCESS_KEY_ID").unwrap_or_else(|_| default_cred());
+    let secret_key = std::env::var("AWS_SECRET_ACCESS_KEY").unwrap_or_else(|_| default_cred());
+    s3_config = s3_config.credentials_provider(aws_sdk_s3::config::Credentials::new(
+        access_key, secret_key, None, None, "ambre-env",
+    ));
     if let Some(endpoint) = s3_endpoint {
         s3_config = s3_config.endpoint_url(&endpoint).force_path_style(true);
     }
