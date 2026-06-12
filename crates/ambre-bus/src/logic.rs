@@ -57,6 +57,10 @@ pub enum LogicCommand {
     /// without a network round-trip.
     RestoreLocalSnapshot {
         document_id: DocumentId,
+        /// Document kind, known from the boot URL route (`/trame/<id>`). Lets the
+        /// handler materialise the live document if the restore wins the startup
+        /// race against [`OpenDocument`](LogicCommand::OpenDocument).
+        doc_type: DocType,
         /// Full Loro snapshot (`ExportMode::Snapshot`) read back from local
         /// storage.
         snapshot: Vec<u8>,

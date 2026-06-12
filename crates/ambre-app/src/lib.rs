@@ -173,7 +173,11 @@ pub fn main() {
     // `/trame/<id>` deep-link boots straight onto that document. After boot the
     // route is a CLIENT concern (leptos_router), no longer re-read here.
     let boot_route = route::current();
-    let boot_doc = boot_route.doc().map(|(_, id)| id);
+    // The routed document with its type (`/trame/<id>` -> (Trame, id)), kept for
+    // the local restore which must materialise the doc with the right type if it
+    // wins the startup race against `OpenDocument`.
+    let boot_doc_typed = boot_route.doc();
+    let boot_doc = boot_doc_typed.map(|(_, id)| id);
     // The canvas needs a document from frame 0. Boot onto the routed one, or a
     // throwaway id on the landing route (the canvas is hidden there; the route
     // effect swaps it to the real document on the first navigation).
@@ -202,8 +206,14 @@ pub fn main() {
     // without OIDC. A prod server rejects the resulting `DevLogin` (DEV_MODE off).
     // The engine lives once now, so this fires only for the boot URL; the landing
     // dev-login field dispatches `DevLogin` directly thereafter (no reload).
-    if let Some(username) = dev_user_from_url() {
+    // `?user=` wins; otherwise fall back to the dev user remembered from a prior
+    // session (localStorage) so a refresh of a `/trame/<id>` deep-link, which
+    // carries no query string, still re-establishes the session. The dev keys are
+    // re-derived deterministically from the name, so no key material is stored --
+    // only the username. (Real-auth refresh-token persistence is Part D.)
+    if let Some(username) = dev_user_from_url().or_else(stored_dev_user) {
         tracing::info!("Dev login requested for user '{username}'");
+        remember_dev_user(&username);
         let _ = ui_to_logic_tx.try_send(LogicCommand::Rest {
             id: RequestId::next(),
             cmd: RestCommand::DevLogin { username },
@@ -285,13 +295,14 @@ pub fn main() {
                     return;
                 }
             };
-            if let Some(document_id) = boot_doc {
+            if let Some((doc_type, document_id)) = boot_doc_typed {
                 if let Ok(Some(snapshot)) =
                     store.load_snapshot(*document_id.as_bytes()).recv_async().await
                 {
                     tracing::info!("Persistence: restoring doc ({} bytes)", snapshot.len());
                     let _ = restore_tx.try_send(LogicCommand::RestoreLocalSnapshot {
                         document_id,
+                        doc_type,
                         snapshot,
                     });
                 }
@@ -757,6 +768,31 @@ fn dev_user_from_url() -> Option<String> {
         .and_then(|p| p.get("user"))
         .map(|u| u.trim().to_string())
         .filter(|u| !u.is_empty())
+}
+
+/// localStorage key under which the active dev username is remembered, so a
+/// refresh re-establishes the dev session without `?user=` in the URL.
+const DEV_USER_KEY: &str = "ambre.dev_user";
+
+/// Read the dev username remembered from a prior session, if any.
+fn stored_dev_user() -> Option<String> {
+    web_sys::window()?
+        .local_storage()
+        .ok()
+        .flatten()?
+        .get_item(DEV_USER_KEY)
+        .ok()
+        .flatten()
+        .map(|u| u.trim().to_owned())
+        .filter(|u| !u.is_empty())
+}
+
+/// Remember `username` as the active dev identity (dev-only; the derived keys are
+/// never stored, only the name they are re-derived from).
+pub(crate) fn remember_dev_user(username: &str) {
+    if let Some(Ok(Some(storage))) = web_sys::window().map(|w| w.local_storage()) {
+        let _ = storage.set_item(DEV_USER_KEY, username);
+    }
 }
 
 /// Map a `SyncWarningCode` (the closed `ambre-bus` contract) to a user-facing
