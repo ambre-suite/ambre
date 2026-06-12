@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2024"
 description = "Abstraction trait for shared rendering (screen & PDF) in Ambre"
 
+[features]
+# Headless test doubles (RecordingSurface, FixedClock). Off by default so the
+# production build never carries them; enabled by downstream crates' dev-deps.
+testing = []
+
 [dependencies]
 kurbo = { workspace = true }
 peniko = { workspace = true }

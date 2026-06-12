@@ -19,3 +19,7 @@ ambre-canvas   = { path = "../ambre-canvas" }
 # UI Thread <-> Logic frame channels (shared memory, Main instance).
 flume      = { workspace = true }
 web-sys    = { workspace = true }
+
+[dev-dependencies]
+# Headless render tests: RecordingSurface mock DrawSurface + FixedClock.
+ambre-draw = { path = "../ambre-draw", features = ["testing"] }

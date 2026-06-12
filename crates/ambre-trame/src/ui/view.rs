@@ -10,7 +10,7 @@
 // ============================================================================
 
 use ambre_bus::{AppCommand, AppEvent, DocumentId, LogicCommand, TrameCommand, TrameEvent, UiEvent};
-use ambre_draw::{FontContext, Rect};
+use ambre_draw::{Clock, FontContext, Rect};
 use ambre_canvas::{
     Anchor, AnchorPublisher, ContentRepaint, DocView, FrameStats, InputEvent, OverlayRepaint,
     RepaintPlan, TextCache, TextInput, Theme, ThemeControl, WgpuSurface,
@@ -21,6 +21,17 @@ use super::renderer::{self, DrawStats};
 
 /// Caret blink half-period: the standard ~530 ms on/off toggle (period ~1.06 s).
 const BLINK_MS: f64 = 530.0;
+
+/// `Clock` adapter over the browser `performance.now()`. The renderer takes a
+/// `&dyn Clock` for its sub-phase timings so it can also run headless (tests
+/// pass `ambre_draw::testing::FixedClock`); on screen this wraps `Performance`.
+struct PerfClock<'a>(&'a web_sys::Performance);
+
+impl Clock for PerfClock<'_> {
+    fn now_ms(&self) -> f64 {
+        self.0.now()
+    }
+}
 
 // -- Kinetic (momentum) touchpad scrolling ------------------------------------
 // Firefox/Linux does not deliver an OS momentum phase after a two-finger flick,
@@ -596,7 +607,7 @@ impl DocView for TrameView {
             text_cache,
             self.text_enabled,
             strip,
-            &self.perf,
+            &PerfClock(&self.perf),
             &mut self.draw_stats,
         );
     }
@@ -620,7 +631,7 @@ impl DocView for TrameView {
             stats.drain_ms,
             stats.draw_ms,
             stats.gpu_ms,
-            &self.perf,
+            &PerfClock(&self.perf),
             &mut self.draw_stats,
         );
 
