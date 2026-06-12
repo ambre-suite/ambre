@@ -40,8 +40,8 @@ It does **not** handle:
 | `tracing` + `tracing-subscriber` | Structured logging, Loki export via Promtail |
 | `thiserror` | Typed errors mapped to HTTP |
 | `tower` + `tower-http` | Middlewares (CORS, compression, timeout, rate limiting) |
-| `axum-extra` | Cookie jar, typed headers |
-| `jsonwebtoken` | JWT OIDC validation |
+| `axum-extra` | Typed headers (`Authorization: Bearer`) |
+| `jsonwebtoken` | OIDC id_token validation **and** our own access-token mint/verify (EdDSA) |
 
 > **`ambre-crypto` intentionally absent.** The server only needs to verify Ed25519 signatures — direct `ed25519-dalek` suffices. Importing `ambre-crypto` would expose `DocumentKey`, `MasterSeed` in the server process without any legitimate need (violation of the least privilege principle).
 
@@ -50,10 +50,10 @@ It does **not** handle:
 **Invariants:**
 - No plaintext data transits through the server (neither stored nor logged)
 - ACLs are verified **before** any S3 read/write operation
-- Every authenticated request validates the Redis session before touching PostgreSQL
+- Every authenticated request validates the access JWT (EdDSA signature + expiry) before touching PostgreSQL
 - S3 presigned URLs are issued only after PostgreSQL ACL verification
 - The Redis Lua script is atomic: clock validation + seq assignment in a single RTT
-- A client's `signing_pubkey` is cached in memory in the Redis session — no PostgreSQL lookup per update
+- A client's `signing_pubkey` travels in the access-token `spk` claim — no PostgreSQL lookup per update
 - No `unsafe` in application code
 
 ---
@@ -213,9 +213,13 @@ CREATE TABLE meetings (
 #### Redis/Valkey Structure
 
 ```
-# Sessions (TTL 24h)
-# signing_pubkey stored in session — avoids PostgreSQL lookup per update
-session:{session_id}           → HASH { user_id, signing_pubkey_hex, created_at, last_seen }
+# Auth: stateless access JWT (EdDSA / Ed25519) -- NO server-side session record.
+# The access token carries claims { sub: user_id, spk: signing_pubkey_hex, iat, exp }
+# (TTL 900s). The WS update hot path reads signing_pubkey from the verified token
+# claim (spk) -- no Redis/PostgreSQL lookup per update.
+#
+# Refresh tokens: opaque (UUIDv4), revocable, rotated on each use (TTL 30d).
+refresh:{refresh_token}        → HASH { user_id, signing_pubkey_hex }
 
 # Global per-document sequence (SecSync seq)
 doc:{doc_id}:seq               → STRING (monotonic INCR)
@@ -246,7 +250,7 @@ channel:{channel_id}:presence  → HASH { pub_key_hex: presence_enc_b64 }
 
 # Active WebSocket sessions per channel
 # Populated at SubscribeChannel, cleaned at UnsubscribeChannel or multiplexed WS disconnect
-channel:{channel_id}:sessions  → HASH { session_id: "1" }
+channel:{channel_id}:sessions  → HASH { connection_id: "1" }
 
 # Document broadcast PubSub
 channel doc:{doc_id}           → PUB/SUB (postcard-serialized WsServerMsg)
@@ -265,7 +269,7 @@ doc:{doc_id}:presence          → HASH { pub_key_hex: presence_enc_b64 }
 
 # Active WebSocket sessions per document
 # Populated at Subscribe, cleaned at Unsubscribe or multiplexed WS disconnect
-doc:{doc_id}:sessions          → HASH { session_id: "1" }
+doc:{doc_id}:sessions          → HASH { connection_id: "1" }
 
 # Reverse lookup user → open documents
 user:{user_id}:open_docs       → SET { doc_id_1, doc_id_2 }
@@ -391,12 +395,19 @@ pub struct AppState {
     pub s3_bucket:    String,
     pub oidc_clients: Arc<HashMap<String, OidcClient>>,
     pub config:       Arc<Config>,
+    pub jwt:          Arc<JwtKeys>,    // EdDSA mint/verify -- seed from JWT_SIGNING_SEED (ephemeral if absent, dev)
+    pub pubsub:       PubSubHub,       // single shared PubSubStream + in-process fan-out (see sec.7)
 }
 
 pub fn api_router() -> Router<AppState> {
     Router::new()
+        .route("/auth/{provider}/login",    get(auth::oidc_login))
         .route("/auth/{provider}/callback", post(auth::oidc_callback))
-        .route("/auth/logout",              post(auth::logout))
+        .route("/auth/setup",               post(auth::setup_account))
+        .route("/auth/dev/login",           post(auth::dev_login))  // DEV_MODE only -- deterministic keys from username
+        .route("/auth/config",              get(auth::auth_config))
+        .route("/auth/refresh",             post(auth::refresh))    // rotates the refresh token, mints a new access JWT
+        .route("/auth/logout",              post(auth::logout))     // revokes the refresh token
         .route("/auth/me",                  get(auth::me))
         .route("/keys/master",              put(keys::store_master).get(keys::get_master))
         .route("/keys/master/rotate",       put(keys::rotate_master))
@@ -453,7 +464,7 @@ pub fn api_router() -> Router<AppState> {
 
 **Notes on key routes:**
 
-- **`GET /api/ws`**: single multiplexed WebSocket per client session. Documents and channels share this connection. The handler maintains a `HashSet<Uuid>` of subscribed documents and channels. Dynamic Subscribe/Unsubscribe. Meetings keep a separate endpoint (`GET /api/ws/meetings/{id}`) because SDP/ICE signaling has an ephemeral lifecycle without a Subscribe pattern.
+- **`GET /api/ws`**: single multiplexed WebSocket per client session. Documents and channels share this connection. The handler maintains a `HashSet<Uuid>` of subscribed documents and channels. Dynamic Subscribe/Unsubscribe. Meetings keep a separate endpoint (`GET /api/ws/meetings/{id}`) because SDP/ICE signaling has an ephemeral lifecycle without a Subscribe pattern. **Auth:** the browser `WebSocket` API forbids custom headers, so the access JWT travels in the **`?token=<jwt>`** query parameter (validated like a Bearer header). On an invalid/expired token the handler closes with application code **4401** so the client can refresh and reconnect silently (see sec.7). Each connection is assigned a server-generated `connection_id` (UUIDv4) -- the stateless access token carries no connection identity.
 - **`GET /api/documents`**: returns for each document `{ id, doc_type, name_enc, role, doc_key_enc, updated_at }` — the `document_members` join includes `doc_key_enc` for the current user in the response. The Sync thread can decrypt all names in a single fetch, without N round-trips.
 - **`POST /api/documents/{id}/media`** and **`POST /api/channels/{id}/media`**: confirmation routes after S3 upload. Body: `{ content_hash, mime_type, size_bytes }`. The server verifies ACL, inserts into the Postgres `media` table. Called by the Sync thread after successful S3 PUT.
 - **`POST /api/.../media/upload-url`**: generates a presigned PUT URL (TTL 15 min) after ACL verification. No Postgres insertion — the INSERT is done by the confirmation route above.
@@ -468,14 +479,14 @@ Client (WASM Sync thread)
   ▼
 Axum WS Handler
   │
-  ├── 1. Validates Redis session: session_id → { user_id, signing_pubkey_hex }
-  │       (signing_pubkey cached in session — no PostgreSQL lookup)
+  ├── 1. Validates the access JWT (?token= at upgrade): claims { sub, spk }
+  │       (signing_pubkey read from the verified `spk` claim — no Redis/PostgreSQL lookup)
   │
   ├── 2. Verifies document_id is in this connection's subscription set
   │       (in-memory HashSet<Uuid> per connection, populated by Subscribe)
   │
   ├── 3. Verifies PostgreSQL ACL: user_id ∈ document_members (role ∈ editor|owner)
-  │       (result cacheable in Redis TTL 60s by {session_id, doc_id})
+  │       (result cacheable in Redis TTL 60s by {user_id, doc_id})
   │
   ├── 4. Verifies Ed25519 signature (direct ed25519-dalek):
   │       valid sign over (ciphertext || nonce || postcard(public_data))?
@@ -587,7 +598,7 @@ This model has O(1) Tokio tasks instead of O(active_documents). Redis SCAN is no
 | Presence | Opaque ciphertext (`presence_enc`) | Cursor, selection, plaintext name |
 | Signatures | Ed25519 signature per message | — |
 | Network metadata | Source IP, timestamps, blob sizes | — |
-| Sessions | `session_id` → `user_id`, `signing_pubkey_hex` | Symmetric keys |
+| Auth | access JWT claims (`sub`, `spk`), refresh token → `user_id`, `signing_pubkey_hex` | Symmetric keys, passphrase |
 
 ### Zero-Knowledge Invariants
 
@@ -615,7 +626,7 @@ This model has O(1) Tokio tasks instead of O(active_documents). Redis SCAN is no
 Client                  Axum Server              OIDC Provider
   │── GET /login ───────►│                              │
   │                      ├── generates state + nonce      │
-  │                      │   (Redis session TTL 10min)   │
+  │                      │   (Redis state store TTL 10min)│
   │   redirect_url ◄─────┤                              │
   │── redirect ────────────────────────────────────────► │
   │         Authorization Code ◄────────────────────── │
@@ -625,43 +636,50 @@ Client                  Axum Server              OIDC Provider
   │                      ├── validates id_token JWT       │
   │                      ├── extracts sub + email         │
   │                      ├── upserts users PostgreSQL     │
-  │                      ├── stores signing_pubkey in Redis session
-  │                      ├── creates Redis session TTL 24h│
-  │   Set-Cookie: session_id (HttpOnly, Secure, SameSite=Strict) ◄─┤
+  │                      ├── mints access JWT (claims sub + spk, TTL 900s)
+  │                      ├── stores opaque refresh token in Redis (TTL 30d)
+  │   200 { access_token, refresh_token, access_expires_in } ◄─┤  (JSON body — NO Set-Cookie)
 ```
 
 Providers: Google, GitHub, Microsoft, Apple.
 
-### Session Management
+> **Why JWT + refresh and not a cookie session.** The client is a cross-origin-isolated SPA whose Sync **worker** owns the network. The browser `WebSocket` API cannot attach cookies/headers reliably across the worker boundary, and a stateless EdDSA access token lets the WS hot path read `signing_pubkey` straight from the verified `spk` claim (no Redis/PG round-trip per update). Revocation is preserved by keeping the **refresh** token server-side (Redis, revoked at logout). See sec.8 (the prior "stateless JWT rejected" decision is reversed: the *refresh* token is the revocable part).
+
+### Token Model — Access JWT + Refresh
 
 ```rust
+/// Access-token claims (EdDSA / Ed25519). Verified on every authenticated
+/// request; `spk` carries the hex Ed25519 signing pubkey so the WS update path
+/// needs no DB lookup. iat/exp in Unix seconds.
+pub struct Claims { pub sub: String, pub spk: String, pub iat: u64, pub exp: u64 }
+
 pub struct AuthSession {
-    pub session_id:       String,
-    pub user_id:          Uuid,
-    pub signing_pubkey:   [u8; 32], // Ed25519 -- from Redis, avoids PostgreSQL lookup per update
-}
-
-async fn auth_middleware(
-    State(state): State<AppState>,
-    cookie_jar: CookieJar,
-    mut req: Request,
-    next: Next,
-) -> Result<Response, AppError> {
-    let session_id = cookie_jar
-        .get("session_id")
-        .ok_or(AppError::Unauthorized)?
-        .value()
-        .to_string();
-
-    let session: Option<SessionData> = state.redis
-        .hgetall(format!("session:{session_id}"))
-        .await?;
-
-    let session = session.ok_or(AppError::Unauthorized)?;
-    req.extensions_mut().insert(AuthSession::from(session));
-    Ok(next.run(req).await)
+    pub user_id:        Uuid,
+    pub signing_pubkey: [u8; 32], // Ed25519 -- from the verified `spk` claim
 }
 ```
+
+- **Access token** — EdDSA JWT, TTL 900s (`ACCESS_TTL_SECS`). Signed with `JwtKeys` derived from `JWT_SIGNING_SEED`. **Multi-instance deployments MUST set the same seed** so any instance can verify a token minted by another; absent (dev), an ephemeral key is generated and all tokens die on restart -- the client recovers via the 4401 reconnect path (sec.7).
+- **Refresh token** — opaque UUIDv4, stored `refresh:{token}` → `{ user_id, signing_pubkey_hex }` (TTL 30d, `REFRESH_TTL_SECS`). `POST /api/auth/refresh` validates and **rotates** it (old token consumed, new minted) and returns a fresh access JWT. `POST /api/auth/logout` deletes it.
+- **Dev login** (`POST /api/auth/dev/login`, gated by `DEV_MODE`) — upserts a user whose keypair is **deterministically derived from the username** (BLAKE2b), so the same `?user=alice` always reauthenticates to the same identity without OIDC. Disabled in production.
+
+### Bearer Authentication (extractor)
+
+```rust
+/// Axum extractor: parses `Authorization: Bearer <jwt>`, verifies signature +
+/// expiry, returns AuthSession. Rejects missing/invalid/expired tokens with 401
+/// (the client's REST wrapper then refreshes once and retries -- see ambre-spec-sync.md).
+async fn from_request_parts(parts, state) -> Result<AuthSession, AppError> {
+    let token = bearer_token(parts).ok_or(AppError::Unauthorized)?;
+    let claims = state.jwt.verify(&token).map_err(|_| AppError::Unauthorized)?;
+    Ok(AuthSession {
+        user_id:        Uuid::parse_str(&claims.sub).map_err(|_| AppError::Unauthorized)?,
+        signing_pubkey: PublicKey::from_hex(&claims.spk).map_err(|_| AppError::Unauthorized)?.into(),
+    })
+}
+```
+
+The WebSocket upgrade reuses the same verification on the `?token=` query parameter (browser WS cannot send an `Authorization` header).
 
 ### Document Key Rotation — Server Side
 
@@ -855,7 +873,7 @@ impl IntoResponse for AppError {
 }
 ```
 
-**WebSocket errors**: sent via `WsServerMsg::Error { code, message }` before close, postcard-serialized.
+**WebSocket errors**: sent via `WsServerMsg::Error { code, message }` before close, postcard-serialized. **Auth failure at upgrade** is signalled with the application close code **4401** ("unauthorized", in the 4000-4999 user range) rather than a generic drop, so the client distinguishes an expired/rotated token (refresh + reconnect silently) from a network blip (plain backoff) -- see `ambre-spec-sync.md §2.G`.
 
 ---
 
@@ -864,6 +882,8 @@ impl IntoResponse for AppError {
 ### PubSub Architecture
 
 **Multiplexed WebSocket:** Each WebSocket connection (`GET /api/ws`) maintains a `HashSet<Uuid>` of subscribed documents and a `HashSet<Uuid>` of subscribed channels. Redis PubSub subscribe/unsubscribe is dynamic: the server subscribes to the Redis channel `doc:{doc_id}` or `chan:{channel_id}` on `Subscribe`/`SubscribeChannel`, and unsubscribes on `Unsubscribe`/`UnsubscribeChannel` or disconnect. Meetings keep a separate WebSocket endpoint (`GET /api/ws/meetings/{id}`) because their ephemeral lifecycle (SDP/ICE signaling) does not follow the Subscribe/Unsubscribe pattern.
+
+**PubSub hub (in-process fan-out — single Redis subscription per channel per instance).** ⚠️ `rustis` keeps subscriptions **connection-global**: a `Client` holds `HashMap<channel, (_, PubSubSender)>` -- **one** sender per channel per connection. Two WebSockets on the same `doc:X` over the shared client therefore collide ("already subscribed"), so a per-WS `PubSubStream` is **impossible** for collaboration. The server runs a single `PubSubHub` task (spawned once at boot, cloned into every `AppState`): it owns **one** `PubSubStream` on the shared RESP3 connection, ref-counts the Redis `SUBSCRIBE` per channel (subscribe on the first interested connection, unsubscribe when the last leaves), and **fans out in-process** -- on each Redis message it clones the (already postcard-encoded `WsServerMsg`) payload to every locally interested WS via an `mpsc` sink keyed by `connection_id`. The handler calls `pubsub.subscribe(channel, connection_id, outbound_tx)` / `unsubscribe(...)`. Binary payloads are published as `RefBulkString` (a raw `&[u8]` makes rustis panic, which would 1006-drop the publisher and trigger a reconnect storm).
 
 ```
 Axum instance A          Redis PubSub          Axum instance B
@@ -916,13 +936,14 @@ No push notifications in MVP. The client queries `GET /api/channels/unread` on r
 | **`doc_type` with English names** | `spreadsheet`, `document`, `whiteboard` diverge from application names. Canonical French names: `prose`, `trame`, `toile`, `murmure`. |
 | **Plaintext Redis presence** | `doc:{id}:presence` stored `name`, `color`, `cursor` as plaintext JSON — ZK violation. Replaced by `presence_enc` (opaque Ephemeral ciphertext). |
 | **S3 flush: one Tokio task per active document** | Not scalable to >1000 active documents (1000 dormant tasks). Replaced by a single global flusher with Redis SCAN. |
-| **PostgreSQL lookup of `signing_pubkey` per update** | Adds a PostgreSQL query on the hot path (every WS update). `signing_pubkey` is cached in the Redis session at login. |
+| **PostgreSQL lookup of `signing_pubkey` per update** | Adds a PostgreSQL query on the hot path (every WS update). `signing_pubkey` travels in the verified access-token `spk` claim. |
 | **Axum with native QUIC (quinn)** | Caddy as HTTP/3 terminator is lower operational risk. Axum only sees internal HTTP/1.1. |
 | **SSE instead of WebSockets** | Unidirectional (server → client). The client must send real-time updates. |
 | **One WebSocket per document/channel** | Connection waste (5 WS for a Toile with 4 embedded documents). Browser limits (~6 connections per origin). Messages already carry `document_id` in `publicData` — the server demultiplexes. Single multiplexed WS per session with Subscribe/Unsubscribe, single endpoint `GET /api/ws`. Meetings keep a separate endpoint (ephemeral signaling). |
 | **gRPC / Protobuf** | No native WASM browser support without grpc-web proxy. Postcard + WebSocket is simpler. |
 | **External message broker (NATS, Kafka)** | Over-engineering for MVP. Redis PubSub suffices. NATS JetStream migration possible in V2. |
-| **Stateless JWT for sessions** | Not immediately revocable. Redis sessions allow instant revocation. |
+| **Cookie sessions (Redis `session:{id}`, HttpOnly + CSRF double-submit)** | ⚠️ **Reversed.** The COI SPA's Sync worker owns the network and cannot reliably attach cookies to the WebSocket; cookies also forced CSRF protection on every mutating route. Replaced by **Bearer access JWT (EdDSA, TTL 900s) + opaque revocable refresh token (Redis, TTL 30d)**. Revocation is preserved (refresh deleted at logout); the WS hot path reads `signing_pubkey` from the `spk` claim with no lookup. CSRF middleware removed (no ambient credential to forge). |
+| **Stateless JWT as the *sole* token (no refresh)** | A bare stateless JWT is not revocable before `exp`. Kept the **refresh** token server-side in Redis (rotated on use, revoked at logout) as the revocable part; only the short-lived access token is stateless. |
 | **ORM (Diesel, SeaORM)** | Diesel blocks native async. SeaORM obscures critical queries. sqlx with compile-time check is the right abstraction level. |
 | **S3 blobs proxied by the server** | The server must not see the content. Presigned URLs: direct upload/download client → S3. |
 | **`WsClientMsg::Ephemeral` without signature** | Without a signature, any client could forge a presence message on behalf of another. `signature: [u8; 64]` is mandatory (defined in `ambre-protocol`). |
@@ -937,7 +958,7 @@ No push notifications in MVP. The client queries `GET /api/channels/unread` on r
 
 - [x] Full PostgreSQL schema with sqlx migrations (`doc_type` in French names)
 - [x] OIDC auth (Google first)
-- [x] Redis sessions (`rustis`) + auth middleware + `signing_pubkey` cache in session
+- [x] Auth: access JWT (EdDSA, `jsonwebtoken`) + opaque revocable refresh token (Redis, rotated on `/auth/refresh`, revoked at logout) + `AuthSession` Bearer extractor; `signing_pubkey` carried in the `spk` claim (no per-update lookup). Dev login (`/auth/dev/login`, deterministic keys from username, `DEV_MODE`). WS authenticated via `?token=`, close code 4401 on invalid/expired.
 - [x] Documents CRUD + basic ACL
 - [x] `GET /api/documents` with inline `doc_key_enc` (`document_members` join)
 - [x] Single multiplexed WebSocket (`GET /api/ws`): per-document Subscribe/Unsubscribe, Update + Ephemeral + MissingUpdates + SnapshotRequired + SnapshotAvailable. HashSet<Uuid> of subscriptions per connection. Dynamic Redis PubSub.
@@ -962,8 +983,8 @@ No push notifications in MVP. The client queries `GET /api/channels/unread` on r
 
 ### SRV P2 — Hardening & Organizations
 
-- [x] Per-user/IP rate limiting (tower middleware)
-- [x] CSRF protection (Double Submit Cookie on POST/PATCH/DELETE)
+- [x] Per-user/IP rate limiting (tower middleware; key `user:{sub}` from the JWT, else `ip:{ip}`)
+- [x] ~~CSRF protection (Double Submit Cookie)~~ -- **removed**: Bearer JWT carries no ambient credential, so there is no cross-site request forgery surface (see sec.8).
 - [x] Organizations feature + Shamir's Secret Sharing (crate `sharks`)
 - [x] Route `POST /api/organizations/{id}/recover/{uid}`
 - [x] Server-side compaction (cron: purge old snapshots > 10 per document)
