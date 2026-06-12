@@ -43,7 +43,7 @@ impl AuthContext {
             .ok_or_else(|| "auth required: no refresh token".to_owned())
     }
 
-    async fn refresh(&self) -> Result<(), String> {
+    pub(crate) async fn refresh(&self) -> Result<(), String> {
         let url = format!("{}://{}/api/auth/refresh", self.url_scheme, self.api_base);
         let body = RefreshRequest {
             refresh_token: self.refresh_token()?,

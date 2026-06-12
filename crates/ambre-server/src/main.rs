@@ -138,9 +138,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .ok()
     .unwrap_or_default();
 
+    // One process-wide PubSub subscriber on the shared RESP3 connection, fanned
+    // out in-process to interested WS connections. Cloned into every AppState.
+    let pubsub = ws::PubSubHub::spawn(redis.clone());
+
     let state = Arc::new(AppState {
         db,
         redis: redis.clone(),
+        pubsub: pubsub.clone(),
         s3,
         s3_bucket,
         config: Arc::new(config.clone()),
@@ -152,6 +157,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let flush_state = AppState {
         db: state.db.clone(),
         redis: redis.clone(),
+        pubsub: pubsub.clone(),
         s3: state.s3.clone(),
         s3_bucket: state.s3_bucket.clone(),
         config: Arc::new(config.clone()),
@@ -164,6 +170,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let compact_state = AppState {
         db: state.db.clone(),
         redis: redis.clone(),
+        pubsub: pubsub.clone(),
         s3: state.s3.clone(),
         s3_bucket: state.s3_bucket.clone(),
         config: Arc::new(config),

@@ -14,6 +14,11 @@ use crate::oidc::OidcClients;
 pub struct AppState {
     pub db: PgPool,
     pub redis: rustis::client::Client,
+    /// Process-wide PubSub fan-out hub. ONE Redis subscriber per channel,
+    /// fanned out in-process to every WS connection watching it (Redis PubSub
+    /// subscriptions are connection-global, so a single shared subscriber is
+    /// the only model that supports several connections on the same channel).
+    pub pubsub: crate::ws::PubSubHub,
     pub s3: S3Client,
     pub s3_bucket: String,
     pub config: Arc<Config>,
