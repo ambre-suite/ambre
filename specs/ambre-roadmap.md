@@ -71,7 +71,7 @@ Stories (all `[x]`):
 > Dependencies: `SRV P0` precedes the network wiring of `SYNC P2` (need a target relay);
 > `SYNC P0` precedes `SYNC P1`-`P3` (crypto before integration).
 
-## E2 — Foundation finishing (minimal)  `[ ]` — *next; do before the Trame release*
+## E2 — Foundation finishing (minimal)  `[x]` (done)
 
 *Close the visible/blocking foundation gaps. Deliberately minimal: offline durability, audits and
 benchmarks are deferred to `E5`.*
