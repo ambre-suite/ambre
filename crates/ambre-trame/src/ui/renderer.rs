@@ -22,7 +22,7 @@
 // ============================================================================
 
 use ambre_draw::{
-    Affine, Alignment, Brush, Color, DrawSurface, FontContext, Layout, ParleyBrush,
+    Affine, Alignment, Brush, Clock, Color, DrawSurface, FontContext, Layout, ParleyBrush,
     PositionedLayoutItem, Rect,
 };
 
@@ -165,7 +165,7 @@ pub fn draw_cells<S: DrawSurface>(
     text_cache:   &mut TextCache,
     text_enabled:   bool,
     strip_rect:     Option<Rect>,
-    perf:         &web_sys::Performance,
+    clock:        &dyn Clock,
     stats:        &mut DrawStats,
 ) {
     let w = state.canvas_width;
@@ -184,7 +184,7 @@ pub fn draw_cells<S: DrawSurface>(
         return;
     }
 
-    let t0 = perf.now();
+    let t0 = clock.now_ms();
 
     // -- 1. Pending grey over the strip. ---------------------------------------
     surface.fill_rect(strip, palette.content_pending);
@@ -231,7 +231,7 @@ pub fn draw_cells<S: DrawSurface>(
         }
     }
 
-    let t_bg = perf.now();
+    let t_bg = clock.now_ms();
 
     // -- 5. Cell body text. ----------------------------------------------------
     let mut cells_drawn = 0u32;
@@ -274,7 +274,7 @@ pub fn draw_cells<S: DrawSurface>(
         }
     }
 
-    let t_cells = perf.now();
+    let t_cells = clock.now_ms();
     stats.bg_ms       = (t_bg - t0) as f32;
     stats.cells_ms    = (t_cells - t_bg) as f32;
     stats.cells_drawn = cells_drawn;
@@ -300,13 +300,13 @@ pub fn draw_overlay<S: DrawSurface>(
     last_drain_ms:  f32,
     last_draw_ms:   f32,
     last_gpu_ms:    f32,
-    perf:           &web_sys::Performance,
+    clock:          &dyn Clock,
     stats:          &mut DrawStats,
 ) {
     let w = state.canvas_width;
     let h = state.canvas_height;
 
-    let t0 = perf.now();
+    let t0 = clock.now_ms();
 
     // -- 1. Active column / row header tints (drawn behind the bg first so
     //       they show through any alpha-blended pixels). -----------------------
@@ -413,7 +413,7 @@ pub fn draw_overlay<S: DrawSurface>(
             }
         }
     }
-    let t_after_hdrs = perf.now();
+    let t_after_hdrs = clock.now_ms();
 
     // -- 6. HUD overlay. ------------------------------------------------------
     let fps_bg = Rect::new(4.0, h - 38.0, 520.0, h - 4.0);
@@ -444,7 +444,7 @@ pub fn draw_overlay<S: DrawSurface>(
         Color::from_rgba8(180, 220, 255, 255),
     );
 
-    let t_end = perf.now();
+    let t_end = clock.now_ms();
     stats.hdrs_ms = (t_after_hdrs - t0) as f32;
     stats.hud_ms  = (t_end - t_after_hdrs) as f32;
 }
@@ -544,4 +544,166 @@ pub fn draw_edit<S: DrawSurface>(
     }
 
     surface.pop_clip();
+}
+
+// -----------------------------------------------------------------------------
+// Headless tests -- mock DrawSurface (ambre-spec-canvas P0 "Headless tests").
+// -----------------------------------------------------------------------------
+//
+// These drive the real grid renderer against `RecordingSurface` (a recording
+// `DrawSurface`) and `FixedClock`, entirely off the browser main thread. They
+// assert on the *sequence* of draw calls -- geometry, palette colours, clip
+// balance -- not on pixels. This is the unit-test counterpart to the on-screen
+// wgpu path; it needs no GPU, no canvas, no `performance.now()`.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ambre_canvas::{TextCache, Theme};
+    use ambre_draw::FontContext;
+    use ambre_draw::testing::{DrawOp, FixedClock, RecordingSurface};
+
+    use super::super::grid::CellData;
+
+    /// A view state large enough to expose several rows/cols, with the given
+    /// cells pre-populated in the cache.
+    fn fixture(cells: &[(u32, u32, &str)]) -> TrameUiState {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        for &(row, col, text) in cells {
+            state.cell_cache.insert(
+                (row, col),
+                CellData { text: text.to_owned(), bold: false, italic: false },
+            );
+        }
+        state
+    }
+
+    /// Shared harness: a recording surface, a fixed clock, a real (empty) font
+    /// context and text cache. Text shaping may yield zero glyphs on a host with
+    /// no fonts, so tests never assert glyph *counts* -- only structural ops and
+    /// the renderer's own `cells_drawn` tally, which is font-independent.
+    fn harness() -> (RecordingSurface, FixedClock, FontContext, TextCache, DrawStats) {
+        (
+            RecordingSurface::new(),
+            FixedClock::default(),
+            FontContext::new(),
+            TextCache::new(1.0),
+            DrawStats::default(),
+        )
+    }
+
+    #[test]
+    fn draw_cells_full_repaint_paints_pending_then_grid() {
+        let state = fixture(&[]);
+        let palette = Theme::Light.palette();
+        let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
+
+        draw_cells(
+            &mut surface, &state, palette, &mut font_cx, &mut cache,
+            true, None, &clock, &mut stats,
+        );
+
+        // First op is the full-area pending-grey fill.
+        assert_eq!(
+            surface.ops().first(),
+            Some(&DrawOp::FillRect {
+                rect: Rect::new(HEADER_WIDTH, HEADER_HEIGHT, 800.0, 600.0),
+                color: palette.content_pending,
+            }),
+        );
+        // Grid lines are stroked with the palette grid colour.
+        assert!(surface.count(|op| matches!(
+            op, DrawOp::StrokeLine { color, .. } if *color == palette.grid_line
+        )) > 0);
+        // The clip stack is balanced and no cell bg was painted (empty cache).
+        assert_eq!(surface.clip_depth(), 0);
+        assert_eq!(stats.cells_drawn, 0);
+    }
+
+    #[test]
+    fn draw_cells_fills_cached_cell_and_counts_text() {
+        // Two cells in view: one with text, one empty (pending stays, but its bg
+        // is filled because it is "received").
+        let state = fixture(&[(0, 0, "hello"), (1, 1, "")]);
+        let palette = Theme::Light.palette();
+        let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
+
+        draw_cells(
+            &mut surface, &state, palette, &mut font_cx, &mut cache,
+            true, None, &clock, &mut stats,
+        );
+
+        // Both received cells get a content_bg fill...
+        assert_eq!(
+            surface.count(|op| matches!(
+                op, DrawOp::FillRect { color, .. } if *color == palette.content_bg
+            )),
+            2,
+        );
+        // ...but only the non-empty one is tallied as drawn text.
+        assert_eq!(stats.cells_drawn, 1);
+        assert_eq!(surface.clip_depth(), 0);
+    }
+
+    #[test]
+    fn draw_cells_strip_skips_when_outside_grid() {
+        // A strip entirely inside the header corner produces no cell drawing.
+        let state = fixture(&[]);
+        let palette = Theme::Light.palette();
+        let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
+
+        let header_corner = Rect::new(0.0, 0.0, HEADER_WIDTH, HEADER_HEIGHT);
+        draw_cells(
+            &mut surface, &state, palette, &mut font_cx, &mut cache,
+            true, Some(header_corner), &clock, &mut stats,
+        );
+
+        assert!(surface.ops().is_empty());
+        assert_eq!(stats.cells_drawn, 0);
+    }
+
+    #[test]
+    fn draw_overlay_draws_headers_and_active_border() {
+        let state = fixture(&[]);
+        let palette = Theme::Light.palette();
+        let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
+
+        draw_overlay(
+            &mut surface, &state, palette, &mut font_cx, &mut cache,
+            true, 60.0, 16.0, 1.0, 1.0, 1.0, &clock, &mut stats,
+        );
+
+        // Header backgrounds use the palette header colour.
+        assert!(surface.count(|op| matches!(
+            op, DrawOp::FillRect { color, .. } if *color == palette.header_bg
+        )) >= 2);
+        // The active cell (0,0) border is stroked with the selection colour.
+        assert_eq!(
+            surface.count(|op| matches!(
+                op, DrawOp::StrokeRect { color, width, .. }
+                    if *color == palette.selection && *width == 2.0
+            )),
+            1,
+        );
+        assert_eq!(surface.clip_depth(), 0);
+    }
+
+    #[test]
+    fn renderer_uses_only_palette_colors_for_fills() {
+        // Guards the "no hardcoded product colour" invariant on the cells layer:
+        // every fill colour must come from the active palette (the HUD, which
+        // does use literals, lives only in the overlay).
+        let state = fixture(&[(0, 0, "x")]);
+        let palette = Theme::Light.palette();
+        let allowed = [palette.content_pending, palette.content_bg];
+        let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
+
+        draw_cells(
+            &mut surface, &state, palette, &mut font_cx, &mut cache,
+            true, None, &clock, &mut stats,
+        );
+
+        for color in surface.fill_colors() {
+            assert!(allowed.contains(&color), "unexpected fill colour {color:?}");
+        }
+    }
 }

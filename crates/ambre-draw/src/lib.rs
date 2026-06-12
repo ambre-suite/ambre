@@ -17,6 +17,22 @@
 pub mod types;
 pub use types::*;
 
+#[cfg(feature = "testing")]
+pub mod testing;
+
+/// Monotonic millisecond clock, abstracted so rendering code can measure its
+/// sub-phase timings without depending on `web_sys::Performance` directly.
+///
+/// On the UI Thread the implementation wraps `performance.now()`; headless
+/// tests pass a deterministic stub (see [`testing::FixedClock`]). This keeps the
+/// renderers callable off the browser main thread, which is what makes the
+/// mock-surface tests possible.
+pub trait Clock {
+    /// Wall-clock milliseconds, monotonic within a frame. Sub-millisecond
+    /// precision is expected on screen but never relied upon for correctness.
+    fn now_ms(&self) -> f64;
+}
+
 /// GPU- and PDF-agnostic drawing interface.
 ///
 /// All coordinates are in logical pixels (f64). The origin is the top-left

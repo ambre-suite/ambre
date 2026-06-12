@@ -421,8 +421,11 @@ The rendering layer consists of pure drawing primitives. ZK audit:
 - [x] `DrawSurface` trait in `ambre-draw`: `ParleyBrush = peniko::Brush`, fill_path/stroke_path/push_transform/pop_transform default no-ops
 - [ ] Icon type + `build.rs` pipeline: SVG → usvg → lyon → vertex buffer blob
 - [x] Inbound drain: `DocView::update` drains `Receiver<UiEvent>` (`flume try_recv`) → mutations → dirty flags; `Disconnected`/`FatalError` → fatal state
-- [ ] Generated canvas tokens (`scale_factor`, sans/mono font families, content colors) from `tokens.ron` → `theme.rs`, consumed by `QuadRenderer`/`TextCache` — see `ambre-spec-ui.md §2.D`
-- [ ] Headless tests via mock `QuadRenderer`
+- [x] Generated canvas tokens (`scale_factor`, sans/mono font families, content colors) from `tokens.ron` → `theme.rs` (`build.rs` codegen), consumed by the Trame renderer (`Palette`) and `TextCache` — see `ambre-spec-ui.md §2.D`
+- [x] Headless tests via mock `DrawSurface` (`ambre_draw::testing::RecordingSurface` + `FixedClock`,
+  behind the `testing` feature): drive the real Trame grid renderer off-main-thread and assert on the
+  recorded `DrawOp` sequence (palette colours, grid/header geometry, clip balance). The renderer's
+  `web_sys::Performance` timing dependency is abstracted behind the `ambre_draw::Clock` trait.
 
 ### CANVAS P1 — Integration
 
