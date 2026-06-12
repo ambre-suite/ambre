@@ -560,6 +560,9 @@ Imports are split into batches of 500 cells with `yield` between each batch to a
 
 ## 10. ROADMAP
 
+> CSV import/export (Phase 1) is tracked as a Story of Epic **E3** in `specs/ambre-roadmap.md`.
+> Basic .xlsx import is deferred to Epic **E5**.
+
 **Phase 1 — MVP**
 - [ ] CSV import: `TrameCommand::ImportCsv` (auto-detect delimiter)
 - [ ] CSV export: `TrameCommand::ExportCsv`

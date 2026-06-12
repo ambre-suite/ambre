@@ -430,7 +430,7 @@ The rendering layer consists of pure drawing primitives. ZK audit:
 - [ ] `push_transform` / `pop_transform` on `WgpuSurface` (Prose margins, Toile pan/zoom)
 - [ ] `fill_path` / `stroke_path` on `WgpuSurface` via lyon (Toile, Trame charts)
 - [ ] Lazy loading CJK/Arabic/Devanagari fonts (trigger on missing codepoint)
-- [ ] `ambreFatal` hook (panic → terminal screen) wired in `host`/`ambre-app`
+- [ ] `ambreFatal` **terminal screen** (panic → canvas terminal render) wired in `host`/`ambre-app`. *(The `panic::set_hook` JS hook itself is done -- see `ambre-spec-architecture.md §7 ARCH P1`; only the canvas-side terminal screen remains. Roadmap Epic `E2`.)*
 
 ### CANVAS P2 — Optimization & Polish
 

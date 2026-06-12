@@ -1,71 +1,125 @@
-# AMBRE — TECHNICAL ROADMAP
+# AMBRE — TECHNICAL ROADMAP (EPICS)
 
-> **Role of this file.** It carries the **cross-cutting order** of the project: the sequence of
-> inter-crate *milestones* and their dependencies. It does not re-enumerate any task.
-> The **detail and progress status** (`[x]`/`[ ]`) lives in §7 of each spec in
-> `1-Foundations/`, referenced here by prefixed ID (`ARCH P1`, `SYNC P2`, `SRV P0`,
-> `CANVAS P0`, `CHROME P1`, `UI P1`).
+> **Role of this file.** This is the **single entry point** for cross-cutting scheduling. It carries
+> the project's **Epics** (coarse, deliverable increments) and their dependency order. The fine-grained
+> backlog (**Stories**, with `[x]`/`[ ]` progress) lives in each spec, referenced here by ID.
 >
-> **Strategy:** vertical delivery of Trame (validate the full stack on one product),
-> then horizontal expansion. No week estimates: the relative order of milestones
-> and their dependencies is the only binding constraint.
+> **Epic / Story model (Agile).**
+> - **Epic** = this file. One Epic = one increment of value. Coarse grain, no per-feature detail.
+> - **Story** = a spec's roadmap section. Fine grain, individual checkboxes.
+> - **Golden rule (derived status).** An Epic is `[x]` **only when every Story it lists is `[x]`**.
+>   The Epic status is *derived*, never hand-set. This is the invariant that keeps this file and the
+>   specs from contradicting each other. If a Story is open, its Epic is open.
+>
+> **How to resume with no prior context.** Read this file top-to-bottom, find the first open Epic
+> (`[ ]`), open each Story it lists (spec + section), and work the open Stories. You do not need any
+> other memory.
+>
+> **Strategy:** vertical delivery of Trame (validate the full stack on one product), then horizontal
+> expansion. No week estimates: the relative order of Epics and their dependencies is the only binding
+> constraint.
 
 ---
 
-## M0 — Technical Foundation
+## Vocabulary mapping (Epic <-> spec phases)
 
-*Objective: the 3-thread stack runs, content renders, chrome is assembled, crypto is proven.*
+The specs predate this file and use their own phase vocabulary. Mapping:
 
-- [x] Shared-memory threading + base crates + typed IPC: `ARCH P0`, `ARCH P1` (partial).
-- [x] GPU rendering pipeline (`FrameHost`/`DocView`, fonts, Trame grid 60+ FPS): `CANVAS P0`.
-- [x] Leptos Chrome (app shell, commands, input/IME, tokens, a11y): `CHROME P1`→`P3`, `UI P0`→`P2`.
-- [x] Standalone E2EE primitives (`ambre-crypto`, compress/seal pipeline, `MasterSeed` derivation): `SYNC P0`.
+| This file | Foundation specs (`1-Foundations/`) | Trame specs (`2-Trame/`) |
+| :--- | :--- | :--- |
+| `E0`/`E1` (done) | `ARCH P0`-`P3`, `CANVAS P0`, `CHROME P1`-`P3`, `UI P0`-`P2`, `SYNC P0`-`P3`, `SRV P0`/`P2` | engine Phase 0/1 (logic), virtual scroll + inline editor (ui Phase 1) |
+| `E2` | `ARCH P1`/`CANVAS P0` remaining items | -- |
+| `E3` | -- | `trame-logic §14`, `trame-features §10`, `trame-ui §18`, `trame-interop §10` (Phase 1) |
+| `E4` | `ARCH P2`/`P5`, `CANVAS P1`, `SYNC P4`, `SRV P1` | -- |
+| `E5` | `ARCH P4`, `CANVAS P2` | Trame Phase 2+ |
 
-## M1 — Vertical Trame encrypted & synchronized
+---
 
-*Objective: a 100% functional Trame, end-to-end encrypted and synchronized via the Blind Relay.*
-*This is the milestone that validates the entire stack.*
+## E0 — Technical Foundation  `[x]` (done)
 
-- [x] **Typed Trame editing** (`TrameOutcome`, lossless Logic dispatcher): `ARCH P2`.
-- [x] **Real network sync**: non-blocking loop + multiplexed WebSocket, `Unlock`/`SetupAccount`,
-  `OpenDocument`/`CloseDocument`, server-side document CRUD: `ARCH P1` (remaining items), `SYNC P1` (wired) → `SYNC P2`.
-- [x] **Cookie-less auth + persistent SPA + live collaboration**: Bearer access JWT + revocable refresh,
-  `leptos_router` SPA over a session-persistent engine (Sync worker never respawned), server PubSub hub,
-  WS resilience (4401 silent reauth, backoff, resubscribe, pre-session buffer), hydration across refresh/devices:
-  `SRV P0`/`SRV P2`, `SYNC P2`, `ARCH P1`.
-- [x] **Blind Relay**: PostgreSQL/Redis/S3, multiplexed WS, ACL, Lua clock+seq, presigned URLs: `SRV P0`.
-- [x] **Canvas finishing**: generated tokens, headless tests: `CANVAS P0` (remaining items).
-- [x] **Client document lifecycle**: URL routing (`/` landing list, `/trame/<docid>`),
-  client-generated `DocumentId` (UUID v7), lazy server creation on first edit
-  (`POST /api/documents` idempotent with client id), per-document IndexedDB restore,
-  `OpenDocument` tolerant of a not-yet-created (404) document. Replaces the hardcoded
-  smoke document as the real entry path (smoke doc retained as headless-test fixture).
+*The 3-thread stack runs, content renders, chrome is assembled, crypto is proven.*
+
+Stories (all `[x]`):
+- `ARCH P0` — shared-memory threading, base crates, typed IPC.
+- `CANVAS P0` — GPU rendering pipeline (`FrameHost`/`DocView`, fonts, Trame grid 60+ FPS).
+  *(core rendering items; remaining `CANVAS P0` items are tracked in `E2`.)*
+- `CHROME P1`->`P3`, `UI P0`->`P2` — Leptos chrome (app shell, commands, input/IME, tokens, a11y).
+- `SYNC P0` — standalone E2EE primitives (`ambre-crypto`, compress/seal pipeline, `MasterSeed`).
+
+## E1 — Trame vertical: encrypted, synchronized, live-sync engine  `[x]` (done)
+
+*A Trame skeleton end-to-end encrypted and synchronized via the Blind Relay. Validates the whole stack.*
+
+> **Scope note -- "collaborative" is not yet reachable from the UI.** The real-time sync engine and
+> the sharing/revocation flow exist at the bus/sync/server layer (`SYNC P3`), but the **chrome has no
+> way to share a document with another user**. So today only multiple sessions of the *same* user
+> converge -- not genuine multi-user collaboration. The user-facing sharing UI is an explicit open
+> Story under `E2`.
+
+Stories (all `[x]`):
+- `ARCH P1`/`ARCH P2` — typed Trame editing (`TrameOutcome`, lossless Logic dispatcher), real
+  multiplexed WebSocket, multi-document `Unlock`/`OpenDocument`, client document lifecycle (URL
+  routing, client-generated `DocumentId`, lazy server creation, per-document IndexedDB restore).
+- `ARCH P3` / `SRV P0` — Blind Relay (PostgreSQL/Redis/S3, multiplexed WS, ACL, Lua clock+seq,
+  presigned URLs).
+- `SYNC P1`->`SYNC P3` — network sync, cookie-less auth (Bearer JWT + refresh), persistent SPA
+  engine, live sync (PubSub hub, WS resilience, hydration), sharing & revocation **flow**
+  (DocumentKey rotation, media, anti-replay). *(Engine/protocol only -- no chrome UI yet, see `E2`.)*
+- `SRV P2` — server hardening (rate limiting, organizations + Shamir, compaction; CSRF dropped
+  with the move to Bearer JWT).
 
 > Dependencies: `SRV P0` precedes the network wiring of `SYNC P2` (need a target relay);
-> `SYNC P0` precedes `SYNC P1`/`P2` (crypto before integration).
+> `SYNC P0` precedes `SYNC P1`-`P3` (crypto before integration).
 
-## M2 — Identity, sharing & hardening
+## E2 — Foundation finishing (minimal)  `[ ]` — *next; do before the Trame release*
 
-*Objective: secured multi-user, sharing/revocation, foundation ready for Enterprise.*
+*Close the visible/blocking foundation gaps. Deliberately minimal: offline durability, audits and
+benchmarks are deferred to `E5`.*
 
-- [x] Sharing & revocation (Document Key rotation, media, anti-replay): `SYNC P3`.
-- [x] Server hardening (rate limiting, organizations + Shamir, compaction; CSRF dropped with the move to Bearer JWT): `SRV P2`.
-- [x] Offline durability (Loro IndexedDB persistence, flush + `RequestMissing` on reconnect): `ARCH P4`.
-- [x] Full Trame formula engine (DAG, incremental recomputation, cycle detection): `ARCH P4`.
+Stories:
+- **Document sharing UI (chrome)** — invite/revoke collaborators by user, wiring the existing
+  `InviteToDocument`/`RevokeFromDocument` flow (`SYNC P3`, sharing flow in `ambre-spec-sync.md §3`)
+  to a chrome command + dialog. **Until this exists, genuine multi-user collaboration is unreachable
+  from the UI** (see `E1` scope note). Unblocks real two-user testing of Trame.
+- `ARCH P1` — remove smoke-test scaffolding (`SMOKE_DOCUMENT_ID`, pre-seeded `DocState::Trame`,
+  `pending_doc_types`) once headless tests no longer depend on it.
+- `CANVAS P0` — generated canvas tokens (`tokens.ron` -> `theme.rs`) + headless tests (mock
+  `QuadRenderer`).
+- `ambreFatal` reconciliation — the `panic::set_hook` JS hook is done (`ARCH P1`); the remaining
+  part is the canvas terminal screen (`CANVAS P1` item), wired in `host`/`ambre-app`.
 
-## M3 — Application expansion
+## E3 — Trame MVP (usual spreadsheet)  `[ ]` — *core objective*
 
-*Objective: deploy the other building blocks on the validated foundation.*
+*Turn the Trame skeleton into a usable spreadsheet. Scope = the consolidated "Phase 1 / MVP" of the
+four Trame specs, deduplicated against what `E0`/`E1` already delivered (virtual scroll + inline cell
+editor are done).*
 
-- [ ] `ambre-prose` (LoroText), `ambre-toile` (R-Tree), `ambre-murmure` (channels): `ARCH P2`/`ARCH P5`.
-- [ ] Sync channels/meetings (segments managed by Sync, WebRTC signaling): `SYNC P4`.
-- [ ] Server channels + meetings (segments, unread, signaling): `SRV P1`.
-- [ ] Canvas paths/transform + PDF export Krilla: `CANVAS P1`.
+Stories:
+- `trame-logic §14` — multi-sheet `LoroDoc` + `SheetIndex`; insert/delete rows/columns; cell merges;
+  Undo/Redo (Loro `UndoManager`); complete the function set from 22 to ~50.
+  *(parser / bytecode VM / `DependencyGraph` / cycles / `#REF!` are already done -- see that section.)*
+- `trame-features §10 Phase 1` — shared filter, simple sort, Undo/Redo commands.
+- `trame-ui §18 Phase 1` — sheet tabs, keyboard navigation, formula bar, single-cell selection,
+  full `on_logic_message` `TrameEvent` dispatch. *(virtual scroll + inline editor already done.)*
+- `trame-interop §10 Phase 1` — CSV import/export. *(basic .xlsx import deferred to `E5`.)*
 
-## M4 — Polish & Advanced Rendez-Vous
+## E4 — Application expansion  `[ ]` (deferred)
 
-*Objective: launch quality, public Beta.*
+*Deploy the other building blocks on the validated foundation.*
 
-- [ ] Frame budget profiling, dynamic theme, i18n/RTL, non-regression benchmarks: `CANVAS P2`.
-- [ ] Rendez-Vous: SFrame encryption (E2EE video): `SYNC P4` / Rendez-Vous.
-- [ ] Final ZK security audit, wasm-only warnings audit: `SYNC P4`, `ARCH P4`.
+Stories:
+- `ARCH P2`/`ARCH P5` — `ambre-prose` (LoroText), `ambre-toile` (R-Tree + read-only embeds),
+  `ambre-murmure` (channels); `DocView` -> `AppView` switch.
+- `SYNC P4` + `SRV P1` — channels & meetings (segments managed by Sync, unread, WebRTC signaling).
+- `CANVAS P1` — paths/transform + PDF export (krilla).
+
+## E5 — Polish & hardening  `[ ]` (deferred)
+
+*Launch quality, public Beta, advanced Rendez-Vous.*
+
+Stories:
+- `ARCH P4` — offline durability (Loro IndexedDB persistence, flush + `RequestMissing` on reconnect);
+  key-rotation hot-path benchmarks + ZK audit (`cargo tree`); wasm-only warnings audit.
+- `CANVAS P2` — frame budget profiling, dynamic theme, i18n/RTL, non-regression benchmarks.
+- Trame Phase 2+ — basic .xlsx import, conditional formatting, data validation.
+- Rendez-Vous — SFrame encryption (E2EE video): `SYNC P4` / Rendez-Vous.

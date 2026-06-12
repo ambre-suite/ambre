@@ -1275,36 +1275,39 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 
 ## 14. ROADMAP
 
+> Tracked as Stories of Epic **E3** (and the engine core, already delivered under **E1**) in
+> `specs/ambre-roadmap.md`.
+
 **Phase 0 — Core standalone**
-- [ ] Multi-sheet `LoroDoc`, full CRDT schema (§2.B including features: `filter_hidden`, `cond_formats`, `validations`, `protections`)
-- [ ] [ ] Bidirectional `SheetIndex` + `sheet_name_to_id`
-- `nom` parser: arithmetic, `CellRef`, `Range` (bounded + `EntireAxis`), basic functions, cross-sheet references (`Sheet2!A1` via `sheet_name_to_id`)
-- [ ] Bytecode VM: full `Op` set, `compile()`, `execute()`, `EvalContext`
-- [ ] Two-level `DependencyGraph` + `collect_dirty`
-- [ ] Cycles: static Kosaraju + dynamic `eval_stack` (cell-to-cell, ranges, cross-sheet)
-- [ ] `#REF!`: detection via `SheetIndex.contains_*`
-- [ ] `TrameCommand` and `TrameEvent`: full consolidated enums (§9, single source of truth)
-- [ ] Unit tests + property tests + postcard round-trip `TrameCommand`/`TrameEvent`
+- [ ] Multi-sheet `LoroDoc`, full CRDT schema (§2.B including features: `filter_hidden`, `cond_formats`, `validations`, `protections`) *(single-sheet today; multi-sheet is Epic `E3`)*
+- [ ] Bidirectional `SheetIndex` + `sheet_name_to_id` *(Epic `E3`)*
+- [x] `nom` parser: arithmetic, `CellRef`, `Range` (bounded + `EntireAxis`), basic functions, cross-sheet references (`Sheet2!A1` via `sheet_name_to_id`)
+- [x] Bytecode VM: full `Op` set, `compile()`, `execute()`, `EvalContext`
+- [x] Two-level `DependencyGraph` + `collect_dirty`
+- [x] Cycles: static Kosaraju + dynamic `eval_stack` (cell-to-cell, ranges, cross-sheet)
+- [x] `#REF!`: detection via `SheetIndex.contains_*`
+- [x] `TrameCommand` and `TrameEvent`: consolidated enums (§9, single source of truth) *(MVP subset; extended per feature)*
+- [x] Unit tests + property tests + postcard round-trip `TrameCommand`/`TrameEvent`
 
 **Phase 1 — Logic Thread Integration**
-- [ ] `TrameController` impl `AppController` (§8 — `handle_ui_command` / `on_logic_event` / `init`)
-- [ ] Synchronous recomputation `compute_all_dirty()` in each handler
-- [ ] `DisplayViewport` + anti-flickering (`tx_version`)
-- [ ] Insert/delete rows/columns + `SheetIndex` update + dirty propagation
-- [ ] Merges: Loro storage, validation, `DisplayCell.merge_span`, conflict detection
-- [ ] Shared rendering module `ambre-trame/src/render.rs`: `draw_cells_on<S: DrawSurface>()`, `draw_grid_lines_on<S>()`, etc.
+- [x] Logic-thread command dispatch (`handle_command` returning `TrameOutcome`, §8) *(current pattern; the `TrameController`/`AppController` trait refactor is deferred)*
+- [x] Synchronous recomputation `compute_all_dirty()` in each handler
+- [x] `DisplayViewport` + anti-flickering (`tx_version`)
+- [ ] Insert/delete rows/columns + `SheetIndex` update + dirty propagation *(Epic `E3`)*
+- [ ] Merges: Loro storage, validation, `DisplayCell.merge_span`, conflict detection *(Epic `E3`)*
+- [ ] Shared rendering module `ambre-trame/src/render.rs`: `draw_cells_on<S: DrawSurface>()`, `draw_grid_lines_on<S>()`, etc. *(Epic `E3`)*
 - [ ] `MockSyncHandle` for controller tests (via `CommandSink`)
-- [ ] Undo/Redo via Loro `UndoManager`
+- [ ] Undo/Redo via Loro `UndoManager` *(Epic `E3`)*
 
 **Phase 2 — Core features (~50 functions)**
-- [ ] SUM, AVERAGE, MIN, MAX, COUNT, IF, AND, OR
-- [ ] VLOOKUP, INDEX, MATCH, IFERROR, SUMIF, COUNTIF
-- [ ] LEFT, RIGHT, MID, CONCAT, TEXT, TRIM, UPPER, LOWER
-- [ ] TODAY, NOW, DATE, YEAR, MONTH, DAY
-- [ ] Named ranges, cross-sheet references
-- [ ] `SheetRangeIndex` interval tree 2D if benchmarks justify it
-- [ ] Floating objects R-tree
-- [ ] [ ] `compute_all_dirty` benchmarks on mobile hardware — if > 50ms P95, implement the asynchronous P4 yield (`ContinueDirtyCompute` / `ComputePending`, see §8 optional Phase 2)
+- [x] SUM, AVERAGE, MIN, MAX, COUNT, IF, AND, OR *(plus ABS, COUNTA, CONCATENATE, LEFT, RIGHT, MID, LEN, LOWER, UPPER, NOT, POWER, ROUND, SQRT, TRIM -- 22 implemented)*
+- [ ] VLOOKUP, INDEX, MATCH, IFERROR, SUMIF, COUNTIF *(Epic `E3`: complete to ~50)*
+- [ ] TEXT, CONCAT *(remaining string functions, Epic `E3`)*
+- [ ] TODAY, NOW, DATE, YEAR, MONTH, DAY *(Epic `E3`)*
+- [ ] Named ranges, cross-sheet references *(Epic `E3`)*
+- [ ] `SheetRangeIndex` interval tree 2D if benchmarks justify it *(deferred -- Phase 3)*
+- [ ] Floating objects R-tree *(deferred -- Phase 3)*
+- [ ] `compute_all_dirty` benchmarks on mobile hardware — if > 50ms P95, implement the asynchronous P4 yield (`ContinueDirtyCompute` / `ComputePending`, see §8 optional Phase 2) *(deferred -- Epic `E5`)*
 
 **Phase 3 — Optimization & Completion**
 - [ ] Advanced functions: XLOOKUP, LAMBDA, dynamic arrays

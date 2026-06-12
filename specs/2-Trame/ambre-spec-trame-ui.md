@@ -1035,12 +1035,15 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 
 ## 18. ROADMAP
 
+> Tracked as Stories of Epic **E3** (Trame MVP) in `specs/ambre-roadmap.md`. Items already delivered
+> under **E0**/**E1** (virtual scroll, inline cell editor) are checked below.
+
 **Phase 1 — MVP**
-- [ ] Virtual scrolling + grid rendering via `ambre_trame::render::draw_cells_on<WgpuSurface>()` (shared module §12)
+- [x] Virtual scrolling + grid rendering *(delivered under `ARCH P2`; the shared `ambre_trame::render` module refactor §12 is still pending -- Epic `E3`)*
 - [ ] UI-only layers on top of shared rendering: scroll offset, dirty opacity, error indicators
 - [ ] Column/row headers (via `ambre_trame::render::draw_col_headers_on<S>`)
 - [ ] Single-cell selection
-- [ ] Inline editor + formula bar
+- [x] Inline editor *(delivered under `CHROME P2` -- Trame WYSIWYG cell)*; [ ] formula bar
 - [ ] Sheet tabs
 - [ ] Keyboard navigation (arrows, Tab, Enter, Delete)
 - [ ] `on_logic_message` wiring: full `TrameEvent` dispatch (ViewportData, EditAck, FormulaError, SheetList, ValidationError, UndoApplied, ImportProgress, ExportComplete)

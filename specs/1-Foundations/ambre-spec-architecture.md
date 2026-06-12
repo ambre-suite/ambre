@@ -626,8 +626,9 @@ impl MasterSeed {
 
 ### ARCH P4 — Finalization & Optimization
 - [x] Full Trame formula engine (DAG, incremental recompute, cycle detection).
-- [ ] Local Loro persistence (IndexedDB) + offline durability: persist Loro state, compact offline outbound queue, flush + `RequestMissing` on reconnect; passive badge fed by `ConnectionStatus`.
-- [ ] Document Key rotation (15 steps), full CRUD/sharing/media. Hot path benchmarks. ZK audit (`cargo tree`).
+- [ ] Local Loro persistence (IndexedDB) + offline durability: persist Loro state, compact offline outbound queue, flush + `RequestMissing` on reconnect; passive badge fed by `ConnectionStatus`. *(deferred -- roadmap Epic `E5`.)*
+- [x] Document Key rotation (15 steps), full CRUD/sharing/media. *(done in `ambre-spec-sync.md §7 SYNC P3`.)*
+- [ ] Hot path benchmarks. ZK audit (`cargo tree`). *(deferred -- roadmap Epic `E5`.)*
 - [ ] Audit wasm-only warnings (`-A warnings` masks dead code on `ambre-app`/`ambre-canvas::host`/`ambre-sync`); confirm `CanvasRenderingContext2d`/`ImageData` are dead.
 
 ### ARCH P5 — Remaining Applications

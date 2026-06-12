@@ -699,6 +699,8 @@ pub enum TrameEvent {
 
 ## 10. ROADMAP
 
+> Tracked as Stories of Epic **E3** (Trame MVP) in `specs/ambre-roadmap.md`.
+
 **Phase 1 — MVP (with the engine)**
 - [ ] Shared filter: `TrameCommand::ApplyFilter` / `ClearFilter`, `filter_hidden_{sheet}` Loro
 - [ ] Simple sort: `TrameCommand::SortRange` (single column)
