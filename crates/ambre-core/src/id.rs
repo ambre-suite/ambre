@@ -96,13 +96,6 @@ define_id! {
     DocumentId
 }
 
-/// Well-known [`DocumentId`] for the IPC smoke-test / bootstrap document.
-///
-/// Used by the UI and Logic threads when no real document is loaded from the
-/// server. A fixed all-zeros UUID so that every thread agrees on the document
-/// identity without a server round-trip.
-pub const SMOKE_DOCUMENT_ID: DocumentId = DocumentId::from_bytes([0; 16]);
-
 define_id! {
     /// Identifies a user account.
     UserId
