@@ -114,6 +114,39 @@ pub async fn generate_presigned_download_url(
         .map_err(|e| AppError::S3(format!("presigned download URL: {e}")))
 }
 
+/// Fetches an object's raw bytes from S3 (used to replay a persisted delta).
+///
+/// Returns `Ok(None)` when the key does not exist yet (e.g. a freshly written
+/// delta still pending in Redis, not yet flushed), so the caller can fall back
+/// to the pending list rather than treating it as a hard error.
+pub async fn fetch_object(
+    s3: &S3Client,
+    bucket: &str,
+    key: &str,
+) -> Result<Option<Vec<u8>>, AppError> {
+    match s3.get_object().bucket(bucket).key(key).send().await {
+        Ok(out) => {
+            let data = out
+                .body
+                .collect()
+                .await
+                .map_err(|e| AppError::S3(format!("read object body: {e}")))?;
+            Ok(Some(data.into_bytes().to_vec()))
+        }
+        Err(e) => {
+            // A missing key is an expected miss (not-yet-flushed), not an error.
+            // Use `as_service_error` (non-consuming, returns Option) rather than
+            // `into_service_error`, which PANICS on a non-service error such as a
+            // network/dispatch failure.
+            if e.as_service_error().map(|se| se.is_no_such_key()).unwrap_or(false) {
+                Ok(None)
+            } else {
+                Err(AppError::S3(format!("get_object {key}: {e}")))
+            }
+        }
+    }
+}
+
 /// Background task that periodically flushes pending deltas from Redis to S3.
 ///
 /// Runs once per Axum instance. It scans `doc:*:pending` keys, spawns a
@@ -189,17 +222,17 @@ async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &str) {
 
         let seq = parsed["seq"].as_u64().unwrap_or(0);
 
-        let ciphertext_b64 = match parsed["ciphertext_b64"].as_str() {
+        let update_b64 = match parsed["update_b64"].as_str() {
             Some(c) => c,
             None => {
-                tracing::error!(s3_key, seq, "flush: missing ciphertext_b64");
+                tracing::error!(s3_key, seq, "flush: missing update_b64");
                 continue;
             }
         };
 
-        let ciphertext = {
+        let update_wire = {
             use base64::Engine;
-            match base64::engine::general_purpose::URL_SAFE.decode(ciphertext_b64) {
+            match base64::engine::general_purpose::URL_SAFE.decode(update_b64) {
                 Ok(data) => data,
                 Err(e) => {
                     tracing::error!(s3_key, seq, error = %e, "flush: base64 decode failed");
@@ -208,7 +241,7 @@ async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &str) {
             }
         };
 
-        let body = ByteStream::from(ciphertext);
+        let body = ByteStream::from(update_wire);
         match state
             .s3
             .put_object()

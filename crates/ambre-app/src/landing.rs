@@ -141,6 +141,9 @@ fn sign_in_panel(
                 let name = value.get();
                 let name = name.trim().to_owned();
                 if !name.is_empty() {
+                    // Remember the dev identity so a later refresh re-establishes
+                    // the session without `?user=` in the URL.
+                    crate::remember_dev_user(&name);
                     let _ = to_logic.try_send(LogicCommand::Rest {
                         id: RequestId::next(),
                         cmd: RestCommand::DevLogin { username: name },

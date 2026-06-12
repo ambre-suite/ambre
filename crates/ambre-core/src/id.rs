@@ -123,6 +123,22 @@ define_id! {
     SnapshotId
 }
 
+impl SnapshotId {
+    /// The genesis snapshot of a document: a deterministic id every client
+    /// agrees on without a server round-trip, reusing the document's own bytes.
+    ///
+    /// A brand-new document has no uploaded snapshot, yet its first deltas must
+    /// reference SOME parent. If each client invented a random base id, a peer
+    /// (or the same client after a refresh) opening the document would never
+    /// recognise that parent and would quarantine those deltas forever. Anchoring
+    /// the pre-first-snapshot base to `genesis(document_id)` makes the parent
+    /// universally known, so the earliest deltas are always releasable. Once a
+    /// real snapshot is uploaded, that snapshot's id supersedes the genesis.
+    pub const fn genesis(document_id: DocumentId) -> Self {
+        Self::from_bytes(*document_id.as_bytes())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

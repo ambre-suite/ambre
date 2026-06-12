@@ -53,22 +53,27 @@ pub async fn verify_clock_and_assign_seq(
 
 /// Appends a delta entry to the pending list for this document.
 ///
-/// The entry is a JSON blob `{ seq, s3_key, ciphertext_b64 }` that
-/// the global S3 flusher picks up every 15 seconds and uploads to S3.
+/// The entry is a JSON blob `{ seq, s3_key, update_b64 }` carrying the full
+/// sealed Update wire, which the global S3 flusher picks up every 15 seconds
+/// and uploads to S3. The same bytes are replayed verbatim on reconnect.
 pub async fn append_pending_delta(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
     seq: u64,
     s3_key: &str,
-    ciphertext: &[u8],
+    update_wire: &[u8],
 ) -> Result<(), AppError> {
     use base64::Engine;
     let key = format!("doc:{document_id}:pending");
-    let ciphertext_b64 = base64::engine::general_purpose::URL_SAFE.encode(ciphertext);
+    // Store the FULL sealed Update wire (ciphertext + nonce + public_data +
+    // commitment + signature), not just the ciphertext: a reconnecting or
+    // cross-device client replays these verbatim and needs every field to
+    // decrypt and verify. The flusher persists the same bytes to S3.
+    let update_b64 = base64::engine::general_purpose::URL_SAFE.encode(update_wire);
     let blob = serde_json::json!({
         "seq": seq,
         "s3_key": s3_key,
-        "ciphertext_b64": ciphertext_b64,
+        "update_b64": update_b64,
     })
     .to_string();
     redis
@@ -76,6 +81,35 @@ pub async fn append_pending_delta(
         .await
         .map_err(|e| AppError::Redis(format!("pending push failed: {e}")))?;
     Ok(())
+}
+
+/// Reads a still-pending delta's full Update wire from Redis by `seq`.
+///
+/// Deltas live in `doc:{id}:pending` until the background flusher uploads them
+/// to S3 and trims the list. A replay requested before the flush finds the
+/// delta here rather than in S3, so the two stores together cover every seq.
+pub async fn get_pending_delta(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+    seq: u64,
+) -> Result<Option<Vec<u8>>, AppError> {
+    use base64::Engine;
+    let key = format!("doc:{document_id}:pending");
+    let blobs: Vec<String> = redis
+        .lrange(&key, 0, -1)
+        .await
+        .map_err(|e| AppError::Redis(format!("pending lrange failed: {e}")))?;
+    for blob in &blobs {
+        let Ok(parsed) = serde_json::from_str::<serde_json::Value>(blob) else {
+            continue;
+        };
+        if parsed["seq"].as_u64() == Some(seq) {
+            if let Some(b64) = parsed["update_b64"].as_str() {
+                return Ok(base64::engine::general_purpose::URL_SAFE.decode(b64).ok());
+            }
+        }
+    }
+    Ok(None)
 }
 
 /// Retrieves a refresh-token record from Redis.

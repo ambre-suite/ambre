@@ -191,17 +191,29 @@ impl LogicState {
     /// Apply a remote CRDT delta to a document and forward viewport events.
     fn apply_remote(&mut self, document_id: DocumentId, payload: &[u8]) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
+            tracing::warn!(
+                "Logic: apply_remote for unopened doc {document_id} ({} bytes), dropping",
+                payload.len()
+            );
             return;
         };
-        let events: Vec<AppEvent> = match doc {
-            DocState::Trame(state) => state
-                .apply_remote(payload)
-                .into_iter()
-                .map(AppEvent::Trame)
-                .collect(),
+        let (events, snapshot): (Vec<AppEvent>, Option<Vec<u8>>) = match doc {
+            DocState::Trame(state) => {
+                let events = state.apply_remote(payload);
+                // Persist the merged state locally whenever the remote delta
+                // actually changed the document (it emitted display events), so a
+                // refresh restores it even for a client that only ever receives
+                // (never edits) -- otherwise such a client has no local snapshot
+                // and depends entirely on a fresh server replay.
+                let snapshot = (!events.is_empty()).then(|| state.export_snapshot());
+                (events.into_iter().map(AppEvent::Trame).collect(), snapshot)
+            }
         };
         for event in events {
             self.send_to_ui(UiEvent::Viewport { document_id, event });
+        }
+        if let Some(snapshot) = snapshot {
+            self.send_to_persist(document_id, snapshot);
         }
     }
 
@@ -247,8 +259,20 @@ impl LogicState {
             // forwarded to Sync.
             LogicCommand::RestoreLocalSnapshot {
                 document_id,
+                doc_type,
                 snapshot,
             } => {
+                // Order-independent: the boot-time local restore and the route
+                // poll's `OpenDocument` race on startup. If the restore arrives
+                // first, materialise the live document here so the snapshot is
+                // never dropped; a later `OpenDocument` finds the slot occupied
+                // and reuses it.
+                if let std::collections::hash_map::Entry::Vacant(slot) =
+                    self.docs.entry(document_id)
+                    && let Some(state) = DocState::new(doc_type)
+                {
+                    slot.insert(state);
+                }
                 let Some(DocState::Trame(state)) = self.docs.get_mut(&document_id) else {
                     tracing::warn!(
                         "Logic: no live document {document_id} to restore snapshot into"
@@ -655,6 +679,25 @@ mod tests {
             sync_rx.try_recv(),
             Ok(SyncCommand::CloseDocument { .. })
         ));
+    }
+
+    #[test]
+    fn restore_local_snapshot_materialises_doc_when_open_lost_the_race() {
+        // The boot-time local restore can arrive before the route poll's
+        // OpenDocument. The handler must materialise the live document itself so
+        // the snapshot is applied instead of dropped.
+        let (mut state, _ui, _sync) = harness();
+        let doc_id = DocumentId::new();
+        // An empty Trame snapshot is a valid Loro export; import must not panic
+        // and the doc must exist afterwards.
+        let snapshot = TrameState::new().export_snapshot();
+        assert!(!state.docs.contains_key(&doc_id));
+        state.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
+            document_id: doc_id,
+            doc_type: DocType::Trame,
+            snapshot,
+        });
+        assert!(state.docs.contains_key(&doc_id));
     }
 
     #[test]

@@ -239,13 +239,15 @@ impl TrameState {
         delta
     }
 
-    /// Apply a remote CRDT delta / snapshot and return display events.
+    /// Apply a remote CRDT delta and return display events.
     ///
-    /// `payload` is the raw (decrypted) Loro binary delta forwarded by the Sync
-    /// thread. Stubbed until CRDT editing is wired.
-    pub fn apply_remote(&mut self, _payload: &[u8]) -> Vec<TrameEvent> {
-        // TODO: import the Loro delta and recompute the affected viewport.
-        vec![]
+    /// `payload` is the raw (decrypted) Loro binary update forwarded by the Sync
+    /// thread (a peer's edit, or our own history replayed on open). Loro's
+    /// `import` ingests both incremental updates and full snapshots, so the same
+    /// reseed path as [`import_snapshot`](Self::import_snapshot) applies: merge
+    /// the ops, reseed the formula engine, and tell the UI to re-fetch.
+    pub fn apply_remote(&mut self, payload: &[u8]) -> Vec<TrameEvent> {
+        self.import_and_reseed(payload, "apply_remote")
     }
 
     /// Apply a remote ephemeral (presence) payload and return presence events.
@@ -268,15 +270,33 @@ impl TrameState {
     /// cells evaluate instead of showing their literal source). Returns no
     /// display events: the next viewport request re-renders the restored grid.
     pub fn import_snapshot(&mut self, payload: &[u8]) -> Vec<TrameEvent> {
+        self.import_and_reseed(payload, "import_snapshot")
+    }
+
+    /// Shared import path for both a local snapshot restore and a remote delta:
+    /// merge the Loro bytes, advance the export cursor past the imported ops (so
+    /// they are not re-broadcast), reseed the formula engine from the resulting
+    /// cell values, and emit a `DataReset` so the UI re-fetches its viewport
+    /// (the original request may predate this import and show an empty grid).
+    fn import_and_reseed(&mut self, payload: &[u8], origin: &str) -> Vec<TrameEvent> {
         if payload.is_empty() {
             return Vec::new();
         }
         if let Err(e) = self.doc.import(payload) {
-            tracing::warn!("[Logic] import_snapshot failed: {e:?}");
+            tracing::warn!("[Logic] {origin} import failed: {e:?}");
             return Vec::new();
         }
+        let cell_count = match self.doc.get_map(CELLS_MAP).get_value() {
+            LoroValue::Map(cells) => cells.len(),
+            _ => 0,
+        };
+        tracing::info!("[Logic] {origin} imported {} bytes, {cell_count} cell(s) now present", payload.len());
+        // Advance the cursor to include the imported ops: we did not author them
+        // (or already persisted them), so the next `flush_delta` must not export
+        // them back. Local edits are flushed each frame before remote applies, so
+        // there are no pending local-only ops to swallow here.
         self.last_exported_vv = self.doc.oplog_vv();
-        // Reseed the formula engine from the restored cell values.
+        // Reseed the formula engine from the resulting cell values.
         if let LoroValue::Map(cells) = self.doc.get_map(CELLS_MAP).get_value() {
             for (key, value) in cells.iter() {
                 if let (Some((row, col)), LoroValue::String(text)) = (parse_cell_key(key), value) {
@@ -285,8 +305,6 @@ impl TrameState {
             }
         }
         self.engine.compute_all_dirty();
-        // Tell the UI to re-fetch its viewport: its initial request predated this
-        // restore and returned an empty grid.
         vec![TrameEvent::DataReset]
     }
 }
