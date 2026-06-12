@@ -433,7 +433,7 @@ The rendering layer consists of pure drawing primitives. ZK audit:
 - [ ] `push_transform` / `pop_transform` on `WgpuSurface` (Prose margins, Toile pan/zoom)
 - [ ] `fill_path` / `stroke_path` on `WgpuSurface` via lyon (Toile, Trame charts)
 - [ ] Lazy loading CJK/Arabic/Devanagari fonts (trigger on missing codepoint)
-- [ ] `ambreFatal` **terminal screen** (panic → canvas terminal render) wired in `host`/`ambre-app`. *(The `panic::set_hook` JS hook itself is done -- see `ambre-spec-architecture.md §7 ARCH P1`; only the canvas-side terminal screen remains. Roadmap Epic `E2`.)*
+- [x] `ambreFatal` **terminal screen** (panic → canvas terminal render) wired in `host`/`ambre-app`. *(The `panic::set_hook` JS hook itself is done -- see `ambre-spec-architecture.md §7 ARCH P1`; only the canvas-side terminal screen remains. Roadmap Epic `E2`.)*
 
 ### CANVAS P2 — Optimization & Polish
 
@@ -444,3 +444,11 @@ The rendering layer consists of pure drawing primitives. ZK audit:
 - [ ] `GlyphAtlas`: atlas size tuning and LRU policy based on measured memory profiles
 - [ ] Internationalization of static labels, RTL Toolbar/Breadcrumb support
 - [ ] Non-regression benchmarks: frame budget, TextCache cold cache, icon atlas load
+- [ ] **DEBT -- headless GPU rendering for visual tests.** Headless Chromium
+      (SwiftShader/ANGLE) does not composite our offscreen ping-pong Content
+      layer: the canvas reads back blank/white, so screenshot-driven verification
+      of any canvas content (grid, and the `ambreFatal` terminal screen) is
+      impossible in CI/agent environments. The render path is provable only by
+      tracing/logs there (confirmed for the fatal screen). Investigate a real-GPU
+      runner, a software path that survives the offscreen blit, or a `DrawOp`
+      golden-image harness off the `RecordingSurface` as the visual oracle.

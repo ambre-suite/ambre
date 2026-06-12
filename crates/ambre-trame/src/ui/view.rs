@@ -279,6 +279,10 @@ impl TrameView {
         }
         self.fatal = true;
         tracing::error!("Trame: fatal — {reason}; the UI is now inert");
+        // Latch the canvas terminal screen. A Sync-worker death is a SEPARATE
+        // wasm instance, so it reaches us only as this channel disconnect; the
+        // panic-hook latch never fires for it. Forward it to the host here.
+        ambre_canvas::signal_fatal(reason);
     }
 
     // -- Edit session ----------------------------------------------------------

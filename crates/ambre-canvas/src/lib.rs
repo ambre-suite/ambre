@@ -21,6 +21,9 @@ pub mod text_cache;
 // -- Per-app UI contract (DocView trait, GPU-agnostic) -----------------------
 pub mod view;
 
+// -- Process-global fatal latch (canvas terminal screen on unrecoverable error)
+pub mod fatal;
+
 // -- UI Thread host plumbing (GPU bootstrap + frame driver, wasm32-only) ------
 #[cfg(target_arch = "wasm32")]
 pub mod host;
@@ -42,6 +45,7 @@ pub mod request_registry;
 pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurface};
 pub use text_cache::TextCache;
 pub use view::{DocView, FrameStats, InputEvent, RepaintPlan};
+pub use fatal::{fatal_message, signal_fatal};
 #[cfg(target_arch = "wasm32")]
 pub use host::{
     DocSwitcher, FrameHost, GpuState, RafControl, bootstrap_gpu, run, run_with, start_raf_loop,

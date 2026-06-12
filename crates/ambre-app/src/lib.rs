@@ -117,10 +117,15 @@ pub fn main() {
     );
     std::panic::set_hook(Box::new(|info| {
         console_error_panic_hook::hook(info);
+        let msg = info.to_string();
+        // Latch the canvas fatal screen. Works from any thread sharing this
+        // instance's memory (UI/Logic): a Logic-thread panic has no `window`,
+        // so the JS overlay below cannot fire, but the UI thread's rAF loop is
+        // still alive and will paint the terminal screen from this latch.
+        ambre_canvas::signal_fatal(&msg);
         // Notify the page that the WASM application has suffered an
         // unrecoverable panic (panic=abort, so no graceful shutdown).
         if let Some(window) = web_sys::window() {
-            let msg = info.to_string();
             if let Ok(f) = js_sys::Reflect::get(&window, &"ambreFatal".into()) {
                 if let Ok(f) = f.dyn_into::<js_sys::Function>() {
                     let _ = f.call1(&window, &msg.into());
