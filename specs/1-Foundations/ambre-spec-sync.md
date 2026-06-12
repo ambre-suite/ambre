@@ -505,6 +505,36 @@ onopen ──► resubscribe_all(): for each server-created doc, ws_send(Subscri
 - **Double Compaction**: Redis lock `SET NX TTL 30s` server-side + `compaction_lock` client-side.
 - **Plaintext presence**: Ephemeral payloads (cursor, selection, name) are **encrypted** with the Document Key before sending. The server only sees `document_id`, `pub_key`, `counter`.
 
+### Document Sharing — Key Wrapping
+
+The DocumentKey is shared via **static X25519 ECDH**: the wrapper seals it under a
+KEK derived from `ECDH(wrapper_secret, recipient_pubkey)`; the recipient recovers
+it with `ECDH(recipient_secret, wrapper_pubkey)`. The shared secret is symmetric,
+so **the recipient must unwrap against the WRAPPER's exchange public key — never
+its own.** Using `entry.exchange_pub_key` (the recipient's own key) silently
+derives the wrong secret.
+
+- **Who the wrapper is** is recorded server-side in `document_members.invited_by`:
+  the inviter for a shared member, or the member themselves for the owner's
+  self-wrap at document creation (so a single-member document degenerates to a
+  self-DH that happens to work even if one mistakenly used the own key).
+- The members endpoint returns **`wrapper_exchange_pub_key`** (the `invited_by`
+  user's exchange key, via a `LEFT JOIN`). `unwrap_document_key` and the
+  `KeyRotationRequired` handler both unwrap against it (falling back to the
+  member's own key only for legacy rows without `invited_by`).
+- **Failure handling:** a failed unwrap MUST be treated as an error — never
+  fall back to a freshly generated DocumentKey for a server-existing document.
+  A bogus key makes the client encrypt and push **undecryptable** updates,
+  permanently poisoning the shared history (every peer hits a commitment-tag
+  mismatch). Surface a `SyncWarning` and do not subscribe/emit instead.
+
+**`WsServerMsg::DocumentShared`.** On a fresh invite the invitee is not yet a
+subscriber of `doc:{document_id}`, so the server pushes `DocumentShared
+{ document_id, doc_type }` on the per-user channel `user:{invitee_id}` (see
+server spec sec.7). The Sync thread forwards it as `LogicEvent::DocumentShared`
+→ `UiEvent::DocumentShared`; the UI refreshes its document list and notifies the
+user, with no polling and no manual reload.
+
 ### Document Key Rotation — Full Flow
 
 Two triggers: (A) the initiator client revokes a member via `SyncCommand::RevokeFromDocument`, (B) other clients receive `WsServerMsg::KeyRotationRequired` via WebSocket.
@@ -523,7 +553,9 @@ Rotation is **entirely orchestrated by the Sync thread** — the Logic thread do
 5. For each remaining member:
    X25519(own_exchange_key, member.exchange_pubkey) → encrypts new key
 6. POST /api/documents/{id}/rotate-key with encrypted_keys_per_member
-   → server atomically replaces all doc_key_enc (Postgres transaction)
+   → server atomically replaces all doc_key_enc AND sets invited_by = rotator
+     (Postgres transaction) — the rotator is the new wrapper of record, so a
+     later unwrap resolves to the rotator's exchange key, not the stale inviter's
    → server broadcasts WsServerMsg::KeyRotationRequired at THIS moment
      (new keys are in the database — no race condition)
 7. Completes messages being encrypted with the old key
@@ -536,8 +568,8 @@ Rotation is **entirely orchestrated by the Sync thread** — the Logic thread do
     → snapshot encrypted with the new key → seals post-revocation state
 
 [Other clients — Sync thread (receiving WsServerMsg::KeyRotationRequired)]
-12. GET /api/documents/{id}/members → fetches new doc_key_enc
-13. X25519 ECDH → decrypts new DocumentKey
+12. GET /api/documents/{id}/members → fetches new doc_key_enc + wrapper_exchange_pub_key
+13. X25519 ECDH against the wrapper's (rotator's) exchange key → decrypts new DocumentKey
 14. Swaps document_key, old → old_keys, zeroize
 15. Sends LogicEvent::MemberRevoked { document_id, revoked_user_id } to the Logic thread
     (Logic thread is informed of the departure, can update UI)
@@ -764,6 +796,8 @@ All tests compile in native mode (`#[cfg(not(target_arch = "wasm32"))]`) with `t
 
 - [x] Full `InviteToDocument` flow (search user → fetch pubkeys → ECDH wrap DocumentKey → POST /share)
 - [x] Full `RevokeFromDocument` flow (DELETE /share → key rotation → POST /rotate-key → 15 steps, see §3)
+- [x] ECDH unwrap against the **wrapper's** exchange key (`wrapper_exchange_pub_key`, from `invited_by`) — invite + rotation paths; rotation updates `invited_by` to the rotator (see §3 "Document Sharing — Key Wrapping")
+- [x] `WsServerMsg::DocumentShared` on `user:{id}` → `LogicEvent`/`UiEvent::DocumentShared` → live document-list refresh + notification (no reload)
 - [x] LRU `old_keys` cache, 10 entries per document
 - [x] Ephemeral anti-replay (`ephemeral_remote_counters`)
 - [x] Media flow: `UploadMedia` (encryption + presigned URL + S3 PUT + confirmation POST), `DownloadMedia` (S3 GET + decryption)

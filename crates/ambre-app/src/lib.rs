@@ -36,8 +36,8 @@ use std::rc::Rc;
 
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
-    AppCommand, AppEvent, DocumentId, LogicCommand, LogicEvent, RequestId, RestCommand,
-    SyncCommand, TrameCommand, TrameEvent, UiEvent,
+    AppCommand, AppEvent, DocumentId, LogicCommand, LogicEvent, MemberInfo, RequestId, RestCommand,
+    Role, SyncCommand, TrameCommand, TrameEvent, UiEvent,
 };
 use ambre_canvas::DocSwitcher;
 use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
@@ -94,6 +94,9 @@ struct Wiring {
     username: RwSignal<Option<String>>,
     /// The user's documents (landing list).
     docs: RwSignal<Vec<DocItem>>,
+    /// Members of the active document (share dialog). Populated by the per-frame
+    /// relay on `DocumentMembers`; empty until the dialog requests the list.
+    members: RwSignal<Vec<MemberInfo>>,
     /// Whether the server enables dev login; `None` until `/api/auth/config` answers.
     dev_mode: RwSignal<Option<bool>>,
     /// The currently routed document, or `None` on the landing route. Read by
@@ -237,6 +240,7 @@ pub fn main() {
     let toasts_slot: Rc<RefCell<Option<Toasts>>> = Rc::new(RefCell::new(None));
     let user_slot: Rc<RefCell<Option<RwSignal<Option<String>>>>> = Rc::new(RefCell::new(None));
     let docs_slot: Rc<RefCell<Option<RwSignal<Vec<DocItem>>>>> = Rc::new(RefCell::new(None));
+    let members_slot: Rc<RefCell<Option<RwSignal<Vec<MemberInfo>>>>> = Rc::new(RefCell::new(None));
     let devmode_slot: Rc<RefCell<Option<RwSignal<Option<bool>>>>> = Rc::new(RefCell::new(None));
     let current_doc_slot: Rc<RefCell<Option<RwSignal<Option<DocumentId>>>>> =
         Rc::new(RefCell::new(None));
@@ -251,6 +255,7 @@ pub fn main() {
         Rc::clone(&toasts_slot),
         Rc::clone(&user_slot),
         Rc::clone(&docs_slot),
+        Rc::clone(&members_slot),
         Rc::clone(&devmode_slot),
         Rc::clone(&current_doc_slot),
     );
@@ -260,6 +265,7 @@ pub fn main() {
     let toasts = toasts_slot.borrow().expect("Toasts created during mount");
     let username = user_slot.borrow().expect("user signal created during mount");
     let docs = docs_slot.borrow().expect("docs signal created during mount");
+    let members = members_slot.borrow().expect("members signal created during mount");
     let dev_mode = devmode_slot.borrow().expect("dev_mode signal created during mount");
     let current_doc = current_doc_slot
         .borrow()
@@ -420,6 +426,55 @@ pub fn main() {
                             .collect(),
                     );
                 }
+                // Share dialog: the current member list landed -> render it.
+                UiEvent::Rest {
+                    evt: ambre_bus::RestEvent::DocumentMembers { members: list, .. },
+                    ..
+                } => members.set(list.clone()),
+                // An invite succeeded: confirm and refresh the member list.
+                UiEvent::Rest {
+                    evt: ambre_bus::RestEvent::InviteSent { document_id, display_name, .. },
+                    ..
+                } => {
+                    toasts.success(format!("Invited {display_name}"));
+                    let _ = relay_tx.try_send(LogicCommand::Rest {
+                        id: RequestId::next(),
+                        cmd: RestCommand::ListDocumentMembers { document_id: *document_id },
+                    });
+                }
+                // Revocation done (key rotation complete): confirm and refresh.
+                UiEvent::Rest {
+                    evt: ambre_bus::RestEvent::RevocationComplete { document_id },
+                    ..
+                } => {
+                    toasts.success("Member revoked");
+                    let _ = relay_tx.try_send(LogicCommand::Rest {
+                        id: RequestId::next(),
+                        cmd: RestCommand::ListDocumentMembers { document_id: *document_id },
+                    });
+                }
+                // A role change took effect: refresh the member list.
+                UiEvent::Rest {
+                    evt: ambre_bus::RestEvent::MemberRoleUpdated { document_id, .. },
+                    ..
+                } => {
+                    let _ = relay_tx.try_send(LogicCommand::Rest {
+                        id: RequestId::next(),
+                        cmd: RestCommand::ListDocumentMembers { document_id: *document_id },
+                    });
+                }
+                // A document was shared with us: refresh the landing list so it
+                // appears without a manual reload, and notify the user.
+                UiEvent::DocumentShared { .. } => {
+                    toasts.info("A document was shared with you");
+                    let _ = relay_tx.try_send(LogicCommand::Rest {
+                        id: RequestId::next(),
+                        cmd: RestCommand::ListDocuments,
+                    });
+                }
+                // Relayed service failures (e.g. unknown invitee) surface as a
+                // warning toast so the share action gives feedback.
+                UiEvent::ApiError { message, .. } => toasts.warning(message.clone()),
                 _ => {}
             }
             // Content (and everything else) still flows to the view unchanged.
@@ -476,6 +531,7 @@ fn mount_shell(
     toasts_slot: Rc<RefCell<Option<Toasts>>>,
     user_slot: Rc<RefCell<Option<RwSignal<Option<String>>>>>,
     docs_slot: Rc<RefCell<Option<RwSignal<Vec<DocItem>>>>>,
+    members_slot: Rc<RefCell<Option<RwSignal<Vec<MemberInfo>>>>>,
     devmode_slot: Rc<RefCell<Option<RwSignal<Option<bool>>>>>,
     current_doc_slot: Rc<RefCell<Option<RwSignal<Option<DocumentId>>>>>,
 ) {
@@ -495,6 +551,8 @@ fn mount_shell(
         *user_slot.borrow_mut() = Some(username);
         let docs = RwSignal::new(Vec::<DocItem>::new());
         *docs_slot.borrow_mut() = Some(docs);
+        let members = RwSignal::new(Vec::<MemberInfo>::new());
+        *members_slot.borrow_mut() = Some(members);
         let dev_mode = RwSignal::new(None::<bool>);
         *devmode_slot.borrow_mut() = Some(dev_mode);
         let current_doc = RwSignal::new(boot_doc);
@@ -513,6 +571,7 @@ fn mount_shell(
             toasts,
             username,
             docs,
+            members,
             dev_mode,
             current_doc,
         });
@@ -542,6 +601,7 @@ fn AppRoot() -> impl IntoView {
         toasts,
         username,
         docs,
+        members,
         dev_mode,
         current_doc,
     } = use_context::<Wiring>().expect("Wiring provided by mount_shell");
@@ -564,6 +624,32 @@ fn AppRoot() -> impl IntoView {
         let raf = raf.clone();
         move |()| raf.resume()
     });
+
+    // Share modal: same rAF suspend/resume. Opening it requests the current
+    // member list so the dialog renders it; the relay fills `members` on the
+    // `DocumentMembers` response.
+    let share_open = RwSignal::new(false);
+    let share_on_open = Callback::new({
+        let raf = raf.clone();
+        let to_logic = to_logic.clone();
+        move |()| {
+            raf.pause();
+            if let Some(document_id) = current_doc.get_untracked() {
+                let _ = to_logic.try_send(LogicCommand::Rest {
+                    id: RequestId::next(),
+                    cmd: RestCommand::ListDocumentMembers { document_id },
+                });
+            }
+        }
+    });
+    let share_on_close = Callback::new({
+        let raf = raf.clone();
+        move |()| raf.resume()
+    });
+    // Invite form state: the typed invitee (email, or a bare username in dev
+    // mode) and the role to grant.
+    let invitee_input = RwSignal::new(String::new());
+    let invite_role = RwSignal::new(Role::Editor);
 
     // Canvas right-click -> context menu (the launcher owns the listener since
     // the canvas is created by the AppShell).
@@ -596,6 +682,11 @@ fn AppRoot() -> impl IntoView {
     // the sender out (which would make the children `FnOnce`).
     let tx_toolbar = to_logic.clone();
     let tx_selbar = to_logic.clone();
+    let tx_invite = to_logic.clone();
+    // The member-row handlers live inside a `<For>` whose item template is a
+    // re-runnable `Fn`; a plain `Sender` clone would be moved into it (making it
+    // `FnOnce`). A `StoredValue` is `Copy`, so each row reads its own clone.
+    let tx_member = StoredValue::new(to_logic.clone());
     let landing_signals = LandingSignals { docs, username, dev_mode };
     let landing_tx = to_logic.clone();
 
@@ -636,6 +727,18 @@ fn AppRoot() -> impl IntoView {
                         view! { <Icon icon=icon /> }
                     }}
                 </button>
+                <Show when=move || current_doc.get().is_some()>
+                    <button
+                        class="icon"
+                        title="Share"
+                        aria-label="Share document"
+                        aria-haspopup="dialog"
+                        aria-expanded=move || share_open.get().then_some("true")
+                        on:click=move |_| share_open.set(true)
+                    >
+                        <Icon icon=icondata::AiShareAltOutlined />
+                    </button>
+                </Show>
                 <button
                     class="icon"
                     title="About"
@@ -690,6 +793,158 @@ fn AppRoot() -> impl IntoView {
                 <p>"Collaborative office suite, 100% Rust, E2EE encrypted."</p>
                 <div class="ambre-dialog-actions">
                     <button on:click=move |_| about_open.set(false)>"Close"</button>
+                </div>
+            </div>
+        </Dialog>
+
+        <Dialog
+            open=share_open
+            on_open=share_on_open
+            on_close=share_on_close
+            class="ambre-share"
+        >
+            <div class="ambre-share-panel">
+                <h2>"Share document"</h2>
+
+                // Current members.
+                <ul class="ambre-share-members">
+                    <For
+                        each=move || members.get()
+                        key=|m| m.user_id
+                        let:member
+                    >
+                        {
+                            let tx_role = tx_member.get_value();
+                            let tx_revoke = tx_member.get_value();
+                            let uid = member.user_id;
+                            let cur_role = member.role;
+                            view! {
+                                <li>
+                                    <span class="ambre-share-member-name">
+                                        {member.display_name.clone()}
+                                    </span>
+                                    <span class="ambre-share-member-email">
+                                        {member.email.clone()}
+                                    </span>
+                                    <select
+                                        prop:value=cur_role.as_str()
+                                        on:change={
+                                            move |ev| {
+                                                let Some(document_id) = current_doc.get_untracked() else {
+                                                    return;
+                                                };
+                                                if let Ok(role) = event_target_value(&ev).parse::<Role>() {
+                                                    let _ = tx_role.try_send(LogicCommand::Rest {
+                                                        id: RequestId::next(),
+                                                        cmd: RestCommand::UpdateDocumentMemberRole {
+                                                            document_id,
+                                                            user_id: uid,
+                                                            role,
+                                                        },
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    >
+                                        <option value="owner" selected=cur_role == Role::Owner>"Owner"</option>
+                                        <option value="editor" selected=cur_role == Role::Editor>"Editor"</option>
+                                        <option value="viewer" selected=cur_role == Role::Viewer>"Viewer"</option>
+                                    </select>
+                                    <button
+                                        class="ambre-share-revoke"
+                                        title="Revoke access"
+                                        aria-label="Revoke access"
+                                        on:click={
+                                            move |_| {
+                                                let Some(document_id) = current_doc.get_untracked() else {
+                                                    return;
+                                                };
+                                                let _ = tx_revoke.try_send(LogicCommand::Rest {
+                                                    id: RequestId::next(),
+                                                    cmd: RestCommand::RevokeFromDocument {
+                                                        document_id,
+                                                        user_id: uid,
+                                                    },
+                                                });
+                                            }
+                                        }
+                                    >
+                                        "Revoke"
+                                    </button>
+                                </li>
+                            }
+                        }
+                    </For>
+                </ul>
+
+                // Invite a new collaborator.
+                <form
+                    class="ambre-share-invite"
+                    on:submit={
+                        let tx = tx_invite.clone();
+                        move |ev| {
+                            ev.prevent_default();
+                            let Some(document_id) = current_doc.get_untracked() else {
+                                return;
+                            };
+                            let raw = invitee_input.get_untracked();
+                            let raw = raw.trim();
+                            if raw.is_empty() {
+                                return;
+                            }
+                            // Dev convention: a bare username maps to the
+                            // deterministic `<username>@dev.local` email the dev
+                            // login assigns (server resolves invitees by email).
+                            let invitee_email = if dev_mode.get_untracked() == Some(true)
+                                && !raw.contains('@')
+                            {
+                                format!("{raw}@dev.local")
+                            } else {
+                                raw.to_owned()
+                            };
+                            let _ = tx.try_send(LogicCommand::Rest {
+                                id: RequestId::next(),
+                                cmd: RestCommand::InviteToDocument {
+                                    document_id,
+                                    invitee_email,
+                                    role: invite_role.get_untracked(),
+                                },
+                            });
+                            invitee_input.set(String::new());
+                        }
+                    }
+                >
+                    <input
+                        r#type="text"
+                        class="ambre-share-input"
+                        aria-label="Invitee"
+                        placeholder=move || {
+                            if dev_mode.get() == Some(true) {
+                                "username or email"
+                            } else {
+                                "user@example.com"
+                            }
+                        }
+                        prop:value=move || invitee_input.get()
+                        on:input=move |ev| invitee_input.set(event_target_value(&ev))
+                    />
+                    <select
+                        aria-label="Role"
+                        on:change=move |ev| {
+                            if let Ok(role) = event_target_value(&ev).parse::<Role>() {
+                                invite_role.set(role);
+                            }
+                        }
+                    >
+                        <option value="editor" selected=true>"Editor"</option>
+                        <option value="viewer">"Viewer"</option>
+                        <option value="owner">"Owner"</option>
+                    </select>
+                    <button r#type="submit">"Invite"</button>
+                </form>
+
+                <div class="ambre-dialog-actions">
+                    <button on:click=move |_| share_open.set(false)>"Close"</button>
                 </div>
             </div>
         </Dialog>

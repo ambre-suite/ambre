@@ -10,6 +10,19 @@ use crate::state::AppState;
 fn parse_doc_id(s: &str) -> Result<ambre_core::DocumentId, AppError> { ambre_core::Uuid::parse_str(s).map(ambre_core::DocumentId::from_uuid).map_err(|_| AppError::NotFound{resource:"document"}) }
 fn parse_user_id(s: &str) -> Result<ambre_core::UserId, AppError> { ambre_core::Uuid::parse_str(s).map(ambre_core::UserId::from_uuid).map_err(|_| AppError::NotFound{resource:"user"}) }
 
+/// Maps the stored lowercase `doc_type` string to the typed enum the WS protocol
+/// carries. Returns `None` for an unknown value (the share still succeeds; only
+/// the live push is skipped).
+fn doc_type_from_str(s: &str) -> Option<ambre_core::DocType> {
+    match s {
+        "prose" => Some(ambre_core::DocType::Prose),
+        "trame" => Some(ambre_core::DocType::Trame),
+        "toile" => Some(ambre_core::DocType::Toile),
+        "murmure" => Some(ambre_core::DocType::Murmure),
+        _ => None,
+    }
+}
+
 /// Request to add a user to a document. `doc_key_enc` is the DocumentKey
 /// encrypted with the invitee's X25519 exchange key.
 #[derive(serde::Deserialize)]
@@ -36,6 +49,18 @@ pub async fn invite_to_document(
     db::add_document_member(&state.db, &doc_id, &invitee_id, &req.role, &doc_key_enc, &s.user_id).await?;
     // Log the resolved invitee_id (UUID), never the email passed in the request.
     tracing::info!(document_id = %doc_id, invitee = %invitee_id, role = %req.role, by = %s.user_id, "member invited");
+
+    // Live push: tell the invitee's connections a document was shared so their
+    // list refreshes without a manual reload. Best-effort -- the membership row
+    // is the source of truth; a missed push self-heals on the next list fetch.
+    if let Some(doc_type) = db::get_document(&state.db, &doc_id).await?
+        .and_then(|d| doc_type_from_str(&d.doc_type))
+    {
+        let msg = ambre_protocol::ws::encode_server_msg(
+            &ambre_protocol::ws::WsServerMsg::DocumentShared { document_id: doc_id, doc_type },
+        );
+        let _ = crate::redis_ops::user_broadcast(&state.redis, &invitee_id, &msg).await;
+    }
     Ok(axum::Json(InviteResponse { user_id: invitee_id.to_string(), display_name: invitee.display_name }))
 }
 
@@ -80,7 +105,7 @@ pub async fn rotate_document_key(
         let enc = base64::engine::general_purpose::URL_SAFE.decode(&e.doc_key_enc).map_err(|er| AppError::Conflict{detail:er.to_string()})?;
         keys.push((uid, enc));
     }
-    db::rotate_document_keys(&state.db, &doc_id, &keys).await?;
+    db::rotate_document_keys(&state.db, &doc_id, &s.user_id, &keys).await?;
     tracing::info!(document_id = %doc_id, by = %s.user_id, members = keys.len(), "document key rotated");
     let msg = ambre_protocol::ws::encode_server_msg(&ambre_protocol::ws::WsServerMsg::KeyRotationRequired { document_id: doc_id, revoked_user_id: s.user_id });
     let _ = crate::redis_ops::doc_broadcast(&state.redis, &doc_id, &msg).await;

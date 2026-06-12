@@ -18,7 +18,7 @@
 //!   channel/meeting push, `AuthError`, `ApiError`, `FatalError`): unsolicited.
 
 use crate::sync_warning::SyncWarningCode;
-use crate::{ChannelId, DocumentId, MeetingId, RequestId, RestEvent, UserId};
+use crate::{ChannelId, DocType, DocumentId, MeetingId, RequestId, RestEvent, UserId};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // UiEvent — Logic thread → UI Thread
@@ -69,6 +69,14 @@ pub enum UiEvent {
     MemberRevoked {
         document_id: DocumentId,
         revoked_user_id: UserId,
+    },
+
+    /// A document was just shared with this user (server-initiated). The UI
+    /// refreshes its document list so the new document appears without a reload,
+    /// and notifies the user.
+    DocumentShared {
+        document_id: DocumentId,
+        doc_type: DocType,
     },
 
     // ── Channels (Murmure) — real-time push ───────────────────────────────────
