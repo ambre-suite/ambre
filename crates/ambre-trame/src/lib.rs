@@ -20,6 +20,12 @@ pub mod formula;
 pub mod logic;
 pub mod ui;
 
+/// Trame-specific chrome (format toolbar, selection toolbar, command wiring),
+/// built on the `ambre-chrome` toolkit. Wasm-only (leptos CSR + DOM): the
+/// launcher mounts it; host logic tests never compile it.
+#[cfg(target_arch = "wasm32")]
+pub mod chrome;
+
 pub use ambre_bus::{DisplayCell, TrameCommand, TrameEvent};
 pub use logic::{TrameOutcome, TrameState};
 

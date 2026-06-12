@@ -36,15 +36,18 @@ use std::rc::Rc;
 
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
-    AppCommand, AppEvent, DocumentId, LogicCommand, LogicEvent, MemberInfo, RequestId, RestCommand,
-    Role, SyncCommand, TrameCommand, TrameEvent, UiEvent,
+    DocumentId, LogicCommand, LogicEvent, MemberInfo, RequestId, RestCommand, Role, SyncCommand,
+    UiEvent,
 };
 use ambre_canvas::DocSwitcher;
-use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
+use ambre_chrome::commands::{CommandId, Keymap};
 use ambre_chrome::{
-    AppShell, CommandStates, ContextMenu, Dialog, Header, Kbd, MenuEntry, StatusBar, ToastHost,
-    Toasts, Toolbar,
+    AppShell, CommandStates, ContextMenu, Dialog, Header, StatusBar, ToastHost, Toasts, Toolbar,
 };
+// Trame-specific chrome (command wiring + toolbar / selection-toolbar markup +
+// status label). The launcher stays app-agnostic and reaches into this module
+// for every Trame concern -- it names no command, button, or event variant itself.
+use ambre_trame::chrome as trame_chrome;
 use ambre_trame::ui::TrameView;
 use leptos::prelude::*;
 use leptos_icons::Icon;
@@ -57,11 +60,6 @@ mod landing;
 mod route;
 
 use landing::{DocItem, LandingSignals};
-
-/// The Trame "Bold"/"Italic" commands. UI affordance ids (ambre-commands),
-/// distinct from the `TrameCommand` IPC payloads they dispatch to.
-const BOLD: CommandId = CommandId("trame.format.bold");
-const ITALIC: CommandId = CommandId("trame.format.italic");
 
 /// Capacity of every inter-thread channel.
 ///
@@ -83,9 +81,9 @@ struct Wiring {
     to_logic: flume::Sender<LogicCommand>,
     raf: ambre_canvas::RafControl,
     theme_ctl: ambre_canvas::ThemeControl,
-    /// Bold/Italic toggle signals (the store's reactive view, chrome side).
-    bold: RwSignal<bool>,
-    italic: RwSignal<bool>,
+    /// The active app's command toggle signals (the store's reactive view,
+    /// chrome side). Opaque to the launcher -- the app's chrome reads its own.
+    toggles: trame_chrome::Toggles,
     /// Floating selection-toolbar anchor (canvas-relative CSS px).
     anchor_pos: RwSignal<Option<(f64, f64)>>,
     /// Transient notifications (ARIA live region).
@@ -157,10 +155,10 @@ pub fn main() {
     // dispatcher has mirrored command-state events into the chrome.
     let (view_tx, view_rx) = flume::bounded::<UiEvent>(CHANNEL_CAPACITY);
 
-    // Command keymap (the keyboard view of the registry).
+    // Command keymap (the keyboard view of the registry). The active app binds
+    // its own chords -- the launcher names none.
     let mut keymap = Keymap::new();
-    keymap.bind(KeyBinding::ctrl('b'), BOLD);
-    keymap.bind(KeyBinding::ctrl('i'), ITALIC);
+    trame_chrome::bind_keys(&mut keymap);
 
     // Handle to the canvas rAF loop, so a fullscreen modal -- or the landing
     // overlay covering the canvas -- can freeze it.
@@ -391,12 +389,11 @@ pub fn main() {
         }
 
         while let Ok(ev) = logic_to_ui_rx.try_recv() {
+            // Mirror authoritative command-toggle state into the chrome store.
+            // The active app owns the event->toggle mapping; the launcher names
+            // no content event variant.
+            trame_chrome::mirror_event(&store, &ev);
             match &ev {
-                UiEvent::Viewport { event: AppEvent::Trame(te), .. } => match te {
-                    TrameEvent::BoldState { enabled } => store.set_toggled(BOLD, *enabled),
-                    TrameEvent::ItalicState { enabled } => store.set_toggled(ITALIC, *enabled),
-                    _ => {}
-                },
                 // Non-fatal sync warnings surface as a transient warning toast.
                 // They never reach the fatal path: the session keeps running and
                 // the CRDT reconverges (a dropped/quarantined update is re-fetched
@@ -544,9 +541,8 @@ fn mount_shell(
         // The store stays here (in the mount owner, NOT in the view): it is `Rc`
         // and the per-frame relay drives it. The shell sees only its toggle
         // signals (Send), so the `<Router>` subtree stays Send.
-        let store = CommandStates::new(&[BOLD, ITALIC]);
-        let bold = store.toggled_signal(BOLD).expect("bold registered");
-        let italic = store.toggled_signal(ITALIC).expect("italic registered");
+        let store = CommandStates::new(trame_chrome::COMMANDS);
+        let toggles = trame_chrome::Toggles::from_store(&store);
         *store_slot.borrow_mut() = Some(store);
         let anchor_pos = RwSignal::new(None::<(f64, f64)>);
         *anchor_slot.borrow_mut() = Some(anchor_pos);
@@ -570,8 +566,7 @@ fn mount_shell(
             to_logic,
             raf,
             theme_ctl,
-            bold,
-            italic,
+            toggles,
             anchor_pos,
             toasts,
             username,
@@ -600,8 +595,7 @@ fn AppRoot() -> impl IntoView {
         to_logic,
         raf,
         theme_ctl,
-        bold,
-        italic,
+        toggles,
         anchor_pos,
         toasts,
         username,
@@ -660,11 +654,14 @@ fn AppRoot() -> impl IntoView {
     // the canvas is created by the AppShell).
     let ctx_menu = RwSignal::new(None::<(f64, f64)>);
     install_canvas_context_menu(ctx_menu);
-    let ctx_on_command = Callback::new({
+    // The single command path shared by every trigger (toolbar, selection bar,
+    // context menu): a `CommandId` -> the routed document. `Callback` is `Copy`,
+    // so it is handed to each app-chrome component below.
+    let on_command = Callback::new({
         let tx = to_logic.clone();
         move |id: CommandId| dispatch_to_current(id, current_doc, &tx)
     });
-    let ctx_entries = vec![MenuEntry::new(BOLD, "Bold"), MenuEntry::new(ITALIC, "Italic")];
+    let ctx_entries = trame_chrome::context_entries();
 
     // Floating selection toolbar position: `anchor_pos` is canvas-relative CSS
     // px; the bar is `position: fixed`, so add the canvas's viewport offset.
@@ -685,8 +682,6 @@ fn AppRoot() -> impl IntoView {
     // Per-slot sender clones. Each slot's children is a `Fn` (re-runnable), so it
     // captures its own clone and re-clones inside the handler rather than moving
     // the sender out (which would make the children `FnOnce`).
-    let tx_toolbar = to_logic.clone();
-    let tx_selbar = to_logic.clone();
     let tx_invite = to_logic.clone();
     // The member-row handlers live inside a `<For>` whose item template is a
     // re-runnable `Fn`; a plain `Sender` clone would be moved into it (making it
@@ -762,31 +757,10 @@ fn AppRoot() -> impl IntoView {
                 </span>
             </Header>
             <Toolbar slot>
-                <button
-                    title="Bold"
-                    aria-pressed=move || bold.get().then_some("true")
-                    on:click={
-                        let tx = tx_toolbar.clone();
-                        move |_| dispatch_to_current(BOLD, current_doc, &tx)
-                    }
-                >
-                    "B"
-                </button>
-                <button
-                    title="Italic"
-                    aria-pressed=move || italic.get().then_some("true")
-                    on:click={
-                        let tx = tx_toolbar.clone();
-                        move |_| dispatch_to_current(ITALIC, current_doc, &tx)
-                    }
-                >
-                    <em>"I"</em>
-                </button>
-                <span class="sep"></span>
-                <Kbd binding=KeyBinding::ctrl('b') />
+                <trame_chrome::FormatBar toggles=toggles on_command=on_command />
             </Toolbar>
             <StatusBar slot>
-                <span>"Trame"</span>
+                <span>{trame_chrome::status_label()}</span>
                 <span class="spacer"></span>
                 <span>"100 %"</span>
             </StatusBar>
@@ -954,32 +928,12 @@ fn AppRoot() -> impl IntoView {
             </div>
         </Dialog>
 
-        <ContextMenu pos=ctx_menu entries=ctx_entries on_command=ctx_on_command />
+        <ContextMenu pos=ctx_menu entries=ctx_entries on_command=on_command />
 
-        // Floating selection toolbar, transform-synced onto the active cell.
+        // Floating selection toolbar, transform-synced onto the active cell. The
+        // generic anchor wrapper is the launcher's; its content is app chrome.
         <div class="ambre-selbar-anchor" style=selbar_style>
-            <div class="ambre-selbar">
-                <button
-                    title="Bold"
-                    aria-pressed=move || bold.get().then_some("true")
-                    on:click={
-                        let tx = tx_selbar.clone();
-                        move |_| dispatch_to_current(BOLD, current_doc, &tx)
-                    }
-                >
-                    "B"
-                </button>
-                <button
-                    title="Italic"
-                    aria-pressed=move || italic.get().then_some("true")
-                    on:click={
-                        let tx = tx_selbar.clone();
-                        move |_| dispatch_to_current(ITALIC, current_doc, &tx)
-                    }
-                >
-                    <em>"I"</em>
-                </button>
-            </div>
+            <trame_chrome::SelectionBar toggles=toggles on_command=on_command />
         </div>
 
         // Live-region toast host (announces transient messages politely).
@@ -1153,11 +1107,7 @@ fn dispatch_command(
     document_id: DocumentId,
     to_logic: &flume::Sender<LogicCommand>,
 ) -> Result<(), flume::TrySendError<LogicCommand>> {
-    let command = if id == BOLD {
-        AppCommand::Trame(TrameCommand::ToggleBold)
-    } else if id == ITALIC {
-        AppCommand::Trame(TrameCommand::ToggleItalic)
-    } else {
+    let Some(command) = trame_chrome::command_to_app(id) else {
         tracing::warn!("no LogicCommand mapping for {id:?}");
         return Ok(());
     };

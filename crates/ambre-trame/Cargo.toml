@@ -20,6 +20,13 @@ ambre-canvas   = { path = "../ambre-canvas" }
 flume      = { workspace = true }
 web-sys    = { workspace = true }
 
+# Trame-specific chrome (the `chrome` module): the format toolbar, selection
+# toolbar, command wiring. Wasm-only -- leptos CSR + DOM, like ambre-chrome --
+# so it is scoped to the wasm32 target and never compiled into host logic tests.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+ambre-chrome = { path = "../ambre-chrome" }
+leptos       = { workspace = true }
+
 [dev-dependencies]
 # Headless render tests: RecordingSurface mock DrawSurface + FixedClock.
 ambre-draw = { path = "../ambre-draw", features = ["testing"] }

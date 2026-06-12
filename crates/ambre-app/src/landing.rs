@@ -19,6 +19,7 @@
 // ============================================================================
 
 use ambre_bus::{DocType, DocumentId, LogicCommand, RequestId, RestCommand};
+use ambre_trame::chrome as trame_chrome;
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 
@@ -58,7 +59,7 @@ pub fn landing_view(
         let navigate = use_navigate();
         move |_| {
             navigate(
-                &route::doc_path(DocType::Trame, DocumentId::new()),
+                &route::doc_path(trame_chrome::DOC_TYPE, DocumentId::new()),
                 Default::default(),
             );
         }
@@ -74,7 +75,7 @@ pub fn landing_view(
                         {move || username.get().unwrap_or_default()}
                     </span>
                     <button class="ambre-new-doc" on:click=on_new.clone()>
-                        "New Trame"
+                        {trame_chrome::new_doc_label()}
                     </button>
                 </Show>
             </header>
