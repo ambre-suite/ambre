@@ -23,6 +23,15 @@ use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 /// Name of the Loro map holding edited cell text, keyed by `"row:col"`.
 const CELLS_MAP: &str = "cells";
 
+/// Name of the Loro map holding per-cell formatting bitmasks, keyed by
+/// `"row:col"`. Source of truth for bold/italic so they survive a reload and
+/// replicate to collaborators, exactly like edited cell text.
+const FORMAT_MAP: &str = "format";
+
+/// Bit flags packed into the `format` map's i64 value.
+const FMT_BOLD: i64 = 1 << 0;
+const FMT_ITALIC: i64 = 1 << 1;
+
 /// Loro map key for a cell. Stable, collision-free (decimal, single separator).
 fn cell_key(row: u32, col: u32) -> String {
     format!("{row}:{col}")
@@ -167,28 +176,40 @@ impl TrameState {
                 TrameOutcome { display: vec![], update, ephemeral: None }
             }
             TrameCommand::ToggleBold => {
+                let (row, col) = self.active;
                 let enabled = toggle(&mut self.bold, self.active);
-                TrameOutcome::display_only(vec![
-                    TrameEvent::BoldState { enabled },
-                    TrameEvent::CellFormat {
-                        row: self.active.0,
-                        col: self.active.1,
-                        bold: enabled,
-                        italic: self.italic.contains(&self.active),
-                    },
-                ])
+                let update = self.persist_format(row, col);
+                TrameOutcome {
+                    display: vec![
+                        TrameEvent::BoldState { enabled },
+                        TrameEvent::CellFormat {
+                            row,
+                            col,
+                            bold: enabled,
+                            italic: self.italic.contains(&self.active),
+                        },
+                    ],
+                    update,
+                    ephemeral: None,
+                }
             }
             TrameCommand::ToggleItalic => {
+                let (row, col) = self.active;
                 let enabled = toggle(&mut self.italic, self.active);
-                TrameOutcome::display_only(vec![
-                    TrameEvent::ItalicState { enabled },
-                    TrameEvent::CellFormat {
-                        row: self.active.0,
-                        col: self.active.1,
-                        bold: self.bold.contains(&self.active),
-                        italic: enabled,
-                    },
-                ])
+                let update = self.persist_format(row, col);
+                TrameOutcome {
+                    display: vec![
+                        TrameEvent::ItalicState { enabled },
+                        TrameEvent::CellFormat {
+                            row,
+                            col,
+                            bold: self.bold.contains(&self.active),
+                            italic: enabled,
+                        },
+                    ],
+                    update,
+                    ephemeral: None,
+                }
             }
             TrameCommand::ScrollViewport { version, row_start, row_end, col_start, col_end } => {
                 // Clamp to grid bounds.
@@ -220,6 +241,47 @@ impl TrameState {
                 }
 
                 TrameOutcome::display_only(vec![TrameEvent::ViewportData { version, row_start, col_start, cells }])
+            }
+        }
+    }
+
+    /// Mirror a cell's current bold/italic state into the CRDT `format` map and
+    /// return the incremental delta to broadcast (and persist). A cell with no
+    /// formatting is removed from the map so it does not accumulate dead entries.
+    fn persist_format(&mut self, row: u32, col: u32) -> Option<Vec<u8>> {
+        let mut mask = 0i64;
+        if self.bold.contains(&(row, col)) {
+            mask |= FMT_BOLD;
+        }
+        if self.italic.contains(&(row, col)) {
+            mask |= FMT_ITALIC;
+        }
+        let map = self.doc.get_map(FORMAT_MAP);
+        let key = cell_key(row, col);
+        if mask == 0 {
+            let _ = map.delete(&key);
+        } else {
+            let _ = map.insert(&key, mask);
+        }
+        self.doc.commit();
+        self.flush_delta()
+    }
+
+    /// Rebuild the in-memory bold/italic sets from the CRDT `format` map. Called
+    /// after any import so a reload or a peer's formatting edit is reflected.
+    fn reseed_formatting(&mut self) {
+        self.bold.clear();
+        self.italic.clear();
+        if let LoroValue::Map(fmts) = self.doc.get_map(FORMAT_MAP).get_value() {
+            for (key, value) in fmts.iter() {
+                if let (Some((row, col)), LoroValue::I64(mask)) = (parse_cell_key(key), value) {
+                    if mask & FMT_BOLD != 0 {
+                        self.bold.insert((row, col));
+                    }
+                    if mask & FMT_ITALIC != 0 {
+                        self.italic.insert((row, col));
+                    }
+                }
             }
         }
     }
@@ -305,7 +367,15 @@ impl TrameState {
             }
         }
         self.engine.compute_all_dirty();
-        vec![TrameEvent::DataReset]
+        // Rebuild bold/italic from the merged `format` map (reload or peer edit).
+        self.reseed_formatting();
+        // Refresh the toolbar / context-menu toggles for the active cell: after a
+        // reload its formatting is only known once the `format` map is restored.
+        vec![
+            TrameEvent::DataReset,
+            TrameEvent::BoldState { enabled: self.bold.contains(&self.active) },
+            TrameEvent::ItalicState { enabled: self.italic.contains(&self.active) },
+        ]
     }
 }
 
@@ -381,6 +451,35 @@ mod tests {
         let b2 = cells.iter().find(|c| c.row == 1 && c.col == 1).unwrap();
         assert!(a1.bold, "A1 must stay bold");
         assert!(!b2.bold, "B2 must not become bold");
+    }
+
+    /// Bold and italic survive a snapshot round-trip (the F5 reload path):
+    /// formatting must be persisted in the CRDT, not only in memory.
+    #[test]
+    fn formatting_survives_snapshot_roundtrip() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetActiveCell { row: 0, col: 0 });
+        state.handle_command(TrameCommand::ToggleBold);
+        state.handle_command(TrameCommand::ToggleItalic);
+
+        // Simulate a reload: fresh state restored from the persisted snapshot.
+        let snapshot = state.export_snapshot();
+        let mut restored = TrameState::new();
+        restored.import_snapshot(&snapshot);
+
+        let evts = restored.handle_command(TrameCommand::ScrollViewport {
+            version: 1,
+            row_start: 0,
+            row_end: 0,
+            col_start: 0,
+            col_end: 0,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
+            panic!("expected ViewportData");
+        };
+        let a1 = cells.iter().find(|c| c.row == 0 && c.col == 0).unwrap();
+        assert!(a1.bold, "A1 must stay bold after reload");
+        assert!(a1.italic, "A1 must stay italic after reload");
     }
 
     /// An edited cell stores its text in the CRDT and overrides the generated
