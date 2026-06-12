@@ -25,7 +25,10 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
+use ambre_draw::{Affine, Alignment, Brush, Color, DrawSurface, PositionedLayoutItem, Rect};
+
 use crate::text_input::TextInput;
+use crate::theme::{FONT_BODY, FONT_HEADING};
 use crate::view::{DocView, FrameStats, InputEvent};
 use crate::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, TextCache, WgpuSurface};
 
@@ -318,6 +321,9 @@ pub struct FrameHost<V: DocView> {
     /// rAF timestamp of the last HUD rebuild. The overlay refreshes at most
     /// every 500 ms so idle frames never trigger a full vertex rebuild.
     last_hud_update_ms: f64,
+    /// Set once the fatal terminal screen has been painted, so the static
+    /// message is encoded a single time rather than every subsequent frame.
+    fatal_painted:      bool,
 }
 
 impl<V: DocView> FrameHost<V> {
@@ -337,6 +343,7 @@ impl<V: DocView> FrameHost<V> {
             last_draw_ms:       0.0,
             last_gpu_ms:        0.0,
             last_hud_update_ms: 0.0,
+            fatal_painted:      false,
         }
     }
 
@@ -398,6 +405,17 @@ impl<V: DocView> FrameHost<V> {
 
     /// Render one frame. Wire this into [`start_raf_loop`].
     pub fn render(&mut self, raf_timestamp: f64) {
+        // Fatal latch first: once set, the Logic thread feeding the view may be
+        // aborted, so we must not keep draining it. Paint the terminal screen a
+        // single time and then idle (the rAF loop keeps ticking harmlessly).
+        if let Some(message) = crate::fatal::fatal_message() {
+            if !self.fatal_painted {
+                self.render_fatal(&message);
+                self.fatal_painted = true;
+            }
+            return;
+        }
+
         let t_drain = self.perf.now();
         self.view.update();
         let t_after_drain = self.perf.now();
@@ -480,6 +498,101 @@ impl<V: DocView> FrameHost<V> {
         self.last_drain_ms = (t_after_drain - t_drain) as f32;
         self.last_draw_ms  = t_draw_ms;
         self.last_gpu_ms   = (t2 - t_gpu_start) as f32;
+    }
+
+    /// Paint the unrecoverable-error terminal screen: a dark backdrop with a
+    /// centered title and the panic `message` below it. Encodes one full frame
+    /// over the content layer; the caller paints it once (see `render`).
+    ///
+    /// This is the canvas counterpart of the `window.ambreFatal` DOM overlay
+    /// (index.html). It runs when the UI/render thread is still alive -- a Logic
+    /// panic or a Sync-worker death -- so the canvas shows a deliberate end state
+    /// instead of freezing on the last good frame.
+    fn render_fatal(&mut self, message: &str) {
+        let Some(gpu) = self.gpu.as_mut() else { return };
+
+        let w = gpu.width as f32;
+        let h = gpu.height as f32;
+
+        // Fixed colours (no theme dependency on the fatal path): a near-black
+        // backdrop, a red title, and a dim grey body. ASCII strings only.
+        const BACKDROP: Color = Color::from_rgba8(0x1a, 0x1a, 0x2e, 255);
+        const TITLE:    Color = Color::from_rgba8(0xe0, 0x5a, 0x5a, 255);
+        const BODY:     Color = Color::from_rgba8(0x9a, 0xa0, 0xa6, 255);
+        const TITLE_TEXT: &str = "Ambre encountered a fatal error and must reload.";
+
+        // Wrap the title/message to a centered column at most 640 logical px wide.
+        let col_w = (w * 0.8).min(640.0);
+        let origin_x = ((w as f64) - col_w as f64) / 2.0;
+
+        gpu.quad_renderer.begin_frame(w, h);
+        {
+            let mut surface = WgpuSurface::new(&mut gpu.quad_renderer);
+            surface.begin_layer(Layer::Content);
+            surface.fill_rect(Rect::new(0.0, 0.0, w as f64, h as f64), BACKDROP);
+
+            // Lay out both blocks first so we can vertically center the stack.
+            let title = gpu.text_cache.get_or_build(
+                &mut gpu.font_cx, TITLE_TEXT, FONT_HEADING, col_w, Alignment::Center, false, false,
+            );
+            let title_h = title.height() as f64;
+            let body = gpu.text_cache.get_or_build(
+                &mut gpu.font_cx, message, FONT_BODY, col_w, Alignment::Center, false, false,
+            );
+            let body_h = body.height() as f64;
+
+            let gap = 16.0;
+            let total_h = title_h + gap + body_h;
+            let title_y = ((h as f64) - total_h) / 2.0;
+            let body_y  = title_y + title_h + gap;
+
+            draw_centered_text(&mut surface, &mut gpu.font_cx, &mut gpu.text_cache,
+                TITLE_TEXT, FONT_HEADING, col_w, origin_x, title_y, TITLE);
+            draw_centered_text(&mut surface, &mut gpu.font_cx, &mut gpu.text_cache,
+                message, FONT_BODY, col_w, origin_x, body_y, BODY);
+        }
+
+        let surface_tex = match gpu.surface.get_current_texture() {
+            Ok(t)  => t,
+            Err(e) => { tracing::error!("fatal screen get_current_texture: {e:?}"); return; }
+        };
+        let target_view = surface_tex.texture.create_view(&Default::default());
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        gpu.quad_renderer.flush_dirty_rect(
+            &gpu.device, &gpu.queue, &mut encoder, &target_view,
+            ContentRepaint::Full, OverlayRepaint::Redraw,
+        );
+        gpu.queue.submit(std::iter::once(encoder.finish()));
+        surface_tex.present();
+    }
+}
+
+/// Draw `text` as centered glyph runs at `(origin_x, origin_y)` over `max_width`.
+/// Mirrors the per-line glyph loop used by the Trame renderer.
+#[allow(clippy::too_many_arguments)]
+fn draw_centered_text(
+    surface:   &mut WgpuSurface<'_>,
+    font_cx:   &mut parley::FontContext,
+    cache:     &mut TextCache,
+    text:      &str,
+    font_size: f32,
+    max_width: f32,
+    origin_x:  f64,
+    origin_y:  f64,
+    color:     Color,
+) {
+    if text.is_empty() {
+        return;
+    }
+    let layout = cache.get_or_build(font_cx, text, font_size, max_width, Alignment::Center, false, false);
+    let brush = Brush::Solid(color);
+    for line in layout.lines() {
+        for item in line.items() {
+            let PositionedLayoutItem::GlyphRun(run) = item else { continue };
+            let tx = origin_x + run.offset() as f64;
+            let ty = origin_y + run.baseline() as f64;
+            surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+        }
     }
 }
 
