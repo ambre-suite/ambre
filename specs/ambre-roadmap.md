@@ -29,6 +29,10 @@
 - [x] **Typed Trame editing** (`TrameOutcome`, lossless Logic dispatcher): `ARCH P2`.
 - [x] **Real network sync**: non-blocking loop + multiplexed WebSocket, `Unlock`/`SetupAccount`,
   `OpenDocument`/`CloseDocument`, server-side document CRUD: `ARCH P1` (remaining items), `SYNC P1` (wired) → `SYNC P2`.
+- [x] **Cookie-less auth + persistent SPA + live collaboration**: Bearer access JWT + revocable refresh,
+  `leptos_router` SPA over a session-persistent engine (Sync worker never respawned), server PubSub hub,
+  WS resilience (4401 silent reauth, backoff, resubscribe, pre-session buffer), hydration across refresh/devices:
+  `SRV P0`/`SRV P2`, `SYNC P2`, `ARCH P1`.
 - [x] **Blind Relay**: PostgreSQL/Redis/S3, multiplexed WS, ACL, Lua clock+seq, presigned URLs: `SRV P0`.
 - [x] **Canvas finishing**: generated tokens, headless tests: `CANVAS P0` (remaining items).
 - [x] **Client document lifecycle**: URL routing (`/` landing list, `/trame/<docid>`),
@@ -45,7 +49,7 @@
 *Objective: secured multi-user, sharing/revocation, foundation ready for Enterprise.*
 
 - [x] Sharing & revocation (Document Key rotation, media, anti-replay): `SYNC P3`.
-- [x] Server hardening (rate limiting, CSRF, organizations + Shamir, compaction): `SRV P2`.
+- [x] Server hardening (rate limiting, organizations + Shamir, compaction; CSRF dropped with the move to Bearer JWT): `SRV P2`.
 - [x] Offline durability (Loro IndexedDB persistence, flush + `RequestMissing` on reconnect): `ARCH P4`.
 - [x] Full Trame formula engine (DAG, incremental recomputation, cycle detection): `ARCH P4`.
 

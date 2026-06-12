@@ -122,6 +122,18 @@ struct SyncState {
 
     /// Outbound channel to the Logic thread (typed `LogicEvent` values, by move).
     logic_tx: flume::Sender<LogicEvent>,
+
+    /// In-memory access + refresh tokens (never localStorage/cookies). Bearer on
+    /// REST, `?token=` on the WS. Holds the 401->refresh->retry logic. (Code: `AuthContext`.)
+    auth: AuthContext,
+
+    /// WS reconnection state (sec.2.G): exponential-backoff attempt counter,
+    /// the buffer of edits issued before the session keys were ready
+    /// (`pending_pre_session_updates`), and -- in dev -- the username to re-derive
+    /// the identity on a 4401 close.
+    reconnect_attempts: u32,
+    pending_pre_session_updates: Vec<(DocumentId, Vec<u8>)>,
+    dev_username: Option<String>,
 }
 
 /// Sync state for an individual document.
@@ -300,10 +312,12 @@ impl SyncState {
         match cmd {
             // -- Session ----------------------------------------------------
             RestCommand::Unlock { passphrase } => {
-                // spawn_local: GET /api/keys/master + GET /api/auth/me
+                // spawn_local: POST /api/auth/... -> parse { access_token, refresh_token } into AuthContext
+                // GET /api/keys/master + GET /api/auth/me (Bearer)
                 // Argon2id(passphrase, salt) -> User Key -> decrypts master_key_enc -> MasterSeed
-                // Derives signing_key + exchange_key; opens the multiplexed WS (GET /api/ws)
-                // WS onmessage -> handle_ws_message ; onclose -> reconnect+resubscribe ; zeroize passphrase
+                // Derives signing_key + exchange_key; opens the multiplexed WS (GET /api/ws?token=<jwt>)
+                // WS onmessage -> handle_ws_message ; onclose -> 4401 reauth | backoff (sec.2.G)
+                //              ; onopen -> resubscribe_all ; zeroize passphrase
                 // reply(id, SessionReady{..}) | AccountSetupRequired (404) | or LogicEvent::AuthError
             }
             RestCommand::SetupAccount { passphrase } => { /* ... -> reply(id, AccountCreated { recovery_words }) */ }
@@ -405,6 +419,8 @@ Reception Update with unknown snapshot_id
       └─ Apply each update via LogicEvent::RemoteUpdate
 ```
 
+> **Genesis snapshot id (never-snapshotted documents).** A brand-new document has no snapshot, yet its first deltas still need a stable parent `snapshot_id` or they would quarantine forever (random per-client id, never uploaded). Every client deterministically derives the same base id from the document id: `SnapshotId::genesis(document_id) = SnapshotId::from_bytes(*document_id.as_bytes())` (pure client-side, `ambre-core`). `SyncDocumentState::new` and `handle_open_document` seed `known_snapshots` with this genesis id, so the very first deltas are always releasable across F5 and across devices. (Deltas written before this rule, under an old random id, are orphans -- only relevant to pre-existing dev data.)
+
 ### F. Batching and Compaction
 
 ```
@@ -424,6 +440,44 @@ Reception SyncCommand::SendSnapshot
   ├─ Signal server: purge deltas seq <= current_seq
   └─ compaction_lock = false
 ```
+
+### G. Authentication & WebSocket Resilience
+
+The server uses **no cookie**: a stateless EdDSA access JWT (TTL 900s) + an opaque revocable refresh token (see `ambre-spec-server.md §3`). The Sync worker is the sole holder of both.
+
+**Token store (`AuthContext`).** Access + refresh tokens are held **in memory** in the Sync worker (never `localStorage`/cookies). `Unlock`/`SetupAccount`/`dev-login` parse the JSON login body (`{ access_token, refresh_token, access_expires_in }`) into the store. Every REST call sends `Authorization: Bearer <access_token>`; the WebSocket carries the access token in the **`?token=<jwt>`** query parameter (browser WS forbids custom headers).
+
+**REST 401 -> refresh -> retry.** A thin wrapper around `gloo-net::http` retries once on `401`: `POST /api/auth/refresh { refresh_token }` -> store the rotated pair -> replay the original request. A second `401` (or a refresh failure) surfaces as `LogicEvent::AuthError` (the UI must re-authenticate).
+
+**WebSocket reconnection.** The single multiplexed WS is opened at `Unlock` and must survive token expiry, server restarts (ephemeral JWT seed in dev), and network blips:
+
+```
+onclose(code) ─┬─ code == 4401 (unauthorized) ─► reauthenticate():
+               │     refresh().await  (dev: re-run dev-login from the stored username)
+               │       ok  -> reset backoff, reopen WS
+               │       err -> schedule_reconnect()
+               │
+               └─ any other close ─────────────► schedule_reconnect()
+
+schedule_reconnect(): exponential backoff base 250ms x2, cap 10s, + random jitter,
+                      armed via setTimeout (DedicatedWorkerGlobalScope) -> ReconnectNow.
+                      The attempt counter is reset ONLY on a real inbound frame
+                      (not on bare onopen: an auth-rejected upgrade emits 101 then an
+                      immediate 4401 close -- resetting on onopen would tight-loop and
+                      saturate the WS rate-limit -> 429).
+
+onopen ──► resubscribe_all(): for each server-created doc, ws_send(Subscribe) +
+           ws_send(RequestMissing { after_seq: last_seq }). MUST run on onopen, not
+           synchronously in open_websocket: a Subscribe sent while the socket is
+           CONNECTING is dropped -> server has the connection but no subscription
+           -> 403 "not subscribed".
+```
+
+> **Decisive rationale (4401 vs generic drop).** When the access token expires or the server rotates its (dev-ephemeral) JWT seed, every token is invalid. A generic close would trigger plain backoff that never recovers (the new connection is rejected too). The explicit **4401** lets the client refresh (or, in dev, re-derive its identity via dev-login) and reconnect **silently**, with no user action.
+
+**Pre-session update buffer.** An edit issued while `Unlock` is still in flight (`signing_key` is `None`) is **not dropped**: it is queued in `pending_pre_session_updates` and flushed by `flush_pre_session_updates(doc)` -- for a server-created doc after `MissingUpdates` (the `RequestMissing` replay has caught `local_clock` up), for a local-only doc at `OpenDocumentReady`. Dropping it instead caused the document's first edit to never reach the server (CLOCK_MISMATCH on the next edit).
+
+**Self-echo clock recovery.** `local_clock` is not persisted across refresh (F5). On reconnect the server echoes the client's own past `Update`s; `receive_update` bumps `local_clock = max(local_clock, update.clock)` when the update's author key is ours, so the next outbound edit picks up at the right clock instead of re-emitting an already-consumed value (which the Lua script rejects with CLOCK_MISMATCH).
 
 ---
 
@@ -702,6 +756,9 @@ All tests compile in native mode (`#[cfg(not(target_arch = "wasm32"))]`) with `t
 - [x] Delta-sync on reconnect (`last_known_seq` → `RequestMissing`)
 - [x] `WsServerMsg::SnapshotRequired` handling → `LogicEvent::SnapshotNeeded`
 - [x] `MockBlindRelay` in-process for multi-client tests
+- [x] Auth: `AuthContext` (in-memory access + refresh tokens), `Authorization: Bearer` on REST, `?token=` on the WS, 401 -> `/auth/refresh` -> retry wrapper.
+- [x] WS resilience (sec.2.G): exponential-backoff reconnect (250ms..10s + jitter), close **4401** -> silent reauth (refresh, or dev re-login), resubscribe + `RequestMissing` on `onopen`, pre-session update buffer, self-echo `local_clock` recovery.
+- [x] Hydration across refresh/devices: deterministic `SnapshotId::genesis(document_id)` anchors a never-snapshotted document's first deltas (no eternal quarantine).
 
 ### SYNC P3 — Sharing & Revocation
 
