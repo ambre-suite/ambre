@@ -28,7 +28,7 @@ The specs predate this file and use their own phase vocabulary. Mapping:
 | This file | Foundation specs (`1-Foundations/`) | Trame specs (`2-Trame/`) |
 | :--- | :--- | :--- |
 | `E0`/`E1` (done) | `ARCH P0`-`P3`, `CANVAS P0`, `CHROME P1`-`P3`, `UI P0`-`P2`, `SYNC P0`-`P3`, `SRV P0`/`P2` | engine Phase 0/1 (logic), virtual scroll + inline editor (ui Phase 1) |
-| `E2` | `ARCH P1`/`CANVAS P0` remaining items | -- |
+| `E2` | `CANVAS P0` remaining items | -- |
 | `E3` | -- | `trame-logic §14`, `trame-features §10`, `trame-ui §18`, `trame-interop §10` (Phase 1) |
 | `E4` | `ARCH P2`/`P5`, `CANVAS P1`, `SYNC P4`, `SRV P1` | -- |
 | `E5` | `ARCH P4`, `CANVAS P2` | Trame Phase 2+ |
@@ -81,8 +81,6 @@ Stories:
   `InviteToDocument`/`RevokeFromDocument` flow (`SYNC P3`, sharing flow in `ambre-spec-sync.md §3`)
   to a chrome command + dialog. **Until this exists, genuine multi-user collaboration is unreachable
   from the UI** (see `E1` scope note). Unblocks real two-user testing of Trame.
-- `ARCH P1` — remove smoke-test scaffolding (`SMOKE_DOCUMENT_ID`, pre-seeded `DocState::Trame`,
-  `pending_doc_types`) once headless tests no longer depend on it.
 - `CANVAS P0` — generated canvas tokens (`tokens.ron` -> `theme.rs`) + headless tests (mock
   `QuadRenderer`).
 - `ambreFatal` reconciliation — the `panic::set_hook` JS hook is done (`ARCH P1`); the remaining

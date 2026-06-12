@@ -194,7 +194,7 @@ pub fn main() {
     // UI runs on THIS (main) thread. The per-frame relay drains logic_to_sync_rx,
     // postcard-encodes each SyncCommand, and worker.postMessage(buf, [buf]).
     ambre_canvas::run_with("ambre-canvas",
-        move |w, h, ti| TrameView::new(SMOKE_DOCUMENT_ID, ui_to_logic_tx, view_rx, w, h, ti, ..),
+        move |w, h, ti| TrameView::new(initial_doc, ui_to_logic_tx, view_rx, w, h, ti, ..),
         /* pre_frame = */ move || { while let Ok(cmd) = logic_to_sync_rx.try_recv() { post_to_worker(&sync_worker, &postcard::to_allocvec(&cmd).unwrap()); } /* + drain logic_to_ui_rx */ },
         raf);
 }
@@ -396,7 +396,7 @@ pub enum RestEvent { // SUCCESS responses only (failures = AuthError/ApiError on
     AccountSetupRequired, AccountCreated { recovery_words: String },
     PassphraseChanged, AccountRecovered, LoggedOut,
     DocumentList { documents: Vec<DocumentSummary> },
-    DocumentCreated { document_id: DocumentId, doc_type: DocType }, // Logic hook: pending_doc_types
+    DocumentCreated { document_id: DocumentId, doc_type: DocType }, // pure UI forward (no Logic hook)
     DocumentDeleted { document_id: DocumentId }, DocumentRenamed { document_id: DocumentId },
     InviteSent { document_id: DocumentId, user_id: UserId, display_name: String },
     RevocationComplete { document_id: DocumentId },
@@ -420,7 +420,7 @@ pub enum RestEvent { // SUCCESS responses only (failures = AuthError/ApiError on
 
 > **No more `AppController` or `CommandSink`** (deleted Model A traits). The document registry is **typed**: `HashMap<DocumentId, DocState>` where `enum DocState { Trame(TrameState), … }`, and dispatch is a **`match`** on `(DocState, AppCommand)` — no trait-object, no `downcast`, no `Box<dyn Any>`. Logic sends on a bare `&flume::Sender<SyncCommand>`.
 
-**Logic thread dispatch (`ambre-logic::LogicState`)**: `handle_logic_command` routes `App` to `docs[document_id]` (drop if unknown) → `UiEvent::Viewport`; `Rest` → single arm forward `SyncCommand::Rest` (+ hooks `Logout`/`DeleteDocument`); control → counterpart `SyncCommand`. `handle_logic_event`: `Rest` → forward `UiEvent::Rest` (+ hook `DocumentCreated` → `pending_doc_types`); `RemoteSnapshot` promotes a `pending_doc_type` to a live `DocState`; `SnapshotNeeded` → `export_snapshot` → `SendSnapshot`; pushes/errors forwarded explicitly.
+**Logic thread dispatch (`ambre-logic::LogicState`)**: `handle_logic_command` routes `App` to `docs[document_id]` (drop if unknown) → `UiEvent::Viewport`; `Rest` → single arm forward `SyncCommand::Rest` (+ hooks `Logout`/`DeleteDocument`); control → counterpart `SyncCommand`, with `OpenDocument { doc_type }` pre-seeding the live `DocState` so UI edits route before any payload arrives. `handle_logic_event`: `Rest` → forward `UiEvent::Rest` (pure forward, no state hook); `RemoteSnapshot`/`RemoteUpdate` apply to the already-seeded `DocState` (snapshot for an unopened doc is dropped); `SnapshotNeeded` → `export_snapshot` → `SendSnapshot`; pushes/errors forwarded explicitly.
 
 ### E. Crates and External Dependencies
 
@@ -608,10 +608,10 @@ impl MasterSeed {
   navigation that never respawns the Sync worker. Live collaboration via the server PubSub hub + WS resilience
   (4401 silent reauth, backoff, resubscribe-on-onopen, pre-session buffer, genesis snapshot id). Details:
   `ambre-spec-server.md §3/§7`, `ambre-spec-sync.md §2.G`.
-- [ ] Remove smoke-test scaffolding (`SMOKE_DOCUMENT_ID`, pre-seeded `DocState::Trame`,
-  `pending_doc_types`). The real open-document flow now exists, but the smoke doc is intentionally
-  retained as a headless/dev fixture; drop it (and `pending_doc_types`) once headless tests no
-  longer depend on it.
+- [x] Remove smoke-test scaffolding (`SMOKE_DOCUMENT_ID`, pre-seeded `DocState::Trame`,
+  `pending_doc_types`). The real open-document flow (`OpenDocument { doc_type }` pre-seeds the live
+  state) is the sole materialisation path; documents are no longer promoted lazily from a
+  `DocumentCreated` hook, and headless tests use real `DocumentId::new()` fixtures.
 
 ### ARCH P2 — Pilot Applications
 - [x] `ambre-trame`: `TrameState` + `TrameView` (impl `DocView`), virtual-scroll grid, viewport smoke-test.

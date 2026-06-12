@@ -79,7 +79,7 @@ fn col_label(mut col: u32) -> String {
 
 /// Trame's `DocView`: a virtual-scroll spreadsheet grid.
 pub struct TrameView {
-    /// Well-known document id for the IPC smoke test.
+    /// The document this view renders (from the active route).
     document_id: DocumentId,
     /// Outbound channel to the Logic thread.
     to_logic: flume::Sender<LogicCommand>,

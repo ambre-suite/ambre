@@ -30,8 +30,8 @@ use std::collections::HashMap;
 pub mod persistence;
 
 use ambre_bus::{
-    AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent, RestCommand, RestEvent,
-    SMOKE_DOCUMENT_ID, SyncCommand, UiEvent,
+    AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent, RestCommand, SyncCommand,
+    UiEvent,
 };
 use ambre_trame::TrameState;
 
@@ -85,13 +85,10 @@ struct LogicState {
     to_persist: flume::Sender<(DocumentId, Vec<u8>)>,
     /// Live document state, keyed by `document_id`.
     ///
-    /// Inserted on the first [`LogicEvent::RemoteSnapshot`] for a document
-    /// (or, for the IPC smoke-test, pre-seeded at bootstrap). Removed on
+    /// Pre-seeded on `OpenDocument` (which carries the `doc_type`) so UI edits
+    /// route immediately, before any snapshot/delta arrives. Removed on
     /// `CloseDocument` / `DeleteDocument` / `Logout`.
     docs: HashMap<DocumentId, DocState>,
-    /// `DocType` carried by `DocumentCreated`, kept until the first snapshot
-    /// arrives so [`DocState::new`] can build the right state.
-    pending_doc_types: HashMap<DocumentId, DocType>,
 }
 
 impl LogicState {
@@ -100,14 +97,11 @@ impl LogicState {
         to_sync: flume::Sender<SyncCommand>,
         to_persist: flume::Sender<(DocumentId, Vec<u8>)>,
     ) -> Self {
-        let mut docs = HashMap::new();
-        docs.insert(SMOKE_DOCUMENT_ID, DocState::Trame(TrameState::new()));
         Self {
             to_ui,
             to_sync,
             to_persist,
-            docs,
-            pending_doc_types: HashMap::new(),
+            docs: HashMap::new(),
         }
     }
 
@@ -352,44 +346,22 @@ impl LogicState {
 
     fn handle_logic_event(&mut self, event: LogicEvent) {
         match event {
-            // -- Service plane: forward verbatim, with state hooks -------------
+            // -- Service plane: forward verbatim -------------------------------
             //
-            // The whole relayed response family collapses to one arm. Only
-            // `DocumentCreated` also mutates Logic state (it records the new
-            // document's type until its first snapshot arrives).
+            // The whole relayed response family collapses to one arm: a pure
+            // forward to the UI. Documents are materialised on `OpenDocument`
+            // (which carries the `doc_type`), so no event here mutates state.
             LogicEvent::Rest { id, evt } => {
-                if let RestEvent::DocumentCreated {
-                    document_id,
-                    doc_type,
-                } = &evt
-                {
-                    self.pending_doc_types.insert(*document_id, *doc_type);
-                }
                 self.send_to_ui(UiEvent::Rest { id, evt });
             }
 
             // -- Real-time sync (server push) ----------------------------------
+            // The document is already live (pre-seeded on `OpenDocument`); a
+            // snapshot for an unopened doc is dropped by `apply_remote`.
             LogicEvent::RemoteSnapshot {
                 document_id,
                 payload,
             } => {
-                if !self.docs.contains_key(&document_id) {
-                    match self
-                        .pending_doc_types
-                        .remove(&document_id)
-                        .and_then(DocState::new)
-                    {
-                        Some(state) => {
-                            self.docs.insert(document_id, state);
-                        }
-                        None => {
-                            tracing::warn!(
-                                "Logic: no pending doc_type for {document_id}, dropping snapshot"
-                            );
-                            return;
-                        }
-                    }
-                }
                 self.apply_remote(document_id, &payload);
             }
 
@@ -603,7 +575,7 @@ pub fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::{DocumentId, RequestId, RestCommand, TrameCommand};
+    use ambre_bus::{DocumentId, RequestId, RestCommand, RestEvent, TrameCommand};
 
     /// A `LogicState` wired to two drainable receivers (UI-bound, Sync-bound).
     fn harness() -> (
@@ -769,8 +741,8 @@ mod tests {
     }
 
     #[test]
-    fn snapshot_creates_state_for_pending_doc_type() {
-        let (mut state, ui_rx, _sync) = harness();
+    fn open_document_materialises_state_before_any_payload() {
+        let (mut state, ui_rx, sync_rx) = harness();
         let id = DocumentId::from_bytes([7; 16]);
 
         // No live state, and no app command can route yet.
@@ -780,21 +752,18 @@ mod tests {
         });
         assert!(ui_rx.try_recv().is_err());
 
-        // DocumentCreated registers the pending doc_type (hook in the Rest arm)…
-        state.handle_logic_event(LogicEvent::Rest {
-            id: RequestId::next(),
-            evt: RestEvent::DocumentCreated {
-                document_id: id,
-                doc_type: DocType::Trame,
-            },
-        });
-        let _ = ui_rx.try_recv(); // drains the forwarded UiEvent::Rest(DocumentCreated)
-
-        // …and the first snapshot promotes it to live state.
-        state.handle_logic_event(LogicEvent::RemoteSnapshot {
+        // OpenDocument pre-seeds the live state (carrying its doc_type) and
+        // forwards the control command to Sync.
+        state.handle_logic_command(LogicCommand::OpenDocument {
             document_id: id,
-            payload: vec![],
+            doc_type: DocType::Trame,
         });
+        assert!(matches!(
+            sync_rx.try_recv(),
+            Ok(SyncCommand::OpenDocument { .. })
+        ));
+
+        // An app command now routes to the freshly-seeded document.
         state.handle_logic_command(LogicCommand::App {
             document_id: id,
             command: scroll(2),
