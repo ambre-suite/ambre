@@ -27,6 +27,16 @@ use crate::error::AppError;
 use crate::redis_ops;
 use crate::state::AppState;
 
+/// Redis PubSub channel name for a document's live broadcasts.
+fn doc_pubsub_channel(document_id: &DocumentId) -> String {
+    format!("doc:{document_id}")
+}
+
+/// Redis PubSub channel name for a Murmure channel's live broadcasts.
+fn chan_pubsub_channel(channel_id: &ChannelId) -> String {
+    format!("chan:{channel_id}")
+}
+
 /// Query parameters on the WS upgrade. The browser WebSocket API forbids custom
 /// headers, so the access JWT travels in the `token` query parameter; it is
 /// verified at the handshake exactly like a `Authorization: Bearer` on REST.
@@ -79,7 +89,21 @@ async fn handle_ws(
 ) {
     let session = match session_result {
         Ok(s) => s,
-        Err(_) => return,
+        Err(_) => {
+            // Tell the client explicitly that the upgrade was refused for auth
+            // reasons (expired/rotated JWT) with an application close code, so it
+            // can refresh its token and reconnect silently instead of treating it
+            // as a generic network drop. 4401 = our "unauthorized" (4000-4999 is
+            // the reserved application range).
+            let mut socket = socket;
+            let _ = socket
+                .send(Message::Close(Some(axum::extract::ws::CloseFrame {
+                    code: 4401,
+                    reason: "unauthorized".into(),
+                })))
+                .await;
+            return;
+        }
     };
 
     let (outbound_tx, mut outbound_rx) = mpsc::channel::<Vec<u8>>(256);
@@ -104,6 +128,15 @@ async fn handle_ws(
         }
     });
 
+    // Live broadcasts (a peer's update / ephemeral / membership change) are
+    // published to Redis PubSub by the writer's connection. THIS connection
+    // registers its outbound queue with the process-wide hub for every channel
+    // it watches; the hub holds the single Redis subscriber per channel and fans
+    // each message in-process to all registered connections. (The writer's own
+    // broadcast is echoed back to it too; a client's CRDT import of its own ops
+    // is an idempotent no-op.)
+    let pubsub = state.pubsub.clone();
+
     while let Some(Ok(msg)) = ws_stream.next().await {
         let Message::Binary(data) = msg else { continue };
 
@@ -122,9 +155,19 @@ async fn handle_ws(
         match client_msg {
             WsClientMsg::Subscribe { document_id } => {
                 handle_subscribe(&state, &mut conn, document_id, &outbound_tx).await;
+                // Start forwarding this doc's live broadcasts only if access was
+                // granted (handle_subscribe records the subscription on success).
+                if conn.doc_subscriptions.contains(&document_id) {
+                    pubsub
+                        .subscribe(doc_pubsub_channel(&document_id), connection_id.clone(), outbound_tx.clone())
+                        .await;
+                }
             }
             WsClientMsg::Unsubscribe { document_id } => {
                 handle_unsubscribe(&state, &mut conn, document_id).await;
+                pubsub
+                    .unsubscribe(doc_pubsub_channel(&document_id), connection_id.clone())
+                    .await;
             }
             WsClientMsg::Update(update) => {
                 tracing::info!(
@@ -143,9 +186,17 @@ async fn handle_ws(
             }
             WsClientMsg::SubscribeChannel { channel_id } => {
                 handle_subscribe_channel(&state, &mut conn, channel_id, &outbound_tx).await;
+                if conn.channel_subscriptions.contains(&channel_id) {
+                    pubsub
+                        .subscribe(chan_pubsub_channel(&channel_id), connection_id.clone(), outbound_tx.clone())
+                        .await;
+                }
             }
             WsClientMsg::UnsubscribeChannel { channel_id } => {
                 conn.channel_subscriptions.remove(&channel_id);
+                pubsub
+                    .unsubscribe(chan_pubsub_channel(&channel_id), connection_id.clone())
+                    .await;
             }
             WsClientMsg::ChannelUpdate { channel_id, update } => {
                 if !conn.channel_subscriptions.contains(&channel_id) {
@@ -165,8 +216,14 @@ async fn handle_ws(
         }
     }
 
+    // Deregister every channel this connection watched from the hub (the hub
+    // drops its Redis subscription when the last interested connection leaves).
     for doc_id in &conn.doc_subscriptions {
         let _ = redis_ops::doc_unsubscribe_session(&state.redis, doc_id, &connection_id).await;
+        pubsub.unsubscribe(doc_pubsub_channel(doc_id), connection_id.clone()).await;
+    }
+    for channel_id in &conn.channel_subscriptions {
+        pubsub.unsubscribe(chan_pubsub_channel(channel_id), connection_id.clone()).await;
     }
     outbound_handle.abort();
 }
@@ -244,8 +301,11 @@ async fn handle_update(
         tracing::error!("insert_update failed doc={doc_id} seq={seq}: {e}");
     }
 
+    // Persist the full sealed Update so it can be replayed verbatim later
+    // (`handle_request_missing`). Serialize before the broadcast moves `update`.
+    let update_wire = postcard::to_allocvec(&update).expect("postcard encode Update");
     tracing::info!("[Server→Redis] append_pending_delta doc={doc_id} seq={seq} s3_key={s3_key}");
-    let _ = redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update.ciphertext.0).await;
+    let _ = redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update_wire).await;
 
     let broadcast = encode_server_msg(&WsServerMsg::Update {
         seq: ambre_protocol::messages::Seq(seq),
@@ -286,31 +346,36 @@ async fn handle_request_missing(
         Err(e) => { tracing::error!(error = %e, "failed to get updates after seq"); return; }
     };
 
-    let seq_updates: Vec<ambre_protocol::SeqUpdate> = updates
-        .into_iter()
-        .map(|u| ambre_protocol::SeqUpdate {
-            seq: ambre_protocol::messages::Seq(u.seq as u64),
-            update: placeholder_update(document_id, u.clock as u64),
-        })
-        .collect();
+    // Rehydrate each indexed delta into the full sealed Update the client needs
+    // to decrypt and verify. The bytes live in S3 once flushed, or in the Redis
+    // pending list until then; together they cover every seq. A delta we cannot
+    // locate or decode is skipped (logged) rather than dropping the whole batch.
+    let mut seq_updates: Vec<ambre_protocol::SeqUpdate> = Vec::with_capacity(updates.len());
+    for row in updates {
+        let seq = row.seq as u64;
+        let wire = match crate::s3::fetch_object(&state.s3, &state.s3_bucket, &row.s3_key).await {
+            Ok(Some(bytes)) => Some(bytes),
+            Ok(None) => match redis_ops::get_pending_delta(&state.redis, &document_id, seq).await {
+                Ok(b) => b,
+                Err(e) => { tracing::error!(seq, error = %e, "replay: pending lookup failed"); None }
+            },
+            Err(e) => { tracing::error!(seq, error = %e, "replay: S3 fetch failed"); None }
+        };
+        let Some(wire) = wire else {
+            tracing::error!(seq, s3_key = %row.s3_key, "replay: delta not found in S3 or pending");
+            continue;
+        };
+        match postcard::from_bytes::<ambre_protocol::Update>(&wire) {
+            Ok(update) => seq_updates.push(ambre_protocol::SeqUpdate {
+                seq: ambre_protocol::messages::Seq(seq),
+                update,
+            }),
+            Err(e) => tracing::error!(seq, error = %e, "replay: Update decode failed"),
+        }
+    }
 
     let msg = encode_server_msg(&WsServerMsg::MissingUpdates { document_id, updates: seq_updates });
     let _ = outbound_tx.send(msg).await;
-}
-
-fn placeholder_update(document_id: DocumentId, clock: u64) -> ambre_protocol::Update {
-    ambre_protocol::Update {
-        ciphertext: ambre_protocol::messages::Ciphertext(vec![]),
-        nonce: ambre_protocol::messages::Nonce([0u8; 24]),
-        public_data: ambre_protocol::public_data::UpdatePublicData {
-            document_id,
-            pub_key: ambre_core::PublicKey::from_array([0u8; 32]),
-            snapshot_id: ambre_core::SnapshotId::from_bytes([0u8; 16]),
-            clock: ambre_protocol::messages::Clock(clock),
-        },
-        commitment_tag: ambre_protocol::messages::CommitmentTag([0u8; 32]),
-        signature: ambre_protocol::messages::Signature([0u8; 64]),
-    }
 }
 
 async fn handle_subscribe_channel(

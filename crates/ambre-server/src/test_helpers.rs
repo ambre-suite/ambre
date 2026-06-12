@@ -24,9 +24,11 @@ pub async fn test_app_state(pool: sqlx::PgPool) -> Arc<AppState> {
         .expect("need Redis for tests");
     let s3_config = aws_sdk_s3::Config::builder().build();
     let s3 = aws_sdk_s3::Client::from_conf(s3_config);
+    let pubsub = crate::ws::PubSubHub::spawn(redis.clone());
     Arc::new(AppState {
         db: pool,
         redis,
+        pubsub,
         s3,
         s3_bucket: "test-bucket".into(),
         config: Arc::new(Config::default()),

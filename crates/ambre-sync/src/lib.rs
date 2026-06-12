@@ -123,6 +123,11 @@ const QUARANTINE_ALERT: usize = 900;
 #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 const QUARANTINE_LIMIT: usize = 1000;
 
+/// WebSocket close code the server sends when it refuses the upgrade for auth
+/// reasons (expired/rotated JWT). In the application-reserved 4000-4999 range;
+/// mirrors HTTP 401. The client reacts by refreshing its token and reconnecting.
+const WS_CLOSE_UNAUTHORIZED: u16 = 4401;
+
 // -----------------------------------------------------------------------------
 // Internal event bus — carries WebSocket frames and spawned-task results
 // into the non-blocking select loop. Sent by JS callbacks (onmessage /
@@ -137,6 +142,16 @@ enum SyncEvent {
         reason: String,
     },
     WsError,
+    /// Fired by a backoff timer scheduled after a disconnect: time to attempt a
+    /// fresh WebSocket connection (see [`schedule_reconnect`](SyncState::schedule_reconnect)).
+    ReconnectNow,
+    /// The WebSocket `onopen` fired: the socket is now OPEN, so (re)subscriptions
+    /// can be sent (they would be dropped if sent while still CONNECTING).
+    WsOpened,
+    /// Result of a silent token refresh triggered by a WS auth rejection (close
+    /// 4401). `ok` true means the access token was renewed and the socket can be
+    /// reopened; false means the refresh failed and a fallback re-login is needed.
+    Reauthenticated { ok: bool },
     SessionReady {
         id: RequestId,
         user_id: UserId,
@@ -314,7 +329,12 @@ impl SyncDocumentState {
         doc_type: DocType,
         server_created: bool,
     ) -> Self {
-        let current_snapshot_id = SnapshotId::new();
+        // Anchor the base to the document's genesis snapshot, which every client
+        // derives identically. Until a real snapshot is uploaded, the earliest
+        // deltas reference this id, so a fresh open (or a peer) recognises their
+        // parent instead of quarantining them forever. A later `OpenDocumentReady`
+        // or `SnapshotAvailable` carrying a real snapshot id supersedes it.
+        let current_snapshot_id = SnapshotId::genesis(document_id);
         Self {
             document_id,
             doc_key,
@@ -441,6 +461,15 @@ pub struct SyncState {
     _onclose: Option<Closure<dyn FnMut(JsValue)>>,
     #[allow(dead_code)]
     _onerror: Option<Closure<dyn FnMut(JsValue)>>,
+    #[allow(dead_code)]
+    _onopen: Option<Closure<dyn FnMut(JsValue)>>,
+    /// Closure kept alive for the pending reconnect `setTimeout`, if any.
+    #[allow(dead_code)]
+    _reconnect_timer: Option<Closure<dyn FnMut()>>,
+    /// Consecutive failed/closed connection count, reset to 0 once a socket
+    /// actually opens. Drives the exponential reconnect backoff so a server that
+    /// rejects the upgrade (e.g. 429 rate limit) is not hammered into a storm.
+    reconnect_attempts: u32,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
     mock_ws_tx: Option<flume::Sender<Vec<u8>>>,
@@ -454,6 +483,27 @@ pub struct SyncState {
 
     // -- Document metadata (in-memory mirror for mock mode) --------------------
     doc_metadata: HashMap<DocumentId, (DocType, String)>,
+
+    /// Opens received before the session keys were ready (e.g. a deep-link
+    /// refresh dispatches `OpenDocument` at frame 0, before `DevLogin` lands).
+    /// Held here and replayed by [`flush_pending_opens`](Self::flush_pending_opens)
+    /// once the session is established, so the document fetches its real key and
+    /// hydrates instead of opening local-only with a throwaway key.
+    pending_opens: Vec<(DocumentId, DocType)>,
+
+    /// Outbound updates produced before the session keys / document were ready
+    /// (e.g. the user edits a restored cell in the milliseconds after F5, while
+    /// `DevLogin` is still in flight). Held here instead of dropped, and flushed
+    /// once the document is open: for a server-side doc after its `RequestMissing`
+    /// replay (so `local_clock` has caught up to the server and no CLOCK_MISMATCH
+    /// occurs), for a local-only doc right when it opens.
+    pending_pre_session_updates: Vec<(DocumentId, Vec<u8>)>,
+
+    /// Last dev username seen on `DevLogin`, kept so the WS reauth path can
+    /// silently re-login if the refresh token is also dead (e.g. the server was
+    /// restarted with a fresh ephemeral JWT key and an empty Redis). `None` in a
+    /// real (non-dev) session, where reauth relies solely on the refresh token.
+    dev_username: Option<String>,
 }
 
 impl SyncState {
@@ -487,10 +537,16 @@ impl SyncState {
             _onmessage: None,
             _onclose: None,
             _onerror: None,
+            _onopen: None,
+            _reconnect_timer: None,
+            reconnect_attempts: 0,
             mock_ws_tx: None,
             event_tx: None,
             documents: HashMap::new(),
             doc_metadata: HashMap::new(),
+            pending_opens: Vec::new(),
+            pending_pre_session_updates: Vec::new(),
+            dev_username: None,
         }
     }
 
@@ -937,6 +993,9 @@ impl SyncState {
     /// the same username always derives the same identity.
     fn handle_dev_login(&mut self, id: RequestId, username: String) {
         tracing::info!("Sync: DevLogin (username={username})");
+        // Remember it so a WS auth rejection (close 4401) whose refresh also fails
+        // can silently re-login with the same deterministic identity.
+        self.dev_username = Some(username.clone());
 
         let logic_tx = self.logic_tx.clone();
         let api_base = self.api_base.clone();
@@ -1134,12 +1193,11 @@ impl SyncState {
                 ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
                 self.wire_ws_callbacks(&ws);
                 self.ws = Some(ws);
-                for doc_id in self.documents.keys().copied().collect::<Vec<_>>() {
-                    self.ws_send(&WsClientMsg::Subscribe {
-                        document_id: doc_id,
-                    });
-                }
-                tracing::info!("Sync: WebSocket opened ({url})");
+                // Subscriptions are (re)sent from the `onopen` handler, NOT here:
+                // the socket is still CONNECTING at this point and `ws_send` would
+                // be dropped, leaving the server with a connection but no
+                // subscription (every later Update then gets 403 "not subscribed").
+                tracing::info!("Sync: WebSocket connecting ({url})");
             }
             Err(e) => {
                 tracing::error!("Sync: WebSocket::new({url}) failed: {e:?}");
@@ -1151,6 +1209,27 @@ impl SyncState {
     #[cfg(not(target_arch = "wasm32"))]
     fn open_websocket(&mut self) {
         tracing::info!("Sync: WebSocket opened (native mock)");
+    }
+
+    /// (Re)subscribes every server-side document once the socket is OPEN, and
+    /// pulls anything missed while disconnected. Called from the `onopen` handler
+    /// so it works identically for the first connection and every reconnect
+    /// (after a network drop or a silent reauth). Local-only documents are not
+    /// subscribed here -- they subscribe after lazy creation materializes them.
+    fn resubscribe_all(&mut self) {
+        for (doc_id, last_seq) in self
+            .documents
+            .iter()
+            .filter(|(_, d)| d.server_created)
+            .map(|(id, d)| (*id, d.last_seq))
+            .collect::<Vec<_>>()
+        {
+            self.ws_send(&WsClientMsg::Subscribe { document_id: doc_id });
+            self.ws_send(&WsClientMsg::RequestMissing {
+                document_id: doc_id,
+                after_seq: last_seq,
+            });
+        }
     }
 
     /// Attaches onmessage / onclose / onerror closures to `ws`. Each closure
@@ -1198,13 +1277,86 @@ impl SyncState {
             self._onclose = Some(onclose);
         }
 
-        if let Some(tx) = event_tx {
+        if let Some(tx) = event_tx.clone() {
             let onerror = Closure::wrap(Box::new(move |_e: JsValue| {
                 let _ = tx.send(SyncEvent::WsError);
             }) as Box<dyn FnMut(JsValue)>);
             ws.set_onerror(Some(onerror.as_ref().unchecked_ref()));
             self._onerror = Some(onerror);
         }
+
+        if let Some(tx) = event_tx {
+            let onopen = Closure::wrap(Box::new(move |_e: JsValue| {
+                let _ = tx.send(SyncEvent::WsOpened);
+            }) as Box<dyn FnMut(JsValue)>);
+            ws.set_onopen(Some(onopen.as_ref().unchecked_ref()));
+            self._onopen = Some(onopen);
+        }
+    }
+
+    /// Schedules a reconnect attempt after an exponential backoff (with jitter)
+    /// so a rejected upgrade -- e.g. an HTTP 429 from the rate limiter -- does not
+    /// trigger a tight reconnect storm. Each failed attempt lengthens the delay;
+    /// a successful open resets the counter via [`SyncEvent::WsConnected`].
+    #[cfg(target_arch = "wasm32")]
+    fn schedule_reconnect(&mut self) {
+        use wasm_bindgen::JsCast;
+
+        let attempt = self.reconnect_attempts;
+        self.reconnect_attempts = attempt.saturating_add(1);
+
+        // 250ms base, doubling, capped at 10s, plus up to 100% jitter.
+        let base = 250u32.saturating_mul(1u32 << attempt.min(6));
+        let capped = base.min(10_000);
+        let jitter = (js_sys::Math::random() * capped as f64) as u32;
+        let delay_ms = (capped + jitter) as i32;
+
+        let Some(tx) = self.event_tx.clone() else { return };
+        let cb = Closure::wrap(Box::new(move || {
+            let _ = tx.send(SyncEvent::ReconnectNow);
+        }) as Box<dyn FnMut()>);
+
+        if let Ok(scope) = js_sys::global().dyn_into::<web_sys::DedicatedWorkerGlobalScope>() {
+            let _ = scope.set_timeout_with_callback_and_timeout_and_arguments_0(
+                cb.as_ref().unchecked_ref(),
+                delay_ms,
+            );
+            tracing::warn!("Sync: reconnect scheduled in {delay_ms}ms (attempt {})", attempt + 1);
+        }
+        // Keep the closure alive until it fires (replaces any previous pending one).
+        self._reconnect_timer = Some(cb);
+    }
+
+    /// Native / host-test stub: reconnect immediately (mock transport, no timer).
+    #[cfg(not(target_arch = "wasm32"))]
+    fn schedule_reconnect(&mut self) {
+        self.open_websocket();
+    }
+
+    /// Silently renews the access token after a WS auth rejection (close
+    /// [`WS_CLOSE_UNAUTHORIZED`]) and signals the outcome via
+    /// [`SyncEvent::Reauthenticated`]. Runs the refresh off the select loop so it
+    /// does not block; the shared token store is updated in place on success.
+    #[cfg(target_arch = "wasm32")]
+    fn reauthenticate(&mut self) {
+        let Some(tx) = self.event_tx.clone() else { return };
+        let auth = self.auth_context();
+        wasm_bindgen_futures::spawn_local(async move {
+            let ok = match auth.refresh().await {
+                Ok(()) => true,
+                Err(e) => {
+                    tracing::warn!("Sync: token refresh failed: {e}");
+                    false
+                }
+            };
+            let _ = tx.send(SyncEvent::Reauthenticated { ok });
+        });
+    }
+
+    /// Native / host-test stub: no token refresh, just reconnect.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn reauthenticate(&mut self) {
+        self.open_websocket();
     }
 
     /// Called by the select loop on a `WsDisconnected` event. Clears the socket
@@ -1233,14 +1385,49 @@ impl SyncState {
     pub(crate) fn handle_sync_event(&mut self, event: SyncEvent) {
         match event {
             SyncEvent::WsMessage(msg) => self.handle_ws_message(msg),
+            SyncEvent::WsOpened => self.resubscribe_all(),
             SyncEvent::WsDisconnected { code, reason } => {
                 self.handle_ws_disconnected(code, reason);
-                if !self.documents.is_empty() {
-                    self.open_websocket();
+                if self.documents.is_empty() {
+                    // No open document: nothing to reconnect for.
+                } else if code == WS_CLOSE_UNAUTHORIZED {
+                    // The server rejected our (expired/rotated) JWT. Refresh the
+                    // token silently and reopen, instead of hammering with a
+                    // dead token (which the backoff alone could never fix).
+                    self.reauthenticate();
+                } else {
+                    self.schedule_reconnect();
+                }
+            }
+            SyncEvent::Reauthenticated { ok } => {
+                if ok {
+                    // New access token in the shared store: reopen promptly.
+                    self.reconnect_attempts = 0;
+                    if self.ws.is_none() && !self.documents.is_empty() {
+                        self.open_websocket();
+                    }
+                } else if let Some(username) = self.dev_username.clone() {
+                    // Refresh token also dead (e.g. server restarted with a fresh
+                    // ephemeral key and empty Redis): re-login with the same
+                    // deterministic dev identity. SessionReady reopens the socket.
+                    tracing::warn!("Sync: refresh failed, re-running dev login for silent recovery");
+                    self.handle_dev_login(RequestId::next(), username);
+                } else {
+                    // Real session with no usable refresh: surface so the UI can
+                    // prompt re-auth. Fall back to backoff to avoid a tight loop.
+                    tracing::error!("Sync: reauth failed and no dev fallback; backing off");
+                    self.schedule_reconnect();
                 }
             }
             SyncEvent::WsError => {
                 tracing::error!("Sync: WebSocket error");
+            }
+            SyncEvent::ReconnectNow => {
+                self._reconnect_timer = None;
+                // Only reconnect if still wanted and not already reconnected.
+                if self.ws.is_none() && !self.documents.is_empty() {
+                    self.open_websocket();
+                }
             }
             SyncEvent::SessionReady {
                 id,
@@ -1258,6 +1445,7 @@ impl SyncState {
                 self.exchange_key = Some(exchange_key);
                 *self.tokens.borrow_mut() = Some(tokens);
                 self.open_websocket();
+                self.flush_pending_opens();
                 self.reply(
                     id,
                     RestEvent::SessionReady {
@@ -1280,6 +1468,7 @@ impl SyncState {
                 self.exchange_key = Some(exchange_key);
                 *self.tokens.borrow_mut() = Some(tokens);
                 self.open_websocket();
+                self.flush_pending_opens();
                 self.reply(id, RestEvent::AccountCreated { recovery_words });
             }
             SyncEvent::DocumentList { id, documents } => {
@@ -1329,11 +1518,34 @@ impl SyncState {
                 // server-side; a local-only doc subscribes after lazy creation.
                 if server_created && self.ws_connected() {
                     self.ws_send(&WsClientMsg::Subscribe { document_id });
+                    // Subscribing alone does not replay history (the server only
+                    // forwards live updates to subscribers). On a fresh open the
+                    // loaded snapshot (if any) covers state up to its own point,
+                    // but any deltas committed after it -- including the whole
+                    // history when no snapshot was ever uploaded -- must be pulled
+                    // explicitly. Request everything after our last known seq (0
+                    // on a fresh open) so the document hydrates to the latest.
+                    let after_seq = self
+                        .documents
+                        .get(&document_id)
+                        .map(|d| d.last_seq)
+                        .unwrap_or(Seq(0));
+                    self.ws_send(&WsClientMsg::RequestMissing {
+                        document_id,
+                        after_seq,
+                    });
                 }
                 self.send_to_logic(LogicEvent::ConnectionStatus {
                     document_id,
                     connected: self.ws_connected(),
                 });
+                // A local-only doc issues no RequestMissing (nothing to replay),
+                // so flush any buffered pre-session updates here -- they will take
+                // the lazy-create path. A server-side doc instead flushes from the
+                // `MissingUpdates` handler, after its clock has caught up.
+                if !server_created {
+                    self.flush_pre_session_updates(document_id);
+                }
             }
             SyncEvent::DocumentMaterialized { document_id } => {
                 let pending = match self.documents.get_mut(&document_id) {
@@ -1475,6 +1687,13 @@ impl SyncState {
     /// this method receives the already-decoded message.
     #[allow(dead_code)]
     fn handle_ws_message(&mut self, server_msg: WsServerMsg) {
+        // Any frame from the server proves the connection is authenticated and
+        // live, so the reconnect backoff resets. A bare `onopen` is NOT enough:
+        // an auth-rejected upgrade still returns 101 (then the server drops it),
+        // firing `onopen` without ever sending a frame -- resetting on `onopen`
+        // there would spin a tight reconnect loop (storm). A rejected connection
+        // never reaches this point, so its backoff keeps growing as intended.
+        self.reconnect_attempts = 0;
         match server_msg {
             WsServerMsg::Subscribed { document_id } => {
                 self.send_to_logic(LogicEvent::ConnectionStatus {
@@ -1529,12 +1748,17 @@ impl SyncState {
             }
 
             WsServerMsg::MissingUpdates {
-                document_id: _,
+                document_id,
                 updates,
             } => {
                 for seq_update in updates {
                     self.receive_update(seq_update.seq, seq_update.update);
                 }
+                // The replay has advanced `local_clock` past everything the
+                // server already holds for us, so any update buffered before the
+                // session was ready can now be sealed with a fresh, conflict-free
+                // clock.
+                self.flush_pre_session_updates(document_id);
             }
 
             WsServerMsg::SnapshotRequired { document_id } => {
@@ -1683,11 +1907,24 @@ impl SyncState {
     #[allow(dead_code)]
     fn receive_update(&mut self, seq: Seq, update: Update) {
         let document_id = update.public_data.document_id;
+        // The per-author clock counter is not persisted across a reload; after F5
+        // it restarts at 0 and would re-emit a clock the server already consumed
+        // (CLOCK_MISMATCH). The server echoes our own updates back to us, so we
+        // treat every update authored by THIS client as a high-water-mark and
+        // advance `local_clock` past it -- the next `seal_update` then continues
+        // from the right value.
+        let authored_by_us = self
+            .signing_key
+            .as_ref()
+            .is_some_and(|sk| sk.verifying_key().to_bytes() == *update.public_data.pub_key.as_array());
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             tracing::warn!("Sync: Update for unopened doc {document_id:?}, dropping");
             return;
         };
         doc_state.last_seq = seq;
+        if authored_by_us {
+            doc_state.local_clock = doc_state.local_clock.max(update.public_data.clock.0);
+        }
 
         let snapshot_id = update.public_data.snapshot_id;
         if doc_state.known_snapshots.contains(&snapshot_id) {
@@ -1815,7 +2052,27 @@ impl SyncState {
 
     // -- Document lifecycle ----------------------------------------------------
 
+    /// Replay every open that arrived before the session was ready. Called once
+    /// the session keys land (`SessionReady` / `AccountCreated`), after the WS is
+    /// (re)opened, so each queued document fetches its real key and hydrates.
+    fn flush_pending_opens(&mut self) {
+        for (document_id, doc_type) in std::mem::take(&mut self.pending_opens) {
+            self.handle_open_document(document_id, doc_type);
+        }
+    }
+
     fn handle_open_document(&mut self, document_id: DocumentId, doc_type: DocType) {
+        // Without session keys we cannot authenticate the members fetch or unwrap
+        // the document key: opening now would insert a local-only doc with a
+        // throwaway key and never hydrate. Queue it until the session is ready.
+        // (Only in the real wasm path; the mock/host path has `event_tx == None`
+        // and seeds keys synchronously.)
+        if self.event_tx.is_some() && self.signing_key.is_none() {
+            tracing::info!("Sync: queuing OpenDocument {document_id:?} until session ready");
+            self.pending_opens.push((document_id, doc_type));
+            return;
+        }
+
         let event_tx = self.event_tx.clone();
 
         if let Some(tx) = event_tx {
@@ -1853,7 +2110,13 @@ impl SyncState {
                 } else {
                     None
                 };
-                let snapshot_id = SnapshotId::new();
+                // No snapshot-upload path exists yet: documents accumulate only
+                // deltas, all parented on the genesis snapshot. Seed the base
+                // with that same deterministic id so the replayed deltas (see the
+                // `RequestMissing` on open below) recognise their parent instead
+                // of quarantining. A real snapshot id supersedes this once the
+                // snapshot-upload flow lands.
+                let snapshot_id = SnapshotId::genesis(doc_id);
                 let _ = tx.send(SyncEvent::OpenDocumentReady {
                     document_id: doc_id,
                     doc_key,
@@ -1952,9 +2215,40 @@ impl SyncState {
             .map(|sk| PublicKey::from_array(sk.verifying_key().to_bytes()))
     }
 
+    /// Replays updates that were buffered before the session/document were ready
+    /// (see [`pending_pre_session_updates`](Self::pending_pre_session_updates)).
+    /// Drains only the entries for `document_id`, preserving their order.
+    fn flush_pre_session_updates(&mut self, document_id: DocumentId) {
+        if self.signing_key.is_none() || self.pending_pre_session_updates.is_empty() {
+            return;
+        }
+        let mut drained = Vec::new();
+        self.pending_pre_session_updates.retain(|(doc, payload)| {
+            if *doc == document_id {
+                drained.push(payload.clone());
+                false
+            } else {
+                true
+            }
+        });
+        if !drained.is_empty() {
+            tracing::info!(
+                "[Sync] flushing {} buffered pre-session update(s) doc={document_id}",
+                drained.len()
+            );
+        }
+        for payload in drained {
+            self.handle_send_update(document_id, payload);
+        }
+    }
+
     fn handle_send_update(&mut self, document_id: DocumentId, payload: Vec<u8>) {
         let Some(signing_key) = self.signing_key.clone() else {
-            tracing::warn!("[Sync] SendUpdate before session keys ready, dropping");
+            // Session not established yet (e.g. an edit landed in the gap between
+            // an F5 and DevLogin completing). Buffer instead of dropping; flushed
+            // once the document opens (see `pending_pre_session_updates`).
+            tracing::info!("[Sync] SendUpdate before session ready, buffering doc={document_id}");
+            self.pending_pre_session_updates.push((document_id, payload));
             return;
         };
         let Some(pub_key) = self.author_pub_key() else {
