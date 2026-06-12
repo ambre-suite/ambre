@@ -128,8 +128,9 @@ CREATE TABLE document_members (
     document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     role        TEXT NOT NULL CHECK (role IN ('owner', 'editor', 'viewer')),
-    doc_key_enc BYTEA NOT NULL,              -- Document Key encrypted with member's X25519 exchange_pubkey
-    invited_by  UUID REFERENCES users(id),
+    doc_key_enc BYTEA NOT NULL,              -- Document Key, static-ECDH-wrapped FOR member's X25519 pubkey BY invited_by's key
+    invited_by  UUID REFERENCES users(id),   -- the wrapper of doc_key_enc (inviter, self at creation, or rotator after rotation);
+                                             -- recipient unwraps via ECDH against THIS user's exchange key, not its own
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (document_id, user_id)
 );
@@ -258,6 +259,13 @@ channel doc:{doc_id}           → PUB/SUB (postcard-serialized WsServerMsg)
 # Channel broadcast PubSub (same pattern as documents)
 channel chan:{channel_id}      → PUB/SUB (postcard-serialized WsServerMsg)
 
+# Per-user broadcast PubSub (server-initiated pushes not tied to an open doc)
+# Every WS connection subscribes to its own user:{user_id} channel for the whole
+# session. Used for events the recipient cannot yet be a doc-subscriber of —
+# e.g. WsServerMsg::DocumentShared on a fresh invite (the invitee does not know
+# the document_id yet, so doc:{doc_id} could not reach them).
+channel user:{user_id}         → PUB/SUB (postcard-serialized WsServerMsg)
+
 # Per-document presence
 # IMPORTANT: presence data (cursor, selection) are encrypted blobs
 # sent by the client in WsClientMsg::Ephemeral. The server stores the opaque blob.
@@ -374,8 +382,8 @@ use ambre_protocol::{
     WsClientMsg,      // Subscribe, Unsubscribe, Update, Ephemeral (with signature), RequestMissing,
                       // SubscribeChannel, UnsubscribeChannel, ChannelUpdate, ChannelEphemeral
     WsServerMsg,      // Subscribed, Update (with seq), Ephemeral, MissingUpdates, SnapshotRequired,
-                      // SnapshotAvailable, KeyRotationRequired, ChannelSubscribed, ChannelUpdate,
-                      // ChannelEphemeral, Error
+                      // SnapshotAvailable, KeyRotationRequired, DocumentShared (pushed on user:{id}),
+                      // ChannelSubscribed, ChannelUpdate, ChannelEphemeral, Error
     UpdatePublicData, // document_id, pub_key: [u8; 32], snapshot_id, clock
     EphemeralPublicData, // document_id, pub_key: [u8; 32], counter
     SignalingClientMsg,
@@ -468,7 +476,9 @@ pub fn api_router() -> Router<AppState> {
 - **`GET /api/documents`**: returns for each document `{ id, doc_type, name_enc, role, doc_key_enc, updated_at }` — the `document_members` join includes `doc_key_enc` for the current user in the response. The Sync thread can decrypt all names in a single fetch, without N round-trips.
 - **`POST /api/documents/{id}/media`** and **`POST /api/channels/{id}/media`**: confirmation routes after S3 upload. Body: `{ content_hash, mime_type, size_bytes }`. The server verifies ACL, inserts into the Postgres `media` table. Called by the Sync thread after successful S3 PUT.
 - **`POST /api/.../media/upload-url`**: generates a presigned PUT URL (TTL 15 min) after ACL verification. No Postgres insertion — the INSERT is done by the confirmation route above.
-- **`POST /api/documents/{id}/rotate-key`**: the `WsServerMsg::KeyRotationRequired` broadcast is emitted **at the end** of this route (after the Postgres transaction), not on `DELETE /share`. The new `doc_key_enc` values are in the database before other clients fetch them.
+- **`GET /api/documents/{id}/members`**: returns each member as `{ user_id, email, display_name, role, signing_pub_key, exchange_pub_key, doc_key_enc, wrapper_exchange_pub_key }`. `wrapper_exchange_pub_key` is the exchange key of `invited_by` (resolved via a `LEFT JOIN`), against which the recipient performs the ECDH unwrap of `doc_key_enc` — **not** its own `exchange_pub_key`. Falls back to the member's own key for legacy rows with a null `invited_by`.
+- **`POST /api/documents/{id}/share`**: after inserting the membership, publishes `WsServerMsg::DocumentShared { document_id, doc_type }` on `user:{invitee_id}` (sec.7) so the invitee's open sessions refresh their list live.
+- **`POST /api/documents/{id}/rotate-key`**: replaces every `doc_key_enc` **and sets `invited_by` to the rotator** (the new wrapper of record), inside one Postgres transaction. The `WsServerMsg::KeyRotationRequired` broadcast is emitted **at the end** of this route, not on `DELETE /share`. The new `doc_key_enc` values are in the database before other clients fetch them.
 
 #### Blind Relay Flow — Update Sequence
 
@@ -882,6 +892,8 @@ impl IntoResponse for AppError {
 ### PubSub Architecture
 
 **Multiplexed WebSocket:** Each WebSocket connection (`GET /api/ws`) maintains a `HashSet<Uuid>` of subscribed documents and a `HashSet<Uuid>` of subscribed channels. Redis PubSub subscribe/unsubscribe is dynamic: the server subscribes to the Redis channel `doc:{doc_id}` or `chan:{channel_id}` on `Subscribe`/`SubscribeChannel`, and unsubscribes on `Unsubscribe`/`UnsubscribeChannel` or disconnect. Meetings keep a separate WebSocket endpoint (`GET /api/ws/meetings/{id}`) because their ephemeral lifecycle (SDP/ICE signaling) does not follow the Subscribe/Unsubscribe pattern.
+
+**Per-user channel (`user:{user_id}`):** in addition to the dynamic per-document/per-channel subscriptions, every connection subscribes to **its own** `user:{user_id}` channel for the whole session (registered right after the connection is established, unsubscribed on disconnect). It carries server-initiated pushes the recipient could not otherwise receive because they are **not yet** a subscriber of the relevant document. The first case is **`WsServerMsg::DocumentShared { document_id, doc_type }`**, published to `user:{invitee_id}` when a document is shared (`POST /documents/{id}/share`): the invitee does not know `document_id` yet, so a `doc:{doc_id}` broadcast could never reach them. The client refreshes its document list and notifies the user — no polling. (Contrast: `KeyRotationRequired` rides `doc:{doc_id}` because the affected members are already subscribed.)
 
 **PubSub hub (in-process fan-out — single Redis subscription per channel per instance).** ⚠️ `rustis` keeps subscriptions **connection-global**: a `Client` holds `HashMap<channel, (_, PubSubSender)>` -- **one** sender per channel per connection. Two WebSockets on the same `doc:X` over the shared client therefore collide ("already subscribed"), so a per-WS `PubSubStream` is **impossible** for collaboration. The server runs a single `PubSubHub` task (spawned once at boot, cloned into every `AppState`): it owns **one** `PubSubStream` on the shared RESP3 connection, ref-counts the Redis `SUBSCRIBE` per channel (subscribe on the first interested connection, unsubscribe when the last leaves), and **fans out in-process** -- on each Redis message it clones the (already postcard-encoded `WsServerMsg`) payload to every locally interested WS via an `mpsc` sink keyed by `connection_id`. The handler calls `pubsub.subscribe(channel, connection_id, outbound_tx)` / `unsubscribe(...)`. Binary payloads are published as `RefBulkString` (a raw `&[u8]` makes rustis panic, which would 1006-drop the publisher and trigger a reconnect storm).
 

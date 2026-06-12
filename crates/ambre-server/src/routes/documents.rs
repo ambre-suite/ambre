@@ -285,6 +285,10 @@ pub struct MemberInfoJson {
     pub signing_pub_key: String,
     pub exchange_pub_key: String,
     pub doc_key_enc: String,
+    /// Exchange public key of whoever wrapped `doc_key_enc` (the inviter, or the
+    /// member themselves at creation). The recipient unwraps via ECDH against
+    /// THIS key, not its own. Falls back to the member's own key for legacy rows.
+    pub wrapper_exchange_pub_key: String,
 }
 
 pub async fn list_document_members(
@@ -302,6 +306,9 @@ pub async fn list_document_members(
         signing_pub_key: hex::encode(&m.signing_pubkey),
         exchange_pub_key: hex::encode(&m.exchange_pubkey),
         doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&m.doc_key_enc),
+        wrapper_exchange_pub_key: hex::encode(
+            m.wrapper_exchange_pubkey.as_ref().unwrap_or(&m.exchange_pubkey),
+        ),
     }).collect();
     Ok(axum::Json(serde_json::json!({"members":json})))
 }

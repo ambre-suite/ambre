@@ -14,7 +14,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::sync_warning::SyncWarningCode;
-use crate::{ChannelId, DocumentId, RequestId, RestEvent, UserId};
+use crate::{ChannelId, DocType, DocumentId, RequestId, RestEvent, UserId};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LogicEvent
@@ -77,6 +77,14 @@ pub enum LogicEvent {
     MemberRevoked {
         document_id: DocumentId,
         revoked_user_id: UserId,
+    },
+
+    /// A document was shared with this user (server push on `user:{id}`,
+    /// translated from `WsServerMsg::DocumentShared`). The Logic thread forwards
+    /// it to the UI, which refreshes its document list and notifies the user.
+    DocumentShared {
+        document_id: DocumentId,
+        doc_type: DocType,
     },
 
     // ── Channels (Murmure) — real-time (server push) ──────────────────────────

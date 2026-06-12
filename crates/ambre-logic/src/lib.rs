@@ -449,6 +449,19 @@ impl LogicState {
                 });
             }
 
+            // Server push: a document was shared with us. Pure forward; the UI
+            // refreshes its list and notifies. No Logic-side state to mutate (the
+            // document materializes lazily when the user opens it).
+            LogicEvent::DocumentShared {
+                document_id,
+                doc_type,
+            } => {
+                self.send_to_ui(UiEvent::DocumentShared {
+                    document_id,
+                    doc_type,
+                });
+            }
+
             // -- Channels (server push) ----------------------------------------
             LogicEvent::ChannelRemoteUpdate {
                 channel_id,

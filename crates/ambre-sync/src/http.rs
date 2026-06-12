@@ -372,6 +372,11 @@ pub(crate) struct MemberEntry {
     pub exchange_pub_key: String,
     pub doc_key_enc: String,
     pub role: String,
+    /// Exchange public key of whoever wrapped `doc_key_enc`. The ECDH unwrap must
+    /// use this peer key, not our own `exchange_pub_key`. Optional for resilience
+    /// against older servers; the unwrap falls back to `exchange_pub_key`.
+    #[serde(default)]
+    pub wrapper_exchange_pub_key: String,
 }
 
 #[derive(Deserialize)]

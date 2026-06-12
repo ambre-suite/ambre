@@ -357,6 +357,84 @@
     backdrop-filter: blur(2px);
 }
 
+/* Share dialog: a member list above an invite form. */
+.ambre-dialog.ambre-share {
+    width: min(92vw, 520px);
+    max-width: min(92vw, 520px);
+}
+
+.ambre-share-members {
+    list-style: none;
+    margin: 0 0 16px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.ambre-share-members li {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.ambre-share-member-name {
+    font-weight: 500;
+}
+
+.ambre-share-member-email {
+    grid-column: 1;
+    color: var(--text-dim);
+    font-size: 12px;
+}
+
+.ambre-share-members select,
+.ambre-share-invite select,
+.ambre-share-input {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    padding: 5px 8px;
+    border-radius: 6px;
+}
+
+.ambre-share-revoke {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--danger, #e05260);
+    font: inherit;
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.ambre-share-invite {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.ambre-share-invite button {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--accent);
+    color: #fff;
+    font: inherit;
+    padding: 6px 14px;
+    border-radius: 7px;
+    cursor: pointer;
+}
+
 /* Header icon button (e.g. "about"). */
 .ambre-header button.icon {
     appearance: none;

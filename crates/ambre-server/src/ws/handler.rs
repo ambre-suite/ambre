@@ -37,6 +37,13 @@ fn chan_pubsub_channel(channel_id: &ChannelId) -> String {
     format!("chan:{channel_id}")
 }
 
+/// Redis PubSub channel name for a user's personal events (e.g. a document was
+/// shared with them). Every connection subscribes to its own user channel for
+/// the whole session so server-initiated, non-document-scoped pushes reach it.
+pub(crate) fn user_pubsub_channel(user_id: &UserId) -> String {
+    format!("user:{user_id}")
+}
+
 /// Query parameters on the WS upgrade. The browser WebSocket API forbids custom
 /// headers, so the access JWT travels in the `token` query parameter; it is
 /// verified at the handshake exactly like a `Authorization: Bearer` on REST.
@@ -137,6 +144,13 @@ async fn handle_ws(
     // is an idempotent no-op.)
     let pubsub = state.pubsub.clone();
 
+    // Personal channel: subscribe for the whole session so server-initiated
+    // pushes not tied to an already-open document (e.g. `DocumentShared` on a
+    // fresh invite) reach this connection.
+    pubsub
+        .subscribe(user_pubsub_channel(&user_id), connection_id.clone(), outbound_tx.clone())
+        .await;
+
     while let Some(Ok(msg)) = ws_stream.next().await {
         let Message::Binary(data) = msg else { continue };
 
@@ -225,6 +239,7 @@ async fn handle_ws(
     for channel_id in &conn.channel_subscriptions {
         pubsub.unsubscribe(chan_pubsub_channel(channel_id), connection_id.clone()).await;
     }
+    pubsub.unsubscribe(user_pubsub_channel(&user_id), connection_id.clone()).await;
     outbound_handle.abort();
 }
 

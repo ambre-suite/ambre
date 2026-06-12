@@ -8,7 +8,7 @@
 
 use crate::{Ephemeral, SeqUpdate, Update};
 use crate::messages::Seq;
-use ambre_core::{ChannelId, DocumentId, SnapshotId, UserId};
+use ambre_core::{ChannelId, DocType, DocumentId, SnapshotId, UserId};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -85,6 +85,15 @@ pub enum WsServerMsg {
     KeyRotationRequired {
         document_id: DocumentId,
         revoked_user_id: UserId,
+    },
+
+    /// A document was just shared with this user. Pushed on the per-user channel
+    /// (`user:{id}`), which every connection subscribes to, so the invitee learns
+    /// about the new document without polling. The client refreshes its document
+    /// list and notifies the user.
+    DocumentShared {
+        document_id: DocumentId,
+        doc_type: DocType,
     },
 
     /// Channel subscription confirmed.

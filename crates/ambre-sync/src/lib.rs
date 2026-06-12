@@ -1841,7 +1841,15 @@ impl SyncState {
                                 .try_into()
                                 .map_err(|_| "invalid nonce length")?;
                             let ciphertext = encrypted[24..].to_vec();
-                            let peer_pub: [u8; 32] = hex::decode(&entry.exchange_pub_key)
+                            // The new key was wrapped by the rotator; unwrap
+                            // against THEIR exchange key, not our own (fallback to
+                            // our own for older servers without the wrapper field).
+                            let wrapper_hex = if entry.wrapper_exchange_pub_key.is_empty() {
+                                &entry.exchange_pub_key
+                            } else {
+                                &entry.wrapper_exchange_pub_key
+                            };
+                            let peer_pub: [u8; 32] = hex::decode(wrapper_hex)
                                 .map_err(|e| format!("hex decode pubkey: {e}"))?
                                 .try_into()
                                 .map_err(|_| "invalid pubkey length")?;
@@ -1863,6 +1871,11 @@ impl SyncState {
                         });
                     });
                 }
+            }
+
+            WsServerMsg::DocumentShared { document_id, doc_type } => {
+                tracing::info!("Sync: DocumentShared {document_id:?} ({doc_type:?})");
+                self.send_to_logic(LogicEvent::DocumentShared { document_id, doc_type });
             }
 
             WsServerMsg::ChannelSubscribed { channel_id } => {
@@ -2172,8 +2185,16 @@ impl SyncState {
             .map_err(|_| "invalid nonce length")?;
         let ciphertext = encrypted[24..].to_vec();
 
-        let peer_pub_bytes: [u8; 32] = hex::decode(&entry.exchange_pub_key)
-            .map_err(|e| format!("hex decode exchange_pub_key: {e}"))?
+        // The DH peer is whoever WRAPPED our key (the inviter, or ourselves at
+        // creation) -- not our own key. Fall back to the member's own key if an
+        // older server omits the wrapper field (e.g. a self-wrapped owner row).
+        let wrapper_pub_hex = if entry.wrapper_exchange_pub_key.is_empty() {
+            &entry.exchange_pub_key
+        } else {
+            &entry.wrapper_exchange_pub_key
+        };
+        let peer_pub_bytes: [u8; 32] = hex::decode(wrapper_pub_hex)
+            .map_err(|e| format!("hex decode wrapper_exchange_pub_key: {e}"))?
             .try_into()
             .map_err(|_| "invalid exchange pubkey length")?;
 

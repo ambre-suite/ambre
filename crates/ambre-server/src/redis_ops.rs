@@ -233,6 +233,24 @@ pub async fn doc_broadcast(
     Ok(())
 }
 
+/// Publishes a message to a user's personal PubSub channel (`user:{id}`).
+///
+/// Reaches every live connection of that user, whatever documents they have
+/// open. Used for server-initiated, non-document-scoped pushes such as
+/// `DocumentShared` on a fresh invite.
+pub async fn user_broadcast(
+    redis: &Client,
+    user_id: &ambre_core::UserId,
+    payload: &[u8],
+) -> Result<(), AppError> {
+    let channel = format!("user:{user_id}");
+    redis
+        .publish(&channel, RefBulkString::new(payload))
+        .await
+        .map_err(|e| AppError::Redis(format!("user broadcast: {e}")))?;
+    Ok(())
+}
+
 /// Publishes a message to the Redis PubSub channel for the given channel.
 pub async fn chan_broadcast(
     redis: &Client,
