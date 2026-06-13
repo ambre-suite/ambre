@@ -1,10 +1,9 @@
+use crate::error::AppError;
 use rustis::client::Client;
 use rustis::commands::{
-    GenericCommands, HashCommands, ListCommands, PubSubCommands,
-    ScriptingCommands, StringCommands,
+    GenericCommands, HashCommands, ListCommands, PubSubCommands, ScriptingCommands, StringCommands,
 };
 use rustis::resp::RefBulkString;
-use crate::error::AppError;
 
 /// Atomic Lua script that validates a client clock and assigns a
 /// global monotonic sequence number.
@@ -103,10 +102,10 @@ pub async fn get_pending_delta(
         let Ok(parsed) = serde_json::from_str::<serde_json::Value>(blob) else {
             continue;
         };
-        if parsed["seq"].as_u64() == Some(seq) {
-            if let Some(b64) = parsed["update_b64"].as_str() {
-                return Ok(base64::engine::general_purpose::URL_SAFE.decode(b64).ok());
-            }
+        if parsed["seq"].as_u64() == Some(seq)
+            && let Some(b64) = parsed["update_b64"].as_str()
+        {
+            return Ok(base64::engine::general_purpose::URL_SAFE.decode(b64).ok());
         }
     }
     Ok(None)
@@ -117,10 +116,7 @@ pub async fn get_pending_delta(
 /// Refresh keys follow the pattern `refresh:{token}` with fields `user_id` and
 /// `signing_pubkey_hex`. Returns `None` when the token is unknown, expired, or
 /// was revoked (logout / rotation).
-pub async fn refresh_get(
-    redis: &Client,
-    token: &str,
-) -> Result<Option<RefreshData>, AppError> {
+pub async fn refresh_get(redis: &Client, token: &str) -> Result<Option<RefreshData>, AppError> {
     let key = format!("refresh:{token}");
     // `hgetall` returns field/value pairs; rustis deserializes them as a map.
     // (Reading into `Vec<String>` fails with "invalid type: sequence, expected a
@@ -135,7 +131,10 @@ pub async fn refresh_get(
     }
 
     let user_id = fields.get("user_id").cloned().unwrap_or_default();
-    let signing_pubkey_hex = fields.get("signing_pubkey_hex").cloned().unwrap_or_default();
+    let signing_pubkey_hex = fields
+        .get("signing_pubkey_hex")
+        .cloned()
+        .unwrap_or_default();
 
     let user_id = ambre_core::Uuid::parse_str(&user_id)
         .map(ambre_core::UserId::from_uuid)
@@ -144,7 +143,10 @@ pub async fn refresh_get(
     let signing_pubkey = ambre_core::PublicKey::from_hex(&signing_pubkey_hex)
         .map_err(|e| AppError::Redis(format!("invalid pubkey in refresh: {e}")))?;
 
-    Ok(Some(RefreshData { user_id, signing_pubkey }))
+    Ok(Some(RefreshData {
+        user_id,
+        signing_pubkey,
+    }))
 }
 
 /// Creates a refresh-token record in Redis with the configured TTL.
@@ -324,10 +326,7 @@ pub async fn oidc_state_set(
     redis
         .hset(
             &key,
-            [
-                ("pkce_verifier", pkce_verifier_secret),
-                ("nonce", nonce),
-            ],
+            [("pkce_verifier", pkce_verifier_secret), ("nonce", nonce)],
         )
         .await
         .map_err(|e| AppError::Redis(format!("oidc state set: {e}")))?;
@@ -394,8 +393,7 @@ mod lua_tests {
     use super::*;
 
     async fn connect_redis() -> Option<rustis::client::Client> {
-        let url = std::env::var("REDIS_URL")
-            .unwrap_or_else(|_| "redis://localhost:6379".into());
+        let url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".into());
         rustis::client::Client::connect(url.as_str()).await.ok()
     }
 
@@ -414,7 +412,10 @@ mod lua_tests {
             .expect("first update should succeed");
         assert_eq!(seq, 1);
 
-        let _ = redis.del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")]).await.unwrap();
+        let _ = redis
+            .del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")])
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -427,14 +428,23 @@ mod lua_tests {
         let doc_id = ambre_core::DocumentId::new();
         let pk = "def456def456def456def456def456def456def456def456def456def456def4";
 
-        let s1 = verify_clock_and_assign_seq(&redis, &doc_id, pk, 1).await.unwrap();
-        let s2 = verify_clock_and_assign_seq(&redis, &doc_id, pk, 2).await.unwrap();
-        let s3 = verify_clock_and_assign_seq(&redis, &doc_id, pk, 3).await.unwrap();
+        let s1 = verify_clock_and_assign_seq(&redis, &doc_id, pk, 1)
+            .await
+            .unwrap();
+        let s2 = verify_clock_and_assign_seq(&redis, &doc_id, pk, 2)
+            .await
+            .unwrap();
+        let s3 = verify_clock_and_assign_seq(&redis, &doc_id, pk, 3)
+            .await
+            .unwrap();
         assert_eq!(s1, 1);
         assert_eq!(s2, 2);
         assert_eq!(s3, 3);
 
-        let _ = redis.del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")]).await.unwrap();
+        let _ = redis
+            .del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")])
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -447,11 +457,18 @@ mod lua_tests {
         let doc_id = ambre_core::DocumentId::new();
         let pk = "1111111111111111111111111111111111111111111111111111111111111111";
 
-        verify_clock_and_assign_seq(&redis, &doc_id, pk, 1).await.unwrap();
-        let err = verify_clock_and_assign_seq(&redis, &doc_id, pk, 3).await.unwrap_err();
+        verify_clock_and_assign_seq(&redis, &doc_id, pk, 1)
+            .await
+            .unwrap();
+        let err = verify_clock_and_assign_seq(&redis, &doc_id, pk, 3)
+            .await
+            .unwrap_err();
         assert!(matches!(err, AppError::Redis(_)));
 
-        let _ = redis.del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")]).await.unwrap();
+        let _ = redis
+            .del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")])
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -464,11 +481,18 @@ mod lua_tests {
         let doc_id = ambre_core::DocumentId::new();
         let pk = "2222222222222222222222222222222222222222222222222222222222222222";
 
-        verify_clock_and_assign_seq(&redis, &doc_id, pk, 1).await.unwrap();
-        let err = verify_clock_and_assign_seq(&redis, &doc_id, pk, 1).await.unwrap_err();
+        verify_clock_and_assign_seq(&redis, &doc_id, pk, 1)
+            .await
+            .unwrap();
+        let err = verify_clock_and_assign_seq(&redis, &doc_id, pk, 1)
+            .await
+            .unwrap_err();
         assert!(matches!(err, AppError::Redis(_)));
 
-        let _ = redis.del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")]).await.unwrap();
+        let _ = redis
+            .del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")])
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -482,15 +506,24 @@ mod lua_tests {
         let pk_a = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         let pk_b = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
-        let s_a = verify_clock_and_assign_seq(&redis, &doc_id, pk_a, 1).await.unwrap();
-        let s_b = verify_clock_and_assign_seq(&redis, &doc_id, pk_b, 1).await.unwrap();
-        let s_a2 = verify_clock_and_assign_seq(&redis, &doc_id, pk_a, 2).await.unwrap();
+        let s_a = verify_clock_and_assign_seq(&redis, &doc_id, pk_a, 1)
+            .await
+            .unwrap();
+        let s_b = verify_clock_and_assign_seq(&redis, &doc_id, pk_b, 1)
+            .await
+            .unwrap();
+        let s_a2 = verify_clock_and_assign_seq(&redis, &doc_id, pk_a, 2)
+            .await
+            .unwrap();
 
         assert_eq!(s_a, 1);
         assert_eq!(s_b, 2);
         assert_eq!(s_a2, 3);
 
-        let _ = redis.del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")]).await.unwrap();
+        let _ = redis
+            .del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")])
+            .await
+            .unwrap();
     }
 
     #[test]
