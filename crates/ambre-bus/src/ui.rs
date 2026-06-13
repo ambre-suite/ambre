@@ -234,6 +234,16 @@ pub enum TrameEvent {
         covered_row: u32,
         covered_col: u32,
     },
+
+    /// Availability of undo/redo after a local
+    /// [`Undo`](crate::logic::TrameCommand::Undo) /
+    /// [`Redo`](crate::logic::TrameCommand::Redo). Drives the enabled state of the
+    /// chrome's Undo/Redo affordances. Reflects Loro's `UndoManager` stacks, whose
+    /// scope is the current document session.
+    UndoState {
+        can_undo: bool,
+        can_redo: bool,
+    },
 }
 
 /// A single cell ready for display.
