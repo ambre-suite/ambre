@@ -23,11 +23,13 @@ pub mod command;
 pub mod event;
 pub mod logic;
 pub mod rest;
+pub mod sink;
 pub mod sync_warning;
 pub mod ui;
 
 // Re‑export the main types for convenient use.
 pub use command::SyncCommand;
+pub use sink::CommandSink;
 pub use event::LogicEvent;
 pub use logic::{AppCommand, LogicCommand, TrameCommand};
 pub use rest::{

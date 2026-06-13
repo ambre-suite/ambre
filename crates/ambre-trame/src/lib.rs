@@ -31,6 +31,12 @@ pub mod ui;
 #[cfg(target_arch = "wasm32")]
 pub mod chrome;
 
+/// Test double for the Sync thread (`MockSyncHandle`), used by controller tests
+/// to capture emitted `SyncCommand`s and relay CRDT deltas between peers. Built
+/// only for the crate's own test runs.
+#[cfg(test)]
+pub mod test_support;
+
 pub use ambre_bus::{DisplayCell, TrameCommand, TrameEvent};
 pub use logic::{TrameOutcome, TrameState};
 
