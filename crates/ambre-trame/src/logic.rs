@@ -1241,6 +1241,62 @@ mod tests {
         assert_eq!(read_display(&mut state, 2, 0).merge_span, Some((2, 1)), "merge shifted down");
     }
 
+    /// An edit emits a CRDT delta through the `CommandSink`: absorbing the
+    /// outcome captures exactly one `SyncCommand::SendUpdate`, the seam the
+    /// production controller drives the Sync thread through.
+    #[test]
+    fn edit_emits_send_update_through_sink() {
+        use crate::test_support::MockSyncHandle;
+        use ambre_bus::{DocumentId, SyncCommand};
+
+        let mut state = TrameState::new();
+        let sync = MockSyncHandle::new();
+        let doc = DocumentId::new();
+
+        let outcome = state.handle_command(TrameCommand::SetCellText {
+            row: 0, col: 0, text: "hi".to_owned(),
+        });
+        sync.absorb(doc, &outcome);
+
+        let sent = sync.drain();
+        assert_eq!(sent.len(), 1, "one SendUpdate per mutating command");
+        assert!(matches!(
+            &sent[0],
+            SyncCommand::SendUpdate { document_id, payload }
+                if *document_id == doc && !payload.is_empty()
+        ));
+    }
+
+    /// Full two-peer collaboration loop driven through `MockSyncHandle`: peer A
+    /// edits, the mock captures and relays the delta to peer B, and B converges
+    /// on A's value -- a controller test with no network and no hand-shuffled
+    /// snapshots.
+    #[test]
+    fn two_peers_converge_via_mock_sync() {
+        use crate::test_support::MockSyncHandle;
+        use ambre_bus::DocumentId;
+
+        let doc = DocumentId::new();
+        let mut a = TrameState::new();
+        let mut b = TrameState::new();
+        let sync = MockSyncHandle::new();
+
+        // A writes A1; the mock absorbs the emitted delta.
+        let outcome = a.handle_command(TrameCommand::SetCellText {
+            row: 0, col: 0, text: "shared".to_owned(),
+        });
+        sync.absorb(doc, &outcome);
+
+        // B has not seen the edit yet.
+        assert_eq!(read_cell(&mut b, 0, 0), "A1");
+
+        // Relay A's pending updates to B; B converges.
+        let events = sync.deliver_updates_to(&mut b);
+        assert!(events.iter().any(|e| matches!(e, TrameEvent::DataReset)));
+        assert!(sync.is_empty(), "buffer drained after delivery");
+        assert_eq!(read_cell(&mut b, 0, 0), "shared", "B converges on A's value");
+    }
+
     #[test]
     fn col_alpha_basics() {
         assert_eq!(col_to_alpha(0), "A");
