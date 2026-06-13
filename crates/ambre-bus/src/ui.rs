@@ -244,6 +244,25 @@ pub enum TrameEvent {
         can_undo: bool,
         can_redo: bool,
     },
+
+    /// The workbook's sheets, in tab-strip order: `(sheet_id, display_name)`.
+    /// Emitted after any sheet-lifecycle command
+    /// ([`CreateSheet`](crate::logic::TrameCommand::CreateSheet) /
+    /// [`RenameSheet`](crate::logic::TrameCommand::RenameSheet) /
+    /// [`MoveSheet`](crate::logic::TrameCommand::MoveSheet) /
+    /// [`DeleteSheet`](crate::logic::TrameCommand::DeleteSheet)) and on load, so
+    /// the tab strip stays in sync (`ambre-spec-trame-logic.md` §2.D). `active`
+    /// is the id of the sheet currently shown.
+    SheetList {
+        sheets: Vec<(String, String)>,
+        active: String,
+    },
+
+    /// A command was rejected for a reason the user should see (e.g. deleting the
+    /// last remaining sheet). Purely informational; no CRDT mutation occurred.
+    Error {
+        message: String,
+    },
 }
 
 /// A single cell ready for display.
