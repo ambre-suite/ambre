@@ -209,8 +209,8 @@ impl Default for TrameState {
 
 impl TrameState {
     /// Display text for a cell: the formula evaluation result if it's a formula
-    /// cell, otherwise the edited value from the CRDT if present, otherwise the
-    /// generated coordinate label.
+    /// cell, otherwise the edited value from the CRDT if present, otherwise
+    /// empty (a virtual or cleared cell renders blank).
     fn cell_text(&self, row: u32, col: u32) -> String {
         let cell = CellRef::new(row, col);
         // Formula cells: return cached evaluation result.
@@ -219,14 +219,14 @@ impl TrameState {
         }
         // Plain-text cells: resolve the grid position to its stable id pair and
         // read the CRDT value. A virtual (never-written) cell, or one cleared
-        // back to empty, shows its generated coordinate label.
+        // back to empty, has no stored value and renders blank.
         if let Some((rl, cl)) = self.index.resolve(row as usize, col as usize) {
             let map = self.doc.get_map(cells_map_name(&self.active_sheet));
             if let Some(LoroValue::String(s)) = map.get(&cell_key(rl, cl)).map(|v| v.get_deep_value()) {
                 return s.to_string();
             }
         }
-        format!("{}{}", col_to_alpha(col), row + 1)
+        String::new()
     }
 
     /// Ensure grid `(row, col)` is materialized (its row and column exist in the
@@ -992,17 +992,17 @@ mod tests {
     }
 
     /// An edited cell stores its text in the CRDT and overrides the generated
-    /// label; clearing it falls back to the coordinate label.
+    /// label; clearing it falls back to blank.
     #[test]
     fn edited_text_overrides_generated_label() {
         let mut state = TrameState::new();
 
-        // A1 starts as its generated label.
+        // A1 starts blank (virtual cell).
         let evts = state.handle_command(TrameCommand::ScrollViewport {
             version: 1, row_start: 0, row_end: 0, col_start: 0, col_end: 0,
         });
         let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
-        assert_eq!(cells[0].text, "A1");
+        assert_eq!(cells[0].text, "");
 
         // Edit A1, then read it back: the stored text wins.
         state.handle_command(TrameCommand::SetCellText {
@@ -1014,7 +1014,7 @@ mod tests {
         let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
         assert_eq!(cells[0].text, "hello");
 
-        // Clearing it restores the generated label.
+        // Clearing it restores the blank cell.
         state.handle_command(TrameCommand::SetCellText {
             row: 0, col: 0, text: String::new(),
         });
@@ -1022,7 +1022,7 @@ mod tests {
             version: 3, row_start: 0, row_end: 0, col_start: 0, col_end: 0,
         });
         let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
-        assert_eq!(cells[0].text, "A1");
+        assert_eq!(cells[0].text, "");
     }
 
     /// A value written far down the grid is keyed by its row/column stable ids,
@@ -1044,12 +1044,12 @@ mod tests {
         });
         let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
         assert_eq!(cells[0].text, "deep");
-        // An untouched far cell still shows its generated label (virtual space).
+        // An untouched far cell is blank (virtual space).
         let evts = restored.handle_command(TrameCommand::ScrollViewport {
             version: 2, row_start: 2000, row_end: 2000, col_start: 0, col_end: 0,
         });
         let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
-        assert_eq!(cells[0].text, "A2001");
+        assert_eq!(cells[0].text, "");
     }
 
     /// A formula referencing another cell still evaluates after the value and the
@@ -1128,7 +1128,7 @@ mod tests {
             evts.display.last(),
             Some(TrameEvent::UndoState { can_undo: false, can_redo: true })
         ));
-        assert_eq!(read_cell(&mut state, 0, 0), "A1", "value gone, label restored");
+        assert_eq!(read_cell(&mut state, 0, 0), "", "value gone, cell blank");
 
         let evts = state.handle_command(TrameCommand::Redo);
         assert!(matches!(
@@ -1164,7 +1164,7 @@ mod tests {
         assert!(matches!(evts.display[0], TrameEvent::DataReset));
 
         assert_eq!(read_cell(&mut state, 0, 0), "top", "row above stays put");
-        assert_eq!(read_cell(&mut state, 1, 0), "A2", "new blank row shows label");
+        assert_eq!(read_cell(&mut state, 1, 0), "", "new blank row is empty");
         assert_eq!(read_cell(&mut state, 2, 0), "mid", "old row 1 shifted to row 2");
     }
 
@@ -1198,7 +1198,7 @@ mod tests {
 
         state.handle_command(TrameCommand::InsertColumn { at: 1 });
         assert_eq!(read_cell(&mut state, 0, 0), "a");
-        assert_eq!(read_cell(&mut state, 0, 1), "B1", "inserted blank column");
+        assert_eq!(read_cell(&mut state, 0, 1), "", "inserted blank column");
         assert_eq!(read_cell(&mut state, 0, 2), "b", "old col 1 shifted right");
 
         state.handle_command(TrameCommand::DeleteColumn { at: 1 });
@@ -1408,7 +1408,7 @@ mod tests {
         sync.absorb(doc, &outcome);
 
         // B has not seen the edit yet.
-        assert_eq!(read_cell(&mut b, 0, 0), "A1");
+        assert_eq!(read_cell(&mut b, 0, 0), "");
 
         // Relay A's pending updates to B; B converges.
         let events = sync.deliver_updates_to(&mut b);
