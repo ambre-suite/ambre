@@ -258,4 +258,24 @@ pub enum TrameCommand {
     /// Redo the edit most recently undone by [`Undo`](TrameCommand::Undo). A no-op
     /// when the redo stack is empty (it is cleared by any new local edit).
     Redo,
+
+    /// Define (or redefine) a workbook named range.
+    ///
+    /// `name` is the case-sensitive identifier used in formulas (`=SUM(TOTAL)`);
+    /// `reference` is its target written in A1 syntax, optionally sheet-qualified
+    /// (`A1`, `A1:B10`, `Sheet2!A1:B10`). Stored in the shared `named_ranges`
+    /// CRDT map (LWW) and resolved positionally against the current grid each
+    /// recomputation (`ambre-spec-trame-logic.md` §8, Phase 2). A reference that
+    /// fails to parse leaves any formula using the name as `#PARSE!`.
+    DefineName {
+        name: String,
+        reference: String,
+    },
+
+    /// Remove a named range. Formulas referencing the now-undefined name
+    /// re-evaluate to a parse error on the next recomputation. A no-op if the
+    /// name does not exist.
+    DeleteName {
+        name: String,
+    },
 }

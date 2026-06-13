@@ -192,7 +192,7 @@ impl<'a> EvalContext<'a> {
         let mut values = Vec::with_capacity(dep.len());
         for row in dep.row_start..=dep.row_end {
             for col in dep.col_start..=dep.col_end {
-                values.push(self.eval_cell(CellRef::new(row, col)));
+                values.push(self.eval_cell(CellRef::with_sheet(dep.sheet, row, col)));
             }
         }
         RangeValue::new(rows, cols, values)

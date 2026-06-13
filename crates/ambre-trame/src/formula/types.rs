@@ -4,24 +4,36 @@ use std::fmt;
 // CellRef — positional cell identifier
 // -----------------------------------------------------------------------------
 
-/// Identifies a cell by its zero-based row and column index in the grid.
+/// Identifies a cell by its sheet plus zero-based row and column index.
 ///
-/// MVP uses positional addressing `(u32, u32)`. Phase 1+ will migrate to
-/// stable `ListItemId` values backed by `LoroMovableList` (see spec §2.A).
+/// `sheet` is a local sheet index (`u16`) interned by the engine for the
+/// duration of a recomputation; it is **not** the CRDT sheet id. A formula's
+/// own sheet is the default for unqualified references (`A1`); a qualified
+/// reference (`Sheet2!A1`) carries the resolved index. Single-sheet code uses
+/// [`CellRef::new`], which defaults `sheet` to 0.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CellRef {
+    pub sheet: u16,
     pub row: u32,
     pub col: u32,
 }
 
 impl CellRef {
+    /// Cell on the default sheet (index 0). Used by single-sheet call sites.
     pub const fn new(row: u32, col: u32) -> Self {
-        Self { row, col }
+        Self { sheet: 0, row, col }
+    }
+
+    /// Cell on an explicit sheet index.
+    pub const fn with_sheet(sheet: u16, row: u32, col: u32) -> Self {
+        Self { sheet, row, col }
     }
 }
 
 impl fmt::Display for CellRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Sheet is intentionally omitted: Display is used for in-cell error and
+        // debug text, where the local sheet index carries no user meaning.
         write!(f, "{}{}", col_to_alpha(self.col), self.row + 1)
     }
 }
@@ -37,6 +49,9 @@ impl fmt::Display for CellRef {
 /// and `EntireAxis` for whole-column/whole-row ranges (see spec §3.A).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RangeDep {
+    /// Local sheet index (see [`CellRef::sheet`]). Defaults to 0 via
+    /// [`RangeDep::new`]; a cross-sheet range carries the resolved index.
+    pub sheet: u16,
     pub row_start: u32,
     pub row_end: u32,
     pub col_start: u32,
@@ -44,13 +59,25 @@ pub struct RangeDep {
 }
 
 impl RangeDep {
+    /// Range on the default sheet (index 0). Used by single-sheet call sites.
     pub fn new(
         row_start: u32,
         row_end: u32,
         col_start: u32,
         col_end: u32,
     ) -> Self {
-        Self { row_start, row_end, col_start, col_end }
+        Self { sheet: 0, row_start, row_end, col_start, col_end }
+    }
+
+    /// Range on an explicit sheet index.
+    pub fn with_sheet(
+        sheet: u16,
+        row_start: u32,
+        row_end: u32,
+        col_start: u32,
+        col_end: u32,
+    ) -> Self {
+        Self { sheet, row_start, row_end, col_start, col_end }
     }
 
     /// Whether the given cell falls inside this range.
@@ -262,11 +289,26 @@ pub struct CellBytecode {
 // -----------------------------------------------------------------------------
 
 /// The abstract syntax tree of a parsed formula, fed into the compiler.
+///
+/// [`Expr::SheetRef`] and [`Expr::Name`] are produced by the (context-free)
+/// parser and removed by [`resolve_refs`](super::parser::resolve_refs) before
+/// compilation: the resolver rewrites them into [`Expr::CellRef`] /
+/// [`Expr::Range`] carrying the resolved sheet index. The compiler therefore
+/// never sees them.
 #[derive(Debug, Clone)]
 pub enum Expr {
     Literal(CellValue),
     CellRef(CellRef),
     Range(RangeDep),
+    /// A sheet-qualified reference `Sheet2!A1` / `'My Sheet'!A1:B2`. `inner` is
+    /// always a [`Expr::CellRef`] or [`Expr::Range`]; the resolver stamps the
+    /// resolved sheet index onto it.
+    SheetRef {
+        sheet_name: String,
+        inner: Box<Expr>,
+    },
+    /// A bareword reference to a named range, resolved by the context.
+    Name(String),
     BinOp {
         kind: BinOpKind,
         lhs: Box<Expr>,
@@ -280,6 +322,43 @@ pub enum Expr {
         name: String,
         args: Vec<Expr>,
     },
+}
+
+// -----------------------------------------------------------------------------
+// Name resolution context
+// -----------------------------------------------------------------------------
+
+/// What a named range resolves to: a single cell or a rectangular range. Both
+/// carry their own sheet index (a name is defined against a specific sheet).
+#[derive(Debug, Clone)]
+pub enum NameTarget {
+    Cell(CellRef),
+    Range(RangeDep),
+}
+
+/// Resolution services the formula crate needs from the host (`TrameState`):
+/// mapping a sheet *display name* to its local index, and a defined name to its
+/// target. Implemented by the host; [`SingleSheetCtx`] is the no-op default for
+/// single-sheet code and unit tests.
+pub trait FormulaCtx {
+    /// Resolve a sheet display name (`Sheet2`) to its local index, or `None`
+    /// if no such sheet exists (the reference becomes a parse error).
+    fn resolve_sheet(&self, name: &str) -> Option<u16>;
+    /// Resolve a defined name (`TOTAL`) to its target, or `None` if undefined.
+    fn resolve_name(&self, name: &str) -> Option<NameTarget>;
+}
+
+/// Default context: a single sheet (index 0), no cross-sheet references, no
+/// defined names. Any `Sheet!ref` or bareword name fails to resolve.
+pub struct SingleSheetCtx;
+
+impl FormulaCtx for SingleSheetCtx {
+    fn resolve_sheet(&self, _name: &str) -> Option<u16> {
+        None
+    }
+    fn resolve_name(&self, _name: &str) -> Option<NameTarget> {
+        None
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

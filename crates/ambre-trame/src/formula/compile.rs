@@ -65,6 +65,13 @@ fn compile_into(
             }
             ops.push(Op::CallFn { name: name.clone(), n_args: args.len() as u8 });
         }
+        // `SheetRef`/`Name` are eliminated by `parser::resolve_refs` before
+        // compilation. Reaching here means the caller skipped resolution; emit a
+        // harmless empty so a misuse degrades to a blank value rather than a panic.
+        Expr::SheetRef { .. } | Expr::Name(_) => {
+            debug_assert!(false, "unresolved SheetRef/Name reached compile()");
+            ops.push(Op::PushEmpty);
+        }
     }
 }
 
@@ -90,7 +97,7 @@ mod tests {
     #[test]
     fn cell_ref_extracts_dep() {
         let bc = compile_str("A1");
-        assert!(matches!(&bc.ops[0], Op::PushCell(CellRef { row: 0, col: 0 })));
+        assert!(matches!(&bc.ops[0], Op::PushCell(CellRef { row: 0, col: 0, .. })));
         assert_eq!(bc.cell_deps.len(), 1);
         assert_eq!(bc.cell_deps[0], CellRef::new(0, 0));
     }

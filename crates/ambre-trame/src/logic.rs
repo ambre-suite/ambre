@@ -18,7 +18,9 @@ use std::collections::{HashMap, HashSet};
 use loro::cursor::Side;
 use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
 
-use crate::formula::{CellRef, FormulaEngine};
+use crate::formula::{CellRef, FormulaCtx, FormulaEngine, NameTarget};
+use crate::formula::types::Expr;
+use crate::formula::parser::{parse_formula, resolve_refs};
 use crate::model::{Lid, SheetIndex, cell_key, parse_cell_key};
 use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 
@@ -36,6 +38,12 @@ const DEFAULT_SHEET: &str = "s0";
 /// name flat; the `{name: LoroText, hidden, tab_color}` sub-map of §2.B lands
 /// with the sheet-tabs UI.
 const SHEETS_MAP: &str = "sheets";
+
+/// Loro map holding workbook named ranges: `{name -> reference}` where the
+/// reference is an A1-syntax string, optionally sheet-qualified (`Sheet2!A1:B2`).
+/// LWW: the last writer of a given name wins. Resolved positionally at reseed
+/// time into [`TrameState::named`] (`ambre-spec-trame-logic.md` §8, Phase 2).
+const NAMED_RANGES_MAP: &str = "named_ranges";
 
 /// Bit flags packed into the per-sheet `format_{sheet}` map's i64 value.
 const FMT_BOLD: i64 = 1 << 0;
@@ -83,6 +91,29 @@ fn merges_map_name(sheet: &str) -> String {
 enum Axis {
     Row,
     Col,
+}
+
+// -----------------------------------------------------------------------------
+// FormulaCtx bridge
+// -----------------------------------------------------------------------------
+
+/// Resolution context handed to the formula engine: maps a sheet *display name*
+/// to its local engine index and a defined name to its target. Borrows the
+/// derived caches on [`TrameState`] so it can be built at a call site without
+/// borrowing the whole state (the engine, a sibling field, is mutated in the
+/// same call).
+struct TrameCtx<'a> {
+    sheet_name_to_u16: &'a HashMap<String, u16>,
+    named: &'a HashMap<String, NameTarget>,
+}
+
+impl FormulaCtx for TrameCtx<'_> {
+    fn resolve_sheet(&self, name: &str) -> Option<u16> {
+        self.sheet_name_to_u16.get(name).copied()
+    }
+    fn resolve_name(&self, name: &str) -> Option<NameTarget> {
+        self.named.get(name).cloned()
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -161,6 +192,17 @@ pub struct TrameState {
     /// concurrent-edit conflict (§6). Masked: excluded from the formula engine
     /// and not displayed, but never destroyed; reappear on unmerge.
     masked_cells: HashSet<String>,
+    /// CRDT sheet id per local engine index (`sheets_by_idx[i]` has index `i`).
+    /// The **active sheet is always index 0**, so single-sheet code paths keep
+    /// using [`CellRef::new`] (sheet 0); other sheets take 1.. in sorted-id
+    /// order. Rebuilt by [`Self::rebuild_sheet_maps`].
+    sheets_by_idx: Vec<String>,
+    /// Sheet *display name* -> local engine index, for resolving `Sheet2!A1`
+    /// references in formulas. Derived alongside [`Self::sheets_by_idx`].
+    sheet_name_to_u16: HashMap<String, u16>,
+    /// Resolved named ranges: defined name -> target cell/range. Rebuilt from the
+    /// `named_ranges` CRDT map by [`Self::rebuild_named`] on every reseed.
+    named: HashMap<String, NameTarget>,
     /// Local undo/redo history (§8). Subscribes to [`Self::doc`] and records one
     /// item per commit; each `TrameCommand` handler commits exactly once, so one
     /// command maps to one undo step. Scope is the open-document session: it only
@@ -184,7 +226,7 @@ impl TrameState {
         // Keep implicit row/column materialization off the undo stack (see
         // [`MATERIALIZE_ORIGIN`]); only user-intended edits are undoable.
         undo_manager.add_exclude_origin_prefix(MATERIALIZE_ORIGIN);
-        Self {
+        let mut state = Self {
             active: (0, 0),
             active_sheet: DEFAULT_SHEET.to_owned(),
             bold: HashSet::new(),
@@ -196,8 +238,14 @@ impl TrameState {
             merges: HashMap::new(),
             covered: HashSet::new(),
             masked_cells: HashSet::new(),
+            sheets_by_idx: Vec::new(),
+            sheet_name_to_u16: HashMap::new(),
+            named: HashMap::new(),
             undo_manager,
-        }
+        };
+        // Index the implicit sheet so `=Sheet1!A1` resolves before any reseed.
+        state.rebuild_sheet_maps();
+        state
     }
 }
 
@@ -216,10 +264,10 @@ impl TrameState {
         // Formula cells: return cached evaluation result. Plain cells also have
         // a cached literal value now (so formula references resolve), but we
         // render their raw CRDT string verbatim to avoid normalizing user input.
-        if self.engine.is_formula_cell(cell) {
-            if let Some(text) = self.engine.evaluated_text(cell) {
-                return text;
-            }
+        if self.engine.is_formula_cell(cell)
+            && let Some(text) = self.engine.evaluated_text(cell)
+        {
+            return text;
         }
         // Plain-text cells: resolve the grid position to its stable id pair and
         // read the CRDT value. A virtual (never-written) cell, or one cleared
@@ -325,14 +373,22 @@ impl TrameState {
                     if let Some((rl, cl)) = self.index.resolve(row as usize, col as usize) {
                         let _ = self.doc.get_map(cells_map_name(&self.active_sheet)).delete(&cell_key(rl, cl));
                     }
-                    self.engine.on_cell_changed(CellRef::new(row, col), "");
+                    let ctx = TrameCtx {
+                        sheet_name_to_u16: &self.sheet_name_to_u16,
+                        named: &self.named,
+                    };
+                    self.engine.on_cell_changed(CellRef::new(row, col), "", &ctx);
                 } else {
                     let Some((rl, cl)) = self.materialize(row, col) else {
                         // Beyond the materialization cap: drop the write.
                         return TrameOutcome::display_only(vec![]);
                     };
                     let _ = self.doc.get_map(cells_map_name(&self.active_sheet)).insert(&cell_key(rl, cl), text.as_str());
-                    self.engine.on_cell_changed(CellRef::new(row, col), &text);
+                    let ctx = TrameCtx {
+                        sheet_name_to_u16: &self.sheet_name_to_u16,
+                        named: &self.named,
+                    };
+                    self.engine.on_cell_changed(CellRef::new(row, col), &text, &ctx);
                 }
                 self.doc.commit();
                 self.engine.compute_all_dirty();
@@ -430,6 +486,8 @@ impl TrameState {
             TrameCommand::UnmergeCells { row, col } => self.unmerge_cells(row, col),
             TrameCommand::Undo => self.apply_history(true),
             TrameCommand::Redo => self.apply_history(false),
+            TrameCommand::DefineName { name, reference } => self.define_name(&name, &reference),
+            TrameCommand::DeleteName { name } => self.delete_name(&name),
         }
     }
 
@@ -730,22 +788,147 @@ impl TrameState {
     /// import, where a cell's grid position may have changed under stable keys.
     fn reseed_engine(&mut self) {
         self.engine.reset();
-        if let LoroValue::Map(cells) = self.doc.get_map(cells_map_name(&self.active_sheet)).get_value() {
+        // Sheet maps and named ranges must be current before feeding cells, so
+        // that `Sheet2!A1` and named references resolve while compiling.
+        self.rebuild_sheet_maps();
+        self.rebuild_named();
+
+        // Feed every sheet's cells, tagging each `CellRef` with the sheet's
+        // local index. The active sheet is index 0 (see `sheets_by_idx`), so its
+        // cells address the same keys the single-sheet read paths use. Only the
+        // active sheet tracks merge masking, so it is the only one consulted.
+        let sheets: Vec<(String, u16)> = self
+            .sheets_by_idx
+            .iter()
+            .enumerate()
+            .map(|(idx, id)| (id.clone(), idx as u16))
+            .collect();
+        for (sheet_id, idx) in sheets {
+            let index = self.build_sheet_index(&sheet_id);
+            let LoroValue::Map(cells) = self.doc.get_map(cells_map_name(&sheet_id)).get_value() else {
+                continue;
+            };
             for (key, value) in cells.iter() {
                 // Masked cells (covered by a merge, conflicting value) stay out of
-                // the DAG: they are neither displayed nor computed while masked.
-                if self.masked_cells.contains(key) {
+                // the DAG on the active sheet; other sheets have no masking.
+                if idx == 0 && self.masked_cells.contains(key) {
                     continue;
                 }
                 let (Some((rl, cl)), LoroValue::String(text)) = (parse_cell_key(key), value) else {
                     continue;
                 };
-                if let (Some(row), Some(col)) = (self.index.row_pos(&rl), self.index.col_pos(&cl)) {
-                    self.engine.on_cell_changed(CellRef::new(row as u32, col as u32), text.as_str());
+                if let (Some(row), Some(col)) = (index.row_pos(&rl), index.col_pos(&cl)) {
+                    let ctx = TrameCtx {
+                        sheet_name_to_u16: &self.sheet_name_to_u16,
+                        named: &self.named,
+                    };
+                    self.engine.on_cell_changed(
+                        CellRef::with_sheet(idx, row as u32, col as u32),
+                        text.as_str(),
+                        &ctx,
+                    );
                 }
             }
         }
         self.engine.compute_all_dirty();
+    }
+
+    /// Rebuild [`Self::sheets_by_idx`] and [`Self::sheet_name_to_u16`] from the
+    /// `sheets` CRDT map. The active sheet is pinned to local index 0; remaining
+    /// sheets follow in sorted-id order. The mapping is local-only (computed
+    /// values never leave this client), so the exact ordering need not match
+    /// peers -- only stability within this session matters.
+    fn rebuild_sheet_maps(&mut self) {
+        // Collect {id -> name} from the CRDT.
+        let mut entries: Vec<(String, String)> = Vec::new();
+        if let LoroValue::Map(sheets) = self.doc.get_map(SHEETS_MAP).get_value() {
+            for (id, name) in sheets.iter() {
+                let name = match name {
+                    LoroValue::String(s) => s.to_string(),
+                    _ => id.clone(),
+                };
+                entries.push((id.clone(), name));
+            }
+        }
+        // Active sheet first (index 0), then the rest by id for determinism.
+        entries.sort_by(|a, b| {
+            let a_active = a.0 == self.active_sheet;
+            let b_active = b.0 == self.active_sheet;
+            b_active.cmp(&a_active).then_with(|| a.0.cmp(&b.0))
+        });
+
+        self.sheets_by_idx.clear();
+        self.sheet_name_to_u16.clear();
+        for (idx, (id, name)) in entries.into_iter().enumerate() {
+            self.sheet_name_to_u16.insert(name, idx as u16);
+            self.sheets_by_idx.push(id);
+        }
+        // A document always has at least the active sheet at index 0.
+        if self.sheets_by_idx.is_empty() {
+            self.sheets_by_idx.push(self.active_sheet.clone());
+        }
+    }
+
+    /// Rebuild [`Self::named`] from the `named_ranges` CRDT map: parse each stored
+    /// A1-syntax reference into a concrete cell/range target, resolving any
+    /// sheet qualifier against [`Self::sheet_name_to_u16`]. A reference that
+    /// fails to parse is dropped (the formula using it surfaces `#PARSE!`).
+    fn rebuild_named(&mut self) {
+        self.named.clear();
+        let LoroValue::Map(names) = self.doc.get_map(NAMED_RANGES_MAP).get_value() else {
+            return;
+        };
+        // Names cannot reference other names: resolve sheet qualifiers only.
+        let no_names: HashMap<String, NameTarget> = HashMap::new();
+        for (name, reference) in names.iter() {
+            let LoroValue::String(reference) = reference else {
+                continue;
+            };
+            let ctx = TrameCtx {
+                sheet_name_to_u16: &self.sheet_name_to_u16,
+                named: &no_names,
+            };
+            // Unqualified references in a name definition default to the active
+            // sheet (index 0).
+            let target = parse_formula(reference)
+                .and_then(|ast| resolve_refs(ast, 0, &ctx))
+                .ok()
+                .and_then(expr_to_name_target);
+            if let Some(target) = target {
+                self.named.insert(name.clone(), target);
+            }
+        }
+    }
+
+    /// Build a fresh [`SheetIndex`] for an arbitrary sheet id (the cross-sheet
+    /// reseed needs each sheet's position<->id map, not just the active one).
+    fn build_sheet_index(&self, sheet_id: &str) -> SheetIndex {
+        let rows = self.doc.get_movable_list(rows_list_name(sheet_id));
+        let cols = self.doc.get_movable_list(cols_list_name(sheet_id));
+        SheetIndex::build(&rows, &cols)
+    }
+
+    /// Define or redefine a named range, persist it to the CRDT, and reseed so
+    /// formulas using the name pick it up immediately.
+    fn define_name(&mut self, name: &str, reference: &str) -> TrameOutcome {
+        let _ = self.doc.get_map(NAMED_RANGES_MAP).insert(name, reference);
+        self.doc.commit();
+        self.reseed_engine();
+        let update = self.flush_delta();
+        TrameOutcome { display: vec![TrameEvent::DataReset], update, ephemeral: None }
+    }
+
+    /// Remove a named range and reseed. A no-op if the name is undefined.
+    fn delete_name(&mut self, name: &str) -> TrameOutcome {
+        let map = self.doc.get_map(NAMED_RANGES_MAP);
+        if map.get(name).is_none() {
+            return TrameOutcome::display_only(vec![]);
+        }
+        let _ = map.delete(name);
+        self.doc.commit();
+        self.reseed_engine();
+        let update = self.flush_delta();
+        TrameOutcome { display: vec![TrameEvent::DataReset], update, ephemeral: None }
     }
 
     /// Mirror a cell's current bold/italic state into the CRDT `format` map and
@@ -912,6 +1095,17 @@ impl TrameState {
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
+
+/// Convert a resolved name-definition expression into a [`NameTarget`]. Only a
+/// bare cell or range is a valid named-range body; anything else (an arithmetic
+/// expression, a function call) is rejected.
+fn expr_to_name_target(expr: Expr) -> Option<NameTarget> {
+    match expr {
+        Expr::CellRef(r) => Some(NameTarget::Cell(r)),
+        Expr::Range(r) => Some(NameTarget::Range(r)),
+        _ => None,
+    }
+}
 
 /// Toggle `cell`'s membership in `set`, returning whether it is now present.
 fn toggle(set: &mut HashSet<(u32, u32)>, cell: (u32, u32)) -> bool {
@@ -1091,6 +1285,57 @@ mod tests {
         let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
         let b1 = cells.iter().find(|c| c.row == 0 && c.col == 1).unwrap();
         assert_eq!(b1.text, "42", "B1 = A1*2 must evaluate after reload");
+    }
+
+    /// A defined name resolves inside a formula, recomputes when its target
+    /// changes, survives a snapshot round-trip, and breaks when deleted.
+    #[test]
+    fn named_range_defines_resolves_and_deletes() {
+        let mut state = TrameState::new();
+        // A1=1, A2=2, A3=3.
+        for r in 0..3 {
+            state.handle_command(TrameCommand::SetCellText {
+                row: r, col: 0, text: format!("{}", r + 1),
+            });
+        }
+        // Define TOTAL = A1:A3, then C1 = SUM(TOTAL).
+        state.handle_command(TrameCommand::DefineName {
+            name: "TOTAL".to_owned(),
+            reference: "A1:A3".to_owned(),
+        });
+        state.handle_command(TrameCommand::SetCellText {
+            row: 0, col: 2, text: "=SUM(TOTAL)".to_owned(),
+        });
+
+        let read_c1 = |state: &mut TrameState, version: u64| {
+            let evts = state.handle_command(TrameCommand::ScrollViewport {
+                version, row_start: 0, row_end: 0, col_start: 2, col_end: 2,
+            });
+            let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
+            cells[0].text.clone()
+        };
+
+        assert_eq!(read_c1(&mut state, 1), "6", "SUM(TOTAL) = 1+2+3");
+
+        // Editing a target cell recomputes the name's consumer.
+        state.handle_command(TrameCommand::SetCellText {
+            row: 0, col: 0, text: "10".to_owned(),
+        });
+        assert_eq!(read_c1(&mut state, 2), "15", "SUM(TOTAL) tracks A1 edit");
+
+        // The name survives a snapshot round-trip.
+        let snapshot = state.export_snapshot();
+        let mut restored = TrameState::new();
+        restored.import_snapshot(&snapshot);
+        assert_eq!(read_c1(&mut restored, 3), "15", "name persists across reload");
+
+        // Deleting the name stops it resolving: its consumer no longer computes
+        // the sum (the engine drops the now-unresolvable formula, so the cell
+        // falls back to its raw text rather than the stale 15).
+        restored.handle_command(TrameCommand::DeleteName { name: "TOTAL".to_owned() });
+        let after = read_c1(&mut restored, 4);
+        assert_ne!(after, "15", "deleted name must no longer resolve");
+        assert_eq!(after, "=SUM(TOTAL)", "unresolved formula falls back to raw text");
     }
 
     /// End-to-end of the reported bug: plain numeric literals typed into A1/B1

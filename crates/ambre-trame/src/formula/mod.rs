@@ -8,4 +8,4 @@ pub mod functions;
 pub mod engine;
 
 pub use engine::FormulaEngine;
-pub use types::{CellRef, CellValue, FormulaError};
+pub use types::{CellRef, CellValue, FormulaCtx, FormulaError, NameTarget, RangeDep, SingleSheetCtx};
