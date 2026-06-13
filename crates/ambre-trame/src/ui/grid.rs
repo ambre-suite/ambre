@@ -32,6 +32,9 @@ pub struct CellData {
     pub text: String,
     pub bold: bool,
     pub italic: bool,
+    /// `Some((col_span, row_span))` on a merge master, `None` otherwise. Covered
+    /// cells arrive with empty text and are simply rendered blank.
+    pub merge_span: Option<(u32, u32)>,
 }
 
 /// In-progress edit of a single cell, driven by the transparent textarea pipe.
@@ -309,7 +312,12 @@ impl TrameUiState {
         for cell in cells {
             self.cell_cache.insert(
                 (cell.row, cell.col),
-                CellData { text: cell.text, bold: cell.bold, italic: cell.italic },
+                CellData {
+                    text: cell.text,
+                    bold: cell.bold,
+                    italic: cell.italic,
+                    merge_span: cell.merge_span,
+                },
             );
         }
     }

@@ -217,6 +217,23 @@ pub enum TrameEvent {
     /// startup). The UI Thread re-requests the visible region: the initial
     /// viewport response predated the restore, so the cache must be refreshed.
     DataReset,
+
+    /// A local [`MergeCells`](crate::logic::TrameCommand::MergeCells) was refused
+    /// because a covered cell is non-empty (`ambre-spec-trame-logic.md` §6). The
+    /// chrome surfaces `reason` to the user; no CRDT mutation was produced.
+    MergeRejected {
+        reason: String,
+    },
+
+    /// A merge ended up covering a non-empty cell after a concurrent edit
+    /// converged (§6). The covered value is masked (not destroyed) while the
+    /// merge is active; it reappears on unmerge. Purely informational for the UI.
+    MergeConflictDetected {
+        master_row: u32,
+        master_col: u32,
+        covered_row: u32,
+        covered_col: u32,
+    },
 }
 
 /// A single cell ready for display.
@@ -234,4 +251,12 @@ pub struct DisplayCell {
     pub bold: bool,
     /// Italic run applied to this cell.
     pub italic: bool,
+    /// Part of a merged range (`ambre-spec-trame-logic.md` §6). `true` for both
+    /// the master cell and the cells it covers; the UI distinguishes them via
+    /// [`merge_span`](DisplayCell::merge_span).
+    pub is_merged: bool,
+    /// `Some((col_span, row_span))` on the master (top-left) cell of a merge,
+    /// giving how many columns/rows it spans. `None` on a covered cell (rendered
+    /// blank, swallowed by the master) and on any non-merged cell.
+    pub merge_span: Option<(u32, u32)>,
 }

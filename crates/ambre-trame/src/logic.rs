@@ -13,7 +13,7 @@
 // (`crate::TOTAL_ROWS` / `crate::TOTAL_COLS`).
 // ============================================================================
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use loro::cursor::Side;
 use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
@@ -61,6 +61,13 @@ fn rows_list_name(sheet: &str) -> String {
 }
 fn cols_list_name(sheet: &str) -> String {
     format!("cols_{sheet}")
+}
+/// Per-sheet merge map (`merges_{sheet}`): a LWW `LoroMap` keyed by the master
+/// (top-left) cell's stable id pair, with the bottom-right corner's id pair as
+/// value (`ambre-spec-trame-logic.md` §6). Keyed by stable ids so a merge
+/// follows its cells across inserts/deletes.
+fn merges_map_name(sheet: &str) -> String {
+    format!("merges_{sheet}")
 }
 
 /// Which axis a structural op targets. Lets [`TrameState::insert_axis`] /
@@ -132,6 +139,17 @@ pub struct TrameState {
     /// Formula engine: dependency graph, bytecode cache, dirty recomputation.
     /// Addresses cells positionally; [`Self::index`] bridges to the CRDT ids.
     engine: FormulaEngine,
+    /// Active-sheet merges, master grid position -> bottom-right grid position.
+    /// Derived cache of `merges_{sheet}`, rebuilt by [`Self::rebuild_merges`]
+    /// after any import or structural op (§6).
+    merges: HashMap<(u32, u32), (u32, u32)>,
+    /// Grid positions covered by a merge but not the master (rendered blank,
+    /// swallowed by the master cell). Derived alongside [`Self::merges`].
+    covered: HashSet<(u32, u32)>,
+    /// Stable cell keys of covered cells that still hold a non-empty value -- a
+    /// concurrent-edit conflict (§6). Masked: excluded from the formula engine
+    /// and not displayed, but never destroyed; reappear on unmerge.
+    masked_cells: HashSet<String>,
 }
 
 impl TrameState {
@@ -150,6 +168,9 @@ impl TrameState {
             index: SheetIndex::default(),
             last_exported_vv: VersionVector::default(),
             engine: FormulaEngine::new(),
+            merges: HashMap::new(),
+            covered: HashSet::new(),
+            masked_cells: HashSet::new(),
         }
     }
 }
@@ -317,12 +338,21 @@ impl TrameState {
 
                 for row in row_start..=row_end {
                     for col in col_start..=col_end {
+                        // A merge master carries its span; a covered cell renders
+                        // blank (swallowed by the master). Both flag `is_merged`.
+                        let merge_span = self
+                            .merges
+                            .get(&(row, col))
+                            .map(|&(end_row, end_col)| (end_col - col + 1, end_row - row + 1));
+                        let is_covered = self.covered.contains(&(row, col));
                         cells.push(DisplayCell {
                             row,
                             col,
-                            text: self.cell_text(row, col),
+                            text: if is_covered { String::new() } else { self.cell_text(row, col) },
                             bold: self.bold.contains(&(row, col)),
                             italic: self.italic.contains(&(row, col)),
+                            is_merged: merge_span.is_some() || is_covered,
+                            merge_span,
                         });
                     }
                 }
@@ -333,7 +363,174 @@ impl TrameState {
             TrameCommand::DeleteRow { at } => self.delete_axis(at, Axis::Row),
             TrameCommand::InsertColumn { at } => self.insert_axis(at, Axis::Col),
             TrameCommand::DeleteColumn { at } => self.delete_axis(at, Axis::Col),
+            TrameCommand::MergeCells { row, col, row_end, col_end } => {
+                self.merge_cells(row, col, row_end, col_end)
+            }
+            TrameCommand::UnmergeCells { row, col } => self.unmerge_cells(row, col),
         }
+    }
+
+    /// Merge the range with corners `(r0,c0)`-`(r1,c1)` (given in any order) into
+    /// one cell. Rejected locally if a covered cell is non-empty (§6); otherwise
+    /// records the master->extent entry in `merges_{sheet}` keyed by stable ids.
+    fn merge_cells(&mut self, r0: u32, c0: u32, r1: u32, c1: u32) -> TrameOutcome {
+        let (top, bottom) = (r0.min(r1), r0.max(r1));
+        let (left, right) = (c0.min(c1), c0.max(c1));
+        // A single cell is not a merge.
+        if top == bottom && left == right {
+            return TrameOutcome::display_only(vec![]);
+        }
+        // Client-side rule: every covered cell (excluding the master) must be
+        // empty locally, matching Excel/Sheets. Cannot prevent a later
+        // concurrent conflict -- that path masks instead (rebuild_merges).
+        for row in top..=bottom {
+            for col in left..=right {
+                if (row, col) == (top, left) {
+                    continue;
+                }
+                if self.cell_has_raw(row, col) {
+                    return TrameOutcome::display_only(vec![TrameEvent::MergeRejected {
+                        reason: format!(
+                            "cell {}{} is not empty",
+                            col_to_alpha(col),
+                            row + 1
+                        ),
+                    }]);
+                }
+            }
+        }
+        // Materialize the bottom-right corner so the whole rectangle has ids.
+        if self.materialize(bottom, right).is_none() {
+            return TrameOutcome::display_only(vec![]);
+        }
+        let (Some(master), Some(extent)) = (
+            self.index.resolve(top as usize, left as usize),
+            self.index.resolve(bottom as usize, right as usize),
+        ) else {
+            return TrameOutcome::display_only(vec![]);
+        };
+        let _ = self.doc.get_map(merges_map_name(&self.active_sheet)).insert(
+            &cell_key(master.0, master.1),
+            cell_key(extent.0, extent.1).as_str(),
+        );
+        self.doc.commit();
+        self.after_merge_change()
+    }
+
+    /// Split the merge whose rectangle contains `(row, col)`, restoring covered
+    /// cells (and any masked value). A no-op when the cell is not in a merge.
+    fn unmerge_cells(&mut self, row: u32, col: u32) -> TrameOutcome {
+        let master = self.merges.iter().find_map(|(&(top, left), &(bottom, right))| {
+            (row >= top && row <= bottom && col >= left && col <= right).then_some((top, left))
+        });
+        let Some((top, left)) = master else {
+            return TrameOutcome::display_only(vec![]);
+        };
+        let Some((rl, cl)) = self.index.resolve(top as usize, left as usize) else {
+            return TrameOutcome::display_only(vec![]);
+        };
+        let _ = self.doc.get_map(merges_map_name(&self.active_sheet)).delete(&cell_key(rl, cl));
+        self.doc.commit();
+        self.after_merge_change()
+    }
+
+    /// Shared tail of merge/unmerge: rebuild the derived merge cache (which also
+    /// re-evaluates masking), reseed the formula engine so unmasked cells rejoin
+    /// the DAG, flush the delta and ask the UI to re-fetch. Conflict events from
+    /// the rebuild ride along with the `DataReset`.
+    fn after_merge_change(&mut self) -> TrameOutcome {
+        let mut display = self.rebuild_merges();
+        self.reseed_engine();
+        display.push(TrameEvent::DataReset);
+        let update = self.flush_delta();
+        TrameOutcome { display, update, ephemeral: None }
+    }
+
+    /// Whether grid `(row, col)` holds a non-empty string value in the CRDT.
+    /// Resolves the position to its stable id pair; a virtual cell has no value.
+    fn cell_has_raw(&self, row: u32, col: u32) -> bool {
+        self.index
+            .resolve(row as usize, col as usize)
+            .and_then(|(rl, cl)| {
+                self.doc
+                    .get_map(cells_map_name(&self.active_sheet))
+                    .get(&cell_key(rl, cl))
+                    .map(|v| v.get_deep_value())
+            })
+            .is_some_and(|v| matches!(v, LoroValue::String(s) if !s.is_empty()))
+    }
+
+    /// Rebuild the derived merge caches ([`Self::merges`], [`Self::covered`],
+    /// [`Self::masked_cells`]) from the active sheet's `merges_{sheet}` map.
+    /// Requires [`Self::index`] to be current (keys are stable id pairs mapped
+    /// back to grid positions). Returns one [`TrameEvent::MergeConflictDetected`]
+    /// per masked cell.
+    ///
+    /// Overlapping merges are resolved deterministically: rectangles are placed
+    /// in ascending master-key order and any that intersects an already-placed
+    /// one is skipped. The order is identical on every peer (it derives only
+    /// from the stable keys), so all clients converge on the same layout without
+    /// mutating the CRDT (no corrective op, no conflict loop -- §6).
+    fn rebuild_merges(&mut self) -> Vec<TrameEvent> {
+        self.merges.clear();
+        self.covered.clear();
+        self.masked_cells.clear();
+        let LoroValue::Map(entries) =
+            self.doc.get_map(merges_map_name(&self.active_sheet)).get_value()
+        else {
+            return Vec::new();
+        };
+        // Collect resolvable rectangles tagged with their master key for a
+        // deterministic, peer-independent overlap precedence.
+        let mut rects: Vec<(String, (u32, u32), (u32, u32))> = entries
+            .iter()
+            .filter_map(|(master_key, value)| {
+                let LoroValue::String(extent_key) = value else { return None };
+                let (mr, mc) = parse_cell_key(master_key)?;
+                let (er, ec) = parse_cell_key(extent_key)?;
+                let top = self.index.row_pos(&mr)? as u32;
+                let left = self.index.col_pos(&mc)? as u32;
+                let bottom = self.index.row_pos(&er)? as u32;
+                let right = self.index.col_pos(&ec)? as u32;
+                Some((master_key.to_string(), (top.min(bottom), left.min(right)), (top.max(bottom), right.max(left))))
+            })
+            .collect();
+        rects.sort_by(|a, b| a.0.cmp(&b.0));
+
+        let mut events = Vec::new();
+        let mut occupied: HashSet<(u32, u32)> = HashSet::new();
+        for (_key, (top, left), (bottom, right)) in rects {
+            let overlaps = (top..=bottom)
+                .flat_map(|r| (left..=right).map(move |c| (r, c)))
+                .any(|cell| occupied.contains(&cell));
+            if overlaps {
+                continue;
+            }
+            self.merges.insert((top, left), (bottom, right));
+            for row in top..=bottom {
+                for col in left..=right {
+                    occupied.insert((row, col));
+                    if (row, col) == (top, left) {
+                        continue;
+                    }
+                    self.covered.insert((row, col));
+                    // Mask a covered cell that still holds a value (concurrent
+                    // conflict): keep the data, exclude it from the engine.
+                    if self.cell_has_raw(row, col) {
+                        if let Some((rl, cl)) = self.index.resolve(row as usize, col as usize) {
+                            self.masked_cells.insert(cell_key(rl, cl));
+                        }
+                        events.push(TrameEvent::MergeConflictDetected {
+                            master_row: top,
+                            master_col: left,
+                            covered_row: row,
+                            covered_col: col,
+                        });
+                    }
+                }
+            }
+        }
+        events
     }
 
     /// Insert a blank row/column at grid position `at`, shifting later elements
@@ -417,10 +614,14 @@ impl TrameState {
     /// the UI to re-fetch its viewport.
     fn after_structural(&mut self) -> TrameOutcome {
         self.rebuild_index();
+        // Merges resolve through the freshly rebuilt index; do this before the
+        // engine reseed so masked cells are excluded from the DAG.
+        let mut display = self.rebuild_merges();
         self.reseed_engine();
         self.reseed_formatting();
         let update = self.flush_delta();
-        TrameOutcome { display: vec![TrameEvent::DataReset], update, ephemeral: None }
+        display.push(TrameEvent::DataReset);
+        TrameOutcome { display, update, ephemeral: None }
     }
 
     /// Reset the positional formula engine and re-feed it from the active
@@ -431,6 +632,11 @@ impl TrameState {
         self.engine.reset();
         if let LoroValue::Map(cells) = self.doc.get_map(cells_map_name(&self.active_sheet)).get_value() {
             for (key, value) in cells.iter() {
+                // Masked cells (covered by a merge, conflicting value) stay out of
+                // the DAG: they are neither displayed nor computed while masked.
+                if self.masked_cells.contains(key) {
+                    continue;
+                }
                 let (Some((rl, cl)), LoroValue::String(text)) = (parse_cell_key(key), value) else {
                     continue;
                 };
@@ -582,6 +788,9 @@ impl TrameState {
         // them back. Local edits are flushed each frame before remote applies, so
         // there are no pending local-only ops to swallow here.
         self.last_exported_vv = self.doc.oplog_vv();
+        // Rebuild the merge cache (and re-evaluate masking) before the engine
+        // reseed so masked cells are excluded; conflict events ride along below.
+        let conflicts = self.rebuild_merges();
         // Reseed the formula engine from the resulting cell values, mapping each
         // stable key pair back to its grid position via the rebuilt index. A
         // merge may have moved cells under their stable keys, so reset first.
@@ -590,11 +799,13 @@ impl TrameState {
         self.reseed_formatting();
         // Refresh the toolbar / context-menu toggles for the active cell: after a
         // reload its formatting is only known once the `format` map is restored.
-        vec![
+        let mut events = vec![
             TrameEvent::DataReset,
             TrameEvent::BoldState { enabled: self.bold.contains(&self.active) },
             TrameEvent::ItalicState { enabled: self.italic.contains(&self.active) },
-        ]
+        ];
+        events.extend(conflicts);
+        events
     }
 }
 
@@ -902,6 +1113,132 @@ mod tests {
         assert!(evts.display.is_empty(), "no DataReset");
         assert!(evts.update.is_none(), "no CRDT delta");
         assert_eq!(read_cell(&mut state, 0, 0), "x");
+    }
+
+    /// Read the full DisplayCell at a single grid position.
+    fn read_display(state: &mut TrameState, row: u32, col: u32) -> crate::DisplayCell {
+        let evts = state.handle_command(TrameCommand::ScrollViewport {
+            version: 5000, row_start: row, row_end: row, col_start: col, col_end: col,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
+        cells[0].clone()
+    }
+
+    /// Merging a range marks the top-left master with its span and renders the
+    /// covered cells blank; the merge survives a snapshot round-trip.
+    #[test]
+    fn merge_marks_master_span_and_blanks_covered() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "title".to_owned() });
+
+        // Merge A1:B2 (2 cols x 2 rows), master = A1.
+        let evts = state.handle_command(TrameCommand::MergeCells {
+            row: 0, col: 0, row_end: 1, col_end: 1,
+        });
+        assert!(evts.display.iter().any(|e| matches!(e, TrameEvent::DataReset)));
+
+        let master = read_display(&mut state, 0, 0);
+        assert_eq!(master.merge_span, Some((2, 2)), "master spans 2x2");
+        assert!(master.is_merged);
+        assert_eq!(master.text, "title");
+
+        let covered = read_display(&mut state, 1, 1);
+        assert!(covered.is_merged, "covered cell flags merged");
+        assert_eq!(covered.merge_span, None, "covered cell has no span");
+        assert_eq!(covered.text, "", "covered cell renders blank");
+
+        // Round-trip: the merge is persisted in the CRDT.
+        let snapshot = state.export_snapshot();
+        let mut restored = TrameState::new();
+        restored.import_snapshot(&snapshot);
+        assert_eq!(read_display(&mut restored, 0, 0).merge_span, Some((2, 2)));
+    }
+
+    /// A merge is rejected locally when a covered cell is non-empty, and no CRDT
+    /// delta is produced (Excel/Sheets behavior, §6).
+    #[test]
+    fn merge_rejected_when_covered_cell_non_empty() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 1, text: "busy".to_owned() });
+
+        let evts = state.handle_command(TrameCommand::MergeCells {
+            row: 0, col: 0, row_end: 0, col_end: 1,
+        });
+        assert!(
+            matches!(&evts.display[0], TrameEvent::MergeRejected { .. }),
+            "non-empty covered cell rejects the merge"
+        );
+        assert!(evts.update.is_none(), "no CRDT mutation on reject");
+        // The cells stay independent.
+        assert_eq!(read_display(&mut state, 0, 0).merge_span, None);
+    }
+
+    /// Unmerging restores the covered cells (span and blanking cleared).
+    #[test]
+    fn unmerge_restores_covered_cells() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::MergeCells {
+            row: 0, col: 0, row_end: 0, col_end: 2,
+        });
+        assert_eq!(read_display(&mut state, 0, 0).merge_span, Some((3, 1)));
+
+        // Unmerge by pointing at any cell inside the range.
+        state.handle_command(TrameCommand::UnmergeCells { row: 0, col: 2 });
+        assert_eq!(read_display(&mut state, 0, 0).merge_span, None);
+        assert!(!read_display(&mut state, 0, 1).is_merged, "covered cell freed");
+    }
+
+    /// A concurrent edit that lands a value in a covered cell is masked, not
+    /// destroyed: the value is hidden while the merge is active and reappears on
+    /// unmerge (§6, data is never destroyed).
+    #[test]
+    fn concurrent_value_under_merge_is_masked_then_restored() {
+        // Shared base so both peers address rows 0/1 by the *same* stable ids
+        // (concurrent dense-list inserts would otherwise create distinct rows).
+        // Seeding then clearing A2 materializes rows 0 and 1 without leaving a
+        // value behind.
+        let mut base = TrameState::new();
+        base.handle_command(TrameCommand::SetCellText { row: 1, col: 0, text: "seed".to_owned() });
+        base.handle_command(TrameCommand::SetCellText { row: 1, col: 0, text: String::new() });
+        let base_snap = base.export_snapshot();
+
+        let mut a = TrameState::new();
+        a.import_snapshot(&base_snap);
+        let mut b = TrameState::new();
+        b.import_snapshot(&base_snap);
+
+        // Peer A merges A1:A2 (both empty on its side).
+        a.handle_command(TrameCommand::MergeCells { row: 0, col: 0, row_end: 1, col_end: 0 });
+        let merge_delta = a.export_snapshot();
+
+        // Peer B concurrently writes A2, then receives A's merge.
+        b.handle_command(TrameCommand::SetCellText { row: 1, col: 0, text: "concurrent".to_owned() });
+        let conflicts = b.apply_remote(&merge_delta);
+        assert!(
+            conflicts.iter().any(|e| matches!(e, TrameEvent::MergeConflictDetected { .. })),
+            "the covered non-empty cell is reported as a conflict"
+        );
+        // While merged, A2 is masked (blank) but the data still exists.
+        assert_eq!(read_display(&mut b, 1, 0).text, "");
+
+        // Unmerge restores the masked value.
+        b.handle_command(TrameCommand::UnmergeCells { row: 0, col: 0 });
+        assert_eq!(read_display(&mut b, 1, 0).text, "concurrent", "masked value reappears");
+    }
+
+    /// A merge follows its cells across a structural insert: inserting a row
+    /// above the merge shifts the master span down with it.
+    #[test]
+    fn merge_follows_structural_insert() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText { row: 1, col: 0, text: "x".to_owned() });
+        state.handle_command(TrameCommand::MergeCells { row: 1, col: 0, row_end: 1, col_end: 1 });
+        assert_eq!(read_display(&mut state, 1, 0).merge_span, Some((2, 1)));
+
+        // Insert a row at the top: the merge shifts from row 1 to row 2.
+        state.handle_command(TrameCommand::InsertRow { at: 0 });
+        assert_eq!(read_display(&mut state, 1, 0).merge_span, None, "old position freed");
+        assert_eq!(read_display(&mut state, 2, 0).merge_span, Some((2, 1)), "merge shifted down");
     }
 
     #[test]
