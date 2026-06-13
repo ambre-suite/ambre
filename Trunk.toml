@@ -2,6 +2,15 @@
 target = "crates/ambre-app/index.html"
 filehash = false
 
+# By default Trunk only watches the parent folder of `build.target`
+# (crates/ambre-app/), so edits to any other workspace crate (ambre-trame,
+# ambre-bus, ambre-logic, ...) never trigger a rebuild. Watch the whole
+# `crates` tree instead, and explicitly ignore target/dist to avoid rebuild
+# loops on build artifacts.
+[watch]
+paths = ["crates"]
+ignore = ["target", "dist"]
+
 [serve]
 port = 8080
 open = true
