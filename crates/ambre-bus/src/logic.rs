@@ -247,4 +247,15 @@ pub enum TrameCommand {
         row: u32,
         col: u32,
     },
+
+    /// Undo the last local edit (`ambre-spec-trame-logic.md` §8). Backed by Loro's
+    /// `UndoManager`: it replays the inverse of this session's most recent commit
+    /// as fresh CRDT ops (1 `TrameCommand` == 1 commit == 1 undo item). The
+    /// inverse ops broadcast to peers like any other edit, so undo converges. A
+    /// no-op when the undo stack is empty.
+    Undo,
+
+    /// Redo the edit most recently undone by [`Undo`](TrameCommand::Undo). A no-op
+    /// when the redo stack is empty (it is cleared by any new local edit).
+    Redo,
 }

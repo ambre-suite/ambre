@@ -16,7 +16,7 @@
 use std::collections::{HashMap, HashSet};
 
 use loro::cursor::Side;
-use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
+use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
 
 use crate::formula::{CellRef, FormulaEngine};
 use crate::model::{Lid, SheetIndex, cell_key, parse_cell_key};
@@ -46,6 +46,13 @@ const FMT_ITALIC: i64 = 1 << 1;
 /// down the grid" case that would otherwise create ~100k placeholder elements
 /// (see `ambre-spec-trame-logic.md` §2.A bis). A write beyond it is dropped.
 const MATERIALIZE_CAP: usize = 10_000;
+
+/// Commit origin tagging the implicit row/column scaffolding that a cell edit
+/// forces into existence (see [`TrameState::materialize`]). The `UndoManager` is
+/// told to exclude this prefix, so that scaffolding never lands on the undo
+/// stack -- only the user-intended value change does. Explicit structural ops
+/// (`InsertRow`, etc.) use the default origin and stay undoable.
+const MATERIALIZE_ORIGIN: &str = "mat";
 
 /// Per-sheet container names (`cells_{sheet}`, etc.). Keyed by sheet id so a
 /// multi-sheet document keeps each sheet's cells/rows/columns/formatting
@@ -150,6 +157,13 @@ pub struct TrameState {
     /// concurrent-edit conflict (§6). Masked: excluded from the formula engine
     /// and not displayed, but never destroyed; reappear on unmerge.
     masked_cells: HashSet<String>,
+    /// Local undo/redo history (§8). Subscribes to [`Self::doc`] and records one
+    /// item per commit; each `TrameCommand` handler commits exactly once, so one
+    /// command maps to one undo step. Scope is the open-document session: it only
+    /// knows this peer's commits, not imported remote ops. `undo`/`redo` mutate
+    /// it, hence it is created after the constructor's initial commit so that the
+    /// implicit-sheet registration is never undoable.
+    undo_manager: UndoManager,
 }
 
 impl TrameState {
@@ -159,6 +173,13 @@ impl TrameState {
         // a peer that also "creates" s0 converges to the same entry).
         let _ = doc.get_map(SHEETS_MAP).insert(DEFAULT_SHEET, "Sheet1");
         doc.commit();
+        // Create the undo manager AFTER the initial commit: the implicit-sheet
+        // registration is document scaffolding, not a user edit, so it must not
+        // sit on the undo stack.
+        let mut undo_manager = UndoManager::new(&doc);
+        // Keep implicit row/column materialization off the undo stack (see
+        // [`MATERIALIZE_ORIGIN`]); only user-intended edits are undoable.
+        undo_manager.add_exclude_origin_prefix(MATERIALIZE_ORIGIN);
         Self {
             active: (0, 0),
             active_sheet: DEFAULT_SHEET.to_owned(),
@@ -171,6 +192,7 @@ impl TrameState {
             merges: HashMap::new(),
             covered: HashSet::new(),
             masked_cells: HashSet::new(),
+            undo_manager,
         }
     }
 }
@@ -221,17 +243,31 @@ impl TrameState {
             );
             return None;
         }
+        let mut grew = false;
         let rows = self.doc.get_movable_list(rows_list_name(&self.active_sheet));
         while self.index.row_len() <= row {
             rows.push(LoroValue::Null).ok()?;
             let id = rows.get_cursor(rows.len() - 1, Side::Middle).and_then(|c| c.id)?;
             self.index.push_row(id);
+            grew = true;
         }
         let cols = self.doc.get_movable_list(cols_list_name(&self.active_sheet));
         while self.index.col_len() <= col {
             cols.push(LoroValue::Null).ok()?;
             let id = cols.get_cursor(cols.len() - 1, Side::Middle).and_then(|c| c.id)?;
             self.index.push_col(id);
+            grew = true;
+        }
+        // Commit the implicit scaffolding under the excluded origin so it stays
+        // OUT of the undo stack (see [`MATERIALIZE_ORIGIN`]). A cell edit's intent
+        // is the value, not the row/column placeholders it forced into existence;
+        // keeping those off the stack means undo reverts only the value and, on
+        // redo, the cell's key still resolves to the same (never-removed) list
+        // element ids -- without this split, Loro would recreate those elements
+        // with fresh ids on redo and orphan the cell. A no-op when nothing grew.
+        if grew {
+            self.doc.set_next_commit_origin(MATERIALIZE_ORIGIN);
+            self.doc.commit();
         }
         self.index.resolve(row, col)
     }
@@ -367,6 +403,45 @@ impl TrameState {
                 self.merge_cells(row, col, row_end, col_end)
             }
             TrameCommand::UnmergeCells { row, col } => self.unmerge_cells(row, col),
+            TrameCommand::Undo => self.apply_history(true),
+            TrameCommand::Redo => self.apply_history(false),
+        }
+    }
+
+    /// Apply one undo (`undo = true`) or redo step from Loro's `UndoManager`,
+    /// then rebuild every derived cache from the resulting CRDT state and
+    /// broadcast the inverse ops it produced (§8).
+    ///
+    /// `undo()` / `redo()` commit the inverse of a past local commit as fresh
+    /// ops, so the rebuild path is identical to a structural op or import: the
+    /// index, merge cache, formula engine and formatting are all reseeded from
+    /// the new document state. Returns the same `DataReset` + active-cell state
+    /// the UI needs to repaint, plus an [`UndoState`] reporting the new stack
+    /// availability. When the requested stack is empty the call is a no-op and
+    /// only the (unchanged) availability is reported.
+    ///
+    /// [`UndoState`]: ambre_bus::TrameEvent::UndoState
+    fn apply_history(&mut self, undo: bool) -> TrameOutcome {
+        let changed = if undo { self.undo_manager.undo() } else { self.undo_manager.redo() }.unwrap_or(false);
+
+        if !changed {
+            return TrameOutcome::display_only(vec![self.undo_state_event()]);
+        }
+
+        // The inverse ops are already committed by undo()/redo(); reseed the
+        // derived caches and broadcast the delta exactly as `after_structural`.
+        let mut outcome = self.after_structural();
+        outcome.display.push(TrameEvent::BoldState { enabled: self.bold.contains(&self.active) });
+        outcome.display.push(TrameEvent::ItalicState { enabled: self.italic.contains(&self.active) });
+        outcome.display.push(self.undo_state_event());
+        outcome
+    }
+
+    /// Current undo/redo availability, for the chrome's Undo/Redo affordances.
+    fn undo_state_event(&self) -> TrameEvent {
+        TrameEvent::UndoState {
+            can_undo: self.undo_manager.can_undo(),
+            can_redo: self.undo_manager.can_redo(),
         }
     }
 
@@ -1030,6 +1105,47 @@ mod tests {
         });
         let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
         cells[0].text.clone()
+    }
+
+    /// Undo reverts the last local edit; redo reapplies it. The `UndoManager`
+    /// records one item per command (one commit), so a single undo restores the
+    /// cell to its pre-edit (empty) label and a single redo brings the value back.
+    #[test]
+    fn undo_then_redo_round_trips_a_cell_edit() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "hello".to_owned() });
+        assert_eq!(read_cell(&mut state, 0, 0), "hello");
+
+        let evts = state.handle_command(TrameCommand::Undo);
+        assert!(matches!(evts.display[0], TrameEvent::DataReset));
+        // Undo produces inverse ops to broadcast, and reports the new stacks.
+        assert!(evts.update.is_some(), "undo broadcasts its inverse ops");
+        assert!(matches!(
+            evts.display.last(),
+            Some(TrameEvent::UndoState { can_undo: false, can_redo: true })
+        ));
+        assert_eq!(read_cell(&mut state, 0, 0), "A1", "value gone, label restored");
+
+        let evts = state.handle_command(TrameCommand::Redo);
+        assert!(matches!(
+            evts.display.last(),
+            Some(TrameEvent::UndoState { can_undo: true, can_redo: false })
+        ));
+        assert_eq!(read_cell(&mut state, 0, 0), "hello", "redo restores the value");
+    }
+
+    /// Undo with an empty stack is a no-op: no `DataReset`, no broadcast, just the
+    /// (unchanged) availability so the chrome can disable the button.
+    #[test]
+    fn undo_with_empty_stack_is_a_noop() {
+        let mut state = TrameState::new();
+        let evts = state.handle_command(TrameCommand::Undo);
+        assert!(evts.update.is_none());
+        assert_eq!(evts.display.len(), 1);
+        assert!(matches!(
+            evts.display[0],
+            TrameEvent::UndoState { can_undo: false, can_redo: false }
+        ));
     }
 
     /// Inserting a row shifts the cells below it down by one position; cells are

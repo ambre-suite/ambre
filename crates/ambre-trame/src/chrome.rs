@@ -28,15 +28,23 @@ use leptos::prelude::*;
 pub const BOLD: CommandId = CommandId("trame.format.bold");
 /// The Trame "Italic" command (see [`BOLD`]).
 pub const ITALIC: CommandId = CommandId("trame.format.italic");
+/// The Trame "Undo" command (Loro `UndoManager`, document-session scope).
+pub const UNDO: CommandId = CommandId("trame.history.undo");
+/// The Trame "Redo" command (see [`UNDO`]).
+pub const REDO: CommandId = CommandId("trame.history.redo");
 
 /// Every command Trame contributes to the registry. The launcher builds the
 /// `CommandStates` store and the keymap from this list, naming no command itself.
-pub const COMMANDS: &[CommandId] = &[BOLD, ITALIC];
+pub const COMMANDS: &[CommandId] = &[BOLD, ITALIC, UNDO, REDO];
 
 /// Bind Trame's command chords into the launcher's keymap.
 pub fn bind_keys(keymap: &mut Keymap) {
     keymap.bind(KeyBinding::ctrl('b'), BOLD);
     keymap.bind(KeyBinding::ctrl('i'), ITALIC);
+    keymap.bind(KeyBinding::ctrl('z'), UNDO);
+    // Ctrl+Shift+Z and Ctrl+Y both redo (Excel/Sheets convention).
+    keymap.bind(KeyBinding::ctrl_shift('z'), REDO);
+    keymap.bind(KeyBinding::ctrl('y'), REDO);
 }
 
 /// Translate a Trame `CommandId` into the `AppCommand` IPC payload the Logic
@@ -46,6 +54,10 @@ pub fn command_to_app(id: CommandId) -> Option<AppCommand> {
         TrameCommand::ToggleBold
     } else if id == ITALIC {
         TrameCommand::ToggleItalic
+    } else if id == UNDO {
+        TrameCommand::Undo
+    } else if id == REDO {
+        TrameCommand::Redo
     } else {
         return None;
     };
@@ -68,7 +80,12 @@ pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
 
 /// The right-click context-menu entries Trame contributes.
 pub fn context_entries() -> Vec<MenuEntry> {
-    vec![MenuEntry::new(BOLD, "Bold"), MenuEntry::new(ITALIC, "Italic")]
+    vec![
+        MenuEntry::new(BOLD, "Bold"),
+        MenuEntry::new(ITALIC, "Italic"),
+        MenuEntry::new(UNDO, "Undo"),
+        MenuEntry::new(REDO, "Redo"),
+    ]
 }
 
 /// The status-bar label for a Trame document.
