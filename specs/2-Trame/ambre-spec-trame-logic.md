@@ -181,6 +181,100 @@ impl SheetIndex {
 }
 ```
 
+### D. Sheet Lifecycle (create / rename / reorder / delete)
+
+A workbook is a set of sheets ordered by `sheet_order` (a `LoroMovableList` of
+stable `sheet_id`s). Each operation below is a small, convergent CRDT mutation;
+none rewrites another sheet's content. The four commands are
+[`CreateSheet`](#8-interface-contract-api) / `RenameSheet` / `MoveSheet` /
+`DeleteSheet` (§9).
+
+> **Sheet identity is a stable `sheet_id`, never the display name.** Formulas
+> depend on `sheet_id`; the display name is a mutable label resolved to its id
+> at parse time. This is the §2.A principle applied to sheets: rename and
+> reorder never invalidate a reference, exactly as a row insert never
+> invalidates a cell key. Only **delete** removes an id, and that is the only
+> operation that can produce a cross-sheet `#REF!`.
+
+**`sheet_id` generation.** The implicit first sheet keeps the constant
+[`DEFAULT_SHEET`](../../crates/ambre-trame/src/logic.rs) `"s0"` so two fresh
+states (creator and reloading peer) address the same containers and merge
+cleanly. Every **explicit** sheet gets a peer-scoped id
+`"{peer:016x}_{counter:08x}"` (the document `PeerID` plus a per-session
+counter), so two peers that concurrently "add a sheet" mint two **distinct**
+ids -- both survive, neither overwrites the other (LWW on a single shared id is
+thereby avoided, mirroring the rejected shared-counter hazard of §13).
+
+#### Create
+
+```
+sheets.insert(sheet_id, {name, hidden: false, tab_color})   // metadata
+sheet_order.push(sheet_id)                                  // 1 LoroMovableList op
+// cells_{id} / rows_{id} / cols_{id} are created lazily on first write.
+```
+
+Convergence: concurrent creates append two distinct ids; `LoroMovableList`
+orders them canonically. The local engine assigns the new sheet a `u16` index at
+the next reseed (its empty cell set needs no recompute). Reply:
+`TrameEvent::SheetList` so the tab strip refreshes.
+
+#### Rename
+
+```
+sheets.get(sheet_id).set("name", new_name)   // LWW on the name field only
+```
+
+The `sheet_id` is untouched, so **every cross-sheet reference keeps resolving and
+keeps computing** -- no formula is recompiled for a rename. The formula *text*
+shown in the formula bar is reconstructed from `sheet_id -> current name`, so a
+renamed sheet immediately displays the new qualifier (`Data!A1` where the user
+once typed `Sheet2!A1`). Concurrent renames resolve by LWW on the `name` field;
+all peers converge to one name and reconstruct identical formula text.
+
+> **Implementation note.** This requires the compiled cross-sheet dependency to
+> carry the `sheet_id` (the engine's local `u16` is a per-session interning of
+> it), and the stored raw `v` text to be re-rendered through the current
+> `sheet_id -> name` map rather than replayed verbatim. The MVP engine re-parses
+> raw text by display name on reseed, so until id-persistence lands a rename
+> breaks an existing cross-sheet reference -- tracked in §14.
+
+#### Reorder (move)
+
+```
+sheet_order.mov(from_index, to_index)   // 1 LoroMovableList move op
+```
+
+Pure presentation: `sheet_order` drives only the tab strip and the local `u16`
+index assignment, never resolution (references are by `sheet_id`). No recompute.
+`MoveSheet { sheet_id, to_index }` looks up the current index and issues one
+`mov`; concurrent moves converge through `LoroMovableList`'s canonical ordering.
+
+#### Delete
+
+```
+sheet_order.delete(index, 1)
+sheets.delete(sheet_id)
+// drop per-sheet containers: cells_{id}, rows_{id}, cols_{id},
+// format_{id}, merges_{id}, and the feature maps of trame-features.
+```
+
+- **Cross-sheet `#REF!`.** A formula `=Sheet2!A1` whose `sheet_id` is gone
+  resolves to `BrokenRef` at evaluation -- the §5 mechanism, extended to the
+  sheet axis: absence in the `sheet_id -> u16` map is the trigger, no bytecode
+  patching. Deleting a sheet marks every dependent formula dirty (full reseed,
+  since the `u16` remap shifts indices) and recomputes them to `#REF!`.
+- **A workbook always keeps >= 1 sheet.** Deleting the last sheet is **rejected
+  locally** (`TrameEvent::Error`). Under concurrency, if two peers delete
+  different sheets and the deletes converge to an empty `sheet_order`, the sheet
+  whose `sheet_id` sorts first is **re-inserted** (deterministic on all peers) so
+  the workbook is never sheet-less.
+- **Active sheet deleted** (locally or by a remote delete): the active sheet
+  switches to the previous tab, or the first remaining sheet if it was first.
+
+**Engine impact.** Create/move/rename need at most a `SheetList` refresh; only
+**delete** forces a reseed + recompute (sheet set changed -> `u16` remap +
+`#REF!` propagation), aligned with the structural-op reseed path of §8.
+
 ---
 
 ## 3. TWO-LEVEL DEPENDENCY GRAPH
@@ -994,10 +1088,11 @@ pub enum TrameCommand {
                    row: u32, col: u32, row_span: u32, col_span: u32 },
     UnmergeCells { version: u64, sheet_id: SheetId, row: u32, col: u32 },
 
-    // -- Sheets --------------------------------------------------------
+    // -- Sheets (lifecycle, see §2.D) -------------------------------------
     CreateSheet  { name: String },
     DeleteSheet  { sheet_id: SheetId },
     RenameSheet  { sheet_id: SheetId, name: String },
+    MoveSheet    { sheet_id: SheetId, to_index: u32 },
 
     // -- Filtres (trame-features sec.1) -------------------------------------
     ApplyFilter         { sheet_id: SheetId, col: u32, kind: FilterKind,
@@ -1264,6 +1359,14 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 
 **Why this is correct:** deletion is an explicit intent. Finding "by position" after delete+reinsert is a fragile heuristic, especially in collaborative mode where the position may have changed between the two operations on different clients. `#REF!` is the correct information: the referenced cell no longer exists.
 
+### Cross-Sheet References After Sheet Operations
+
+**Excel:** renaming a sheet rewrites the name token in every dependent formula; deleting a sheet leaves `#REF!`.
+
+**Trame:** cross-sheet references depend on the stable `sheet_id` (§2.D), not the display name. **Rename** therefore changes nothing in the dependency graph -- the formula keeps computing and only its *displayed* qualifier follows the new name. **Reorder** is pure presentation and never touches a reference. **Delete** is the sole sheet operation that removes a `sheet_id`, so it is the only one that yields a cross-sheet `#REF!`, by the same absence-triggers-broken-ref rule as a deleted row (§5).
+
+**Why this is correct for a CRDT:** Excel's rename-rewrite is the same non-idempotent rewrite hazard as its row-insert rewrite (§12, "References After Structural Operations"). Binding to `sheet_id` makes rename and reorder convergent and reference-preserving, leaving `#REF!` to mean exactly one thing: the target no longer exists.
+
 ---
 
 ## 13. REJECTED ARCHITECTURAL DECISIONS
@@ -1314,7 +1417,9 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 - [x] VLOOKUP, INDEX, MATCH, IFERROR, SUMIF, COUNTIF *(2D `RangeValue` added to `CellValue::Range` so lookups can address cells by row/col; criteria parser for SUMIF/COUNTIF) (Epic `E3`)*
 - [x] TEXT, CONCAT *(`CONCAT`/`CONCATENATE` already present; `TEXT` minimal numeric formatting: decimals + thousands grouping) (Epic `E3`)*
 - [x] TODAY, NOW, DATE, YEAR, MONTH, DAY *(Excel serial numbers, epoch 1899-12-30; evaluation clock threaded through `EvalContext::now_serial` -> `call_builtin`, sourced from `functions::now_serial()` (js-sys on wasm, std::time native)) (Epic `E3`)*
-- [ ] Named ranges, cross-sheet references *(Epic `E3`: deferred -- the formula crate is positional single-sheet; requires parser + `TrameState` name/sheet resolution, not just a new builtin)*
+- [x] Named ranges, cross-sheet references *(Epic `E3`: `CellRef`/`RangeDep` carry a local `sheet: u16`; the parser emits `Expr::SheetRef`/`Expr::Name`, resolved by a context-aware `resolve_refs` pass against a `FormulaCtx` (sheet display name -> index, defined name -> target). Named ranges fully wired e2e: `named_ranges` LWW CRDT map, `TrameCommand::DefineName`/`DeleteName`, positional resolution on reseed. `reseed_engine` is multi-sheet (active sheet pinned to index 0; cross-sheet `Sheet2!A1` evaluates in the engine, unit-tested). **Gap:** the end-to-end cross-sheet path needs a sheet-creation command (`CreateSheet`/`ActivateSheet`), which lands with the sheet-tabs UI (see Phase 0) -- the engine is ready, only the entry point is missing)*
+- [ ] Sheet lifecycle commands `CreateSheet` / `RenameSheet` / `MoveSheet` / `DeleteSheet` (§2.D): peer-scoped `sheet_id` minting, `sheet_order` `LoroMovableList` ops, last-sheet-deletion guard + convergent re-insert, active-sheet fallback on delete, delete-driven reseed + cross-sheet `#REF!` propagation. Unlocks the end-to-end cross-sheet path above. *(Epic `E3`, with the sheet-tabs UI)*
+- [ ] Cross-sheet references bound to `sheet_id` (not display name): persist the resolved sheet id in the compiled dependency and reconstruct formula-bar text through `sheet_id -> name`, so rename/reorder preserve references (§2.D rename note, §12). *(Epic `E3`)*
 
 **Phase 3 — Optimization & Completion**
 - [ ] `SheetRangeIndex` interval tree 2D if benchmarks justify it

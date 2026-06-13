@@ -13,7 +13,7 @@ use petgraph::visit::Topo;
 
 use super::cache::BytecodeCache;
 use super::dag::DependencyGraph;
-use super::types::{CellRef, CellValue};
+use super::types::{CellRef, CellValue, FormulaCtx};
 use super::vm::EvalContext;
 
 /// Central orchestrator for the Trame formula engine.
@@ -58,7 +58,7 @@ impl FormulaEngine {
     ///
     /// Invalidates its bytecode, marks it stale, collects all downstream
     /// dependents, and extends the `dirty` set.
-    pub fn on_cell_changed(&mut self, cell: CellRef, raw: &str) {
+    pub fn on_cell_changed(&mut self, cell: CellRef, raw: &str, ctx: &dyn FormulaCtx) {
         self.bytecode.invalidate(cell);
         let downstream = self.deps.collect_dirty(cell);
         self.dirty.insert(cell);
@@ -66,8 +66,8 @@ impl FormulaEngine {
 
         // Recompile immediately to detect parse/cycle errors early; the
         // result (error or success) is stored in formula_cache by
-        // compute_all_dirty.
-        let _ = self.bytecode.recompile_if_stale(cell, raw, &mut self.deps);
+        // compute_all_dirty. `ctx` resolves sheet-qualified refs / named ranges.
+        let _ = self.bytecode.recompile_if_stale(cell, raw, &mut self.deps, ctx);
 
         // Plain (non-formula) cells never go through the VM, so their value
         // must be published here for formula references (e.g. SUM(A1:B1)) to
@@ -165,13 +165,14 @@ impl Default for FormulaEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::types::SingleSheetCtx;
 
     #[test]
     fn literal_formula_evaluated() {
         let mut engine = FormulaEngine::new();
         let cell = CellRef::new(0, 0);
 
-        engine.on_cell_changed(cell, "=42");
+        engine.on_cell_changed(cell, "=42", &SingleSheetCtx);
         engine.compute_all_dirty();
 
         assert_eq!(engine.evaluated_text(cell).unwrap(), "42");
@@ -183,12 +184,12 @@ mod tests {
         let mut engine = FormulaEngine::new();
 
         // A1 = 10
-        engine.on_cell_changed(CellRef::new(0, 0), "=10");
+        engine.on_cell_changed(CellRef::new(0, 0), "=10", &SingleSheetCtx);
         engine.compute_all_dirty();
         engine.dirty.clear();
 
         // B1 = A1 * 2
-        engine.on_cell_changed(CellRef::new(0, 1), "=A1*2");
+        engine.on_cell_changed(CellRef::new(0, 1), "=A1*2", &SingleSheetCtx);
         engine.compute_all_dirty();
 
         assert_eq!(engine.evaluated_text(CellRef::new(0, 1)).unwrap(), "20");
@@ -199,18 +200,18 @@ mod tests {
         let mut engine = FormulaEngine::new();
 
         // A1 = 5
-        engine.on_cell_changed(CellRef::new(0, 0), "=5");
+        engine.on_cell_changed(CellRef::new(0, 0), "=5", &SingleSheetCtx);
         engine.compute_all_dirty();
         engine.dirty.clear();
 
         // B1 = A1 + 3
-        engine.on_cell_changed(CellRef::new(0, 1), "=A1+3");
+        engine.on_cell_changed(CellRef::new(0, 1), "=A1+3", &SingleSheetCtx);
         engine.compute_all_dirty();
         assert_eq!(engine.evaluated_text(CellRef::new(0, 1)).unwrap(), "8");
 
         // Edit A1 to 10: B1 should cascade.
         engine.dirty.clear();
-        engine.on_cell_changed(CellRef::new(0, 0), "=10");
+        engine.on_cell_changed(CellRef::new(0, 0), "=10", &SingleSheetCtx);
         engine.compute_all_dirty();
 
         assert_eq!(engine.evaluated_text(CellRef::new(0, 0)).unwrap(), "10");
@@ -222,7 +223,7 @@ mod tests {
         let mut engine = FormulaEngine::new();
         let cell = CellRef::new(0, 0);
 
-        engine.on_cell_changed(cell, "=1/0");
+        engine.on_cell_changed(cell, "=1/0", &SingleSheetCtx);
         engine.compute_all_dirty();
 
         assert_eq!(engine.evaluated_text(cell).unwrap(), "#DIV/0!");
@@ -235,13 +236,13 @@ mod tests {
         // A1 = 1, A2 = 2, A3 = 3
         for i in 0..3 {
             let cell = CellRef::new(i, 0);
-            engine.on_cell_changed(cell, &format!("={}", i + 1));
+            engine.on_cell_changed(cell, &format!("={}", i + 1), &SingleSheetCtx);
         }
         engine.compute_all_dirty();
         engine.dirty.clear();
 
         // C1 = SUM(A1:A3)
-        engine.on_cell_changed(CellRef::new(0, 2), "=SUM(A1:A3)");
+        engine.on_cell_changed(CellRef::new(0, 2), "=SUM(A1:A3)", &SingleSheetCtx);
         engine.compute_all_dirty();
 
         assert_eq!(engine.evaluated_text(CellRef::new(0, 2)).unwrap(), "6");
@@ -252,13 +253,13 @@ mod tests {
         let mut engine = FormulaEngine::new();
 
         // A1 = 1, B1 = 2 entered as plain literals (no leading '=').
-        engine.on_cell_changed(CellRef::new(0, 0), "1");
-        engine.on_cell_changed(CellRef::new(0, 1), "2");
+        engine.on_cell_changed(CellRef::new(0, 0), "1", &SingleSheetCtx);
+        engine.on_cell_changed(CellRef::new(0, 1), "2", &SingleSheetCtx);
         engine.compute_all_dirty();
         engine.dirty.clear();
 
         // C1 = SUM(A1:B1) must see the plain literals, not Empty.
-        engine.on_cell_changed(CellRef::new(0, 2), "=SUM(A1:B1)");
+        engine.on_cell_changed(CellRef::new(0, 2), "=SUM(A1:B1)", &SingleSheetCtx);
         engine.compute_all_dirty();
 
         assert_eq!(engine.evaluated_text(CellRef::new(0, 2)).unwrap(), "3");
@@ -268,11 +269,11 @@ mod tests {
     fn static_cycle_rejected() {
         let mut engine = FormulaEngine::new();
 
-        engine.on_cell_changed(CellRef::new(0, 0), "=B1");
+        engine.on_cell_changed(CellRef::new(0, 0), "=B1", &SingleSheetCtx);
         engine.compute_all_dirty();
         engine.dirty.clear();
 
-        engine.on_cell_changed(CellRef::new(0, 1), "=A1");
+        engine.on_cell_changed(CellRef::new(0, 1), "=A1", &SingleSheetCtx);
         engine.compute_all_dirty();
 
         // B1's parse/compile should have failed (cycle), so no cached result.
@@ -283,9 +284,60 @@ mod tests {
     fn function_if() {
         let mut engine = FormulaEngine::new();
 
-        engine.on_cell_changed(CellRef::new(0, 0), "=IF(1>0, \"yes\", \"no\")");
+        engine.on_cell_changed(CellRef::new(0, 0), "=IF(1>0, \"yes\", \"no\")", &SingleSheetCtx);
         engine.compute_all_dirty();
 
         assert_eq!(engine.evaluated_text(CellRef::new(0, 0)).unwrap(), "yes");
+    }
+
+    /// Context mapping `Sheet2` to local index 1 (other names/sheets absent).
+    struct TwoSheetCtx;
+    impl FormulaCtx for TwoSheetCtx {
+        fn resolve_sheet(&self, name: &str) -> Option<u16> {
+            (name == "Sheet2").then_some(1)
+        }
+        fn resolve_name(&self, _: &str) -> Option<super::super::types::NameTarget> {
+            None
+        }
+    }
+
+    #[test]
+    fn cross_sheet_reference_evaluates() {
+        let mut engine = FormulaEngine::new();
+        // Sheet2!A1 = 7 (sheet index 1).
+        engine.on_cell_changed(CellRef::with_sheet(1, 0, 0), "7", &TwoSheetCtx);
+        // Sheet1!A1 = Sheet2!A1 + 1 (default sheet 0).
+        engine.on_cell_changed(CellRef::new(0, 0), "=Sheet2!A1+1", &TwoSheetCtx);
+        engine.compute_all_dirty();
+
+        assert_eq!(engine.evaluated_text(CellRef::new(0, 0)).unwrap(), "8");
+    }
+
+    #[test]
+    fn cross_sheet_range_sum() {
+        let mut engine = FormulaEngine::new();
+        // Sheet2!A1=1, A2=2, A3=3.
+        for r in 0..3 {
+            engine.on_cell_changed(
+                CellRef::with_sheet(1, r, 0),
+                &format!("{}", r + 1),
+                &TwoSheetCtx,
+            );
+        }
+        engine.on_cell_changed(CellRef::new(0, 0), "=SUM(Sheet2!A1:A3)", &TwoSheetCtx);
+        engine.compute_all_dirty();
+
+        assert_eq!(engine.evaluated_text(CellRef::new(0, 0)).unwrap(), "6");
+    }
+
+    #[test]
+    fn same_position_different_sheets_are_distinct() {
+        let mut engine = FormulaEngine::new();
+        engine.on_cell_changed(CellRef::new(0, 0), "10", &TwoSheetCtx);
+        engine.on_cell_changed(CellRef::with_sheet(1, 0, 0), "99", &TwoSheetCtx);
+        engine.compute_all_dirty();
+
+        assert_eq!(engine.evaluated_text(CellRef::new(0, 0)).unwrap(), "10");
+        assert_eq!(engine.evaluated_text(CellRef::with_sheet(1, 0, 0)).unwrap(), "99");
     }
 }

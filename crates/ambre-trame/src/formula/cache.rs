@@ -8,8 +8,8 @@ use std::collections::{HashMap, HashSet};
 
 use super::compile::compile;
 use super::dag::DependencyGraph;
-use super::parser::parse_formula;
-use super::types::{CellBytecode, CellRef, CellValue, FormulaError};
+use super::parser::{parse_formula, resolve_refs};
+use super::types::{CellBytecode, CellRef, CellValue, FormulaCtx, FormulaError};
 
 /// Caches compiled bytecode and tracks stale cells for incremental compilation.
 pub struct BytecodeCache {
@@ -50,6 +50,7 @@ impl BytecodeCache {
         cell: CellRef,
         raw: &str,
         deps: &mut DependencyGraph,
+        ctx: &dyn FormulaCtx,
     ) -> Option<CellValue> {
         if !self.stale.remove(&cell) {
             return None;
@@ -63,7 +64,11 @@ impl BytecodeCache {
         }
 
         let formula_text = &raw[1..]; // Strip leading '='.
-        match parse_formula(formula_text) {
+        // Parse (context-free) then resolve sheet-qualified refs and named
+        // ranges against the host context; unqualified refs land on the
+        // formula's own sheet (`cell.sheet`).
+        let parsed = parse_formula(formula_text).and_then(|ast| resolve_refs(ast, cell.sheet, ctx));
+        match parsed {
             Ok(ast) => {
                 let bc = compile(&ast);
                 match deps.update(cell, bc.cell_deps.clone(), bc.range_deps.clone()) {
@@ -102,6 +107,7 @@ impl Default for BytecodeCache {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::types::SingleSheetCtx;
 
     #[test]
     fn stale_cell_recompiled() {
@@ -110,7 +116,7 @@ mod tests {
         let cell = CellRef::new(0, 0);
 
         cache.invalidate(cell);
-        let err = cache.recompile_if_stale(cell, "=42", &mut deps);
+        let err = cache.recompile_if_stale(cell, "=42", &mut deps, &SingleSheetCtx);
         assert!(err.is_none());
         assert!(cache.get(&cell).is_some());
         assert!(!cache.stale.contains(&cell));
@@ -124,12 +130,12 @@ mod tests {
 
         // First, compile as formula.
         cache.invalidate(cell);
-        cache.recompile_if_stale(cell, "=42", &mut deps);
+        cache.recompile_if_stale(cell, "=42", &mut deps, &SingleSheetCtx);
         assert!(cache.get(&cell).is_some());
 
         // Now, set to plain text.
         cache.invalidate(cell);
-        cache.recompile_if_stale(cell, "hello", &mut deps);
+        cache.recompile_if_stale(cell, "hello", &mut deps, &SingleSheetCtx);
         assert!(cache.get(&cell).is_none());
     }
 
@@ -140,7 +146,7 @@ mod tests {
         let cell = CellRef::new(0, 0);
 
         cache.invalidate(cell);
-        let err = cache.recompile_if_stale(cell, "=SUM(", &mut deps);
+        let err = cache.recompile_if_stale(cell, "=SUM(", &mut deps, &SingleSheetCtx);
         assert!(matches!(err, Some(CellValue::Error(FormulaError::ParseError(_)))));
     }
 
@@ -150,7 +156,7 @@ mod tests {
         let mut deps = DependencyGraph::new();
         let cell = CellRef::new(0, 0);
 
-        let err = cache.recompile_if_stale(cell, "=42", &mut deps);
+        let err = cache.recompile_if_stale(cell, "=42", &mut deps, &SingleSheetCtx);
         assert!(err.is_none());
         assert!(cache.get(&cell).is_none()); // Not compiled because not stale.
     }

@@ -11,7 +11,10 @@ use nom::multi::{many0, many1, separated_list0};
 use nom::sequence::{delimited, preceded};
 use nom::Parser;
 
-use super::types::{alpha_to_col, BinOpKind, CellRef, CellValue, Expr, RangeDep, UnaryOpKind};
+use super::types::{
+    alpha_to_col, BinOpKind, CellRef, CellValue, Expr, FormulaCtx, NameTarget, RangeDep,
+    UnaryOpKind,
+};
 
 // -----------------------------------------------------------------------------
 // Whitespace
@@ -128,6 +131,36 @@ fn cell_or_range(input: &str) -> nom::IResult<&str, Expr> {
     map(cell_ref, Expr::CellRef).parse(input)
 }
 
+/// A sheet name preceding a `!`: a bareword identifier (`Sheet2`) or a
+/// single-quoted name (`'My Sheet'`, allowing spaces). The closing `!` is not
+/// consumed here.
+fn sheet_name(input: &str) -> nom::IResult<&str, String> {
+    if let Ok((rest, _)) = char::<&str, nom::error::Error<&str>>('\'').parse(input) {
+        // Quoted: read until the closing quote (no escaping in the MVP).
+        let end = rest.find('\'').ok_or_else(|| {
+            nom::Err::Error(nom::error::Error::new(rest, nom::error::ErrorKind::Tag))
+        })?;
+        let name = rest[..end].to_string();
+        return Ok((&rest[end + 1..], name));
+    }
+    map(identifier, |s: &str| s.to_string()).parse(input)
+}
+
+/// A sheet-qualified reference `Sheet2!A1` / `'My Sheet'!A1:B2`. Resolution of
+/// the sheet name to an index happens later in [`resolve_refs`].
+fn sheet_qualified(input: &str) -> nom::IResult<&str, Expr> {
+    let (input, name) = sheet_name.parse(input)?;
+    let (input, _) = char('!').parse(input)?;
+    let (input, inner) = cell_or_range.parse(input)?;
+    Ok((input, Expr::SheetRef { sheet_name: name, inner: Box::new(inner) }))
+}
+
+/// A bareword reference to a named range. Resolution happens in
+/// [`resolve_refs`]; here we only capture the identifier.
+fn name_ref(input: &str) -> nom::IResult<&str, Expr> {
+    map(identifier, |s: &str| Expr::Name(s.to_string())).parse(input)
+}
+
 // -----------------------------------------------------------------------------
 // Function call
 // -----------------------------------------------------------------------------
@@ -171,7 +204,17 @@ fn atom_inner(input: &str) -> nom::IResult<&str, Expr> {
     if let Ok(result) = function_call(input) {
         return Ok(result);
     }
+    // Sheet-qualified (`Sheet2!A1`) before a plain ref: it starts like an
+    // identifier but is disambiguated by the `!`.
+    if let Ok(result) = sheet_qualified(input) {
+        return Ok(result);
+    }
     if let Ok(result) = cell_or_range(input) {
+        return Ok(result);
+    }
+    // A bareword that is neither a function call, a cell ref, nor a range is a
+    // named-range reference, resolved later against the context.
+    if let Ok(result) = name_ref(input) {
         return Ok(result);
     }
     delimited(char('('), expr, char(')')).parse(input)
@@ -323,6 +366,74 @@ pub fn parse_formula(input: &str) -> Result<Expr, String> {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Reference resolution (context-dependent pass over the AST)
+// -----------------------------------------------------------------------------
+
+/// Rewrite the context-free AST into a fully resolved one: stamp `default_sheet`
+/// onto every unqualified reference, resolve `Sheet2!ref` to a sheet index, and
+/// expand named ranges. After this pass the AST contains no [`Expr::SheetRef`]
+/// or [`Expr::Name`] nodes, so the compiler only deals with concrete refs.
+///
+/// `default_sheet` is the sheet the formula itself lives on (its unqualified
+/// references resolve there). Returns an error string for an unknown sheet name
+/// or undefined name.
+pub fn resolve_refs(
+    expr: Expr,
+    default_sheet: u16,
+    ctx: &dyn FormulaCtx,
+) -> Result<Expr, String> {
+    match expr {
+        Expr::CellRef(mut r) => {
+            r.sheet = default_sheet;
+            Ok(Expr::CellRef(r))
+        }
+        Expr::Range(mut r) => {
+            r.sheet = default_sheet;
+            Ok(Expr::Range(r))
+        }
+        Expr::SheetRef { sheet_name, inner } => {
+            let sheet = ctx
+                .resolve_sheet(&sheet_name)
+                .ok_or_else(|| format!("unknown sheet: {sheet_name}"))?;
+            // `inner` is always a CellRef or Range straight from the parser.
+            match *inner {
+                Expr::CellRef(mut r) => {
+                    r.sheet = sheet;
+                    Ok(Expr::CellRef(r))
+                }
+                Expr::Range(mut r) => {
+                    r.sheet = sheet;
+                    Ok(Expr::Range(r))
+                }
+                other => resolve_refs(other, sheet, ctx),
+            }
+        }
+        Expr::Name(name) => match ctx.resolve_name(&name) {
+            Some(NameTarget::Cell(r)) => Ok(Expr::CellRef(r)),
+            Some(NameTarget::Range(r)) => Ok(Expr::Range(r)),
+            None => Err(format!("undefined name: {name}")),
+        },
+        Expr::BinOp { kind, lhs, rhs } => Ok(Expr::BinOp {
+            kind,
+            lhs: Box::new(resolve_refs(*lhs, default_sheet, ctx)?),
+            rhs: Box::new(resolve_refs(*rhs, default_sheet, ctx)?),
+        }),
+        Expr::UnaryOp { kind, operand } => Ok(Expr::UnaryOp {
+            kind,
+            operand: Box::new(resolve_refs(*operand, default_sheet, ctx)?),
+        }),
+        Expr::FnCall { name, args } => {
+            let args = args
+                .into_iter()
+                .map(|a| resolve_refs(a, default_sheet, ctx))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Expr::FnCall { name, args })
+        }
+        lit @ Expr::Literal(_) => Ok(lit),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -351,9 +462,9 @@ mod tests {
 
     #[test]
     fn cell_reference() {
-        assert!(matches!(parse("A1"), Expr::CellRef(CellRef { row: 0, col: 0 })));
-        assert!(matches!(parse("B2"), Expr::CellRef(CellRef { row: 1, col: 1 })));
-        assert!(matches!(parse("AA100"), Expr::CellRef(CellRef { row: 99, col: 26 })));
+        assert!(matches!(parse("A1"), Expr::CellRef(CellRef { row: 0, col: 0, .. })));
+        assert!(matches!(parse("B2"), Expr::CellRef(CellRef { row: 1, col: 1, .. })));
+        assert!(matches!(parse("AA100"), Expr::CellRef(CellRef { row: 99, col: 26, .. })));
     }
 
     #[test]
@@ -444,6 +555,112 @@ mod tests {
             }
             other => panic!("expected FnCall SUM, got {other:?}"),
         }
+    }
+
+    // -- Sheet-qualified references & named ranges ----------------------------
+
+    use super::super::types::{FormulaCtx, NameTarget, RangeDep};
+
+    /// Test context: `Sheet2` -> index 2, name `TOTAL` -> `B1:B3` on sheet 2.
+    struct TestCtx;
+    impl FormulaCtx for TestCtx {
+        fn resolve_sheet(&self, name: &str) -> Option<u16> {
+            match name {
+                "Sheet1" => Some(0),
+                "Sheet2" => Some(2),
+                "My Sheet" => Some(5),
+                _ => None,
+            }
+        }
+        fn resolve_name(&self, name: &str) -> Option<NameTarget> {
+            match name {
+                "TOTAL" => Some(NameTarget::Range(RangeDep::with_sheet(2, 0, 2, 1, 1))),
+                "PIVOT" => Some(NameTarget::Cell(CellRef::with_sheet(0, 4, 0))),
+                _ => None,
+            }
+        }
+    }
+
+    fn resolve(src: &str, default_sheet: u16) -> Result<Expr, String> {
+        resolve_refs(parse(src), default_sheet, &TestCtx)
+    }
+
+    #[test]
+    fn sheet_qualified_cell_parses() {
+        assert!(matches!(parse("Sheet2!A1"), Expr::SheetRef { .. }));
+    }
+
+    #[test]
+    fn sheet_qualified_resolves_index() {
+        match resolve("Sheet2!A1", 0).unwrap() {
+            Expr::CellRef(CellRef { sheet: 2, row: 0, col: 0 }) => {}
+            other => panic!("expected sheet-2 cell, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn quoted_sheet_name_with_space() {
+        match resolve("'My Sheet'!B2", 0).unwrap() {
+            Expr::CellRef(CellRef { sheet: 5, row: 1, col: 1 }) => {}
+            other => panic!("expected sheet-5 cell, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn sheet_qualified_range_resolves() {
+        match resolve("Sheet2!A1:A10", 0).unwrap() {
+            Expr::Range(RangeDep { sheet: 2, row_start: 0, row_end: 9, .. }) => {}
+            other => panic!("expected sheet-2 range, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unqualified_ref_takes_default_sheet() {
+        match resolve("A1", 3).unwrap() {
+            Expr::CellRef(CellRef { sheet: 3, row: 0, col: 0 }) => {}
+            other => panic!("expected default-sheet cell, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unknown_sheet_is_error() {
+        assert!(resolve("Nope!A1", 0).is_err());
+    }
+
+    #[test]
+    fn named_range_resolves() {
+        match resolve("SUM(TOTAL)", 0).unwrap() {
+            Expr::FnCall { name, args } => {
+                assert_eq!(name, "SUM");
+                assert!(matches!(
+                    &args[0],
+                    Expr::Range(RangeDep { sheet: 2, row_start: 0, row_end: 2, .. })
+                ));
+            }
+            other => panic!("expected SUM(range), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn named_cell_in_arithmetic() {
+        // PIVOT + 1 -> CellRef(sheet 0, E1) added to 1.
+        match resolve("PIVOT+1", 0).unwrap() {
+            Expr::BinOp { lhs, .. } => {
+                assert!(matches!(*lhs, Expr::CellRef(CellRef { sheet: 0, row: 4, col: 0 })));
+            }
+            other => panic!("expected BinOp, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn undefined_name_is_error() {
+        assert!(resolve("UNKNOWN", 0).is_err());
+    }
+
+    #[test]
+    fn bareword_name_does_not_shadow_cell_ref() {
+        // `A1` is a valid cell ref, never treated as a name.
+        assert!(matches!(resolve("A1", 0).unwrap(), Expr::CellRef(_)));
     }
 
     #[test]
