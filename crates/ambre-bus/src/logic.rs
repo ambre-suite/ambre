@@ -225,4 +225,26 @@ pub enum TrameCommand {
     DeleteColumn {
         at: u32,
     },
+
+    /// Merge the rectangular range `[row..=row_end] x [col..=col_end]` into a
+    /// single cell, the top-left corner becoming the master
+    /// (`ambre-spec-trame-logic.md` §6). The corners may be given in any order.
+    /// Rejected locally with [`TrameEvent::MergeRejected`] if any covered cell
+    /// (other than the master) is non-empty -- Excel/Sheets behavior. Stored in
+    /// the per-sheet `merges_{sheet}` LWW map keyed by stable id pairs, so the
+    /// merge follows its cells across structural ops.
+    MergeCells {
+        row: u32,
+        col: u32,
+        row_end: u32,
+        col_end: u32,
+    },
+
+    /// Split the merge whose rectangle contains grid cell `(row, col)`, restoring
+    /// the covered cells. Any value masked by the merge (a concurrent-edit
+    /// conflict, §6) reappears. A no-op if `(row, col)` is not inside a merge.
+    UnmergeCells {
+        row: u32,
+        col: u32,
+    },
 }

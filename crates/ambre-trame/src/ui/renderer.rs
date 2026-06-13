@@ -391,7 +391,7 @@ mod tests {
         for &(row, col, text) in cells {
             state.cell_cache.insert(
                 (row, col),
-                CellData { text: text.to_owned(), bold: false, italic: false },
+                CellData { text: text.to_owned(), bold: false, italic: false, merge_span: None },
             );
         }
         state
