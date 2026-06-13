@@ -39,6 +39,13 @@ const DEFAULT_SHEET: &str = "s0";
 /// with the sheet-tabs UI.
 const SHEETS_MAP: &str = "sheets";
 
+/// `LoroMovableList` holding the tab-strip order as a sequence of `sheet_id`s
+/// (§2.B/§2.D). The implicit [`DEFAULT_SHEET`] is *not* eagerly pushed here (two
+/// fresh peers would each push it and converge to a duplicate); it is treated as
+/// the implicit first tab by [`TrameState::sheet_order_ids`]. Explicit sheets
+/// are appended on [`TrameCommand::CreateSheet`].
+const SHEET_ORDER: &str = "sheet_order";
+
 /// Loro map holding workbook named ranges: `{name -> reference}` where the
 /// reference is an A1-syntax string, optionally sheet-qualified (`Sheet2!A1:B2`).
 /// LWW: the last writer of a given name wins. Resolved positionally at reseed
@@ -210,6 +217,11 @@ pub struct TrameState {
     /// it, hence it is created after the constructor's initial commit so that the
     /// implicit-sheet registration is never undoable.
     undo_manager: UndoManager,
+    /// Per-session monotonic counter for minting explicit `sheet_id`s. Combined
+    /// with the document `PeerID` so two peers that concurrently add a sheet mint
+    /// distinct ids that both survive (§2.D). Not persisted: ids, once minted,
+    /// live in the CRDT; the counter only needs to be unique within this session.
+    sheet_counter: u32,
 }
 
 impl TrameState {
@@ -242,6 +254,7 @@ impl TrameState {
             sheet_name_to_u16: HashMap::new(),
             named: HashMap::new(),
             undo_manager,
+            sheet_counter: 0,
         };
         // Index the implicit sheet so `=Sheet1!A1` resolves before any reseed.
         state.rebuild_sheet_maps();
@@ -488,6 +501,11 @@ impl TrameState {
             TrameCommand::Redo => self.apply_history(false),
             TrameCommand::DefineName { name, reference } => self.define_name(&name, &reference),
             TrameCommand::DeleteName { name } => self.delete_name(&name),
+            TrameCommand::ActivateSheet { sheet_id } => self.activate_sheet(&sheet_id),
+            TrameCommand::CreateSheet { name } => self.create_sheet(&name),
+            TrameCommand::RenameSheet { sheet_id, name } => self.rename_sheet(&sheet_id, &name),
+            TrameCommand::MoveSheet { sheet_id, to_index } => self.move_sheet(&sheet_id, to_index),
+            TrameCommand::DeleteSheet { sheet_id } => self.delete_sheet(&sheet_id),
         }
     }
 
@@ -931,6 +949,238 @@ impl TrameState {
         TrameOutcome { display: vec![TrameEvent::DataReset], update, ephemeral: None }
     }
 
+    // -------------------------------------------------------------------------
+    // Sheet lifecycle (create / rename / reorder / delete / activate) -- §2.D
+    // -------------------------------------------------------------------------
+
+    /// Every sheet id registered in the `sheets` CRDT map (unordered).
+    fn all_sheet_ids(&self) -> Vec<String> {
+        match self.doc.get_map(SHEETS_MAP).get_value() {
+            LoroValue::Map(sheets) => sheets.keys().cloned().collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Canonical tab-strip order, deterministic on every peer: the implicit
+    /// default sheet first, then any sheet not yet present in `sheet_order`
+    /// (sorted by id -- covers a create whose order op has not merged), then the
+    /// explicit `sheet_order` entries that still correspond to a live sheet.
+    fn sheet_order_ids(&self) -> Vec<String> {
+        let listed: Vec<String> = match self.doc.get_movable_list(SHEET_ORDER).get_value() {
+            LoroValue::List(items) => items
+                .iter()
+                .filter_map(|v| match v {
+                    LoroValue::String(s) => Some(s.to_string()),
+                    _ => None,
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        let in_list: HashSet<&String> = listed.iter().collect();
+        let mut unlisted: Vec<String> =
+            self.all_sheet_ids().into_iter().filter(|id| !in_list.contains(id)).collect();
+        // Default sheet first, the rest by id for a stable, peer-independent order.
+        unlisted.sort_by(|a, b| {
+            let a_def = a == DEFAULT_SHEET;
+            let b_def = b == DEFAULT_SHEET;
+            b_def.cmp(&a_def).then_with(|| a.cmp(b))
+        });
+        let existing: HashSet<String> = self.all_sheet_ids().into_iter().collect();
+        drop(in_list);
+        unlisted
+            .into_iter()
+            .chain(listed.into_iter().filter(|id| existing.contains(id)))
+            .collect()
+    }
+
+    /// Build the [`TrameEvent::SheetList`] the tab strip consumes, in canonical
+    /// order with the active sheet flagged.
+    fn sheet_list_event(&self) -> TrameEvent {
+        let map = self.doc.get_map(SHEETS_MAP);
+        let sheets = self
+            .sheet_order_ids()
+            .into_iter()
+            .map(|id| {
+                let name = match map.get(&id).map(|v| v.get_deep_value()) {
+                    Some(LoroValue::String(s)) => s.to_string(),
+                    _ => id.clone(),
+                };
+                (id, name)
+            })
+            .collect();
+        TrameEvent::SheetList { sheets, active: self.active_sheet.clone() }
+    }
+
+    /// Rebuild every active-sheet derived cache (index, merges, formula engine,
+    /// formatting) from the current CRDT state. Used when the active sheet
+    /// changes (switch or delete fallback) -- no CRDT mutation, no delta.
+    /// Returns merge-conflict events from the rebuild.
+    fn reseed_active_sheet(&mut self) -> Vec<TrameEvent> {
+        self.rebuild_index();
+        let conflicts = self.rebuild_merges();
+        self.reseed_engine();
+        self.reseed_formatting();
+        conflicts
+    }
+
+    /// Switch the active sheet and re-derive its caches (§2.D). A no-op if the id
+    /// is unknown or already active.
+    fn activate_sheet(&mut self, sheet_id: &str) -> TrameOutcome {
+        if sheet_id == self.active_sheet || !self.all_sheet_ids().iter().any(|id| id == sheet_id) {
+            return TrameOutcome::display_only(vec![]);
+        }
+        self.active_sheet = sheet_id.to_owned();
+        let mut display = self.reseed_active_sheet();
+        display.push(TrameEvent::DataReset);
+        display.push(self.sheet_list_event());
+        display.push(TrameEvent::BoldState { enabled: self.bold.contains(&self.active) });
+        display.push(TrameEvent::ItalicState { enabled: self.italic.contains(&self.active) });
+        TrameOutcome::display_only(display)
+    }
+
+    /// Add a sheet with a freshly minted peer-scoped id (§2.D). The new sheet is
+    /// empty; its containers are created lazily on first write. Does not switch
+    /// the active sheet (the UI sends [`TrameCommand::ActivateSheet`] for that).
+    fn create_sheet(&mut self, name: &str) -> TrameOutcome {
+        let id = format!("{:016x}_{:08x}", self.doc.peer_id(), self.sheet_counter);
+        self.sheet_counter += 1;
+        let _ = self.doc.get_map(SHEETS_MAP).insert(&id, name);
+        let _ = self.doc.get_movable_list(SHEET_ORDER).push(id.as_str());
+        self.doc.commit();
+        // Refresh the name -> index map so the new sheet is addressable.
+        self.rebuild_sheet_maps();
+        let update = self.flush_delta();
+        TrameOutcome { display: vec![self.sheet_list_event()], update, ephemeral: None }
+    }
+
+    /// Rename a sheet's display label (LWW on the name). The stable id is
+    /// untouched. The name -> index map changes, so reseed to recompile any
+    /// cross-sheet reference (the display-name binding is the §2.D MVP gap).
+    /// A no-op if the id is unknown.
+    fn rename_sheet(&mut self, sheet_id: &str, name: &str) -> TrameOutcome {
+        if !self.all_sheet_ids().iter().any(|id| id == sheet_id) {
+            return TrameOutcome::display_only(vec![]);
+        }
+        let _ = self.doc.get_map(SHEETS_MAP).insert(sheet_id, name);
+        self.doc.commit();
+        self.reseed_engine();
+        let update = self.flush_delta();
+        TrameOutcome {
+            display: vec![self.sheet_list_event(), TrameEvent::DataReset],
+            update,
+            ephemeral: None,
+        }
+    }
+
+    /// Move a sheet to `to_index` in the tab strip (§2.D). Pure presentation, no
+    /// recompute. Materializes the canonical order into `sheet_order` first (the
+    /// implicit default and unmerged entries are otherwise absent) so positions
+    /// are well-defined, then issues one move op. A no-op if the id is unknown or
+    /// already at the target position.
+    fn move_sheet(&mut self, sheet_id: &str, to_index: u32) -> TrameOutcome {
+        let order = self.sheet_order_ids();
+        let Some(from) = order.iter().position(|id| id == sheet_id) else {
+            return TrameOutcome::display_only(vec![]);
+        };
+        let to = (to_index as usize).min(order.len().saturating_sub(1));
+        if from == to {
+            return TrameOutcome::display_only(vec![]);
+        }
+        let list = self.doc.get_movable_list(SHEET_ORDER);
+        // Rewrite the list to the canonical order if it diverges, so `mov`
+        // operates on the positions the tab strip actually shows.
+        let current: Vec<String> = match list.get_value() {
+            LoroValue::List(items) => items
+                .iter()
+                .filter_map(|v| match v {
+                    LoroValue::String(s) => Some(s.to_string()),
+                    _ => None,
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        if current != order {
+            let _ = list.clear();
+            for id in &order {
+                let _ = list.push(id.as_str());
+            }
+        }
+        let _ = list.mov(from, to);
+        self.doc.commit();
+        let update = self.flush_delta();
+        TrameOutcome { display: vec![self.sheet_list_event()], update, ephemeral: None }
+    }
+
+    /// Delete a sheet and its per-sheet containers (§2.D). Rejected locally if it
+    /// is the last remaining sheet. If the active sheet is deleted, the active
+    /// sheet falls back to the previous tab (else the first remaining). The sheet
+    /// set changed, so a full reseed remaps engine indices and lets cross-sheet
+    /// formulas targeting the gone id surface `#REF!`.
+    fn delete_sheet(&mut self, sheet_id: &str) -> TrameOutcome {
+        let ids = self.all_sheet_ids();
+        if !ids.iter().any(|id| id == sheet_id) {
+            return TrameOutcome::display_only(vec![]);
+        }
+        if ids.len() <= 1 {
+            return TrameOutcome::display_only(vec![TrameEvent::Error {
+                message: "a workbook must keep at least one sheet".to_owned(),
+            }]);
+        }
+        // Pick the fallback active sheet from the pre-delete order.
+        let order = self.sheet_order_ids();
+        let list = self.doc.get_movable_list(SHEET_ORDER);
+        if let LoroValue::List(items) = list.get_value()
+            && let Some(pos) = items
+                .iter()
+                .position(|v| matches!(v, LoroValue::String(s) if s.as_str() == sheet_id))
+        {
+            let _ = list.delete(pos, 1);
+        }
+        let _ = self.doc.get_map(SHEETS_MAP).delete(sheet_id);
+        self.drop_sheet_containers(sheet_id);
+        self.doc.commit();
+
+        if self.active_sheet == sheet_id {
+            let pos = order.iter().position(|id| id == sheet_id).unwrap_or(0);
+            self.active_sheet = if pos > 0 {
+                order[pos - 1].clone()
+            } else {
+                order
+                    .iter()
+                    .find(|id| id.as_str() != sheet_id)
+                    .cloned()
+                    .unwrap_or_else(|| DEFAULT_SHEET.to_owned())
+            };
+        }
+
+        let mut display = self.reseed_active_sheet();
+        display.push(self.sheet_list_event());
+        display.push(TrameEvent::DataReset);
+        let update = self.flush_delta();
+        TrameOutcome { display, update, ephemeral: None }
+    }
+
+    /// Drop every cell, formatting and merge entry of `sheet_id` and clear its
+    /// row/column lists, so a deleted sheet leaves no orphan containers behind.
+    fn drop_sheet_containers(&mut self, sheet_id: &str) {
+        for name in [
+            cells_map_name(sheet_id),
+            format_map_name(sheet_id),
+            merges_map_name(sheet_id),
+        ] {
+            let map = self.doc.get_map(name);
+            if let LoroValue::Map(entries) = map.get_value() {
+                let keys: Vec<String> = entries.keys().cloned().collect();
+                for key in keys {
+                    let _ = map.delete(&key);
+                }
+            }
+        }
+        for name in [rows_list_name(sheet_id), cols_list_name(sheet_id)] {
+            let _ = self.doc.get_movable_list(name).clear();
+        }
+    }
+
     /// Mirror a cell's current bold/italic state into the CRDT `format` map and
     /// return the incremental delta to broadcast (and persist). A cell with no
     /// formatting is removed from the map so it does not accumulate dead entries.
@@ -1084,6 +1334,7 @@ impl TrameState {
         // reload its formatting is only known once the `format` map is restored.
         let mut events = vec![
             TrameEvent::DataReset,
+            self.sheet_list_event(),
             TrameEvent::BoldState { enabled: self.bold.contains(&self.active) },
             TrameEvent::ItalicState { enabled: self.italic.contains(&self.active) },
         ];
@@ -1731,6 +1982,110 @@ mod tests {
         assert!(events.iter().any(|e| matches!(e, TrameEvent::DataReset)));
         assert!(sync.is_empty(), "buffer drained after delivery");
         assert_eq!(read_cell(&mut b, 0, 0), "shared", "B converges on A's value");
+    }
+
+    /// The id of the first non-default sheet in the current tab order.
+    fn second_sheet_id(state: &TrameState) -> String {
+        state.sheet_order_ids().into_iter().find(|id| id != super::DEFAULT_SHEET).expect("a second sheet")
+    }
+
+    /// Creating a sheet mints a stable id, lists it after the default in the tab
+    /// strip, and keeps its cells isolated from the default sheet.
+    #[test]
+    fn create_sheet_lists_and_isolates() {
+        let mut state = TrameState::new();
+        let evts = state.handle_command(TrameCommand::CreateSheet { name: "Data".to_owned() });
+        let TrameEvent::SheetList { sheets, active } = &evts.display[0] else { panic!("expected SheetList") };
+        assert_eq!(active, "s0", "active sheet unchanged by create");
+        assert_eq!(sheets.len(), 2);
+        assert_eq!(sheets[0], ("s0".to_owned(), "Sheet1".to_owned()), "default tab first");
+        assert_eq!(sheets[1].1, "Data");
+
+        let s1 = sheets[1].0.clone();
+        // Write on the default sheet, switch to the new one: it is blank.
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "on_s0".to_owned() });
+        state.handle_command(TrameCommand::ActivateSheet { sheet_id: s1.clone() });
+        assert_eq!(read_cell(&mut state, 0, 0), "", "new sheet starts empty");
+        // Write here, switch back: each sheet keeps its own value.
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "on_s1".to_owned() });
+        assert_eq!(read_cell(&mut state, 0, 0), "on_s1");
+        state.handle_command(TrameCommand::ActivateSheet { sheet_id: "s0".to_owned() });
+        assert_eq!(read_cell(&mut state, 0, 0), "on_s0");
+    }
+
+    /// A cross-sheet formula on the active sheet evaluates a cell living on
+    /// another sheet -- the end-to-end path unlocked by the lifecycle commands.
+    #[test]
+    fn cross_sheet_formula_evaluates_end_to_end() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::CreateSheet { name: "Sheet2".to_owned() });
+        let s2 = second_sheet_id(&state);
+
+        // Put 5 into Sheet2!A1.
+        state.handle_command(TrameCommand::ActivateSheet { sheet_id: s2 });
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "5".to_owned() });
+
+        // Back on Sheet1, B1 references it.
+        state.handle_command(TrameCommand::ActivateSheet { sheet_id: "s0".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 1, text: "=Sheet2!A1*2".to_owned() });
+        assert_eq!(read_cell(&mut state, 0, 1), "10", "B1 = Sheet2!A1 * 2");
+    }
+
+    /// Renaming changes only the display label; the stable id (and the cells
+    /// keyed under it) are untouched.
+    #[test]
+    fn rename_sheet_keeps_id_and_cells() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::CreateSheet { name: "Data".to_owned() });
+        let s1 = second_sheet_id(&state);
+        state.handle_command(TrameCommand::ActivateSheet { sheet_id: s1.clone() });
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "v".to_owned() });
+
+        let evts = state.handle_command(TrameCommand::RenameSheet { sheet_id: s1.clone(), name: "Renamed".to_owned() });
+        let TrameEvent::SheetList { sheets, .. } = &evts.display[0] else { panic!() };
+        assert!(sheets.iter().any(|(id, name)| id == &s1 && name == "Renamed"));
+        // The value survives the rename (same id, same container).
+        assert_eq!(read_cell(&mut state, 0, 0), "v");
+    }
+
+    /// Moving a sheet reorders the tab strip without touching its content.
+    #[test]
+    fn move_sheet_reorders_tabs() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::CreateSheet { name: "B".to_owned() });
+        let b = second_sheet_id(&state);
+        // Order is [s0, B]; move B to the front.
+        let evts = state.handle_command(TrameCommand::MoveSheet { sheet_id: b.clone(), to_index: 0 });
+        let TrameEvent::SheetList { sheets, .. } = &evts.display[0] else { panic!() };
+        assert_eq!(sheets[0].0, b, "B moved to the front");
+        assert_eq!(sheets[1].0, "s0");
+    }
+
+    /// Deleting the last remaining sheet is rejected; the workbook keeps >= 1.
+    #[test]
+    fn delete_last_sheet_rejected() {
+        let mut state = TrameState::new();
+        let evts = state.handle_command(TrameCommand::DeleteSheet { sheet_id: "s0".to_owned() });
+        assert!(matches!(evts.display[0], TrameEvent::Error { .. }));
+        assert!(evts.update.is_none());
+    }
+
+    /// Deleting the active sheet falls back to a neighbour and refreshes the
+    /// tab strip; the deleted sheet is gone from the list.
+    #[test]
+    fn delete_active_sheet_falls_back() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::CreateSheet { name: "B".to_owned() });
+        let b = second_sheet_id(&state);
+        state.handle_command(TrameCommand::ActivateSheet { sheet_id: b.clone() });
+
+        let evts = state.handle_command(TrameCommand::DeleteSheet { sheet_id: b.clone() });
+        let list = evts.display.iter().find_map(|e| match e {
+            TrameEvent::SheetList { sheets, active } => Some((sheets.clone(), active.clone())),
+            _ => None,
+        }).expect("SheetList emitted");
+        assert_eq!(list.1, "s0", "active fell back to the default sheet");
+        assert!(!list.0.iter().any(|(id, _)| id == &b), "deleted sheet gone");
     }
 
     #[test]

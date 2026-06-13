@@ -278,4 +278,49 @@ pub enum TrameCommand {
     DeleteName {
         name: String,
     },
+
+    /// Switch the sheet the UI is looking at to `sheet_id`. The Logic thread
+    /// rebuilds its active-sheet derived caches (index, merges, formatting,
+    /// formula engine) and replies with a [`DataReset`] so the UI re-fetches the
+    /// new sheet's viewport (`ambre-spec-trame-logic.md` §2.D). A no-op if the id
+    /// is unknown.
+    ///
+    /// [`DataReset`]: crate::ui::TrameEvent::DataReset
+    ActivateSheet {
+        sheet_id: String,
+    },
+
+    /// Add a new sheet named `name`. Mints a peer-scoped stable `sheet_id`
+    /// (`{peer:016x}_{counter:08x}`) so concurrent creates on two peers never
+    /// collide, registers it in `sheets`, appends it to `sheet_order`, and
+    /// replies with a refreshed [`SheetList`](crate::ui::TrameEvent::SheetList)
+    /// (`ambre-spec-trame-logic.md` §2.D). Cells are created lazily on first write.
+    CreateSheet {
+        name: String,
+    },
+
+    /// Rename `sheet_id`'s display label (LWW on the name field). The stable id
+    /// is untouched, so same-name references keep resolving; cross-sheet formula
+    /// text bound to the old display name is the known MVP gap (§2.D).
+    RenameSheet {
+        sheet_id: String,
+        name: String,
+    },
+
+    /// Move `sheet_id` to position `to_index` in the tab strip (one
+    /// `LoroMovableList` move op). Pure presentation: never touches a reference
+    /// (§2.D). A no-op if the id is unknown or already at that position.
+    MoveSheet {
+        sheet_id: String,
+        to_index: u32,
+    },
+
+    /// Delete `sheet_id` and its per-sheet containers (§2.D). Rejected locally
+    /// with [`TrameEvent::Error`](crate::ui::TrameEvent::Error) if it is the last
+    /// remaining sheet (a workbook always keeps >= 1). If the active sheet is
+    /// deleted, the active sheet falls back to a neighbour. Cross-sheet formulas
+    /// targeting the gone id resolve to `#REF!`.
+    DeleteSheet {
+        sheet_id: String,
+    },
 }
