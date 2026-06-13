@@ -30,7 +30,25 @@ use ambre_canvas::{Palette, TextCache};
 
 use super::grid::{CellEditor, COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT};
 use super::TrameUiState;
+use crate::render::{self, BODY_SIZE, CELL_PAD_X, CellContent, GridLayout};
 use crate::{TOTAL_COLS, TOTAL_ROWS};
+
+/// Build the shared [`GridLayout`] for the current screen viewport. Uniform
+/// metrics for the MVP; the cell-aligned scroll position is the layout origin.
+fn screen_layout(state: &TrameUiState) -> GridLayout {
+    GridLayout {
+        header_width: HEADER_WIDTH,
+        header_height: HEADER_HEIGHT,
+        col_width: COL_WIDTH,
+        row_height: ROW_HEIGHT,
+        origin_col: state.left_col,
+        origin_row: state.top_row,
+        width: state.canvas_width,
+        height: state.canvas_height,
+        total_cols: TOTAL_COLS,
+        total_rows: TOTAL_ROWS,
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Colors
@@ -39,11 +57,6 @@ use crate::{TOTAL_COLS, TOTAL_ROWS};
 // Product colours come from the active `Palette` (generated from tokens.ron,
 // theme-switched at runtime). Only the debug HUD keeps hardcoded colours -- it
 // is a developer overlay, not themed product chrome.
-
-/// Cell text left padding (also the caret's x origin inside a cell).
-const CELL_PAD_X: f64 = 4.0;
-/// Body font size, shared by the cell renderer and the edit overlay.
-const BODY_SIZE: f32 = 12.0;
 
 // -----------------------------------------------------------------------------
 // DrawStats — per-frame breakdown
@@ -77,46 +90,6 @@ pub struct DrawStats {
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
-
-fn col_label(col: u32) -> String {
-    let mut label = String::new();
-    let mut n = col + 1;
-    while n > 0 {
-        n -= 1;
-        label.push(char::from_u32(b'A' as u32 + n % 26).unwrap());
-        n /= 26;
-    }
-    label.chars().rev().collect()
-}
-
-#[allow(clippy::too_many_arguments)]
-fn draw_text<S: DrawSurface>(
-    surface:   &mut S,
-    font_cx:   &mut FontContext,
-    cache:     &mut TextCache,
-    text:      &str,
-    font_size: f32,
-    max_width: f32,
-    align:     Alignment,
-    origin_x:  f64,
-    origin_y:  f64,
-    color:     Color,
-) {
-    if text.is_empty() {
-        return;
-    }
-    let layout: &Layout<ParleyBrush> =
-        cache.get_or_build(font_cx, text, font_size, max_width, align, false, false);
-    let brush = Brush::Solid(color);
-    for line in layout.lines() {
-        for item in line.items() {
-            let PositionedLayoutItem::GlyphRun(run) = item else { continue };
-            let tx = origin_x + run.offset() as f64;
-            let ty = origin_y + run.baseline() as f64;
-            surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
-        }
-    }
-}
 
 /// Compute the inclusive cell-coordinate range that intersects `strip` in the
 /// cell area. Returns `(row_start, row_end_exclusive, col_start, col_end_exclusive)`.
@@ -184,99 +157,34 @@ pub fn draw_cells<S: DrawSurface>(
         return;
     }
 
+    let layout = screen_layout(state);
     let t0 = clock.now_ms();
 
-    // -- 1. Pending grey over the strip. ---------------------------------------
+    // -- 1. Pending grey over the strip (screen-only "not yet received"). -------
     surface.fill_rect(strip, palette.content_pending);
+    let t_pending = clock.now_ms();
 
-    // -- 2. Content fill for received cells in the strip. ----------------------
+    // -- 2. Received-cell backgrounds + body text, via the shared primitive. ---
+    // The cell area is virtual, so we feed only the cached cells inside the
+    // strip rather than a full DisplayViewport.
     let (row_start, row_end, col_start, col_end) = rows_cols_in_strip(state, strip);
-    for row in row_start..row_end {
-        for col in col_start..col_end {
-            if state.cell_cache.contains_key(&(row, col)) {
-                let x = HEADER_WIDTH + (col - state.left_col) as f64 * COL_WIDTH;
-                let y = HEADER_HEIGHT + (row - state.top_row) as f64 * ROW_HEIGHT;
-                surface.fill_rect(Rect::new(x, y, x + COL_WIDTH, y + ROW_HEIGHT), palette.content_bg);
-            }
-        }
-    }
-
-    // -- 3. Vertical grid lines inside the strip. ------------------------------
-    // Walk every visible column boundary, drawing line segments bounded by
-    // the strip's y range.
-    let line_y0 = strip.y0.max(HEADER_HEIGHT);
-    let line_y1 = strip.y1.min(h);
-    if line_y1 > line_y0 {
-        for i in 0..=(state.viewport_cols + 2) {
-            let col = state.left_col + i;
-            if col > TOTAL_COLS { break; }
-            let x = HEADER_WIDTH + i as f64 * COL_WIDTH;
-            if x > w { break; }
-            if x < strip.x0 || x > strip.x1 { continue; }
-            surface.stroke_line(x, line_y0, x, line_y1, palette.grid_line, 1.0);
-        }
-    }
-
-    // -- 4. Horizontal grid lines inside the strip. ----------------------------
-    let line_x0 = strip.x0.max(HEADER_WIDTH);
-    let line_x1 = strip.x1.min(w);
-    if line_x1 > line_x0 {
-        for i in 0..=(state.viewport_rows + 2) {
-            let row = state.top_row + i;
-            if row > TOTAL_ROWS { break; }
-            let y = HEADER_HEIGHT + i as f64 * ROW_HEIGHT;
-            if y > h { break; }
-            if y < strip.y0 || y > strip.y1 { continue; }
-            surface.stroke_line(line_x0, y, line_x1, y, palette.grid_line, 1.0);
-        }
-    }
-
-    let t_bg = clock.now_ms();
-
-    // -- 5. Cell body text. ----------------------------------------------------
-    let mut cells_drawn = 0u32;
-
-    if text_enabled {
-        let cell_brush     = Brush::Solid(palette.cell_text);
-        let cell_max_width = (COL_WIDTH - 8.0) as f32;
-        for row in row_start..row_end {
-            for col in col_start..col_end {
-                if let Some(cell) = state.cell_cache.get(&(row, col)) {
-                    if cell.text.is_empty() { continue; }
-                    let cx = HEADER_WIDTH + (col - state.left_col) as f64 * COL_WIDTH;
-                    let cy = HEADER_HEIGHT + (row - state.top_row) as f64 * ROW_HEIGHT;
-                    // Formatting is pinned per-cell in the cache -- it stays on
-                    // the cell it was applied to, not on the moving selection.
-                    let layout: &Layout<ParleyBrush> = text_cache.get_or_build(
-                        font_cx, &cell.text, BODY_SIZE, cell_max_width, Alignment::Start,
-                        cell.bold, cell.italic,
-                    );
-                    let text_h  = layout.height() as f64;
-                    let y_off   = ((ROW_HEIGHT - text_h) / 2.0).max(0.0);
-                    let needs_clip = text_h > ROW_HEIGHT;
-                    if needs_clip {
-                        surface.push_clip(Rect::new(cx, cy, cx + COL_WIDTH, cy + ROW_HEIGHT));
-                    }
-                    for line in layout.lines() {
-                        for item in line.items() {
-                            let PositionedLayoutItem::GlyphRun(run) = item else { continue };
-                            let tx = cx + 4.0 + run.offset() as f64;
-                            let ty = cy + y_off + run.baseline() as f64;
-                            surface.draw_glyphs(&run, &cell_brush, Affine::translate((tx, ty)));
-                        }
-                    }
-                    if needs_clip {
-                        surface.pop_clip();
-                    }
-                    cells_drawn += 1;
-                }
-            }
-        }
-    }
-
+    let cells = (row_start..row_end).flat_map(move |row| {
+        (col_start..col_end).filter_map(move |col| {
+            state.cell_cache.get(&(row, col)).map(|c| {
+                (row, col, CellContent { text: &c.text, bold: c.bold, italic: c.italic })
+            })
+        })
+    });
+    let cells_drawn =
+        render::draw_cells_on(surface, &layout, palette, font_cx, text_cache, text_enabled, cells);
     let t_cells = clock.now_ms();
-    stats.bg_ms       = (t_bg - t0) as f32;
-    stats.cells_ms    = (t_cells - t_bg) as f32;
+
+    // -- 3. Grid lines on top of the fills, so separators stay visible. --------
+    render::draw_grid_lines_on(surface, &layout, palette.grid_line, strip);
+    let t_lines = clock.now_ms();
+
+    stats.bg_ms       = ((t_pending - t0) + (t_lines - t_cells)) as f32;
+    stats.cells_ms    = (t_cells - t_pending) as f32;
     stats.cells_drawn = cells_drawn;
 }
 
@@ -303,115 +211,27 @@ pub fn draw_overlay<S: DrawSurface>(
     clock:          &dyn Clock,
     stats:          &mut DrawStats,
 ) {
-    let w = state.canvas_width;
     let h = state.canvas_height;
 
     let t0 = clock.now_ms();
 
-    // -- 1. Active column / row header tints (drawn behind the bg first so
-    //       they show through any alpha-blended pixels). -----------------------
-    let active_col_visible = state.active_col >= state.left_col
-        && state.active_col < state.left_col + state.viewport_cols;
-    let active_row_visible = state.active_row >= state.top_row
-        && state.active_row < state.top_row + state.viewport_rows;
+    let layout = screen_layout(state);
 
-    if active_col_visible {
-        let x = HEADER_WIDTH + (state.active_col - state.left_col) as f64 * COL_WIDTH;
-        surface.fill_rect(Rect::new(x, 0.0, x + COL_WIDTH, HEADER_HEIGHT), palette.header_active);
-    }
-    if active_row_visible {
-        let y = HEADER_HEIGHT + (state.active_row - state.top_row) as f64 * ROW_HEIGHT;
-        surface.fill_rect(Rect::new(0.0, y, HEADER_WIDTH, y + ROW_HEIGHT), palette.header_active);
-    }
+    // -- 1. Fixed header strips (bg + active tint + separator + labels), via
+    //       the shared primitives. The primitives clip the active tint to the
+    //       visible range, so passing the raw active index is safe. -----------
+    render::draw_col_headers_on(
+        surface, &layout, palette, Some(state.active_col), font_cx, text_cache, text_enabled,
+    );
+    render::draw_row_headers_on(
+        surface, &layout, palette, Some(state.active_row), font_cx, text_cache, text_enabled,
+    );
 
-    // -- 2. Header backgrounds (cover the tint outside the active cells). -----
-    surface.fill_rect(Rect::new(0.0, 0.0, w, HEADER_HEIGHT), palette.header_bg);
-    surface.fill_rect(Rect::new(0.0, 0.0, HEADER_WIDTH, h), palette.header_bg);
-
-    // Re-apply active tints over the opaque header backgrounds.
-    if active_col_visible {
-        let x = HEADER_WIDTH + (state.active_col - state.left_col) as f64 * COL_WIDTH;
-        surface.fill_rect(Rect::new(x, 0.0, x + COL_WIDTH, HEADER_HEIGHT), palette.header_active);
-    }
-    if active_row_visible {
-        let y = HEADER_HEIGHT + (state.active_row - state.top_row) as f64 * ROW_HEIGHT;
-        surface.fill_rect(Rect::new(0.0, y, HEADER_WIDTH, y + ROW_HEIGHT), palette.header_active);
-    }
-
-    // -- 3. Header separator lines. -------------------------------------------
-    surface.stroke_line(0.0, HEADER_HEIGHT, w, HEADER_HEIGHT, palette.header_border, 1.0);
-    surface.stroke_line(HEADER_WIDTH, 0.0, HEADER_WIDTH, h, palette.header_border, 1.0);
-
-    // -- 4. Active cell border. -----------------------------------------------
+    // -- 2. Active cell border. -----------------------------------------------
     // Lives in the overlay so it tracks the active cell on every frame
     // regardless of scroll shifts in the persistent layer.
     if let Some((x, y, cw, ch)) = state.cell_pixel_rect(state.active_row, state.active_col) {
         surface.stroke_rect(Rect::new(x, y, x + cw, y + ch), palette.selection, 2.0);
-    }
-
-    // -- 5. Header text labels. -----------------------------------------------
-    const HEADER_SIZE: f32 = 11.0;
-    if text_enabled {
-        let header_brush = Brush::Solid(palette.header_text);
-
-        // 5a. Column header labels (A, B, C...).
-        for i in 0..=(state.viewport_cols + 1) {
-            let col = state.left_col + i;
-            if col >= TOTAL_COLS { break; }
-            let col_x = HEADER_WIDTH + i as f64 * COL_WIDTH;
-            if col_x >= w { break; }
-            let label = col_label(col);
-            let layout: &Layout<ParleyBrush> = text_cache.get_or_build(
-                font_cx, &label, HEADER_SIZE, COL_WIDTH as f32, Alignment::Center, false, false,
-            );
-            let text_h = layout.height() as f64;
-            let y_off  = ((HEADER_HEIGHT - text_h) / 2.0).max(0.0);
-            let needs_clip = text_h > HEADER_HEIGHT;
-            if needs_clip {
-                surface.push_clip(Rect::new(col_x, 0.0, col_x + COL_WIDTH, HEADER_HEIGHT));
-            }
-            for line in layout.lines() {
-                for item in line.items() {
-                    let PositionedLayoutItem::GlyphRun(run) = item else { continue };
-                    let tx = col_x + run.offset() as f64;
-                    let ty = y_off + run.baseline() as f64;
-                    surface.draw_glyphs(&run, &header_brush, Affine::translate((tx, ty)));
-                }
-            }
-            if needs_clip {
-                surface.pop_clip();
-            }
-        }
-
-        // 5b. Row header numbers (1, 2, 3...).
-        let row_hdr_max_width = (HEADER_WIDTH - 8.0) as f32;
-        for i in 0..=(state.viewport_rows + 1) {
-            let row = state.top_row + i;
-            if row >= TOTAL_ROWS { break; }
-            let row_y = HEADER_HEIGHT + i as f64 * ROW_HEIGHT;
-            if row_y >= h { break; }
-            let label = (row + 1).to_string();
-            let layout: &Layout<ParleyBrush> = text_cache.get_or_build(
-                font_cx, &label, HEADER_SIZE, row_hdr_max_width, Alignment::End, false, false,
-            );
-            let text_h = layout.height() as f64;
-            let y_off  = ((ROW_HEIGHT - text_h) / 2.0).max(0.0);
-            let needs_clip = text_h > ROW_HEIGHT;
-            if needs_clip {
-                surface.push_clip(Rect::new(0.0, row_y, HEADER_WIDTH, row_y + ROW_HEIGHT));
-            }
-            for line in layout.lines() {
-                for item in line.items() {
-                    let PositionedLayoutItem::GlyphRun(run) = item else { continue };
-                    let tx = 4.0 + run.offset() as f64;
-                    let ty = row_y + y_off + run.baseline() as f64;
-                    surface.draw_glyphs(&run, &header_brush, Affine::translate((tx, ty)));
-                }
-            }
-            if needs_clip {
-                surface.pop_clip();
-            }
-        }
     }
     let t_after_hdrs = clock.now_ms();
 
@@ -431,13 +251,13 @@ pub fn draw_overlay<S: DrawSurface>(
         stats.bg_ms, stats.cells_ms, stats.hdrs_ms, stats.hud_ms, stats.cells_drawn,
         stats.input_latency_ms,
     );
-    draw_text(
+    render::draw_text(
         surface, font_cx, text_cache,
         &line1, 11.0, 514.0, Alignment::Start,
         6.0, h - 37.0,
         Color::from_rgba8(255, 220, 0, 255),
     );
-    draw_text(
+    render::draw_text(
         surface, font_cx, text_cache,
         &line2, 11.0, 514.0, Alignment::Start,
         6.0, h - 21.0,

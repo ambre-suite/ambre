@@ -19,6 +19,10 @@
 pub mod formula;
 pub mod logic;
 pub mod model;
+/// Shared, `DrawSurface`-generic grid rendering primitives (`GridLayout`,
+/// `draw_cells_on`, `draw_grid_lines_on`, `draw_col_headers_on`, ...). Composed
+/// by `ui::renderer` for the screen and by the future PDF path for export.
+pub mod render;
 pub mod ui;
 
 /// Trame-specific chrome (format toolbar, selection toolbar, command wiring),
