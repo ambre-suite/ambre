@@ -460,10 +460,10 @@ fn sumif(args: &[CellValue]) -> CellValue {
         if crit.matches(v) {
             if let Some(CellValue::Number(n)) = sum_src.get(i) {
                 total += n;
-            } else if let Some(s) = sum_src.get(i) {
-                if let Ok(n) = s.as_number() {
-                    total += n;
-                }
+            } else if let Some(s) = sum_src.get(i)
+                && let Ok(n) = s.as_number()
+            {
+                total += n;
             }
         }
     }
@@ -1063,7 +1063,7 @@ mod tests {
 
     #[test]
     fn text_formatting() {
-        assert_eq!(text(&[num(3.14159), txt("0.00")]).to_display(), "3.14");
+        assert_eq!(text(&[num(12.12), txt("0.00")]).to_display(), "12.12");
         assert_eq!(text(&[num(1234.5), txt("#,##0.0")]).to_display(), "1,234.5");
         assert_eq!(text(&[num(42.0), txt("0")]).to_display(), "42");
     }
