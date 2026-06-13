@@ -627,7 +627,11 @@ impl MasterSeed {
   keeps the GPU primitives (`GpuState`/`bootstrap_gpu`/`RafControl`/`start_raf_loop`) and
   the per-frame value types. The `DocView` trait is removed; views expose inherent methods
   the `AppView` `match` dispatches to. (Landed ahead of multi-document/tabs.)
-- [ ] `ambre-prose` (LoroText).
+- [ ] `ambre-prose` (LoroText): second pilot validating the text/CRDT axis.
+  `AppCommand::Prose` / `AppEvent::Prose` variants + `AppView::Prose` + `DocState::Prose`;
+  `LoroText` sequence model; Parley pagination on the Logic thread (first real consumer
+  of the "UI + Logic pagination" dep); `KrillaSurface` PDF export (lazy, Logic). Proves the
+  typed data plane + `AppView` registry generalize beyond Trame's grid/formula model.
 
 ### ARCH P3 — Blind Relay
 - [x] `ambre-server`: REST routes, WS upgrade, ACL, Lua Redis. PostgreSQL/Valkey/MinIO. Snapshot via S3. E2E tests.

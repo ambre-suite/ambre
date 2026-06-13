@@ -106,8 +106,8 @@ Stories:
 *Deploy the other building blocks on the validated foundation.*
 
 Stories:
-- `ARCH P2`/`ARCH P5` — `ambre-prose` (LoroText), `ambre-toile` (R-Tree + read-only embeds),
-  `ambre-murmure` (channels).
+- `ARCH P2` — `ambre-prose` (LoroText): second pilot, validates the text/CRDT axis.
+- `ARCH P5` — `ambre-toile` (R-Tree + read-only embeds), `ambre-murmure` (channels).
 - `SYNC P4` + `SRV P1` — channels & meetings (segments managed by Sync, unread, WebRTC signaling).
 - `CANVAS P1` — paths/transform + PDF export (krilla).
 
