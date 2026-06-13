@@ -86,7 +86,8 @@ impl FormulaEngine {
 
         {
             let cache_ref = self.formula_cache.borrow();
-            let mut ctx = EvalContext::new(&self.bytecode, &cache_ref);
+            let mut ctx =
+                EvalContext::new(&self.bytecode, &cache_ref).with_now(super::functions::now_serial());
 
             let mut topo = Topo::new(&self.deps.cell_dag);
             while let Some(node) = topo.next(&self.deps.cell_dag) {

@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 
 use super::cache::BytecodeCache;
 use super::functions::call_builtin;
-use super::types::{CellRef, CellValue, FormulaError, Op, RangeDep};
+use super::types::{CellRef, CellValue, FormulaError, Op, RangeDep, RangeValue};
 
 /// Holds the mutable evaluation state shared across all cell evaluations in a
 /// single recomputation pass (`compute_all_dirty`).
@@ -26,6 +26,10 @@ pub struct EvalContext<'a> {
     /// Borrowed reference to the persistent formula result cache so recursive
     /// `eval_cell` calls for non-dirty cells can reuse prior results.
     pub formula_cache: &'a HashMap<CellRef, CellValue>,
+    /// Evaluation clock as an Excel serial number (days since 1899-12-30, the
+    /// fractional part being the time of day). Shared by every cell in the pass
+    /// so `TODAY()`/`NOW()` are stable within one recomputation.
+    pub now_serial: f64,
 }
 
 impl<'a> EvalContext<'a> {
@@ -38,7 +42,14 @@ impl<'a> EvalContext<'a> {
             resolved: HashMap::new(),
             bc,
             formula_cache,
+            now_serial: 0.0,
         }
+    }
+
+    /// Set the evaluation clock (see [`EvalContext::now_serial`]).
+    pub fn with_now(mut self, now_serial: f64) -> Self {
+        self.now_serial = now_serial;
+        self
     }
 
     /// Evaluate a single cell, detecting dynamic cycles and caching results.
@@ -165,7 +176,7 @@ impl<'a> EvalContext<'a> {
                 Op::CallFn { name, n_args } => {
                     let split = stack.len().saturating_sub(*n_args as usize);
                     let args: Vec<CellValue> = stack.drain(split..).collect();
-                    stack.push(call_builtin(name, &args));
+                    stack.push(call_builtin(name, &args, self.now_serial));
                 }
             }
         }
@@ -173,15 +184,18 @@ impl<'a> EvalContext<'a> {
         stack.pop().unwrap_or(CellValue::Empty)
     }
 
-    /// Evaluate every cell in a range, pushing the values as a flat vector.
-    fn eval_range(&mut self, dep: &RangeDep) -> Vec<CellValue> {
+    /// Evaluate every cell in a range, returning a row-major [`RangeValue`]
+    /// that preserves the 2D shape (needed by `VLOOKUP`/`INDEX`/`MATCH`).
+    fn eval_range(&mut self, dep: &RangeDep) -> RangeValue {
+        let rows = dep.row_end.saturating_sub(dep.row_start).saturating_add(1) as usize;
+        let cols = dep.col_end.saturating_sub(dep.col_start).saturating_add(1) as usize;
         let mut values = Vec::with_capacity(dep.len());
         for row in dep.row_start..=dep.row_end {
             for col in dep.col_start..=dep.col_end {
                 values.push(self.eval_cell(CellRef::new(row, col)));
             }
         }
-        values
+        RangeValue::new(rows, cols, values)
     }
 
     /// Pop two values, apply a numeric binary operation, push the result.
