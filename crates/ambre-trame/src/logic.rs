@@ -96,6 +96,10 @@ enum Axis {
 /// Sync as [`SyncCommand::SendUpdate`] / [`SyncCommand::SendEphemeral`].  This
 /// is the *lossless* path required by the architecture: no app content is
 /// silently dropped.
+/// A resolvable merge rectangle: master key, inclusive top-left `(row, col)`,
+/// and inclusive bottom-right `(row, col)` in grid positions.
+type MergeRect = (String, (u32, u32), (u32, u32));
+
 pub struct TrameOutcome {
     /// Display events destined for the UI Thread.
     pub display: Vec<TrameEvent>,
@@ -557,7 +561,7 @@ impl TrameState {
         };
         // Collect resolvable rectangles tagged with their master key for a
         // deterministic, peer-independent overlap precedence.
-        let mut rects: Vec<(String, (u32, u32), (u32, u32))> = entries
+        let mut rects: Vec<MergeRect> = entries
             .iter()
             .filter_map(|(master_key, value)| {
                 let LoroValue::String(extent_key) = value else { return None };
