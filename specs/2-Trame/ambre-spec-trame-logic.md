@@ -1311,10 +1311,10 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 
 **Phase 2 — Core features (~50 functions)**
 - [x] SUM, AVERAGE, MIN, MAX, COUNT, IF, AND, OR *(plus ABS, COUNTA, CONCATENATE, LEFT, RIGHT, MID, LEN, LOWER, UPPER, NOT, POWER, ROUND, SQRT, TRIM -- 22 implemented)*
-- [ ] VLOOKUP, INDEX, MATCH, IFERROR, SUMIF, COUNTIF *(Epic `E3`: complete to ~50)*
-- [ ] TEXT, CONCAT *(remaining string functions, Epic `E3`)*
-- [ ] TODAY, NOW, DATE, YEAR, MONTH, DAY *(Epic `E3`)*
-- [ ] Named ranges, cross-sheet references *(Epic `E3`)*
+- [x] VLOOKUP, INDEX, MATCH, IFERROR, SUMIF, COUNTIF *(2D `RangeValue` added to `CellValue::Range` so lookups can address cells by row/col; criteria parser for SUMIF/COUNTIF) (Epic `E3`)*
+- [x] TEXT, CONCAT *(`CONCAT`/`CONCATENATE` already present; `TEXT` minimal numeric formatting: decimals + thousands grouping) (Epic `E3`)*
+- [x] TODAY, NOW, DATE, YEAR, MONTH, DAY *(Excel serial numbers, epoch 1899-12-30; evaluation clock threaded through `EvalContext::now_serial` -> `call_builtin`, sourced from `functions::now_serial()` (js-sys on wasm, std::time native)) (Epic `E3`)*
+- [ ] Named ranges, cross-sheet references *(Epic `E3`: deferred -- the formula crate is positional single-sheet; requires parser + `TrameState` name/sheet resolution, not just a new builtin)*
 
 **Phase 3 — Optimization & Completion**
 - [ ] `SheetRangeIndex` interval tree 2D if benchmarks justify it

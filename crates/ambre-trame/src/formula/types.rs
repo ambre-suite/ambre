@@ -78,6 +78,35 @@ impl RangeDep {
 // CellValue — runtime value in the stack VM
 // -----------------------------------------------------------------------------
 
+/// A rectangular block of values produced by evaluating a range reference.
+///
+/// Values are stored row-major (`values[row * cols + col]`). The 2D shape is
+/// kept (unlike a flat `Vec`) so functions such as `VLOOKUP`, `INDEX` and
+/// `MATCH` can address cells by row/column. Aggregation functions that only
+/// need a flat stream iterate `values` directly.
+#[derive(Debug, Clone)]
+pub struct RangeValue {
+    pub rows: usize,
+    pub cols: usize,
+    /// Row-major, `len == rows * cols`.
+    pub values: Vec<CellValue>,
+}
+
+impl RangeValue {
+    pub fn new(rows: usize, cols: usize, values: Vec<CellValue>) -> Self {
+        debug_assert_eq!(values.len(), rows * cols);
+        Self { rows, cols, values }
+    }
+
+    /// Value at zero-based `(row, col)`, or `None` if out of bounds.
+    pub fn get(&self, row: usize, col: usize) -> Option<&CellValue> {
+        if row >= self.rows || col >= self.cols {
+            return None;
+        }
+        self.values.get(row * self.cols + col)
+    }
+}
+
 /// The result of evaluating a cell: a literal value, an error, or an internal
 /// range (used only on the VM stack, never persisted in `formula_cache`).
 #[derive(Debug, Clone)]
@@ -87,7 +116,7 @@ pub enum CellValue {
     Boolean(bool),
     Empty,
     /// Only on the VM stack during evaluation; never stored in `formula_cache`.
-    Range(Vec<CellValue>),
+    Range(RangeValue),
     Error(FormulaError),
 }
 
@@ -118,10 +147,10 @@ impl CellValue {
             CellValue::Text(s) => s.clone(),
             CellValue::Boolean(b) => format!("{b}"),
             CellValue::Empty => String::new(),
-            CellValue::Range(vals) => {
+            CellValue::Range(r) => {
                 // A range on the stack is only consumed by functions;
                 // if it surfaces as a display value, show the count.
-                format!("[{} values]", vals.len())
+                format!("[{} values]", r.values.len())
             }
             CellValue::Error(e) => format!("{e}"),
         }
