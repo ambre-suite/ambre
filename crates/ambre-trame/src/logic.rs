@@ -213,13 +213,29 @@ impl TrameState {
     /// empty (a virtual or cleared cell renders blank).
     fn cell_text(&self, row: u32, col: u32) -> String {
         let cell = CellRef::new(row, col);
-        // Formula cells: return cached evaluation result.
-        if let Some(text) = self.engine.evaluated_text(cell) {
-            return text;
+        // Formula cells: return cached evaluation result. Plain cells also have
+        // a cached literal value now (so formula references resolve), but we
+        // render their raw CRDT string verbatim to avoid normalizing user input.
+        if self.engine.is_formula_cell(cell) {
+            if let Some(text) = self.engine.evaluated_text(cell) {
+                return text;
+            }
         }
         // Plain-text cells: resolve the grid position to its stable id pair and
         // read the CRDT value. A virtual (never-written) cell, or one cleared
         // back to empty, has no stored value and renders blank.
+        if let Some((rl, cl)) = self.index.resolve(row as usize, col as usize) {
+            let map = self.doc.get_map(cells_map_name(&self.active_sheet));
+            if let Some(LoroValue::String(s)) = map.get(&cell_key(rl, cl)).map(|v| v.get_deep_value()) {
+                return s.to_string();
+            }
+        }
+        String::new()
+    }
+
+    /// Raw cell text as stored in the CRDT (the formula source for a formula
+    /// cell, the literal otherwise). Empty for virtual/cleared cells.
+    fn cell_raw(&self, row: u32, col: u32) -> String {
         if let Some((rl, cl)) = self.index.resolve(row as usize, col as usize) {
             let map = self.doc.get_map(cells_map_name(&self.active_sheet));
             if let Some(LoroValue::String(s)) = map.get(&cell_key(rl, cl)).map(|v| v.get_deep_value()) {
@@ -321,7 +337,11 @@ impl TrameState {
                 self.doc.commit();
                 self.engine.compute_all_dirty();
                 let update = self.flush_delta();
-                TrameOutcome { display: vec![], update, ephemeral: None }
+                // Ask the UI to re-fetch its viewport so the edit (and any
+                // formula it feeds) renders its computed result immediately,
+                // without waiting for the network echo. The optimistic UI-side
+                // update covers plain literals; formulas need this round-trip.
+                TrameOutcome { display: vec![TrameEvent::DataReset], update, ephemeral: None }
             }
             TrameCommand::ToggleBold => {
                 let (row, col) = self.active;
@@ -389,6 +409,7 @@ impl TrameState {
                             row,
                             col,
                             text: if is_covered { String::new() } else { self.cell_text(row, col) },
+                            raw: if is_covered { String::new() } else { self.cell_raw(row, col) },
                             bold: self.bold.contains(&(row, col)),
                             italic: self.italic.contains(&(row, col)),
                             is_merged: merge_span.is_some() || is_covered,
@@ -1057,8 +1078,6 @@ mod tests {
     #[test]
     fn formula_evaluates_through_stable_keys() {
         let mut state = TrameState::new();
-        // A1 is a formula literal so the engine ingests its value (plain numeric
-        // literals feeding formulas are a separate engine concern, out of scope).
         state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "=21".to_owned() });
         state.handle_command(TrameCommand::SetCellText { row: 0, col: 1, text: "=A1*2".to_owned() });
 
@@ -1072,6 +1091,58 @@ mod tests {
         let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
         let b1 = cells.iter().find(|c| c.row == 0 && c.col == 1).unwrap();
         assert_eq!(b1.text, "42", "B1 = A1*2 must evaluate after reload");
+    }
+
+    /// End-to-end of the reported bug: plain numeric literals typed into A1/B1
+    /// must feed `=SUM(A1:B1)` (display "3"), and the formula cell's `raw` must
+    /// carry the formula source (so the in-cell editor reopens on the formula,
+    /// not its result).
+    #[test]
+    fn sum_over_plain_literals_and_formula_raw_in_viewport() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "1".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 1, text: "2".to_owned() });
+        state.handle_command(TrameCommand::SetCellText {
+            row: 0, col: 2, text: "=SUM(A1:B1)".to_owned(),
+        });
+
+        let evts = state.handle_command(TrameCommand::ScrollViewport {
+            version: 1, row_start: 0, row_end: 0, col_start: 0, col_end: 2,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
+
+        let a1 = cells.iter().find(|c| c.row == 0 && c.col == 0).unwrap();
+        assert_eq!(a1.text, "1");
+        assert_eq!(a1.raw, "1", "plain cell raw == display");
+
+        let c1 = cells.iter().find(|c| c.row == 0 && c.col == 2).unwrap();
+        assert_eq!(c1.text, "3", "SUM must see plain literals A1=1, B1=2");
+        assert_eq!(c1.raw, "=SUM(A1:B1)", "editor must reopen on the formula");
+    }
+
+    /// The same scenario after a reseed (the path a remote echo / snapshot
+    /// restore takes): plain literals must still feed the formula so the
+    /// refreshed viewport shows "3", not the optimistic formula text.
+    #[test]
+    fn sum_over_plain_literals_survives_reseed() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "1".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 1, text: "2".to_owned() });
+        state.handle_command(TrameCommand::SetCellText {
+            row: 0, col: 2, text: "=SUM(A1:B1)".to_owned(),
+        });
+
+        let snapshot = state.export_snapshot();
+        let mut restored = TrameState::new();
+        restored.import_snapshot(&snapshot);
+
+        let evts = restored.handle_command(TrameCommand::ScrollViewport {
+            version: 1, row_start: 0, row_end: 0, col_start: 0, col_end: 2,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
+        let c1 = cells.iter().find(|c| c.row == 0 && c.col == 2).unwrap();
+        assert_eq!(c1.text, "3", "SUM must re-evaluate after reseed");
+        assert_eq!(c1.raw, "=SUM(A1:B1)");
     }
 
     /// Two sheets keep their cells isolated (distinct `cells_{sheet}` containers)

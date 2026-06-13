@@ -68,6 +68,18 @@ impl FormulaEngine {
         // result (error or success) is stored in formula_cache by
         // compute_all_dirty.
         let _ = self.bytecode.recompile_if_stale(cell, raw, &mut self.deps);
+
+        // Plain (non-formula) cells never go through the VM, so their value
+        // must be published here for formula references (e.g. SUM(A1:B1)) to
+        // resolve. Formula cells get their value from `compute_all_dirty`.
+        if !raw.starts_with('=') {
+            let mut cache = self.formula_cache.borrow_mut();
+            if raw.is_empty() {
+                cache.remove(&cell);
+            } else {
+                cache.insert(cell, literal_value(raw));
+            }
+        }
     }
 
     /// Recompute every cell in the `dirty` set in topological order.
@@ -132,6 +144,15 @@ impl FormulaEngine {
     /// Number of cached formula cells.
     pub fn formula_count(&self) -> usize {
         self.bytecode.len()
+    }
+}
+
+/// Parse a plain cell's raw text into a literal [`CellValue`]: a number when it
+/// parses as one, otherwise text. Empty strings are handled by the caller.
+fn literal_value(raw: &str) -> CellValue {
+    match raw.parse::<f64>() {
+        Ok(n) => CellValue::Number(n),
+        Err(_) => CellValue::Text(raw.to_string()),
     }
 }
 
@@ -224,6 +245,23 @@ mod tests {
         engine.compute_all_dirty();
 
         assert_eq!(engine.evaluated_text(CellRef::new(0, 2)).unwrap(), "6");
+    }
+
+    #[test]
+    fn sum_over_plain_literal_cells() {
+        let mut engine = FormulaEngine::new();
+
+        // A1 = 1, B1 = 2 entered as plain literals (no leading '=').
+        engine.on_cell_changed(CellRef::new(0, 0), "1");
+        engine.on_cell_changed(CellRef::new(0, 1), "2");
+        engine.compute_all_dirty();
+        engine.dirty.clear();
+
+        // C1 = SUM(A1:B1) must see the plain literals, not Empty.
+        engine.on_cell_changed(CellRef::new(0, 2), "=SUM(A1:B1)");
+        engine.compute_all_dirty();
+
+        assert_eq!(engine.evaluated_text(CellRef::new(0, 2)).unwrap(), "3");
     }
 
     #[test]

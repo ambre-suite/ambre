@@ -342,7 +342,7 @@ impl TrameView {
         self.state
             .cell_cache
             .get(&(row, col))
-            .map(|c| c.text.clone())
+            .map(|c| c.raw.clone())
             .unwrap_or_default()
     }
 
