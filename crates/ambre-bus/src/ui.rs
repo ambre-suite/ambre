@@ -257,6 +257,10 @@ pub struct DisplayCell {
     pub col: u32,
     /// Display text (formula result or raw string).
     pub text: String,
+    /// Raw cell text as stored in the CRDT (e.g. `=SUM(A1:B1)` for a formula).
+    /// Used to seed the in-cell editor so editing a formula shows the formula,
+    /// not its computed result. Equals `text` for plain cells.
+    pub raw: String,
     /// Bold run applied to this cell (pinned to the cell, not the selection).
     pub bold: bool,
     /// Italic run applied to this cell.

@@ -30,6 +30,9 @@ const PADDING_COLS: u32 = 5;
 #[derive(Clone, Default)]
 pub struct CellData {
     pub text: String,
+    /// Raw cell text (formula source for formula cells, equal to `text`
+    /// otherwise). Seeds the in-cell editor so formulas are editable as text.
+    pub raw: String,
     pub bold: bool,
     pub italic: bool,
     /// `Some((col_span, row_span))` on a merge master, `None` otherwise. Covered
@@ -314,6 +317,7 @@ impl TrameUiState {
                 (cell.row, cell.col),
                 CellData {
                     text: cell.text,
+                    raw: cell.raw,
                     bold: cell.bold,
                     italic: cell.italic,
                     merge_span: cell.merge_span,
@@ -326,7 +330,14 @@ impl TrameUiState {
     /// its formatting. Keeps the local view in sync without a Logic round-trip
     /// (the CRDT echo would only re-confirm what we already show).
     pub fn set_cell_text(&mut self, row: u32, col: u32, text: String) {
-        self.cell_cache.entry((row, col)).or_default().text = text;
+        let entry = self.cell_cache.entry((row, col)).or_default();
+        // `text` here is the raw buffer. For a formula we cannot evaluate it on
+        // the UI thread, so the displayed result stays blank until the next
+        // ViewportData carries the computed value -- never echo the formula
+        // source as its own result. For a plain literal, raw == display.
+        let is_formula = text.starts_with('=');
+        entry.raw = text.clone();
+        entry.text = if is_formula { String::new() } else { text };
     }
 
     /// Apply a single-cell formatting change (from `TrameEvent::CellFormat`).
@@ -385,7 +396,54 @@ impl TrameUiState {
 
 #[cfg(test)]
 mod tests {
-    use super::CellEditor;
+    use super::{CellEditor, TrameUiState};
+    use crate::{DisplayCell, TrameEvent};
+
+    /// A formula cell arriving in a viewport batch keeps its computed result in
+    /// `text` for rendering while preserving the formula source in `raw` -- the
+    /// value `cell_seed` hands the editor so editing a formula shows the formula.
+    #[test]
+    fn viewport_data_preserves_formula_raw_for_editing() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        state.on_viewport_data(TrameEvent::ViewportData {
+            version: 1,
+            row_start: 0,
+            col_start: 0,
+            cells: vec![DisplayCell {
+                row: 0,
+                col: 2,
+                text: "3".to_owned(),
+                raw: "=SUM(A1:B1)".to_owned(),
+                bold: false,
+                italic: false,
+                is_merged: false,
+                merge_span: None,
+            }],
+        });
+
+        let cell = state.cell_cache.get(&(0, 2)).expect("cell cached");
+        assert_eq!(cell.text, "3", "renders the result");
+        assert_eq!(cell.raw, "=SUM(A1:B1)", "editor reopens on the formula");
+    }
+
+    /// Optimistic commit of a formula must not display the formula source as its
+    /// own result: `text` stays blank (pending the authoritative ViewportData)
+    /// while `raw` retains the formula for re-editing. A plain literal shows
+    /// immediately.
+    #[test]
+    fn optimistic_commit_does_not_echo_formula_as_result() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+
+        state.set_cell_text(0, 0, "5".to_owned());
+        let plain = state.cell_cache.get(&(0, 0)).unwrap();
+        assert_eq!(plain.text, "5");
+        assert_eq!(plain.raw, "5");
+
+        state.set_cell_text(0, 2, "=SUM(A1:B1)".to_owned());
+        let formula = state.cell_cache.get(&(0, 2)).unwrap();
+        assert_eq!(formula.text, "", "result blank until recomputed");
+        assert_eq!(formula.raw, "=SUM(A1:B1)", "formula kept for editing");
+    }
 
     /// Insertion advances the caret; backspace and caret motion respect UTF-8
     /// boundaries (no byte-splitting a multi-byte char).
