@@ -619,10 +619,9 @@ pub enum TrameEvent {
     // Conditional formatting
     CondFormatsUpdated { version: u64 },
 
-    // Undo/Redo
-    UndoApplied     { version: u64, can_undo: bool, can_redo: bool },
-    RedoApplied     { version: u64, can_undo: bool, can_redo: bool },
-    UndoStackEmpty,
+    // Undo/Redo -- single event for undo, redo, and empty-stack states.
+    // Matches the implemented `ambre_bus::TrameEvent::UndoState`.
+    UndoState       { can_undo: bool, can_redo: bool },
 
     // Validation
     ValidationError   { version: u64, row: u32, col: u32, message: String },

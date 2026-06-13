@@ -117,6 +117,18 @@ LogicEnvelope::UndoState { can_undo, can_redo } => {
     self.trame.can_undo = can_undo;
     self.trame.can_redo = can_redo;
 }
+// Filters (shared) -- MVP
+LogicEnvelope::FilterApplied { hidden_row_count } =>
+    self.trame.filter_active = hidden_row_count > 0,  // request_viewport already refreshed
+LogicEnvelope::FilterCleared =>
+    self.trame.filter_active = false,
+// Sort -- MVP (viewport already refreshed by the Logic thread; just clears the busy flag)
+LogicEnvelope::SortComplete => self.trame.sort_pending = false,
+// Merges -- MVP
+LogicEnvelope::MergeRejected { reason } =>
+    self.trame.toast(ToastKind::Warn, &reason),
+LogicEnvelope::MergeConflictDetected { master, covered } =>
+    self.trame.mark_merge_conflict(master, covered),
 LogicEnvelope::ExportComplete { filename, data } =>
     trigger_download(&filename, &data),  // via web_sys
 ```
@@ -459,6 +471,108 @@ fn on_pointer_drag(&mut self, x: f32, y: f32) {
 }
 ```
 
+### C. Context Menu — Structural Ops, Merge, Sort, Filter (MVP)
+
+Right-click on the grid (or on a header) opens a context menu. It is the single MVP
+entry point for the structural / feature commands the Logic thread already handles but
+which had no UI trigger: row/column insert-delete, merge, single-column sort, and the
+shared filter. The menu is a `DrawSurface` overlay (no DOM); items are positioned from
+the click point and dismissed on Escape or outside click.
+
+```rust
+pub enum ContextMenuItem {
+    InsertRowAbove, InsertRowBelow,
+    InsertColLeft,  InsertColRight,
+    DeleteRows,     DeleteCols,
+    MergeCells,     UnmergeCells,    // Merge enabled only on a multi-cell selection
+    SortAsc,        SortDesc,        // single-column sort on the active column
+    FilterByColumn,                  // opens the filter popover for the active column
+    ClearFilter,
+}
+
+fn on_context_menu_select(&mut self, item: ContextMenuItem) {
+    let sel = &self.ui_state.selection;
+    let (row, col) = sel.active();
+    let sheet_id   = self.ui_state.active_sheet;
+    let v          = self.next_version();
+    match item {
+        ContextMenuItem::InsertRowAbove =>
+            self.logic_tx.send(TrameCommand::InsertRow { version: v, sheet_id, before_row: row }),
+        ContextMenuItem::InsertRowBelow =>
+            self.logic_tx.send(TrameCommand::InsertRow { version: v, sheet_id, before_row: row + 1 }),
+        ContextMenuItem::InsertColLeft =>
+            self.logic_tx.send(TrameCommand::InsertCol { version: v, sheet_id, before_col: col }),
+        ContextMenuItem::InsertColRight =>
+            self.logic_tx.send(TrameCommand::InsertCol { version: v, sheet_id, before_col: col + 1 }),
+        // One command per row/col in the selection span (each = 1 undo item).
+        ContextMenuItem::DeleteRows =>
+            for r in sel.row_span_desc() {  // descending so positions stay valid
+                self.logic_tx.send(TrameCommand::DeleteRow { version: self.next_version(), sheet_id, row: r });
+            },
+        ContextMenuItem::DeleteCols =>
+            for c in sel.col_span_desc() {
+                self.logic_tx.send(TrameCommand::DeleteCol { version: self.next_version(), sheet_id, col: c });
+            },
+        ContextMenuItem::MergeCells => {
+            let (r1, c1, r2, c2) = sel.bounds();
+            self.logic_tx.send(TrameCommand::MergeCells {
+                version: v, sheet_id, row: r1, col: c1,
+                row_span: r2 - r1 + 1, col_span: c2 - c1 + 1,
+            });
+            // A MergeRejected event (covered non-empty cell) surfaces a toast -- see sec.2.
+        }
+        ContextMenuItem::UnmergeCells =>
+            self.logic_tx.send(TrameCommand::UnmergeCells { version: v, sheet_id, row, col }),
+        ContextMenuItem::SortAsc =>
+            self.send_sort(sheet_id, /* ascending */ true),
+        ContextMenuItem::SortDesc =>
+            self.send_sort(sheet_id, false),
+        ContextMenuItem::FilterByColumn =>
+            self.open_filter_popover(sheet_id, col),   // see sec.5.D
+        ContextMenuItem::ClearFilter =>
+            self.logic_tx.send(TrameCommand::ClearFilter { sheet_id }),
+    }
+    self.ui_state.context_menu = None;  // close
+}
+
+// Single-column sort over the current selection (or the used range if a whole
+// column is selected). has_header defaults to false; toggled in the menu.
+fn send_sort(&mut self, sheet_id: SheetId, ascending: bool) {
+    let (r1, c1, r2, c2) = self.ui_state.selection.bounds();
+    self.ui_state.sort_pending = true;
+    self.logic_tx.send(TrameCommand::SortRange {
+        version: self.next_version(), sheet_id,
+        row_start: r1, row_end: r2, col_start: c1, col_end: c2,
+        sort_col: 0,  // reference column = first column of the range
+        ascending, has_header: false,
+    });
+}
+```
+
+### D. Shared Filter Popover (MVP)
+
+`FilterByColumn` opens a `DrawSurface` popover anchored under the active column header.
+For MVP it offers the `values` kind (checkbox list of the column's distinct visible
+values) and a minimal `condition` kind (op + value). Applying sends a single
+`ApplyFilter`; the Logic thread recomputes `filter_hidden_{sheet}` and replies
+`FilterApplied { hidden_row_count }`, after which the viewport no longer lists hidden
+rows. A funnel badge is drawn on the filtered column header while `filter_active`.
+
+```rust
+fn apply_filter_from_popover(&mut self, sheet_id: SheetId, col: u32, p: &FilterPopover) {
+    self.logic_tx.send(TrameCommand::ApplyFilter {
+        sheet_id, col,
+        kind:      p.kind,                 // FilterKind::Values | Condition
+        values:    p.selected_values.clone(),
+        condition: p.condition.clone(),
+    });
+    self.ui_state.context_menu = None;
+}
+```
+
+> **Personal filter views, multi-column sort, conditional formatting, validation** stay
+> in Phase 2 (`-features` roadmap). Only the shared filter and single-column sort are MVP.
+
 ---
 
 ## 6. INLINE EDITOR AND FORMULA BAR
@@ -535,6 +649,9 @@ fn commit_editing(&mut self, direction: CommitDirection) {
         row, col,
         raw: editor.content,
     });
+    // Close the undo group on cell exit so the whole edit = 1 undo item
+    // (spec-ambre-trame-logic.md sec.8 "doc.commit() per TrameCommand").
+    self.logic_tx.send(TrameCommand::CommitEdit);
 
     // Move selection according to direction
     match direction {
@@ -936,6 +1053,39 @@ fn on_sheet_tab_click(&mut self, sheet_id: SheetId) {
 }
 ```
 
+### Full Sheet Lifecycle (MVP)
+
+The tab strip is the entry point for the four lifecycle commands the Logic thread
+already implements (`-logic` sec.2.D). The `SheetList` event refreshes the strip after
+each one.
+
+```rust
+// "+" button -> create. The Logic thread mints a peer-scoped sheet_id and replies SheetList.
+fn on_add_sheet_button(&mut self) {
+    self.logic_tx.send(TrameCommand::CreateSheet { name: self.next_sheet_name() });
+}
+
+// Double-click a tab -> inline rename editor on the tab label.
+fn on_sheet_tab_rename_commit(&mut self, sheet_id: SheetId, name: String) {
+    if !name.trim().is_empty() {
+        self.logic_tx.send(TrameCommand::RenameSheet { sheet_id, name });
+    }
+}
+
+// Right-click a tab -> tab context menu { Rename, Delete }.
+// Delete is rejected by the Logic thread if it is the last sheet (TrameEvent::Error -> toast).
+fn on_sheet_tab_delete(&mut self, sheet_id: SheetId) {
+    self.logic_tx.send(TrameCommand::DeleteSheet { sheet_id });
+    // Active-sheet fallback is decided by the Logic thread; UI updates active_sheet
+    // from the next SheetList + ViewportData.
+}
+
+// Drag a tab horizontally -> reorder. to_index is the drop slot in the strip.
+fn on_sheet_tab_drag_drop(&mut self, sheet_id: SheetId, to_index: u32) {
+    self.logic_tx.send(TrameCommand::MoveSheet { sheet_id, to_index });
+}
+```
+
 ---
 
 ## 14. QUALITY & TESTABILITY
@@ -1044,19 +1194,24 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 - [ ] Column/row headers (via `ambre_trame::render::draw_col_headers_on<S>`)
 - [ ] Single-cell selection
 - [x] Inline editor *(delivered under `CHROME P2` -- Trame WYSIWYG cell)*; [ ] formula bar
-- [ ] Sheet tabs
+- [ ] Sheet tabs + full lifecycle (create via "+", rename via double-click, delete/rename via tab context menu, reorder via drag) -> `CreateSheet` / `RenameSheet` / `DeleteSheet` / `MoveSheet` (sec.13)
 - [ ] Keyboard navigation (arrows, Tab, Enter, Delete)
-- [ ] `on_logic_message` wiring: full `TrameEvent` dispatch (ViewportData, EditAck, FormulaError, SheetList, ValidationError, UndoApplied, ImportProgress, ExportComplete)
+- [ ] `CommitEdit` on cell exit (closes the undo group -- 1 cell edit = 1 undo item, sec.6.C)
+- [ ] Grid context menu (right-click, sec.5.C): row/column insert+delete (`InsertRow`/`InsertCol`/`DeleteRow`/`DeleteCol`), merge/unmerge (`MergeCells`/`UnmergeCells`)
+- [ ] Cell merge rendering (`DisplayCell.is_merged` / `merge_span`) + `MergeRejected` / `MergeConflictDetected` handling (sec.2)
+- [ ] Single-column shared sort (`SortRange` from the context menu, sec.5.C) + `SortComplete` dispatch
+- [ ] Shared filter: filter popover (`ApplyFilter` / `ClearFilter`, sec.5.D) + funnel badge + `FilterApplied` / `FilterCleared` dispatch
+- [ ] `on_logic_message` wiring: full `TrameEvent` dispatch (ViewportData, EditAck, FormulaError, SheetList, MergeRejected, MergeConflictDetected, FilterApplied, FilterCleared, SortComplete, ValidationError, UndoState, ImportProgress, ExportComplete)
 
 **Phase 2 — V1**
 - [ ] Multi-cell selection
 - [ ] Row/column freeze
 - [ ] Function autocompletion
 - [ ] Multi-user cursors (`TrameEvent::RemoteCursors`, identified by `UserId`)
-- [ ] Cell merge rendering
+- [ ] Personal filter views + multi-column sort UI (`-features` Phase 2)
 - [ ] Conditional formatting (`style_override` rendering)
 - [ ] Column/row resize (drag)
-- [ ] Context menu (right-click)
+- [ ] Context menu extensions (conditional formatting, data validation entries)
 
 **Phase 3 — Post-V1**
 - [ ] Sparklines

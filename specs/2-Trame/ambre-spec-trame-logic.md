@@ -1179,9 +1179,7 @@ pub enum TrameEvent {
     CondFormatsUpdated { version: u64 },
 
     // -- Undo / Redo (trame-features) ------------------------------------
-    UndoApplied      { version: u64, can_undo: bool, can_redo: bool },
-    RedoApplied      { version: u64, can_undo: bool, can_redo: bool },
-    UndoStackEmpty,
+    UndoState        { can_undo: bool, can_redo: bool },
 
     // -- Validation (trame-features) -------------------------------------
     ValidationError   { version: u64, row: u32, col: u32, message: String },
