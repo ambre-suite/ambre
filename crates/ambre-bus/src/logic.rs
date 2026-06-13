@@ -196,4 +196,33 @@ pub enum TrameCommand {
     /// Toggle italic formatting for the active cell (set by
     /// [`SetActiveCell`](TrameCommand::SetActiveCell)).
     ToggleItalic,
+
+    /// Insert a blank row at grid position `at`, shifting existing rows at
+    /// `>= at` down by one. One `LoroMovableList` op; cells keyed by stable id
+    /// pairs follow their row automatically (`ambre-spec-trame-logic.md` §2).
+    /// A row inserted within a range formula is naturally included; references
+    /// are never rewritten (§12). A no-op past the materialized used range
+    /// (virtual rows are already blank).
+    InsertRow {
+        at: u32,
+    },
+
+    /// Delete the row at grid position `at`, shifting rows at `> at` up by one.
+    /// Its cells/formatting are dropped and any formula referencing the now
+    /// removed row id resolves to `#REF!` (§12). A no-op in virtual space.
+    DeleteRow {
+        at: u32,
+    },
+
+    /// Insert a blank column at grid position `at`, shifting existing columns at
+    /// `>= at` right by one. Column analogue of [`InsertRow`](TrameCommand::InsertRow).
+    InsertColumn {
+        at: u32,
+    },
+
+    /// Delete the column at grid position `at`, shifting columns at `> at` left
+    /// by one. Column analogue of [`DeleteRow`](TrameCommand::DeleteRow).
+    DeleteColumn {
+        at: u32,
+    },
 }
