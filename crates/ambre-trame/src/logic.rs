@@ -63,9 +63,13 @@ fn cols_list_name(sheet: &str) -> String {
     format!("cols_{sheet}")
 }
 
-// -----------------------------------------------------------------------------
-// TrameState
-// -----------------------------------------------------------------------------
+/// Which axis a structural op targets. Lets [`TrameState::insert_axis`] /
+/// [`delete_axis`](TrameState::delete_axis) share one body across rows/columns.
+#[derive(Clone, Copy)]
+enum Axis {
+    Row,
+    Col,
+}
 
 // -----------------------------------------------------------------------------
 // TrameOutcome -- typed editing result
@@ -325,7 +329,117 @@ impl TrameState {
 
                 TrameOutcome::display_only(vec![TrameEvent::ViewportData { version, row_start, col_start, cells }])
             }
+            TrameCommand::InsertRow { at } => self.insert_axis(at, Axis::Row),
+            TrameCommand::DeleteRow { at } => self.delete_axis(at, Axis::Row),
+            TrameCommand::InsertColumn { at } => self.insert_axis(at, Axis::Col),
+            TrameCommand::DeleteColumn { at } => self.delete_axis(at, Axis::Col),
         }
+    }
+
+    /// Insert a blank row/column at grid position `at`, shifting later elements
+    /// down/right. One `LoroMovableList` op; cells keyed by stable id pairs
+    /// follow their element automatically. A no-op past the materialized used
+    /// range (those rows/columns are already virtual blanks, nothing to shift).
+    fn insert_axis(&mut self, at: u32, axis: Axis) -> TrameOutcome {
+        let at = at as usize;
+        let used = match axis {
+            Axis::Row => self.index.row_len(),
+            Axis::Col => self.index.col_len(),
+        };
+        if at > used {
+            return TrameOutcome::display_only(vec![]);
+        }
+        let list_name = match axis {
+            Axis::Row => rows_list_name(&self.active_sheet),
+            Axis::Col => cols_list_name(&self.active_sheet),
+        };
+        if self.doc.get_movable_list(list_name).insert(at, LoroValue::Null).is_err() {
+            return TrameOutcome::display_only(vec![]);
+        }
+        self.doc.commit();
+        self.after_structural()
+    }
+
+    /// Delete the row/column at grid position `at`, shifting later elements
+    /// up/left and purging the removed element's cells and formatting. Any
+    /// formula whose referenced cell was below the deletion now reads the
+    /// shifted (or emptied) position -- references are not rewritten
+    /// (`ambre-spec-trame-logic.md` §12). Full id-based `#REF!` on delete is a
+    /// separate broken-references story. A no-op in virtual space.
+    fn delete_axis(&mut self, at: u32, axis: Axis) -> TrameOutcome {
+        let at = at as usize;
+        let removed = match axis {
+            Axis::Row => self.index.row_id(at),
+            Axis::Col => self.index.col_id(at),
+        };
+        let Some(removed) = removed else {
+            return TrameOutcome::display_only(vec![]); // virtual: nothing materialized
+        };
+        let list_name = match axis {
+            Axis::Row => rows_list_name(&self.active_sheet),
+            Axis::Col => cols_list_name(&self.active_sheet),
+        };
+        if self.doc.get_movable_list(list_name).delete(at, 1).is_err() {
+            return TrameOutcome::display_only(vec![]);
+        }
+        self.purge_axis(removed, axis);
+        self.doc.commit();
+        self.after_structural()
+    }
+
+    /// Drop every cell and formatting entry whose key references the removed
+    /// row/column id, so a deleted line leaves no orphan entries behind.
+    fn purge_axis(&mut self, removed: Lid, axis: Axis) {
+        for name in [cells_map_name(&self.active_sheet), format_map_name(&self.active_sheet)] {
+            let map = self.doc.get_map(name);
+            let LoroValue::Map(entries) = map.get_value() else {
+                continue;
+            };
+            let stale: Vec<String> = entries
+                .keys()
+                .filter(|k| {
+                    parse_cell_key(k).is_some_and(|(rl, cl)| match axis {
+                        Axis::Row => rl == removed,
+                        Axis::Col => cl == removed,
+                    })
+                })
+                .cloned()
+                .collect();
+            for key in stale {
+                let _ = map.delete(&key);
+            }
+        }
+    }
+
+    /// Shared tail of every structural op: rebuild the position <-> id cache
+    /// (positions shifted), reseed the positional formula engine and the
+    /// formatting sets from the new layout, then flush the CRDT delta and ask
+    /// the UI to re-fetch its viewport.
+    fn after_structural(&mut self) -> TrameOutcome {
+        self.rebuild_index();
+        self.reseed_engine();
+        self.reseed_formatting();
+        let update = self.flush_delta();
+        TrameOutcome { display: vec![TrameEvent::DataReset], update, ephemeral: None }
+    }
+
+    /// Reset the positional formula engine and re-feed it from the active
+    /// sheet's cells at their current grid positions (resolved through the
+    /// freshly rebuilt [`Self::index`]). Required after any structural op or
+    /// import, where a cell's grid position may have changed under stable keys.
+    fn reseed_engine(&mut self) {
+        self.engine.reset();
+        if let LoroValue::Map(cells) = self.doc.get_map(cells_map_name(&self.active_sheet)).get_value() {
+            for (key, value) in cells.iter() {
+                let (Some((rl, cl)), LoroValue::String(text)) = (parse_cell_key(key), value) else {
+                    continue;
+                };
+                if let (Some(row), Some(col)) = (self.index.row_pos(&rl), self.index.col_pos(&cl)) {
+                    self.engine.on_cell_changed(CellRef::new(row as u32, col as u32), text.as_str());
+                }
+            }
+        }
+        self.engine.compute_all_dirty();
     }
 
     /// Mirror a cell's current bold/italic state into the CRDT `format` map and
@@ -469,18 +583,9 @@ impl TrameState {
         // there are no pending local-only ops to swallow here.
         self.last_exported_vv = self.doc.oplog_vv();
         // Reseed the formula engine from the resulting cell values, mapping each
-        // stable key pair back to its grid position via the rebuilt index.
-        if let LoroValue::Map(cells) = cells_map.get_value() {
-            for (key, value) in cells.iter() {
-                let (Some((rl, cl)), LoroValue::String(text)) = (parse_cell_key(key), value) else {
-                    continue;
-                };
-                if let (Some(row), Some(col)) = (self.index.row_pos(&rl), self.index.col_pos(&cl)) {
-                    self.engine.on_cell_changed(CellRef::new(row as u32, col as u32), text.as_str());
-                }
-            }
-        }
-        self.engine.compute_all_dirty();
+        // stable key pair back to its grid position via the rebuilt index. A
+        // merge may have moved cells under their stable keys, so reset first.
+        self.reseed_engine();
         // Rebuild bold/italic from the merged `format_{sheet}` map.
         self.reseed_formatting();
         // Refresh the toolbar / context-menu toggles for the active cell: after a
@@ -705,6 +810,98 @@ mod tests {
             loro::LoroValue::Map(ref m) if m.is_empty()
         ));
         assert_eq!(state.sheet_name_to_id("Sheet2").as_deref(), Some("s1"));
+    }
+
+    /// Read the text at a single grid cell through a viewport request.
+    fn read_cell(state: &mut TrameState, row: u32, col: u32) -> String {
+        let evts = state.handle_command(TrameCommand::ScrollViewport {
+            version: 999, row_start: row, row_end: row, col_start: col, col_end: col,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
+        cells[0].text.clone()
+    }
+
+    /// Inserting a row shifts the cells below it down by one position; cells are
+    /// keyed by stable ids so their content follows the shift.
+    #[test]
+    fn insert_row_shifts_cells_down() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "top".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 1, col: 0, text: "mid".to_owned() });
+
+        let evts = state.handle_command(TrameCommand::InsertRow { at: 1 });
+        assert!(matches!(evts.display[0], TrameEvent::DataReset));
+
+        assert_eq!(read_cell(&mut state, 0, 0), "top", "row above stays put");
+        assert_eq!(read_cell(&mut state, 1, 0), "A2", "new blank row shows label");
+        assert_eq!(read_cell(&mut state, 2, 0), "mid", "old row 1 shifted to row 2");
+    }
+
+    /// Deleting a row shifts the rows below it up and drops the deleted row's
+    /// cell content (no orphan entry resurfaces).
+    #[test]
+    fn delete_row_shifts_cells_up_and_purges() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "keep".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 1, col: 0, text: "gone".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 2, col: 0, text: "last".to_owned() });
+
+        state.handle_command(TrameCommand::DeleteRow { at: 1 });
+
+        assert_eq!(read_cell(&mut state, 0, 0), "keep");
+        assert_eq!(read_cell(&mut state, 1, 0), "last", "row 2 shifted up to row 1");
+        // The purged content is gone for good, even after a snapshot round-trip.
+        let snapshot = state.export_snapshot();
+        let mut restored = TrameState::new();
+        restored.import_snapshot(&snapshot);
+        assert_eq!(read_cell(&mut restored, 0, 0), "keep");
+        assert_eq!(read_cell(&mut restored, 1, 0), "last");
+    }
+
+    /// Column insert/delete mirror the row behavior on the horizontal axis.
+    #[test]
+    fn insert_and_delete_column_shift_cells() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "a".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 1, text: "b".to_owned() });
+
+        state.handle_command(TrameCommand::InsertColumn { at: 1 });
+        assert_eq!(read_cell(&mut state, 0, 0), "a");
+        assert_eq!(read_cell(&mut state, 0, 1), "B1", "inserted blank column");
+        assert_eq!(read_cell(&mut state, 0, 2), "b", "old col 1 shifted right");
+
+        state.handle_command(TrameCommand::DeleteColumn { at: 1 });
+        assert_eq!(read_cell(&mut state, 0, 0), "a");
+        assert_eq!(read_cell(&mut state, 0, 1), "b", "shift back after delete");
+    }
+
+    /// References are positional and never rewritten (§12): after deleting the
+    /// row that held a formula's source, the formula reads whatever now sits at
+    /// that grid position -- here an emptied cell. (Full id-based `#REF!` on
+    /// delete is a separate broken-references story.)
+    #[test]
+    fn formula_reference_is_positional_after_delete() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText { row: 1, col: 0, text: "=7".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 1, text: "=A2".to_owned() });
+        assert_eq!(read_cell(&mut state, 0, 1), "7", "B1 reads A2 before delete");
+
+        // Delete row 1 (the source A2). B1 stays at row 0; A2 is now empty, so
+        // the positional reference reads an empty cell.
+        state.handle_command(TrameCommand::DeleteRow { at: 1 });
+        assert_eq!(read_cell(&mut state, 0, 1), "", "positional ref now empty");
+    }
+
+    /// Inserting past the materialized used range is a no-op: virtual rows are
+    /// already blank, there is nothing to shift, and no CRDT delta is produced.
+    #[test]
+    fn insert_beyond_used_range_is_noop() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "x".to_owned() });
+        let evts = state.handle_command(TrameCommand::InsertRow { at: 50 });
+        assert!(evts.display.is_empty(), "no DataReset");
+        assert!(evts.update.is_none(), "no CRDT delta");
+        assert_eq!(read_cell(&mut state, 0, 0), "x");
     }
 
     #[test]

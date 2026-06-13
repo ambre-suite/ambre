@@ -45,6 +45,15 @@ impl FormulaEngine {
         }
     }
 
+    /// Discard all formula state (dependency graph, bytecode, results, dirty
+    /// set). Used before a full reseed after a structural op (insert/delete
+    /// row/column) shifts every cell's grid position: the engine is positional,
+    /// so stale entries at old positions must be cleared before re-feeding cells
+    /// at their new positions.
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+
     /// Notify the engine that `cell`'s raw text changed.
     ///
     /// Invalidates its bytecode, marks it stale, collects all downstream

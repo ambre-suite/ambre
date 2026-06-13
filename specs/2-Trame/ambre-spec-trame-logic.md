@@ -1331,7 +1331,7 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 - [x] Logic-thread command dispatch (`handle_command` returning `TrameOutcome`, §8) *(current pattern; the `TrameController`/`AppController` trait refactor is deferred)*
 - [x] Synchronous recomputation `compute_all_dirty()` in each handler
 - [x] `DisplayViewport` + anti-flickering (`tx_version`)
-- [ ] Insert/delete rows/columns + `SheetIndex` update + dirty propagation *(Epic `E3`)*
+- [x] Insert/delete rows/columns (`TrameCommand::Insert/DeleteRow/Column { at }`): one `LoroMovableList` op, `rebuild_index` + positional engine reseed + formatting reseed; delete purges the removed line's cells/formatting; no-op past the used range *(Epic `E3`)*
 - [ ] Merges: Loro storage, validation, `DisplayCell.merge_span`, conflict detection *(Epic `E3`)*
 - [x] Shared rendering module `ambre-trame/src/render.rs`: `GridLayout` + `draw_cells_on<S>()`, `draw_grid_lines_on<S>()`, `draw_col_headers_on<S>()`, `draw_row_headers_on<S>()`, all `DrawSurface`-generic. `ui::renderer` composes them (cells layer + header overlay); uniform-metrics `GridLayout` (variable widths deferred); `DisplayViewport`-fed PDF path lands with `export_pdf.rs` (Phase 3). *(Epic `E3`)*
 - [ ] `MockSyncHandle` for controller tests (via `CommandSink`)

@@ -103,6 +103,17 @@ impl SheetIndex {
         self.col_by_pos.push(id);
     }
 
+    /// Stable id of the row/column at grid position `pos`, if materialized.
+    /// Unlike [`resolve`](Self::resolve) this needs only one axis, so it works
+    /// even when the other axis has zero materialized elements (used by the
+    /// structural delete path to identify the row/column being removed).
+    pub fn row_id(&self, pos: usize) -> Option<Lid> {
+        self.row_by_pos.get(pos).copied()
+    }
+    pub fn col_id(&self, pos: usize) -> Option<Lid> {
+        self.col_by_pos.get(pos).copied()
+    }
+
     /// Grid position of a row/column id, if it is materialized. Inverse of
     /// [`resolve`](Self::resolve), used to map a stored cell key back to its
     /// `(row, col)` grid position when reseeding the formula engine.
