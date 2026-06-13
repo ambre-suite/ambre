@@ -321,7 +321,7 @@ The `HttpError` handler in Sync discards the `id` (`_id`) and sends a generic `A
 
 - **`caps.formats[0]` direct indexing** (`host.rs:212`): panics if `caps.formats` is empty (unlikely but not impossible on headless backends).
 - **`matchMedia` listener registration failures silently discarded** (`host.rs:713`): `let _ = mql.add_event_listener_with_callback(...)` — failure is invisible.
-- **Surface resize race** (`host.rs:374-375`): correctness depends on unwritten contract that `DocView::resize()` must flag a full repaint — no runtime assertion.
+- **Surface resize race** (`host.rs:374-375`): correctness depends on unwritten contract that `AppView::resize()` must flag a full repaint — no runtime assertion.
 - **WGSL divide-by-zero** (`solid.wgsl:33`, `glyph.wgsl:33`): division by `u.viewport.x`/`u.viewport.y` without epsilon guard (not reachable in practice since dimensions are clamped to >=1).
 
 ### ambre-trame

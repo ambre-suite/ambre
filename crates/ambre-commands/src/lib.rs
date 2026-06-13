@@ -75,8 +75,8 @@ impl Default for CommandState {
 }
 
 /// An owner of commands. Each app implements this; the chrome consumes it
-/// without knowing which app it is (the same dependency inversion as `DocView`
-/// on the render side).
+/// without knowing which app it is (the same dependency inversion as the
+/// `AppView` enum on the render side).
 ///
 /// `Context` is the app's own state handle. Keeping it an associated type
 /// rather than a concrete `AppContext` preserves this crate as a true leaf:

@@ -23,7 +23,7 @@
 * **Invariants:**
   - **Thread-level** invariants (boundary rule, single source of truth, non-blocking, WebGL2-compatible) are in `ambre-spec-ui.md §1`.
   - **Chrome does not own the content:** it never writes into the `<canvas>` nor hit-tests content; it invokes `CommandId` and receives state via signals (boundary `ambre-spec-ui.md §2.A`).
-  - **`ambre-chrome` does not depend on apps**: it displays `Command` and their state (dependency inversion, symmetrical to `DocView` on the rendering side).
+  - **`ambre-chrome` does not depend on apps**: it displays `Command` and their state (dependency inversion, symmetrical to the `AppView` enum on the rendering side).
 
 ---
 

@@ -24,9 +24,9 @@
 | `ambre-bus` depends on `ambre-core` + `serde` | UI <-> Logic envelopes (`LogicCommand`/`UiEvent`) travel as **Rust values over `flume`** — not serialized. But the Logic <-> Sync envelopes (`SyncCommand`/`LogicEvent` and the `Rest*` family they carry) cross the Sync-worker `postMessage` boundary, so they derive `Serialize`/`Deserialize` (postcard on that hop only). Still no `thiserror`/`tracing`/network deps; application payloads stay **typed** (`AppCommand`/`AppEvent`), only real network bytes (Loro CRDT deltas, channel messages) remain `Vec<u8>`. |
 | `ambre-draw` depends on `kurbo`, `peniko`, `parley` only (no `wgpu`, no `krilla`) | `DrawSurface` trait and re-exports of geometric/typographic types. Light type dependencies (math, colors, text layout) — no GPU dependency. Concrete implementations (`WgpuSurface` on the UI side, `KrillaSurface` on the Logic side) live in consumer crates. |
 | `ambre-commands` depends on **nothing UI-side** (leaf; `ambre-core` for ids/`Locale` as needed) | Shared command registry: `CommandId`, `Command`, `CommandState`, `CommandSource`, keybindings. Depended on by **every app crate** (which defines its commands) AND by `ambre-chrome` (which renders them). Distinct from `AppCommand`/`LogicCommand` IPC from `ambre-bus`: an invoked `Command` *produces* a `LogicCommand`. |
-| `ambre-canvas` depends on `ambre-draw` (+ wgpu/swash + accesskit ; + web-sys/js-sys/wasm-bindgen(-futures)/tracing as **`cfg(wasm32)`-targeted** deps for `host`) | **Canvas render runtime** of the UI thread: `WgpuSurface`/`QuadRenderer`/`GlyphAtlas`, `TextCache`, `FrameHost`/`DocView`, generated `theme.rs`. **Does NOT depend on `leptos`.** `accesskit` is scoped to canvas **content** a11y. **No application dependency** (coupling via `DocView` + closure injection). Named `ambre-canvas` (medium, symmetrical to `ambre-chrome`); spec `ambre-spec-canvas.md`. |
-| `ambre-chrome` depends on `leptos` + `ambre-commands` | **Shared, app-agnostic Leptos chrome toolkit**: `AppShell`, `CommandPalette`, `Dialog`/`Menu`/`Toolbar`/`Toast`/`ContextMenu`/`Sidebar`/`StatusBar` primitives, keybinding manager. Renders views over the registry — **names no app** (same inversion as `DocView`). App-**specific** chrome lives in the app crate, **not here**. |
-| Each app crate (`ambre-trame`, ...) depends on `ambre-bus` + `ambre-draw` + `ambre-canvas` + `ambre-chrome` + `ambre-commands` + `leptos` (NOT `ambre-sync` or `ambre-logic`) | One crate per app, **deliberate monolith**, **no features**: `logic` (`*State` + handlers, Logic thread) + `ui` (`*View` impl `DocView`, content rendering on `ambre-canvas`) + `chrome` (**specific** Leptos components built on `ambre-chrome`) + `Command` definition (`CommandSource`). IPC types (`TrameCommand`/`TrameEvent`/`DisplayCell`) re-exported from `ambre-bus`. |
+| `ambre-canvas` depends on `ambre-draw` (+ wgpu/swash + accesskit ; + web-sys/js-sys/wasm-bindgen(-futures)/tracing as **`cfg(wasm32)`-targeted** deps for `host`) | **Canvas render runtime** of the UI thread: `WgpuSurface`/`QuadRenderer`/`GlyphAtlas`, `TextCache`, the GPU primitives (`GpuState`/`bootstrap_gpu`/`RafControl`/`start_raf_loop`) + per-frame value types (`RepaintPlan`/`FrameStats`/`InputEvent`), generated `theme.rs`. **Does NOT depend on `leptos`.** `accesskit` is scoped to canvas **content** a11y. **No application dependency**: the frame DRIVER (`FrameHost`) and the closed `AppView` registry live **downstream in `ambre-app`** (§6). Named `ambre-canvas` (medium, symmetrical to `ambre-chrome`); spec `ambre-spec-canvas.md`. |
+| `ambre-chrome` depends on `leptos` + `ambre-commands` | **Shared, app-agnostic Leptos chrome toolkit**: `AppShell`, `CommandPalette`, `Dialog`/`Menu`/`Toolbar`/`Toast`/`ContextMenu`/`Sidebar`/`StatusBar` primitives, keybinding manager. Renders views over the registry — **names no app** (same inversion as the `AppView` enum). App-**specific** chrome lives in the app crate, **not here**. |
+| Each app crate (`ambre-trame`, ...) depends on `ambre-bus` + `ambre-draw` + `ambre-canvas` + `ambre-chrome` + `ambre-commands` + `leptos` (NOT `ambre-sync` or `ambre-logic`) | One crate per app, **deliberate monolith**, **no features**: `logic` (`*State` + handlers, Logic thread) + `ui` (`*View`, a variant of the launcher's closed `AppView`; inherent driver methods, content rendering on `ambre-canvas`) + `chrome` (**specific** Leptos components built on `ambre-chrome`) + `Command` definition (`CommandSource`). IPC types (`TrameCommand`/`TrameEvent`/`DisplayCell`) re-exported from `ambre-bus`. |
 | `ambre-logic` depends on `ambre-bus` + the app crate(s) + `flume` + `tracing` | Logic thread runtime. **100% pure Rust, zero WASM glue**: fundamental types arrive via `ambre-bus` re-exports (no direct dep on `ambre-core`). Blocks on `flume::Selector` (UI + Sync-relay inputs). The panic hook + tracing subscriber are set up in `ambre-app`. |
 | `ambre-sync` is a `cdylib`+`rlib` depending on `ambre-bus` + `ambre-protocol` + `ambre-crypto` + `flume` + `postcard` + `tracing` + `wasm-bindgen(-futures)` + `js-sys` + `web-sys` + `gloo-net`/`ruzstd`/`zeroize` (+ `console_error_panic_hook`/`tracing-wasm`, wasm-only) | **The Sync worker itself** — its own WASM instance. `worker.rs` is the `#[wasm_bindgen(start)]` entry: it sets up the `postMessage` bridge (decode `SyncCommand`, encode `LogicEvent`) and runs the `flume`-`select!` loop. `flume` is internal-only (WS/HTTP callbacks -> select loop, same worker, so the waker fires). Wire encoding from `ambre-protocol`; crypto from `ambre-crypto`. |
 | `ambre-app` depends on `ambre-bus` + `ambre-canvas` + `ambre-chrome` + `ambre-trame` + `ambre-logic` + `flume` + `postcard` + `wasm-bindgen(-futures)` + `wasm_thread` + `web-sys` | cdylib LAUNCHER (Main instance). **Mounts the Leptos `AppShell`**, creates the `flume` channels, spawns `ambre_logic::run` in a `wasm_thread` worker, **spawns the Sync worker via `web_sys::Worker`** (a separate artifact — `ambre-app` does **NOT** depend on `ambre-sync`), relays Logic <-> Sync over `postMessage`, bootstraps the canvas and injects the active app's content view. |
@@ -70,22 +70,23 @@ ambre/
 │   ├── ambre-canvas/                 Canvas render runtime of the UI thread (NO leptos):
 │   │     ├── render/             (QuadRenderer, GlyphAtlas, WgpuSurface, 2-layer Layer model)
 │   │     ├── text_cache.rs       (TextCache Parley)
-│   │     ├── view.rs             (DocView trait + RepaintPlan + FrameStats + InputEvent)        [GPU-agnostic]
-│   │     ├── host.rs             (FrameHost<V> + GpuState + bootstrap_gpu + start_raf_loop + run) [cfg(wasm32)]
+│   │     ├── view.rs             (per-frame value types: RepaintPlan + FrameStats + InputEvent)  [GPU-agnostic]
+│   │     ├── host.rs             (GpuState + bootstrap_gpu + RafControl + start_raf_loop)         [cfg(wasm32)]
 │   │     └── theme.rs            (canvas-side constant tokens, generated from tokens.ron ; accesskit scoped to content)
 │   ├── ambre-chrome/             Shared, app-agnostic Leptos chrome toolkit: AppShell, CommandPalette,
 │   │                             Dialog/Menu/Toolbar/Toast/ContextMenu/Sidebar/StatusBar, keybindings.
 │   │                             Depends on leptos + ambre-commands. App-SPECIFIC chrome lives in app crates.
 │   ├── ambre-trame/              ALL of the Trame app (monolith, no features):
 │   │     ├── logic.rs            (TrameState + handlers, Logic thread)
-│   │     ├── ui/{grid,renderer,view}  (TrameView impl DocView, content rendering on ambre-canvas)
+│   │     ├── ui/{grid,renderer,view}  (TrameView = AppView::Trame variant, inherent driver methods, render on ambre-canvas)
 │   │     └── chrome/             (SPECIFIC Leptos components on ambre-chrome ; Command via ambre-commands)
 │   ├── ambre-prose / ambre-toile / ambre-murmure   Stubs (doc only, no logic).
 │   ├── ambre-logic/              Logic thread runtime: run(from_ui, to_ui, to_sync, from_sync),
 │   │                             LogicState { docs: HashMap<Uuid, DocState>, ... }, match dispatch. 100% pure Rust.
 │   ├── ambre-sync/               Sync thread runtime: run(from_logic, to_logic), WS/crypto pipeline (placeholder).
 │   ├── ambre-app/                cdylib LAUNCHER: #[wasm_bindgen(start)], mounts Leptos AppShell (ambre-chrome),
-│   │                             creates the 4 channels, spawns logic + sync, bootstraps the canvas + injects active view.
+│   │     ├── host.rs             (closed AppView enum + FrameHost driver + run_with + DocSwitcher) [cfg(wasm32)]
+│   │                             creates the 4 channels, spawns logic + sync, bootstraps the canvas + drives AppView.
 │   └── ambre-server/             Native Blind Relay (Axum). OUTSIDE workspace members (native target, not wasm32).
 └── specs/
 ```
@@ -105,9 +106,9 @@ The client runs in **two WASM instances**:
 │ ┌─────────────────────────────────────────────────────────────────┐        │
 │ │  UI THREAD (page's main thread)                                   │        │
 │ │  Chrome: Leptos DOM (ambre-chrome) — AppShell/menus/dialogs/...    │        │
-│ │  Content: ambre_canvas::run → FrameHost<V> in the <canvas>        │        │
+│ │  Content: host::run_with → FrameHost over AppView in the <canvas> │        │
 │ │  wgpu (QuadRenderer / GlyphAtlas / WgpuSurface), Parley/Swash     │        │
-│ │  requestAnimationFrame → DocView::{update, plan_repaint, paint*}  │        │
+│ │  requestAnimationFrame → AppView::{update, plan_repaint, paint*}  │        │
 │ │  ⚠️ never BLOCKS (try_send / try_recv) · relays Logic<->Sync      │        │
 │ └──────────┬────────────────────▲──────────────┬──────────────▲────┘        │
 │   flume    │ LogicCommand        │ UiEvent      │ (relay)      │ (relay)      │
@@ -138,11 +139,11 @@ The client runs in **two WASM instances**:
 
 **The three runtimes:**
 ```
-ambre_canvas::run(canvas_id, make_view)                  ← UI thread (generic over DocView)
+ambre_app::host::run_with(canvas_id, make_view, ...)     ← UI thread (FrameHost over AppView)
 ambre_logic::run(from_ui, to_ui, to_sync, from_sync)     ← Logic thread (flume)
 ambre_sync::run_wasm(cmd_rx, logic_sink, api_base)       ← Sync worker (driven by worker.rs)
 ```
-The only app-aware piece on the UI side (constructing `TrameView`) is **injected via closure** from `ambre-app` → no cycle (`ambre-canvas` does not depend on `ambre-trame`).
+The frame driver `host::run_with` and the closed `AppView` registry live in `ambre-app` (downstream of every app crate), so naming `TrameView` introduces no cycle. `ambre-canvas` stays app-agnostic: it owns only the GPU primitives + per-frame value types and does not depend on `ambre-trame`.
 
 **Rationale for Logic/Sync separation:** decryption + decompression of a remote update (~0.5–2 ms on mobile) must not interrupt the Logic thread's response to P1 events (scroll). Sync being its own instance, these run in **true parallelism**; the only cost is the `postMessage` copy of the (already-byte) payload, made zero-copy for large ones via a Transferable `ArrayBuffer`.
 
@@ -193,8 +194,8 @@ pub fn main() {
 
     // UI runs on THIS (main) thread. The per-frame relay drains logic_to_sync_rx,
     // postcard-encodes each SyncCommand, and worker.postMessage(buf, [buf]).
-    ambre_canvas::run_with("ambre-canvas",
-        move |w, h, ti| TrameView::new(initial_doc, ui_to_logic_tx, view_rx, w, h, ti, ..),
+    host::run_with("ambre-canvas",
+        move |w, h, ti| AppView::Trame(TrameView::new(initial_doc, ui_to_logic_tx, view_rx, w, h, ti, ..)),
         /* pre_frame = */ move || { while let Ok(cmd) = logic_to_sync_rx.try_recv() { post_to_worker(&sync_worker, &postcard::to_allocvec(&cmd).unwrap()); } /* + drain logic_to_ui_rx */ },
         raf);
 }
@@ -214,11 +215,11 @@ pub fn start() {
 }
 ```
 
-**The Logic thread** blocks on `flume::Selector` over `from_ui` + `from_sync`, dispatches, and exits when **both** inputs disconnect (`Selector::wait` parks via flume's Atomics-backed blocking path, which crosses the UI/Logic worker boundary — only flume's *async* waker failed cross-worker, and that path is gone). **The Sync worker** runs a `futures_util::select!` loop over its command channel and its internal `SyncEvent` channel, both fed from within the same worker, while its JS event loop stays free for the WebSocket/fetch. **Dependency injection via closure**: `ambre_canvas::run_with<V, F>(...)` receives `F: FnOnce(f64,f64,_) -> V`; `ambre-canvas` never names `TrameView` (cf. `DocView` vs `AppView`, §6).
+**The Logic thread** blocks on `flume::Selector` over `from_ui` + `from_sync`, dispatches, and exits when **both** inputs disconnect (`Selector::wait` parks via flume's Atomics-backed blocking path, which crosses the UI/Logic worker boundary — only flume's *async* waker failed cross-worker, and that path is gone). **The Sync worker** runs a `futures_util::select!` loop over its command channel and its internal `SyncEvent` channel, both fed from within the same worker, while its JS event loop stays free for the WebSocket/fetch. **View construction via closure**: `ambre_app::host::run_with<F, P>(...)` receives `F: FnOnce(f64,f64,_) -> AppView`; the driver lives in the launcher (not `ambre-canvas`), so it names `TrameView` directly through the `AppView::Trame` variant — no cycle (§6).
 
-> **Hybrid evolution (UI Chrome — see `ambre-spec-chrome.md`).** The threads/channels model above is **unchanged**; Leptos chrome is **additive on the UI thread**. The bootstrap evolves: `ambre-app` first mounts the Leptos `AppShell` (`ambre-chrome`) which owns the `<canvas id="ambre-canvas">` cell; `ambre_canvas::run` attaches to this canvas for the **content**, the `make_view` closure still injecting the active app's `DocView`. The Leptos shell and the canvas rAF loop coexist on the same thread. **Consequence:** the shell becoming owner of the canvas and deciding *which* view is mounted (tabs/multi-document) **brings forward the deadline** for the `DocView → AppView` switch (§6) — still deferred, but not for much longer. (Exact bootstrap to be frozen at POC, `ambre-spec-chrome.md §7`.)
+> **Hybrid evolution (UI Chrome — see `ambre-spec-chrome.md`).** The threads/channels model above is **unchanged**; Leptos chrome is **additive on the UI thread**. The bootstrap evolves: `ambre-app` first mounts the Leptos `AppShell` (`ambre-chrome`) which owns the `<canvas id="ambre-canvas">` cell; `host::run_with` attaches to this canvas for the **content**, the `make_view` closure constructing the active app's `AppView`. The Leptos shell and the canvas rAF loop coexist on the same thread. (The closed `AppView` enum + `FrameHost` live in `ambre-app` — §6/§7. Exact bootstrap to be frozen at POC, `ambre-spec-chrome.md §7`.)
 
-> **Persistent engine + `leptos_router` SPA shell (real client-side navigation).** The application is a **true SPA**: a **single** `<Router><AppRoot/></Router>` mount, and the *engine* (the Logic `wasm_thread`, the Sync worker, the wgpu surface) is created **once per session** and **outlives route changes**. Navigating `/` (landing list) <-> `/trame/<docid>` is client-side only — **no full-page navigation**, so the Sync worker (and its in-memory keys + tokens) is **never respawned**. This fixed the root bug where a full-page nav respawned a key-less Sync worker, dropping the first `SendUpdate` so the document was never created server-side. Document switching swaps the canvas's active document **without** recreating the wgpu surface: `DocView::set_document(DocumentId)` (default no-op) resets doc-scoped state while keeping the surface/channels/theme. **`!Send` constraint:** `<Router>` requires a `Send` subtree, so `!Send` handles (`Rc` command-state, the `DocSwitcher`) stay **outside** the Leptos tree; the canonical route source of truth is a **per-frame poll of `window.location`** inside `pre_frame` (which also drives `CloseDocument(prev)` / `OpenDocument(next)` and `raf` pause/resume), while shared `Wiring` reaches children via `provide_context`. The `pre_frame` relay runs **every** frame (Logic<->Sync relay, dispatcher, route poll); only the `render` is gated by `RafControl` (a modal/landing overlay freezes rendering, not the relay).
+> **Persistent engine + `leptos_router` SPA shell (real client-side navigation).** The application is a **true SPA**: a **single** `<Router><AppRoot/></Router>` mount, and the *engine* (the Logic `wasm_thread`, the Sync worker, the wgpu surface) is created **once per session** and **outlives route changes**. Navigating `/` (landing list) <-> `/trame/<docid>` is client-side only — **no full-page navigation**, so the Sync worker (and its in-memory keys + tokens) is **never respawned**. This fixed the root bug where a full-page nav respawned a key-less Sync worker, dropping the first `SendUpdate` so the document was never created server-side. Document switching swaps the canvas's active document **without** recreating the wgpu surface: `AppView::set_document(DocumentId)` (dispatched to the variant's inherent method) resets doc-scoped state while keeping the surface/channels/theme. **`!Send` constraint:** `<Router>` requires a `Send` subtree, so `!Send` handles (`Rc` command-state, the `DocSwitcher`) stay **outside** the Leptos tree; the canonical route source of truth is a **per-frame poll of `window.location`** inside `pre_frame` (which also drives `CloseDocument(prev)` / `OpenDocument(next)` and `raf` pause/resume), while shared `Wiring` reaches children via `provide_context`. The `pre_frame` relay runs **every** frame (Logic<->Sync relay, dispatcher, route poll); only the `render` is gated by `RafControl` (a modal/landing overlay freezes rendering, not the relay).
 
 ### D. Data Modeling — Typed Data Plane (3 planes) & Interface Contracts
 
@@ -569,7 +570,7 @@ impl MasterSeed {
 | **Wire types redefined in `ambre-sync`/`ambre-server`** | Guaranteed divergence (`[u8; 32]` vs `Vec<u8>`). Single source of truth = `ambre-protocol`. |
 | **`ambre-sync`/`ambre-logic` as direct dependency of apps** | Strong logic↔infra coupling. Apps only know `ambre-bus` IPC types. |
 | **Logic + Sync merged (single thread)** | Decryption/decompression would block response to P1 events (scroll). Separation mandatory (< 15 ms). |
-| **`ambre-canvas` depending on apps (`AppView` closed enum today)** | Would create a cycle (`ambre-canvas` is upstream of apps). Hence `DocView` + closure injection. Switching to `AppView` remains possible **but requires moving `FrameHost` out of `ambre-canvas`** — deferred to multi-document (§7 ARCH P2). |
+| **`AppView` closed enum *in `ambre-canvas`*** | Would create a cycle (`ambre-canvas` is upstream of the apps a closed enum naming `TrameView` must reference). **Resolved (§7 ARCH P2):** the `AppView` enum + `FrameHost` + the rAF/run glue were moved **into `ambre-app`** (downstream of every app crate); `ambre-canvas` keeps the GPU primitives + per-frame value types and the `DocView` trait was removed. So the closed enum is adopted, just **in the launcher, not in `ambre-canvas`** — putting it upstream here is what stays rejected. |
 | **100% canvas UI (homemade widget framework) + Vello/Masonry/Xilem** | Rejected in favor of **hybrid UI** (Leptos DOM chrome + wgpu content, web-only). Details and related rejections: UI model (Masonry, Xilem, winit, WebGPU-only) in `ambre-spec-ui.md §6`, chrome (egui, ribbon) in `ambre-spec-chrome.md §6`, content (Vello) in `ambre-spec-canvas.md §6`. The `ambre-canvas` GPU/text pipeline is **preserved**; only the widget framework was removed. |
 | **One WebSocket per document** | Wastage (browser limits ~6 conns/origin, battery). Single multiplexed WS, Subscribe/Unsubscribe per doc. |
 | **Separation `ambre-sync` / `ambre-network`** | The network layer is lightweight enough to stay in `ambre-sync`. Separating would create a cycle or complexity. |
@@ -614,11 +615,18 @@ impl MasterSeed {
   `DocumentCreated` hook, and headless tests use real `DocumentId::new()` fixtures.
 
 ### ARCH P2 — Pilot Applications
-- [x] `ambre-trame`: `TrameState` + `TrameView` (impl `DocView`), virtual-scroll grid, viewport smoke-test.
+- [x] `ambre-trame`: `TrameState` + `TrameView` (now the `AppView::Trame` variant; was an `impl DocView`), virtual-scroll grid, viewport smoke-test.
 - [x] Hybrid UI migration: `ambre-commands` + `ambre-chrome` created and mounted by `ambre-app`; homemade widget framework removed, `ambre-canvas` slimmed to render runtime.
 - [x] Trame editing: `TrameState::handle_command` returns `TrameOutcome { display, update, ephemeral }`, decomposed by the Logic dispatcher (lossless path; subsumes snapshot export off the hot path).
-- [ ] Extract Trame-specific chrome from `ambre-app` into `ambre-trame`'s `chrome` module.
-- [ ] `DocView` -> `AppView` switch (move `FrameHost` out of `ambre-canvas`), at multi-document/tabs.
+- [x] Extract Trame-specific chrome from `ambre-app` into `ambre-trame`'s `chrome` module.
+  (wasm-only `chrome` module on `ambre-chrome`: `FormatBar`/`SelectionBar`, `COMMANDS`,
+  `bind_keys`, `command_to_app`, `mirror_event`, `context_entries`, `status_label`,
+  `DOC_TYPE`. The launcher names no command, button, or content event variant.)
+- [x] `DocView` -> `AppView` switch (`FrameHost` moved out of `ambre-canvas`). The closed
+  `AppView` enum + `FrameHost` + the rAF/run glue now live in `ambre-app`; `ambre-canvas`
+  keeps the GPU primitives (`GpuState`/`bootstrap_gpu`/`RafControl`/`start_raf_loop`) and
+  the per-frame value types. The `DocView` trait is removed; views expose inherent methods
+  the `AppView` `match` dispatches to. (Landed ahead of multi-document/tabs.)
 - [ ] `ambre-prose` (LoroText).
 
 ### ARCH P3 — Blind Relay

@@ -13,7 +13,7 @@
 //       column/row header backgrounds + active tints + separator lines
 //       + active cell border + column/row header labels + on-canvas HUD.
 //
-// The orchestrator (`TrameView::plan_repaint`, driven by `ambre_canvas::FrameHost`)
+// The orchestrator (`TrameView::plan_repaint`, driven by the launcher's FrameHost)
 // detects what changed since the previous frame and selects the appropriate
 // combination:
 //   - Full repaint:      draw_cells(strip=None) + draw_overlay

@@ -13,9 +13,10 @@
 // (AccessKit has no web adapter). Scope is deliberately the focused cell, not a
 // full 100k-row mirror.
 //
-// Ownership: created and positioned by the host (host.rs) under the canvas's
-// positioned container; the per-app `DocView` drives WHERE it sits (caret
-// follow), WHEN it has focus, and WHAT it announces through the handle below.
+// Ownership: created and positioned by the launcher's frame host under the
+// canvas's positioned container; the per-app view (an `AppView` variant) drives
+// WHERE it sits (caret follow), WHEN it has focus, and WHAT it announces through
+// the handle below.
 //
 // wasm32-only: it is pure web_sys DOM glue.
 // ============================================================================
