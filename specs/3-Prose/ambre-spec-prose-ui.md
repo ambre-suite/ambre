@@ -7,7 +7,7 @@
 > collaborative cursors, comment display, and track changes. Everything runs in the UI
 > thread — no CRDT mutation is performed directly here.
 
-> **Model note (Model B).** **3-thread shared-memory architecture** (`flume` channels, single WASM binary) — see `ambre-spec-architecture.md`. For this spec:
+> **Architecture note.** **3-thread shared-memory architecture** (`flume` channels, single WASM binary) — see `ambre-spec-architecture.md`. For this spec:
 > - **Typed `flume` transport, no `postMessage`/postcard.** The UI sends `LogicCommand::App { document_id, command: AppCommand::Prose(ProseCommand) }` and receives `UiEvent::Viewport/Presence { event: AppEvent::Prose(ProseEvent) }` — Rust values **by move** on `flume`, no serialization on the UI side.
 > - **The Prose view is an `AppView` variant.** Like `TrameView`, the Prose presentation exposes the inherent driver methods (`update`/`plan_repaint`/`paint_content`/`paint_overlay`/`resize`/`handle_input`) that the `FrameHost` `match`es over — adding Prose is a new `AppView::Prose(ProseView)` arm in `ambre-app` (see `ambre-spec-canvas.md §A`). The GPU pipeline (`QuadRenderer`, `WgpuSurface`) lives in `ambre-canvas`; the `FrameHost` driver lives in `ambre-app`.
 > - Memory is **shared** (single heap): there is no longer "memory isolation per Worker". The `ProseCommand` is **not copied** between threads — it is moved.

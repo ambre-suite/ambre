@@ -20,7 +20,7 @@ This component handles:
 - Managing fidelity losses (best-effort) during conversions and reporting them to the user.
 
 This component delegates:
-- Actual CRDT mutations → `ProseState::handle_ui_command()` via `ProseCommand`.
+- Actual CRDT mutations → `ProseState::handle_command()` via `ProseCommand`.
 - Native format encryption/decryption → `ambre-sync`.
 - Live wgpu + Parley/Swash rendering (display list, virtual scroll) → `prose-ui`.
 - Binary asset (image) management → `ambre-server` (presigned S3 URLs).
@@ -66,7 +66,7 @@ Import:  Bytes (docx/md/html)
            → ProseIr
            → IrToCommands
            → Vec<ProseCommand>
-           → ProseState::handle_ui_command() [by batch]
+           → ProseState::handle_command() [by batch]
 
 Export:  LoroDoc (snapshot read from ProseState)
            → DocToIr

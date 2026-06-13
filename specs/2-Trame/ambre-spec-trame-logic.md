@@ -2,9 +2,11 @@
 **Type:** Vertical (Feature / Application — Logic)
 **Status:** Draft
 
-> Trame collaborative spreadsheet engine: multi-sheet CRDT state management (`LoroDoc`), incremental formula compilation to bytecode, evaluation via stack VM, two-level dependency graph, synchronous recomputation in the `AppController` contract, and production of data-oriented structures for rendering.
+> Trame collaborative spreadsheet engine: multi-sheet CRDT state management (`LoroDoc`), incremental formula compilation to bytecode, evaluation via stack VM, two-level dependency graph, synchronous recomputation inside `handle_command`, and production of data-oriented structures for rendering.
 >
-> **Scope of this spec:** The engine (`TrameController`) that runs in the **Logic thread** (WASM Worker 1). Trame is a complete Logic + UI application — rendering (QuadRenderer/DrawSurface), user interactions, and the UI thread are covered in a separate spec (`spec-ambre-trame-ui.md`). Features (sort, filters, conditional formatting, undo/redo, validation) are covered in `spec-ambre-trame-features.md`. xlsx/PDF/CSV interoperability is covered in `spec-ambre-trame-interop.md`.
+> **Scope of this spec:** The engine (`TrameState`) that runs in the **Logic thread** (one of the three `wasm_thread` threads of the single WASM binary). Trame is a complete Logic + UI application — rendering (QuadRenderer/DrawSurface), user interactions, and the UI thread are covered in a separate spec (`spec-ambre-trame-ui.md`). Features (sort, filters, conditional formatting, undo/redo, validation) are covered in `spec-ambre-trame-features.md`. xlsx/PDF/CSV interoperability is covered in `spec-ambre-trame-interop.md`.
+>
+> **State registry.** Trame state is a concrete value, not a trait object. The Logic thread holds a typed registry `HashMap<DocumentId, DocState>` where `enum DocState { Trame(TrameState), … }`, and dispatch is a `match` on `(DocState, AppCommand)` — no trait object, no `Box<dyn Any>`, no `downcast`. `TrameState::handle_command` returns a typed [`TrameOutcome`]; the `ambre-logic` dispatcher reads it and forwards display events to the UI and CRDT/ephemeral payloads to Sync over bare `flume` channels. See `spec-ambre-architecture.md §6`.
 >
 > `LoroDoc` is instantiated in the Logic thread and never leaves it.
 
@@ -17,7 +19,7 @@
 - Incremental compilation of formulas to bytecode (compile once, execute N times)
 - Evaluation via stack VM with dynamic cycle detection
 - Two-level dependency graph: cell-to-cell + ranges
-- Synchronous recomputation of dirty cells in `handle_ui_command` / `on_logic_event` (aligned with the `AppController` contract, Prose pattern)
+- Synchronous recomputation of dirty cells inside `handle_command` / `apply_remote` (aligned with the Prose pattern)
 - Broken reference detection (`#REF!`)
 - Production of `DisplayViewport` for the UI thread
 - Export of CRDT deltas to the Sync thread via `SyncCommand::SendUpdate`
@@ -27,12 +29,12 @@
 | Crate | Role | Rationale |
 |---|---|---|
 | `ambre-core` | `Uuid`, `DocType` | Shared foundation |
-| `ambre-bus` | `SyncCommand`, `LogicEvent`, `AppController`, `CommandSink` | Inter-thread interface (IPC types + traits) |
+| `ambre-bus` | `AppCommand`/`AppEvent` (incl. `TrameCommand`/`TrameEvent`), `SyncCommand`, `LogicEvent`, `CommandSink` (test seam) | Typed inter-thread data plane + IPC types |
 | `ambre-draw` | `DrawSurface` trait, re-exports kurbo/peniko/parley | Shared rendering screen (WgpuSurface) / PDF (KrillaSurface) — required by architectural convention |
 | `loro` | Multi-sheet CRDT | `LoroMovableList` (stable rows/columns), `LoroMap`, `LoroDoc` |
 | `petgraph` | Cell-to-cell dependency DAG | Kosaraju SCC, topological sort |
 | `nom` | Formula parser | Pure Rust, `no_std`, Excel-compatible syntax |
-| `flume` | Channels for native tests only (`cfg(not(wasm32))`) | Simulates `postMessage` bridges natively behind `CommandSink` / `AppController` |
+| `flume` | Logic<->Sync channels (prod) + native test bridges | The Logic dispatcher forwards `SyncCommand`s on a bare `flume::Sender`; tests use the `CommandSink` seam (`MockSyncHandle`) |
 | `postcard` | Serialization of `TrameCommand` / `TrameEvent` / `DisplayViewport` | Compact, consistent with inter-thread IPC protocol |
 | `rstar` | Floating objects R-tree | O(log n) viewport culling |
 
@@ -40,7 +42,7 @@
 > **Rayon absent (MVP)** — incremental recomputation O(dirty) is sufficient. Planned Phase 3+.
 
 **Invariants:**
-- Dirty recomputation is **synchronous** in each `handle_ui_command` / `on_logic_event` — the controller returns all events (including `ViewportData`) in the return `Vec<Vec<u8>>`.
+- Dirty recomputation is **synchronous** in each `handle_command` / `apply_remote` — the state returns all events (including `ViewportData`) in the `TrameOutcome.display` / returned `Vec<TrameEvent>`.
 - `LoroDoc` confined to the Logic thread: only exits via `export_updates()` → `Vec<u8>`.
 - Computed values kept out of Loro: local `formula_cache`, each client recomputes independently.
 - Bytecode compiled once: only cells whose `raw` changed are recompiled.
@@ -658,11 +660,11 @@ LWW Loro resolves overlapping merge conflicts deterministically. Validation afte
 This conflict is unavoidable in collaborative CRDT. Rejecting Bob's delta would break convergence. **Strategy: the merge masks covered values without destroying them.**
 
 ```rust
-/// Addition in TrameController
+/// Field of TrameState
 masked_cells: HashSet<String>, // lid_keys of covered non-empty cells
 
-/// Returns detected conflict events -- added to the Vec<TrameEvent>
-/// returned by dispatch() or on_logic_event().
+/// Returns detected conflict events -- added to TrameOutcome.display
+/// (handle_command) or the Vec<TrameEvent> returned by apply_remote().
 fn detect_and_handle_merge_conflicts(&mut self, sheet: SheetId) -> Vec<TrameEvent> {
     let mut events = Vec::new();
     for (master_key, extent_key) in self.load_merges(sheet) {
@@ -682,7 +684,7 @@ fn detect_and_handle_merge_conflicts(&mut self, sheet: SheetId) -> Vec<TrameEven
 }
 ```
 
-Called after each `doc.import()` — returned events are added to the `Vec<TrameEvent>` of `on_logic_event()`.
+Called after each `doc.import()` — returned events are added to the `Vec<TrameEvent>` of `apply_remote()`.
 
 **Guaranteed behavior:**
 - Bob's value exists in `LoroDoc` — not erased, not corrupted.
@@ -708,8 +710,10 @@ DisplayCell { is_merged: true, merge_span: None, display_text: String::new(), ..
 
 ## 7. INTERNAL STATE
 
+> **No Sync handle inside the state.** `TrameState` holds **no** `sync_tx` / `Box<dyn CommandSink>`. CRDT and ephemeral payloads leave the state as fields of the [`TrameOutcome`] returned by `handle_command`; the `ambre-logic` dispatcher is the single place that forwards them to the Sync thread (on a bare `flume::Sender<SyncCommand>`). The `document_id` is owned by the registry key, not by the state, so it is not a field here either.
+
 ```rust
-pub struct TrameController {
+pub struct TrameState {
     doc:           LoroDoc,
     active_sheet:  SheetId,
     sheet_indices: HashMap<SheetId, SheetIndex>,
@@ -723,10 +727,9 @@ pub struct TrameController {
     sheet_name_to_id: HashMap<String, SheetId>,
     viewport:      Viewport,
     tx_version:    u64,
-    /// Bridge to the Sync thread -- `Option<Box<dyn CommandSink>>` injected by `ControllerRegistry`
-    /// in `ambre-app` via `AppController::init()`. None before init.
-    /// En WASM : wrapper `postMessage`. En tests natifs : wrapper `flume`.
-    sync_tx:       Option<Box<dyn CommandSink>>,
+    /// Last CRDT version vector exported to Sync -- produces incremental deltas
+    /// via `ExportMode::Updates` in `handle_command`.
+    last_exported_vv: VersionVector,
     /// Cells covered by a merge but non-empty (masked, not destroyed)
     masked_cells:  HashSet<String>,
     /// Undo/Redo local -- scope = session document ouverte
@@ -734,8 +737,6 @@ pub struct TrameController {
     /// Canonical identifier for the current user (received via LogicEvent::SessionReady).
     /// Uuid stable per-user -- not pub_key which changes on key rotation.
     my_user_id:    Uuid,
-    /// Document identifier (received on open).
-    doc_id:        Uuid,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -776,107 +777,83 @@ pub enum FormulaError {
 
 ## 8. INTERFACE CONTRACT (API)
 
-### `TrameController` — impl `AppController`
+### `TrameState` — typed inherent methods (dispatched by `ambre-logic`)
 
-Aligned with the Prose pattern: `TrameController` implements `AppController` directly. Dirty recomputation (P4) runs synchronously at the end of each `handle_ui_command` / `on_logic_event`. No custom loop, no `setTimeout(0)`.
+`TrameState` exposes plain inherent methods and holds no transport handle of its own. The `ambre-logic` dispatcher owns the registry, routes by `document_id`, calls these methods, and forwards the results over the typed channels. Dirty recomputation (P4) runs synchronously at the end of each `handle_command` / `apply_remote`. No custom loop, no `setTimeout(0)`.
+
+The state's surface (see `ambre-trame/src/logic.rs`):
 
 ```rust
-// ambre-trame/src/controller.rs
-use ambre_bus::{AppController, CommandSink, SyncCommand, LogicEvent};
-use ambre_core::{DocType, Uuid};
+// ambre-trame/src/logic.rs
+use ambre_bus::{TrameCommand, TrameEvent};
 
-impl AppController for TrameController {
-    fn doc_type(&self) -> DocType { DocType::Trame }
+impl TrameState {
+    /// Process a UI command. Returns a typed `TrameOutcome`:
+    ///   - `display`   : Vec<TrameEvent>  -> UI Thread (UiEvent::Viewport)
+    ///   - `update`    : Option<Vec<u8>>  -> Sync (SyncCommand::SendUpdate)
+    ///   - `ephemeral` : Option<Vec<u8>>  -> Sync (SyncCommand::SendEphemeral)
+    /// A single command can yield several display events (e.g. EditAck +
+    /// ViewportData). Loro mutation + dirty propagation + compute_all_dirty()
+    /// all run synchronously here before the outcome is returned.
+    pub fn handle_command(&mut self, cmd: TrameCommand) -> TrameOutcome { /* §8 dispatch */ }
 
-    fn init(&mut self, sync_tx: Box<dyn CommandSink>) {
-        self.sync_tx = Some(sync_tx);
-    }
+    /// Apply a remote CRDT delta (decrypted by Sync). Imports into LoroDoc,
+    /// rebuilds the derived caches, runs compute_all_dirty(), and returns the
+    /// viewport/conflict events for the UI. No sync payload leaves here -- a
+    /// remote import is never re-broadcast.
+    pub fn apply_remote(&mut self, payload: &[u8]) -> Vec<TrameEvent> { /* import + recompute */ }
 
-    /// Receives a serialized command (postcard) from the UI thread.
-    /// Returns a list of serialized events -- ControllerRegistry dispatches them
-    /// all via postMessage. A single TrameCommand can produce multiple events
-    /// (e.g. EditAck + ViewportData after input).
-    fn handle_ui_command(&mut self, cmd: Vec<u8>) -> Vec<Vec<u8>> {
-        let command: TrameCommand = postcard::from_bytes(&cmd)
-            .unwrap_or(TrameCommand::Noop);
-        let events = self.dispatch(command);
-        events.iter()
-            .filter_map(|e| postcard::to_allocvec(e).ok())
-            .collect()
-    }
+    /// Apply a remote ephemeral (presence) payload -> RemoteCursors events.
+    pub fn apply_ephemeral(&mut self, payload: &[u8]) -> Vec<TrameEvent> { /* cursors */ }
 
-    /// Receives an event from the Sync thread (via ControllerRegistry).
-    /// Returns a list of serialized events to dispatch to the UI thread --
-    /// symmetrical with handle_ui_command.
-    fn on_logic_event(&mut self, event: LogicEvent) -> Vec<Vec<u8>> {
-        let trame_events: Vec<TrameEvent> = match event {
-            // -- Real-time sync ------------------------------------------
-            LogicEvent::RemoteUpdate { document_id, payload } => {
-                if document_id != self.doc_id { return vec![]; }
-                self.doc.import(&payload).ok();
-                self.apply_remote_changes(&payload);
-                self.compute_all_dirty();
-                self.produce_viewport_events()
-            }
-            LogicEvent::RemoteSnapshot { document_id, payload } => {
-                if document_id != self.doc_id { return vec![]; }
-                self.doc.import(&payload).ok();
-                self.rebuild_all();
-                self.produce_viewport_events()
-            }
-            LogicEvent::RemoteEphemeral { document_id, payload } => {
-                if document_id != self.doc_id { return vec![]; }
-                // The pub_key -> UserId resolution is done by ambre-sync
-                // BEFORE the payload propagates to the Logic thread.
-                match postcard::from_bytes::<RemoteCursorPayload>(&payload) {
-                    Ok(cursor) => vec![TrameEvent::RemoteCursors { cursors: vec![cursor] }],
-                    Err(_) => vec![],
-                }
-            }
-            LogicEvent::SnapshotNeeded { document_id } => {
-                if document_id != self.doc_id { return vec![]; }
-                let snapshot = self.doc.export_snapshot();
-                if let Some(tx) = &self.sync_tx {
-                    tx.send(SyncCommand::SendSnapshot { document_id, payload: snapshot });
-                }
-                vec![]
-            }
-            LogicEvent::SessionReady { user_id, .. } => {
-                self.my_user_id = user_id;
-                vec![]
-            }
-            LogicEvent::ConnectionStatus { document_id, connected } => {
-                if document_id != self.doc_id { return vec![]; }
-                vec![] // handled by ControllerRegistry (online/offline indicator)
-            }
-            LogicEvent::SyncWarning { document_id, code, message } => {
-                if document_id != self.doc_id { return vec![]; }
-                vec![TrameEvent::Error { code, message }]
-            }
-            // Events ignored by Trame (handled by ControllerRegistry)
-            _ => vec![],
-        };
+    /// Export a full CRDT snapshot (compaction / local persistence / SnapshotNeeded).
+    pub fn export_snapshot(&self) -> Vec<u8> { self.doc.export(ExportMode::Snapshot) }
+}
+```
 
-        trame_events.iter()
-            .filter_map(|e| postcard::to_allocvec(e).ok())
-            .collect()
+**Production dispatch (`ambre-logic::LogicState`).** The single place that touches the transport — the state never does. `document_id` filtering is the registry lookup, not an `if document_id != self.doc_id` inside the state:
+
+```rust
+// ambre-logic/src/lib.rs (condensed)
+match (self.docs.get_mut(&document_id)?, command) {
+    (DocState::Trame(state), AppCommand::Trame(cmd)) => {
+        let outcome = state.handle_command(cmd);
+        // Snapshot for local persistence whenever the doc changed.
+        let snapshot = outcome.update.is_some().then(|| state.export_snapshot());
+        for event in outcome.display {
+            self.send_to_ui(UiEvent::Viewport { document_id, event: AppEvent::Trame(event) });
+        }
+        if let Some(payload) = outcome.update {
+            self.send_to_sync(SyncCommand::SendUpdate { document_id, payload });
+        }
+        if let Some(snapshot) = snapshot { self.send_to_persist(document_id, snapshot); }
+        if let Some(payload) = outcome.ephemeral {
+            self.send_to_sync(SyncCommand::SendEphemeral { document_id, payload });
+        }
     }
 }
+
+// Remote inbound (LogicEvent::RemoteUpdate / RemoteSnapshot):
+let events = state.apply_remote(&payload);           // import + recompute
+let snapshot = (!events.is_empty()).then(|| state.export_snapshot());
+for event in events { self.send_to_ui(UiEvent::Viewport { document_id, event: AppEvent::Trame(event) }); }
+// SnapshotNeeded -> SyncCommand::SendSnapshot { document_id, payload: state.export_snapshot() }
+// SessionReady / ConnectionStatus / SyncWarning are handled by LogicState, not TrameState.
 ```
 
 ### Command Dispatch and Synchronous Recalculation
 
 ```rust
-impl TrameController {
-    fn dispatch(&mut self, cmd: TrameCommand) -> Vec<TrameEvent> {
+impl TrameState {
+    pub fn handle_command(&mut self, cmd: TrameCommand) -> TrameOutcome {
         match cmd {
-            TrameCommand::Noop => vec![],
+            TrameCommand::Noop => TrameOutcome::display_only(vec![]),
 
             TrameCommand::ScrollViewport { version, sheet_id, .. } => {
-                // P1 -- immediate viewport response
+                // P1 -- immediate viewport response, no sync payload
                 self.viewport = /* ... */;
                 self.compute_all_dirty(); // recompute dirty in viewport
-                vec![TrameEvent::ViewportData(self.build_viewport(version))]
+                TrameOutcome::display_only(vec![TrameEvent::ViewportData(self.build_viewport(version))])
             }
 
             TrameCommand::EditCell { version, sheet_id, row, col, raw } => {
@@ -887,25 +864,22 @@ impl TrameController {
                 let dirty = self.deps.collect_dirty(cell_ref, &self.sheet_indices);
                 self.dirty.extend(dirty);
                 self.compute_all_dirty();
-                let delta = self.doc.export_updates();
-                if let Some(tx) = &self.sync_tx {
-                    tx.send(SyncCommand::SendUpdate {
-                        document_id: self.doc_id, payload: delta,
-                    });
-                }
-                let mut events = vec![TrameEvent::EditAck { version }];
+                // The incremental delta becomes TrameOutcome.update; the
+                // ambre-logic dispatcher turns it into SyncCommand::SendUpdate.
+                let update = Some(self.export_incremental_delta());
+                let mut display = vec![TrameEvent::EditAck { version }];
                 if self.viewport_intersects_dirty() {
-                    events.push(TrameEvent::ViewportData(self.build_viewport(version)));
+                    display.push(TrameEvent::ViewportData(self.build_viewport(version)));
                 }
-                events
+                TrameOutcome { display, update, ephemeral: None }
             }
 
-            // ... other variants: same pattern (mutation -> dirty -> compute_all_dirty -> events)
+            // ... other variants: same pattern (mutation -> dirty -> compute_all_dirty -> TrameOutcome)
 
             TrameCommand::Undo => { /* undo_manager.undo() + rebuild */ }
             TrameCommand::Redo => { /* undo_manager.redo() + rebuild */ }
 
-            _ => self.dispatch_features_and_interop(cmd),
+            _ => self.handle_features_and_interop(cmd),
         }
     }
 
@@ -950,21 +924,20 @@ impl TrameController {
 
 Full recomputation of 10k formula cells takes < 50 ms (target). During these 50 ms, the Logic thread is blocked — P1 (scroll) messages accumulate. This lag is **occasional** and **rare** (large `RemoteUpdate` during active scroll). It is accepted for the MVP, aligned with the Prose pattern.
 
-If Phase 2 benchmarks show a real problem on mobile hardware, a yield mechanism can be added without modifying the `AppController` trait:
+If Phase 2 benchmarks show a real problem on mobile hardware, a yield mechanism can be added without touching the typed data plane or the `DocState` registry:
 
 - `compute_all_dirty()` is replaced by `compute_dirty_batch(N)` which processes N cells and returns a boolean `more_dirty`.
-- If `more_dirty`, the controller adds a `TrameEvent::ComputePending` to its returned events.
-- The `ControllerRegistry` in `ambre-app`, when it sees this signal, injects a `TrameCommand::ContinueDirtyCompute` via `setTimeout(0)`.
-- Pending P1/P2 `postMessage` messages in the JS queue are processed **before** the `setTimeout(0)`, guaranteeing the interruption.
+- If `more_dirty`, `handle_command` adds a `TrameEvent::ComputePending` to `TrameOutcome.display`.
+- The `LogicState` dispatcher in `ambre-logic`, when it sees this signal, re-enqueues a `TrameCommand::ContinueDirtyCompute` (e.g. via a self-send on the Logic command channel) so pending P1/P2 commands are drained first.
 - The `DisplayViewport` is sent with `is_dirty=true` on cells not yet recomputed.
 
-This mechanism is **additive** — it does not modify the `AppController` trait or the existing `ControllerRegistry`. It adds two variants (`TrameCommand::ContinueDirtyCompute`, `TrameEvent::ComputePending`) specific to Trame.
+This mechanism is **additive** — it does not change `TrameState`'s method signatures or the `DocState` dispatch. It adds two variants (`TrameCommand::ContinueDirtyCompute`, `TrameEvent::ComputePending`) specific to Trame.
 
 ---
 
 ## 9. DATA-ORIENTED STRUCTURES (UI Thread)
 
-> **postcard serialization:** `TrameCommand` (UI→Logic) and `TrameEvent` (Logic→UI) are serialized via `postcard` in the `Vec<u8>` values exchanged through `AppController::handle_ui_command()` and `AppController::on_logic_event()` (see `spec-ambre-architecture.md` §2.D). The UI thread serializes a `TrameCommand` into a `UiEnvelope`, the Logic thread deserializes and dispatches. `TrameEvent` responses are serialized into the `Vec<Vec<u8>>` returned by `handle_ui_command` / `on_logic_event`.
+> **Typed data plane (no postcard on the UI<->Logic hop):** `TrameCommand` (UI→Logic) and `TrameEvent` (Logic→UI) travel as **Rust values** inside `AppCommand::Trame` / `AppEvent::Trame` over the `flume` channels between the UI and Logic threads of the single WASM binary — they are **not** serialized (shared memory; see `spec-ambre-architecture.md §2/§6`). postcard is reserved for the Logic<->Sync `postMessage` hop (`SyncCommand`/`LogicEvent`) and for real network bytes. The UI thread sends a `LogicCommand::App { document_id, command: AppCommand::Trame(cmd) }`; the Logic thread `match`es it to the right `DocState` and dispatches.
 
 ```rust
 #[derive(Serialize, Deserialize)]
@@ -1180,26 +1153,25 @@ The UI thread instantiates `WgpuSurface` and calls these functions in its `reque
 
 ```
 UI Thread
-  │  postMessage (postcard: UiEnvelope { cmd: Vec<u8> })
+  │  flume send: LogicCommand::App { document_id, AppCommand::Trame(cmd) }   (typed value)
   ▼
-Logic thread — TrameController::handle_ui_command()
-  │  dispatch(TrameCommand) → Vec<TrameEvent>
-  │  → doc.with_txn(|txn| ...)      — LoroDoc mutation
-  │  → doc.export_updates()          — delta Vec<u8>
-  │  → sync_tx.as_ref().map(|tx| tx.send(SyncCommand::SendUpdate { payload: delta }))
-  │  → compute_all_dirty()           — synchronous recomputation
-  │  → build_viewport()              — ViewportData
-  │  → postMessage × N (one per event)
+ambre-logic — LogicState::handle_app_command()
+  │  match (DocState::Trame(state), AppCommand::Trame(cmd))
+  │  → state.handle_command(cmd) → TrameOutcome
+  │       (LoroDoc mutation, compute_all_dirty(), build_viewport — all synchronous)
+  │  → for ev in outcome.display: send_to_ui(UiEvent::Viewport { AppEvent::Trame(ev) })
+  │  → outcome.update    → send_to_sync(SyncCommand::SendUpdate    { document_id, payload })
+  │  → outcome.ephemeral → send_to_sync(SyncCommand::SendEphemeral { document_id, payload })
   ▼
 Sync thread → encryption + signature → WsClientMsg::Update → Blind Relay
 
 Sync thread → Logic thread (remote update)
-  │  LogicEvent::RemoteUpdate { payload }
+  │  postMessage (postcard): LogicEvent::RemoteUpdate { document_id, payload }
   ▼
-Logic thread — TrameController::on_logic_event() → Vec<Vec<u8>>
-  │  doc.import(&payload)
-  │  → compute_all_dirty()           — synchronous recomputation
-  │  → build_viewport()              — ViewportData
+ambre-logic — LogicState::apply_remote()
+  │  match DocState::Trame(state) → state.apply_remote(&payload) → Vec<TrameEvent>
+  │       (doc.import, compute_all_dirty(), build_viewport — all synchronous)
+  │  → for ev in events: send_to_ui(UiEvent::Viewport { AppEvent::Trame(ev) })
   ▼
 UI Thread — re-render viewport
 ```
@@ -1328,13 +1300,13 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 - [x] Unit tests + property tests + postcard round-trip `TrameCommand`/`TrameEvent`
 
 **Phase 1 — Logic Thread Integration**
-- [x] Logic-thread command dispatch (`handle_command` returning `TrameOutcome`, §8) *(current pattern; the `TrameController`/`AppController` trait refactor is deferred)*
+- [x] Logic-thread command dispatch (`handle_command` returning `TrameOutcome`, §8) *(typed `DocState` + `match`; see `spec-ambre-architecture.md §6`)*
 - [x] Synchronous recomputation `compute_all_dirty()` in each handler
 - [x] `DisplayViewport` + anti-flickering (`tx_version`)
 - [x] Insert/delete rows/columns (`TrameCommand::Insert/DeleteRow/Column { at }`): one `LoroMovableList` op, `rebuild_index` + positional engine reseed + formatting reseed; delete purges the removed line's cells/formatting; no-op past the used range *(Epic `E3`)*
 - [x] Merges: `merges_{sheet}` LWW map (master/extent stable-id pairs), client-side non-empty rejection (`MergeRejected`), `DisplayCell.is_merged`/`merge_span`, masked covered cells (`masked_cells`, excluded from the engine, restored on unmerge), deterministic overlap precedence, conflict detection (`MergeConflictDetected`) on import. Merges follow their cells across structural ops *(Epic `E3`)*
 - [x] Shared rendering module `ambre-trame/src/render.rs`: `GridLayout` + `draw_cells_on<S>()`, `draw_grid_lines_on<S>()`, `draw_col_headers_on<S>()`, `draw_row_headers_on<S>()`, all `DrawSurface`-generic. `ui::renderer` composes them (cells layer + header overlay); uniform-metrics `GridLayout` (variable widths deferred); `DisplayViewport`-fed PDF path lands with `export_pdf.rs` (Phase 3). *(Epic `E3`)*
-- [x] `MockSyncHandle` for controller tests (via `CommandSink`) *(`ambre-bus::CommandSink` seam + `ambre-trame::test_support::MockSyncHandle`: captures emitted `SyncCommand`s and relays CRDT deltas peer-to-peer; fed from `TrameOutcome` until the deferred `AppController` refactor wires the sink into the controller directly) (Epic `E3`)*
+- [x] `MockSyncHandle` for controller tests (via `CommandSink`) *(`ambre-bus::CommandSink` seam + `ambre-trame::test_support::MockSyncHandle`: captures emitted `SyncCommand`s and relays CRDT deltas peer-to-peer. Production forwards `TrameOutcome` payloads from `ambre-logic`; the test seam mirrors that exact relay via `MockSyncHandle::absorb`, so tests drive the same `SyncCommand`s the dispatcher emits) (Epic `E3`)*
 - [ ] Undo/Redo via Loro `UndoManager` *(Epic `E3`)*
 
 **Phase 2 — Core features (~50 functions)**

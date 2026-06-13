@@ -6,13 +6,17 @@
 //! `flume` channel or an in-memory buffer. `CommandSink` is the single seam
 //! both share, so controller logic never names a concrete transport.
 //!
-//! The trait is object-safe (`send` takes `&self`), so a controller holds its
-//! sink as `Box<dyn CommandSink>` and pushes through it without interior
-//! plumbing of its own -- the implementation owns whatever buffering or
-//! channel send it needs (hence the shared-reference signature).
+//! The trait is object-safe (`send` takes `&self`), so a holder can keep its
+//! sink as `Box<dyn CommandSink>` and push through it without interior plumbing
+//! of its own -- the implementation owns whatever buffering or channel send it
+//! needs (hence the shared-reference signature).
 //!
-//! See `specs/2-Trame/ambre-spec-trame-logic.md` (the `sync_tx` field and the
-//! `AppController::init` injection point).
+//! In production the Logic dispatcher (`ambre-logic::LogicState`)
+//! forwards `SyncCommand`s on a bare `flume::Sender`, reading them from the
+//! `TrameOutcome` a `TrameState` returns -- the state holds no sink itself.
+//! `CommandSink` is the **test seam**: `ambre-trame::test_support::MockSyncHandle`
+//! implements it to capture emitted `SyncCommand`s and relay CRDT deltas
+//! peer-to-peer. See `specs/2-Trame/ambre-spec-trame-logic.md` sec.8.
 
 use crate::SyncCommand;
 

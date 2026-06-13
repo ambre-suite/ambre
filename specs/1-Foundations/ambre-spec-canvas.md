@@ -4,7 +4,7 @@
 
 > GPU pipeline, frame lifecycle, GPU bootstrap + rAF driver (`bootstrap_gpu` / `start_raf_loop`), assets (icons, fonts, GlyphAtlas), `DrawSurface` abstraction, PDF export (krilla), and HiDPI handling. The frame **driver** (`FrameHost`) and the closed `AppView` registry live one layer up in `ambre-app` (see §A). This document covers **only content rendering** in the `<canvas>` (`ambre-canvas` crate), shared across all applications. The application **chrome** (menus, toolbars, dialogs, panels) is **DOM/Leptos** (`ambre-spec-chrome.md`); the canvas/DOM boundary, command registry, and design tokens are in the umbrella `ambre-spec-ui.md`. Everything executes in the **UI Thread** (page's main thread) — no business logic, no network, no crypto in this layer.
 >
-> **Model note.** The architecture spec has moved from Model A (3 WASM binaries, `postMessage`) to **Model B** (1 binary, 3 `wasm_thread` threads with shared memory, `flume` channels). On the rendering side, this changes two things: (1) the layer lives in the **`ambre-canvas`** crate (no longer `ambre-app/src/ui`/`render`); (2) the displayed content arrives from the Logic thread as **typed `UiEvent` values** drained from a `flume` channel (no longer as deserialized `LogicEnvelope` postcard). See `ambre-spec-architecture.md`.
+> **Architecture note.** The client is a single WASM binary with 3 `wasm_thread` threads sharing memory over `flume` channels. On the rendering side: (1) the layer lives in the **`ambre-canvas`** crate; (2) the displayed content arrives from the Logic thread as **typed `UiEvent` values** drained from a `flume` channel (no serialization on the UI side). See `ambre-spec-architecture.md`.
 
 ---
 
@@ -50,7 +50,7 @@
   | `smallvec` | Inline storage for short lists (<8 items) | Avoids heap on hot path. |
   | `image` | Bitmap decoding | Pure Rust. Only activated decoders (PNG, JPEG, WebP) compiled — feature flags. |
 
-  > **Inbound transport note (Model B):** content to display arrives from the Logic thread as **typed `UiEvent` values** on a shared `flume` channel (common linear memory). The view drains it **without blocking** at the start of each frame (`AppView::update` → `from_logic.try_recv()` loop until `Empty`), applies mutations, and raises its dirty flags. No more `postMessage`, no more `postcard`, no more deserialization on the UI side: payloads are typed `AppEvent` (e.g. `TrameEvent::ViewportData`). The UI thread **never blocks**; on the outbound side it sends via `try_send` (drop-on-`Full`, the next viewport supersedes via `version`). See `ambre-spec-architecture.md §2`.
+  > **Inbound transport note.** content to display arrives from the Logic thread as **typed `UiEvent` values** on a shared `flume` channel (common linear memory). The view drains it **without blocking** at the start of each frame (`AppView::update` → `from_logic.try_recv()` loop until `Empty`), applies mutations, and raises its dirty flags. No serialization on the UI side: payloads are typed `AppEvent` (e.g. `TrameEvent::ViewportData`). The UI thread **never blocks**; on the outbound side it sends via `try_send` (drop-on-`Full`, the next viewport supersedes via `version`). See `ambre-spec-architecture.md §2`.
 
   No dependency on a native toolkit (GTK, Qt, Win32). No unaudited C bindings in our code.
 
@@ -351,7 +351,7 @@ The rendering layer consists of pure drawing primitives. ZK audit:
 | GPU upload + render pass | < 1 ms | `write_buffer` + 2 draw calls (quads, glyphs). Typical 0.3–0.5 ms |
 | **Total target** | **< 5 ms typical** | 11 ms margin for complex cases |
 
-> **Architecture alignment:** the P1 scroll round-trip (UI → Logic → UI) is budgeted at < 15 ms in `ambre-spec-architecture.md` §5. UI rendering consumes < 5 ms; `flume` transport (move in shared memory) is negligible (< 1 µs/hop, no more serialization or boundary memcpy from Model A), leaving most of the budget for Logic thread processing.
+> **Architecture alignment:** the P1 scroll round-trip (UI → Logic → UI) is budgeted at < 15 ms in `ambre-spec-architecture.md` §5. UI rendering consumes < 5 ms; `flume` transport (move in shared memory) is negligible (< 1 µs/hop, no serialization or boundary memcpy), leaving most of the budget for Logic thread processing.
 
 ### B. WASM Impact
 
@@ -363,7 +363,7 @@ The rendering layer consists of pure drawing primitives. ZK audit:
 | Icon atlas blob (vertex buffers) | < 200 KB | ~500 tessellated icons |
 | `image` (PNG/JPEG/WebP) | ~60 KB | Feature-flagged, only activated decoders |
 
-> **Note:** in Model B there is **only a single WASM binary** (3 threads, shared memory); wgpu/lyon/swash are linked once and deduplicated with the rest. See `ambre-spec-architecture.md` §5 for the global binary budget < 2 MB gzip.
+> **Note:** there is **only a single WASM binary** (3 threads, shared memory); wgpu/lyon/swash are linked once and deduplicated with the rest. See `ambre-spec-architecture.md` §5 for the global binary budget < 2 MB gzip.
 
 ### C. UI Thread Memory Budget
 
