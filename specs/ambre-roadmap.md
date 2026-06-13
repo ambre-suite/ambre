@@ -41,7 +41,7 @@ The specs predate this file and use their own phase vocabulary. Mapping:
 
 Stories (all `[x]`):
 - `ARCH P0` — shared-memory threading, base crates, typed IPC.
-- `CANVAS P0` — GPU rendering pipeline (`FrameHost`/`DocView`, fonts, Trame grid 60+ FPS).
+- `CANVAS P0` — GPU rendering pipeline (`FrameHost`/`AppView`, fonts, Trame grid 60+ FPS).
   *(core rendering items; remaining `CANVAS P0` items are tracked in `E2`.)*
 - `CHROME P1`->`P3`, `UI P0`->`P2` — Leptos chrome (app shell, commands, input/IME, tokens, a11y).
 - `SYNC P0` — standalone E2EE primitives (`ambre-crypto`, compress/seal pipeline, `MasterSeed`).
@@ -107,7 +107,7 @@ Stories:
 
 Stories:
 - `ARCH P2`/`ARCH P5` — `ambre-prose` (LoroText), `ambre-toile` (R-Tree + read-only embeds),
-  `ambre-murmure` (channels); `DocView` -> `AppView` switch.
+  `ambre-murmure` (channels).
 - `SYNC P4` + `SRV P1` — channels & meetings (segments managed by Sync, unread, WebRTC signaling).
 - `CANVAS P1` — paths/transform + PDF export (krilla).
 

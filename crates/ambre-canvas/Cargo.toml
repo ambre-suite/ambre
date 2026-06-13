@@ -3,7 +3,7 @@ name = "ambre-canvas"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "GPU content-rendering runtime for the Ambre UI thread (wgpu surface, quad/glyph pipeline, DocView contract). Chrome lives in the DOM (ambre-chrome)."
+description = "GPU content-rendering runtime for the Ambre UI thread (wgpu surface, quad/glyph pipeline, GPU bootstrap + rAF loop). Chrome lives in the DOM (ambre-chrome)."
 
 [build-dependencies]
 # Token codegen: parse tokens.ron -> theme.rs + theme.css (build.rs).

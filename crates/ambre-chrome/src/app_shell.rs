@@ -9,7 +9,7 @@
 //
 // The shell is app-agnostic: every region is a slot the app fills. ambre-chrome
 // knows nothing about Trame/Prose/etc. -- it lays out whatever chrome content
-// the app provides, exactly as the renderer knows only `DocView`.
+// the app provides, exactly as the renderer dispatches only over `AppView`.
 // ============================================================================
 
 use leptos::prelude::*;

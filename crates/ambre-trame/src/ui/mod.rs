@@ -4,7 +4,7 @@
 //
 //   grid     -- virtual-scroll navigation state (TrameUiState).
 //   renderer -- DrawSurface rendering of the grid (draw_cells / draw_overlay).
-//   view     -- TrameView, the `ambre_canvas::DocView` impl driven by the FrameHost.
+//   view     -- TrameView, an `AppView::Trame` variant driven by the launcher's FrameHost.
 //
 // The shared IPC types live in `ambre-bus` (re-exported from the crate root);
 // the grid dimensions live in the crate root (`crate::TOTAL_ROWS` / `TOTAL_COLS`).

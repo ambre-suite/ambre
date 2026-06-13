@@ -10,7 +10,7 @@
 //
 // The toolkit never reaches across the canvas/DOM boundary: it invokes
 // `CommandId`s and reflects state via Leptos signals (ambre-spec-ui.md 2.A).
-// It depends on no app crate (dependency inversion, symmetric to `DocView`).
+// It depends on no app crate (dependency inversion, symmetric to `AppView`).
 //
 // Module map (filled in across Phase 1+ of ambre-spec-chrome.md 7):
 //   shortcut    -- keybinding presentation (the <Kbd> component)            [done]

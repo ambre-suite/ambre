@@ -1,24 +1,22 @@
 // ambre-canvas/src/view.rs
 // ============================================================================
-// DocView — the per-application UI contract driven by the generic FrameHost.
+// Per-frame view value types -- the GPU-agnostic vocabulary the frame driver
+// and the app views share: `FrameStats` (driver timings), `RepaintPlan` (what
+// to repaint), `InputEvent` (a DOM event reduced to a flat enum).
 //
-// The FrameHost (host.rs) owns the GPU, the rAF loop, channel-drain timing and
-// the swapchain present. It knows nothing about spreadsheets, documents or
-// canvases. Everything app-specific — what changed, what to paint, how to react
-// to input — is delegated to a `DocView` implementation living in the app crate
-// (e.g. `ambre_trame::ui::TrameView`).
-//
-// This module is GPU-agnostic at the type level (it only names `WgpuSurface`,
-// which compiles on every target) so app crates can unit-test their view logic
-// without a browser.
+// The frame DRIVER (`FrameHost`) and the closed `AppView` registry that names
+// the concrete per-app view (`ambre_trame::ui::TrameView`) live in the launcher
+// (`ambre-app`): a closed enum naming an app view cannot sit upstream here
+// without a dependency cycle (ambre-spec-architecture.md 6). This module only
+// defines the shared value types both sides exchange; app views consume them
+// directly (inherent methods), so the types stay GPU-agnostic at the type level
+// (they only name `WgpuSurface`/`TextCache`, which compile on every target) and
+// app crates can unit-test their view logic without a browser.
 // ============================================================================
 
-use parley::FontContext;
-
-use ambre_bus::DocumentId;
 use ambre_draw::Rect;
 
-use crate::{ContentRepaint, OverlayRepaint, TextCache, WgpuSurface};
+use crate::{ContentRepaint, OverlayRepaint};
 
 /// Driver-measured per-frame timings, handed to the view so it can render a
 /// debug HUD. All values are wall-clock milliseconds from the *previous* frame.
@@ -70,60 +68,3 @@ pub enum InputEvent {
     CompositionEnd { text: String },
 }
 
-/// Per-application UI logic driven once per animation frame by [`FrameHost`].
-///
-/// Call order each frame: [`update`] → [`plan_repaint`] → (optionally)
-/// [`paint_content`] / [`paint_overlay`]. [`resize`] and [`handle_input`] are
-/// called out-of-band from the host's DOM listeners.
-///
-/// [`update`]: DocView::update
-/// [`plan_repaint`]: DocView::plan_repaint
-/// [`paint_content`]: DocView::paint_content
-/// [`paint_overlay`]: DocView::paint_overlay
-/// [`resize`]: DocView::resize
-/// [`handle_input`]: DocView::handle_input
-pub trait DocView {
-    /// Pump inbound state: drain logic-thread messages, apply them, and set
-    /// internal dirty flags. Called before painting, with no GPU access.
-    fn update(&mut self);
-
-    /// Decide what to repaint this frame and clear the dirty flags.
-    ///
-    /// `hud_tick` is true when the host's periodic HUD refresh (~2 Hz) fires;
-    /// the view should redraw its overlay in that case even if nothing else
-    /// changed.
-    fn plan_repaint(&mut self, hud_tick: bool) -> RepaintPlan;
-
-    /// Paint the persistent content layer. `strip` is `Some` for a scroll repaint
-    /// (only that rect is redrawn over shifted pixels), `None` for full.
-    fn paint_content(
-        &mut self,
-        surface:    &mut WgpuSurface<'_>,
-        font_cx:    &mut FontContext,
-        text_cache: &mut TextCache,
-        strip:      Option<Rect>,
-    );
-
-    /// Paint the transient overlay layer. `stats` carries the host's timing
-    /// numbers for the debug HUD.
-    fn paint_overlay(
-        &mut self,
-        surface:    &mut WgpuSurface<'_>,
-        font_cx:    &mut FontContext,
-        text_cache: &mut TextCache,
-        stats:      &FrameStats,
-    );
-
-    /// Canvas resized to `width` × `height` physical pixels.
-    fn resize(&mut self, width: u32, height: u32);
-
-    /// Handle an input event. Returns `true` if the host should call
-    /// `preventDefault()` on the originating DOM event.
-    fn handle_input(&mut self, ev: &InputEvent) -> bool;
-
-    /// Switch the active document in place, without tearing down the GPU surface
-    /// (the SPA router calls this on a `/trame/<id>` navigation). The view drops
-    /// its document-scoped state and re-fetches for `document_id`. Default no-op
-    /// for views that are not document-scoped.
-    fn set_document(&mut self, _document_id: DocumentId) {}
-}

@@ -5,12 +5,15 @@
 // Scope is the canvas *content* renderer only -- the widget framework was
 // removed in favour of the DOM Leptos chrome (ambre-chrome). The UI chrome
 // (menus, toolbars, dialogs, palette) lives in the DOM; this crate owns the
-// wgpu surface, the quad/glyph pipeline and the per-app DocView contract.
+// wgpu surface, the quad/glyph pipeline, the GPU bootstrap + rAF primitives,
+// and the per-frame value types. The frame DRIVER (FrameHost) and the closed
+// AppView registry live in the launcher (ambre-app), downstream of the apps.
 //
 //   render/       -- QuadRenderer, GlyphAtlas, WgpuSurface (wgpu + swash)
 //   text_cache    -- Parley layout cache (parley-dependent)
-//   view          -- DocView trait: the per-app UI contract (GPU-agnostic)
-//   host          -- UI-thread host plumbing: GPU bootstrap + rAF loop (wasm)
+//   view          -- per-frame value types (FrameStats/RepaintPlan/InputEvent)
+//   host          -- GPU bootstrap + rAF primitives (wasm). The frame DRIVER
+//                    (FrameHost) + the AppView registry live in ambre-app.
 //   request_registry -- P3 request/response correlator (ARCH P1)
 // ============================================================================
 
@@ -18,13 +21,13 @@
 pub mod render;
 pub mod text_cache;
 
-// -- Per-app UI contract (DocView trait, GPU-agnostic) -----------------------
+// -- Per-frame view value types (GPU-agnostic) -------------------------------
 pub mod view;
 
 // -- Process-global fatal latch (canvas terminal screen on unrecoverable error)
 pub mod fatal;
 
-// -- UI Thread host plumbing (GPU bootstrap + frame driver, wasm32-only) ------
+// -- UI Thread host plumbing (GPU bootstrap + rAF primitives, wasm32-only) ----
 #[cfg(target_arch = "wasm32")]
 pub mod host;
 
@@ -44,12 +47,10 @@ pub mod request_registry;
 // -- Convenience re-exports --------------------------------------------------
 pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurface};
 pub use text_cache::TextCache;
-pub use view::{DocView, FrameStats, InputEvent, RepaintPlan};
+pub use view::{FrameStats, InputEvent, RepaintPlan};
 pub use fatal::{fatal_message, signal_fatal};
 #[cfg(target_arch = "wasm32")]
-pub use host::{
-    DocSwitcher, FrameHost, GpuState, RafControl, bootstrap_gpu, run, run_with, start_raf_loop,
-};
+pub use host::{GpuState, RafControl, bootstrap_gpu, start_raf_loop};
 pub use text_input::TextInput;
 pub use anchor::{Anchor, AnchorPublisher};
 pub use theme::{Palette, Theme, ThemeControl};

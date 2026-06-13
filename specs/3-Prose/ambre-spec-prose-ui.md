@@ -9,7 +9,7 @@
 
 > **Model note (Model B).** **3-thread shared-memory architecture** (`flume` channels, single WASM binary) — see `ambre-spec-architecture.md`. For this spec:
 > - **Typed `flume` transport, no `postMessage`/postcard.** The UI sends `LogicCommand::App { document_id, command: AppCommand::Prose(ProseCommand) }` and receives `UiEvent::Viewport/Presence { event: AppEvent::Prose(ProseEvent) }` — Rust values **by move** on `flume`, no serialization on the UI side.
-> - **The Prose view is a `DocView`.** Like `TrameView`, Prose presentation implements the `DocView` trait from `ambre-canvas` (`FrameHost` driver: `update`/`plan_repaint`/`paint_content`/`paint_overlay`) — see `ambre-spec-canvas.md`. The GPU pipeline (`QuadRenderer`, `WgpuSurface`) and the `host` live in `ambre-canvas`.
+> - **The Prose view is an `AppView` variant.** Like `TrameView`, the Prose presentation exposes the inherent driver methods (`update`/`plan_repaint`/`paint_content`/`paint_overlay`/`resize`/`handle_input`) that the `FrameHost` `match`es over — adding Prose is a new `AppView::Prose(ProseView)` arm in `ambre-app` (see `ambre-spec-canvas.md §A`). The GPU pipeline (`QuadRenderer`, `WgpuSurface`) lives in `ambre-canvas`; the `FrameHost` driver lives in `ambre-app`.
 > - Memory is **shared** (single heap): there is no longer "memory isolation per Worker". The `ProseCommand` is **not copied** between threads — it is moved.
 
 ---
@@ -46,7 +46,7 @@ This component delegates:
 | `web_sys` | `Clipboard API`, `navigator.clipboard`, `InputEvent` (IME), `onresize` |
 | `flume` | Inter-thread channels: send `LogicCommand`, receive `UiEvent` (typed values by move) |
 | `ambre-bus` | Typed IPC types: `LogicCommand`/`UiEvent`, `ProseCommand`/`ProseEvent`, `AppCommand`/`AppEvent` |
-| `ambre-canvas` | Frame driver (`FrameHost`/`DocView`), GPU pipeline (`QuadRenderer`, `WgpuSurface`) |
+| `ambre-canvas` | GPU pipeline (`QuadRenderer`, `WgpuSurface`), GPU bootstrap + rAF loop (the `FrameHost` driver + `AppView` enum live in `ambre-app`) |
 | `ambre-draw` | `DrawSurface` trait (parameterized screen/PDF rendering) |
 
 All `web_sys::*` resources (`HTMLCanvasElement`, `GPUDevice`, `GPUQueue`) are `!Send`
@@ -951,7 +951,7 @@ source of truth.
 - [ ] `handle_pointer_event()`: PointerDown cursor, PointerMove selection, PointerUp toolbar.
 - [ ] `DrawSurface` rendering of blinking cursor (2px fill_rect) and selection (alpha fill_rect).
 - [ ] `flume` UI → Logic thread send: `LogicCommand::App { command: AppCommand::Prose(ProseCommand) }` (`try_send`, non-blocking).
-- [ ] Prose `DocView`: `update` (drain `UiEvent` `flume`) / `plan_repaint` / `paint_content` / `paint_overlay` wired to `FrameHost`.
+- [ ] Prose `AppView::Prose` variant: inherent `update` (drain `UiEvent` `flume`) / `plan_repaint` / `paint_content` / `paint_overlay` dispatched by `FrameHost`.
 - [ ] Unit tests keyboard, hit_test, draft buffer.
 
 **Phase 2 — Toolbar, Slash, IME (Week 3)**

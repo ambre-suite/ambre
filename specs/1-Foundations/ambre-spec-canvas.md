@@ -2,7 +2,7 @@
 **Type:** Horizontal (Foundation — UI Thread)
 **Status:** Draft
 
-> GPU pipeline, frame lifecycle, frame driver (`FrameHost` / `DocView`), assets (icons, fonts, GlyphAtlas), `DrawSurface` abstraction, PDF export (krilla), and HiDPI handling. This document covers **only content rendering** in the `<canvas>` (`ambre-canvas` crate), shared across all applications. The application **chrome** (menus, toolbars, dialogs, panels) is **DOM/Leptos** (`ambre-spec-chrome.md`); the canvas/DOM boundary, command registry, and design tokens are in the umbrella `ambre-spec-ui.md`. Everything executes in the **UI Thread** (page's main thread) — no business logic, no network, no crypto in this layer.
+> GPU pipeline, frame lifecycle, GPU bootstrap + rAF driver (`bootstrap_gpu` / `start_raf_loop`), assets (icons, fonts, GlyphAtlas), `DrawSurface` abstraction, PDF export (krilla), and HiDPI handling. The frame **driver** (`FrameHost`) and the closed `AppView` registry live one layer up in `ambre-app` (see §A). This document covers **only content rendering** in the `<canvas>` (`ambre-canvas` crate), shared across all applications. The application **chrome** (menus, toolbars, dialogs, panels) is **DOM/Leptos** (`ambre-spec-chrome.md`); the canvas/DOM boundary, command registry, and design tokens are in the umbrella `ambre-spec-ui.md`. Everything executes in the **UI Thread** (page's main thread) — no business logic, no network, no crypto in this layer.
 >
 > **Model note.** The architecture spec has moved from Model A (3 WASM binaries, `postMessage`) to **Model B** (1 binary, 3 `wasm_thread` threads with shared memory, `flume` channels). On the rendering side, this changes two things: (1) the layer lives in the **`ambre-canvas`** crate (no longer `ambre-app/src/ui`/`render`); (2) the displayed content arrives from the Logic thread as **typed `UiEvent` values** drained from a `flume` channel (no longer as deserialized `LogicEnvelope` postcard). See `ambre-spec-architecture.md`.
 
@@ -12,9 +12,9 @@
 
 * **Scope:**
 
-  This document covers the **`ambre-canvas`** crate: the UI thread runtime (`host.rs`, `ambre_canvas::run`) and the **content** rendering pipeline in the `<canvas>`. The DOM chrome (Leptos) hosting this canvas is in `ambre-spec-chrome.md`.
+  This document covers the **`ambre-canvas`** crate: the UI thread GPU primitives (`host.rs`: `bootstrap_gpu`/`start_raf_loop`) and the **content** rendering pipeline in the `<canvas>`. The DOM chrome (Leptos) hosting this canvas is in `ambre-spec-chrome.md`.
 
-  - **Frame driver:** `FrameHost<V: DocView>` orchestrates a frame; the app↔driver contract is the **`DocView`** trait. The launcher (`ambre-app`) injects the concrete view via closure.
+  - **Frame driver:** `FrameHost` (in `ambre-app`, downstream of every app crate) orchestrates a frame over the closed `AppView` enum; each view exposes the inherent driver methods (`update`/`plan_repaint`/`paint_content`/`paint_overlay`/`resize`/`handle_input`). `ambre-canvas` only provides the GPU bootstrap + rAF loop the driver consumes.
   - **Rendering pipeline:** `requestAnimationFrame` loop, CPU-side batching, GPU submission via `QuadRenderer` (vertex/fragment shaders only — no compute), 2-layer model `Layer::{Content, Overlay}`.
   - **Asset pipeline:** SVG icons compiled build-time via lyon, font loading via fetch, GPU `GlyphAtlas`.
   - **`DrawSurface` abstraction:** unified screen/PDF trait defined in `ambre-draw`.
@@ -46,11 +46,11 @@
   |:---|:---|:---|
   | `usvg` | SVG parsing | Build-time: SVG → curves → vertex buffer via lyon. |
   | `krilla` | PDF export | Implements `DrawSurface` via `KrillaSurface` (Logic thread, lazy-loaded). |
-  | `flume` | Inter-thread channels (Logic ↔ UI) | Typed receives. The view drains `UiEvent` from the `Receiver` each frame (`DocView::update`, non-blocking `try_recv`). |
+  | `flume` | Inter-thread channels (Logic ↔ UI) | Typed receives. The view drains `UiEvent` from the `Receiver` each frame (`AppView::update`, non-blocking `try_recv`). |
   | `smallvec` | Inline storage for short lists (<8 items) | Avoids heap on hot path. |
   | `image` | Bitmap decoding | Pure Rust. Only activated decoders (PNG, JPEG, WebP) compiled — feature flags. |
 
-  > **Inbound transport note (Model B):** content to display arrives from the Logic thread as **typed `UiEvent` values** on a shared `flume` channel (common linear memory). The view drains it **without blocking** at the start of each frame (`DocView::update` → `from_logic.try_recv()` loop until `Empty`), applies mutations, and raises its dirty flags. No more `postMessage`, no more `postcard`, no more deserialization on the UI side: payloads are typed `AppEvent` (e.g. `TrameEvent::ViewportData`). The UI thread **never blocks**; on the outbound side it sends via `try_send` (drop-on-`Full`, the next viewport supersedes via `version`). See `ambre-spec-architecture.md §2`.
+  > **Inbound transport note (Model B):** content to display arrives from the Logic thread as **typed `UiEvent` values** on a shared `flume` channel (common linear memory). The view drains it **without blocking** at the start of each frame (`AppView::update` → `from_logic.try_recv()` loop until `Empty`), applies mutations, and raises its dirty flags. No more `postMessage`, no more `postcard`, no more deserialization on the UI side: payloads are typed `AppEvent` (e.g. `TrameEvent::ViewportData`). The UI thread **never blocks**; on the outbound side it sends via `try_send` (drop-on-`Full`, the next viewport supersedes via `version`). See `ambre-spec-architecture.md §2`.
 
   No dependency on a native toolkit (GTK, Qt, Win32). No unaudited C bindings in our code.
 
@@ -67,27 +67,28 @@
 
 ## 2. TECHNICAL DESIGN & STATE
 
-### A. Frame Driver: `FrameHost` & `DocView`
+### A. Frame Driver: `FrameHost` & `AppView`
 
-The UI runtime (`ambre-canvas/src/host.rs`, function `ambre_canvas::run`) runs on the **page's main thread**, symmetrical to `ambre_logic::run` / `ambre_sync::run` but **generic** over the application. The app↔driver decoupling rests on two types:
+The UI runtime runs on the **page's main thread**, symmetrical to `ambre_logic::run` / `ambre_sync::run`. Responsibility is split across two crates so that the closed view registry can name app crates without creating a cycle:
 
-- **`FrameHost<V: DocView>`** (host.rs) — app-agnostic. Owns `GpuState` (wgpu Device/Queue/Surface + `QuadRenderer` + `FontContext` + `TextCache`), measures frame timings (`FrameStats`), decides which layers to encode from the view's `RepaintPlan`, and presents the swapchain. It knows neither spreadsheet nor document.
-- **`DocView`** (view.rs) — the per-application contract, implemented in the app crate (e.g. `ambre_trame::ui::TrameView`). GPU-agnostic at the type level (only names `WgpuSurface`, which compiles on all targets), so apps test their view **without a browser**.
+- **`ambre-canvas`** — app-agnostic GPU primitives only: `GpuState` (wgpu Device/Queue/Surface + `QuadRenderer` + `FontContext` + `TextCache`), `bootstrap_gpu` (async wgpu init), `start_raf_loop` (the `requestAnimationFrame` driver over a frame callback), and the per-frame value types (`RepaintPlan`, `FrameStats`, `InputEvent`, `WgpuSurface`). It knows neither spreadsheet nor document.
+- **`FrameHost`** (`ambre-app/src/host.rs`) — app-aware, **downstream of every app crate**. Owns the `GpuState` it gets from `bootstrap_gpu`, measures frame timings (`FrameStats`), decides which layers to encode from the view's `RepaintPlan`, presents the swapchain, and dispatches every frame over the closed **`AppView`** enum.
+- **`AppView`** (`ambre-app/src/host.rs`) — a closed sum over document types (`AppView { Trame(TrameView), … }`), symmetric to the `AppCommand`/`DocState` data plane (no trait object, no `Box<dyn Any>`, exhaustiveness checked by the compiler). Each variant's view exposes the **inherent** driver method set; the `FrameHost` `match`es over the enum to call them. Views are GPU-agnostic at the type level (only name `WgpuSurface`, which compiles on all targets), so apps test their view **without a browser**.
 
 ```rust
-pub trait DocView {
-    fn update(&mut self);                                   // drain inbound (flume try_recv) -> dirty flags, no GPU
-    fn plan_repaint(&mut self, hud_tick: bool) -> RepaintPlan;
-    fn paint_content(&mut self, s: &mut WgpuSurface, fc: &mut FontContext, tc: &mut TextCache, strip: Option<Rect>);
-    fn paint_overlay(&mut self, s: &mut WgpuSurface, fc: &mut FontContext, tc: &mut TextCache, stats: &FrameStats);
-    fn resize(&mut self, width: u32, height: u32);
-    fn handle_input(&mut self, ev: &InputEvent) -> bool;   // true => host calls preventDefault()
-}
+// inherent methods on each app view (e.g. ambre_trame::ui::TrameView),
+// dispatched by AppView's match arms:
+fn update(&mut self);                                   // drain inbound (flume try_recv) -> dirty flags, no GPU
+fn plan_repaint(&mut self, hud_tick: bool) -> RepaintPlan;
+fn paint_content(&mut self, s: &mut WgpuSurface, fc: &mut FontContext, tc: &mut TextCache, strip: Option<Rect>);
+fn paint_overlay(&mut self, s: &mut WgpuSurface, fc: &mut FontContext, tc: &mut TextCache, stats: &FrameStats);
+fn resize(&mut self, width: u32, height: u32);
+fn handle_input(&mut self, ev: &InputEvent) -> bool;   // true => host calls preventDefault()
 ```
 
-`ambre_canvas::run<V, F>(canvas_id, make_view)` receives `F: FnOnce(f64, f64) -> V`: the launcher (`ambre-app`) injects `TrameView::new(...)` via closure, so **`ambre-canvas` depends on no app crate** (no cycle). The host wires DOM listeners (`keydown` → `handle_input`, `onresize` → `resize`), launches async GPU bootstrap then the rAF loop, and notifies the page via `ambreReady` once ready.
+`ambre-app`'s `run_with(canvas_id, make_view)` receives a closure constructing the active `AppView`, wires DOM listeners (`keydown` → `handle_input`, `onresize` → `resize`), launches async `bootstrap_gpu` then `start_raf_loop`, and notifies the page via `ambreReady` once ready. Because `FrameHost` + `AppView` live in the launcher (not `ambre-canvas`), the closed enum can name `TrameView` without a dependency cycle.
 
-> **`DocView` vs `AppView` (deferred).** Currently a single view (`Box<dyn DocView>` implicit via the generic). Switching to a closed enum `AppView { Trame(TrameView), … }` (symmetrical to the data plane) would require **moving `FrameHost` out of `ambre-canvas`**; decided at multi-document/tabs. See `ambre-spec-architecture.md §6`.
+> **Why the driver lives in `ambre-app`.** The closed `AppView` enum names app crates (`TrameView`, …), so it must sit **downstream** of them; `FrameHost` travels with it. `ambre-canvas` stays upstream with only the GPU primitives + value types, depending on no app crate. See `ambre-spec-architecture.md §6/§7`.
 
 ### B. Rendering Pipeline & Frame Lifecycle
 
@@ -276,14 +277,14 @@ pub struct KrillaSurface<'a> {
 
 > `DisplayMode`, adaptive breakpoints, and the per-mode adaptation table are defined in `ambre-spec-chrome.md §2.E`. This section only covers HiDPI wiring on the rendering side.
 
-On `window.onresize`, the host calls `DocView::resize` with the logical width (`canvas.client_width()`, browser dp); the view adapts its content layout. (`DisplayMode` on the **chrome** side is CSS-driven — `ambre-spec-chrome.md §2.E`.)
+On `window.onresize`, the host calls `AppView::resize` with the logical width (`canvas.client_width()`, browser dp); the view adapts its content layout. (`DisplayMode` on the **chrome** side is CSS-driven — `ambre-spec-chrome.md §2.E`.)
 
 DPI is handled via the browser's `devicePixelRatio`:
 
 - **Vector paths (lyon):** rects and strokes adapt to physical DPI without blur.
 - **Glyphs (Swash atlas):** `scale` is passed in `TextCache::new(scale)` and in `LayoutContext::ranged_builder(font_cx, text, scale, ...)`. Glyphs are rasterized at physical resolution — cache-key includes `size * scale`.
 - **Logical vs physical metrics:** the view reasons in logical coordinates (f64). `QuadRenderer::begin_frame(w, h)` receives the canvas physical dimensions and builds the NDC matrix.
-- **Resize:** `window.onresize` → `canvas.set_width/height(physical)` → `FrameHost::resize(w, h)` (reconfigures `wgpu::Surface` + reallocates offscreens) → `DocView::resize` (the view raises a full repaint).
+- **Resize:** `window.onresize` → `canvas.set_width/height(physical)` → `FrameHost::resize(w, h)` (reconfigures `wgpu::Surface` + reallocates offscreens) → `AppView::resize` (the view raises a full repaint).
 
 Canvas-side constants needed for content rendering — `scale_factor` (`devicePixelRatio`), logical width, sans/mono font families — provided by **generated tokens** (`theme.rs`, see §F and `ambre-spec-ui.md §2.D`).
 
@@ -341,8 +342,8 @@ The rendering layer consists of pure drawing primitives. ZK audit:
 
 | Phase | Budget | Notes |
 |:---|:---|:---|
-| `DocView::update` (drain flume `UiEvent`) | < 0.1 ms | Inbound IPC, dirty flag mutations |
-| Content hit-test + input dispatch (in view) | < 0.2 ms | `DocView::handle_input` (pointer/keyboard on canvas area) |
+| `AppView::update` (drain flume `UiEvent`) | < 0.1 ms | Inbound IPC, dirty flag mutations |
+| Content hit-test + input dispatch (in view) | < 0.2 ms | `AppView::handle_input` (pointer/keyboard on canvas area) |
 | View state update | < 0.5 ms | Internal state mutations, transition logic |
 | Text layout (Parley, dirty paragraph) | < 2 ms | Worst case: full Prose document layout. Typical < 0.5 ms |
 | Content accessibility diff (AccessKit) | < 0.2 ms | OS notifications on delta only |
@@ -410,7 +411,7 @@ The rendering layer consists of pure drawing primitives. ZK audit:
 ### CANVAS P0 — Rendering Foundation
 
 - [x] GPU bootstrap (`ambre-canvas/src/host.rs`): `wgpu::Instance`, `wgpu::Adapter`, WebGL2 by default, WebGPU opt-in `?webgpu`
-- [x] `FrameHost<V: DocView>` + `DocView` trait + generic `ambre_canvas::run(canvas_id, make_view)` (view injection by closure from `ambre-app`)
+- [x] `FrameHost` + closed `AppView` enum (in `ambre-app`) + `run_with(canvas_id, make_view)` (view injection by closure); `ambre-canvas` exposes `bootstrap_gpu`/`start_raf_loop`. (Was `FrameHost<V: DocView>` + `DocView` trait in `ambre-canvas` — switched in ARCH P2.)
 - [x] Direct `requestAnimationFrame` loop (no Winit/Masonry), `RepaintPlan` (dirty flags), rAF after GPU init, `ambreReady` hook
 - [x] 2-layer model `Layer::{Content, Overlay}` (`ContentRepaint`/`OverlayRepaint`, scroll-strip reuse)
 - [x] `QuadRenderer`: quads pipeline (fill_rect/stroke_rect/stroke_line) + glyphs pipeline (GlyphAtlas R8Unorm)
@@ -420,7 +421,7 @@ The rendering layer consists of pure drawing primitives. ZK audit:
 - [x] Load base fonts (NotoSans-Regular.ttf) via `fetch()` + Parley `FontContext`
 - [x] `DrawSurface` trait in `ambre-draw`: `ParleyBrush = peniko::Brush`, fill_path/stroke_path/push_transform/pop_transform default no-ops
 - [ ] Icon type + `build.rs` pipeline: SVG → usvg → lyon → vertex buffer blob
-- [x] Inbound drain: `DocView::update` drains `Receiver<UiEvent>` (`flume try_recv`) → mutations → dirty flags; `Disconnected`/`FatalError` → fatal state
+- [x] Inbound drain: `AppView::update` drains `Receiver<UiEvent>` (`flume try_recv`) → mutations → dirty flags; `Disconnected`/`FatalError` → fatal state
 - [x] Generated canvas tokens (`scale_factor`, sans/mono font families, content colors) from `tokens.ron` → `theme.rs` (`build.rs` codegen), consumed by the Trame renderer (`Palette`) and `TextCache` — see `ambre-spec-ui.md §2.D`
 - [x] Headless tests via mock `DrawSurface` (`ambre_draw::testing::RecordingSurface` + `FixedClock`,
   behind the `testing` feature): drive the real Trame grid renderer off-main-thread and assert on the

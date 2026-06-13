@@ -1,19 +1,21 @@
 // ambre-trame/src/ui/view.rs
 // ============================================================================
-// TrameView -- the Trame implementation of `ambre_canvas::DocView`.
+// TrameView -- the Trame per-frame view, a variant of the launcher's closed
+// `AppView` registry.
 //
 // Owns everything that used to live in ambre-app's `UiState`: the grid
 // navigation state, the inbound/outbound logic-thread channels, the dirty-rect
-// bookkeeping, and the per-frame repaint decision. The generic FrameHost in
-// ambre-canvas drives it (update → plan_repaint → paint_*), knowing nothing about
-// spreadsheets.
+// bookkeeping, and the per-frame repaint decision. The launcher's FrameHost
+// drives it through `AppView` (update -> plan_repaint -> paint_*), knowing
+// nothing about spreadsheets. The driver-facing methods are inherent `pub`
+// methods (see the dedicated impl block).
 // ============================================================================
 
 use ambre_bus::{AppCommand, AppEvent, DocumentId, LogicCommand, TrameCommand, TrameEvent, UiEvent};
 use ambre_draw::{Clock, FontContext, Rect};
 use ambre_canvas::{
-    Anchor, AnchorPublisher, ContentRepaint, DocView, FrameStats, InputEvent, OverlayRepaint,
-    RepaintPlan, TextCache, TextInput, Theme, ThemeControl, WgpuSurface,
+    Anchor, AnchorPublisher, ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan,
+    TextCache, TextInput, Theme, ThemeControl, WgpuSurface,
 };
 
 use super::grid::{CellEditor, COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT, TrameUiState};
@@ -77,7 +79,7 @@ fn col_label(mut col: u32) -> String {
     label
 }
 
-/// Trame's `DocView`: a virtual-scroll spreadsheet grid.
+/// Trame's view: a virtual-scroll spreadsheet grid (an `AppView::Trame`).
 pub struct TrameView {
     /// The document this view renders (from the active route).
     document_id: DocumentId,
@@ -400,13 +402,18 @@ impl TrameView {
     }
 }
 
-impl DocView for TrameView {
+/// The per-frame driver surface: the inherent methods the launcher's `AppView`
+/// registry dispatches to (call order each frame: `update` -> `plan_repaint` ->
+/// `paint_content` / `paint_overlay`; `resize` / `handle_input` / `set_document`
+/// are out-of-band). Inherent methods: the launcher owns the closed `AppView`
+/// enum (no upstream trait, no dependency cycle -- ambre-spec-architecture.md 6).
+impl TrameView {
     /// Swap the active document in place (SPA route change). Drop every
     /// document-scoped field back to its `new()` value while preserving the
     /// shared, route-independent plumbing (channels, text pipe, anchor, theme)
     /// and the current canvas size, then force a full repaint and a fresh
     /// initial viewport fetch for the new document. No-op if already current.
-    fn set_document(&mut self, document_id: DocumentId) {
+    pub fn set_document(&mut self, document_id: DocumentId) {
         if self.document_id == document_id {
             return;
         }
@@ -426,7 +433,7 @@ impl DocView for TrameView {
         self.anchor.publish(None);
     }
 
-    fn update(&mut self) {
+    pub fn update(&mut self) {
         // Drain every queued UiEvent without blocking. A `Disconnected` error
         // means the Logic thread is gone (panic=abort or shutdown) — there is
         // no recovery, so flip to the fatal state instead of silently looping.
@@ -509,7 +516,7 @@ impl DocView for TrameView {
         }
     }
 
-    fn plan_repaint(&mut self, hud_tick: bool) -> RepaintPlan {
+    pub fn plan_repaint(&mut self, hud_tick: bool) -> RepaintPlan {
         // Formatting lives per-cell in the persistent cell layer, so a cursor
         // move needs no special repaint -- the cells keep their runs as they
         // shift. Only a CellFormat event (handled in `update`) dirties content.
@@ -596,7 +603,7 @@ impl DocView for TrameView {
         RepaintPlan { content, content_strip, overlay }
     }
 
-    fn paint_content(
+    pub fn paint_content(
         &mut self,
         surface: &mut WgpuSurface<'_>,
         font_cx: &mut FontContext,
@@ -616,7 +623,7 @@ impl DocView for TrameView {
         );
     }
 
-    fn paint_overlay(
+    pub fn paint_overlay(
         &mut self,
         surface: &mut WgpuSurface<'_>,
         font_cx: &mut FontContext,
@@ -665,12 +672,12 @@ impl DocView for TrameView {
         }
     }
 
-    fn resize(&mut self, width: u32, height: u32) {
+    pub fn resize(&mut self, width: u32, height: u32) {
         self.state.resize(width as f64, height as f64);
         self.needs_full = true;
     }
 
-    fn handle_input(&mut self, ev: &InputEvent) -> bool {
+    pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
         // Wheel / two-finger touchpad scroll pans the viewport in any mode and
         // never disturbs the cursor or an open editor.
         if let InputEvent::Wheel { dx, dy, delta_mode, ctrl_key } = ev {

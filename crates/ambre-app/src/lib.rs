@@ -39,7 +39,6 @@ use ambre_bus::{
     DocumentId, LogicCommand, LogicEvent, MemberInfo, RequestId, RestCommand, Role, SyncCommand,
     UiEvent,
 };
-use ambre_canvas::DocSwitcher;
 use ambre_chrome::commands::{CommandId, Keymap};
 use ambre_chrome::{
     AppShell, CommandStates, ContextMenu, Dialog, Header, StatusBar, ToastHost, Toasts, Toolbar,
@@ -56,8 +55,11 @@ use leptos_router::hooks::use_location;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
+mod host;
 mod landing;
 mod route;
+
+use host::{AppView, DocSwitcher};
 
 use landing::{DocItem, LandingSignals};
 
@@ -496,10 +498,10 @@ pub fn main() {
     // drives the Trame view through the rAF loop, and returns the document-swap
     // handle the route effect uses on navigation.
     let view_tx_logic = ui_to_logic_tx.clone();
-    let switcher = ambre_canvas::run_with(
+    let switcher = host::run_with(
         "ambre-canvas",
         move |w, h, text_input| {
-            TrameView::new(
+            AppView::Trame(TrameView::new(
                 initial_doc,
                 view_tx_logic,
                 view_rx,
@@ -508,7 +510,7 @@ pub fn main() {
                 text_input,
                 anchor_pub,
                 theme_ctl,
-            )
+            ))
         },
         pre_frame,
         raf,

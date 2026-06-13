@@ -46,15 +46,16 @@ ambre-commands/   CommandId/Command/CommandState/CommandSource, keybindings.
                   Zero UI dependency (leaf). Depended on by apps AND ambre-chrome.
 ambre-draw/       DrawSurface trait. Impls: WgpuSurface (screen), KrillaSurface (PDF).
 ambre-canvas/     Canvas render runtime: WgpuSurface/QuadRenderer/GlyphAtlas,
-                  TextCache, FrameHost/DocView, generated theme.rs. wgpu/parley/swash +
-                  accesskit (scoped to content). No app dependency (DocView + closure).
+                  TextCache, bootstrap_gpu/start_raf_loop, generated theme.rs. wgpu/
+                  parley/swash + accesskit (scoped to content). No app dependency.
+                  (FrameHost + AppView enum live in ambre-app, downstream of apps.)
 ambre-chrome/     Shared, app-agnostic Leptos chrome toolkit: AppShell,
                   CommandPalette, Dialog/Menu/Toolbar/Toast/ContextMenu/Sidebar/
                   StatusBar, keybinding manager. Depends on leptos + ambre-commands.
 
 # Application crates (monolith: logic + ui + chrome)
 ambre-trame/      logic   : *State + handlers (Logic thread)
-ambre-prose/      ui      : *View impl DocView, content on ambre-canvas (UI thread)
+ambre-prose/      ui      : *View (AppView variant), content on ambre-canvas (UI thread)
 ambre-toile/      chrome  : SPECIFIC Leptos components, on ambre-chrome
 ambre-murmure/    commands: Command via ambre-commands (CommandSource)
 
@@ -93,7 +94,7 @@ pub trait CommandSource {
 }
 ```
 
-- Each app implements `CommandSource` and registers its commands. Chrome **does not know about apps**: it displays commands and their state (same dependency inversion as `DocView` on the rendering side).
+- Each app implements `CommandSource` and registers its commands. Chrome **does not know about apps**: it displays commands and their state (same dependency inversion as the `AppView` enum on the rendering side).
 - The keybinding manager is a `HashMap<KeyBinding, CommandId>`. A menu is a list of `CommandId`; a ribbon would be a tree of `CommandId` grouped by `category`.
 - `Command`/`CommandId` (`ambre-commands`) is a **UI affordance**; `AppCommand`/`LogicCommand` (`ambre-bus`) is the **IPC payload**. An invoked `Command` *produces* a `LogicCommand` — distinct layers.
 
@@ -147,6 +148,6 @@ Testability and frame budgets are defined **per sub-spec**: render pipeline and 
 
 Per-subsystem detail is in each sub-spec; at the thread level:
 
-- **UI P0 — Content (canvas):** GPU pipeline, `FrameHost`/`DocView`, fonts, Trame grid at 60+ FPS. **Done** — see `ambre-spec-canvas.md §7` (`CANVAS P0`).
+- **UI P0 — Content (canvas):** GPU pipeline, `FrameHost`/`AppView`, fonts, Trame grid at 60+ FPS. **Done** — see `ambre-spec-canvas.md §7` (`CANVAS P0`).
 - **UI P1 — Chrome foundation:** create `ambre-commands` (registry) and `ambre-chrome` (Leptos toolkit), slim `ambre-canvas` to render runtime, Leptos app shell + `<canvas>` cell, winit-free bootstrap, **one end-to-end command**. Prerequisite: validate Leptos under `+atomics`/`shared-memory` build + nightly `build-std`. Detail in `ambre-spec-chrome.md §7` (`CHROME P1`).
 - **UI P2+ — Input/IME, WYSIWYG, adaptive, tokens, a11y:** `ambre-spec-chrome.md §7` (`CHROME P2`/`P3`).

@@ -3,7 +3,7 @@ name = "ambre-app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "UI Thread entry point: creates the inter-thread channels, spawns the Logic/Sync threads, and drives an ambre_canvas::FrameHost over the app's DocView."
+description = "UI Thread entry point: creates the inter-thread channels, spawns the Logic/Sync threads, and drives a FrameHost over the closed AppView registry."
 
 [lib]
 crate-type = ["cdylib"]
@@ -12,10 +12,19 @@ crate-type = ["cdylib"]
 ambre-bus    = { path = "../ambre-bus" }
 ambre-canvas = { path = "../ambre-canvas" }
 ambre-chrome = { path = "../ambre-chrome" }
+ambre-draw   = { path = "../ambre-draw" }
 ambre-trame  = { path = "../ambre-trame" }
 ambre-logic  = { path = "../ambre-logic" }
 # NB: no dependency on ambre-sync -- the Sync worker is a SEPARATE wasm artifact
 # (its own instance/memory), reached over postMessage, not linked as a crate.
+
+# The frame driver (FrameHost) + the closed AppView registry live here now
+# (moved out of ambre-canvas: a closed view enum naming TrameView cannot sit
+# upstream of the app crates without a cycle). The driver owns the GPU
+# orchestration, so the launcher names wgpu / parley / ambre-draw directly --
+# previously reachable only transitively through ambre-canvas.
+wgpu         = { workspace = true }
+parley       = { workspace = true }
 
 leptos       = { workspace = true }
 leptos_router = { workspace = true }
