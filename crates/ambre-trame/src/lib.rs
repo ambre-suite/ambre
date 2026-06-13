@@ -18,6 +18,7 @@
 
 pub mod formula;
 pub mod logic;
+pub mod model;
 pub mod ui;
 
 /// Trame-specific chrome (format toolbar, selection toolbar, command wiring),

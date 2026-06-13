@@ -15,32 +15,52 @@
 
 use std::collections::HashSet;
 
+use loro::cursor::Side;
 use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
 
 use crate::formula::{CellRef, FormulaEngine};
+use crate::model::{Lid, SheetIndex, cell_key, parse_cell_key};
 use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 
-/// Name of the Loro map holding edited cell text, keyed by `"row:col"`.
-const CELLS_MAP: &str = "cells";
+/// Stable id of the implicit default sheet created by [`TrameState::new`].
+///
+/// A single constant (not a per-instance generated id) so that two fresh
+/// `TrameState`s -- the document creator and a peer/reload restoring its
+/// snapshot -- address the *same* per-sheet containers (`cells_s0`, `rows_s0`,
+/// ...) and merge cleanly. Explicit additional sheets (a later step) get unique
+/// ids and populate `sheet_order`; with one sheet, `sheet_order` is left empty
+/// to avoid a duplicate `push` on merge (see `ambre-spec-trame-logic.md` §2).
+const DEFAULT_SHEET: &str = "s0";
 
-/// Name of the Loro map holding per-cell formatting bitmasks, keyed by
-/// `"row:col"`. Source of truth for bold/italic so they survive a reload and
-/// replicate to collaborators, exactly like edited cell text.
-const FORMAT_MAP: &str = "format";
+/// Loro map holding sheet metadata: `{sheet_id -> name}`. Step 1 stores the
+/// name flat; the `{name: LoroText, hidden, tab_color}` sub-map of §2.B lands
+/// with the sheet-tabs UI.
+const SHEETS_MAP: &str = "sheets";
 
-/// Bit flags packed into the `format` map's i64 value.
+/// Bit flags packed into the per-sheet `format_{sheet}` map's i64 value.
 const FMT_BOLD: i64 = 1 << 0;
 const FMT_ITALIC: i64 = 1 << 1;
 
-/// Loro map key for a cell. Stable, collision-free (decimal, single separator).
-fn cell_key(row: u32, col: u32) -> String {
-    format!("{row}:{col}")
-}
+/// Maximum number of rows/columns a single write may materialize past the
+/// current used-range high-water mark. Bounds the pathological "lone value far
+/// down the grid" case that would otherwise create ~100k placeholder elements
+/// (see `ambre-spec-trame-logic.md` §2.A bis). A write beyond it is dropped.
+const MATERIALIZE_CAP: usize = 10_000;
 
-/// Parse a `"row:col"` cell key back into coordinates. Inverse of [`cell_key`].
-fn parse_cell_key(key: &str) -> Option<(u32, u32)> {
-    let (row, col) = key.split_once(':')?;
-    Some((row.parse().ok()?, col.parse().ok()?))
+/// Per-sheet container names (`cells_{sheet}`, etc.). Keyed by sheet id so a
+/// multi-sheet document keeps each sheet's cells/rows/columns/formatting
+/// isolated (§2.B).
+fn cells_map_name(sheet: &str) -> String {
+    format!("cells_{sheet}")
+}
+fn format_map_name(sheet: &str) -> String {
+    format!("format_{sheet}")
+}
+fn rows_list_name(sheet: &str) -> String {
+    format!("rows_{sheet}")
+}
+fn cols_list_name(sheet: &str) -> String {
+    format!("cols_{sheet}")
 }
 
 // -----------------------------------------------------------------------------
@@ -86,32 +106,44 @@ pub struct TrameState {
     /// Active cell (selection), kept in sync by the UI via
     /// [`TrameCommand::SetActiveCell`]. Formatting toggles target this cell.
     active: (u32, u32),
-    /// Cells carrying a bold run. Keyed by `(row, col)`; absence means regular
-    /// weight. A `HashSet` (not a flag on the cell) because cell content is
-    /// generated on the fly -- formatting is the only per-cell state we persist
-    /// until the CRDT model lands.
+    /// Id of the sheet the UI is currently looking at. Step 1 always holds the
+    /// implicit [`DEFAULT_SHEET`]; multi-sheet switching arrives with the tabs.
+    active_sheet: String,
+    /// Cells carrying a bold run on the active sheet. Keyed by grid `(row, col)`;
+    /// absence means regular weight. Mirrors the persisted `format_{sheet}` map
+    /// (the CRDT source of truth) for fast lookup; reseeded on import.
     bold: HashSet<(u32, u32)>,
-    /// Cells carrying an italic run.
+    /// Cells carrying an italic run on the active sheet.
     italic: HashSet<(u32, u32)>,
-    /// CRDT source of truth for **edited** cell text: a Loro map keyed by
-    /// `"row:col"` -> plaintext. A cell absent from the map shows its generated
-    /// coordinate label (A1, B2, ...). This is the first wiring of the document
-    /// model; bold/italic stay in the sets above until they move to Loro runs.
+    /// The whole workbook CRDT: multi-sheet schema (§2.B). Cells are keyed by
+    /// stable `(row_lid, col_lid)` pairs -- see [`crate::model`].
     doc: LoroDoc,
+    /// Position <-> stable-id cache for the **active sheet**'s rows/columns.
+    /// Rebuilt by [`Self::rebuild_index`] after any import; mutated in place by
+    /// the write path as it materializes rows/columns.
+    index: SheetIndex,
     /// Last CRDT version vector exported to Sync. Used to produce incremental
     /// deltas via [`ExportMode::Updates`].
     last_exported_vv: VersionVector,
     /// Formula engine: dependency graph, bytecode cache, dirty recomputation.
+    /// Addresses cells positionally; [`Self::index`] bridges to the CRDT ids.
     engine: FormulaEngine,
 }
 
 impl TrameState {
     pub fn new() -> Self {
+        let doc = LoroDoc::new();
+        // Register the implicit default sheet's name (idempotent map insert, so
+        // a peer that also "creates" s0 converges to the same entry).
+        let _ = doc.get_map(SHEETS_MAP).insert(DEFAULT_SHEET, "Sheet1");
+        doc.commit();
         Self {
             active: (0, 0),
+            active_sheet: DEFAULT_SHEET.to_owned(),
             bold: HashSet::new(),
             italic: HashSet::new(),
-            doc: LoroDoc::new(),
+            doc,
+            index: SheetIndex::default(),
             last_exported_vv: VersionVector::default(),
             engine: FormulaEngine::new(),
         }
@@ -134,12 +166,58 @@ impl TrameState {
         if let Some(text) = self.engine.evaluated_text(cell) {
             return text;
         }
-        // Plain-text cells: return CRDT value or generated label.
-        let map = self.doc.get_map(CELLS_MAP);
-        match map.get(&cell_key(row, col)).map(|v| v.get_deep_value()) {
-            Some(LoroValue::String(s)) => s.to_string(),
-            _ => format!("{}{}", col_to_alpha(col), row + 1),
+        // Plain-text cells: resolve the grid position to its stable id pair and
+        // read the CRDT value. A virtual (never-written) cell, or one cleared
+        // back to empty, shows its generated coordinate label.
+        if let Some((rl, cl)) = self.index.resolve(row as usize, col as usize) {
+            let map = self.doc.get_map(cells_map_name(&self.active_sheet));
+            if let Some(LoroValue::String(s)) = map.get(&cell_key(rl, cl)).map(|v| v.get_deep_value()) {
+                return s.to_string();
+            }
         }
+        format!("{}{}", col_to_alpha(col), row + 1)
+    }
+
+    /// Ensure grid `(row, col)` is materialized (its row and column exist in the
+    /// `rows_/cols_` lists) and return the `(row_lid, col_lid)` pair to key the
+    /// cell with. Extends the dense used range by pushing placeholder elements,
+    /// capturing each new element's stable id. Returns `None` -- dropping the
+    /// write -- if the jump past the high-water mark exceeds [`MATERIALIZE_CAP`].
+    fn materialize(&mut self, row: u32, col: u32) -> Option<(Lid, Lid)> {
+        let (row, col) = (row as usize, col as usize);
+        if row >= self.index.row_len() && row - self.index.row_len() >= MATERIALIZE_CAP
+            || col >= self.index.col_len() && col - self.index.col_len() >= MATERIALIZE_CAP
+        {
+            tracing::warn!(
+                "[Logic] materialize ({row},{col}) exceeds cap past hwm \
+                 (rows {}, cols {}); write dropped",
+                self.index.row_len(),
+                self.index.col_len(),
+            );
+            return None;
+        }
+        let rows = self.doc.get_movable_list(rows_list_name(&self.active_sheet));
+        while self.index.row_len() <= row {
+            rows.push(LoroValue::Null).ok()?;
+            let id = rows.get_cursor(rows.len() - 1, Side::Middle).and_then(|c| c.id)?;
+            self.index.push_row(id);
+        }
+        let cols = self.doc.get_movable_list(cols_list_name(&self.active_sheet));
+        while self.index.col_len() <= col {
+            cols.push(LoroValue::Null).ok()?;
+            let id = cols.get_cursor(cols.len() - 1, Side::Middle).and_then(|c| c.id)?;
+            self.index.push_col(id);
+        }
+        self.index.resolve(row, col)
+    }
+
+    /// Rebuild [`Self::index`] from the active sheet's `rows_/cols_` lists.
+    /// Called after any import, where peers' (or our own persisted) structural
+    /// ops may have added rows/columns the cache does not yet know about.
+    fn rebuild_index(&mut self) {
+        let rows = self.doc.get_movable_list(rows_list_name(&self.active_sheet));
+        let cols = self.doc.get_movable_list(cols_list_name(&self.active_sheet));
+        self.index = SheetIndex::build(&rows, &cols);
     }
 
     /// Handle a UI command and return a typed outcome.
@@ -161,13 +239,18 @@ impl TrameState {
                     "[Logic] SetCellText row={} col={} text='{:.80}'",
                     row, col, text,
                 );
-                let map = self.doc.get_map(CELLS_MAP);
-                let key = cell_key(row, col);
                 if text.is_empty() {
-                    let _ = map.delete(&key);
+                    // Clearing: only touch the CRDT if the cell was materialized.
+                    if let Some((rl, cl)) = self.index.resolve(row as usize, col as usize) {
+                        let _ = self.doc.get_map(cells_map_name(&self.active_sheet)).delete(&cell_key(rl, cl));
+                    }
                     self.engine.on_cell_changed(CellRef::new(row, col), "");
                 } else {
-                    let _ = map.insert(&key, text.as_str());
+                    let Some((rl, cl)) = self.materialize(row, col) else {
+                        // Beyond the materialization cap: drop the write.
+                        return TrameOutcome::display_only(vec![]);
+                    };
+                    let _ = self.doc.get_map(cells_map_name(&self.active_sheet)).insert(&cell_key(rl, cl), text.as_str());
                     self.engine.on_cell_changed(CellRef::new(row, col), &text);
                 }
                 self.doc.commit();
@@ -256,8 +339,11 @@ impl TrameState {
         if self.italic.contains(&(row, col)) {
             mask |= FMT_ITALIC;
         }
-        let map = self.doc.get_map(FORMAT_MAP);
-        let key = cell_key(row, col);
+        // Formatting a cell pins an identity to it, so it must be materialized
+        // just like an edited value. Beyond the cap there is nothing to persist.
+        let (rl, cl) = self.materialize(row, col)?;
+        let map = self.doc.get_map(format_map_name(&self.active_sheet));
+        let key = cell_key(rl, cl);
         if mask == 0 {
             let _ = map.delete(&key);
         } else {
@@ -267,20 +353,27 @@ impl TrameState {
         self.flush_delta()
     }
 
-    /// Rebuild the in-memory bold/italic sets from the CRDT `format` map. Called
-    /// after any import so a reload or a peer's formatting edit is reflected.
+    /// Rebuild the in-memory bold/italic sets from the active sheet's
+    /// `format_{sheet}` map. Called after any import so a reload or a peer's
+    /// formatting edit is reflected. Requires [`Self::index`] to be current
+    /// (the keys are stable id pairs, mapped back to grid positions).
     fn reseed_formatting(&mut self) {
         self.bold.clear();
         self.italic.clear();
-        if let LoroValue::Map(fmts) = self.doc.get_map(FORMAT_MAP).get_value() {
+        if let LoroValue::Map(fmts) = self.doc.get_map(format_map_name(&self.active_sheet)).get_value() {
             for (key, value) in fmts.iter() {
-                if let (Some((row, col)), LoroValue::I64(mask)) = (parse_cell_key(key), value) {
-                    if mask & FMT_BOLD != 0 {
-                        self.bold.insert((row, col));
-                    }
-                    if mask & FMT_ITALIC != 0 {
-                        self.italic.insert((row, col));
-                    }
+                let (Some((rl, cl)), LoroValue::I64(mask)) = (parse_cell_key(key), value) else {
+                    continue;
+                };
+                let (Some(row), Some(col)) = (self.index.row_pos(&rl), self.index.col_pos(&cl)) else {
+                    continue; // references a deleted row/column
+                };
+                let cell = (row as u32, col as u32);
+                if mask & FMT_BOLD != 0 {
+                    self.bold.insert(cell);
+                }
+                if mask & FMT_ITALIC != 0 {
+                    self.italic.insert(cell);
                 }
             }
         }
@@ -335,6 +428,18 @@ impl TrameState {
         self.import_and_reseed(payload, "import_snapshot")
     }
 
+    /// Resolve a sheet name to its stable sheet id (e.g. `"Sheet1"` -> `"s0"`).
+    /// Groundwork for cross-sheet formula references (`Sheet2!A1`). Linear scan
+    /// over the `sheets` map -- there are only a handful of sheets.
+    pub fn sheet_name_to_id(&self, name: &str) -> Option<String> {
+        match self.doc.get_map(SHEETS_MAP).get_value() {
+            LoroValue::Map(sheets) => sheets.iter().find_map(|(id, value)| {
+                matches!(value, LoroValue::String(n) if n.as_str() == name).then(|| id.to_string())
+            }),
+            _ => None,
+        }
+    }
+
     /// Shared import path for both a local snapshot restore and a remote delta:
     /// merge the Loro bytes, advance the export cursor past the imported ops (so
     /// they are not re-broadcast), reseed the formula engine from the resulting
@@ -348,7 +453,12 @@ impl TrameState {
             tracing::warn!("[Logic] {origin} import failed: {e:?}");
             return Vec::new();
         }
-        let cell_count = match self.doc.get_map(CELLS_MAP).get_value() {
+        // Rebuild the position <-> id cache first: the merged doc may carry rows
+        // or columns this cache does not yet know about, and both the engine
+        // reseed and the formatting reseed below resolve cell keys through it.
+        self.rebuild_index();
+        let cells_map = self.doc.get_map(cells_map_name(&self.active_sheet));
+        let cell_count = match cells_map.get_value() {
             LoroValue::Map(cells) => cells.len(),
             _ => 0,
         };
@@ -358,16 +468,20 @@ impl TrameState {
         // them back. Local edits are flushed each frame before remote applies, so
         // there are no pending local-only ops to swallow here.
         self.last_exported_vv = self.doc.oplog_vv();
-        // Reseed the formula engine from the resulting cell values.
-        if let LoroValue::Map(cells) = self.doc.get_map(CELLS_MAP).get_value() {
+        // Reseed the formula engine from the resulting cell values, mapping each
+        // stable key pair back to its grid position via the rebuilt index.
+        if let LoroValue::Map(cells) = cells_map.get_value() {
             for (key, value) in cells.iter() {
-                if let (Some((row, col)), LoroValue::String(text)) = (parse_cell_key(key), value) {
-                    self.engine.on_cell_changed(CellRef::new(row, col), text.as_str());
+                let (Some((rl, cl)), LoroValue::String(text)) = (parse_cell_key(key), value) else {
+                    continue;
+                };
+                if let (Some(row), Some(col)) = (self.index.row_pos(&rl), self.index.col_pos(&cl)) {
+                    self.engine.on_cell_changed(CellRef::new(row as u32, col as u32), text.as_str());
                 }
             }
         }
         self.engine.compute_all_dirty();
-        // Rebuild bold/italic from the merged `format` map (reload or peer edit).
+        // Rebuild bold/italic from the merged `format_{sheet}` map.
         self.reseed_formatting();
         // Refresh the toolbar / context-menu toggles for the active cell: after a
         // reload its formatting is only known once the `format` map is restored.
@@ -514,6 +628,83 @@ mod tests {
         });
         let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
         assert_eq!(cells[0].text, "A1");
+    }
+
+    /// A value written far down the grid is keyed by its row/column stable ids,
+    /// survives a snapshot round-trip, and resolves at the same grid position in
+    /// a fresh state -- proving the LID-keyed persistence + `SheetIndex` rebuild.
+    #[test]
+    fn far_cell_survives_snapshot_roundtrip() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText {
+            row: 1000, col: 3, text: "deep".to_owned(),
+        });
+
+        let snapshot = state.export_snapshot();
+        let mut restored = TrameState::new();
+        restored.import_snapshot(&snapshot);
+
+        let evts = restored.handle_command(TrameCommand::ScrollViewport {
+            version: 1, row_start: 1000, row_end: 1000, col_start: 3, col_end: 3,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
+        assert_eq!(cells[0].text, "deep");
+        // An untouched far cell still shows its generated label (virtual space).
+        let evts = restored.handle_command(TrameCommand::ScrollViewport {
+            version: 2, row_start: 2000, row_end: 2000, col_start: 0, col_end: 0,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
+        assert_eq!(cells[0].text, "A2001");
+    }
+
+    /// A formula referencing another cell still evaluates after the value and the
+    /// formula are stored under stable id keys and reloaded.
+    #[test]
+    fn formula_evaluates_through_stable_keys() {
+        let mut state = TrameState::new();
+        // A1 is a formula literal so the engine ingests its value (plain numeric
+        // literals feeding formulas are a separate engine concern, out of scope).
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "=21".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 1, text: "=A1*2".to_owned() });
+
+        let snapshot = state.export_snapshot();
+        let mut restored = TrameState::new();
+        restored.import_snapshot(&snapshot);
+
+        let evts = restored.handle_command(TrameCommand::ScrollViewport {
+            version: 1, row_start: 0, row_end: 0, col_start: 0, col_end: 1,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
+        let b1 = cells.iter().find(|c| c.row == 0 && c.col == 1).unwrap();
+        assert_eq!(b1.text, "42", "B1 = A1*2 must evaluate after reload");
+    }
+
+    /// Two sheets keep their cells isolated (distinct `cells_{sheet}` containers)
+    /// and `sheet_name_to_id` resolves the default sheet's name.
+    #[test]
+    fn multi_sheet_isolation_and_name_lookup() {
+        let mut state = TrameState::new();
+        assert_eq!(state.sheet_name_to_id("Sheet1").as_deref(), Some("s0"));
+        assert_eq!(state.sheet_name_to_id("Nope"), None);
+
+        // Write to the default sheet, then to a second sheet's containers
+        // directly (the add-sheet command lands in a later step).
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "on_s0".to_owned() });
+        let _ = state.doc.get_map(super::SHEETS_MAP).insert("s1", "Sheet2");
+        let other = state.doc.get_movable_list(super::rows_list_name("s1"));
+        other.push(loro::LoroValue::Null).unwrap();
+        state.doc.commit();
+
+        // `cells_s1` is empty; `cells_s0` holds the value -- containers are isolated.
+        assert!(matches!(
+            state.doc.get_map(super::cells_map_name("s0")).get_value(),
+            loro::LoroValue::Map(ref m) if m.len() == 1
+        ));
+        assert!(matches!(
+            state.doc.get_map(super::cells_map_name("s1")).get_value(),
+            loro::LoroValue::Map(ref m) if m.is_empty()
+        ));
+        assert_eq!(state.sheet_name_to_id("Sheet2").as_deref(), Some("s1"));
     }
 
     #[test]

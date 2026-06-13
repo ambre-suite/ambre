@@ -54,12 +54,44 @@
 
 Positional addressing (`"R{row}C{col}"`) is **rejected**: inserting a row at position 5 would invalidate all keys `R5C*..RnC*` → O(n) CRDT operations.
 
-**Decision: `LoroMovableList` for rows and columns.** Each element has an internal `ListItemID = (PeerID: u64, Counter: i32)`, stable and unique. Inserting a row = 1 CRDT operation. No cell key is invalidated.
+**Decision: `LoroMovableList` for rows and columns.** Each element has a stable, unique
+`ListItemId = (PeerID: u64, Counter: i32)`. Inserting a row = 1 CRDT operation. No cell key is
+invalidated.
 
-**Key format in `LoroMap("cells_{sheet}")` — fixed-length 42 chars:**
+> **Implementation note (loro 1.12).** `LoroMovableList` does not expose a per-element id directly.
+> The stable `ListItemId` is obtained via `list.get_cursor(pos, Side::Middle)` whose `Cursor.id`
+> is a `loro::ID { peer, counter }` (`Copy + Eq + Hash`). That `ID` anchors to the op that created
+> the element and replicates with the document, so it is stable across sessions and peers and is the
+> concrete `ListItemId` used below.
+
+**Key format in `LoroMap("cells_{sheet}")` — fixed-length 51 chars** (16 + `_` + 8 per side, joined by `:`):
 ```
 "{row_peer:016x}_{row_ctr:08x}:{col_peer:016x}_{col_ctr:08x}"
 ```
+
+### A bis. Dense over used range — reconciliation with the virtual 100k grid
+
+The grid is virtual at `TOTAL_ROWS = 100_000`. We do **not** materialize 100k list elements. The
+model that keeps O(1) insert *and* CRDT convergence is:
+
+> **Stable `ListItemId`s, `rows_/cols_` `LoroMovableList` dense over the *used range* `[0..hwm]`
+> (high-water mark), rows/columns beyond the used range are virtual** (no element, no storage; a
+> read there returns the generated label, a write there materializes up to that index).
+
+Crucially, **list index == grid position**: resolving `A5` is a direct `row_by_pos[5]` lookup, and a
+concurrent insert of two distinct rows is two independent element insertions that Loro orders
+canonically — convergent *and* intent-preserving, with no shared mutable counter.
+
+**Materialization cap.** To bound the pathological "single value far down" case (e.g. an edit at row
+99 999 in an otherwise empty sheet, which would materialize ~100k placeholders), a write that would
+extend the used range by more than `ROW_MATERIALIZE_CAP` (= 10 000) rows past the current high-water
+mark is **rejected** (the cell write is dropped and a warning is surfaced). Normal top-down editing
+is unaffected. The symmetric cap applies to columns (bounded by `TOTAL_COLS = 1000` anyway).
+
+The **truly-sparse run-length** alternative (store only non-empty rows + a per-row `gap_before`
+counter + an order-statistic tree) is **rejected** — see §13: splitting a shared gap on concurrent
+inserts is not convergent under LWW and corrupts absolute numbering. The order-statistic tree only
+speeds the position query; it does not remove the shared-counter hazard.
 
 ### B. CRDT Schema
 
@@ -100,6 +132,11 @@ LoroDoc
 
 ### C. SheetIndex — Bidirectional O(1) Cache
 
+The `Vec`s are dense over the **used range** (`len == hwm`, see §2.A bis), never over the 100k
+virtual grid, so `resolve` is a direct O(1) index lookup and memory is proportional to real sheet
+size. `row_by_pos[i]` is the `ListItemId` of the element at list position `i` (obtained via the
+`get_cursor(i, Middle).id` cursor described in §2.A).
+
 ```rust
 pub struct SheetIndex {
     row_by_pos: Vec<ListItemId>,
@@ -109,7 +146,7 @@ pub struct SheetIndex {
 }
 
 impl SheetIndex {
-    /// Reconstruction O(N) au chargement
+    /// O(N_used) reconstruction at load (N_used = materialized rows + cols, not 100k).
     pub fn build(rows: &LoroMovableList, cols: &LoroMovableList) -> Self { /* ... */ }
 
     /// Incremental O(N) update for shifts
@@ -1262,6 +1299,7 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 | Alternative | Rejected because |
 |---|---|
 | **Positional addressing `R{row}C{col}`** | Row insert = O(n) CRDT ops. `LoroMovableList` = 1 op. |
+| **Sparse run-length rows + order-statistic tree** | Stores only non-empty rows with a shared `gap_before` counter to avoid materializing empty rows. **Not convergent:** two concurrent inserts that split the same gap both `set` the shared counter -> LWW keeps one -> absolute numbering of every following row corrupts identically on all replicas. Dense-over-used-range (each row = its own element, no shared counter) is convergent and intent-preserving; the tree would only speed the query, not remove the hazard. A `ROW_MATERIALIZE_CAP` bounds the memory cost the sparse model aimed to avoid. |
 | **UUID v7 per row/column** | Redundant — Loro already generates stable `ListItemID` values. |
 | **`{client_hex}{counter_hex}` format without fixed width** | Ambiguous without separator. Fixed encoding `{peer:016x}_{ctr:08x}` chosen. |
 | **100 petgraph edges for a range** | Memory explosion + O(n) updates on insert. Separate `range_deps`. |
@@ -1279,8 +1317,8 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 > `specs/ambre-roadmap.md`.
 
 **Phase 0 — Core standalone**
-- [ ] Multi-sheet `LoroDoc`, full CRDT schema (§2.B including features: `filter_hidden`, `cond_formats`, `validations`, `protections`) *(single-sheet today; multi-sheet is Epic `E3`)*
-- [ ] Bidirectional `SheetIndex` + `sheet_name_to_id` *(Epic `E3`)*
+- [~] Multi-sheet `LoroDoc`, per-sheet CRDT schema (§2.B: `sheets`, `cells_/format_/rows_/cols_{sheet}`, dense stable-id model) *(structural foundation landed: implicit default sheet, lazy materialization, `MATERIALIZE_CAP`; the `{v,t,s}` cell sub-map, shared `styles`, and the feature maps `filter_hidden`/`cond_formats`/`validations`/`protections` arrive with their features; explicit add-sheet + `sheet_order` arrive with the tabs UI)*
+- [x] Bidirectional `SheetIndex` (`model::SheetIndex`, dense over used range) + `sheet_name_to_id`
 - [x] `nom` parser: arithmetic, `CellRef`, `Range` (bounded + `EntireAxis`), basic functions, cross-sheet references (`Sheet2!A1` via `sheet_name_to_id`)
 - [x] Bytecode VM: full `Op` set, `compile()`, `execute()`, `EvalContext`
 - [x] Two-level `DependencyGraph` + `collect_dirty`
