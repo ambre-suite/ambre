@@ -1333,7 +1333,7 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 - [x] `DisplayViewport` + anti-flickering (`tx_version`)
 - [ ] Insert/delete rows/columns + `SheetIndex` update + dirty propagation *(Epic `E3`)*
 - [ ] Merges: Loro storage, validation, `DisplayCell.merge_span`, conflict detection *(Epic `E3`)*
-- [ ] Shared rendering module `ambre-trame/src/render.rs`: `draw_cells_on<S: DrawSurface>()`, `draw_grid_lines_on<S>()`, etc. *(Epic `E3`)*
+- [x] Shared rendering module `ambre-trame/src/render.rs`: `GridLayout` + `draw_cells_on<S>()`, `draw_grid_lines_on<S>()`, `draw_col_headers_on<S>()`, `draw_row_headers_on<S>()`, all `DrawSurface`-generic. `ui::renderer` composes them (cells layer + header overlay); uniform-metrics `GridLayout` (variable widths deferred); `DisplayViewport`-fed PDF path lands with `export_pdf.rs` (Phase 3). *(Epic `E3`)*
 - [ ] `MockSyncHandle` for controller tests (via `CommandSink`)
 - [ ] Undo/Redo via Loro `UndoManager` *(Epic `E3`)*
 
@@ -1343,11 +1343,11 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 - [ ] TEXT, CONCAT *(remaining string functions, Epic `E3`)*
 - [ ] TODAY, NOW, DATE, YEAR, MONTH, DAY *(Epic `E3`)*
 - [ ] Named ranges, cross-sheet references *(Epic `E3`)*
-- [ ] `SheetRangeIndex` interval tree 2D if benchmarks justify it *(deferred -- Phase 3)*
-- [ ] Floating objects R-tree *(deferred -- Phase 3)*
-- [ ] `compute_all_dirty` benchmarks on mobile hardware — if > 50ms P95, implement the asynchronous P4 yield (`ContinueDirtyCompute` / `ComputePending`, see §8 optional Phase 2) *(deferred -- Epic `E5`)*
 
 **Phase 3 — Optimization & Completion**
+- [ ] `SheetRangeIndex` interval tree 2D if benchmarks justify it
+- [ ] Floating objects R-tree
+- [ ] `compute_all_dirty` benchmarks on mobile hardware — if > 50ms P95, implement the asynchronous P4 yield (`ContinueDirtyCompute` / `ComputePending`, see §8 optional Phase 2)
 - [ ] Advanced functions: XLOOKUP, LAMBDA, dynamic arrays
 - [ ] Rayon for independent DAG branches
 - [ ] `SheetIndex` O(log N) for shifts

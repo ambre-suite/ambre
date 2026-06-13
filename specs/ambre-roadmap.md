@@ -93,7 +93,7 @@ four Trame specs, deduplicated against what `E0`/`E1` already delivered (virtual
 editor are done).*
 
 Stories:
-- `trame-logic §14` — multi-sheet `LoroDoc` + `SheetIndex`; insert/delete rows/columns; cell merges;
+- `trame-logic §14 Phase 1 & 2` — multi-sheet `LoroDoc` + `SheetIndex`; insert/delete rows/columns; cell merges;
   Undo/Redo (Loro `UndoManager`); complete the function set from 22 to ~50.
   *(parser / bytecode VM / `DependencyGraph` / cycles / `#REF!` are already done -- see that section.)*
 - `trame-features §10 Phase 1` — shared filter, simple sort, Undo/Redo commands.
