@@ -8,10 +8,10 @@
 > `prose-features`, `prose-interop`, and `prose-ui` build. These four modules are internal
 > to the `ambre-prose` crate.
 
-> **Model note (Model B).** The code uses the **3-thread shared-memory architecture** (`flume` channels, single WASM binary) — see `ambre-spec-architecture.md`. Consequences for this spec:
-> - **`AppController`/`CommandSink` removed.** The state of a Prose document is `ProseState`, stored in the Logic thread's typed registry (`enum DocState { Trame(TrameState), Prose(ProseState), … }`) and dispatched via `match` (no trait object, no `Box<dyn Any>`, no `ControllerRegistry`).
+> **Architecture note.** The client uses a **3-thread shared-memory architecture** (`flume` channels, single WASM binary) — see `ambre-spec-architecture.md`. Consequences for this spec:
+> - **State registry.** The state of a Prose document is `ProseState`, a concrete value stored in the Logic thread's typed registry (`enum DocState { Trame(TrameState), Prose(ProseState), … }`) and dispatched via `match` (no trait object, no `Box<dyn Any>`).
 > - **Typed data plane.** `ProseCommand`/`ProseEvent` (+ their payload types: `PageLayout`, `BlockLayout`, …) live in **`ambre-bus`** (re-exported by `ambre-prose`) and travel **by move** on `flume`, inside `AppCommand::Prose(..)` / `AppEvent::Prose(..)`. **No `serde` derivation** on them. `serde`/`postcard` only remain for **network bytes**: Loro CRDT payloads (`export_updates`/`export_snapshot`, already `Vec<u8>`) and `Ephemeral` payloads (`CursorPosition`/`RemoteCursor`, postcard).
-> - **Typed outcome for editing.** A handler that mutates the CRDT **returns** domain bytes (Loro delta); the Logic dispatcher emits `SyncCommand::SendUpdate { document_id, payload }`. No more `sync_tx`/`CommandSink` in `ProseState`. See §C and `ambre-spec-architecture.md §7 ARCH P2`.
+> - **Typed outcome for editing.** A handler that mutates the CRDT **returns** domain bytes (Loro delta); the Logic dispatcher emits `SyncCommand::SendUpdate { document_id, payload }`. `ProseState` holds no transport handle of its own. See §C and `ambre-spec-architecture.md §7 ARCH P2`.
 > - **Sync→Logic event routing.** `ProseState` does **not** see `LogicEvent`: the generic dispatcher in `ambre-logic` routes incoming events (`RemoteUpdate`/`RemoteSnapshot`/`RemoteEphemeral`/`SnapshotNeeded`/…) to `ProseState`'s content methods (`apply_remote`, `apply_ephemeral`, `export_snapshot`).
 
 ---
@@ -41,7 +41,7 @@ This component delegates:
 | `loro` | Native Rust CRDT: `LoroDoc`, `LoroMovableTree`, `LoroText`, `LoroMap`. Single source of collaborative truth. |
 | `parley` | Typographic layout used in the Logic thread to compute block heights (pagination). Direct dependency (not only via `ambre-draw`) because `ambre-prose` uses Parley's full API (`Layout`, `FontContext`, line-breaking) — not just the `GlyphRun` types exposed by `DrawSurface`. |
 | `ambre-core` | `Uuid`, `DocType`, common types (via `ambre-bus` re-export). |
-| `ambre-bus` | Typed IPC types: `ProseCommand`/`ProseEvent` (+ payloads), `AppCommand`/`AppEvent`, `SyncCommand`, `RestCommand`/`RestEvent`. No more `AppController`/`CommandSink` traits. |
+| `ambre-bus` | Typed IPC types: `ProseCommand`/`ProseEvent` (+ payloads), `AppCommand`/`AppEvent`, `SyncCommand`, `RestCommand`/`RestEvent`. |
 | `ambre-draw` | `DrawSurface` trait + kurbo/peniko re-exports. Page rendering functions (`render_block_on`, etc.) are parameterized on this trait — same code for screen (WgpuSurface) and PDF export (KrillaSurface). |
 | `postcard` | Binary serialization **only for network payloads**: `Ephemeral` (`CursorPosition`/`RemoteCursor` cursors). CRDT snapshots/deltas are already `Vec<u8>` produced by Loro. **No postcard on the inter-thread path** (typed values on `flume`). |
 | `serde` | `Serialize`/`Deserialize` **only** on postcard-serialized types bound for the network (`CursorPosition`, `RemoteCursor`). IPC types (`ProseCommand`/`ProseEvent`, `PageLayout`, …) do not carry it (move on `flume`). |
@@ -721,9 +721,8 @@ invalidation optimizes frequent cases (keystroke, insertion, deletion):
 
 #### `ProseState` — typed document state
 
-`ProseState` no longer implements any `AppController` trait: it is a concrete state,
-stored in `DocState::Prose(ProseState)` and dispatched via `match` in the Logic thread
-(`ambre-logic`). Its public surface mirrors `TrameState`:
+`ProseState` is a concrete state, stored in `DocState::Prose(ProseState)` and dispatched
+via `match` in the Logic thread (`ambre-logic`). Its public surface mirrors `TrameState`:
 
 - `handle_command(ProseCommand) -> ProseOutcome` — content command (UI → Logic).
 - `apply_remote(&[u8]) -> Vec<ProseEvent>` — remote CRDT delta/snapshot to import.

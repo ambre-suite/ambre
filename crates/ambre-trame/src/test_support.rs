@@ -8,14 +8,13 @@
 // seam) and relaying the captured CRDT deltas to a peer controller's
 // `apply_remote`.
 //
-// In production the Logic dispatcher (`ambre-logic`) reads a `TrameOutcome` and
-// pushes `SyncCommand::SendUpdate` / `SendEphemeral` onto the Logic->Sync
-// channel. The `TrameController`/`AppController` refactor that would let the
-// controller hold a `Box<dyn CommandSink>` directly is deferred (see
-// `ambre-spec-trame-logic.md` Phase 1), so `MockSyncHandle::absorb` reproduces
-// that exact relay step over the current `TrameOutcome` API. Tests therefore
-// drive the same payloads through the same `CommandSink` seam the production
-// controller will use once the refactor lands -- no test rewrite required then.
+// In production the Logic dispatcher (`ambre-logic::LogicState`) reads a
+// `TrameOutcome` and pushes `SyncCommand::SendUpdate` / `SendEphemeral` onto the
+// Logic->Sync channel. `TrameState` is a typed `DocState` variant that holds no
+// transport handle of its own (see `ambre-spec-trame-logic.md` sec.8 and
+// `ambre-spec-architecture.md` sec.6). `MockSyncHandle::absorb` reproduces that
+// exact relay step over the `TrameOutcome` API, so tests drive the same
+// `SyncCommand`s through the same `CommandSink` seam the dispatcher emits.
 // ============================================================================
 
 use std::cell::RefCell;

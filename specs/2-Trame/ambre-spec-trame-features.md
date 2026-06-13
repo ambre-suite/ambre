@@ -6,11 +6,10 @@
 >
 > **Scope:** Logic thread only. Rendering of resulting states (hidden rows, conditional styles, protection indicators) is delegated to `ambre-spec-trame-ui.md`.
 
-> **Model note (Model B).** The code is in **3-thread shared-memory** architecture (`flume` channels, single WASM binary) — see `ambre-spec-architecture.md`. Implications for this spec:
-> - **`TrameController` → `TrameState`**: the `AppController`/`CommandSink` model (trait objects) is removed. A Trame document's state is `TrameState`, stored in the Logic thread's typed registry (`enum DocState { Trame(TrameState), … }`) and dispatched via `match` (no trait object, no `Box<dyn Any>`).
+> **Architecture note.** The client runs a 3-thread shared-memory architecture (`flume` channels, single WASM binary) — see `ambre-spec-architecture.md`. Implications for this spec:
+> - **State registry.** A Trame document's state is `TrameState`, a concrete value stored in the Logic thread's typed registry (`enum DocState { Trame(TrameState), … }`) and dispatched via `match` (no trait object, no `Box<dyn Any>`).
 > - **Typed data plane, zero inter-thread postcard.** `TrameCommand`/`TrameEvent`/`DisplayCell` live in **`ambre-bus`** (re-exported by `ambre-trame`), travel **by move** on `flume` inside `AppCommand::Trame(..)` / `AppEvent::Trame(..)` — **no `serde` derive**. `Vec<u8>` only remain for real network bytes (Loro deltas/snapshots).
 > - **Typed outcome for editing.** A handler that mutates the CRDT does not "self-synchronize": it **returns** domain bytes that the Logic dispatcher fans out to the Sync thread. See §0 below and `ambre-spec-architecture.md §7 ARCH P2` ("one-way content handler").
-> - ✅ The sister Trame specs (`-logic`, `-ui`, `-interop`) have been aligned to Model B vocabulary (Logic thread, not Logic Worker).
 
 ---
 
@@ -32,7 +31,7 @@ struct TrameOutcome {
 }
 ```
 
-> The `fn handle_*(…) -> Vec<TrameEvent>` signatures shown in the following sections are the **display-only** form; for operations that must also broadcast a delta, read the return as the `display` branch of a `TrameOutcome` (the `update` branch carrying the Loro delta). This replaces the old Model A "automatic `subscribe_local_update → SyncCommand::SendUpdate`".
+> The `fn handle_*(…) -> Vec<TrameEvent>` signatures shown in the following sections are the **display-only** form; for operations that must also broadcast a delta, read the return as the `display` branch of a `TrameOutcome` (the `update` branch carrying the Loro delta).
 
 ---
 

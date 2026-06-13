@@ -727,7 +727,7 @@ The full flow is specified in `ambre-spec-sync.md` §3. The initiator client cal
 ))
 ```
 
-> ⚠️ **COOP/COEP Note (Model B — REQUIRED).** The client architecture has moved to **Model B**: 3 `wasm_thread` threads sharing a **linear memory** (`SharedArrayBuffer`) — see `ambre-spec-architecture.md §2.B`. `SharedArrayBuffer` requires the page to be **cross-origin isolated**, so the headers `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` (or `credentialless`) **must** be served on the main HTML document (and the worker bootstrap). Consequence to document for self-hosting: any embedded cross-origin resource must carry appropriate `Cross-Origin-Resource-Policy` / CORS, otherwise it is blocked. *(The opposite was true in Model A shared-nothing, where these headers were not required — accepted cost of the move to copy-free typed `flume` transport.)*
+> ⚠️ **COOP/COEP Note (REQUIRED).** The client runs 3 `wasm_thread` threads sharing a **linear memory** (`SharedArrayBuffer`) — see `ambre-spec-architecture.md §2.B`. `SharedArrayBuffer` requires the page to be **cross-origin isolated**, so the headers `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` (or `credentialless`) **must** be served on the main HTML document (and the worker bootstrap). Consequence to document for self-hosting: any embedded cross-origin resource must carry appropriate `Cross-Origin-Resource-Policy` / CORS, otherwise it is blocked. This is the accepted cost of copy-free typed `flume` transport across threads.
 
 TLS via **rustls** (Caddy as terminator). No OpenSSL in the Axum chain.
 
