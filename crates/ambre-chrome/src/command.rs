@@ -35,14 +35,20 @@ use leptos::prelude::*;
 #[derive(Clone)]
 pub struct CommandStates {
     toggled: Rc<HashMap<ambre_commands::CommandId, RwSignal<bool>>>,
+    /// Per-command enabled state (e.g. Undo/Redo availability), keyed like
+    /// `toggled`. Initially `true`: a command is actionable until the Logic
+    /// thread reports otherwise (`TrameEvent::UndoState`, ...).
+    enabled: Rc<HashMap<ambre_commands::CommandId, RwSignal<bool>>>,
 }
 
 impl CommandStates {
-    /// Create a store with a toggle signal (initially `false`) for each id.
-    /// Must run inside a Leptos reactive owner (e.g. the mount closure).
+    /// Create a store with a toggle signal (initially `false`) and an enabled
+    /// signal (initially `true`) for each id. Must run inside a Leptos reactive
+    /// owner (e.g. the mount closure).
     pub fn new(ids: &[ambre_commands::CommandId]) -> Self {
         let toggled = ids.iter().map(|&id| (id, RwSignal::new(false))).collect();
-        Self { toggled: Rc::new(toggled) }
+        let enabled = ids.iter().map(|&id| (id, RwSignal::new(true))).collect();
+        Self { toggled: Rc::new(toggled), enabled: Rc::new(enabled) }
     }
 
     /// The reactive toggle signal for `id`, for a chrome view to subscribe to
@@ -55,6 +61,21 @@ impl CommandStates {
     /// from the inbound `UiEvent` stream -- the single writer.
     pub fn set_toggled(&self, id: ambre_commands::CommandId, value: bool) {
         if let Some(sig) = self.toggled.get(&id) {
+            sig.set(value);
+        }
+    }
+
+    /// The reactive enabled signal for `id`, for a chrome view to subscribe to
+    /// (e.g. a button's `disabled` / `aria-disabled`). `None` if the id was not
+    /// registered.
+    pub fn enabled_signal(&self, id: ambre_commands::CommandId) -> Option<RwSignal<bool>> {
+        self.enabled.get(&id).copied()
+    }
+
+    /// Push the authoritative enabled state for `id`. Called by the dispatcher
+    /// from the inbound `UiEvent` stream -- the single writer.
+    pub fn set_enabled(&self, id: ambre_commands::CommandId, value: bool) {
+        if let Some(sig) = self.enabled.get(&id) {
             sig.set(value);
         }
     }

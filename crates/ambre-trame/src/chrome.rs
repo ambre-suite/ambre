@@ -20,7 +20,7 @@
 
 use ambre_bus::{AppCommand, AppEvent, DocType, TrameCommand, TrameEvent, UiEvent};
 use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
-use ambre_chrome::{CommandStates, Kbd, MenuEntry};
+use ambre_chrome::{CommandStates, Kbd, MenuEntry, Toasts};
 use leptos::prelude::*;
 
 /// The Trame "Bold" command. A UI affordance id (ambre-commands), distinct from
@@ -73,8 +73,56 @@ pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
         match te {
             TrameEvent::BoldState { enabled } => store.set_toggled(BOLD, *enabled),
             TrameEvent::ItalicState { enabled } => store.set_toggled(ITALIC, *enabled),
+            // Loro `UndoManager` stack availability -> the Undo/Redo affordances'
+            // enabled state. The Logic thread is the single source of truth.
+            TrameEvent::UndoState { can_undo, can_redo } => {
+                store.set_enabled(UNDO, *can_undo);
+                store.set_enabled(REDO, *can_redo);
+            }
             _ => {}
         }
+    }
+}
+
+/// Seed the command store for a freshly mounted Trame document: Undo and Redo
+/// start disabled (an untouched document has an empty history) until the first
+/// [`TrameEvent::UndoState`] arrives. Every other command stays enabled by
+/// default. Called by the launcher right after it builds the store.
+pub fn init_command_states(store: &CommandStates) {
+    store.set_enabled(UNDO, false);
+    store.set_enabled(REDO, false);
+}
+
+/// Surface a Trame `UiEvent` to the user as a transient toast, when it carries a
+/// message the user should see: a rejected merge/edit, a sheet-lifecycle error,
+/// or the completion of a shared sort/filter. A no-op for every other event; the
+/// launcher calls this for each event it relays, naming no Trame variant itself.
+pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
+    let UiEvent::Viewport { event: AppEvent::Trame(te), .. } = ev else { return };
+    match te {
+        // Rejections / validation failures: no CRDT mutation occurred, the user
+        // needs to know why their action did nothing.
+        TrameEvent::MergeRejected { reason } => {
+            toasts.warning(format!("Merge rejected: {reason}"));
+        }
+        TrameEvent::ValidationError { message, .. } => {
+            toasts.warning(format!("Invalid value: {message}"));
+        }
+        TrameEvent::Error { message } => toasts.warning(message.clone()),
+        // A converged concurrent edit masked a covered cell on an active merge.
+        // Purely informational: the value reappears on unmerge.
+        TrameEvent::MergeConflictDetected { covered_row, covered_col, .. } => {
+            toasts.info(format!(
+                "A merge now covers a non-empty cell ({covered_row}, {covered_col}); its value is hidden until unmerge"
+            ));
+        }
+        // Shared sort/filter completion: confirm the action took effect (the data
+        // refresh rides on the accompanying `DataReset`).
+        TrameEvent::FilterApplied { hidden_row_count } => {
+            toasts.info(format!("Filter applied ({hidden_row_count} rows hidden)"));
+        }
+        TrameEvent::FilterCleared => toasts.info("Filter cleared"),
+        _ => {}
     }
 }
 
@@ -109,14 +157,22 @@ pub fn new_doc_label() -> &'static str {
 pub struct Toggles {
     pub bold: RwSignal<bool>,
     pub italic: RwSignal<bool>,
+    /// Undo/Redo availability (Loro `UndoManager` stacks), driving the matching
+    /// buttons' `disabled` state. Fed by [`TrameEvent::UndoState`] via
+    /// [`mirror_event`].
+    pub undo_enabled: RwSignal<bool>,
+    pub redo_enabled: RwSignal<bool>,
 }
 
 impl Toggles {
-    /// Resolve the format toggles from a store built over [`COMMANDS`].
+    /// Resolve the format toggles and history-enabled signals from a store built
+    /// over [`COMMANDS`].
     pub fn from_store(store: &CommandStates) -> Self {
         Self {
             bold: store.toggled_signal(BOLD).expect("bold registered"),
             italic: store.toggled_signal(ITALIC).expect("italic registered"),
+            undo_enabled: store.enabled_signal(UNDO).expect("undo registered"),
+            redo_enabled: store.enabled_signal(REDO).expect("redo registered"),
         }
     }
 }
@@ -140,6 +196,21 @@ pub fn FormatBar(toggles: Toggles, on_command: Callback<CommandId>) -> impl Into
             on:click=move |_| on_command.run(ITALIC)
         >
             <em>"I"</em>
+        </button>
+        <span class="sep"></span>
+        <button
+            title="Undo"
+            disabled=move || !toggles.undo_enabled.get()
+            on:click=move |_| on_command.run(UNDO)
+        >
+            "Undo"
+        </button>
+        <button
+            title="Redo"
+            disabled=move || !toggles.redo_enabled.get()
+            on:click=move |_| on_command.run(REDO)
+        >
+            "Redo"
         </button>
         <span class="sep"></span>
         <Kbd binding=KeyBinding::ctrl('b') />

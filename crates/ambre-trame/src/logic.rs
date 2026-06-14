@@ -491,6 +491,21 @@ impl TrameState {
     ///
     /// Must complete in < 50 ms (P2); scroll requests in < 10 ms (P1).
     pub fn handle_command(&mut self, cmd: TrameCommand) -> TrameOutcome {
+        let mut outcome = self.dispatch_command(cmd);
+        // Any command that produced a CRDT delta also moved the `UndoManager`
+        // stacks, so the chrome's Undo/Redo affordances must be refreshed. Undo
+        // and Redo already append their own `UndoState`; skip the duplicate.
+        let already_reported =
+            matches!(outcome.display.last(), Some(TrameEvent::UndoState { .. }));
+        if outcome.update.is_some() && !already_reported {
+            outcome.display.push(self.undo_state_event());
+        }
+        outcome
+    }
+
+    /// Execute one command and return its raw outcome, before the central
+    /// [`UndoState`](TrameEvent::UndoState) refresh applied by [`handle_command`].
+    fn dispatch_command(&mut self, cmd: TrameCommand) -> TrameOutcome {
         match cmd {
             TrameCommand::SetActiveCell { row, col } => {
                 self.active = (row, col);
@@ -2395,6 +2410,29 @@ mod tests {
             Some(TrameEvent::UndoState { can_undo: true, can_redo: false })
         ));
         assert_eq!(read_cell(&mut state, 0, 0), "hello", "redo restores the value");
+    }
+
+    /// Every mutating command refreshes the Undo/Redo availability so the chrome
+    /// enables the Undo button right after the first edit -- without waiting for
+    /// the user to trigger an undo. A non-mutating command emits no `UndoState`.
+    #[test]
+    fn mutating_command_reports_undo_state() {
+        let mut state = TrameState::new();
+
+        let evts = state.handle_command(TrameCommand::SetCellText {
+            row: 0, col: 0, text: "x".to_owned(),
+        });
+        assert!(matches!(
+            evts.display.last(),
+            Some(TrameEvent::UndoState { can_undo: true, can_redo: false }),
+        ), "an edit enables Undo");
+
+        // A pure selection move produces no CRDT delta -> no UndoState refresh.
+        let evts = state.handle_command(TrameCommand::SetActiveCell { row: 1, col: 1 });
+        assert!(
+            !evts.display.iter().any(|e| matches!(e, TrameEvent::UndoState { .. })),
+            "a non-mutating command does not touch the history stacks",
+        );
     }
 
     /// Undo with an empty stack is a no-op: no `DataReset`, no broadcast, just the
