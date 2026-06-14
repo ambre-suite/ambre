@@ -395,6 +395,10 @@ pub fn main() {
             // The active app owns the event->toggle mapping; the launcher names
             // no content event variant.
             trame_chrome::mirror_event(&store, &ev);
+            // Surface Trame's user-facing notifications (rejections, validation
+            // errors, sheet-lifecycle errors, sort/filter completion) as toasts.
+            // The app owns the event->toast mapping; the launcher names no variant.
+            trame_chrome::notify_event(&toasts, &ev);
             match &ev {
                 // Non-fatal sync warnings surface as a transient warning toast.
                 // They never reach the fatal path: the session keeps running and
@@ -544,6 +548,8 @@ fn mount_shell(
         // and the per-frame relay drives it. The shell sees only its toggle
         // signals (Send), so the `<Router>` subtree stays Send.
         let store = CommandStates::new(trame_chrome::COMMANDS);
+        // Seed app-specific initial command states (Undo/Redo start disabled).
+        trame_chrome::init_command_states(&store);
         let toggles = trame_chrome::Toggles::from_store(&store);
         *store_slot.borrow_mut() = Some(store);
         let anchor_pos = RwSignal::new(None::<(f64, f64)>);
