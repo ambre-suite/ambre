@@ -19,7 +19,7 @@
 //!   `SendChannelMessage`): fire-and-forget session/content-send commands with
 //!   no single response to correlate — kept explicit.
 
-use crate::{ChannelId, DocType, DocumentId, RequestId, RestCommand};
+use crate::{ChannelId, DocType, DocumentId, RequestId, RestCommand, UserId};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LogicCommand — UI Thread → Logic thread
@@ -377,6 +377,128 @@ pub enum TrameCommand {
     ClearFilter {
         sheet_id: String,
     },
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Deferred feature surface (Phase 2+)
+    //
+    // The variants below complete the `TrameCommand` surface mandated by
+    // `ambre-spec-trame-features.md §10` ("all feature variants are in the
+    // enums"). They are part of the typed data plane now so the UI Thread and
+    // the Logic dispatcher compile against a stable command vocabulary; their
+    // Logic-thread handlers are no-op stubs until the corresponding phase lands
+    // (personal filter views / multi-column sort -> Phase 2, conditional
+    // formatting & validation -> Phase 2/3, range protection -> Post-MVP).
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Persist a personal (non-shared) filter view in local storage only
+    /// (`ambre-spec-trame-features.md §1.B`). Never touches the `LoroDoc`, so it
+    /// emits no CRDT delta. Replies with
+    /// [`TrameEvent::FilterViewSaved`](crate::ui::TrameEvent::FilterViewSaved).
+    SaveFilterView {
+        name: String,
+        sheet_id: String,
+        /// Grid column the personal view filters on (0-based).
+        filter_col: u32,
+        kind: FilterKind,
+    },
+
+    /// Activate a previously saved personal filter view (`§1.B`). Loads it from
+    /// local storage, recomputes its hidden rows against the current doc state,
+    /// and re-sends the viewport without them -- a purely local view change, no
+    /// CRDT delta. A no-op if `view_id` is unknown.
+    ActivateFilterView {
+        view_id: String,
+    },
+
+    /// Sort the rows of a range by several keys in decreasing priority
+    /// (`ambre-spec-trame-features.md §2`, multi-column sort). Like
+    /// [`SortRange`](TrameCommand::SortRange) but with a lexicographic
+    /// comparison over `sort_keys`. Realized as `LoroMovableList` move ops on
+    /// `rows_{sheet}`; references follow the data (§12).
+    SortRangeMulti {
+        sheet_id: String,
+        row_start: u32,
+        row_end: u32,
+        col_start: u32,
+        col_end: u32,
+        /// Decreasing priority: `[primary, secondary, ...]`. Each `col` is an
+        /// index within the range (`0` = `col_start`).
+        sort_keys: Vec<SortKey>,
+        has_header: bool,
+    },
+
+    /// Add a conditional-formatting rule to `sheet_id` over `range`
+    /// (`ambre-spec-trame-features.md §3`). Stored in `cond_formats_{sheet}`
+    /// (LoroList), evaluated per-cell after each recompute into a
+    /// `DisplayCell.style` override (never mutates `styles_{sheet}`). `priority`
+    /// orders evaluation (smaller = higher); the first matching rule wins.
+    /// Replies with
+    /// [`TrameEvent::CondFormatsUpdated`](crate::ui::TrameEvent::CondFormatsUpdated).
+    AddCondFormat {
+        sheet_id: String,
+        range: GridRange,
+        rule: CondFormatKind,
+        style: CondStyle,
+        priority: i64,
+    },
+
+    /// Replace the rule identified by `id` on `sheet_id` (`§3`). A no-op if no
+    /// rule with that id exists.
+    UpdateCondFormat {
+        sheet_id: String,
+        id: String,
+        range: GridRange,
+        rule: CondFormatKind,
+        style: CondStyle,
+        priority: i64,
+    },
+
+    /// Remove the conditional-formatting rule `id` from `sheet_id` (`§3`). A
+    /// no-op if it does not exist.
+    RemoveCondFormat {
+        sheet_id: String,
+        id: String,
+    },
+
+    /// Attach a data-validation rule to `range` of `sheet_id`
+    /// (`ambre-spec-trame-features.md §5`). Stored in `validations_{sheet}`,
+    /// checked before a local edit commits: `Reject` blocks the mutation,
+    /// `Warn` lets it through with a warning, `Info` is a visual indicator only.
+    /// Validations are an input aid, not a CRDT integrity barrier (a remote
+    /// delta can still violate them).
+    AddValidation {
+        sheet_id: String,
+        range: GridRange,
+        kind: ValidationKind,
+        on_invalid: ValidationOnInvalid,
+        message: String,
+    },
+
+    /// Remove the validation rule covering `range` on `sheet_id` (`§5`). A no-op
+    /// if none is attached there.
+    RemoveValidation {
+        sheet_id: String,
+        range: GridRange,
+    },
+
+    /// Protect `range` of `sheet_id` so only `allowed_user_ids` (plus the owner)
+    /// may edit it (`ambre-spec-trame-features.md §6`, Post-MVP). Soft
+    /// client-side enforcement: an official client respects it, the Blind Relay
+    /// cannot. Empty `allowed_user_ids` means owner-only. Identified by stable
+    /// [`UserId`](crate::UserId), not `pub_key` (survives key rotation).
+    SetProtection {
+        sheet_id: String,
+        range: GridRange,
+        allowed_user_ids: Vec<UserId>,
+        description: String,
+    },
+
+    /// Remove the protection covering `range` on `sheet_id` (`§6`). A no-op if
+    /// none is set there.
+    RemoveProtection {
+        sheet_id: String,
+        range: GridRange,
+    },
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -417,4 +539,119 @@ pub enum FilterOp {
     StartsWith,
     IsEmpty,
     IsNotEmpty,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Deferred feature payloads (Phase 2+)
+//
+// Typed value types carried by the deferred `TrameCommand` variants above. They
+// live in `ambre-bus` (re-exported by `ambre-trame`) and travel by move inside
+// `AppCommand::Trame` -- no `serde`. Ranges are expressed in **grid
+// coordinates** here because the engine-level `RangeDep` (`ambre-trame`) is not
+// visible from the bus; the Logic thread resolves these positions to stable ids
+// when each feature's handler lands.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A rectangular grid range `[row..=row_end] x [col..=col_end]` (0-based,
+/// inclusive). Corners may be given in any order; the handler normalizes them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GridRange {
+    pub row: u32,
+    pub col: u32,
+    pub row_end: u32,
+    pub col_end: u32,
+}
+
+/// One key of a multi-column sort ([`TrameCommand::SortRangeMulti`],
+/// `ambre-spec-trame-features.md §2`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SortKey {
+    /// Column to sort on, as an index within the range (`0` = `col_start`).
+    pub col: u32,
+    pub ascending: bool,
+}
+
+/// A conditional-formatting rule predicate (`ambre-spec-trame-features.md §3`).
+/// `String` operands are either a literal value or a cell reference, resolved at
+/// evaluation. MVP+ kinds (value/text/formula/presets) land in Phase 2; the
+/// gradient / data-bar / top-bottom kinds are Phase 3.
+#[derive(Debug, Clone)]
+pub enum CondFormatKind {
+    GreaterThan(String),
+    LessThan(String),
+    Between(String, String),
+    Equal(String),
+    Contains(String),
+    StartsWith(String),
+    /// Custom formula, e.g. `"=A1>AVERAGE(A:A)"` (relative refs resolved from
+    /// the target cell).
+    Formula(String),
+    IsEmpty,
+    IsNotEmpty,
+    IsError,
+    ColorScale2 {
+        min_color: u32,
+        max_color: u32,
+    },
+    ColorScale3 {
+        min_color: u32,
+        mid_color: u32,
+        max_color: u32,
+    },
+    DataBar {
+        color: u32,
+    },
+    TopN(u32),
+    BottomN(u32),
+    TopNPercent(f32),
+}
+
+/// Style applied when a conditional-formatting rule matches (`§3`). Layered on
+/// top of the base style; absent fields leave the base intact. Colours are
+/// packed `0xRRGGBB`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CondStyle {
+    pub fg: Option<u32>,
+    pub bg: u32,
+    pub bold: bool,
+}
+
+/// A data-validation predicate (`ambre-spec-trame-features.md §5`). `List` /
+/// `NumberRange` / `TextLength` are Phase 2; `ListRange` / `DateRange` / `Regex`
+/// are Phase 3.
+#[derive(Debug, Clone)]
+pub enum ValidationKind {
+    /// Dropdown over a fixed value set.
+    List(Vec<String>),
+    /// Dropdown over the values of a range, given as an A1 reference (the
+    /// engine-level `RangeDep` is not visible from the bus).
+    ListRange(String),
+    NumberRange {
+        min: f64,
+        max: f64,
+        inclusive: bool,
+    },
+    NumberInteger,
+    DateRange {
+        min: Option<String>,
+        max: Option<String>,
+    },
+    TextLength {
+        min: Option<u32>,
+        max: Option<u32>,
+    },
+    Regex(String),
+    /// Custom formula that must return `TRUE`.
+    Formula(String),
+}
+
+/// What happens when a [`ValidationKind`] rejects an input (`§5`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValidationOnInvalid {
+    /// Block the local mutation -> [`TrameEvent::ValidationError`](crate::ui::TrameEvent::ValidationError).
+    Reject,
+    /// Allow the mutation but warn -> [`TrameEvent::ValidationWarning`](crate::ui::TrameEvent::ValidationWarning).
+    Warn,
+    /// Visual indicator only.
+    Info,
 }
