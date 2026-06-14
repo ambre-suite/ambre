@@ -286,6 +286,78 @@ pub enum TrameEvent {
     /// [`DataReset`](Self::DataReset) prompts a viewport re-fetch with every row
     /// visible again. A no-op clear (no active filter) emits nothing.
     FilterCleared,
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Deferred feature surface (Phase 2+)
+    //
+    // Completes the `TrameEvent` surface mandated by
+    // `ambre-spec-trame-features.md §7 / §10` ("all feature variants are in the
+    // enums"). Emitted once the matching command handlers land (personal filter
+    // views / conditional formatting -> Phase 2/3, validation -> Phase 2/3,
+    // range protection -> Post-MVP).
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// A personal filter view was persisted to local storage
+    /// ([`SaveFilterView`](crate::logic::TrameCommand::SaveFilterView),
+    /// `ambre-spec-trame-features.md §1.B`). `view_id` is its stable local id.
+    FilterViewSaved {
+        view_id: String,
+    },
+
+    /// The sheet's conditional-formatting rules changed
+    /// ([`AddCondFormat`](crate::logic::TrameCommand::AddCondFormat) /
+    /// [`UpdateCondFormat`](crate::logic::TrameCommand::UpdateCondFormat) /
+    /// [`RemoveCondFormat`](crate::logic::TrameCommand::RemoveCondFormat), §3).
+    /// The accompanying [`DataReset`](Self::DataReset) prompts a viewport
+    /// re-fetch with the new style overrides applied.
+    CondFormatsUpdated {
+        version: u64,
+    },
+
+    /// A local edit was rejected by a [`ValidationOnInvalid::Reject`] rule
+    /// (`ambre-spec-trame-features.md §5`). No CRDT delta was produced; the
+    /// chrome surfaces `message`. `version` echoes the originating edit.
+    ///
+    /// [`ValidationOnInvalid::Reject`]: crate::logic::ValidationOnInvalid::Reject
+    ValidationError {
+        version: u64,
+        row: u32,
+        col: u32,
+        message: String,
+    },
+
+    /// A local edit passed through despite failing a
+    /// [`ValidationOnInvalid::Warn`] rule (`§5`). The mutation was applied; the
+    /// chrome surfaces `message` as a non-blocking warning.
+    ///
+    /// [`ValidationOnInvalid::Warn`]: crate::logic::ValidationOnInvalid::Warn
+    ValidationWarning {
+        version: u64,
+        row: u32,
+        col: u32,
+        message: String,
+    },
+
+    /// A local edit was blocked by a range protection the current user may not
+    /// edit (`ambre-spec-trame-features.md §6`, Post-MVP). No CRDT delta was
+    /// produced; the chrome surfaces `description`.
+    ProtectionDenied {
+        version: u64,
+        row: u32,
+        col: u32,
+        description: String,
+    },
+
+    /// A remote delta edited a protected range its author was not allowed to
+    /// (`§6`). The delta IS applied (CRDT convergence is mandatory) but the UI
+    /// is warned. `from_user_id` is the offending author's stable
+    /// [`UserId`](crate::UserId).
+    ProtectionViolationWarning {
+        row: u32,
+        col: u32,
+        from_user_id: UserId,
+        description: String,
+    },
 }
 
 /// A single cell ready for display.

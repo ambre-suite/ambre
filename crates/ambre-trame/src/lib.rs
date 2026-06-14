@@ -37,7 +37,10 @@ pub mod chrome;
 #[cfg(test)]
 pub mod test_support;
 
-pub use ambre_bus::{DisplayCell, TrameCommand, TrameEvent};
+pub use ambre_bus::{
+    CondFormatKind, CondStyle, DisplayCell, FilterKind, FilterOp, GridRange, SortKey, TrameCommand,
+    TrameEvent, ValidationKind, ValidationOnInvalid,
+};
 pub use logic::{TrameOutcome, TrameState};
 
 /// Total number of rows in a Trame grid (0-based indices `0..TOTAL_ROWS`).

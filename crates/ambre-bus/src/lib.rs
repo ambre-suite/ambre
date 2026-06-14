@@ -31,7 +31,10 @@ pub mod ui;
 pub use command::SyncCommand;
 pub use sink::CommandSink;
 pub use event::LogicEvent;
-pub use logic::{AppCommand, FilterKind, FilterOp, LogicCommand, TrameCommand};
+pub use logic::{
+    AppCommand, CondFormatKind, CondStyle, FilterKind, FilterOp, GridRange, LogicCommand, SortKey,
+    TrameCommand, ValidationKind, ValidationOnInvalid,
+};
 pub use rest::{
     ChannelSummary, DocumentSummary, MemberInfo, RequestId, RestCommand, RestEvent, UnreadCount,
     UserInfo,

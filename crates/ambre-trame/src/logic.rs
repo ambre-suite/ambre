@@ -668,6 +668,23 @@ impl TrameState {
                 self.apply_filter(&sheet_id, col, kind)
             }
             TrameCommand::ClearFilter { sheet_id } => self.clear_filter(&sheet_id),
+
+            // Deferred feature surface (`ambre-spec-trame-features.md §10`): the
+            // command vocabulary is complete and typed, but these handlers land
+            // in later phases (personal views / multi-sort -> Phase 2,
+            // conditional formatting & validation -> Phase 2/3, protection ->
+            // Post-MVP). Until then each is an explicit no-op: no CRDT delta, no
+            // display event, so an early UI build can issue them harmlessly.
+            TrameCommand::SaveFilterView { .. }
+            | TrameCommand::ActivateFilterView { .. }
+            | TrameCommand::SortRangeMulti { .. }
+            | TrameCommand::AddCondFormat { .. }
+            | TrameCommand::UpdateCondFormat { .. }
+            | TrameCommand::RemoveCondFormat { .. }
+            | TrameCommand::AddValidation { .. }
+            | TrameCommand::RemoveValidation { .. }
+            | TrameCommand::SetProtection { .. }
+            | TrameCommand::RemoveProtection { .. } => TrameOutcome::display_only(vec![]),
         }
     }
 
