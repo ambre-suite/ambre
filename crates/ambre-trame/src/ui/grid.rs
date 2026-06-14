@@ -418,6 +418,7 @@ mod tests {
                 italic: false,
                 is_merged: false,
                 merge_span: None,
+                is_filtered: false,
             }],
         });
 

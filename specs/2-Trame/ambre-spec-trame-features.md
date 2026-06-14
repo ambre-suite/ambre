@@ -43,18 +43,24 @@ Google Sheets distinguishes two filtering modes. Both are implemented.
 
 Visible to all collaborators. Stored in the `LoroDoc` — the view is synchronized via SecSync.
 
-**CRDT Schema:**
+**CRDT Schema (implemented):** the active filter is stored *flat* in
+`filters_{sheet_id}` (empty map = no filter) rather than under a nested `active`
+sub-map -- one fewer container to merge, same LWW semantics:
 
 ```
-"filters_{sheet_id}" (LoroMap)
-  └── "active" (LoroMap)         → active filter (null = no filter)
-      ├── "col_uid"  : String    → column the filter is applied to
-      ├── "kind"     : String    → "values" | "condition" | "color"
-      ├── "values"   : LoroList  → list of displayed values (for kind="values")
-      └── "condition": LoroMap   → {op: String, value: String} (for kind="condition")
-          // op : "eq" | "ne" | "gt" | "lt" | "gte" | "lte" | "contains"
-          //      | "not_contains" | "starts_with" | "is_empty" | "is_not_empty"
+"filters_{sheet_id}" (LoroMap)         → empty = no filter
+  ├── "col"    : String                → column uid the filter is applied to
+  ├── "kind"   : String                → "values" | "condition"
+  ├── "values" : LoroList<String>      → displayed (checked) values (kind="values")
+  ├── "op"     : String                → operator (kind="condition")
+  │       // "eq" | "ne" | "gt" | "lt" | "gte" | "lte" | "contains"
+  │       // | "not_contains" | "starts_with" | "is_empty" | "is_not_empty"
+  └── "value"  : String                → operand (kind="condition")
 ```
+
+The `FilterKind` enum (`Values(Vec<String>)` / `Condition { op, value }`, with
+`FilterOp`) lives in **`ambre-bus`** (re-exported by `ambre-trame`) and travels
+typed in `TrameCommand::ApplyFilter`. Colour filters are Phase 2.
 
 **Hidden rows:**
 
@@ -65,23 +71,37 @@ Rows hidden by the filter are stored in a separate `LoroMap` to avoid polluting 
   └── "{row_uid}" : bool         → true = hidden by the active filter
 ```
 
-This `LoroMap` is recomputed by the Logic thread after each change to the filter or data. Only the filter author recomputes it — other clients receive `filter_hidden` via SecSync and apply it directly without recomputing.
+This `LoroMap` is recomputed by the Logic thread after each change to the filter or data. Only the filter author recomputes it — other clients receive `filter_hidden` via SecSync and apply it directly without recomputing (`apply_remote` → `rebuild_filter`, no recompute).
 
-**Flow:**
+**Flow (implemented):**
 
 ```
-TrameCommand::ApplyFilter { sheet_id, col, kind, values/condition }
-  │
-  ├─ Evaluates the column cells via formula_cache
-  ├─ Computes the Uid of rows not passing the filter
-  ├─ Writes hidden rows into LoroMap("filter_hidden_{sheet}")
-  ├─ display : updated viewport (without hidden rows) → TrameEvent::ViewportData
-  └─ update  : CRDT delta from the Loro mutation → outcome.update → SyncCommand::SendUpdate (by the Logic dispatcher)
+TrameCommand::ApplyFilter { sheet_id, col, kind: FilterKind }
+  │  (no-op for a non-active sheet or a virtual/never-materialized column)
+  ├─ compute_all_dirty (so the formula_cache is current)
+  ├─ write_filter_hidden: evaluate each materialized row's cell in `col` via
+  │     engine.evaluated_value; row_uids failing `filter_pass(kind, value)` are
+  │     written into LoroMap("filter_hidden_{sheet}") as {row_uid -> true}
+  ├─ persist_filter_def: store col/kind/op/value(+values list) in "filters_{sheet}"
+  ├─ rebuild_filter: derive `hidden_rows` (grid positions) from the uid map
+  ├─ display : [TrameEvent::FilterApplied { hidden_row_count }, DataReset]
+  └─ update  : CRDT delta → outcome.update → SyncCommand::SendUpdate (dispatcher)
 
 TrameCommand::ClearFilter { sheet_id }
-  │
-  └─ Removes all entries from "filter_hidden_{sheet}" + "filters_{sheet}/active"
+  │  (no-op -- no delta -- when no filter is active)
+  └─ clears "filter_hidden_{sheet}" + "filters_{sheet}", emits
+     [TrameEvent::FilterCleared, DataReset]
 ```
+
+A `SetCellText` on the active sheet calls `recompute_active_filter`: it reloads
+the stored definition and rewrites `filter_hidden_{sheet}` so a row's hidden
+status tracks the edited value. Structural ops (insert/delete/sort) do **not**
+recompute -- the hidden set is keyed by `row_uid`, so `rebuild_filter` simply
+remaps it to the new positions and the hidden flag follows its row.
+
+**Rendering:** hidden rows are not dropped from the viewport; each cell in a
+hidden row is returned with `DisplayCell::is_filtered = true` (§8) and the UI
+Thread collapses those rows.
 
 **DAG interaction:** hidden rows are excluded from `DisplayViewport` but **included in calculations**. `=SUM(A:A)` on a filtered column returns the sum of all rows. To exclude hidden rows, the user uses `SUBTOTAL` (planned Phase 2).
 
@@ -620,10 +640,12 @@ fn apply_remote(&mut self, payload: &[u8]) -> Vec<TrameEvent> {
 pub enum TrameEvent {
     // ... existing variants from the logic spec ...
 
-    // Filters
-    FilterApplied   { version: u64, hidden_row_count: u32 },
-    FilterCleared   { version: u64 },
-    FilterViewSaved { view_id: String },
+    // Filters -- shared filter implemented field-light (the accompanying
+    // DataReset prompts the viewport re-fetch; hidden rows arrive flagged via
+    // DisplayCell::is_filtered). Matches the implemented ambre_bus::TrameEvent.
+    FilterApplied   { hidden_row_count: u32 },
+    FilterCleared,
+    FilterViewSaved { view_id: String }, // Phase 2 (personal views)
 
     // Sort -- implemented field-less (the accompanying DataReset prompts the
     // viewport re-fetch; SortComplete is the explicit completion signal).
@@ -680,11 +702,20 @@ pub enum TrameEvent {
 ## 9. QUALITY & TESTABILITY
 
 ```rust
-// Filters
-#[test] fn shared_filter_hides_rows()                  { /* LoroMap filter_hidden */ }
-#[test] fn filter_does_not_affect_sum()                { /* SUM(A:A) includes hidden ones */ }
+// Filters (shared filter implemented, Epic E3 -- see ambre-trame/src/logic.rs tests)
+#[test] fn shared_filter_by_values_hides_nonmatching() { /* LoroMap filter_hidden, is_filtered */ }
+#[test] fn shared_filter_condition_greater_than()      { /* numeric condition */ }
+#[test] fn shared_filter_does_not_affect_sum()         { /* SUM(A:A) includes hidden ones */ }
+#[test] fn clear_filter_unhides_and_noops_when_absent(){ }
+#[test] fn shared_filter_hidden_follows_sort()         { /* row_uid-keyed hidden set */ }
+#[test] fn shared_filter_recomputes_on_edit()          { /* stored def drives recompute */ }
+#[test] fn shared_filter_applies_on_remote_import()    { /* peer applies filter_hidden directly */ }
+#[test] fn concurrent_filters_converge_lww()           { /* Alice vs Bob filter -> LWW */ }
+#[test] fn shared_filter_is_undoable()                 { /* Ctrl+Z removes shared filter */ }
+#[test] fn shared_filter_noop_guards()                 { /* wrong sheet / virtual column */ }
+#[test] fn condition_pass_covers_every_operator()      { /* predicate branch coverage */ }
+// Phase 2:
 #[test] fn personal_filter_view_not_synced()           { /* no CRDT delta emitted */ }
-#[test] fn concurrent_filters_lww()                    { /* Alice vs Bob filter -> LWW */ }
 
 // Sort (implemented, Epic E3 -- see ambre-trame/src/logic.rs tests)
 #[test] fn sort_range_ascending_moves_whole_rows()     { /* row data travels with key col */ }
@@ -723,7 +754,7 @@ pub enum TrameEvent {
 > Tracked as Stories of Epic **E3** (Trame MVP) in `specs/ambre-roadmap.md`.
 
 **Phase 1 — MVP (with the engine)**
-- [ ] Shared filter: `TrameCommand::ApplyFilter` / `ClearFilter`, `filter_hidden_{sheet}` Loro
+- [x] Shared filter: `TrameCommand::ApplyFilter` / `ClearFilter`, `filter_hidden_{sheet}` Loro *(Epic `E3`: `FilterKind::Values` / `Condition { op, value }` typed in `ambre-bus`; the failing rows' `row_uid`s are written into `filter_hidden_{sheet}` and broadcast, the definition persisted flat in `filters_{sheet}` (LWW). Hidden rows ride the viewport flagged `DisplayCell::is_filtered` (still counted by `=SUM`); the uid-keyed hidden set follows the data across a sort/insert, and `SetCellText` recomputes the active filter. Undoable (plain CRDT mutation). Emits `TrameEvent::FilterApplied { hidden_row_count }` / `FilterCleared` + `DataReset`. Tests: by-values, condition, sum-unaffected, clear, follows-sort, recompute-on-edit, remote-import, LWW convergence, undoable, no-op guards, full predicate coverage.)*
 - [x] Simple sort: `TrameCommand::SortRange` (single column) *(Epic `E3`: typed sort keys via `engine.evaluated_value` + `compare_cell_values` precedence `Number < Text < Boolean < Error < Empty`; `has_header` pin, ascending/descending. Realized as a **pure `rows_{sheet}` order permutation** (`MovableList::mov`): cells keyed by their move-invariant `Uid` follow for free, references follow the data (`trame-logic §2.A`, §12). Emits `TrameEvent::SortComplete` + `DataReset`. Tests: ascending whole-row move, descending+header, formulas follow data, no-op guards.)* **Depends on the own-uid cell model (`trame-logic §14`).**
 - [x] Undo/Redo: `TrameCommand::Undo` / `Redo` via `UndoManager` Loro *(delivered under `trame-logic` Phase 1 -- see that section)*
 - [ ] All feature variants are in the `TrameCommand` / `TrameEvent` enums (defined in `ambre-bus`, re-exported by `ambre-trame`; transported in `AppCommand::Trame` / `AppEvent::Trame`)
