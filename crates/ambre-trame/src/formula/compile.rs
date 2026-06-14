@@ -4,23 +4,77 @@
 //! instructions suitable for stack-VM execution. Extracts cell and range
 //! dependencies in the same pass so the [`DependencyGraph`] can be updated
 //! without a second traversal.
+//!
+//! Compilation is also where the positional AST references (`A1`, `A1:B10`) are
+//! resolved against the current per-sheet [`SheetIndex`] into the uid-anchored
+//! engine forms ([`CellId`] / [`RangeId`]): a position inside the used range
+//! binds to the row/column `Uid` (so it follows the data), a position beyond it
+//! stays a [`AxisId::Virtual`] grid coordinate (spec section 4.B).
 
-use super::types::{CellBytecode, CellRef, Expr, Op, RangeDep};
+use std::collections::HashMap;
 
-/// Compile an AST into a [`CellBytecode`] (ops + dependencies).
-pub fn compile(ast: &Expr) -> CellBytecode {
+use crate::model::SheetIndex;
+
+use super::types::{
+    AxisId, CellBytecode, CellId, CellRef, Expr, Op, RangeDep, RangeEndpoint, RangeId,
+};
+
+/// Per-sheet indices, keyed by the engine's local sheet index (`u16`), used to
+/// bind positional references to row/column `Uid`s during compilation.
+pub type SheetIndices = HashMap<u16, SheetIndex>;
+
+/// Compile an AST into a [`CellBytecode`] (ops + dependencies), resolving
+/// positional references against `indices`.
+pub fn compile(ast: &Expr, indices: &SheetIndices) -> CellBytecode {
     let mut ops = Vec::new();
     let mut cell_deps = Vec::new();
     let mut range_deps = Vec::new();
-    compile_into(ast, &mut ops, &mut cell_deps, &mut range_deps);
+    compile_into(ast, indices, &mut ops, &mut cell_deps, &mut range_deps);
     CellBytecode { ops, cell_deps, range_deps }
+}
+
+fn resolve_cell(r: &CellRef, indices: &SheetIndices) -> CellId {
+    let idx = indices.get(&r.sheet);
+    let row = bind(idx.and_then(|i| i.row_id(r.row as usize)), r.row);
+    let col = bind(idx.and_then(|i| i.col_id(r.col as usize)), r.col);
+    CellId { sheet: r.sheet, row, col }
+}
+
+/// Compile a positional range into a uid-anchored [`RangeId`]. **Range endpoints
+/// stay positional** (`AxisId::Virtual`), so a range denotes a rectangular
+/// *region* (a block of positions), not a set of specific rows/columns. This is
+/// the only well-defined choice under a sort: the two endpoints can otherwise
+/// scatter and invert, collapsing the range -- and it matches Excel/Sheets, where
+/// sorting the rows inside `SUM(A1:A3)` leaves the block (and its total) intact.
+/// Single-cell references, by contrast, bind to their row/column `Uid` and follow
+/// the data (see [`resolve_cell`] and spec section 12).
+fn resolve_range(r: &RangeDep, _indices: &SheetIndices) -> RangeId {
+    let row = |p: u32| RangeEndpoint::Specific(AxisId::Virtual(p));
+    let col = |p: u32| RangeEndpoint::Specific(AxisId::Virtual(p));
+    RangeId {
+        sheet: r.sheet,
+        row_start: row(r.row_start),
+        row_end: row(r.row_end),
+        col_start: col(r.col_start),
+        col_end: col(r.col_end),
+    }
+}
+
+/// Bind a positional axis coordinate: the materialized `Uid` if present (a
+/// reference inside the used range, follows the data), else a virtual position.
+fn bind(uid: Option<crate::model::Uid>, pos: u32) -> AxisId {
+    match uid {
+        Some(u) => AxisId::Bound(u),
+        None => AxisId::Virtual(pos),
+    }
 }
 
 fn compile_into(
     ast: &Expr,
+    indices: &SheetIndices,
     ops: &mut Vec<Op>,
-    cell_deps: &mut Vec<CellRef>,
-    range_deps: &mut Vec<RangeDep>,
+    cell_deps: &mut Vec<CellId>,
+    range_deps: &mut Vec<RangeId>,
 ) {
     match ast {
         Expr::Literal(val) => {
@@ -43,20 +97,22 @@ fn compile_into(
             }
         }
         Expr::CellRef(r) => {
-            cell_deps.push(*r);
-            ops.push(Op::PushCell(*r));
+            let id = resolve_cell(r, indices);
+            cell_deps.push(id);
+            ops.push(Op::PushCell(id));
         }
         Expr::Range(r) => {
-            range_deps.push(r.clone());
-            ops.push(Op::EvalRange(r.clone()));
+            let id = resolve_range(r, indices);
+            range_deps.push(id.clone());
+            ops.push(Op::EvalRange(id));
         }
         Expr::BinOp { kind, lhs, rhs } => {
-            compile_into(lhs, ops, cell_deps, range_deps);
-            compile_into(rhs, ops, cell_deps, range_deps);
+            compile_into(lhs, indices, ops, cell_deps, range_deps);
+            compile_into(rhs, indices, ops, cell_deps, range_deps);
             ops.push(kind.to_op());
         }
         Expr::UnaryOp { kind, operand } => {
-            compile_into(operand, ops, cell_deps, range_deps);
+            compile_into(operand, indices, ops, cell_deps, range_deps);
             match kind {
                 super::types::UnaryOpKind::Neg => ops.push(Op::Neg),
                 super::types::UnaryOpKind::Not => ops.push(Op::Not),
@@ -64,7 +120,7 @@ fn compile_into(
         }
         Expr::FnCall { name, args } => {
             for arg in args {
-                compile_into(arg, ops, cell_deps, range_deps);
+                compile_into(arg, indices, ops, cell_deps, range_deps);
             }
             ops.push(Op::CallFn { name: name.clone(), n_args: args.len() as u8 });
         }
@@ -82,10 +138,13 @@ fn compile_into(
 mod tests {
     use super::*;
     use super::super::parser::parse_formula;
+    use super::super::test_index::index_with;
 
     fn compile_str(input: &str) -> CellBytecode {
         let ast = parse_formula(input).unwrap();
-        compile(&ast)
+        let mut indices = SheetIndices::new();
+        indices.insert(0, index_with(20, 10));
+        compile(&ast, &indices)
     }
 
     #[test]
@@ -98,11 +157,10 @@ mod tests {
     }
 
     #[test]
-    fn cell_ref_extracts_dep() {
+    fn cell_ref_extracts_bound_dep() {
         let bc = compile_str("A1");
-        assert!(matches!(&bc.ops[0], Op::PushCell(CellRef { row: 0, col: 0, .. })));
+        assert!(matches!(&bc.ops[0], Op::PushCell(CellId { row: AxisId::Bound(_), col: AxisId::Bound(_), .. })));
         assert_eq!(bc.cell_deps.len(), 1);
-        assert_eq!(bc.cell_deps[0], CellRef::new(0, 0));
     }
 
     #[test]
@@ -110,12 +168,10 @@ mod tests {
         let bc = compile_str("A1:B10");
         assert!(matches!(&bc.ops[0], Op::EvalRange(_)));
         assert_eq!(bc.range_deps.len(), 1);
-        assert_eq!(bc.range_deps[0], RangeDep::new(0, 9, 0, 1));
     }
 
     #[test]
     fn binary_op_postfix_order() {
-        // "A1+B2" → push A1, push B2, Add
         let bc = compile_str("A1+B2");
         assert_eq!(bc.ops.len(), 3);
         assert!(matches!(&bc.ops[0], Op::PushCell(_)));
@@ -129,5 +185,12 @@ mod tests {
         assert_eq!(bc.ops.len(), 2); // EvalRange + CallFn
         assert!(matches!(&bc.ops[0], Op::EvalRange(_)));
         assert!(matches!(&bc.ops[1], Op::CallFn { name, n_args: 1 } if name == "SUM"));
+    }
+
+    #[test]
+    fn ref_beyond_used_range_is_virtual() {
+        // Column Z (25) is beyond the 10 materialized columns -> virtual.
+        let bc = compile_str("Z1");
+        assert!(matches!(&bc.ops[0], Op::PushCell(CellId { col: AxisId::Virtual(25), .. })));
     }
 }

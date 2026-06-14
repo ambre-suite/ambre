@@ -1,22 +1,23 @@
-//! Bytecode cache — incremental recompilation.
+//! Bytecode cache -- incremental recompilation.
 //!
-//! Holds compiled [`CellBytecode`] keyed by [`CellRef`] and a `stale` set of
+//! Holds compiled [`CellBytecode`] keyed by [`CellId`] and a `stale` set of
 //! cells whose raw text has changed and need recompilation on the next
-//! evaluation pass.
+//! evaluation pass. Recompilation resolves positional references against the
+//! current per-sheet indices (so `=A1` binds to the row/column `Uid`).
 
 use std::collections::{HashMap, HashSet};
 
-use super::compile::compile;
+use super::compile::{compile, SheetIndices};
 use super::dag::DependencyGraph;
 use super::parser::{parse_formula, resolve_refs};
-use super::types::{CellBytecode, CellRef, CellValue, FormulaCtx, FormulaError};
+use super::types::{CellBytecode, CellId, CellValue, FormulaCtx, FormulaError};
 
 /// Caches compiled bytecode and tracks stale cells for incremental compilation.
 pub struct BytecodeCache {
     /// Compiled bytecode for each formula cell.
-    entries: HashMap<CellRef, CellBytecode>,
+    entries: HashMap<CellId, CellBytecode>,
     /// Cells whose raw text has changed since their last compilation.
-    stale: HashSet<CellRef>,
+    stale: HashSet<CellId>,
 }
 
 impl BytecodeCache {
@@ -25,30 +26,38 @@ impl BytecodeCache {
     }
 
     /// Mark a cell as needing recompilation (its raw text changed).
-    pub fn invalidate(&mut self, cell: CellRef) {
+    pub fn invalidate(&mut self, cell: CellId) {
         self.stale.insert(cell);
     }
 
     /// Look up the bytecode for a cell, returning `None` if it's not a formula.
-    pub fn get(&self, cell: &CellRef) -> Option<&CellBytecode> {
+    pub fn get(&self, cell: &CellId) -> Option<&CellBytecode> {
         self.entries.get(cell)
+    }
+
+    /// Iterate every formula cell that currently has compiled bytecode. Used to
+    /// mark the whole sheet dirty after a structural reorder that preserves the
+    /// uid-anchored bytecode (sort).
+    pub fn cells(&self) -> impl Iterator<Item = &CellId> {
+        self.entries.keys()
     }
 
     /// Insert bytecode for a cell (used in tests).
     #[cfg(test)]
-    pub fn insert(&mut self, cell: CellRef, bc: CellBytecode) {
+    pub fn insert(&mut self, cell: CellId, bc: CellBytecode) {
         self.entries.insert(cell, bc);
     }
 
     /// Recompile `cell` if its raw text changed (`stale`).
     ///
-    /// Returns `true` if recompilation happened (caller should mark surrounding
-    /// viewport dirty), `false` if the cell was already up-to-date or not a
-    /// formula.
+    /// Returns `Some(error_value)` when the formula is rejected (cycle / parse
+    /// error), `None` when it compiled cleanly, was already up-to-date, or is no
+    /// longer a formula.
     pub fn recompile_if_stale(
         &mut self,
-        cell: CellRef,
+        cell: CellId,
         raw: &str,
+        indices: &SheetIndices,
         deps: &mut DependencyGraph,
         ctx: &dyn FormulaCtx,
     ) -> Option<CellValue> {
@@ -66,15 +75,17 @@ impl BytecodeCache {
         let formula_text = &raw[1..]; // Strip leading '='.
         // Parse (context-free) then resolve sheet-qualified refs and named
         // ranges against the host context; unqualified refs land on the
-        // formula's own sheet (`cell.sheet`).
-        let parsed = parse_formula(formula_text).and_then(|ast| resolve_refs(ast, cell.sheet, ctx));
+        // formula's own sheet (`cell.sheet`). Positional `A1` is bound to a
+        // row/column `Uid` by `compile` against `indices`.
+        let parsed =
+            parse_formula(formula_text).and_then(|ast| resolve_refs(ast, cell.sheet, ctx));
         match parsed {
             Ok(ast) => {
-                let bc = compile(&ast);
+                let bc = compile(&ast, indices);
                 match deps.update(cell, bc.cell_deps.clone(), bc.range_deps.clone()) {
                     Ok(()) => {
                         self.entries.insert(cell, bc);
-                        None // No error — caller evaluates normally.
+                        None // No error -- caller evaluates normally.
                     }
                     Err(_cycle_err) => {
                         self.entries.remove(&cell);
@@ -107,57 +118,82 @@ impl Default for BytecodeCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::types::SingleSheetCtx;
+    use super::super::test_index::indices_with;
+    use super::super::types::{AxisId, SingleSheetCtx};
+    use crate::model::Uid;
+
+    fn cell(row: u32, col: u32) -> CellId {
+        CellId::bound(0, Uid { peer: 1, counter: row }, Uid { peer: 2, counter: col })
+    }
 
     #[test]
     fn stale_cell_recompiled() {
+        let idx = indices_with(10, 10);
         let mut cache = BytecodeCache::new();
         let mut deps = DependencyGraph::new();
-        let cell = CellRef::new(0, 0);
+        let c = cell(0, 0);
 
-        cache.invalidate(cell);
-        let err = cache.recompile_if_stale(cell, "=42", &mut deps, &SingleSheetCtx);
+        cache.invalidate(c);
+        let err = cache.recompile_if_stale(c, "=42", &idx, &mut deps, &SingleSheetCtx);
         assert!(err.is_none());
-        assert!(cache.get(&cell).is_some());
-        assert!(!cache.stale.contains(&cell));
+        assert!(cache.get(&c).is_some());
+        assert!(!cache.stale.contains(&c));
     }
 
     #[test]
     fn non_formula_clears_cache() {
+        let idx = indices_with(10, 10);
         let mut cache = BytecodeCache::new();
         let mut deps = DependencyGraph::new();
-        let cell = CellRef::new(0, 0);
+        let c = cell(0, 0);
 
-        // First, compile as formula.
-        cache.invalidate(cell);
-        cache.recompile_if_stale(cell, "=42", &mut deps, &SingleSheetCtx);
-        assert!(cache.get(&cell).is_some());
+        cache.invalidate(c);
+        cache.recompile_if_stale(c, "=42", &idx, &mut deps, &SingleSheetCtx);
+        assert!(cache.get(&c).is_some());
 
-        // Now, set to plain text.
-        cache.invalidate(cell);
-        cache.recompile_if_stale(cell, "hello", &mut deps, &SingleSheetCtx);
-        assert!(cache.get(&cell).is_none());
+        cache.invalidate(c);
+        cache.recompile_if_stale(c, "hello", &idx, &mut deps, &SingleSheetCtx);
+        assert!(cache.get(&c).is_none());
     }
 
     #[test]
     fn parse_error_returns_error_value() {
+        let idx = indices_with(10, 10);
         let mut cache = BytecodeCache::new();
         let mut deps = DependencyGraph::new();
-        let cell = CellRef::new(0, 0);
+        let c = cell(0, 0);
 
-        cache.invalidate(cell);
-        let err = cache.recompile_if_stale(cell, "=SUM(", &mut deps, &SingleSheetCtx);
+        cache.invalidate(c);
+        let err = cache.recompile_if_stale(c, "=SUM(", &idx, &mut deps, &SingleSheetCtx);
         assert!(matches!(err, Some(CellValue::Error(FormulaError::ParseError(_)))));
     }
 
     #[test]
     fn not_stale_no_recompile() {
+        let idx = indices_with(10, 10);
         let mut cache = BytecodeCache::new();
         let mut deps = DependencyGraph::new();
-        let cell = CellRef::new(0, 0);
+        let c = cell(0, 0);
 
-        let err = cache.recompile_if_stale(cell, "=42", &mut deps, &SingleSheetCtx);
+        let err = cache.recompile_if_stale(c, "=42", &idx, &mut deps, &SingleSheetCtx);
         assert!(err.is_none());
-        assert!(cache.get(&cell).is_none()); // Not compiled because not stale.
+        assert!(cache.get(&c).is_none());
+    }
+
+    #[test]
+    fn formula_binds_ref_to_uid() {
+        // `=A1` on a 10x10 sheet binds its dependency to the bound row/col uid.
+        let idx = indices_with(10, 10);
+        let mut cache = BytecodeCache::new();
+        let mut deps = DependencyGraph::new();
+        let c = cell(0, 1);
+
+        cache.invalidate(c);
+        cache.recompile_if_stale(c, "=A1", &idx, &mut deps, &SingleSheetCtx);
+        let bc = cache.get(&c).unwrap();
+        assert!(matches!(
+            bc.cell_deps[0],
+            CellId { row: AxisId::Bound(_), col: AxisId::Bound(_), .. }
+        ));
     }
 }

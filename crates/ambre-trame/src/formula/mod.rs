@@ -8,8 +8,12 @@ pub mod functions;
 pub mod engine;
 pub mod render;
 
+#[cfg(test)]
+pub(crate) mod test_index;
+
+pub use compile::SheetIndices;
 pub use engine::FormulaEngine;
 pub use types::{
-    CellRef, CellValue, FormulaCtx, FormulaError, NameTarget, RangeDep, SheetQualifier,
-    SingleSheetCtx,
+    AxisId, CellId, CellRef, CellValue, FormulaCtx, FormulaError, NameTarget, RangeDep,
+    RangeEndpoint, RangeId, SheetQualifier, SingleSheetCtx,
 };

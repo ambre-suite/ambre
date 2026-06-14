@@ -52,19 +52,31 @@
 
 ## 2. MULTI-SHEET CRDT MODEL
 
-### A. Stable IDs via `LoroMovableList`
+### A. Own stable uids carried as `LoroMovableList` values
 
 Positional addressing (`"R{row}C{col}"`) is **rejected**: inserting a row at position 5 would invalidate all keys `R5C*..RnC*` → O(n) CRDT operations.
 
-**Decision: `LoroMovableList` for rows and columns.** Each element has a stable, unique
-`ListItemId = (PeerID: u64, Counter: i32)`. Inserting a row = 1 CRDT operation. No cell key is
-invalidated.
+**Decision: each row and column carries an own stable `Uid` that *we* mint, stored as the
+*value* of an element in a `LoroMovableList` (`rows_{sheet}` / `cols_{sheet}`).** A `Uid` is
+`{peer: u64, counter: u32}`, rendered `"{peer:016x}_{counter:08x}"`, where `peer` is the document
+`PeerID` and `counter` a per-session monotonic counter. Inserting a row = 1 CRDT operation
+(push/insert one uid value). No cell key is invalidated.
 
-> **Implementation note (loro 1.12).** `LoroMovableList` does not expose a per-element id directly.
-> The stable `ListItemId` is obtained via `list.get_cursor(pos, Side::Middle)` whose `Cursor.id`
-> is a `loro::ID { peer, counter }` (`Copy + Eq + Hash`). That `ID` anchors to the op that created
-> the element and replicates with the document, so it is stable across sessions and peers and is the
-> concrete `ListItemId` used below.
+> **Why an owned value, not the Loro element id.** `LoroMovableList` does expose a per-element op
+> id via `get_cursor(pos, Side::Middle).id` (a `loro::ID { peer, counter }`), but
+> `LoroMovableList::mov(from, to)` **reassigns the moved element's op id** -- it becomes the move
+> op's id. A cell keyed by that slot id would be orphaned by every reorder. Owning the uid as the
+> element's *value* makes it **move-invariant**: a reorder (`mov`) shuffles the values, the uid each
+> carries is untouched, and every `"{row_uid}:{col_uid}"` cell key keeps resolving. This is what
+> lets a sort be a **pure order permutation** (§12, `trame-features §2`) instead of a content
+> rewrite, and what lets id-based references follow the data. See the rejected "Loro slot id as
+> cell key" and "sort by content rewrite" entries in §13.
+
+**Convergence of minting.** Two peers that concurrently insert a row each mint a **distinct** uid
+(their `PeerID` differs), so both rows survive and `LoroMovableList` orders the two values
+canonically -- no shared counter, no LWW collision. This is the §2.D sheet-id argument applied to
+rows/columns (see the rejected shared-counter hazard in §13). The counter need only be unique
+within a peer's session; once minted, a uid lives in the CRDT and never changes.
 
 **Key format in `LoroMap("cells_{sheet}")` — fixed-length 51 chars** (16 + `_` + 8 per side, joined by `:`):
 ```
@@ -76,9 +88,10 @@ invalidated.
 The grid is virtual at `TOTAL_ROWS = 100_000`. We do **not** materialize 100k list elements. The
 model that keeps O(1) insert *and* CRDT convergence is:
 
-> **Stable `ListItemId`s, `rows_/cols_` `LoroMovableList` dense over the *used range* `[0..hwm]`
-> (high-water mark), rows/columns beyond the used range are virtual** (no element, no storage; a
-> read there returns the generated label, a write there materializes up to that index).
+> **Own stable `Uid`s carried as element values, `rows_/cols_` `LoroMovableList` dense over the
+> *used range* `[0..hwm]` (high-water mark), rows/columns beyond the used range are virtual** (no
+> element, no storage; a read there returns the generated label, a write there materializes up to
+> that index).
 
 Crucially, **list index == grid position**: resolving `A5` is a direct `row_by_pos[5]` lookup, and a
 concurrent insert of two distinct rows is two independent element insertions that Loro orders
@@ -104,19 +117,19 @@ LoroDoc
 ├── "sheets" (LoroMap)
 │   └── "{sheet_id}" (LoroMap)        → {name: LoroText, hidden: bool, tab_color: u32}
 │
-├── "rows_{sheet_id}" (LoroMovableList)   → each element = a row (stable ListItemId)
+├── "rows_{sheet_id}" (LoroMovableList)   → each element VALUE = a row's own uid (move-invariant)
 ├── "cols_{sheet_id}" (LoroMovableList)   → same for columns
 │
-├── "cells_{sheet_id}" (LoroMap)      → sparse, key = "{row_lid}:{col_lid}"
-│   └── "{lid}:{lid}" (LoroMap)
+├── "cells_{sheet_id}" (LoroMap)      → sparse, key = "{row_uid}:{col_uid}"
+│   └── "{uid}:{uid}" (LoroMap)
 │       ├── "v" : LoroText            → raw value ("42", "=SUM(A1:A10)", "text")
 │       ├── "t" : String              → "n" | "s" | "b" | ""
 │       └── "s" : String              → style_id
 │
-├── "col_widths_{sheet_id}" (LoroMap) → {col_lid: f64}
+├── "col_widths_{sheet_id}" (LoroMap) → {col_uid: f64}
 ├── "row_heights_{sheet_id}" (LoroMap)
 │
-├── "merges_{sheet_id}" (LoroMap)     → {"{row_lid}:{col_lid}": "{row_lid_end}:{col_lid_end}"}
+├── "merges_{sheet_id}" (LoroMap)     → {"{row_uid}:{col_uid}": "{row_uid_end}:{col_uid_end}"}
 │
 ├── "styles" (LoroMap)                → shared styles
 │   └── "style_007" (LoroMap)         → {bold, italic, fg, bg, fmt, halign, border}
@@ -125,8 +138,8 @@ LoroDoc
 ├── "media" (LoroMap)                 → {hash_blake2b: {dims, anchor, mime}}
 │
 │   ── Features (defined in spec-ambre-trame-features.md) ──
-├── "filters_{sheet_id}" (LoroMap)    → active shared filter {col_lid, kind, values/condition}
-├── "filter_hidden_{sheet_id}" (LoroMap) → {row_lid: bool} — rows hidden by filter
+├── "filters_{sheet_id}" (LoroMap)    → active shared filter {col_uid, kind, values/condition}
+├── "filter_hidden_{sheet_id}" (LoroMap) → {row_uid: bool} — rows hidden by filter
 ├── "cond_formats_{sheet_id}" (LoroList) → conditional formatting rules [{range, priority, rule, style}]
 ├── "validations_{sheet_id}" (LoroMap) → data validations [{kind, params, on_invalid, message}]
 └── "protections_{sheet_id}" (LoroMap) → range protection (Post-MVP) [{owner, allowed, description}]
@@ -136,33 +149,39 @@ LoroDoc
 
 The `Vec`s are dense over the **used range** (`len == hwm`, see §2.A bis), never over the 100k
 virtual grid, so `resolve` is a direct O(1) index lookup and memory is proportional to real sheet
-size. `row_by_pos[i]` is the `ListItemId` of the element at list position `i` (obtained via the
-`get_cursor(i, Middle).id` cursor described in §2.A).
+size. `row_by_pos[i]` is the `Uid` carried by the element at list position `i` (read from the
+element's *value*, parsed with [`parse_uid`], not from a Loro cursor -- see §2.A). Because the uid
+is move-invariant, a `rows_{sheet}.mov(from, to)` simply **permutes `row_by_pos`** and every cell
+key still resolves; this is the single primitive behind sort (§12) and any future drag-to-reorder.
 
 ```rust
 pub struct SheetIndex {
-    row_by_pos: Vec<ListItemId>,
-    col_by_pos: Vec<ListItemId>,
-    row_to_pos: HashMap<ListItemId, usize>,
-    col_to_pos: HashMap<ListItemId, usize>,
+    row_by_pos: Vec<Uid>,
+    col_by_pos: Vec<Uid>,
+    row_to_pos: HashMap<Uid, usize>,
+    col_to_pos: HashMap<Uid, usize>,
 }
 
 impl SheetIndex {
     /// O(N_used) reconstruction at load (N_used = materialized rows + cols, not 100k).
+    /// Reads each element's uid VALUE in list order.
     pub fn build(rows: &LoroMovableList, cols: &LoroMovableList) -> Self { /* ... */ }
 
     /// Incremental O(N) update for shifts
     /// Phase 2: order-statistic tree for O(log N)
-    pub fn apply_insert_row(&mut self, pos: usize, id: ListItemId) { /* ... */ }
-    pub fn apply_delete_row(&mut self, pos: usize) -> ListItemId   { /* ... */ }
+    pub fn apply_insert_row(&mut self, pos: usize, id: Uid) { /* ... */ }
+    pub fn apply_delete_row(&mut self, pos: usize) -> Uid   { /* ... */ }
 
-    pub fn resolve(&self, row: usize, col: usize) -> Option<(ListItemId, ListItemId)> {
+    /// Permute the row order to mirror a `mov(from, to)` (sort, reorder).
+    pub fn apply_move_row(&mut self, from: usize, to: usize) { /* ... */ }
+
+    pub fn resolve(&self, row: usize, col: usize) -> Option<(Uid, Uid)> {
         Some((*self.row_by_pos.get(row)?, *self.col_by_pos.get(col)?))
     }
 
     /// Used for #REF! detection
-    pub fn contains_row(&self, id: &ListItemId) -> bool { self.row_to_pos.contains_key(id) }
-    pub fn contains_col(&self, id: &ListItemId) -> bool { self.col_to_pos.contains_key(id) }
+    pub fn contains_row(&self, id: &Uid) -> bool { self.row_to_pos.contains_key(id) }
+    pub fn contains_col(&self, id: &Uid) -> bool { self.col_to_pos.contains_key(id) }
 
     pub fn col_letter(index: usize) -> String {
         let mut chars = Vec::new();
@@ -289,9 +308,46 @@ sheets.delete(sheet_id)
 
 ### A. Range Types
 
+**Two reference representations.** The `nom` parser produces *positional* refs
+(`CellRef { sheet: u16, row: u32, col: u32 }`, `RangeDep { .. : u32 }`) -- a typed
+`A1` / `A1:B10`. Compilation resolves those against the current per-sheet
+`SheetIndex` into the *uid-anchored* engine forms below (`CellId` / `RangeId`),
+which are what the bytecode, dependency graph, bytecode cache and VM are keyed
+by. Binding `A1` to the row/column `Uid` is what makes a reference follow the data
+(§4.B / §12).
+
+**Bound vs virtual axes (`AxisId`).** Within the used range a single-cell
+reference binds to the row/column `Uid`. Beyond the used range -- a *virtual*
+row/column with no list element yet (§2.A bis), so no `Uid` -- there is nothing to
+bind to, so the reference keeps the grid position it was typed at and reads
+`Empty` until that line is materialized (a later re-edit then re-binds it to the
+new `Uid`). This is the only correct way to model `=A100` on a 10-row sheet.
+
+**Cells follow, ranges are blocks.** Only *single-cell* references bind to a `Uid`
+and follow their row/column through a sort (§12). A **range** is compiled with
+`Virtual` (positional) endpoints, so it denotes a rectangular *region* -- a block
+of grid positions -- not a set of specific rows. Sorting the rows inside
+`SUM(A1:A3)` reorders the same three values, leaving the block (and its total)
+intact; this matches Excel/Sheets and is the only well-defined behavior, since
+uid-bound endpoints could scatter and invert the rectangle (see §13). A range
+therefore never `#REF!`s on a row delete -- it shifts positionally, like Excel.
+
 ```rust
-pub struct RangeDep {
-    pub sheet:     SheetId,
+pub enum AxisId {
+    /// Bound to a materialized row/column `Uid`. #REF! once that id is deleted.
+    Bound(Uid),
+    /// A virtual position beyond the used range; stays positional, reads Empty.
+    Virtual(u32),
+}
+
+pub struct CellId {           // engine-side (uid-anchored) cell identity
+    pub sheet: u16,           // local engine sheet index
+    pub row:   AxisId,
+    pub col:   AxisId,
+}
+
+pub struct RangeId {          // engine-side (uid-anchored) range identity
+    pub sheet:     u16,
     pub row_start: RangeEndpoint,
     pub row_end:   RangeEndpoint,
     pub col_start: RangeEndpoint,
@@ -299,56 +355,35 @@ pub struct RangeDep {
 }
 
 pub enum RangeEndpoint {
-    /// Bounded endpoint -- stable via ListItemId. #REF! if deleted.
-    Specific(ListItemId),
-    /// Unbounded range: entire column (A:A) or entire row (1:1)
+    /// Bounded endpoint -- stable via the axis `AxisId`. #REF! if a bound id is deleted.
+    Specific(AxisId),
+    /// Unbounded range: entire column (A:A) or entire row (1:1). Reserved; the
+    /// MVP parser never emits it.
     EntireAxis,
 }
 
-impl RangeDep {
-    pub fn contains(&self, row: ListItemId, col: ListItemId, index: &SheetIndex) -> bool {
+impl RangeId {
+    pub fn contains(&self, row: Uid, col: Uid, index: &SheetIndex) -> bool {
         self.axis_contains(&self.row_start, &self.row_end, row, &index.row_to_pos)
             && self.axis_contains(&self.col_start, &self.col_end, col, &index.col_to_pos)
     }
 
-    fn axis_contains(
-        &self, start: &RangeEndpoint, end: &RangeEndpoint,
-        id: ListItemId, pos_map: &HashMap<ListItemId, usize>,
-    ) -> bool {
-        let pos = match pos_map.get(&id) { Some(p) => p, None => return false };
-        let s = match start {
-            RangeEndpoint::EntireAxis    => 0,
-            RangeEndpoint::Specific(sid) => *pos_map.get(sid).unwrap_or(&usize::MAX),
-        };
-        let e = match end {
-            RangeEndpoint::EntireAxis    => usize::MAX,
-            RangeEndpoint::Specific(eid) => *pos_map.get(eid).unwrap_or(&0),
-        };
-        *pos >= s && *pos <= e
-    }
+    /// Resolves endpoints to positions for iteration. `entire` is the position an
+    /// `EntireAxis` bound takes (0 for a start, axis_len-1 for an end). Returns
+    /// None only when a `Specific(Bound(_))` endpoint is no longer in the index
+    /// (-> #REF!); a `Specific(Virtual(p))` keeps position `p` even past the
+    /// used range (the caller clamps iteration to the materialized cells).
+    pub fn row_range(&self, index: &SheetIndex) -> Option<(usize, usize)> { /* axis resolve */ }
+    pub fn col_range(&self, index: &SheetIndex) -> Option<(usize, usize)> { /* axis resolve */ }
 
-    /// Resolves endpoints to positions for iteration.
-    /// Returns None if a Specific endpoint is no longer in SheetIndex -> #REF!
-    pub fn row_range(&self, index: &SheetIndex) -> Option<(usize, usize)> {
-        self.resolve_range(&self.row_start, &self.row_end, &index.row_to_pos, index.row_by_pos.len())
-    }
-    pub fn col_range(&self, index: &SheetIndex) -> Option<(usize, usize)> {
-        self.resolve_range(&self.col_start, &self.col_end, &index.col_to_pos, index.col_by_pos.len())
-    }
-
-    fn resolve_range(
-        &self, start: &RangeEndpoint, end: &RangeEndpoint,
-        pos_map: &HashMap<ListItemId, usize>, axis_len: usize,
-    ) -> Option<(usize, usize)> {
-        let s = match start {
-            RangeEndpoint::EntireAxis    => 0,
-            RangeEndpoint::Specific(id)  => *pos_map.get(id)?,
-        };
-        let e = match end {
-            RangeEndpoint::EntireAxis    => axis_len.saturating_sub(1),
-            RangeEndpoint::Specific(id)  => *pos_map.get(id)?,
-        };
-        Some((s, e))
+    fn endpoint_pos(ep: &RangeEndpoint, entire: usize, pos: impl Fn(&Uid) -> Option<usize>)
+        -> Option<usize>
+    {
+        match ep {
+            RangeEndpoint::EntireAxis                   => Some(entire),
+            RangeEndpoint::Specific(AxisId::Bound(u))   => pos(u),         // None -> #REF!
+            RangeEndpoint::Specific(AxisId::Virtual(p)) => Some(*p as usize),
+        }
     }
 }
 ```
@@ -358,23 +393,23 @@ impl RangeDep {
 ```rust
 pub struct DependencyGraph {
     /// Level 1: cell-to-cell dependencies (cycles detected statically)
-    cell_dag:    petgraph::stable_graph::StableGraph<CellRef, ()>,
-    cell_to_node: HashMap<CellRef, petgraph::graph::NodeIndex>,
+    cell_dag:    petgraph::stable_graph::StableGraph<CellId, ()>,
+    cell_to_node: HashMap<CellId, petgraph::graph::NodeIndex>,
 
     /// Level 2: range dependencies (cycles detected dynamically)
-    range_deps:  HashMap<CellRef, Vec<RangeDep>>,
+    range_deps:  HashMap<CellId, Vec<RangeId>>,
 
-    /// Reverse index: sheet -> [(formula, RangeDep)]
+    /// Reverse index: local sheet index -> [(formula, RangeId)]
     /// MVP: linear scan O(n). Phase 2: 2D interval tree.
-    range_index: HashMap<SheetId, Vec<(CellRef, RangeDep)>>,
+    range_index: HashMap<u16, Vec<(CellId, RangeId)>>,
 }
 
 impl DependencyGraph {
     pub fn update(
         &mut self,
-        formula_cell: CellRef,
-        new_cell_deps:  Vec<CellRef>,
-        new_range_deps: Vec<RangeDep>,
+        formula_cell: CellId,
+        new_cell_deps:  Vec<CellId>,
+        new_range_deps: Vec<RangeId>,
     ) -> Result<(), CycleError> {
         // Update cell_dag
         let node = self.get_or_create_node(formula_cell);
@@ -414,9 +449,9 @@ impl DependencyGraph {
     /// Collects all cells to mark dirty after `changed` is modified.
     pub fn collect_dirty(
         &self,
-        changed: CellRef,
-        indices: &HashMap<SheetId, SheetIndex>,
-    ) -> HashSet<CellRef> {
+        changed: CellId,
+        index: &SheetIndex,   // the changed cell's sheet index
+    ) -> HashSet<CellId> {
         let mut dirty = HashSet::new();
 
         // Level 1: DFS descendants in cell_dag
@@ -427,11 +462,12 @@ impl DependencyGraph {
             }
         }
 
-        // Level 2: formulas whose range contains changed
-        let sheet_idx = match indices.get(&changed.sheet) { Some(i) => i, None => return dirty };
+        // Level 2: formulas whose range contains changed. Only a fully bound
+        // cell can sit inside a uid-keyed range; a virtual cell is skipped.
+        let (Some(row), Some(col)) = (changed.row_uid(), changed.col_uid()) else { return dirty };
         if let Some(entries) = self.range_index.get(&changed.sheet) {
             for (formula_cell, dep) in entries {
-                if dep.contains(changed.row, changed.col, sheet_idx) {
+                if dep.contains(row, col, index) {
                     dirty.insert(*formula_cell);
                     // Propagate in cell_dag from formula_cell
                     if let Some(&node) = self.cell_to_node.get(formula_cell) {
@@ -446,7 +482,7 @@ impl DependencyGraph {
         dirty
     }
 
-    fn find_cycle_cells(&self) -> Vec<CellRef> {
+    fn find_cycle_cells(&self) -> Vec<CellId> {
         petgraph::algo::kosaraju_scc(&self.cell_dag)
             .into_iter()
             .find(|scc| scc.len() > 1)
@@ -474,8 +510,8 @@ pub enum Op {
     PushEmpty,
 
     // References -- verify SheetIndex (broken ref) and eval_stack (dynamic cycle)
-    PushCell(CellRef),
-    EvalRange(RangeDep),    // iterates range -> pushes Vec<CellValue> for functions
+    PushCell(CellId),
+    EvalRange(RangeId),     // iterates range -> pushes Vec<CellValue> for functions
 
     // Binary operations
     Add, Sub, Mul, Div, Pow,
@@ -494,8 +530,8 @@ pub enum Op {
 
 pub struct CellBytecode {
     pub ops:        Vec<Op>,
-    pub cell_deps:  Vec<CellRef>,   // extracted at compilation -> DependencyGraph update
-    pub range_deps: Vec<RangeDep>,
+    pub cell_deps:  Vec<CellId>,    // extracted at compilation -> DependencyGraph update
+    pub range_deps: Vec<RangeId>,
 }
 ```
 
@@ -508,8 +544,8 @@ fn compile(expr: &Expr) -> Vec<Op> {
         Expr::Literal(CellValue::Text(s))    => vec![Op::PushStr(s.clone())],
         Expr::Literal(CellValue::Boolean(b)) => vec![Op::PushBool(*b)],
         Expr::Literal(_)                     => vec![Op::PushEmpty],
-        Expr::CellRef(r)                     => vec![Op::PushCell(*r)],
-        Expr::Range(dep)                     => vec![Op::EvalRange(dep.clone())],
+        Expr::CellRef(r)                     => vec![Op::PushCell(bind_cell(r, index))],
+        Expr::Range(dep)                     => vec![Op::EvalRange(bind_range(dep, index))],
         Expr::BinOp(kind, lhs, rhs) => {
             let mut ops = compile(lhs);
             ops.extend(compile(rhs));
@@ -528,27 +564,28 @@ fn compile(expr: &Expr) -> Vec<Op> {
 }
 ```
 
-**A1 → CellRef Resolution:** the `nom` parser receives the current `SheetIndex`. `A1` (col=A→0, row=1→index 0) is converted to a stable `CellRef { sheet, row: ListItemId, col: ListItemId }`, which survives row/column insertions.
+**A1 → CellId Resolution:** compilation receives the current `SheetIndex` (per sheet). `A1` (col=A→0, row=1→index 0) is resolved against the index to the `Uid`s currently at those positions, producing a stable `CellId { sheet, row: AxisId::Bound(uid), col: AxisId::Bound(uid) }`. The reference then **binds to those rows/columns**, surviving inserts, deletes, and reorders -- after a sort it still points at the same physical cells (now elsewhere), which is the §12 "references follow the data" guarantee. A position *beyond* the used range (e.g. `A100` on a 10-row sheet) has no `Uid`, so it compiles to `AxisId::Virtual(pos)` and reads `Empty` until that line is materialized (§3.A).
 
 ### C. Bytecode Cache and Incremental Compilation
 
 ```rust
 pub struct BytecodeCache {
-    entries: HashMap<CellRef, CellBytecode>,
-    stale:   HashSet<CellRef>,   // raw changed -> recompilation needed
+    entries: HashMap<CellId, CellBytecode>,
+    stale:   HashSet<CellId>,   // raw changed -> recompilation needed
 }
 
 impl BytecodeCache {
-    pub fn invalidate(&mut self, cell: CellRef) { self.stale.insert(cell); }
+    pub fn invalidate(&mut self, cell: CellId) { self.stale.insert(cell); }
 
-    /// Recompiles if stale. Called just before compute_cell().
+    /// Recompiles if stale. Called just before compute_cell(). `indices` lets
+    /// compilation bind every positional `A1` to its row/column `AxisId`.
     pub fn recompile_if_stale(
         &mut self,
-        cell:        CellRef,
+        cell:        CellId,
         raw:         &str,
-        sheet_index: &SheetIndex,
-        sheet_name_to_id: &HashMap<String, SheetId>,
+        indices:     &HashMap<u16, SheetIndex>,
         deps:        &mut DependencyGraph,
+        ctx:         &dyn FormulaCtx,
     ) {
         if !self.stale.remove(&cell) { return; }
 
@@ -585,19 +622,18 @@ impl BytecodeCache {
 pub struct EvalContext<'a> {
     /// Cells currently being evaluated -- dynamic cycle detection
     /// (ranges, named ranges, cross-sheet, any cycle not visible in cell_dag)
-    eval_stack: HashSet<CellRef>,
+    eval_stack: HashSet<CellId>,
 
     /// Results already computed in this cycle -- avoids redundant recomputation
-    resolved:   HashMap<CellRef, CellValue>,
+    resolved:   HashMap<CellId, CellValue>,
 
-    doc:     &'a LoroDoc,
-    indices: &'a HashMap<SheetId, SheetIndex>,
+    indices: &'a HashMap<u16, SheetIndex>,
     bc:      &'a BytecodeCache,
-    cache:   &'a HashMap<CellRef, CellValue>,
+    cache:   &'a HashMap<CellId, CellValue>,
 }
 
 impl<'a> EvalContext<'a> {
-    pub fn eval_cell(&mut self, cell: CellRef) -> CellValue {
+    pub fn eval_cell(&mut self, cell: CellId) -> CellValue {
         // Dynamic cycle: cell being evaluated in the call stack
         if self.eval_stack.contains(&cell) {
             return CellValue::Error(FormulaError::CircularReference);
@@ -626,12 +662,11 @@ impl<'a> EvalContext<'a> {
                 Op::PushEmpty   => stack.push(CellValue::Empty),
 
                 Op::PushCell(r) => {
-                    let idx = &self.indices[&r.sheet];
-                    if !idx.contains_row(&r.row) || !idx.contains_col(&r.col) {
-                        stack.push(CellValue::Error(FormulaError::BrokenRef));
-                    } else {
-                        stack.push(self.eval_cell(*r)); // recursive -- detects cycles
-                    }
+                    // Resolve each axis to a position: a deleted Bound id -> #REF!;
+                    // a Virtual position past the used range -> Empty; otherwise
+                    // normalize to the canonical bound cell at that position and
+                    // recurse (detecting cycles).
+                    stack.push(self.read_cell(*r));
                 }
 
                 Op::EvalRange(dep) => {
@@ -677,7 +712,7 @@ impl<'a> EvalContext<'a> {
         stack.pop().unwrap_or(CellValue::Empty)
     }
 
-    fn eval_range(&mut self, dep: &RangeDep) -> Vec<CellValue> {
+    fn eval_range(&mut self, dep: &RangeId) -> Vec<CellValue> {
         let idx = &self.indices[&dep.sheet];
 
         let (row_start, row_end) = match dep.row_range(idx) {
@@ -689,13 +724,16 @@ impl<'a> EvalContext<'a> {
             None    => return vec![CellValue::Error(FormulaError::BrokenRef)],
         };
 
+        // Iterate the logical span (preserving shape for VLOOKUP/INDEX); a
+        // position past the materialized range reads Empty, a materialized one
+        // normalizes to its (row_uid, col_uid) and recurses (cycle detection).
         let mut values = Vec::new();
         for rp in row_start..=row_end {
             for cp in col_start..=col_end {
-                let row_id = idx.row_by_pos[rp];
-                let col_id = idx.col_by_pos[cp];
-                // Dynamic cycle detection on each cell in the range
-                values.push(self.eval_cell(CellRef { sheet: dep.sheet, row: row_id, col: col_id }));
+                values.push(match (idx.row_id(rp), idx.col_id(cp)) {
+                    (Some(row), Some(col)) => self.eval_cell(CellId::bound(dep.sheet, row, col)),
+                    _                      => CellValue::Empty,
+                });
             }
         }
         values
@@ -707,17 +745,19 @@ impl<'a> EvalContext<'a> {
 
 ## 5. BROKEN REFERENCES (`#REF!`)
 
-A reference is broken when its `ListItemId` is no longer in the `SheetIndex` — the row or column has been deleted.
+A reference is broken when a `Bound` `Uid` is no longer in the `SheetIndex` — the
+row or column has been deleted. (A `Virtual` axis is never broken: it reads
+`Empty`, since it never referred to materialized data.)
 
 **Detection at evaluation:**
-- `Op::PushCell(r)` → `SheetIndex.contains_row(r.row) && contains_col(r.col)` → otherwise `BrokenRef`
-- `Op::EvalRange(dep)` → `dep.row_range(idx)` returns `None` if `Specific(id)` endpoint is missing → `BrokenRef`
+- `Op::PushCell(r)` → resolving `AxisId::Bound(uid)` finds no position → `BrokenRef`
+- `Op::EvalRange(dep)` → `dep.row_range(idx)` returns `None` when a `Specific(Bound(id))` endpoint is missing → `BrokenRef`
 
 **Propagation after delete_row/delete_col:**
 
 ```rust
-fn on_delete_row(&mut self, sheet: SheetId, deleted_id: ListItemId) {
-    // All formulas depending on this ListItemId will be detected as broken
+fn on_delete_row(&mut self, sheet: SheetId, deleted_id: Uid) {
+    // All formulas depending on this Uid will be detected as broken
     // on the next evaluation via SheetIndex.contains_*
     // Mark them simply dirty to force recomputation
     let affected = self.deps.collect_dirty_for_deleted(sheet, deleted_id, &self.sheet_indices);
@@ -725,7 +765,7 @@ fn on_delete_row(&mut self, sheet: SheetId, deleted_id: ListItemId) {
 }
 ```
 
-No bytecode patching — the `ListItemId` values in `CellRef` and `RangeDep` remain, absence in `SheetIndex` triggers `BrokenRef` at evaluation.
+No bytecode patching — the `AxisId::Bound(uid)` values in `CellId` and `RangeId` remain, absence in `SheetIndex` triggers `BrokenRef` at evaluation.
 
 ---
 
@@ -735,8 +775,8 @@ No bytecode patching — the `ListItemId` values in `CellRef` and `RangeDep` rem
 
 ```
 "merges_{sheet_id}" (LoroMap) — LWW
-  key   = "{row_lid}:{col_lid}"       (master cell = top-left corner)
-  value = "{row_lid_end}:{col_lid_end}"  (bottom-right corner)
+  key   = "{row_uid}:{col_uid}"       (master cell = top-left corner)
+  value = "{row_uid_end}:{col_uid_end}"  (bottom-right corner)
 ```
 
 ### Client-side rule: merge blocked if covered cell is non-empty
@@ -813,8 +853,8 @@ pub struct TrameState {
     sheet_indices: HashMap<SheetId, SheetIndex>,
     deps:          DependencyGraph,
     bytecode:      BytecodeCache,
-    formula_cache: HashMap<CellRef, CellValue>,
-    dirty:         HashSet<CellRef>,
+    formula_cache: HashMap<CellId, CellValue>,
+    dirty:         HashSet<CellId>,
     float_objects: rstar::RTree<FloatObject>,
     /// Cache name -> SheetId for resolving cross-sheet references
     /// in formulas (e.g. Sheet2!A1). Updated on each CreateSheet/RenameSheet/DeleteSheet.
@@ -833,13 +873,19 @@ pub struct TrameState {
     my_user_id:    Uuid,
 }
 
+// Engine-side, uid-anchored cell identity (the compiled form of a positional
+// `CellRef`). `AxisId::Bound(uid)` inside the used range follows the data;
+// `AxisId::Virtual(pos)` past it stays positional and reads Empty (§3.A).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct CellRef { pub sheet: SheetId, pub row: ListItemId, pub col: ListItemId }
+pub struct CellId { pub sheet: u16, pub row: AxisId, pub col: AxisId }
 
+/// Our own, move-invariant row/column identity (§2.A). Minted as
+/// `{peer = document PeerID, counter = per-session monotonic}`, stored as the
+/// value of an element in the `rows_/cols_` `LoroMovableList`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ListItemId { pub peer: u64, pub counter: i32 }
+pub struct Uid { pub peer: u64, pub counter: u32 }
 
-impl ListItemId {
+impl Uid {
     pub fn to_key_part(&self) -> String { format!("{:016x}_{:08x}", self.peer, self.counter) }
 }
 
@@ -1274,8 +1320,10 @@ UI Thread — re-render viewport
 ## 10. QUALITY & TESTABILITY
 
 ```rust
-#[test] fn insert_row_stable_cell_keys()            { /* ListItemId not invalidated */ }
+#[test] fn insert_row_stable_cell_keys()            { /* row uid not invalidated */ }
 #[test] fn sheetindex_o1_lookup_after_inserts()      { }
+#[test] fn sort_is_uid_permutation_refs_follow()     { /* mov reorders uids; =A1 ref tracks its physical cell */ }
+#[test] fn move_row_preserves_cell_keys()            { /* rows_.mov -> every cell key still resolves */ }
 #[test] fn static_cycle_cell_to_cell()               { /* A1=B1+1, B1=A1 -> CycleError */ }
 #[test] fn dynamic_cycle_via_range()                 { /* A5=SUM(A1:A10) -> CircularRef */ }
 #[test] fn dynamic_cycle_cross_sheet()               { /* Sheet1!A1=Sheet2!B1, Sheet2!B1=Sheet1!A1 */ }
@@ -1335,17 +1383,17 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 
 **Excel:** inserting a row at position 3 implicitly rewrites `=SUM(A1:A10)` to `=SUM(A1:A11)`. This rewriting is performed by the Excel engine at the time of the operation.
 
-**Trame:** references are stable `ListItemId` values. Inserting a row within the range `A1:A10` naturally includes the new row in the computation (it lands positionally between the endpoints), without any rewriting. The formula references the same physical rows + the new row inserted within the range.
+**Trame:** references are stable `Uid` values. Inserting a row within the range `A1:A10` naturally includes the new row in the computation (it lands positionally between the endpoints), without any rewriting. The formula references the same physical rows + the new row inserted within the range.
 
 **Visible difference:** if the user inserts a row **outside** the range (before A1 or after A10), Excel does not modify the formula. Trame does not either — identical behavior. The difference is only visible for insertions **within** the range, where Trame naturally includes the new row while Excel must rewrite.
 
-**Why this is correct for a CRDT:** Excel's implicit rewriting is a non-idempotent operation. If Alice and Bob each simultaneously insert a row in the same range, two concurrent rewrites produce an inconsistent state. The `ListItemId` model avoids this problem.
+**Why this is correct for a CRDT:** Excel's implicit rewriting is a non-idempotent operation. If Alice and Bob each simultaneously insert a row in the same range, two concurrent rewrites produce an inconsistent state. The `Uid` model avoids this problem.
 
 ### References After Sort
 
 **Excel:** after a sort, absolute references (`$A$1`) do not move, relative references (`A1`) move with the data.
 
-**Trame:** all references are stable `ListItemId` values — they follow the data during the sort. `=SUM(A1:A10)` after sort still references the same 10 physical rows, which are now in a different order. Behavior equivalent to Excel absolute references (`$A$1`).
+**Trame:** a sort is a **pure permutation of the row order** (`rows_{sheet}.mov`, §2.A) -- it never rewrites a cell. Cells are keyed by their move-invariant row/column `Uid`, so the data follows the reorder for free, and every reference, being a `Uid` too, **follows the same physical rows**. `=SUM(A1:A10)` after sort still references the same 10 physical rows, now in a different order. Behavior equivalent to Excel absolute references (`$A$1`).
 
 **Visible difference:** if the user expected a formula referencing "row 3" to point to "what is now in third position after the sort", Trame does not do this. This is a choice consistent with the CRDT model.
 
@@ -1353,7 +1401,7 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 
 **Excel:** if a row is deleted then reinserted at the same position, Excel can find the cell "by position" in some cases.
 
-**Trame:** reinsertion creates a new `ListItemId`. The old `ListItemId` no longer exists in the `SheetIndex`. Any formula that referenced the old ID produces `#REF!` — even if a new row is inserted at the same visual position. The user must retype or copy the formula to point it to the new `ListItemId`.
+**Trame:** reinsertion mints a new `Uid`. The old `Uid` no longer exists in the `SheetIndex`. Any formula that referenced the old id produces `#REF!` — even if a new row is inserted at the same visual position. The user must retype or copy the formula to point it to the new `Uid`.
 
 **Why this is correct:** deletion is an explicit intent. Finding "by position" after delete+reinsert is a fragile heuristic, especially in collaborative mode where the position may have changed between the two operations on different clients. `#REF!` is the correct information: the referenced cell no longer exists.
 
@@ -1373,8 +1421,10 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 |---|---|
 | **Positional addressing `R{row}C{col}`** | Row insert = O(n) CRDT ops. `LoroMovableList` = 1 op. |
 | **Sparse run-length rows + order-statistic tree** | Stores only non-empty rows with a shared `gap_before` counter to avoid materializing empty rows. **Not convergent:** two concurrent inserts that split the same gap both `set` the shared counter -> LWW keeps one -> absolute numbering of every following row corrupts identically on all replicas. Dense-over-used-range (each row = its own element, no shared counter) is convergent and intent-preserving; the tree would only speed the query, not remove the hazard. A `ROW_MATERIALIZE_CAP` bounds the memory cost the sparse model aimed to avoid. |
-| **UUID v7 per row/column** | Redundant — Loro already generates stable `ListItemID` values. |
-| **`{client_hex}{counter_hex}` format without fixed width** | Ambiguous without separator. Fixed encoding `{peer:016x}_{ctr:08x}` chosen. |
+| **Loro slot/cursor id (`ListItemId`) as the row/column identity** | The element's op id (`get_cursor(pos).id`) looks stable, but `LoroMovableList::mov(from, to)` **reassigns the moved element's op id** to the move op. Every cell keyed by that slot id is orphaned on the first reorder, so a sort could only be done by rewriting cell contents (see next row). We instead mint our **own** `Uid` and store it as the element's *value*, which `mov` leaves untouched (§2.A). (This reverses the earlier "Loro already gives stable ids, a UUID is redundant" call: it holds for insert/delete but **not** for `mov`.) |
+| **Sort by rewriting cell contents into fixed row slots** | A workaround for the slot-id hazard above: keep the row slots fixed and copy values/formatting into sorted order. It is O(cells) not O(rows), churns the CRDT (every moved cell is a write that replicates and lands on the undo stack), and **breaks id-based references** (a reference to "the row that moved" stays pinned to the now-overwritten slot -> positional, not the §12 follow-the-data ideal). The owned-uid model makes sort a single `mov` permutation instead. |
+| **Uid-bound *range* endpoints (ranges follow the data like cells)** | A range bound to two row `Uid`s breaks under a sort: the endpoints reorder independently and can cross, inverting the rectangle (`SUM(A1:A3)` over a sorted block collapses to `0`). A rectangle cannot follow a non-contiguous set of rows. Ranges are compiled with **positional** (`Virtual`) endpoints -- a region/block -- so an internal sort leaves the block and its total intact (Excel/Sheets behavior). Only single-cell references bind to a `Uid` and follow the data (§3.A, §12). |
+| **`{client_hex}{counter_hex}` format without fixed width** | Ambiguous without separator. Fixed encoding `{peer:016x}_{ctr:08x}` chosen (shared by `Uid` and `sheet_id`). |
 | **100 petgraph edges for a range** | Memory explosion + O(n) updates on insert. Separate `range_deps`. |
 | **Interval tree 2D (MVP)** | Premature. Linear scan sufficient for < 1k formulas with ranges. Phase 2. |
 | **Direct AST evaluation** | Re-parse on each recomputation. Bytecode = compile once, eval N times. |
@@ -1409,6 +1459,7 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 - [x] Shared rendering module `ambre-trame/src/render.rs`: `GridLayout` + `draw_cells_on<S>()`, `draw_grid_lines_on<S>()`, `draw_col_headers_on<S>()`, `draw_row_headers_on<S>()`, all `DrawSurface`-generic. `ui::renderer` composes them (cells layer + header overlay); uniform-metrics `GridLayout` (variable widths deferred); `DisplayViewport`-fed PDF path lands with `export_pdf.rs` (Phase 3). *(Epic `E3`)*
 - [x] `MockSyncHandle` for controller tests (via `CommandSink`) *(`ambre-bus::CommandSink` seam + `ambre-trame::test_support::MockSyncHandle`: captures emitted `SyncCommand`s and relays CRDT deltas peer-to-peer. Production forwards `TrameOutcome` payloads from `ambre-logic`; the test seam mirrors that exact relay via `MockSyncHandle::absorb`, so tests drive the same `SyncCommand`s the dispatcher emits) (Epic `E3`)*
 - [x] Undo/Redo via Loro `UndoManager` (`TrameCommand::Undo/Redo` -> `undo_manager.undo()/redo()` + full derived-cache reseed via `after_structural` + `flush_delta` broadcast of the inverse ops; `TrameEvent::UndoState { can_undo, can_redo }`; chrome `UNDO`/`REDO` commands bound to Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y). Implicit row/column materialization is committed under an excluded origin (`add_exclude_origin_prefix`) so undo reverts only the value and the cell key still resolves to its stable list-element ids on redo *(Epic `E3`)*
+- [x] **Own-uid cell model (§2.A) + id-based engine (§3, §12).** Each `rows_/cols_` element carries a minted `Uid` as its *value* (replacing the Loro cursor id); `SheetIndex` reads values and gained `apply_move_row`. The compiled engine is uid-anchored: positional AST `CellRef`/`RangeDep` are resolved at compile time into `CellId`/`RangeId` over `AxisId { Bound(Uid), Virtual(pos) }` (a reference past the used range stays virtual and reads `Empty`). `SortRange` is a single `mov` permutation that **preserves** the uid-anchored bytecode (no reseed/re-parse) and recomputes, so single-cell references follow the moved data -- the §12 guarantee, proven by `sort_range_formulas_follow_data`. Ranges are positional blocks (`Virtual` endpoints), so `SUM(A1:A3)` over a sorted block stays intact (`sort_range_sum_block_is_stable_under_internal_sort`; uid-bound endpoints would invert -- see §13). Other structural ops still reset+reseed (re-bind against the converged order). Landed in stages, 164 tests green. *(Epic `E3`)*
 
 **Phase 2 — Core features (~50 functions)**
 - [x] SUM, AVERAGE, MIN, MAX, COUNT, IF, AND, OR *(plus ABS, COUNTA, CONCATENATE, LEFT, RIGHT, MID, LEN, LOWER, UPPER, NOT, POWER, ROUND, SQRT, TRIM -- 22 implemented)*
