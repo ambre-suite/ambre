@@ -10,7 +10,7 @@
 // send to the Logic thread whenever the visible range changes.
 // ============================================================================
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 
@@ -152,6 +152,17 @@ pub struct TrameUiState {
     /// we never evict entries because the grid is read-only for now.
     pub cell_cache: HashMap<(u32, u32), CellData>,
 
+    /// Cells edited locally whose authoritative (recomputed) value has not yet
+    /// arrived from the Logic thread. Rendered with a reduced-opacity veil so
+    /// the optimistic value reads as "not yet confirmed". Cleared per cell when
+    /// the next `ViewportData` carries it. UI-only derived state -- never synced.
+    pub dirty_cells: HashSet<(u32, u32)>,
+
+    /// Cells whose formula evaluation failed, keyed to the error string (e.g.
+    /// `#DIV/0!`). Rendered with a small corner marker. Populated by
+    /// `TrameEvent::FormulaError`, cleared when a valid value arrives. UI-only.
+    pub formula_errors: HashMap<(u32, u32), String>,
+
     /// Version of the last accepted `ViewportData` response (anti-flicker).
     pub accepted_version: u64,
 
@@ -171,6 +182,8 @@ impl TrameUiState {
             canvas_width,
             canvas_height,
             cell_cache: HashMap::new(),
+            dirty_cells: HashSet::new(),
+            formula_errors: HashMap::new(),
             accepted_version: 0,
             next_version: 1,
         };
@@ -313,6 +326,10 @@ impl TrameUiState {
         }
         self.accepted_version = version;
         for cell in cells {
+            // Authoritative value supersedes the optimistic one: the cell is no
+            // longer dirty, and any prior error is resolved unless re-reported.
+            self.dirty_cells.remove(&(cell.row, cell.col));
+            self.formula_errors.remove(&(cell.row, cell.col));
             self.cell_cache.insert(
                 (cell.row, cell.col),
                 CellData {
@@ -324,6 +341,14 @@ impl TrameUiState {
                 },
             );
         }
+    }
+
+    /// Record a formula evaluation failure for `(row, col)` (from
+    /// `TrameEvent::FormulaError`). The cell renders with a corner error marker
+    /// until a valid `ViewportData` value clears it.
+    pub fn set_formula_error(&mut self, row: u32, col: u32, error: String) {
+        self.dirty_cells.remove(&(row, col));
+        self.formula_errors.insert((row, col), error);
     }
 
     /// Optimistically set a cell's text after a local edit commit, preserving
@@ -338,6 +363,10 @@ impl TrameUiState {
         let is_formula = text.starts_with('=');
         entry.raw = text.clone();
         entry.text = if is_formula { String::new() } else { text };
+        // The shown value is now optimistic: a formula awaits recompute, and a
+        // literal awaits the CRDT echo. Either way the prior error is stale.
+        self.formula_errors.remove(&(row, col));
+        self.dirty_cells.insert((row, col));
     }
 
     /// Apply a single-cell formatting change (from `TrameEvent::CellFormat`).
@@ -444,6 +473,40 @@ mod tests {
         let formula = state.cell_cache.get(&(0, 2)).unwrap();
         assert_eq!(formula.text, "", "result blank until recomputed");
         assert_eq!(formula.raw, "=SUM(A1:B1)", "formula kept for editing");
+    }
+
+    /// An optimistic edit marks a cell dirty; the authoritative `ViewportData`
+    /// for that cell clears the dirty flag. A formula error supersedes dirty and
+    /// is itself cleared once a valid value arrives.
+    #[test]
+    fn dirty_and_error_lifecycle() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+
+        state.set_cell_text(0, 0, "=A2".to_owned());
+        assert!(state.dirty_cells.contains(&(0, 0)), "edit marks dirty");
+
+        state.set_formula_error(0, 0, "#REF!".to_owned());
+        assert!(!state.dirty_cells.contains(&(0, 0)), "error clears dirty");
+        assert_eq!(state.formula_errors.get(&(0, 0)).map(String::as_str), Some("#REF!"));
+
+        state.on_viewport_data(TrameEvent::ViewportData {
+            version: 1,
+            row_start: 0,
+            col_start: 0,
+            cells: vec![DisplayCell {
+                row: 0,
+                col: 0,
+                text: "42".to_owned(),
+                raw: "=A2".to_owned(),
+                bold: false,
+                italic: false,
+                is_merged: false,
+                merge_span: None,
+                is_filtered: false,
+            }],
+        });
+        assert!(!state.formula_errors.contains_key(&(0, 0)), "valid value clears error");
+        assert!(!state.dirty_cells.contains(&(0, 0)), "valid value clears dirty");
     }
 
     /// Insertion advances the caret; backspace and caret motion respect UTF-8

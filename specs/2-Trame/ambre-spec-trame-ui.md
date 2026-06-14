@@ -1190,7 +1190,7 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 
 **Phase 1 — MVP**
 - [x] Virtual scrolling + grid rendering *(delivered under `ARCH P2`; the shared `ambre_trame::render` module refactor §12 is still pending -- Epic `E3`)*
-- [ ] UI-only layers on top of shared rendering: scroll offset, dirty opacity, error indicators
+- [x] UI-only layers on top of shared rendering: scroll offset, dirty opacity, error indicators
 - [ ] Column/row headers (via `ambre_trame::render::draw_col_headers_on<S>`)
 - [ ] Single-cell selection
 - [x] Inline editor *(delivered under `CHROME P2` -- Trame WYSIWYG cell)*; [ ] formula bar

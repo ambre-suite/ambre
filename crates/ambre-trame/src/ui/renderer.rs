@@ -87,6 +87,13 @@ pub struct DrawStats {
     pub input_latency_ms: f32,
 }
 
+/// Opacity of the veil painted over a dirty (awaiting-recompute) cell. The
+/// content_bg-coloured veil fades the optimistic value toward the background.
+const DIRTY_VEIL_ALPHA: f32 = 0.5;
+/// Leg length, in physical pixels, of the right-triangle error marker drawn in
+/// a cell's top-right corner.
+const ERROR_MARK_SIZE: f64 = 7.0;
+
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
@@ -181,11 +188,64 @@ pub fn draw_cells<S: DrawSurface>(
 
     // -- 3. Grid lines on top of the fills, so separators stay visible. --------
     render::draw_grid_lines_on(surface, &layout, palette.grid_line, strip);
+
+    // -- 4. UI-only layers tied to cell content (dirty veil + error marker). ---
+    // These live on the persistent cells layer so they scroll with the data,
+    // and they are intentionally absent from the shared `render` primitives:
+    // a PDF export never shows "pending recompute" or transient error state.
+    draw_ui_cell_layers(surface, state, &layout, palette, row_start, row_end, col_start, col_end);
     let t_lines = clock.now_ms();
 
     stats.bg_ms       = ((t_pending - t0) + (t_lines - t_cells)) as f32;
     stats.cells_ms    = (t_cells - t_pending) as f32;
     stats.cells_drawn = cells_drawn;
+}
+
+/// Paint the per-cell UI-only layers for the cells intersecting the strip:
+/// a reduced-opacity veil over dirty cells, and a corner marker over errored
+/// cells. Iterates the (small) dirty/error sets rather than the visible grid,
+/// rejecting entries outside the `[row_start, row_end) x [col_start, col_end)`
+/// strip already computed by the caller.
+fn draw_ui_cell_layers<S: DrawSurface>(
+    surface:   &mut S,
+    state:     &TrameUiState,
+    layout:    &GridLayout,
+    palette:   &Palette,
+    row_start: u32,
+    row_end:   u32,
+    col_start: u32,
+    col_end:   u32,
+) {
+    let in_strip = |row: u32, col: u32| {
+        row >= row_start && row < row_end && col >= col_start && col < col_end
+    };
+
+    // Dirty veil: a translucent content_bg quad fades the optimistic value.
+    let veil = palette.content_bg.with_alpha(DIRTY_VEIL_ALPHA);
+    for &(row, col) in &state.dirty_cells {
+        if in_strip(row, col) {
+            surface.fill_rect(layout.cell_rect(row, col), veil);
+        }
+    }
+
+    // Error marker: a filled right-triangle in the cell's top-right corner,
+    // assembled from 1px horizontal lines so it renders on the GPU surface
+    // (WgpuSurface does not implement fill_path).
+    let err = palette.cell_error;
+    for &(row, col) in state.formula_errors.keys() {
+        if !in_strip(row, col) {
+            continue;
+        }
+        let rect = layout.cell_rect(row, col);
+        let mut dy = 0.0;
+        while dy < ERROR_MARK_SIZE {
+            // Row `dy` from the top spans the hypotenuse to the right edge.
+            let x0 = rect.x1 - (ERROR_MARK_SIZE - dy);
+            let y = rect.y0 + dy + 0.5;
+            surface.stroke_line(x0, y, rect.x1, y, err, 1.0);
+            dy += 1.0;
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -505,6 +565,49 @@ mod tests {
             1,
         );
         assert_eq!(surface.clip_depth(), 0);
+    }
+
+    #[test]
+    fn dirty_cell_gets_a_translucent_veil() {
+        // An optimistic edit marks (0,0) dirty -> a content_bg veil at reduced
+        // alpha is painted over it, on top of the opaque cell fill.
+        let mut state = fixture(&[(0, 0, "x")]);
+        state.set_cell_text(0, 0, "5".to_owned());
+        let palette = Theme::Light.palette();
+        let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
+
+        draw_cells(
+            &mut surface, &state, palette, &mut font_cx, &mut cache,
+            true, None, &clock, &mut stats,
+        );
+
+        let veil = palette.content_bg.with_alpha(super::DIRTY_VEIL_ALPHA);
+        assert_eq!(
+            surface.count(|op| matches!(
+                op, DrawOp::FillRect { color, .. } if *color == veil
+            )),
+            1,
+        );
+        assert_ne!(veil, palette.content_bg, "veil must differ from the opaque fill");
+    }
+
+    #[test]
+    fn errored_cell_gets_a_corner_marker() {
+        // A formula error on (1,1) draws the corner marker with the error colour;
+        // a clean cell draws none.
+        let mut state = fixture(&[(1, 1, "")]);
+        state.set_formula_error(1, 1, "#DIV/0!".to_owned());
+        let palette = Theme::Light.palette();
+        let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
+
+        draw_cells(
+            &mut surface, &state, palette, &mut font_cx, &mut cache,
+            true, None, &clock, &mut stats,
+        );
+
+        assert!(surface.count(|op| matches!(
+            op, DrawOp::StrokeLine { color, .. } if *color == palette.cell_error
+        )) > 0);
     }
 
     #[test]
