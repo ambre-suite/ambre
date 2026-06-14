@@ -73,11 +73,12 @@ struct CanvasColors {
     cell_text: String,
     header_text: String,
     caret: String,
+    cell_error: String,
 }
 
 impl CanvasColors {
     /// (rust-field-name, hex) pairs in `Palette` field order.
-    fn fields(&self) -> [(&'static str, &str); 10] {
+    fn fields(&self) -> [(&'static str, &str); 11] {
         [
             ("content_bg", &self.content_bg),
             ("content_pending", &self.content_pending),
@@ -89,6 +90,7 @@ impl CanvasColors {
             ("cell_text", &self.cell_text),
             ("header_text", &self.header_text),
             ("caret", &self.caret),
+            ("cell_error", &self.cell_error),
         ]
     }
 }
