@@ -315,6 +315,31 @@ pub enum TrameCommand {
         to_index: u32,
     },
 
+    /// Sort the rows of the rectangular range `[row_start..=row_end] x
+    /// [col_start..=col_end]` by the values in the column `col_start + sort_col`
+    /// (`ambre-spec-trame-features.md` §3, single-column sort). Whole rows are
+    /// reordered, so cells outside `[col_start..=col_end]` move with their row --
+    /// matching Google Sheets "sort range". `has_header` keeps the first range row
+    /// pinned in place. Realized as `LoroMovableList` move ops on
+    /// `rows_{sheet_id}`: cells keyed by stable id pairs follow their row, so no
+    /// cell key is rewritten and references are preserved (§12). LWW on the row
+    /// list resolves concurrent sorts deterministically. A no-op when the range is
+    /// empty/virtual. Replies with [`TrameEvent::SortComplete`].
+    ///
+    /// [`TrameEvent::SortComplete`]: crate::ui::TrameEvent::SortComplete
+    SortRange {
+        sheet_id: String,
+        row_start: u32,
+        row_end: u32,
+        col_start: u32,
+        col_end: u32,
+        /// Column to sort on, as an index within the range (`0` = `col_start`).
+        sort_col: u32,
+        ascending: bool,
+        /// When `true`, the first range row is treated as a header and not sorted.
+        has_header: bool,
+    },
+
     /// Delete `sheet_id` and its per-sheet containers (§2.D). Rejected locally
     /// with [`TrameEvent::Error`](crate::ui::TrameEvent::Error) if it is the last
     /// remaining sheet (a workbook always keeps >= 1). If the active sheet is
