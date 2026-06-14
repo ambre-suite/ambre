@@ -196,6 +196,9 @@ pub enum FormulaError {
     CircularReference,
     /// A formula failed to parse.
     ParseError(String),
+    /// A reference points at something that no longer exists (a deleted sheet,
+    /// row, or column). Rendered as `#REF!`.
+    BrokenRef,
     /// Division by zero.
     DivisionByZero,
     /// Operands have incompatible types.
@@ -211,6 +214,7 @@ impl fmt::Display for FormulaError {
         match self {
             FormulaError::CircularReference => write!(f, "#CIRCULAR!"),
             FormulaError::ParseError(msg) => write!(f, "#PARSE!({msg})"),
+            FormulaError::BrokenRef => write!(f, "#REF!"),
             FormulaError::DivisionByZero => write!(f, "#DIV/0!"),
             FormulaError::TypeError => write!(f, "#TYPE!"),
             FormulaError::NumError => write!(f, "#NUM!"),
@@ -233,6 +237,9 @@ pub enum Op {
     PushStr(String),
     PushBool(bool),
     PushEmpty,
+    /// Push a constant error onto the stack. Emitted for an error literal,
+    /// e.g. a cross-sheet reference whose sheet was deleted (`#REF!`).
+    PushError(FormulaError),
 
     // -- Cell / range references (resolved at eval time) -----------------------
     /// Push the evaluated value of another cell onto the stack.
@@ -300,11 +307,11 @@ pub enum Expr {
     Literal(CellValue),
     CellRef(CellRef),
     Range(RangeDep),
-    /// A sheet-qualified reference `Sheet2!A1` / `'My Sheet'!A1:B2`. `inner` is
-    /// always a [`Expr::CellRef`] or [`Expr::Range`]; the resolver stamps the
-    /// resolved sheet index onto it.
+    /// A sheet-qualified reference `Sheet2!A1` / `'My Sheet'!A1:B2` /
+    /// `#s0_a1b2!A1`. `inner` is always a [`Expr::CellRef`] or [`Expr::Range`];
+    /// the resolver stamps the resolved sheet index onto it.
     SheetRef {
-        sheet_name: String,
+        sheet: SheetQualifier,
         inner: Box<Expr>,
     },
     /// A bareword reference to a named range, resolved by the context.
@@ -336,14 +343,31 @@ pub enum NameTarget {
     Range(RangeDep),
 }
 
+/// How a sheet-qualified reference names its sheet.
+///
+/// User input and named-range definitions carry a [`SheetQualifier::Name`]
+/// (display name). The canonical form persisted in the CRDT `v` text carries a
+/// [`SheetQualifier::Id`] (the stable `sheet_id`), so rename/reorder never
+/// invalidate the reference (spec section 2.D).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SheetQualifier {
+    /// A display name (`Sheet2`, `'My Sheet'`).
+    Name(String),
+    /// A stable CRDT `sheet_id` (`s0`, `00..0_0000002a`), prefixed `#` in text.
+    Id(String),
+}
+
 /// Resolution services the formula crate needs from the host (`TrameState`):
-/// mapping a sheet *display name* to its local index, and a defined name to its
-/// target. Implemented by the host; [`SingleSheetCtx`] is the no-op default for
-/// single-sheet code and unit tests.
+/// mapping a sheet *display name* or stable *id* to its local index, and a
+/// defined name to its target. Implemented by the host; [`SingleSheetCtx`] is
+/// the no-op default for single-sheet code and unit tests.
 pub trait FormulaCtx {
     /// Resolve a sheet display name (`Sheet2`) to its local index, or `None`
     /// if no such sheet exists (the reference becomes a parse error).
     fn resolve_sheet(&self, name: &str) -> Option<u16>;
+    /// Resolve a stable sheet id (`#s0_a1b2` canonical form) to its local index,
+    /// or `None` if the sheet was deleted (the reference becomes `#REF!`).
+    fn resolve_sheet_id(&self, id: &str) -> Option<u16>;
     /// Resolve a defined name (`TOTAL`) to its target, or `None` if undefined.
     fn resolve_name(&self, name: &str) -> Option<NameTarget>;
 }
@@ -354,6 +378,9 @@ pub struct SingleSheetCtx;
 
 impl FormulaCtx for SingleSheetCtx {
     fn resolve_sheet(&self, _name: &str) -> Option<u16> {
+        None
+    }
+    fn resolve_sheet_id(&self, _id: &str) -> Option<u16> {
         None
     }
     fn resolve_name(&self, _name: &str) -> Option<NameTarget> {

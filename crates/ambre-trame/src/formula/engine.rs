@@ -296,6 +296,9 @@ mod tests {
         fn resolve_sheet(&self, name: &str) -> Option<u16> {
             (name == "Sheet2").then_some(1)
         }
+        fn resolve_sheet_id(&self, id: &str) -> Option<u16> {
+            (id == "s1").then_some(1)
+        }
         fn resolve_name(&self, _: &str) -> Option<super::super::types::NameTarget> {
             None
         }

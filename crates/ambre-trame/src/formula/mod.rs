@@ -6,6 +6,10 @@ pub mod dag;
 pub mod cache;
 pub mod functions;
 pub mod engine;
+pub mod render;
 
 pub use engine::FormulaEngine;
-pub use types::{CellRef, CellValue, FormulaCtx, FormulaError, NameTarget, RangeDep, SingleSheetCtx};
+pub use types::{
+    CellRef, CellValue, FormulaCtx, FormulaError, NameTarget, RangeDep, SheetQualifier,
+    SingleSheetCtx,
+};

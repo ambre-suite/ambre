@@ -34,8 +34,11 @@ fn compile_into(
                     // is unreachable from the parser.
                     ops.push(Op::PushEmpty);
                 }
-                super::types::CellValue::Error(_) => {
-                    ops.push(Op::PushEmpty);
+                super::types::CellValue::Error(e) => {
+                    // Error literals come from `resolve_refs` (e.g. a deleted
+                    // cross-sheet target -> `#REF!`); push the error so it
+                    // propagates through any surrounding operators.
+                    ops.push(Op::PushError(e.clone()));
                 }
             }
         }

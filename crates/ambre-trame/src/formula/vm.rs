@@ -91,6 +91,7 @@ impl<'a> EvalContext<'a> {
                 Op::PushStr(s) => stack.push(CellValue::Text(s.clone())),
                 Op::PushBool(b) => stack.push(CellValue::Boolean(*b)),
                 Op::PushEmpty => stack.push(CellValue::Empty),
+                Op::PushError(e) => stack.push(CellValue::Error(e.clone())),
 
                 Op::PushCell(r) => {
                     stack.push(self.eval_cell(*r));
