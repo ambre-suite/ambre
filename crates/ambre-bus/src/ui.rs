@@ -270,6 +270,22 @@ pub enum TrameEvent {
     /// the new ordering; this event is the explicit completion signal (e.g. to
     /// clear a "sorting..." affordance). A no-op sort emits nothing.
     SortComplete,
+
+    /// A local [`ApplyFilter`](crate::logic::TrameCommand::ApplyFilter) finished
+    /// recomputing the hidden rows (`ambre-spec-trame-features.md` §1.A).
+    /// `hidden_row_count` is how many rows the filter hides. The accompanying
+    /// [`DataReset`](Self::DataReset) prompts the UI to re-fetch the viewport,
+    /// where the hidden rows now carry [`DisplayCell::is_filtered`]. A no-op
+    /// filter (non-active sheet / virtual column) emits nothing.
+    FilterApplied {
+        hidden_row_count: u32,
+    },
+
+    /// A local [`ClearFilter`](crate::logic::TrameCommand::ClearFilter) removed the
+    /// active shared filter (`ambre-spec-trame-features.md` §1.A). The accompanying
+    /// [`DataReset`](Self::DataReset) prompts a viewport re-fetch with every row
+    /// visible again. A no-op clear (no active filter) emits nothing.
+    FilterCleared,
 }
 
 /// A single cell ready for display.
@@ -299,4 +315,8 @@ pub struct DisplayCell {
     /// giving how many columns/rows it spans. `None` on a covered cell (rendered
     /// blank, swallowed by the master) and on any non-merged cell.
     pub merge_span: Option<(u32, u32)>,
+    /// The cell's row is hidden by the active shared filter
+    /// (`ambre-spec-trame-features.md` §1.A / §8). The UI Thread collapses such
+    /// rows; the value is still present (and still counted by `=SUM`, etc.).
+    pub is_filtered: bool,
 }

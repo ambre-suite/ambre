@@ -348,4 +348,73 @@ pub enum TrameCommand {
     DeleteSheet {
         sheet_id: String,
     },
+
+    /// Apply a shared filter to column `col` of `sheet_id`
+    /// (`ambre-spec-trame-features.md` §1.A). The filter is stored in the document
+    /// CRDT (`filters_{sheet}` + `filter_hidden_{sheet}`), so every collaborator
+    /// sees the same hidden rows. The Logic thread evaluates the column through
+    /// the formula cache, writes the failing rows' stable ids into
+    /// `filter_hidden_{sheet}` (keyed by `row_uid`, so the hidden set follows the
+    /// data across a sort or insert), and broadcasts the resulting delta. Rows
+    /// hidden by a filter are excluded from the viewport (flagged
+    /// [`DisplayCell::is_filtered`](crate::ui::DisplayCell::is_filtered)) but stay
+    /// in calculations (`=SUM` still totals them). A filter is a plain CRDT
+    /// mutation, hence undoable. Replies with
+    /// [`TrameEvent::FilterApplied`](crate::ui::TrameEvent::FilterApplied). A no-op
+    /// for a non-active sheet or a virtual (never-materialized) column.
+    ApplyFilter {
+        sheet_id: String,
+        /// Grid column the filter is applied to (0-based).
+        col: u32,
+        kind: FilterKind,
+    },
+
+    /// Clear the shared filter on `sheet_id`: removes every `filter_hidden_{sheet}`
+    /// entry and the stored `filters_{sheet}` definition, then broadcasts the
+    /// delta (`ambre-spec-trame-features.md` §1.A). Replies with
+    /// [`TrameEvent::FilterCleared`](crate::ui::TrameEvent::FilterCleared). A no-op
+    /// when no filter is active.
+    ClearFilter {
+        sheet_id: String,
+    },
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared filter — definition (UI → Logic)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// How a shared filter decides whether a row's value in the filtered column is
+/// kept (visible) or hidden (`ambre-spec-trame-features.md` §1.A). MVP covers
+/// the "by values" and "by condition" modes; colour filters are Phase 2.
+#[derive(Debug, Clone)]
+pub enum FilterKind {
+    /// Keep only rows whose filtered-column display text is one of these values
+    /// (Google Sheets "filter by values": the listed values are the *checked*,
+    /// i.e. visible, ones).
+    Values(Vec<String>),
+    /// Keep only rows whose filtered-column value satisfies the condition.
+    Condition {
+        op: FilterOp,
+        /// Comparison operand (parsed as a number when both sides are numeric,
+        /// compared as text otherwise). Ignored by the unary operators
+        /// ([`IsEmpty`](FilterOp::IsEmpty) / [`IsNotEmpty`](FilterOp::IsNotEmpty)).
+        value: String,
+    },
+}
+
+/// Condition operators for a [`FilterKind::Condition`]
+/// (`ambre-spec-trame-features.md` §1.A).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FilterOp {
+    Eq,
+    Ne,
+    Gt,
+    Lt,
+    Gte,
+    Lte,
+    Contains,
+    NotContains,
+    StartsWith,
+    IsEmpty,
+    IsNotEmpty,
 }

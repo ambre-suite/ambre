@@ -15,7 +15,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
+use loro::{ExportMode, LoroDoc, LoroList, LoroValue, UndoManager, VersionVector};
 
 use crate::formula::{render, AxisId, CellId, FormulaCtx, FormulaEngine, NameTarget, SheetIndices};
 use crate::formula::types::CellValue;
@@ -23,6 +23,7 @@ use crate::formula::types::Expr;
 use crate::formula::parser::{parse_formula, resolve_refs};
 use crate::model::{SheetIndex, Uid, cell_key, parse_cell_key};
 use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
+use ambre_bus::{FilterKind, FilterOp};
 
 /// Stable id of the implicit default sheet created by [`TrameState::new`].
 ///
@@ -90,6 +91,21 @@ fn cols_list_name(sheet: &str) -> String {
 /// follows its cells across inserts/deletes.
 fn merges_map_name(sheet: &str) -> String {
     format!("merges_{sheet}")
+}
+
+/// Per-sheet shared-filter definition map (`filters_{sheet}`): the active filter
+/// (column uid + kind), stored flat so it converges via LWW
+/// (`ambre-spec-trame-features.md` §1.A). Empty map = no filter.
+fn filters_map_name(sheet: &str) -> String {
+    format!("filters_{sheet}")
+}
+
+/// Per-sheet hidden-row set (`filter_hidden_{sheet}`): `{row_uid -> true}` for
+/// every row the active filter hides. Kept separate from `rows_{sheet}` to avoid
+/// polluting the order list, and keyed by stable `row_uid` so the hidden set
+/// follows the data across a sort/insert (§1.A).
+fn filter_hidden_map_name(sheet: &str) -> String {
+    format!("filter_hidden_{sheet}")
 }
 
 /// Which axis a structural op targets. Lets [`TrameState::insert_axis`] /
@@ -199,6 +215,12 @@ pub struct TrameState {
     /// Grid positions covered by a merge but not the master (rendered blank,
     /// swallowed by the master cell). Derived alongside [`Self::merges`].
     covered: HashSet<(u32, u32)>,
+    /// Active-sheet grid row positions hidden by the shared filter (§1.A).
+    /// Derived cache of `filter_hidden_{sheet}` (a `{row_uid -> true}` map),
+    /// rebuilt by [`Self::rebuild_filter`] after any import or structural op.
+    /// Cells in these rows are flagged [`DisplayCell::is_filtered`] but still
+    /// participate in calculations.
+    hidden_rows: HashSet<u32>,
     /// Stable cell keys of covered cells that still hold a non-empty value -- a
     /// concurrent-edit conflict (§6). Masked: excluded from the formula engine
     /// and not displayed, but never destroyed; reappear on unmerge.
@@ -266,6 +288,7 @@ impl TrameState {
             engine: FormulaEngine::new(),
             merges: HashMap::new(),
             covered: HashSet::new(),
+            hidden_rows: HashSet::new(),
             masked_cells: HashSet::new(),
             sheets_by_idx: Vec::new(),
             sheet_name_to_u16: HashMap::new(),
@@ -517,6 +540,9 @@ impl TrameState {
                 self.doc.commit();
                 let indices = self.engine_indices();
                 self.engine.compute_all_dirty(&indices);
+                // The edit may change the filtered column's value: recompute the
+                // active filter so the row's hidden status tracks the data (§1.A).
+                self.recompute_active_filter();
                 let update = self.flush_delta();
                 // Ask the UI to re-fetch its viewport so the edit (and any
                 // formula it feeds) renders its computed result immediately,
@@ -602,6 +628,7 @@ impl TrameState {
                             italic: self.italic.contains(&(row, col)),
                             is_merged: merge_span.is_some() || is_covered,
                             merge_span,
+                            is_filtered: self.hidden_rows.contains(&row),
                         });
                     }
                 }
@@ -637,6 +664,10 @@ impl TrameState {
             } => self.sort_range(
                 &sheet_id, row_start, row_end, col_start, col_end, sort_col, ascending, has_header,
             ),
+            TrameCommand::ApplyFilter { sheet_id, col, kind } => {
+                self.apply_filter(&sheet_id, col, kind)
+            }
+            TrameCommand::ClearFilter { sheet_id } => self.clear_filter(&sheet_id),
         }
     }
 
@@ -933,6 +964,9 @@ impl TrameState {
         let mut display = self.rebuild_merges();
         self.reseed_engine();
         self.reseed_formatting();
+        // The hidden set is keyed by stable row uid, so a structural shift just
+        // remaps it to the new positions (no recompute).
+        self.rebuild_filter();
         let update = self.flush_delta();
         display.push(TrameEvent::DataReset);
         TrameOutcome { display, update, ephemeral: None }
@@ -1169,6 +1203,7 @@ impl TrameState {
         let conflicts = self.rebuild_merges();
         self.reseed_engine();
         self.reseed_formatting();
+        self.rebuild_filter();
         conflicts
     }
 
@@ -1442,6 +1477,9 @@ impl TrameState {
         self.rebuild_index();
         let mut display = self.rebuild_merges();
         self.reseed_formatting();
+        // The hidden set is keyed by row uid, so it follows the rows across the
+        // permutation -- remap positions, do not recompute.
+        self.rebuild_filter();
         let indices = self.engine_indices();
         self.engine.mark_all_dirty();
         self.engine.compute_all_dirty(&indices);
@@ -1449,6 +1487,201 @@ impl TrameState {
         display.push(TrameEvent::DataReset);
         display.push(TrameEvent::SortComplete);
         TrameOutcome { display, update, ephemeral: None }
+    }
+
+    // -------------------------------------------------------------------------
+    // Shared filter (apply / clear / recompute) -- features spec §1.A
+    // -------------------------------------------------------------------------
+
+    /// Apply a shared filter to grid column `col` of the active sheet (§1.A).
+    ///
+    /// Evaluates each materialized row's cell in that column through the formula
+    /// cache, writes the rows failing the filter into `filter_hidden_{sheet}`
+    /// (keyed by `row_uid`), persists the filter definition for convergence and
+    /// later recompute, and broadcasts the delta. A no-op for a non-active sheet
+    /// or a virtual (never-materialized) column.
+    fn apply_filter(&mut self, sheet_id: &str, col: u32, kind: FilterKind) -> TrameOutcome {
+        if sheet_id != self.active_sheet {
+            return TrameOutcome::display_only(vec![]);
+        }
+        let Some(col_uid) = self.index.col_id(col as usize) else {
+            // Virtual column: no data to filter.
+            return TrameOutcome::display_only(vec![]);
+        };
+        // The sort keys read from the formula cache; make sure it is current.
+        let indices = self.engine_indices();
+        self.engine.compute_all_dirty(&indices);
+
+        let count = self.write_filter_hidden(col_uid, &kind);
+        self.persist_filter_def(col_uid, &kind);
+        self.doc.commit();
+        self.rebuild_filter();
+        let update = self.flush_delta();
+        TrameOutcome {
+            display: vec![TrameEvent::FilterApplied { hidden_row_count: count }, TrameEvent::DataReset],
+            update,
+            ephemeral: None,
+        }
+    }
+
+    /// Clear the active shared filter: drop every `filter_hidden_{sheet}` entry
+    /// and the stored `filters_{sheet}` definition, then broadcast (§1.A). A no-op
+    /// (no delta) when nothing is filtered.
+    fn clear_filter(&mut self, sheet_id: &str) -> TrameOutcome {
+        if sheet_id != self.active_sheet {
+            return TrameOutcome::display_only(vec![]);
+        }
+        let hidden = self.doc.get_map(filter_hidden_map_name(&self.active_sheet));
+        let filters = self.doc.get_map(filters_map_name(&self.active_sheet));
+        let has_hidden = matches!(hidden.get_value(), LoroValue::Map(ref m) if !m.is_empty());
+        let has_def = matches!(filters.get_value(), LoroValue::Map(ref m) if !m.is_empty());
+        if !has_hidden && !has_def {
+            return TrameOutcome::display_only(vec![]);
+        }
+        clear_loro_map(&hidden);
+        clear_loro_map(&filters);
+        self.doc.commit();
+        self.rebuild_filter();
+        let update = self.flush_delta();
+        TrameOutcome {
+            display: vec![TrameEvent::FilterCleared, TrameEvent::DataReset],
+            update,
+            ephemeral: None,
+        }
+    }
+
+    /// Recompute the active filter's hidden rows after a data change (§1.A). Reads
+    /// the stored definition; a no-op when no filter is active. Commits the
+    /// updated `filter_hidden_{sheet}` so the caller's [`flush_delta`] broadcasts
+    /// it. Assumes the formula cache is already current.
+    ///
+    /// [`flush_delta`]: Self::flush_delta
+    fn recompute_active_filter(&mut self) {
+        let Some((col_uid, kind)) = self.load_active_filter() else {
+            return;
+        };
+        self.write_filter_hidden(col_uid, &kind);
+        self.doc.commit();
+        self.rebuild_filter();
+    }
+
+    /// Recompute and rewrite `filter_hidden_{sheet}` from scratch for the given
+    /// column/kind, returning the number of hidden rows. Clears the prior hidden
+    /// set first. Does not commit (the caller does).
+    fn write_filter_hidden(&mut self, col_uid: Uid, kind: &FilterKind) -> u32 {
+        let hidden = self.doc.get_map(filter_hidden_map_name(&self.active_sheet));
+        clear_loro_map(&hidden);
+        let Some(col_pos) = self.index.col_pos(&col_uid) else {
+            return 0; // column deleted since the filter was set
+        };
+        let mut count = 0;
+        for pos in 0..self.index.row_len() {
+            let value = self
+                .engine
+                .evaluated_value(self.active_cell_id(pos as u32, col_pos as u32))
+                .unwrap_or(CellValue::Empty);
+            if !filter_pass(kind, &value)
+                && let Some(uid) = self.index.row_id(pos)
+            {
+                let _ = hidden.insert(uid.to_key_part().as_str(), true);
+                count += 1;
+            }
+        }
+        count
+    }
+
+    /// Persist the active filter definition into `filters_{sheet}` (flat keys plus
+    /// a child `values` list), replacing any prior one. Stored so concurrent
+    /// filters converge via LWW and so [`recompute_active_filter`] can re-evaluate
+    /// after a data change.
+    ///
+    /// [`recompute_active_filter`]: Self::recompute_active_filter
+    fn persist_filter_def(&self, col_uid: Uid, kind: &FilterKind) {
+        let filters = self.doc.get_map(filters_map_name(&self.active_sheet));
+        clear_loro_map(&filters);
+        let _ = filters.insert("col", col_uid.to_key_part().as_str());
+        match kind {
+            FilterKind::Values(values) => {
+                let _ = filters.insert("kind", "values");
+                if let Ok(list) = filters.get_or_create_container("values", LoroList::new()) {
+                    for v in values {
+                        let _ = list.push(v.as_str());
+                    }
+                }
+            }
+            FilterKind::Condition { op, value } => {
+                let _ = filters.insert("kind", "condition");
+                let _ = filters.insert("op", op_to_str(*op));
+                let _ = filters.insert("value", value.as_str());
+            }
+        }
+    }
+
+    /// Read the active filter definition back from `filters_{sheet}`. Returns the
+    /// filtered column's uid and the reconstructed [`FilterKind`], or `None` when
+    /// no (parseable) filter is stored.
+    fn load_active_filter(&self) -> Option<(Uid, FilterKind)> {
+        let LoroValue::Map(filters) =
+            self.doc.get_map(filters_map_name(&self.active_sheet)).get_value()
+        else {
+            return None;
+        };
+        let LoroValue::String(col) = filters.get("col")? else {
+            return None;
+        };
+        let col_uid = Uid::parse(col.as_str())?;
+        let LoroValue::String(kind) = filters.get("kind")? else {
+            return None;
+        };
+        let kind = match kind.as_str() {
+            "values" => {
+                let values = match filters.get("values") {
+                    Some(LoroValue::List(items)) => items
+                        .iter()
+                        .filter_map(|v| match v {
+                            LoroValue::String(s) => Some(s.to_string()),
+                            _ => None,
+                        })
+                        .collect(),
+                    _ => Vec::new(),
+                };
+                FilterKind::Values(values)
+            }
+            "condition" => {
+                let op = match filters.get("op") {
+                    Some(LoroValue::String(s)) => op_from_str(s.as_str())?,
+                    _ => return None,
+                };
+                let value = match filters.get("value") {
+                    Some(LoroValue::String(s)) => s.to_string(),
+                    _ => String::new(),
+                };
+                FilterKind::Condition { op, value }
+            }
+            _ => return None,
+        };
+        Some((col_uid, kind))
+    }
+
+    /// Rebuild [`Self::hidden_rows`] (grid positions) from the active sheet's
+    /// `filter_hidden_{sheet}` map. Requires [`Self::index`] to be current (keys
+    /// are stable `row_uid`s mapped back to positions); a uid no longer present
+    /// (its row was deleted) is dropped.
+    fn rebuild_filter(&mut self) {
+        self.hidden_rows.clear();
+        let LoroValue::Map(entries) =
+            self.doc.get_map(filter_hidden_map_name(&self.active_sheet)).get_value()
+        else {
+            return;
+        };
+        for (key, value) in entries.iter() {
+            if matches!(value, LoroValue::Bool(true))
+                && let Some(uid) = Uid::parse(key)
+                && let Some(pos) = self.index.row_pos(&uid)
+            {
+                self.hidden_rows.insert(pos as u32);
+            }
+        }
     }
 
     /// Mirror a cell's current bold/italic state into the CRDT `format` map and
@@ -1600,6 +1833,10 @@ impl TrameState {
         self.reseed_engine();
         // Rebuild bold/italic from the merged `format_{sheet}` map.
         self.reseed_formatting();
+        // Adopt the (possibly remote) hidden-row set directly: a peer's filter
+        // arrives as `filter_hidden_{sheet}` ops and is applied without recompute
+        // (§1.A -- only the filter author recomputes).
+        self.rebuild_filter();
         // Refresh the toolbar / context-menu toggles for the active cell: after a
         // reload its formatting is only known once the `format` map is restored.
         let mut events = vec![
@@ -1651,6 +1888,102 @@ fn compare_cell_values(a: &CellValue, b: &CellValue) -> std::cmp::Ordering {
         (CellValue::Boolean(x), CellValue::Boolean(y)) => x.cmp(y),
         _ => rank(a).cmp(&rank(b)),
     }
+}
+
+/// Delete every key of a Loro map (its child containers are detached with it).
+/// `LoroMap` has no `clear`, so we enumerate and delete -- used to reset the
+/// filter definition / hidden-row maps before rewriting them.
+fn clear_loro_map(map: &loro::LoroMap) {
+    if let LoroValue::Map(entries) = map.get_value() {
+        for key in entries.keys() {
+            let _ = map.delete(key);
+        }
+    }
+}
+
+/// Whether a row's filtered-column `value` passes the filter (stays visible),
+/// per [`FilterKind`] (`ambre-spec-trame-features.md` §1.A).
+fn filter_pass(kind: &FilterKind, value: &CellValue) -> bool {
+    match kind {
+        // "Filter by values": the listed values are the visible (checked) ones.
+        FilterKind::Values(allowed) => {
+            let text = value.to_display();
+            allowed.contains(&text)
+        }
+        FilterKind::Condition { op, value: operand } => condition_pass(*op, value, operand),
+    }
+}
+
+/// Evaluate a single [`FilterOp`] against a cell value and a comparison operand.
+/// Comparisons are numeric when both sides parse as numbers, lexicographic on the
+/// display text otherwise; the unary operators ignore `operand`.
+fn condition_pass(op: FilterOp, value: &CellValue, operand: &str) -> bool {
+    use std::cmp::Ordering;
+    let text = value.to_display();
+    // A numeric comparison applies only when *both* operands are numeric.
+    let nums = match (value.as_number(), operand.parse::<f64>()) {
+        (Ok(a), Ok(b)) => Some((a, b)),
+        _ => None,
+    };
+    // Only treat as numeric when the cell itself is a number (avoid "abc"->Err
+    // but Empty->0.0 surprises): require the value to be a real Number.
+    let order = match (matches!(value, CellValue::Number(_)), nums) {
+        (true, Some((a, b))) => a.partial_cmp(&b).unwrap_or(Ordering::Equal),
+        _ => text.as_str().cmp(operand),
+    };
+    let eq = match (matches!(value, CellValue::Number(_)), nums) {
+        (true, Some((a, b))) => a == b,
+        _ => text.as_str() == operand,
+    };
+    match op {
+        FilterOp::Eq => eq,
+        FilterOp::Ne => !eq,
+        FilterOp::Gt => order == Ordering::Greater,
+        FilterOp::Lt => order == Ordering::Less,
+        FilterOp::Gte => order != Ordering::Less,
+        FilterOp::Lte => order != Ordering::Greater,
+        FilterOp::Contains => text.contains(operand),
+        FilterOp::NotContains => !text.contains(operand),
+        FilterOp::StartsWith => text.starts_with(operand),
+        FilterOp::IsEmpty => text.is_empty(),
+        FilterOp::IsNotEmpty => !text.is_empty(),
+    }
+}
+
+/// Canonical CRDT string for a [`FilterOp`] (persisted in `filters_{sheet}`).
+fn op_to_str(op: FilterOp) -> &'static str {
+    match op {
+        FilterOp::Eq => "eq",
+        FilterOp::Ne => "ne",
+        FilterOp::Gt => "gt",
+        FilterOp::Lt => "lt",
+        FilterOp::Gte => "gte",
+        FilterOp::Lte => "lte",
+        FilterOp::Contains => "contains",
+        FilterOp::NotContains => "not_contains",
+        FilterOp::StartsWith => "starts_with",
+        FilterOp::IsEmpty => "is_empty",
+        FilterOp::IsNotEmpty => "is_not_empty",
+    }
+}
+
+/// Inverse of [`op_to_str`]: parse a persisted operator string. `None` on an
+/// unknown token (defensive against a corrupt or future entry).
+fn op_from_str(s: &str) -> Option<FilterOp> {
+    Some(match s {
+        "eq" => FilterOp::Eq,
+        "ne" => FilterOp::Ne,
+        "gt" => FilterOp::Gt,
+        "lt" => FilterOp::Lt,
+        "gte" => FilterOp::Gte,
+        "lte" => FilterOp::Lte,
+        "contains" => FilterOp::Contains,
+        "not_contains" => FilterOp::NotContains,
+        "starts_with" => FilterOp::StartsWith,
+        "is_empty" => FilterOp::IsEmpty,
+        "is_not_empty" => FilterOp::IsNotEmpty,
+        _ => return None,
+    })
 }
 
 /// Toggle `cell`'s membership in `set`, returning whether it is now present.
@@ -2612,5 +2945,307 @@ mod tests {
         assert_eq!(col_to_alpha(51), "AZ");
         assert_eq!(col_to_alpha(52), "BA");
         assert_eq!(col_to_alpha(701), "ZZ");
+    }
+
+    // -------------------------------------------------------------------------
+    // Shared filter (features spec §1.A)
+    // -------------------------------------------------------------------------
+
+    use ambre_bus::{FilterKind, FilterOp};
+
+    /// Whether grid `row` is hidden by the active filter (read through a viewport).
+    fn is_filtered(state: &mut TrameState, row: u32, col: u32) -> bool {
+        read_display(state, row, col).is_filtered
+    }
+
+    /// Seed column A (col 0) with one value per row, top to bottom.
+    fn seed_col_a(state: &mut TrameState, values: &[&str]) {
+        for (r, v) in values.iter().enumerate() {
+            state.handle_command(TrameCommand::SetCellText {
+                row: r as u32, col: 0, text: (*v).to_owned(),
+            });
+        }
+    }
+
+    /// A "filter by values" keeps only the listed (checked) values visible; the
+    /// others are flagged `is_filtered`. `FilterApplied` reports the hidden count.
+    #[test]
+    fn shared_filter_by_values_hides_nonmatching() {
+        let mut state = TrameState::new();
+        seed_col_a(&mut state, &["apple", "banana", "cherry", "apple"]);
+
+        let evts = state.handle_command(TrameCommand::ApplyFilter {
+            sheet_id: "s0".to_owned(),
+            col: 0,
+            kind: FilterKind::Values(vec!["apple".to_owned()]),
+        });
+        assert!(matches!(
+            evts.display[0],
+            TrameEvent::FilterApplied { hidden_row_count: 2 }
+        ));
+        assert!(evts.display.iter().any(|e| matches!(e, TrameEvent::DataReset)));
+        assert!(evts.update.is_some(), "filter broadcasts a CRDT delta");
+
+        assert!(!is_filtered(&mut state, 0, 0), "apple visible");
+        assert!(is_filtered(&mut state, 1, 0), "banana hidden");
+        assert!(is_filtered(&mut state, 2, 0), "cherry hidden");
+        assert!(!is_filtered(&mut state, 3, 0), "apple visible");
+    }
+
+    /// A numeric "greater than" condition hides rows that fail it.
+    #[test]
+    fn shared_filter_condition_greater_than() {
+        let mut state = TrameState::new();
+        seed_col_a(&mut state, &["10", "20", "30"]);
+
+        let evts = state.handle_command(TrameCommand::ApplyFilter {
+            sheet_id: "s0".to_owned(),
+            col: 0,
+            kind: FilterKind::Condition { op: FilterOp::Gt, value: "15".to_owned() },
+        });
+        assert!(matches!(
+            evts.display[0],
+            TrameEvent::FilterApplied { hidden_row_count: 1 }
+        ));
+        assert!(is_filtered(&mut state, 0, 0), "10 is not > 15");
+        assert!(!is_filtered(&mut state, 1, 0), "20 > 15");
+        assert!(!is_filtered(&mut state, 2, 0), "30 > 15");
+    }
+
+    /// Hidden rows are excluded from the viewport but still counted by `=SUM`
+    /// (features spec §8): the filter is a display concern, not a data concern.
+    #[test]
+    fn shared_filter_does_not_affect_sum() {
+        let mut state = TrameState::new();
+        seed_col_a(&mut state, &["1", "2", "3"]);
+        state.handle_command(TrameCommand::SetCellText {
+            row: 0, col: 1, text: "=SUM(A1:A3)".to_owned(),
+        });
+
+        state.handle_command(TrameCommand::ApplyFilter {
+            sheet_id: "s0".to_owned(),
+            col: 0,
+            kind: FilterKind::Condition { op: FilterOp::Gt, value: "1".to_owned() },
+        });
+        assert!(is_filtered(&mut state, 0, 0), "row with 1 is hidden");
+        assert_eq!(read_cell(&mut state, 0, 1), "6", "SUM still totals every row");
+    }
+
+    /// Clearing the filter unhides every row and broadcasts the removal; clearing
+    /// again with no active filter is a no-op (no delta).
+    #[test]
+    fn clear_filter_unhides_and_noops_when_absent() {
+        let mut state = TrameState::new();
+        seed_col_a(&mut state, &["a", "b"]);
+
+        // No filter yet -> clear is a pure no-op.
+        let noop = state.handle_command(TrameCommand::ClearFilter { sheet_id: "s0".to_owned() });
+        assert!(noop.display.is_empty());
+        assert!(noop.update.is_none());
+
+        state.handle_command(TrameCommand::ApplyFilter {
+            sheet_id: "s0".to_owned(),
+            col: 0,
+            kind: FilterKind::Values(vec!["a".to_owned()]),
+        });
+        assert!(is_filtered(&mut state, 1, 0), "b hidden");
+
+        let cleared = state.handle_command(TrameCommand::ClearFilter { sheet_id: "s0".to_owned() });
+        assert!(matches!(cleared.display[0], TrameEvent::FilterCleared));
+        assert!(cleared.update.is_some(), "clear broadcasts the removal");
+        assert!(!is_filtered(&mut state, 1, 0), "row visible again");
+    }
+
+    /// The hidden set is keyed by stable `row_uid`, so it follows its row across a
+    /// sort -- the hidden row tracks the data, no recompute needed.
+    #[test]
+    fn shared_filter_hidden_follows_sort() {
+        let mut state = TrameState::new();
+        // Rows: A1=3, A2=1, A3=2.
+        seed_col_a(&mut state, &["3", "1", "2"]);
+        // Hide the row whose value is exactly 1 (the middle row).
+        state.handle_command(TrameCommand::ApplyFilter {
+            sheet_id: "s0".to_owned(),
+            col: 0,
+            kind: FilterKind::Condition { op: FilterOp::Ne, value: "1".to_owned() },
+        });
+        assert!(is_filtered(&mut state, 1, 0), "row holding 1 hidden");
+
+        // Sort ascending: order becomes [1, 2, 3]; the hidden row (value 1) moves
+        // to the top and its hidden flag must travel with it.
+        state.handle_command(TrameCommand::SortRange {
+            sheet_id: "s0".to_owned(),
+            row_start: 0, row_end: 2, col_start: 0, col_end: 0,
+            sort_col: 0, ascending: true, has_header: false,
+        });
+        assert_eq!(read_cell(&mut state, 0, 0), "1", "smallest sorted to top");
+        assert!(is_filtered(&mut state, 0, 0), "hidden flag followed the row");
+        assert!(!is_filtered(&mut state, 1, 0));
+        assert!(!is_filtered(&mut state, 2, 0));
+    }
+
+    /// Editing the filtered column recomputes the hidden set (the stored
+    /// definition drives the recompute): a row that newly passes is unhidden.
+    #[test]
+    fn shared_filter_recomputes_on_edit() {
+        let mut state = TrameState::new();
+        seed_col_a(&mut state, &["5"]);
+        state.handle_command(TrameCommand::ApplyFilter {
+            sheet_id: "s0".to_owned(),
+            col: 0,
+            kind: FilterKind::Condition { op: FilterOp::Gt, value: "10".to_owned() },
+        });
+        assert!(is_filtered(&mut state, 0, 0), "5 is not > 10");
+
+        // Raise the value above the threshold: the row must reappear.
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "20".to_owned() });
+        assert!(!is_filtered(&mut state, 0, 0), "20 > 10, row unhidden after edit");
+    }
+
+    /// A peer receives the filter as `filter_hidden_{sheet}` ops and applies them
+    /// directly on import (no recompute); the stored condition also round-trips.
+    #[test]
+    fn shared_filter_applies_on_remote_import() {
+        let mut author = TrameState::new();
+        seed_col_a(&mut author, &["10", "20", "30"]);
+        author.handle_command(TrameCommand::ApplyFilter {
+            sheet_id: "s0".to_owned(),
+            col: 0,
+            kind: FilterKind::Condition { op: FilterOp::Gte, value: "20".to_owned() },
+        });
+        let snapshot = author.export_snapshot();
+
+        let mut peer = TrameState::new();
+        peer.apply_remote(&snapshot);
+        assert!(is_filtered(&mut peer, 0, 0), "10 hidden on the peer");
+        assert!(!is_filtered(&mut peer, 1, 0));
+        // The stored condition survived: an edit on the peer recomputes it.
+        peer.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "25".to_owned() });
+        assert!(!is_filtered(&mut peer, 0, 0), "25 >= 20 after edit -> visible");
+    }
+
+    /// Concurrent different filters converge: Loro LWW picks a single hidden set,
+    /// identical on both peers (features spec §1.A "deterministic behavior").
+    #[test]
+    fn concurrent_filters_converge_lww() {
+        // Shared base so both peers address the same row uids.
+        let mut base = TrameState::new();
+        seed_col_a(&mut base, &["1", "2", "3"]);
+        let base_snap = base.export_snapshot();
+
+        let mut a = TrameState::new();
+        a.import_snapshot(&base_snap);
+        let mut b = TrameState::new();
+        b.import_snapshot(&base_snap);
+
+        a.handle_command(TrameCommand::ApplyFilter {
+            sheet_id: "s0".to_owned(),
+            col: 0,
+            kind: FilterKind::Condition { op: FilterOp::Gt, value: "1".to_owned() },
+        });
+        b.handle_command(TrameCommand::ApplyFilter {
+            sheet_id: "s0".to_owned(),
+            col: 0,
+            kind: FilterKind::Condition { op: FilterOp::Lt, value: "3".to_owned() },
+        });
+
+        // Exchange deltas (full snapshots merge fine).
+        let a_snap = a.export_snapshot();
+        let b_snap = b.export_snapshot();
+        a.apply_remote(&b_snap);
+        b.apply_remote(&a_snap);
+
+        assert_eq!(a.hidden_rows, b.hidden_rows, "both peers converge to one hidden set");
+    }
+
+    /// A filter is a plain CRDT mutation, so Ctrl+Z removes it (features spec §4).
+    #[test]
+    fn shared_filter_is_undoable() {
+        let mut state = TrameState::new();
+        seed_col_a(&mut state, &["a", "b"]);
+        state.handle_command(TrameCommand::ApplyFilter {
+            sheet_id: "s0".to_owned(),
+            col: 0,
+            kind: FilterKind::Values(vec!["a".to_owned()]),
+        });
+        assert!(is_filtered(&mut state, 1, 0), "b hidden by the filter");
+
+        state.handle_command(TrameCommand::Undo);
+        assert!(!is_filtered(&mut state, 1, 0), "undo removed the filter");
+    }
+
+    /// Apply/clear on a non-active sheet, or a virtual column, is a pure no-op.
+    #[test]
+    fn shared_filter_noop_guards() {
+        let mut state = TrameState::new();
+        seed_col_a(&mut state, &["x"]);
+
+        // Wrong sheet.
+        let wrong = state.handle_command(TrameCommand::ApplyFilter {
+            sheet_id: "nope".to_owned(),
+            col: 0,
+            kind: FilterKind::Values(vec!["x".to_owned()]),
+        });
+        assert!(wrong.display.is_empty() && wrong.update.is_none());
+        let wrong_clear = state.handle_command(TrameCommand::ClearFilter { sheet_id: "nope".to_owned() });
+        assert!(wrong_clear.display.is_empty() && wrong_clear.update.is_none());
+
+        // Virtual column (never materialized): nothing to filter.
+        let virtual_col = state.handle_command(TrameCommand::ApplyFilter {
+            sheet_id: "s0".to_owned(),
+            col: 50,
+            kind: FilterKind::Values(vec!["x".to_owned()]),
+        });
+        assert!(virtual_col.display.is_empty() && virtual_col.update.is_none());
+    }
+
+    /// Unit-test every `condition_pass` operator and both the numeric and the
+    /// text comparison paths (full branch coverage of the predicate).
+    #[test]
+    fn condition_pass_covers_every_operator() {
+        use super::condition_pass;
+        use crate::formula::types::CellValue;
+        let num = CellValue::Number(10.0);
+        let txt = CellValue::Text("hello".to_owned());
+        let empty = CellValue::Empty;
+
+        // Numeric path.
+        assert!(condition_pass(FilterOp::Eq, &num, "10"));
+        assert!(!condition_pass(FilterOp::Eq, &num, "11"));
+        assert!(condition_pass(FilterOp::Ne, &num, "11"));
+        assert!(condition_pass(FilterOp::Gt, &num, "5"));
+        assert!(condition_pass(FilterOp::Lt, &num, "20"));
+        assert!(condition_pass(FilterOp::Gte, &num, "10"));
+        assert!(condition_pass(FilterOp::Lte, &num, "10"));
+
+        // Text path (operand not numeric, or value not a number).
+        assert!(condition_pass(FilterOp::Eq, &txt, "hello"));
+        assert!(condition_pass(FilterOp::Gt, &txt, "a"), "lexicographic compare");
+        assert!(condition_pass(FilterOp::Contains, &txt, "ell"));
+        assert!(condition_pass(FilterOp::NotContains, &txt, "xyz"));
+        assert!(condition_pass(FilterOp::StartsWith, &txt, "he"));
+        assert!(!condition_pass(FilterOp::IsEmpty, &txt, ""));
+        assert!(condition_pass(FilterOp::IsNotEmpty, &txt, ""));
+        assert!(condition_pass(FilterOp::IsEmpty, &empty, ""));
+        assert!(!condition_pass(FilterOp::IsNotEmpty, &empty, ""));
+    }
+
+    /// `filter_pass` for the values mode, and the operator string round-trip.
+    #[test]
+    fn filter_pass_values_and_op_string_roundtrip() {
+        use super::{filter_pass, op_from_str, op_to_str};
+        use crate::formula::types::CellValue;
+        let kind = FilterKind::Values(vec!["keep".to_owned()]);
+        assert!(filter_pass(&kind, &CellValue::Text("keep".to_owned())));
+        assert!(!filter_pass(&kind, &CellValue::Text("drop".to_owned())));
+
+        for op in [
+            FilterOp::Eq, FilterOp::Ne, FilterOp::Gt, FilterOp::Lt, FilterOp::Gte,
+            FilterOp::Lte, FilterOp::Contains, FilterOp::NotContains, FilterOp::StartsWith,
+            FilterOp::IsEmpty, FilterOp::IsNotEmpty,
+        ] {
+            assert_eq!(op_from_str(op_to_str(op)), Some(op), "round-trips {op:?}");
+        }
+        assert_eq!(op_from_str("garbage"), None);
     }
 }
