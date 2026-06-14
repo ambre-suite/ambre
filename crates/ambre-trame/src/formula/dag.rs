@@ -1,9 +1,13 @@
 //! Two-level dependency graph for spreadsheet formulas.
 //!
 //! Level 1 (`cell_dag`): cell-to-cell dependencies with static cycle detection
-//! via Kosaraju SCC. Level 2 (`range_deps` / `range_index`): range dependencies
-//! where each cell in the range is a dependency, stored compactly and scanned
-//! linearly (MVP).
+//! via Kosaraju SCC. Level 2 (`range_index`): range dependencies registered per
+//! sheet and scanned linearly, testing each formula's range for containment of
+//! the changed cell through the current [`SheetIndex`] (MVP).
+//!
+//! Both levels are keyed by the uid-anchored [`CellId`] so that dependencies
+//! survive structural reorder: a `=A1` edge points at the row/column `Uid`, not
+//! a grid position.
 //!
 //! # Design rationale
 //! If `=SUM(A1:A100)` created 100 edges in `petgraph`, an entire-column formula
@@ -16,7 +20,9 @@ use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{Dfs, EdgeRef};
 use petgraph::Direction;
 
-use super::types::{CellRef, RangeDep};
+use crate::model::SheetIndex;
+
+use super::types::{CellId, RangeId};
 
 // -----------------------------------------------------------------------------
 // CycleError
@@ -25,26 +31,26 @@ use super::types::{CellRef, RangeDep};
 /// Returned by [`DependencyGraph::update`] when adding a formula would create a
 /// cycle in the cell-to-cell dependency graph.
 #[derive(Debug, Clone)]
-pub struct CycleError(pub Vec<CellRef>);
+pub struct CycleError(pub Vec<CellId>);
 
 // -----------------------------------------------------------------------------
 // DependencyGraph
 // -----------------------------------------------------------------------------
 
 pub struct DependencyGraph {
-    /// Cell-to-cell DAG. A directed edge `A → B` means "B depends on A"
+    /// Cell-to-cell DAG. A directed edge `A -> B` means "B depends on A"
     /// (A is a dependency of B). Topological order visits A before B;
-    /// dirty propagation follows `A → B` from a changed cell A to its
+    /// dirty propagation follows `A -> B` from a changed cell A to its
     /// dependents.
-    pub cell_dag: StableGraph<CellRef, ()>,
-    /// Map from `CellRef` to its node index in `cell_dag`.
-    pub cell_to_node: HashMap<CellRef, petgraph::graph::NodeIndex>,
+    pub cell_dag: StableGraph<CellId, ()>,
+    /// Map from `CellId` to its node index in `cell_dag`.
+    pub cell_to_node: HashMap<CellId, petgraph::graph::NodeIndex>,
 
     /// Range dependencies for each formula cell.
-    pub range_deps: HashMap<CellRef, Vec<RangeDep>>,
-    /// Reverse index: `CellRef` in this sheet → list of `(formula_cell, RangeDep)`
-    /// whose range contains this cell. MVP linear scan; Phase 2: 2D interval tree.
-    pub range_index: HashMap<CellRef, Vec<(CellRef, RangeDep)>>,
+    pub range_deps: HashMap<CellId, Vec<RangeId>>,
+    /// Reverse index: sheet (local `u16`) -> list of `(formula_cell, RangeId)`
+    /// whose range lives on that sheet. MVP linear scan; Phase 2: 2D interval tree.
+    pub range_index: HashMap<u16, Vec<(CellId, RangeId)>>,
 }
 
 impl DependencyGraph {
@@ -58,7 +64,7 @@ impl DependencyGraph {
     }
 
     /// Ensure a node exists for `cell` in `cell_dag`, returning its index.
-    fn get_or_create_node(&mut self, cell: CellRef) -> petgraph::graph::NodeIndex {
+    fn get_or_create_node(&mut self, cell: CellId) -> petgraph::graph::NodeIndex {
         *self
             .cell_to_node
             .entry(cell)
@@ -73,9 +79,9 @@ impl DependencyGraph {
     /// listing the offending cells.
     pub fn update(
         &mut self,
-        formula_cell: CellRef,
-        new_cell_deps: Vec<CellRef>,
-        new_range_deps: Vec<RangeDep>,
+        formula_cell: CellId,
+        new_cell_deps: Vec<CellId>,
+        new_range_deps: Vec<RangeId>,
     ) -> Result<(), CycleError> {
         let node = self.get_or_create_node(formula_cell);
 
@@ -89,7 +95,7 @@ impl DependencyGraph {
             self.cell_dag.remove_edge(e);
         }
 
-        // Add new cell edges: dep → formula_cell (dependency points to the
+        // Add new cell edges: dep -> formula_cell (dependency points to the
         // formula that depends on it).
         for dep in &new_cell_deps {
             if *dep != formula_cell {
@@ -114,25 +120,19 @@ impl DependencyGraph {
             return Err(CycleError(culprits));
         }
 
-        // Update range dependencies.
-        // Clear previous range entries for this formula across all entries.
+        // Update range dependencies: clear previous range entries for this
+        // formula across all sheets, then re-register per sheet.
         for entries in self.range_index.values_mut() {
             entries.retain(|(fc, _)| *fc != formula_cell);
         }
         self.range_deps.remove(&formula_cell);
 
         if !new_range_deps.is_empty() {
-            // Register each cell in each range as depending on formula_cell.
             for dep in &new_range_deps {
-                for row in dep.row_start..=dep.row_end {
-                    for col in dep.col_start..=dep.col_end {
-                        let cell = CellRef::new(row, col);
-                        self.range_index
-                            .entry(cell)
-                            .or_default()
-                            .push((formula_cell, dep.clone()));
-                    }
-                }
+                self.range_index
+                    .entry(dep.sheet)
+                    .or_default()
+                    .push((formula_cell, dep.clone()));
             }
             self.range_deps.insert(formula_cell, new_range_deps);
         }
@@ -142,7 +142,7 @@ impl DependencyGraph {
 
     /// Remove a formula cell entirely from the graph (called when a cell is
     /// cleared or its formula is deleted).
-    pub fn remove(&mut self, cell: CellRef) {
+    pub fn remove(&mut self, cell: CellId) {
         // Remove cell_dag node.
         if let Some(&node) = self.cell_to_node.get(&cell) {
             self.cell_dag.remove_node(node);
@@ -165,13 +165,12 @@ impl DependencyGraph {
     ///
     /// Returns the transitive closure of downstream dependents: all cells in
     /// `cell_dag` reachable from `changed`, plus any formula whose range
-    /// contains `changed` and its transitive cell-level dependents.
-    pub fn collect_dirty(&self, changed: CellRef) -> HashSet<CellRef> {
+    /// contains `changed` (resolved through `index`) and its transitive
+    /// cell-level dependents.
+    pub fn collect_dirty(&self, changed: CellId, index: &SheetIndex) -> HashSet<CellId> {
         let mut dirty = HashSet::new();
 
         // Level 1: DFS descendants in cell_dag (cells that depend on `changed`).
-        // Dfs starts at `changed` and follows outgoing edges; the starting node
-        // is included in the traversal but should not be counted as dirty.
         if let Some(&node) = self.cell_to_node.get(&changed) {
             let mut dfs = Dfs::new(&self.cell_dag, node);
             while let Some(n) = dfs.next(&self.cell_dag) {
@@ -182,11 +181,17 @@ impl DependencyGraph {
             }
         }
 
-        // Level 2: formulas whose range contains `changed`.
-        if let Some(entries) = self.range_index.get(&changed) {
-            for (formula_cell, _dep) in entries {
+        // Level 2: formulas on the same sheet whose range contains `changed`.
+        // A range is keyed by row/column `Uid`s, so containment needs the
+        // changed cell's bound uids; a virtual cell cannot be inside a range.
+        if let (Some(row), Some(col)) = (changed.row_uid(), changed.col_uid())
+            && let Some(entries) = self.range_index.get(&changed.sheet)
+        {
+            for (formula_cell, dep) in entries {
+                if !dep.contains(row, col, index) {
+                    continue;
+                }
                 dirty.insert(*formula_cell);
-                // Propagate from each affected formula.
                 if let Some(&node) = self.cell_to_node.get(formula_cell) {
                     let mut dfs = Dfs::new(&self.cell_dag, node);
                     while let Some(n) = dfs.next(&self.cell_dag) {
@@ -200,7 +205,7 @@ impl DependencyGraph {
     }
 
     /// Find cells participating in a cycle via Kosaraju SCC.
-    fn find_cycle_cells(&self) -> Vec<CellRef> {
+    fn find_cycle_cells(&self) -> Vec<CellId> {
         petgraph::algo::kosaraju_scc(&self.cell_dag)
             .into_iter()
             .find(|scc| scc.len() > 1)
@@ -229,73 +234,88 @@ impl Default for DependencyGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::test_index::index_with;
+    use super::super::types::{AxisId, RangeEndpoint};
+    use crate::model::Uid;
+
+    /// Bound cell at grid `(row, col)` on sheet 0, matching `index_with`'s
+    /// synthetic uids (rows peer 1, cols peer 2, counter == position).
+    fn cell(row: u32, col: u32) -> CellId {
+        CellId::bound(
+            0,
+            Uid { peer: 1, counter: row },
+            Uid { peer: 2, counter: col },
+        )
+    }
+
+    /// Bound range over grid rows `[r0, r1]` x cols `[c0, c1]` on sheet 0.
+    fn range(r0: u32, r1: u32, c0: u32, c1: u32) -> RangeId {
+        let rid = |r: u32| RangeEndpoint::Specific(AxisId::Bound(Uid { peer: 1, counter: r }));
+        let cid = |c: u32| RangeEndpoint::Specific(AxisId::Bound(Uid { peer: 2, counter: c }));
+        RangeId {
+            sheet: 0,
+            row_start: rid(r0),
+            row_end: rid(r1),
+            col_start: cid(c0),
+            col_end: cid(c1),
+        }
+    }
 
     #[test]
     fn simple_dependency_propagation() {
+        let idx = index_with(10, 10);
         let mut dag = DependencyGraph::new();
 
         // B1 depends on A1.
-        dag.update(CellRef::new(1, 1), vec![CellRef::new(0, 0)], vec![])
-            .unwrap();
+        dag.update(cell(0, 1), vec![cell(0, 0)], vec![]).unwrap();
         // C1 depends on B1.
-        dag.update(CellRef::new(2, 1), vec![CellRef::new(1, 1)], vec![])
-            .unwrap();
+        dag.update(cell(0, 2), vec![cell(0, 1)], vec![]).unwrap();
 
-        // Changing A1 should dirty B1 and C1.
-        let dirty = dag.collect_dirty(CellRef::new(0, 0));
-        assert!(dirty.contains(&CellRef::new(1, 1)));
-        assert!(dirty.contains(&CellRef::new(2, 1)));
-        assert!(!dirty.contains(&CellRef::new(0, 0))); // source not included
+        let dirty = dag.collect_dirty(cell(0, 0), &idx);
+        assert!(dirty.contains(&cell(0, 1)));
+        assert!(dirty.contains(&cell(0, 2)));
+        assert!(!dirty.contains(&cell(0, 0)));
     }
 
     #[test]
     fn static_cycle_detected() {
         let mut dag = DependencyGraph::new();
-
-        // A1 depends on B1.
-        dag.update(CellRef::new(0, 0), vec![CellRef::new(0, 1)], vec![])
-            .unwrap();
-        // B1 depends on A1 → cycle.
-        let result = dag.update(CellRef::new(0, 1), vec![CellRef::new(0, 0)], vec![]);
+        dag.update(cell(0, 0), vec![cell(0, 1)], vec![]).unwrap();
+        let result = dag.update(cell(0, 1), vec![cell(0, 0)], vec![]);
         assert!(result.is_err());
     }
 
     #[test]
     fn range_dirty_collection() {
+        let idx = index_with(10, 10);
         let mut dag = DependencyGraph::new();
 
-        // C1 = SUM(A1:A3)
-        let range = RangeDep::new(0, 2, 0, 0);
-        dag.update(CellRef::new(2, 2), vec![], vec![range.clone()])
-            .unwrap();
+        // C3 = SUM(A1:A3)
+        dag.update(cell(2, 2), vec![], vec![range(0, 2, 0, 0)]).unwrap();
 
-        // Changing A2 (inside range) dirties C1.
-        let dirty = dag.collect_dirty(CellRef::new(1, 0));
-        assert!(dirty.contains(&CellRef::new(2, 2)));
+        // Changing A2 (inside range) dirties C3.
+        let dirty = dag.collect_dirty(cell(1, 0), &idx);
+        assert!(dirty.contains(&cell(2, 2)));
     }
 
     #[test]
     fn range_outside_no_dirty() {
+        let idx = index_with(10, 10);
         let mut dag = DependencyGraph::new();
+        dag.update(cell(2, 2), vec![], vec![range(0, 2, 0, 0)]).unwrap();
 
-        let range = RangeDep::new(0, 2, 0, 0);
-        dag.update(CellRef::new(2, 2), vec![], vec![range])
-            .unwrap();
-
-        // Changing B5 (outside range) does not dirty C1.
-        let dirty = dag.collect_dirty(CellRef::new(4, 1));
-        assert!(!dirty.contains(&CellRef::new(2, 2)));
+        // Changing B5 (outside range) does not dirty C3.
+        let dirty = dag.collect_dirty(cell(4, 1), &idx);
+        assert!(!dirty.contains(&cell(2, 2)));
     }
 
     #[test]
     fn remove_formula_cleans_up() {
         let mut dag = DependencyGraph::new();
-
-        dag.update(CellRef::new(0, 1), vec![CellRef::new(0, 0)], vec![])
-            .unwrap();
+        dag.update(cell(0, 1), vec![cell(0, 0)], vec![]).unwrap();
         assert_eq!(dag.node_count(), 2);
 
-        dag.remove(CellRef::new(0, 1));
+        dag.remove(cell(0, 1));
         assert_eq!(dag.node_count(), 1);
         assert!(dag.range_deps.is_empty());
     }
@@ -303,10 +323,7 @@ mod tests {
     #[test]
     fn self_reference_rejected() {
         let mut dag = DependencyGraph::new();
-
-        // Self-reference: edge A1 → A1 is not added (guarded in update),
-        // but the graph is still acyclic.
-        let result = dag.update(CellRef::new(0, 0), vec![], vec![]);
+        let result = dag.update(cell(0, 0), vec![], vec![]);
         assert!(result.is_ok());
         assert!(!petgraph::algo::is_cyclic_directed(&dag.cell_dag));
     }
@@ -314,16 +331,9 @@ mod tests {
     #[test]
     fn cycle_detection_kosaraju_returns_culprits() {
         let mut dag = DependencyGraph::new();
-
-        // A1 → B1 → C1 → A1
-        dag.update(CellRef::new(0, 0), vec![CellRef::new(0, 1)], vec![])
-            .unwrap();
-        dag.update(CellRef::new(0, 1), vec![CellRef::new(0, 2)], vec![])
-            .unwrap();
-        let err = dag
-            .update(CellRef::new(0, 2), vec![CellRef::new(0, 0)], vec![])
-            .unwrap_err();
-        let cycle = err.0;
-        assert_eq!(cycle.len(), 3);
+        dag.update(cell(0, 0), vec![cell(0, 1)], vec![]).unwrap();
+        dag.update(cell(0, 1), vec![cell(0, 2)], vec![]).unwrap();
+        let err = dag.update(cell(0, 2), vec![cell(0, 0)], vec![]).unwrap_err();
+        assert_eq!(err.0.len(), 3);
     }
 }

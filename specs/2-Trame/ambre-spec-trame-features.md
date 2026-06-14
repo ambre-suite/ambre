@@ -48,7 +48,7 @@ Visible to all collaborators. Stored in the `LoroDoc` — the view is synchroniz
 ```
 "filters_{sheet_id}" (LoroMap)
   └── "active" (LoroMap)         → active filter (null = no filter)
-      ├── "col_lid"  : String    → column the filter is applied to
+      ├── "col_uid"  : String    → column the filter is applied to
       ├── "kind"     : String    → "values" | "condition" | "color"
       ├── "values"   : LoroList  → list of displayed values (for kind="values")
       └── "condition": LoroMap   → {op: String, value: String} (for kind="condition")
@@ -62,7 +62,7 @@ Rows hidden by the filter are stored in a separate `LoroMap` to avoid polluting 
 
 ```
 "filter_hidden_{sheet_id}" (LoroMap)
-  └── "{row_lid}" : bool         → true = hidden by the active filter
+  └── "{row_uid}" : bool         → true = hidden by the active filter
 ```
 
 This `LoroMap` is recomputed by the Logic thread after each change to the filter or data. Only the filter author recomputes it — other clients receive `filter_hidden` via SecSync and apply it directly without recomputing.
@@ -73,7 +73,7 @@ This `LoroMap` is recomputed by the Logic thread after each change to the filter
 TrameCommand::ApplyFilter { sheet_id, col, kind, values/condition }
   │
   ├─ Evaluates the column cells via formula_cache
-  ├─ Computes the ListItemId of rows not passing the filter
+  ├─ Computes the Uid of rows not passing the filter
   ├─ Writes hidden rows into LoroMap("filter_hidden_{sheet}")
   ├─ display : updated viewport (without hidden rows) → TrameEvent::ViewportData
   └─ update  : CRDT delta from the Loro mutation → outcome.update → SyncCommand::SendUpdate (by the Logic dispatcher)
@@ -98,9 +98,9 @@ pub struct FilterView {
     pub id:          String,
     pub name:        String,
     pub sheet_id:    SheetId,
-    pub filter_col:  ListItemId,
+    pub filter_col:  Uid,
     pub kind:        FilterKind,
-    pub hidden_rows: HashSet<ListItemId>, // recomputed on activation
+    pub hidden_rows: HashSet<Uid>, // recomputed on activation
 }
 ```
 
@@ -144,12 +144,12 @@ TrameCommand::SortRange {
 fn sort_range(&mut self, cmd: SortRangeCmd) {
     let sheet_idx = &self.sheet_indices[&cmd.sheet_id];
 
-    // Resolve the ListItemId of the rows in the range
-    let rows: Vec<ListItemId> = (cmd.row_start..=cmd.row_end)
+    // Resolve the Uid of the rows in the range
+    let rows: Vec<Uid> = (cmd.row_start..=cmd.row_end)
         .filter_map(|r| sheet_idx.row_by_pos.get(r as usize).copied())
         .collect();
     let header = if cmd.has_header { rows.first().copied() } else { None };
-    let sort_rows: Vec<ListItemId> = rows.iter()
+    let sort_rows: Vec<Uid> = rows.iter()
         .skip(if cmd.has_header { 1 } else { 0 })
         .copied()
         .collect();
@@ -157,9 +157,9 @@ fn sort_range(&mut self, cmd: SortRangeCmd) {
     let sort_col_id = sheet_idx.col_by_pos[cmd.col_start as usize + cmd.sort_col as usize];
 
     // Fetch values and sort -- stable sort
-    let mut keyed: Vec<(ListItemId, CellValue)> = sort_rows.iter()
+    let mut keyed: Vec<(Uid, CellValue)> = sort_rows.iter()
         .map(|&row_id| {
-            let cell = CellRef { sheet: cmd.sheet_id, row: row_id, col: sort_col_id };
+            let cell = CellId::bound(cmd.sheet_idx, row_id, sort_col_id);
             let val = self.formula_cache.get(&cell).cloned().unwrap_or(CellValue::Empty);
             (row_id, val)
         })
@@ -171,8 +171,8 @@ fn sort_range(&mut self, cmd: SortRangeCmd) {
     });
 
     // Reorder LoroMovableList("rows_{sheet}") according to the new order
-    // Each move = 1 CRDT operation
-    let new_order: Vec<ListItemId> = header.into_iter()
+    // Each move = 1 CRDT operation; cells keyed by uid follow for free.
+    let new_order: Vec<Uid> = header.into_iter()
         .chain(keyed.into_iter().map(|(id, _)| id))
         .chain(rows.iter().skip(cmd.row_end as usize + 1).copied())
         .collect();
@@ -203,18 +203,17 @@ fn compare_cell_values(a: &CellValue, b: &CellValue) -> std::cmp::Ordering {
 }
 ```
 
-> **Implemented (Epic `E3`) -- diverges from the pseudocode above.** The single-column
-> sort is realized by **rewriting cell contents into fixed row slots**, not by reordering
-> `rows_{sheet}` with `MovableList::mov`. Reason: cells are keyed by the row slot's stable
-> id (`ListItemId`), but Loro reassigns a moved slot's id, which would orphan every cell
-> keyed to it (verified empirically). The slots therefore stay put and each row's
-> values/formatting are written back in sorted order. Because the formula engine is
-> positional (`reseed_engine` recompiles each cell at its current grid position), formula
-> references stay **positional after the sort** -- Excel relative-reference behavior, *not*
-> the `ListItemId`-follow ideal claimed in §8 and `trame-logic §12` (which requires id-based
-> references the positional engine does not yet model). `compare_cell_values` is implemented
-> with an explicit type-rank (`Number < Text < Boolean < Error < Empty`). Emits
-> `TrameEvent::SortComplete` + `DataReset`.
+> **Sort is a pure row-order permutation.** Because each row carries an own move-invariant
+> `Uid` stored as the `rows_{sheet}` element *value* (`trame-logic §2.A`), reordering the list
+> with `MovableList::mov` leaves every `"{row_uid}:{col_uid}"` cell key intact -- the data
+> follows the move with **no cell rewrite**. The sort touches only the order list (one `mov`
+> per displaced row), then rebuilds the `SheetIndex`. Crucially it **preserves** the engine's
+> uid-anchored bytecode (no reseed/re-parse) and merely recomputes; single-cell references
+> (bound to a row/column `Uid`, `trame-logic §3`) resolve to the new positions, so they
+> **follow the data** -- the §8 / `trame-logic §12` guarantee. A *range* is a positional block
+> (its endpoints stay positional), so an internal sort leaves the block and its total intact.
+> `compare_cell_values` uses an explicit type-rank (`Number < Text < Boolean < Error < Empty`).
+> Emits `TrameEvent::SortComplete` + `DataReset`.
 
 ### Multi-Column Sort
 
@@ -249,7 +248,7 @@ Two users sorting simultaneously: LWW on the row `LoroMovableList` — the last 
 "cond_formats_{sheet_id}" (LoroList)
   └── item (LoroMap)
       ├── "id"       : String           → stable rule identifier
-      ├── "range"    : String           → "{row_lid}:{col_lid}:{row_lid_end}:{col_lid_end}"
+      ├── "range"    : String           → "{row_uid}:{col_uid}:{row_uid_end}:{col_uid_end}"
       ├── "priority" : i64              → evaluation order (smaller = higher priority)
       ├── "rule"     : LoroMap          → rule definition
       │   ├── "kind" : String           → see CondFormatKind
@@ -434,7 +433,7 @@ fn rebuild_after_undo_redo(&mut self) {
 
 ```
 "validations_{sheet_id}" (LoroMap)
-  └── "{row_lid}:{col_lid}:{row_lid_end}:{col_lid_end}" (LoroMap)
+  └── "{row_uid}:{col_uid}:{row_uid_end}:{col_uid_end}" (LoroMap)
       ├── "kind"       : String    → see ValidationKind
       ├── "params"     : LoroMap   → parameters based on kind
       ├── "on_invalid" : String    → "warn" | "reject" | "info"
@@ -521,7 +520,7 @@ This model is documented in the protection invitation UI: *"Protection prevents 
 
 ```
 "protections_{sheet_id}" (LoroMap)
-  └── "{row_lid}:{col_lid}:{row_lid_end}:{col_lid_end}" (LoroMap)
+  └── "{row_uid}:{col_uid}:{row_uid_end}:{col_uid_end}" (LoroMap)
       ├── "owner_user_id"    : String     → creator's Uuid hex (stable, per-user)
       ├── "allowed_user_ids" : LoroList   → [uuid_hex, ...] — empty = owner only
       └── "description"      : String     → optional
@@ -655,16 +654,18 @@ pub enum TrameEvent {
 - Filtered rows are excluded from `DisplayViewport` but **not** from `SUM`, `COUNT`, etc. calculations. To exclude hidden rows, use `SUBTOTAL` (Phase 2).
 - The `is_filtered` flag is added to `DisplayCell` for the UI Thread to manage rendering.
 
-**Sort and DAG (as implemented, Epic `E3`):**
-- The sort rewrites cell contents into fixed row slots (see §2), so the engine is fully
-  reseeded afterwards (`after_structural`): the DAG and `formula_cache` are rebuilt from the
-  new layout, not preserved.
-- The `SheetIndex` is unchanged by the sort (the row slots do not move); only the cell
-  values/formatting they hold are reassigned.
-- Formula references are **positional**: a formula's text travels with its row, but it is
-  recompiled at the new grid position, so `=A1` reads whatever is now in A1 (Excel
-  relative-reference behavior). The `ListItemId`-follow ideal would require id-based
-  references, which the positional engine does not model.
+**Sort and DAG:**
+- The sort permutes the `rows_{sheet}` order list (one `mov` per displaced row, see §2); cells
+  are keyed by their move-invariant `Uid`, so no cell is rewritten. The engine's uid-anchored
+  bytecode is **preserved** (no reseed/re-parse); the sort just rebuilds the `SheetIndex` and
+  recomputes, refreshing the `formula_cache` from the new positions.
+- The `SheetIndex` row order is permuted to mirror the moves; each row's `Uid` -- and the cells
+  keyed by it -- travel together.
+- Single-cell references **follow the data**: a `CellId` binds each axis to its row/column `Uid`
+  (`trame-logic §3`) resolved to a position at eval, so a reference to a sorted row still points
+  at the same physical cell after the sort (`trame-logic §12`). A *range* is a positional block
+  (`Virtual` endpoints): sorting the rows inside `SUM(A1:A3)` reorders the same values, so the
+  block total is unchanged -- uid-bound endpoints would scatter and invert (`trame-logic §13`).
 
 **Conditional formatting and dirty:**
 - Conditional formatting rules are re-evaluated after each `compute_dirty_batch` for cells in the viewport.
@@ -688,7 +689,7 @@ pub enum TrameEvent {
 // Sort (implemented, Epic E3 -- see ambre-trame/src/logic.rs tests)
 #[test] fn sort_range_ascending_moves_whole_rows()     { /* row data travels with key col */ }
 #[test] fn sort_range_descending_keeps_header()        { /* has_header pin + reverse order */ }
-#[test] fn sort_range_formulas_stay_positional()       { /* refs positional, no #REF! */ }
+#[test] fn sort_range_formulas_follow_data()           { /* refs track their physical cell, no #REF! */ }
 #[test] fn sort_range_noops()                          { /* wrong sheet / already sorted */ }
 // Phase 2:
 #[test] fn sort_multi_column_primary_secondary()        { }
@@ -723,7 +724,7 @@ pub enum TrameEvent {
 
 **Phase 1 — MVP (with the engine)**
 - [ ] Shared filter: `TrameCommand::ApplyFilter` / `ClearFilter`, `filter_hidden_{sheet}` Loro
-- [x] Simple sort: `TrameCommand::SortRange` (single column) *(Epic `E3`: typed sort keys via `engine.evaluated_value` + `compare_cell_values` precedence `Number < Text < Boolean < Error < Empty`; `has_header` pin, ascending/descending. Implemented by **rewriting cell contents** into fixed row slots, not by `MovableList::mov` -- a moved slot's `ListItemId` is reassigned by Loro and would orphan its cells. Consequence: references stay **positional** (Excel relative-ref behavior), not the `ListItemId`-follow ideal of `trame-logic §12`, which needs id-based references the positional engine does not model. Emits `TrameEvent::SortComplete` + `DataReset`. Tests: ascending whole-row move, descending+header, positional formulas, no-op guards.)*
+- [x] Simple sort: `TrameCommand::SortRange` (single column) *(Epic `E3`: typed sort keys via `engine.evaluated_value` + `compare_cell_values` precedence `Number < Text < Boolean < Error < Empty`; `has_header` pin, ascending/descending. Realized as a **pure `rows_{sheet}` order permutation** (`MovableList::mov`): cells keyed by their move-invariant `Uid` follow for free, references follow the data (`trame-logic §2.A`, §12). Emits `TrameEvent::SortComplete` + `DataReset`. Tests: ascending whole-row move, descending+header, formulas follow data, no-op guards.)* **Depends on the own-uid cell model (`trame-logic §14`).**
 - [x] Undo/Redo: `TrameCommand::Undo` / `Redo` via `UndoManager` Loro *(delivered under `trame-logic` Phase 1 -- see that section)*
 - [ ] All feature variants are in the `TrameCommand` / `TrameEvent` enums (defined in `ambre-bus`, re-exported by `ambre-trame`; transported in `AppCommand::Trame` / `AppEvent::Trame`)
 - [ ] **Pure** handlers: return `TrameEvent` (display) and/or a `TrameOutcome` (CRDT delta → `SyncCommand::SendUpdate` by the Logic dispatcher) — no direct inter-thread send from the app model (preserves host testability, cf. `ambre-spec-architecture.md §4`)

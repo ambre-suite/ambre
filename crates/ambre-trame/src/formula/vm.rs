@@ -4,44 +4,60 @@
 //! dynamic cycles (not visible in the static cell_dag, e.g. cycles through
 //! ranges or cross-sheet references) via an `eval_stack` and memoizes results
 //! in `resolved` to avoid redundant work within a single recomputation pass.
+//!
+//! References are uid-anchored ([`CellId`] / [`RangeId`]). At evaluation each
+//! reference is resolved against the current per-sheet [`SheetIndex`]: a bound
+//! `Uid` that is missing yields `#REF!`; a virtual position beyond the used
+//! range reads `Empty`. The lookup is normalized to the bound `(row_uid,
+//! col_uid)` form so it matches the keys fed by the host.
 
 use std::collections::{HashMap, HashSet};
 
 use super::cache::BytecodeCache;
+use super::compile::SheetIndices;
 use super::functions::call_builtin;
-use super::types::{CellRef, CellValue, FormulaError, Op, RangeDep, RangeValue};
+use super::types::{AxisId, CellId, CellValue, FormulaError, Op, RangeId, RangeValue};
 
 /// Holds the mutable evaluation state shared across all cell evaluations in a
 /// single recomputation pass (`compute_all_dirty`).
 pub struct EvalContext<'a> {
-    /// Cells currently on the evaluation stack — used for dynamic cycle
-    /// detection. If a cell appears here, evaluating it would recurse
-    /// infinitely.
-    pub eval_stack: HashSet<CellRef>,
-    /// Results already computed during this pass, keyed by `CellRef`. Avoids
-    /// recomputing the same cell multiple times within one cycle.
-    pub resolved: HashMap<CellRef, CellValue>,
+    /// Cells currently on the evaluation stack -- used for dynamic cycle
+    /// detection.
+    pub eval_stack: HashSet<CellId>,
+    /// Results already computed during this pass, keyed by `CellId`.
+    pub resolved: HashMap<CellId, CellValue>,
     /// Borrowed reference to the bytecode cache.
     pub bc: &'a BytecodeCache,
     /// Borrowed reference to the persistent formula result cache so recursive
     /// `eval_cell` calls for non-dirty cells can reuse prior results.
-    pub formula_cache: &'a HashMap<CellRef, CellValue>,
-    /// Evaluation clock as an Excel serial number (days since 1899-12-30, the
-    /// fractional part being the time of day). Shared by every cell in the pass
-    /// so `TODAY()`/`NOW()` are stable within one recomputation.
+    pub formula_cache: &'a HashMap<CellId, CellValue>,
+    /// Per-sheet position <-> uid indices, used to resolve references at eval.
+    pub indices: &'a SheetIndices,
+    /// Evaluation clock as an Excel serial number. Shared by every cell in the
+    /// pass so `TODAY()`/`NOW()` are stable within one recomputation.
     pub now_serial: f64,
+}
+
+/// Resolving one axis of a reference to a grid position.
+enum AxisPos {
+    /// A concrete grid position (may be beyond the materialized range).
+    Pos(usize),
+    /// A bound `Uid` that is no longer in the index -> `#REF!`.
+    Broken,
 }
 
 impl<'a> EvalContext<'a> {
     pub fn new(
         bc: &'a BytecodeCache,
-        formula_cache: &'a HashMap<CellRef, CellValue>,
+        formula_cache: &'a HashMap<CellId, CellValue>,
+        indices: &'a SheetIndices,
     ) -> Self {
         Self {
             eval_stack: HashSet::new(),
             resolved: HashMap::new(),
             bc,
             formula_cache,
+            indices,
             now_serial: 0.0,
         }
     }
@@ -52,12 +68,9 @@ impl<'a> EvalContext<'a> {
         self
     }
 
-    /// Evaluate a single cell, detecting dynamic cycles and caching results.
-    ///
-    /// Returns `CellValue::Error(FormulaError::CircularReference)` if the cell
-    /// is already on the evaluation stack. Checks `resolved` first to avoid
-    /// redundant work.
-    pub fn eval_cell(&mut self, cell: CellRef) -> CellValue {
+    /// Evaluate a single cell (already in canonical bound form), detecting
+    /// dynamic cycles and caching results.
+    pub fn eval_cell(&mut self, cell: CellId) -> CellValue {
         if self.eval_stack.contains(&cell) {
             return CellValue::Error(FormulaError::CircularReference);
         }
@@ -67,21 +80,51 @@ impl<'a> EvalContext<'a> {
         self.eval_stack.insert(cell);
         let result = match self.bc.get(&cell) {
             Some(bc) => self.execute(bc),
-            None => {
-                // Not a formula cell — return the cached display value.
-                self.formula_cache
-                    .get(&cell)
-                    .cloned()
-                    .unwrap_or(CellValue::Empty)
-            }
+            None => self
+                .formula_cache
+                .get(&cell)
+                .cloned()
+                .unwrap_or(CellValue::Empty),
         };
         self.eval_stack.remove(&cell);
         self.resolved.insert(cell, result.clone());
         result
     }
 
-    /// Execute a compiled bytecode sequence, consuming stack-based operands and
-    /// pushing the final result.
+    /// Resolve one axis of a reference to a grid position against `idx`.
+    fn axis_pos(axis: AxisId, pos_of: impl Fn(&crate::model::Uid) -> Option<usize>) -> AxisPos {
+        match axis {
+            AxisId::Bound(u) => match pos_of(&u) {
+                Some(p) => AxisPos::Pos(p),
+                None => AxisPos::Broken,
+            },
+            AxisId::Virtual(p) => AxisPos::Pos(p as usize),
+        }
+    }
+
+    /// Resolve a [`CellId`] to the value it points at: `#REF!` for a deleted
+    /// bound id, `Empty` for a virtual position beyond the used range, otherwise
+    /// the evaluated value of the canonical bound cell at that position.
+    fn read_cell(&mut self, r: CellId) -> CellValue {
+        let Some(idx) = self.indices.get(&r.sheet) else {
+            return CellValue::Error(FormulaError::BrokenRef);
+        };
+        let rp = match Self::axis_pos(r.row, |u| idx.row_pos(u)) {
+            AxisPos::Pos(p) => p,
+            AxisPos::Broken => return CellValue::Error(FormulaError::BrokenRef),
+        };
+        let cp = match Self::axis_pos(r.col, |u| idx.col_pos(u)) {
+            AxisPos::Pos(p) => p,
+            AxisPos::Broken => return CellValue::Error(FormulaError::BrokenRef),
+        };
+        match (idx.row_id(rp), idx.col_id(cp)) {
+            (Some(row), Some(col)) => self.eval_cell(CellId::bound(r.sheet, row, col)),
+            // Virtual position beyond the materialized range: an empty cell.
+            _ => CellValue::Empty,
+        }
+    }
+
+    /// Execute a compiled bytecode sequence.
     pub fn execute(&mut self, bc: &super::types::CellBytecode) -> CellValue {
         let mut stack: Vec<CellValue> = Vec::with_capacity(8);
 
@@ -94,7 +137,8 @@ impl<'a> EvalContext<'a> {
                 Op::PushError(e) => stack.push(CellValue::Error(e.clone())),
 
                 Op::PushCell(r) => {
-                    stack.push(self.eval_cell(*r));
+                    let v = self.read_cell(*r);
+                    stack.push(v);
                 }
 
                 Op::EvalRange(dep) => {
@@ -108,9 +152,7 @@ impl<'a> EvalContext<'a> {
                     let b = stack.pop().unwrap_or(CellValue::Empty);
                     let a = stack.pop().unwrap_or(CellValue::Empty);
                     stack.push(match (a.as_number(), b.as_number()) {
-                        (Ok(_), Ok(0.0)) => {
-                            CellValue::Error(FormulaError::DivisionByZero)
-                        }
+                        (Ok(_), Ok(0.0)) => CellValue::Error(FormulaError::DivisionByZero),
                         (Ok(x), Ok(y)) => CellValue::Number(x / y),
                         _ => CellValue::Error(FormulaError::TypeError),
                     });
@@ -185,22 +227,47 @@ impl<'a> EvalContext<'a> {
         stack.pop().unwrap_or(CellValue::Empty)
     }
 
-    /// Evaluate every cell in a range, returning a row-major [`RangeValue`]
-    /// that preserves the 2D shape (needed by `VLOOKUP`/`INDEX`/`MATCH`).
-    fn eval_range(&mut self, dep: &RangeDep) -> RangeValue {
-        let rows = dep.row_end.saturating_sub(dep.row_start).saturating_add(1) as usize;
-        let cols = dep.col_end.saturating_sub(dep.col_start).saturating_add(1) as usize;
-        let mut values = Vec::with_capacity(dep.len());
-        for row in dep.row_start..=dep.row_end {
-            for col in dep.col_start..=dep.col_end {
-                values.push(self.eval_cell(CellRef::with_sheet(dep.sheet, row, col)));
+    /// Evaluate every cell in a range, returning a row-major [`RangeValue`] that
+    /// preserves the 2D shape (needed by `VLOOKUP`/`INDEX`/`MATCH`). Endpoints
+    /// resolve through the current index; cells beyond the used range read
+    /// `Empty`. A deleted bound endpoint yields a single `#REF!` value.
+    fn eval_range(&mut self, dep: &RangeId) -> RangeValue {
+        let Some(idx) = self.indices.get(&dep.sheet) else {
+            return RangeValue::new(1, 1, vec![CellValue::Error(FormulaError::BrokenRef)]);
+        };
+        let row_len = idx.row_len();
+        let col_len = idx.col_len();
+        let (rs, re) = match dep.row_range(idx) {
+            Some(r) => r,
+            None => return RangeValue::new(1, 1, vec![CellValue::Error(FormulaError::BrokenRef)]),
+        };
+        let (cs, ce) = match dep.col_range(idx) {
+            Some(r) => r,
+            None => return RangeValue::new(1, 1, vec![CellValue::Error(FormulaError::BrokenRef)]),
+        };
+        if re < rs || ce < cs {
+            return RangeValue::new(0, 0, Vec::new());
+        }
+        let rows = re - rs + 1;
+        let cols = ce - cs + 1;
+        let mut values = Vec::with_capacity(rows * cols);
+        for rp in rs..=re {
+            for cp in cs..=ce {
+                let v = match (rp < row_len, cp < col_len) {
+                    (true, true) => {
+                        let row = idx.row_id(rp).expect("rp < row_len");
+                        let col = idx.col_id(cp).expect("cp < col_len");
+                        self.eval_cell(CellId::bound(dep.sheet, row, col))
+                    }
+                    _ => CellValue::Empty,
+                };
+                values.push(v);
             }
         }
         RangeValue::new(rows, cols, values)
     }
 
     /// Pop two values, apply a numeric binary operation, push the result.
-    /// Propagates the first error encountered.
     fn binop<F>(&mut self, stack: &mut Vec<CellValue>, f: F)
     where
         F: Fn(f64, f64) -> f64,
@@ -251,29 +318,96 @@ mod tests {
     use super::*;
     use super::super::compile::compile;
     use super::super::parser::parse_formula;
+    use super::super::test_index::{index_with, indices_with};
     use super::super::types::CellValue;
+    use crate::model::Uid;
+
+    fn cell(row: u32, col: u32) -> CellId {
+        CellId::bound(0, Uid { peer: 1, counter: row }, Uid { peer: 2, counter: col })
+    }
+
+    /// Compile `src` for the cell at `(0, fcol)` over a 10x10 sheet, evaluate it
+    /// against `cache` (plain cell values keyed by their bound `CellId`), and
+    /// return the result text. Exercises `PushCell`/`EvalRange` resolution.
+    fn eval_with_cells(src: &str, fcol: u32, cache: HashMap<CellId, CellValue>) -> String {
+        let indices = indices_with(10, 10);
+        let bc = compile(&parse_formula(src).unwrap(), &indices);
+        let mut bcc = BytecodeCache::new();
+        bcc.insert(cell(0, fcol), bc);
+        let mut ctx = EvalContext::new(&bcc, &cache, &indices);
+        ctx.eval_cell(cell(0, fcol)).to_display()
+    }
+
+    #[test]
+    fn push_cell_reads_bound_value() {
+        let mut cache = HashMap::new();
+        cache.insert(cell(0, 0), CellValue::Number(7.0)); // A1 = 7
+        assert_eq!(eval_with_cells("A1*2", 1, cache), "14");
+    }
+
+    #[test]
+    fn push_cell_virtual_beyond_used_range_reads_empty() {
+        // Column Z (25) is past the 10 materialized columns -> virtual -> Empty,
+        // so the sum is just the literal addend.
+        assert_eq!(eval_with_cells("Z1+5", 1, HashMap::new()), "5");
+    }
+
+    #[test]
+    fn push_cell_deleted_bound_yields_ref_error() {
+        // Compile `=A1` (binds A1 -> Bound(row0,col0)) then evaluate against an
+        // index whose row 0 has been deleted: the bound uid is gone -> #REF!.
+        let indices_full = indices_with(10, 10);
+        let bc = compile(&parse_formula("A1").unwrap(), &indices_full);
+        let mut bcc = BytecodeCache::new();
+        bcc.insert(cell(0, 1), bc);
+
+        let mut idx = index_with(10, 10);
+        idx.apply_delete_row(0); // removes row_uid(0)
+        let mut indices = super::super::compile::SheetIndices::new();
+        indices.insert(0, idx);
+
+        let cache = HashMap::new();
+        let mut ctx = EvalContext::new(&bcc, &cache, &indices);
+        assert!(matches!(
+            ctx.eval_cell(cell(0, 1)),
+            CellValue::Error(FormulaError::BrokenRef)
+        ));
+    }
+
+    #[test]
+    fn eval_range_sums_bound_cells_and_ignores_virtual_tail() {
+        // A1=1, A2=2, A3=3; SUM(A1:A100) spans far past the used range but the
+        // virtual tail reads Empty, so the result is 6.
+        let mut cache = HashMap::new();
+        cache.insert(cell(0, 0), CellValue::Number(1.0));
+        cache.insert(cell(1, 0), CellValue::Number(2.0));
+        cache.insert(cell(2, 0), CellValue::Number(3.0));
+        assert_eq!(eval_with_cells("SUM(A1:A100)", 2, cache), "6");
+    }
 
     fn eval_formula(src: &str) -> CellValue {
         let ast = parse_formula(src).unwrap();
-        let bc = compile(&ast);
+        let indices = indices_with(10, 10);
+        let bc = compile(&ast, &indices);
         let cache = HashMap::new();
         let mut bc_cache_mut = BytecodeCache::new();
-        bc_cache_mut.insert(CellRef::new(0, 0), bc);
-        let bc_ref = bc_cache_mut.get(&CellRef::new(0, 0)).unwrap();
-        let mut ctx = EvalContext::new(&bc_cache_mut, &cache);
-        ctx.execute(bc_ref)
+        bc_cache_mut.insert(cell(0, 0), bc);
+        let bc_ref = bc_cache_mut.get(&cell(0, 0)).unwrap();
+        let mut ctx = EvalContext::new(&bc_cache_mut, &cache, &indices);
+        // SAFETY-free: execute borrows bc_ref immutably; ctx borrows the same
+        // cache immutably. Clone the bytecode to avoid the double borrow.
+        let owned = bc_ref.clone();
+        ctx.execute(&owned)
     }
 
     #[test]
     fn literal_number() {
-        let v = eval_formula("42");
-        assert_eq!(v.to_display(), "42");
+        assert_eq!(eval_formula("42").to_display(), "42");
     }
 
     #[test]
     fn literal_string() {
-        let v = eval_formula(r#""hello""#);
-        assert_eq!(v.to_display(), "hello");
+        assert_eq!(eval_formula(r#""hello""#).to_display(), "hello");
     }
 
     #[test]
@@ -287,8 +421,7 @@ mod tests {
 
     #[test]
     fn division_by_zero() {
-        let v = eval_formula("1/0");
-        assert!(matches!(v, CellValue::Error(FormulaError::DivisionByZero)));
+        assert!(matches!(eval_formula("1/0"), CellValue::Error(FormulaError::DivisionByZero)));
     }
 
     #[test]
@@ -308,12 +441,6 @@ mod tests {
     fn negate() {
         assert_eq!(eval_formula("-5").to_display(), "-5");
         assert_eq!(eval_formula("--5").to_display(), "5");
-    }
-
-    #[test]
-    fn not() {
-        // NOT isn't a unary operator in our parser yet, so this tests the bytecode.
-        // In practice, the function NOT() handles this.
     }
 
     #[test]

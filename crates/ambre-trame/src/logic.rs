@@ -15,14 +15,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use loro::cursor::Side;
 use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
 
-use crate::formula::{render, CellRef, FormulaCtx, FormulaEngine, NameTarget};
+use crate::formula::{render, AxisId, CellId, FormulaCtx, FormulaEngine, NameTarget, SheetIndices};
 use crate::formula::types::CellValue;
 use crate::formula::types::Expr;
 use crate::formula::parser::{parse_formula, resolve_refs};
-use crate::model::{Lid, SheetIndex, cell_key, parse_cell_key};
+use crate::model::{SheetIndex, Uid, cell_key, parse_cell_key};
 use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 
 /// Stable id of the implicit default sheet created by [`TrameState::new`].
@@ -234,6 +233,12 @@ pub struct TrameState {
     /// distinct ids that both survive (§2.D). Not persisted: ids, once minted,
     /// live in the CRDT; the counter only needs to be unique within this session.
     sheet_counter: u32,
+    /// Per-session monotonic counter for minting row/column [`Uid`]s. Same
+    /// peer-scoped convergence argument as `sheet_counter` (§2.A): two peers that
+    /// concurrently materialize/insert a line mint distinct uids that both
+    /// survive. Not persisted -- once minted, a uid lives in the CRDT as the list
+    /// element's value.
+    uid_counter: u32,
 }
 
 impl TrameState {
@@ -269,6 +274,7 @@ impl TrameState {
             named: HashMap::new(),
             undo_manager,
             sheet_counter: 0,
+            uid_counter: 0,
         };
         // Index the implicit sheet so `=Sheet1!A1` resolves before any reseed.
         state.rebuild_sheet_maps();
@@ -287,7 +293,7 @@ impl TrameState {
     /// cell, otherwise the edited value from the CRDT if present, otherwise
     /// empty (a virtual or cleared cell renders blank).
     fn cell_text(&self, row: u32, col: u32) -> String {
-        let cell = CellRef::new(row, col);
+        let cell = self.active_cell_id(row, col);
         // Formula cells: return cached evaluation result. Plain cells also have
         // a cached literal value now (so formula references resolve), but we
         // render their raw CRDT string verbatim to avoid normalizing user input.
@@ -370,7 +376,16 @@ impl TrameState {
     /// cell with. Extends the dense used range by pushing placeholder elements,
     /// capturing each new element's stable id. Returns `None` -- dropping the
     /// write -- if the jump past the high-water mark exceeds [`MATERIALIZE_CAP`].
-    fn materialize(&mut self, row: u32, col: u32) -> Option<(Lid, Lid)> {
+    /// Mint a fresh, peer-scoped row/column [`Uid`] (§2.A). The pair
+    /// `(document PeerID, per-session counter)` is unique across peers, so
+    /// concurrent materialize/insert ops never collide.
+    fn mint_uid(&mut self) -> Uid {
+        let uid = Uid { peer: self.doc.peer_id(), counter: self.uid_counter };
+        self.uid_counter += 1;
+        uid
+    }
+
+    fn materialize(&mut self, row: u32, col: u32) -> Option<(Uid, Uid)> {
         let (row, col) = (row as usize, col as usize);
         if row >= self.index.row_len() && row - self.index.row_len() >= MATERIALIZE_CAP
             || col >= self.index.col_len() && col - self.index.col_len() >= MATERIALIZE_CAP
@@ -384,18 +399,18 @@ impl TrameState {
             return None;
         }
         let mut grew = false;
-        let rows = self.doc.get_movable_list(rows_list_name(&self.active_sheet));
         while self.index.row_len() <= row {
-            rows.push(LoroValue::Null).ok()?;
-            let id = rows.get_cursor(rows.len() - 1, Side::Middle).and_then(|c| c.id)?;
-            self.index.push_row(id);
+            let uid = self.mint_uid();
+            let rows = self.doc.get_movable_list(rows_list_name(&self.active_sheet));
+            rows.push(uid.to_key_part().as_str()).ok()?;
+            self.index.push_row(uid);
             grew = true;
         }
-        let cols = self.doc.get_movable_list(cols_list_name(&self.active_sheet));
         while self.index.col_len() <= col {
-            cols.push(LoroValue::Null).ok()?;
-            let id = cols.get_cursor(cols.len() - 1, Side::Middle).and_then(|c| c.id)?;
-            self.index.push_col(id);
+            let uid = self.mint_uid();
+            let cols = self.doc.get_movable_list(cols_list_name(&self.active_sheet));
+            cols.push(uid.to_key_part().as_str()).ok()?;
+            self.index.push_col(uid);
             grew = true;
         }
         // Commit the implicit scaffolding under the excluded origin so it stays
@@ -419,6 +434,34 @@ impl TrameState {
         let rows = self.doc.get_movable_list(rows_list_name(&self.active_sheet));
         let cols = self.doc.get_movable_list(cols_list_name(&self.active_sheet));
         self.index = SheetIndex::build(&rows, &cols);
+    }
+
+    /// Build the per-sheet position<->uid index map the formula engine needs to
+    /// resolve references. The active sheet is local index 0 (reusing the
+    /// maintained [`Self::index`]); other sheets are rebuilt on demand. Local
+    /// indices match [`Self::sheets_by_idx`] (active pinned first).
+    fn engine_indices(&self) -> SheetIndices {
+        let mut m = SheetIndices::new();
+        for (idx, id) in self.sheets_by_idx.iter().enumerate() {
+            let index = if idx == 0 { self.index.clone() } else { self.build_sheet_index(id) };
+            m.insert(idx as u16, index);
+        }
+        m
+    }
+
+    /// Engine [`CellId`] for grid `(row, col)` on the active sheet (local index
+    /// 0): each axis binds to its row/column `Uid` when materialized, else stays
+    /// a virtual grid position.
+    fn active_cell_id(&self, row: u32, col: u32) -> CellId {
+        let r = match self.index.row_id(row as usize) {
+            Some(u) => AxisId::Bound(u),
+            None => AxisId::Virtual(row),
+        };
+        let c = match self.index.col_id(col as usize) {
+            Some(u) => AxisId::Bound(u),
+            None => AxisId::Virtual(col),
+        };
+        CellId { sheet: 0, row: r, col: c }
     }
 
     /// Handle a UI command and return a typed outcome.
@@ -445,12 +488,14 @@ impl TrameState {
                     if let Some((rl, cl)) = self.index.resolve(row as usize, col as usize) {
                         let _ = self.doc.get_map(cells_map_name(&self.active_sheet)).delete(&cell_key(rl, cl));
                     }
+                    let cell = self.active_cell_id(row, col);
+                    let indices = self.engine_indices();
                     let ctx = TrameCtx {
                         sheet_name_to_u16: &self.sheet_name_to_u16,
                         sheet_id_to_u16: &self.sheet_id_to_u16,
                         named: &self.named,
                     };
-                    self.engine.on_cell_changed(CellRef::new(row, col), "", &ctx);
+                    self.engine.on_cell_changed(cell, "", &indices, &ctx);
                 } else {
                     let Some((rl, cl)) = self.materialize(row, col) else {
                         // Beyond the materialization cap: drop the write.
@@ -460,15 +505,18 @@ impl TrameState {
                     // references survive rename/reorder (§2.D).
                     let stored = self.canonicalize_input(&text);
                     let _ = self.doc.get_map(cells_map_name(&self.active_sheet)).insert(&cell_key(rl, cl), stored.as_str());
+                    let cell = CellId::bound(0, rl, cl);
+                    let indices = self.engine_indices();
                     let ctx = TrameCtx {
                         sheet_name_to_u16: &self.sheet_name_to_u16,
                         sheet_id_to_u16: &self.sheet_id_to_u16,
                         named: &self.named,
                     };
-                    self.engine.on_cell_changed(CellRef::new(row, col), &stored, &ctx);
+                    self.engine.on_cell_changed(cell, &stored, &indices, &ctx);
                 }
                 self.doc.commit();
-                self.engine.compute_all_dirty();
+                let indices = self.engine_indices();
+                self.engine.compute_all_dirty(&indices);
                 let update = self.flush_delta();
                 // Ask the UI to re-fetch its viewport so the edit (and any
                 // formula it feeds) renders its computed result immediately,
@@ -523,7 +571,8 @@ impl TrameState {
 
                 // Synchronous recomputation of any dirty cells before serving
                 // the viewport. Ensures the UI displays up-to-date formula results.
-                self.engine.compute_all_dirty();
+                let indices = self.engine_indices();
+                self.engine.compute_all_dirty(&indices);
 
                 let mut cells = Vec::with_capacity(
                     ((row_end - row_start + 1) * (col_end - col_start + 1)) as usize,
@@ -808,7 +857,14 @@ impl TrameState {
             Axis::Row => rows_list_name(&self.active_sheet),
             Axis::Col => cols_list_name(&self.active_sheet),
         };
-        if self.doc.get_movable_list(list_name).insert(at, LoroValue::Null).is_err() {
+        // The new line carries a freshly minted, move-invariant uid value (§2.A).
+        let uid = self.mint_uid();
+        if self
+            .doc
+            .get_movable_list(list_name)
+            .insert(at, uid.to_key_part().as_str())
+            .is_err()
+        {
             return TrameOutcome::display_only(vec![]);
         }
         self.doc.commit();
@@ -844,7 +900,7 @@ impl TrameState {
 
     /// Drop every cell and formatting entry whose key references the removed
     /// row/column id, so a deleted line leaves no orphan entries behind.
-    fn purge_axis(&mut self, removed: Lid, axis: Axis) {
+    fn purge_axis(&mut self, removed: Uid, axis: Axis) {
         for name in [cells_map_name(&self.active_sheet), format_map_name(&self.active_sheet)] {
             let map = self.doc.get_map(name);
             let LoroValue::Map(entries) = map.get_value() else {
@@ -893,10 +949,14 @@ impl TrameState {
         self.rebuild_sheet_maps();
         self.rebuild_named();
 
-        // Feed every sheet's cells, tagging each `CellRef` with the sheet's
-        // local index. The active sheet is index 0 (see `sheets_by_idx`), so its
-        // cells address the same keys the single-sheet read paths use. Only the
-        // active sheet tracks merge masking, so it is the only one consulted.
+        // Feed every sheet's cells under a uid-anchored [`CellId`], tagged with
+        // the sheet's local index. The active sheet is index 0 (see
+        // `sheets_by_idx`), so its cells address the same keys the single-sheet
+        // read paths use. Only the active sheet tracks merge masking. Each cell's
+        // stable key already carries its `(row_uid, col_uid)`, so feeding is a
+        // direct `CellId::bound`; a cell whose row/column uid is absent from the
+        // sheet index (a deleted line) is skipped.
+        let indices = self.engine_indices();
         let sheets: Vec<(String, u16)> = self
             .sheets_by_idx
             .iter()
@@ -904,7 +964,7 @@ impl TrameState {
             .map(|(idx, id)| (id.clone(), idx as u16))
             .collect();
         for (sheet_id, idx) in sheets {
-            let index = self.build_sheet_index(&sheet_id);
+            let Some(index) = indices.get(&idx) else { continue };
             let LoroValue::Map(cells) = self.doc.get_map(cells_map_name(&sheet_id)).get_value() else {
                 continue;
             };
@@ -917,21 +977,22 @@ impl TrameState {
                 let (Some((rl, cl)), LoroValue::String(text)) = (parse_cell_key(key), value) else {
                     continue;
                 };
-                if let (Some(row), Some(col)) = (index.row_pos(&rl), index.col_pos(&cl)) {
+                if index.contains_row(&rl) && index.contains_col(&cl) {
                     let ctx = TrameCtx {
                         sheet_name_to_u16: &self.sheet_name_to_u16,
                         sheet_id_to_u16: &self.sheet_id_to_u16,
                         named: &self.named,
                     };
                     self.engine.on_cell_changed(
-                        CellRef::with_sheet(idx, row as u32, col as u32),
+                        CellId::bound(idx, rl, cl),
                         text.as_str(),
+                        &indices,
                         &ctx,
                     );
                 }
             }
         }
-        self.engine.compute_all_dirty();
+        self.engine.compute_all_dirty(&indices);
     }
 
     /// Rebuild [`Self::sheets_by_idx`] and [`Self::sheet_name_to_u16`] from the
@@ -1275,23 +1336,22 @@ impl TrameState {
     /// `col_start + sort_col`. Cells of a row outside `[col_start..=col_end]`
     /// travel with it (Google Sheets "sort range").
     ///
-    /// **Realized by rewriting cell contents, not by moving row list elements.**
-    /// Cells are keyed by the row's stable `ListItemId` (the `rows_{sheet}` slot
-    /// id), but Loro's `MovableList::mov` reassigns a moved slot's id, which would
-    /// orphan every cell keyed to it. So instead the row *slots* stay put and the
-    /// values/formatting are written back in sorted order. The formula engine is
-    /// positional (`reseed_engine` recompiles each cell at its current grid
-    /// position), so a formula's references stay positional after the sort --
-    /// equivalent to Excel relative references, *not* the `ListItemId`-follow
-    /// behavior described in `ambre-spec-trame-logic.md` §12 (that ideal requires
-    /// id-based references, which the positional engine does not yet model). The
-    /// rewrite produces a CRDT delta like any edit; LWW on the cell map resolves
-    /// concurrent sorts deterministically.
+    /// **Realized as a pure row-order permutation of `rows_{sheet}`**: each
+    /// sortable row is keyed by its own move-invariant `Uid` (the list element
+    /// *value*, not a Loro slot id), and the desired order is replayed with
+    /// `LoroMovableList::mov`. Cells keyed by `(row_uid, col_uid)` travel with
+    /// their row for free -- no cell content is read or rewritten (§2.A, §12).
+    ///
+    /// References then **follow the data**: the formula engine's bytecode is
+    /// uid-anchored, so the sort preserves it (no reseed/re-parse) and merely
+    /// recomputes -- every `A1` resolves to its row/column's new position, the
+    /// section 12 guarantee. The `mov` ops produce a CRDT delta like any edit;
+    /// LWW on the row order resolves concurrent sorts deterministically.
     ///
     /// Sorting only ever targets the **active sheet** (the UI sends an
     /// [`ActivateSheet`](TrameCommand::ActivateSheet) before any range op): the
-    /// positional formula cache the sort keys read from is pinned to index 0. A
-    /// command for any other sheet, or an empty/virtual range, is a no-op.
+    /// formula cache the sort keys read from is pinned to index 0. A command for
+    /// any other sheet, or an empty/virtual range, is a no-op.
     #[allow(clippy::too_many_arguments)]
     fn sort_range(
         &mut self,
@@ -1323,82 +1383,72 @@ impl TrameState {
             return TrameOutcome::display_only(vec![]);
         }
 
-        // Snapshot each sortable row's full contents (every materialized column,
-        // since whole rows move) keyed by its sort value. `evaluated_value`
-        // returns the formula result or parsed literal; an empty cell sorts as
-        // `Empty` (last).
-        let col_len = self.index.col_len();
-        let cells = self.doc.get_map(cells_map_name(&self.active_sheet));
-        let formats = self.doc.get_map(format_map_name(&self.active_sheet));
-        let mut keyed: Vec<(CellValue, RowSnapshot)> = (sort_start..=row_end)
+        // Key each sortable row by its uid and the evaluated value of its sort
+        // column. `evaluated_value` returns the formula result or parsed literal;
+        // an empty cell sorts as `Empty` (last). Whole rows travel by uid, so no
+        // cell contents are read or rewritten -- the sort is a pure permutation.
+        let mut keyed: Vec<(Uid, CellValue)> = (sort_start..=row_end)
             .filter_map(|pos| {
-                let row_lid = self.index.row_id(pos as usize)?;
+                let row_uid = self.index.row_id(pos as usize)?;
                 let value = self
                     .engine
-                    .evaluated_value(CellRef::new(pos, sort_col_abs))
+                    .evaluated_value(self.active_cell_id(pos, sort_col_abs))
                     .unwrap_or(CellValue::Empty);
-                let mut snap = RowSnapshot {
-                    values: vec![None; col_len],
-                    formats: vec![None; col_len],
-                };
-                for (c, slot) in snap.values.iter_mut().enumerate() {
-                    let Some(col_lid) = self.index.col_id(c) else { continue };
-                    let key = cell_key(row_lid, col_lid);
-                    if let Some(LoroValue::String(s)) = cells.get(&key).map(|v| v.get_deep_value()) {
-                        *slot = Some(s.to_string());
-                    }
-                    if let Some(LoroValue::I64(m)) = formats.get(&key).map(|v| v.get_deep_value()) {
-                        snap.formats[c] = Some(m);
-                    }
-                }
-                Some((value, snap))
+                Some((row_uid, value))
             })
             .collect();
 
-        // Remember the pre-sort order to detect an already-sorted no-op.
-        let before: Vec<Vec<Option<String>>> =
-            keyed.iter().map(|(_, s)| s.values.clone()).collect();
-        keyed.sort_by(|(a, _), (b, _)| {
+        // Current uid order of the sortable region, to detect an already-sorted
+        // no-op after the stable sort below.
+        let before: Vec<Uid> = keyed.iter().map(|(uid, _)| *uid).collect();
+        keyed.sort_by(|(_, a), (_, b)| {
             let ord = compare_cell_values(a, b);
             if ascending { ord } else { ord.reverse() }
         });
-        let after: Vec<&Vec<Option<String>>> =
-            keyed.iter().map(|(_, s)| &s.values).collect();
-        if before.iter().zip(after.iter()).all(|(a, b)| &a == b) {
-            // Stable sort left the data untouched: acknowledge, no CRDT delta.
+        let target: Vec<Uid> = keyed.into_iter().map(|(uid, _)| uid).collect();
+        if before == target {
+            // Stable sort left the order untouched: acknowledge, no CRDT delta.
             return TrameOutcome::display_only(vec![TrameEvent::SortComplete]);
         }
 
-        // Write each row's sorted contents back into the fixed slots. A column
-        // that has no value in the source row is cleared in the target.
-        for (offset, (_, snap)) in keyed.iter().enumerate() {
-            let target = sort_start as usize + offset;
-            let Some(row_lid) = self.index.row_id(target) else { continue };
-            for c in 0..col_len {
-                let Some(col_lid) = self.index.col_id(c) else { continue };
-                let key = cell_key(row_lid, col_lid);
-                match &snap.values[c] {
-                    Some(v) => {
-                        let _ = cells.insert(&key, v.as_str());
-                    }
-                    None => {
-                        let _ = cells.delete(&key);
-                    }
-                }
-                match snap.formats[c] {
-                    Some(m) => {
-                        let _ = formats.insert(&key, m);
-                    }
-                    None => {
-                        let _ = formats.delete(&key);
-                    }
-                }
+        // Realize the permutation as `mov` ops on `rows_{sheet}`: cells keyed by
+        // the move-invariant uid follow for free (§2.A, §12). Move each desired
+        // uid into place left-to-right over the sortable region; `cur` mirrors the
+        // list's evolving order so the `mov` indices stay correct.
+        let list = self.doc.get_movable_list(rows_list_name(&self.active_sheet));
+        let mut cur: Vec<Uid> = self.index.row_ids().to_vec();
+        let base = sort_start as usize;
+        for (offset, want) in target.into_iter().enumerate() {
+            let dst = base + offset;
+            if cur[dst] == want {
+                continue;
             }
+            // The wanted uid is always at or after `dst` (earlier slots are fixed).
+            let src = cur[dst..].iter().position(|u| *u == want).map(|p| p + dst);
+            let Some(src) = src else { continue };
+            let _ = list.mov(src, dst);
+            let u = cur.remove(src);
+            cur.insert(dst, u);
         }
         self.doc.commit();
-        let mut outcome = self.after_structural();
-        outcome.display.push(TrameEvent::SortComplete);
-        outcome
+
+        // Refresh the position<->uid cache and the position-keyed derived caches
+        // (merges, formatting) for the new row order. Crucially, do NOT reseed
+        // (re-parse) the formula engine: the compiled bytecode is uid-anchored,
+        // so preserving it and merely recomputing lets every reference resolve to
+        // its row/column's NEW position -- references follow the moved data, the
+        // section 12 guarantee. A full reseed would re-bind each `A1` against the
+        // post-sort index and collapse the engine back to positional semantics.
+        self.rebuild_index();
+        let mut display = self.rebuild_merges();
+        self.reseed_formatting();
+        let indices = self.engine_indices();
+        self.engine.mark_all_dirty();
+        self.engine.compute_all_dirty(&indices);
+        let update = self.flush_delta();
+        display.push(TrameEvent::DataReset);
+        display.push(TrameEvent::SortComplete);
+        TrameOutcome { display, update, ephemeral: None }
     }
 
     /// Mirror a cell's current bold/italic state into the CRDT `format` map and
@@ -1578,14 +1628,6 @@ fn expr_to_name_target(expr: Expr) -> Option<NameTarget> {
     }
 }
 
-/// One sortable row's contents, captured before a sort and written back into a
-/// (possibly different) row slot afterwards. Indexed by column position; `None`
-/// means the cell is empty (cleared in the destination). See [`TrameState::sort_range`].
-struct RowSnapshot {
-    values: Vec<Option<String>>,
-    formats: Vec<Option<i64>>,
-}
-
 /// Order two cell values for sorting (`ambre-spec-trame-features.md` §3). Within
 /// a type the natural order applies; across types the precedence is
 /// `Number < Text < Boolean < Error < Empty`, so blanks sink to the bottom and
@@ -1641,6 +1683,7 @@ fn col_to_alpha(mut col: u32) -> String {
 #[cfg(test)]
 mod tests {
     use super::{col_to_alpha, TrameState};
+    use crate::model::Uid;
     use crate::{TrameCommand, TrameEvent};
 
     /// Bold a cell, then move the selection elsewhere: the formatting must stay
@@ -1907,7 +1950,7 @@ mod tests {
         state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "on_s0".to_owned() });
         let _ = state.doc.get_map(super::SHEETS_MAP).insert("s1", "Sheet2");
         let other = state.doc.get_movable_list(super::rows_list_name("s1"));
-        other.push(loro::LoroValue::Null).unwrap();
+        other.push(Uid { peer: 1, counter: 0 }.to_key_part().as_str()).unwrap();
         state.doc.commit();
 
         // `cells_s1` is empty; `cells_s0` holds the value -- containers are isolated.
@@ -2476,16 +2519,17 @@ mod tests {
         assert_eq!(read_col(&mut state, 0, 3, 1), vec!["Header", "3", "2", "1"]);
     }
 
-    /// Formula references stay positional after a sort (Excel relative-reference
-    /// behavior): the formula *text* travels with its row, but the engine
-    /// recompiles it at the new grid position, so `=A1*10` always reads whatever
-    /// is now in A1. No `#REF!`, no stale cache.
+    /// Formula references follow the data through a sort (the section 12
+    /// guarantee). Each `=A{n}*10` binds to its row's `Uid` at edit time; the sort
+    /// reorders rows by `mov` and the uid-anchored bytecode is preserved (no
+    /// reseed/re-parse), so every formula keeps reading the *same physical* A cell
+    /// it referenced -- now at a new grid position.
     #[test]
-    fn sort_range_formulas_stay_positional() {
+    fn sort_range_formulas_follow_data() {
         let mut state = TrameState::new();
         for (r, a) in ["2", "1"].iter().enumerate() {
             state.handle_command(TrameCommand::SetCellText { row: r as u32, col: 0, text: a.to_string() });
-            // B = A of the same row, times 10 (row0 -> =A1*10, row1 -> =A2*10).
+            // B = A of the same row, times 10 (row0 -> =A1*10 -> 20, row1 -> =A2*10 -> 10).
             let cell = format!("=A{}*10", r + 1);
             state.handle_command(TrameCommand::SetCellText { row: r as u32, col: 1, text: cell });
         }
@@ -2494,10 +2538,44 @@ mod tests {
             row_start: 0, row_end: 1, col_start: 0, col_end: 1,
             sort_col: 0, ascending: true, has_header: false,
         });
+        // Data sorts ascending: A = [1, 2].
         assert_eq!(read_col(&mut state, 0, 1, 1), vec!["1", "2"]);
-        // pos0 now holds text "=A2*10" -> A2 (pos1) = 2 -> 20; pos1 holds "=A1*10"
-        // -> A1 (pos0) = 1 -> 10. References are positional, not value-following.
-        assert_eq!(read_col(&mut state, 1, 1, 2), vec!["20", "10"]);
+        // References follow the data: the `=A2*10` cell (bound to the row whose
+        // A was 1) is now at pos0 and still reads 1 -> 10; the `=A1*10` cell
+        // (bound to the row whose A was 2) is now at pos1 and reads 2 -> 20.
+        assert_eq!(read_col(&mut state, 1, 1, 2), vec!["10", "20"]);
+    }
+
+    /// A range is a positional *block*, not a set of specific rows: sorting the
+    /// rows inside `SUM(A1:A3)` reorders the same three values, so the block (and
+    /// its total) is unchanged -- the Excel/Sheets behavior, and the only
+    /// well-defined one (uid-bound endpoints would scatter and invert the range).
+    /// Contrast `sort_range_formulas_follow_data`, where single-cell refs *do*
+    /// follow their row.
+    #[test]
+    fn sort_range_sum_block_is_stable_under_internal_sort() {
+        let mut state = TrameState::new();
+        for (r, a) in ["3", "1", "2"].iter().enumerate() {
+            state.handle_command(TrameCommand::SetCellText { row: r as u32, col: 0, text: a.to_string() });
+        }
+        // A4 lives below the sorted block and sums the whole block, plus a
+        // sub-block A1:A2 whose endpoints would invert under a naive uid binding.
+        state.handle_command(TrameCommand::SetCellText { row: 3, col: 0, text: "=SUM(A1:A3)".into() });
+        state.handle_command(TrameCommand::SetCellText { row: 4, col: 0, text: "=SUM(A1:A2)".into() });
+        assert_eq!(read_col(&mut state, 0, 4, 1)[3], "6");
+        assert_eq!(read_col(&mut state, 0, 4, 1)[4], "4"); // 3 + 1
+
+        state.handle_command(TrameCommand::SortRange {
+            sheet_id: "s0".to_owned(),
+            row_start: 0, row_end: 2, col_start: 0, col_end: 0,
+            sort_col: 0, ascending: true, has_header: false,
+        });
+        // Data sorts to [1, 2, 3]; the SUM cells below are untouched.
+        assert_eq!(read_col(&mut state, 0, 2, 2), vec!["1", "2", "3"]);
+        // Whole block A1:A3 still sums all three -> 6 (no #REF!, no collapse).
+        assert_eq!(read_col(&mut state, 0, 4, 3)[3], "6");
+        // Sub-block A1:A2 is positions 0..1 -> 1 + 2 = 3.
+        assert_eq!(read_col(&mut state, 0, 4, 3)[4], "3");
     }
 
     /// A sort targeting a non-active sheet, or an already-sorted range, makes no

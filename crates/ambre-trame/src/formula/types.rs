@@ -1,7 +1,9 @@
 use std::fmt;
 
+use crate::model::{SheetIndex, Uid};
+
 // -----------------------------------------------------------------------------
-// CellRef — positional cell identifier
+// CellRef — positional cell identifier (AST / parser / renderer)
 // -----------------------------------------------------------------------------
 
 /// Identifies a cell by its sheet plus zero-based row and column index.
@@ -98,6 +100,136 @@ impl RangeDep {
     /// Returns `true` when the range spans zero cells.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Engine-side uid identities (compiled references)
+// -----------------------------------------------------------------------------
+//
+// The parser produces positional `CellRef` / `RangeDep` (a typed `A1`). The
+// compiler resolves those against the current `SheetIndex` into the uid-anchored
+// forms below, which are what the bytecode, dependency graph, bytecode cache and
+// VM are keyed by. Binding to the row/column `Uid` is what makes a reference
+// follow the data through inserts, deletes and sorts (spec section 4.B / section 12).
+
+/// Engine-side identity of one axis (a row or a column) inside a compiled
+/// reference.
+///
+/// Within the used range a reference binds to the row/column `Uid`, so it tracks
+/// the physical line through any reorder. Beyond the used range -- a *virtual*
+/// row/column that has no list element yet (spec section 2.A bis) -- there is no
+/// `Uid` to bind, so the reference keeps the grid position it was typed at and
+/// evaluates `Empty` until that line is materialized (at which point a re-edit
+/// re-binds it to the new `Uid`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AxisId {
+    /// Bound to a materialized row/column `Uid`. `#REF!` once that id is deleted.
+    Bound(Uid),
+    /// A virtual position beyond the used range; stays positional, reads `Empty`.
+    Virtual(u32),
+}
+
+/// Engine-side cell identity: a sheet plus a row and column [`AxisId`]. This is
+/// the compiled, uid-anchored counterpart of the positional AST [`CellRef`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CellId {
+    pub sheet: u16,
+    pub row: AxisId,
+    pub col: AxisId,
+}
+
+impl CellId {
+    pub const fn new(sheet: u16, row: AxisId, col: AxisId) -> Self {
+        Self { sheet, row, col }
+    }
+
+    /// Convenience constructor for a fully bound cell `(row_uid, col_uid)`.
+    pub const fn bound(sheet: u16, row: Uid, col: Uid) -> Self {
+        Self { sheet, row: AxisId::Bound(row), col: AxisId::Bound(col) }
+    }
+
+    /// The bound row `Uid`, or `None` when the row axis is virtual.
+    pub fn row_uid(&self) -> Option<Uid> {
+        match self.row {
+            AxisId::Bound(u) => Some(u),
+            AxisId::Virtual(_) => None,
+        }
+    }
+    /// The bound column `Uid`, or `None` when the column axis is virtual.
+    pub fn col_uid(&self) -> Option<Uid> {
+        match self.col {
+            AxisId::Bound(u) => Some(u),
+            AxisId::Virtual(_) => None,
+        }
+    }
+}
+
+/// One bound of a compiled range, on a single axis.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RangeEndpoint {
+    /// A bounded endpoint, stable via the row/column [`AxisId`]. `#REF!` if a
+    /// bound `Uid` is deleted.
+    Specific(AxisId),
+    /// An unbounded endpoint: entire column (`A:A`) or entire row (`1:1`).
+    /// Reserved for a later milestone; the MVP parser never emits it.
+    EntireAxis,
+}
+
+/// Engine-side range identity: the uid-anchored counterpart of the positional
+/// AST [`RangeDep`]. Endpoints resolve to grid positions through the current
+/// [`SheetIndex`] at evaluation time, so the spanned cells follow the data.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RangeId {
+    pub sheet: u16,
+    pub row_start: RangeEndpoint,
+    pub row_end: RangeEndpoint,
+    pub col_start: RangeEndpoint,
+    pub col_end: RangeEndpoint,
+}
+
+impl RangeId {
+    /// Resolve the row endpoints to an inclusive `(start, end)` position pair, or
+    /// `None` when a `Specific(Bound(_))` endpoint refers to a deleted row
+    /// (`#REF!`). A `Virtual` endpoint keeps its typed position even beyond the
+    /// used range (the caller clamps iteration to the materialized rows).
+    pub fn row_range(&self, index: &SheetIndex) -> Option<(usize, usize)> {
+        let len = index.row_len();
+        let s = endpoint_pos(&self.row_start, 0, |u| index.row_pos(u))?;
+        let e = endpoint_pos(&self.row_end, len.saturating_sub(1), |u| index.row_pos(u))?;
+        Some((s, e))
+    }
+    pub fn col_range(&self, index: &SheetIndex) -> Option<(usize, usize)> {
+        let len = index.col_len();
+        let s = endpoint_pos(&self.col_start, 0, |u| index.col_pos(u))?;
+        let e = endpoint_pos(&self.col_end, len.saturating_sub(1), |u| index.col_pos(u))?;
+        Some((s, e))
+    }
+
+    /// Whether the bound cell `(row, col)` falls inside this range under the
+    /// current `index`. Used by the dependency graph to dirty range formulas
+    /// when one of their member cells changes.
+    pub fn contains(&self, row: Uid, col: Uid, index: &SheetIndex) -> bool {
+        let (Some(rp), Some(cp)) = (index.row_pos(&row), index.col_pos(&col)) else {
+            return false;
+        };
+        matches!(self.row_range(index), Some((s, e)) if rp >= s && rp <= e)
+            && matches!(self.col_range(index), Some((s, e)) if cp >= s && cp <= e)
+    }
+}
+
+/// Resolve a single range endpoint to a grid position. `entire` is the position
+/// used for an unbounded `EntireAxis` endpoint (0 for a start, `len-1` for an
+/// end). Returns `None` only when a bound `Uid` is missing from the index.
+fn endpoint_pos(
+    ep: &RangeEndpoint,
+    entire: usize,
+    pos: impl Fn(&Uid) -> Option<usize>,
+) -> Option<usize> {
+    match ep {
+        RangeEndpoint::EntireAxis => Some(entire),
+        RangeEndpoint::Specific(AxisId::Bound(u)) => pos(u),
+        RangeEndpoint::Specific(AxisId::Virtual(p)) => Some(*p as usize),
     }
 }
 
@@ -243,9 +375,9 @@ pub enum Op {
 
     // -- Cell / range references (resolved at eval time) -----------------------
     /// Push the evaluated value of another cell onto the stack.
-    PushCell(CellRef),
+    PushCell(CellId),
     /// Evaluate every cell in a range and push them as `CellValue::Range`.
-    EvalRange(RangeDep),
+    EvalRange(RangeId),
 
     // -- Binary arithmetic -----------------------------------------------------
     Add,
@@ -285,10 +417,10 @@ pub enum Op {
 #[derive(Debug, Clone)]
 pub struct CellBytecode {
     pub ops: Vec<Op>,
-    /// Cell references extracted at compile time.
-    pub cell_deps: Vec<CellRef>,
-    /// Range dependencies extracted at compile time.
-    pub range_deps: Vec<RangeDep>,
+    /// Cell references extracted at compile time (uid-anchored).
+    pub cell_deps: Vec<CellId>,
+    /// Range dependencies extracted at compile time (uid-anchored).
+    pub range_deps: Vec<RangeId>,
 }
 
 // -----------------------------------------------------------------------------
@@ -513,6 +645,75 @@ mod tests {
             CellValue::Error(FormulaError::ParseError("oops".into())).to_display(),
             "#PARSE!(oops)"
         );
+    }
+
+    // -- Engine uid range resolution -----------------------------------------
+
+    use crate::formula::test_index::index_with;
+    use crate::model::Uid;
+
+    fn row_uid(p: u32) -> Uid {
+        Uid { peer: 1, counter: p }
+    }
+    fn col_uid(p: u32) -> Uid {
+        Uid { peer: 2, counter: p }
+    }
+    fn bound_range(r0: u32, r1: u32, c0: u32, c1: u32) -> RangeId {
+        RangeId {
+            sheet: 0,
+            row_start: RangeEndpoint::Specific(AxisId::Bound(row_uid(r0))),
+            row_end: RangeEndpoint::Specific(AxisId::Bound(row_uid(r1))),
+            col_start: RangeEndpoint::Specific(AxisId::Bound(col_uid(c0))),
+            col_end: RangeEndpoint::Specific(AxisId::Bound(col_uid(c1))),
+        }
+    }
+
+    #[test]
+    fn range_id_resolves_bound_endpoints_to_positions() {
+        let idx = index_with(10, 10);
+        let r = bound_range(2, 5, 1, 3);
+        assert_eq!(r.row_range(&idx), Some((2, 5)));
+        assert_eq!(r.col_range(&idx), Some((1, 3)));
+    }
+
+    #[test]
+    fn range_id_virtual_endpoint_keeps_typed_position() {
+        // A1:A1000 on a 10-row sheet: the far endpoint sits past the used range,
+        // so it stays a virtual position rather than resolving to a uid.
+        let idx = index_with(10, 1);
+        let r = RangeId {
+            sheet: 0,
+            row_start: RangeEndpoint::Specific(AxisId::Bound(row_uid(0))),
+            row_end: RangeEndpoint::Specific(AxisId::Virtual(999)),
+            col_start: RangeEndpoint::Specific(AxisId::Bound(col_uid(0))),
+            col_end: RangeEndpoint::Specific(AxisId::Bound(col_uid(0))),
+        };
+        assert_eq!(r.row_range(&idx), Some((0, 999)));
+    }
+
+    #[test]
+    fn range_id_deleted_bound_endpoint_is_broken() {
+        // An endpoint bound to a uid absent from the index (a deleted row) makes
+        // the whole range resolve to None -> the VM yields #REF!.
+        let idx = index_with(10, 10);
+        let r = RangeId {
+            sheet: 0,
+            row_start: RangeEndpoint::Specific(AxisId::Bound(row_uid(0))),
+            row_end: RangeEndpoint::Specific(AxisId::Bound(row_uid(999))), // not materialized
+            col_start: RangeEndpoint::Specific(AxisId::Bound(col_uid(0))),
+            col_end: RangeEndpoint::Specific(AxisId::Bound(col_uid(0))),
+        };
+        assert_eq!(r.row_range(&idx), None);
+    }
+
+    #[test]
+    fn range_id_contains_only_bound_cells_inside_span() {
+        let idx = index_with(10, 10);
+        let r = bound_range(1, 3, 1, 2); // rows 1..=3, cols 1..=2
+        assert!(r.contains(row_uid(2), col_uid(1), &idx));
+        assert!(!r.contains(row_uid(0), col_uid(1), &idx), "row above span");
+        assert!(!r.contains(row_uid(2), col_uid(3), &idx), "col right of span");
+        assert!(!r.contains(row_uid(999), col_uid(1), &idx), "deleted row not contained");
     }
 
     #[test]
