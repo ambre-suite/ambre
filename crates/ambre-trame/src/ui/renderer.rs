@@ -281,16 +281,18 @@ pub fn draw_overlay<S: DrawSurface>(
     //       the shared primitives. The primitives clip the active tint to the
     //       visible range, so passing the raw active index is safe. -----------
     render::draw_col_headers_on(
-        surface, &layout, palette, Some(state.active_col), font_cx, text_cache, text_enabled,
+        surface, &layout, palette, Some(state.active_col()), font_cx, text_cache, text_enabled,
     );
     render::draw_row_headers_on(
-        surface, &layout, palette, Some(state.active_row), font_cx, text_cache, text_enabled,
+        surface, &layout, palette, Some(state.active_row()), font_cx, text_cache, text_enabled,
     );
 
     // -- 2. Active cell border. -----------------------------------------------
     // Lives in the overlay so it tracks the active cell on every frame
-    // regardless of scroll shifts in the persistent layer.
-    if let Some((x, y, cw, ch)) = state.cell_pixel_rect(state.active_row, state.active_col) {
+    // regardless of scroll shifts in the persistent layer. A single-cell
+    // selection is drawn as the active border alone (no range fill); a
+    // multi-cell range fill is Phase 2.
+    if let Some((x, y, cw, ch)) = state.cell_pixel_rect(state.active_row(), state.active_col()) {
         surface.stroke_rect(Rect::new(x, y, x + cw, y + ch), palette.selection, 2.0);
     }
     let t_after_hdrs = clock.now_ms();

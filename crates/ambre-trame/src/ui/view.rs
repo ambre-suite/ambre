@@ -294,7 +294,7 @@ impl TrameView {
     /// every selection change so navigating the grid is audible, like a native
     /// spreadsheet.
     fn announce_active(&self) {
-        let (row, col) = (self.state.active_row, self.state.active_col);
+        let (row, col) = (self.state.active_row(), self.state.active_col());
         let value = self.cell_seed(row, col);
         let desc = if value.is_empty() {
             format!("{}{}, empty", col_label(col), row + 1)
@@ -312,7 +312,7 @@ impl TrameView {
     fn publish_anchor(&mut self) {
         let next = self
             .state
-            .cell_pixel_rect(self.state.active_row, self.state.active_col)
+            .cell_pixel_rect(self.state.active_row(), self.state.active_col())
             .map(|(x, y, w, _h)| Anchor {
                 x: (x + w / 2.0) / self.dpr,
                 y: y / self.dpr,
@@ -358,7 +358,7 @@ impl TrameView {
     /// Open an edit session on the active cell, seeded with `seed`. Focuses the
     /// pipe (clearing its buffer) and positions it on the cell.
     fn begin_edit(&mut self, seed: String) {
-        let (row, col) = (self.state.active_row, self.state.active_col);
+        let (row, col) = (self.state.active_row(), self.state.active_col());
         self.editor = Some(CellEditor::new(row, col, seed));
         self.text_input.clear();
         self.text_input.focus();
@@ -759,7 +759,7 @@ impl TrameView {
                 "ArrowRight" => self.nav_move(0, 1),
                 // Enter / F2 open an editor on the cell's current text.
                 "Enter" | "F2" => {
-                    let seed = self.cell_seed(self.state.active_row, self.state.active_col);
+                    let seed = self.cell_seed(self.state.active_row(), self.state.active_col());
                     self.begin_edit(seed);
                     true
                 }
@@ -914,7 +914,7 @@ impl TrameView {
             if let Some(scroll) = mv.scroll {
                 self.pending_viewport = Some(scroll);
             }
-            self.park_input_on(self.state.active_row, self.state.active_col);
+            self.park_input_on(self.state.active_row(), self.state.active_col());
             self.announce_active();
         }
         true
@@ -922,12 +922,11 @@ impl TrameView {
 
     /// Select a cell directly (pointer hit), keeping Logic and the pipe in sync.
     fn select_cell(&mut self, row: u32, col: u32) {
-        if row == self.state.active_row && col == self.state.active_col {
+        if row == self.state.active_row() && col == self.state.active_col() {
             self.park_input_on(row, col);
             return;
         }
-        self.state.active_row = row;
-        self.state.active_col = col;
+        self.state.select(row, col);
         self.viewport_changed = true;
         if let Err(flume::TrySendError::Full(_)) = self.send_command_lossless(TrameCommand::SetActiveCell { row, col }) {
             tracing::error!("Trame: UI→Logic channel full, cell selection dropped");
