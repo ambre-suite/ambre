@@ -12,8 +12,8 @@ use nom::sequence::{delimited, preceded};
 use nom::Parser;
 
 use super::types::{
-    alpha_to_col, BinOpKind, CellRef, CellValue, Expr, FormulaCtx, NameTarget, RangeDep,
-    UnaryOpKind,
+    alpha_to_col, BinOpKind, CellRef, CellValue, Expr, FormulaCtx, FormulaError, NameTarget,
+    RangeDep, SheetQualifier, UnaryOpKind,
 };
 
 // -----------------------------------------------------------------------------
@@ -146,13 +146,31 @@ fn sheet_name(input: &str) -> nom::IResult<&str, String> {
     map(identifier, |s: &str| s.to_string()).parse(input)
 }
 
-/// A sheet-qualified reference `Sheet2!A1` / `'My Sheet'!A1:B2`. Resolution of
-/// the sheet name to an index happens later in [`resolve_refs`].
+/// A stable sheet id token in canonical form: `#` followed by id characters
+/// (hex digits and `_`, e.g. `#s0` or `#00..0_0000002a`). The id may start with
+/// a digit, so a plain `identifier` parser does not fit.
+fn sheet_id_token(input: &str) -> nom::IResult<&str, String> {
+    let (input, _) = char('#').parse(input)?;
+    let (input, id) = recognize(many1(alt((alphanumeric1, tag("_"))))).parse(input)?;
+    Ok((input, id.to_string()))
+}
+
+/// The qualifier preceding a `!`: a stable id (`#s0`) or a display name
+/// (`Sheet2`, `'My Sheet'`).
+fn sheet_qualifier(input: &str) -> nom::IResult<&str, SheetQualifier> {
+    if let Ok((rest, id)) = sheet_id_token(input) {
+        return Ok((rest, SheetQualifier::Id(id)));
+    }
+    map(sheet_name, SheetQualifier::Name).parse(input)
+}
+
+/// A sheet-qualified reference `Sheet2!A1` / `'My Sheet'!A1:B2` / `#s0!A1`.
+/// Resolution of the qualifier to an index happens later in [`resolve_refs`].
 fn sheet_qualified(input: &str) -> nom::IResult<&str, Expr> {
-    let (input, name) = sheet_name.parse(input)?;
+    let (input, sheet) = sheet_qualifier.parse(input)?;
     let (input, _) = char('!').parse(input)?;
     let (input, inner) = cell_or_range.parse(input)?;
-    Ok((input, Expr::SheetRef { sheet_name: name, inner: Box::new(inner) }))
+    Ok((input, Expr::SheetRef { sheet, inner: Box::new(inner) }))
 }
 
 /// A bareword reference to a named range. Resolution happens in
@@ -392,21 +410,32 @@ pub fn resolve_refs(
             r.sheet = default_sheet;
             Ok(Expr::Range(r))
         }
-        Expr::SheetRef { sheet_name, inner } => {
-            let sheet = ctx
-                .resolve_sheet(&sheet_name)
-                .ok_or_else(|| format!("unknown sheet: {sheet_name}"))?;
+        Expr::SheetRef { sheet, inner } => {
+            // A display name that does not resolve is a hard parse error (user
+            // typo). A canonical id that does not resolve means the sheet was
+            // deleted: the reference evaluates to `#REF!`, mirroring a deleted
+            // row/column (spec section 2.D / section 5).
+            let resolved = match &sheet {
+                SheetQualifier::Name(name) => Some(
+                    ctx.resolve_sheet(name)
+                        .ok_or_else(|| format!("unknown sheet: {name}"))?,
+                ),
+                SheetQualifier::Id(id) => ctx.resolve_sheet_id(id),
+            };
+            let Some(sheet_idx) = resolved else {
+                return Ok(Expr::Literal(CellValue::Error(FormulaError::BrokenRef)));
+            };
             // `inner` is always a CellRef or Range straight from the parser.
             match *inner {
                 Expr::CellRef(mut r) => {
-                    r.sheet = sheet;
+                    r.sheet = sheet_idx;
                     Ok(Expr::CellRef(r))
                 }
                 Expr::Range(mut r) => {
-                    r.sheet = sheet;
+                    r.sheet = sheet_idx;
                     Ok(Expr::Range(r))
                 }
-                other => resolve_refs(other, sheet, ctx),
+                other => resolve_refs(other, sheet_idx, ctx),
             }
         }
         Expr::Name(name) => match ctx.resolve_name(&name) {
@@ -561,7 +590,8 @@ mod tests {
 
     use super::super::types::{FormulaCtx, NameTarget, RangeDep};
 
-    /// Test context: `Sheet2` -> index 2, name `TOTAL` -> `B1:B3` on sheet 2.
+    /// Test context: `Sheet2` -> index 2, name `TOTAL` -> `B1:B3` on sheet 2,
+    /// canonical id `#s2` -> index 2 (`#gone` resolves to nothing).
     struct TestCtx;
     impl FormulaCtx for TestCtx {
         fn resolve_sheet(&self, name: &str) -> Option<u16> {
@@ -569,6 +599,12 @@ mod tests {
                 "Sheet1" => Some(0),
                 "Sheet2" => Some(2),
                 "My Sheet" => Some(5),
+                _ => None,
+            }
+        }
+        fn resolve_sheet_id(&self, id: &str) -> Option<u16> {
+            match id {
+                "s2" => Some(2),
                 _ => None,
             }
         }
@@ -612,6 +648,36 @@ mod tests {
             Expr::Range(RangeDep { sheet: 2, row_start: 0, row_end: 9, .. }) => {}
             other => panic!("expected sheet-2 range, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn id_qualified_cell_resolves_index() {
+        match resolve("#s2!A1", 0).unwrap() {
+            Expr::CellRef(CellRef { sheet: 2, row: 0, col: 0 }) => {}
+            other => panic!("expected sheet-2 cell, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn id_qualified_with_underscore_and_leading_digit() {
+        // A peer-scoped id can start with a hex digit and contain '_'.
+        assert!(matches!(
+            parse("#00a_2f!A1"),
+            Expr::SheetRef { sheet: SheetQualifier::Id(id), .. } if id == "00a_2f"
+        ));
+    }
+
+    #[test]
+    fn deleted_sheet_id_yields_broken_ref() {
+        match resolve("#gone!A1", 0).unwrap() {
+            Expr::Literal(CellValue::Error(FormulaError::BrokenRef)) => {}
+            other => panic!("expected #REF! literal, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unknown_sheet_name_is_parse_error() {
+        assert!(resolve("Nope!A1", 0).is_err());
     }
 
     #[test]

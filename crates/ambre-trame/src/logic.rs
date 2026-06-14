@@ -18,7 +18,7 @@ use std::collections::{HashMap, HashSet};
 use loro::cursor::Side;
 use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
 
-use crate::formula::{CellRef, FormulaCtx, FormulaEngine, NameTarget};
+use crate::formula::{render, CellRef, FormulaCtx, FormulaEngine, NameTarget};
 use crate::formula::types::Expr;
 use crate::formula::parser::{parse_formula, resolve_refs};
 use crate::model::{Lid, SheetIndex, cell_key, parse_cell_key};
@@ -111,12 +111,16 @@ enum Axis {
 /// same call).
 struct TrameCtx<'a> {
     sheet_name_to_u16: &'a HashMap<String, u16>,
+    sheet_id_to_u16: &'a HashMap<String, u16>,
     named: &'a HashMap<String, NameTarget>,
 }
 
 impl FormulaCtx for TrameCtx<'_> {
     fn resolve_sheet(&self, name: &str) -> Option<u16> {
         self.sheet_name_to_u16.get(name).copied()
+    }
+    fn resolve_sheet_id(&self, id: &str) -> Option<u16> {
+        self.sheet_id_to_u16.get(id).copied()
     }
     fn resolve_name(&self, name: &str) -> Option<NameTarget> {
         self.named.get(name).cloned()
@@ -207,6 +211,13 @@ pub struct TrameState {
     /// Sheet *display name* -> local engine index, for resolving `Sheet2!A1`
     /// references in formulas. Derived alongside [`Self::sheets_by_idx`].
     sheet_name_to_u16: HashMap<String, u16>,
+    /// Stable `sheet_id` -> local engine index, for resolving the canonical
+    /// `#s0!A1` form persisted in the CRDT `v` text (rename-stable, §2.D).
+    /// Derived alongside [`Self::sheets_by_idx`].
+    sheet_id_to_u16: HashMap<String, u16>,
+    /// Stable `sheet_id` -> current display name, for reconstructing formula-bar
+    /// text from the canonical id form. Derived alongside [`Self::sheets_by_idx`].
+    sheet_id_to_name: HashMap<String, String>,
     /// Resolved named ranges: defined name -> target cell/range. Rebuilt from the
     /// `named_ranges` CRDT map by [`Self::rebuild_named`] on every reseed.
     named: HashMap<String, NameTarget>,
@@ -252,6 +263,8 @@ impl TrameState {
             masked_cells: HashSet::new(),
             sheets_by_idx: Vec::new(),
             sheet_name_to_u16: HashMap::new(),
+            sheet_id_to_u16: HashMap::new(),
+            sheet_id_to_name: HashMap::new(),
             named: HashMap::new(),
             undo_manager,
             sheet_counter: 0,
@@ -304,6 +317,51 @@ impl TrameState {
             }
         }
         String::new()
+    }
+
+    /// Rewrite user-entered formula text into its canonical CRDT form: each
+    /// cross-sheet qualifier is bound to the stable `sheet_id`
+    /// (`Sheet2!A1` -> `#s0!A1`), so a later rename/reorder never invalidates the
+    /// reference (§2.D). Plain text, formulas without a sheet qualifier, and
+    /// formulas that fail to parse are stored verbatim (the user's exact input).
+    fn canonicalize_input(&self, text: &str) -> String {
+        let Some(body) = text.strip_prefix('=') else {
+            return text.to_string();
+        };
+        // A cross-sheet reference always carries a `!`; nothing else to rewrite.
+        if !body.contains('!') {
+            return text.to_string();
+        }
+        let name_to_id = |name: &str| {
+            self.sheet_name_to_u16
+                .get(name)
+                .and_then(|idx| self.sheets_by_idx.get(*idx as usize))
+                .cloned()
+        };
+        match parse_formula(body) {
+            Ok(ast) => format!("={}", render::render(&render::canonicalize(ast, &name_to_id))),
+            Err(_) => text.to_string(),
+        }
+    }
+
+    /// Reconstruct the formula-bar text for a stored CRDT value: canonical `#id`
+    /// qualifiers are rendered through the current `sheet_id -> name` map
+    /// (`#s0!A1` -> `Data!A1`), so a rename is reflected immediately with no CRDT
+    /// mutation. A deleted target stays in `#id` form, signalling the dangling
+    /// reference. Plain text and formulas without an id qualifier pass through.
+    fn formula_display(&self, stored: &str) -> String {
+        let Some(body) = stored.strip_prefix('=') else {
+            return stored.to_string();
+        };
+        // The canonical id qualifier is the only `#` we persist in `v`.
+        if !body.contains('#') {
+            return stored.to_string();
+        }
+        let id_to_name = |id: &str| self.sheet_id_to_name.get(id).cloned();
+        match parse_formula(body) {
+            Ok(ast) => format!("={}", render::render(&render::to_display_form(ast, &id_to_name))),
+            Err(_) => stored.to_string(),
+        }
     }
 
     /// Ensure grid `(row, col)` is materialized (its row and column exist in the
@@ -388,6 +446,7 @@ impl TrameState {
                     }
                     let ctx = TrameCtx {
                         sheet_name_to_u16: &self.sheet_name_to_u16,
+                        sheet_id_to_u16: &self.sheet_id_to_u16,
                         named: &self.named,
                     };
                     self.engine.on_cell_changed(CellRef::new(row, col), "", &ctx);
@@ -396,12 +455,16 @@ impl TrameState {
                         // Beyond the materialization cap: drop the write.
                         return TrameOutcome::display_only(vec![]);
                     };
-                    let _ = self.doc.get_map(cells_map_name(&self.active_sheet)).insert(&cell_key(rl, cl), text.as_str());
+                    // Persist the canonical (`sheet_id`-bound) form so cross-sheet
+                    // references survive rename/reorder (§2.D).
+                    let stored = self.canonicalize_input(&text);
+                    let _ = self.doc.get_map(cells_map_name(&self.active_sheet)).insert(&cell_key(rl, cl), stored.as_str());
                     let ctx = TrameCtx {
                         sheet_name_to_u16: &self.sheet_name_to_u16,
+                        sheet_id_to_u16: &self.sheet_id_to_u16,
                         named: &self.named,
                     };
-                    self.engine.on_cell_changed(CellRef::new(row, col), &text, &ctx);
+                    self.engine.on_cell_changed(CellRef::new(row, col), &stored, &ctx);
                 }
                 self.doc.commit();
                 self.engine.compute_all_dirty();
@@ -478,7 +541,13 @@ impl TrameState {
                             row,
                             col,
                             text: if is_covered { String::new() } else { self.cell_text(row, col) },
-                            raw: if is_covered { String::new() } else { self.cell_raw(row, col) },
+                            raw: if is_covered {
+                                String::new()
+                            } else {
+                                // Reconstruct cross-sheet qualifiers from the
+                                // stable id to the current display name (§2.D).
+                                self.formula_display(&self.cell_raw(row, col))
+                            },
                             bold: self.bold.contains(&(row, col)),
                             italic: self.italic.contains(&(row, col)),
                             is_merged: merge_span.is_some() || is_covered,
@@ -838,6 +907,7 @@ impl TrameState {
                 if let (Some(row), Some(col)) = (index.row_pos(&rl), index.col_pos(&cl)) {
                     let ctx = TrameCtx {
                         sheet_name_to_u16: &self.sheet_name_to_u16,
+                        sheet_id_to_u16: &self.sheet_id_to_u16,
                         named: &self.named,
                     };
                     self.engine.on_cell_changed(
@@ -877,8 +947,12 @@ impl TrameState {
 
         self.sheets_by_idx.clear();
         self.sheet_name_to_u16.clear();
+        self.sheet_id_to_u16.clear();
+        self.sheet_id_to_name.clear();
         for (idx, (id, name)) in entries.into_iter().enumerate() {
-            self.sheet_name_to_u16.insert(name, idx as u16);
+            self.sheet_name_to_u16.insert(name.clone(), idx as u16);
+            self.sheet_id_to_u16.insert(id.clone(), idx as u16);
+            self.sheet_id_to_name.insert(id.clone(), name);
             self.sheets_by_idx.push(id);
         }
         // A document always has at least the active sheet at index 0.
@@ -904,6 +978,7 @@ impl TrameState {
             };
             let ctx = TrameCtx {
                 sheet_name_to_u16: &self.sheet_name_to_u16,
+                sheet_id_to_u16: &self.sheet_id_to_u16,
                 named: &no_names,
             };
             // Unqualified references in a name definition default to the active
@@ -1678,6 +1753,52 @@ mod tests {
         cells[0].text.clone()
     }
 
+    /// Read the formula-bar `raw` text at a single grid cell through a viewport
+    /// request (the reconstructed display form, not the stored canonical form).
+    fn read_raw(state: &mut TrameState, row: u32, col: u32) -> String {
+        let evts = state.handle_command(TrameCommand::ScrollViewport {
+            version: 999, row_start: row, row_end: row, col_start: col, col_end: col,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
+        cells[0].raw.clone()
+    }
+
+    /// A cross-sheet formula is stored bound to the stable `sheet_id` (`#id`
+    /// form), so a later rename keeps it computing and its formula-bar text
+    /// follows the new name; a reorder is inert; deleting the target sheet turns
+    /// it into `#REF!` (spec section 2.D / section 12).
+    #[test]
+    fn cross_sheet_reference_survives_rename_and_breaks_on_delete() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::CreateSheet { name: "Sheet2".to_owned() });
+        let s2 = second_sheet_id(&state);
+
+        // Sheet2!A1 = 5.
+        state.handle_command(TrameCommand::ActivateSheet { sheet_id: s2.clone() });
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "5".to_owned() });
+
+        // Sheet1!B1 = Sheet2!A1 * 2.
+        state.handle_command(TrameCommand::ActivateSheet { sheet_id: "s0".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 1, text: "=Sheet2!A1*2".to_owned() });
+        assert_eq!(read_cell(&mut state, 0, 1), "10");
+        // Stored canonical form is id-bound; the formula bar shows the name.
+        assert_eq!(state.cell_raw(0, 1), format!("=#{s2}!A1*2"), "v is sheet_id-bound");
+        assert_eq!(read_raw(&mut state, 0, 1), "=Sheet2!A1*2", "bar shows display name");
+
+        // Rename the target: the reference keeps computing and the bar follows.
+        state.handle_command(TrameCommand::RenameSheet { sheet_id: s2.clone(), name: "Data".to_owned() });
+        assert_eq!(read_cell(&mut state, 0, 1), "10", "rename preserves the reference");
+        assert_eq!(read_raw(&mut state, 0, 1), "=Data!A1*2", "bar reflects the new name");
+
+        // Reorder: pure presentation, value unchanged.
+        state.handle_command(TrameCommand::MoveSheet { sheet_id: s2.clone(), to_index: 0 });
+        assert_eq!(read_cell(&mut state, 0, 1), "10", "reorder is inert");
+
+        // Delete the target sheet: the cross-sheet reference becomes #REF!.
+        state.handle_command(TrameCommand::DeleteSheet { sheet_id: s2 });
+        assert_eq!(read_cell(&mut state, 0, 1), "#REF!", "deleted target -> #REF!");
+    }
+
     /// Undo reverts the last local edit; redo reapplies it. The `UndoManager`
     /// records one item per command (one commit), so a single undo restores the
     /// cell to its pre-edit (empty) label and a single redo brings the value back.
@@ -1982,6 +2103,42 @@ mod tests {
         assert!(events.iter().any(|e| matches!(e, TrameEvent::DataReset)));
         assert!(sync.is_empty(), "buffer drained after delivery");
         assert_eq!(read_cell(&mut b, 0, 0), "shared", "B converges on A's value");
+    }
+
+    /// Two peers sharing a cross-sheet formula converge when one renames the
+    /// target sheet: the reference is bound to the stable `sheet_id` (same id on
+    /// both peers via sync), so both keep computing and reconstruct identical
+    /// formula-bar text (spec section 2.D).
+    #[test]
+    fn cross_sheet_reference_converges_across_peers_on_rename() {
+        let mut a = TrameState::new();
+
+        // A builds the workbook: Sheet2!A1 = 5, Sheet1!B1 = Sheet2!A1 * 2.
+        a.handle_command(TrameCommand::CreateSheet { name: "Sheet2".to_owned() });
+        let s2 = second_sheet_id(&a);
+        a.handle_command(TrameCommand::ActivateSheet { sheet_id: s2.clone() });
+        a.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "5".to_owned() });
+        a.handle_command(TrameCommand::ActivateSheet { sheet_id: "s0".to_owned() });
+        a.handle_command(TrameCommand::SetCellText { row: 0, col: 1, text: "=Sheet2!A1*2".to_owned() });
+
+        // B joins by loading A's snapshot (the real "open shared doc" path, so
+        // both peers share the same op history) and converges on the value.
+        let mut b = TrameState::new();
+        b.import_snapshot(&a.export_snapshot());
+        assert_eq!(read_cell(&mut b, 0, 1), "10", "B resolves the shared sheet_id");
+        assert_eq!(read_raw(&mut b, 0, 1), "=Sheet2!A1*2");
+
+        // B renames the target sheet; A merges B's state (a snapshot carries
+        // B's full history, including the implicit-s0 op each peer mints in
+        // `new()`, which an incremental delta would leave as a dangling dep).
+        b.handle_command(TrameCommand::RenameSheet { sheet_id: s2.clone(), name: "Data".to_owned() });
+        a.apply_remote(&b.export_snapshot());
+
+        // Both peers keep computing and reconstruct the same new label.
+        assert_eq!(read_cell(&mut a, 0, 1), "10");
+        assert_eq!(read_cell(&mut b, 0, 1), "10");
+        assert_eq!(read_raw(&mut a, 0, 1), "=Data!A1*2");
+        assert_eq!(read_raw(&mut b, 0, 1), "=Data!A1*2");
     }
 
     /// The id of the first non-default sheet in the current tab order.
