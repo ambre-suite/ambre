@@ -113,6 +113,62 @@ impl CellEditor {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Selection
+// -----------------------------------------------------------------------------
+
+/// The grid selection (spec sec.8). A single-cell selection has `anchor ==
+/// active`; a multi-cell range (Phase 2) keeps `anchor` fixed and moves `active`.
+///
+/// `active` is the cell the cursor, the inline editor and the formatting
+/// commands target; `anchor` is the opposite corner of the range. Selection is
+/// local view state -- never synced (sec.16).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Selection {
+    /// Fixed corner of the range (where the selection started).
+    pub anchor: (u32, u32),
+    /// Active cell; the cursor / editor / formatting target.
+    pub active: (u32, u32),
+}
+
+impl Default for Selection {
+    fn default() -> Self {
+        Self::single(0, 0)
+    }
+}
+
+impl Selection {
+    /// A selection collapsed to a single cell (`anchor == active`).
+    pub fn single(row: u32, col: u32) -> Self {
+        Self { anchor: (row, col), active: (row, col) }
+    }
+
+    /// Move the active corner, keeping the anchor (Phase 2 range extension).
+    #[allow(dead_code)]
+    pub fn extend_to(&mut self, row: u32, col: u32) {
+        self.active = (row, col);
+    }
+
+    /// The active cell (row, col).
+    pub fn active(&self) -> (u32, u32) {
+        self.active
+    }
+
+    /// True if `col` is within the selected column span.
+    #[allow(dead_code)]
+    pub fn contains_col(&self, col: u32) -> bool {
+        let (c1, c2) = (self.anchor.1.min(self.active.1), self.anchor.1.max(self.active.1));
+        col >= c1 && col <= c2
+    }
+
+    /// True if `row` is within the selected row span.
+    #[allow(dead_code)]
+    pub fn contains_row(&self, row: u32) -> bool {
+        let (r1, r2) = (self.anchor.0.min(self.active.0), self.anchor.0.max(self.active.0));
+        row >= r1 && row <= r2
+    }
+}
+
 /// Outcome of a cursor move: the two commands the view forwards to Logic.
 pub struct CursorMove {
     /// Always present -- the new active cell, so formatting toggles retarget.
@@ -132,9 +188,9 @@ pub struct TrameUiState {
     /// Top-left visible column (0-based).
     pub left_col: u32,
 
-    /// Currently selected cell.
-    pub active_row: u32,
-    pub active_col: u32,
+    /// Current selection. Single-cell for now (`anchor == active`); the active
+    /// cell drives the cursor, inline editor and formatting commands (sec.8).
+    pub selection: Selection,
 
     /// Number of full rows visible in the grid area (recomputed on resize).
     pub viewport_rows: u32,
@@ -175,8 +231,7 @@ impl TrameUiState {
         let mut s = Self {
             top_row: 0,
             left_col: 0,
-            active_row: 0,
-            active_col: 0,
+            selection: Selection::single(0, 0),
             viewport_rows: 0,
             viewport_cols: 0,
             canvas_width,
@@ -216,6 +271,26 @@ impl TrameUiState {
     }
 
     // -------------------------------------------------------------------------
+    // Selection
+    // -------------------------------------------------------------------------
+
+    /// The active cell row (the selection's active corner).
+    pub fn active_row(&self) -> u32 {
+        self.selection.active.0
+    }
+
+    /// The active cell column (the selection's active corner).
+    pub fn active_col(&self) -> u32 {
+        self.selection.active.1
+    }
+
+    /// Collapse the selection to a single cell (single-cell selection, sec.8).
+    /// Used on a pointer hit; no clamping -- callers pass valid grid coords.
+    pub fn select(&mut self, row: u32, col: u32) {
+        self.selection = Selection::single(row, col);
+    }
+
+    // -------------------------------------------------------------------------
     // Cursor movement
     // -------------------------------------------------------------------------
 
@@ -227,16 +302,16 @@ impl TrameUiState {
     /// can retarget formatting) plus an optional `ScrollViewport` to fetch newly
     /// exposed cells.
     pub fn move_cursor(&mut self, dr: i32, dc: i32) -> Option<CursorMove> {
-        let new_row = (self.active_row as i64 + dr as i64)
+        let new_row = (self.active_row() as i64 + dr as i64)
             .clamp(0, (TOTAL_ROWS - 1) as i64) as u32;
-        let new_col = (self.active_col as i64 + dc as i64)
+        let new_col = (self.active_col() as i64 + dc as i64)
             .clamp(0, (TOTAL_COLS - 1) as i64) as u32;
 
-        if new_row == self.active_row && new_col == self.active_col {
+        if new_row == self.active_row() && new_col == self.active_col() {
             return None;
         }
-        self.active_row = new_row;
-        self.active_col = new_col;
+        // Keyboard navigation collapses the selection onto the new cell.
+        self.selection = Selection::single(new_row, new_col);
 
         // Scroll viewport so the active cell stays visible. When the active cell
         // is still within the cached range the highlight moves without a Logic
@@ -425,8 +500,26 @@ impl TrameUiState {
 
 #[cfg(test)]
 mod tests {
-    use super::{CellEditor, TrameUiState};
+    use super::{CellEditor, Selection, TrameUiState};
     use crate::{DisplayCell, TrameEvent};
+
+    /// A pointer hit collapses the selection to a single cell (`anchor ==
+    /// active`); keyboard navigation moves the single-cell selection and never
+    /// leaves a stale anchor behind.
+    #[test]
+    fn single_cell_selection_tracks_active() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        assert_eq!(state.selection, Selection::single(0, 0));
+
+        state.select(5, 3);
+        assert_eq!(state.selection, Selection::single(5, 3));
+        assert_eq!((state.active_row(), state.active_col()), (5, 3));
+
+        // Arrow navigation keeps the selection single-cell on the new active cell.
+        state.move_cursor(1, 0).expect("cursor moved");
+        assert_eq!(state.selection, Selection::single(6, 3));
+        assert_eq!(state.selection.anchor, state.selection.active);
+    }
 
     /// A formula cell arriving in a viewport batch keeps its computed result in
     /// `text` for rendering while preserving the formula source in `raw` -- the
