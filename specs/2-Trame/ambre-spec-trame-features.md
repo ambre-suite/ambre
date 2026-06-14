@@ -203,6 +203,19 @@ fn compare_cell_values(a: &CellValue, b: &CellValue) -> std::cmp::Ordering {
 }
 ```
 
+> **Implemented (Epic `E3`) -- diverges from the pseudocode above.** The single-column
+> sort is realized by **rewriting cell contents into fixed row slots**, not by reordering
+> `rows_{sheet}` with `MovableList::mov`. Reason: cells are keyed by the row slot's stable
+> id (`ListItemId`), but Loro reassigns a moved slot's id, which would orphan every cell
+> keyed to it (verified empirically). The slots therefore stay put and each row's
+> values/formatting are written back in sorted order. Because the formula engine is
+> positional (`reseed_engine` recompiles each cell at its current grid position), formula
+> references stay **positional after the sort** -- Excel relative-reference behavior, *not*
+> the `ListItemId`-follow ideal claimed in §8 and `trame-logic §12` (which requires id-based
+> references the positional engine does not yet model). `compare_cell_values` is implemented
+> with an explicit type-rank (`Number < Text < Boolean < Error < Empty`). Emits
+> `TrameEvent::SortComplete` + `DataReset`.
+
 ### Multi-Column Sort
 
 ```rust
@@ -613,8 +626,9 @@ pub enum TrameEvent {
     FilterCleared   { version: u64 },
     FilterViewSaved { view_id: String },
 
-    // Sort
-    SortComplete    { version: u64 },
+    // Sort -- implemented field-less (the accompanying DataReset prompts the
+    // viewport re-fetch; SortComplete is the explicit completion signal).
+    SortComplete,
 
     // Conditional formatting
     CondFormatsUpdated { version: u64 },
@@ -641,10 +655,16 @@ pub enum TrameEvent {
 - Filtered rows are excluded from `DisplayViewport` but **not** from `SUM`, `COUNT`, etc. calculations. To exclude hidden rows, use `SUBTOTAL` (Phase 2).
 - The `is_filtered` flag is added to `DisplayCell` for the UI Thread to manage rendering.
 
-**Sort and DAG:**
-- After a sort, cell `ListItemId`s are unchanged. The DAG and `formula_cache` remain valid.
-- The `SheetIndex` is incrementally updated by `apply_row_order`.
-- Formulas with relative references (`=A1`) resolved to stable `CellRef` are not affected by sort — they still reference the same `ListItemId`.
+**Sort and DAG (as implemented, Epic `E3`):**
+- The sort rewrites cell contents into fixed row slots (see §2), so the engine is fully
+  reseeded afterwards (`after_structural`): the DAG and `formula_cache` are rebuilt from the
+  new layout, not preserved.
+- The `SheetIndex` is unchanged by the sort (the row slots do not move); only the cell
+  values/formatting they hold are reassigned.
+- Formula references are **positional**: a formula's text travels with its row, but it is
+  recompiled at the new grid position, so `=A1` reads whatever is now in A1 (Excel
+  relative-reference behavior). The `ListItemId`-follow ideal would require id-based
+  references, which the positional engine does not model.
 
 **Conditional formatting and dirty:**
 - Conditional formatting rules are re-evaluated after each `compute_dirty_batch` for cells in the viewport.
@@ -665,11 +685,13 @@ pub enum TrameEvent {
 #[test] fn personal_filter_view_not_synced()           { /* no CRDT delta emitted */ }
 #[test] fn concurrent_filters_lww()                    { /* Alice vs Bob filter -> LWW */ }
 
-// Sort
-#[test] fn sort_stable_preserves_equal_rows_order()    { }
+// Sort (implemented, Epic E3 -- see ambre-trame/src/logic.rs tests)
+#[test] fn sort_range_ascending_moves_whole_rows()     { /* row data travels with key col */ }
+#[test] fn sort_range_descending_keeps_header()        { /* has_header pin + reverse order */ }
+#[test] fn sort_range_formulas_stay_positional()       { /* refs positional, no #REF! */ }
+#[test] fn sort_range_noops()                          { /* wrong sheet / already sorted */ }
+// Phase 2:
 #[test] fn sort_multi_column_primary_secondary()        { }
-#[test] fn sort_does_not_invalidate_formula_cache()    { /* ListItemId stable */ }
-#[test] fn sort_broken_ref_after_sort()                { /* no broken ref */ }
 
 // Conditional formatting
 #[test] fn first_matching_rule_wins()                  { /* priority */ }
@@ -701,8 +723,8 @@ pub enum TrameEvent {
 
 **Phase 1 — MVP (with the engine)**
 - [ ] Shared filter: `TrameCommand::ApplyFilter` / `ClearFilter`, `filter_hidden_{sheet}` Loro
-- [ ] Simple sort: `TrameCommand::SortRange` (single column)
-- [ ] Undo/Redo: `TrameCommand::Undo` / `Redo` via `UndoManager` Loro
+- [x] Simple sort: `TrameCommand::SortRange` (single column) *(Epic `E3`: typed sort keys via `engine.evaluated_value` + `compare_cell_values` precedence `Number < Text < Boolean < Error < Empty`; `has_header` pin, ascending/descending. Implemented by **rewriting cell contents** into fixed row slots, not by `MovableList::mov` -- a moved slot's `ListItemId` is reassigned by Loro and would orphan its cells. Consequence: references stay **positional** (Excel relative-ref behavior), not the `ListItemId`-follow ideal of `trame-logic §12`, which needs id-based references the positional engine does not model. Emits `TrameEvent::SortComplete` + `DataReset`. Tests: ascending whole-row move, descending+header, positional formulas, no-op guards.)*
+- [x] Undo/Redo: `TrameCommand::Undo` / `Redo` via `UndoManager` Loro *(delivered under `trame-logic` Phase 1 -- see that section)*
 - [ ] All feature variants are in the `TrameCommand` / `TrameEvent` enums (defined in `ambre-bus`, re-exported by `ambre-trame`; transported in `AppCommand::Trame` / `AppEvent::Trame`)
 - [ ] **Pure** handlers: return `TrameEvent` (display) and/or a `TrameOutcome` (CRDT delta → `SyncCommand::SendUpdate` by the Logic dispatcher) — no direct inter-thread send from the app model (preserves host testability, cf. `ambre-spec-architecture.md §4`)
 

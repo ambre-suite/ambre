@@ -136,6 +136,14 @@ impl FormulaEngine {
         self.formula_cache.borrow().get(&cell).map(|v| v.to_display())
     }
 
+    /// Get the evaluated [`CellValue`] for a cell: the formula result for a
+    /// formula cell, the parsed literal for a plain cell, or `None` for a
+    /// virtual/empty cell. Used by the sort path to key rows on their typed
+    /// value (numbers before text, empties last) rather than display text.
+    pub fn evaluated_value(&self, cell: CellRef) -> Option<CellValue> {
+        self.formula_cache.borrow().get(&cell).cloned()
+    }
+
     /// Whether `cell` has a formula (as opposed to plain text).
     pub fn is_formula_cell(&self, cell: CellRef) -> bool {
         self.bytecode.get(&cell).is_some()

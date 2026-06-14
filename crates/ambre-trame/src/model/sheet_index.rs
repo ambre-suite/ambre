@@ -114,6 +114,12 @@ impl SheetIndex {
         self.col_by_pos.get(pos).copied()
     }
 
+    /// The full materialized row order, position 0..hwm. Used by the sort path
+    /// to compute a row permutation and replay it as `LoroMovableList` moves.
+    pub fn row_ids(&self) -> &[Lid] {
+        &self.row_by_pos
+    }
+
     /// Grid position of a row/column id, if it is materialized. Inverse of
     /// [`resolve`](Self::resolve), used to map a stored cell key back to its
     /// `(row, col)` grid position when reseeding the formula engine.

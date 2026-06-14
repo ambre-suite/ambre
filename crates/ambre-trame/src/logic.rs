@@ -19,6 +19,7 @@ use loro::cursor::Side;
 use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
 
 use crate::formula::{render, CellRef, FormulaCtx, FormulaEngine, NameTarget};
+use crate::formula::types::CellValue;
 use crate::formula::types::Expr;
 use crate::formula::parser::{parse_formula, resolve_refs};
 use crate::model::{Lid, SheetIndex, cell_key, parse_cell_key};
@@ -575,6 +576,18 @@ impl TrameState {
             TrameCommand::RenameSheet { sheet_id, name } => self.rename_sheet(&sheet_id, &name),
             TrameCommand::MoveSheet { sheet_id, to_index } => self.move_sheet(&sheet_id, to_index),
             TrameCommand::DeleteSheet { sheet_id } => self.delete_sheet(&sheet_id),
+            TrameCommand::SortRange {
+                sheet_id,
+                row_start,
+                row_end,
+                col_start,
+                col_end,
+                sort_col,
+                ascending,
+                has_header,
+            } => self.sort_range(
+                &sheet_id, row_start, row_end, col_start, col_end, sort_col, ascending, has_header,
+            ),
         }
     }
 
@@ -1256,6 +1269,138 @@ impl TrameState {
         }
     }
 
+    /// Single-column sort of a row range (`ambre-spec-trame-features.md` §3).
+    ///
+    /// Reorders whole rows of the active sheet by the typed value in column
+    /// `col_start + sort_col`. Cells of a row outside `[col_start..=col_end]`
+    /// travel with it (Google Sheets "sort range").
+    ///
+    /// **Realized by rewriting cell contents, not by moving row list elements.**
+    /// Cells are keyed by the row's stable `ListItemId` (the `rows_{sheet}` slot
+    /// id), but Loro's `MovableList::mov` reassigns a moved slot's id, which would
+    /// orphan every cell keyed to it. So instead the row *slots* stay put and the
+    /// values/formatting are written back in sorted order. The formula engine is
+    /// positional (`reseed_engine` recompiles each cell at its current grid
+    /// position), so a formula's references stay positional after the sort --
+    /// equivalent to Excel relative references, *not* the `ListItemId`-follow
+    /// behavior described in `ambre-spec-trame-logic.md` §12 (that ideal requires
+    /// id-based references, which the positional engine does not yet model). The
+    /// rewrite produces a CRDT delta like any edit; LWW on the cell map resolves
+    /// concurrent sorts deterministically.
+    ///
+    /// Sorting only ever targets the **active sheet** (the UI sends an
+    /// [`ActivateSheet`](TrameCommand::ActivateSheet) before any range op): the
+    /// positional formula cache the sort keys read from is pinned to index 0. A
+    /// command for any other sheet, or an empty/virtual range, is a no-op.
+    #[allow(clippy::too_many_arguments)]
+    fn sort_range(
+        &mut self,
+        sheet_id: &str,
+        row_start: u32,
+        row_end: u32,
+        col_start: u32,
+        col_end: u32,
+        sort_col: u32,
+        ascending: bool,
+        has_header: bool,
+    ) -> TrameOutcome {
+        // Only the active sheet has its values positioned in the engine cache.
+        if sheet_id != self.active_sheet {
+            return TrameOutcome::display_only(vec![]);
+        }
+        // Clamp the range to the materialized rows; virtual rows carry no cell
+        // data to reorder and no value to sort on.
+        let last = self.index.row_len().saturating_sub(1) as u32;
+        let row_end = row_end.min(last);
+        if col_start + sort_col > col_end || row_start > row_end {
+            return TrameOutcome::display_only(vec![]);
+        }
+        let sort_col_abs = col_start + sort_col;
+        // First sortable position: the header row (if any) stays pinned in place.
+        let sort_start = if has_header { row_start + 1 } else { row_start };
+        if sort_start >= row_end {
+            // Zero or one sortable row: nothing to reorder.
+            return TrameOutcome::display_only(vec![]);
+        }
+
+        // Snapshot each sortable row's full contents (every materialized column,
+        // since whole rows move) keyed by its sort value. `evaluated_value`
+        // returns the formula result or parsed literal; an empty cell sorts as
+        // `Empty` (last).
+        let col_len = self.index.col_len();
+        let cells = self.doc.get_map(cells_map_name(&self.active_sheet));
+        let formats = self.doc.get_map(format_map_name(&self.active_sheet));
+        let mut keyed: Vec<(CellValue, RowSnapshot)> = (sort_start..=row_end)
+            .filter_map(|pos| {
+                let row_lid = self.index.row_id(pos as usize)?;
+                let value = self
+                    .engine
+                    .evaluated_value(CellRef::new(pos, sort_col_abs))
+                    .unwrap_or(CellValue::Empty);
+                let mut snap = RowSnapshot {
+                    values: vec![None; col_len],
+                    formats: vec![None; col_len],
+                };
+                for (c, slot) in snap.values.iter_mut().enumerate() {
+                    let Some(col_lid) = self.index.col_id(c) else { continue };
+                    let key = cell_key(row_lid, col_lid);
+                    if let Some(LoroValue::String(s)) = cells.get(&key).map(|v| v.get_deep_value()) {
+                        *slot = Some(s.to_string());
+                    }
+                    if let Some(LoroValue::I64(m)) = formats.get(&key).map(|v| v.get_deep_value()) {
+                        snap.formats[c] = Some(m);
+                    }
+                }
+                Some((value, snap))
+            })
+            .collect();
+
+        // Remember the pre-sort order to detect an already-sorted no-op.
+        let before: Vec<Vec<Option<String>>> =
+            keyed.iter().map(|(_, s)| s.values.clone()).collect();
+        keyed.sort_by(|(a, _), (b, _)| {
+            let ord = compare_cell_values(a, b);
+            if ascending { ord } else { ord.reverse() }
+        });
+        let after: Vec<&Vec<Option<String>>> =
+            keyed.iter().map(|(_, s)| &s.values).collect();
+        if before.iter().zip(after.iter()).all(|(a, b)| &a == b) {
+            // Stable sort left the data untouched: acknowledge, no CRDT delta.
+            return TrameOutcome::display_only(vec![TrameEvent::SortComplete]);
+        }
+
+        // Write each row's sorted contents back into the fixed slots. A column
+        // that has no value in the source row is cleared in the target.
+        for (offset, (_, snap)) in keyed.iter().enumerate() {
+            let target = sort_start as usize + offset;
+            let Some(row_lid) = self.index.row_id(target) else { continue };
+            for c in 0..col_len {
+                let Some(col_lid) = self.index.col_id(c) else { continue };
+                let key = cell_key(row_lid, col_lid);
+                match &snap.values[c] {
+                    Some(v) => {
+                        let _ = cells.insert(&key, v.as_str());
+                    }
+                    None => {
+                        let _ = cells.delete(&key);
+                    }
+                }
+                match snap.formats[c] {
+                    Some(m) => {
+                        let _ = formats.insert(&key, m);
+                    }
+                    None => {
+                        let _ = formats.delete(&key);
+                    }
+                }
+            }
+        }
+        self.doc.commit();
+        let mut outcome = self.after_structural();
+        outcome.display.push(TrameEvent::SortComplete);
+        outcome
+    }
+
     /// Mirror a cell's current bold/italic state into the CRDT `format` map and
     /// return the incremental delta to broadcast (and persist). A cell with no
     /// formatting is removed from the map so it does not accumulate dead entries.
@@ -1430,6 +1575,39 @@ fn expr_to_name_target(expr: Expr) -> Option<NameTarget> {
         Expr::CellRef(r) => Some(NameTarget::Cell(r)),
         Expr::Range(r) => Some(NameTarget::Range(r)),
         _ => None,
+    }
+}
+
+/// One sortable row's contents, captured before a sort and written back into a
+/// (possibly different) row slot afterwards. Indexed by column position; `None`
+/// means the cell is empty (cleared in the destination). See [`TrameState::sort_range`].
+struct RowSnapshot {
+    values: Vec<Option<String>>,
+    formats: Vec<Option<i64>>,
+}
+
+/// Order two cell values for sorting (`ambre-spec-trame-features.md` §3). Within
+/// a type the natural order applies; across types the precedence is
+/// `Number < Text < Boolean < Error < Empty`, so blanks sink to the bottom and
+/// errors group just above them, matching the spec. `Range` only ever appears on
+/// the VM stack, never in the cache, so it is treated as `Empty` defensively.
+fn compare_cell_values(a: &CellValue, b: &CellValue) -> std::cmp::Ordering {
+    use std::cmp::Ordering::Equal;
+    // Type rank: lower sorts first.
+    fn rank(v: &CellValue) -> u8 {
+        match v {
+            CellValue::Number(_) => 0,
+            CellValue::Text(_) => 1,
+            CellValue::Boolean(_) => 2,
+            CellValue::Error(_) => 3,
+            CellValue::Empty | CellValue::Range(_) => 4,
+        }
+    }
+    match (a, b) {
+        (CellValue::Number(x), CellValue::Number(y)) => x.partial_cmp(y).unwrap_or(Equal),
+        (CellValue::Text(x), CellValue::Text(y)) => x.cmp(y),
+        (CellValue::Boolean(x), CellValue::Boolean(y)) => x.cmp(y),
+        _ => rank(a).cmp(&rank(b)),
     }
 }
 
@@ -2243,6 +2421,109 @@ mod tests {
         }).expect("SheetList emitted");
         assert_eq!(list.1, "s0", "active fell back to the default sheet");
         assert!(!list.0.iter().any(|(id, _)| id == &b), "deleted sheet gone");
+    }
+
+    /// Read column `col` over rows `[0..=row_end]` as display strings.
+    fn read_col(state: &mut TrameState, col: u32, row_end: u32, version: u64) -> Vec<String> {
+        let evts = state.handle_command(TrameCommand::ScrollViewport {
+            version, row_start: 0, row_end, col_start: 0, col_end: col,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
+        (0..=row_end)
+            .map(|r| {
+                cells
+                    .iter()
+                    .find(|c| c.row == r && c.col == col)
+                    .map(|c| c.text.clone())
+                    .unwrap_or_default()
+            })
+            .collect()
+    }
+
+    /// Ascending sort reorders whole rows by the key column; cells in other
+    /// columns of the same row travel with it (stable-id keyed).
+    #[test]
+    fn sort_range_ascending_moves_whole_rows() {
+        let mut state = TrameState::new();
+        // A: 3,1,2  B: "c","a","b" (paired with A so we can check rows move whole)
+        for (r, (a, b)) in [("3", "c"), ("1", "a"), ("2", "b")].iter().enumerate() {
+            state.handle_command(TrameCommand::SetCellText { row: r as u32, col: 0, text: a.to_string() });
+            state.handle_command(TrameCommand::SetCellText { row: r as u32, col: 1, text: b.to_string() });
+        }
+        let evts = state.handle_command(TrameCommand::SortRange {
+            sheet_id: "s0".to_owned(),
+            row_start: 0, row_end: 2, col_start: 0, col_end: 1,
+            sort_col: 0, ascending: true, has_header: false,
+        });
+        assert!(evts.display.iter().any(|e| matches!(e, TrameEvent::SortComplete)));
+        assert!(evts.update.is_some(), "a real reorder broadcasts a delta");
+        assert_eq!(read_col(&mut state, 0, 2, 1), vec!["1", "2", "3"]);
+        assert_eq!(read_col(&mut state, 1, 2, 2), vec!["a", "b", "c"], "row B follows A");
+    }
+
+    /// Descending sort and the `has_header` pin: the first row stays put.
+    #[test]
+    fn sort_range_descending_keeps_header() {
+        let mut state = TrameState::new();
+        for (r, a) in ["Header", "1", "3", "2"].iter().enumerate() {
+            state.handle_command(TrameCommand::SetCellText { row: r as u32, col: 0, text: a.to_string() });
+        }
+        state.handle_command(TrameCommand::SortRange {
+            sheet_id: "s0".to_owned(),
+            row_start: 0, row_end: 3, col_start: 0, col_end: 0,
+            sort_col: 0, ascending: false, has_header: true,
+        });
+        assert_eq!(read_col(&mut state, 0, 3, 1), vec!["Header", "3", "2", "1"]);
+    }
+
+    /// Formula references stay positional after a sort (Excel relative-reference
+    /// behavior): the formula *text* travels with its row, but the engine
+    /// recompiles it at the new grid position, so `=A1*10` always reads whatever
+    /// is now in A1. No `#REF!`, no stale cache.
+    #[test]
+    fn sort_range_formulas_stay_positional() {
+        let mut state = TrameState::new();
+        for (r, a) in ["2", "1"].iter().enumerate() {
+            state.handle_command(TrameCommand::SetCellText { row: r as u32, col: 0, text: a.to_string() });
+            // B = A of the same row, times 10 (row0 -> =A1*10, row1 -> =A2*10).
+            let cell = format!("=A{}*10", r + 1);
+            state.handle_command(TrameCommand::SetCellText { row: r as u32, col: 1, text: cell });
+        }
+        state.handle_command(TrameCommand::SortRange {
+            sheet_id: "s0".to_owned(),
+            row_start: 0, row_end: 1, col_start: 0, col_end: 1,
+            sort_col: 0, ascending: true, has_header: false,
+        });
+        assert_eq!(read_col(&mut state, 0, 1, 1), vec!["1", "2"]);
+        // pos0 now holds text "=A2*10" -> A2 (pos1) = 2 -> 20; pos1 holds "=A1*10"
+        // -> A1 (pos0) = 1 -> 10. References are positional, not value-following.
+        assert_eq!(read_col(&mut state, 1, 1, 2), vec!["20", "10"]);
+    }
+
+    /// A sort targeting a non-active sheet, or an already-sorted range, makes no
+    /// CRDT mutation.
+    #[test]
+    fn sort_range_noops() {
+        let mut state = TrameState::new();
+        for (r, a) in ["1", "2"].iter().enumerate() {
+            state.handle_command(TrameCommand::SetCellText { row: r as u32, col: 0, text: a.to_string() });
+        }
+        // Wrong sheet: ignored.
+        let other = state.handle_command(TrameCommand::SortRange {
+            sheet_id: "s9".to_owned(),
+            row_start: 0, row_end: 1, col_start: 0, col_end: 0,
+            sort_col: 0, ascending: true, has_header: false,
+        });
+        assert!(other.update.is_none());
+        assert!(other.display.is_empty());
+        // Already ascending: acknowledged but no delta.
+        let sorted = state.handle_command(TrameCommand::SortRange {
+            sheet_id: "s0".to_owned(),
+            row_start: 0, row_end: 1, col_start: 0, col_end: 0,
+            sort_col: 0, ascending: true, has_header: false,
+        });
+        assert!(sorted.update.is_none(), "no reorder, no broadcast");
+        assert!(sorted.display.iter().any(|e| matches!(e, TrameEvent::SortComplete)));
     }
 
     #[test]

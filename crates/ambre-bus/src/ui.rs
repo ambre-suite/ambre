@@ -263,6 +263,13 @@ pub enum TrameEvent {
     Error {
         message: String,
     },
+
+    /// A local [`SortRange`](crate::logic::TrameCommand::SortRange) finished
+    /// reordering the rows (`ambre-spec-trame-features.md` §3). The accompanying
+    /// [`DataReset`](Self::DataReset) prompts the UI to re-fetch the viewport with
+    /// the new ordering; this event is the explicit completion signal (e.g. to
+    /// clear a "sorting..." affordance). A no-op sort emits nothing.
+    SortComplete,
 }
 
 /// A single cell ready for display.
