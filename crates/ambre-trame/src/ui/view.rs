@@ -394,6 +394,10 @@ impl TrameView {
         }) {
             tracing::error!("[UI] channel full, edit dropped — retry next frame");
         }
+        // Close the undo group on cell exit so the whole edit is one undo item
+        // (§6.C). Lossless: it must not be dropped, or the group would stay open
+        // until the next command and could absorb a later edit.
+        let _ = self.send_command_lossless(TrameCommand::CommitEdit);
         self.state.set_cell_text(editor.row, editor.col, editor.buffer);
         // Content layer must repaint to show the committed text; overlay too, to
         // drop the edit field.
