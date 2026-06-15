@@ -189,6 +189,18 @@ pub enum TrameCommand {
         text: String,
     },
 
+    /// Close the undo group opened by the cell edit, on cell exit
+    /// (`ambre-spec-trame-ui.md` §6.C, `-logic.md` §8). An interactive edit can
+    /// mutate the `LoroDoc` more than once -- the cell write plus derived
+    /// side-effects such as a filtered-column recompute -- and Loro records one
+    /// `UndoManager` item per commit. The Logic thread groups every mutation of
+    /// the edit into a single undo item and seals that group when this command
+    /// arrives, so the whole cell edit is exactly one undo step (1 cell edit = 1
+    /// undo item). Emitted by the UI right after the committing
+    /// [`SetCellText`](TrameCommand::SetCellText) when leaving the inline editor;
+    /// produces no CRDT delta of its own. A no-op if no edit group is open.
+    CommitEdit,
+
     /// Toggle bold formatting for the active cell (set by
     /// [`SetActiveCell`](TrameCommand::SetActiveCell)).
     ToggleBold,

@@ -512,6 +512,14 @@ impl TrameState {
     /// Execute one command and return its raw outcome, before the central
     /// [`UndoState`](TrameEvent::UndoState) refresh applied by [`handle_command`].
     fn dispatch_command(&mut self, cmd: TrameCommand) -> TrameOutcome {
+        // Seal any still-open interactive edit group before handling the next
+        // command. An edit is grouped across all its commits (cell write plus
+        // derived side-effects such as a filtered-column recompute) and normally
+        // closed by `CommitEdit` on cell exit; this is the fallback boundary when
+        // the UI omits it (e.g. a non-edit command intervenes), so one cell edit
+        // is always exactly one undo item (`-ui.md` §6.C, `-logic.md` §8).
+        // `group_end` is a no-op when no group is open.
+        self.undo_manager.group_end();
         match cmd {
             TrameCommand::SetActiveCell { row, col } => {
                 self.active = (row, col);
@@ -522,11 +530,21 @@ impl TrameState {
                     TrameEvent::ItalicState { enabled: self.italic.contains(&self.active) },
                 ])
             }
+            TrameCommand::CommitEdit => {
+                // Cell exit: the fallback seal at the top of `dispatch_command`
+                // has already closed the edit group, so the whole edit is now one
+                // undo item. No CRDT delta of its own (`-ui.md` §6.C).
+                TrameOutcome::display_only(vec![])
+            }
             TrameCommand::SetCellText { row, col, text } => {
                 tracing::info!(
                     "[Logic] SetCellText row={} col={} text='{:.80}'",
                     row, col, text,
                 );
+                // Open the edit group: the cell write below and any derived
+                // commit (filter recompute) merge into a single undo item, sealed
+                // by the next `CommitEdit` (or the fallback seal above).
+                let _ = self.undo_manager.group_start();
                 if text.is_empty() {
                     // Clearing: only touch the CRDT if the cell was materialized.
                     if let Some((rl, cl)) = self.index.resolve(row as usize, col as usize) {
@@ -2424,6 +2442,38 @@ mod tests {
             Some(TrameEvent::UndoState { can_undo: true, can_redo: false })
         ));
         assert_eq!(read_cell(&mut state, 0, 0), "hello", "redo restores the value");
+    }
+
+    /// A cell edit that also rewrites the active filter's hidden set commits the
+    /// `LoroDoc` twice (the cell write + the filter recompute), yet the edit must
+    /// stay a single undo item (`-ui.md` §6.C). `SetCellText` opens an undo group
+    /// that `CommitEdit` seals on cell exit, so both commits collapse into one
+    /// step: a single `Undo` restores the pre-edit value and the prior hidden set.
+    #[test]
+    fn filtered_column_edit_is_one_undo_item() {
+        let mut state = TrameState::new();
+        seed_col_a(&mut state, &["1", "2", "3"]);
+        // Hide every row whose column-A value is < 3 -> rows 0 and 1 hidden.
+        state.handle_command(TrameCommand::ApplyFilter {
+            sheet_id: "s0".to_owned(),
+            col: 0,
+            kind: FilterKind::Condition { op: FilterOp::Gte, value: "3".to_owned() },
+        });
+        let undo_before = state.undo_manager.undo_count();
+
+        // Edit a filtered cell so the hidden set is recomputed (a second commit),
+        // then exit the editor.
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "9".to_owned() });
+        state.handle_command(TrameCommand::CommitEdit);
+
+        assert_eq!(
+            state.undo_manager.undo_count(),
+            undo_before + 1,
+            "cell write + filter recompute collapse into a single undo item",
+        );
+
+        state.handle_command(TrameCommand::Undo);
+        assert_eq!(read_cell(&mut state, 0, 0), "1", "one undo restores the edited cell");
     }
 
     /// Every mutating command refreshes the Undo/Redo availability so the chrome
