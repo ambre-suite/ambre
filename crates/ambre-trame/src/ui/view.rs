@@ -575,7 +575,14 @@ impl TrameView {
                 let dy_px = -(dr as i32) * ROW_HEIGHT as i32;
                 let dx_px = -(dc as i32) * COL_WIDTH as i32;
                 let w = self.state.canvas_width;
-                let h = self.state.canvas_height;
+                // Bottom edge of the *cell area*, not the full canvas: the
+                // sheet-tab strip (sec.13) occupies [grid_bottom, canvas_height]
+                // and is repainted via the overlay. Computing the scroll strip
+                // with canvas_height would place the entering-row band inside the
+                // tab strip and leave the real bottom cell row (height
+                // TAB_STRIP_HEIGHT) stale after the shift -- the source of the
+                // edge flicker on Arrow/Page navigation.
+                let h = self.state.grid_bottom();
                 // If the scroll exceeds the viewport, nothing useful to shift.
                 let abs_dx = dx_px.unsigned_abs();
                 let abs_dy = dy_px.unsigned_abs();
