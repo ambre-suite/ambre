@@ -278,10 +278,22 @@ fn draw_cell<S: DrawSurface>(
             HAlign::Right  => Alignment::End,
         };
         let fg = cell.style.fg_color.unwrap_or(Color::BLACK);
-        let layout = text_cache.get_or_build(font_cx, &cell.display_text, 11.0, (w - 6.0) as f32, align);
-        let y_off = ((h - layout.height() as f64) / 2.0).max(0.0);
+        // Wrap: constrain to the cell width so Parley breaks lines. No wrap: let the
+        // text overflow into empty right-neighbour cells (Excel behaviour, sec.4.C).
+        let size  = cell.style.size.unwrap_or(11.0);
+        let max_w = if cell.style.wrap { (w - 6.0) as f32 } else { f32::MAX };
+        let layout = text_cache.get_or_build(font_cx, &cell.display_text, size, max_w, align);
+        // Vertical alignment (replaces the hard-coded centring).
+        let y_off = match cell.style.v_align {
+            VAlign::Top    => 0.0,
+            VAlign::Middle => ((h - layout.height() as f64) / 2.0).max(0.0),
+            VAlign::Bottom =>  (h - layout.height() as f64).max(0.0),
+        };
         let brush = Brush::Solid(fg);
-        surface.push_clip(Rect::new(x, y, x + w, y + h));
+        // Clip to the cell, except a non-wrapped overflowing text spills up to the next
+        // non-empty cell (overflow_clip_width scans the viewport row).
+        let clip_w = if cell.style.wrap { w } else { overflow_clip_width(cell, w) };
+        surface.push_clip(Rect::new(x, y, x + clip_w, y + h));
         for line in layout.lines() {
             for item in line.items() {
                 let PositionedLayoutItem::GlyphRun(run) = item else { continue };
@@ -293,9 +305,19 @@ fn draw_cell<S: DrawSurface>(
         surface.pop_clip();
     }
 
-    // Custom borders, error indicator: TODO (fill_path via lyon)
+    // Custom borders (cell.style.border via fill_path/lyon), error indicator: TODO
 }
 ```
+
+> **Wrap / vertical alignment / overflow (MVP):** `CellStyle.wrap` and `CellStyle.v_align`
+> are honoured above. `wrap` rows may need a taller `row_height` -- the Logic thread returns
+> the measured height in `DisplayViewport.row_heights`; the UI does not remeasure.
+>
+> **Decision (overflow vs ellipsis):** a non-wrapped value that exceeds its column spills
+> over **empty** right-neighbour cells (`overflow_clip_width` extends the clip up to the
+> first non-empty cell in the viewport row), matching Excel/Sheets. If the neighbour is
+> non-empty the text is clipped at the cell edge (no ellipsis in MVP). Borders/fills are
+> still clipped to the owning cell.
 
 ### B. Headers (Columns A, B, C... / Rows 1, 2, 3...)
 
@@ -571,6 +593,133 @@ fn apply_filter_from_popover(&mut self, sheet_id: SheetId, col: u32, p: &FilterP
 
 > **Personal filter views, multi-column sort, conditional formatting, validation** stay
 > in Phase 2 (`-features` roadmap). Only the shared filter and single-column sort are MVP.
+
+### E. Clipboard (Copy / Cut / Paste) -- MVP
+
+Copy/cut read the selected range **locally** from `current_viewport` (UI cache); paste of a
+range goes through the Logic thread, which reindexes relative formulas and applies styles
+(the UI holds no document data beyond the viewport, sec.16).
+
+```rust
+// Ctrl+C / Ctrl+X -- serialise the selection from the viewport cache.
+fn on_copy(&mut self, cut: bool) {
+    let payload = self.build_clipboard_payload();   // ClipboardPayload: cells (raw + CellStyle), relative coords
+    self.clipboard_anchor = Some(self.ui_state.selection.bounds());  // for marching-ants
+    self.cut_pending = cut;
+    // web-sys clipboard: postcard payload (internal) + tab-separated text (OS interop).
+    write_clipboard(&payload, &payload.to_tsv());
+}
+
+// Ctrl+V -- paste at the active cell. Reindexing happens in the Logic thread.
+fn on_paste(&mut self) {
+    let payload = read_clipboard();                  // internal payload, else parse OS TSV
+    let (row, col) = self.ui_state.selection.active();
+    self.logic_tx.send(TrameCommand::PasteRange {
+        version: self.next_version(), sheet_id: self.ui_state.active_sheet,
+        target_row: row, target_col: col, payload,
+    });
+    if self.cut_pending {
+        // Clear the source range after a cut (empty SetCellText, like Delete).
+        self.clear_range(self.clipboard_anchor.take());
+        self.cut_pending = false;
+    }
+}
+```
+
+Keyboard: add Ctrl+C / Ctrl+X / Ctrl+V to `on_key_down` (sec.5.A). Context menu: add
+`Copy`, `Cut`, `Paste` to `ContextMenuItem` (sec.5.C). Render: animated marching-ants
+(dashed `stroke_rect`) around `clipboard_anchor` until Escape or the next copy.
+A `PasteRejected` event (protected range) surfaces a toast.
+
+### F. Autofill (Fill Handle) -- MVP
+
+A small blue square is drawn at the bottom-right of the selection. Dragging it extends the
+selection to a destination range and emits `FillRange`; the Logic thread chooses `Series`
+(detected numeric/date pattern) or `Copy`.
+
+```rust
+fn on_fill_handle_drag_end(&mut self, dest: (u32, u32)) {
+    let src  = self.ui_state.selection.bounds();
+    let dest = self.extend_bounds(src, dest);   // src + dragged extent
+    self.logic_tx.send(TrameCommand::FillRange {
+        version: self.next_version(), sheet_id: self.ui_state.active_sheet,
+        src: src.into(), dest: dest.into(), mode: FillMode::Auto,  // Logic picks Copy vs Series
+    });
+}
+```
+Hit-testing the handle uses a ~6px square at the selection's bottom-right corner; cursor
+switches to a crosshair on hover.
+
+### G. Find & Replace -- MVP
+
+`Ctrl+F` / `Ctrl+H` open a `DrawSurface` panel (no DOM, sec.17). Because the UI cache only
+covers the viewport (sec.16), the search runs in the Logic thread: `FindNext` returns the
+next match to scroll to; `ReplaceAll` mutates and returns the count.
+
+```rust
+fn on_find_next(&mut self, p: &FindPanel) {
+    let (row, col) = self.ui_state.selection.active();
+    self.logic_tx.send(TrameCommand::FindNext {
+        sheet_id: self.ui_state.active_sheet, from: CellRef { row, col },
+        find: p.query.clone(), match_case: p.match_case, whole_cell: p.whole_cell,
+    });
+    // FindResult { matches, active } -> highlight visible matches, scroll to active.
+}
+
+fn on_replace_all(&mut self, p: &FindPanel) {
+    self.logic_tx.send(TrameCommand::ReplaceAll {
+        version: self.next_version(),
+        scope: if p.all_sheets { Scope::Workbook } else { Scope::Sheet(self.ui_state.active_sheet) },
+        find: p.query.clone(), replace: p.replacement.clone(),
+        match_case: p.match_case, whole_cell: p.whole_cell, in_formulas: p.in_formulas,
+    });
+    // ReplaceDone { replaced } -> toast "N replaced".
+}
+```
+
+---
+
+## 5bis. TOOLBAR (MANUAL FORMATTING)
+
+The formatting toolbar is a `DrawSurface` overlay (no DOM, sec.17) pinned above the formula
+bar (sec.6). Every control emits `TrameCommand::SetCellStyle { range, patch }` over the
+current selection; control state (e.g. the bold toggle) is read from the **active cell's**
+`CellStyle` in `current_viewport`. Styles are document mutations (LoroDoc, synchronised --
+sec.16), unlike freeze/selection which are local.
+
+```rust
+pub enum ToolbarAction {
+    Bold, Italic, Underline,                 // toggles
+    Font(String), Size(f32),
+    TextColor(Color), FillColor(Color),
+    AlignH(HAlign), AlignV(VAlign),          // horizontal AND vertical
+    NumberFmt(NumberFormat),                  // General / Number / Currency / Percent / Scientific / Fraction / Date / Time / Text / Custom
+    IncDecimals(i8),                          // +/- decimal places on the active fmt
+    Wrap(bool),
+    Border(BorderPreset),                     // None | Outline | All | Bottom | ...
+    Merge,                                     // reuses MergeCells (sec.5.C)
+}
+
+fn on_toolbar_action(&mut self, action: ToolbarAction) {
+    let range = self.ui_state.selection.bounds().into();
+    let patch = match action {
+        ToolbarAction::Bold       => StylePatch { bold: Some(!self.active_style().bold), ..Default::default() },
+        ToolbarAction::AlignV(v)  => StylePatch { v_align: Some(v), ..Default::default() },
+        ToolbarAction::NumberFmt(f)=> StylePatch { fmt: Some(f), ..Default::default() },
+        ToolbarAction::Wrap(w)    => StylePatch { wrap: Some(w), ..Default::default() },
+        // ... one field per control
+        ToolbarAction::Merge      => return self.merge_selection(),  // existing path
+        _ => self.patch_for(action),
+    };
+    self.logic_tx.send(TrameCommand::SetCellStyle {
+        version: self.next_version(), sheet_id: self.ui_state.active_sheet, range, patch,
+    });
+    // StyleApplied { version } refreshes the viewport (display_text reformatted by Logic).
+}
+```
+
+Color pickers and the number-format / border menus are small `DrawSurface` popovers anchored
+under their toolbar button (same overlay pattern as the filter popover, sec.5.D).
 
 ---
 
@@ -1087,6 +1236,33 @@ fn on_sheet_tab_drag_drop(&mut self, sheet_id: SheetId, to_index: u32) {
 
 ---
 
+## 13bis. STATUS BAR (SELECTION AGGREGATES)
+
+A thin band above the sheet-tab strip (sec.13) shows aggregates of the current selection,
+like Excel/Sheets (Sum / Average / Count). The selection can exceed the viewport, so the
+**Logic thread computes** the aggregates -- the UI cannot, holding only the visible cells
+(sec.16). On each non-trivial selection change the UI requests them; for a single cell it
+shows nothing.
+
+```rust
+fn on_selection_changed(&mut self) {
+    let sel = self.ui_state.selection;
+    if sel.is_single() { self.status_stats = None; return; }
+    self.logic_tx.send(TrameCommand::RequestSelectionStats {
+        sheet_id: self.ui_state.active_sheet, range: sel.bounds().into(),
+    });
+    // SelectionStats { sum, avg, count, count_num, min, max } -> cache + redraw.
+}
+
+fn draw_status_bar(&mut self) {
+    let Some(s) = &self.status_stats else { return };
+    // e.g. "Sum: 1 234   Avg: 205.7   Count: 6"  (count_num drives Sum/Avg visibility)
+    // DrawSurface fill_rect band + right-aligned draw_glyphs.
+}
+```
+
+---
+
 ## 14. QUALITY & TESTABILITY
 
 UI tests are run with `wasm-bindgen-test` in a headless browser (Chrome via `wasm-pack test --headless`).
@@ -1192,7 +1368,8 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 - [x] UI-only layers on top of shared rendering: scroll offset, dirty opacity, error indicators
 - [x] Column/row headers (via `ambre_trame::render::draw_col_headers_on<S>` / `draw_row_headers_on<S>`, wired in `ui::renderer::draw_overlay`)
 - [x] Single-cell selection *(via `ui::grid::Selection` -- `anchor == active`; click `select()` / arrow nav, active border + header tint in `draw_overlay`)*
-- [x] Inline editor *(delivered under `CHROME P2` -- Trame WYSIWYG cell)*; [ ] formula bar
+- [x] Inline editor *(delivered under `CHROME P2` -- Trame WYSIWYG cell)*;
+- [ ] Formula bar
 - [x] Sheet tabs + full lifecycle (create via "+", rename via double-click, delete/rename via tab context menu, reorder via drag) -> `CreateSheet` / `RenameSheet` / `DeleteSheet` / `MoveSheet` (sec.13) *(bottom strip in `ui::renderer::draw_sheet_tabs`; input + `SheetList` dispatch in `ui::view`; strip hydrated on the first `ScrollViewport`)*
 - [x] Keyboard navigation (Arrows, Page Up, Page Down, Tab/Shift+Tab, Enter/Shift+Enter, Delete/Backspace, End, Home, Ctrl+End, Ctrl+Home) *(nav-mode dispatch in `ui::view`; absolute jumps via `TrameUiState::move_to` + cache-scan helpers `last_content_col`/`last_content_cell` for End/Ctrl+End -- UI-thread cache is the only used-range view, sec.16; Delete/Backspace clear via empty `SetCellText`; F2 opens the editor)*
 - [x] `CommitEdit` on cell exit (closes the undo group -- 1 cell edit = 1 undo item, sec.6.C)
@@ -1200,7 +1377,13 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 - [ ] Cell merge rendering (`DisplayCell.is_merged` / `merge_span`) + `MergeRejected` / `MergeConflictDetected` handling (sec.2)
 - [ ] Single-column shared sort (`SortRange` from the context menu, sec.5.C) + `SortComplete` dispatch
 - [ ] Shared filter: filter popover (`ApplyFilter` / `ClearFilter`, sec.5.D) + funnel badge + `FilterApplied` / `FilterCleared` dispatch
-- [ ] `on_logic_message` wiring: full `TrameEvent` dispatch (ViewportData, EditAck, FormulaError, SheetList, MergeRejected, MergeConflictDetected, FilterApplied, FilterCleared, SortComplete, ValidationError, UndoState, ImportProgress, ExportComplete)
+- [ ] Formatting toolbar (sec.5bis): bold/italic/underline, font+size, text+fill color, H/V alignment, number format (text/number/currency/percent/scientific/fraction/date/time/custom + decimals), borders, wrap -> `SetCellStyle` + `StylePatch`; `StyleApplied` dispatch
+- [ ] Clipboard (sec.5.E): copy/cut local from the viewport, paste via `PasteRange` (Logic reindexes formulas+styles), marching-ants, Ctrl+C/X/V + context-menu entries; `PasteRejected` toast
+- [ ] Autofill / fill handle (sec.5.F): drag -> `FillRange` (Copy | Series)
+- [ ] Find & replace panel (sec.5.G): Ctrl+F / Ctrl+H -> `FindNext` / `ReplaceAll`; `FindResult` / `ReplaceDone` dispatch
+- [ ] Cell wrap + vertical alignment + empty-neighbour overflow rendering (sec.4.A/4.C)
+- [ ] Status bar (sec.13bis): selection aggregates via `RequestSelectionStats` -> `SelectionStats`
+- [ ] `on_logic_message` wiring: full `TrameEvent` dispatch (ViewportData, EditAck, FormulaError, SheetList, MergeRejected, MergeConflictDetected, FilterApplied, FilterCleared, SortComplete, StyleApplied, PasteRejected, FindResult, ReplaceDone, SelectionStats, ValidationError, UndoState, ImportProgress, ExportComplete)
 
 **Phase 2 — V1**
 - [ ] Multi-cell selection

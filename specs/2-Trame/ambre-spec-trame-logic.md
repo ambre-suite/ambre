@@ -132,7 +132,7 @@ LoroDoc
 ├── "merges_{sheet_id}" (LoroMap)     → {"{row_uid}:{col_uid}": "{row_uid_end}:{col_uid_end}"}
 │
 ├── "styles" (LoroMap)                → shared styles
-│   └── "style_007" (LoroMap)         → {bold, italic, fg, bg, fmt, halign, border}
+│   └── "style_007" (LoroMap)         → {bold, italic, underline, font, size, fg, bg, fmt, halign, valign, wrap, border}
 │
 ├── "named_ranges" (LoroMap)          → {"TOTAL": {sheet_id, range}}
 ├── "media" (LoroMap)                 → {hash_blake2b: {dims, anchor, mime}}
@@ -1104,6 +1104,66 @@ pub struct DisplayCell {
     pub style:        CellStyle,
 }
 
+/// Resolved cell style sent to the UI thread (projection of the "styles" LoroMap).
+/// The UI renders it; it never edits it directly -- every change goes through
+/// `TrameCommand::SetCellStyle`. The `fmt` choice drives `display_text` formatting,
+/// computed 100% in the Logic thread (the UI computes nothing).
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub struct CellStyle {
+    pub bold:      bool,
+    pub italic:    bool,
+    pub underline: bool,
+    pub font:      Option<String>,    // None = default family
+    pub size:      Option<f32>,       // None = default 11.0
+    pub fg_color:  Option<Color>,
+    pub bg_color:  Option<Color>,
+    pub fmt:       NumberFormat,
+    pub h_align:   HAlign,            // Auto | Left | Center | Right
+    pub v_align:   VAlign,            // Top | Middle | Bottom
+    pub wrap:      bool,             // automatic line wrapping
+    pub border:    Borders,
+}
+
+/// Number/value display format. The value -> `display_text` conversion is done in the
+/// Logic thread. The UI only *selects* the format (toolbar) via `SetCellStyle`.
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub enum NumberFormat {
+    General,
+    Number     { decimals: u8, thousands: bool },
+    Currency   { decimals: u8, code: CurrencyCode },   // EUR, USD, GBP, ...
+    Percent    { decimals: u8 },
+    Scientific { decimals: u8 },
+    Fraction   { denom: FractionDenom },   // Halves | Quarters | Eighths | upto N significant digits
+    Date(DatePattern),    // Iso | LocaleShort | LocaleLong
+    Time(TimePattern),    // Hm | Hms
+    Text,                 // force raw text, no numeric/date auto-cast
+    Custom(String),       // Excel-style format code, e.g. "#,##0.00;[Red](#,##0.00)"
+}
+// "Special" (zip code, phone, SSN) is locale-specific and is NOT a distinct primitive:
+// it is expressed via `Custom(..)` patterns rather than a hardcoded, US-centric variant.
+
+/// Partial style update -- only `Some(..)` fields are applied. A toolbar control
+/// sets a single field at a time (e.g. toggle bold -> patch { bold: Some(true), .. }).
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct StylePatch {
+    pub bold:      Option<bool>,
+    pub italic:    Option<bool>,
+    pub underline: Option<bool>,
+    pub font:      Option<Option<String>>,
+    pub size:      Option<Option<f32>>,
+    pub fg_color:  Option<Option<Color>>,
+    pub bg_color:  Option<Option<Color>>,
+    pub fmt:       Option<NumberFormat>,
+    pub h_align:   Option<HAlign>,
+    pub v_align:   Option<VAlign>,
+    pub wrap:      Option<bool>,
+    pub border:    Option<Borders>,
+}
+
+// `Color`, `HAlign`, `VAlign`, `Borders`, `CurrencyCode`, `DatePattern`, `TimePattern`, `FractionDenom`
+// are defined in `ambre-trame/src/style.rs` and implement Serialize/Deserialize so
+// they travel in `DisplayCell` / `TrameCommand` via postcard.
+
 /// Single source of truth -- UI thread -> Logic thread.
 /// All feature and interop variants are consolidated here.
 /// The `trame-features` and `trame-interop` specs document the behavior
@@ -1133,6 +1193,28 @@ pub enum TrameCommand {
     MergeCells   { version: u64, sheet_id: SheetId,
                    row: u32, col: u32, row_span: u32, col_span: u32 },
     UnmergeCells { version: u64, sheet_id: SheetId, row: u32, col: u32 },
+
+    // -- Format & Clipboard (trame-ui sec.5bis/6bis) ----------------------
+    // Manual cell styling. Partial patch: only Some(..) fields applied.
+    SetCellStyle { version: u64, sheet_id: SheetId, range: CellRange, patch: StylePatch },
+    // Paste a range: relative-formula reindexing + styles done in the Logic thread
+    // (the UI cache is viewport-only, sec.16).
+    PasteRange   { version: u64, sheet_id: SheetId, target_row: u32, target_col: u32,
+                   payload: ClipboardPayload },
+    // Fill handle (autofill). mode = Copy (replicate) | Series (increment detected pattern).
+    FillRange    { version: u64, sheet_id: SheetId, src: CellRange, dest: CellRange,
+                   mode: FillMode },
+
+    // -- Find & Replace (trame-ui sec.5ter) -------------------------------
+    // Whole-document scope: the UI sees only the viewport, so the Logic thread scans.
+    ReplaceAll   { version: u64, scope: Scope, find: String, replace: String,
+                   match_case: bool, whole_cell: bool, in_formulas: bool },
+    FindNext     { sheet_id: SheetId, from: CellRef, find: String,
+                   match_case: bool, whole_cell: bool },
+
+    // -- Selection stats (status bar) -------------------------------------
+    // Selection may exceed the viewport -> aggregates computed in the Logic thread.
+    RequestSelectionStats { sheet_id: SheetId, range: CellRange },
 
     // -- Sheets (lifecycle, see §2.D) -------------------------------------
     CreateSheet  { name: String },
@@ -1195,8 +1277,9 @@ pub enum TrameCommand {
 /// `ValidationRule` types are defined in the corresponding `ambre-trame/src/features/` modules
 /// (filters, conditional formatting, data validation). `CsvRange`, `PdfPageSetup`,
 /// `ImportWarning` types are defined in `ambre-trame/src/interop/`. `SortKey` is defined in
-/// `ambre-trame/src/features/sort.rs`. All these types implement `Serialize`/`Deserialize`
-/// to travel in `TrameCommand` via postcard.
+/// `ambre-trame/src/features/sort.rs`. `StylePatch`, `NumberFormat`, `CellRange`, `ClipboardPayload`,
+/// `FillMode`, `Scope` are defined in `ambre-trame/src/style.rs` / `ambre-trame/src/clipboard.rs`.
+/// All these types implement `Serialize`/`Deserialize` to travel in `TrameCommand` via postcard.
 
 /// Single source of truth -- Logic thread -> UI thread.
 /// All feature and interop variants are consolidated here.
@@ -1223,6 +1306,19 @@ pub enum TrameEvent {
 
     // -- Formatage conditionnel (trame-features) -------------------------
     CondFormatsUpdated { version: u64 },
+
+    // -- Format manuel / clipboard / autofill (trame-ui) -----------------
+    // The viewport is refreshed alongside; these just unblock UI busy flags / toasts.
+    StyleApplied     { version: u64 },
+    PasteRejected    { version: u64, reason: String },   // e.g. paste over a protected range
+
+    // -- Find & Replace (trame-ui) ---------------------------------------
+    FindResult       { matches: Vec<CellRef>, active: Option<CellRef> },
+    ReplaceDone      { version: u64, replaced: u32 },
+
+    // -- Selection stats (status bar) ------------------------------------
+    SelectionStats   { sum: f64, avg: f64, count: u32, count_num: u32,
+                       min: f64, max: f64 },
 
     // -- Undo / Redo (trame-features) ------------------------------------
     UndoState        { can_undo: bool, can_redo: bool },
@@ -1460,6 +1556,11 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 - [x] `MockSyncHandle` for controller tests (via `CommandSink`) *(`ambre-bus::CommandSink` seam + `ambre-trame::test_support::MockSyncHandle`: captures emitted `SyncCommand`s and relays CRDT deltas peer-to-peer. Production forwards `TrameOutcome` payloads from `ambre-logic`; the test seam mirrors that exact relay via `MockSyncHandle::absorb`, so tests drive the same `SyncCommand`s the dispatcher emits) (Epic `E3`)*
 - [x] Undo/Redo via Loro `UndoManager` (`TrameCommand::Undo/Redo` -> `undo_manager.undo()/redo()` + full derived-cache reseed via `after_structural` + `flush_delta` broadcast of the inverse ops; `TrameEvent::UndoState { can_undo, can_redo }`; chrome `UNDO`/`REDO` commands bound to Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y). Implicit row/column materialization is committed under an excluded origin (`add_exclude_origin_prefix`) so undo reverts only the value and the cell key still resolves to its stable list-element ids on redo *(Epic `E3`)*
 - [x] **Own-uid cell model (§2.A) + id-based engine (§3, §12).** Each `rows_/cols_` element carries a minted `Uid` as its *value* (replacing the Loro cursor id); `SheetIndex` reads values and gained `apply_move_row`. The compiled engine is uid-anchored: positional AST `CellRef`/`RangeDep` are resolved at compile time into `CellId`/`RangeId` over `AxisId { Bound(Uid), Virtual(pos) }` (a reference past the used range stays virtual and reads `Empty`). `SortRange` is a single `mov` permutation that **preserves** the uid-anchored bytecode (no reseed/re-parse) and recomputes, so single-cell references follow the moved data -- the §12 guarantee, proven by `sort_range_formulas_follow_data`. Ranges are positional blocks (`Virtual` endpoints), so `SUM(A1:A3)` over a sorted block stays intact (`sort_range_sum_block_is_stable_under_internal_sort`; uid-bound endpoints would invert -- see §13). Other structural ops still reset+reseed (re-bind against the converged order). Landed in stages, 164 tests green. *(Epic `E3`)*
+- [ ] Manual cell formatting (`TrameCommand::SetCellStyle` + `StylePatch`): write the extended `CellStyle` (bold/italic/underline, font/size, fg/bg, `NumberFormat`, h/v align, wrap, borders) into the `styles` LoroMap; value -> `display_text` formatting per `NumberFormat` done in the Logic thread. Emits `StyleApplied`. *(Epic `E3`)*
+- [ ] Clipboard paste (`TrameCommand::PasteRange` + `ClipboardPayload`): relative-formula reindexing + style application from the anchor; `PasteRejected` on protected range. (Copy/cut stay UI-local.) *(Epic `E3`)*
+- [ ] Autofill (`TrameCommand::FillRange` + `FillMode`): Copy replication or Series increment (numeric/date pattern detection). *(Epic `E3`)*
+- [ ] Find & replace (`ReplaceAll` / `FindNext`): full-document scan (UI cache is viewport-only); `FindResult` / `ReplaceDone`. *(Epic `E3`)*
+- [ ] Selection aggregates (`RequestSelectionStats` -> `SelectionStats`: sum/avg/count/count_num/min/max) for the status bar; computed in the Logic thread since the selection can exceed the viewport. *(Epic `E3`)*
 
 **Phase 2 — Core features (~50 functions)**
 - [x] SUM, AVERAGE, MIN, MAX, COUNT, IF, AND, OR *(plus ABS, COUNTA, CONCATENATE, LEFT, RIGHT, MID, LEN, LOWER, UPPER, NOT, POWER, ROUND, SQRT, TRIM -- 22 implemented)*

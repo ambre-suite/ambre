@@ -94,10 +94,14 @@ editor are done).*
 
 Stories:
 - `trame-logic §14 Phase 1 & 2` — multi-sheet `LoroDoc` + `SheetIndex`; insert/delete rows/columns; cell merges;
-  Undo/Redo (Loro `UndoManager`); complete the function set from 22 to ~50.
+  Undo/Redo (Loro `UndoManager`); complete the function set from 22 to ~50; manual cell formatting
+  (`SetCellStyle` + `NumberFormat`), clipboard paste (`PasteRange`), autofill (`FillRange`),
+  find/replace (`ReplaceAll`/`FindNext`), selection aggregates (`RequestSelectionStats`).
   *(parser / bytecode VM / `DependencyGraph` / cycles / `#REF!` are already done -- see that section.)*
 - `trame-features §10 Phase 1` — shared filter, simple sort, Undo/Redo commands.
 - `trame-ui §18 Phase 1` — sheet tabs, keyboard navigation, formula bar, single-cell selection,
+  formatting toolbar (bold/colors/H+V alignment/number format incl. currency/percent/scientific/fraction/date/time/custom/borders/wrap), copy/cut/paste, autofill,
+  find/replace, cell wrap + vertical alignment + overflow, selection status bar,
   full `on_logic_message` `TrameEvent` dispatch. *(virtual scroll + inline editor already done.)*
 - `trame-interop §10 Phase 1` — CSV import/export. *(basic .xlsx import deferred to `E5`.)*
 
