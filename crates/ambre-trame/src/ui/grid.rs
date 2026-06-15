@@ -22,6 +22,18 @@ pub const COL_WIDTH: f64 = 80.0;
 pub const HEADER_HEIGHT: f64 = 24.0;
 pub const HEADER_WIDTH: f64 = 50.0;
 
+// Sheet-tab strip pinned to the bottom of the canvas (spec sec.13). The grid
+// area stops at `canvas_height - TAB_STRIP_HEIGHT`; the strip hosts the tabs and
+// the trailing "+" button.
+pub const TAB_STRIP_HEIGHT: f64 = 26.0;
+/// Fixed tab slot width (label is truncated to fit). Uniform width keeps tab
+/// hit-testing pure and font-independent, mirroring the uniform grid metrics.
+pub const TAB_WIDTH: f64 = 104.0;
+/// Horizontal gap between adjacent tab slots.
+pub const TAB_GAP: f64 = 2.0;
+/// Width of the trailing "+" (new sheet) button.
+pub const ADD_BTN_WIDTH: f64 = 26.0;
+
 // Pre-fetch padding around the visible area.
 const PADDING_ROWS: u32 = 20;
 const PADDING_COLS: u32 = 5;
@@ -169,6 +181,70 @@ impl Selection {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Sheet tabs (spec sec.13)
+// -----------------------------------------------------------------------------
+
+/// An in-progress tab rename, seeded with the sheet's current name. Reuses the
+/// same caret/insert/backspace machinery as the cell editor; `sheet_id` pins the
+/// target so a concurrent reorder cannot misdirect the commit.
+#[derive(Clone)]
+pub struct TabRename {
+    pub sheet_id: String,
+    pub editor: CellEditor,
+}
+
+/// An open per-tab context menu (`{ Rename, Delete }`, spec sec.13), anchored by
+/// its top-left corner in physical pixels.
+#[derive(Clone)]
+pub struct TabMenu {
+    pub sheet_id: String,
+    pub x: f64,
+    pub y: f64,
+}
+
+/// The two entries of the tab context menu.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TabMenuItem {
+    Rename,
+    Delete,
+}
+
+/// Menu geometry (physical px). Two stacked items.
+pub const TAB_MENU_WIDTH: f64 = 120.0;
+pub const TAB_MENU_ITEM_HEIGHT: f64 = 24.0;
+
+impl TabMenu {
+    /// Rect of menu item `i` (0 = Rename, 1 = Delete).
+    pub fn item_rect(&self, i: usize) -> (f64, f64, f64, f64) {
+        let y = self.y + i as f64 * TAB_MENU_ITEM_HEIGHT;
+        (self.x, y, TAB_MENU_WIDTH, TAB_MENU_ITEM_HEIGHT)
+    }
+
+    /// The menu item at physical pixel `(x, y)`, or `None` if outside the menu.
+    pub fn item_at(&self, x: f64, y: f64) -> Option<TabMenuItem> {
+        if x < self.x || x >= self.x + TAB_MENU_WIDTH || y < self.y {
+            return None;
+        }
+        match ((y - self.y) / TAB_MENU_ITEM_HEIGHT) as usize {
+            0 => Some(TabMenuItem::Rename),
+            1 => Some(TabMenuItem::Delete),
+            _ => None,
+        }
+    }
+}
+
+/// An in-progress tab drag-reorder. Tracks the grabbed sheet and the live
+/// pointer x so the renderer can show the dragged tab follow the cursor; `moved`
+/// gates whether the release commits a `MoveSheet` (vs a plain activate-click).
+#[derive(Clone)]
+pub struct TabDrag {
+    pub sheet_id: String,
+    pub grab_x: f64,
+    pub cur_x: f64,
+    pub moved: bool,
+}
+
 /// Outcome of a cursor move: the two commands the view forwards to Logic.
 pub struct CursorMove {
     /// Always present -- the new active cell, so formatting toggles retarget.
@@ -222,6 +298,13 @@ pub struct TrameUiState {
     /// Version of the last accepted `ViewportData` response (anti-flicker).
     pub accepted_version: u64,
 
+    /// The workbook's sheets in tab-strip order: `(sheet_id, display_name)`.
+    /// Mirrors `TrameEvent::SheetList`; empty until the first one arrives.
+    pub sheets: Vec<(String, String)>,
+    /// Id of the sheet currently shown (the highlighted tab). Empty until the
+    /// first `SheetList`.
+    pub active_sheet: String,
+
     /// Monotonically increasing version counter for outgoing `ScrollViewport` commands.
     next_version: u64,
 }
@@ -240,6 +323,8 @@ impl TrameUiState {
             dirty_cells: HashSet::new(),
             formula_errors: HashMap::new(),
             accepted_version: 0,
+            sheets: Vec::new(),
+            active_sheet: String::new(),
             next_version: 1,
         };
         s.recompute_viewport_dims();
@@ -258,8 +343,14 @@ impl TrameUiState {
         self.recompute_viewport_dims();
     }
 
+    /// Bottom edge (physical px) of the scrollable grid area: the canvas height
+    /// minus the sheet-tab strip pinned along the bottom (sec.13).
+    pub fn grid_bottom(&self) -> f64 {
+        (self.canvas_height - TAB_STRIP_HEIGHT).max(HEADER_HEIGHT)
+    }
+
     fn recompute_viewport_dims(&mut self) {
-        let grid_h = (self.canvas_height - HEADER_HEIGHT).max(0.0);
+        let grid_h = (self.grid_bottom() - HEADER_HEIGHT).max(0.0);
         let grid_w = (self.canvas_width - HEADER_WIDTH).max(0.0);
         // ceil() already accounts for the partially-visible row/col at the edge.
         // No +1 needed: viewport_rows is the count of rows that start within the
@@ -457,6 +548,63 @@ impl TrameUiState {
     }
 
     // -------------------------------------------------------------------------
+    // Sheet tabs (spec sec.13)
+    // -------------------------------------------------------------------------
+
+    /// Replace the tab strip from a `TrameEvent::SheetList`.
+    pub fn on_sheet_list(&mut self, sheets: Vec<(String, String)>, active: String) {
+        self.sheets = sheets;
+        self.active_sheet = active;
+    }
+
+    /// True if physical `y` falls within the bottom tab strip.
+    pub fn in_tab_strip(&self, y: f64) -> bool {
+        y >= self.grid_bottom() && y < self.canvas_height
+    }
+
+    /// Pixel x-range `(x0, x1)` of tab slot `index` (no horizontal tab scroll in
+    /// the MVP).
+    pub fn tab_slot_x(&self, index: usize) -> (f64, f64) {
+        let x0 = index as f64 * (TAB_WIDTH + TAB_GAP);
+        (x0, x0 + TAB_WIDTH)
+    }
+
+    /// Pixel x-range of the trailing "+" button, just past the last tab.
+    pub fn add_button_x(&self) -> (f64, f64) {
+        let x0 = self.sheets.len() as f64 * (TAB_WIDTH + TAB_GAP);
+        (x0, x0 + ADD_BTN_WIDTH)
+    }
+
+    /// Index of the tab at physical pixel `(x, y)`, or `None` if `(x, y)` is not
+    /// over a tab (header strip required; "+" button excluded).
+    pub fn tab_at(&self, x: f64, y: f64) -> Option<usize> {
+        if !self.in_tab_strip(y) {
+            return None;
+        }
+        (0..self.sheets.len()).find(|&i| {
+            let (x0, x1) = self.tab_slot_x(i);
+            x >= x0 && x < x1
+        })
+    }
+
+    /// True if `(x, y)` hits the trailing "+" button.
+    pub fn add_button_at(&self, x: f64, y: f64) -> bool {
+        if !self.in_tab_strip(y) {
+            return false;
+        }
+        let (x0, x1) = self.add_button_x();
+        x >= x0 && x < x1
+    }
+
+    /// The drop index a tab dragged to physical x `cur_x` would land at, clamped
+    /// to the strip. Slots are uniform, so the target is the slot the tab's left
+    /// edge currently overlaps.
+    pub fn drop_index_at(&self, cur_x: f64) -> u32 {
+        let slot = (cur_x / (TAB_WIDTH + TAB_GAP)).floor().max(0.0) as u32;
+        slot.min(self.sheets.len().saturating_sub(1) as u32)
+    }
+
+    // -------------------------------------------------------------------------
     // Coordinate helpers
     // -------------------------------------------------------------------------
 
@@ -466,7 +614,7 @@ impl TrameUiState {
         if x < HEADER_WIDTH || y < HEADER_HEIGHT {
             return None;
         }
-        if x >= self.canvas_width || y >= self.canvas_height {
+        if x >= self.canvas_width || y >= self.grid_bottom() {
             return None;
         }
         let col = self.left_col + ((x - HEADER_WIDTH) / COL_WIDTH) as u32;
@@ -491,7 +639,7 @@ impl TrameUiState {
         if x + COL_WIDTH <= HEADER_WIDTH || x >= self.canvas_width {
             return None;
         }
-        if y + ROW_HEIGHT <= HEADER_HEIGHT || y >= self.canvas_height {
+        if y + ROW_HEIGHT <= HEADER_HEIGHT || y >= self.grid_bottom() {
             return None;
         }
         Some((x, y, COL_WIDTH, ROW_HEIGHT))
@@ -500,7 +648,7 @@ impl TrameUiState {
 
 #[cfg(test)]
 mod tests {
-    use super::{CellEditor, Selection, TrameUiState};
+    use super::{CellEditor, Selection, TabMenu, TabMenuItem, TrameUiState};
     use crate::{DisplayCell, TrameEvent};
 
     /// A pointer hit collapses the selection to a single cell (`anchor ==
@@ -622,6 +770,108 @@ mod tests {
         e.backspace();
         assert_eq!(e.buffer, "caf");
         assert_eq!(e.caret, 3);
+    }
+
+    /// The tab strip is reserved from the bottom of the canvas: the grid area
+    /// stops above it, and a point inside the strip is not a grid cell.
+    #[test]
+    fn tab_strip_reserves_bottom_of_canvas() {
+        let state = TrameUiState::new(800.0, 600.0);
+        assert_eq!(state.grid_bottom(), 600.0 - super::TAB_STRIP_HEIGHT);
+        // A click in the strip is not over any cell.
+        assert_eq!(state.cell_at(100.0, 590.0), None);
+        assert!(state.in_tab_strip(590.0));
+        assert!(!state.in_tab_strip(100.0));
+    }
+
+    /// `on_sheet_list` mirrors the event, and tab/"+"/drop hit-testing maps pixel
+    /// x to the right slot.
+    #[test]
+    fn tab_hit_testing_maps_pixels_to_slots() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        state.on_sheet_list(
+            vec![("s0".into(), "One".into()), ("s1".into(), "Two".into())],
+            "s0".into(),
+        );
+        assert_eq!(state.active_sheet, "s0");
+
+        let y = state.grid_bottom() + 5.0;
+        // First slot centre -> tab 0; second slot centre -> tab 1.
+        let (x0, x1) = state.tab_slot_x(0);
+        assert_eq!(state.tab_at((x0 + x1) / 2.0, y), Some(0));
+        let (x0, _) = state.tab_slot_x(1);
+        assert_eq!(state.tab_at(x0 + 1.0, y), Some(1));
+
+        // The "+" button sits just past the last tab.
+        let (ax0, _) = state.add_button_x();
+        assert!(state.add_button_at(ax0 + 1.0, y));
+        assert!(!state.add_button_at(ax0 + 1.0, 50.0)); // not in the strip
+
+        // A drag to the first slot drops at index 0; far right clamps to last.
+        assert_eq!(state.drop_index_at(1.0), 0);
+        assert_eq!(state.drop_index_at(5000.0), 1);
+    }
+
+    /// Hit-testing rejects points outside any tab: the gap past the last tab but
+    /// before "+", a y above the strip, and a far-right x are not tabs. The "+"
+    /// button tracks the sheet count, and `on_sheet_list` fully replaces state.
+    #[test]
+    fn tab_hit_testing_rejects_non_tab_points() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        // No sheets yet: nothing is a tab, and "+" sits at the origin.
+        let y = state.grid_bottom() + 5.0;
+        assert_eq!(state.tab_at(10.0, y), None);
+        assert_eq!(state.add_button_x().0, 0.0);
+        assert!(state.add_button_at(2.0, y));
+
+        state.on_sheet_list(
+            vec![("s0".into(), "A".into()), ("s1".into(), "B".into()), ("s2".into(), "C".into())],
+            "s1".into(),
+        );
+        // "+" now follows the third tab; the slot before it is tab 2, not "+".
+        let (ax0, _) = state.add_button_x();
+        assert_eq!(ax0, 3.0 * (super::TAB_WIDTH + super::TAB_GAP));
+        assert_eq!(state.tab_at(state.tab_slot_x(2).0 + 1.0, y), Some(2));
+        assert!(!state.add_button_at(state.tab_slot_x(2).0 + 1.0, y));
+
+        // A point above the strip is never a tab, even at a tab's x.
+        assert_eq!(state.tab_at(state.tab_slot_x(0).0 + 1.0, 10.0), None);
+        // The inter-tab gap (the 2px between slots) is not a tab.
+        assert_eq!(state.tab_at(state.tab_slot_x(0).1 + 0.5, y), None);
+
+        // A fresh list shrinks the strip and re-points the active tab.
+        state.on_sheet_list(vec![("only".into(), "Only".into())], "only".into());
+        assert_eq!(state.sheets.len(), 1);
+        assert_eq!(state.active_sheet, "only");
+        assert_eq!(state.tab_at(state.tab_slot_x(1).0 + 1.0, y), None);
+        // A single sheet: every drag clamps to index 0.
+        assert_eq!(state.drop_index_at(9999.0), 0);
+    }
+
+    /// The tab context menu maps a click to Rename / Delete by row, and rejects
+    /// clicks outside its box (left/right of the width, above/below the items).
+    #[test]
+    fn tab_menu_item_hit_testing() {
+        let menu = TabMenu { sheet_id: "s0".into(), x: 100.0, y: 200.0 };
+        // First row -> Rename, second -> Delete.
+        assert_eq!(menu.item_at(110.0, 200.0 + 1.0), Some(TabMenuItem::Rename));
+        assert_eq!(
+            menu.item_at(110.0, 200.0 + super::TAB_MENU_ITEM_HEIGHT + 1.0),
+            Some(TabMenuItem::Delete),
+        );
+        // Outside the width / above / below the two items.
+        assert_eq!(menu.item_at(99.0, 210.0), None);
+        assert_eq!(menu.item_at(100.0 + super::TAB_MENU_WIDTH + 1.0, 210.0), None);
+        assert_eq!(menu.item_at(110.0, 199.0), None);
+        assert_eq!(menu.item_at(110.0, 200.0 + 2.0 * super::TAB_MENU_ITEM_HEIGHT + 1.0), None);
+    }
+
+    /// On a very short canvas the grid area never inverts: `grid_bottom` floors
+    /// at the top header height.
+    #[test]
+    fn grid_bottom_floors_at_header_on_tiny_canvas() {
+        let state = TrameUiState::new(800.0, 10.0);
+        assert_eq!(state.grid_bottom(), super::HEADER_HEIGHT);
     }
 
     /// The display string folds the IME preview in at the caret; `before_caret`

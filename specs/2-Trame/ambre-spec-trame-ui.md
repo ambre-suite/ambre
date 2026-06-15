@@ -1194,7 +1194,7 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 - [x] Column/row headers (via `ambre_trame::render::draw_col_headers_on<S>` / `draw_row_headers_on<S>`, wired in `ui::renderer::draw_overlay`)
 - [x] Single-cell selection *(via `ui::grid::Selection` -- `anchor == active`; click `select()` / arrow nav, active border + header tint in `draw_overlay`)*
 - [x] Inline editor *(delivered under `CHROME P2` -- Trame WYSIWYG cell)*; [ ] formula bar
-- [ ] Sheet tabs + full lifecycle (create via "+", rename via double-click, delete/rename via tab context menu, reorder via drag) -> `CreateSheet` / `RenameSheet` / `DeleteSheet` / `MoveSheet` (sec.13)
+- [x] Sheet tabs + full lifecycle (create via "+", rename via double-click, delete/rename via tab context menu, reorder via drag) -> `CreateSheet` / `RenameSheet` / `DeleteSheet` / `MoveSheet` (sec.13) *(bottom strip in `ui::renderer::draw_sheet_tabs`; input + `SheetList` dispatch in `ui::view`; strip hydrated on the first `ScrollViewport`)*
 - [ ] Keyboard navigation (arrows, Tab, Enter, Delete)
 - [ ] `CommitEdit` on cell exit (closes the undo group -- 1 cell edit = 1 undo item, sec.6.C)
 - [ ] Grid context menu (right-click, sec.5.C): row/column insert+delete (`InsertRow`/`InsertCol`/`DeleteRow`/`DeleteCol`), merge/unmerge (`MergeCells`/`UnmergeCells`)
