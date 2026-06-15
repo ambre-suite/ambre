@@ -68,6 +68,16 @@ enum ScrollOutcome {
     Edge,
 }
 
+/// Backpressure outcome of a lossless UI->Logic send. Mirrors the two
+/// `flume::TrySendError` variants without carrying the (large) `LogicCommand`
+/// payload, so the `Err` path stays cheap (see `clippy::result_large_err`).
+enum SendError {
+    /// The channel buffer is full; the caller may retry or alert the user.
+    Full,
+    /// The Logic thread is gone; the channel is permanently disconnected.
+    Disconnected,
+}
+
 /// Spreadsheet column label for a 0-based index (0 -> "A", 26 -> "AA"). Used for
 /// the screen-reader cell announcement.
 fn col_label(mut col: u32) -> String {
@@ -274,10 +284,7 @@ impl TrameView {
     /// Lossless: returns the `TrySendError` on `Full` so the caller can decide
     /// whether to retry or alert the user. The UI thread never blocks; backpressure
     /// is surfaced synchronously at the call-site.
-    fn send_command_lossless(
-        &self,
-        cmd: TrameCommand,
-    ) -> Result<(), flume::TrySendError<LogicCommand>> {
+    fn send_command_lossless(&self, cmd: TrameCommand) -> Result<(), SendError> {
         if self.fatal {
             return Ok(());
         }
@@ -285,7 +292,10 @@ impl TrameView {
             document_id: self.document_id,
             command: AppCommand::Trame(cmd),
         };
-        self.to_logic.try_send(msg)
+        self.to_logic.try_send(msg).map_err(|err| match err {
+            flume::TrySendError::Full(_) => SendError::Full,
+            flume::TrySendError::Disconnected(_) => SendError::Disconnected,
+        })
     }
 
     /// Enter the inert fatal state: a worker thread is gone, so no command can
@@ -392,7 +402,7 @@ impl TrameView {
             editor.row, editor.col,
             editor.buffer,
         );
-        if let Err(flume::TrySendError::Full(_)) = self.send_command_lossless(TrameCommand::SetCellText {
+        if let Err(SendError::Full) = self.send_command_lossless(TrameCommand::SetCellText {
             row: editor.row,
             col: editor.col,
             text: editor.buffer.clone(),
@@ -824,7 +834,7 @@ impl TrameView {
                     && d.moved
                 {
                     let to_index = self.state.drop_index_at(d.cur_x);
-                    if let Err(flume::TrySendError::Full(_)) =
+                    if let Err(SendError::Full) =
                         self.send_command_lossless(TrameCommand::MoveSheet { sheet_id: d.sheet_id, to_index })
                     {
                         tracing::error!("Trame: UI->Logic channel full, MoveSheet dropped");
@@ -854,7 +864,7 @@ impl TrameView {
                 Some(true)
             }
             Some(TabMenuItem::Delete) => {
-                if let Err(flume::TrySendError::Full(_)) =
+                if let Err(SendError::Full) =
                     self.send_command_lossless(TrameCommand::DeleteSheet { sheet_id })
                 {
                     tracing::error!("Trame: UI->Logic channel full, DeleteSheet dropped");
@@ -944,7 +954,7 @@ impl TrameView {
         if sheet_id == self.state.active_sheet {
             return;
         }
-        if let Err(flume::TrySendError::Full(_)) =
+        if let Err(SendError::Full) =
             self.send_command_lossless(TrameCommand::ActivateSheet { sheet_id: sheet_id.clone() })
         {
             tracing::error!("Trame: UI->Logic channel full, ActivateSheet dropped");
@@ -962,7 +972,7 @@ impl TrameView {
     /// (the Logic thread mints the id and replies `SheetList`).
     fn create_tab(&mut self) {
         let name = format!("Sheet{}", self.state.sheets.len() + 1);
-        if let Err(flume::TrySendError::Full(_)) =
+        if let Err(SendError::Full) =
             self.send_command_lossless(TrameCommand::CreateSheet { name })
         {
             tracing::error!("Trame: UI->Logic channel full, CreateSheet dropped");
@@ -987,7 +997,7 @@ impl TrameView {
         let Some(r) = self.tab_rename.take() else { return };
         let name = r.editor.buffer.trim().to_owned();
         if !name.is_empty()
-            && let Err(flume::TrySendError::Full(_)) =
+            && let Err(SendError::Full) =
                 self.send_command_lossless(TrameCommand::RenameSheet { sheet_id: r.sheet_id, name })
         {
             tracing::error!("Trame: UI->Logic channel full, RenameSheet dropped");
@@ -1271,7 +1281,7 @@ impl TrameView {
     fn apply_cursor_move(&mut self, mv: Option<CursorMove>) -> bool {
         self.viewport_changed = true;
         if let Some(mv) = mv {
-            if let Err(flume::TrySendError::Full(_)) = self.send_command_lossless(mv.active) {
+            if let Err(SendError::Full) = self.send_command_lossless(mv.active) {
                 tracing::error!("Trame: UI→Logic channel full, cursor move dropped");
             }
             if let Some(scroll) = mv.scroll {
@@ -1289,7 +1299,7 @@ impl TrameView {
     /// `true` (consumed).
     fn clear_active_cell(&mut self) -> bool {
         let (row, col) = (self.state.active_row(), self.state.active_col());
-        if let Err(flume::TrySendError::Full(_)) = self
+        if let Err(SendError::Full) = self
             .send_command_lossless(TrameCommand::SetCellText { row, col, text: String::new() })
         {
             tracing::error!("Trame: UI→Logic channel full, cell clear dropped");
@@ -1308,7 +1318,7 @@ impl TrameView {
         }
         self.state.select(row, col);
         self.viewport_changed = true;
-        if let Err(flume::TrySendError::Full(_)) = self.send_command_lossless(TrameCommand::SetActiveCell { row, col }) {
+        if let Err(SendError::Full) = self.send_command_lossless(TrameCommand::SetActiveCell { row, col }) {
             tracing::error!("Trame: UI→Logic channel full, cell selection dropped");
         }
         self.park_input_on(row, col);
