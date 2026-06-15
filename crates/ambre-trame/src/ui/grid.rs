@@ -500,8 +500,15 @@ impl TrameUiState {
     /// Logic thread responds. Cells already within the new range stay white,
     /// avoiding flicker on slow continuous scrolling.
     pub fn scroll_viewport_cmd(&mut self) -> TrameCommand {
-        let row_start = self.top_row.saturating_sub(PADDING_ROWS);
-        let row_end = (self.top_row + self.viewport_rows + PADDING_ROWS)
+        // Prefetch one full screen of rows above and below the viewport (with a
+        // PADDING_ROWS floor for tiny windows). A Page Up/Down jump moves the
+        // viewport by exactly viewport_rows, so a smaller fixed margin would land
+        // beyond the cache and flash the entering rows grey until the Logic thread
+        // responds. Sizing the margin to the viewport keeps a page jump's
+        // destination within already-fetched data, eliminating that flash.
+        let row_pad = self.viewport_rows.max(PADDING_ROWS);
+        let row_start = self.top_row.saturating_sub(row_pad);
+        let row_end = (self.top_row + self.viewport_rows + row_pad)
             .min(TOTAL_ROWS.saturating_sub(1));
         let col_start = self.left_col.saturating_sub(PADDING_COLS);
         let col_end = (self.left_col + self.viewport_cols + PADDING_COLS)
