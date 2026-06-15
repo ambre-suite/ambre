@@ -102,29 +102,41 @@ const ERROR_MARK_SIZE: f64 = 7.0;
 // Helpers
 // -----------------------------------------------------------------------------
 
-/// Compute the inclusive cell-coordinate range that intersects `strip` in the
-/// cell area. Returns `(row_start, row_end_exclusive, col_start, col_end_exclusive)`.
-fn rows_cols_in_strip(
-    state: &TrameUiState,
-    strip: Rect,
-) -> (u32, u32, u32, u32) {
+/// Half-open `[row_start, row_end) x [col_start, col_end)` cell range covering a
+/// repaint strip. Bundling the four bounds keeps the per-cell helpers' argument
+/// lists short and the `in_strip` test self-documenting.
+#[derive(Clone, Copy)]
+struct CellSpan {
+    row_start: u32,
+    row_end:   u32,
+    col_start: u32,
+    col_end:   u32,
+}
+
+impl CellSpan {
+    /// True when `(row, col)` falls inside the half-open span.
+    fn contains(&self, row: u32, col: u32) -> bool {
+        row >= self.row_start && row < self.row_end && col >= self.col_start && col < self.col_end
+    }
+}
+
+/// Compute the cell-coordinate range that intersects `strip` in the cell area.
+fn rows_cols_in_strip(state: &TrameUiState, strip: Rect) -> CellSpan {
     let row_start = if strip.y0 > HEADER_HEIGHT {
         ((strip.y0 - HEADER_HEIGHT) / ROW_HEIGHT).floor() as u32 + state.top_row
     } else {
         state.top_row
     };
-    let row_end_excl = (((strip.y1 - HEADER_HEIGHT) / ROW_HEIGHT).ceil() as u32
-        + state.top_row)
+    let row_end = (((strip.y1 - HEADER_HEIGHT) / ROW_HEIGHT).ceil() as u32 + state.top_row)
         .min(TOTAL_ROWS);
     let col_start = if strip.x0 > HEADER_WIDTH {
         ((strip.x0 - HEADER_WIDTH) / COL_WIDTH).floor() as u32 + state.left_col
     } else {
         state.left_col
     };
-    let col_end_excl = (((strip.x1 - HEADER_WIDTH) / COL_WIDTH).ceil() as u32
-        + state.left_col)
+    let col_end = (((strip.x1 - HEADER_WIDTH) / COL_WIDTH).ceil() as u32 + state.left_col)
         .min(TOTAL_COLS);
-    (row_start, row_end_excl, col_start, col_end_excl)
+    CellSpan { row_start, row_end, col_start, col_end }
 }
 
 // -----------------------------------------------------------------------------
@@ -179,9 +191,9 @@ pub fn draw_cells<S: DrawSurface>(
     // -- 2. Received-cell backgrounds + body text, via the shared primitive. ---
     // The cell area is virtual, so we feed only the cached cells inside the
     // strip rather than a full DisplayViewport.
-    let (row_start, row_end, col_start, col_end) = rows_cols_in_strip(state, strip);
-    let cells = (row_start..row_end).flat_map(move |row| {
-        (col_start..col_end).filter_map(move |col| {
+    let span = rows_cols_in_strip(state, strip);
+    let cells = (span.row_start..span.row_end).flat_map(move |row| {
+        (span.col_start..span.col_end).filter_map(move |col| {
             state.cell_cache.get(&(row, col)).map(|c| {
                 (row, col, CellContent { text: &c.text, bold: c.bold, italic: c.italic })
             })
@@ -198,7 +210,7 @@ pub fn draw_cells<S: DrawSurface>(
     // These live on the persistent cells layer so they scroll with the data,
     // and they are intentionally absent from the shared `render` primitives:
     // a PDF export never shows "pending recompute" or transient error state.
-    draw_ui_cell_layers(surface, state, &layout, palette, row_start, row_end, col_start, col_end);
+    draw_ui_cell_layers(surface, state, &layout, palette, span);
     let t_lines = clock.now_ms();
 
     stats.bg_ms       = ((t_pending - t0) + (t_lines - t_cells)) as f32;
@@ -209,26 +221,18 @@ pub fn draw_cells<S: DrawSurface>(
 /// Paint the per-cell UI-only layers for the cells intersecting the strip:
 /// a reduced-opacity veil over dirty cells, and a corner marker over errored
 /// cells. Iterates the (small) dirty/error sets rather than the visible grid,
-/// rejecting entries outside the `[row_start, row_end) x [col_start, col_end)`
-/// strip already computed by the caller.
+/// rejecting entries outside the `span` already computed by the caller.
 fn draw_ui_cell_layers<S: DrawSurface>(
-    surface:   &mut S,
-    state:     &TrameUiState,
-    layout:    &GridLayout,
-    palette:   &Palette,
-    row_start: u32,
-    row_end:   u32,
-    col_start: u32,
-    col_end:   u32,
+    surface: &mut S,
+    state:   &TrameUiState,
+    layout:  &GridLayout,
+    palette: &Palette,
+    span:    CellSpan,
 ) {
-    let in_strip = |row: u32, col: u32| {
-        row >= row_start && row < row_end && col >= col_start && col < col_end
-    };
-
     // Dirty veil: a translucent content_bg quad fades the optimistic value.
     let veil = palette.content_bg.with_alpha(DIRTY_VEIL_ALPHA);
     for &(row, col) in &state.dirty_cells {
-        if in_strip(row, col) {
+        if span.contains(row, col) {
             surface.fill_rect(layout.cell_rect(row, col), veil);
         }
     }
@@ -238,7 +242,7 @@ fn draw_ui_cell_layers<S: DrawSurface>(
     // (WgpuSurface does not implement fill_path).
     let err = palette.cell_error;
     for &(row, col) in state.formula_errors.keys() {
-        if !in_strip(row, col) {
+        if !span.contains(row, col) {
             continue;
         }
         let rect = layout.cell_rect(row, col);
