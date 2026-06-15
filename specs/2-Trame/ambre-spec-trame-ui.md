@@ -334,7 +334,8 @@ surface.fill_rect(Rect::new(x_active_col, 0.0, x_active_col + COL_WIDTH, HEADER_
 // Labels (via TextCache + draw_glyphs)
 // ...
 
-// TODO: multi-cell selection highlighting (not yet implemented)
+// Range header highlight (MVP, sec.8): a header is tinted when its col/row is inside
+// the selection bounds, full opaque for a whole row/column selection.
 // let bg = if selection.contains_col(col) { COLOR_SELECTION_HEADER } else { COLOR_HEADER_BG };
 ```
 
@@ -419,15 +420,17 @@ fn on_key_down(&mut self, key: &KeyCode, modifiers: &Modifiers) {
         return;
     }
 
-    // Grid navigation
+    // Grid navigation. With Shift held, an arrow *extends* the selection
+    // (move `active`, keep `anchor`) instead of collapsing it to a single cell.
     if self.ui_state.editing.is_none() {
+        let extend = modifiers.shift();   // move_selection extends when true (sec.8)
         match key {
-            KeyCode::ArrowUp    => self.move_selection(0, -1),
-            KeyCode::ArrowDown  => self.move_selection(0, 1),
-            KeyCode::ArrowLeft  => self.move_selection(-1, 0),
-            KeyCode::ArrowRight => self.move_selection(1, 0),
-            KeyCode::Tab        => self.move_selection(1, 0),
-            KeyCode::Enter      => self.move_selection(0, 1),
+            KeyCode::ArrowUp    => self.move_selection(0, -1, extend),
+            KeyCode::ArrowDown  => self.move_selection(0, 1, extend),
+            KeyCode::ArrowLeft  => self.move_selection(-1, 0, extend),
+            KeyCode::ArrowRight => self.move_selection(1, 0, extend),
+            KeyCode::Tab        => self.move_selection(1, 0, false),
+            KeyCode::Enter      => self.move_selection(0, 1, false),
             KeyCode::Home       => self.goto_cell(self.ui_state.selection.row, 0),
             KeyCode::End        => self.goto_end_of_row(),
             KeyCode::PageDown   => self.scroll_pages(1),
@@ -887,6 +890,13 @@ Floating dropdown below the active cell (DrawSurface), with selected item highli
 ---
 
 ## 8. SELECTION
+
+The selection is a rectangle from `anchor` to `active` (`anchor == active` is just the
+single-cell case). **Multi-cell selection is MVP** -- it is a hard prerequisite for Merge,
+Delete rows/cols, `SetCellStyle`, `PasteRange`, `FillRange`, `SortRange` and the status bar,
+which all read `sel.bounds()`. Extension paths: drag (sec.5.B `on_pointer_drag` -> `extend_to`),
+**Shift+arrows** and **Shift+click** (sec.5.A), and whole row/column selection by clicking a
+header. Range rendering is `draw_selection` below; header range highlight is in sec.4.B.
 
 ```rust
 pub struct Selection {
@@ -1368,6 +1378,7 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 - [x] UI-only layers on top of shared rendering: scroll offset, dirty opacity, error indicators
 - [x] Column/row headers (via `ambre_trame::render::draw_col_headers_on<S>` / `draw_row_headers_on<S>`, wired in `ui::renderer::draw_overlay`)
 - [x] Single-cell selection *(via `ui::grid::Selection` -- `anchor == active`; click `select()` / arrow nav, active border + header tint in `draw_overlay`)*
+- [ ] Multi-cell selection (sec.8): drop the `anchor == active` constraint, Shift+arrows / Shift+click extension (drag already in sec.5.B), range highlight (`draw_selection`) + range header highlight (sec.4.B), whole row/column selection by header click. *(Hard prerequisite for Merge/Delete-rows-cols/SetCellStyle/Paste/Fill/Sort/status-bar, all of which consume `sel.bounds()`.)*
 - [x] Inline editor *(delivered under `CHROME P2` -- Trame WYSIWYG cell)*;
 - [ ] Formula bar
 - [x] Sheet tabs + full lifecycle (create via "+", rename via double-click, delete/rename via tab context menu, reorder via drag) -> `CreateSheet` / `RenameSheet` / `DeleteSheet` / `MoveSheet` (sec.13) *(bottom strip in `ui::renderer::draw_sheet_tabs`; input + `SheetList` dispatch in `ui::view`; strip hydrated on the first `ScrollViewport`)*
@@ -1386,7 +1397,6 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 - [ ] `on_logic_message` wiring: full `TrameEvent` dispatch (ViewportData, EditAck, FormulaError, SheetList, MergeRejected, MergeConflictDetected, FilterApplied, FilterCleared, SortComplete, StyleApplied, PasteRejected, FindResult, ReplaceDone, SelectionStats, ValidationError, UndoState, ImportProgress, ExportComplete)
 
 **Phase 2 — V1**
-- [ ] Multi-cell selection
 - [ ] Row/column freeze
 - [ ] Function autocompletion
 - [ ] Multi-user cursors (`TrameEvent::RemoteCursors`, identified by `UserId`)
