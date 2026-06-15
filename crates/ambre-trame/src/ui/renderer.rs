@@ -29,8 +29,9 @@ use ambre_draw::{
 use ambre_canvas::{Palette, TextCache};
 
 use super::grid::{
-    ADD_BTN_WIDTH, CellEditor, COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, HitKind, ROW_HEIGHT,
-    TAB_MENU_ITEM_HEIGHT, TAB_MENU_WIDTH, TAB_STRIP_HEIGHT, TAB_WIDTH, TabDrag, TabMenu, TabRename,
+    ADD_BTN_WIDTH, CellEditor, COL_WIDTH, FORMULA_BAR_HEIGHT, HEADER_HEIGHT, HEADER_WIDTH, HitKind,
+    NAME_BOX_WIDTH, ROW_HEIGHT, TAB_MENU_ITEM_HEIGHT, TAB_MENU_WIDTH, TAB_STRIP_HEIGHT, TAB_WIDTH,
+    TabDrag, TabMenu, TabRename,
 };
 use super::TrameUiState;
 use crate::render::{self, BODY_SIZE, CELL_PAD_X, CellContent, GridLayout};
@@ -42,6 +43,8 @@ fn screen_layout(state: &TrameUiState) -> GridLayout {
     GridLayout {
         header_width: HEADER_WIDTH,
         header_height: HEADER_HEIGHT,
+        // The grid is pushed down by the formula bar band (sec.6).
+        top: FORMULA_BAR_HEIGHT,
         col_width: COL_WIDTH,
         row_height: ROW_HEIGHT,
         origin_col: state.left_col,
@@ -122,12 +125,13 @@ impl CellSpan {
 
 /// Compute the cell-coordinate range that intersects `strip` in the cell area.
 fn rows_cols_in_strip(state: &TrameUiState, strip: Rect) -> CellSpan {
-    let row_start = if strip.y0 > HEADER_HEIGHT {
-        ((strip.y0 - HEADER_HEIGHT) / ROW_HEIGHT).floor() as u32 + state.top_row
+    let cells_top = FORMULA_BAR_HEIGHT + HEADER_HEIGHT;
+    let row_start = if strip.y0 > cells_top {
+        ((strip.y0 - cells_top) / ROW_HEIGHT).floor() as u32 + state.top_row
     } else {
         state.top_row
     };
-    let row_end = (((strip.y1 - HEADER_HEIGHT) / ROW_HEIGHT).ceil() as u32 + state.top_row)
+    let row_end = (((strip.y1 - cells_top) / ROW_HEIGHT).ceil() as u32 + state.top_row)
         .min(TOTAL_ROWS);
     let col_start = if strip.x0 > HEADER_WIDTH {
         ((strip.x0 - HEADER_WIDTH) / COL_WIDTH).floor() as u32 + state.left_col
@@ -167,9 +171,9 @@ pub fn draw_cells<S: DrawSurface>(
     let w = state.canvas_width;
     let h = state.grid_bottom();
 
-    // Cell area = canvas minus the fixed header strip (top/left) and the bottom
-    // sheet-tab strip.
-    let cell_area = Rect::new(HEADER_WIDTH, HEADER_HEIGHT, w, h);
+    // Cell area = canvas minus the formula bar band + fixed header strip
+    // (top/left) and the bottom sheet-tab strip.
+    let cell_area = Rect::new(HEADER_WIDTH, FORMULA_BAR_HEIGHT + HEADER_HEIGHT, w, h);
     let strip = match strip_rect {
         Some(r) => r.intersect(cell_area),
         None    => cell_area,
@@ -606,6 +610,58 @@ pub fn draw_tab_menu<S: DrawSurface>(
 }
 
 // -----------------------------------------------------------------------------
+// draw_formula_bar -- top band (overlay, spec sec.6)
+// -----------------------------------------------------------------------------
+
+/// Draw the formula bar band pinned to the top of the canvas (spec sec.6): a
+/// left "name box" carrying the active cell reference (e.g. `"B2"`), and to its
+/// right the active cell's raw value -- or the live edit buffer while a cell
+/// edit is in progress. Opaque, redrawn with the overlay each dirty frame so it
+/// tracks selection moves and keystrokes.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_formula_bar<S: DrawSurface>(
+    surface:      &mut S,
+    state:        &TrameUiState,
+    palette:      &Palette,
+    font_cx:      &mut FontContext,
+    text_cache:   &mut TextCache,
+    text_enabled: bool,
+    cell_ref:     &str,
+    content:      &str,
+) {
+    let w = state.canvas_width;
+    let h = FORMULA_BAR_HEIGHT;
+
+    // Band background + bottom separator against the column-header strip.
+    surface.fill_rect(Rect::new(0.0, 0.0, w, h), palette.header_bg);
+    surface.stroke_line(0.0, h, w, h, palette.header_border, 1.0);
+
+    // Name box (cell reference) on the left, with a right separator.
+    surface.fill_rect(Rect::new(0.0, 0.0, NAME_BOX_WIDTH, h), palette.content_bg);
+    surface.stroke_line(NAME_BOX_WIDTH, 0.0, NAME_BOX_WIDTH, h, palette.header_border, 1.0);
+
+    if !text_enabled {
+        return;
+    }
+    let label_y = (h - BODY_SIZE as f64) / 2.0;
+    // Reference label, centred in the name box.
+    render::draw_text(
+        surface, font_cx, text_cache, cell_ref, BODY_SIZE,
+        NAME_BOX_WIDTH as f32, Alignment::Center, 0.0, label_y, palette.cell_text,
+    );
+    // Value / live edit buffer, left-aligned in the content area.
+    if !content.is_empty() {
+        let max_w = (w - NAME_BOX_WIDTH - CELL_PAD_X * 2.0).max(0.0) as f32;
+        surface.push_clip(Rect::new(NAME_BOX_WIDTH, 0.0, w, h));
+        render::draw_text(
+            surface, font_cx, text_cache, content, BODY_SIZE,
+            max_w, Alignment::Start, NAME_BOX_WIDTH + CELL_PAD_X, label_y, palette.cell_text,
+        );
+        surface.pop_clip();
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Headless tests -- mock DrawSurface (ambre-spec-canvas P0 "Headless tests").
 // -----------------------------------------------------------------------------
 //
@@ -665,7 +721,12 @@ mod tests {
         assert_eq!(
             surface.ops().first(),
             Some(&DrawOp::FillRect {
-                rect: Rect::new(HEADER_WIDTH, HEADER_HEIGHT, 800.0, state.grid_bottom()),
+                rect: Rect::new(
+                    HEADER_WIDTH,
+                    FORMULA_BAR_HEIGHT + HEADER_HEIGHT,
+                    800.0,
+                    state.grid_bottom(),
+                ),
                 color: palette.content_pending,
             }),
         );
@@ -885,6 +946,36 @@ mod tests {
         let (mut surface, _c, mut f, mut ch, _s) = harness();
         draw_sheet_tabs(&mut surface, &state, palette, &mut f, &mut ch, true, None, Some(&still), true);
         assert_eq!(surface.count(drop_marker), 0);
+    }
+
+    #[test]
+    fn formula_bar_draws_band_name_box_and_separator() {
+        let state = fixture(&[]);
+        let palette = Theme::Light.palette();
+        let (mut surface, _clock, mut font_cx, mut cache, _stats) = harness();
+
+        draw_formula_bar(
+            &mut surface, &state, palette, &mut font_cx, &mut cache, true, "B2", "=A1+1",
+        );
+
+        // The full-width band background and the name box are both painted.
+        assert_eq!(
+            surface.ops().first(),
+            Some(&DrawOp::FillRect {
+                rect: Rect::new(0.0, 0.0, state.canvas_width, FORMULA_BAR_HEIGHT),
+                color: palette.header_bg,
+            }),
+        );
+        assert!(surface.count(|op| matches!(
+            op, DrawOp::FillRect { rect, color }
+                if *color == palette.content_bg && rect.x1 == NAME_BOX_WIDTH
+        )) == 1);
+        // The bottom + name-box separators are stroked with the header border.
+        assert!(surface.count(|op| matches!(
+            op, DrawOp::StrokeLine { color, .. } if *color == palette.header_border
+        )) >= 2);
+        // The content text is clipped to the value area; the clip stack balances.
+        assert_eq!(surface.clip_depth(), 0);
     }
 
     #[test]

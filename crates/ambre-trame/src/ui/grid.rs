@@ -22,6 +22,15 @@ pub const COL_WIDTH: f64 = 80.0;
 pub const HEADER_HEIGHT: f64 = 24.0;
 pub const HEADER_WIDTH: f64 = 50.0;
 
+// Formula bar band pinned to the top of the canvas, above the column-header
+// strip (spec sec.6). It shows the active cell reference and its raw value (or
+// the live edit buffer). Reserved from the top, mirroring how the sheet-tab
+// strip is reserved from the bottom: the column headers begin at
+// `FORMULA_BAR_HEIGHT`, the cells one header-height further down.
+pub const FORMULA_BAR_HEIGHT: f64 = 24.0;
+/// Width of the cell-reference ("name") box at the left of the formula bar.
+pub const NAME_BOX_WIDTH: f64 = 64.0;
+
 // Sheet-tab strip pinned to the bottom of the canvas (spec sec.13). The grid
 // area stops at `canvas_height - TAB_STRIP_HEIGHT`; the strip hosts the tabs and
 // the trailing "+" button.
@@ -551,7 +560,7 @@ impl TrameUiState {
     }
 
     fn recompute_viewport_dims(&mut self) {
-        let grid_h = (self.grid_bottom() - HEADER_HEIGHT).max(0.0);
+        let grid_h = (self.grid_bottom() - FORMULA_BAR_HEIGHT - HEADER_HEIGHT).max(0.0);
         let grid_w = (self.canvas_width - HEADER_WIDTH).max(0.0);
         // ceil() already accounts for the partially-visible row/col at the edge.
         // No +1 needed: viewport_rows is the count of rows that start within the
@@ -852,17 +861,25 @@ impl TrameUiState {
     // Coordinate helpers
     // -------------------------------------------------------------------------
 
+    /// True if physical `(x, y)` falls in the formula bar's content area (the
+    /// band right of the name box). A click there opens an edit on the active
+    /// cell (spec sec.6); the name box itself is reserved (future go-to).
+    pub fn in_formula_bar(&self, x: f64, y: f64) -> bool {
+        (0.0..FORMULA_BAR_HEIGHT).contains(&y) && x >= NAME_BOX_WIDTH && x < self.canvas_width
+    }
+
     /// Cell `(row, col)` at physical pixel `(x, y)`, or `None` if the point is
     /// in a header strip or past the grid bounds. Inverse of `cell_pixel_rect`.
     pub fn cell_at(&self, x: f64, y: f64) -> Option<(u32, u32)> {
-        if x < HEADER_WIDTH || y < HEADER_HEIGHT {
+        let cells_top = FORMULA_BAR_HEIGHT + HEADER_HEIGHT;
+        if x < HEADER_WIDTH || y < cells_top {
             return None;
         }
         if x >= self.canvas_width || y >= self.grid_bottom() {
             return None;
         }
         let col = self.left_col + ((x - HEADER_WIDTH) / COL_WIDTH) as u32;
-        let row = self.top_row + ((y - HEADER_HEIGHT) / ROW_HEIGHT) as u32;
+        let row = self.top_row + ((y - cells_top) / ROW_HEIGHT) as u32;
         if row >= TOTAL_ROWS || col >= TOTAL_COLS {
             return None;
         }
@@ -877,13 +894,14 @@ impl TrameUiState {
         let col_offset = col as i64 - self.left_col as i64;
         let row_offset = row as i64 - self.top_row as i64;
 
+        let cells_top = FORMULA_BAR_HEIGHT + HEADER_HEIGHT;
         let x = HEADER_WIDTH + col_offset as f64 * COL_WIDTH;
-        let y = HEADER_HEIGHT + row_offset as f64 * ROW_HEIGHT;
+        let y = cells_top + row_offset as f64 * ROW_HEIGHT;
 
         if x + COL_WIDTH <= HEADER_WIDTH || x >= self.canvas_width {
             return None;
         }
-        if y + ROW_HEIGHT <= HEADER_HEIGHT || y >= self.grid_bottom() {
+        if y + ROW_HEIGHT <= cells_top || y >= self.grid_bottom() {
             return None;
         }
         Some((x, y, COL_WIDTH, ROW_HEIGHT))
@@ -1195,6 +1213,32 @@ mod tests {
         assert_eq!(menu.item_at(100.0 + super::TAB_MENU_WIDTH + 1.0, 210.0), None);
         assert_eq!(menu.item_at(110.0, 199.0), None);
         assert_eq!(menu.item_at(110.0, 200.0 + 2.0 * super::TAB_MENU_ITEM_HEIGHT + 1.0), None);
+    }
+
+    /// The formula bar band reserves the top of the canvas: a point in its
+    /// content area (right of the name box) is not a grid cell, and the cell
+    /// area is pushed below both the band and the column-header strip.
+    #[test]
+    fn formula_bar_reserves_top_of_canvas() {
+        let state = TrameUiState::new(800.0, 600.0);
+        let bar = super::FORMULA_BAR_HEIGHT;
+        let name_box = super::NAME_BOX_WIDTH;
+
+        // A click in the bar's content area is a formula bar hit, not a cell.
+        assert!(state.in_formula_bar(name_box + 10.0, bar / 2.0));
+        assert_eq!(state.cell_at(name_box + 10.0, bar / 2.0), None);
+        // The name box itself is reserved (not a formula bar content hit).
+        assert!(!state.in_formula_bar(name_box / 2.0, bar / 2.0));
+        // Below the band, but still in the header strip: not a cell either.
+        assert_eq!(state.cell_at(100.0, bar + super::HEADER_HEIGHT - 1.0), None);
+        // The first cell starts just below the band + header strip.
+        assert_eq!(
+            state.cell_at(super::HEADER_WIDTH + 1.0, bar + super::HEADER_HEIGHT + 1.0),
+            Some((0, 0)),
+        );
+        // (0,0)'s pixel rect sits at the cell-area top-left.
+        let (_, y, _, _) = state.cell_pixel_rect(0, 0).expect("visible");
+        assert_eq!(y, bar + super::HEADER_HEIGHT);
     }
 
     /// On a very short canvas the grid area never inverts: `grid_bottom` floors
