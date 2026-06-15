@@ -19,8 +19,8 @@ use ambre_canvas::{
 };
 
 use super::grid::{
-    CellEditor, COL_WIDTH, CursorMove, HEADER_HEIGHT, HEADER_WIDTH, HitKind, PendingHit, ROW_HEIGHT,
-    TabDrag, TabMenu, TabMenuItem, TabRename, TrameUiState,
+    CellEditor, COL_WIDTH, CursorMove, FORMULA_BAR_HEIGHT, HEADER_HEIGHT, HEADER_WIDTH, HitKind,
+    PendingHit, ROW_HEIGHT, TabDrag, TabMenu, TabMenuItem, TabRename, TrameUiState,
 };
 use super::renderer::{self, DrawStats};
 
@@ -330,6 +330,12 @@ impl TrameView {
         self.text_input.announce(&desc);
     }
 
+    /// The active cell's spreadsheet reference (e.g. `"B2"`), shown in the
+    /// formula bar's name box (spec sec.6).
+    fn active_cell_ref(&self) -> String {
+        format!("{}{}", col_label(self.state.active_col()), self.state.active_row() + 1)
+    }
+
     /// Recompute the active cell's on-screen anchor and publish it for the
     /// floating selection toolbar -- the centre of the cell's top edge in CSS
     /// px, or `None` when the cell is scrolled out of the grid area. Cheap;
@@ -602,6 +608,9 @@ impl TrameView {
                 // TAB_STRIP_HEIGHT) stale after the shift -- the source of the
                 // edge flicker on Arrow/Page navigation.
                 let h = self.state.grid_bottom();
+                // Top of the scrollable cell area: below the formula bar band
+                // (sec.6) and the column-header strip.
+                let hh = FORMULA_BAR_HEIGHT + HEADER_HEIGHT;
                 // If the scroll exceeds the viewport, nothing useful to shift.
                 let abs_dx = dx_px.unsigned_abs();
                 let abs_dy = dy_px.unsigned_abs();
@@ -610,7 +619,6 @@ impl TrameView {
                 } else {
                     // Strip = the area of the destination offscreen exposed by
                     // the shift, restricted to the cell area.
-                    let hh = HEADER_HEIGHT;
                     let hw = HEADER_WIDTH;
                     let strip = if dy_px > 0 {
                         Rect::new(hw, hh, w, hh + dy_px as f64)
@@ -700,6 +708,24 @@ impl TrameView {
             &mut self.draw_stats,
         );
 
+        // Formula bar band (sec.6): active cell reference + raw value, or the
+        // live edit buffer (IME preview folded in) while editing.
+        let cell_ref = self.active_cell_ref();
+        let content = match &self.editor {
+            Some(ed) => ed.display(),
+            None => self.cell_seed(self.state.active_row(), self.state.active_col()),
+        };
+        renderer::draw_formula_bar(
+            surface,
+            &self.state,
+            self.theme.palette(),
+            font_cx,
+            text_cache,
+            self.text_enabled,
+            &cell_ref,
+            &content,
+        );
+
         // Bottom sheet-tab strip (sec.13), above the grid/HUD.
         renderer::draw_sheet_tabs(
             surface,
@@ -754,6 +780,19 @@ impl TrameView {
         // never disturbs the cursor or an open editor.
         if let InputEvent::Wheel { dx, dy, delta_mode, ctrl_key } = ev {
             return self.handle_wheel(*dx, *dy, *delta_mode, *ctrl_key);
+        }
+        // A click in the formula bar opens an edit on the active cell (sec.6),
+        // so typing flows through the same in-cell editor the bar mirrors.
+        if let InputEvent::PointerDown { x, y, button: 0 } = ev
+            && self.state.in_formula_bar(*x, *y)
+        {
+            self.text_input.focus();
+            if self.editor.is_none() {
+                let (row, col) = (self.state.active_row(), self.state.active_col());
+                let seed = self.cell_seed(row, col);
+                self.begin_edit(seed);
+            }
+            return true;
         }
         // An open tab rename owns text, IME and the editing keys until it ends.
         if self.tab_rename.is_some()

@@ -53,6 +53,10 @@ pub struct GridLayout {
     pub header_width: f64,
     /// Height of the fixed column-letter strip on the top.
     pub header_height: f64,
+    /// Vertical offset (physical px) of the whole grid from the surface top:
+    /// the height of any band reserved above the column-header strip (the
+    /// formula bar on screen, `0.0` for PDF export).
+    pub top: f64,
     /// Uniform column width (content area).
     pub col_width: f64,
     /// Uniform row height (content area).
@@ -74,7 +78,7 @@ pub struct GridLayout {
 impl GridLayout {
     /// The scrollable content area (everything below + right of the headers).
     pub fn content_area(&self) -> Rect {
-        Rect::new(self.header_width, self.header_height, self.width, self.height)
+        Rect::new(self.header_width, self.top + self.header_height, self.width, self.height)
     }
 
     /// Pixel rect of cell `(row, col)` relative to the surface top-left.
@@ -84,7 +88,9 @@ impl GridLayout {
     /// `content_area()` or push their own clip.
     pub fn cell_rect(&self, row: u32, col: u32) -> Rect {
         let x = self.header_width + (col as i64 - self.origin_col as i64) as f64 * self.col_width;
-        let y = self.header_height + (row as i64 - self.origin_row as i64) as f64 * self.row_height;
+        let y = self.top
+            + self.header_height
+            + (row as i64 - self.origin_row as i64) as f64 * self.row_height;
         Rect::new(x, y, x + self.col_width, y + self.row_height)
     }
 }
@@ -243,7 +249,8 @@ pub fn draw_grid_lines_on<S: DrawSurface>(
     }
 
     // Vertical lines at each visible column boundary.
-    let line_y0 = area.y0.max(layout.header_height);
+    let cells_top = layout.top + layout.header_height;
+    let line_y0 = area.y0.max(cells_top);
     let line_y1 = area.y1.min(layout.height);
     if line_y1 > line_y0 {
         let mut i = 0u32;
@@ -273,7 +280,7 @@ pub fn draw_grid_lines_on<S: DrawSurface>(
             if row > layout.total_rows {
                 break;
             }
-            let y = layout.header_height + i as f64 * layout.row_height;
+            let y = cells_top + i as f64 * layout.row_height;
             if y > layout.height {
                 break;
             }
@@ -305,9 +312,10 @@ pub fn draw_col_headers_on<S: DrawSurface>(
 ) {
     let w = layout.width;
     let hh = layout.header_height;
+    let top = layout.top;
 
     // Opaque background over the full top strip (corner included).
-    surface.fill_rect(Rect::new(0.0, 0.0, w, hh), palette.header_bg);
+    surface.fill_rect(Rect::new(0.0, top, w, top + hh), palette.header_bg);
 
     // Active-column tint, over the bg and under the labels.
     if let Some(col) = active_col
@@ -315,12 +323,15 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     {
         let x = layout.header_width + (col - layout.origin_col) as f64 * layout.col_width;
         if x < w {
-            surface.fill_rect(Rect::new(x, 0.0, x + layout.col_width, hh), palette.header_active);
+            surface.fill_rect(
+                Rect::new(x, top, x + layout.col_width, top + hh),
+                palette.header_active,
+            );
         }
     }
 
     // Bottom separator.
-    surface.stroke_line(0.0, hh, w, hh, palette.header_border, 1.0);
+    surface.stroke_line(0.0, top + hh, w, top + hh, palette.header_border, 1.0);
 
     if !text_enabled {
         return;
@@ -344,13 +355,13 @@ pub fn draw_col_headers_on<S: DrawSurface>(
         let y_off = ((hh - text_h) / 2.0).max(0.0);
         let needs_clip = text_h > hh;
         if needs_clip {
-            surface.push_clip(Rect::new(col_x, 0.0, col_x + layout.col_width, hh));
+            surface.push_clip(Rect::new(col_x, top, col_x + layout.col_width, top + hh));
         }
         for line in lyt.lines() {
             for item in line.items() {
                 let PositionedLayoutItem::GlyphRun(run) = item else { continue };
                 let tx = col_x + run.offset() as f64;
-                let ty = y_off + run.baseline() as f64;
+                let ty = top + y_off + run.baseline() as f64;
                 surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
             }
         }
@@ -377,22 +388,24 @@ pub fn draw_row_headers_on<S: DrawSurface>(
 ) {
     let h = layout.height;
     let hw = layout.header_width;
+    let top = layout.top;
+    let cells_top = top + layout.header_height;
 
-    // Opaque background over the full left strip (corner included).
-    surface.fill_rect(Rect::new(0.0, 0.0, hw, h), palette.header_bg);
+    // Opaque background over the full left strip (below the formula bar band).
+    surface.fill_rect(Rect::new(0.0, top, hw, h), palette.header_bg);
 
     // Active-row tint, over the bg and under the numbers.
     if let Some(row) = active_row
         && row >= layout.origin_row
     {
-        let y = layout.header_height + (row - layout.origin_row) as f64 * layout.row_height;
+        let y = cells_top + (row - layout.origin_row) as f64 * layout.row_height;
         if y < h {
             surface.fill_rect(Rect::new(0.0, y, hw, y + layout.row_height), palette.header_active);
         }
     }
 
     // Right separator.
-    surface.stroke_line(hw, 0.0, hw, h, palette.header_border, 1.0);
+    surface.stroke_line(hw, top, hw, h, palette.header_border, 1.0);
 
     if !text_enabled {
         return;
@@ -405,7 +418,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
         if row >= layout.total_rows {
             break;
         }
-        let row_y = layout.header_height + i as f64 * layout.row_height;
+        let row_y = cells_top + i as f64 * layout.row_height;
         if row_y >= h {
             break;
         }
@@ -449,6 +462,7 @@ mod tests {
         GridLayout {
             header_width: 50.0,
             header_height: 24.0,
+            top: 0.0,
             col_width: 80.0,
             row_height: 20.0,
             origin_col: 0,
