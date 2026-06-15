@@ -19,8 +19,8 @@ use ambre_canvas::{
 };
 
 use super::grid::{
-    CellEditor, COL_WIDTH, CursorMove, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT, TabDrag, TabMenu,
-    TabMenuItem, TabRename, TrameUiState,
+    CellEditor, COL_WIDTH, CursorMove, HEADER_HEIGHT, HEADER_WIDTH, HitKind, PendingHit, ROW_HEIGHT,
+    TabDrag, TabMenu, TabMenuItem, TabRename, TrameUiState,
 };
 use super::renderer::{self, DrawStats};
 
@@ -112,6 +112,9 @@ pub struct TrameView {
     theme: Theme,
     /// Active in-cell edit session, or `None` in navigation mode.
     editor: Option<CellEditor>,
+    /// True while the pointer is dragging out a text selection inside the open
+    /// editor (between a press in the cell and its release).
+    editor_text_drag: bool,
     /// Active in-place sheet-tab rename, or `None` (spec sec.13).
     tab_rename: Option<TabRename>,
     /// Open per-tab context menu (`{ Rename, Delete }`), or `None`.
@@ -210,6 +213,7 @@ impl TrameView {
             theme_ctl,
             theme,
             editor: None,
+            editor_text_drag: false,
             tab_rename: None,
             tab_menu: None,
             tab_drag: None,
@@ -372,6 +376,7 @@ impl TrameView {
     fn begin_edit(&mut self, seed: String) {
         let (row, col) = (self.state.active_row(), self.state.active_col());
         self.editor = Some(CellEditor::new(row, col, seed));
+        self.editor_text_drag = false;
         self.text_input.clear();
         self.text_input.focus();
         self.park_input_on(row, col);
@@ -699,7 +704,7 @@ impl TrameView {
         );
 
         // The in-cell edit field sits above everything (after the active border).
-        if let Some(editor) = &self.editor {
+        if let Some(editor) = &mut self.editor {
             renderer::draw_edit(
                 surface,
                 &self.state,
@@ -1312,6 +1317,36 @@ impl TrameView {
 
     // -- Edit mode -------------------------------------------------------------
 
+    /// The selected text inside the open editor (copy / Ctrl+Insert), or `None`
+    /// when not editing or the selection is empty. Read synchronously by the
+    /// host's `copy`/`cut` listeners to feed `ClipboardEvent.clipboardData`.
+    pub fn copy_selection(&self) -> Option<String> {
+        let ed = self.editor.as_ref()?;
+        let s = ed.selected_text();
+        (!s.is_empty()).then(|| s.to_owned())
+    }
+
+    /// Like [`copy_selection`], but also deletes the selection (cut / Shift+Del).
+    ///
+    /// [`copy_selection`]: Self::copy_selection
+    pub fn cut_selection(&mut self) -> Option<String> {
+        let ed = self.editor.as_mut()?;
+        let s = ed.selected_text().to_owned();
+        if s.is_empty() {
+            return None;
+        }
+        ed.delete_selection();
+        self.reset_blink();
+        Some(s)
+    }
+
+    /// True when physical pixel `(x, y)` falls on the cell currently being
+    /// edited -- the gate for in-cell mouse text selection vs. committing.
+    fn pointer_in_editor(&self, x: f64, y: f64) -> bool {
+        let Some(ed) = self.editor.as_ref() else { return false };
+        self.state.cell_at(x, y) == Some((ed.row, ed.col))
+    }
+
     /// Input routing while editing a cell.
     fn handle_input_editing(&mut self, ev: &InputEvent) -> bool {
         match ev {
@@ -1337,13 +1372,42 @@ impl TrameView {
                 self.reset_blink();
                 true
             }
-            // A click outside commits and reselects the clicked cell.
+            // A press inside the edited cell starts a mouse text selection; a
+            // press outside commits and reselects the clicked cell.
             InputEvent::PointerDown { x, y, button: 0 } => {
+                if self.pointer_in_editor(*x, *y) {
+                    if let Some(ed) = self.editor.as_mut() {
+                        ed.pending = Some(PendingHit { x: *x, kind: HitKind::Place });
+                    }
+                    self.editor_text_drag = true;
+                    self.reset_blink();
+                    return true;
+                }
                 self.commit_edit();
                 self.text_input.focus();
                 if let Some((row, col)) = self.state.cell_at(*x, *y) {
                     self.select_cell(row, col);
                 }
+                true
+            }
+            // Drag inside the edited cell extends the text selection.
+            InputEvent::PointerMove { x, .. } if self.editor_text_drag => {
+                if let Some(ed) = self.editor.as_mut() {
+                    ed.pending = Some(PendingHit { x: *x, kind: HitKind::Extend });
+                }
+                self.reset_blink();
+                true
+            }
+            InputEvent::PointerUp { .. } if self.editor_text_drag => {
+                self.editor_text_drag = false;
+                true
+            }
+            // Double-click inside the edited cell selects the word under it.
+            InputEvent::DoubleClick { x, y } if self.pointer_in_editor(*x, *y) => {
+                if let Some(ed) = self.editor.as_mut() {
+                    ed.pending = Some(PendingHit { x: *x, kind: HitKind::Word });
+                }
+                self.reset_blink();
                 true
             }
             // A right-click commits and selects the cell under the cursor, so the
@@ -1357,9 +1421,17 @@ impl TrameView {
                 }
                 false
             }
-            InputEvent::Key { key, ctrl, meta, .. } => {
-                // Leave command chords (Ctrl/Cmd+X) to the chrome keymap.
+            InputEvent::Key { key, ctrl, meta, shift, .. } => {
+                // Ctrl/Cmd+A selects the whole buffer; other command chords
+                // (Ctrl/Cmd+X) fall through to the chrome keymap.
                 if *ctrl || *meta {
+                    if matches!(key.as_str(), "a" | "A") {
+                        if let Some(ed) = self.editor.as_mut() {
+                            ed.select_all();
+                        }
+                        self.reset_blink();
+                        return true;
+                    }
                     return false;
                 }
                 match key.as_str() {
@@ -1384,16 +1456,41 @@ impl TrameView {
                         self.reset_blink();
                         true
                     }
+                    // Delete removes the selection, else the char after the caret.
+                    // Shift+Delete is "cut": let it fall through so the browser
+                    // fires the `cut` clipboard event the host listens for.
+                    "Delete" if !*shift => {
+                        if let Some(ed) = self.editor.as_mut() {
+                            ed.delete_forward();
+                        }
+                        self.reset_blink();
+                        true
+                    }
+                    // Shift extends the selection; a bare arrow collapses it.
                     "ArrowLeft" => {
                         if let Some(ed) = self.editor.as_mut() {
-                            ed.move_left();
+                            if *shift { ed.extend_left() } else { ed.move_left() }
                         }
                         self.reset_blink();
                         true
                     }
                     "ArrowRight" => {
                         if let Some(ed) = self.editor.as_mut() {
-                            ed.move_right();
+                            if *shift { ed.extend_right() } else { ed.move_right() }
+                        }
+                        self.reset_blink();
+                        true
+                    }
+                    "Home" => {
+                        if let Some(ed) = self.editor.as_mut() {
+                            if *shift { ed.extend_home() } else { ed.move_home() }
+                        }
+                        self.reset_blink();
+                        true
+                    }
+                    "End" => {
+                        if let Some(ed) = self.editor.as_mut() {
+                            if *shift { ed.extend_end() } else { ed.move_end() }
                         }
                         self.reset_blink();
                         true

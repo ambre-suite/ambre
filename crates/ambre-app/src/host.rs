@@ -111,6 +111,20 @@ impl AppView {
         }
     }
 
+    /// Text to put on the clipboard for a `copy`/`cut` event, or `None` to let
+    /// the browser's default run. `cut` deletes the selection as a side effect.
+    fn clipboard_extract(&mut self, cut: bool) -> Option<String> {
+        match self {
+            AppView::Trame(v) => {
+                if cut {
+                    v.cut_selection()
+                } else {
+                    v.copy_selection()
+                }
+            }
+        }
+    }
+
     /// Swap the active document in place, keeping the GPU surface.
     fn set_document(&mut self, document_id: DocumentId) {
         match self {
@@ -177,6 +191,13 @@ impl FrameHost {
     /// `preventDefault()` on the originating DOM event.
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
         self.view.handle_input(ev)
+    }
+
+    /// Pull the text a `copy`/`cut` event should place on the clipboard (and,
+    /// for `cut`, remove it from the editor). `None` means "nothing selected --
+    /// let the browser default proceed".
+    pub fn clipboard_extract(&mut self, cut: bool) -> Option<String> {
+        self.view.clipboard_extract(cut)
     }
 
     /// Switch the active document on the live view, keeping the GPU surface.
@@ -574,6 +595,57 @@ where
         });
         ta.add_event_listener_with_callback("input", cb.as_ref().unchecked_ref())
             .expect("add input listener");
+        cb.forget();
+    }
+
+    // -- Clipboard: copy / cut / paste on the focused textarea pipe. -----------
+    // The browser maps Ctrl+C / Ctrl+Insert -> `copy`, Ctrl+X / Shift+Del ->
+    // `cut`, Ctrl+V / Shift+Insert -> `paste`, so we never decode those chords
+    // ourselves: we just service the three clipboard events. `copy`/`cut` write
+    // the editor's selection synchronously into `clipboardData`; `paste` reads
+    // plain text and feeds it through the same `Text` insertion path as typing.
+    {
+        let ta = text_input.element().clone();
+        let host_c = Rc::clone(&host);
+        for cut in [false, true] {
+            let host_e = Rc::clone(&host_c);
+            let cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(
+                move |event: web_sys::ClipboardEvent| {
+                    let Some(text) = host_e.borrow_mut().clipboard_extract(cut) else {
+                        return; // nothing selected -- let the default proceed
+                    };
+                    if let Some(data) = event.clipboard_data() {
+                        let _ = data.set_data("text/plain", &text);
+                        event.prevent_default();
+                    }
+                },
+            );
+            ta.add_event_listener_with_callback(
+                if cut { "cut" } else { "copy" },
+                cb.as_ref().unchecked_ref(),
+            )
+            .expect("add clipboard listener");
+            cb.forget();
+        }
+    }
+    {
+        let ta = text_input.element().clone();
+        let host_c = Rc::clone(&host);
+        let cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(
+            move |event: web_sys::ClipboardEvent| {
+                let Some(data) = event.clipboard_data() else { return };
+                let text = data.get_data("text/plain").unwrap_or_default();
+                if text.is_empty() {
+                    return;
+                }
+                // Prevent the native insert (which would also fire `input` and
+                // double-paste); route through the model's caret/selection path.
+                event.prevent_default();
+                host_c.borrow_mut().handle_input(&InputEvent::Text { text });
+            },
+        );
+        ta.add_event_listener_with_callback("paste", cb.as_ref().unchecked_ref())
+            .expect("add paste listener");
         cb.forget();
     }
 

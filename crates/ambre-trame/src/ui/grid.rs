@@ -52,12 +52,38 @@ pub struct CellData {
     pub merge_span: Option<(u32, u32)>,
 }
 
+/// A deferred pointer hit inside the in-cell editor. Resolving a click x to a
+/// byte offset needs text measurement (font metrics), which only the renderer
+/// has, so the view records the raw physical pointer x plus the intent here and
+/// the renderer resolves it into `caret` / `mark` on the next paint.
+#[derive(Clone, Copy)]
+pub struct PendingHit {
+    /// Physical pointer x (same space as `cell_pixel_rect`).
+    pub x: f64,
+    pub kind: HitKind,
+}
+
+/// What a resolved pointer hit does to the editor selection.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum HitKind {
+    /// Place the caret and collapse the selection (single click / drag start).
+    Place,
+    /// Extend the selection to the hit (drag move / shift-click).
+    Extend,
+    /// Select the word under the hit (double click).
+    Word,
+}
+
 /// In-progress edit of a single cell, driven by the transparent textarea pipe.
 ///
 /// The `buffer` is the committed plaintext; `caret` is a byte offset into it
 /// (always on a char boundary). `preview` is the live IME composition string,
 /// conceptually inserted at the caret but kept separate so it can be styled and
 /// discarded/replaced atomically on each composition pass.
+///
+/// `mark` is the fixed end of a text selection (the moving end is `caret`);
+/// `None` means no selection (a bare caret). The selected range is
+/// `min(mark, caret)..max(mark, caret)`.
 #[derive(Clone, Default)]
 pub struct CellEditor {
     pub row: u32,
@@ -65,23 +91,64 @@ pub struct CellEditor {
     pub buffer: String,
     pub caret: usize,
     pub preview: String,
+    pub mark: Option<usize>,
+    /// Pending pointer hit awaiting resolution by the renderer (then cleared).
+    pub pending: Option<PendingHit>,
 }
 
 impl CellEditor {
     /// Open an editor on `(row, col)` seeded with `text`, caret at the end.
     pub fn new(row: u32, col: u32, text: String) -> Self {
         let caret = text.len();
-        Self { row, col, buffer: text, caret, preview: String::new() }
+        Self { row, col, buffer: text, caret, preview: String::new(), mark: None, pending: None }
     }
 
-    /// Insert committed text at the caret (latin typing, paste, IME commit).
+    /// The selected byte range `start..end` (start <= end), or `None` when the
+    /// selection is empty (no mark, or mark collapsed onto the caret).
+    pub fn selection(&self) -> Option<(usize, usize)> {
+        match self.mark {
+            Some(m) if m != self.caret => Some((m.min(self.caret), m.max(self.caret))),
+            _ => None,
+        }
+    }
+
+    /// The currently selected substring, or empty when nothing is selected.
+    pub fn selected_text(&self) -> &str {
+        match self.selection() {
+            Some((s, e)) => &self.buffer[s..e],
+            None => "",
+        }
+    }
+
+    /// Drop the active selection (keeps the caret where it is).
+    pub fn clear_selection(&mut self) {
+        self.mark = None;
+    }
+
+    /// Delete the selected range, collapsing the caret to its start. Returns
+    /// `true` when something was removed.
+    pub fn delete_selection(&mut self) -> bool {
+        let Some((s, e)) = self.selection() else { return false };
+        self.buffer.drain(s..e);
+        self.caret = s;
+        self.mark = None;
+        true
+    }
+
+    /// Insert committed text at the caret (latin typing, paste, IME commit),
+    /// replacing the selection first if there is one.
     pub fn insert(&mut self, s: &str) {
+        self.delete_selection();
         self.buffer.insert_str(self.caret, s);
         self.caret += s.len();
     }
 
-    /// Delete the char before the caret. No-op at the start.
+    /// Delete the char before the caret, or the selection when there is one.
+    /// No-op at the start with no selection.
     pub fn backspace(&mut self) {
+        if self.delete_selection() {
+            return;
+        }
         if self.caret == 0 {
             return;
         }
@@ -94,17 +161,151 @@ impl CellEditor {
         self.caret -= prev;
     }
 
-    /// Move the caret one char left.
-    pub fn move_left(&mut self) {
-        if let Some(c) = self.buffer[..self.caret].chars().next_back() {
-            self.caret -= c.len_utf8();
+    /// Delete the selection, or the char after the caret when none (Del key).
+    /// Returns `true` when something was removed.
+    pub fn delete_forward(&mut self) -> bool {
+        if self.delete_selection() {
+            return true;
         }
+        if let Some(c) = self.buffer[self.caret..].chars().next() {
+            self.buffer.drain(self.caret..self.caret + c.len_utf8());
+            return true;
+        }
+        false
     }
 
-    /// Move the caret one char right.
+    /// Byte offset one char left of the caret (or the caret at the start).
+    fn prev_offset(&self) -> usize {
+        self.buffer[..self.caret]
+            .chars()
+            .next_back()
+            .map(|c| self.caret - c.len_utf8())
+            .unwrap_or(self.caret)
+    }
+
+    /// Byte offset one char right of the caret (or the caret at the end).
+    fn next_offset(&self) -> usize {
+        self.buffer[self.caret..]
+            .chars()
+            .next()
+            .map(|c| self.caret + c.len_utf8())
+            .unwrap_or(self.caret)
+    }
+
+    /// Move the caret one char left. Collapses an existing selection to its
+    /// left edge instead of moving past it (standard text-field behaviour).
+    pub fn move_left(&mut self) {
+        if let Some((s, _)) = self.selection() {
+            self.caret = s;
+        } else {
+            self.caret = self.prev_offset();
+        }
+        self.mark = None;
+    }
+
+    /// Move the caret one char right, collapsing a selection to its right edge.
     pub fn move_right(&mut self) {
-        if let Some(c) = self.buffer[self.caret..].chars().next() {
-            self.caret += c.len_utf8();
+        if let Some((_, e)) = self.selection() {
+            self.caret = e;
+        } else {
+            self.caret = self.next_offset();
+        }
+        self.mark = None;
+    }
+
+    /// Extend the selection one char left (Shift+Left).
+    pub fn extend_left(&mut self) {
+        self.mark.get_or_insert(self.caret);
+        self.caret = self.prev_offset();
+    }
+
+    /// Extend the selection one char right (Shift+Right).
+    pub fn extend_right(&mut self) {
+        self.mark.get_or_insert(self.caret);
+        self.caret = self.next_offset();
+    }
+
+    /// Move the caret to the start of the buffer (Home), dropping the selection.
+    pub fn move_home(&mut self) {
+        self.caret = 0;
+        self.mark = None;
+    }
+
+    /// Move the caret to the end of the buffer (End), dropping the selection.
+    pub fn move_end(&mut self) {
+        self.caret = self.buffer.len();
+        self.mark = None;
+    }
+
+    /// Extend the selection to the start of the buffer (Shift+Home).
+    pub fn extend_home(&mut self) {
+        self.mark.get_or_insert(self.caret);
+        self.caret = 0;
+    }
+
+    /// Extend the selection to the end of the buffer (Shift+End).
+    pub fn extend_end(&mut self) {
+        self.mark.get_or_insert(self.caret);
+        self.caret = self.buffer.len();
+    }
+
+    /// Select the whole buffer (Ctrl+A).
+    pub fn select_all(&mut self) {
+        self.mark = Some(0);
+        self.caret = self.buffer.len();
+    }
+
+    /// Place the caret at byte offset `off` (clamped to a char boundary) and
+    /// collapse the selection. Used to resolve a single-click hit.
+    pub fn place_caret(&mut self, off: usize) {
+        self.caret = self.clamp_boundary(off);
+        self.mark = None;
+    }
+
+    /// Extend the selection to byte offset `off` (drag / shift-click hit),
+    /// seeding the mark at the current caret if there is no selection yet.
+    pub fn extend_to(&mut self, off: usize) {
+        self.mark.get_or_insert(self.caret);
+        self.caret = self.clamp_boundary(off);
+    }
+
+    /// Select the word surrounding byte offset `off` (double-click hit). Words
+    /// are maximal runs of alphanumeric chars; a hit on a non-word char selects
+    /// that single char.
+    pub fn select_word(&mut self, off: usize) {
+        let off = self.clamp_boundary(off);
+        let is_word = |c: char| c.is_alphanumeric() || c == '_';
+        // Anchor on the char to the right of the hit, falling back to the left.
+        let here = self.buffer[off..].chars().next().or_else(|| self.buffer[..off].chars().next_back());
+        let Some(here) = here else {
+            self.place_caret(off);
+            return;
+        };
+        let word = is_word(here);
+        let start = self.buffer[..off]
+            .char_indices()
+            .rev()
+            .take_while(|(_, c)| is_word(*c) == word)
+            .last()
+            .map(|(i, _)| i)
+            .unwrap_or(off);
+        let end = self.buffer[off..]
+            .char_indices()
+            .take_while(|(_, c)| is_word(*c) == word)
+            .last()
+            .map(|(i, c)| off + i + c.len_utf8())
+            .unwrap_or(off);
+        self.mark = Some(start);
+        self.caret = end;
+    }
+
+    /// Snap a byte offset down to the nearest char boundary within the buffer.
+    fn clamp_boundary(&self, off: usize) -> usize {
+        let off = off.min(self.buffer.len());
+        if self.buffer.is_char_boundary(off) {
+            off
+        } else {
+            self.buffer[..off].char_indices().next_back().map(|(i, _)| i).unwrap_or(0)
         }
     }
 
@@ -710,6 +911,53 @@ mod tests {
         state.move_cursor(1, 0).expect("cursor moved");
         assert_eq!(state.selection, Selection::single(6, 3));
         assert_eq!(state.selection.anchor, state.selection.active);
+    }
+
+    /// Shift+arrows grow the selection from a seeded mark; a bare arrow collapses
+    /// it to the matching edge; typing and Delete replace the selected range.
+    #[test]
+    fn cell_editor_text_selection() {
+        let mut ed = CellEditor::new(0, 0, "hello world".to_owned());
+        assert_eq!(ed.caret, 11);
+        assert_eq!(ed.selection(), None);
+
+        // Shift+Left twice selects the last two chars ("ld").
+        ed.extend_left();
+        ed.extend_left();
+        assert_eq!(ed.selection(), Some((9, 11)));
+        assert_eq!(ed.selected_text(), "ld");
+
+        // A bare Left collapses to the selection's left edge (no extra move).
+        ed.move_left();
+        assert_eq!(ed.caret, 9);
+        assert_eq!(ed.selection(), None);
+
+        // Home..Shift? Extend to start, then replace the run by typing.
+        ed.extend_home();
+        assert_eq!(ed.selected_text(), "hello wor");
+        ed.insert("HI ");
+        assert_eq!(ed.buffer, "HI ld");
+        assert_eq!(ed.caret, 3);
+
+        // Delete with a selection removes it; without one, the next char.
+        ed.select_all();
+        assert!(ed.delete_forward());
+        assert_eq!(ed.buffer, "");
+        assert!(!ed.delete_forward());
+    }
+
+    /// Double-click word selection spans the alphanumeric run under the hit and
+    /// Ctrl+A grabs the whole buffer.
+    #[test]
+    fn cell_editor_word_and_select_all() {
+        let mut ed = CellEditor::new(0, 0, "foo bar baz".to_owned());
+        ed.select_word(5); // inside "bar"
+        assert_eq!(ed.selected_text(), "bar");
+
+        ed.select_all();
+        assert_eq!(ed.selection(), Some((0, 11)));
+        ed.backspace();
+        assert_eq!(ed.buffer, "");
     }
 
     /// Absolute moves clamp to the grid and report the new active cell; a move

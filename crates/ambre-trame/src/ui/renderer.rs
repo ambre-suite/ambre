@@ -29,7 +29,7 @@ use ambre_draw::{
 use ambre_canvas::{Palette, TextCache};
 
 use super::grid::{
-    ADD_BTN_WIDTH, CellEditor, COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT,
+    ADD_BTN_WIDTH, CellEditor, COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, HitKind, ROW_HEIGHT,
     TAB_MENU_ITEM_HEIGHT, TAB_MENU_WIDTH, TAB_STRIP_HEIGHT, TAB_WIDTH, TabDrag, TabMenu, TabRename,
 };
 use super::TrameUiState;
@@ -356,6 +356,32 @@ fn measure(
     layout.width() as f64
 }
 
+/// Map a text-relative pixel x to the nearest char boundary in `text`. Walks
+/// boundaries left to right and returns the one whose mid-glyph crossing the
+/// target is closest -- i.e. the caret snaps to whichever gap the click is
+/// nearer to. `text` is short (one cell), so the linear measure scan is cheap.
+fn offset_at_x(
+    font_cx: &mut FontContext,
+    cache:   &mut TextCache,
+    text:    &str,
+    bold:    bool,
+    italic:  bool,
+    target:  f64,
+) -> usize {
+    let mut prev_w = 0.0;
+    let mut prev_off = 0;
+    for (off, c) in text.char_indices() {
+        let next_off = off + c.len_utf8();
+        let w = measure(font_cx, cache, &text[..next_off], bold, italic);
+        if target <= (prev_w + w) / 2.0 {
+            return prev_off;
+        }
+        prev_w = w;
+        prev_off = next_off;
+    }
+    text.len()
+}
+
 /// Draw the active edit session over the cell: a white field, the buffer with
 /// its IME composition preview, the caret, and a dotted underline under the
 /// composition. Called on the overlay layer after `draw_overlay`, so it sits
@@ -365,7 +391,7 @@ pub fn draw_edit<S: DrawSurface>(
     surface:       &mut S,
     state:         &TrameUiState,
     palette:       &Palette,
-    editor:        &CellEditor,
+    editor:        &mut CellEditor,
     caret_visible: bool,
     font_cx:       &mut FontContext,
     cache:         &mut TextCache,
@@ -381,11 +407,31 @@ pub fn draw_edit<S: DrawSurface>(
         .map(|c| (c.bold, c.italic))
         .unwrap_or((false, false));
 
+    // Resolve a deferred pointer hit now that we have font metrics: map its
+    // physical x to a byte offset and apply the click/drag/word-select intent.
+    if let Some(hit) = editor.pending.take() {
+        let text_x = (hit.x - (x + CELL_PAD_X)).max(0.0);
+        let off = offset_at_x(font_cx, cache, &editor.buffer, bold, italic, text_x);
+        match hit.kind {
+            HitKind::Place => editor.place_caret(off),
+            HitKind::Extend => editor.extend_to(off),
+            HitKind::Word => editor.select_word(off),
+        }
+    }
+
     let cell = Rect::new(x, y, x + cw, y + ch);
     surface.push_clip(cell);
 
     // Content-coloured field over the underlying cell + active border interior.
     surface.fill_rect(cell, palette.content_bg);
+
+    // Selection highlight behind the text: a translucent band from the start to
+    // the end of the selected range.
+    if let Some((s, e)) = editor.selection() {
+        let sx = x + CELL_PAD_X + measure(font_cx, cache, &editor.buffer[..s], bold, italic);
+        let ex = x + CELL_PAD_X + measure(font_cx, cache, &editor.buffer[..e], bold, italic);
+        surface.fill_rect(Rect::new(sx, y + 2.0, ex, y + ch - 2.0), palette.selection.with_alpha(0.30));
+    }
 
     // Text: prefix + preview + suffix, baseline-centred in the row.
     let display = editor.display();
