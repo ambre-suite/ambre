@@ -28,7 +28,10 @@ use ambre_draw::{
 
 use ambre_canvas::{Palette, TextCache};
 
-use super::grid::{CellEditor, COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT};
+use super::grid::{
+    ADD_BTN_WIDTH, CellEditor, COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT,
+    TAB_MENU_ITEM_HEIGHT, TAB_MENU_WIDTH, TAB_STRIP_HEIGHT, TAB_WIDTH, TabDrag, TabMenu, TabRename,
+};
 use super::TrameUiState;
 use crate::render::{self, BODY_SIZE, CELL_PAD_X, CellContent, GridLayout};
 use crate::{TOTAL_COLS, TOTAL_ROWS};
@@ -44,7 +47,8 @@ fn screen_layout(state: &TrameUiState) -> GridLayout {
         origin_col: state.left_col,
         origin_row: state.top_row,
         width: state.canvas_width,
-        height: state.canvas_height,
+        // The grid stops above the bottom sheet-tab strip (sec.13).
+        height: state.grid_bottom(),
         total_cols: TOTAL_COLS,
         total_rows: TOTAL_ROWS,
     }
@@ -149,9 +153,10 @@ pub fn draw_cells<S: DrawSurface>(
     stats:        &mut DrawStats,
 ) {
     let w = state.canvas_width;
-    let h = state.canvas_height;
+    let h = state.grid_bottom();
 
-    // Cell area = full canvas minus the fixed-position header strip.
+    // Cell area = canvas minus the fixed header strip (top/left) and the bottom
+    // sheet-tab strip.
     let cell_area = Rect::new(HEADER_WIDTH, HEADER_HEIGHT, w, h);
     let strip = match strip_rect {
         Some(r) => r.intersect(cell_area),
@@ -429,6 +434,128 @@ pub fn draw_edit<S: DrawSurface>(
 }
 
 // -----------------------------------------------------------------------------
+// draw_sheet_tabs -- bottom tab strip (overlay, spec sec.13)
+// -----------------------------------------------------------------------------
+
+/// Vertical padding from the tab top to the label baseline area.
+const TAB_LABEL_PAD_X: f64 = 8.0;
+
+/// Draw the bottom sheet-tab strip: one slot per sheet (active highlighted),
+/// the trailing "+" button, an optional in-place rename field, and a drop marker
+/// while a tab is being dragged. Lives on the overlay so it redraws with the
+/// chrome each dirty frame.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_sheet_tabs<S: DrawSurface>(
+    surface:      &mut S,
+    state:        &TrameUiState,
+    palette:      &Palette,
+    font_cx:      &mut FontContext,
+    text_cache:   &mut TextCache,
+    text_enabled: bool,
+    rename:       Option<&TabRename>,
+    drag:         Option<&TabDrag>,
+    caret_on:     bool,
+) {
+    let strip_y = state.grid_bottom();
+    let w = state.canvas_width;
+    let bottom = state.canvas_height;
+
+    // Strip background across the full width.
+    surface.fill_rect(Rect::new(0.0, strip_y, w, bottom), palette.header_bg);
+    // Top hairline separating the strip from the grid.
+    surface.stroke_line(0.0, strip_y, w, strip_y, palette.grid_line, 1.0);
+
+    for (i, (id, name)) in state.sheets.iter().enumerate() {
+        let (x0, x1) = state.tab_slot_x(i);
+        if x0 >= w {
+            break; // off the right edge; no horizontal tab scroll in the MVP
+        }
+        let active = *id == state.active_sheet;
+        let bg = if active { palette.content_bg } else { palette.header_bg };
+        surface.fill_rect(Rect::new(x0, strip_y, x1, bottom), bg);
+
+        // Active tab carries a thicker accent on its top edge.
+        let (border_color, border_w) =
+            if active { (palette.selection, 2.0) } else { (palette.grid_line, 1.0) };
+        surface.stroke_line(x0, strip_y, x1, strip_y, border_color, border_w);
+        // Right separator between slots.
+        surface.stroke_line(x1, strip_y, x1, bottom, palette.grid_line, 1.0);
+
+        // Label, or the rename field when this tab is being renamed.
+        let label_y = strip_y + (TAB_STRIP_HEIGHT - BODY_SIZE as f64) / 2.0;
+        if let Some(r) = rename.filter(|r| r.sheet_id == *id) {
+            let text = r.editor.display();
+            if text_enabled && !text.is_empty() {
+                render::draw_text(
+                    surface, font_cx, text_cache, &text, BODY_SIZE,
+                    (TAB_WIDTH - TAB_LABEL_PAD_X * 2.0) as f32, Alignment::Start,
+                    x0 + TAB_LABEL_PAD_X, label_y, palette.cell_text,
+                );
+            }
+            // Caret after the committed prefix + IME preview.
+            if caret_on {
+                let cx = x0 + TAB_LABEL_PAD_X
+                    + measure(font_cx, text_cache, &r.editor.before_caret(), false, false);
+                surface.stroke_line(cx, strip_y + 4.0, cx, bottom - 4.0, palette.caret, 1.0);
+            }
+        } else if text_enabled && !name.is_empty() {
+            let color = if active { palette.cell_text } else { palette.header_text };
+            render::draw_text(
+                surface, font_cx, text_cache, name, BODY_SIZE,
+                (TAB_WIDTH - TAB_LABEL_PAD_X * 2.0) as f32, Alignment::Start,
+                x0 + TAB_LABEL_PAD_X, label_y, color,
+            );
+        }
+    }
+
+    // Trailing "+" button.
+    let (ax0, ax1) = state.add_button_x();
+    if ax0 < w {
+        surface.fill_rect(Rect::new(ax0, strip_y, ax1, bottom), palette.header_bg);
+        surface.stroke_line(ax1, strip_y, ax1, bottom, palette.grid_line, 1.0);
+        if text_enabled {
+            let label_y = strip_y + (TAB_STRIP_HEIGHT - BODY_SIZE as f64) / 2.0;
+            render::draw_text(
+                surface, font_cx, text_cache, "+", BODY_SIZE,
+                ADD_BTN_WIDTH as f32, Alignment::Center,
+                ax0, label_y, palette.header_text,
+            );
+        }
+    }
+
+    // Drop marker: a vertical accent at the slot the dragged tab would land on.
+    if let Some(d) = drag.filter(|d| d.moved) {
+        let drop = state.drop_index_at(d.cur_x) as usize;
+        let (mx, _) = state.tab_slot_x(drop);
+        surface.stroke_line(mx, strip_y, mx, bottom, palette.selection, 2.0);
+    }
+}
+
+/// Draw an open tab context menu (`{ Rename, Delete }`) over everything.
+pub fn draw_tab_menu<S: DrawSurface>(
+    surface:    &mut S,
+    palette:    &Palette,
+    font_cx:    &mut FontContext,
+    text_cache: &mut TextCache,
+    menu:       &TabMenu,
+) {
+    let h = TAB_MENU_ITEM_HEIGHT * 2.0;
+    let area = Rect::new(menu.x, menu.y, menu.x + TAB_MENU_WIDTH, menu.y + h);
+    surface.fill_rect(area, palette.content_bg);
+    surface.stroke_rect(area, palette.grid_line, 1.0);
+
+    for (i, label) in ["Rename", "Delete"].into_iter().enumerate() {
+        let y = menu.y + i as f64 * TAB_MENU_ITEM_HEIGHT;
+        render::draw_text(
+            surface, font_cx, text_cache, label, BODY_SIZE,
+            (TAB_MENU_WIDTH - 16.0) as f32, Alignment::Start,
+            menu.x + 8.0, y + (TAB_MENU_ITEM_HEIGHT - BODY_SIZE as f64) / 2.0,
+            palette.cell_text,
+        );
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Headless tests -- mock DrawSurface (ambre-spec-canvas P0 "Headless tests").
 // -----------------------------------------------------------------------------
 //
@@ -488,7 +615,7 @@ mod tests {
         assert_eq!(
             surface.ops().first(),
             Some(&DrawOp::FillRect {
-                rect: Rect::new(HEADER_WIDTH, HEADER_HEIGHT, 800.0, 600.0),
+                rect: Rect::new(HEADER_WIDTH, HEADER_HEIGHT, 800.0, state.grid_bottom()),
                 color: palette.content_pending,
             }),
         );
@@ -610,6 +737,104 @@ mod tests {
         assert!(surface.count(|op| matches!(
             op, DrawOp::StrokeLine { color, .. } if *color == palette.cell_error
         )) > 0);
+    }
+
+    #[test]
+    fn sheet_tabs_fill_active_slot_and_draw_strip() {
+        // Two sheets, the second active: the active slot is filled with
+        // content_bg and accented with the selection colour on its top edge.
+        let mut state = fixture(&[]);
+        state.on_sheet_list(
+            vec![("s0".into(), "One".into()), ("s1".into(), "Two".into())],
+            "s1".into(),
+        );
+        let palette = Theme::Light.palette();
+        let (mut surface, _clock, mut font_cx, mut cache, _stats) = harness();
+
+        draw_sheet_tabs(
+            &mut surface, &state, palette, &mut font_cx, &mut cache, true, None, None, true,
+        );
+
+        // The active slot gets a content_bg fill (inactive slots use header_bg).
+        assert!(surface.count(|op| matches!(
+            op, DrawOp::FillRect { color, .. } if *color == palette.content_bg
+        )) >= 1);
+        // The active accent uses the selection colour at 2px.
+        assert!(surface.count(|op| matches!(
+            op, DrawOp::StrokeLine { color, width, .. }
+                if *color == palette.selection && *width == 2.0
+        )) >= 1);
+        assert_eq!(surface.clip_depth(), 0);
+    }
+
+    #[test]
+    fn sheet_tab_rename_draws_caret_over_the_target_tab() {
+        // An active rename on "s0" draws a caret (palette.caret) in the strip.
+        let mut state = fixture(&[]);
+        state.on_sheet_list(vec![("s0".into(), "One".into())], "s0".into());
+        let palette = Theme::Light.palette();
+        let (mut surface, _clock, mut font_cx, mut cache, _stats) = harness();
+
+        let rename = super::TabRename {
+            sheet_id: "s0".into(),
+            editor: CellEditor::new(0, 0, "On".to_owned()),
+        };
+        draw_sheet_tabs(
+            &mut surface, &state, palette, &mut font_cx, &mut cache, true,
+            Some(&rename), None, /* caret_on */ true,
+        );
+        assert!(surface.count(|op| matches!(
+            op, DrawOp::StrokeLine { color, .. } if *color == palette.caret
+        )) >= 1);
+
+        // With the caret off (blink), no caret line is drawn.
+        let (mut surface, _c, mut f, mut ch, _s) = harness();
+        draw_sheet_tabs(
+            &mut surface, &state, palette, &mut f, &mut ch, true, Some(&rename), None, false,
+        );
+        assert_eq!(
+            surface.count(|op| matches!(
+                op, DrawOp::StrokeLine { color, .. } if *color == palette.caret
+            )),
+            0,
+        );
+    }
+
+    #[test]
+    fn sheet_tab_drag_draws_drop_marker_only_when_moved() {
+        let mut state = fixture(&[]);
+        state.on_sheet_list(
+            vec![("s0".into(), "A".into()), ("s1".into(), "B".into())],
+            "s0".into(),
+        );
+        let palette = Theme::Light.palette();
+
+        let strip_y = state.grid_bottom();
+        let bottom = state.canvas_height;
+        // The drop marker is the *vertical* (x0 == x1) 2px selection line that
+        // spans the strip -- distinct from the active tab's horizontal accent,
+        // which is also a 2px selection line but along the top edge.
+        let drop_marker = move |op: &DrawOp| matches!(
+            op, DrawOp::StrokeLine { x0, y0, x1, y1, color, width }
+                if *color == palette.selection && *width == 2.0
+                    && (*x0 - *x1).abs() < 0.01 && *y0 == strip_y && *y1 == bottom
+        );
+
+        // A drag that has moved draws the marker at the drop slot's left edge.
+        let moved = super::TabDrag { sheet_id: "s0".into(), grab_x: 5.0, cur_x: 150.0, moved: true };
+        let (mut surface, _c, mut f, mut ch, _s) = harness();
+        draw_sheet_tabs(&mut surface, &state, palette, &mut f, &mut ch, true, None, Some(&moved), true);
+        let expected_x = state.tab_slot_x(state.drop_index_at(150.0) as usize).0;
+        assert_eq!(surface.count(drop_marker), 1);
+        assert!(surface.ops().iter().any(|op| matches!(
+            op, DrawOp::StrokeLine { x0, .. } if (*x0 - expected_x).abs() < 0.01
+        )));
+
+        // A grab that has not moved yet draws no drop marker.
+        let still = super::TabDrag { sheet_id: "s0".into(), grab_x: 5.0, cur_x: 6.0, moved: false };
+        let (mut surface, _c, mut f, mut ch, _s) = harness();
+        draw_sheet_tabs(&mut surface, &state, palette, &mut f, &mut ch, true, None, Some(&still), true);
+        assert_eq!(surface.count(drop_marker), 0);
     }
 
     #[test]

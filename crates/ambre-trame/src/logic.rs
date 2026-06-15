@@ -261,6 +261,11 @@ pub struct TrameState {
     /// survive. Not persisted -- once minted, a uid lives in the CRDT as the list
     /// element's value.
     uid_counter: u32,
+    /// Set once the first [`TrameCommand::ScrollViewport`] has been served. The
+    /// UI thread has no dedicated "fetch sheet list" command, so the first
+    /// viewport request (sent on load) rides a [`TrameEvent::SheetList`] back to
+    /// hydrate the tab strip. Subsequent scrolls do not repeat it.
+    sheet_list_sent: bool,
 }
 
 impl TrameState {
@@ -298,6 +303,7 @@ impl TrameState {
             undo_manager,
             sheet_counter: 0,
             uid_counter: 0,
+            sheet_list_sent: false,
         };
         // Index the implicit sheet so `=Sheet1!A1` resolves before any reseed.
         state.rebuild_sheet_maps();
@@ -648,7 +654,15 @@ impl TrameState {
                     }
                 }
 
-                TrameOutcome::display_only(vec![TrameEvent::ViewportData { version, row_start, col_start, cells }])
+                let mut display =
+                    vec![TrameEvent::ViewportData { version, row_start, col_start, cells }];
+                // Hydrate the tab strip on the first viewport request of the
+                // session (the UI has no separate sheet-list fetch command).
+                if !self.sheet_list_sent {
+                    self.sheet_list_sent = true;
+                    display.push(self.sheet_list_event());
+                }
+                TrameOutcome::display_only(display)
             }
             TrameCommand::InsertRow { at } => self.insert_axis(at, Axis::Row),
             TrameCommand::DeleteRow { at } => self.delete_axis(at, Axis::Row),
@@ -2777,6 +2791,43 @@ mod tests {
         assert_eq!(read_cell(&mut state, 0, 0), "on_s1");
         state.handle_command(TrameCommand::ActivateSheet { sheet_id: "s0".to_owned() });
         assert_eq!(read_cell(&mut state, 0, 0), "on_s0");
+    }
+
+    /// The first `ScrollViewport` of a session rides a `SheetList` back so the
+    /// UI tab strip hydrates on load (no separate fetch command); subsequent
+    /// scrolls carry only the viewport.
+    #[test]
+    fn first_scroll_viewport_hydrates_sheet_list_once() {
+        let mut state = TrameState::new();
+        let scroll = || TrameCommand::ScrollViewport {
+            version: 1,
+            row_start: 0,
+            row_end: 4,
+            col_start: 0,
+            col_end: 4,
+        };
+
+        let first = state.handle_command(scroll());
+        assert!(
+            matches!(first.display.first(), Some(TrameEvent::ViewportData { .. })),
+            "viewport data leads the response",
+        );
+        let sheet_list = first
+            .display
+            .iter()
+            .find(|e| matches!(e, TrameEvent::SheetList { .. }));
+        let Some(TrameEvent::SheetList { sheets, active }) = sheet_list else {
+            panic!("first ScrollViewport must emit a SheetList");
+        };
+        assert_eq!(active, "s0");
+        assert_eq!(sheets, &vec![("s0".to_owned(), "Sheet1".to_owned())]);
+
+        // The second scroll carries the viewport only -- no repeated SheetList.
+        let second = state.handle_command(scroll());
+        assert!(
+            !second.display.iter().any(|e| matches!(e, TrameEvent::SheetList { .. })),
+            "SheetList is emitted only once per session",
+        );
     }
 
     /// A cross-sheet formula on the active sheet evaluates a cell living on
