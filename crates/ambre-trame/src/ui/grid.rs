@@ -397,6 +397,19 @@ impl TrameUiState {
             .clamp(0, (TOTAL_ROWS - 1) as i64) as u32;
         let new_col = (self.active_col() as i64 + dc as i64)
             .clamp(0, (TOTAL_COLS - 1) as i64) as u32;
+        self.move_to(new_row, new_col)
+    }
+
+    /// Move the active cell to absolute `(row, col)`, clamped to the grid.
+    ///
+    /// Backs the jump-style navigation keys (Home / End / Ctrl+Home / Ctrl+End,
+    /// Page Up / Page Down compute their target row first). Same contract as
+    /// [`move_cursor`](Self::move_cursor): `None` if the cell did not change,
+    /// otherwise a [`CursorMove`] with the new active cell plus an optional
+    /// `ScrollViewport`.
+    pub fn move_to(&mut self, row: u32, col: u32) -> Option<CursorMove> {
+        let new_row = row.min(TOTAL_ROWS - 1);
+        let new_col = col.min(TOTAL_COLS - 1);
 
         if new_row == self.active_row() && new_col == self.active_col() {
             return None;
@@ -414,6 +427,29 @@ impl TrameUiState {
             active: TrameCommand::SetActiveCell { row: new_row, col: new_col },
             scroll,
         })
+    }
+
+    /// Rightmost cached non-empty column in `row`, or `None` if the row has no
+    /// cached content. Backs the End key: the UI thread has no used-range model,
+    /// so the local cell cache is the only view of content available (sec.16),
+    /// making this a best-effort jump to the end of the visible data.
+    pub fn last_content_col(&self, row: u32) -> Option<u32> {
+        self.cell_cache
+            .iter()
+            .filter(|((r, _), d)| *r == row && !d.text.is_empty())
+            .map(|((_, c), _)| *c)
+            .max()
+    }
+
+    /// Bottom-right cached non-empty cell `(row, col)`, or `None` if the cache
+    /// holds no content. Backs Ctrl+End (same cache-only caveat as
+    /// [`last_content_col`](Self::last_content_col)).
+    pub fn last_content_cell(&self) -> Option<(u32, u32)> {
+        self.cell_cache
+            .iter()
+            .filter(|(_, d)| !d.text.is_empty())
+            .map(|(&pos, _)| pos)
+            .max()
     }
 
     /// Adjust top_row / left_col so that (row, col) is visible.
@@ -667,6 +703,46 @@ mod tests {
         state.move_cursor(1, 0).expect("cursor moved");
         assert_eq!(state.selection, Selection::single(6, 3));
         assert_eq!(state.selection.anchor, state.selection.active);
+    }
+
+    /// Absolute moves clamp to the grid and report the new active cell; a move
+    /// to the current cell is a no-op. End/Ctrl+End scan the local cache for the
+    /// last cell carrying content (the UI thread's only view of data).
+    #[test]
+    fn move_to_and_content_scans() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+
+        // No change -> None.
+        assert!(state.move_to(0, 0).is_none());
+        // Clamped to the last valid index.
+        state.move_to(crate::TOTAL_ROWS + 10, crate::TOTAL_COLS + 10).expect("moved");
+        assert_eq!(
+            (state.active_row(), state.active_col()),
+            (crate::TOTAL_ROWS - 1, crate::TOTAL_COLS - 1),
+        );
+
+        // Empty cache: no content cells.
+        assert_eq!(state.last_content_col(0), None);
+        assert_eq!(state.last_content_cell(), None);
+
+        state.on_viewport_data(TrameEvent::ViewportData {
+            version: 1,
+            row_start: 0,
+            col_start: 0,
+            cells: vec![
+                DisplayCell { row: 2, col: 5, text: "x".into(), raw: "x".into(),
+                    bold: false, italic: false, is_merged: false, merge_span: None, is_filtered: false },
+                DisplayCell { row: 2, col: 1, text: "y".into(), raw: "y".into(),
+                    bold: false, italic: false, is_merged: false, merge_span: None, is_filtered: false },
+                DisplayCell { row: 4, col: 3, text: "".into(), raw: "".into(),
+                    bold: false, italic: false, is_merged: false, merge_span: None, is_filtered: false },
+            ],
+        });
+        // Rightmost non-empty col in row 2 is col 5; row 4's only cell is empty.
+        assert_eq!(state.last_content_col(2), Some(5));
+        assert_eq!(state.last_content_col(4), None);
+        // Bottom-right non-empty cell ignores the empty (4, 3): max is (2, 5).
+        assert_eq!(state.last_content_cell(), Some((2, 5)));
     }
 
     /// A formula cell arriving in a viewport batch keeps its computed result in

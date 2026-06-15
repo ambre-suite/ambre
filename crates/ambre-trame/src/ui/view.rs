@@ -19,8 +19,8 @@ use ambre_canvas::{
 };
 
 use super::grid::{
-    CellEditor, COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT, TabDrag, TabMenu, TabMenuItem,
-    TabRename, TrameUiState,
+    CellEditor, COL_WIDTH, CursorMove, HEADER_HEIGHT, HEADER_WIDTH, ROW_HEIGHT, TabDrag, TabMenu,
+    TabMenuItem, TabRename, TrameUiState,
 };
 use super::renderer::{self, DrawStats};
 
@@ -1050,27 +1050,60 @@ impl TrameView {
                 self.edit_dirty = true;
                 true
             }
-            InputEvent::Key { key, alt, .. } => match key.as_str() {
-                "ArrowUp" => self.nav_move(-1, 0),
-                "ArrowDown" => self.nav_move(1, 0),
-                "ArrowLeft" => self.nav_move(0, -1),
-                "ArrowRight" => self.nav_move(0, 1),
-                // Enter / F2 open an editor on the cell's current text.
-                "Enter" | "F2" => {
-                    let seed = self.cell_seed(self.state.active_row(), self.state.active_col());
-                    self.begin_edit(seed);
-                    true
+            InputEvent::Key { key, ctrl, meta, alt, shift } => {
+                let chord = *ctrl || *meta; // Ctrl (or Cmd on macOS) jump modifier.
+                match key.as_str() {
+                    "ArrowUp" => self.nav_move(-1, 0),
+                    "ArrowDown" => self.nav_move(1, 0),
+                    "ArrowLeft" => self.nav_move(0, -1),
+                    "ArrowRight" => self.nav_move(0, 1),
+                    // Tab / Shift+Tab walk columns; Enter / Shift+Enter walk rows
+                    // (spreadsheet convention, sec.5.A). preventDefault keeps the
+                    // browser from moving focus off the canvas.
+                    "Tab" if !chord => self.nav_move(0, if *shift { -1 } else { 1 }),
+                    "Enter" if !chord => self.nav_move(if *shift { -1 } else { 1 }, 0),
+                    // Page Down / Up move by a full viewport height.
+                    "PageDown" => self.nav_move(self.state.viewport_rows.max(1) as i32, 0),
+                    "PageUp" => self.nav_move(-(self.state.viewport_rows.max(1) as i32), 0),
+                    // Home: column 0 of the row; Ctrl+Home: top-left of the grid.
+                    "Home" if chord => self.nav_goto(0, 0),
+                    "Home" => self.nav_goto(self.state.active_row(), 0),
+                    // End: last cell with content in the row; Ctrl+End: bottom-right
+                    // of the used (cached) range. Best-effort -- the UI thread has
+                    // no used-range model, so it scans its local cache (sec.16).
+                    "End" if chord => {
+                        let (row, col) = self
+                            .state
+                            .last_content_cell()
+                            .unwrap_or((self.state.active_row(), self.state.active_col()));
+                        self.nav_goto(row, col)
+                    }
+                    "End" => {
+                        let row = self.state.active_row();
+                        let col = self.state.last_content_col(row).unwrap_or(self.state.active_col());
+                        self.nav_goto(row, col)
+                    }
+                    // Delete / Backspace clear the active cell.
+                    "Delete" | "Backspace" => self.clear_active_cell(),
+                    // F2 opens an editor on the cell's current text.
+                    "F2" => {
+                        let seed = self.cell_seed(self.state.active_row(), self.state.active_col());
+                        self.begin_edit(seed);
+                        true
+                    }
+                    // Debug HUD text toggle, moved behind Alt so plain letters type.
+                    "t" | "T" if *alt => {
+                        self.text_enabled ^= true;
+                        self.needs_full = true;
+                        true
+                    }
+                    // Let plain printable keys fall through (no preventDefault) so
+                    // the focused textarea receives them and emits an `input` ->
+                    // `Text`. Command chords (Ctrl/Cmd+X) likewise fall through to
+                    // the chrome keymap.
+                    _ => false,
                 }
-                // Debug HUD text toggle, moved behind Alt so plain letters type.
-                "t" | "T" if *alt => {
-                    self.text_enabled ^= true;
-                    self.needs_full = true;
-                    true
-                }
-                // Let plain printable keys fall through (no preventDefault) so the
-                // focused textarea receives them and emits an `input` -> `Text`.
-                _ => false,
-            },
+            }
             _ => false,
         }
     }
@@ -1204,8 +1237,24 @@ impl TrameView {
 
     /// Move the active cell by `(dr, dc)`; returns `true` (consumed).
     fn nav_move(&mut self, dr: i32, dc: i32) -> bool {
+        let mv = self.state.move_cursor(dr, dc);
+        self.apply_cursor_move(mv)
+    }
+
+    /// Jump the active cell to absolute `(row, col)` (Home / End / Ctrl+Home /
+    /// Ctrl+End); returns `true` (consumed).
+    fn nav_goto(&mut self, row: u32, col: u32) -> bool {
+        let mv = self.state.move_to(row, col);
+        self.apply_cursor_move(mv)
+    }
+
+    /// Forward a cursor move to Logic and keep the text pipe / a11y in sync.
+    /// Shared by relative ([`nav_move`](Self::nav_move)) and absolute
+    /// ([`nav_goto`](Self::nav_goto)) navigation. A `None` move (clamped at an
+    /// edge / no change) is a no-op but still reports the key as consumed.
+    fn apply_cursor_move(&mut self, mv: Option<CursorMove>) -> bool {
         self.viewport_changed = true;
-        if let Some(mv) = self.state.move_cursor(dr, dc) {
+        if let Some(mv) = mv {
             if let Err(flume::TrySendError::Full(_)) = self.send_command_lossless(mv.active) {
                 tracing::error!("Trame: UI→Logic channel full, cursor move dropped");
             }
@@ -1215,6 +1264,23 @@ impl TrameView {
             self.park_input_on(self.state.active_row(), self.state.active_col());
             self.announce_active();
         }
+        true
+    }
+
+    /// Clear the active cell's content (Delete / Backspace in navigation mode).
+    /// Optimistically empties the local cache and forwards a `SetCellText` with
+    /// an empty string -- the same path a committed empty edit takes. Returns
+    /// `true` (consumed).
+    fn clear_active_cell(&mut self) -> bool {
+        let (row, col) = (self.state.active_row(), self.state.active_col());
+        if let Err(flume::TrySendError::Full(_)) = self
+            .send_command_lossless(TrameCommand::SetCellText { row, col, text: String::new() })
+        {
+            tracing::error!("Trame: UI→Logic channel full, cell clear dropped");
+        }
+        self.state.set_cell_text(row, col, String::new());
+        self.needs_full = true;
+        self.announce_active();
         true
     }
 

@@ -411,12 +411,11 @@ fn on_key_down(&mut self, key: &KeyCode, modifiers: &Modifiers) {
             KeyCode::PageDown   => self.scroll_pages(1),
             KeyCode::PageUp     => self.scroll_pages(-1),
             KeyCode::Delete | KeyCode::Backspace => {
+                // No dedicated ClearCell command: an empty SetCellText clears the
+                // cell (same path a committed empty edit takes). The UI updates
+                // its cache optimistically; no echo event is required.
                 let (row, col) = self.ui_state.selection.active();
-                self.logic_tx.send(TrameCommand::ClearCell {
-                    version: self.next_version(),
-                    sheet_id: self.ui_state.active_sheet,
-                    row, col,
-                });
+                self.logic_tx.send(TrameCommand::SetCellText { row, col, text: String::new() });
             }
             KeyCode::F2 => self.start_editing(EditTrigger::F2),
             _ => {
@@ -1195,7 +1194,7 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 - [x] Single-cell selection *(via `ui::grid::Selection` -- `anchor == active`; click `select()` / arrow nav, active border + header tint in `draw_overlay`)*
 - [x] Inline editor *(delivered under `CHROME P2` -- Trame WYSIWYG cell)*; [ ] formula bar
 - [x] Sheet tabs + full lifecycle (create via "+", rename via double-click, delete/rename via tab context menu, reorder via drag) -> `CreateSheet` / `RenameSheet` / `DeleteSheet` / `MoveSheet` (sec.13) *(bottom strip in `ui::renderer::draw_sheet_tabs`; input + `SheetList` dispatch in `ui::view`; strip hydrated on the first `ScrollViewport`)*
-- [ ] Keyboard navigation (arrows, Tab, Enter, Delete)
+- [x] Keyboard navigation (Arrows, Page Up, Page Down, Tab/Shift+Tab, Enter/Shift+Enter, Delete/Backspace, End, Home, Ctrl+End, Ctrl+Home) *(nav-mode dispatch in `ui::view`; absolute jumps via `TrameUiState::move_to` + cache-scan helpers `last_content_col`/`last_content_cell` for End/Ctrl+End -- UI-thread cache is the only used-range view, sec.16; Delete/Backspace clear via empty `SetCellText`; F2 opens the editor)*
 - [ ] `CommitEdit` on cell exit (closes the undo group -- 1 cell edit = 1 undo item, sec.6.C)
 - [ ] Grid context menu (right-click, sec.5.C): row/column insert+delete (`InsertRow`/`InsertCol`/`DeleteRow`/`DeleteCol`), merge/unmerge (`MergeCells`/`UnmergeCells`)
 - [ ] Cell merge rendering (`DisplayCell.is_merged` / `merge_span`) + `MergeRejected` / `MergeConflictDetected` handling (sec.2)
