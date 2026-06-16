@@ -767,6 +767,16 @@ impl TrameState {
                 self.merge_cells(r1, c1, r2, c2)
             }
             TrameCommand::UnmergeActive => self.unmerge_cells(self.active.0, self.active.1),
+            // Single-column shared sort over the tracked selection (`-ui.md`
+            // sec.5.C). Reference column = the range's first column (`sort_col = 0`),
+            // no header row. The active sheet is the only sortable one (see
+            // `sort_range`).
+            TrameCommand::SortSelectionAsc => self.sort_selection(true),
+            TrameCommand::SortSelectionDesc => self.sort_selection(false),
+            // Whole-sheet sort by the active column (whole-column selection,
+            // sec.5.C): sorts the full used range, ref column = active column.
+            TrameCommand::SortSheetAsc => self.sort_sheet(true),
+            TrameCommand::SortSheetDesc => self.sort_sheet(false),
             TrameCommand::Undo => self.apply_history(true),
             TrameCommand::Redo => self.apply_history(false),
             TrameCommand::DefineName { name, reference } => self.define_name(&name, &reference),
@@ -1087,6 +1097,34 @@ impl TrameState {
             outcome = self.delete_axis(at, axis);
         }
         outcome
+    }
+
+    /// Single-column shared sort resolved against the tracked selection
+    /// rectangle (`-ui.md` sec.5.C). Sorts on the range's first column with no
+    /// header row, exactly the parameterless context-menu intent: whole rows are
+    /// permuted so cells outside the selection move with their row (Google Sheets
+    /// "sort range"). Delegates to [`sort_range`](Self::sort_range) on the active
+    /// sheet, which guards the empty/single-row cases and replies with
+    /// [`TrameEvent::SortComplete`].
+    fn sort_selection(&mut self, ascending: bool) -> TrameOutcome {
+        let (r1, c1, r2, c2) = self.selection;
+        let sheet = self.active_sheet.clone();
+        self.sort_range(&sheet, r1, r2, c1, c2, 0, ascending, false)
+    }
+
+    /// Whole-sheet single-column sort by the active cell's column (`-ui.md`
+    /// sec.5.C, the "sort by column" affordance for a whole-column selection).
+    /// Sorts every materialized row of the sheet across the full used-column span,
+    /// so a row's cells outside the active column travel with it. The active
+    /// column is passed as `sort_col` over a range anchored at column 0, with no
+    /// header row. Delegates to [`sort_range`](Self::sort_range), which guards the
+    /// empty range and replies with [`TrameEvent::SortComplete`].
+    fn sort_sheet(&mut self, ascending: bool) -> TrameOutcome {
+        let row_end = self.index.row_len().saturating_sub(1) as u32;
+        let col_end = self.index.col_len().saturating_sub(1) as u32;
+        let sort_col = self.active.1;
+        let sheet = self.active_sheet.clone();
+        self.sort_range(&sheet, 0, row_end, 0, col_end, sort_col, ascending, false)
     }
 
     /// Drop every cell and formatting entry whose key references the removed
@@ -3287,6 +3325,47 @@ mod tests {
         });
         assert!(sorted.update.is_none(), "no reorder, no broadcast");
         assert!(sorted.display.iter().any(|e| matches!(e, TrameEvent::SortComplete)));
+    }
+
+    /// The parameterless `SortSelectionAsc` intent (DOM context menu, sec.5.C)
+    /// resolves against the tracked selection and active sheet: same outcome as an
+    /// explicit `SortRange` over `selection.bounds()`.
+    #[test]
+    fn sort_selection_resolves_against_tracked_selection() {
+        let mut state = TrameState::new();
+        for (r, (a, b)) in [("3", "c"), ("1", "a"), ("2", "b")].iter().enumerate() {
+            state.handle_command(TrameCommand::SetCellText { row: r as u32, col: 0, text: a.to_string() });
+            state.handle_command(TrameCommand::SetCellText { row: r as u32, col: 1, text: b.to_string() });
+        }
+        // The UI reports the selection rectangle A1:B3 via SetActiveCell.
+        state.handle_command(TrameCommand::SetActiveCell { row: 0, col: 0, anchor_row: 2, anchor_col: 1 });
+        let evts = state.handle_command(TrameCommand::SortSelectionAsc);
+        assert!(evts.display.iter().any(|e| matches!(e, TrameEvent::SortComplete)));
+        assert!(evts.update.is_some(), "a real reorder broadcasts a delta");
+        assert_eq!(read_col(&mut state, 0, 2, 1), vec!["1", "2", "3"]);
+        assert_eq!(read_col(&mut state, 1, 2, 2), vec!["a", "b", "c"], "row B follows A");
+    }
+
+    /// The whole-sheet `SortSheetAsc` intent (whole-column selection, sec.5.C)
+    /// sorts the full used range by the active cell's column, keeping every row's
+    /// other columns aligned -- even rows below the values reported by a partial
+    /// selection.
+    #[test]
+    fn sort_sheet_sorts_used_range_by_active_column() {
+        let mut state = TrameState::new();
+        // Sort key in column B; column A is an aligned label that must follow.
+        for (r, (a, b)) in [("x", "3"), ("y", "1"), ("z", "2")].iter().enumerate() {
+            state.handle_command(TrameCommand::SetCellText { row: r as u32, col: 0, text: a.to_string() });
+            state.handle_command(TrameCommand::SetCellText { row: r as u32, col: 1, text: b.to_string() });
+        }
+        // The active cell sits in column B (a whole-column selection of B).
+        state.handle_command(TrameCommand::SetActiveCell { row: 0, col: 1, anchor_row: 2, anchor_col: 1 });
+        let evts = state.handle_command(TrameCommand::SortSheetAsc);
+        assert!(evts.display.iter().any(|e| matches!(e, TrameEvent::SortComplete)));
+        assert!(evts.update.is_some());
+        // B sorts ascending; A follows its row across the whole used range.
+        assert_eq!(read_col(&mut state, 1, 2, 1), vec!["1", "2", "3"]);
+        assert_eq!(read_col(&mut state, 0, 2, 2), vec!["y", "z", "x"], "col A stays aligned");
     }
 
     #[test]

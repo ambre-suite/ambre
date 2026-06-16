@@ -305,6 +305,30 @@ pub enum TrameCommand {
     /// Unmerge the merge containing the active cell (equivalent to
     /// [`UnmergeCells`] at the active cell). A no-op outside a merge.
     UnmergeActive,
+    /// Sort the current selection rectangle ascending on its first column
+    /// (equivalent to [`SortRange`] over `selection.bounds()` with `sort_col = 0`,
+    /// `has_header = false`). The Logic thread resolves the geometry and the
+    /// active sheet itself. Replies with [`TrameEvent::SortComplete`].
+    ///
+    /// [`SortRange`]: TrameCommand::SortRange
+    /// [`TrameEvent::SortComplete`]: crate::ui::TrameEvent::SortComplete
+    SortSelectionAsc,
+    /// Sort the current selection rectangle descending on its first column
+    /// (see [`SortSelectionAsc`](TrameCommand::SortSelectionAsc)).
+    SortSelectionDesc,
+    /// Sort the whole sheet (its materialized used range) ascending on the active
+    /// cell's column -- the "sort by column" affordance for a whole-column
+    /// selection (`-ui.md` sec.5.C). Equivalent to [`SortRange`] over the full
+    /// used range with `sort_col` resolved to the active column. The Logic thread
+    /// resolves the geometry and the active sheet itself. Replies with
+    /// [`TrameEvent::SortComplete`].
+    ///
+    /// [`SortRange`]: TrameCommand::SortRange
+    /// [`TrameEvent::SortComplete`]: crate::ui::TrameEvent::SortComplete
+    SortSheetAsc,
+    /// Sort the whole sheet descending on the active cell's column
+    /// (see [`SortSheetAsc`](TrameCommand::SortSheetAsc)).
+    SortSheetDesc,
 
     /// Undo the last local edit (`ambre-spec-trame-logic.md` §8). Backed by Loro's
     /// `UndoManager`: it replays the inverse of this session's most recent commit

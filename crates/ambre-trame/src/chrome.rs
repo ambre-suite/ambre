@@ -55,6 +55,14 @@ pub const DELETE_COLS: CommandId = CommandId("trame.col.delete");
 pub const MERGE: CommandId = CommandId("trame.merge");
 /// Unmerge the merge containing the active cell.
 pub const UNMERGE: CommandId = CommandId("trame.unmerge");
+/// Sort the selection ascending on its first column (single-column shared sort).
+pub const SORT_RANGE_ASC: CommandId = CommandId("trame.sort.range_asc");
+/// Sort the selection descending on its first column.
+pub const SORT_RANGE_DESC: CommandId = CommandId("trame.sort.range_desc");
+/// Sort the whole sheet ascending by the active cell's column.
+pub const SORT_SHEET_ASC: CommandId = CommandId("trame.sort.sheet_asc");
+/// Sort the whole sheet descending by the active cell's column.
+pub const SORT_SHEET_DESC: CommandId = CommandId("trame.sort.sheet_desc");
 
 /// Every command Trame contributes to the registry. The launcher builds the
 /// `CommandStates` store and the keymap from this list, naming no command itself.
@@ -71,6 +79,10 @@ pub const COMMANDS: &[CommandId] = &[
     DELETE_COLS,
     MERGE,
     UNMERGE,
+    SORT_RANGE_ASC,
+    SORT_RANGE_DESC,
+    SORT_SHEET_ASC,
+    SORT_SHEET_DESC,
 ];
 
 /// Bind Trame's command chords into the launcher's keymap.
@@ -110,6 +122,14 @@ pub fn command_to_app(id: CommandId) -> Option<AppCommand> {
         TrameCommand::MergeSelection
     } else if id == UNMERGE {
         TrameCommand::UnmergeActive
+    } else if id == SORT_RANGE_ASC {
+        TrameCommand::SortSelectionAsc
+    } else if id == SORT_RANGE_DESC {
+        TrameCommand::SortSelectionDesc
+    } else if id == SORT_SHEET_ASC {
+        TrameCommand::SortSheetAsc
+    } else if id == SORT_SHEET_DESC {
+        TrameCommand::SortSheetDesc
     } else {
         return None;
     };
@@ -174,6 +194,7 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
             toasts.info(format!("Filter applied ({hidden_row_count} rows hidden)"));
         }
         TrameEvent::FilterCleared => toasts.info("Filter cleared"),
+        TrameEvent::SortComplete => toasts.info("Range sorted"),
         _ => {}
     }
 }
@@ -197,6 +218,15 @@ pub fn context_entries() -> Vec<MenuEntry> {
         MenuEntry::new(DELETE_COLS, "Delete columns"),
         MenuEntry::new(MERGE, "Merge cells"),
         MenuEntry::new(UNMERGE, "Unmerge cells"),
+        // Single-column shared sort over the selection (sec.5.C). Reference
+        // column = the selection's first column; the Logic thread no-ops an
+        // empty/single-row range.
+        MenuEntry::new(SORT_RANGE_ASC, "Sort range ascending"),
+        MenuEntry::new(SORT_RANGE_DESC, "Sort range descending"),
+        // Whole-sheet sort by the active column (whole-column selection, sec.5.C):
+        // sorts the full used range so rows stay aligned across all columns.
+        MenuEntry::new(SORT_SHEET_ASC, "Sort sheet by column (asc)"),
+        MenuEntry::new(SORT_SHEET_DESC, "Sort sheet by column (desc)"),
     ]
 }
 
