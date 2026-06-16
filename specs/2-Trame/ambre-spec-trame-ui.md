@@ -500,8 +500,31 @@ fn on_pointer_drag(&mut self, x: f32, y: f32) {
 Right-click on the grid (or on a header) opens a context menu. It is the single MVP
 entry point for the structural / feature commands the Logic thread already handles but
 which had no UI trigger: row/column insert-delete, merge, single-column sort, and the
-shared filter. The menu is a `DrawSurface` overlay (no DOM); items are positioned from
-the click point and dismissed on Escape or outside click.
+shared filter.
+
+> **Implementation note (supersedes the `DrawSurface` overlay below).** The structural
+> / merge ops are wired through the **existing DOM context menu** (`ambre-chrome::ContextMenu`,
+> populated by `trame_chrome::context_entries()`), not a canvas overlay. That menu already
+> exists, already flips/keyboard-navigates/dismisses, and shares the single command path
+> (`on_command` -> `command_to_app` -> `AppCommand`) with the toolbar, the selection bar and
+> the keyboard -- the foundation for configurable command buttons shared across menu / toolbar
+> / dynamic context menus. A parallel canvas menu would duplicate that machinery.
+>
+> Because the DOM menu dispatches **parameterless** `CommandId`s, the structural commands are
+> parameterless intents (`InsertRowAbove`/`InsertRowBelow`/`InsertColLeft`/`InsertColRight`,
+> `DeleteSelectedRows`/`DeleteSelectedCols`, `MergeSelection`, `UnmergeActive`). The Logic
+> thread resolves their geometry against the **active cell / selection rectangle it tracks** --
+> `SetActiveCell` now carries the anchor corner so the Logic thread keeps the full selection,
+> exactly as it already keeps the active cell for formatting toggles (still local view state,
+> sec.16). `MergeSelection` on a single cell is a silent no-op; on a non-empty covered cell it
+> replies `MergeRejected` (toast via `chrome::notify_event`); `UnmergeActive` outside a merge
+> is a no-op. Sort and filter entries (below) remain to do.
+>
+> The `DrawSurface`/`ContextMenuItem` design that follows is retained for reference but is
+> not the implemented path.
+
+The (reference) `DrawSurface` overlay design: items are positioned from the click point and
+dismissed on Escape or outside click.
 
 ```rust
 pub enum ContextMenuItem {
@@ -1397,7 +1420,7 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 - [x] Sheet tabs + full lifecycle (create via "+", rename via double-click, delete/rename via tab context menu, reorder via drag) -> `CreateSheet` / `RenameSheet` / `DeleteSheet` / `MoveSheet` (sec.13) *(bottom strip in `ui::renderer::draw_sheet_tabs`; input + `SheetList` dispatch in `ui::view`; strip hydrated on the first `ScrollViewport`)*
 - [x] Keyboard navigation (Arrows, Page Up, Page Down, Tab/Shift+Tab, Enter/Shift+Enter, Delete/Backspace, End, Home, Ctrl+End, Ctrl+Home) *(nav-mode dispatch in `ui::view`; absolute jumps via `TrameUiState::move_to` + cache-scan helpers `last_content_col`/`last_content_cell` for End/Ctrl+End -- UI-thread cache is the only used-range view, sec.16; Delete/Backspace clear via empty `SetCellText`; F2 opens the editor)*
 - [x] `CommitEdit` on cell exit (closes the undo group -- 1 cell edit = 1 undo item, sec.6.C)
-- [ ] Grid context menu (right-click, sec.5.C): row/column insert+delete (`InsertRow`/`InsertCol`/`DeleteRow`/`DeleteCol`), merge/unmerge (`MergeCells`/`UnmergeCells`)
+- [x] Grid context menu (right-click, sec.5.C): row/column insert+delete, merge/unmerge. *Delivered through the existing **DOM** context menu (`ambre-chrome::ContextMenu`, populated by `trame_chrome::context_entries()`) rather than a canvas `DrawSurface` overlay -- it reuses the shared command path (toolbar / keyboard / menu all dispatch one `CommandId`). The menu fires parameterless intents (`InsertRowAbove/Below`, `InsertColLeft/Right`, `DeleteSelectedRows/Cols`, `MergeSelection`, `UnmergeActive`); the Logic thread resolves their geometry against the active cell / selection rectangle it now tracks (`SetActiveCell` carries the anchor corner). See the sec.5.C note.*
 - [ ] Cell merge rendering (`DisplayCell.is_merged` / `merge_span`) + `MergeRejected` / `MergeConflictDetected` handling (sec.2)
 - [ ] Single-column shared sort (`SortRange` from the context menu, sec.5.C) + `SortComplete` dispatch
 - [ ] Shared filter: filter popover (`ApplyFilter` / `ClearFilter`, sec.5.D) + funnel badge + `FilterApplied` / `FilterCleared` dispatch

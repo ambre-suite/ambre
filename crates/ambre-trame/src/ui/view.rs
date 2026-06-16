@@ -1500,6 +1500,15 @@ impl TrameView {
         self.apply_cursor_move(mv)
     }
 
+    /// Build the active-cell report from the current selection, carrying the
+    /// anchor corner so the Logic thread can track the whole selection rectangle
+    /// (needed by the structural intents -- merge / delete rows-cols).
+    fn set_active_cmd(&self) -> TrameCommand {
+        let (row, col) = self.state.selection.active;
+        let (anchor_row, anchor_col) = self.state.selection.anchor;
+        TrameCommand::SetActiveCell { row, col, anchor_row, anchor_col }
+    }
+
     /// Extend the live selection rectangle to `(row, col)` (Shift+click / drag),
     /// keeping the anchor. Moves the active cell, so Logic and the pipe stay in
     /// sync via the same path as a plain selection.
@@ -1509,9 +1518,7 @@ impl TrameView {
         }
         self.state.select_extend(row, col);
         self.viewport_changed = true;
-        if let Err(SendError::Full) =
-            self.send_command_lossless(TrameCommand::SetActiveCell { row, col })
-        {
+        if let Err(SendError::Full) = self.send_command_lossless(self.set_active_cmd()) {
             tracing::error!("Trame: UI->Logic channel full, selection extend dropped");
         }
         self.park_input_on(row, col);
@@ -1523,9 +1530,7 @@ impl TrameView {
     fn disjoin_cell(&mut self, row: u32, col: u32) {
         self.state.select_disjoint(row, col);
         self.viewport_changed = true;
-        if let Err(SendError::Full) =
-            self.send_command_lossless(TrameCommand::SetActiveCell { row, col })
-        {
+        if let Err(SendError::Full) = self.send_command_lossless(self.set_active_cmd()) {
             tracing::error!("Trame: UI->Logic channel full, disjoint select dropped");
         }
         self.park_input_on(row, col);
@@ -1581,7 +1586,7 @@ impl TrameView {
         }
         self.state.select(row, col);
         self.viewport_changed = true;
-        if let Err(SendError::Full) = self.send_command_lossless(TrameCommand::SetActiveCell { row, col }) {
+        if let Err(SendError::Full) = self.send_command_lossless(self.set_active_cmd()) {
             tracing::error!("Trame: UI→Logic channel full, cell selection dropped");
         }
         self.park_input_on(row, col);

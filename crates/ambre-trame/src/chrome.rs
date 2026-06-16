@@ -36,9 +36,42 @@ pub const UNDO: CommandId = CommandId("trame.history.undo");
 /// The Trame "Redo" command (see [`UNDO`]).
 pub const REDO: CommandId = CommandId("trame.history.redo");
 
+// Structural / merge commands (grid context menu, `-ui.md` sec.5.C). Each is a
+// parameterless intent: the Logic thread resolves its geometry against the
+// active cell / selection it tracks (via `SetActiveCell`).
+/// Insert a row above the active cell.
+pub const INSERT_ROW_ABOVE: CommandId = CommandId("trame.row.insert_above");
+/// Insert a row below the active cell.
+pub const INSERT_ROW_BELOW: CommandId = CommandId("trame.row.insert_below");
+/// Insert a column left of the active cell.
+pub const INSERT_COL_LEFT: CommandId = CommandId("trame.col.insert_left");
+/// Insert a column right of the active cell.
+pub const INSERT_COL_RIGHT: CommandId = CommandId("trame.col.insert_right");
+/// Delete the rows spanned by the selection.
+pub const DELETE_ROWS: CommandId = CommandId("trame.row.delete");
+/// Delete the columns spanned by the selection.
+pub const DELETE_COLS: CommandId = CommandId("trame.col.delete");
+/// Merge the selection into a single cell.
+pub const MERGE: CommandId = CommandId("trame.merge");
+/// Unmerge the merge containing the active cell.
+pub const UNMERGE: CommandId = CommandId("trame.unmerge");
+
 /// Every command Trame contributes to the registry. The launcher builds the
 /// `CommandStates` store and the keymap from this list, naming no command itself.
-pub const COMMANDS: &[CommandId] = &[BOLD, ITALIC, UNDO, REDO];
+pub const COMMANDS: &[CommandId] = &[
+    BOLD,
+    ITALIC,
+    UNDO,
+    REDO,
+    INSERT_ROW_ABOVE,
+    INSERT_ROW_BELOW,
+    INSERT_COL_LEFT,
+    INSERT_COL_RIGHT,
+    DELETE_ROWS,
+    DELETE_COLS,
+    MERGE,
+    UNMERGE,
+];
 
 /// Bind Trame's command chords into the launcher's keymap.
 pub fn bind_keys(keymap: &mut Keymap) {
@@ -61,6 +94,22 @@ pub fn command_to_app(id: CommandId) -> Option<AppCommand> {
         TrameCommand::Undo
     } else if id == REDO {
         TrameCommand::Redo
+    } else if id == INSERT_ROW_ABOVE {
+        TrameCommand::InsertRowAbove
+    } else if id == INSERT_ROW_BELOW {
+        TrameCommand::InsertRowBelow
+    } else if id == INSERT_COL_LEFT {
+        TrameCommand::InsertColLeft
+    } else if id == INSERT_COL_RIGHT {
+        TrameCommand::InsertColRight
+    } else if id == DELETE_ROWS {
+        TrameCommand::DeleteSelectedRows
+    } else if id == DELETE_COLS {
+        TrameCommand::DeleteSelectedCols
+    } else if id == MERGE {
+        TrameCommand::MergeSelection
+    } else if id == UNMERGE {
+        TrameCommand::UnmergeActive
     } else {
         return None;
     };
@@ -136,6 +185,18 @@ pub fn context_entries() -> Vec<MenuEntry> {
         MenuEntry::new(ITALIC, "Italic"),
         MenuEntry::new(UNDO, "Undo"),
         MenuEntry::new(REDO, "Redo"),
+        // Structural / merge ops (sec.5.C). Always listed; the Logic thread
+        // guards them (Merge on a single cell is a silent no-op, Merge over a
+        // non-empty covered cell replies MergeRejected -> toast, Unmerge outside
+        // a merge is a no-op).
+        MenuEntry::new(INSERT_ROW_ABOVE, "Insert row above"),
+        MenuEntry::new(INSERT_ROW_BELOW, "Insert row below"),
+        MenuEntry::new(INSERT_COL_LEFT, "Insert column left"),
+        MenuEntry::new(INSERT_COL_RIGHT, "Insert column right"),
+        MenuEntry::new(DELETE_ROWS, "Delete rows"),
+        MenuEntry::new(DELETE_COLS, "Delete columns"),
+        MenuEntry::new(MERGE, "Merge cells"),
+        MenuEntry::new(UNMERGE, "Unmerge cells"),
     ]
 }
 
