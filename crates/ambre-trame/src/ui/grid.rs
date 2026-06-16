@@ -330,18 +330,29 @@ impl CellEditor {
 // Selection
 // -----------------------------------------------------------------------------
 
+/// A normalized cell rectangle `(r1, c1, r2, c2)` with `r1 <= r2` and
+/// `c1 <= c2`. Used for the committed disjoint rectangles of a multi-range
+/// selection and as the return type of [`Selection::bounds`].
+pub type CellRect = (u32, u32, u32, u32);
+
 /// The grid selection (spec sec.8). A single-cell selection has `anchor ==
-/// active`; a multi-cell range (Phase 2) keeps `anchor` fixed and moves `active`.
+/// active` and no extra ranges. A contiguous range keeps `anchor` fixed and
+/// moves `active` (drag, Shift+click, Shift+arrows). Disjoint ranges
+/// (Ctrl+click) push the live rectangle into `extra` and start a fresh one.
 ///
 /// `active` is the cell the cursor, the inline editor and the formatting
-/// commands target; `anchor` is the opposite corner of the range. Selection is
-/// local view state -- never synced (sec.16).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// commands target; `anchor` is the opposite corner of the live rectangle.
+/// Selection is local view state -- never synced (sec.16).
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Selection {
-    /// Fixed corner of the range (where the selection started).
+    /// Fixed corner of the live rectangle (where this range started).
     pub anchor: (u32, u32),
     /// Active cell; the cursor / editor / formatting target.
     pub active: (u32, u32),
+    /// Committed disjoint rectangles (Ctrl+click), each normalized. The live
+    /// rectangle (`anchor..=active`) is *not* in here; the full selection is
+    /// `extra` plus that rectangle (see [`rects`](Self::rects)).
+    pub extra: Vec<CellRect>,
 }
 
 impl Default for Selection {
@@ -351,14 +362,22 @@ impl Default for Selection {
 }
 
 impl Selection {
-    /// A selection collapsed to a single cell (`anchor == active`).
+    /// A selection collapsed to a single cell (`anchor == active`, no extras).
     pub fn single(row: u32, col: u32) -> Self {
-        Self { anchor: (row, col), active: (row, col) }
+        Self { anchor: (row, col), active: (row, col), extra: Vec::new() }
     }
 
-    /// Move the active corner, keeping the anchor (Phase 2 range extension).
-    #[allow(dead_code)]
+    /// Move the active corner of the live rectangle, keeping the anchor (range
+    /// extension: drag, Shift+click, Shift+arrows).
     pub fn extend_to(&mut self, row: u32, col: u32) {
+        self.active = (row, col);
+    }
+
+    /// Commit the live rectangle and start a fresh single-cell one at
+    /// `(row, col)` (Ctrl+click: disjoint selection).
+    pub fn add_disjoint(&mut self, row: u32, col: u32) {
+        self.extra.push(self.live_rect());
+        self.anchor = (row, col);
         self.active = (row, col);
     }
 
@@ -367,14 +386,62 @@ impl Selection {
         self.active
     }
 
-    /// True if `col` is within the selected column span.
+    /// The live rectangle normalized to `(r1, c1, r2, c2)`.
+    pub fn live_rect(&self) -> CellRect {
+        (
+            self.anchor.0.min(self.active.0),
+            self.anchor.1.min(self.active.1),
+            self.anchor.0.max(self.active.0),
+            self.anchor.1.max(self.active.1),
+        )
+    }
+
+    /// Bounds of the live rectangle (the target of range ops: merge, sort,
+    /// style, fill...). Mirrors the spec's `sel.bounds()`.
+    pub fn bounds(&self) -> CellRect {
+        self.live_rect()
+    }
+
+    /// Iterator over every selected rectangle: the committed disjoint ones
+    /// followed by the live rectangle.
+    pub fn rects(&self) -> impl Iterator<Item = CellRect> + '_ {
+        self.extra.iter().copied().chain(std::iter::once(self.live_rect()))
+    }
+
+    /// True when the selection covers more than a single cell -- either a
+    /// multi-cell live rectangle or any committed disjoint range. Drives the
+    /// range-fill rendering (a lone single cell shows only the active border).
+    pub fn is_multi(&self) -> bool {
+        !self.extra.is_empty() || self.anchor != self.active
+    }
+
+    /// Every distinct cell `(row, col)` covered by the selection, across all
+    /// rectangles, deduplicated (disjoint rectangles may overlap). Backs
+    /// Ctrl+Enter "fill the selection with the entered value".
+    pub fn selected_cells(&self) -> Vec<(u32, u32)> {
+        let mut cells: Vec<(u32, u32)> = self
+            .rects()
+            .flat_map(|(r1, c1, r2, c2)| (r1..=r2).flat_map(move |r| (c1..=c2).map(move |c| (r, c))))
+            .collect();
+        cells.sort_unstable();
+        cells.dedup();
+        cells
+    }
+
+    /// True if `(row, col)` falls inside any selected rectangle.
+    pub fn contains(&self, row: u32, col: u32) -> bool {
+        self.rects()
+            .any(|(r1, c1, r2, c2)| row >= r1 && row <= r2 && col >= c1 && col <= c2)
+    }
+
+    /// True if `col` is within the live rectangle's column span.
     #[allow(dead_code)]
     pub fn contains_col(&self, col: u32) -> bool {
         let (c1, c2) = (self.anchor.1.min(self.active.1), self.anchor.1.max(self.active.1));
         col >= c1 && col <= c2
     }
 
-    /// True if `row` is within the selected row span.
+    /// True if `row` is within the live rectangle's row span.
     #[allow(dead_code)]
     pub fn contains_row(&self, row: u32) -> bool {
         let (r1, r2) = (self.anchor.0.min(self.active.0), self.anchor.0.max(self.active.0));
@@ -577,9 +644,21 @@ impl TrameUiState {
     }
 
     /// Collapse the selection to a single cell (single-cell selection, sec.8).
-    /// Used on a pointer hit; no clamping -- callers pass valid grid coords.
+    /// Used on a plain pointer hit; no clamping -- callers pass valid grid coords.
     pub fn select(&mut self, row: u32, col: u32) {
         self.selection = Selection::single(row, col);
+    }
+
+    /// Extend the live rectangle's active corner to `(row, col)`, keeping the
+    /// anchor (Shift+click / drag). The selection's other corner is unchanged.
+    pub fn select_extend(&mut self, row: u32, col: u32) {
+        self.selection.extend_to(row, col);
+    }
+
+    /// Commit the live rectangle and start a fresh single-cell range at
+    /// `(row, col)` (Ctrl+click: disjoint selection).
+    pub fn select_disjoint(&mut self, row: u32, col: u32) {
+        self.selection.add_disjoint(row, col);
     }
 
     // -------------------------------------------------------------------------
@@ -588,35 +667,44 @@ impl TrameUiState {
 
     /// Move the active cell by `(dr, dc)`.
     ///
-    /// Scrolls the viewport if the new position falls outside the visible area.
-    /// Returns `None` if the cursor did not move (clamped at an edge); otherwise
-    /// a [`CursorMove`] carrying the new active cell (always, so the Logic thread
-    /// can retarget formatting) plus an optional `ScrollViewport` to fetch newly
-    /// exposed cells.
-    pub fn move_cursor(&mut self, dr: i32, dc: i32) -> Option<CursorMove> {
+    /// With `extend` (Shift held) the selection's active corner moves and the
+    /// anchor stays, growing a range; without it the selection collapses onto
+    /// the new cell. Scrolls the viewport if the new position falls outside the
+    /// visible area. Returns `None` if the cursor did not move (clamped at an
+    /// edge); otherwise a [`CursorMove`] carrying the new active cell (always,
+    /// so the Logic thread can retarget formatting) plus an optional
+    /// `ScrollViewport` to fetch newly exposed cells.
+    pub fn move_cursor(&mut self, dr: i32, dc: i32, extend: bool) -> Option<CursorMove> {
         let new_row = (self.active_row() as i64 + dr as i64)
             .clamp(0, (TOTAL_ROWS - 1) as i64) as u32;
         let new_col = (self.active_col() as i64 + dc as i64)
             .clamp(0, (TOTAL_COLS - 1) as i64) as u32;
-        self.move_to(new_row, new_col)
+        self.move_to(new_row, new_col, extend)
     }
 
     /// Move the active cell to absolute `(row, col)`, clamped to the grid.
     ///
     /// Backs the jump-style navigation keys (Home / End / Ctrl+Home / Ctrl+End,
-    /// Page Up / Page Down compute their target row first). Same contract as
-    /// [`move_cursor`](Self::move_cursor): `None` if the cell did not change,
-    /// otherwise a [`CursorMove`] with the new active cell plus an optional
-    /// `ScrollViewport`.
-    pub fn move_to(&mut self, row: u32, col: u32) -> Option<CursorMove> {
+    /// Page Up / Page Down compute their target row first). With `extend` the
+    /// range grows to the target (Shift+End, Shift+Ctrl+End...) instead of
+    /// collapsing. Same contract as [`move_cursor`](Self::move_cursor): `None`
+    /// if the cell did not change, otherwise a [`CursorMove`] with the new
+    /// active cell plus an optional `ScrollViewport`.
+    pub fn move_to(&mut self, row: u32, col: u32, extend: bool) -> Option<CursorMove> {
         let new_row = row.min(TOTAL_ROWS - 1);
         let new_col = col.min(TOTAL_COLS - 1);
 
         if new_row == self.active_row() && new_col == self.active_col() {
             return None;
         }
-        // Keyboard navigation collapses the selection onto the new cell.
-        self.selection = Selection::single(new_row, new_col);
+        if extend {
+            // Grow the live rectangle: move the active corner, keep the anchor
+            // (and any committed disjoint rectangles).
+            self.selection.extend_to(new_row, new_col);
+        } else {
+            // Plain navigation collapses the selection onto the new cell.
+            self.selection = Selection::single(new_row, new_col);
+        }
 
         // Scroll viewport so the active cell stays visible. When the active cell
         // is still within the cached range the highlight moves without a Logic
@@ -890,6 +978,35 @@ impl TrameUiState {
         }
         Some((x, y, COL_WIDTH, ROW_HEIGHT))
     }
+
+    /// Screen pixel rect (x, y, w, h) covering the cell range
+    /// `(r1, c1)..=(r2, c2)`, clipped to the scrollable grid area (never under a
+    /// header strip or the tab strip). Returns `None` if the range is entirely
+    /// outside the visible area. Used to fill / outline a multi-cell selection.
+    pub fn range_pixel_rect(
+        &self,
+        r1: u32,
+        c1: u32,
+        r2: u32,
+        c2: u32,
+    ) -> Option<(f64, f64, f64, f64)> {
+        let cells_top = HEADER_HEIGHT;
+        // Unclipped edges (signed: the range may start left/above the viewport).
+        let x_left = HEADER_WIDTH + (c1 as i64 - self.left_col as i64) as f64 * COL_WIDTH;
+        let x_right = HEADER_WIDTH + (c2 as i64 - self.left_col as i64 + 1) as f64 * COL_WIDTH;
+        let y_top = cells_top + (r1 as i64 - self.top_row as i64) as f64 * ROW_HEIGHT;
+        let y_bot = cells_top + (r2 as i64 - self.top_row as i64 + 1) as f64 * ROW_HEIGHT;
+
+        // Clip to the visible cell area.
+        let cx1 = x_left.max(HEADER_WIDTH);
+        let cx2 = x_right.min(self.canvas_width);
+        let cy1 = y_top.max(cells_top);
+        let cy2 = y_bot.min(self.grid_bottom());
+        if cx2 <= cx1 || cy2 <= cy1 {
+            return None;
+        }
+        Some((cx1, cy1, cx2 - cx1, cy2 - cy1))
+    }
 }
 
 #[cfg(test)]
@@ -910,9 +1027,71 @@ mod tests {
         assert_eq!((state.active_row(), state.active_col()), (5, 3));
 
         // Arrow navigation keeps the selection single-cell on the new active cell.
-        state.move_cursor(1, 0).expect("cursor moved");
+        state.move_cursor(1, 0, false).expect("cursor moved");
         assert_eq!(state.selection, Selection::single(6, 3));
         assert_eq!(state.selection.anchor, state.selection.active);
+    }
+
+    /// Shift+arrows / drag extend the live rectangle (anchor fixed, active
+    /// moves); a plain move collapses it; Ctrl+click commits a disjoint range.
+    #[test]
+    fn selection_extend_disjoint_and_membership() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        state.select(2, 2);
+        assert!(!state.selection.is_multi(), "lone single cell is not multi");
+        assert_eq!(state.selection.bounds(), (2, 2, 2, 2));
+
+        // Extend to (4, 5): the live rectangle spans (2,2)..=(4,5).
+        state.select_extend(4, 5);
+        assert!(state.selection.is_multi());
+        assert_eq!(state.selection.bounds(), (2, 2, 4, 5));
+        assert!(state.selection.contains(3, 3));
+        assert!(!state.selection.contains(5, 5));
+
+        // Extending backwards past the anchor renormalizes the bounds.
+        state.select_extend(0, 0);
+        assert_eq!(state.selection.bounds(), (0, 0, 2, 2));
+
+        // Ctrl+click starts a disjoint single-cell range; the old rect persists.
+        state.select_disjoint(10, 10);
+        assert_eq!(state.selection.active(), (10, 10));
+        assert!(state.selection.contains(1, 1), "first rect still selected");
+        assert!(state.selection.contains(10, 10), "new cell selected");
+        assert_eq!(state.selection.rects().count(), 2);
+
+        // A plain move collapses everything back to a single cell.
+        state.move_to(7, 7, false).expect("moved");
+        assert_eq!(state.selection, Selection::single(7, 7));
+        assert!(!state.selection.is_multi());
+    }
+
+    /// `selected_cells` enumerates every covered cell across rectangles and
+    /// deduplicates overlaps (Ctrl+Enter fill target).
+    #[test]
+    fn selected_cells_enumerates_and_dedups() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        // A 2x2 block (0,0)..=(1,1).
+        state.select(0, 0);
+        state.select_extend(1, 1);
+        // A disjoint block (1,1)..=(1,2) that overlaps the first at (1,1).
+        state.select_disjoint(1, 1);
+        state.select_extend(1, 2);
+
+        let cells = state.selection.selected_cells();
+        assert_eq!(cells, vec![(0, 0), (0, 1), (1, 0), (1, 1), (1, 2)]);
+    }
+
+    /// `move_cursor`/`move_to` with `extend` grow the range while keeping the
+    /// anchor put (Shift+arrows, Shift+End).
+    #[test]
+    fn move_with_extend_keeps_anchor() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        state.select(0, 0);
+        state.move_cursor(2, 0, true).expect("moved");
+        state.move_cursor(0, 3, true).expect("moved");
+        assert_eq!(state.selection.anchor, (0, 0));
+        assert_eq!(state.selection.active(), (2, 3));
+        assert_eq!(state.selection.bounds(), (0, 0, 2, 3));
     }
 
     /// Shift+arrows grow the selection from a seeded mark; a bare arrow collapses
@@ -970,9 +1149,9 @@ mod tests {
         let mut state = TrameUiState::new(800.0, 600.0);
 
         // No change -> None.
-        assert!(state.move_to(0, 0).is_none());
+        assert!(state.move_to(0, 0, false).is_none());
         // Clamped to the last valid index.
-        state.move_to(crate::TOTAL_ROWS + 10, crate::TOTAL_COLS + 10).expect("moved");
+        state.move_to(crate::TOTAL_ROWS + 10, crate::TOTAL_COLS + 10, false).expect("moved");
         assert_eq!(
             (state.active_row(), state.active_col()),
             (crate::TOTAL_ROWS - 1, crate::TOTAL_COLS - 1),

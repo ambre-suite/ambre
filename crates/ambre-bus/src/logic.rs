@@ -189,6 +189,16 @@ pub enum TrameCommand {
         text: String,
     },
 
+    /// Set the plaintext content of many cells in one shot, as `(row, col,
+    /// text)` triples. Emitted for a multi-cell fill (Ctrl+Enter) or a clear over
+    /// a range (Delete on a selection). The Logic thread applies every write
+    /// inside a single `UndoManager` group, so the whole batch is one undo item
+    /// (unlike a stream of `SetCellText`, each of which is its own item). An
+    /// empty `text` clears that cell.
+    SetCellsBatch {
+        cells: Vec<(u32, u32, String)>,
+    },
+
     /// Close the undo group opened by the cell edit, on cell exit
     /// (`ambre-spec-trame-ui.md` §6.C, `-logic.md` §8). An interactive edit can
     /// mutate the `LoroDoc` more than once -- the cell write plus derived

@@ -766,7 +766,14 @@ where
                 let x = event.offset_x() as f64 * dpr;
                 let y = event.offset_y() as f64 * dpr;
                 let ev = match event.type_().as_str() {
-                    "pointerdown" => InputEvent::PointerDown { x, y, button: event.button() },
+                    "pointerdown" => InputEvent::PointerDown {
+                        x,
+                        y,
+                        button: event.button(),
+                        shift: event.shift_key(),
+                        // Fold Cmd (macOS) into ctrl so disjoint-select works there.
+                        ctrl: event.ctrl_key() || event.meta_key(),
+                    },
                     "pointermove" => InputEvent::PointerMove { x, y },
                     "pointerup" => InputEvent::PointerUp { x, y, button: event.button() },
                     _ => return,

@@ -299,11 +299,22 @@ pub fn draw_overlay<S: DrawSurface>(
         surface, &layout, palette, Some(state.active_row()), font_cx, text_cache, text_enabled,
     );
 
-    // -- 2. Active cell border. -----------------------------------------------
-    // Lives in the overlay so it tracks the active cell on every frame
-    // regardless of scroll shifts in the persistent layer. A single-cell
-    // selection is drawn as the active border alone (no range fill); a
-    // multi-cell range fill is Phase 2.
+    // -- 2. Selection (range fills + outlines) and active-cell border. --------
+    // Lives in the overlay so it tracks the selection on every frame regardless
+    // of scroll shifts in the persistent layer. A lone single cell shows only
+    // the active border (no fill); any multi-cell or disjoint selection fills
+    // each rectangle with a translucent tint and outlines it.
+    let sel = &state.selection;
+    if sel.is_multi() {
+        for (r1, c1, r2, c2) in sel.rects() {
+            if let Some((x, y, w, ht)) = state.range_pixel_rect(r1, c1, r2, c2) {
+                let rect = Rect::new(x, y, x + w, y + ht);
+                surface.fill_rect(rect, palette.selection.with_alpha(0.16));
+                surface.stroke_rect(rect, palette.selection, 1.0);
+            }
+        }
+    }
+    // The active cell always gets a solid 2px border on top.
     if let Some((x, y, cw, ch)) = state.cell_pixel_rect(state.active_row(), state.active_col()) {
         surface.stroke_rect(Rect::new(x, y, x + cw, y + ch), palette.selection, 2.0);
     }
@@ -752,6 +763,40 @@ mod tests {
             1,
         );
         assert_eq!(surface.clip_depth(), 0);
+    }
+
+    #[test]
+    fn multi_cell_selection_fills_and_outlines_each_range() {
+        // A live range (0,0)..=(1,1) plus a disjoint single cell (3,3): both get
+        // a translucent selection fill, and the active cell keeps its 2px border.
+        let mut state = fixture(&[]);
+        state.select(0, 0);
+        state.select_extend(1, 1);
+        state.select_disjoint(3, 3);
+        let palette = Theme::Light.palette();
+        let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
+
+        draw_overlay(
+            &mut surface, &state, palette, &mut font_cx, &mut cache,
+            true, 60.0, 16.0, 1.0, 1.0, 1.0, &clock, &mut stats,
+        );
+
+        // One translucent fill per selected rectangle (2 rects).
+        let tint = palette.selection.with_alpha(0.16);
+        assert_eq!(
+            surface.count(|op| matches!(
+                op, DrawOp::FillRect { color, .. } if *color == tint
+            )),
+            2,
+        );
+        // The active cell (3,3) still gets the 2px border.
+        assert_eq!(
+            surface.count(|op| matches!(
+                op, DrawOp::StrokeRect { color, width, .. }
+                    if *color == palette.selection && *width == 2.0
+            )),
+            1,
+        );
     }
 
     #[test]

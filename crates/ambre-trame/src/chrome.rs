@@ -286,7 +286,12 @@ pub fn FormulaBar(
             match ev.key().as_str() {
                 "Enter" => {
                     ev.prevent_default();
-                    on_action.run(FormulaAction::Commit(CommitDirection::Down));
+                    // Ctrl/Cmd+Enter fills the whole selection with the value.
+                    if ev.ctrl_key() || ev.meta_key() {
+                        on_action.run(FormulaAction::CommitFill);
+                    } else {
+                        on_action.run(FormulaAction::Commit(CommitDirection::Down));
+                    }
                 }
                 "Tab" => {
                     ev.prevent_default();

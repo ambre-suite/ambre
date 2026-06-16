@@ -597,9 +597,13 @@ pub enum CommitDirection {
 }
 
 /// Action emitted by the HTML formula bar input: commit the edit with the
-/// cursor-navigation direction, or cancel it without writing.
+/// cursor-navigation direction, fill the whole selection with the value
+/// (Ctrl/Cmd+Enter), or cancel it without writing.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum FormulaAction {
     Commit(CommitDirection),
+    /// Ctrl/Cmd+Enter: write the value to every cell of the current selection,
+    /// keeping the selection and active cell put.
+    CommitFill,
     Cancel,
 }
