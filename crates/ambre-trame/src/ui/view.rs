@@ -17,12 +17,18 @@ use ambre_canvas::{
     Anchor, AnchorPublisher, ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan,
     TextCache, TextInput, Theme, ThemeControl, WgpuSurface,
 };
+#[cfg(target_arch = "wasm32")]
+use leptos::prelude::RwSignal;
+#[cfg(target_arch = "wasm32")]
+use leptos::prelude::{Get, Set};
 
 use super::grid::{
-    CellEditor, COL_WIDTH, CursorMove, FORMULA_BAR_HEIGHT, HEADER_HEIGHT, HEADER_WIDTH, HitKind,
+    CellEditor, COL_WIDTH, CursorMove, HEADER_HEIGHT, HEADER_WIDTH, HitKind,
     PendingHit, ROW_HEIGHT, TabDrag, TabMenu, TabMenuItem, TabRename, TrameUiState,
 };
 use super::renderer::{self, DrawStats};
+#[cfg(target_arch = "wasm32")]
+use crate::render::{CommitDirection, FormulaAction};
 
 /// Caret blink half-period: the standard ~530 ms on/off toggle (period ~1.06 s).
 const BLINK_MS: f64 = 530.0;
@@ -92,6 +98,18 @@ fn col_label(mut col: u32) -> String {
     label
 }
 
+/// Whether the HTML formula bar `<input>` (id `ambre-formula-input`) currently
+/// holds DOM focus. The view uses this to decide who owns the formula text: the
+/// user (typing in the input) or the grid (mirroring the active cell).
+#[cfg(target_arch = "wasm32")]
+fn formula_input_focused() -> bool {
+    web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.active_element())
+        .map(|el| el.id() == "ambre-formula-input")
+        .unwrap_or(false)
+}
+
 /// Trame's view: a virtual-scroll spreadsheet grid (an `AppView::Trame`).
 pub struct TrameView {
     /// The document this view renders (from the active route).
@@ -120,6 +138,14 @@ pub struct TrameView {
     theme_ctl: ThemeControl,
     /// Theme used to render the last frame; a change forces a full repaint.
     theme: Theme,
+    /// Formula bar DOM signals (HTML `input`, synced with in-cell editor).
+    /// Only present in the browser; native headless tests skip them.
+    #[cfg(target_arch = "wasm32")]
+    formula_ref: RwSignal<String>,
+    #[cfg(target_arch = "wasm32")]
+    formula_text: RwSignal<String>,
+    #[cfg(target_arch = "wasm32")]
+    formula_action: RwSignal<Option<FormulaAction>>,
     /// Active in-cell edit session, or `None` in navigation mode.
     editor: Option<CellEditor>,
     /// True while the pointer is dragging out a text selection inside the open
@@ -201,6 +227,9 @@ impl TrameView {
         text_input: TextInput,
         anchor: AnchorPublisher,
         theme_ctl: ThemeControl,
+        #[cfg(target_arch = "wasm32")] formula_ref: RwSignal<String>,
+        #[cfg(target_arch = "wasm32")] formula_text: RwSignal<String>,
+        #[cfg(target_arch = "wasm32")] formula_action: RwSignal<Option<FormulaAction>>,
     ) -> Self {
         let window = web_sys::window().expect("no window");
         let perf = window.performance().expect("no Performance API");
@@ -222,6 +251,12 @@ impl TrameView {
             last_anchor: None,
             theme_ctl,
             theme,
+            #[cfg(target_arch = "wasm32")]
+            formula_ref,
+            #[cfg(target_arch = "wasm32")]
+            formula_text,
+            #[cfg(target_arch = "wasm32")]
+            formula_action,
             editor: None,
             editor_text_drag: false,
             tab_rename: None,
@@ -332,6 +367,7 @@ impl TrameView {
 
     /// The active cell's spreadsheet reference (e.g. `"B2"`), shown in the
     /// formula bar's name box (spec sec.6).
+    #[cfg(target_arch = "wasm32")]
     fn active_cell_ref(&self) -> String {
         format!("{}{}", col_label(self.state.active_col()), self.state.active_row() + 1)
     }
@@ -391,11 +427,27 @@ impl TrameView {
     /// pipe (clearing its buffer) and positions it on the cell.
     fn begin_edit(&mut self, seed: String) {
         let (row, col) = (self.state.active_row(), self.state.active_col());
-        self.editor = Some(CellEditor::new(row, col, seed));
+        self.editor = Some(CellEditor::new(row, col, seed.clone()));
         self.editor_text_drag = false;
         self.text_input.clear();
         self.text_input.focus();
         self.park_input_on(row, col);
+        self.reset_blink();
+        #[cfg(target_arch = "wasm32")]
+        self.formula_text.set(seed);
+    }
+
+    /// Open an edit session on the active cell WITHOUT touching focus or the
+    /// formula bar text. Used when an edit originates from the HTML formula bar
+    /// input (which keeps DOM focus and owns the buffer): the in-cell editor is
+    /// only the rendering/commit vehicle, so stealing focus to the textarea pipe
+    /// (as [`begin_edit`](Self::begin_edit) does) would abort the user's typing.
+    #[cfg(target_arch = "wasm32")]
+    fn begin_edit_external(&mut self) {
+        let (row, col) = (self.state.active_row(), self.state.active_col());
+        let seed = self.cell_seed(row, col);
+        self.editor = Some(CellEditor::new(row, col, seed));
+        self.editor_text_drag = false;
         self.reset_blink();
     }
 
@@ -432,9 +484,15 @@ impl TrameView {
     /// Abandon the current edit without writing anything, then leave edit mode.
     fn cancel_edit(&mut self) {
         if self.editor.take().is_some() {
-            // Content is untouched; only the overlay field must be cleared.
+            // Content is untouched; only the overlay field must be cleared. The
+            // formula bar reverts to the (unchanged) active cell's stored value,
+            // not blank -- blanking it would read as "user typed empty" next
+            // frame and could re-open an edit that clears the cell.
             self.edit_dirty = true;
             self.text_input.clear();
+            #[cfg(target_arch = "wasm32")]
+            self.formula_text
+                .set(self.cell_seed(self.state.active_row(), self.state.active_col()));
         }
     }
 }
@@ -567,6 +625,81 @@ impl TrameView {
                 self.edit_dirty = true;
             }
         }
+
+        // Sync the HTML formula bar with the grid (spec sec.6).
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.formula_ref.set(self.active_cell_ref());
+
+            // While the formula input is focused it OWNS the text: the user is
+            // typing there, so the view must not overwrite `formula_text` (that
+            // would fight the caret). A divergence from the active cell's value
+            // means an edit is in progress -- open / drive an edit session from
+            // the input's content. While the input is NOT focused, the formula
+            // bar is read-only: mirror the in-cell editor buffer (live), or the
+            // active cell's stored value when idle.
+            if formula_input_focused() {
+                let text = self.formula_text.get();
+                if let Some(ed) = self.editor.as_mut() {
+                    if ed.buffer != text {
+                        ed.buffer = text;
+                        self.edit_dirty = true;
+                    }
+                } else {
+                    let seed = self.cell_seed(self.state.active_row(), self.state.active_col());
+                    if text != seed {
+                        // First typed character in the formula bar: open an edit
+                        // session on the active cell, seeded with what was typed.
+                        self.begin_edit_external();
+                        if let Some(ed) = self.editor.as_mut() {
+                            ed.buffer = text;
+                            self.edit_dirty = true;
+                        }
+                    }
+                }
+            } else if let Some(ed) = self.editor.as_ref() {
+                let buffer = ed.buffer.clone();
+                if self.formula_text.get() != buffer {
+                    self.formula_text.set(buffer);
+                }
+            } else {
+                let seed = self.cell_seed(self.state.active_row(), self.state.active_col());
+                if self.formula_text.get() != seed {
+                    self.formula_text.set(seed);
+                }
+            }
+
+            // Handle formula bar commit / cancel actions from the DOM input.
+            if let Some(action) = self.formula_action.get() {
+                match action {
+                    FormulaAction::Commit(dir) => {
+                        if let Some(ed) = self.editor.as_mut() {
+                            ed.buffer = self.formula_text.get();
+                        }
+                        self.commit_edit();
+                        match dir {
+                            CommitDirection::Down => { self.nav_move(1, 0); }
+                            CommitDirection::Right => { self.nav_move(0, 1); }
+                            CommitDirection::Stay => {}
+                        }
+                        // Return focus to the grid and reset the formula text to
+                        // the cell we landed on. Without this reset `formula_text`
+                        // still holds the just-committed value: if the input keeps
+                        // DOM focus for even one frame, the focused branch above
+                        // would see `text != seed` on the NEW cell and re-open an
+                        // edit there, writing the value into the cell below too.
+                        self.text_input.focus();
+                        self.formula_text
+                            .set(self.cell_seed(self.state.active_row(), self.state.active_col()));
+                    }
+                    FormulaAction::Cancel => {
+                        self.cancel_edit();
+                        self.text_input.focus();
+                    }
+                }
+                self.formula_action.set(None);
+            }
+        }
     }
 
     pub fn plan_repaint(&mut self, hud_tick: bool) -> RepaintPlan {
@@ -610,7 +743,7 @@ impl TrameView {
                 let h = self.state.grid_bottom();
                 // Top of the scrollable cell area: below the formula bar band
                 // (sec.6) and the column-header strip.
-                let hh = FORMULA_BAR_HEIGHT + HEADER_HEIGHT;
+                let hh = HEADER_HEIGHT;
                 // If the scroll exceeds the viewport, nothing useful to shift.
                 let abs_dx = dx_px.unsigned_abs();
                 let abs_dy = dy_px.unsigned_abs();
@@ -708,24 +841,6 @@ impl TrameView {
             &mut self.draw_stats,
         );
 
-        // Formula bar band (sec.6): active cell reference + raw value, or the
-        // live edit buffer (IME preview folded in) while editing.
-        let cell_ref = self.active_cell_ref();
-        let content = match &self.editor {
-            Some(ed) => ed.display(),
-            None => self.cell_seed(self.state.active_row(), self.state.active_col()),
-        };
-        renderer::draw_formula_bar(
-            surface,
-            &self.state,
-            self.theme.palette(),
-            font_cx,
-            text_cache,
-            self.text_enabled,
-            &cell_ref,
-            &content,
-        );
-
         // Bottom sheet-tab strip (sec.13), above the grid/HUD.
         renderer::draw_sheet_tabs(
             surface,
@@ -780,19 +895,6 @@ impl TrameView {
         // never disturbs the cursor or an open editor.
         if let InputEvent::Wheel { dx, dy, delta_mode, ctrl_key } = ev {
             return self.handle_wheel(*dx, *dy, *delta_mode, *ctrl_key);
-        }
-        // A click in the formula bar opens an edit on the active cell (sec.6),
-        // so typing flows through the same in-cell editor the bar mirrors.
-        if let InputEvent::PointerDown { x, y, button: 0 } = ev
-            && self.state.in_formula_bar(*x, *y)
-        {
-            self.text_input.focus();
-            if self.editor.is_none() {
-                let (row, col) = (self.state.active_row(), self.state.active_col());
-                let seed = self.cell_seed(row, col);
-                self.begin_edit(seed);
-            }
-            return true;
         }
         // An open tab rename owns text, IME and the editing keys until it ends.
         if self.tab_rename.is_some()
@@ -1402,6 +1504,8 @@ impl TrameView {
             InputEvent::Text { text } => {
                 if let Some(ed) = self.editor.as_mut() {
                     ed.insert(text);
+                    #[cfg(target_arch = "wasm32")]
+                    self.formula_text.set(ed.buffer.clone());
                 }
                 self.reset_blink();
                 true
@@ -1417,6 +1521,8 @@ impl TrameView {
                 if let Some(ed) = self.editor.as_mut() {
                     ed.preview.clear();
                     ed.insert(text);
+                    #[cfg(target_arch = "wasm32")]
+                    self.formula_text.set(ed.buffer.clone());
                 }
                 self.reset_blink();
                 true
@@ -1501,6 +1607,8 @@ impl TrameView {
                     "Backspace" => {
                         if let Some(ed) = self.editor.as_mut() {
                             ed.backspace();
+                            #[cfg(target_arch = "wasm32")]
+                            self.formula_text.set(ed.buffer.clone());
                         }
                         self.reset_blink();
                         true
@@ -1511,6 +1619,8 @@ impl TrameView {
                     "Delete" if !*shift => {
                         if let Some(ed) = self.editor.as_mut() {
                             ed.delete_forward();
+                            #[cfg(target_arch = "wasm32")]
+                            self.formula_text.set(ed.buffer.clone());
                         }
                         self.reset_blink();
                         true

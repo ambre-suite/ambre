@@ -41,12 +41,14 @@ use ambre_bus::{
 };
 use ambre_chrome::commands::{CommandId, Keymap};
 use ambre_chrome::{
-    AppShell, CommandStates, ContextMenu, Dialog, Header, StatusBar, ToastHost, Toasts, Toolbar,
+    AppShell, CommandStates, ContextMenu, Dialog, FormulaBar, Header, StatusBar, ToastHost, Toasts,
+    Toolbar,
 };
 // Trame-specific chrome (command wiring + toolbar / selection-toolbar markup +
 // status label). The launcher stays app-agnostic and reaches into this module
 // for every Trame concern -- it names no command, button, or event variant itself.
 use ambre_trame::chrome as trame_chrome;
+use ambre_trame::render::FormulaAction;
 use ambre_trame::ui::TrameView;
 use leptos::prelude::*;
 use leptos_icons::Icon;
@@ -102,6 +104,12 @@ struct Wiring {
     /// The currently routed document, or `None` on the landing route. Read by
     /// every command trigger so it targets the active document.
     current_doc: RwSignal<Option<DocumentId>>,
+    /// Formula bar: active cell reference label (e.g. "B2").
+    formula_ref: RwSignal<String>,
+    /// Formula bar: cell raw text / live edit buffer.
+    formula_text: RwSignal<String>,
+    /// Formula bar: commit/cancel action from the HTML input.
+    formula_action: RwSignal<Option<FormulaAction>>,
 }
 
 #[wasm_bindgen(start)]
@@ -170,6 +178,12 @@ pub fn main() {
     // position, the dispatcher mirrors it into the chrome's `anchor_pos` signal,
     // and the floating selection toolbar transform-syncs onto it.
     let anchor_pub = ambre_canvas::AnchorPublisher::new();
+
+    // Formula bar signals (HTML input -> TrameView sync). RwSignal is Copy, so
+    // we create them once and pass clones to both TrameView and the Leptos shell.
+    let formula_ref = RwSignal::new(String::new());
+    let formula_text = RwSignal::new(String::new());
+    let formula_action = RwSignal::new(None::<FormulaAction>);
 
     // Design tokens: inject the generated CSS custom properties (theme.css) and
     // boot the dark theme. `theme_ctl` is the single source of truth for the
@@ -263,6 +277,9 @@ pub fn main() {
         Rc::clone(&members_slot),
         Rc::clone(&devmode_slot),
         Rc::clone(&current_doc_slot),
+        formula_ref,
+        formula_text,
+        formula_action,
     );
 
     let store = store_slot.borrow().clone().expect("store created during mount");
@@ -502,6 +519,9 @@ pub fn main() {
     // drives the Trame view through the rAF loop, and returns the document-swap
     // handle the route effect uses on navigation.
     let view_tx_logic = ui_to_logic_tx.clone();
+    let formula_ref_tv = formula_ref;
+    let formula_text_tv = formula_text;
+    let formula_action_tv = formula_action;
     let switcher = host::run_with(
         "ambre-canvas",
         move |w, h, text_input| {
@@ -514,6 +534,9 @@ pub fn main() {
                 text_input,
                 anchor_pub,
                 theme_ctl,
+                formula_ref_tv,
+                formula_text_tv,
+                formula_action_tv,
             ))
         },
         pre_frame,
@@ -542,6 +565,9 @@ fn mount_shell(
     members_slot: Rc<RefCell<Option<RwSignal<Vec<MemberInfo>>>>>,
     devmode_slot: Rc<RefCell<Option<RwSignal<Option<bool>>>>>,
     current_doc_slot: Rc<RefCell<Option<RwSignal<Option<DocumentId>>>>>,
+    formula_ref: RwSignal<String>,
+    formula_text: RwSignal<String>,
+    formula_action: RwSignal<Option<FormulaAction>>,
 ) {
     leptos::mount::mount_to_body(move || {
         // The store stays here (in the mount owner, NOT in the view): it is `Rc`
@@ -582,6 +608,9 @@ fn mount_shell(
             members,
             dev_mode,
             current_doc,
+            formula_ref,
+            formula_text,
+            formula_action,
         });
 
         view! {
@@ -611,6 +640,9 @@ fn AppRoot() -> impl IntoView {
         members,
         dev_mode,
         current_doc,
+        formula_ref,
+        formula_text,
+        formula_action,
     } = use_context::<Wiring>().expect("Wiring provided by mount_shell");
 
     // The reactive client route, used only to show/hide the landing overlay.
@@ -767,6 +799,13 @@ fn AppRoot() -> impl IntoView {
             <Toolbar slot>
                 <trame_chrome::FormatBar toggles=toggles on_command=on_command />
             </Toolbar>
+            <FormulaBar slot>
+                <trame_chrome::FormulaBar
+                    cell_ref=formula_ref
+                    content=formula_text
+                    on_action=Callback::new(move |action| formula_action.set(Some(action)))
+                />
+            </FormulaBar>
             <StatusBar slot>
                 <span>{trame_chrome::status_label()}</span>
                 <span class="spacer"></span>

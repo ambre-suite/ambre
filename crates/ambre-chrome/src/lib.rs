@@ -32,7 +32,7 @@ mod dialog;
 mod shortcut;
 mod toast;
 
-pub use app_shell::{AppShell, Header, StatusBar, Toolbar};
+pub use app_shell::{AppShell, FormulaBar, Header, StatusBar, Toolbar};
 pub use command::{keybinding_from_event, CommandStates};
 pub use context_menu::{ContextMenu, MenuEntry};
 pub use dialog::Dialog;

@@ -583,3 +583,23 @@ mod tests {
         assert_eq!(col_label(702), "AAA");
     }
 }
+
+// -----------------------------------------------------------------------------
+// Formula bar action types (shared between the UI thread and the Leptos chrome)
+// -----------------------------------------------------------------------------
+
+/// Direction the active cell moves after a formula bar commit via Enter or Tab.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CommitDirection {
+    Down,
+    Right,
+    Stay,
+}
+
+/// Action emitted by the HTML formula bar input: commit the edit with the
+/// cursor-navigation direction, or cancel it without writing.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum FormulaAction {
+    Commit(CommitDirection),
+    Cancel,
+}

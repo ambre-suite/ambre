@@ -551,8 +551,23 @@ where
     // -- Keyboard input -> view. ----------------------------------------------
     {
         let host_c = Rc::clone(&host);
+        // The canvas text pipe: the one editable element whose keydowns the grid
+        // owns (navigation/edit keys ride the document listener even while it is
+        // focused, since text itself arrives via the textarea `input` event).
+        let pipe = text_input.element().clone();
         let cb = Closure::<dyn FnMut(web_sys::KeyboardEvent)>::new(
             move |event: web_sys::KeyboardEvent| {
+                // Ignore keys aimed at any OTHER editable DOM element -- the HTML
+                // formula bar input, dialog fields, etc. Those handle their own
+                // keyboard; forwarding them to the grid would double-process the
+                // event (e.g. a formula-bar Enter committing the cell, then the
+                // grid committing again and navigating off it).
+                if event
+                    .target()
+                    .is_some_and(|t| is_other_editable(&t, &pipe))
+                {
+                    return;
+                }
                 let consumed = host_c
                     .borrow_mut()
                     .handle_input(&InputEvent::Key {
@@ -845,6 +860,27 @@ where
 /// ratio, so rendering is crisp on HiDPI displays. Returns the new physical
 /// `(width, height)` in device pixels, or `None` if the cell has zero area
 /// (detached / display:none) -- in which case the caller skips the resize.
+/// True when keydown `target` is an editable DOM element OTHER than the canvas
+/// text `pipe`: an `<input>` / `<textarea>` / `<select>`, or a contenteditable
+/// host. Such elements own their own keyboard, so the grid's document-level
+/// keydown listener must not also process the event. The pipe itself is exempt:
+/// the grid intentionally reads navigation/edit keys from it via this listener.
+fn is_other_editable(target: &web_sys::EventTarget, pipe: &web_sys::HtmlTextAreaElement) -> bool {
+    if target
+        .dyn_ref::<web_sys::HtmlTextAreaElement>()
+        .is_some_and(|ta| ta == pipe)
+    {
+        return false;
+    }
+    match target.dyn_ref::<web_sys::HtmlElement>() {
+        Some(el) => {
+            matches!(el.tag_name().as_str(), "INPUT" | "TEXTAREA" | "SELECT")
+                || el.is_content_editable()
+        }
+        None => false,
+    }
+}
+
 fn size_backing_store(canvas: &HtmlCanvasElement) -> Option<(u32, u32)> {
     let dpr = web_sys::window().map(|w| w.device_pixel_ratio()).unwrap_or(1.0);
     let w = (canvas.client_width() as f64 * dpr).round() as u32;
