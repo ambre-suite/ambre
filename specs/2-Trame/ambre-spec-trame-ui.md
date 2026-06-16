@@ -1380,7 +1380,7 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 - [x] Single-cell selection *(via `ui::grid::Selection` -- `anchor == active`; click `select()` / arrow nav, active border + header tint in `draw_overlay`)*
 - [ ] Multi-cell selection (sec.8): drop the `anchor == active` constraint, Shift+arrows / Shift+click extension (drag already in sec.5.B), range highlight (`draw_selection`) + range header highlight (sec.4.B), whole row/column selection by header click. *(Hard prerequisite for Merge/Delete-rows-cols/SetCellStyle/Paste/Fill/Sort/status-bar, all of which consume `sel.bounds()`.)*
 - [x] Inline editor *(delivered under `CHROME P2` -- Trame WYSIWYG cell)*;
-- [ ] Formula bar
+- [x] Formula bar
 - [x] Sheet tabs + full lifecycle (create via "+", rename via double-click, delete/rename via tab context menu, reorder via drag) -> `CreateSheet` / `RenameSheet` / `DeleteSheet` / `MoveSheet` (sec.13) *(bottom strip in `ui::renderer::draw_sheet_tabs`; input + `SheetList` dispatch in `ui::view`; strip hydrated on the first `ScrollViewport`)*
 - [x] Keyboard navigation (Arrows, Page Up, Page Down, Tab/Shift+Tab, Enter/Shift+Enter, Delete/Backspace, End, Home, Ctrl+End, Ctrl+Home) *(nav-mode dispatch in `ui::view`; absolute jumps via `TrameUiState::move_to` + cache-scan helpers `last_content_col`/`last_content_cell` for End/Ctrl+End -- UI-thread cache is the only used-range view, sec.16; Delete/Backspace clear via empty `SetCellText`; F2 opens the editor)*
 - [x] `CommitEdit` on cell exit (closes the undo group -- 1 cell edit = 1 undo item, sec.6.C)
