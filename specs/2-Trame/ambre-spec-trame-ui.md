@@ -1391,7 +1391,7 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 - [x] UI-only layers on top of shared rendering: scroll offset, dirty opacity, error indicators
 - [x] Column/row headers (via `ambre_trame::render::draw_col_headers_on<S>` / `draw_row_headers_on<S>`, wired in `ui::renderer::draw_overlay`)
 - [x] Single-cell selection *(via `ui::grid::Selection` -- `anchor == active`; click `select()` / arrow nav, active border + header tint in `draw_overlay`)*
-- [ ] Multi-cell selection (sec.8): drop the `anchor == active` constraint, Shift+arrows / Shift+click extension (drag already in sec.5.B), range highlight (`draw_selection`) + range header highlight (sec.4.B), whole row/column selection by header click. *(Hard prerequisite for Merge/Delete-rows-cols/SetCellStyle/Paste/Fill/Sort/status-bar, all of which consume `sel.bounds()`.)*
+- [x] Multi-cell selection (sec.8): drop the `anchor == active` constraint, Shift+arrows / Shift+click extension (drag already in sec.5.B), range highlight (`draw_selection`) + range header highlight (sec.4.B), whole row/column selection by header click. *(Hard prerequisite for Merge/Delete-rows-cols/SetCellStyle/Paste/Fill/Sort/status-bar, all of which consume `sel.bounds()`.)*
 - [x] Inline editor *(delivered under `CHROME P2` -- Trame WYSIWYG cell)*;
 - [x] Formula bar
 - [x] Sheet tabs + full lifecycle (create via "+", rename via double-click, delete/rename via tab context menu, reorder via drag) -> `CreateSheet` / `RenameSheet` / `DeleteSheet` / `MoveSheet` (sec.13) *(bottom strip in `ui::renderer::draw_sheet_tabs`; input + `SheetList` dispatch in `ui::view`; strip hydrated on the first `ScrollViewport`)*
