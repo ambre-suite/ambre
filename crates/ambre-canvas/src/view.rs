@@ -43,7 +43,11 @@ pub struct RepaintPlan {
 /// A raw input event forwarded from the DOM by the host's event listeners.
 pub enum InputEvent {
     Key { key: String, ctrl: bool, alt: bool, shift: bool, meta: bool },
-    PointerDown { x: f64, y: f64, button: i16 },
+    /// `shift` / `ctrl` carry the modifier state at press time so the grid can
+    /// distinguish a plain click (single select), Shift+click (extend the range)
+    /// and Ctrl+click (add a disjoint range). On macOS the Cmd key is folded
+    /// into `ctrl` by the host so the same disjoint-select gesture works.
+    PointerDown { x: f64, y: f64, button: i16, shift: bool, ctrl: bool },
     PointerMove { x: f64, y: f64 },
     PointerUp { x: f64, y: f64, button: i16 },
     /// Native double-click (respects the platform's double-click speed). Used to

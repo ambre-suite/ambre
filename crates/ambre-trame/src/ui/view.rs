@@ -151,6 +151,10 @@ pub struct TrameView {
     /// True while the pointer is dragging out a text selection inside the open
     /// editor (between a press in the cell and its release).
     editor_text_drag: bool,
+    /// True while the pointer is dragging out a grid cell-range selection in
+    /// navigation mode (between a press on a cell and its release). Pointer
+    /// moves while set extend the live selection rectangle.
+    selecting_drag: bool,
     /// Active in-place sheet-tab rename, or `None` (spec sec.13).
     tab_rename: Option<TabRename>,
     /// Open per-tab context menu (`{ Rename, Delete }`), or `None`.
@@ -259,6 +263,7 @@ impl TrameView {
             formula_action,
             editor: None,
             editor_text_drag: false,
+            selecting_drag: false,
             tab_rename: None,
             tab_menu: None,
             tab_drag: None,
@@ -481,6 +486,38 @@ impl TrameView {
         self.announce_active();
     }
 
+    /// Commit the current edit's value into *every* selected cell (Ctrl+Enter),
+    /// then leave edit mode keeping the selection and active cell put. Each cell
+    /// gets the same raw text; the whole fill is one undo group (a single
+    /// `CommitEdit` seals it). For a lone single-cell selection this is identical
+    /// to [`commit_edit`](Self::commit_edit) but without the cursor advance.
+    ///
+    /// Note: the raw text is copied verbatim, so a filled *formula* keeps its
+    /// references as typed (no per-cell relative reindexing -- that lives in the
+    /// Logic thread's paste/fill path, not the UI).
+    fn commit_edit_filled(&mut self) {
+        let Some(editor) = self.editor.take() else { return };
+        let text = editor.buffer;
+        let cells = self.state.selection.selected_cells();
+        tracing::info!("[UI] commit_edit_filled -> {} cells, text='{:.80}'", cells.len(), text);
+        // One batch command so the whole fill is a single undo item (a stream of
+        // SetCellText would be one undo item per cell).
+        let batch = cells.iter().map(|&(r, c)| (r, c, text.clone())).collect();
+        if let Err(SendError::Full) =
+            self.send_command_lossless(TrameCommand::SetCellsBatch { cells: batch })
+        {
+            tracing::error!("[UI] channel full, fill batch dropped");
+        }
+        // Optimistic local update, mirroring the batch.
+        for &(row, col) in &cells {
+            self.state.set_cell_text(row, col, text.clone());
+        }
+        self.needs_full = true;
+        self.edit_dirty = true;
+        self.text_input.clear();
+        self.announce_active();
+    }
+
     /// Abandon the current edit without writing anything, then leave edit mode.
     fn cancel_edit(&mut self) {
         if self.editor.take().is_some() {
@@ -678,8 +715,8 @@ impl TrameView {
                         }
                         self.commit_edit();
                         match dir {
-                            CommitDirection::Down => { self.nav_move(1, 0); }
-                            CommitDirection::Right => { self.nav_move(0, 1); }
+                            CommitDirection::Down => { self.nav_move(1, 0, false); }
+                            CommitDirection::Right => { self.nav_move(0, 1, false); }
                             CommitDirection::Stay => {}
                         }
                         // Return focus to the grid and reset the formula text to
@@ -688,6 +725,17 @@ impl TrameView {
                         // DOM focus for even one frame, the focused branch above
                         // would see `text != seed` on the NEW cell and re-open an
                         // edit there, writing the value into the cell below too.
+                        self.text_input.focus();
+                        self.formula_text
+                            .set(self.cell_seed(self.state.active_row(), self.state.active_col()));
+                    }
+                    // Ctrl/Cmd+Enter: fill the value into every selected cell and
+                    // keep the selection put (no cursor advance).
+                    FormulaAction::CommitFill => {
+                        if let Some(ed) = self.editor.as_mut() {
+                            ed.buffer = self.formula_text.get();
+                        }
+                        self.commit_edit_filled();
                         self.text_input.focus();
                         self.formula_text
                             .set(self.cell_seed(self.state.active_row(), self.state.active_col()));
@@ -927,7 +975,7 @@ impl TrameView {
     /// grid (e.g. a pointer-down above the strip).
     fn handle_tab_input(&mut self, ev: &InputEvent) -> Option<bool> {
         match ev {
-            InputEvent::PointerDown { x, y, button: 0 } if self.state.in_tab_strip(*y) => {
+            InputEvent::PointerDown { x, y, button: 0, .. } if self.state.in_tab_strip(*y) => {
                 // Any open cell edit is committed before leaving the grid.
                 self.commit_edit();
                 if self.state.add_button_at(*x, *y) {
@@ -942,7 +990,7 @@ impl TrameView {
             }
             // Right-click a tab opens its context menu; consume so the browser
             // menu does not appear over the canvas.
-            InputEvent::PointerDown { x, y, button: 2 } if self.state.in_tab_strip(*y) => {
+            InputEvent::PointerDown { x, y, button: 2, .. } if self.state.in_tab_strip(*y) => {
                 if let Some(i) = self.state.tab_at(*x, *y) {
                     let (id, _) = self.state.sheets[i].clone();
                     let menu_h = 2.0 * super::grid::TAB_MENU_ITEM_HEIGHT;
@@ -1162,21 +1210,49 @@ impl TrameView {
     /// Input routing while NOT editing a cell.
     fn handle_input_nav(&mut self, ev: &InputEvent) -> bool {
         match ev {
-            // A content click focuses the pipe and selects the clicked cell, so
-            // typing or IME can start there (spec: canvas click -> textarea.focus).
-            InputEvent::PointerDown { x, y, button: 0 } => {
+            // A content click focuses the pipe and (re)selects the clicked cell,
+            // so typing or IME can start there (spec: canvas click ->
+            // textarea.focus). Shift extends the range to the clicked cell;
+            // Ctrl adds it as a disjoint range; a plain click collapses to it and
+            // arms a drag-to-select.
+            InputEvent::PointerDown { x, y, button: 0, shift, ctrl } => {
                 self.text_input.focus();
                 if let Some((row, col)) = self.state.cell_at(*x, *y) {
-                    self.select_cell(row, col);
+                    if *shift {
+                        self.extend_cell(row, col);
+                    } else if *ctrl {
+                        self.disjoin_cell(row, col);
+                    } else {
+                        self.select_cell(row, col);
+                        // Arm drag-to-select: pointer moves now grow the range.
+                        self.selecting_drag = true;
+                    }
                 }
+                true
+            }
+            // Drag with the button held grows the live selection rectangle to the
+            // cell under the cursor (mouse range selection).
+            InputEvent::PointerMove { x, y } if self.selecting_drag => {
+                if let Some((row, col)) = self.state.cell_at(*x, *y) {
+                    self.extend_cell(row, col);
+                }
+                true
+            }
+            InputEvent::PointerUp { .. } if self.selecting_drag => {
+                self.selecting_drag = false;
                 true
             }
             // A right-click selects the cell under the cursor before the DOM
             // context menu opens on it (standard spreadsheet behaviour). We don't
             // preventDefault here -- the `contextmenu` listener owns the menu.
-            InputEvent::PointerDown { x, y, button: 2 } => {
+            InputEvent::PointerDown { x, y, button: 2, .. } => {
                 self.text_input.focus();
-                if let Some((row, col)) = self.state.cell_at(*x, *y) {
+                // Right-click inside the current multi-cell selection keeps it
+                // (so a context menu can act on the range); otherwise it collapses
+                // to the clicked cell, like a left click.
+                if let Some((row, col)) = self.state.cell_at(*x, *y)
+                    && !self.state.selection.contains(row, col)
+                {
                     self.select_cell(row, col);
                 }
                 false
@@ -1219,36 +1295,43 @@ impl TrameView {
             }
             InputEvent::Key { key, ctrl, meta, alt, shift } => {
                 let chord = *ctrl || *meta; // Ctrl (or Cmd on macOS) jump modifier.
+                // Shift extends the selection range across navigation keys
+                // (Shift+arrows, Shift+Page, Shift+Home/End, Shift+Ctrl+End).
+                let ext = *shift;
                 match key.as_str() {
-                    "ArrowUp" => self.nav_move(-1, 0),
-                    "ArrowDown" => self.nav_move(1, 0),
-                    "ArrowLeft" => self.nav_move(0, -1),
-                    "ArrowRight" => self.nav_move(0, 1),
+                    "ArrowUp" => self.nav_move(-1, 0, ext),
+                    "ArrowDown" => self.nav_move(1, 0, ext),
+                    "ArrowLeft" => self.nav_move(0, -1, ext),
+                    "ArrowRight" => self.nav_move(0, 1, ext),
                     // Tab / Shift+Tab walk columns; Enter / Shift+Enter walk rows
-                    // (spreadsheet convention, sec.5.A). preventDefault keeps the
-                    // browser from moving focus off the canvas.
-                    "Tab" if !chord => self.nav_move(0, if *shift { -1 } else { 1 }),
-                    "Enter" if !chord => self.nav_move(if *shift { -1 } else { 1 }, 0),
+                    // (spreadsheet convention, sec.5.A) -- these always collapse the
+                    // selection (Shift is the reverse-direction modifier here, not
+                    // a range extender). preventDefault keeps the browser from
+                    // moving focus off the canvas.
+                    "Tab" if !chord => self.nav_move(0, if *shift { -1 } else { 1 }, false),
+                    "Enter" if !chord => self.nav_move(if *shift { -1 } else { 1 }, 0, false),
                     // Page Down / Up move by a full viewport height.
-                    "PageDown" => self.nav_move(self.state.viewport_rows.max(1) as i32, 0),
-                    "PageUp" => self.nav_move(-(self.state.viewport_rows.max(1) as i32), 0),
+                    "PageDown" => self.nav_move(self.state.viewport_rows.max(1) as i32, 0, ext),
+                    "PageUp" => self.nav_move(-(self.state.viewport_rows.max(1) as i32), 0, ext),
                     // Home: column 0 of the row; Ctrl+Home: top-left of the grid.
-                    "Home" if chord => self.nav_goto(0, 0),
-                    "Home" => self.nav_goto(self.state.active_row(), 0),
+                    "Home" if chord => self.nav_goto(0, 0, ext),
+                    "Home" => self.nav_goto(self.state.active_row(), 0, ext),
                     // End: last cell with content in the row; Ctrl+End: bottom-right
-                    // of the used (cached) range. Best-effort -- the UI thread has
-                    // no used-range model, so it scans its local cache (sec.16).
+                    // of the used (cached) range. With Shift the range grows to that
+                    // target (Shift+Ctrl+End = select to the last non-empty cell).
+                    // Best-effort -- the UI thread has no used-range model, so it
+                    // scans its local cache (sec.16).
                     "End" if chord => {
                         let (row, col) = self
                             .state
                             .last_content_cell()
                             .unwrap_or((self.state.active_row(), self.state.active_col()));
-                        self.nav_goto(row, col)
+                        self.nav_goto(row, col, ext)
                     }
                     "End" => {
                         let row = self.state.active_row();
                         let col = self.state.last_content_col(row).unwrap_or(self.state.active_col());
-                        self.nav_goto(row, col)
+                        self.nav_goto(row, col, ext)
                     }
                     // Delete / Backspace clear the active cell.
                     "Delete" | "Backspace" => self.clear_active_cell(),
@@ -1402,17 +1485,51 @@ impl TrameView {
         self.scroll_accum_y = 0.0;
     }
 
-    /// Move the active cell by `(dr, dc)`; returns `true` (consumed).
-    fn nav_move(&mut self, dr: i32, dc: i32) -> bool {
-        let mv = self.state.move_cursor(dr, dc);
+    /// Move the active cell by `(dr, dc)`; returns `true` (consumed). With
+    /// `extend` (Shift held) the selection range grows instead of collapsing.
+    fn nav_move(&mut self, dr: i32, dc: i32, extend: bool) -> bool {
+        let mv = self.state.move_cursor(dr, dc, extend);
         self.apply_cursor_move(mv)
     }
 
     /// Jump the active cell to absolute `(row, col)` (Home / End / Ctrl+Home /
-    /// Ctrl+End); returns `true` (consumed).
-    fn nav_goto(&mut self, row: u32, col: u32) -> bool {
-        let mv = self.state.move_to(row, col);
+    /// Ctrl+End); returns `true` (consumed). With `extend` the range grows to
+    /// the target (Shift+End, Shift+Ctrl+End...).
+    fn nav_goto(&mut self, row: u32, col: u32, extend: bool) -> bool {
+        let mv = self.state.move_to(row, col, extend);
         self.apply_cursor_move(mv)
+    }
+
+    /// Extend the live selection rectangle to `(row, col)` (Shift+click / drag),
+    /// keeping the anchor. Moves the active cell, so Logic and the pipe stay in
+    /// sync via the same path as a plain selection.
+    fn extend_cell(&mut self, row: u32, col: u32) {
+        if (row, col) == (self.state.active_row(), self.state.active_col()) {
+            return;
+        }
+        self.state.select_extend(row, col);
+        self.viewport_changed = true;
+        if let Err(SendError::Full) =
+            self.send_command_lossless(TrameCommand::SetActiveCell { row, col })
+        {
+            tracing::error!("Trame: UI->Logic channel full, selection extend dropped");
+        }
+        self.park_input_on(row, col);
+        self.announce_active();
+    }
+
+    /// Add `(row, col)` as a fresh disjoint range (Ctrl+click), committing the
+    /// previous live rectangle. The new cell becomes active.
+    fn disjoin_cell(&mut self, row: u32, col: u32) {
+        self.state.select_disjoint(row, col);
+        self.viewport_changed = true;
+        if let Err(SendError::Full) =
+            self.send_command_lossless(TrameCommand::SetActiveCell { row, col })
+        {
+            tracing::error!("Trame: UI->Logic channel full, disjoint select dropped");
+        }
+        self.park_input_on(row, col);
+        self.announce_active();
     }
 
     /// Forward a cursor move to Logic and keep the text pipe / a11y in sync.
@@ -1434,18 +1551,23 @@ impl TrameView {
         true
     }
 
-    /// Clear the active cell's content (Delete / Backspace in navigation mode).
-    /// Optimistically empties the local cache and forwards a `SetCellText` with
-    /// an empty string -- the same path a committed empty edit takes. Returns
-    /// `true` (consumed).
+    /// Clear every selected cell's content (Delete / Backspace in navigation
+    /// mode). Optimistically empties the local cache and forwards an empty
+    /// `SetCellText` per cell -- the same path a committed empty edit takes --
+    /// sealed as one undo group by a trailing `CommitEdit`. Returns `true`
+    /// (consumed).
     fn clear_active_cell(&mut self) -> bool {
-        let (row, col) = (self.state.active_row(), self.state.active_col());
-        if let Err(SendError::Full) = self
-            .send_command_lossless(TrameCommand::SetCellText { row, col, text: String::new() })
+        let cells = self.state.selection.selected_cells();
+        // One batch command so the whole clear is a single undo item.
+        let batch = cells.iter().map(|&(r, c)| (r, c, String::new())).collect();
+        if let Err(SendError::Full) =
+            self.send_command_lossless(TrameCommand::SetCellsBatch { cells: batch })
         {
             tracing::error!("Trame: UI→Logic channel full, cell clear dropped");
         }
-        self.state.set_cell_text(row, col, String::new());
+        for &(row, col) in &cells {
+            self.state.set_cell_text(row, col, String::new());
+        }
         self.needs_full = true;
         self.announce_active();
         true
@@ -1529,7 +1651,7 @@ impl TrameView {
             }
             // A press inside the edited cell starts a mouse text selection; a
             // press outside commits and reselects the clicked cell.
-            InputEvent::PointerDown { x, y, button: 0 } => {
+            InputEvent::PointerDown { x, y, button: 0, .. } => {
                 if self.pointer_in_editor(*x, *y) {
                     if let Some(ed) = self.editor.as_mut() {
                         ed.pending = Some(PendingHit { x: *x, kind: HitKind::Place });
@@ -1568,7 +1690,7 @@ impl TrameView {
             // A right-click commits and selects the cell under the cursor, so the
             // DOM context menu opens on it. We don't preventDefault (the
             // `contextmenu` listener owns the menu).
-            InputEvent::PointerDown { x, y, button: 2 } => {
+            InputEvent::PointerDown { x, y, button: 2, .. } => {
                 self.commit_edit();
                 self.text_input.focus();
                 if let Some((row, col)) = self.state.cell_at(*x, *y) {
@@ -1577,9 +1699,14 @@ impl TrameView {
                 false
             }
             InputEvent::Key { key, ctrl, meta, shift, .. } => {
+                // Ctrl/Cmd+Enter fills the whole selection with the typed value;
                 // Ctrl/Cmd+A selects the whole buffer; other command chords
                 // (Ctrl/Cmd+X) fall through to the chrome keymap.
                 if *ctrl || *meta {
+                    if key == "Enter" {
+                        self.commit_edit_filled();
+                        return true;
+                    }
                     if matches!(key.as_str(), "a" | "A") {
                         if let Some(ed) = self.editor.as_mut() {
                             ed.select_all();
@@ -1592,12 +1719,12 @@ impl TrameView {
                 match key.as_str() {
                     "Enter" => {
                         self.commit_edit();
-                        self.nav_move(1, 0);
+                        self.nav_move(1, 0, false);
                         true
                     }
                     "Tab" => {
                         self.commit_edit();
-                        self.nav_move(0, 1);
+                        self.nav_move(0, 1, false);
                         true
                     }
                     "Escape" => {
@@ -1657,12 +1784,12 @@ impl TrameView {
                     // Up/Down commit and move, as in a spreadsheet.
                     "ArrowUp" => {
                         self.commit_edit();
-                        self.nav_move(-1, 0);
+                        self.nav_move(-1, 0, false);
                         true
                     }
                     "ArrowDown" => {
                         self.commit_edit();
-                        self.nav_move(1, 0);
+                        self.nav_move(1, 0, false);
                         true
                     }
                     // Printable keys fall through to the textarea -> `Text`.

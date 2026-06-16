@@ -892,11 +892,24 @@ Floating dropdown below the active cell (DrawSurface), with selected item highli
 ## 8. SELECTION
 
 The selection is a rectangle from `anchor` to `active` (`anchor == active` is just the
-single-cell case). **Multi-cell selection is MVP** -- it is a hard prerequisite for Merge,
-Delete rows/cols, `SetCellStyle`, `PasteRange`, `FillRange`, `SortRange` and the status bar,
-which all read `sel.bounds()`. Extension paths: drag (sec.5.B `on_pointer_drag` -> `extend_to`),
-**Shift+arrows** and **Shift+click** (sec.5.A), and whole row/column selection by clicking a
-header. Range rendering is `draw_selection` below; header range highlight is in sec.4.B.
+single-cell case). **Multi-cell selection is MVP and IMPLEMENTED** -- it is a hard
+prerequisite for Merge, Delete rows/cols, `SetCellStyle`, `PasteRange`, `FillRange`,
+`SortRange` and the status bar, which all read `sel.bounds()`. Extension paths (all in
+`ambre-trame/src/ui/`): mouse drag (`view::handle_input_nav` arms `selecting_drag`, pointer
+moves call `select_extend` -> `Selection::extend_to`), **Shift+click** (`extend_cell`),
+**Ctrl/Cmd+click** for disjoint ranges (`disjoin_cell` -> `Selection::add_disjoint`, pushing
+the live rectangle into `Selection.extra`), **Shift+arrows / Shift+Page / Shift+Home/End**
+(`move_cursor`/`move_to` take an `extend` flag), and **Shift+Ctrl+End** to grow to the last
+cached non-empty cell. `InputEvent::PointerDown` carries `shift` / `ctrl` (Cmd folded into
+`ctrl` by the host). Range rendering iterates `Selection::rects()` in `renderer::draw_overlay`
+(translucent fill + 1px outline per rectangle, 2px active-cell border on top); whole
+row/column selection by clicking a header and the header range highlight (sec.4.B) remain
+to do.
+
+> **Disjoint selection** is modelled by `Selection { anchor, active, extra: Vec<CellRect> }`:
+> `extra` holds the committed rectangles, `anchor..=active` is the live one. `is_multi()` gates
+> the range fill so a lone single cell shows only the active border. Selection stays local
+> view state (never synced, sec.16).
 
 ```rust
 pub struct Selection {

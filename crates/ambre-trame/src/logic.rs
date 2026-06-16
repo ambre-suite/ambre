@@ -493,6 +493,72 @@ impl TrameState {
         CellId { sheet: 0, row: r, col: c }
     }
 
+    /// Apply a single cell write to the CRDT and the formula engine, without
+    /// committing, recomputing, or touching the undo group. Shared by the
+    /// single-cell [`SetCellText`](TrameCommand::SetCellText) path and the
+    /// multi-cell [`SetCellsBatch`](TrameCommand::SetCellsBatch) path so a batch
+    /// can wrap many writes in one undo group. An empty `text` clears the cell;
+    /// a write beyond the materialization cap is silently dropped.
+    ///
+    /// Does not commit -- the caller commits once after the write(s). The batch
+    /// path must pre-materialize every cell first (see the `SetCellsBatch` arm):
+    /// a `materialize` commit carries the excluded [`MATERIALIZE_ORIGIN`], and an
+    /// excluded commit interleaved between two value commits splits them into
+    /// separate undo items. Materializing up front keeps all value writes in one
+    /// final commit, hence one undo item.
+    fn write_cell(&mut self, row: u32, col: u32, text: &str) {
+        if text.is_empty() {
+            // Clearing: only touch the CRDT if the cell was materialized.
+            if let Some((rl, cl)) = self.index.resolve(row as usize, col as usize) {
+                let _ = self.doc.get_map(cells_map_name(&self.active_sheet)).delete(&cell_key(rl, cl));
+            }
+            let cell = self.active_cell_id(row, col);
+            let indices = self.engine_indices();
+            let ctx = TrameCtx {
+                sheet_name_to_u16: &self.sheet_name_to_u16,
+                sheet_id_to_u16: &self.sheet_id_to_u16,
+                named: &self.named,
+            };
+            self.engine.on_cell_changed(cell, "", &indices, &ctx);
+        } else {
+            let Some((rl, cl)) = self.materialize(row, col) else {
+                // Beyond the materialization cap: drop the write.
+                return;
+            };
+            // Persist the canonical (`sheet_id`-bound) form so cross-sheet
+            // references survive rename/reorder (§2.D).
+            let stored = self.canonicalize_input(text);
+            let _ = self.doc.get_map(cells_map_name(&self.active_sheet)).insert(&cell_key(rl, cl), stored.as_str());
+            let cell = CellId::bound(0, rl, cl);
+            let indices = self.engine_indices();
+            let ctx = TrameCtx {
+                sheet_name_to_u16: &self.sheet_name_to_u16,
+                sheet_id_to_u16: &self.sheet_id_to_u16,
+                named: &self.named,
+            };
+            self.engine.on_cell_changed(cell, &stored, &indices, &ctx);
+        }
+    }
+
+    /// Commit the pending cell write(s), recompute the dirty formula closure and
+    /// the active filter, and return the standard write outcome (a `DataReset`
+    /// so the UI re-fetches its viewport plus the CRDT delta). Shared tail of the
+    /// single-cell and batch write paths.
+    fn finish_cell_writes(&mut self) -> TrameOutcome {
+        self.doc.commit();
+        let indices = self.engine_indices();
+        self.engine.compute_all_dirty(&indices);
+        // The edit may change the filtered column's value: recompute the active
+        // filter so the row's hidden status tracks the data (§1.A).
+        self.recompute_active_filter();
+        let update = self.flush_delta();
+        // Ask the UI to re-fetch its viewport so the edit (and any formula it
+        // feeds) renders its computed result immediately, without waiting for the
+        // network echo. The optimistic UI-side update covers plain literals;
+        // formulas need this round-trip.
+        TrameOutcome { display: vec![TrameEvent::DataReset], update, ephemeral: None }
+    }
+
     /// Handle a UI command and return a typed outcome.
     ///
     /// Must complete in < 50 ms (P2); scroll requests in < 10 ms (P1).
@@ -545,49 +611,30 @@ impl TrameState {
                 // commit (filter recompute) merge into a single undo item, sealed
                 // by the next `CommitEdit` (or the fallback seal above).
                 let _ = self.undo_manager.group_start();
-                if text.is_empty() {
-                    // Clearing: only touch the CRDT if the cell was materialized.
-                    if let Some((rl, cl)) = self.index.resolve(row as usize, col as usize) {
-                        let _ = self.doc.get_map(cells_map_name(&self.active_sheet)).delete(&cell_key(rl, cl));
+                self.write_cell(row, col, &text);
+                self.finish_cell_writes()
+            }
+            TrameCommand::SetCellsBatch { cells } => {
+                tracing::info!("[Logic] SetCellsBatch {} cells", cells.len());
+                // A multi-cell fill / clear (Ctrl+Enter, Delete over a range).
+                // All writes share ONE undo group so the whole batch is a single
+                // undo item -- the group spans the loop and is sealed by the next
+                // command's fallback `group_end` (or an explicit `CommitEdit`).
+                let _ = self.undo_manager.group_start();
+                // Pre-materialize every written cell so all the excluded-origin
+                // `materialize` commits happen up front. Interleaving them between
+                // the value commits would split the batch into one undo item per
+                // cell (see `write_cell`); doing them first leaves the value writes
+                // in a single trailing commit -> one undo item for the batch.
+                for (row, col, text) in &cells {
+                    if !text.is_empty() {
+                        let _ = self.materialize(*row, *col);
                     }
-                    let cell = self.active_cell_id(row, col);
-                    let indices = self.engine_indices();
-                    let ctx = TrameCtx {
-                        sheet_name_to_u16: &self.sheet_name_to_u16,
-                        sheet_id_to_u16: &self.sheet_id_to_u16,
-                        named: &self.named,
-                    };
-                    self.engine.on_cell_changed(cell, "", &indices, &ctx);
-                } else {
-                    let Some((rl, cl)) = self.materialize(row, col) else {
-                        // Beyond the materialization cap: drop the write.
-                        return TrameOutcome::display_only(vec![]);
-                    };
-                    // Persist the canonical (`sheet_id`-bound) form so cross-sheet
-                    // references survive rename/reorder (§2.D).
-                    let stored = self.canonicalize_input(&text);
-                    let _ = self.doc.get_map(cells_map_name(&self.active_sheet)).insert(&cell_key(rl, cl), stored.as_str());
-                    let cell = CellId::bound(0, rl, cl);
-                    let indices = self.engine_indices();
-                    let ctx = TrameCtx {
-                        sheet_name_to_u16: &self.sheet_name_to_u16,
-                        sheet_id_to_u16: &self.sheet_id_to_u16,
-                        named: &self.named,
-                    };
-                    self.engine.on_cell_changed(cell, &stored, &indices, &ctx);
                 }
-                self.doc.commit();
-                let indices = self.engine_indices();
-                self.engine.compute_all_dirty(&indices);
-                // The edit may change the filtered column's value: recompute the
-                // active filter so the row's hidden status tracks the data (§1.A).
-                self.recompute_active_filter();
-                let update = self.flush_delta();
-                // Ask the UI to re-fetch its viewport so the edit (and any
-                // formula it feeds) renders its computed result immediately,
-                // without waiting for the network echo. The optimistic UI-side
-                // update covers plain literals; formulas need this round-trip.
-                TrameOutcome { display: vec![TrameEvent::DataReset], update, ephemeral: None }
+                for (row, col, text) in cells {
+                    self.write_cell(row, col, &text);
+                }
+                self.finish_cell_writes()
             }
             TrameCommand::ToggleBold => {
                 let (row, col) = self.active;
@@ -2442,6 +2489,39 @@ mod tests {
             Some(TrameEvent::UndoState { can_undo: true, can_redo: false })
         ));
         assert_eq!(read_cell(&mut state, 0, 0), "hello", "redo restores the value");
+    }
+
+    /// A multi-cell batch (Ctrl+Enter fill / Delete over a range) is a SINGLE
+    /// undo item: every write shares one undo group, so one `Undo` restores all
+    /// the affected cells at once.
+    #[test]
+    fn batch_write_is_one_undo_item() {
+        let mut state = TrameState::new();
+        let undo_before = state.undo_manager.undo_count();
+
+        state.handle_command(TrameCommand::SetCellsBatch {
+            cells: vec![
+                (0, 0, "x".to_owned()),
+                (0, 1, "x".to_owned()),
+                (1, 0, "x".to_owned()),
+            ],
+        });
+        // Seal the group (cell-exit boundary), like the UI's next command would.
+        state.handle_command(TrameCommand::CommitEdit);
+
+        assert_eq!(read_cell(&mut state, 0, 0), "x");
+        assert_eq!(read_cell(&mut state, 1, 0), "x");
+        assert_eq!(
+            state.undo_manager.undo_count(),
+            undo_before + 1,
+            "the whole batch collapses into a single undo item",
+        );
+
+        // One undo clears every cell of the batch.
+        state.handle_command(TrameCommand::Undo);
+        assert_eq!(read_cell(&mut state, 0, 0), "", "one undo restores the whole batch");
+        assert_eq!(read_cell(&mut state, 0, 1), "");
+        assert_eq!(read_cell(&mut state, 1, 0), "");
     }
 
     /// A cell edit that also rewrites the active filter's hidden set commits the
