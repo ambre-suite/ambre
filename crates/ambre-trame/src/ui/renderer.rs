@@ -198,7 +198,12 @@ pub fn draw_cells<S: DrawSurface>(
     let cells = (span.row_start..span.row_end).flat_map(move |row| {
         (span.col_start..span.col_end).filter_map(move |col| {
             state.cell_cache.get(&(row, col)).map(|c| {
-                (row, col, CellContent { text: &c.text, bold: c.bold, italic: c.italic })
+                // A merge master's text is laid out by the merge pass over the
+                // full span; drawing it here too would double it (single-cell
+                // baseline + span baseline). Pass empty text so only its bg fill
+                // lands here. Covered cells already carry empty text.
+                let text = if c.merge_span.is_some() { "" } else { c.text.as_str() };
+                (row, col, CellContent { text, bold: c.bold, italic: c.italic })
             })
         })
     });
@@ -208,6 +213,24 @@ pub fn draw_cells<S: DrawSurface>(
 
     // -- 3. Grid lines on top of the fills, so separators stay visible. --------
     render::draw_grid_lines_on(surface, &layout, palette.grid_line, strip);
+
+    // -- 3bis. Merge masters: paint over the interior separators of the covered
+    // cells, lay the master's text across the span, re-stroke the outer border.
+    // Iterates the (bounded) cache rather than the strip so a master pinned just
+    // outside the strip still repaints the part of its span that is inside.
+    let merges = state.cell_cache.iter().filter_map(|(&(row, col), c)| {
+        c.merge_span.and_then(|(col_span, row_span)| {
+            let hit = layout.merge_rect(row, col, col_span, row_span).intersect(strip);
+            (hit.width() > 0.0 && hit.height() > 0.0).then_some((
+                row,
+                col,
+                col_span,
+                row_span,
+                CellContent { text: &c.text, bold: c.bold, italic: c.italic },
+            ))
+        })
+    });
+    render::draw_merges_on(surface, &layout, palette, font_cx, text_cache, text_enabled, merges);
 
     // -- 4. UI-only layers tied to cell content (dirty veil + error marker). ---
     // These live on the persistent cells layer so they scroll with the data,
@@ -314,8 +337,13 @@ pub fn draw_overlay<S: DrawSurface>(
             }
         }
     }
-    // The active cell always gets a solid 2px border on top.
-    if let Some((x, y, cw, ch)) = state.cell_pixel_rect(state.active_row(), state.active_col()) {
+    // The active cell always gets a solid 2px border on top. When it sits in a
+    // merged block the border wraps the whole block, so the merge reads as one
+    // selected cell.
+    if let Some((x, y, cw, ch)) = state
+        .active_merge_rect()
+        .or_else(|| state.cell_pixel_rect(state.active_row(), state.active_col()))
+    {
         surface.stroke_rect(Rect::new(x, y, x + cw, y + ch), palette.selection, 2.0);
     }
     let t_after_hdrs = clock.now_ms();
@@ -719,6 +747,35 @@ mod tests {
         );
         // ...but only the non-empty one is tallied as drawn text.
         assert_eq!(stats.cells_drawn, 1);
+        assert_eq!(surface.clip_depth(), 0);
+    }
+
+    #[test]
+    fn draw_cells_renders_merge_master_over_its_span() {
+        // A 2x2 merge master at (0,0) plus its three blank covered cells.
+        let mut state = fixture(&[(0, 0, "merged"), (0, 1, ""), (1, 0, ""), (1, 1, "")]);
+        state.cell_cache.get_mut(&(0, 0)).unwrap().merge_span = Some((2, 2));
+        let palette = Theme::Light.palette();
+        let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
+
+        draw_cells(
+            &mut surface, &state, palette, &mut font_cx, &mut cache,
+            true, None, &clock, &mut stats,
+        );
+
+        // The merge pass strokes the span's outer border with the grid colour as
+        // a rect (the per-cell separators are only ever stroked as lines).
+        let layout = screen_layout(&state);
+        let span_rect = layout.merge_rect(0, 0, 2, 2);
+        assert!(surface.count(|op| matches!(
+            op, DrawOp::StrokeRect { rect, color, .. }
+                if *color == palette.grid_line && *rect == span_rect
+        )) == 1);
+        // The span gets an opaque content_bg fill covering its full rectangle.
+        assert!(surface.count(|op| matches!(
+            op, DrawOp::FillRect { rect, color }
+                if *color == palette.content_bg && *rect == span_rect
+        )) == 1);
         assert_eq!(surface.clip_depth(), 0);
     }
 
