@@ -645,8 +645,20 @@ impl TrameUiState {
 
     /// Collapse the selection to a single cell (single-cell selection, sec.8).
     /// Used on a plain pointer hit; no clamping -- callers pass valid grid coords.
+    ///
+    /// A hit inside a merged block snaps to the block's master, so the merge is
+    /// always selected as a whole (its sub-cells are never individually
+    /// selectable, spec sec.2).
     pub fn select(&mut self, row: u32, col: u32) {
+        let (row, col) = self.snap_to_master(row, col);
         self.selection = Selection::single(row, col);
+    }
+
+    /// Resolve `(row, col)` to its merge master when inside a merged block, else
+    /// return it unchanged. The single chokepoint that keeps the active cell on a
+    /// master rather than a covered sub-cell.
+    fn snap_to_master(&self, row: u32, col: u32) -> (u32, u32) {
+        self.merge_master_at(row, col).map_or((row, col), |(mr, mc, _, _)| (mr, mc))
     }
 
     /// Extend the live rectangle's active corner to `(row, col)`, keeping the
@@ -675,10 +687,25 @@ impl TrameUiState {
     /// so the Logic thread can retarget formatting) plus an optional
     /// `ScrollViewport` to fetch newly exposed cells.
     pub fn move_cursor(&mut self, dr: i32, dc: i32, extend: bool) -> Option<CursorMove> {
-        let new_row = (self.active_row() as i64 + dr as i64)
-            .clamp(0, (TOTAL_ROWS - 1) as i64) as u32;
-        let new_col = (self.active_col() as i64 + dc as i64)
-            .clamp(0, (TOTAL_COLS - 1) as i64) as u32;
+        let (ar, ac) = (self.active_row(), self.active_col());
+        // Stepping off a merge master must clear its whole span, else the
+        // candidate lands on a covered sub-cell and snaps straight back (cursor
+        // trapped). Advance by the span in the travel direction.
+        let (mut tr, mut tc) = (ar as i64 + dr as i64, ac as i64 + dc as i64);
+        if let Some((mr, mc, cs, rs)) = self.merge_master_at(ar, ac) {
+            if dc > 0 {
+                tc = mc as i64 + cs as i64;
+            } else if dc < 0 {
+                tc = mc as i64 - 1;
+            }
+            if dr > 0 {
+                tr = mr as i64 + rs as i64;
+            } else if dr < 0 {
+                tr = mr as i64 - 1;
+            }
+        }
+        let new_row = tr.clamp(0, (TOTAL_ROWS - 1) as i64) as u32;
+        let new_col = tc.clamp(0, (TOTAL_COLS - 1) as i64) as u32;
         self.move_to(new_row, new_col, extend)
     }
 
@@ -691,8 +718,14 @@ impl TrameUiState {
     /// if the cell did not change, otherwise a [`CursorMove`] with the new
     /// active cell plus an optional `ScrollViewport`.
     pub fn move_to(&mut self, row: u32, col: u32, extend: bool) -> Option<CursorMove> {
-        let new_row = row.min(TOTAL_ROWS - 1);
-        let new_col = col.min(TOTAL_COLS - 1);
+        // Landing on a covered sub-cell snaps to its master (only when
+        // collapsing: an extension keeps its raw corner so the live rectangle
+        // can grow cell by cell).
+        let (new_row, new_col) = if extend {
+            (row.min(TOTAL_ROWS - 1), col.min(TOTAL_COLS - 1))
+        } else {
+            self.snap_to_master(row.min(TOTAL_ROWS - 1), col.min(TOTAL_COLS - 1))
+        };
 
         if new_row == self.active_row() && new_col == self.active_col() {
             return None;
@@ -964,6 +997,28 @@ impl TrameUiState {
         Some((row, col))
     }
 
+    /// If `(row, col)` falls inside a merged block, return its master corner and
+    /// span `(master_row, master_col, col_span, row_span)`.
+    ///
+    /// A covered cell carries no back-reference to its master, so this scans the
+    /// cached merge masters (the cache is bounded to the viewport + padding, so
+    /// the scan is cheap). The master itself resolves to its own block.
+    pub fn merge_master_at(&self, row: u32, col: u32) -> Option<(u32, u32, u32, u32)> {
+        self.cell_cache.iter().find_map(|(&(mr, mc), c)| {
+            let (col_span, row_span) = c.merge_span?;
+            (row >= mr && row < mr + row_span && col >= mc && col < mc + col_span)
+                .then_some((mr, mc, col_span, row_span))
+        })
+    }
+
+    /// Screen pixel rect (x, y, w, h) of the merged block the active cell belongs
+    /// to, or `None` when the active cell is not merged (or scrolled out). Lets
+    /// the overlay draw the active-cell border around the whole merge.
+    pub fn active_merge_rect(&self) -> Option<(f64, f64, f64, f64)> {
+        let (mr, mc, cs, rs) = self.merge_master_at(self.active_row(), self.active_col())?;
+        self.range_pixel_rect(mr, mc, mr + rs - 1, mc + cs - 1)
+    }
+
     /// Screen pixel rect (x, y, w, h) of cell (row, col) relative to the
     /// top-left corner of the canvas, or `None` if the cell is outside the
     /// visible area.
@@ -1036,6 +1091,48 @@ mod tests {
         state.move_cursor(1, 0, false).expect("cursor moved");
         assert_eq!(state.selection, Selection::single(6, 3));
         assert_eq!(state.selection.anchor, state.selection.active);
+    }
+
+    /// A 2x2 merge master at (1,1) covering (1,1)..=(2,2): selecting any covered
+    /// sub-cell snaps the active cell to the master, and arrow navigation steps
+    /// across the whole block rather than landing inside it.
+    #[test]
+    fn merge_block_selects_as_a_whole_and_nav_steps_over_it() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        let cell = |row, col, span| DisplayCell {
+            row,
+            col,
+            text: String::new(),
+            raw: String::new(),
+            bold: false,
+            italic: false,
+            is_merged: true,
+            merge_span: span,
+            is_filtered: false,
+        };
+        state.on_viewport_data(TrameEvent::ViewportData {
+            version: 0,
+            row_start: 0,
+            col_start: 0,
+            cells: vec![
+                cell(1, 1, Some((2, 2))), // master
+                cell(1, 2, None),
+                cell(2, 1, None),
+                cell(2, 2, None),
+            ],
+        });
+
+        // Clicking the bottom-right covered sub-cell selects the master.
+        state.select(2, 2);
+        assert_eq!(state.selection, Selection::single(1, 1));
+
+        // Arrow Right from the master clears the 2-wide span -> column 3.
+        state.move_cursor(0, 1, false).expect("moved past merge");
+        assert_eq!((state.active_row(), state.active_col()), (1, 3));
+
+        // Arrow Left back into the block snaps onto the master, not a sub-cell.
+        state.move_cursor(0, -1, false).expect("moved back");
+        assert_eq!((state.active_row(), state.active_col()), (1, 1));
     }
 
     /// Shift+arrows / drag extend the live rectangle (anchor fixed, active

@@ -93,6 +93,19 @@ impl GridLayout {
             + (row as i64 - self.origin_row as i64) as f64 * self.row_height;
         Rect::new(x, y, x + self.col_width, y + self.row_height)
     }
+
+    /// Pixel rect of a merge master `(row, col)` spanning `col_span` columns and
+    /// `row_span` rows (both >= 1). Like [`cell_rect`](Self::cell_rect) the
+    /// result is unclipped.
+    pub fn merge_rect(&self, row: u32, col: u32, col_span: u32, row_span: u32) -> Rect {
+        let base = self.cell_rect(row, col);
+        Rect::new(
+            base.x0,
+            base.y0,
+            base.x0 + col_span.max(1) as f64 * self.col_width,
+            base.y0 + row_span.max(1) as f64 * self.row_height,
+        )
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -290,6 +303,82 @@ pub fn draw_grid_lines_on<S: DrawSurface>(
             i += 1;
         }
     }
+}
+
+// -----------------------------------------------------------------------------
+// draw_merges_on -- merge masters spanning their covered area
+// -----------------------------------------------------------------------------
+
+/// Draw the merge masters over the base cell + grid-line layer.
+///
+/// `merges` yields `(row, col, col_span, row_span, content)` for the visible
+/// merge masters (a covered cell is *not* a master and must not appear here --
+/// it renders blank under the master's span). For each master:
+///
+///   1. the full span gets an opaque `content_bg` fill, painting over the
+///      interior grid separators drawn through the covered cells;
+///   2. the master's text is laid out across the spanned width, vertically
+///      centered in the spanned height;
+///   3. the span's outer border is stroked in `grid_line` so the merged block
+///      reads as one cell.
+///
+/// Call *after* [`draw_cells_on`] + [`draw_grid_lines_on`]. Returns the number
+/// of masters that had non-empty text drawn (font-independent tally).
+#[allow(clippy::too_many_arguments)]
+pub fn draw_merges_on<'a, S, I>(
+    surface: &mut S,
+    layout: &GridLayout,
+    palette: &Palette,
+    font_cx: &mut FontContext,
+    text_cache: &mut TextCache,
+    text_enabled: bool,
+    merges: I,
+) -> u32
+where
+    S: DrawSurface,
+    I: IntoIterator<Item = (u32, u32, u32, u32, CellContent<'a>)>,
+{
+    let cell_brush = Brush::Solid(palette.cell_text);
+    let mut drawn = 0u32;
+
+    for (row, col, col_span, row_span, content) in merges {
+        let rect = layout.merge_rect(row, col, col_span, row_span);
+
+        // 1. Opaque fill over the whole span, hiding the interior separators.
+        surface.fill_rect(rect, palette.content_bg);
+
+        // 3. Outer border last is fine -- text is clipped to the span anyway.
+        // Drawn here before text so the 1px edge never sits over a glyph.
+        surface.stroke_rect(rect, palette.grid_line, 1.0);
+
+        if text_enabled && !content.text.is_empty() {
+            let max_width = (rect.width() - 2.0 * CELL_PAD_X).max(0.0) as f32;
+            let layout_text: &Layout<ParleyBrush> = text_cache.get_or_build(
+                font_cx,
+                content.text,
+                BODY_SIZE,
+                max_width,
+                Alignment::Start,
+                content.bold,
+                content.italic,
+            );
+            let text_h = layout_text.height() as f64;
+            let y_off = ((rect.height() - text_h) / 2.0).max(0.0);
+            surface.push_clip(rect);
+            for line in layout_text.lines() {
+                for item in line.items() {
+                    let PositionedLayoutItem::GlyphRun(run) = item else { continue };
+                    let tx = rect.x0 + CELL_PAD_X + run.offset() as f64;
+                    let ty = rect.y0 + y_off + run.baseline() as f64;
+                    surface.draw_glyphs(&run, &cell_brush, Affine::translate((tx, ty)));
+                }
+            }
+            surface.pop_clip();
+            drawn += 1;
+        }
+    }
+
+    drawn
 }
 
 // -----------------------------------------------------------------------------
