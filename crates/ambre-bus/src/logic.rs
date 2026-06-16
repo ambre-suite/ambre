@@ -163,7 +163,8 @@ pub enum TrameCommand {
         col_end: u32,
     },
 
-    /// Move the active cell (selection) to `(row, col)`.
+    /// Move the active cell to `(row, col)` and report the selection rectangle
+    /// whose opposite (anchor) corner is `(anchor_row, anchor_col)`.
     ///
     /// Formatting commands ([`ToggleBold`](TrameCommand::ToggleBold) /
     /// [`ToggleItalic`](TrameCommand::ToggleItalic)) target whatever cell is
@@ -172,9 +173,18 @@ pub enum TrameCommand {
     /// formatting ([`TrameEvent::BoldState`](crate::ui::TrameEvent::BoldState) /
     /// [`ItalicState`](crate::ui::TrameEvent::ItalicState)) so the chrome toggle
     /// buttons track the selection.
+    ///
+    /// `(anchor_row, anchor_col)` is the selection's other corner (equal to
+    /// `(row, col)` for a single-cell selection). The Logic thread normalizes the
+    /// two corners into the selection rectangle that the parameterless structural
+    /// intents (`MergeSelection`, `DeleteSelectedRows`, ...) resolve against. The
+    /// selection is local view state -- never persisted, never synced
+    /// (`-ui.md` sec.16).
     SetActiveCell {
         row: u32,
         col: u32,
+        anchor_row: u32,
+        anchor_col: u32,
     },
 
     /// Set the plaintext content of cell `(row, col)`.
@@ -269,6 +279,32 @@ pub enum TrameCommand {
         row: u32,
         col: u32,
     },
+
+    // -- Parameterless structural intents (grid context menu, `-ui.md` sec.5.C).
+    // These carry no geometry: the Logic thread resolves them against the active
+    // cell / selection rectangle it tracks (kept current by `SetActiveCell`).
+    // They map one-to-one to a registry `CommandId`, so the DOM context menu, the
+    // toolbar and the keyboard can all trigger them through the same dispatch.
+    /// Insert a blank row just above the active cell's row.
+    InsertRowAbove,
+    /// Insert a blank row just below the active cell's row.
+    InsertRowBelow,
+    /// Insert a blank column just left of the active cell's column.
+    InsertColLeft,
+    /// Insert a blank column just right of the active cell's column.
+    InsertColRight,
+    /// Delete every row spanned by the current selection (descending order, so
+    /// earlier positions stay valid). One `DeleteRow` per row internally.
+    DeleteSelectedRows,
+    /// Delete every column spanned by the current selection (descending order).
+    DeleteSelectedCols,
+    /// Merge the current selection rectangle (equivalent to [`MergeCells`] over
+    /// `selection.bounds()`). Rejected with [`TrameEvent::MergeRejected`] on a
+    /// single-cell selection or a non-empty covered cell.
+    MergeSelection,
+    /// Unmerge the merge containing the active cell (equivalent to
+    /// [`UnmergeCells`] at the active cell). A no-op outside a merge.
+    UnmergeActive,
 
     /// Undo the last local edit (`ambre-spec-trame-logic.md` §8). Backed by Loro's
     /// `UndoManager`: it replays the inverse of this session's most recent commit

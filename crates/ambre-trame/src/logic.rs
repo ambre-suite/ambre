@@ -186,6 +186,14 @@ pub struct TrameState {
     /// Active cell (selection), kept in sync by the UI via
     /// [`TrameCommand::SetActiveCell`]. Formatting toggles target this cell.
     active: (u32, u32),
+    /// Current selection rectangle, normalized to `(row_start, col_start,
+    /// row_end, col_end)` with `start <= end`. Kept in sync by the UI alongside
+    /// [`active`](Self::active) via [`TrameCommand::SetActiveCell`]; the
+    /// parameterless structural intents (`MergeSelection`, `DeleteSelectedRows`,
+    /// ...) resolve their geometry against it. Like [`active`](Self::active) it
+    /// is ephemeral, in-memory only, never in Loro, never synced (a local view
+    /// state, `-ui.md` sec.16). Defaults to the single active cell.
+    selection: (u32, u32, u32, u32),
     /// Id of the sheet the UI is currently looking at. Step 1 always holds the
     /// implicit [`DEFAULT_SHEET`]; multi-sheet switching arrives with the tabs.
     active_sheet: String,
@@ -284,6 +292,7 @@ impl TrameState {
         undo_manager.add_exclude_origin_prefix(MATERIALIZE_ORIGIN);
         let mut state = Self {
             active: (0, 0),
+            selection: (0, 0, 0, 0),
             active_sheet: DEFAULT_SHEET.to_owned(),
             bold: HashSet::new(),
             italic: HashSet::new(),
@@ -587,8 +596,16 @@ impl TrameState {
         // `group_end` is a no-op when no group is open.
         self.undo_manager.group_end();
         match cmd {
-            TrameCommand::SetActiveCell { row, col } => {
+            TrameCommand::SetActiveCell { row, col, anchor_row, anchor_col } => {
                 self.active = (row, col);
+                // Normalize the active cell and the anchor corner into the
+                // selection rectangle the structural intents resolve against.
+                self.selection = (
+                    row.min(anchor_row),
+                    col.min(anchor_col),
+                    row.max(anchor_row),
+                    col.max(anchor_col),
+                );
                 // Report the new active cell's formatting so the chrome toggle
                 // buttons reflect the selection.
                 TrameOutcome::display_only(vec![
@@ -737,6 +754,19 @@ impl TrameState {
                 self.merge_cells(row, col, row_end, col_end)
             }
             TrameCommand::UnmergeCells { row, col } => self.unmerge_cells(row, col),
+            // -- Parameterless structural intents (grid context menu). Geometry
+            // comes from the tracked active cell / selection (`SetActiveCell`).
+            TrameCommand::InsertRowAbove => self.insert_axis(self.active.0, Axis::Row),
+            TrameCommand::InsertRowBelow => self.insert_axis(self.active.0 + 1, Axis::Row),
+            TrameCommand::InsertColLeft => self.insert_axis(self.active.1, Axis::Col),
+            TrameCommand::InsertColRight => self.insert_axis(self.active.1 + 1, Axis::Col),
+            TrameCommand::DeleteSelectedRows => self.delete_selected_axis(Axis::Row),
+            TrameCommand::DeleteSelectedCols => self.delete_selected_axis(Axis::Col),
+            TrameCommand::MergeSelection => {
+                let (r1, c1, r2, c2) = self.selection;
+                self.merge_cells(r1, c1, r2, c2)
+            }
+            TrameCommand::UnmergeActive => self.unmerge_cells(self.active.0, self.active.1),
             TrameCommand::Undo => self.apply_history(true),
             TrameCommand::Redo => self.apply_history(false),
             TrameCommand::DefineName { name, reference } => self.define_name(&name, &reference),
@@ -1038,6 +1068,25 @@ impl TrameState {
         self.purge_axis(removed, axis);
         self.doc.commit();
         self.after_structural()
+    }
+
+    /// Delete every row/column spanned by the current selection rectangle,
+    /// iterating from the far edge inward so earlier positions stay valid as the
+    /// list shifts. Each line is its own [`delete_axis`](Self::delete_axis) commit
+    /// (hence its own undo item, matching `-ui.md` sec.5.C); the final outcome
+    /// carries the refreshed display. The selection is left untouched -- the UI
+    /// owns it and re-reports it on the next cursor move.
+    fn delete_selected_axis(&mut self, axis: Axis) -> TrameOutcome {
+        let (r1, c1, r2, c2) = self.selection;
+        let (start, end) = match axis {
+            Axis::Row => (r1, r2),
+            Axis::Col => (c1, c2),
+        };
+        let mut outcome = TrameOutcome::display_only(vec![]);
+        for at in (start..=end).rev() {
+            outcome = self.delete_axis(at, axis);
+        }
+        outcome
     }
 
     /// Drop every cell and formatting entry whose key references the removed
@@ -2138,7 +2187,7 @@ mod tests {
         let mut state = TrameState::new();
 
         // Select A1 (0,0) and bold it.
-        state.handle_command(TrameCommand::SetActiveCell { row: 0, col: 0 });
+        state.handle_command(TrameCommand::SetActiveCell { row: 0, col: 0, anchor_row: 0, anchor_col: 0 });
         let evts = state.handle_command(TrameCommand::ToggleBold);
         assert!(matches!(evts.display[0], TrameEvent::BoldState { enabled: true }));
         assert!(matches!(
@@ -2148,7 +2197,7 @@ mod tests {
 
         // Move the selection to B2 (1,1): the active cell is not bold, so the
         // button reports false -- A1 keeps its bold.
-        let evts = state.handle_command(TrameCommand::SetActiveCell { row: 1, col: 1 });
+        let evts = state.handle_command(TrameCommand::SetActiveCell { row: 1, col: 1, anchor_row: 1, anchor_col: 1 });
         assert!(matches!(evts.display[0], TrameEvent::BoldState { enabled: false }));
 
         // A viewport covering both cells: only A1 carries the bold run.
@@ -2173,7 +2222,7 @@ mod tests {
     #[test]
     fn formatting_survives_snapshot_roundtrip() {
         let mut state = TrameState::new();
-        state.handle_command(TrameCommand::SetActiveCell { row: 0, col: 0 });
+        state.handle_command(TrameCommand::SetActiveCell { row: 0, col: 0, anchor_row: 0, anchor_col: 0 });
         state.handle_command(TrameCommand::ToggleBold);
         state.handle_command(TrameCommand::ToggleItalic);
 
@@ -2572,7 +2621,7 @@ mod tests {
         ), "an edit enables Undo");
 
         // A pure selection move produces no CRDT delta -> no UndoState refresh.
-        let evts = state.handle_command(TrameCommand::SetActiveCell { row: 1, col: 1 });
+        let evts = state.handle_command(TrameCommand::SetActiveCell { row: 1, col: 1, anchor_row: 1, anchor_col: 1 });
         assert!(
             !evts.display.iter().any(|e| matches!(e, TrameEvent::UndoState { .. })),
             "a non-mutating command does not touch the history stacks",
@@ -2747,6 +2796,73 @@ mod tests {
         state.handle_command(TrameCommand::UnmergeCells { row: 0, col: 2 });
         assert_eq!(read_display(&mut state, 0, 0).merge_span, None);
         assert!(!read_display(&mut state, 0, 1).is_merged, "covered cell freed");
+    }
+
+    /// The parameterless structural intents (grid context menu) resolve their
+    /// geometry against the active cell / selection the Logic thread tracks.
+    /// `InsertRowAbove` / `InsertRowBelow` land relative to the active row.
+    #[test]
+    fn insert_intents_land_relative_to_active_cell() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "r0".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 1, col: 0, text: "r1".to_owned() });
+
+        // Active cell = row 1; "insert above" pushes r1 down to row 2.
+        state.handle_command(TrameCommand::SetActiveCell {
+            row: 1, col: 0, anchor_row: 1, anchor_col: 0,
+        });
+        state.handle_command(TrameCommand::InsertRowAbove);
+        assert_eq!(read_cell(&mut state, 0, 0), "r0", "row above the active stays");
+        assert_eq!(read_cell(&mut state, 1, 0), "", "blank row inserted at the active row");
+        assert_eq!(read_cell(&mut state, 2, 0), "r1", "active row shifted down");
+    }
+
+    /// `DeleteSelectedRows` drops every row spanned by the selection rectangle.
+    #[test]
+    fn delete_selected_rows_drops_the_whole_span() {
+        let mut state = TrameState::new();
+        for (r, t) in [(0, "keep"), (1, "a"), (2, "b"), (3, "c"), (4, "tail")] {
+            state.handle_command(TrameCommand::SetCellText { row: r, col: 0, text: t.to_owned() });
+        }
+        // Select rows 1..=3 (active corner row 3, anchor row 1).
+        state.handle_command(TrameCommand::SetActiveCell {
+            row: 3, col: 0, anchor_row: 1, anchor_col: 0,
+        });
+        state.handle_command(TrameCommand::DeleteSelectedRows);
+        assert_eq!(read_cell(&mut state, 0, 0), "keep");
+        assert_eq!(read_cell(&mut state, 1, 0), "tail", "rows 1..=3 gone, row 4 shifted up");
+        assert_eq!(read_cell(&mut state, 2, 0), "");
+    }
+
+    /// `MergeSelection` merges the tracked selection; `UnmergeActive` splits the
+    /// merge under the active cell.
+    #[test]
+    fn merge_and_unmerge_intents_use_the_selection() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "title".to_owned() });
+        // Select A1:B2.
+        state.handle_command(TrameCommand::SetActiveCell {
+            row: 1, col: 1, anchor_row: 0, anchor_col: 0,
+        });
+        state.handle_command(TrameCommand::MergeSelection);
+        assert_eq!(read_display(&mut state, 0, 0).merge_span, Some((2, 2)), "selection merged");
+
+        // Active cell is inside the merge; UnmergeActive frees it.
+        state.handle_command(TrameCommand::UnmergeActive);
+        assert_eq!(read_display(&mut state, 0, 0).merge_span, None, "merge split");
+    }
+
+    /// `MergeSelection` over a lone single-cell selection is a silent no-op (a
+    /// single cell is not a merge), producing no CRDT delta.
+    #[test]
+    fn merge_selection_single_cell_is_noop() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetActiveCell {
+            row: 2, col: 2, anchor_row: 2, anchor_col: 2,
+        });
+        let evts = state.handle_command(TrameCommand::MergeSelection);
+        assert!(evts.update.is_none(), "no CRDT mutation");
+        assert_eq!(read_display(&mut state, 2, 2).merge_span, None);
     }
 
     /// A concurrent edit that lands a value in a covered cell is masked, not
