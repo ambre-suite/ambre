@@ -802,6 +802,17 @@ impl TrameState {
                 self.apply_filter(&sheet_id, col, kind)
             }
             TrameCommand::ClearFilter { sheet_id } => self.clear_filter(&sheet_id),
+            // Parameterless siblings: geometry resolved against the tracked active
+            // cell / active sheet (`-ui.md` sec.5.D), like the sort intents above.
+            TrameCommand::RequestActiveColumnValues => self.active_column_values(),
+            TrameCommand::ApplyFilterToActiveColumn { kind } => {
+                let sheet = self.active_sheet.clone();
+                self.apply_filter(&sheet, self.active.1, kind)
+            }
+            TrameCommand::ClearActiveFilter => {
+                let sheet = self.active_sheet.clone();
+                self.clear_filter(&sheet)
+            }
 
             // Deferred feature surface (`ambre-spec-trame-features.md §10`): the
             // command vocabulary is complete and typed, but these handlers land
@@ -1716,10 +1727,50 @@ impl TrameState {
         self.rebuild_filter();
         let update = self.flush_delta();
         TrameOutcome {
-            display: vec![TrameEvent::FilterApplied { hidden_row_count: count }, TrameEvent::DataReset],
+            display: vec![
+                TrameEvent::FilterApplied { hidden_row_count: count, col },
+                TrameEvent::DataReset,
+            ],
             update,
             ephemeral: None,
         }
+    }
+
+    /// Collect the distinct visible values of the active cell's column for the
+    /// filter popover's "by values" list (`-ui.md` sec.5.D). Evaluates every
+    /// non-hidden materialized row through the formula cache, dedups by display
+    /// text, sorts, and replies with [`TrameEvent::ColumnValues`]. A read-only
+    /// query (no delta); replies with an empty list for a virtual column.
+    fn active_column_values(&mut self) -> TrameOutcome {
+        let col = self.active.1;
+        let Some(col_uid) = self.index.col_id(col as usize) else {
+            return TrameOutcome::display_only(vec![TrameEvent::ColumnValues {
+                col,
+                values: vec![],
+            }]);
+        };
+        // The popover lists current results; make sure the cache is up to date.
+        let indices = self.engine_indices();
+        self.engine.compute_all_dirty(&indices);
+        let col_pos = self.index.col_pos(&col_uid).unwrap_or(col as usize);
+        let mut values: Vec<String> = (0..self.index.row_len())
+            // Skip rows already hidden by an active filter (distinct *visible*
+            // values, matching Google Sheets).
+            .filter(|&pos| !self.hidden_rows.contains(&(pos as u32)))
+            .filter_map(|pos| {
+                let v = self
+                    .engine
+                    .evaluated_value(self.active_cell_id(pos as u32, col_pos as u32))
+                    .unwrap_or(CellValue::Empty);
+                match v {
+                    CellValue::Empty => None,
+                    other => Some(other.to_display()),
+                }
+            })
+            .collect();
+        values.sort();
+        values.dedup();
+        TrameOutcome::display_only(vec![TrameEvent::ColumnValues { col, values }])
     }
 
     /// Clear the active shared filter: drop every `filter_hidden_{sheet}` entry
@@ -3398,6 +3449,53 @@ mod tests {
         }
     }
 
+    /// `RequestActiveColumnValues` returns the active column's distinct visible
+    /// values (deduped, sorted, empties dropped) for the popover's "by values"
+    /// list (`-ui.md` sec.5.D).
+    #[test]
+    fn active_column_values_are_distinct_sorted_and_visible() {
+        let mut state = TrameState::new();
+        seed_col_a(&mut state, &["cherry", "apple", "", "banana", "apple"]);
+        state.handle_command(TrameCommand::SetActiveCell {
+            row: 0, col: 0, anchor_row: 0, anchor_col: 0,
+        });
+
+        let evts = state.handle_command(TrameCommand::RequestActiveColumnValues);
+        match &evts.display[0] {
+            TrameEvent::ColumnValues { col, values } => {
+                assert_eq!(*col, 0);
+                assert_eq!(values, &["apple", "banana", "cherry"]);
+            }
+            other => panic!("expected ColumnValues, got {other:?}"),
+        }
+        assert!(evts.update.is_none(), "a values query is read-only");
+    }
+
+    /// The parameterless filter wrappers resolve the sheet/column from the tracked
+    /// active cell, mirroring the sort intents (`-ui.md` sec.5.D).
+    #[test]
+    fn active_column_filter_wrappers_apply_and_clear() {
+        let mut state = TrameState::new();
+        seed_col_a(&mut state, &["10", "20", "30"]);
+        state.handle_command(TrameCommand::SetActiveCell {
+            row: 0, col: 0, anchor_row: 0, anchor_col: 0,
+        });
+
+        let applied = state.handle_command(TrameCommand::ApplyFilterToActiveColumn {
+            kind: FilterKind::Condition { op: FilterOp::Gt, value: "15".to_owned() },
+        });
+        assert!(matches!(
+            applied.display[0],
+            TrameEvent::FilterApplied { hidden_row_count: 1, col: 0 }
+        ));
+        assert!(is_filtered(&mut state, 0, 0), "10 hidden");
+        assert!(!is_filtered(&mut state, 1, 0), "20 visible");
+
+        let cleared = state.handle_command(TrameCommand::ClearActiveFilter);
+        assert!(matches!(cleared.display[0], TrameEvent::FilterCleared));
+        assert!(!is_filtered(&mut state, 0, 0), "row visible again after clear");
+    }
+
     /// A "filter by values" keeps only the listed (checked) values visible; the
     /// others are flagged `is_filtered`. `FilterApplied` reports the hidden count.
     #[test]
@@ -3412,7 +3510,7 @@ mod tests {
         });
         assert!(matches!(
             evts.display[0],
-            TrameEvent::FilterApplied { hidden_row_count: 2 }
+            TrameEvent::FilterApplied { hidden_row_count: 2, col: 0 }
         ));
         assert!(evts.display.iter().any(|e| matches!(e, TrameEvent::DataReset)));
         assert!(evts.update.is_some(), "filter broadcasts a CRDT delta");
@@ -3436,7 +3534,7 @@ mod tests {
         });
         assert!(matches!(
             evts.display[0],
-            TrameEvent::FilterApplied { hidden_row_count: 1 }
+            TrameEvent::FilterApplied { hidden_row_count: 1, col: 0 }
         ));
         assert!(is_filtered(&mut state, 0, 0), "10 is not > 15");
         assert!(!is_filtered(&mut state, 1, 0), "20 > 15");

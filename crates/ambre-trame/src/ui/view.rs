@@ -596,6 +596,16 @@ impl TrameView {
                     tracing::warn!("[UI] Trame rejected: {message}");
                     self.text_input.announce(&message);
                 }
+                // Shared filter (sec.5.D): track the filtered column for the funnel
+                // badge. The accompanying DataReset re-fetches the collapsed rows.
+                Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::FilterApplied { col, .. }), .. }) => {
+                    self.state.filtered_col = Some(col);
+                    self.needs_full = true;
+                }
+                Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::FilterCleared), .. }) => {
+                    self.state.filtered_col = None;
+                    self.needs_full = true;
+                }
                 Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::DataReset), .. }) => {
                     // Local snapshot restored: re-fetch the visible region so the
                     // restored cells render, then full-repaint with the result.

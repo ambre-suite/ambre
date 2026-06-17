@@ -769,3 +769,114 @@
 .ambre-signin-btn:hover {
     filter: brightness(1.1);
 }
+
+/* ---------------------------------------------------------------------------
+   Shared filter popover (-ui.md sec.5.D): anchored under the active column
+   header, with a "by values" checkbox list and a "by condition" op+value form.
+   --------------------------------------------------------------------------- */
+.ambre-filter-popover {
+    min-width: 200px;
+    max-width: 280px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    padding: 8px;
+    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+    color: var(--text);
+}
+
+.ambre-filter-head {
+    font-weight: 600;
+    padding: 2px 2px 6px;
+}
+
+.ambre-filter-modes {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 6px;
+}
+
+.ambre-filter-modes .mode {
+    flex: 1;
+    appearance: none;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    padding: 4px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.ambre-filter-modes .mode[aria-pressed="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.ambre-filter-values {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px;
+}
+
+.ambre-filter-value {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ambre-filter-cond {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ambre-filter-cond select,
+.ambre-filter-cond input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 13px;
+}
+
+.ambre-filter-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.ambre-filter-actions button {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.ambre-filter-actions button:hover {
+    background: var(--surface-2);
+}
+
+.ambre-filter-actions button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}

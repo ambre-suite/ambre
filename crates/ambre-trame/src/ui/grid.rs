@@ -50,6 +50,9 @@ pub struct CellData {
     /// `Some((col_span, row_span))` on a merge master, `None` otherwise. Covered
     /// cells arrive with empty text and are simply rendered blank.
     pub merge_span: Option<(u32, u32)>,
+    /// The cell's row is hidden by the active shared filter (`-ui.md` sec.5.D):
+    /// the row axis collapses over it. Drives [`TrameUiState::hidden_rows`].
+    pub is_filtered: bool,
 }
 
 /// A deferred pointer hit inside the in-cell editor. Resolving a click x to a
@@ -575,6 +578,18 @@ pub struct TrameUiState {
 
     /// Monotonically increasing version counter for outgoing `ScrollViewport` commands.
     next_version: u64,
+
+    /// Grid column carrying the active shared filter, drawn with a funnel badge on
+    /// its header (`-ui.md` sec.5.D). `None` when no filter is active. Tracked from
+    /// `TrameEvent::FilterApplied` / `FilterCleared`; UI-only derived state.
+    pub filtered_col: Option<u32>,
+
+    /// Absolute grid rows hidden by the active shared filter, sorted ascending
+    /// (`-ui.md` sec.5.D). Derived from the `is_filtered` flag of cached cells and
+    /// rebuilt whenever the cache changes. The row axis collapses over these (see
+    /// [`visible_offset`](Self::visible_offset)); fed to the renderer's
+    /// `GridLayout`. UI-only derived state.
+    pub hidden_rows: Vec<u32>,
 }
 
 impl TrameUiState {
@@ -594,6 +609,8 @@ impl TrameUiState {
             sheets: Vec::new(),
             active_sheet: String::new(),
             next_version: 1,
+            filtered_col: None,
+            hidden_rows: Vec::new(),
         };
         s.recompute_viewport_dims();
         s
@@ -704,8 +721,15 @@ impl TrameUiState {
                 tr = mr as i64 - 1;
             }
         }
-        let new_row = tr.clamp(0, (TOTAL_ROWS - 1) as i64) as u32;
+        let mut new_row = tr.clamp(0, (TOTAL_ROWS - 1) as i64) as u32;
         let new_col = tc.clamp(0, (TOTAL_COLS - 1) as i64) as u32;
+        // A vertical step never lands on a collapsed (filtered) row: skip the run
+        // of hidden rows in the travel direction.
+        new_row = match dr.cmp(&0) {
+            std::cmp::Ordering::Greater => self.next_visible_row(new_row),
+            std::cmp::Ordering::Less => self.prev_visible_row(new_row),
+            std::cmp::Ordering::Equal => new_row,
+        };
         self.move_to(new_row, new_col, extend)
     }
 
@@ -725,6 +749,12 @@ impl TrameUiState {
             (row.min(TOTAL_ROWS - 1), col.min(TOTAL_COLS - 1))
         } else {
             self.snap_to_master(row.min(TOTAL_ROWS - 1), col.min(TOTAL_COLS - 1))
+        };
+        // A jump target (Home/End/PageDown/click-through) may fall on a collapsed
+        // row: snap to the nearest visible one so the caret stays on shown data.
+        let new_row = {
+            let fwd = self.next_visible_row(new_row);
+            if self.is_row_hidden(fwd) { self.prev_visible_row(new_row) } else { fwd }
         };
 
         if new_row == self.active_row() && new_col == self.active_col() {
@@ -787,8 +817,10 @@ impl TrameUiState {
         if row < self.top_row {
             self.top_row = row;
             changed = true;
-        } else if row >= self.top_row + self.viewport_rows {
-            self.top_row = row - self.viewport_rows + 1;
+        } else if self.visible_offset(row) >= self.viewport_rows as i64 {
+            // `row` sits past the last visible slot: pull the top down so `row`
+            // lands on the bottom slot, counting in collapsed (visible) rows.
+            self.top_row = self.nth_visible_row_back(row, self.viewport_rows.saturating_sub(1));
             changed = true;
         }
         if col < self.left_col {
@@ -809,6 +841,9 @@ impl TrameUiState {
             (self.top_row as i64 + dr as i64).clamp(0, (TOTAL_ROWS - 1) as i64) as u32;
         let new_left =
             (self.left_col as i64 + dc as i64).clamp(0, (TOTAL_COLS - 1) as i64) as u32;
+        // Keep the top edge on a visible row so the collapsed-row slot math stays
+        // consistent (`top_row` is slot 0).
+        let new_top = self.next_visible_row(new_top);
         if new_top == self.top_row && new_left == self.left_col {
             return false;
         }
@@ -836,7 +871,11 @@ impl TrameUiState {
         // destination within already-fetched data, eliminating that flash.
         let row_pad = self.viewport_rows.max(PADDING_ROWS);
         let row_start = self.top_row.saturating_sub(row_pad);
-        let row_end = (self.top_row + self.viewport_rows + row_pad)
+        // Extend the fetched window by the number of currently-hidden rows in it,
+        // so that after the row axis collapses there are still enough *visible*
+        // rows to fill the screen (a filtered window would otherwise run short).
+        let hidden_in_window = self.hidden_rows.len() as u32;
+        let row_end = (self.top_row + self.viewport_rows + row_pad + hidden_in_window)
             .min(TOTAL_ROWS.saturating_sub(1));
         let col_start = self.left_col.saturating_sub(PADDING_COLS);
         let col_end = (self.left_col + self.viewport_cols + PADDING_COLS)
@@ -846,6 +885,8 @@ impl TrameUiState {
         self.cell_cache.retain(|&(row, col), _| {
             row >= row_start && row <= row_end && col >= col_start && col <= col_end
         });
+        // The evicted cells may have carried filter flags; resync the hidden set.
+        self.rebuild_hidden_rows();
 
         let version = self.next_version;
         self.next_version += 1;
@@ -875,9 +916,107 @@ impl TrameUiState {
                     bold: cell.bold,
                     italic: cell.italic,
                     merge_span: cell.merge_span,
+                    is_filtered: cell.is_filtered,
                 },
             );
         }
+        self.rebuild_hidden_rows();
+    }
+
+    /// Recompute [`Self::hidden_rows`] (sorted, deduped) from the `is_filtered`
+    /// flag of the cached cells. Called whenever the cache changes (a viewport
+    /// batch arrived, or rows were evicted on scroll). The flag is row-level, so
+    /// any cached cell of a row is authoritative for it.
+    fn rebuild_hidden_rows(&mut self) {
+        let mut rows: Vec<u32> = self
+            .cell_cache
+            .iter()
+            .filter(|(_, c)| c.is_filtered)
+            .map(|(&(row, _), _)| row)
+            .collect();
+        rows.sort_unstable();
+        rows.dedup();
+        self.hidden_rows = rows;
+    }
+
+    /// True if `row` is collapsed by the active shared filter.
+    pub fn is_row_hidden(&self, row: u32) -> bool {
+        self.hidden_rows.binary_search(&row).is_ok()
+    }
+
+    /// Signed count of *visible* row slots between [`top_row`](Self::top_row) and
+    /// `row` -- the vertical offset (in `ROW_HEIGHT` units) where `row` is drawn
+    /// once filtered rows are collapsed out. Mirrors `GridLayout::visible_offset`.
+    pub fn visible_offset(&self, row: u32) -> i64 {
+        if self.hidden_rows.is_empty() {
+            return row as i64 - self.top_row as i64;
+        }
+        if row >= self.top_row {
+            let hidden = self
+                .hidden_rows
+                .iter()
+                .filter(|&&r| r >= self.top_row && r < row)
+                .count() as i64;
+            (row - self.top_row) as i64 - hidden
+        } else {
+            let hidden = self
+                .hidden_rows
+                .iter()
+                .filter(|&&r| r >= row && r < self.top_row)
+                .count() as i64;
+            -((self.top_row - row) as i64 - hidden)
+        }
+    }
+
+    /// The absolute grid row drawn at visible slot `slot` from the top of the
+    /// viewport (skipping hidden rows). Saturates at the last grid row.
+    pub fn row_at_slot(&self, slot: u32) -> u32 {
+        let mut row = self.top_row;
+        let mut seen = 0u32;
+        while row < TOTAL_ROWS {
+            if !self.is_row_hidden(row) {
+                if seen == slot {
+                    return row;
+                }
+                seen += 1;
+            }
+            row += 1;
+        }
+        TOTAL_ROWS.saturating_sub(1)
+    }
+
+    /// The next visible row at or after `row` (skips a run of hidden rows). Used
+    /// by vertical navigation so the caret never lands on a collapsed row.
+    pub fn next_visible_row(&self, row: u32) -> u32 {
+        let mut r = row;
+        while r < TOTAL_ROWS.saturating_sub(1) && self.is_row_hidden(r) {
+            r += 1;
+        }
+        r
+    }
+
+    /// The previous visible row at or before `row` (skips a run of hidden rows).
+    pub fn prev_visible_row(&self, row: u32) -> u32 {
+        let mut r = row;
+        while r > 0 && self.is_row_hidden(r) {
+            r -= 1;
+        }
+        r
+    }
+
+    /// Walk back from `from` until `n` visible rows have been passed, returning
+    /// the resulting row (saturating at 0). Used to place a row on the bottom
+    /// viewport slot when scrolling it into view under an active filter.
+    fn nth_visible_row_back(&self, from: u32, n: u32) -> u32 {
+        let mut r = from;
+        let mut counted = 0u32;
+        while r > 0 && counted < n {
+            r -= 1;
+            if !self.is_row_hidden(r) {
+                counted += 1;
+            }
+        }
+        r
     }
 
     /// Record a formula evaluation failure for `(row, col)` (from
@@ -990,7 +1129,10 @@ impl TrameUiState {
             return None;
         }
         let col = self.left_col + ((x - HEADER_WIDTH) / COL_WIDTH) as u32;
-        let row = self.top_row + ((y - cells_top) / ROW_HEIGHT) as u32;
+        // The y slot indexes *visible* rows: map it back to the absolute row,
+        // skipping the collapsed (filtered) ones.
+        let slot = ((y - cells_top) / ROW_HEIGHT) as u32;
+        let row = self.row_at_slot(slot);
         if row >= TOTAL_ROWS || col >= TOTAL_COLS {
             return None;
         }
@@ -1023,9 +1165,14 @@ impl TrameUiState {
     /// top-left corner of the canvas, or `None` if the cell is outside the
     /// visible area.
     pub fn cell_pixel_rect(&self, row: u32, col: u32) -> Option<(f64, f64, f64, f64)> {
-        // Signed arithmetic to handle the cell being left/above the viewport.
+        // A collapsed (filtered) row is not drawn at all.
+        if self.is_row_hidden(row) {
+            return None;
+        }
+        // Signed arithmetic to handle the cell being left/above the viewport. The
+        // row offset is in collapsed (visible-row) space.
         let col_offset = col as i64 - self.left_col as i64;
-        let row_offset = row as i64 - self.top_row as i64;
+        let row_offset = self.visible_offset(row);
 
         let cells_top = HEADER_HEIGHT;
         let x = HEADER_WIDTH + col_offset as f64 * COL_WIDTH;
@@ -1053,10 +1200,17 @@ impl TrameUiState {
     ) -> Option<(f64, f64, f64, f64)> {
         let cells_top = HEADER_HEIGHT;
         // Unclipped edges (signed: the range may start left/above the viewport).
+        // Row edges are in collapsed (visible-row) space: the top is the first
+        // row's slot, the bottom is one slot past the last *visible* row of the
+        // range (so a range straddling hidden rows shrinks to its visible height).
         let x_left = HEADER_WIDTH + (c1 as i64 - self.left_col as i64) as f64 * COL_WIDTH;
         let x_right = HEADER_WIDTH + (c2 as i64 - self.left_col as i64 + 1) as f64 * COL_WIDTH;
-        let y_top = cells_top + (r1 as i64 - self.top_row as i64) as f64 * ROW_HEIGHT;
-        let y_bot = cells_top + (r2 as i64 - self.top_row as i64 + 1) as f64 * ROW_HEIGHT;
+        let top_slot = self.visible_offset(r1);
+        // Bottom edge: slot just below r2 if r2 is visible, else its own slot
+        // (its successors have already collapsed up onto it).
+        let bot_slot = self.visible_offset(r2) + if self.is_row_hidden(r2) { 0 } else { 1 };
+        let y_top = cells_top + top_slot as f64 * ROW_HEIGHT;
+        let y_bot = cells_top + bot_slot as f64 * ROW_HEIGHT;
 
         // Clip to the visible cell area.
         let cx1 = x_left.max(HEADER_WIDTH);
@@ -1195,6 +1349,55 @@ mod tests {
         assert_eq!(state.selection.anchor, (0, 0));
         assert_eq!(state.selection.active(), (2, 3));
         assert_eq!(state.selection.bounds(), (0, 0, 2, 3));
+    }
+
+    /// Feed a single column of cells, flagging `filtered` rows as collapsed
+    /// (`-ui.md` sec.5.D), then assert the row axis collapses over them: the
+    /// hidden set, vertical offsets, hit-testing, and navigation all skip them.
+    #[test]
+    fn filtered_rows_collapse_geometry_and_nav() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        let cell = |row: u32, filtered: bool| DisplayCell {
+            row,
+            col: 0,
+            text: format!("v{row}"),
+            raw: format!("v{row}"),
+            bold: false,
+            italic: false,
+            is_merged: false,
+            merge_span: None,
+            is_filtered: filtered,
+        };
+        // Rows 0..=4; rows 2 and 3 are filtered out.
+        state.on_viewport_data(TrameEvent::ViewportData {
+            version: 0,
+            row_start: 0,
+            col_start: 0,
+            cells: vec![cell(0, false), cell(1, false), cell(2, true), cell(3, true), cell(4, false)],
+        });
+
+        assert_eq!(state.hidden_rows, vec![2, 3], "filtered rows tracked, sorted");
+        assert!(state.is_row_hidden(2) && state.is_row_hidden(3));
+
+        // Row 4 draws on the 3rd visible slot (rows 0,1 above it; 2,3 collapsed).
+        assert_eq!(state.visible_offset(4), 2);
+        assert!(state.cell_pixel_rect(2, 0).is_none(), "a hidden row is not drawn");
+        let r1 = state.cell_pixel_rect(1, 0).expect("row 1 visible");
+        let r4 = state.cell_pixel_rect(4, 0).expect("row 4 visible");
+        // Row 4 sits exactly one slot below row 1 (the two hidden rows took none).
+        assert_eq!(r4.1 - r1.1, super::ROW_HEIGHT);
+
+        // Hit-testing the second visible slot resolves to row 4, not row 2.
+        let (hit_row, _) = state.cell_at(r4.0 + 1.0, r4.1 + 1.0).expect("hit");
+        assert_eq!(hit_row, 4);
+
+        // Arrow-down from row 1 jumps straight to row 4, skipping 2 and 3.
+        state.select(1, 0);
+        state.move_cursor(1, 0, false).expect("moved");
+        assert_eq!(state.active_row(), 4);
+        // Arrow-up returns to row 1.
+        state.move_cursor(-1, 0, false).expect("moved");
+        assert_eq!(state.active_row(), 1);
     }
 
     /// Shift+arrows grow the selection from a seeded mark; a bare arrow collapses

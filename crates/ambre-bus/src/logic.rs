@@ -330,6 +330,31 @@ pub enum TrameCommand {
     /// (see [`SortSheetAsc`](TrameCommand::SortSheetAsc)).
     SortSheetDesc,
 
+    /// Request the distinct visible values of the active cell's column, for the
+    /// shared filter popover's "by values" checkbox list (`-ui.md` sec.5.D). The
+    /// Logic thread resolves the column and active sheet itself, evaluates every
+    /// non-hidden materialized row through the formula cache, and replies with
+    /// [`TrameEvent::ColumnValues`](crate::ui::TrameEvent::ColumnValues)
+    /// (deduplicated, sorted). A read-only query: no CRDT delta.
+    RequestActiveColumnValues,
+    /// Apply a shared filter to the active cell's column (`-ui.md` sec.5.D). The
+    /// parameterless-geometry sibling of [`ApplyFilter`]: the Logic thread
+    /// resolves `sheet_id`/`col` from the tracked active cell, so the UI only
+    /// supplies the user's chosen [`FilterKind`]. Replies with
+    /// [`TrameEvent::FilterApplied`](crate::ui::TrameEvent::FilterApplied).
+    ///
+    /// [`ApplyFilter`]: TrameCommand::ApplyFilter
+    ApplyFilterToActiveColumn {
+        kind: FilterKind,
+    },
+    /// Clear the shared filter on the active sheet (`-ui.md` sec.5.D). The
+    /// parameterless sibling of [`ClearFilter`]: the Logic thread resolves the
+    /// active sheet itself. Replies with
+    /// [`TrameEvent::FilterCleared`](crate::ui::TrameEvent::FilterCleared).
+    ///
+    /// [`ClearFilter`]: TrameCommand::ClearFilter
+    ClearActiveFilter,
+
     /// Undo the last local edit (`ambre-spec-trame-logic.md` §8). Backed by Loro's
     /// `UndoManager`: it replays the inverse of this session's most recent commit
     /// as fresh CRDT ops (1 `TrameCommand` == 1 commit == 1 undo item). The
