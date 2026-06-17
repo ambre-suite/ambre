@@ -36,8 +36,8 @@ use std::rc::Rc;
 
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
-    DocumentId, LogicCommand, LogicEvent, MemberInfo, RequestId, RestCommand, Role, SyncCommand,
-    UiEvent,
+    AppCommand, AppEvent, DocumentId, LogicCommand, LogicEvent, MemberInfo, RequestId, RestCommand,
+    Role, SyncCommand, TrameCommand, UiEvent,
 };
 use ambre_chrome::commands::{CommandId, Keymap};
 use ambre_chrome::{
@@ -110,6 +110,11 @@ struct Wiring {
     formula_text: RwSignal<String>,
     /// Formula bar: commit/cancel action from the HTML input.
     formula_action: RwSignal<Option<FormulaAction>>,
+    /// Shared filter popover open state (`-ui.md` sec.5.D); `None` = closed.
+    filter_popover: RwSignal<Option<trame_chrome::FilterPopoverState>>,
+    /// The active column's distinct visible values, feeding the popover's "by
+    /// values" list. Set by the per-frame relay on `TrameEvent::ColumnValues`.
+    filter_values: RwSignal<Vec<String>>,
 }
 
 #[wasm_bindgen(start)]
@@ -263,6 +268,10 @@ pub fn main() {
     let devmode_slot: Rc<RefCell<Option<RwSignal<Option<bool>>>>> = Rc::new(RefCell::new(None));
     let current_doc_slot: Rc<RefCell<Option<RwSignal<Option<DocumentId>>>>> =
         Rc::new(RefCell::new(None));
+    let filter_popover_slot: Rc<RefCell<Option<RwSignal<Option<trame_chrome::FilterPopoverState>>>>> =
+        Rc::new(RefCell::new(None));
+    let filter_values_slot: Rc<RefCell<Option<RwSignal<Vec<String>>>>> =
+        Rc::new(RefCell::new(None));
 
     mount_shell(
         ui_to_logic_tx.clone(),
@@ -277,6 +286,8 @@ pub fn main() {
         Rc::clone(&members_slot),
         Rc::clone(&devmode_slot),
         Rc::clone(&current_doc_slot),
+        Rc::clone(&filter_popover_slot),
+        Rc::clone(&filter_values_slot),
         formula_ref,
         formula_text,
         formula_action,
@@ -292,6 +303,15 @@ pub fn main() {
     let current_doc = current_doc_slot
         .borrow()
         .expect("current_doc signal created during mount");
+    // Shared filter popover signals (`-ui.md` sec.5.D), created in the mount owner
+    // and read back here for the per-frame relay (which sets them on
+    // `TrameEvent::ColumnValues` / `FilterApplied` / `FilterCleared`).
+    let filter_popover = filter_popover_slot
+        .borrow()
+        .expect("filter_popover signal created during mount");
+    let filter_values = filter_values_slot
+        .borrow()
+        .expect("filter_values signal created during mount");
 
     // Learn whether the server enables dev login (drives the signed-out panel).
     // Unauthenticated, Main-thread fetch -- a pre-session concern.
@@ -500,6 +520,29 @@ pub fn main() {
                 // Relayed service failures (e.g. unknown invitee) surface as a
                 // warning toast so the share action gives feedback.
                 UiEvent::ApiError { message, .. } => toasts.warning(message.clone()),
+                // Shared filter popover (`-ui.md` sec.5.D): the distinct values of
+                // the active column landed -> populate the "by values" list and pin
+                // the popover to the real column index.
+                UiEvent::Viewport {
+                    event: AppEvent::Trame(ambre_bus::TrameEvent::ColumnValues { col, values }),
+                    ..
+                } => {
+                    filter_values.set(values.clone());
+                    filter_popover.update(|st| {
+                        if let Some(st) = st {
+                            st.col = *col;
+                        }
+                    });
+                }
+                // The filter took effect or was cleared -> close the popover.
+                UiEvent::Viewport {
+                    event:
+                        AppEvent::Trame(
+                            ambre_bus::TrameEvent::FilterApplied { .. }
+                            | ambre_bus::TrameEvent::FilterCleared,
+                        ),
+                    ..
+                } => filter_popover.set(None),
                 _ => {}
             }
             // Content (and everything else) still flows to the view unchanged.
@@ -565,6 +608,8 @@ fn mount_shell(
     members_slot: Rc<RefCell<Option<RwSignal<Vec<MemberInfo>>>>>,
     devmode_slot: Rc<RefCell<Option<RwSignal<Option<bool>>>>>,
     current_doc_slot: Rc<RefCell<Option<RwSignal<Option<DocumentId>>>>>,
+    filter_popover_slot: Rc<RefCell<Option<RwSignal<Option<trame_chrome::FilterPopoverState>>>>>,
+    filter_values_slot: Rc<RefCell<Option<RwSignal<Vec<String>>>>>,
     formula_ref: RwSignal<String>,
     formula_text: RwSignal<String>,
     formula_action: RwSignal<Option<FormulaAction>>,
@@ -592,6 +637,10 @@ fn mount_shell(
         *devmode_slot.borrow_mut() = Some(dev_mode);
         let current_doc = RwSignal::new(boot_doc);
         *current_doc_slot.borrow_mut() = Some(current_doc);
+        let filter_popover = RwSignal::new(None::<trame_chrome::FilterPopoverState>);
+        *filter_popover_slot.borrow_mut() = Some(filter_popover);
+        let filter_values = RwSignal::new(Vec::<String>::new());
+        *filter_values_slot.borrow_mut() = Some(filter_values);
 
         // Provide the wiring via context rather than as a prop: `<Router>`'s
         // children must be `Fn` (re-runnable), so the children closure cannot
@@ -608,6 +657,8 @@ fn mount_shell(
             members,
             dev_mode,
             current_doc,
+            filter_popover,
+            filter_values,
             formula_ref,
             formula_text,
             formula_action,
@@ -640,6 +691,8 @@ fn AppRoot() -> impl IntoView {
         members,
         dev_mode,
         current_doc,
+        filter_popover,
+        filter_values,
         formula_ref,
         formula_text,
         formula_action,
@@ -694,12 +747,46 @@ fn AppRoot() -> impl IntoView {
     // the canvas is created by the AppShell).
     let ctx_menu = RwSignal::new(None::<(f64, f64)>);
     install_canvas_context_menu(ctx_menu);
+
     // The single command path shared by every trigger (toolbar, selection bar,
     // context menu): a `CommandId` -> the routed document. `Callback` is `Copy`,
     // so it is handed to each app-chrome component below.
     let on_command = Callback::new({
         let tx = to_logic.clone();
-        move |id: CommandId| dispatch_to_current(id, current_doc, &tx)
+        move |id: CommandId| {
+            // `FILTER_COLUMN` is a UI-only intent: open the popover anchored under
+            // the active cell and ask the Logic thread for the column's distinct
+            // values (it resolves the active column itself). Everything else flows
+            // through the shared CommandId -> AppCommand path.
+            if id == trame_chrome::FILTER_COLUMN {
+                let (x, y) = client_anchor(anchor_pos.get_untracked());
+                // `col` is provisional; the ColumnValues reply carries the real one.
+                filter_popover.set(Some(trame_chrome::FilterPopoverState { col: 0, x, y }));
+                filter_values.set(Vec::new());
+                if let Some(document_id) = current_doc.get_untracked() {
+                    let _ = tx.try_send(LogicCommand::App {
+                        document_id,
+                        command: AppCommand::Trame(TrameCommand::RequestActiveColumnValues),
+                    });
+                }
+            } else {
+                dispatch_to_current(id, current_doc, &tx);
+            }
+        }
+    });
+
+    // Apply the popover's chosen filter to the active column. The Logic thread
+    // resolves the sheet/column from the tracked active cell.
+    let on_filter_apply = Callback::new({
+        let tx = to_logic.clone();
+        move |kind: ambre_bus::FilterKind| {
+            if let Some(document_id) = current_doc.get_untracked() {
+                let _ = tx.try_send(LogicCommand::App {
+                    document_id,
+                    command: AppCommand::Trame(TrameCommand::ApplyFilterToActiveColumn { kind }),
+                });
+            }
+        }
     });
     let ctx_entries = trame_chrome::context_entries();
 
@@ -977,6 +1064,14 @@ fn AppRoot() -> impl IntoView {
 
         <ContextMenu pos=ctx_menu entries=ctx_entries on_command=on_command />
 
+        // Shared filter popover (sec.5.D), anchored under the active column.
+        <trame_chrome::FilterPopover
+            state=filter_popover
+            values=filter_values
+            on_apply=on_filter_apply
+            on_command=on_command
+        />
+
         // Floating selection toolbar, transform-synced onto the active cell. The
         // generic anchor wrapper is the launcher's; its content is app chrome.
         <div class="ambre-selbar-anchor" style=selbar_style>
@@ -999,6 +1094,22 @@ fn AppRoot() -> impl IntoView {
 /// Dispatch a `CommandId` to the currently routed document, if any. Reads the
 /// active document untracked (this runs in an event handler, not a reactive
 /// scope) and no-ops on the landing route, where no document is open.
+/// Convert a canvas-relative anchor (CSS px, as published by the view for the
+/// active cell) into client-space coordinates, by adding the canvas's viewport
+/// offset. Falls back to the top-left of the canvas when no anchor is set. Used
+/// to position the filter popover under the active column header.
+fn client_anchor(anchor: Option<(f64, f64)>) -> (f64, f64) {
+    let (ox, oy) = leptos::prelude::document()
+        .get_element_by_id("ambre-canvas")
+        .map(|c| {
+            let r = c.get_bounding_client_rect();
+            (r.left(), r.top())
+        })
+        .unwrap_or((0.0, 0.0));
+    let (ax, ay) = anchor.unwrap_or((0.0, 0.0));
+    (ox + ax, oy + ay)
+}
+
 fn dispatch_to_current(
     id: CommandId,
     current_doc: RwSignal<Option<DocumentId>>,

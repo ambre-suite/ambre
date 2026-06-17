@@ -276,9 +276,22 @@ pub enum TrameEvent {
     /// `hidden_row_count` is how many rows the filter hides. The accompanying
     /// [`DataReset`](Self::DataReset) prompts the UI to re-fetch the viewport,
     /// where the hidden rows now carry [`DisplayCell::is_filtered`]. A no-op
-    /// filter (non-active sheet / virtual column) emits nothing.
+    /// filter (non-active sheet / virtual column) emits nothing. `col` is the
+    /// grid column the filter targets, so the UI can draw the funnel badge on its
+    /// header (`-ui.md` sec.5.D).
     FilterApplied {
         hidden_row_count: u32,
+        col: u32,
+    },
+
+    /// The distinct visible values of a column, replying to
+    /// [`RequestActiveColumnValues`](crate::logic::TrameCommand::RequestActiveColumnValues).
+    /// Feeds the shared filter popover's "by values" checkbox list (`-ui.md`
+    /// sec.5.D). `col` is the grid column the values belong to; `values` is the
+    /// deduplicated, sorted display text of every non-hidden row.
+    ColumnValues {
+        col: u32,
+        values: Vec<String>,
     },
 
     /// A local [`ClearFilter`](crate::logic::TrameCommand::ClearFilter) removed the

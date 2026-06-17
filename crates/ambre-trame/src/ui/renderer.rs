@@ -39,8 +39,10 @@ use crate::{TOTAL_COLS, TOTAL_ROWS};
 
 /// Build the shared [`GridLayout`] for the current screen viewport. Uniform
 /// metrics for the MVP; the cell-aligned scroll position is the layout origin.
-fn screen_layout(state: &TrameUiState) -> GridLayout {
+fn screen_layout(state: &TrameUiState) -> GridLayout<'_> {
     GridLayout {
+        // Collapse the row axis over filter-hidden rows (sec.5.D).
+        hidden_rows: &state.hidden_rows,
         header_width: HEADER_WIDTH,
         header_height: HEADER_HEIGHT,
         top: 0.0,
@@ -125,13 +127,18 @@ impl CellSpan {
 /// Compute the cell-coordinate range that intersects `strip` in the cell area.
 fn rows_cols_in_strip(state: &TrameUiState, strip: Rect) -> CellSpan {
     let cells_top = HEADER_HEIGHT;
-    let row_start = if strip.y0 > cells_top {
-        ((strip.y0 - cells_top) / ROW_HEIGHT).floor() as u32 + state.top_row
+    // The strip's y-slots index *visible* rows; map them back to absolute rows so
+    // the iterated span covers the right data once the axis is collapsed. The
+    // span may still contain hidden rows in between -- the cell iterator skips
+    // them (their slot collapses onto the next visible row).
+    let row_start_slot = if strip.y0 > cells_top {
+        ((strip.y0 - cells_top) / ROW_HEIGHT).floor() as u32
     } else {
-        state.top_row
+        0
     };
-    let row_end = (((strip.y1 - cells_top) / ROW_HEIGHT).ceil() as u32 + state.top_row)
-        .min(TOTAL_ROWS);
+    let row_end_slot = ((strip.y1 - cells_top) / ROW_HEIGHT).ceil() as u32;
+    let row_start = state.row_at_slot(row_start_slot);
+    let row_end = state.row_at_slot(row_end_slot).saturating_add(1).min(TOTAL_ROWS);
     let col_start = if strip.x0 > HEADER_WIDTH {
         ((strip.x0 - HEADER_WIDTH) / COL_WIDTH).floor() as u32 + state.left_col
     } else {
@@ -195,7 +202,11 @@ pub fn draw_cells<S: DrawSurface>(
     // The cell area is virtual, so we feed only the cached cells inside the
     // strip rather than a full DisplayViewport.
     let span = rows_cols_in_strip(state, strip);
-    let cells = (span.row_start..span.row_end).flat_map(move |row| {
+    let cells = (span.row_start..span.row_end)
+        // A collapsed (filtered) row occupies no slot: skip it so its successors
+        // are not double-drawn over the next visible row.
+        .filter(move |row| !state.is_row_hidden(*row))
+        .flat_map(move |row| {
         (span.col_start..span.col_end).filter_map(move |col| {
             state.cell_cache.get(&(row, col)).map(|c| {
                 // A merge master's text is laid out by the merge pass over the
@@ -258,7 +269,7 @@ fn draw_ui_cell_layers<S: DrawSurface>(
     // Dirty veil: a translucent content_bg quad fades the optimistic value.
     let veil = palette.content_bg.with_alpha(DIRTY_VEIL_ALPHA);
     for &(row, col) in &state.dirty_cells {
-        if span.contains(row, col) {
+        if span.contains(row, col) && !state.is_row_hidden(row) {
             surface.fill_rect(layout.cell_rect(row, col), veil);
         }
     }
@@ -268,7 +279,7 @@ fn draw_ui_cell_layers<S: DrawSurface>(
     // (WgpuSurface does not implement fill_path).
     let err = palette.cell_error;
     for &(row, col) in state.formula_errors.keys() {
-        if !span.contains(row, col) {
+        if !span.contains(row, col) || state.is_row_hidden(row) {
             continue;
         }
         let rect = layout.cell_rect(row, col);
@@ -321,6 +332,30 @@ pub fn draw_overlay<S: DrawSurface>(
     render::draw_row_headers_on(
         surface, &layout, palette, Some(state.active_row()), font_cx, text_cache, text_enabled,
     );
+
+    // -- 1b. Funnel badge on the filtered column's header (sec.5.D). Drawn only
+    //        when the column is within the visible span; a small funnel glyph
+    //        (trapezoid + stem) using stroke primitives so every surface renders
+    //        it (fill_path is optional). -------------------------------------
+    if let Some(fcol) = state.filtered_col {
+        if fcol >= layout.origin_col && fcol < layout.origin_col + state.viewport_cols + 1 {
+            let cell = layout.cell_rect(layout.origin_row, fcol);
+            // Anchor the badge to the header strip, right-aligned in the cell.
+            let w = 8.0;
+            let h = 7.0;
+            let bx = (cell.x1 - w - 3.0).max(cell.x0 + 2.0);
+            let by = layout.top + (layout.header_height - h) / 2.0;
+            let cx = bx + w / 2.0;
+            let mid = by + h * 0.55;
+            let c = palette.selection;
+            // Top edge (wide mouth), then both sides converge to the centre, then
+            // a short stem downward.
+            surface.stroke_line(bx, by, bx + w, by, c, 1.0);
+            surface.stroke_line(bx, by, cx, mid, c, 1.0);
+            surface.stroke_line(bx + w, by, cx, mid, c, 1.0);
+            surface.stroke_line(cx, mid, cx, by + h, c, 1.0);
+        }
+    }
 
     // -- 2. Selection (range fills + outlines) and active-cell border. --------
     // Lives in the overlay so it tracks the selection on every frame regardless
@@ -672,7 +707,7 @@ mod tests {
         for &(row, col, text) in cells {
             state.cell_cache.insert(
                 (row, col),
-                CellData { text: text.to_owned(), raw: text.to_owned(), bold: false, italic: false, merge_span: None },
+                CellData { text: text.to_owned(), raw: text.to_owned(), bold: false, italic: false, merge_span: None, is_filtered: false },
             );
         }
         state

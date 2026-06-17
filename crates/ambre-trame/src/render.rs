@@ -48,7 +48,14 @@ pub const HEADER_SIZE: f32 = 11.0;
 /// so a future variable-size layout can add per-index offset slices without
 /// breaking callers.
 #[derive(Clone, Copy, Debug)]
-pub struct GridLayout {
+pub struct GridLayout<'a> {
+    /// Absolute grid rows hidden by the shared filter (`-ui.md` sec.5.D), sorted
+    /// ascending. Such rows occupy no vertical space: the row axis collapses over
+    /// them, so a hidden row's successors slide up by one `row_height`. Empty
+    /// (the common case and PDF export) means a plain uniform layout. The slice
+    /// only needs to cover the visible window -- rows beyond it are treated as
+    /// visible.
+    pub hidden_rows: &'a [u32],
     /// Width of the fixed row-number strip on the left.
     pub header_width: f64,
     /// Height of the fixed column-letter strip on the top.
@@ -75,35 +82,87 @@ pub struct GridLayout {
     pub total_rows: u32,
 }
 
-impl GridLayout {
+impl GridLayout<'_> {
     /// The scrollable content area (everything below + right of the headers).
     pub fn content_area(&self) -> Rect {
         Rect::new(self.header_width, self.top + self.header_height, self.width, self.height)
+    }
+
+    /// True if `row` is collapsed by the shared filter (binary search over the
+    /// sorted [`hidden_rows`](Self::hidden_rows) slice).
+    pub fn is_hidden(&self, row: u32) -> bool {
+        self.hidden_rows.binary_search(&row).is_ok()
+    }
+
+    /// Signed number of *visible* row slots between [`origin_row`](Self::origin_row)
+    /// and `row`: the vertical offset (in `row_height` units) at which `row` is
+    /// drawn, with the collapsed rows removed. Equals `row - origin_row` when no
+    /// row in between is hidden.
+    pub fn visible_offset(&self, row: u32) -> i64 {
+        if self.hidden_rows.is_empty() {
+            return row as i64 - self.origin_row as i64;
+        }
+        if row >= self.origin_row {
+            let hidden = self
+                .hidden_rows
+                .iter()
+                .filter(|&&r| r >= self.origin_row && r < row)
+                .count() as i64;
+            (row - self.origin_row) as i64 - hidden
+        } else {
+            let hidden = self
+                .hidden_rows
+                .iter()
+                .filter(|&&r| r >= row && r < self.origin_row)
+                .count() as i64;
+            -((self.origin_row - row) as i64 - hidden)
+        }
+    }
+
+    /// The absolute grid row drawn at visible slot `slot` (0 = the row at
+    /// `origin_row`, skipping hidden rows). `None` once the grid is exhausted.
+    pub fn row_at_slot(&self, slot: u32) -> Option<u32> {
+        let mut row = self.origin_row;
+        let mut seen = 0u32;
+        while row < self.total_rows {
+            if !self.is_hidden(row) {
+                if seen == slot {
+                    return Some(row);
+                }
+                seen += 1;
+            }
+            row += 1;
+        }
+        None
     }
 
     /// Pixel rect of cell `(row, col)` relative to the surface top-left.
     ///
     /// The result is unclipped: a cell scrolled left of / above the origin has
     /// a negative-offset (smaller-than-header) coordinate. Callers clip against
-    /// `content_area()` or push their own clip.
+    /// `content_area()` or push their own clip. The vertical position accounts
+    /// for collapsed (filtered) rows via [`visible_offset`](Self::visible_offset).
     pub fn cell_rect(&self, row: u32, col: u32) -> Rect {
         let x = self.header_width + (col as i64 - self.origin_col as i64) as f64 * self.col_width;
-        let y = self.top
-            + self.header_height
-            + (row as i64 - self.origin_row as i64) as f64 * self.row_height;
+        let y = self.top + self.header_height + self.visible_offset(row) as f64 * self.row_height;
         Rect::new(x, y, x + self.col_width, y + self.row_height)
     }
 
     /// Pixel rect of a merge master `(row, col)` spanning `col_span` columns and
     /// `row_span` rows (both >= 1). Like [`cell_rect`](Self::cell_rect) the
-    /// result is unclipped.
+    /// result is unclipped. The height counts only the *visible* rows in the span
+    /// (a merge across a filtered row shrinks accordingly).
     pub fn merge_rect(&self, row: u32, col: u32, col_span: u32, row_span: u32) -> Rect {
         let base = self.cell_rect(row, col);
+        let vis_rows = (row..row + row_span.max(1))
+            .filter(|&r| !self.is_hidden(r))
+            .count()
+            .max(1) as f64;
         Rect::new(
             base.x0,
             base.y0,
             base.x0 + col_span.max(1) as f64 * self.col_width,
-            base.y0 + row_span.max(1) as f64 * self.row_height,
+            base.y0 + vis_rows * self.row_height,
         )
     }
 }
@@ -186,7 +245,7 @@ pub fn col_label(col: u32) -> String {
 #[allow(clippy::too_many_arguments)]
 pub fn draw_cells_on<'a, S, I>(
     surface: &mut S,
-    layout: &GridLayout,
+    layout: &GridLayout<'_>,
     palette: &Palette,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
@@ -252,7 +311,7 @@ where
 /// adjacent filled cells.
 pub fn draw_grid_lines_on<S: DrawSurface>(
     surface: &mut S,
-    layout: &GridLayout,
+    layout: &GridLayout<'_>,
     color: Color,
     clip: Rect,
 ) {
@@ -327,7 +386,7 @@ pub fn draw_grid_lines_on<S: DrawSurface>(
 #[allow(clippy::too_many_arguments)]
 pub fn draw_merges_on<'a, S, I>(
     surface: &mut S,
-    layout: &GridLayout,
+    layout: &GridLayout<'_>,
     palette: &Palette,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
@@ -392,7 +451,7 @@ where
 #[allow(clippy::too_many_arguments)]
 pub fn draw_col_headers_on<S: DrawSurface>(
     surface: &mut S,
-    layout: &GridLayout,
+    layout: &GridLayout<'_>,
     palette: &Palette,
     active_col: Option<u32>,
     font_cx: &mut FontContext,
@@ -468,7 +527,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
 #[allow(clippy::too_many_arguments)]
 pub fn draw_row_headers_on<S: DrawSurface>(
     surface: &mut S,
-    layout: &GridLayout,
+    layout: &GridLayout<'_>,
     palette: &Palette,
     active_row: Option<u32>,
     font_cx: &mut FontContext,
@@ -483,11 +542,13 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     // Opaque background over the full left strip (below the formula bar band).
     surface.fill_rect(Rect::new(0.0, top, hw, h), palette.header_bg);
 
-    // Active-row tint, over the bg and under the numbers.
+    // Active-row tint, over the bg and under the numbers. Positioned in collapsed
+    // (filtered) row space; skipped when the active row is itself hidden.
     if let Some(row) = active_row
         && row >= layout.origin_row
+        && !layout.is_hidden(row)
     {
-        let y = cells_top + (row - layout.origin_row) as f64 * layout.row_height;
+        let y = cells_top + layout.visible_offset(row) as f64 * layout.row_height;
         if y < h {
             surface.fill_rect(Rect::new(0.0, y, hw, y + layout.row_height), palette.header_active);
         }
@@ -503,10 +564,11 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     let max_width = (hw - 8.0) as f32;
     let mut i = 0u32;
     loop {
-        let row = layout.origin_row + i;
-        if row >= layout.total_rows {
+        // The label at visible slot `i` is the i-th non-hidden row from the
+        // origin: filtered rows are collapsed out of the number strip too.
+        let Some(row) = layout.row_at_slot(i) else {
             break;
-        }
+        };
         let row_y = cells_top + i as f64 * layout.row_height;
         if row_y >= h {
             break;
@@ -547,8 +609,9 @@ mod tests {
     use ambre_draw::FontContext;
 
     /// 800x600 surface, uniform 80x20 cells, 50x24 headers, origin at (0,0).
-    fn layout() -> GridLayout {
+    fn layout() -> GridLayout<'static> {
         GridLayout {
+            hidden_rows: &[],
             header_width: 50.0,
             header_height: 24.0,
             top: 0.0,
@@ -574,6 +637,20 @@ mod tests {
         assert_eq!((r.x0, r.y0), (50.0, 24.0));
         let r = l.cell_rect(2, 1);
         assert_eq!((r.x0, r.y0), (50.0 + 80.0, 24.0 + 2.0 * 20.0));
+    }
+
+    #[test]
+    fn cell_rect_collapses_over_hidden_rows() {
+        let mut l = layout();
+        // Rows 2 and 3 are filtered out (sorted slice).
+        l.hidden_rows = &[2, 3];
+        assert!(l.is_hidden(2) && l.is_hidden(3) && !l.is_hidden(4));
+        // Row 4 draws on the 3rd slot (rows 0,1 above; 2,3 collapsed).
+        assert_eq!(l.visible_offset(4), 2);
+        let r = l.cell_rect(4, 0);
+        assert_eq!(r.y0, 24.0 + 2.0 * 20.0);
+        // Slot 2 maps back to absolute row 4, not row 2.
+        assert_eq!(l.row_at_slot(2), Some(4));
     }
 
     #[test]
