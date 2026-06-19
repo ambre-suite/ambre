@@ -843,22 +843,6 @@ fn AppRoot() -> impl IntoView {
     });
     let ctx_entries = trame_chrome::context_entries();
 
-    // Floating selection toolbar position: `anchor_pos` is canvas-relative CSS
-    // px; the bar is `position: fixed`, so add the canvas's viewport offset.
-    let selbar_style = move || match anchor_pos.get() {
-        Some((x, y)) => {
-            let (ox, oy) = leptos::prelude::document()
-                .get_element_by_id("ambre-canvas")
-                .map(|c| {
-                    let r = c.get_bounding_client_rect();
-                    (r.left(), r.top())
-                })
-                .unwrap_or((0.0, 0.0));
-            format!("transform: translate({}px, {}px)", ox + x, oy + y)
-        }
-        None => "display: none".to_owned(),
-    };
-
     // Per-slot sender clones. Each slot's children is a `Fn` (re-runnable), so it
     // captures its own clone and re-clones inside the handler rather than moving
     // the sender out (which would make the children `FnOnce`).
@@ -1130,12 +1114,6 @@ fn AppRoot() -> impl IntoView {
             on_apply=on_filter_apply
             on_command=on_command
         />
-
-        // Floating selection toolbar, transform-synced onto the active cell. The
-        // generic anchor wrapper is the launcher's; its content is app chrome.
-        <div class="ambre-selbar-anchor" style=selbar_style>
-            <trame_chrome::SelectionBar style=style_state on_command=on_command />
-        </div>
 
         // Live-region toast host (announces transient messages politely).
         <ToastHost toasts=toasts />

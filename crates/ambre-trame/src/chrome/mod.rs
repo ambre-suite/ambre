@@ -8,7 +8,7 @@
 //   - the format `CommandId`s (Bold/Italic) and their keybindings;
 //   - the CommandId -> `AppCommand` mapping (UI affordance -> IPC payload);
 //   - the inbound `UiEvent` -> command-store mirror (authoritative toggle state);
-//   - the toolbar / floating-selection-toolbar markup and the status label.
+//   - the toolbar markup and the status label.
 //
 // The launcher (`ambre-app`) stays app-agnostic: it owns the generic AppShell,
 // the `CommandStates` store, and the per-frame relay, and reaches into this
@@ -21,7 +21,7 @@
 // re-exports below, so call sites name `chrome::FormatBar`, `chrome::BOLD`, ...):
 //   - `commands`    : command ids, keymap, dispatch, inbound-event mirroring;
 //   - `style`       : `Toggles` / `StyleState` and the style-event mirror;
-//   - `bars`        : the `FormatBar` / `SelectionBar` toolbars;
+//   - `bars`        : the `FormatBar` toolbar;
 //   - `popovers`    : the borders / colour / filter popovers;
 //   - `formula_bar` : the editable formula bar;
 //   - `color`       : shared hex/theme colour helpers (module-private).
@@ -34,7 +34,7 @@ mod formula_bar;
 mod popovers;
 mod style;
 
-pub use bars::{FormatBar, SelectionBar};
+pub use bars::FormatBar;
 pub use commands::{
     bind_keys, command_to_app, context_entries, init_command_states, mirror_event, new_doc_label,
     notify_event, status_label, BOLD, CLEAR_FILTER, COMMANDS, DELETE_COLS, DELETE_ROWS, DOC_TYPE,
