@@ -7,7 +7,7 @@
 // ============================================================================
 
 use ambre_bus::{
-    BorderEdit, BorderPreset, BorderStyle, FilterKind, FilterOp, StylePatch,
+    BorderEdit, BorderPreset, BorderStyle, CellFormat, FilterKind, FilterOp, StylePatch,
 };
 use ambre_chrome::commands::CommandId;
 use leptos::html;
@@ -171,6 +171,96 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
                             on_pick=Callback::new(move |c| style.border_color.set(c))
                         />
                     </div>
+                </div>
+            </Show>
+        </span>
+    }
+}
+
+/// The number-format families offered by the format popover, paired with their
+/// labels. Clicking an item applies its [`CellFormat`] through [`StylePatch`].
+const NUMBER_FORMATS: &[(CellFormat, &str)] = &[
+    (CellFormat::General, "General"),
+    (CellFormat::Number, "Number"),
+    (CellFormat::Currency, "Currency"),
+    (CellFormat::Percent, "Percent"),
+    (CellFormat::Scientific, "Scientific"),
+    (CellFormat::Fraction, "Fraction"),
+    (CellFormat::Date, "Date"),
+    (CellFormat::Time, "Time"),
+    (CellFormat::Text, "Text"),
+];
+
+/// The composed number-format control (`-ui.md` sec.5bis): a single toolbar
+/// button (the "123" icon) toggling a context-menu-style popover that lists the
+/// [`CellFormat`] families, with a check next to the active one. Picking a format
+/// emits a [`StylePatch`] through `on_style` and closes the menu.
+#[component]
+pub(crate) fn NumberFormatPopover(
+    style: StyleState,
+    on_style: Callback<StylePatch>,
+) -> impl IntoView {
+    let open = RwSignal::new(false);
+    // The wrapper node, so a global pointer-down can tell clicks inside the menu
+    // apart from clicks elsewhere (another cell, the canvas, a sibling control).
+    let root_ref = NodeRef::<html::Span>::new();
+    // Close on any pointer-down outside the control: selecting a cell hits the
+    // canvas, which is outside this node, so the menu dismisses.
+    let handle = window_event_listener(leptos::ev::pointerdown, move |ev| {
+        if !open.get_untracked() {
+            return;
+        }
+        let inside = root_ref
+            .get_untracked()
+            .zip(ev.target())
+            .and_then(|(root, target)| target.dyn_into::<web_sys::Node>().ok().map(|n| (root, n)))
+            .is_some_and(|(root, node)| root.contains(Some(&node)));
+        if !inside {
+            open.set(false);
+        }
+    });
+    on_cleanup(move || handle.remove());
+    view! {
+        <span class="ambre-number-format" node_ref=root_ref>
+            <button
+                title="Number format"
+                aria-haspopup="true"
+                aria-expanded=move || open.get().then_some("true")
+                on:click=move |_| open.update(|o| *o = !*o)
+            >
+                <Icon icon=icondata::Bs123 />
+            </button>
+            <Show when=move || open.get() fallback=|| ()>
+                <div class="ambre-number-format-popover">
+                    {NUMBER_FORMATS
+                        .iter()
+                        .map(|(fmt, label)| {
+                            let fmt = fmt.clone();
+                            let fmt_for_check = fmt.clone();
+                            view! {
+                                <button
+                                    class="number-format-item"
+                                    on:click=move |_| {
+                                        on_style.run(StylePatch {
+                                            format: Some(fmt.clone()),
+                                            ..Default::default()
+                                        });
+                                        open.set(false);
+                                    }
+                                >
+                                    <span class="check">
+                                        <Show
+                                            when=move || style.format.get() == fmt_for_check
+                                            fallback=|| ()
+                                        >
+                                            <Icon icon=icondata::BsCheck />
+                                        </Show>
+                                    </span>
+                                    <span class="label">{label.to_string()}</span>
+                                </button>
+                            }
+                        })
+                        .collect_view()}
                 </div>
             </Show>
         </span>
