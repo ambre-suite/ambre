@@ -12,12 +12,8 @@ use leptos_icons::Icon;
 
 use super::color::{theme_bg_default, theme_fg_default};
 use super::commands::{BOLD, ITALIC, MERGE, REDO, UNDO, UNMERGE};
-use super::popovers::{BordersPopover, ColorPopover, NumberFormatPopover};
+use super::popovers::{BordersPopover, ColorPopover, FontPopover, NumberFormatPopover};
 use super::style::{StyleState, Toggles};
-
-/// The font families offered by the toolbar `<select>` (the renderer falls back
-/// to its default for any family it does not have loaded).
-const FONTS: &[&str] = &["Default", "Sans", "Serif", "Monospace"];
 
 /// The font sizes offered by the toolbar `<select>` (points).
 const SIZES: &[u16] = &[8, 9, 10, 11, 12, 14, 16, 18, 24, 36];
@@ -78,21 +74,9 @@ pub fn FormatBar(
         </button>
         <span class="sep"></span>
 
-        // Font family + size.
-        <select
-            title="Font"
-            prop:value=move || style.font.get().unwrap_or_else(|| "Default".to_owned())
-            on:change=move |ev| {
-                let v = event_target_value(&ev);
-                let font = (v != "Default").then_some(v);
-                on_style.run(StylePatch { font: Some(font), ..Default::default() });
-            }
-        >
-            {FONTS
-                .iter()
-                .map(|f| view! { <option value=*f>{f.to_string()}</option> })
-                .collect_view()}
-        </select>
+        // Font family (custom popover: each family previewed in its own
+        // typeface) + size.
+        <FontPopover style=style on_style=on_style />
         <select
             title="Font size"
             prop:value=move || {
