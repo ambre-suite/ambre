@@ -111,14 +111,10 @@ pub fn apply_style_event(s: &StyleState, ev: &UiEvent) {
         s.h_align.set(style.h_align);
         s.v_align.set(style.v_align);
         s.format.set(style.format.clone());
-        // Seed the popover pen from the first present edge (best effort: the
-        // per-edge model has no single style/colour, but reopening the popover
-        // on a bordered cell should show a sensible current pen).
-        let b = &style.borders;
-        if let Some(edge) = b.top.or(b.right).or(b.bottom).or(b.left) {
-            s.border_line.set(edge.style);
-            s.border_color.set(edge.color);
-        }
+        // The borders pen (line style + colour) is user-owned and sticky: it is
+        // NOT reseeded from the selected cell. Seeding it here would clobber an
+        // explicit pick every time the selection emits `StyleApplied`, making the
+        // line-style picker revert to the cell's current edge (`-ui.md` sec.5bis).
         s.fg.set(style.fg);
         s.bg.set(style.bg);
         s.font.set(style.font.clone());

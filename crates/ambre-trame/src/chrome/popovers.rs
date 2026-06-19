@@ -35,15 +35,16 @@ const BORDER_BUTTONS: &[(BorderPreset, icondata::Icon, &str)] = &[
     (BorderPreset::None, icondata::BsBorder, "Clear borders"),
 ];
 
-/// The border stroke styles offered by the toolbar `<select>` (line pattern +
-/// weight), paired with their labels. The option index maps back on change.
-const BORDER_STYLES: &[(BorderStyle, &str)] = &[
-    (BorderStyle::Solid, "Solid"),
-    (BorderStyle::Dashed, "Dashed"),
-    (BorderStyle::Dotted, "Dotted"),
-    (BorderStyle::Medium, "Medium"),
-    (BorderStyle::Thick, "Thick"),
-    (BorderStyle::Double, "Double"),
+/// The border stroke styles offered by the line-style picker (line pattern +
+/// weight), each paired with its label and the CSS modifier class that renders a
+/// visual preview of the stroke (see `.line-preview.*` in `styles.css`).
+const BORDER_STYLES: &[(BorderStyle, &str, &str)] = &[
+    (BorderStyle::Solid, "Solid", "solid"),
+    (BorderStyle::Medium, "Medium", "medium"),
+    (BorderStyle::Thick, "Thick", "thick"),
+    (BorderStyle::Dashed, "Dashed", "dashed"),
+    (BorderStyle::Dotted, "Dotted", "dotted"),
+    (BorderStyle::Double, "Double", "double"),
 ];
 
 /// The composed borders control (`-ui.md` sec.5bis): a single toolbar button
@@ -54,6 +55,8 @@ const BORDER_STYLES: &[(BorderStyle, &str)] = &[
 #[component]
 pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) -> impl IntoView {
     let open = RwSignal::new(false);
+    // The nested line-style picker's open state (a sub-popover inside this one).
+    let line_open = RwSignal::new(false);
     // The wrapper node, so a global pointer-down can tell clicks inside the
     // popover apart from clicks elsewhere (another cell, the canvas, a sibling).
     let root_ref = NodeRef::<html::Span>::new();
@@ -96,39 +99,6 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
             </button>
             <Show when=move || open.get() fallback=|| ()>
                 <div class="ambre-borders-popover">
-                    // Pen: stroke style + colour applied by the preset buttons.
-                    <div class="row">
-                        <select
-                            title="Line style"
-                            prop:value=move || {
-                                BORDER_STYLES
-                                    .iter()
-                                    .position(|(bs, _)| *bs == style.border_line.get())
-                                    .unwrap_or(0)
-                                    .to_string()
-                            }
-                            on:change=move |ev| {
-                                let i = event_target_value(&ev).parse::<usize>().unwrap_or(0);
-                                style.border_line.set(BORDER_STYLES[i.min(BORDER_STYLES.len() - 1)].0);
-                            }
-                        >
-                            {BORDER_STYLES
-                                .iter()
-                                .enumerate()
-                                .map(|(i, (_, label))| {
-                                    view! { <option value=i.to_string()>{label.to_string()}</option> }
-                                })
-                                .collect_view()}
-                        </select>
-                        <input
-                            type="color"
-                            title="Line colour"
-                            prop:value=move || color_hex(style.border_color.get(), 0x606060)
-                            on:input=move |ev| {
-                                style.border_color.set(parse_hex_color(&event_target_value(&ev)));
-                            }
-                        />
-                    </div>
                     // Preset grid: each applies the pen to its edges.
                     <div class="grid">
                         {BORDER_BUTTONS
@@ -144,6 +114,62 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
                                 }
                             })
                             .collect_view()}
+                    </div>
+                    // Pen: stroke style + colour applied by the preset buttons,
+                    // left-aligned beneath the preset grid.
+                    <div class="row">
+                        // Line style: an icon button toggling a sub-popover that
+                        // renders each stroke with a check on the active one.
+                        <span class="ambre-line-style">
+                            <button
+                                class="line-style-trigger"
+                                title="Border style"
+                                aria-haspopup="true"
+                                aria-expanded=move || line_open.get().then_some("true")
+                                on:click=move |_| line_open.update(|o| *o = !*o)
+                            >
+                                <Icon icon=icondata::BsBorderStyle />
+                            </button>
+                            <Show when=move || line_open.get() fallback=|| ()>
+                                <div class="ambre-line-style-popover">
+                                    {BORDER_STYLES
+                                        .iter()
+                                        .map(|&(bs, label, css)| {
+                                            view! {
+                                                <button
+                                                    class="line-style-item"
+                                                    title=label
+                                                    on:click=move |_| {
+                                                        style.border_line.set(bs);
+                                                        line_open.set(false);
+                                                    }
+                                                >
+                                                    <span class="check">
+                                                        <Show
+                                                            when=move || style.border_line.get() == bs
+                                                            fallback=|| ()
+                                                        >
+                                                            <Icon icon=icondata::BsCheck />
+                                                        </Show>
+                                                    </span>
+                                                    <span class=format!("line-preview {css}")></span>
+                                                </button>
+                                            }
+                                        })
+                                        .collect_view()}
+                                </div>
+                            </Show>
+                        </span>
+                        // Border colour: the same composed picker as Text colour
+                        // (palette + "Automatic" reset + custom), driving the pen.
+                        <ColorPopover
+                            title="Border colour"
+                            icon=icondata::MdiBorderColor
+                            current=style.border_color
+                            default=Signal::derive(|| 0x606060)
+                            reset_label="Automatic"
+                            on_pick=Callback::new(move |c| style.border_color.set(c))
+                        />
                     </div>
                 </div>
             </Show>
