@@ -1,0 +1,107 @@
+// ambre-trame/src/render/merges.rs.rs
+//
+// Part of the Trame software renderer, split out of render.rs by concern.
+// Submodule of `render`; reaches sibling helpers, constants and imports through
+// the `use super::*` glob (the parent re-exports every renderer item).
+
+use super::*;
+use super::content::{cell_alignment, cell_v_offset, rgb};
+
+// -----------------------------------------------------------------------------
+// draw_merges_on -- merge masters spanning their covered area
+// -----------------------------------------------------------------------------
+
+/// Draw the merge masters over the base cell + grid-line layer.
+///
+/// `merges` yields `(row, col, col_span, row_span, content)` for the visible
+/// merge masters (a covered cell is *not* a master and must not appear here --
+/// it renders blank under the master's span). For each master:
+///
+///   1. the full span gets an opaque `content_bg` fill, painting over the
+///      interior grid separators drawn through the covered cells;
+///   2. the master's text is laid out across the spanned width, vertically
+///      centered in the spanned height;
+///   3. the span's outer border is stroked in `grid_line` so the merged block
+///      reads as one cell.
+///
+/// Call *after* [`draw_cells_on`] + [`draw_grid_lines_on`]. Returns the number
+/// of masters that had non-empty text drawn (font-independent tally).
+#[allow(clippy::too_many_arguments)]
+pub fn draw_merges_on<'a, S, I>(
+    surface: &mut S,
+    layout: &GridLayout<'_>,
+    palette: &Palette,
+    font_cx: &mut FontContext,
+    text_cache: &mut TextCache,
+    text_enabled: bool,
+    merges: I,
+) -> u32
+where
+    S: DrawSurface,
+    I: IntoIterator<Item = (u32, u32, u32, u32, CellContent<'a>)>,
+{
+    let mut drawn = 0u32;
+
+    for (row, col, col_span, row_span, content) in merges {
+        let rect = layout.merge_rect(row, col, col_span, row_span);
+
+        // 1. Fill the whole span with the master's fill (or the themed bg),
+        // hiding the interior separators drawn through the covered cells.
+        let bg = content.bg.map(rgb).unwrap_or(palette.content_bg);
+        surface.fill_rect(rect, bg);
+        // Re-stroke the span perimeter in the grid-line colour so the block reads
+        // as one cell (the fill above paints over the perimeter separators). A
+        // user-set border draws on top of this in the dedicated border pass.
+        surface.stroke_rect(rect, palette.grid_line, 1.0);
+
+        if text_enabled && !content.text.is_empty() {
+            // Honour the master's full style (size, font, colour, alignment,
+            // underline/strike) exactly like a plain cell, but always clipped to
+            // and aligned within the span rect.
+            let avail = (rect.width() - 2.0 * CELL_PAD_X).max(0.0);
+            let font_size = content.size.map(|s| s as f32).unwrap_or(BODY_SIZE);
+            let layout_text: &Layout<ParleyBrush> = text_cache.get_or_build_font(
+                font_cx,
+                content.text,
+                font_size,
+                avail as f32,
+                Alignment::Start,
+                content.bold,
+                content.italic,
+                content.font,
+            );
+            let text_h = layout_text.height() as f64;
+            let text_w = layout_text.width() as f64;
+            let y_off = cell_v_offset(content.v_align, rect.height(), text_h);
+            let x_off = match cell_alignment(content.h_align, content.text) {
+                Alignment::Center => ((avail - text_w) / 2.0).max(0.0),
+                Alignment::End | Alignment::Right => (avail - text_w).max(0.0),
+                _ => 0.0,
+            };
+            let brush = Brush::Solid(content.fg.map(rgb).unwrap_or(palette.cell_text));
+            surface.push_clip(rect);
+            for line in layout_text.lines() {
+                for item in line.items() {
+                    let PositionedLayoutItem::GlyphRun(run) = item else { continue };
+                    let tx = rect.x0 + CELL_PAD_X + x_off + run.offset() as f64;
+                    let ty = rect.y0 + y_off + run.baseline() as f64;
+                    surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+                    let dec = content.fg.map(rgb).unwrap_or(palette.cell_text);
+                    let adv = run.advance() as f64;
+                    if content.underline {
+                        surface.stroke_line(tx, ty + 2.0, tx + adv, ty + 2.0, dec, 1.0);
+                    }
+                    if content.strikethrough {
+                        let sy = ty - (font_size as f64) * 0.3;
+                        surface.stroke_line(tx, sy, tx + adv, sy, dec, 1.0);
+                    }
+                }
+            }
+            surface.pop_clip();
+            drawn += 1;
+        }
+    }
+
+    drawn
+}
+
