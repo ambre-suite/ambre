@@ -472,6 +472,25 @@ fn theme_bg_default(theme: ambre_canvas::Theme) -> u32 {
 #[component]
 fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) -> impl IntoView {
     let open = RwSignal::new(false);
+    // The wrapper node, so a global pointer-down can tell clicks inside the
+    // popover apart from clicks elsewhere (another cell, the canvas, a sibling).
+    let root_ref = NodeRef::<html::Span>::new();
+    // Close on any pointer-down outside the control: selecting a cell hits the
+    // canvas, which is outside this node, so the popover dismisses.
+    let handle = window_event_listener(leptos::ev::pointerdown, move |ev| {
+        if !open.get_untracked() {
+            return;
+        }
+        let inside = root_ref
+            .get_untracked()
+            .zip(ev.target())
+            .and_then(|(root, target)| target.dyn_into::<web_sys::Node>().ok().map(|n| (root, n)))
+            .is_some_and(|(root, node)| root.contains(Some(&node)));
+        if !inside {
+            open.set(false);
+        }
+    });
+    on_cleanup(move || handle.remove());
     // Emit a border edit for `preset` using the popover's current pen.
     let apply = move |preset: BorderPreset| {
         on_style.run(StylePatch {
@@ -484,7 +503,7 @@ fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) -> impl Int
         });
     };
     view! {
-        <span class="ambre-borders">
+        <span class="ambre-borders" node_ref=root_ref>
             <button
                 title="Borders"
                 aria-haspopup="true"
