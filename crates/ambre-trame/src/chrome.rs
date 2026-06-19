@@ -18,16 +18,21 @@
 // Wasm-only, like the rest of the chrome stack (leptos CSR + DOM).
 // ============================================================================
 
-use ambre_bus::{AppCommand, AppEvent, DocType, FilterKind, FilterOp, TrameCommand, TrameEvent, UiEvent};
+use ambre_bus::{
+    AppCommand, AppEvent, BorderEdit, BorderPreset, BorderStyle, Borders, CellFormat, CellStyle,
+    DocType, FilterKind, FilterOp, HAlign, StylePatch, TrameCommand, TrameEvent, UiEvent, VAlign,
+};
 use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
-use ambre_chrome::{CommandStates, Kbd, MenuEntry, Toasts};
+use ambre_chrome::{CommandStates, MenuEntry, Toasts};
 use leptos::html;
 use leptos::prelude::*;
+use leptos_icons::Icon;
+use wasm_bindgen::JsCast;
 
 use crate::render::{CommitDirection, FormulaAction};
 
-/// The Trame "Bold" command. A UI affordance id (ambre-commands), distinct from
-/// the `TrameCommand::ToggleBold` IPC payload it dispatches to.
+/// The Trame "Bold" command. A UI affordance id (ambre-commands); the launcher
+/// intercepts it into a `SetCellStyle` patch toggled against the tracked style.
 pub const BOLD: CommandId = CommandId("trame.format.bold");
 /// The Trame "Italic" command (see [`BOLD`]).
 pub const ITALIC: CommandId = CommandId("trame.format.italic");
@@ -106,11 +111,7 @@ pub fn bind_keys(keymap: &mut Keymap) {
 /// Translate a Trame `CommandId` into the `AppCommand` IPC payload the Logic
 /// thread expects. `None` for a command Trame does not own (the launcher logs it).
 pub fn command_to_app(id: CommandId) -> Option<AppCommand> {
-    let cmd = if id == BOLD {
-        TrameCommand::ToggleBold
-    } else if id == ITALIC {
-        TrameCommand::ToggleItalic
-    } else if id == UNDO {
+    let cmd = if id == UNDO {
         TrameCommand::Undo
     } else if id == REDO {
         TrameCommand::Redo
@@ -141,8 +142,10 @@ pub fn command_to_app(id: CommandId) -> Option<AppCommand> {
     } else if id == CLEAR_FILTER {
         TrameCommand::ClearActiveFilter
     } else {
-        // FILTER_COLUMN is a UI-only intent handled by the launcher (it opens the
-        // popover and requests the column values); it has no AppCommand here.
+        // BOLD / ITALIC (style toggles) and FILTER_COLUMN are UI-only intents the
+        // launcher intercepts: BOLD/ITALIC become a `SetCellStyle` patch toggled
+        // against the tracked style state, FILTER_COLUMN opens the popover. Neither
+        // has a direct AppCommand here.
         return None;
     };
     Some(AppCommand::Trame(cmd))
@@ -155,8 +158,6 @@ pub fn command_to_app(id: CommandId) -> Option<AppCommand> {
 pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
     if let UiEvent::Viewport { event: AppEvent::Trame(te), .. } = ev {
         match te {
-            TrameEvent::BoldState { enabled } => store.set_toggled(BOLD, *enabled),
-            TrameEvent::ItalicState { enabled } => store.set_toggled(ITALIC, *enabled),
             // Loro `UndoManager` stack availability -> the Undo/Redo affordances'
             // enabled state. The Logic thread is the single source of truth.
             TrameEvent::UndoState { can_undo, can_redo } => {
@@ -266,8 +267,6 @@ pub fn new_doc_label() -> &'static str {
 /// `!Send` store itself, which the launcher keeps outside the reactive tree).
 #[derive(Clone, Copy)]
 pub struct Toggles {
-    pub bold: RwSignal<bool>,
-    pub italic: RwSignal<bool>,
     /// Undo/Redo availability (Loro `UndoManager` stacks), driving the matching
     /// buttons' `disabled` state. Fed by [`TrameEvent::UndoState`] via
     /// [`mirror_event`].
@@ -276,74 +275,642 @@ pub struct Toggles {
 }
 
 impl Toggles {
-    /// Resolve the format toggles and history-enabled signals from a store built
-    /// over [`COMMANDS`].
+    /// Resolve the history-enabled signals from a store built over [`COMMANDS`].
+    /// Bold/italic now live in [`StyleState`] (the single style channel), not the
+    /// command store.
     pub fn from_store(store: &CommandStates) -> Self {
         Self {
-            bold: store.toggled_signal(BOLD).expect("bold registered"),
-            italic: store.toggled_signal(ITALIC).expect("italic registered"),
             undo_enabled: store.enabled_signal(UNDO).expect("undo registered"),
             redo_enabled: store.enabled_signal(REDO).expect("redo registered"),
         }
     }
 }
 
-/// The Trame format toolbar (the launcher mounts it inside the chrome `Toolbar`
-/// slot). Buttons reflect `toggles` and invoke their `CommandId` through
-/// `on_command` -- the same command path as the keyboard and the context menu.
+// -----------------------------------------------------------------------------
+// Rich formatting state (the formatting toolbar, `-ui.md` sec.5bis)
+// -----------------------------------------------------------------------------
+
+/// The active cell's resolved rich style, mirrored into `Copy` signals so the
+/// formatting toolbar's selects/swatches/toggles reflect the selection. Fed by
+/// [`TrameEvent::StyleApplied`] via [`apply_style_event`] -- this is the single
+/// style channel, so bold/italic live here too. Lives in the `<Router>` subtree.
+#[derive(Clone, Copy)]
+pub struct StyleState {
+    pub bold: RwSignal<bool>,
+    pub italic: RwSignal<bool>,
+    pub underline: RwSignal<bool>,
+    pub strikethrough: RwSignal<bool>,
+    pub wrap: RwSignal<bool>,
+    pub h_align: RwSignal<HAlign>,
+    pub v_align: RwSignal<VAlign>,
+    pub format: RwSignal<CellFormat>,
+    /// Borders popover picker state: the stroke style and colour the next preset
+    /// click applies. Seeded (best-effort) from the active cell's first present
+    /// edge so reopening the popover shows the cell's current pen.
+    pub border_line: RwSignal<BorderStyle>,
+    pub border_color: RwSignal<Option<u32>>,
+    pub fg: RwSignal<Option<u32>>,
+    pub bg: RwSignal<Option<u32>>,
+    pub font: RwSignal<Option<String>>,
+    pub size: RwSignal<Option<u16>>,
+    /// Whether the active cell is part of a merge, driving the toolbar's
+    /// merge/unmerge toggle pressed state.
+    pub merged: RwSignal<bool>,
+}
+
+impl Default for StyleState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl StyleState {
+    /// Build a fresh state with every control at its default value.
+    pub fn new() -> Self {
+        Self {
+            bold: RwSignal::new(false),
+            italic: RwSignal::new(false),
+            underline: RwSignal::new(false),
+            strikethrough: RwSignal::new(false),
+            wrap: RwSignal::new(false),
+            h_align: RwSignal::new(HAlign::Auto),
+            v_align: RwSignal::new(VAlign::Middle),
+            format: RwSignal::new(CellFormat::General),
+            border_line: RwSignal::new(BorderStyle::Solid),
+            border_color: RwSignal::new(None),
+            fg: RwSignal::new(None),
+            bg: RwSignal::new(None),
+            font: RwSignal::new(None),
+            size: RwSignal::new(None),
+            merged: RwSignal::new(false),
+        }
+    }
+}
+
+/// Mirror a [`TrameEvent::StyleApplied`] into the toolbar's [`StyleState`]. A
+/// no-op for any other event; the launcher calls it for every event it relays.
+pub fn apply_style_event(s: &StyleState, ev: &UiEvent) {
+    if let UiEvent::Viewport {
+        event: AppEvent::Trame(TrameEvent::StyleApplied { style, bold, italic, merged }),
+        ..
+    } = ev
+    {
+        s.bold.set(*bold);
+        s.italic.set(*italic);
+        s.merged.set(*merged);
+        s.underline.set(style.underline);
+        s.strikethrough.set(style.strikethrough);
+        s.wrap.set(style.wrap);
+        s.h_align.set(style.h_align);
+        s.v_align.set(style.v_align);
+        s.format.set(style.format.clone());
+        // Seed the popover pen from the first present edge (best effort: the
+        // per-edge model has no single style/colour, but reopening the popover
+        // on a bordered cell should show a sensible current pen).
+        let b = &style.borders;
+        if let Some(edge) = b.top.or(b.right).or(b.bottom).or(b.left) {
+            s.border_line.set(edge.style);
+            s.border_color.set(edge.color);
+        }
+        s.fg.set(style.fg);
+        s.bg.set(style.bg);
+        s.font.set(style.font.clone());
+        s.size.set(style.size);
+    }
+}
+
+/// The number-format families offered by the toolbar `<select>`, paired with
+/// their labels. The option index maps back to the [`CellFormat`] on change.
+const NUMBER_FORMATS: &[(CellFormat, &str)] = &[
+    (CellFormat::General, "General"),
+    (CellFormat::Number, "Number"),
+    (CellFormat::Currency, "Currency"),
+    (CellFormat::Percent, "Percent"),
+    (CellFormat::Scientific, "Scientific"),
+    (CellFormat::Fraction, "Fraction"),
+    (CellFormat::Date, "Date"),
+    (CellFormat::Time, "Time"),
+    (CellFormat::Text, "Text"),
+];
+
+/// The border presets offered by the popover, each with its Bootstrap icon and
+/// tooltip. Clicking one applies the popover's current pen (line style + colour)
+/// to the named edges; `None` clears every edge.
+const BORDER_BUTTONS: &[(BorderPreset, icondata::Icon, &str)] = &[
+    (BorderPreset::All, icondata::BsBorderAll, "All borders"),
+    (BorderPreset::Inner, icondata::BsBorderInner, "Inner borders"),
+    (BorderPreset::InnerHorizontal, icondata::BsBorderMiddle, "Inner horizontal"),
+    (BorderPreset::InnerVertical, icondata::BsBorderCenter, "Inner vertical"),
+    (BorderPreset::Outline, icondata::BsBorderOuter, "Outline"),
+    (BorderPreset::Top, icondata::BsBorderTop, "Top border"),
+    (BorderPreset::Bottom, icondata::BsBorderBottom, "Bottom border"),
+    (BorderPreset::Left, icondata::BsBorderLeft, "Left border"),
+    (BorderPreset::Right, icondata::BsBorderRight, "Right border"),
+    (BorderPreset::None, icondata::BsBorder, "Clear borders"),
+];
+
+/// The border stroke styles offered by the toolbar `<select>` (line pattern +
+/// weight), paired with their labels. The option index maps back on change.
+const BORDER_STYLES: &[(BorderStyle, &str)] = &[
+    (BorderStyle::Solid, "Solid"),
+    (BorderStyle::Dashed, "Dashed"),
+    (BorderStyle::Dotted, "Dotted"),
+    (BorderStyle::Medium, "Medium"),
+    (BorderStyle::Thick, "Thick"),
+    (BorderStyle::Double, "Double"),
+];
+
+/// The font families offered by the toolbar `<select>` (the renderer falls back
+/// to its default for any family it does not have loaded).
+const FONTS: &[&str] = &["Default", "Sans", "Serif", "Monospace"];
+
+/// The font sizes offered by the toolbar `<select>` (points).
+const SIZES: &[u16] = &[8, 9, 10, 11, 12, 14, 16, 18, 24, 36];
+
+/// The grid's default body size (matches `render::BODY_SIZE`), shown in the size
+/// picker when a cell has no explicit size.
+const DEFAULT_SIZE: u16 = 12;
+
+/// Parse an `<input type="color">` value (`"#rrggbb"`) into a packed `0xRRGGBB`.
+fn parse_hex_color(s: &str) -> Option<u32> {
+    let hex = s.strip_prefix('#')?;
+    u32::from_str_radix(hex, 16).ok()
+}
+
+/// Format a packed `0xRRGGBB` colour into an `<input type="color">` value, using
+/// `default` when the cell has no explicit colour (`<input type=color>` cannot be
+/// empty). The default is the themed text / fill colour, so an "Automatic" /
+/// "Transparent" cell shows its real on-screen colour rather than a misleading
+/// black/white -- the picker tracks the active light/dark theme.
+fn color_hex(c: Option<u32>, default: u32) -> String {
+    format!("#{:06x}", c.unwrap_or(default))
+}
+
+/// The themed default text colour (matches the canvas `cell_text` token), so the
+/// fg picker, when on "Automatic", shows the colour the glyphs actually render in.
+fn theme_fg_default(theme: ambre_canvas::Theme) -> u32 {
+    match theme {
+        ambre_canvas::Theme::Dark => 0xe8e8e8,
+        ambre_canvas::Theme::Light => 0x202020,
+    }
+}
+
+/// The themed default fill colour (matches the canvas `content_bg` token), so the
+/// bg picker, when on "Transparent", shows the sheet background.
+fn theme_bg_default(theme: ambre_canvas::Theme) -> u32 {
+    match theme {
+        ambre_canvas::Theme::Dark => 0x1c1c1f,
+        ambre_canvas::Theme::Light => 0xffffff,
+    }
+}
+
+/// The composed borders control (`-ui.md` sec.5bis): a single toolbar button
+/// that toggles a popover holding the "pen" (stroke style + colour) and a grid
+/// of preset icon buttons. A preset click applies the current pen to its edges
+/// via [`StylePatch::border`] (a [`BorderEdit`]); the per-edge model lets a cell
+/// carry a different style/colour on each side, accumulated across clicks.
 #[component]
-pub fn FormatBar(toggles: Toggles, on_command: Callback<CommandId>) -> impl IntoView {
+fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) -> impl IntoView {
+    let open = RwSignal::new(false);
+    // Emit a border edit for `preset` using the popover's current pen.
+    let apply = move |preset: BorderPreset| {
+        on_style.run(StylePatch {
+            border: Some(BorderEdit {
+                preset,
+                style: style.border_line.get_untracked(),
+                color: style.border_color.get_untracked(),
+            }),
+            ..Default::default()
+        });
+    };
+    view! {
+        <span class="ambre-borders">
+            <button
+                title="Borders"
+                aria-haspopup="true"
+                aria-expanded=move || open.get().then_some("true")
+                on:click=move |_| open.update(|o| *o = !*o)
+            >
+                <Icon icon=icondata::BsBorderAll />
+            </button>
+            <Show when=move || open.get() fallback=|| ()>
+                <div class="ambre-borders-popover">
+                    // Pen: stroke style + colour applied by the preset buttons.
+                    <div class="row">
+                        <select
+                            title="Line style"
+                            prop:value=move || {
+                                BORDER_STYLES
+                                    .iter()
+                                    .position(|(bs, _)| *bs == style.border_line.get())
+                                    .unwrap_or(0)
+                                    .to_string()
+                            }
+                            on:change=move |ev| {
+                                let i = event_target_value(&ev).parse::<usize>().unwrap_or(0);
+                                style.border_line.set(BORDER_STYLES[i.min(BORDER_STYLES.len() - 1)].0);
+                            }
+                        >
+                            {BORDER_STYLES
+                                .iter()
+                                .enumerate()
+                                .map(|(i, (_, label))| {
+                                    view! { <option value=i.to_string()>{label.to_string()}</option> }
+                                })
+                                .collect_view()}
+                        </select>
+                        <input
+                            type="color"
+                            title="Line colour"
+                            prop:value=move || color_hex(style.border_color.get(), 0x606060)
+                            on:input=move |ev| {
+                                style.border_color.set(parse_hex_color(&event_target_value(&ev)));
+                            }
+                        />
+                    </div>
+                    // Preset grid: each applies the pen to its edges.
+                    <div class="grid">
+                        {BORDER_BUTTONS
+                            .iter()
+                            .map(|&(preset, icon, label)| {
+                                view! {
+                                    <button
+                                        title=label
+                                        on:click=move |_| apply(preset)
+                                    >
+                                        <Icon icon=icon />
+                                    </button>
+                                }
+                            })
+                            .collect_view()}
+                    </div>
+                </div>
+            </Show>
+        </span>
+    }
+}
+
+/// Curated swatch palette for the colour picker popover (packed `0xRRGGBB`).
+/// A small office-style set: greys, then a saturated row and a muted row.
+const PALETTE: &[u32] = &[
+    0x000000, 0x404040, 0x808080, 0xb0b0b0, 0xd9d9d9, 0xffffff, 0xc00000, 0xff0000,
+    0xffc000, 0xffff00, 0x92d050, 0x00b050, 0x00b0f0, 0x0070c0, 0x002060, 0x7030a0,
+];
+
+/// A composed colour control (text or fill): a single toolbar button toggling a
+/// popover that combines a reset entry ("Automatic" / "No fill"), a swatch
+/// palette, and an embedded native `<input type="color">` for arbitrary colours.
+/// `on_pick` receives `Some(rgb)` for a chosen colour or `None` for the reset,
+/// which the caller maps onto `StylePatch { fg/bg: Some(_) }` (sec.5bis).
+#[component]
+fn ColorPopover(
+    title: &'static str,
+    icon: icondata::Icon,
+    current: RwSignal<Option<u32>>,
+    default: Signal<u32>,
+    reset_label: &'static str,
+    on_pick: Callback<Option<u32>>,
+) -> impl IntoView {
+    let open = RwSignal::new(false);
+    // The wrapper node, so a global mousedown can tell clicks inside the popover
+    // apart from clicks elsewhere (another cell, the canvas, a sibling control).
+    let root_ref = NodeRef::<html::Span>::new();
+    // Close on any pointer-down outside the control: selecting another cell hits
+    // the canvas, which is outside this node, so the popover dismisses.
+    let handle = window_event_listener(leptos::ev::pointerdown, move |ev| {
+        if !open.get_untracked() {
+            return;
+        }
+        let inside = root_ref
+            .get_untracked()
+            .zip(ev.target())
+            .and_then(|(root, target)| target.dyn_into::<web_sys::Node>().ok().map(|n| (root, n)))
+            .is_some_and(|(root, node)| root.contains(Some(&node)));
+        if !inside {
+            open.set(false);
+        }
+    });
+    on_cleanup(move || handle.remove());
+    view! {
+        <span class="ambre-color" node_ref=root_ref>
+            <button
+                title=title
+                aria-haspopup="true"
+                aria-expanded=move || open.get().then_some("true")
+                on:click=move |_| open.update(|o| *o = !*o)
+            >
+                <Icon icon=icon />
+                // Thin strip tinted to the current colour (themed default when unset).
+                <span
+                    class="swatch-strip"
+                    style:background-color=move || color_hex(current.get(), default.get())
+                ></span>
+            </button>
+            <Show when=move || open.get() fallback=|| ()>
+                <div class="ambre-color-popover">
+                    // Reset entry: "Automatic" (text) / "No fill (transparent)" (fill).
+                    <button
+                        class="reset"
+                        on:click=move |_| {
+                            on_pick.run(None);
+                            open.set(false);
+                        }
+                    >
+                        {reset_label}
+                    </button>
+                    // Swatch palette.
+                    <div class="swatches">
+                        {PALETTE
+                            .iter()
+                            .map(|&rgb| {
+                                view! {
+                                    <button
+                                        title=format!("#{:06x}", rgb)
+                                        style:background-color=format!("#{:06x}", rgb)
+                                        on:click=move |_| {
+                                            on_pick.run(Some(rgb));
+                                            open.set(false);
+                                        }
+                                    ></button>
+                                }
+                            })
+                            .collect_view()}
+                    </div>
+                    // Custom colour: the standard native widget, kept for arbitrary picks.
+                    <label class="custom">
+                        <input
+                            type="color"
+                            prop:value=move || color_hex(current.get(), default.get())
+                            on:input=move |ev| {
+                                on_pick.run(parse_hex_color(&event_target_value(&ev)));
+                            }
+                        />
+                        "Custom..."
+                    </label>
+                </div>
+            </Show>
+        </span>
+    }
+}
+
+/// The Trame format toolbar (the launcher mounts it inside the chrome `Toolbar`
+/// slot). Bold/Italic/Undo/Redo invoke their `CommandId` through `on_command`
+/// (the shared command path); the rich-formatting controls (underline, font,
+/// size, colours, alignment, number format, borders, wrap) emit a [`StylePatch`]
+/// through `on_style`, which the launcher routes as `SetCellStyle` (sec.5bis).
+#[component]
+pub fn FormatBar(
+    toggles: Toggles,
+    style: StyleState,
+    /// The active light/dark theme, so the colour pickers' "Automatic" /
+    /// "Transparent" defaults match what the canvas actually renders.
+    theme: RwSignal<ambre_canvas::Theme>,
+    on_command: Callback<CommandId>,
+    on_style: Callback<StylePatch>,
+) -> impl IntoView {
     view! {
         <button
             title="Bold"
-            aria-pressed=move || toggles.bold.get().then_some("true")
+            aria-pressed=move || style.bold.get().then_some("true")
             on:click=move |_| on_command.run(BOLD)
         >
-            "B"
+            <Icon icon=icondata::BsTypeBold />
         </button>
         <button
             title="Italic"
-            aria-pressed=move || toggles.italic.get().then_some("true")
+            aria-pressed=move || style.italic.get().then_some("true")
             on:click=move |_| on_command.run(ITALIC)
         >
-            <em>"I"</em>
+            <Icon icon=icondata::BsTypeItalic />
+        </button>
+        <button
+            title="Underline"
+            aria-pressed=move || style.underline.get().then_some("true")
+            on:click=move |_| on_style.run(StylePatch {
+                underline: Some(!style.underline.get_untracked()),
+                ..Default::default()
+            })
+        >
+            <Icon icon=icondata::BsTypeUnderline />
+        </button>
+        <button
+            title="Strikethrough"
+            aria-pressed=move || style.strikethrough.get().then_some("true")
+            on:click=move |_| on_style.run(StylePatch {
+                strikethrough: Some(!style.strikethrough.get_untracked()),
+                ..Default::default()
+            })
+        >
+            <Icon icon=icondata::BsTypeStrikethrough />
         </button>
         <span class="sep"></span>
+
+        // Font family + size.
+        <select
+            title="Font"
+            prop:value=move || style.font.get().unwrap_or_else(|| "Default".to_owned())
+            on:change=move |ev| {
+                let v = event_target_value(&ev);
+                let font = (v != "Default").then_some(v);
+                on_style.run(StylePatch { font: Some(font), ..Default::default() });
+            }
+        >
+            {FONTS
+                .iter()
+                .map(|f| view! { <option value=*f>{f.to_string()}</option> })
+                .collect_view()}
+        </select>
+        <select
+            title="Font size"
+            prop:value=move || {
+                style.size.get().map(|s| s.to_string()).unwrap_or_else(|| DEFAULT_SIZE.to_string())
+            }
+            on:change=move |ev| {
+                let sz = event_target_value(&ev).parse::<u16>().ok();
+                on_style.run(StylePatch { size: Some(sz), ..Default::default() });
+            }
+        >
+            {SIZES
+                .iter()
+                .map(|&s| view! { <option value=s.to_string()>{s.to_string()}</option> })
+                .collect_view()}
+        </select>
+        <span class="sep"></span>
+
+        // Text colour: composed picker (palette + "Automatic" reset + custom).
+        <ColorPopover
+            title="Text colour"
+            icon=icondata::BiFontColorRegular
+            current=style.fg
+            default=Signal::derive(move || theme_fg_default(theme.get()))
+            reset_label="Automatic"
+            on_pick=Callback::new(move |c| {
+                on_style.run(StylePatch { fg: Some(c), ..Default::default() })
+            })
+        />
+        // Fill colour: composed picker (palette + "No fill" reset + custom).
+        <ColorPopover
+            title="Fill colour"
+            icon=icondata::BiColorFillSolid
+            current=style.bg
+            default=Signal::derive(move || theme_bg_default(theme.get()))
+            reset_label="No fill (transparent)"
+            on_pick=Callback::new(move |c| {
+                on_style.run(StylePatch { bg: Some(c), ..Default::default() })
+            })
+        />
+        <span class="sep"></span>
+
+        // Horizontal alignment.
+        <button
+            title="Align left"
+            aria-pressed=move || (style.h_align.get() == HAlign::Left).then_some("true")
+            on:click=move |_| on_style.run(StylePatch { h_align: Some(HAlign::Left), ..Default::default() })
+        >
+            <Icon icon=icondata::BiAlignLeftRegular />
+        </button>
+        <button
+            title="Align center"
+            aria-pressed=move || (style.h_align.get() == HAlign::Center).then_some("true")
+            on:click=move |_| on_style.run(StylePatch { h_align: Some(HAlign::Center), ..Default::default() })
+        >
+            <Icon icon=icondata::BiAlignMiddleRegular />
+        </button>
+        <button
+            title="Align right"
+            aria-pressed=move || (style.h_align.get() == HAlign::Right).then_some("true")
+            on:click=move |_| on_style.run(StylePatch { h_align: Some(HAlign::Right), ..Default::default() })
+        >
+            <Icon icon=icondata::BiAlignRightRegular />
+        </button>
+        <span class="sep"></span>
+
+        // Vertical alignment.
+        <button
+            title="Align top"
+            aria-pressed=move || (style.v_align.get() == VAlign::Top).then_some("true")
+            on:click=move |_| on_style.run(StylePatch { v_align: Some(VAlign::Top), ..Default::default() })
+        >
+            <Icon icon=icondata::AiVerticalAlignTopOutlined />
+        </button>
+        <button
+            title="Align middle"
+            aria-pressed=move || (style.v_align.get() == VAlign::Middle).then_some("true")
+            on:click=move |_| on_style.run(StylePatch { v_align: Some(VAlign::Middle), ..Default::default() })
+        >
+            <Icon icon=icondata::AiVerticalAlignMiddleOutlined />
+        </button>
+        <button
+            title="Align bottom"
+            aria-pressed=move || (style.v_align.get() == VAlign::Bottom).then_some("true")
+            on:click=move |_| on_style.run(StylePatch { v_align: Some(VAlign::Bottom), ..Default::default() })
+        >
+            <Icon icon=icondata::AiVerticalAlignBottomOutlined />
+        </button>
+        <span class="sep"></span>
+
+        // Number format + decimals.
+        <select
+            title="Number format"
+            prop:value=move || {
+                NUMBER_FORMATS
+                    .iter()
+                    .position(|(f, _)| *f == style.format.get())
+                    .unwrap_or(0)
+                    .to_string()
+            }
+            on:change=move |ev| {
+                let i = event_target_value(&ev).parse::<usize>().unwrap_or(0);
+                let fmt = NUMBER_FORMATS[i.min(NUMBER_FORMATS.len() - 1)].0.clone();
+                on_style.run(StylePatch { format: Some(fmt), ..Default::default() });
+            }
+        >
+            {NUMBER_FORMATS
+                .iter()
+                .enumerate()
+                .map(|(i, (_, label))| {
+                    view! { <option value=i.to_string()>{label.to_string()}</option> }
+                })
+                .collect_view()}
+        </select>
+        <button
+            title="Decrease decimals"
+            on:click=move |_| on_style.run(StylePatch { decimals: Some(Some(0)), ..Default::default() })
+        >
+            <Icon icon=icondata::LuDecimalsArrowLeft />
+        </button>
+        <button
+            title="Increase decimals"
+            on:click=move |_| on_style.run(StylePatch { decimals: Some(Some(2)), ..Default::default() })
+        >
+            <Icon icon=icondata::LuDecimalsArrowRight />
+        </button>
+        <span class="sep"></span>
+
+        // Borders: a single button opening a composed popover (pen + presets).
+        <BordersPopover style=style on_style=on_style />
+        <span class="sep"></span>
+
+        // Wrap text.
+        <button
+            title="Wrap text"
+            aria-pressed=move || style.wrap.get().then_some("true")
+            on:click=move |_| on_style.run(StylePatch {
+                wrap: Some(!style.wrap.get_untracked()),
+                ..Default::default()
+            })
+        >
+            <Icon icon=icondata::BsTextWrap />
+        </button>
+
+        // Merge / unmerge cells: a stateful toggle. Pressed when the active cell
+        // is part of a merge, in which case clicking splits it (UNMERGE); on a
+        // plain selection it merges the range (MERGE). The Logic thread guards
+        // both (single-cell merge is a no-op, non-empty covered cell rejects).
+        <button
+            title="Merge cells"
+            aria-pressed=move || style.merged.get().then_some("true")
+            on:click=move |_| {
+                on_command.run(if style.merged.get_untracked() { UNMERGE } else { MERGE })
+            }
+        >
+            <Icon icon=icondata::AiMergeCellsOutlined />
+        </button>
+        <span class="sep"></span>
+
         <button
             title="Undo"
             disabled=move || !toggles.undo_enabled.get()
             on:click=move |_| on_command.run(UNDO)
         >
-            "Undo"
+            <Icon icon=icondata::BiUndoRegular />
         </button>
         <button
             title="Redo"
             disabled=move || !toggles.redo_enabled.get()
             on:click=move |_| on_command.run(REDO)
         >
-            "Redo"
+            <Icon icon=icondata::BiRedoRegular />
         </button>
-        <span class="sep"></span>
-        <Kbd binding=KeyBinding::ctrl('b') />
     }
 }
 
 /// The floating selection toolbar's inner content, transform-synced onto the
 /// active cell by the launcher's generic `.ambre-selbar-anchor` wrapper.
 #[component]
-pub fn SelectionBar(toggles: Toggles, on_command: Callback<CommandId>) -> impl IntoView {
+pub fn SelectionBar(style: StyleState, on_command: Callback<CommandId>) -> impl IntoView {
     view! {
         <div class="ambre-selbar">
             <button
                 title="Bold"
-                aria-pressed=move || toggles.bold.get().then_some("true")
+                aria-pressed=move || style.bold.get().then_some("true")
                 on:click=move |_| on_command.run(BOLD)
             >
                 "B"
             </button>
             <button
                 title="Italic"
-                aria-pressed=move || toggles.italic.get().then_some("true")
+                aria-pressed=move || style.italic.get().then_some("true")
                 on:click=move |_| on_command.run(ITALIC)
             >
                 <em>"I"</em>

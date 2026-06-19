@@ -574,15 +574,11 @@ impl TrameView {
         // no recovery, so flip to the fatal state instead of silently looping.
         loop {
             match self.from_logic.try_recv() {
-                Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::CellFormat { row, col, bold, italic }), .. }) => {
-                    // Formatting is pinned to the cell, not the selection.
-                    self.state.set_cell_format(row, col, bold, italic);
-                    self.needs_full = true;
-                }
-                // BoldState / ItalicState target the chrome toggle buttons; the
-                // UI-thread dispatcher consumes them. The canvas ignores them --
-                // it renders per-cell formatting from the cache instead.
-                Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::BoldState { .. } | TrameEvent::ItalicState { .. }), .. }) => {}
+                // StyleApplied targets the chrome formatting toolbar; the UI-thread
+                // dispatcher consumes it. The canvas ignores it -- it renders
+                // per-cell formatting from the cache (refreshed by the accompanying
+                // DataReset), not from the active-cell style event.
+                Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::StyleApplied { .. }), .. }) => {}
                 Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::SheetList { sheets, active }), .. }) => {
                     // The active sheet may have changed (switch, or delete
                     // fallback decided by the Logic thread); adopt it and refresh

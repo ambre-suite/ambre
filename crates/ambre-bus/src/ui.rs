@@ -181,36 +181,22 @@ pub enum TrameEvent {
         cells: Vec<DisplayCell>,
     },
 
-    /// Bold formatting state of the **active cell**, emitted after a
-    /// [`ToggleBold`] or [`SetActiveCell`] command. Drives the chrome's "Bold"
-    /// toggle button (which always reflects the current selection).
+    /// The resolved formatting of the **active cell** after a
+    /// [`SetCellStyle`](crate::logic::TrameCommand::SetCellStyle) or a
+    /// [`SetActiveCell`](crate::logic::TrameCommand::SetActiveCell), driving the
+    /// whole formatting toolbar (bold/italic/underline toggles, font/size selects,
+    /// colour swatches, align buttons, cell-format / border menus, wrap). Bold and
+    /// italic ride alongside the [`CellStyle`] -- they are now part of the single
+    /// style channel, not a separate per-flag event (`-ui.md` sec.5bis).
     ///
-    /// [`ToggleBold`]: crate::logic::TrameCommand::ToggleBold
-    /// [`SetActiveCell`]: crate::logic::TrameCommand::SetActiveCell
-    BoldState {
-        enabled: bool,
-    },
-
-    /// Italic formatting state of the **active cell**, emitted after a
-    /// [`ToggleItalic`] or [`SetActiveCell`] command. Drives the chrome's
-    /// "Italic" toggle button.
-    ///
-    /// [`ToggleItalic`]: crate::logic::TrameCommand::ToggleItalic
-    /// [`SetActiveCell`]: crate::logic::TrameCommand::SetActiveCell
-    ItalicState {
-        enabled: bool,
-    },
-
-    /// A single cell's formatting changed (after a toggle). The UI Thread
-    /// updates that cell in its cache and repaints, so the bold/italic run stays
-    /// pinned to the cell it was applied to -- independent of where the cursor
-    /// moves next. Carries the full per-cell flags (not a delta) so it is
-    /// order-independent.
-    CellFormat {
-        row: u32,
-        col: u32,
+    /// [`CellStyle`]: crate::logic::CellStyle
+    StyleApplied {
+        style: crate::logic::CellStyle,
         bold: bool,
         italic: bool,
+        /// Whether the active cell is part of a merge (a master or a covered
+        /// cell), driving the toolbar's merge/unmerge toggle pressed state.
+        merged: bool,
     },
 
     /// The document's content was replaced wholesale (local snapshot restore at
@@ -378,7 +364,7 @@ pub enum TrameEvent {
 /// Flat, data-oriented. The UI Thread stores these in a
 /// `HashMap<(u32, u32), DisplayCell>` keyed by `(row, col)`; missing entries
 /// are blank (white background, no text), so only non-empty cells are sent.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DisplayCell {
     pub row: u32,
     pub col: u32,
@@ -392,6 +378,26 @@ pub struct DisplayCell {
     pub bold: bool,
     /// Italic run applied to this cell.
     pub italic: bool,
+    /// Underline run applied to this cell (`-ui.md` sec.5bis).
+    pub underline: bool,
+    /// Strikethrough run applied to this cell.
+    pub strikethrough: bool,
+    /// Horizontal text alignment.
+    pub h_align: crate::logic::HAlign,
+    /// Vertical text alignment.
+    pub v_align: crate::logic::VAlign,
+    /// Wrap long text onto multiple lines inside the cell.
+    pub wrap: bool,
+    /// Text colour, packed `0xRRGGBB` (`None` = theme default).
+    pub fg: Option<u32>,
+    /// Fill colour, packed `0xRRGGBB` (`None` = transparent).
+    pub bg: Option<u32>,
+    /// Font family name (`None` = grid default).
+    pub font: Option<String>,
+    /// Font size in points (`None` = grid default).
+    pub size: Option<u16>,
+    /// Per-edge border (style + colour each); `None` edges are undrawn.
+    pub borders: crate::logic::Borders,
     /// Part of a merged range (`ambre-spec-trame-logic.md` §6). `true` for both
     /// the master cell and the cells it covers; the UI distinguishes them via
     /// [`merge_span`](DisplayCell::merge_span).

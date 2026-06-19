@@ -19,6 +19,7 @@ ambre-canvas   = { path = "../ambre-canvas" }
 # UI Thread <-> Logic frame channels (shared memory, Main instance).
 flume      = { workspace = true }
 web-sys    = { workspace = true }
+wasm-bindgen = { workspace = true }
 
 # Trame-specific chrome (the `chrome` module): the format toolbar, selection
 # toolbar, command wiring. Wasm-only -- leptos CSR + DOM, like ambre-chrome --
@@ -26,6 +27,9 @@ web-sys    = { workspace = true }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 ambre-chrome = { path = "../ambre-chrome" }
 leptos       = { workspace = true }
+# Tree-shaken SVG icons for the borders popover (BsBorder* set).
+leptos_icons = { workspace = true }
+icondata     = { workspace = true }
 # Current wall-clock time for TODAY()/NOW() (std::time is unavailable on
 # wasm32-unknown-unknown).
 js-sys       = { workspace = true }

@@ -166,13 +166,11 @@ pub enum TrameCommand {
     /// Move the active cell to `(row, col)` and report the selection rectangle
     /// whose opposite (anchor) corner is `(anchor_row, anchor_col)`.
     ///
-    /// Formatting commands ([`ToggleBold`](TrameCommand::ToggleBold) /
-    /// [`ToggleItalic`](TrameCommand::ToggleItalic)) target whatever cell is
-    /// active in the Logic thread, so the UI Thread must keep it informed when
-    /// the cursor moves. The Logic thread replies with the active cell's current
-    /// formatting ([`TrameEvent::BoldState`](crate::ui::TrameEvent::BoldState) /
-    /// [`ItalicState`](crate::ui::TrameEvent::ItalicState)) so the chrome toggle
-    /// buttons track the selection.
+    /// Formatting ([`SetCellStyle`](TrameCommand::SetCellStyle)) targets whatever
+    /// selection the Logic thread tracks, so the UI Thread must keep it informed
+    /// when the cursor moves. The Logic thread replies with the active cell's
+    /// resolved style ([`TrameEvent::StyleApplied`](crate::ui::TrameEvent::StyleApplied))
+    /// so the formatting toolbar tracks the selection.
     ///
     /// `(anchor_row, anchor_col)` is the selection's other corner (equal to
     /// `(row, col)` for a single-cell selection). The Logic thread normalizes the
@@ -221,13 +219,21 @@ pub enum TrameCommand {
     /// produces no CRDT delta of its own. A no-op if no edit group is open.
     CommitEdit,
 
-    /// Toggle bold formatting for the active cell (set by
-    /// [`SetActiveCell`](TrameCommand::SetActiveCell)).
-    ToggleBold,
-
-    /// Toggle italic formatting for the active cell (set by
-    /// [`SetActiveCell`](TrameCommand::SetActiveCell)).
-    ToggleItalic,
+    /// Apply a sparse formatting [`StylePatch`] to every cell of the tracked
+    /// selection (`-ui.md` sec.5bis). The Logic thread resolves the geometry from
+    /// the selection it keeps via [`SetActiveCell`](TrameCommand::SetActiveCell)
+    /// -- the same parameterless-geometry contract as the structural intents --
+    /// merges the patch into each cell's stored style, persists the result in the
+    /// per-sheet style containers (a synchronised CRDT mutation, hence undoable),
+    /// reformats display text for any number-format change, and replies with a
+    /// [`TrameEvent::StyleApplied`](crate::ui::TrameEvent::StyleApplied) carrying
+    /// the active cell's resulting style plus a [`DataReset`] so the UI re-fetches
+    /// the restyled viewport.
+    ///
+    /// [`DataReset`]: crate::ui::TrameEvent::DataReset
+    SetCellStyle {
+        patch: StylePatch,
+    },
 
     /// Insert a blank row at grid position `at`, shifting existing rows at
     /// `>= at` down by one. One `LoroMovableList` op; cells keyed by stable id
@@ -646,6 +652,201 @@ pub enum FilterOp {
     StartsWith,
     IsEmpty,
     IsNotEmpty,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Manual cell formatting (`ambre-spec-trame-ui.md` sec.5bis)
+//
+// The toolbar's typed style vocabulary. `CellStyle` is the resolved formatting of
+// a single cell (the toolbar reflects the active cell's); `StylePatch` is the
+// sparse delta a control emits over the selection (`SetCellStyle`). Both travel
+// by move inside `AppCommand::Trame` / `AppEvent::Trame` -- no `serde`, like the
+// rest of the data plane. Colours are packed `0xRRGGBB`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Horizontal text alignment of a cell (`-ui.md` sec.5bis). [`Auto`](Self::Auto)
+/// is the spreadsheet default: numbers align right, everything else left.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HAlign {
+    #[default]
+    Auto,
+    Left,
+    Center,
+    Right,
+}
+
+/// Vertical text alignment of a cell (`-ui.md` sec.5bis).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VAlign {
+    Top,
+    #[default]
+    Middle,
+    Bottom,
+}
+
+/// A cell number-format family (`-ui.md` sec.5bis). The number of decimal places
+/// rides alongside in [`CellStyle::decimals`]; [`Custom`](Self::Custom) carries
+/// its own pattern string (applied verbatim by the Logic thread).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum CellFormat {
+    /// No reformatting: the raw value / formula result is shown as-is.
+    #[default]
+    General,
+    Number,
+    Currency,
+    Percent,
+    Scientific,
+    Fraction,
+    /// Date (ISO `YYYY-MM-DD`) -- the numeric value is a day serial (MVP stub
+    /// keeps the raw text when it is not numeric).
+    Date,
+    /// Time (`HH:MM:SS`).
+    Time,
+    /// Force textual interpretation (no numeric coercion).
+    Text,
+    Custom(String),
+}
+
+/// A border preset naming a set of edges within the selection (`-ui.md`
+/// sec.5bis). Resolved per cell (merge-aware) by the Logic thread into the
+/// concrete edges of [`Borders`] the chosen stroke is applied to. Every preset
+/// except [`BorderPreset::None`] is additive: it sets only its own edges and
+/// leaves the others untouched; `None` clears all four.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BorderPreset {
+    #[default]
+    None,
+    /// Border around the outside of the selection rectangle only.
+    Outline,
+    /// Border on every cell edge in the selection.
+    All,
+    /// All interior edges of the selection (between adjacent selected cells).
+    Inner,
+    /// Interior horizontal edges only (between stacked rows).
+    InnerHorizontal,
+    /// Interior vertical edges only (between side-by-side columns).
+    InnerVertical,
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
+/// Border edge bits for [`CellStyle::border_edges`] / [`DisplayCell::border_edges`]
+/// (`-ui.md` sec.5bis). A [`BorderPreset`] applied over a selection is resolved by
+/// the Logic thread into the per-cell set of edges these bits represent, so a
+/// selection-level "Outline" lands only on the perimeter cells, not the interior.
+pub const BORDER_EDGE_TOP: u8 = 1 << 0;
+pub const BORDER_EDGE_RIGHT: u8 = 1 << 1;
+pub const BORDER_EDGE_BOTTOM: u8 = 1 << 2;
+pub const BORDER_EDGE_LEFT: u8 = 1 << 3;
+/// All four edges (the `All` preset, per cell).
+pub const BORDER_EDGE_ALL: u8 =
+    BORDER_EDGE_TOP | BORDER_EDGE_RIGHT | BORDER_EDGE_BOTTOM | BORDER_EDGE_LEFT;
+
+/// The stroke style of a cell border, conflating line pattern and weight into a
+/// single choice (`-ui.md` sec.5bis).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BorderStyle {
+    /// A solid line border.
+    #[default]
+    Solid,
+    /// A dashed line border.
+    Dashed,
+    /// A dotted line border.
+    Dotted,
+    /// A thicker line border.
+    Medium,
+    /// A very thick line border.
+    Thick,
+    /// A double line border.
+    Double,
+}
+
+/// A single cell edge's border: its stroke style and colour. The edge's
+/// presence is carried by the enclosing `Option<CellBorder>` in [`Borders`]
+/// (`None` = no border on that edge).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct CellBorder {
+    pub style: BorderStyle,
+    /// Border colour, packed `0xRRGGBB`. `None` = the default grid-line colour.
+    pub color: Option<u32>,
+}
+
+/// The four independent edges of a cell border (`-ui.md` sec.5bis). Each edge
+/// carries its own stroke style and colour, so a cell can mix, e.g., a thick
+/// red top with a dotted blue left. `None` on an edge means no border there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Borders {
+    pub top: Option<CellBorder>,
+    pub right: Option<CellBorder>,
+    pub bottom: Option<CellBorder>,
+    pub left: Option<CellBorder>,
+}
+
+/// The resolved manual formatting of a single cell, the value the toolbar
+/// reflects (`-ui.md` sec.5bis). Bold/italic are tracked by their dedicated
+/// toggle commands and reported separately ([`TrameEvent::StyleApplied`]); the
+/// underline run lives here with the rest of the patchable attributes.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CellStyle {
+    pub underline: bool,
+    /// Strikethrough run drawn through the glyphs (`-ui.md` sec.5bis).
+    pub strikethrough: bool,
+    pub h_align: HAlign,
+    pub v_align: VAlign,
+    pub wrap: bool,
+    /// Text colour, packed `0xRRGGBB`. `None` = theme default (adapts to the
+    /// light/dark theme).
+    pub fg: Option<u32>,
+    /// Fill colour, packed `0xRRGGBB`. `None` = transparent (shows the themed
+    /// sheet background).
+    pub bg: Option<u32>,
+    /// Font family name. `None` = the grid default font.
+    pub font: Option<String>,
+    /// Font size in points. `None` = the grid default size.
+    pub size: Option<u16>,
+    pub format: CellFormat,
+    /// Decimal places for the active number format. `None` = the format default.
+    pub decimals: Option<u8>,
+    /// Per-edge border (style + colour each), resolved per cell by the Logic
+    /// thread from the selection-level [`StylePatch::border`] edit.
+    pub borders: Borders,
+}
+
+/// A sparse formatting delta emitted by a toolbar control over the current
+/// selection ([`TrameCommand::SetCellStyle`], `-ui.md` sec.5bis). Every `None`
+/// field leaves the existing cell value intact; a `Some` overwrites it. The
+/// nested `Option<Option<_>>` colour/font/size fields distinguish "leave alone"
+/// (`None`) from "clear" (`Some(None)`) and "set" (`Some(Some(v))`).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct StylePatch {
+    pub bold: Option<bool>,
+    pub italic: Option<bool>,
+    pub underline: Option<bool>,
+    pub strikethrough: Option<bool>,
+    pub h_align: Option<HAlign>,
+    pub v_align: Option<VAlign>,
+    pub wrap: Option<bool>,
+    pub fg: Option<Option<u32>>,
+    pub bg: Option<Option<u32>>,
+    pub font: Option<Option<String>>,
+    pub size: Option<Option<u16>>,
+    pub format: Option<CellFormat>,
+    pub decimals: Option<Option<u8>>,
+    pub border: Option<BorderEdit>,
+}
+
+/// A border edit emitted by the toolbar's borders popover: apply the chosen
+/// stroke `style` and `color` to the edges named by `preset` (or, for
+/// [`BorderPreset::None`], clear every edge). Resolved per cell, merge-aware,
+/// by the Logic thread (`-ui.md` sec.5bis).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct BorderEdit {
+    pub preset: BorderPreset,
+    pub style: BorderStyle,
+    /// Border colour, packed `0xRRGGBB`. `None` = the default grid-line colour.
+    pub color: Option<u32>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

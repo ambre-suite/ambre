@@ -47,12 +47,48 @@ pub struct CellData {
     pub raw: String,
     pub bold: bool,
     pub italic: bool,
+    /// Rich manual formatting (`-ui.md` sec.5bis): underline run, alignments,
+    /// wrap, text/fill colours, font family/size, border preset. Pinned to the
+    /// cell, fed by [`DisplayCell`](crate::DisplayCell).
+    pub underline: bool,
+    pub strikethrough: bool,
+    pub h_align: ambre_bus::HAlign,
+    pub v_align: ambre_bus::VAlign,
+    pub wrap: bool,
+    pub fg: Option<u32>,
+    pub bg: Option<u32>,
+    pub font: Option<String>,
+    pub size: Option<u16>,
+    pub borders: ambre_bus::Borders,
     /// `Some((col_span, row_span))` on a merge master, `None` otherwise. Covered
     /// cells arrive with empty text and are simply rendered blank.
     pub merge_span: Option<(u32, u32)>,
     /// The cell's row is hidden by the active shared filter (`-ui.md` sec.5.D):
     /// the row axis collapses over it. Drives [`TrameUiState::hidden_rows`].
     pub is_filtered: bool,
+}
+
+impl CellData {
+    /// Build the renderer's [`CellContent`](crate::render::CellContent) view of
+    /// this cached cell, with `text` supplied by the caller (a merge master draws
+    /// empty body text in the single-cell pass, its real text in the merge pass).
+    pub fn content<'a>(&'a self, text: &'a str) -> crate::render::CellContent<'a> {
+        crate::render::CellContent {
+            text,
+            bold: self.bold,
+            italic: self.italic,
+            underline: self.underline,
+            strikethrough: self.strikethrough,
+            h_align: self.h_align,
+            v_align: self.v_align,
+            fg: self.fg,
+            bg: self.bg,
+            font: self.font.as_deref(),
+            size: self.size,
+            wrap: self.wrap,
+            borders: self.borders,
+        }
+    }
 }
 
 /// A deferred pointer hit inside the in-cell editor. Resolving a click x to a
@@ -915,6 +951,16 @@ impl TrameUiState {
                     raw: cell.raw,
                     bold: cell.bold,
                     italic: cell.italic,
+                    underline: cell.underline,
+                    strikethrough: cell.strikethrough,
+                    h_align: cell.h_align,
+                    v_align: cell.v_align,
+                    wrap: cell.wrap,
+                    fg: cell.fg,
+                    bg: cell.bg,
+                    font: cell.font,
+                    size: cell.size,
+                    borders: cell.borders,
                     merge_span: cell.merge_span,
                     is_filtered: cell.is_filtered,
                 },
@@ -1043,18 +1089,6 @@ impl TrameUiState {
         // literal awaits the CRDT echo. Either way the prior error is stale.
         self.formula_errors.remove(&(row, col));
         self.dirty_cells.insert((row, col));
-    }
-
-    /// Apply a single-cell formatting change (from `TrameEvent::CellFormat`).
-    ///
-    /// Pins the run to the cell regardless of where the cursor moves next. A
-    /// no-op if the cell is not cached (it will arrive formatted on its next
-    /// `ViewportData`).
-    pub fn set_cell_format(&mut self, row: u32, col: u32, bold: bool, italic: bool) {
-        if let Some(cell) = self.cell_cache.get_mut(&(row, col)) {
-            cell.bold = bold;
-            cell.italic = italic;
-        }
     }
 
     // -------------------------------------------------------------------------
@@ -1263,6 +1297,7 @@ mod tests {
             is_merged: true,
             merge_span: span,
             is_filtered: false,
+            ..Default::default()
         };
         state.on_viewport_data(TrameEvent::ViewportData {
             version: 0,
@@ -1367,6 +1402,7 @@ mod tests {
             is_merged: false,
             merge_span: None,
             is_filtered: filtered,
+            ..Default::default()
         };
         // Rows 0..=4; rows 2 and 3 are filtered out.
         state.on_viewport_data(TrameEvent::ViewportData {
@@ -1473,11 +1509,11 @@ mod tests {
             col_start: 0,
             cells: vec![
                 DisplayCell { row: 2, col: 5, text: "x".into(), raw: "x".into(),
-                    bold: false, italic: false, is_merged: false, merge_span: None, is_filtered: false },
+                    bold: false, italic: false, is_merged: false, merge_span: None, is_filtered: false, ..Default::default() },
                 DisplayCell { row: 2, col: 1, text: "y".into(), raw: "y".into(),
-                    bold: false, italic: false, is_merged: false, merge_span: None, is_filtered: false },
+                    bold: false, italic: false, is_merged: false, merge_span: None, is_filtered: false, ..Default::default() },
                 DisplayCell { row: 4, col: 3, text: "".into(), raw: "".into(),
-                    bold: false, italic: false, is_merged: false, merge_span: None, is_filtered: false },
+                    bold: false, italic: false, is_merged: false, merge_span: None, is_filtered: false, ..Default::default() },
             ],
         });
         // Rightmost non-empty col in row 2 is col 5; row 4's only cell is empty.
@@ -1507,6 +1543,7 @@ mod tests {
                 is_merged: false,
                 merge_span: None,
                 is_filtered: false,
+                ..Default::default()
             }],
         });
 
@@ -1562,6 +1599,7 @@ mod tests {
                 is_merged: false,
                 merge_span: None,
                 is_filtered: false,
+                ..Default::default()
             }],
         });
         assert!(!state.formula_errors.contains_key(&(0, 0)), "valid value clears error");

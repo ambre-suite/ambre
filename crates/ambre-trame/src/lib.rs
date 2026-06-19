@@ -38,8 +38,10 @@ pub mod chrome;
 pub mod test_support;
 
 pub use ambre_bus::{
-    CondFormatKind, CondStyle, DisplayCell, FilterKind, FilterOp, GridRange, SortKey, TrameCommand,
-    TrameEvent, ValidationKind, ValidationOnInvalid,
+    BorderEdit, BorderStyle, BorderPreset, Borders, CellBorder, CellStyle, CondFormatKind, CondStyle,
+    DisplayCell, FilterKind, FilterOp,
+    GridRange, HAlign, CellFormat, SortKey, StylePatch, TrameCommand, TrameEvent, VAlign,
+    ValidationKind, ValidationOnInvalid,
 };
 pub use logic::{TrameOutcome, TrameState};
 

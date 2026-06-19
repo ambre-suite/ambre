@@ -88,6 +88,10 @@ struct Wiring {
     /// The active app's command toggle signals (the store's reactive view,
     /// chrome side). Opaque to the launcher -- the app's chrome reads its own.
     toggles: trame_chrome::Toggles,
+    /// The active cell's rich formatting, driving the formatting toolbar's
+    /// font/size selects, colour pickers, alignment, number format, borders, wrap
+    /// and underline controls (`-ui.md` sec.5bis). Fed by `TrameEvent::StyleApplied`.
+    style_state: trame_chrome::StyleState,
     /// Floating selection-toolbar anchor (canvas-relative CSS px).
     anchor_pos: RwSignal<Option<(f64, f64)>>,
     /// Transient notifications (ARIA live region).
@@ -272,6 +276,7 @@ pub fn main() {
         Rc::new(RefCell::new(None));
     let filter_values_slot: Rc<RefCell<Option<RwSignal<Vec<String>>>>> =
         Rc::new(RefCell::new(None));
+    let style_slot: Rc<RefCell<Option<trame_chrome::StyleState>>> = Rc::new(RefCell::new(None));
 
     mount_shell(
         ui_to_logic_tx.clone(),
@@ -288,6 +293,7 @@ pub fn main() {
         Rc::clone(&current_doc_slot),
         Rc::clone(&filter_popover_slot),
         Rc::clone(&filter_values_slot),
+        Rc::clone(&style_slot),
         formula_ref,
         formula_text,
         formula_action,
@@ -312,6 +318,9 @@ pub fn main() {
     let filter_values = filter_values_slot
         .borrow()
         .expect("filter_values signal created during mount");
+    // Formatting-toolbar style state (`-ui.md` sec.5bis), read back for the
+    // per-frame relay (which updates it on `TrameEvent::StyleApplied`).
+    let style_state = style_slot.borrow().expect("style state created during mount");
 
     // Learn whether the server enables dev login (drives the signed-out panel).
     // Unauthenticated, Main-thread fetch -- a pre-session concern.
@@ -432,6 +441,9 @@ pub fn main() {
             // The active app owns the event->toggle mapping; the launcher names
             // no content event variant.
             trame_chrome::mirror_event(&store, &ev);
+            // Mirror the active cell's rich style into the formatting toolbar
+            // (`-ui.md` sec.5bis). A no-op for non-style events.
+            trame_chrome::apply_style_event(&style_state, &ev);
             // Surface Trame's user-facing notifications (rejections, validation
             // errors, sheet-lifecycle errors, sort/filter completion) as toasts.
             // The app owns the event->toast mapping; the launcher names no variant.
@@ -610,6 +622,7 @@ fn mount_shell(
     current_doc_slot: Rc<RefCell<Option<RwSignal<Option<DocumentId>>>>>,
     filter_popover_slot: Rc<RefCell<Option<RwSignal<Option<trame_chrome::FilterPopoverState>>>>>,
     filter_values_slot: Rc<RefCell<Option<RwSignal<Vec<String>>>>>,
+    style_slot: Rc<RefCell<Option<trame_chrome::StyleState>>>,
     formula_ref: RwSignal<String>,
     formula_text: RwSignal<String>,
     formula_action: RwSignal<Option<FormulaAction>>,
@@ -641,6 +654,8 @@ fn mount_shell(
         *filter_popover_slot.borrow_mut() = Some(filter_popover);
         let filter_values = RwSignal::new(Vec::<String>::new());
         *filter_values_slot.borrow_mut() = Some(filter_values);
+        let style_state = trame_chrome::StyleState::new();
+        *style_slot.borrow_mut() = Some(style_state);
 
         // Provide the wiring via context rather than as a prop: `<Router>`'s
         // children must be `Fn` (re-runnable), so the children closure cannot
@@ -650,6 +665,7 @@ fn mount_shell(
             raf,
             theme_ctl,
             toggles,
+            style_state,
             anchor_pos,
             toasts,
             username,
@@ -684,6 +700,7 @@ fn AppRoot() -> impl IntoView {
         raf,
         theme_ctl,
         toggles,
+        style_state,
         anchor_pos,
         toasts,
         username,
@@ -769,8 +786,44 @@ fn AppRoot() -> impl IntoView {
                         command: AppCommand::Trame(TrameCommand::RequestActiveColumnValues),
                     });
                 }
+            } else if id == trame_chrome::BOLD || id == trame_chrome::ITALIC {
+                // Bold/Italic are part of the single style channel: toggle the
+                // tracked toolbar state and emit a `SetCellStyle` patch (sec.5bis).
+                let is_bold = id == trame_chrome::BOLD;
+                let cur = if is_bold {
+                    style_state.bold.get_untracked()
+                } else {
+                    style_state.italic.get_untracked()
+                };
+                let mut patch = ambre_bus::StylePatch::default();
+                if is_bold {
+                    patch.bold = Some(!cur);
+                } else {
+                    patch.italic = Some(!cur);
+                }
+                if let Some(document_id) = current_doc.get_untracked() {
+                    let _ = tx.try_send(LogicCommand::App {
+                        document_id,
+                        command: AppCommand::Trame(TrameCommand::SetCellStyle { patch }),
+                    });
+                }
             } else {
                 dispatch_to_current(id, current_doc, &tx);
+            }
+        }
+    });
+
+    // Formatting toolbar: a control's `StylePatch` -> `SetCellStyle` over the
+    // tracked selection (`-ui.md` sec.5bis). The Logic thread resolves the
+    // geometry from the selection it keeps via `SetActiveCell`.
+    let on_style = Callback::new({
+        let tx = to_logic.clone();
+        move |patch: ambre_bus::StylePatch| {
+            if let Some(document_id) = current_doc.get_untracked() {
+                let _ = tx.try_send(LogicCommand::App {
+                    document_id,
+                    command: AppCommand::Trame(TrameCommand::SetCellStyle { patch }),
+                });
             }
         }
     });
@@ -884,7 +937,13 @@ fn AppRoot() -> impl IntoView {
                 </span>
             </Header>
             <Toolbar slot>
-                <trame_chrome::FormatBar toggles=toggles on_command=on_command />
+                <trame_chrome::FormatBar
+                    toggles=toggles
+                    style=style_state
+                    theme=theme_sig
+                    on_command=on_command
+                    on_style=on_style
+                />
             </Toolbar>
             <FormulaBar slot>
                 <trame_chrome::FormulaBar
@@ -1075,7 +1134,7 @@ fn AppRoot() -> impl IntoView {
         // Floating selection toolbar, transform-synced onto the active cell. The
         // generic anchor wrapper is the launcher's; its content is app chrome.
         <div class="ambre-selbar-anchor" style=selbar_style>
-            <trame_chrome::SelectionBar toggles=toggles on_command=on_command />
+            <trame_chrome::SelectionBar style=style_state on_command=on_command />
         </div>
 
         // Live-region toast host (announces transient messages politely).

@@ -179,6 +179,180 @@ pub struct CellContent<'a> {
     pub text: &'a str,
     pub bold: bool,
     pub italic: bool,
+    /// Underline run drawn under the glyphs (`-ui.md` sec.5bis).
+    pub underline: bool,
+    /// Strikethrough run drawn through the glyphs.
+    pub strikethrough: bool,
+    /// Horizontal alignment ([`HAlign::Auto`] resolves numbers right, text left).
+    pub h_align: ambre_bus::HAlign,
+    /// Vertical alignment within the cell (or the span rect for a merge master).
+    pub v_align: ambre_bus::VAlign,
+    /// Text colour, packed `0xRRGGBB` (`None` = the palette default).
+    pub fg: Option<u32>,
+    /// Fill colour, packed `0xRRGGBB` (`None` = the palette `content_bg`).
+    pub bg: Option<u32>,
+    /// Font family name (`None` = the grid default).
+    pub font: Option<&'a str>,
+    /// Font size in points (`None` = the grid default [`BODY_SIZE`]).
+    pub size: Option<u16>,
+    /// Wrap onto multiple lines inside the cell instead of overflowing.
+    pub wrap: bool,
+    /// Per-edge border (style + colour each); `None` edges are not drawn.
+    pub borders: ambre_bus::Borders,
+}
+
+impl<'a> CellContent<'a> {
+    /// A plain cell view (no rich style): the common case for tests and any caller
+    /// that only carries text + bold/italic.
+    pub fn plain(text: &'a str, bold: bool, italic: bool) -> Self {
+        Self {
+            text,
+            bold,
+            italic,
+            underline: false,
+            strikethrough: false,
+            h_align: ambre_bus::HAlign::Auto,
+            v_align: ambre_bus::VAlign::Middle,
+            fg: None,
+            bg: None,
+            font: None,
+            size: None,
+            wrap: false,
+            borders: ambre_bus::Borders::default(),
+        }
+    }
+}
+
+/// Unpack a `0xRRGGBB` colour into a [`Color`].
+fn rgb(packed: u32) -> Color {
+    Color::from_rgb8(
+        ((packed >> 16) & 0xFF) as u8,
+        ((packed >> 8) & 0xFF) as u8,
+        (packed & 0xFF) as u8,
+    )
+}
+
+/// Resolve a cell's parley alignment from its [`HAlign`], deferring `Auto` to the
+/// numeric-vs-text heuristic on `text`.
+fn cell_alignment(h: ambre_bus::HAlign, text: &str) -> Alignment {
+    match h {
+        ambre_bus::HAlign::Left => Alignment::Start,
+        ambre_bus::HAlign::Center => Alignment::Center,
+        ambre_bus::HAlign::Right => Alignment::End,
+        ambre_bus::HAlign::Auto => {
+            if text.parse::<f64>().is_ok() {
+                Alignment::End
+            } else {
+                Alignment::Start
+            }
+        }
+    }
+}
+
+/// Vertical text offset inside a box of height `box_h` for a text block of height
+/// `text_h`, honouring the cell's [`VAlign`](ambre_bus::VAlign). Clamped to `>= 0`
+/// so oversized text never lifts above the box top.
+fn cell_v_offset(v: ambre_bus::VAlign, box_h: f64, text_h: f64) -> f64 {
+    match v {
+        ambre_bus::VAlign::Top => 0.0,
+        ambre_bus::VAlign::Middle => ((box_h - text_h) / 2.0).max(0.0),
+        ambre_bus::VAlign::Bottom => (box_h - text_h).max(0.0),
+    }
+}
+
+/// The default border colour (a mid grey), darker than the grid line so a border
+/// reads as a deliberate edge.
+const BORDER_DEFAULT: Color = Color::from_rgb8(0x60, 0x60, 0x60);
+
+/// Resolve a [`BorderStyle`] into a stroke `(width, dash_period)`; `dash_period`
+/// of `0.0` means a solid stroke. `Double` is handled by the caller (two passes).
+fn border_stroke(style: ambre_bus::BorderStyle) -> (f64, f64) {
+    use ambre_bus::BorderStyle as Bs;
+    match style {
+        Bs::Solid => (1.0, 0.0),
+        Bs::Dashed => (1.0, 6.0),
+        Bs::Dotted => (1.0, 2.5),
+        Bs::Medium => (2.0, 0.0),
+        Bs::Thick => (3.0, 0.0),
+        Bs::Double => (1.0, 0.0),
+    }
+}
+
+/// Stroke a straight axis-aligned segment in the given border `style`. Dashed and
+/// dotted patterns are drawn as a run of short segments because [`DrawSurface`]
+/// has no dash parameter; solid/medium/thick are a single stroke; `Double` draws
+/// two thin parallel lines straddling the edge.
+fn styled_segment<S: DrawSurface>(
+    surface: &mut S,
+    x0: f64,
+    y0: f64,
+    x1: f64,
+    y1: f64,
+    color: Color,
+    style: ambre_bus::BorderStyle,
+) {
+    use ambre_bus::BorderStyle as Bs;
+    let (width, period) = border_stroke(style);
+    if style == Bs::Double {
+        // Two 1px lines offset by 1px on each side of the edge.
+        let (dx, dy) = if (y1 - y0).abs() < f64::EPSILON { (0.0, 1.0) } else { (1.0, 0.0) };
+        surface.stroke_line(x0 - dx, y0 - dy, x1 - dx, y1 - dy, color, 1.0);
+        surface.stroke_line(x0 + dx, y0 + dy, x1 + dx, y1 + dy, color, 1.0);
+        return;
+    }
+    if period <= 0.0 {
+        surface.stroke_line(x0, y0, x1, y1, color, width);
+        return;
+    }
+    // Dashed / dotted: step along the segment drawing `on` runs.
+    let len = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt();
+    if len <= 0.0 {
+        return;
+    }
+    let (ux, uy) = ((x1 - x0) / len, (y1 - y0) / len);
+    let on = period * 0.6;
+    let mut t = 0.0;
+    while t < len {
+        let s = t;
+        let e = (t + on).min(len);
+        surface.stroke_line(x0 + ux * s, y0 + uy * s, x0 + ux * e, y0 + uy * e, color, width);
+        t += period;
+    }
+}
+
+/// Stroke a cell's set border edges, each in its own style/colour, over `rect`.
+fn draw_cell_border<S: DrawSurface>(surface: &mut S, rect: Rect, content: &CellContent<'_>) {
+    let b = &content.borders;
+    let mut edge = |cb: Option<ambre_bus::CellBorder>, x0, y0, x1, y1| {
+        if let Some(cb) = cb {
+            let color = cb.color.map(rgb).unwrap_or(BORDER_DEFAULT);
+            styled_segment(surface, x0, y0, x1, y1, color, cb.style);
+        }
+    };
+    edge(b.top, rect.x0, rect.y0, rect.x1, rect.y0);
+    edge(b.bottom, rect.x0, rect.y1, rect.x1, rect.y1);
+    edge(b.left, rect.x0, rect.y0, rect.x0, rect.y1);
+    edge(b.right, rect.x1, rect.y0, rect.x1, rect.y1);
+}
+
+/// Whether any of the four edges carries a border (drives the border pass).
+fn has_border(b: &ambre_bus::Borders) -> bool {
+    b.top.is_some() || b.right.is_some() || b.bottom.is_some() || b.left.is_some()
+}
+
+/// Draw the border layer for each supplied `(rect, content)`. Called **after** the
+/// grid lines (and the merge repaint) so a deliberate border is never overpainted;
+/// `rect` is the owning cell's rect, or the full span rect for a merge master.
+pub fn draw_cell_borders_on<'a, S, I>(surface: &mut S, cells: I)
+where
+    S: DrawSurface,
+    I: IntoIterator<Item = (Rect, CellContent<'a>)>,
+{
+    for (rect, content) in cells {
+        if has_border(&content.borders) {
+            draw_cell_border(surface, rect, &content);
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -256,40 +430,75 @@ where
     S: DrawSurface,
     I: IntoIterator<Item = (u32, u32, CellContent<'a>)>,
 {
-    let cell_brush = Brush::Solid(palette.cell_text);
     let cell_max_width = (layout.col_width - 8.0) as f32;
     let mut drawn = 0u32;
 
     for (row, col, content) in cells {
         let rect = layout.cell_rect(row, col);
-        // Lift the cell out of the pending grey with an opaque fill.
-        surface.fill_rect(rect, palette.content_bg);
+        // Lift the cell out of the pending grey with its fill (the manual fill
+        // colour if set, else the opaque content background).
+        let bg = content.bg.map(rgb).unwrap_or(palette.content_bg);
+        surface.fill_rect(rect, bg);
+
+        // Borders are a separate pass (draw_cell_borders_on) AFTER the grid lines,
+        // so a deliberate border is never overpainted by a faint separator.
 
         if !text_enabled || content.text.is_empty() {
             continue;
         }
 
-        let layout_text: &Layout<ParleyBrush> = text_cache.get_or_build(
+        // Wrap constrains the layout to the cell width so parley breaks lines;
+        // otherwise the text lays out unbounded (Excel-style overflow). We always
+        // shape left-aligned and position the run horizontally ourselves: parley's
+        // own alignment needs a finite advance, and an unbounded (non-wrap) layout
+        // would push centred/right text off-screen.
+        let max_w = if content.wrap { cell_max_width } else { f32::MAX };
+        let font_size = content.size.map(|s| s as f32).unwrap_or(BODY_SIZE);
+        let layout_text: &Layout<ParleyBrush> = text_cache.get_or_build_font(
             font_cx,
             content.text,
-            BODY_SIZE,
-            cell_max_width,
+            font_size,
+            max_w,
             Alignment::Start,
             content.bold,
             content.italic,
+            content.font,
         );
         let text_h = layout_text.height() as f64;
-        let y_off = ((layout.row_height - text_h) / 2.0).max(0.0);
-        let needs_clip = text_h > layout.row_height;
+        let text_w = layout_text.width() as f64;
+        let y_off = cell_v_offset(content.v_align, layout.row_height, text_h);
+        // Horizontal alignment within the column content width (Auto resolves
+        // numbers right, text left). Overflow keeps the text pinned to the start.
+        let avail = cell_max_width as f64;
+        let x_off = match cell_alignment(content.h_align, content.text) {
+            Alignment::Center => ((avail - text_w) / 2.0).max(0.0),
+            Alignment::End | Alignment::Right => (avail - text_w).max(0.0),
+            _ => 0.0,
+        };
+        // Clip wrapped or vertically oversized text to the cell box; a non-wrapped
+        // single line is allowed to overflow into empty neighbours.
+        let needs_clip = text_h > layout.row_height || content.wrap;
         if needs_clip {
             surface.push_clip(rect);
         }
+        let brush = Brush::Solid(content.fg.map(rgb).unwrap_or(palette.cell_text));
         for line in layout_text.lines() {
             for item in line.items() {
                 let PositionedLayoutItem::GlyphRun(run) = item else { continue };
-                let tx = rect.x0 + CELL_PAD_X + run.offset() as f64;
+                let tx = rect.x0 + CELL_PAD_X + x_off + run.offset() as f64;
                 let ty = rect.y0 + y_off + run.baseline() as f64;
-                surface.draw_glyphs(&run, &cell_brush, Affine::translate((tx, ty)));
+                surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+                let dec_color = content.fg.map(rgb).unwrap_or(palette.cell_text);
+                let adv = run.advance() as f64;
+                // Underline run: a 1px line just below the glyph baseline.
+                if content.underline {
+                    surface.stroke_line(tx, ty + 2.0, tx + adv, ty + 2.0, dec_color, 1.0);
+                }
+                // Strikethrough run: a 1px line through the x-height.
+                if content.strikethrough {
+                    let sy = ty - (font_size as f64) * 0.3;
+                    surface.stroke_line(tx, sy, tx + adv, sy, dec_color, 1.0);
+                }
             }
         }
         if needs_clip {
@@ -397,39 +606,61 @@ where
     S: DrawSurface,
     I: IntoIterator<Item = (u32, u32, u32, u32, CellContent<'a>)>,
 {
-    let cell_brush = Brush::Solid(palette.cell_text);
     let mut drawn = 0u32;
 
     for (row, col, col_span, row_span, content) in merges {
         let rect = layout.merge_rect(row, col, col_span, row_span);
 
-        // 1. Opaque fill over the whole span, hiding the interior separators.
-        surface.fill_rect(rect, palette.content_bg);
-
-        // 3. Outer border last is fine -- text is clipped to the span anyway.
-        // Drawn here before text so the 1px edge never sits over a glyph.
+        // 1. Fill the whole span with the master's fill (or the themed bg),
+        // hiding the interior separators drawn through the covered cells.
+        let bg = content.bg.map(rgb).unwrap_or(palette.content_bg);
+        surface.fill_rect(rect, bg);
+        // Re-stroke the span perimeter in the grid-line colour so the block reads
+        // as one cell (the fill above paints over the perimeter separators). A
+        // user-set border draws on top of this in the dedicated border pass.
         surface.stroke_rect(rect, palette.grid_line, 1.0);
 
         if text_enabled && !content.text.is_empty() {
-            let max_width = (rect.width() - 2.0 * CELL_PAD_X).max(0.0) as f32;
-            let layout_text: &Layout<ParleyBrush> = text_cache.get_or_build(
+            // Honour the master's full style (size, font, colour, alignment,
+            // underline/strike) exactly like a plain cell, but always clipped to
+            // and aligned within the span rect.
+            let avail = (rect.width() - 2.0 * CELL_PAD_X).max(0.0);
+            let font_size = content.size.map(|s| s as f32).unwrap_or(BODY_SIZE);
+            let layout_text: &Layout<ParleyBrush> = text_cache.get_or_build_font(
                 font_cx,
                 content.text,
-                BODY_SIZE,
-                max_width,
+                font_size,
+                avail as f32,
                 Alignment::Start,
                 content.bold,
                 content.italic,
+                content.font,
             );
             let text_h = layout_text.height() as f64;
-            let y_off = ((rect.height() - text_h) / 2.0).max(0.0);
+            let text_w = layout_text.width() as f64;
+            let y_off = cell_v_offset(content.v_align, rect.height(), text_h);
+            let x_off = match cell_alignment(content.h_align, content.text) {
+                Alignment::Center => ((avail - text_w) / 2.0).max(0.0),
+                Alignment::End | Alignment::Right => (avail - text_w).max(0.0),
+                _ => 0.0,
+            };
+            let brush = Brush::Solid(content.fg.map(rgb).unwrap_or(palette.cell_text));
             surface.push_clip(rect);
             for line in layout_text.lines() {
                 for item in line.items() {
                     let PositionedLayoutItem::GlyphRun(run) = item else { continue };
-                    let tx = rect.x0 + CELL_PAD_X + run.offset() as f64;
+                    let tx = rect.x0 + CELL_PAD_X + x_off + run.offset() as f64;
                     let ty = rect.y0 + y_off + run.baseline() as f64;
-                    surface.draw_glyphs(&run, &cell_brush, Affine::translate((tx, ty)));
+                    surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+                    let dec = content.fg.map(rgb).unwrap_or(palette.cell_text);
+                    let adv = run.advance() as f64;
+                    if content.underline {
+                        surface.stroke_line(tx, ty + 2.0, tx + adv, ty + 2.0, dec, 1.0);
+                    }
+                    if content.strikethrough {
+                        let sy = ty - (font_size as f64) * 0.3;
+                        surface.stroke_line(tx, sy, tx + adv, sy, dec, 1.0);
+                    }
                 }
             }
             surface.pop_clip();
@@ -670,8 +901,8 @@ mod tests {
         let (mut s, mut fc, mut tc) = harness();
 
         let cells = vec![
-            (0, 0, CellContent { text: "hi", bold: false, italic: false }),
-            (1, 1, CellContent { text: "", bold: false, italic: false }),
+            (0, 0, CellContent::plain("hi", false, false)),
+            (1, 1, CellContent::plain("", false, false)),
         ];
         let drawn = draw_cells_on(&mut s, &l, palette, &mut fc, &mut tc, true, cells);
 
