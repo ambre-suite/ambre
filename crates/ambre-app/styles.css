@@ -776,11 +776,106 @@
     display: flex;
     gap: 6px;
     align-items: center;
-    margin-bottom: 6px;
+    justify-content: flex-start;
+    margin-top: 6px;
 }
 
-.ambre-borders-popover .row select {
+/* Line-style picker: an icon button toggling a sub-popover that renders each
+   stroke pattern, with a check on the active one. */
+.ambre-line-style {
+    position: relative;
+    display: inline-flex;
+}
+
+.ambre-line-style .line-style-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+}
+
+.ambre-line-style .line-style-trigger:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.ambre-line-style-popover {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 30;
+    margin-top: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    padding: 4px;
+    min-width: 140px;
+}
+
+.ambre-line-style-popover .line-style-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 8px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+}
+
+.ambre-line-style-popover .line-style-item:hover {
+    background: var(--accent);
+    color: #fff;
+}
+
+.ambre-line-style-popover .line-style-item .check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+}
+
+.ambre-line-style-popover .line-preview {
     flex: 1;
+    height: 0;
+}
+
+.line-preview.solid {
+    border-bottom: 1px solid currentColor;
+}
+
+.line-preview.dashed {
+    border-bottom: 1px dashed currentColor;
+}
+
+.line-preview.dotted {
+    border-bottom: 1px dotted currentColor;
+}
+
+.line-preview.medium {
+    border-bottom: 2px solid currentColor;
+}
+
+.line-preview.thick {
+    border-bottom: 3px solid currentColor;
+}
+
+.line-preview.double {
+    border-bottom: 3px double currentColor;
 }
 
 .ambre-borders-popover .grid {
