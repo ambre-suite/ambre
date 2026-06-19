@@ -1,7 +1,6 @@
 // ambre-trame/src/chrome/bars.rs
 // ============================================================================
-// The two formatting toolbars: `FormatBar` (the full chrome `Toolbar` slot) and
-// `SelectionBar` (the floating bold/italic toolbar anchored on the active cell).
+// The `FormatBar` formatting toolbar (the full chrome `Toolbar` slot).
 // Bold/Italic/Undo/Redo/Merge go through the shared command path (`on_command`);
 // the rich-formatting controls emit a `StylePatch` through `on_style`.
 // ============================================================================
@@ -280,29 +279,5 @@ pub fn FormatBar(
         >
             <Icon icon=icondata::BiRedoRegular />
         </button>
-    }
-}
-
-/// The floating selection toolbar's inner content, transform-synced onto the
-/// active cell by the launcher's generic `.ambre-selbar-anchor` wrapper.
-#[component]
-pub fn SelectionBar(style: StyleState, on_command: Callback<CommandId>) -> impl IntoView {
-    view! {
-        <div class="ambre-selbar">
-            <button
-                title="Bold"
-                aria-pressed=move || style.bold.get().then_some("true")
-                on:click=move |_| on_command.run(BOLD)
-            >
-                "B"
-            </button>
-            <button
-                title="Italic"
-                aria-pressed=move || style.italic.get().then_some("true")
-                on:click=move |_| on_command.run(ITALIC)
-            >
-                <em>"I"</em>
-            </button>
-        </div>
     }
 }
