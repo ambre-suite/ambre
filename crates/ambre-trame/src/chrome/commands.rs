@@ -1,0 +1,241 @@
+// ambre-trame/src/chrome/commands.rs
+// ============================================================================
+// Command surface: the Trame `CommandId`s, their keybindings, the CommandId ->
+// `AppCommand` IPC mapping, and the inbound `UiEvent` mirroring (toggle state,
+// toasts, context menu). The launcher reaches in here for `COMMANDS`,
+// `bind_keys`, `command_to_app`, `mirror_event`, ... naming no command itself.
+// ============================================================================
+
+use ambre_bus::{AppCommand, AppEvent, DocType, TrameCommand, TrameEvent, UiEvent};
+use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
+use ambre_chrome::{CommandStates, MenuEntry, Toasts};
+
+/// The Trame "Bold" command. A UI affordance id (ambre-commands); the launcher
+/// intercepts it into a `SetCellStyle` patch toggled against the tracked style.
+pub const BOLD: CommandId = CommandId("trame.format.bold");
+/// The Trame "Italic" command (see [`BOLD`]).
+pub const ITALIC: CommandId = CommandId("trame.format.italic");
+/// The Trame "Undo" command (Loro `UndoManager`, document-session scope).
+pub const UNDO: CommandId = CommandId("trame.history.undo");
+/// The Trame "Redo" command (see [`UNDO`]).
+pub const REDO: CommandId = CommandId("trame.history.redo");
+
+// Structural / merge commands (grid context menu, `-ui.md` sec.5.C). Each is a
+// parameterless intent: the Logic thread resolves its geometry against the
+// active cell / selection it tracks (via `SetActiveCell`).
+/// Insert a row above the active cell.
+pub const INSERT_ROW_ABOVE: CommandId = CommandId("trame.row.insert_above");
+/// Insert a row below the active cell.
+pub const INSERT_ROW_BELOW: CommandId = CommandId("trame.row.insert_below");
+/// Insert a column left of the active cell.
+pub const INSERT_COL_LEFT: CommandId = CommandId("trame.col.insert_left");
+/// Insert a column right of the active cell.
+pub const INSERT_COL_RIGHT: CommandId = CommandId("trame.col.insert_right");
+/// Delete the rows spanned by the selection.
+pub const DELETE_ROWS: CommandId = CommandId("trame.row.delete");
+/// Delete the columns spanned by the selection.
+pub const DELETE_COLS: CommandId = CommandId("trame.col.delete");
+/// Merge the selection into a single cell.
+pub const MERGE: CommandId = CommandId("trame.merge");
+/// Unmerge the merge containing the active cell.
+pub const UNMERGE: CommandId = CommandId("trame.unmerge");
+/// Sort the selection ascending on its first column (single-column shared sort).
+pub const SORT_RANGE_ASC: CommandId = CommandId("trame.sort.range_asc");
+/// Sort the selection descending on its first column.
+pub const SORT_RANGE_DESC: CommandId = CommandId("trame.sort.range_desc");
+/// Sort the whole sheet ascending by the active cell's column.
+pub const SORT_SHEET_ASC: CommandId = CommandId("trame.sort.sheet_asc");
+/// Sort the whole sheet descending by the active cell's column.
+pub const SORT_SHEET_DESC: CommandId = CommandId("trame.sort.sheet_desc");
+/// Open the shared filter popover for the active cell's column (sec.5.D). A
+/// UI-only intent: it has no `AppCommand` mapping; the launcher intercepts it to
+/// open the popover and request the column's distinct values.
+pub const FILTER_COLUMN: CommandId = CommandId("trame.filter.column");
+/// Clear the active sheet's shared filter (sec.5.D).
+pub const CLEAR_FILTER: CommandId = CommandId("trame.filter.clear");
+
+/// Every command Trame contributes to the registry. The launcher builds the
+/// `CommandStates` store and the keymap from this list, naming no command itself.
+pub const COMMANDS: &[CommandId] = &[
+    BOLD,
+    ITALIC,
+    UNDO,
+    REDO,
+    INSERT_ROW_ABOVE,
+    INSERT_ROW_BELOW,
+    INSERT_COL_LEFT,
+    INSERT_COL_RIGHT,
+    DELETE_ROWS,
+    DELETE_COLS,
+    MERGE,
+    UNMERGE,
+    SORT_RANGE_ASC,
+    SORT_RANGE_DESC,
+    SORT_SHEET_ASC,
+    SORT_SHEET_DESC,
+    FILTER_COLUMN,
+    CLEAR_FILTER,
+];
+
+/// Bind Trame's command chords into the launcher's keymap.
+pub fn bind_keys(keymap: &mut Keymap) {
+    keymap.bind(KeyBinding::ctrl('b'), BOLD);
+    keymap.bind(KeyBinding::ctrl('i'), ITALIC);
+    keymap.bind(KeyBinding::ctrl('z'), UNDO);
+    // Ctrl+Shift+Z and Ctrl+Y both redo (Excel/Sheets convention).
+    keymap.bind(KeyBinding::ctrl_shift('z'), REDO);
+    keymap.bind(KeyBinding::ctrl('y'), REDO);
+}
+
+/// Translate a Trame `CommandId` into the `AppCommand` IPC payload the Logic
+/// thread expects. `None` for a command Trame does not own (the launcher logs it).
+pub fn command_to_app(id: CommandId) -> Option<AppCommand> {
+    let cmd = if id == UNDO {
+        TrameCommand::Undo
+    } else if id == REDO {
+        TrameCommand::Redo
+    } else if id == INSERT_ROW_ABOVE {
+        TrameCommand::InsertRowAbove
+    } else if id == INSERT_ROW_BELOW {
+        TrameCommand::InsertRowBelow
+    } else if id == INSERT_COL_LEFT {
+        TrameCommand::InsertColLeft
+    } else if id == INSERT_COL_RIGHT {
+        TrameCommand::InsertColRight
+    } else if id == DELETE_ROWS {
+        TrameCommand::DeleteSelectedRows
+    } else if id == DELETE_COLS {
+        TrameCommand::DeleteSelectedCols
+    } else if id == MERGE {
+        TrameCommand::MergeSelection
+    } else if id == UNMERGE {
+        TrameCommand::UnmergeActive
+    } else if id == SORT_RANGE_ASC {
+        TrameCommand::SortSelectionAsc
+    } else if id == SORT_RANGE_DESC {
+        TrameCommand::SortSelectionDesc
+    } else if id == SORT_SHEET_ASC {
+        TrameCommand::SortSheetAsc
+    } else if id == SORT_SHEET_DESC {
+        TrameCommand::SortSheetDesc
+    } else if id == CLEAR_FILTER {
+        TrameCommand::ClearActiveFilter
+    } else {
+        // BOLD / ITALIC (style toggles) and FILTER_COLUMN are UI-only intents the
+        // launcher intercepts: BOLD/ITALIC become a `SetCellStyle` patch toggled
+        // against the tracked style state, FILTER_COLUMN opens the popover. Neither
+        // has a direct AppCommand here.
+        return None;
+    };
+    Some(AppCommand::Trame(cmd))
+}
+
+/// Mirror authoritative toggle state from an inbound `UiEvent` into the command
+/// store, so the chrome's `aria-pressed` buttons reflect the Logic thread. A
+/// no-op for any event that is not a Trame format-state notification; the
+/// launcher calls this for every event it relays, naming no Trame variant.
+pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
+    if let UiEvent::Viewport { event: AppEvent::Trame(te), .. } = ev {
+        match te {
+            // Loro `UndoManager` stack availability -> the Undo/Redo affordances'
+            // enabled state. The Logic thread is the single source of truth.
+            TrameEvent::UndoState { can_undo, can_redo } => {
+                store.set_enabled(UNDO, *can_undo);
+                store.set_enabled(REDO, *can_redo);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Seed the command store for a freshly mounted Trame document: Undo and Redo
+/// start disabled (an untouched document has an empty history) until the first
+/// [`TrameEvent::UndoState`] arrives. Every other command stays enabled by
+/// default. Called by the launcher right after it builds the store.
+pub fn init_command_states(store: &CommandStates) {
+    store.set_enabled(UNDO, false);
+    store.set_enabled(REDO, false);
+}
+
+/// Surface a Trame `UiEvent` to the user as a transient toast, when it carries a
+/// message the user should see: a rejected merge/edit, a sheet-lifecycle error,
+/// or the completion of a shared sort/filter. A no-op for every other event; the
+/// launcher calls this for each event it relays, naming no Trame variant itself.
+pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
+    let UiEvent::Viewport { event: AppEvent::Trame(te), .. } = ev else { return };
+    match te {
+        // Rejections / validation failures: no CRDT mutation occurred, the user
+        // needs to know why their action did nothing.
+        TrameEvent::MergeRejected { reason } => {
+            toasts.warning(format!("Merge rejected: {reason}"));
+        }
+        TrameEvent::ValidationError { message, .. } => {
+            toasts.warning(format!("Invalid value: {message}"));
+        }
+        TrameEvent::Error { message } => toasts.warning(message.clone()),
+        // A converged concurrent edit masked a covered cell on an active merge.
+        // Purely informational: the value reappears on unmerge.
+        TrameEvent::MergeConflictDetected { covered_row, covered_col, .. } => {
+            toasts.info(format!(
+                "A merge now covers a non-empty cell ({covered_row}, {covered_col}); its value is hidden until unmerge"
+            ));
+        }
+        // Shared sort/filter completion: confirm the action took effect (the data
+        // refresh rides on the accompanying `DataReset`).
+        TrameEvent::FilterApplied { hidden_row_count, .. } => {
+            toasts.info(format!("Filter applied ({hidden_row_count} rows hidden)"));
+        }
+        TrameEvent::FilterCleared => toasts.info("Filter cleared"),
+        TrameEvent::SortComplete => toasts.info("Range sorted"),
+        _ => {}
+    }
+}
+
+/// The right-click context-menu entries Trame contributes.
+pub fn context_entries() -> Vec<MenuEntry> {
+    vec![
+        MenuEntry::new(BOLD, "Bold"),
+        MenuEntry::new(ITALIC, "Italic"),
+        MenuEntry::new(UNDO, "Undo"),
+        MenuEntry::new(REDO, "Redo"),
+        // Structural / merge ops (sec.5.C). Always listed; the Logic thread
+        // guards them (Merge on a single cell is a silent no-op, Merge over a
+        // non-empty covered cell replies MergeRejected -> toast, Unmerge outside
+        // a merge is a no-op).
+        MenuEntry::new(INSERT_ROW_ABOVE, "Insert row above"),
+        MenuEntry::new(INSERT_ROW_BELOW, "Insert row below"),
+        MenuEntry::new(INSERT_COL_LEFT, "Insert column left"),
+        MenuEntry::new(INSERT_COL_RIGHT, "Insert column right"),
+        MenuEntry::new(DELETE_ROWS, "Delete rows"),
+        MenuEntry::new(DELETE_COLS, "Delete columns"),
+        MenuEntry::new(MERGE, "Merge cells"),
+        MenuEntry::new(UNMERGE, "Unmerge cells"),
+        // Single-column shared sort over the selection (sec.5.C). Reference
+        // column = the selection's first column; the Logic thread no-ops an
+        // empty/single-row range.
+        MenuEntry::new(SORT_RANGE_ASC, "Sort range ascending"),
+        MenuEntry::new(SORT_RANGE_DESC, "Sort range descending"),
+        // Whole-sheet sort by the active column (whole-column selection, sec.5.C):
+        // sorts the full used range so rows stay aligned across all columns.
+        MenuEntry::new(SORT_SHEET_ASC, "Sort sheet by column (asc)"),
+        MenuEntry::new(SORT_SHEET_DESC, "Sort sheet by column (desc)"),
+        // Shared filter on the active cell's column (sec.5.D). "Filter by column"
+        // opens the popover (values / condition); "Clear filter" drops the active
+        // sheet's filter. The Logic thread no-ops a clear when nothing is filtered.
+        MenuEntry::new(FILTER_COLUMN, "Filter by column"),
+        MenuEntry::new(CLEAR_FILTER, "Clear filter"),
+    ]
+}
+
+/// The status-bar label for a Trame document.
+pub fn status_label() -> &'static str {
+    "Trame"
+}
+
+/// The document type this app creates from the landing "new document" button.
+pub const DOC_TYPE: DocType = DocType::Trame;
+
+/// The label of the landing "new document" button for this app.
+pub fn new_doc_label() -> &'static str {
+    "New Trame"
+}
