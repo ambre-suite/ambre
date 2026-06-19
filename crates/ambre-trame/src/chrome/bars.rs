@@ -5,29 +5,15 @@
 // the rich-formatting controls emit a `StylePatch` through `on_style`.
 // ============================================================================
 
-use ambre_bus::{CellFormat, HAlign, StylePatch, VAlign};
+use ambre_bus::{HAlign, StylePatch, VAlign};
 use ambre_chrome::commands::CommandId;
 use leptos::prelude::*;
 use leptos_icons::Icon;
 
 use super::color::{theme_bg_default, theme_fg_default};
 use super::commands::{BOLD, ITALIC, MERGE, REDO, UNDO, UNMERGE};
-use super::popovers::{BordersPopover, ColorPopover};
+use super::popovers::{BordersPopover, ColorPopover, NumberFormatPopover};
 use super::style::{StyleState, Toggles};
-
-/// The number-format families offered by the toolbar `<select>`, paired with
-/// their labels. The option index maps back to the [`CellFormat`] on change.
-const NUMBER_FORMATS: &[(CellFormat, &str)] = &[
-    (CellFormat::General, "General"),
-    (CellFormat::Number, "Number"),
-    (CellFormat::Currency, "Currency"),
-    (CellFormat::Percent, "Percent"),
-    (CellFormat::Scientific, "Scientific"),
-    (CellFormat::Fraction, "Fraction"),
-    (CellFormat::Date, "Date"),
-    (CellFormat::Time, "Time"),
-    (CellFormat::Text, "Text"),
-];
 
 /// The font families offered by the toolbar `<select>` (the renderer falls back
 /// to its default for any family it does not have loaded).
@@ -196,30 +182,9 @@ pub fn FormatBar(
         </button>
         <span class="sep"></span>
 
-        // Number format + decimals.
-        <select
-            title="Number format"
-            prop:value=move || {
-                NUMBER_FORMATS
-                    .iter()
-                    .position(|(f, _)| *f == style.format.get())
-                    .unwrap_or(0)
-                    .to_string()
-            }
-            on:change=move |ev| {
-                let i = event_target_value(&ev).parse::<usize>().unwrap_or(0);
-                let fmt = NUMBER_FORMATS[i.min(NUMBER_FORMATS.len() - 1)].0.clone();
-                on_style.run(StylePatch { format: Some(fmt), ..Default::default() });
-            }
-        >
-            {NUMBER_FORMATS
-                .iter()
-                .enumerate()
-                .map(|(i, (_, label))| {
-                    view! { <option value=i.to_string()>{label.to_string()}</option> }
-                })
-                .collect_view()}
-        </select>
+        // Number format: a single button (the "123" icon) opening a context-menu
+        // popover that lists the families, with a check on the active one.
+        <NumberFormatPopover style=style on_style=on_style />
         <button
             title="Decrease decimals"
             on:click=move |_| on_style.run(StylePatch { decimals: Some(Some(0)), ..Default::default() })
