@@ -28,6 +28,9 @@ struct CacheKey {
     align:          u8, // 0=Start, 1=Center, 2=End
     bold:           bool,
     italic:         bool,
+    /// Font family name (`None` = the grid default). Part of the key so each
+    /// family of the same string is cached separately.
+    font:           Option<Box<str>>,
 }
 
 // -----------------------------------------------------------------------------
@@ -91,6 +94,25 @@ impl TextCache {
         bold:      bool,
         italic:    bool,
     ) -> &Layout<Brush> {
+        self.get_or_build_font(font_cx, text, font_size, max_width, align, bold, italic, None)
+    }
+
+    /// Like [`get_or_build`](Self::get_or_build) but selecting a font `family`
+    /// (`None` = the grid default). `"Sans"`/`"Default"` map to the bundled sans
+    /// face; `"Serif"`/`"Monospace"` to the matching generic; any other name is
+    /// requested verbatim and falls back to the default if unavailable.
+    #[allow(clippy::too_many_arguments)]
+    pub fn get_or_build_font(
+        &mut self,
+        font_cx:   &mut FontContext,
+        text:      &str,
+        font_size: f32,
+        max_width: f32,
+        align:     Alignment,
+        bold:      bool,
+        italic:    bool,
+        family:    Option<&str>,
+    ) -> &Layout<Brush> {
         let align_u8 = match align {
             Alignment::Center           => 1,
             Alignment::End | Alignment::Right => 2,
@@ -103,6 +125,7 @@ impl TextCache {
             align:          align_u8,
             bold,
             italic,
+            font:           family.map(Box::from),
         };
 
         use std::collections::hash_map::Entry;
@@ -113,9 +136,10 @@ impl TextCache {
             }
             Entry::Vacant(e) => {
                 self.frame_misses += 1;
+                let family = e.key().font.clone();
                 let layout = Self::build_layout(
                     &mut self.layout_cx, font_cx, &e.key().text,
-                    font_size, max_width, align, bold, italic, self.scale,
+                    font_size, max_width, align, bold, italic, family.as_deref(), self.scale,
                 );
                 e.insert(layout)
             }
@@ -132,12 +156,20 @@ impl TextCache {
         align:     Alignment,
         bold:      bool,
         italic:    bool,
+        family:    Option<&str>,
         scale:     f32,
     ) -> Layout<Brush> {
         let mut builder = layout_cx.ranged_builder(font_cx, text, scale, true);
-        builder.push_default(StyleProperty::FontStack(FontStack::Single(
-            FontFamily::Named("Noto Sans".into()),
-        )));
+        // Map the toolbar's family choices to the actually-registered faces
+        // (host.rs loads Noto Sans + DejaVu Serif + DejaVu Sans Mono). The
+        // generic fallback covers any other named family.
+        let font_family = match family {
+            Some("Serif") => FontFamily::Named("DejaVu Serif".into()),
+            Some("Monospace") => FontFamily::Named("DejaVu Sans Mono".into()),
+            Some(name) if name != "Sans" && name != "Default" => FontFamily::Named(name.into()),
+            _ => FontFamily::Named("Noto Sans".into()),
+        };
+        builder.push_default(StyleProperty::FontStack(FontStack::Single(font_family)));
         builder.push_default(StyleProperty::FontSize(font_size));
         if bold {
             builder.push_default(StyleProperty::FontWeight(FontWeight::BOLD));

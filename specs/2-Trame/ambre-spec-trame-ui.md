@@ -722,7 +722,7 @@ pub enum ToolbarAction {
     NumberFmt(NumberFormat),                  // General / Number / Currency / Percent / Scientific / Fraction / Date / Time / Text / Custom
     IncDecimals(i8),                          // +/- decimal places on the active fmt
     Wrap(bool),
-    Border(BorderPreset),                     // None | Outline | All | Bottom | ...
+    Border(BorderEdit),                       // preset (None|All|Inner|Outline|Top|..) + pen (style+colour); per-edge model
     Merge,                                     // reuses MergeCells (sec.5.C)
 }
 
@@ -744,8 +744,12 @@ fn on_toolbar_action(&mut self, action: ToolbarAction) {
 }
 ```
 
-Color pickers and the number-format / border menus are small `DrawSurface` popovers anchored
-under their toolbar button (same overlay pattern as the filter popover, sec.5.D).
+Color pickers and the number-format menu are small popovers anchored under their toolbar
+button (same overlay pattern as the filter popover, sec.5.D). The borders control is a
+composed popover: a "pen" (line style + colour) over a grid of preset icon buttons; a preset
+click applies the current pen to its edges. Borders are stored per edge (each of top/right/
+bottom/left carries its own style + colour), so a cell can mix edges, and the selection-level
+preset is resolved to concrete edges per cell (merge-aware) by the Logic thread.
 
 ---
 
@@ -1425,7 +1429,7 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 - [x] Single-column shared sort (`SortRange` from the context menu, sec.5.C) + `SortComplete` dispatch *(parameterless `SortSelectionAsc`/`SortSelectionDesc` intents through the shared DOM command path -- `SORT_ASC`/`SORT_DESC` `CommandId`s in `trame_chrome` (`COMMANDS`, `command_to_app`, `context_entries`); the Logic thread resolves the geometry against the tracked selection (`sort_selection` -> `sort_range` on the active sheet, ref column = first column, no header). `SortComplete` -> info toast via `chrome::notify_event`. Two scopes per sec.5.C: `SortSelectionAsc`/`SortSelectionDesc` sort the selection rectangle on its first column; `SortSheetAsc`/`SortSheetDesc` sort the whole sheet's used range by the active cell's column (whole-column selection), keeping every row aligned across all columns.)*
 - [x] Shared filter: filter popover (`ApplyFilter` / `ClearFilter`, sec.5.D) + funnel badge + `FilterApplied` / `FilterCleared` dispatch *(DOM `FilterPopover` leptos component in `trame_chrome`, opened by the `FILTER_COLUMN` UI-only intent and anchored under the active cell via the published selection anchor. Two MVP kinds: "by values" (checkbox list of the column's distinct visible values) and "by condition" (op + value). The values list is fed by a read-only round-trip -- `TrameCommand::RequestActiveColumnValues` -> `TrameEvent::ColumnValues { col, values }` (Logic resolves the active column, evaluates non-hidden rows through the formula cache, dedups+sorts). Apply/clear go through parameterless siblings resolved against the tracked active cell -- `ApplyFilterToActiveColumn { kind }` / `ClearActiveFilter` (the latter on the shared `CLEAR_FILTER` command path; both are context-menu entries). `FilterApplied` now carries `col` so the render worker tracks `filtered_col` and draws a funnel badge on the column header (`ui::renderer::draw_overlay`). `FilterApplied`/`FilterCleared` already toast via `chrome::notify_event`. **Row collapse:** filtered rows are hidden UI-side (the spec's "the UI Thread collapses such rows") -- `DisplayCell.is_filtered` flows into `CellData`, the UI derives a sorted `hidden_rows` set, and the row axis collapses over them through `GridLayout::{visible_offset,row_at_slot}` (cell positioning, row-number header, hit-testing) plus the UI's `cell_pixel_rect`/`range_pixel_rect`/`cell_at` and vertical navigation (which skip hidden rows). The Logic position<->stable-id contract is untouched: commands stay in absolute grid coordinates.)*
 - [ ] Formatting toolbar (sec.5bis): bold/italic/underline, font+size, text+fill color, H/V alignment, number format (text/number/currency/percent/scientific/fraction/date/time/custom + decimals), borders, wrap -> `SetCellStyle` + `StylePatch`; `StyleApplied` dispatch
-- [ ] Clipboard (sec.5.E): copy/cut local from the viewport, paste via `PasteRange` (Logic reindexes formulas+styles), marching-ants, Ctrl+C/X/V + context-menu entries; `PasteRejected` toast
+- [ ] Clipboard (sec.5.E): copy/cut local from the viewport, paste via `PasteRange` (Logic reindexes formulas+styles), marching-ants, Ctrl+C/X/V + context-menu entries + Ctrl+Inser/Shift+Inser/Shift+Del; `PasteRejected` toast
 - [ ] Autofill / fill handle (sec.5.F): drag -> `FillRange` (Copy | Series)
 - [ ] Find & replace panel (sec.5.G): Ctrl+F / Ctrl+H -> `FindNext` / `ReplaceAll`; `FindResult` / `ReplaceDone` dispatch
 - [ ] Cell wrap + vertical alignment + empty-neighbour overflow rendering (sec.4.A/4.C)

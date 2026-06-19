@@ -247,6 +247,11 @@ async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -
         ("/fonts/NotoSans-Bold.ttf", "NotoSans-Bold.ttf"),
         ("/fonts/NotoSans-Italic.ttf", "NotoSans-Italic.ttf"),
         ("/fonts/NotoSans-BoldItalic.ttf", "NotoSans-BoldItalic.ttf"),
+        // Alternate families for the formatting toolbar's font picker
+        // (`-ui.md` sec.5bis): a serif ("DejaVu Serif") and a monospace
+        // ("DejaVu Sans Mono"), selectable by family name.
+        ("/fonts/DejaVuSerif.ttf", "DejaVuSerif.ttf"),
+        ("/fonts/DejaVuSansMono.ttf", "DejaVuSansMono.ttf"),
     ] {
         match fetch_bytes(file).await {
             Some(bytes) => {

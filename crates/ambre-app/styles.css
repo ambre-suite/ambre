@@ -98,6 +98,12 @@
     cursor: pointer;
 }
 
+.ambre-commandbar button svg {
+    width: 20px;
+    height: 20px;
+    display: block;
+}
+
 .ambre-commandbar button:hover {
     background: var(--surface);
     border-color: var(--border);
@@ -790,6 +796,153 @@
 .ambre-filter-head {
     font-weight: 600;
     padding: 2px 2px 6px;
+}
+
+/* ---------------------------------------------------------------------------
+   Borders popover (-ui.md sec.5bis): a toolbar button toggling a small panel
+   with the "pen" (line style + colour) over a grid of preset icon buttons.
+   Each preset applies the current pen to its edges; the per-edge model lets a
+   cell carry a different style/colour on each side.
+   --------------------------------------------------------------------------- */
+.ambre-borders {
+    position: relative;
+    display: inline-flex;
+}
+
+.ambre-borders-popover {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 20;
+    margin-top: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    padding: 8px;
+    color: var(--text);
+}
+
+.ambre-borders-popover .row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.ambre-borders-popover .row select {
+    flex: 1;
+}
+
+.ambre-borders-popover .grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+}
+
+.ambre-borders-popover .grid button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+}
+
+.ambre-borders-popover .grid button:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+/* ---------------------------------------------------------------------------
+   Colour picker popover (text & fill): a toolbar button toggling a panel with
+   a reset entry ("Automatic" / "No fill"), a swatch palette, and an embedded
+   native colour input for arbitrary picks. Mirrors the borders popover.
+   --------------------------------------------------------------------------- */
+.ambre-color {
+    position: relative;
+    display: inline-flex;
+}
+
+/* The trigger button carries the icon plus a thin strip tinted to the
+   currently applied colour. */
+.ambre-color > button {
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ambre-color .swatch-strip {
+    display: block;
+    width: 16px;
+    height: 3px;
+    border-radius: 1px;
+}
+
+.ambre-color-popover {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 20;
+    margin-top: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    padding: 8px;
+    color: var(--text);
+}
+
+.ambre-color-popover .reset {
+    display: block;
+    width: 100%;
+    margin-bottom: 6px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+}
+
+.ambre-color-popover .reset:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.ambre-color-popover .swatches {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 4px;
+}
+
+.ambre-color-popover .swatches button {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.ambre-color-popover .swatches button:hover {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+.ambre-color-popover .custom {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    cursor: pointer;
 }
 
 .ambre-filter-modes {

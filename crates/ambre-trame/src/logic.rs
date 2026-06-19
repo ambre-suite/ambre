@@ -23,7 +23,10 @@ use crate::formula::types::Expr;
 use crate::formula::parser::{parse_formula, resolve_refs};
 use crate::model::{SheetIndex, Uid, cell_key, parse_cell_key};
 use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
-use ambre_bus::{FilterKind, FilterOp};
+use ambre_bus::{
+    BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellStyle, FilterKind, FilterOp,
+    HAlign, StylePatch, VAlign,
+};
 
 /// Stable id of the implicit default sheet created by [`TrameState::new`].
 ///
@@ -57,6 +60,37 @@ const NAMED_RANGES_MAP: &str = "named_ranges";
 const FMT_BOLD: i64 = 1 << 0;
 const FMT_ITALIC: i64 = 1 << 1;
 
+// Bit layout of the `style_{sheet}` map's packed i64 (`-ui.md` sec.5bis). Each
+// field occupies a fixed slice; a zero mask is the default style (and is deleted
+// from the map so it leaves no dead entry).
+const STYLE_UNDERLINE: i64 = 1 << 0;
+const STYLE_WRAP: i64 = 1 << 1;
+/// Horizontal align: bits 2-3 (`0` Auto, `1` Left, `2` Center, `3` Right).
+const STYLE_HALIGN_SHIFT: i64 = 2;
+const STYLE_HALIGN_MASK: i64 = 0b11 << STYLE_HALIGN_SHIFT;
+/// Vertical align: bits 4-5 (`0` Top, `1` Middle, `2` Bottom).
+const STYLE_VALIGN_SHIFT: i64 = 4;
+const STYLE_VALIGN_MASK: i64 = 0b11 << STYLE_VALIGN_SHIFT;
+/// Number-format family: bits 9-12 (`0` General .. `9` Custom).
+const STYLE_NUMFMT_SHIFT: i64 = 9;
+const STYLE_NUMFMT_MASK: i64 = 0b1111 << STYLE_NUMFMT_SHIFT;
+/// Decimals + 1: bits 13-17 (`0` = unset/auto, else `value - 1` decimals).
+const STYLE_DECIMALS_SHIFT: i64 = 13;
+const STYLE_DECIMALS_MASK: i64 = 0b11111 << STYLE_DECIMALS_SHIFT;
+/// Font size in points: bits 18-24 (`0` = default, else the size, max 127pt).
+const STYLE_SIZE_SHIFT: i64 = 18;
+const STYLE_SIZE_MASK: i64 = 0b1111111 << STYLE_SIZE_SHIFT;
+/// Strikethrough run: bit 25.
+const STYLE_STRIKE: i64 = 1 << 25;
+/// Per-edge border presence: bits 30-33, one bit per edge in the order
+/// top, right, bottom, left. Each present edge also has a 3-bit stroke style
+/// in [`STYLE_BORDER_STYLE_SHIFT`]; its colour lives in the per-edge
+/// `bordcolor{edge}_{sheet}` map.
+const STYLE_BORDER_PRESENT_SHIFT: i64 = 30;
+/// Per-edge stroke style: bits 34-45 (4 edges * 3 bits, same edge order as the
+/// presence bits, see [`pack_bordstyle`]).
+const STYLE_BORDER_STYLE_SHIFT: i64 = 34;
+
 /// Maximum number of rows/columns a single write may materialize past the
 /// current used-range high-water mark. Bounds the pathological "lone value far
 /// down the grid" case that would otherwise create ~100k placeholder elements
@@ -78,6 +112,43 @@ fn cells_map_name(sheet: &str) -> String {
 }
 fn format_map_name(sheet: &str) -> String {
     format!("format_{sheet}")
+}
+/// Per-sheet rich-style map (`style_{sheet}`, `-ui.md` sec.5bis): one packed i64
+/// mask per cell (underline / wrap / alignments / border / number-format family /
+/// decimals / font size), keyed by the stable id pair so the style follows its
+/// cell across structural ops. Colours and the font family / custom pattern --
+/// which do not fit the mask -- live in the sibling maps below.
+fn style_map_name(sheet: &str) -> String {
+    format!("style_{sheet}")
+}
+/// Per-sheet text-colour map (`fgcolor_{sheet}`): `0xRRGGBB` packed as i64,
+/// keyed by the cell id pair. Absence = theme default.
+fn fgcolor_map_name(sheet: &str) -> String {
+    format!("fgcolor_{sheet}")
+}
+/// Per-sheet fill-colour map (`bgcolor_{sheet}`): see [`fgcolor_map_name`].
+fn bgcolor_map_name(sheet: &str) -> String {
+    format!("bgcolor_{sheet}")
+}
+/// Per-sheet, per-edge border-colour map (`bordcolor{edge}_{sheet}`): `0xRRGGBB`
+/// packed as i64, keyed by the cell id pair. One map per edge (`edge` in
+/// `0..4`, ordered top, right, bottom, left) so each edge keeps its own colour;
+/// see [`fgcolor_map_name`]. Absence = the default grid-line colour.
+fn bordcolor_map_name(sheet: &str, edge: usize) -> String {
+    format!("bordcolor{edge}_{sheet}")
+}
+/// Edge order for the packed presence/style bits and the per-edge colour maps:
+/// top, right, bottom, left. Index into this drives both.
+const BORDER_EDGE_ORDER: usize = 4;
+/// Per-sheet font-family map (`font_{sheet}`): the family name string keyed by
+/// the cell id pair. Absence = the grid default font.
+fn font_map_name(sheet: &str) -> String {
+    format!("font_{sheet}")
+}
+/// Per-sheet custom number-format map (`numfmt_{sheet}`): the [`CellFormat::Custom`]
+/// pattern string, present only for cells whose mask selects the custom family.
+fn numfmt_map_name(sheet: &str) -> String {
+    format!("numfmt_{sheet}")
 }
 fn rows_list_name(sheet: &str) -> String {
     format!("rows_{sheet}")
@@ -203,6 +274,12 @@ pub struct TrameState {
     bold: HashSet<(u32, u32)>,
     /// Cells carrying an italic run on the active sheet.
     italic: HashSet<(u32, u32)>,
+    /// Rich manual formatting (underline, alignment, colours, font, number
+    /// format, borders, wrap) per cell on the active sheet (`-ui.md` sec.5bis).
+    /// Keyed by grid `(row, col)`; absence means the default style. Mirrors the
+    /// persisted per-sheet style containers (the CRDT source of truth); reseeded
+    /// on import. Bold/italic stay in their own sets above.
+    styles: HashMap<(u32, u32), CellStyle>,
     /// The whole workbook CRDT: multi-sheet schema (§2.B). Cells are keyed by
     /// stable `(row_lid, col_lid)` pairs -- see [`crate::model`].
     doc: LoroDoc,
@@ -296,6 +373,7 @@ impl TrameState {
             active_sheet: DEFAULT_SHEET.to_owned(),
             bold: HashSet::new(),
             italic: HashSet::new(),
+            styles: HashMap::new(),
             doc,
             index: SheetIndex::default(),
             last_exported_vv: VersionVector::default(),
@@ -608,10 +686,8 @@ impl TrameState {
                 );
                 // Report the new active cell's formatting so the chrome toggle
                 // buttons reflect the selection.
-                TrameOutcome::display_only(vec![
-                    TrameEvent::BoldState { enabled: self.bold.contains(&self.active) },
-                    TrameEvent::ItalicState { enabled: self.italic.contains(&self.active) },
-                ])
+                // Resolved style (incl. bold/italic) drives the formatting toolbar.
+                TrameOutcome::display_only(vec![self.style_state_event()])
             }
             TrameCommand::CommitEdit => {
                 // Cell exit: the fallback seal at the top of `dispatch_command`
@@ -653,42 +729,7 @@ impl TrameState {
                 }
                 self.finish_cell_writes()
             }
-            TrameCommand::ToggleBold => {
-                let (row, col) = self.active;
-                let enabled = toggle(&mut self.bold, self.active);
-                let update = self.persist_format(row, col);
-                TrameOutcome {
-                    display: vec![
-                        TrameEvent::BoldState { enabled },
-                        TrameEvent::CellFormat {
-                            row,
-                            col,
-                            bold: enabled,
-                            italic: self.italic.contains(&self.active),
-                        },
-                    ],
-                    update,
-                    ephemeral: None,
-                }
-            }
-            TrameCommand::ToggleItalic => {
-                let (row, col) = self.active;
-                let enabled = toggle(&mut self.italic, self.active);
-                let update = self.persist_format(row, col);
-                TrameOutcome {
-                    display: vec![
-                        TrameEvent::ItalicState { enabled },
-                        TrameEvent::CellFormat {
-                            row,
-                            col,
-                            bold: self.bold.contains(&self.active),
-                            italic: enabled,
-                        },
-                    ],
-                    update,
-                    ephemeral: None,
-                }
-            }
+            TrameCommand::SetCellStyle { patch } => self.set_cell_style(patch),
             TrameCommand::ScrollViewport { version, row_start, row_end, col_start, col_end } => {
                 // Clamp to grid bounds.
                 let row_end = row_end.min(TOTAL_ROWS.saturating_sub(1));
@@ -716,10 +757,18 @@ impl TrameState {
                             .get(&(row, col))
                             .map(|&(end_row, end_col)| (end_col - col + 1, end_row - row + 1));
                         let is_covered = self.covered.contains(&(row, col));
+                        let style = self.styles.get(&(row, col)).cloned().unwrap_or_default();
+                        let text = if is_covered {
+                            String::new()
+                        } else {
+                            // Apply the cell's number format to its computed value
+                            // (sec.5bis): a plain `General` cell renders verbatim.
+                            self.format_display(row, col, self.cell_text(row, col), &style)
+                        };
                         cells.push(DisplayCell {
                             row,
                             col,
-                            text: if is_covered { String::new() } else { self.cell_text(row, col) },
+                            text,
                             raw: if is_covered {
                                 String::new()
                             } else {
@@ -729,6 +778,16 @@ impl TrameState {
                             },
                             bold: self.bold.contains(&(row, col)),
                             italic: self.italic.contains(&(row, col)),
+                            underline: style.underline,
+                            strikethrough: style.strikethrough,
+                            h_align: style.h_align,
+                            v_align: style.v_align,
+                            wrap: style.wrap,
+                            fg: style.fg,
+                            bg: style.bg,
+                            font: style.font.clone(),
+                            size: style.size,
+                            borders: style.borders,
                             is_merged: merge_span.is_some() || is_covered,
                             merge_span,
                             is_filtered: self.hidden_rows.contains(&row),
@@ -856,8 +915,7 @@ impl TrameState {
         // The inverse ops are already committed by undo()/redo(); reseed the
         // derived caches and broadcast the delta exactly as `after_structural`.
         let mut outcome = self.after_structural();
-        outcome.display.push(TrameEvent::BoldState { enabled: self.bold.contains(&self.active) });
-        outcome.display.push(TrameEvent::ItalicState { enabled: self.italic.contains(&self.active) });
+        outcome.display.push(self.style_state_event());
         outcome.display.push(self.undo_state_event());
         outcome
     }
@@ -1141,7 +1199,18 @@ impl TrameState {
     /// Drop every cell and formatting entry whose key references the removed
     /// row/column id, so a deleted line leaves no orphan entries behind.
     fn purge_axis(&mut self, removed: Uid, axis: Axis) {
-        for name in [cells_map_name(&self.active_sheet), format_map_name(&self.active_sheet)] {
+        for name in [
+            cells_map_name(&self.active_sheet),
+            format_map_name(&self.active_sheet),
+            style_map_name(&self.active_sheet),
+            fgcolor_map_name(&self.active_sheet),
+            bgcolor_map_name(&self.active_sheet),
+            font_map_name(&self.active_sheet),
+            numfmt_map_name(&self.active_sheet),
+        ]
+        .into_iter()
+        .chain((0..BORDER_EDGE_ORDER).map(|e| bordcolor_map_name(&self.active_sheet, e)))
+        {
             let map = self.doc.get_map(name);
             let LoroValue::Map(entries) = map.get_value() else {
                 continue;
@@ -1173,6 +1242,7 @@ impl TrameState {
         let mut display = self.rebuild_merges();
         self.reseed_engine();
         self.reseed_formatting();
+        self.reseed_styles();
         // The hidden set is keyed by stable row uid, so a structural shift just
         // remaps it to the new positions (no recompute).
         self.rebuild_filter();
@@ -1412,6 +1482,7 @@ impl TrameState {
         let conflicts = self.rebuild_merges();
         self.reseed_engine();
         self.reseed_formatting();
+        self.reseed_styles();
         self.rebuild_filter();
         conflicts
     }
@@ -1426,8 +1497,7 @@ impl TrameState {
         let mut display = self.reseed_active_sheet();
         display.push(TrameEvent::DataReset);
         display.push(self.sheet_list_event());
-        display.push(TrameEvent::BoldState { enabled: self.bold.contains(&self.active) });
-        display.push(TrameEvent::ItalicState { enabled: self.italic.contains(&self.active) });
+        display.push(self.style_state_event());
         TrameOutcome::display_only(display)
     }
 
@@ -1559,8 +1629,16 @@ impl TrameState {
         for name in [
             cells_map_name(sheet_id),
             format_map_name(sheet_id),
+            style_map_name(sheet_id),
+            fgcolor_map_name(sheet_id),
+            bgcolor_map_name(sheet_id),
+            font_map_name(sheet_id),
+            numfmt_map_name(sheet_id),
             merges_map_name(sheet_id),
-        ] {
+        ]
+        .into_iter()
+        .chain((0..BORDER_EDGE_ORDER).map(|e| bordcolor_map_name(sheet_id, e)))
+        {
             let map = self.doc.get_map(name);
             if let LoroValue::Map(entries) = map.get_value() {
                 let keys: Vec<String> = entries.keys().cloned().collect();
@@ -1686,6 +1764,7 @@ impl TrameState {
         self.rebuild_index();
         let mut display = self.rebuild_merges();
         self.reseed_formatting();
+        self.reseed_styles();
         // The hidden set is keyed by row uid, so it follows the rows across the
         // permutation -- remap positions, do not recompute.
         self.rebuild_filter();
@@ -1984,6 +2063,280 @@ impl TrameState {
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Rich manual formatting (`-ui.md` sec.5bis)
+    // -------------------------------------------------------------------------
+
+    /// Apply a [`StylePatch`] to every cell of the tracked selection, persist the
+    /// merged styles in the CRDT, and report the active cell's resulting style so
+    /// the toolbar reflects the selection. Bold/italic fold into their dedicated
+    /// sets (and the `format_{sheet}` map); the rest into the cell's [`CellStyle`]
+    /// (the `style_{sheet}` / colour / font containers).
+    fn set_cell_style(&mut self, patch: StylePatch) -> TrameOutcome {
+        let (r1, c1, r2, c2) = self.selection;
+        for row in r1..=r2 {
+            for col in c1..=c2 {
+                let cell = (row, col);
+                // Cells covered by a merge are swallowed by their master: they
+                // render blank, so styling them is pointless and -- for `All`
+                // borders -- actively wrong (it would draw interior edges inside
+                // the merged block). The master carries the whole span's style.
+                if self.covered.contains(&cell) {
+                    continue;
+                }
+                // Bold/italic live in their own sets + the format map.
+                if let Some(b) = patch.bold {
+                    if b {
+                        self.bold.insert(cell);
+                    } else {
+                        self.bold.remove(&cell);
+                    }
+                }
+                if let Some(i) = patch.italic {
+                    if i {
+                        self.italic.insert(cell);
+                    } else {
+                        self.italic.remove(&cell);
+                    }
+                }
+                if patch.bold.is_some() || patch.italic.is_some() {
+                    let _ = self.persist_format(row, col);
+                }
+                // Everything else lives in the rich-style containers.
+                let mut style = self.styles.get(&cell).cloned().unwrap_or_default();
+                apply_patch_to_style(&mut style, &patch);
+                // Resolve the selection-level border edit into this cell's edges.
+                // Merge-aware: a master's perimeter follows its full span, and
+                // interior edges fall between adjacent selected cells. Every
+                // preset is additive (touches only its own edges) except `None`,
+                // which clears all four.
+                if let Some(edit) = patch.border {
+                    let (br, bc) = self.merges.get(&cell).copied().unwrap_or((row, col));
+                    // Perimeter membership within the selection rectangle.
+                    let top_p = row == r1;
+                    let bottom_p = br == r2;
+                    let left_p = col == c1;
+                    let right_p = bc == c2;
+                    // Interior membership (edge shared with an adjacent cell).
+                    let top_i = row > r1;
+                    let bottom_i = br < r2;
+                    let left_i = col > c1;
+                    let right_i = bc < c2;
+                    // Targeted edges in [top, right, bottom, left] order.
+                    let targeted = match edit.preset {
+                        BorderPreset::None => [true; 4],
+                        BorderPreset::All => [true; 4],
+                        BorderPreset::Outline => [top_p, right_p, bottom_p, left_p],
+                        BorderPreset::Inner => [top_i, right_i, bottom_i, left_i],
+                        BorderPreset::InnerHorizontal => [top_i, false, bottom_i, false],
+                        BorderPreset::InnerVertical => [false, right_i, false, left_i],
+                        BorderPreset::Top => [top_p, false, false, false],
+                        BorderPreset::Bottom => [false, false, bottom_p, false],
+                        BorderPreset::Left => [false, false, false, left_p],
+                        BorderPreset::Right => [false, right_p, false, false],
+                    };
+                    let new_edge = (edit.preset != BorderPreset::None)
+                        .then_some(CellBorder { style: edit.style, color: edit.color });
+                    let slots = [
+                        &mut style.borders.top,
+                        &mut style.borders.right,
+                        &mut style.borders.bottom,
+                        &mut style.borders.left,
+                    ];
+                    for (slot, &hit) in slots.into_iter().zip(targeted.iter()) {
+                        if hit {
+                            *slot = new_edge;
+                        }
+                    }
+                }
+                if style == CellStyle::default() {
+                    self.styles.remove(&cell);
+                } else {
+                    self.styles.insert(cell, style.clone());
+                }
+                let _ = self.persist_style(row, col, &style);
+            }
+        }
+        let update = self.flush_delta();
+        // The active cell's resolved state drives the toolbar; DataReset re-fetches
+        // the restyled viewport (number-format reformat, colours, borders).
+        TrameOutcome {
+            display: vec![self.style_state_event(), TrameEvent::DataReset],
+            update,
+            ephemeral: None,
+        }
+    }
+
+    /// The active cell's resolved formatting, for the toolbar controls.
+    fn style_state_event(&self) -> TrameEvent {
+        TrameEvent::StyleApplied {
+            style: self.styles.get(&self.active).cloned().unwrap_or_default(),
+            bold: self.bold.contains(&self.active),
+            italic: self.italic.contains(&self.active),
+            merged: self.merges.contains_key(&self.active)
+                || self.covered.contains(&self.active),
+        }
+    }
+
+    /// Mirror a cell's [`CellStyle`] into the CRDT style containers and return the
+    /// incremental delta. A default style removes every entry so the maps never
+    /// accumulate dead keys. Commits but does not flush (the caller batches the
+    /// flush over the whole selection).
+    fn persist_style(&mut self, row: u32, col: u32, style: &CellStyle) -> Option<()> {
+        let (rl, cl) = self.materialize(row, col)?;
+        let key = cell_key(rl, cl);
+        let sheet = self.active_sheet.clone();
+
+        let mask = pack_style_mask(style);
+        let map = self.doc.get_map(style_map_name(&sheet));
+        if mask == 0 {
+            let _ = map.delete(&key);
+        } else {
+            let _ = map.insert(&key, mask);
+        }
+
+        let put_color = |doc: &LoroDoc, name: String, c: Option<u32>| {
+            let m = doc.get_map(name);
+            match c {
+                Some(c) => {
+                    let _ = m.insert(&key, c as i64);
+                }
+                None => {
+                    let _ = m.delete(&key);
+                }
+            }
+        };
+        put_color(&self.doc, fgcolor_map_name(&sheet), style.fg);
+        put_color(&self.doc, bgcolor_map_name(&sheet), style.bg);
+        // One colour map per edge (top, right, bottom, left); each present edge
+        // stores its own colour, absent edges delete their entry.
+        let edges = [
+            style.borders.top,
+            style.borders.right,
+            style.borders.bottom,
+            style.borders.left,
+        ];
+        for (i, edge) in edges.into_iter().enumerate() {
+            put_color(&self.doc, bordcolor_map_name(&sheet, i), edge.and_then(|e| e.color));
+        }
+
+        let font_map = self.doc.get_map(font_map_name(&sheet));
+        match &style.font {
+            Some(f) => {
+                let _ = font_map.insert(&key, f.as_str());
+            }
+            None => {
+                let _ = font_map.delete(&key);
+            }
+        }
+
+        let numfmt_map = self.doc.get_map(numfmt_map_name(&sheet));
+        match &style.format {
+            CellFormat::Custom(pat) => {
+                let _ = numfmt_map.insert(&key, pat.as_str());
+            }
+            _ => {
+                let _ = numfmt_map.delete(&key);
+            }
+        }
+
+        self.doc.commit();
+        Some(())
+    }
+
+    /// Rebuild the in-memory [`Self::styles`] map from the active sheet's style
+    /// containers. Called on import alongside [`Self::reseed_formatting`].
+    fn reseed_styles(&mut self) {
+        self.styles.clear();
+        let sheet = self.active_sheet.clone();
+
+        // Read the sibling colour / font / custom-pattern maps once, keyed by the
+        // raw cell-key string (the mask map drives which cells exist).
+        let read_i64_map = |doc: &LoroDoc, name: String| -> HashMap<String, i64> {
+            let mut out = HashMap::new();
+            if let LoroValue::Map(m) = doc.get_map(name).get_value() {
+                for (k, v) in m.iter() {
+                    if let LoroValue::I64(n) = v {
+                        out.insert(k.to_string(), *n);
+                    }
+                }
+            }
+            out
+        };
+        let read_str_map = |doc: &LoroDoc, name: String| -> HashMap<String, String> {
+            let mut out = HashMap::new();
+            if let LoroValue::Map(m) = doc.get_map(name).get_value() {
+                for (k, v) in m.iter() {
+                    if let LoroValue::String(s) = v {
+                        out.insert(k.to_string(), s.to_string());
+                    }
+                }
+            }
+            out
+        };
+        let fg = read_i64_map(&self.doc, fgcolor_map_name(&sheet));
+        let bg = read_i64_map(&self.doc, bgcolor_map_name(&sheet));
+        let bordc: [HashMap<String, i64>; BORDER_EDGE_ORDER] =
+            std::array::from_fn(|e| read_i64_map(&self.doc, bordcolor_map_name(&sheet, e)));
+        let fonts = read_str_map(&self.doc, font_map_name(&sheet));
+        let customs = read_str_map(&self.doc, numfmt_map_name(&sheet));
+
+        if let LoroValue::Map(masks) = self.doc.get_map(style_map_name(&sheet)).get_value() {
+            for (key, value) in masks.iter() {
+                let (Some((rl, cl)), LoroValue::I64(mask)) = (parse_cell_key(key), value) else {
+                    continue;
+                };
+                let (Some(row), Some(col)) = (self.index.row_pos(&rl), self.index.col_pos(&cl))
+                else {
+                    continue; // references a deleted row/column
+                };
+                let key_s = key.as_str();
+                let decimals_raw = (mask & STYLE_DECIMALS_MASK) >> STYLE_DECIMALS_SHIFT;
+                let size_raw = (mask & STYLE_SIZE_MASK) >> STYLE_SIZE_SHIFT;
+                let style = CellStyle {
+                    underline: mask & STYLE_UNDERLINE != 0,
+                    strikethrough: mask & STYLE_STRIKE != 0,
+                    wrap: mask & STYLE_WRAP != 0,
+                    h_align: unpack_halign((mask & STYLE_HALIGN_MASK) >> STYLE_HALIGN_SHIFT),
+                    v_align: unpack_valign((mask & STYLE_VALIGN_MASK) >> STYLE_VALIGN_SHIFT),
+                    borders: {
+                        let edge = |i: usize| {
+                            unpack_border_edge(*mask, i, bordc[i].get(key_s).map(|&c| c as u32))
+                        };
+                        Borders {
+                            top: edge(0),
+                            right: edge(1),
+                            bottom: edge(2),
+                            left: edge(3),
+                        }
+                    },
+                    format: unpack_numfmt(
+                        (mask & STYLE_NUMFMT_MASK) >> STYLE_NUMFMT_SHIFT,
+                        customs.get(key_s).cloned(),
+                    ),
+                    decimals: (decimals_raw != 0).then(|| (decimals_raw - 1) as u8),
+                    size: (size_raw != 0).then_some(size_raw as u16),
+                    fg: fg.get(key_s).map(|&c| c as u32),
+                    bg: bg.get(key_s).map(|&c| c as u32),
+                    font: fonts.get(key_s).cloned(),
+                };
+                self.styles.insert((row as u32, col as u32), style);
+            }
+        }
+    }
+
+    /// Apply a cell's number format to its computed display `text`. A `General` /
+    /// `Text` cell or a non-numeric value renders verbatim (`-ui.md` sec.5bis).
+    fn format_display(&self, _row: u32, _col: u32, text: String, style: &CellStyle) -> String {
+        match style.format {
+            CellFormat::General | CellFormat::Text | CellFormat::Custom(_) => text,
+            ref fmt => match text.parse::<f64>() {
+                Ok(v) => format_number(v, fmt, style.decimals),
+                Err(_) => text,
+            },
+        }
+    }
+
     /// Export any new CRDT ops since `last_exported_vv` and bump the tracking
     /// cursor. Returns `Some` binary delta if there were new ops.
     fn flush_delta(&mut self) -> Option<Vec<u8>> {
@@ -2082,18 +2435,15 @@ impl TrameState {
         self.reseed_engine();
         // Rebuild bold/italic from the merged `format_{sheet}` map.
         self.reseed_formatting();
+        self.reseed_styles();
         // Adopt the (possibly remote) hidden-row set directly: a peer's filter
         // arrives as `filter_hidden_{sheet}` ops and is applied without recompute
         // (§1.A -- only the filter author recomputes).
         self.rebuild_filter();
         // Refresh the toolbar / context-menu toggles for the active cell: after a
         // reload its formatting is only known once the `format` map is restored.
-        let mut events = vec![
-            TrameEvent::DataReset,
-            self.sheet_list_event(),
-            TrameEvent::BoldState { enabled: self.bold.contains(&self.active) },
-            TrameEvent::ItalicState { enabled: self.italic.contains(&self.active) },
-        ];
+        let mut events =
+            vec![TrameEvent::DataReset, self.sheet_list_event(), self.style_state_event()];
         events.extend(conflicts);
         events
     }
@@ -2235,13 +2585,210 @@ fn op_from_str(s: &str) -> Option<FilterOp> {
     })
 }
 
-/// Toggle `cell`'s membership in `set`, returning whether it is now present.
-fn toggle(set: &mut HashSet<(u32, u32)>, cell: (u32, u32)) -> bool {
-    if set.remove(&cell) {
-        false
-    } else {
-        set.insert(cell);
-        true
+// -----------------------------------------------------------------------------
+// Style packing (`-ui.md` sec.5bis)
+// -----------------------------------------------------------------------------
+
+fn pack_halign(a: HAlign) -> i64 {
+    match a {
+        HAlign::Auto => 0,
+        HAlign::Left => 1,
+        HAlign::Center => 2,
+        HAlign::Right => 3,
+    }
+}
+fn unpack_halign(v: i64) -> HAlign {
+    match v {
+        1 => HAlign::Left,
+        2 => HAlign::Center,
+        3 => HAlign::Right,
+        _ => HAlign::Auto,
+    }
+}
+fn pack_valign(a: VAlign) -> i64 {
+    match a {
+        VAlign::Top => 0,
+        VAlign::Middle => 1,
+        VAlign::Bottom => 2,
+    }
+}
+fn unpack_valign(v: i64) -> VAlign {
+    match v {
+        0 => VAlign::Top,
+        2 => VAlign::Bottom,
+        _ => VAlign::Middle,
+    }
+}
+fn pack_bordstyle(s: BorderStyle) -> i64 {
+    match s {
+        BorderStyle::Solid => 0,
+        BorderStyle::Dashed => 1,
+        BorderStyle::Dotted => 2,
+        BorderStyle::Medium => 3,
+        BorderStyle::Thick => 4,
+        BorderStyle::Double => 5,
+    }
+}
+fn unpack_bordstyle(v: i64) -> BorderStyle {
+    match v {
+        1 => BorderStyle::Dashed,
+        2 => BorderStyle::Dotted,
+        3 => BorderStyle::Medium,
+        4 => BorderStyle::Thick,
+        5 => BorderStyle::Double,
+        _ => BorderStyle::Solid,
+    }
+}
+
+/// Pack a number-format family discriminant (the [`CellFormat::Custom`]
+/// pattern is stored out-of-band in `numfmt_{sheet}`).
+fn pack_numfmt(f: &CellFormat) -> i64 {
+    match f {
+        CellFormat::General => 0,
+        CellFormat::Number => 1,
+        CellFormat::Currency => 2,
+        CellFormat::Percent => 3,
+        CellFormat::Scientific => 4,
+        CellFormat::Fraction => 5,
+        CellFormat::Date => 6,
+        CellFormat::Time => 7,
+        CellFormat::Text => 8,
+        CellFormat::Custom(_) => 9,
+    }
+}
+/// Inverse of [`pack_numfmt`]; `custom` supplies the pattern for the custom slot.
+fn unpack_numfmt(v: i64, custom: Option<String>) -> CellFormat {
+    match v {
+        1 => CellFormat::Number,
+        2 => CellFormat::Currency,
+        3 => CellFormat::Percent,
+        4 => CellFormat::Scientific,
+        5 => CellFormat::Fraction,
+        6 => CellFormat::Date,
+        7 => CellFormat::Time,
+        8 => CellFormat::Text,
+        9 => CellFormat::Custom(custom.unwrap_or_default()),
+        _ => CellFormat::General,
+    }
+}
+
+/// Pack a [`CellStyle`]'s mask-resident fields (everything except colours and the
+/// font family / custom pattern, which live in sibling maps) into one i64.
+fn pack_style_mask(s: &CellStyle) -> i64 {
+    let mut m = 0i64;
+    if s.underline {
+        m |= STYLE_UNDERLINE;
+    }
+    if s.strikethrough {
+        m |= STYLE_STRIKE;
+    }
+    if s.wrap {
+        m |= STYLE_WRAP;
+    }
+    m |= pack_halign(s.h_align) << STYLE_HALIGN_SHIFT;
+    m |= pack_valign(s.v_align) << STYLE_VALIGN_SHIFT;
+    pack_borders(&s.borders, &mut m);
+    m |= pack_numfmt(&s.format) << STYLE_NUMFMT_SHIFT;
+    if let Some(d) = s.decimals {
+        m |= ((d as i64 + 1) << STYLE_DECIMALS_SHIFT) & STYLE_DECIMALS_MASK;
+    }
+    if let Some(sz) = s.size {
+        m |= ((sz as i64).min(127) << STYLE_SIZE_SHIFT) & STYLE_SIZE_MASK;
+    }
+    m
+}
+
+/// Merge a [`StylePatch`] into a [`CellStyle`] in place: each `Some` field of the
+/// patch overwrites the style; `None` leaves it. Bold/italic are not part of
+/// [`CellStyle`] (they live in their own sets), so they are ignored here.
+fn apply_patch_to_style(s: &mut CellStyle, p: &StylePatch) {
+    if let Some(u) = p.underline {
+        s.underline = u;
+    }
+    if let Some(st) = p.strikethrough {
+        s.strikethrough = st;
+    }
+    if let Some(a) = p.h_align {
+        s.h_align = a;
+    }
+    if let Some(a) = p.v_align {
+        s.v_align = a;
+    }
+    if let Some(w) = p.wrap {
+        s.wrap = w;
+    }
+    if let Some(fg) = p.fg {
+        s.fg = fg;
+    }
+    if let Some(bg) = p.bg {
+        s.bg = bg;
+    }
+    if let Some(font) = &p.font {
+        s.font = font.clone();
+    }
+    if let Some(size) = p.size {
+        s.size = size;
+    }
+    if let Some(f) = &p.format {
+        s.format = f.clone();
+    }
+    if let Some(d) = p.decimals {
+        s.decimals = d;
+    }
+    // `p.border` (the selection-level edit: preset + stroke style + colour) is
+    // resolved into per-cell edges by `set_cell_style`, which has the selection
+    // geometry; not handled here.
+}
+
+/// Pack a [`Borders`] into the style mask: a presence bit and a 3-bit stroke
+/// style per edge, in the order top, right, bottom, left (colours live in the
+/// per-edge `bordcolor{edge}_{sheet}` maps).
+fn pack_borders(b: &Borders, m: &mut i64) {
+    let edges = [b.top, b.right, b.bottom, b.left];
+    for (i, edge) in edges.into_iter().enumerate() {
+        if let Some(cb) = edge {
+            *m |= 1 << (STYLE_BORDER_PRESENT_SHIFT + i as i64);
+            *m |= pack_bordstyle(cb.style) << (STYLE_BORDER_STYLE_SHIFT + 3 * i as i64);
+        }
+    }
+}
+
+/// Unpack one edge (index `i` in top/right/bottom/left order) from the style
+/// mask, pairing its stroke style with the `color` read from that edge's map.
+fn unpack_border_edge(mask: i64, i: usize, color: Option<u32>) -> Option<CellBorder> {
+    let present = mask & (1 << (STYLE_BORDER_PRESENT_SHIFT + i as i64)) != 0;
+    present.then(|| CellBorder {
+        style: unpack_bordstyle((mask >> (STYLE_BORDER_STYLE_SHIFT + 3 * i as i64)) & 0b111),
+        color,
+    })
+}
+
+/// Format a numeric `value` per a [`CellFormat`] and decimal count. Non-numeric
+/// cells keep their text (handled by the caller); this is the numeric branch.
+fn format_number(value: f64, fmt: &CellFormat, decimals: Option<u8>) -> String {
+    let dec = |default: usize| decimals.map(|d| d as usize).unwrap_or(default);
+    match fmt {
+        CellFormat::Number => format!("{:.*}", dec(2), value),
+        CellFormat::Currency => format!("{:.*}", dec(2), value) + " \u{20AC}",
+        CellFormat::Percent => format!("{:.*}%", dec(0), value * 100.0),
+        CellFormat::Scientific => format!("{:.*e}", dec(2), value),
+        CellFormat::Fraction => {
+            // Simple proper-fraction rendering over a /16 denominator (MVP).
+            let whole = value.trunc() as i64;
+            let frac = (value.fract().abs() * 16.0).round() as i64;
+            if frac == 0 {
+                whole.to_string()
+            } else if whole == 0 {
+                format!("{frac}/16")
+            } else {
+                format!("{whole} {frac}/16")
+            }
+        }
+        // Date/Time MVP: render the day/second serial as an integer; a real
+        // calendar conversion lands with the date engine (Phase 2).
+        CellFormat::Date | CellFormat::Time => format!("{value}"),
+        // General / Text / Custom leave the value untouched here.
+        _ => format!("{value}"),
     }
 }
 
@@ -2268,6 +2815,11 @@ mod tests {
     use crate::model::Uid;
     use crate::{TrameCommand, TrameEvent};
 
+    /// A bold patch over `bold: Some(true)`.
+    fn bold_patch(on: bool) -> crate::StylePatch {
+        crate::StylePatch { bold: Some(on), ..Default::default() }
+    }
+
     /// Bold a cell, then move the selection elsewhere: the formatting must stay
     /// pinned to the cell it was applied to, not follow the cursor. This is the
     /// regression the per-cell model fixes.
@@ -2275,19 +2827,15 @@ mod tests {
     fn bold_stays_on_the_cell_not_the_selection() {
         let mut state = TrameState::new();
 
-        // Select A1 (0,0) and bold it.
+        // Select A1 (0,0) and bold it via the single style channel.
         state.handle_command(TrameCommand::SetActiveCell { row: 0, col: 0, anchor_row: 0, anchor_col: 0 });
-        let evts = state.handle_command(TrameCommand::ToggleBold);
-        assert!(matches!(evts.display[0], TrameEvent::BoldState { enabled: true }));
-        assert!(matches!(
-            evts.display[1],
-            TrameEvent::CellFormat { row: 0, col: 0, bold: true, italic: false }
-        ));
+        let evts = state.handle_command(TrameCommand::SetCellStyle { patch: bold_patch(true) });
+        assert!(matches!(evts.display[0], TrameEvent::StyleApplied { bold: true, .. }));
 
         // Move the selection to B2 (1,1): the active cell is not bold, so the
-        // button reports false -- A1 keeps its bold.
+        // toolbar reports false -- A1 keeps its bold.
         let evts = state.handle_command(TrameCommand::SetActiveCell { row: 1, col: 1, anchor_row: 1, anchor_col: 1 });
-        assert!(matches!(evts.display[0], TrameEvent::BoldState { enabled: false }));
+        assert!(matches!(evts.display[0], TrameEvent::StyleApplied { bold: false, .. }));
 
         // A viewport covering both cells: only A1 carries the bold run.
         let evts = state.handle_command(TrameCommand::ScrollViewport {
@@ -2312,8 +2860,9 @@ mod tests {
     fn formatting_survives_snapshot_roundtrip() {
         let mut state = TrameState::new();
         state.handle_command(TrameCommand::SetActiveCell { row: 0, col: 0, anchor_row: 0, anchor_col: 0 });
-        state.handle_command(TrameCommand::ToggleBold);
-        state.handle_command(TrameCommand::ToggleItalic);
+        state.handle_command(TrameCommand::SetCellStyle {
+            patch: crate::StylePatch { bold: Some(true), italic: Some(true), ..Default::default() },
+        });
 
         // Simulate a reload: fresh state restored from the persisted snapshot.
         let snapshot = state.export_snapshot();
@@ -2333,6 +2882,63 @@ mod tests {
         let a1 = cells.iter().find(|c| c.row == 0 && c.col == 0).unwrap();
         assert!(a1.bold, "A1 must stay bold after reload");
         assert!(a1.italic, "A1 must stay italic after reload");
+    }
+
+    /// `SetCellStyle` applies a [`StylePatch`] over the selection, persists it in
+    /// the CRDT (survives a snapshot round-trip), reformats numeric display text
+    /// per the number format, and reports the active cell's resolved style for the
+    /// toolbar (`-ui.md` sec.5bis).
+    #[test]
+    fn set_cell_style_round_trips_and_formats_numbers() {
+        use crate::{HAlign, CellFormat, StylePatch};
+
+        let mut state = TrameState::new();
+        // A numeric value at A1, selection collapsed on it.
+        state.handle_command(TrameCommand::SetCellText {
+            row: 0, col: 0, text: "3.14159".to_owned(),
+        });
+        state.handle_command(TrameCommand::SetActiveCell {
+            row: 0, col: 0, anchor_row: 0, anchor_col: 0,
+        });
+
+        // Apply Percent with 1 decimal + right alignment + underline.
+        let out = state.handle_command(TrameCommand::SetCellStyle {
+            patch: StylePatch {
+                format: Some(CellFormat::Percent),
+                decimals: Some(Some(1)),
+                h_align: Some(HAlign::Right),
+                underline: Some(true),
+                ..Default::default()
+            },
+        });
+        // The toolbar event reflects the resolved style.
+        let style_ev = out
+            .display
+            .iter()
+            .find_map(|e| match e {
+                TrameEvent::StyleApplied { style, .. } => Some(style.clone()),
+                _ => None,
+            })
+            .expect("StyleApplied emitted");
+        assert_eq!(style_ev.format, CellFormat::Percent);
+        assert_eq!(style_ev.h_align, HAlign::Right);
+        assert!(style_ev.underline);
+
+        // Reload from a snapshot: the style must persist in the CRDT.
+        let snapshot = state.export_snapshot();
+        let mut restored = TrameState::new();
+        restored.import_snapshot(&snapshot);
+        let evts = restored.handle_command(TrameCommand::ScrollViewport {
+            version: 1, row_start: 0, row_end: 0, col_start: 0, col_end: 0,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
+            panic!("expected ViewportData");
+        };
+        let a1 = cells.iter().find(|c| c.row == 0 && c.col == 0).unwrap();
+        assert!(a1.underline, "underline must survive reload");
+        assert_eq!(a1.h_align, HAlign::Right, "alignment must survive reload");
+        // 3.14159 -> Percent, 1 decimal -> "314.2%".
+        assert_eq!(a1.text, "314.2%");
     }
 
     /// An edited cell stores its text in the CRDT and overrides the generated

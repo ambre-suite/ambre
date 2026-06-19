@@ -34,7 +34,7 @@ use super::grid::{
     TabDrag, TabMenu, TabRename,
 };
 use super::TrameUiState;
-use crate::render::{self, BODY_SIZE, CELL_PAD_X, CellContent, GridLayout};
+use crate::render::{self, BODY_SIZE, CELL_PAD_X, GridLayout};
 use crate::{TOTAL_COLS, TOTAL_ROWS};
 
 /// Build the shared [`GridLayout`] for the current screen viewport. Uniform
@@ -214,7 +214,7 @@ pub fn draw_cells<S: DrawSurface>(
                 // baseline + span baseline). Pass empty text so only its bg fill
                 // lands here. Covered cells already carry empty text.
                 let text = if c.merge_span.is_some() { "" } else { c.text.as_str() };
-                (row, col, CellContent { text, bold: c.bold, italic: c.italic })
+                (row, col, c.content(text))
             })
         })
     });
@@ -237,11 +237,40 @@ pub fn draw_cells<S: DrawSurface>(
                 col,
                 col_span,
                 row_span,
-                CellContent { text: &c.text, bold: c.bold, italic: c.italic },
+                c.content(&c.text),
             ))
         })
     });
     render::draw_merges_on(surface, &layout, palette, font_cx, text_cache, text_enabled, merges);
+
+    // -- 3ter. Cell borders LAST, so a deliberate border is never overpainted by a
+    // faint grid separator nor by the merge repaint (`-ui.md` sec.5bis). A merged
+    // master's border wraps the whole span (merge_rect); plain cells use their own
+    // rect. Second pass over the strip (the first iterator was consumed by
+    // draw_cells_on); plus the cache for merge masters pinned just outside it.
+    let bspan = rows_cols_in_strip(state, strip);
+    let strip_borders = (bspan.row_start..bspan.row_end)
+        .filter(move |row| !state.is_row_hidden(*row))
+        .flat_map(move |row| {
+            (bspan.col_start..bspan.col_end).filter_map(move |col| {
+                let c = state.cell_cache.get(&(row, col))?;
+                // Merge masters are handled by the cache pass below (full span);
+                // skip them here so a single-cell rect is not drawn under the span.
+                if c.merge_span.is_some() {
+                    return None;
+                }
+                Some((layout.cell_rect(row, col), c.content("")))
+            })
+        });
+    render::draw_cell_borders_on(surface, strip_borders);
+    // Merge masters: border around the full span rect.
+    let merge_borders = state.cell_cache.iter().filter_map(|(&(row, col), c)| {
+        let (col_span, row_span) = c.merge_span?;
+        let rect = layout.merge_rect(row, col, col_span, row_span);
+        let hit = rect.intersect(strip);
+        (hit.width() > 0.0 && hit.height() > 0.0).then(|| (rect, c.content("")))
+    });
+    render::draw_cell_borders_on(surface, merge_borders);
 
     // -- 4. UI-only layers tied to cell content (dirty veil + error marker). ---
     // These live on the persistent cells layer so they scroll with the data,
@@ -707,7 +736,7 @@ mod tests {
         for &(row, col, text) in cells {
             state.cell_cache.insert(
                 (row, col),
-                CellData { text: text.to_owned(), raw: text.to_owned(), bold: false, italic: false, merge_span: None, is_filtered: false },
+                CellData { text: text.to_owned(), raw: text.to_owned(), ..Default::default() },
             );
         }
         state

@@ -32,8 +32,10 @@ pub use command::SyncCommand;
 pub use sink::CommandSink;
 pub use event::LogicEvent;
 pub use logic::{
-    AppCommand, CondFormatKind, CondStyle, FilterKind, FilterOp, GridRange, LogicCommand, SortKey,
-    TrameCommand, ValidationKind, ValidationOnInvalid,
+    AppCommand, BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellStyle,
+    CondFormatKind, CondStyle, FilterKind, FilterOp, GridRange, HAlign, LogicCommand, SortKey,
+    StylePatch, TrameCommand, VAlign, ValidationKind, ValidationOnInvalid, BORDER_EDGE_ALL,
+    BORDER_EDGE_BOTTOM, BORDER_EDGE_LEFT, BORDER_EDGE_RIGHT, BORDER_EDGE_TOP,
 };
 pub use rest::{
     ChannelSummary, DocumentSummary, MemberInfo, RequestId, RestCommand, RestEvent, UnreadCount,
