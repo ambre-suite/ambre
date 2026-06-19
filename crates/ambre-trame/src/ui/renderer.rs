@@ -28,12 +28,11 @@ use ambre_draw::{
 
 use ambre_canvas::{Palette, TextCache};
 
-use super::grid::{
-    ADD_BTN_WIDTH, CellEditor, COL_WIDTH, HEADER_HEIGHT, HEADER_WIDTH, HitKind,
-    ROW_HEIGHT, TAB_MENU_ITEM_HEIGHT, TAB_MENU_WIDTH, TAB_STRIP_HEIGHT, TAB_WIDTH,
-    TabDrag, TabMenu, TabRename,
-};
 use super::TrameUiState;
+use super::grid::{
+    ADD_BTN_WIDTH, COL_WIDTH, CellEditor, HEADER_HEIGHT, HEADER_WIDTH, HitKind, ROW_HEIGHT,
+    TAB_MENU_ITEM_HEIGHT, TAB_MENU_WIDTH, TAB_STRIP_HEIGHT, TAB_WIDTH, TabDrag, TabMenu, TabRename,
+};
 use crate::render::{self, BODY_SIZE, CELL_PAD_X, GridLayout};
 use crate::{TOTAL_COLS, TOTAL_ROWS};
 
@@ -112,9 +111,9 @@ const ERROR_MARK_SIZE: f64 = 7.0;
 #[derive(Clone, Copy)]
 struct CellSpan {
     row_start: u32,
-    row_end:   u32,
+    row_end: u32,
     col_start: u32,
-    col_end:   u32,
+    col_end: u32,
 }
 
 impl CellSpan {
@@ -138,15 +137,23 @@ fn rows_cols_in_strip(state: &TrameUiState, strip: Rect) -> CellSpan {
     };
     let row_end_slot = ((strip.y1 - cells_top) / ROW_HEIGHT).ceil() as u32;
     let row_start = state.row_at_slot(row_start_slot);
-    let row_end = state.row_at_slot(row_end_slot).saturating_add(1).min(TOTAL_ROWS);
+    let row_end = state
+        .row_at_slot(row_end_slot)
+        .saturating_add(1)
+        .min(TOTAL_ROWS);
     let col_start = if strip.x0 > HEADER_WIDTH {
         ((strip.x0 - HEADER_WIDTH) / COL_WIDTH).floor() as u32 + state.left_col
     } else {
         state.left_col
     };
-    let col_end = (((strip.x1 - HEADER_WIDTH) / COL_WIDTH).ceil() as u32 + state.left_col)
-        .min(TOTAL_COLS);
-    CellSpan { row_start, row_end, col_start, col_end }
+    let col_end =
+        (((strip.x1 - HEADER_WIDTH) / COL_WIDTH).ceil() as u32 + state.left_col).min(TOTAL_COLS);
+    CellSpan {
+        row_start,
+        row_end,
+        col_start,
+        col_end,
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -164,15 +171,15 @@ fn rows_cols_in_strip(state: &TrameUiState, strip: Rect) -> CellSpan {
 /// and grid lines are drawn over.
 #[allow(clippy::too_many_arguments)]
 pub fn draw_cells<S: DrawSurface>(
-    surface:      &mut S,
-    state:        &TrameUiState,
-    palette:      &Palette,
-    font_cx:      &mut FontContext,
-    text_cache:   &mut TextCache,
-    text_enabled:   bool,
-    strip_rect:     Option<Rect>,
-    clock:        &dyn Clock,
-    stats:        &mut DrawStats,
+    surface: &mut S,
+    state: &TrameUiState,
+    palette: &Palette,
+    font_cx: &mut FontContext,
+    text_cache: &mut TextCache,
+    text_enabled: bool,
+    strip_rect: Option<Rect>,
+    clock: &dyn Clock,
+    stats: &mut DrawStats,
 ) {
     let w = state.canvas_width;
     let h = state.grid_bottom();
@@ -182,11 +189,11 @@ pub fn draw_cells<S: DrawSurface>(
     let cell_area = Rect::new(HEADER_WIDTH, HEADER_HEIGHT, w, h);
     let strip = match strip_rect {
         Some(r) => r.intersect(cell_area),
-        None    => cell_area,
+        None => cell_area,
     };
     if strip.width() <= 0.0 || strip.height() <= 0.0 {
-        stats.bg_ms      = 0.0;
-        stats.cells_ms   = 0.0;
+        stats.bg_ms = 0.0;
+        stats.cells_ms = 0.0;
         stats.cells_drawn = 0;
         return;
     }
@@ -207,19 +214,30 @@ pub fn draw_cells<S: DrawSurface>(
         // are not double-drawn over the next visible row.
         .filter(move |row| !state.is_row_hidden(*row))
         .flat_map(move |row| {
-        (span.col_start..span.col_end).filter_map(move |col| {
-            state.cell_cache.get(&(row, col)).map(|c| {
-                // A merge master's text is laid out by the merge pass over the
-                // full span; drawing it here too would double it (single-cell
-                // baseline + span baseline). Pass empty text so only its bg fill
-                // lands here. Covered cells already carry empty text.
-                let text = if c.merge_span.is_some() { "" } else { c.text.as_str() };
-                (row, col, c.content(text))
+            (span.col_start..span.col_end).filter_map(move |col| {
+                state.cell_cache.get(&(row, col)).map(|c| {
+                    // A merge master's text is laid out by the merge pass over the
+                    // full span; drawing it here too would double it (single-cell
+                    // baseline + span baseline). Pass empty text so only its bg fill
+                    // lands here. Covered cells already carry empty text.
+                    let text = if c.merge_span.is_some() {
+                        ""
+                    } else {
+                        c.text.as_str()
+                    };
+                    (row, col, c.content(text))
+                })
             })
-        })
-    });
-    let cells_drawn =
-        render::draw_cells_on(surface, &layout, palette, font_cx, text_cache, text_enabled, cells);
+        });
+    let cells_drawn = render::draw_cells_on(
+        surface,
+        &layout,
+        palette,
+        font_cx,
+        text_cache,
+        text_enabled,
+        cells,
+    );
     let t_cells = clock.now_ms();
 
     // -- 3. Grid lines on top of the fills, so separators stay visible. --------
@@ -231,7 +249,9 @@ pub fn draw_cells<S: DrawSurface>(
     // outside the strip still repaints the part of its span that is inside.
     let merges = state.cell_cache.iter().filter_map(|(&(row, col), c)| {
         c.merge_span.and_then(|(col_span, row_span)| {
-            let hit = layout.merge_rect(row, col, col_span, row_span).intersect(strip);
+            let hit = layout
+                .merge_rect(row, col, col_span, row_span)
+                .intersect(strip);
             (hit.width() > 0.0 && hit.height() > 0.0).then_some((
                 row,
                 col,
@@ -241,7 +261,15 @@ pub fn draw_cells<S: DrawSurface>(
             ))
         })
     });
-    render::draw_merges_on(surface, &layout, palette, font_cx, text_cache, text_enabled, merges);
+    render::draw_merges_on(
+        surface,
+        &layout,
+        palette,
+        font_cx,
+        text_cache,
+        text_enabled,
+        merges,
+    );
 
     // -- 3ter. Cell borders LAST, so a deliberate border is never overpainted by a
     // faint grid separator nor by the merge repaint (`-ui.md` sec.5bis). A merged
@@ -279,8 +307,8 @@ pub fn draw_cells<S: DrawSurface>(
     draw_ui_cell_layers(surface, state, &layout, palette, span);
     let t_lines = clock.now_ms();
 
-    stats.bg_ms       = ((t_pending - t0) + (t_lines - t_cells)) as f32;
-    stats.cells_ms    = (t_cells - t_pending) as f32;
+    stats.bg_ms = ((t_pending - t0) + (t_lines - t_cells)) as f32;
+    stats.cells_ms = (t_cells - t_pending) as f32;
     stats.cells_drawn = cells_drawn;
 }
 
@@ -290,10 +318,10 @@ pub fn draw_cells<S: DrawSurface>(
 /// rejecting entries outside the `span` already computed by the caller.
 fn draw_ui_cell_layers<S: DrawSurface>(
     surface: &mut S,
-    state:   &TrameUiState,
-    layout:  &GridLayout,
+    state: &TrameUiState,
+    layout: &GridLayout,
     palette: &Palette,
-    span:    CellSpan,
+    span: CellSpan,
 ) {
     // Dirty veil: a translucent content_bg quad fades the optimistic value.
     let veil = palette.content_bg.with_alpha(DIRTY_VEIL_ALPHA);
@@ -332,19 +360,19 @@ fn draw_ui_cell_layers<S: DrawSurface>(
 /// layer has been blitted from its persistent offscreen.
 #[allow(clippy::too_many_arguments)]
 pub fn draw_overlay<S: DrawSurface>(
-    surface:        &mut S,
-    state:          &TrameUiState,
-    palette:        &Palette,
-    font_cx:        &mut FontContext,
-    text_cache:     &mut TextCache,
-    text_enabled:   bool,
-    render_fps:     f32,
-    last_frame_ms:  f32,
-    last_drain_ms:  f32,
-    last_draw_ms:   f32,
-    last_gpu_ms:    f32,
-    clock:          &dyn Clock,
-    stats:          &mut DrawStats,
+    surface: &mut S,
+    state: &TrameUiState,
+    palette: &Palette,
+    font_cx: &mut FontContext,
+    text_cache: &mut TextCache,
+    text_enabled: bool,
+    render_fps: f32,
+    last_frame_ms: f32,
+    last_drain_ms: f32,
+    last_draw_ms: f32,
+    last_gpu_ms: f32,
+    clock: &dyn Clock,
+    stats: &mut DrawStats,
 ) {
     let h = state.canvas_height;
 
@@ -356,34 +384,47 @@ pub fn draw_overlay<S: DrawSurface>(
     //       the shared primitives. The primitives clip the active tint to the
     //       visible range, so passing the raw active index is safe. -----------
     render::draw_col_headers_on(
-        surface, &layout, palette, Some(state.active_col()), font_cx, text_cache, text_enabled,
+        surface,
+        &layout,
+        palette,
+        Some(state.active_col()),
+        font_cx,
+        text_cache,
+        text_enabled,
     );
     render::draw_row_headers_on(
-        surface, &layout, palette, Some(state.active_row()), font_cx, text_cache, text_enabled,
+        surface,
+        &layout,
+        palette,
+        Some(state.active_row()),
+        font_cx,
+        text_cache,
+        text_enabled,
     );
 
     // -- 1b. Funnel badge on the filtered column's header (sec.5.D). Drawn only
     //        when the column is within the visible span; a small funnel glyph
     //        (trapezoid + stem) using stroke primitives so every surface renders
     //        it (fill_path is optional). -------------------------------------
-    if let Some(fcol) = state.filtered_col {
-        if fcol >= layout.origin_col && fcol < layout.origin_col + state.viewport_cols + 1 {
-            let cell = layout.cell_rect(layout.origin_row, fcol);
-            // Anchor the badge to the header strip, right-aligned in the cell.
-            let w = 8.0;
-            let h = 7.0;
-            let bx = (cell.x1 - w - 3.0).max(cell.x0 + 2.0);
-            let by = layout.top + (layout.header_height - h) / 2.0;
-            let cx = bx + w / 2.0;
-            let mid = by + h * 0.55;
-            let c = palette.selection;
-            // Top edge (wide mouth), then both sides converge to the centre, then
-            // a short stem downward.
-            surface.stroke_line(bx, by, bx + w, by, c, 1.0);
-            surface.stroke_line(bx, by, cx, mid, c, 1.0);
-            surface.stroke_line(bx + w, by, cx, mid, c, 1.0);
-            surface.stroke_line(cx, mid, cx, by + h, c, 1.0);
-        }
+    if let Some(fcol) = state.filtered_col
+        && fcol >= layout.origin_col
+        && fcol < layout.origin_col + state.viewport_cols + 1
+    {
+        let cell = layout.cell_rect(layout.origin_row, fcol);
+        // Anchor the badge to the header strip, right-aligned in the cell.
+        let w = 8.0;
+        let h = 7.0;
+        let bx = (cell.x1 - w - 3.0).max(cell.x0 + 2.0);
+        let by = layout.top + (layout.header_height - h) / 2.0;
+        let cx = bx + w / 2.0;
+        let mid = by + h * 0.55;
+        let c = palette.selection;
+        // Top edge (wide mouth), then both sides converge to the centre, then
+        // a short stem downward.
+        surface.stroke_line(bx, by, bx + w, by, c, 1.0);
+        surface.stroke_line(bx, by, cx, mid, c, 1.0);
+        surface.stroke_line(bx + w, by, cx, mid, c, 1.0);
+        surface.stroke_line(cx, mid, cx, by + h, c, 1.0);
     }
 
     // -- 2. Selection (range fills + outlines) and active-cell border. --------
@@ -416,7 +457,7 @@ pub fn draw_overlay<S: DrawSurface>(
     let fps_bg = Rect::new(4.0, h - 38.0, 520.0, h - 4.0);
     surface.fill_rect(fps_bg, Color::from_rgba8(0, 0, 0, 160));
 
-    let text_tag  = if text_enabled { "" } else { " [T=text]" };
+    let text_tag = if text_enabled { "" } else { " [T=text]" };
     let line1 = format!(
         "{render_fps:.0}fps {last_frame_ms:.1}ms  \
          drain:{last_drain_ms:.1} draw:{last_draw_ms:.1} gpu:{last_gpu_ms:.1}  \
@@ -425,25 +466,41 @@ pub fn draw_overlay<S: DrawSurface>(
     );
     let line2 = format!(
         "bg:{:.2} cells:{:.2} hdrs:{:.2} hud:{:.2}  drawn:{}  inlat:{:.1}ms",
-        stats.bg_ms, stats.cells_ms, stats.hdrs_ms, stats.hud_ms, stats.cells_drawn,
+        stats.bg_ms,
+        stats.cells_ms,
+        stats.hdrs_ms,
+        stats.hud_ms,
+        stats.cells_drawn,
         stats.input_latency_ms,
     );
     render::draw_text(
-        surface, font_cx, text_cache,
-        &line1, 11.0, 514.0, Alignment::Start,
-        6.0, h - 37.0,
+        surface,
+        font_cx,
+        text_cache,
+        &line1,
+        11.0,
+        514.0,
+        Alignment::Start,
+        6.0,
+        h - 37.0,
         Color::from_rgba8(255, 220, 0, 255),
     );
     render::draw_text(
-        surface, font_cx, text_cache,
-        &line2, 11.0, 514.0, Alignment::Start,
-        6.0, h - 21.0,
+        surface,
+        font_cx,
+        text_cache,
+        &line2,
+        11.0,
+        514.0,
+        Alignment::Start,
+        6.0,
+        h - 21.0,
         Color::from_rgba8(180, 220, 255, 255),
     );
 
     let t_end = clock.now_ms();
     stats.hdrs_ms = (t_after_hdrs - t0) as f32;
-    stats.hud_ms  = (t_end - t_after_hdrs) as f32;
+    stats.hud_ms = (t_end - t_after_hdrs) as f32;
 }
 
 // -----------------------------------------------------------------------------
@@ -453,16 +510,23 @@ pub fn draw_overlay<S: DrawSurface>(
 /// Width in pixels of `text` shaped at the body size, or 0 for empty text.
 fn measure(
     font_cx: &mut FontContext,
-    cache:   &mut TextCache,
-    text:    &str,
-    bold:    bool,
-    italic:  bool,
+    cache: &mut TextCache,
+    text: &str,
+    bold: bool,
+    italic: bool,
 ) -> f64 {
     if text.is_empty() {
         return 0.0;
     }
-    let layout: &Layout<ParleyBrush> =
-        cache.get_or_build(font_cx, text, BODY_SIZE, f32::MAX, Alignment::Start, bold, italic);
+    let layout: &Layout<ParleyBrush> = cache.get_or_build(
+        font_cx,
+        text,
+        BODY_SIZE,
+        f32::MAX,
+        Alignment::Start,
+        bold,
+        italic,
+    );
     layout.width() as f64
 }
 
@@ -472,11 +536,11 @@ fn measure(
 /// nearer to. `text` is short (one cell), so the linear measure scan is cheap.
 fn offset_at_x(
     font_cx: &mut FontContext,
-    cache:   &mut TextCache,
-    text:    &str,
-    bold:    bool,
-    italic:  bool,
-    target:  f64,
+    cache: &mut TextCache,
+    text: &str,
+    bold: bool,
+    italic: bool,
+    target: f64,
 ) -> usize {
     let mut prev_w = 0.0;
     let mut prev_off = 0;
@@ -498,13 +562,13 @@ fn offset_at_x(
 /// above the active-cell border and the grid. Clipped to the cell, which is
 /// itself clipped to the scrollable area (never under the header strip).
 pub fn draw_edit<S: DrawSurface>(
-    surface:       &mut S,
-    state:         &TrameUiState,
-    palette:       &Palette,
-    editor:        &mut CellEditor,
+    surface: &mut S,
+    state: &TrameUiState,
+    palette: &Palette,
+    editor: &mut CellEditor,
     caret_visible: bool,
-    font_cx:       &mut FontContext,
-    cache:         &mut TextCache,
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
 ) {
     let Some((x, y, cw, ch)) = state.cell_pixel_rect(editor.row, editor.col) else {
         return; // active cell scrolled out of view; nothing to draw
@@ -540,21 +604,32 @@ pub fn draw_edit<S: DrawSurface>(
     if let Some((s, e)) = editor.selection() {
         let sx = x + CELL_PAD_X + measure(font_cx, cache, &editor.buffer[..s], bold, italic);
         let ex = x + CELL_PAD_X + measure(font_cx, cache, &editor.buffer[..e], bold, italic);
-        surface.fill_rect(Rect::new(sx, y + 2.0, ex, y + ch - 2.0), palette.selection.with_alpha(0.30));
+        surface.fill_rect(
+            Rect::new(sx, y + 2.0, ex, y + ch - 2.0),
+            palette.selection.with_alpha(0.30),
+        );
     }
 
     // Text: prefix + preview + suffix, baseline-centred in the row.
     let display = editor.display();
     if !display.is_empty() {
         let layout: &Layout<ParleyBrush> = cache.get_or_build(
-            font_cx, &display, BODY_SIZE, f32::MAX, Alignment::Start, bold, italic,
+            font_cx,
+            &display,
+            BODY_SIZE,
+            f32::MAX,
+            Alignment::Start,
+            bold,
+            italic,
         );
         let text_h = layout.height() as f64;
-        let y_off  = ((ch - text_h) / 2.0).max(0.0);
-        let brush  = Brush::Solid(palette.cell_text);
+        let y_off = ((ch - text_h) / 2.0).max(0.0);
+        let brush = Brush::Solid(palette.cell_text);
         for line in layout.lines() {
             for item in line.items() {
-                let PositionedLayoutItem::GlyphRun(run) = item else { continue };
+                let PositionedLayoutItem::GlyphRun(run) = item else {
+                    continue;
+                };
                 let tx = x + CELL_PAD_X + run.offset() as f64;
                 let ty = y + y_off + run.baseline() as f64;
                 surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
@@ -564,11 +639,11 @@ pub fn draw_edit<S: DrawSurface>(
 
     // Composition underline: a dotted line under the preview run.
     if !editor.preview.is_empty() {
-        let pre_w  = measure(font_cx, cache, &editor.buffer[..editor.caret], bold, italic);
+        let pre_w = measure(font_cx, cache, &editor.buffer[..editor.caret], bold, italic);
         let prev_w = measure(font_cx, cache, &editor.preview, bold, italic);
         let ux0 = x + CELL_PAD_X + pre_w;
         let ux1 = ux0 + prev_w;
-        let uy  = (y + ch - 3.0).min(y + ch);
+        let uy = (y + ch - 3.0).min(y + ch);
         // Dotted: 3px dash, 2px gap.
         let mut dx = ux0;
         while dx < ux1 {
@@ -602,15 +677,15 @@ const TAB_LABEL_PAD_X: f64 = 8.0;
 /// chrome each dirty frame.
 #[allow(clippy::too_many_arguments)]
 pub fn draw_sheet_tabs<S: DrawSurface>(
-    surface:      &mut S,
-    state:        &TrameUiState,
-    palette:      &Palette,
-    font_cx:      &mut FontContext,
-    text_cache:   &mut TextCache,
+    surface: &mut S,
+    state: &TrameUiState,
+    palette: &Palette,
+    font_cx: &mut FontContext,
+    text_cache: &mut TextCache,
     text_enabled: bool,
-    rename:       Option<&TabRename>,
-    drag:         Option<&TabDrag>,
-    caret_on:     bool,
+    rename: Option<&TabRename>,
+    drag: Option<&TabDrag>,
+    caret_on: bool,
 ) {
     let strip_y = state.grid_bottom();
     let w = state.canvas_width;
@@ -627,12 +702,19 @@ pub fn draw_sheet_tabs<S: DrawSurface>(
             break; // off the right edge; no horizontal tab scroll in the MVP
         }
         let active = *id == state.active_sheet;
-        let bg = if active { palette.content_bg } else { palette.header_bg };
+        let bg = if active {
+            palette.content_bg
+        } else {
+            palette.header_bg
+        };
         surface.fill_rect(Rect::new(x0, strip_y, x1, bottom), bg);
 
         // Active tab carries a thicker accent on its top edge.
-        let (border_color, border_w) =
-            if active { (palette.selection, 2.0) } else { (palette.grid_line, 1.0) };
+        let (border_color, border_w) = if active {
+            (palette.selection, 2.0)
+        } else {
+            (palette.grid_line, 1.0)
+        };
         surface.stroke_line(x0, strip_y, x1, strip_y, border_color, border_w);
         // Right separator between slots.
         surface.stroke_line(x1, strip_y, x1, bottom, palette.grid_line, 1.0);
@@ -643,23 +725,42 @@ pub fn draw_sheet_tabs<S: DrawSurface>(
             let text = r.editor.display();
             if text_enabled && !text.is_empty() {
                 render::draw_text(
-                    surface, font_cx, text_cache, &text, BODY_SIZE,
-                    (TAB_WIDTH - TAB_LABEL_PAD_X * 2.0) as f32, Alignment::Start,
-                    x0 + TAB_LABEL_PAD_X, label_y, palette.cell_text,
+                    surface,
+                    font_cx,
+                    text_cache,
+                    &text,
+                    BODY_SIZE,
+                    (TAB_WIDTH - TAB_LABEL_PAD_X * 2.0) as f32,
+                    Alignment::Start,
+                    x0 + TAB_LABEL_PAD_X,
+                    label_y,
+                    palette.cell_text,
                 );
             }
             // Caret after the committed prefix + IME preview.
             if caret_on {
-                let cx = x0 + TAB_LABEL_PAD_X
+                let cx = x0
+                    + TAB_LABEL_PAD_X
                     + measure(font_cx, text_cache, &r.editor.before_caret(), false, false);
                 surface.stroke_line(cx, strip_y + 4.0, cx, bottom - 4.0, palette.caret, 1.0);
             }
         } else if text_enabled && !name.is_empty() {
-            let color = if active { palette.cell_text } else { palette.header_text };
+            let color = if active {
+                palette.cell_text
+            } else {
+                palette.header_text
+            };
             render::draw_text(
-                surface, font_cx, text_cache, name, BODY_SIZE,
-                (TAB_WIDTH - TAB_LABEL_PAD_X * 2.0) as f32, Alignment::Start,
-                x0 + TAB_LABEL_PAD_X, label_y, color,
+                surface,
+                font_cx,
+                text_cache,
+                name,
+                BODY_SIZE,
+                (TAB_WIDTH - TAB_LABEL_PAD_X * 2.0) as f32,
+                Alignment::Start,
+                x0 + TAB_LABEL_PAD_X,
+                label_y,
+                color,
             );
         }
     }
@@ -672,9 +773,16 @@ pub fn draw_sheet_tabs<S: DrawSurface>(
         if text_enabled {
             let label_y = strip_y + (TAB_STRIP_HEIGHT - BODY_SIZE as f64) / 2.0;
             render::draw_text(
-                surface, font_cx, text_cache, "+", BODY_SIZE,
-                ADD_BTN_WIDTH as f32, Alignment::Center,
-                ax0, label_y, palette.header_text,
+                surface,
+                font_cx,
+                text_cache,
+                "+",
+                BODY_SIZE,
+                ADD_BTN_WIDTH as f32,
+                Alignment::Center,
+                ax0,
+                label_y,
+                palette.header_text,
             );
         }
     }
@@ -689,11 +797,11 @@ pub fn draw_sheet_tabs<S: DrawSurface>(
 
 /// Draw an open tab context menu (`{ Rename, Delete }`) over everything.
 pub fn draw_tab_menu<S: DrawSurface>(
-    surface:    &mut S,
-    palette:    &Palette,
-    font_cx:    &mut FontContext,
+    surface: &mut S,
+    palette: &Palette,
+    font_cx: &mut FontContext,
     text_cache: &mut TextCache,
-    menu:       &TabMenu,
+    menu: &TabMenu,
 ) {
     let h = TAB_MENU_ITEM_HEIGHT * 2.0;
     let area = Rect::new(menu.x, menu.y, menu.x + TAB_MENU_WIDTH, menu.y + h);
@@ -703,9 +811,15 @@ pub fn draw_tab_menu<S: DrawSurface>(
     for (i, label) in ["Rename", "Delete"].into_iter().enumerate() {
         let y = menu.y + i as f64 * TAB_MENU_ITEM_HEIGHT;
         render::draw_text(
-            surface, font_cx, text_cache, label, BODY_SIZE,
-            (TAB_MENU_WIDTH - 16.0) as f32, Alignment::Start,
-            menu.x + 8.0, y + (TAB_MENU_ITEM_HEIGHT - BODY_SIZE as f64) / 2.0,
+            surface,
+            font_cx,
+            text_cache,
+            label,
+            BODY_SIZE,
+            (TAB_MENU_WIDTH - 16.0) as f32,
+            Alignment::Start,
+            menu.x + 8.0,
+            y + (TAB_MENU_ITEM_HEIGHT - BODY_SIZE as f64) / 2.0,
             palette.cell_text,
         );
     }
@@ -736,7 +850,11 @@ mod tests {
         for &(row, col, text) in cells {
             state.cell_cache.insert(
                 (row, col),
-                CellData { text: text.to_owned(), raw: text.to_owned(), ..Default::default() },
+                CellData {
+                    text: text.to_owned(),
+                    raw: text.to_owned(),
+                    ..Default::default()
+                },
             );
         }
         state
@@ -746,7 +864,13 @@ mod tests {
     /// context and text cache. Text shaping may yield zero glyphs on a host with
     /// no fonts, so tests never assert glyph *counts* -- only structural ops and
     /// the renderer's own `cells_drawn` tally, which is font-independent.
-    fn harness() -> (RecordingSurface, FixedClock, FontContext, TextCache, DrawStats) {
+    fn harness() -> (
+        RecordingSurface,
+        FixedClock,
+        FontContext,
+        TextCache,
+        DrawStats,
+    ) {
         (
             RecordingSurface::new(),
             FixedClock::default(),
@@ -763,27 +887,31 @@ mod tests {
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
 
         draw_cells(
-            &mut surface, &state, palette, &mut font_cx, &mut cache,
-            true, None, &clock, &mut stats,
+            &mut surface,
+            &state,
+            palette,
+            &mut font_cx,
+            &mut cache,
+            true,
+            None,
+            &clock,
+            &mut stats,
         );
 
         // First op is the full-area pending-grey fill.
         assert_eq!(
             surface.ops().first(),
             Some(&DrawOp::FillRect {
-                rect: Rect::new(
-                    HEADER_WIDTH,
-                    HEADER_HEIGHT,
-                    800.0,
-                    state.grid_bottom(),
-                ),
+                rect: Rect::new(HEADER_WIDTH, HEADER_HEIGHT, 800.0, state.grid_bottom(),),
                 color: palette.content_pending,
             }),
         );
         // Grid lines are stroked with the palette grid colour.
-        assert!(surface.count(|op| matches!(
-            op, DrawOp::StrokeLine { color, .. } if *color == palette.grid_line
-        )) > 0);
+        assert!(
+            surface.count(|op| matches!(
+                op, DrawOp::StrokeLine { color, .. } if *color == palette.grid_line
+            )) > 0
+        );
         // The clip stack is balanced and no cell bg was painted (empty cache).
         assert_eq!(surface.clip_depth(), 0);
         assert_eq!(stats.cells_drawn, 0);
@@ -798,8 +926,15 @@ mod tests {
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
 
         draw_cells(
-            &mut surface, &state, palette, &mut font_cx, &mut cache,
-            true, None, &clock, &mut stats,
+            &mut surface,
+            &state,
+            palette,
+            &mut font_cx,
+            &mut cache,
+            true,
+            None,
+            &clock,
+            &mut stats,
         );
 
         // Both received cells get a content_bg fill...
@@ -823,23 +958,34 @@ mod tests {
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
 
         draw_cells(
-            &mut surface, &state, palette, &mut font_cx, &mut cache,
-            true, None, &clock, &mut stats,
+            &mut surface,
+            &state,
+            palette,
+            &mut font_cx,
+            &mut cache,
+            true,
+            None,
+            &clock,
+            &mut stats,
         );
 
         // The merge pass strokes the span's outer border with the grid colour as
         // a rect (the per-cell separators are only ever stroked as lines).
         let layout = screen_layout(&state);
         let span_rect = layout.merge_rect(0, 0, 2, 2);
-        assert!(surface.count(|op| matches!(
-            op, DrawOp::StrokeRect { rect, color, .. }
-                if *color == palette.grid_line && *rect == span_rect
-        )) == 1);
+        assert!(
+            surface.count(|op| matches!(
+                op, DrawOp::StrokeRect { rect, color, .. }
+                    if *color == palette.grid_line && *rect == span_rect
+            )) == 1
+        );
         // The span gets an opaque content_bg fill covering its full rectangle.
-        assert!(surface.count(|op| matches!(
-            op, DrawOp::FillRect { rect, color }
-                if *color == palette.content_bg && *rect == span_rect
-        )) == 1);
+        assert!(
+            surface.count(|op| matches!(
+                op, DrawOp::FillRect { rect, color }
+                    if *color == palette.content_bg && *rect == span_rect
+            )) == 1
+        );
         assert_eq!(surface.clip_depth(), 0);
     }
 
@@ -852,8 +998,15 @@ mod tests {
 
         let header_corner = Rect::new(0.0, 0.0, HEADER_WIDTH, HEADER_HEIGHT);
         draw_cells(
-            &mut surface, &state, palette, &mut font_cx, &mut cache,
-            true, Some(header_corner), &clock, &mut stats,
+            &mut surface,
+            &state,
+            palette,
+            &mut font_cx,
+            &mut cache,
+            true,
+            Some(header_corner),
+            &clock,
+            &mut stats,
         );
 
         assert!(surface.ops().is_empty());
@@ -867,14 +1020,27 @@ mod tests {
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
 
         draw_overlay(
-            &mut surface, &state, palette, &mut font_cx, &mut cache,
-            true, 60.0, 16.0, 1.0, 1.0, 1.0, &clock, &mut stats,
+            &mut surface,
+            &state,
+            palette,
+            &mut font_cx,
+            &mut cache,
+            true,
+            60.0,
+            16.0,
+            1.0,
+            1.0,
+            1.0,
+            &clock,
+            &mut stats,
         );
 
         // Header backgrounds use the palette header colour.
-        assert!(surface.count(|op| matches!(
-            op, DrawOp::FillRect { color, .. } if *color == palette.header_bg
-        )) >= 2);
+        assert!(
+            surface.count(|op| matches!(
+                op, DrawOp::FillRect { color, .. } if *color == palette.header_bg
+            )) >= 2
+        );
         // The active cell (0,0) border is stroked with the selection colour.
         assert_eq!(
             surface.count(|op| matches!(
@@ -898,8 +1064,19 @@ mod tests {
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
 
         draw_overlay(
-            &mut surface, &state, palette, &mut font_cx, &mut cache,
-            true, 60.0, 16.0, 1.0, 1.0, 1.0, &clock, &mut stats,
+            &mut surface,
+            &state,
+            palette,
+            &mut font_cx,
+            &mut cache,
+            true,
+            60.0,
+            16.0,
+            1.0,
+            1.0,
+            1.0,
+            &clock,
+            &mut stats,
         );
 
         // One translucent fill per selected rectangle (2 rects).
@@ -930,8 +1107,15 @@ mod tests {
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
 
         draw_cells(
-            &mut surface, &state, palette, &mut font_cx, &mut cache,
-            true, None, &clock, &mut stats,
+            &mut surface,
+            &state,
+            palette,
+            &mut font_cx,
+            &mut cache,
+            true,
+            None,
+            &clock,
+            &mut stats,
         );
 
         let veil = palette.content_bg.with_alpha(super::DIRTY_VEIL_ALPHA);
@@ -941,7 +1125,10 @@ mod tests {
             )),
             1,
         );
-        assert_ne!(veil, palette.content_bg, "veil must differ from the opaque fill");
+        assert_ne!(
+            veil, palette.content_bg,
+            "veil must differ from the opaque fill"
+        );
     }
 
     #[test]
@@ -954,13 +1141,22 @@ mod tests {
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
 
         draw_cells(
-            &mut surface, &state, palette, &mut font_cx, &mut cache,
-            true, None, &clock, &mut stats,
+            &mut surface,
+            &state,
+            palette,
+            &mut font_cx,
+            &mut cache,
+            true,
+            None,
+            &clock,
+            &mut stats,
         );
 
-        assert!(surface.count(|op| matches!(
-            op, DrawOp::StrokeLine { color, .. } if *color == palette.cell_error
-        )) > 0);
+        assert!(
+            surface.count(|op| matches!(
+                op, DrawOp::StrokeLine { color, .. } if *color == palette.cell_error
+            )) > 0
+        );
     }
 
     #[test]
@@ -976,18 +1172,30 @@ mod tests {
         let (mut surface, _clock, mut font_cx, mut cache, _stats) = harness();
 
         draw_sheet_tabs(
-            &mut surface, &state, palette, &mut font_cx, &mut cache, true, None, None, true,
+            &mut surface,
+            &state,
+            palette,
+            &mut font_cx,
+            &mut cache,
+            true,
+            None,
+            None,
+            true,
         );
 
         // The active slot gets a content_bg fill (inactive slots use header_bg).
-        assert!(surface.count(|op| matches!(
-            op, DrawOp::FillRect { color, .. } if *color == palette.content_bg
-        )) >= 1);
+        assert!(
+            surface.count(|op| matches!(
+                op, DrawOp::FillRect { color, .. } if *color == palette.content_bg
+            )) >= 1
+        );
         // The active accent uses the selection colour at 2px.
-        assert!(surface.count(|op| matches!(
-            op, DrawOp::StrokeLine { color, width, .. }
-                if *color == palette.selection && *width == 2.0
-        )) >= 1);
+        assert!(
+            surface.count(|op| matches!(
+                op, DrawOp::StrokeLine { color, width, .. }
+                    if *color == palette.selection && *width == 2.0
+            )) >= 1
+        );
         assert_eq!(surface.clip_depth(), 0);
     }
 
@@ -1004,17 +1212,34 @@ mod tests {
             editor: CellEditor::new(0, 0, "On".to_owned()),
         };
         draw_sheet_tabs(
-            &mut surface, &state, palette, &mut font_cx, &mut cache, true,
-            Some(&rename), None, /* caret_on */ true,
+            &mut surface,
+            &state,
+            palette,
+            &mut font_cx,
+            &mut cache,
+            true,
+            Some(&rename),
+            None,
+            /* caret_on */ true,
         );
-        assert!(surface.count(|op| matches!(
-            op, DrawOp::StrokeLine { color, .. } if *color == palette.caret
-        )) >= 1);
+        assert!(
+            surface.count(|op| matches!(
+                op, DrawOp::StrokeLine { color, .. } if *color == palette.caret
+            )) >= 1
+        );
 
         // With the caret off (blink), no caret line is drawn.
         let (mut surface, _c, mut f, mut ch, _s) = harness();
         draw_sheet_tabs(
-            &mut surface, &state, palette, &mut f, &mut ch, true, Some(&rename), None, false,
+            &mut surface,
+            &state,
+            palette,
+            &mut f,
+            &mut ch,
+            true,
+            Some(&rename),
+            None,
+            false,
         );
         assert_eq!(
             surface.count(|op| matches!(
@@ -1038,16 +1263,33 @@ mod tests {
         // The drop marker is the *vertical* (x0 == x1) 2px selection line that
         // spans the strip -- distinct from the active tab's horizontal accent,
         // which is also a 2px selection line but along the top edge.
-        let drop_marker = move |op: &DrawOp| matches!(
-            op, DrawOp::StrokeLine { x0, y0, x1, y1, color, width }
-                if *color == palette.selection && *width == 2.0
-                    && (*x0 - *x1).abs() < 0.01 && *y0 == strip_y && *y1 == bottom
-        );
+        let drop_marker = move |op: &DrawOp| {
+            matches!(
+                op, DrawOp::StrokeLine { x0, y0, x1, y1, color, width }
+                    if *color == palette.selection && *width == 2.0
+                        && (*x0 - *x1).abs() < 0.01 && *y0 == strip_y && *y1 == bottom
+            )
+        };
 
         // A drag that has moved draws the marker at the drop slot's left edge.
-        let moved = super::TabDrag { sheet_id: "s0".into(), grab_x: 5.0, cur_x: 150.0, moved: true };
+        let moved = super::TabDrag {
+            sheet_id: "s0".into(),
+            grab_x: 5.0,
+            cur_x: 150.0,
+            moved: true,
+        };
         let (mut surface, _c, mut f, mut ch, _s) = harness();
-        draw_sheet_tabs(&mut surface, &state, palette, &mut f, &mut ch, true, None, Some(&moved), true);
+        draw_sheet_tabs(
+            &mut surface,
+            &state,
+            palette,
+            &mut f,
+            &mut ch,
+            true,
+            None,
+            Some(&moved),
+            true,
+        );
         let expected_x = state.tab_slot_x(state.drop_index_at(150.0) as usize).0;
         assert_eq!(surface.count(drop_marker), 1);
         assert!(surface.ops().iter().any(|op| matches!(
@@ -1055,9 +1297,24 @@ mod tests {
         )));
 
         // A grab that has not moved yet draws no drop marker.
-        let still = super::TabDrag { sheet_id: "s0".into(), grab_x: 5.0, cur_x: 6.0, moved: false };
+        let still = super::TabDrag {
+            sheet_id: "s0".into(),
+            grab_x: 5.0,
+            cur_x: 6.0,
+            moved: false,
+        };
         let (mut surface, _c, mut f, mut ch, _s) = harness();
-        draw_sheet_tabs(&mut surface, &state, palette, &mut f, &mut ch, true, None, Some(&still), true);
+        draw_sheet_tabs(
+            &mut surface,
+            &state,
+            palette,
+            &mut f,
+            &mut ch,
+            true,
+            None,
+            Some(&still),
+            true,
+        );
         assert_eq!(surface.count(drop_marker), 0);
     }
 
@@ -1072,8 +1329,15 @@ mod tests {
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
 
         draw_cells(
-            &mut surface, &state, palette, &mut font_cx, &mut cache,
-            true, None, &clock, &mut stats,
+            &mut surface,
+            &state,
+            palette,
+            &mut font_cx,
+            &mut cache,
+            true,
+            None,
+            &clock,
+            &mut stats,
         );
 
         for color in surface.fill_colors() {
