@@ -291,6 +291,25 @@ pub enum TrameEvent {
     /// visible again. A no-op clear (no active filter) emits nothing.
     FilterCleared,
 
+    /// The matches of a [`FindNext`](crate::logic::TrameCommand::FindNext) on the
+    /// active sheet (`-ui.md` sec.5.G). `matches` lists every matching cell as a
+    /// `(row, col)` grid pair in scan order; `active` is the index within
+    /// `matches` of the cell to focus (`None` when there is no match). Local view
+    /// state: the UI highlights the set and scrolls the focused cell into view; it
+    /// is never synced. An empty `matches` means "not found".
+    FindResult {
+        matches: Vec<(u32, u32)>,
+        active: Option<usize>,
+    },
+
+    /// A [`ReplaceAll`](crate::logic::TrameCommand::ReplaceAll) finished, having
+    /// rewritten `replaced` cells (`-ui.md` sec.5.G). Paired with a
+    /// [`DataReset`](Self::DataReset) that prompts the viewport re-fetch; the
+    /// chrome surfaces the count as a toast.
+    ReplaceDone {
+        replaced: u32,
+    },
+
     /// A local [`PasteRange`](crate::logic::TrameCommand::PasteRange) was refused
     /// because the destination overlaps a protected range the current user may
     /// not edit (`-ui.md` sec.5.E, range protection is Post-MVP). No CRDT

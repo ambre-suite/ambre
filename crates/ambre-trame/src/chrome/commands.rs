@@ -59,6 +59,14 @@ pub const CLEAR_FILTER: CommandId = CommandId("trame.filter.clear");
 // they never map to an `AppCommand`. The launcher intercepts them, driving the
 // browser clipboard (the keyboard chords Ctrl+C/X/V are serviced directly by the
 // DOM `copy`/`cut`/`paste` listeners, so they are NOT bound in the keymap here).
+// Find & Replace (`-ui.md` sec.5.G). UI-only intents: the launcher intercepts
+// them to open the DOM `FindReplace` panel (find vs replace mode); neither maps
+// to an `AppCommand` (the panel sends `FindNext`/`ReplaceAll` itself).
+/// Open the find/replace panel in find mode (Ctrl+F).
+pub const FIND: CommandId = CommandId("trame.find.open");
+/// Open the find/replace panel in replace mode (Ctrl+H).
+pub const REPLACE: CommandId = CommandId("trame.find.replace");
+
 /// Copy the selection to the clipboard.
 pub const COPY: CommandId = CommandId("trame.clipboard.copy");
 /// Cut the selection to the clipboard.
@@ -87,6 +95,8 @@ pub const COMMANDS: &[CommandId] = &[
     SORT_SHEET_DESC,
     FILTER_COLUMN,
     CLEAR_FILTER,
+    FIND,
+    REPLACE,
     COPY,
     CUT,
     PASTE,
@@ -100,6 +110,9 @@ pub fn bind_keys(keymap: &mut Keymap) {
     // Ctrl+Shift+Z and Ctrl+Y both redo (Excel/Sheets convention).
     keymap.bind(KeyBinding::ctrl_shift('z'), REDO);
     keymap.bind(KeyBinding::ctrl('y'), REDO);
+    // Find & Replace (`-ui.md` sec.5.G): Ctrl+F opens find, Ctrl+H opens replace.
+    keymap.bind(KeyBinding::ctrl('f'), FIND);
+    keymap.bind(KeyBinding::ctrl('h'), REPLACE);
 }
 
 /// Translate a Trame `CommandId` into the `AppCommand` IPC payload the Logic
@@ -136,10 +149,11 @@ pub fn command_to_app(id: CommandId) -> Option<AppCommand> {
     } else if id == CLEAR_FILTER {
         TrameCommand::ClearActiveFilter
     } else {
-        // BOLD / ITALIC (style toggles) and FILTER_COLUMN are UI-only intents the
-        // launcher intercepts: BOLD/ITALIC become a `SetCellStyle` patch toggled
-        // against the tracked style state, FILTER_COLUMN opens the popover. Neither
-        // has a direct AppCommand here.
+        // BOLD / ITALIC (style toggles), FILTER_COLUMN, FIND / REPLACE and the
+        // clipboard commands are UI-only intents the launcher intercepts:
+        // BOLD/ITALIC become a `SetCellStyle` patch toggled against the tracked
+        // style state, FILTER_COLUMN opens the popover, FIND/REPLACE open the
+        // find/replace panel. None has a direct AppCommand here.
         return None;
     };
     Some(AppCommand::Trame(cmd))

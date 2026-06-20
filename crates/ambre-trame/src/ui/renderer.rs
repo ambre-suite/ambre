@@ -460,6 +460,20 @@ pub fn draw_overlay<S: DrawSurface>(
         surface.stroke_line(cx, mid, cx, by + h, c, 1.0);
     }
 
+    // -- 1c. Find matches (sec.5.G): a translucent highlight behind each matched
+    //        cell so every hit is visible at a glance; the focused match is the
+    //        active cell, so it also carries the active border drawn below.
+    if !state.find_matches.is_empty() {
+        for &(row, col) in &state.find_matches {
+            if let Some((x, y, cw, ch)) = state.cell_pixel_rect(row, col) {
+                surface.fill_rect(
+                    Rect::new(x, y, x + cw, y + ch),
+                    palette.selection.with_alpha(0.28),
+                );
+            }
+        }
+    }
+
     // -- 2. Selection (range fills + outlines) and active-cell border. --------
     // Lives in the overlay so it tracks the selection on every frame regardless
     // of scroll shifts in the persistent layer. A lone single cell shows only

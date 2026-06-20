@@ -11,7 +11,7 @@ use leptos::prelude::*;
 use leptos_icons::Icon;
 
 use super::color::{theme_bg_default, theme_fg_default};
-use super::commands::{BOLD, COPY, CUT, ITALIC, MERGE, PASTE, REDO, UNDO, UNMERGE};
+use super::commands::{BOLD, COPY, CUT, FIND, ITALIC, MERGE, PASTE, REDO, UNDO, UNMERGE};
 use super::popovers::{
     BordersPopover, ColorPopover, FontPopover, HAlignPopover, NumberFormatPopover, VAlignPopover,
 };
@@ -69,6 +69,17 @@ pub fn FormatBar(
             on:click=move |_| on_command.run(PASTE)
         >
             <Icon icon=icondata::MdiContentPaste />
+        </button>
+        <span class="sep"></span>
+
+        // Find & Replace (sec.5.G): opens the DOM `FindReplace` panel in find
+        // mode. The launcher intercepts FIND (UI-only) like FILTER_COLUMN.
+        <button
+            aria-label="Find and replace"
+            on:mousedown=move |ev| ev.prevent_default()
+            on:click=move |_| on_command.run(FIND)
+        >
+            <Icon icon=icondata::AiSearchOutlined />
         </button>
         <span class="sep"></span>
 

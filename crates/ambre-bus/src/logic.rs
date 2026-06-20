@@ -423,6 +423,54 @@ pub enum TrameCommand {
         mode: FillMode,
     },
 
+    /// Find the next cell whose displayed value matches `query`, starting from
+    /// the tracked active cell and wrapping around the active sheet
+    /// (`ambre-spec-trame-ui.md` sec.5.G). Read-only: the Logic thread scans the
+    /// materialized extent comparing each cell's *displayed* value (formula
+    /// results included), case-folded unless `match_case`, by exact equality when
+    /// `whole_cell` else by substring. Produces a
+    /// [`FindResult`](crate::TrameEvent::FindResult) with every match on the sheet
+    /// plus the index of the one to focus; no CRDT delta is emitted. The UI moves
+    /// the active cell onto the focused match, so a repeated `FindNext` advances.
+    FindNext {
+        query: String,
+        match_case: bool,
+        whole_cell: bool,
+    },
+
+    /// Replace every match of `query` with `replacement` across the active sheet
+    /// (or all sheets when `all_sheets`) in a single undo group
+    /// (`ambre-spec-trame-ui.md` sec.5.G). Matching tests the *displayed* value
+    /// (case-folded unless `match_case`, exact when `whole_cell` else substring),
+    /// but the rewrite edits the *raw* cell text. Cells whose raw text is a
+    /// formula (`=...`) are skipped unless `in_formulas`. Replies with
+    /// [`ReplaceDone`](crate::TrameEvent::ReplaceDone) and a
+    /// [`DataReset`](crate::TrameEvent::DataReset) so the UI re-fetches.
+    ReplaceAll {
+        query: String,
+        replacement: String,
+        match_case: bool,
+        whole_cell: bool,
+        in_formulas: bool,
+        all_sheets: bool,
+    },
+
+    /// Replace the single match at the tracked active cell, then advance to the
+    /// next match (`ambre-spec-trame-ui.md` sec.5.G). If the active cell matches
+    /// `query` it is rewritten (same raw-text rules as
+    /// [`ReplaceAll`](TrameCommand::ReplaceAll), `in_formulas` gating included) in
+    /// one undo group; whether or not it matched, the reply carries a fresh
+    /// [`FindResult`](crate::TrameEvent::FindResult) so the UI moves to and
+    /// highlights the following match. Replies with
+    /// [`ReplaceDone`](crate::TrameEvent::ReplaceDone) (`0` or `1`).
+    ReplaceOne {
+        query: String,
+        replacement: String,
+        match_case: bool,
+        whole_cell: bool,
+        in_formulas: bool,
+    },
+
     /// Undo the last local edit (`ambre-spec-trame-logic.md` §8). Backed by Loro's
     /// `UndoManager`: it replays the inverse of this session's most recent commit
     /// as fresh CRDT ops (1 `TrameCommand` == 1 commit == 1 undo item). The

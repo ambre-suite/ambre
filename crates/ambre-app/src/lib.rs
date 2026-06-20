@@ -119,6 +119,11 @@ struct Wiring {
     /// The active column's distinct visible values, feeding the popover's "by
     /// values" list. Set by the per-frame relay on `TrameEvent::ColumnValues`.
     filter_values: RwSignal<Vec<String>>,
+    /// Find/replace panel open state (`-ui.md` sec.5.G); `None` = closed.
+    find_state: RwSignal<Option<trame_chrome::FindReplaceState>>,
+    /// Last `FindResult` summarized as `(active_1based, total)` for the panel's
+    /// "k/n" counter. Set by the per-frame relay on `TrameEvent::FindResult`.
+    find_result: RwSignal<Option<(usize, usize)>>,
 }
 
 #[wasm_bindgen(start)]
@@ -276,6 +281,10 @@ pub fn main() {
         Rc::new(RefCell::new(None));
     let filter_values_slot: Rc<RefCell<Option<RwSignal<Vec<String>>>>> =
         Rc::new(RefCell::new(None));
+    let find_state_slot: Rc<RefCell<Option<RwSignal<Option<trame_chrome::FindReplaceState>>>>> =
+        Rc::new(RefCell::new(None));
+    let find_result_slot: Rc<RefCell<Option<RwSignal<Option<(usize, usize)>>>>> =
+        Rc::new(RefCell::new(None));
     let style_slot: Rc<RefCell<Option<trame_chrome::StyleState>>> = Rc::new(RefCell::new(None));
 
     mount_shell(
@@ -293,6 +302,8 @@ pub fn main() {
         Rc::clone(&current_doc_slot),
         Rc::clone(&filter_popover_slot),
         Rc::clone(&filter_values_slot),
+        Rc::clone(&find_state_slot),
+        Rc::clone(&find_result_slot),
         Rc::clone(&style_slot),
         formula_ref,
         formula_text,
@@ -318,6 +329,15 @@ pub fn main() {
     let filter_values = filter_values_slot
         .borrow()
         .expect("filter_values signal created during mount");
+    // Find/replace panel signals (`-ui.md` sec.5.G), read back for the keyboard
+    // listener (Ctrl+F/Ctrl+H open the panel) and the per-frame relay (which sets
+    // `find_result` on `TrameEvent::FindResult`).
+    let find_state = find_state_slot
+        .borrow()
+        .expect("find_state signal created during mount");
+    let find_result = find_result_slot
+        .borrow()
+        .expect("find_result signal created during mount");
     // Formatting-toolbar style state (`-ui.md` sec.5bis), read back for the
     // per-frame relay (which updates it on `TrameEvent::StyleApplied`).
     let style_state = style_slot.borrow().expect("style state created during mount");
@@ -329,7 +349,7 @@ pub fn main() {
     });
 
     // Keyboard: resolve registered chords and dispatch to the routed document.
-    install_command_keys(keymap, current_doc, ui_to_logic_tx.clone());
+    install_command_keys(keymap, current_doc, ui_to_logic_tx.clone(), find_state);
 
     // Local persistence: open the IndexedDB store on this (Main) thread, where
     // the event loop is live. On open, restore the BOOT document's snapshot (if
@@ -555,6 +575,19 @@ pub fn main() {
                         ),
                     ..
                 } => filter_popover.set(None),
+                // Find & Replace (sec.5.G): summarize the match set for the panel's
+                // "k/n" counter. The view (canvas) consumes the same event to move
+                // the active cell onto the focused match and highlight the set.
+                UiEvent::Viewport {
+                    event: AppEvent::Trame(ambre_bus::TrameEvent::FindResult { matches, active }),
+                    ..
+                } => {
+                    let total = matches.len();
+                    find_result.set(match active {
+                        Some(i) if total > 0 => Some((*i + 1, total)),
+                        _ => Some((0, total)),
+                    });
+                }
                 _ => {}
             }
             // Content (and everything else) still flows to the view unchanged.
@@ -622,6 +655,8 @@ fn mount_shell(
     current_doc_slot: Rc<RefCell<Option<RwSignal<Option<DocumentId>>>>>,
     filter_popover_slot: Rc<RefCell<Option<RwSignal<Option<trame_chrome::FilterPopoverState>>>>>,
     filter_values_slot: Rc<RefCell<Option<RwSignal<Vec<String>>>>>,
+    find_state_slot: Rc<RefCell<Option<RwSignal<Option<trame_chrome::FindReplaceState>>>>>,
+    find_result_slot: Rc<RefCell<Option<RwSignal<Option<(usize, usize)>>>>>,
     style_slot: Rc<RefCell<Option<trame_chrome::StyleState>>>,
     formula_ref: RwSignal<String>,
     formula_text: RwSignal<String>,
@@ -654,6 +689,10 @@ fn mount_shell(
         *filter_popover_slot.borrow_mut() = Some(filter_popover);
         let filter_values = RwSignal::new(Vec::<String>::new());
         *filter_values_slot.borrow_mut() = Some(filter_values);
+        let find_state = RwSignal::new(None::<trame_chrome::FindReplaceState>);
+        *find_state_slot.borrow_mut() = Some(find_state);
+        let find_result = RwSignal::new(None::<(usize, usize)>);
+        *find_result_slot.borrow_mut() = Some(find_result);
         let style_state = trame_chrome::StyleState::new();
         *style_slot.borrow_mut() = Some(style_state);
 
@@ -675,6 +714,8 @@ fn mount_shell(
             current_doc,
             filter_popover,
             filter_values,
+            find_state,
+            find_result,
             formula_ref,
             formula_text,
             formula_action,
@@ -710,6 +751,8 @@ fn AppRoot() -> impl IntoView {
         current_doc,
         filter_popover,
         filter_values,
+        find_state,
+        find_result,
         formula_ref,
         formula_text,
         formula_action,
@@ -775,7 +818,16 @@ fn AppRoot() -> impl IntoView {
             // the active cell and ask the Logic thread for the column's distinct
             // values (it resolves the active column itself). Everything else flows
             // through the shared CommandId -> AppCommand path.
-            if id == trame_chrome::FILTER_COLUMN {
+            if id == trame_chrome::FIND || id == trame_chrome::REPLACE {
+                // UI-only intents (sec.5.G): open the find/replace panel in the
+                // matching mode. The panel emits FindNext/ReplaceAll itself.
+                let mode = if id == trame_chrome::FIND {
+                    trame_chrome::FindMode::Find
+                } else {
+                    trame_chrome::FindMode::Replace
+                };
+                find_state.set(Some(trame_chrome::FindReplaceState { mode }));
+            } else if id == trame_chrome::FILTER_COLUMN {
                 let (x, y) = client_anchor(anchor_pos.get_untracked());
                 // `col` is provisional; the ColumnValues reply carries the real one.
                 filter_popover.set(Some(trame_chrome::FilterPopoverState { col: 0, x, y }));
@@ -890,6 +942,59 @@ fn AppRoot() -> impl IntoView {
             }
         }
     });
+    // Find & Replace (sec.5.G): the panel emits these requests; the Logic thread
+    // resolves the search origin from the tracked active cell.
+    let on_find = Callback::new({
+        let tx = to_logic.clone();
+        move |q: trame_chrome::FindQuery| {
+            if let Some(document_id) = current_doc.get_untracked() {
+                let _ = tx.try_send(LogicCommand::App {
+                    document_id,
+                    command: AppCommand::Trame(TrameCommand::FindNext {
+                        query: q.query,
+                        match_case: q.match_case,
+                        whole_cell: q.whole_cell,
+                    }),
+                });
+            }
+        }
+    });
+    let on_replace = Callback::new({
+        let tx = to_logic.clone();
+        move |r: trame_chrome::ReplaceRequest| {
+            if let Some(document_id) = current_doc.get_untracked() {
+                let _ = tx.try_send(LogicCommand::App {
+                    document_id,
+                    command: AppCommand::Trame(TrameCommand::ReplaceOne {
+                        query: r.query,
+                        replacement: r.replacement,
+                        match_case: r.match_case,
+                        whole_cell: r.whole_cell,
+                        in_formulas: r.in_formulas,
+                    }),
+                });
+            }
+        }
+    });
+    let on_replace_all = Callback::new({
+        let tx = to_logic.clone();
+        move |r: trame_chrome::ReplaceRequest| {
+            if let Some(document_id) = current_doc.get_untracked() {
+                let _ = tx.try_send(LogicCommand::App {
+                    document_id,
+                    command: AppCommand::Trame(TrameCommand::ReplaceAll {
+                        query: r.query,
+                        replacement: r.replacement,
+                        match_case: r.match_case,
+                        whole_cell: r.whole_cell,
+                        in_formulas: r.in_formulas,
+                        all_sheets: r.all_sheets,
+                    }),
+                });
+            }
+        }
+    });
+
     let ctx_entries = trame_chrome::context_entries();
 
     // Per-slot sender clones. Each slot's children is a `Fn` (re-runnable), so it
@@ -1162,6 +1267,15 @@ fn AppRoot() -> impl IntoView {
             values=filter_values
             on_apply=on_filter_apply
             on_command=on_command
+        />
+
+        // Find & Replace panel (sec.5.G), pinned top-right.
+        <trame_chrome::FindReplace
+            state=find_state
+            result=find_result
+            on_find=on_find
+            on_replace=on_replace
+            on_replace_all=on_replace_all
         />
 
         // Live-region toast host (announces transient messages politely).
@@ -1482,6 +1596,7 @@ fn install_command_keys(
     keymap: Keymap,
     current_doc: RwSignal<Option<DocumentId>>,
     to_logic: flume::Sender<LogicCommand>,
+    find_state: RwSignal<Option<trame_chrome::FindReplaceState>>,
 ) {
     let document = web_sys::window()
         .expect("no window")
@@ -1497,6 +1612,20 @@ fn install_command_keys(
                 return;
             };
             event.prevent_default();
+            // Find & Replace (sec.5.G) are UI-only intents: open the DOM panel in
+            // the matching mode rather than dispatching to the Logic thread.
+            if id == trame_chrome::FIND {
+                find_state.set(Some(trame_chrome::FindReplaceState {
+                    mode: trame_chrome::FindMode::Find,
+                }));
+                return;
+            }
+            if id == trame_chrome::REPLACE {
+                find_state.set(Some(trame_chrome::FindReplaceState {
+                    mode: trame_chrome::FindMode::Replace,
+                }));
+                return;
+            }
             dispatch_to_current(id, current_doc, &to_logic);
         },
     );
