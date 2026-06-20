@@ -11,7 +11,7 @@ use leptos::prelude::*;
 use leptos_icons::Icon;
 
 use super::color::{theme_bg_default, theme_fg_default};
-use super::commands::{BOLD, ITALIC, MERGE, REDO, UNDO, UNMERGE};
+use super::commands::{BOLD, COPY, CUT, ITALIC, MERGE, PASTE, REDO, UNDO, UNMERGE};
 use super::popovers::{
     BordersPopover, ColorPopover, FontPopover, HAlignPopover, NumberFormatPopover, VAlignPopover,
 };
@@ -40,6 +40,38 @@ pub fn FormatBar(
     on_style: Callback<StylePatch>,
 ) -> impl IntoView {
     view! {
+        // Clipboard (sec.5.E): the launcher drives the browser clipboard from
+        // these intents (copy/cut read the viewport cache, paste reads the OS
+        // clipboard). The keyboard chords Ctrl+C/X/V are serviced directly by the
+        // DOM clipboard listeners, not through these buttons.
+        //
+        // `mousedown` preventDefault keeps DOM focus on the canvas text pipe: a
+        // button stealing focus both broke the next grid click (needed a second
+        // click to reselect) and made `navigator.clipboard.read()` throw "Document
+        // is not focused", so the Paste button did nothing.
+        <button
+            aria-label="Copy"
+            on:mousedown=move |ev| ev.prevent_default()
+            on:click=move |_| on_command.run(COPY)
+        >
+            <Icon icon=icondata::MdiContentCopy />
+        </button>
+        <button
+            aria-label="Cut"
+            on:mousedown=move |ev| ev.prevent_default()
+            on:click=move |_| on_command.run(CUT)
+        >
+            <Icon icon=icondata::MdiContentCut />
+        </button>
+        <button
+            aria-label="Paste"
+            on:mousedown=move |ev| ev.prevent_default()
+            on:click=move |_| on_command.run(PASTE)
+        >
+            <Icon icon=icondata::MdiContentPaste />
+        </button>
+        <span class="sep"></span>
+
         <button
             aria-label="Bold"
             aria-pressed=move || style.bold.get().then_some("true")

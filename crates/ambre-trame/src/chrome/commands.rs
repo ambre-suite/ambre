@@ -54,6 +54,18 @@ pub const FILTER_COLUMN: CommandId = CommandId("trame.filter.column");
 /// Clear the active sheet's shared filter (sec.5.D).
 pub const CLEAR_FILTER: CommandId = CommandId("trame.filter.clear");
 
+// Clipboard commands (toolbar + context menu, `-ui.md` sec.5.E). UI-only
+// intents: copy/cut read the viewport cache and paste reads the OS clipboard, so
+// they never map to an `AppCommand`. The launcher intercepts them, driving the
+// browser clipboard (the keyboard chords Ctrl+C/X/V are serviced directly by the
+// DOM `copy`/`cut`/`paste` listeners, so they are NOT bound in the keymap here).
+/// Copy the selection to the clipboard.
+pub const COPY: CommandId = CommandId("trame.clipboard.copy");
+/// Cut the selection to the clipboard.
+pub const CUT: CommandId = CommandId("trame.clipboard.cut");
+/// Paste the clipboard at the active cell.
+pub const PASTE: CommandId = CommandId("trame.clipboard.paste");
+
 /// Every command Trame contributes to the registry. The launcher builds the
 /// `CommandStates` store and the keymap from this list, naming no command itself.
 pub const COMMANDS: &[CommandId] = &[
@@ -75,6 +87,9 @@ pub const COMMANDS: &[CommandId] = &[
     SORT_SHEET_DESC,
     FILTER_COLUMN,
     CLEAR_FILTER,
+    COPY,
+    CUT,
+    PASTE,
 ];
 
 /// Bind Trame's command chords into the launcher's keymap.
@@ -187,6 +202,10 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
         }
         TrameEvent::FilterCleared => toasts.info("Filter cleared"),
         TrameEvent::SortComplete => toasts.info("Range sorted"),
+        // A paste blocked by a protected range (Post-MVP); no CRDT mutation.
+        TrameEvent::PasteRejected { reason } => {
+            toasts.warning(format!("Paste rejected: {reason}"));
+        }
         _ => {}
     }
 }
@@ -224,6 +243,10 @@ pub fn context_entries() -> Vec<MenuEntry> {
         // sheet's filter. The Logic thread no-ops a clear when nothing is filtered.
         MenuEntry::new(FILTER_COLUMN, "Filter by column"),
         MenuEntry::new(CLEAR_FILTER, "Clear filter"),
+        // Clipboard (sec.5.E): the launcher drives the browser clipboard.
+        MenuEntry::new(COPY, "Copy"),
+        MenuEntry::new(CUT, "Cut"),
+        MenuEntry::new(PASTE, "Paste"),
     ]
 }
 

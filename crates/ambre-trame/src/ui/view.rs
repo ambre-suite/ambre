@@ -218,6 +218,11 @@ pub struct TrameView {
     coasting: bool,
     /// Timestamp (perf ms) of the last coast step, for the per-frame integration.
     last_coast_ms: f64,
+
+    /// The last grid copy/cut was a cut: the source range
+    /// ([`TrameUiState::clipboard_anchor`]) is cleared after the next paste
+    /// (`-ui.md` sec.5.E). UI-only view state.
+    cut_pending: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -289,6 +294,7 @@ impl TrameView {
             last_wheel_ms: 0.0,
             coasting: false,
             last_coast_ms: 0.0,
+            cut_pending: false,
         }
     }
 
@@ -563,6 +569,7 @@ impl TrameView {
         self.data_dirty = false;
         self.prev_top_row = 0;
         self.prev_left_col = 0;
+        self.cut_pending = false;
         // Retract any floating-toolbar anchor from the previous document.
         self.last_anchor = None;
         self.anchor.publish(None);
@@ -667,6 +674,12 @@ impl TrameView {
                 self.last_blink_ms = now;
                 self.edit_dirty = true;
             }
+        }
+
+        // While a clipboard marquee is active, dirty the overlay each frame so
+        // the marching-ants dashes crawl (sec.5.E). Cleared on Escape / next copy.
+        if self.state.clipboard_anchor.is_some() {
+            self.edit_dirty = true;
         }
 
         // Sync the HTML formula bar with the grid (spec sec.6).
@@ -1339,6 +1352,20 @@ impl TrameView {
                         let col = self.state.last_content_col(row).unwrap_or(self.state.active_col());
                         self.nav_goto(row, col, ext)
                     }
+                    // Escape clears the marching-ants clipboard marquee (sec.5.E),
+                    // if any; otherwise it is not ours.
+                    "Escape" => {
+                        if self.state.clipboard_anchor.take().is_some() {
+                            self.cut_pending = false;
+                            self.edit_dirty = true;
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    // Shift+Delete is Cut: don't consume it, so the browser fires
+                    // the native `cut` clipboard event the host services (sec.5.E).
+                    "Delete" if *shift => false,
                     // Delete / Backspace clear the active cell.
                     "Delete" | "Backspace" => self.clear_active_cell(),
                     // F2 opens an editor on the cell's current text.
@@ -1622,6 +1649,115 @@ impl TrameView {
         ed.delete_selection();
         self.reset_blink();
         Some(s)
+    }
+
+    /// Whether an in-cell edit session is open (the host routes a paste to the
+    /// caret rather than the grid when so).
+    pub fn is_editing(&self) -> bool {
+        self.editor.is_some()
+    }
+
+    // -- Grid clipboard (spec sec.5.E) -----------------------------------------
+
+    /// Build the clipboard contents for a copy/cut (`-ui.md` sec.5.E). An open
+    /// in-cell text selection wins (returns `text/plain` only, no Ambre payload);
+    /// otherwise the grid selection is serialised, returning both the TSV text
+    /// (OS interop) and the typed [`ClipboardPayload`](ambre_bus::ClipboardPayload)
+    /// (internal round-trip with styles + formula reindexing). Arms the
+    /// marching-ants anchor and the cut-pending flag. `None` means "nothing to
+    /// copy -- let the browser default proceed".
+    pub fn clipboard_write(
+        &mut self,
+        cut: bool,
+    ) -> Option<(String, Option<ambre_bus::ClipboardPayload>)> {
+        // In-cell text selection takes precedence over the grid range.
+        if self.editor.is_some() {
+            let text = if cut { self.cut_selection() } else { self.copy_selection() }?;
+            return Some((text, None));
+        }
+        let payload = self.state.build_clipboard_payload();
+        if payload.cells.is_empty() {
+            return None;
+        }
+        self.state.clipboard_anchor = Some(self.state.selection.bounds());
+        self.cut_pending = cut;
+        self.edit_dirty = true; // repaint the marching-ants overlay
+        Some((payload.to_tsv(), Some(payload)))
+    }
+
+    /// Paste a typed Ambre payload at the active cell (`-ui.md` sec.5.E). The
+    /// Logic thread reindexes relative formulas and applies styles; a pending cut
+    /// then clears the source range.
+    pub fn grid_paste_payload(&mut self, payload: ambre_bus::ClipboardPayload) {
+        let (row, col) = (self.state.active_row(), self.state.active_col());
+        if let Err(SendError::Full) = self.send_command_lossless(TrameCommand::PasteRange {
+            target_row: row,
+            target_col: col,
+            payload,
+        }) {
+            tracing::error!("Trame: UI->Logic channel full, paste dropped");
+        }
+        self.finish_paste();
+        self.needs_full = true;
+    }
+
+    /// Paste external tab-separated text at the active cell (`-ui.md` sec.5.E):
+    /// each field becomes a literal cell (`src == target`, so no relative-formula
+    /// shift). Used when the clipboard carries no Ambre payload.
+    pub fn grid_paste_text(&mut self, text: &str) {
+        let (row, col) = (self.state.active_row(), self.state.active_col());
+        let normalized = text.replace('\r', "");
+        let mut cells = Vec::new();
+        let mut rows = 0u32;
+        let mut cols = 0u32;
+        for (dr, line) in normalized.trim_end_matches('\n').split('\n').enumerate() {
+            rows = rows.max(dr as u32 + 1);
+            for (dc, field) in line.split('\t').enumerate() {
+                cols = cols.max(dc as u32 + 1);
+                if field.is_empty() {
+                    continue;
+                }
+                cells.push(ambre_bus::ClipboardCell {
+                    dr: dr as u32,
+                    dc: dc as u32,
+                    raw: field.to_owned(),
+                    ..Default::default()
+                });
+            }
+        }
+        if cells.is_empty() {
+            return;
+        }
+        let payload =
+            ambre_bus::ClipboardPayload { src_row: row, src_col: col, rows, cols, cells };
+        if let Err(SendError::Full) = self.send_command_lossless(TrameCommand::PasteRange {
+            target_row: row,
+            target_col: col,
+            payload,
+        }) {
+            tracing::error!("Trame: UI->Logic channel full, paste dropped");
+        }
+        self.needs_full = true;
+    }
+
+    /// After a paste: clear the source range if the clipboard held a cut, then
+    /// drop the marching-ants anchor.
+    fn finish_paste(&mut self) {
+        if self.cut_pending
+            && let Some((r1, c1, r2, c2)) = self.state.clipboard_anchor
+        {
+            let batch = (r1..=r2)
+                .flat_map(|r| (c1..=c2).map(move |c| (r, c, String::new())))
+                .collect();
+            let _ = self.send_command_lossless(TrameCommand::SetCellsBatch { cells: batch });
+            for r in r1..=r2 {
+                for c in c1..=c2 {
+                    self.state.set_cell_text(r, c, String::new());
+                }
+            }
+        }
+        self.cut_pending = false;
+        self.state.clipboard_anchor = None;
     }
 
     /// True when physical pixel `(x, y)` falls on the cell currently being

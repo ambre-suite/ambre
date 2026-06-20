@@ -37,9 +37,10 @@ mod style;
 pub use bars::FormatBar;
 pub use commands::{
     bind_keys, command_to_app, context_entries, init_command_states, mirror_event, new_doc_label,
-    notify_event, status_label, BOLD, CLEAR_FILTER, COMMANDS, DELETE_COLS, DELETE_ROWS, DOC_TYPE,
-    FILTER_COLUMN, INSERT_COL_LEFT, INSERT_COL_RIGHT, INSERT_ROW_ABOVE, INSERT_ROW_BELOW, ITALIC,
-    MERGE, REDO, SORT_RANGE_ASC, SORT_RANGE_DESC, SORT_SHEET_ASC, SORT_SHEET_DESC, UNDO, UNMERGE,
+    notify_event, status_label, BOLD, CLEAR_FILTER, COMMANDS, COPY, CUT, DELETE_COLS, DELETE_ROWS,
+    DOC_TYPE, FILTER_COLUMN, INSERT_COL_LEFT, INSERT_COL_RIGHT, INSERT_ROW_ABOVE, INSERT_ROW_BELOW,
+    ITALIC, MERGE, PASTE, REDO, SORT_RANGE_ASC, SORT_RANGE_DESC, SORT_SHEET_ASC, SORT_SHEET_DESC,
+    UNDO, UNMERGE,
 };
 pub use formula_bar::FormulaBar;
 pub use popovers::{FilterPopover, FilterPopoverState};

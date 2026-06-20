@@ -355,6 +355,39 @@ fn draw_ui_cell_layers<S: DrawSurface>(
 // draw_overlay -- transient OVERLAY layer
 // -----------------------------------------------------------------------------
 
+/// Marching-ants dash geometry (physical px): 6px dash + 4px gap. The animation
+/// crawls the dashes by advancing a phase across this period each frame.
+const MARCHING_DASH: f64 = 6.0;
+const MARCHING_GAP: f64 = 4.0;
+const MARCHING_PERIOD: f64 = MARCHING_DASH + MARCHING_GAP;
+
+/// Stroke a horizontal dashed line from `x0` to `x1` at height `y`, the dashes
+/// offset left by `phase` (the marching-ants crawl, sec.5.E).
+fn dashed_h<S: DrawSurface>(s: &mut S, x0: f64, x1: f64, y: f64, c: Color, phase: f64) {
+    let mut t = x0 - phase;
+    while t < x1 {
+        let a = t.max(x0);
+        let b = (t + MARCHING_DASH).min(x1);
+        if b > a {
+            s.stroke_line(a, y, b, y, c, 1.0);
+        }
+        t += MARCHING_PERIOD;
+    }
+}
+
+/// Stroke a vertical dashed line from `y0` to `y1` at column `x` (see [`dashed_h`]).
+fn dashed_v<S: DrawSurface>(s: &mut S, y0: f64, y1: f64, x: f64, c: Color, phase: f64) {
+    let mut t = y0 - phase;
+    while t < y1 {
+        let a = t.max(y0);
+        let b = (t + MARCHING_DASH).min(y1);
+        if b > a {
+            s.stroke_line(x, a, x, b, c, 1.0);
+        }
+        t += MARCHING_PERIOD;
+    }
+}
+
 /// Draw the overlay layer (headers + active border + header labels + HUD).
 /// This is re-rendered every dirty frame onto the swapchain after the cells
 /// layer has been blitted from its persistent offscreen.
@@ -450,6 +483,19 @@ pub fn draw_overlay<S: DrawSurface>(
         .or_else(|| state.cell_pixel_rect(state.active_row(), state.active_col()))
     {
         surface.stroke_rect(Rect::new(x, y, x + cw, y + ch), palette.selection, 2.0);
+    }
+
+    // -- 2b. Clipboard marching-ants marquee (sec.5.E). A dashed rectangle around
+    //        the copied/cut range, its dashes crawling so the marquee animates.
+    if let Some((r1, c1, r2, c2)) = state.clipboard_anchor
+        && let Some((x, y, w, ht)) = state.range_pixel_rect(r1, c1, r2, c2)
+    {
+        let phase = (clock.now_ms() / 40.0) % MARCHING_PERIOD;
+        let c = palette.selection;
+        dashed_h(surface, x, x + w, y, c, phase);
+        dashed_h(surface, x, x + w, y + ht, c, phase);
+        dashed_v(surface, y, y + ht, x, c, phase);
+        dashed_v(surface, y, y + ht, x + w, c, phase);
     }
     let t_after_hdrs = clock.now_ms();
 

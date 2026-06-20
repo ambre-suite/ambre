@@ -35,8 +35,11 @@ tracing-wasm = { workspace = true }
 
 # UI <-> Logic channels (shared memory, this Main instance).
 flume        = { workspace = true }
-# Encode SyncCommand / decode LogicEvent across the Sync-worker postMessage hop.
+# Encode SyncCommand / decode LogicEvent across the Sync-worker postMessage hop,
+# and the clipboard ClipboardPayload onto the OS clipboard (sec.5.E).
 postcard     = { workspace = true }
+# Base64 for transporting the postcard clipboard payload as a UTF-8 string.
+base64       = { workspace = true }
 
 # Entry point + Logic thread spawning (shared memory). The Sync worker is spawned
 # directly via web_sys::Worker (separate instance), not through wasm_thread.

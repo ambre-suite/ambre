@@ -626,6 +626,12 @@ pub struct TrameUiState {
     /// [`visible_offset`](Self::visible_offset)); fed to the renderer's
     /// `GridLayout`. UI-only derived state.
     pub hidden_rows: Vec<u32>,
+
+    /// The range last copied/cut, drawn with animated marching-ants until the
+    /// next copy or an Escape (`-ui.md` sec.5.E). `None` when nothing is on the
+    /// clipboard. Stored as the normalized rectangle `(r1, c1, r2, c2)` in
+    /// absolute grid coordinates. UI-only view state.
+    pub clipboard_anchor: Option<CellRect>,
 }
 
 impl TrameUiState {
@@ -647,6 +653,7 @@ impl TrameUiState {
             next_version: 1,
             filtered_col: None,
             hidden_rows: Vec::new(),
+            clipboard_anchor: None,
         };
         s.recompute_viewport_dims();
         s
@@ -1089,6 +1096,50 @@ impl TrameUiState {
         // literal awaits the CRDT echo. Either way the prior error is stale.
         self.formula_errors.remove(&(row, col));
         self.dirty_cells.insert((row, col));
+    }
+
+    // -------------------------------------------------------------------------
+    // Clipboard (spec sec.5.E)
+    // -------------------------------------------------------------------------
+
+    /// Serialise the live selection rectangle into a [`ClipboardPayload`] from
+    /// the viewport cache (`-ui.md` sec.5.E). Only the cells currently cached
+    /// contribute -- the UI holds no document data beyond the viewport (sec.16),
+    /// so a copy of cells scrolled far out of view is best-effort. Blank cells
+    /// are omitted. Number format / decimals are not carried (the viewport does
+    /// not surface them); pasted cells fall back to `General`.
+    pub fn build_clipboard_payload(&self) -> ambre_bus::ClipboardPayload {
+        let (r1, c1, r2, c2) = self.selection.bounds();
+        let mut cells = Vec::new();
+        for row in r1..=r2 {
+            for col in c1..=c2 {
+                let Some(data) = self.cell_cache.get(&(row, col)) else { continue };
+                if data.raw.is_empty() {
+                    continue;
+                }
+                cells.push(ambre_bus::ClipboardCell {
+                    dr: row - r1,
+                    dc: col - c1,
+                    raw: data.raw.clone(),
+                    bold: data.bold,
+                    italic: data.italic,
+                    style: ambre_bus::CellStyle {
+                        underline: data.underline,
+                        strikethrough: data.strikethrough,
+                        h_align: data.h_align,
+                        v_align: data.v_align,
+                        wrap: data.wrap,
+                        fg: data.fg,
+                        bg: data.bg,
+                        font: data.font.clone(),
+                        size: data.size,
+                        borders: data.borders,
+                        ..Default::default()
+                    },
+                });
+            }
+        }
+        ambre_bus::ClipboardPayload { src_row: r1, src_col: c1, rows: r2 - r1 + 1, cols: c2 - c1 + 1, cells }
     }
 
     // -------------------------------------------------------------------------

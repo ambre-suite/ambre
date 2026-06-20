@@ -98,8 +98,11 @@ swash = "0.2"
 # WASM
 gloo-net = { version = "0.7", features = ["http", "websocket"] }
 web-sys = { version = "0.3.85", features = [
+    "Blob",
     "CanvasRenderingContext2d",
+    "Clipboard",
     "ClipboardEvent",
+    "ClipboardItem",
     "CompositionEvent",
     "DataTransfer",
     "CssStyleDeclaration",
@@ -110,6 +113,7 @@ web-sys = { version = "0.3.85", features = [
     "EventTarget",
     "HtmlCanvasElement",
     "HtmlDialogElement",
+    "HtmlDocument",
     "HtmlElement",
     "HtmlTextAreaElement",
     "ImageData",
@@ -121,6 +125,7 @@ web-sys = { version = "0.3.85", features = [
     "MediaQueryListEvent",
     "MessageEvent",
     "MouseEvent",
+    "Navigator",
     "DedicatedWorkerGlobalScope",
     "Worker",
     "WorkerOptions",

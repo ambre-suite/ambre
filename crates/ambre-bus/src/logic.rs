@@ -20,6 +20,7 @@
 //!   no single response to correlate — kept explicit.
 
 use crate::{ChannelId, DocType, DocumentId, RequestId, RestCommand, UserId};
+use serde::{Deserialize, Serialize};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LogicCommand — UI Thread → Logic thread
@@ -361,6 +362,48 @@ pub enum TrameCommand {
     /// [`ClearFilter`]: TrameCommand::ClearFilter
     ClearActiveFilter,
 
+    /// Paste a clipboard [`ClipboardPayload`] with its top-left landing on
+    /// `(target_row, target_col)` (`-ui.md` sec.5.E). The Logic thread is the
+    /// only holder of document data, so the paste -- including relative-formula
+    /// reindexing and style application -- happens here: every pasted cell lands
+    /// at `(target_row + dr, target_col + dc)`, a formula's relative references
+    /// shift by `(target_row - src_row, target_col - src_col)`, and the carried
+    /// [`CellStyle`] (plus bold/italic) is written verbatim. The whole paste is a
+    /// single undo group. Replies with a [`DataReset`] so the UI re-fetches the
+    /// pasted region; a paste blocked by a protected range (Post-MVP) replies
+    /// [`TrameEvent::PasteRejected`](crate::ui::TrameEvent::PasteRejected).
+    ///
+    /// [`DataReset`]: crate::ui::TrameEvent::DataReset
+    PasteRange {
+        target_row: u32,
+        target_col: u32,
+        payload: ClipboardPayload,
+    },
+
+    /// Paste plain tab-separated `text` at the tracked active cell (`-ui.md`
+    /// sec.5.E). The parameterless-geometry sibling of
+    /// [`PasteRange`](TrameCommand::PasteRange): the Logic thread resolves the
+    /// target from the active cell it keeps via
+    /// [`SetActiveCell`](TrameCommand::SetActiveCell), so a toolbar/menu Paste
+    /// button -- which reads the OS clipboard asynchronously and has no view
+    /// state -- can paste without knowing the cursor. Each field becomes a
+    /// literal cell (no relative-formula reindexing, the source is external).
+    /// Replies with a [`DataReset`](crate::ui::TrameEvent::DataReset).
+    PasteText {
+        text: String,
+    },
+
+    /// Paste a typed [`ClipboardPayload`] at the tracked active cell (`-ui.md`
+    /// sec.5.E). The parameterless-geometry sibling of
+    /// [`PasteRange`](TrameCommand::PasteRange): the Logic thread resolves the
+    /// target from the active cell it keeps, so the toolbar/menu Paste button --
+    /// which reads the OS clipboard asynchronously via the Clipboard API and has
+    /// no view state -- gets the same styled, formula-reindexed paste as a native
+    /// Ctrl+V. The reindex offset is `active - payload.src`.
+    PasteClipboardAtActive {
+        payload: ClipboardPayload,
+    },
+
     /// Undo the last local edit (`ambre-spec-trame-logic.md` §8). Backed by Loro's
     /// `UndoManager`: it replays the inverse of this session's most recent commit
     /// as fresh CRDT ops (1 `TrameCommand` == 1 commit == 1 undo item). The
@@ -666,7 +709,7 @@ pub enum FilterOp {
 
 /// Horizontal text alignment of a cell (`-ui.md` sec.5bis). [`Auto`](Self::Auto)
 /// is the spreadsheet default: numbers align right, everything else left.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum HAlign {
     #[default]
     Auto,
@@ -676,7 +719,7 @@ pub enum HAlign {
 }
 
 /// Vertical text alignment of a cell (`-ui.md` sec.5bis).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum VAlign {
     Top,
     #[default]
@@ -687,7 +730,7 @@ pub enum VAlign {
 /// A cell number-format family (`-ui.md` sec.5bis). The number of decimal places
 /// rides alongside in [`CellStyle::decimals`]; [`Custom`](Self::Custom) carries
 /// its own pattern string (applied verbatim by the Logic thread).
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum CellFormat {
     /// No reformatting: the raw value / formula result is shown as-is.
     #[default]
@@ -762,7 +805,7 @@ pub const BORDER_EDGE_ALL: u8 =
 
 /// The stroke style of a cell border, conflating line pattern and weight into a
 /// single choice (`-ui.md` sec.5bis).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum BorderStyle {
     /// A solid line border.
     #[default]
@@ -782,7 +825,7 @@ pub enum BorderStyle {
 /// A single cell edge's border: its stroke style and colour. The edge's
 /// presence is carried by the enclosing `Option<CellBorder>` in [`Borders`]
 /// (`None` = no border on that edge).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct CellBorder {
     pub style: BorderStyle,
     /// Border colour, packed `0xRRGGBB`. `None` = the default grid-line colour.
@@ -792,7 +835,7 @@ pub struct CellBorder {
 /// The four independent edges of a cell border (`-ui.md` sec.5bis). Each edge
 /// carries its own stroke style and colour, so a cell can mix, e.g., a thick
 /// red top with a dotted blue left. `None` on an edge means no border there.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Borders {
     pub top: Option<CellBorder>,
     pub right: Option<CellBorder>,
@@ -804,7 +847,7 @@ pub struct Borders {
 /// reflects (`-ui.md` sec.5bis). Bold/italic are tracked by their dedicated
 /// toggle commands and reported separately ([`TrameEvent::StyleApplied`]); the
 /// underline run lives here with the rest of the patchable attributes.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct CellStyle {
     pub underline: bool,
     /// Strikethrough run drawn through the glyphs (`-ui.md` sec.5bis).
@@ -863,6 +906,74 @@ pub struct BorderEdit {
     pub style: BorderStyle,
     /// Border colour, packed `0xRRGGBB`. `None` = the default grid-line colour.
     pub color: Option<u32>,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Clipboard (`ambre-spec-trame-ui.md` sec.5.E)
+//
+// The serialized payload of a copied/cut range. Built by the UI from its
+// viewport cache, written onto the OS clipboard (postcard, alongside a
+// tab-separated text fallback for cross-app interop), read back on paste, and
+// moved to the Logic thread inside [`TrameCommand::PasteRange`]. It derives
+// `serde` (unlike the rest of the data plane) precisely so the UI can postcard
+// it onto the clipboard.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A copied/cut rectangular range: its source origin (top-left absolute grid
+/// position, for relative-formula reindexing) plus its non-empty cells, each
+/// keyed by an offset from that origin.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ClipboardPayload {
+    /// Source range top-left absolute row (0-based). The paste reindex shift is
+    /// `target_row - src_row`.
+    pub src_row: u32,
+    /// Source range top-left absolute column (0-based).
+    pub src_col: u32,
+    /// Source range height in rows (so a cut can clear the whole rectangle and
+    /// the renderer can draw marching-ants over it).
+    pub rows: u32,
+    /// Source range width in columns.
+    pub cols: u32,
+    /// The range's non-empty cells. Blank cells are omitted; the paste leaves
+    /// the corresponding destination cells untouched (Excel/Sheets behaviour).
+    pub cells: Vec<ClipboardCell>,
+}
+
+impl ClipboardPayload {
+    /// Lay the payload out as tab-separated rows (`\t` between columns, `\n`
+    /// between rows), the lingua-franca a spreadsheet writes to the OS clipboard
+    /// for cross-application paste. Cells are placed by their `(dr, dc)` offset;
+    /// gaps (blank source cells, omitted from `cells`) render as empty fields. A
+    /// formula cell contributes its raw text (e.g. `=A1*2`).
+    pub fn to_tsv(&self) -> String {
+        let mut grid = vec![vec![String::new(); self.cols.max(1) as usize]; self.rows.max(1) as usize];
+        for cell in &self.cells {
+            if let Some(row) = grid.get_mut(cell.dr as usize)
+                && let Some(slot) = row.get_mut(cell.dc as usize)
+            {
+                *slot = cell.raw.clone();
+            }
+        }
+        grid.into_iter().map(|r| r.join("\t")).collect::<Vec<_>>().join("\n")
+    }
+}
+
+/// One cell of a [`ClipboardPayload`], positioned by its offset from the source
+/// origin and carrying its raw text (formula source for a formula cell) plus its
+/// full formatting.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ClipboardCell {
+    /// Row offset from [`ClipboardPayload::src_row`].
+    pub dr: u32,
+    /// Column offset from [`ClipboardPayload::src_col`].
+    pub dc: u32,
+    /// Raw cell text (e.g. `=SUM(A1:B1)` for a formula), in display form. A
+    /// formula's relative references are reindexed by the Logic thread on paste.
+    pub raw: String,
+    pub bold: bool,
+    pub italic: bool,
+    /// The cell's resolved rich formatting, written verbatim at the destination.
+    pub style: CellStyle,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

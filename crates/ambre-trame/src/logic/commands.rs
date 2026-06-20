@@ -234,6 +234,14 @@ impl TrameState {
                 let sheet = self.active_sheet.clone();
                 self.clear_filter(&sheet)
             }
+            TrameCommand::PasteRange { target_row, target_col, payload } => {
+                self.paste_range(target_row, target_col, payload)
+            }
+            TrameCommand::PasteText { text } => self.paste_text(&text),
+            TrameCommand::PasteClipboardAtActive { payload } => {
+                let (row, col) = self.active;
+                self.paste_range(row, col, payload)
+            }
 
             // Deferred feature surface (`ambre-spec-trame-features.md §10`): the
             // command vocabulary is complete and typed, but these handlers land

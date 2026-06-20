@@ -7,6 +7,7 @@ pub mod cache;
 pub mod functions;
 pub mod engine;
 pub mod render;
+pub mod shift;
 
 #[cfg(test)]
 pub(crate) mod test_index;

@@ -807,6 +807,55 @@ fn AppRoot() -> impl IntoView {
                         command: AppCommand::Trame(TrameCommand::SetCellStyle { patch }),
                     });
                 }
+            } else if id == trame_chrome::COPY || id == trame_chrome::CUT {
+                // Copy/cut (sec.5.E): focus the canvas text pipe and ask the
+                // browser to fire the `copy`/`cut` DOM event the host listeners
+                // service (they write both the TSV and the typed payload).
+                if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
+                    if let Ok(Some(ta)) = doc.query_selector(".ambre-input")
+                        && let Some(el) = ta.dyn_ref::<web_sys::HtmlElement>()
+                    {
+                        let _ = el.focus();
+                    }
+                    let cmd = if id == trame_chrome::COPY { "copy" } else { "cut" };
+                    if let Ok(html_doc) = doc.dyn_into::<web_sys::HtmlDocument>() {
+                        let _ = html_doc.exec_command(cmd);
+                    }
+                }
+            } else if id == trame_chrome::PASTE {
+                // Paste (sec.5.E): `execCommand("paste")` is blocked by browsers,
+                // so read the OS clipboard via the async Clipboard API (allowed in
+                // this click gesture). `read()` recovers the private Ambre payload
+                // (full styled / formula-reindexed paste, like Ctrl+V) when
+                // present, else the plain text; the Logic thread resolves the
+                // target from the tracked active cell.
+                if let Some(document_id) = current_doc.get_untracked() {
+                    let clipboard = web_sys::window().map(|w| w.navigator().clipboard());
+                    // `navigator.clipboard` is undefined outside a secure context
+                    // (http:// on a LAN IP, etc.): there the button cannot read at
+                    // all -- tell the user instead of failing silently.
+                    let available = clipboard
+                        .as_ref()
+                        .map(|c| {
+                            let v: &wasm_bindgen::JsValue = c.as_ref();
+                            !v.is_undefined() && !v.is_null()
+                        })
+                        .unwrap_or(false);
+                    if let Some(clipboard) = clipboard.filter(|_| available) {
+                        let tx = tx.clone();
+                        // Call `read()` synchronously, still inside the click's user
+                        // gesture: Firefox shows its mandatory "paste" confirmation
+                        // right away instead of deferring it to the next click.
+                        let read_promise = clipboard.read();
+                        wasm_bindgen_futures::spawn_local(paste_from_clipboard(
+                            read_promise, clipboard, document_id, tx, toasts,
+                        ));
+                    } else {
+                        toasts.warning(
+                            "Clipboard unavailable here (needs HTTPS); use Ctrl+V to paste",
+                        );
+                    }
+                }
             } else {
                 dispatch_to_current(id, current_doc, &tx);
             }
@@ -1158,6 +1207,76 @@ fn dispatch_to_current(
     if let Err(e) = dispatch_command(id, document_id, to_logic) {
         tracing::warn!("{id:?}: Logic channel full ({e:?})");
     }
+}
+
+/// Service the toolbar/menu Paste button by reading the OS clipboard with the
+/// async Clipboard API (`-ui.md` sec.5.E). `read()` recovers the private Ambre
+/// payload (full styled / formula-reindexed paste) when present, else the plain
+/// text; on a browser without `read()` it falls back to `readText()`. The chosen
+/// content is handed to the Logic thread, which resolves the target from the
+/// tracked active cell. Best-effort: a clipboard the browser will not surface
+/// (permission denied, unsupported) is logged, not fatal -- Ctrl+V still works.
+async fn paste_from_clipboard(
+    read_promise: js_sys::Promise,
+    clipboard: web_sys::Clipboard,
+    document_id: DocumentId,
+    tx: flume::Sender<LogicCommand>,
+    toasts: Toasts,
+) {
+    let send = |cmd: TrameCommand| {
+        let _ = tx.try_send(LogicCommand::App {
+            document_id,
+            command: AppCommand::Trame(cmd),
+        });
+    };
+
+    // Structured read: rich Ambre type first, then plain text. `read_promise` was
+    // started synchronously in the click handler so the user gesture is preserved.
+    if let Ok(val) = wasm_bindgen_futures::JsFuture::from(read_promise).await
+        && let Ok(items) = val.dyn_into::<js_sys::Array>()
+    {
+        for item in items.iter() {
+            let Ok(item) = item.dyn_into::<web_sys::ClipboardItem>() else { continue };
+            let types = item.types();
+            let has = |t: &str| types.iter().any(|v| v.as_string().as_deref() == Some(t));
+            if has(host::AMBRE_CLIPBOARD_WEB_TYPE)
+                && let Some(payload) = read_clipboard_item(&item, host::AMBRE_CLIPBOARD_WEB_TYPE)
+                    .await
+                    .and_then(|b64| host::base64_decode(&b64))
+                    .and_then(|bytes| {
+                        postcard::from_bytes::<ambre_bus::ClipboardPayload>(&bytes).ok()
+                    })
+            {
+                send(TrameCommand::PasteClipboardAtActive { payload });
+                return;
+            }
+            if has("text/plain")
+                && let Some(text) = read_clipboard_item(&item, "text/plain").await
+            {
+                send(TrameCommand::PasteText { text });
+                return;
+            }
+        }
+    }
+
+    // Fallback for browsers without structured `read()`.
+    if let Ok(val) = wasm_bindgen_futures::JsFuture::from(clipboard.read_text()).await
+        && let Some(text) = val.as_string().filter(|t| !t.is_empty())
+    {
+        send(TrameCommand::PasteText { text });
+        return;
+    }
+    tracing::warn!("Trame: clipboard read unavailable for the Paste button (use Ctrl+V)");
+    toasts.warning("Could not read the clipboard; use Ctrl+V to paste");
+}
+
+/// Read one MIME entry of a [`web_sys::ClipboardItem`] as a string (its blob
+/// decoded as UTF-8). `None` on any failure.
+async fn read_clipboard_item(item: &web_sys::ClipboardItem, mime: &str) -> Option<String> {
+    let blob_val = wasm_bindgen_futures::JsFuture::from(item.get_type(mime)).await.ok()?;
+    let blob = blob_val.dyn_into::<web_sys::Blob>().ok()?;
+    let text_val = wasm_bindgen_futures::JsFuture::from(blob.text()).await.ok()?;
+    text_val.as_string()
 }
 
 /// Dev-only: resolve the dev login identity from `?user=<name>` in the boot URL.

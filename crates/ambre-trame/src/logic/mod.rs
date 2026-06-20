@@ -24,8 +24,8 @@ use crate::formula::parser::{parse_formula, resolve_refs};
 use crate::model::{SheetIndex, Uid, cell_key, parse_cell_key};
 use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 use ambre_bus::{
-    BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellStyle, FilterKind, FilterOp,
-    HAlign, StylePatch, VAlign,
+    BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellStyle, ClipboardCell,
+    ClipboardPayload, FilterKind, FilterOp, HAlign, StylePatch, VAlign,
 };
 
 // -----------------------------------------------------------------------------
@@ -261,6 +261,7 @@ impl Default for TrameState {
 //   - sync       : CRDT delta flush, remote apply, snapshot import/export.
 // -----------------------------------------------------------------------------
 mod cells;
+mod clipboard;
 mod commands;
 mod filters;
 mod helpers;

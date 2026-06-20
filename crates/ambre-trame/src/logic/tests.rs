@@ -1573,3 +1573,41 @@
         }
         assert_eq!(op_from_str("garbage"), None);
     }
+
+    /// A pasted formula's relative references reindex by the paste offset, and a
+    /// plain literal is copied verbatim (`-ui.md` sec.5.E). Copy A1:B1 (A1=10,
+    /// B1==A1*2) and paste with the top-left landing on A3: B3 must store the
+    /// reindexed `=A3*2` and compute `20`.
+    #[test]
+    fn paste_reindexes_relative_formula() {
+        use crate::{ClipboardCell, ClipboardPayload};
+
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "10".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 1, text: "=A1*2".to_owned() });
+
+        // Source range A1:B1, pasted with top-left at A3 (row 2): dr = +2.
+        let payload = ClipboardPayload {
+            src_row: 0,
+            src_col: 0,
+            rows: 1,
+            cols: 2,
+            cells: vec![
+                ClipboardCell { dr: 0, dc: 0, raw: "10".to_owned(), ..Default::default() },
+                ClipboardCell { dr: 0, dc: 1, raw: "=A1*2".to_owned(), ..Default::default() },
+            ],
+        };
+        state.handle_command(TrameCommand::PasteRange { target_row: 2, target_col: 0, payload });
+
+        let evts = state.handle_command(TrameCommand::ScrollViewport {
+            version: 1, row_start: 0, row_end: 3, col_start: 0, col_end: 1,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
+            panic!("expected ViewportData");
+        };
+        let a3 = cells.iter().find(|c| c.row == 2 && c.col == 0).unwrap();
+        let b3 = cells.iter().find(|c| c.row == 2 && c.col == 1).unwrap();
+        assert_eq!(a3.text, "10", "literal copied verbatim");
+        assert_eq!(b3.raw, "=A3*2", "relative ref reindexed by the paste offset");
+        assert_eq!(b3.text, "20", "reindexed formula recomputes against the pasted literal");
+    }
