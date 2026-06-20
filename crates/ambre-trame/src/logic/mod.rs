@@ -263,6 +263,7 @@ impl Default for TrameState {
 mod cells;
 mod clipboard;
 mod commands;
+mod fill;
 mod filters;
 mod helpers;
 mod merges;

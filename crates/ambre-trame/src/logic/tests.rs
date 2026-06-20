@@ -1611,3 +1611,105 @@
         assert_eq!(b3.raw, "=A3*2", "relative ref reindexed by the paste offset");
         assert_eq!(b3.text, "20", "reindexed formula recomputes against the pasted literal");
     }
+
+    /// Autofill in `Auto` mode extrapolates a numeric arithmetic series down a
+    /// column (`-ui.md` sec.5.F): A1=1, A2=2 dragged to A5 yields 3, 4, 5.
+    #[test]
+    fn fill_auto_extrapolates_numeric_series() {
+        use crate::{FillMode, GridRange};
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "1".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 1, col: 0, text: "2".to_owned() });
+
+        state.handle_command(TrameCommand::FillRange {
+            sheet_id: state.active_sheet.clone(),
+            src: GridRange { row: 0, col: 0, row_end: 1, col_end: 0 },
+            dest: GridRange { row: 0, col: 0, row_end: 4, col_end: 0 },
+            mode: FillMode::Auto,
+        });
+
+        let evts = state.handle_command(TrameCommand::ScrollViewport {
+            version: 1, row_start: 0, row_end: 4, col_start: 0, col_end: 0,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
+        let at = |r: u32| cells.iter().find(|c| c.row == r && c.col == 0).unwrap().text.clone();
+        assert_eq!((at(2), at(3), at(4)), ("3".into(), "4".into(), "5".into()));
+    }
+
+    /// Autofill in `Auto` mode copies (tiles) a non-numeric source and reindexes
+    /// a copied formula's relative references by its fill offset.
+    #[test]
+    fn fill_auto_copies_text_and_reindexes_formula() {
+        use crate::{FillMode, GridRange};
+        let mut state = TrameState::new();
+        // B1 = A1*2; A column holds the multiplicands so the reindex is visible.
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "10".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 1, col: 0, text: "20".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 1, text: "=A1*2".to_owned() });
+
+        // Fill B1 down to B2: the single source is not a series -> Copy + reindex.
+        state.handle_command(TrameCommand::FillRange {
+            sheet_id: state.active_sheet.clone(),
+            src: GridRange { row: 0, col: 1, row_end: 0, col_end: 1 },
+            dest: GridRange { row: 0, col: 1, row_end: 1, col_end: 1 },
+            mode: FillMode::Auto,
+        });
+
+        let evts = state.handle_command(TrameCommand::ScrollViewport {
+            version: 1, row_start: 0, row_end: 1, col_start: 0, col_end: 1,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
+        let b2 = cells.iter().find(|c| c.row == 1 && c.col == 1).unwrap();
+        assert_eq!(b2.raw, "=A2*2", "relative ref reindexed by the fill offset");
+        assert_eq!(b2.text, "40", "reindexed formula recomputes against A2");
+    }
+
+    /// `Series` mode on a single numeric cell increments by 1 (Excel's Ctrl+drag
+    /// of one number): A1=5 filled to A4 yields 6, 7, 8.
+    #[test]
+    fn fill_series_single_cell_increments_by_one() {
+        use crate::{FillMode, GridRange};
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "5".to_owned() });
+
+        state.handle_command(TrameCommand::FillRange {
+            sheet_id: state.active_sheet.clone(),
+            src: GridRange { row: 0, col: 0, row_end: 0, col_end: 0 },
+            dest: GridRange { row: 0, col: 0, row_end: 3, col_end: 0 },
+            mode: FillMode::Series,
+        });
+
+        let evts = state.handle_command(TrameCommand::ScrollViewport {
+            version: 1, row_start: 0, row_end: 3, col_start: 0, col_end: 0,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
+        let at = |r: u32| cells.iter().find(|c| c.row == r && c.col == 0).unwrap().text.clone();
+        assert_eq!((at(1), at(2), at(3)), ("6".into(), "7".into(), "8".into()));
+    }
+
+    /// `Copy` mode tiles a multi-cell numeric source verbatim (Excel's Ctrl+drag
+    /// of a selection): A1=1, A2=2 filled to A6 repeats 1, 2, 1, 2 -- no series.
+    #[test]
+    fn fill_copy_multi_cell_tiles_verbatim() {
+        use crate::{FillMode, GridRange};
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "1".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 1, col: 0, text: "2".to_owned() });
+
+        state.handle_command(TrameCommand::FillRange {
+            sheet_id: state.active_sheet.clone(),
+            src: GridRange { row: 0, col: 0, row_end: 1, col_end: 0 },
+            dest: GridRange { row: 0, col: 0, row_end: 5, col_end: 0 },
+            mode: FillMode::Copy,
+        });
+
+        let evts = state.handle_command(TrameCommand::ScrollViewport {
+            version: 1, row_start: 0, row_end: 5, col_start: 0, col_end: 0,
+        });
+        let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else { panic!() };
+        let at = |r: u32| cells.iter().find(|c| c.row == r && c.col == 0).unwrap().text.clone();
+        assert_eq!(
+            (at(2), at(3), at(4), at(5)),
+            ("1".into(), "2".into(), "1".into(), "2".into()),
+        );
+    }

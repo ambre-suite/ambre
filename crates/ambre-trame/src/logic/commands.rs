@@ -242,6 +242,9 @@ impl TrameState {
                 let (row, col) = self.active;
                 self.paste_range(row, col, payload)
             }
+            TrameCommand::FillRange { sheet_id, src, dest, mode } => {
+                self.fill_range(&sheet_id, src, dest, mode)
+            }
 
             // Deferred feature surface (`ambre-spec-trame-features.md §10`): the
             // command vocabulary is complete and typed, but these handlers land
