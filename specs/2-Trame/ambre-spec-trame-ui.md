@@ -598,7 +598,9 @@ fn send_sort(&mut self, sheet_id: SheetId, ascending: bool) {
 
 ### D. Shared Filter Popover (MVP)
 
-`FilterByColumn` opens a `DrawSurface` popover anchored under the active column header.
+`FilterByColumn` opens a **DOM chrome popover** (Leptos `FilterPopover` in `trame_chrome`)
+anchored under the active column header -- the same chrome pattern as the format bar
+(sec.5bis) and the find/replace panel (sec.5.G), not a canvas `DrawSurface` overlay.
 For MVP it offers the `values` kind (checkbox list of the column's distinct visible
 values) and a minimal `condition` kind (op + value). Applying sends a single
 `ApplyFilter`; the Logic thread recomputes `filter_hidden_{sheet}` and replies
@@ -678,40 +680,80 @@ switches to a crosshair on hover.
 
 ### G. Find & Replace -- MVP
 
-`Ctrl+F` / `Ctrl+H` open a `DrawSurface` panel (no DOM, sec.17). Because the UI cache only
-covers the viewport (sec.16), the search runs in the Logic thread: `FindNext` returns the
-next match to scroll to; `ReplaceAll` mutates and returns the count.
+`Ctrl+F` / `Ctrl+H` open a **DOM chrome panel** (Leptos `FindReplace` component in
+`trame_chrome`), the same approach as the grid context menu, the filter popover and the
+format bar -- a floating panel pinned to the grid's top-right corner, not a canvas
+`DrawSurface` overlay. The panel reuses the shared chrome plumbing: it is a piece of view
+state in the chrome, and its actions cross the existing UI<->Logic command channel. Because
+the UI cache only covers the viewport (sec.16), the search runs in the Logic thread:
+`FindNext` returns the next match to scroll to; `ReplaceAll` mutates and returns the count.
+
+`Ctrl+F` opens the panel in *find* mode (query field only); `Ctrl+H` opens it in *replace*
+mode (query + replacement fields). Both chords route through the host's `keydown` listener
+(like Copy/Cut/Paste, sec.5.E) into a UI-only intent that toggles the panel; `Escape` (or the
+panel's close button) dismisses it and clears the match highlight. The panel carries the
+search options as local Leptos signals: `match_case`, `whole_cell`, `in_formulas` (Replace
+only), `all_sheets` (Replace only).
 
 ```rust
-fn on_find_next(&mut self, p: &FindPanel) {
-    let (row, col) = self.ui_state.selection.active();
-    self.logic_tx.send(TrameCommand::FindNext {
-        sheet_id: self.ui_state.active_sheet, from: CellRef { row, col },
-        find: p.query.clone(), match_case: p.match_case, whole_cell: p.whole_cell,
-    });
-    // FindResult { matches, active } -> highlight visible matches, scroll to active.
+// FindReplace panel state, held in the chrome (DOM), not in the render worker.
+struct FindReplaceState {
+    query:       String,
+    replacement: String,   // replace mode only
+    match_case:  bool,
+    whole_cell:  bool,
+    in_formulas: bool,     // replace mode only
+    all_sheets:  bool,     // replace mode only -> Scope::Workbook
 }
 
-fn on_replace_all(&mut self, p: &FindPanel) {
-    self.logic_tx.send(TrameCommand::ReplaceAll {
-        version: self.next_version(),
-        scope: if p.all_sheets { Scope::Workbook } else { Scope::Sheet(self.ui_state.active_sheet) },
-        find: p.query.clone(), replace: p.replacement.clone(),
-        match_case: p.match_case, whole_cell: p.whole_cell, in_formulas: p.in_formulas,
+// Find / Find Next: resolve the search origin from the tracked active cell, like the
+// parameterless filter/sort intents (sec.5.C/5.D). The Logic thread keeps the active cell
+// via SetActiveCell, so the panel need not carry the cursor.
+fn on_find_next(&mut self, p: &FindReplaceState) {
+    self.logic_tx.send(TrameCommand::FindNext {
+        query: p.query.clone(), match_case: p.match_case, whole_cell: p.whole_cell,
     });
-    // ReplaceDone { replaced } -> toast "N replaced".
+    // FindResult { matches, active } -> the chrome forwards `matches` (current-sheet hits)
+    // and `active` (next match) to the render worker, which highlights the visible matches
+    // and scrolls `active` into view.
+}
+
+fn on_replace_all(&mut self, p: &FindReplaceState) {
+    self.logic_tx.send(TrameCommand::ReplaceAll {
+        query: p.query.clone(), replacement: p.replacement.clone(),
+        match_case: p.match_case, whole_cell: p.whole_cell,
+        in_formulas: p.in_formulas, all_sheets: p.all_sheets,
+    });
+    // ReplaceDone { replaced } -> toast "N replaced" via chrome::notify_event.
 }
 ```
+
+The match scan compares against each cell's **displayed value** (`whole_cell` = exact
+equality, else substring); `match_case` toggles case folding. `ReplaceAll` rewrites the raw
+cell text; `in_formulas` controls whether formula-source cells (`=...`) are eligible, and
+`all_sheets` widens the scope from the active sheet (`Scope::Sheet`) to the whole workbook
+(`Scope::Workbook`). The whole `ReplaceAll` is one undo group and replies `DataReset` so the
+UI re-fetches the rewritten region. `FindResult` matches are local view state (never synced);
+the highlight is cleared when the panel closes or the query changes.
 
 ---
 
 ## 5bis. TOOLBAR (MANUAL FORMATTING)
 
-The formatting toolbar is a `DrawSurface` overlay (no DOM, sec.17) pinned above the formula
-bar (sec.6). Every control emits `TrameCommand::SetCellStyle { range, patch }` over the
-current selection; control state (e.g. the bold toggle) is read from the **active cell's**
-`CellStyle` in `current_viewport`. Styles are document mutations (LoroDoc, synchronised --
-sec.16), unlike freeze/selection which are local.
+The formatting toolbar is a **DOM chrome bar** (Leptos `FormatBar` in
+`trame_chrome::chrome::bars`) pinned above the formula bar (sec.6) -- the same approach as
+the grid context menu (sec.5.C), the filter popover (sec.5.D) and the find/replace panel
+(sec.5.G), reusing the shared chrome command channel rather than a canvas `DrawSurface`
+overlay. Every control emits `TrameCommand::SetCellStyle { range, patch }` over the current
+selection (the toggle buttons -- Bold/Italic/Underline -- and Undo/Redo route through the
+shared `CommandId` path; the value controls emit a `StylePatch`); control state (e.g. the
+bold toggle) is read from the **active cell's** resolved `CellStyle`, pushed to the chrome by
+`TrameEvent::StyleApplied`. Styles are document mutations (LoroDoc, synchronised -- sec.16),
+unlike freeze/selection which are local.
+
+The `ToolbarAction` enum below is the conceptual action vocabulary; in the delivered Leptos
+bar each control maps to either a `CommandId` (toggles, undo/redo, merge) or a `StylePatch`
+field (the value controls).
 
 ```rust
 pub enum ToolbarAction {
@@ -744,16 +786,28 @@ fn on_toolbar_action(&mut self, action: ToolbarAction) {
 }
 ```
 
-Color pickers and the number-format menu are small popovers anchored under their toolbar
-button (same overlay pattern as the filter popover, sec.5.D). The borders control is a
-composed popover: a "pen" (line style + colour) over a grid of preset icon buttons; a preset
-click applies the current pen to its edges. Borders are stored per edge (each of top/right/
-bottom/left carries its own style + colour), so a cell can mix edges, and the selection-level
-preset is resolved to concrete edges per cell (merge-aware) by the Logic thread.
+Color pickers and the number-format menu are small **DOM popovers** anchored under their
+toolbar button (`NumberFormatPopover`, `BordersPopover`, `ColorPopover`, `H/VAlignPopover`,
+`FontPopover` -- same chrome pattern as the filter popover, sec.5.D, with theme-aware
+palettes). The borders control is a composed popover: a "pen" (line style + colour) over a
+grid of preset icon buttons; a preset click applies the current pen to its edges. Borders are
+stored per edge (each of top/right/bottom/left carries its own style + colour), so a cell can
+mix edges, and the selection-level preset is resolved to concrete edges per cell
+(merge-aware) by the Logic thread.
 
 ---
 
 ## 6. INLINE EDITOR AND FORMULA BAR
+
+> **Implementation note.** The **formula bar** is a DOM chrome component
+> (`trame_chrome::chrome::formula_bar`), like the format bar (sec.5bis) and the other chrome
+> controls -- not a canvas `DrawSurface` band. The canvas merely reserves the strip above the
+> grid (`ui::renderer`: "canvas minus the formula bar band"); the bar's cell-reference box and
+> editable value field are DOM. The **inline editor** is a transparent DOM `<textarea>`
+> overlaid on the active cell (the "textarea pipe"), so IME, selection and clipboard come for
+> free; the canvas only paints the cell's white background + blue focus border underneath. The
+> pseudo-code below predates that split and is kept for the data model (`InlineEditor`,
+> `EditTrigger`) and the commit/cancel flow; the literal `DrawSurface` calls are illustrative.
 
 ### A. Structure
 
@@ -912,7 +966,11 @@ fn compute_cell_ref_completions(&self, token: &str) -> Vec<Completion> {
 
 ### C. Autocompletion Dropdown Rendering
 
-Floating dropdown below the active cell (DrawSurface), with selected item highlighting. Navigation: up/down arrows, Tab to complete, Escape to close.
+Floating **DOM chrome dropdown** (Leptos, anchored under the active cell -- it sits over the
+inline editor's transparent textarea, which is itself DOM, so a canvas `DrawSurface` overlay
+would be the odd one out; same chrome pattern as the filter/format/find popovers), with
+selected item highlighting. Navigation: up/down arrows, Tab to complete, Escape to close.
+*(Phase 2.)*
 
 ---
 
@@ -1431,7 +1489,7 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 - [x] Formatting toolbar (sec.5bis): bold/italic/underline, font+size, text+fill color, H/V alignment, number format (text/number/currency/percent/scientific/fraction/date/time/custom + decimals), borders, wrap -> `SetCellStyle` + `StylePatch`; `StyleApplied` dispatch *(Delivered as a **DOM** chrome bar (`trame_chrome::chrome::bars::FormatBar`) pinned above the formula bar, not a canvas `DrawSurface` overlay -- same approach as the context menu / filter popovers, reusing the shared command channel. Bold/Italic/Underline/Undo/Redo go through `on_command` (`CommandId`); the value controls (font + size, text + fill colours, H/V alignment, number format, borders, wrap) emit a `StylePatch` via `on_style` -> `SetCellStyle`. Number format is a `123` icon popover; borders, colours and alignment are icon popovers with theme-aware palettes (`NumberFormatPopover`, `BordersPopover`, `ColorPopover`, `H/VAlignPopover`, `FontPopover`). Buttons reflect the active selection's style and grey out inactionable undo/redo and decimals controls. `StyleApplied` toasts via `chrome::notify_event`.)*
 - [x] Clipboard (sec.5.E): copy/cut local from the viewport, paste via `PasteRange` (Logic reindexes formulas+styles), marching-ants, Ctrl+C/X/V + context-menu entries + Ctrl+Inser/Shift+Inser/Shift+Del; `PasteRejected` toast *(Copy/cut serialise the live selection from the viewport cache into a typed `ClipboardPayload` (`ambre-bus`, serde) written to the OS clipboard as base64 postcard under `application/x-ambre-trame` plus a tab-separated `text/plain` fallback; the host's `copy`/`cut`/`paste` DOM listeners service the Ctrl+C/X/V (and Ctrl+Insert/Shift+Insert/Shift+Del) chords. Paste sends `TrameCommand::PasteRange`; the Logic thread reindexes every relative reference by the paste offset (`formula::shift`, parse -> shift -> render; off-grid -> `#REF!`; AMBRE has no `$` absolute syntax) and writes the carried `CellStyle`/bold/italic verbatim, as one undo group. An external TSV paste lands as literals (`src == target`, no shift). Cut clears the source after paste; the source range crawls with animated marching-ants (`renderer::dashed_h`/`dashed_v`) until Escape or the next copy. Toolbar Copy/Cut/Paste buttons (`MdiContentCopy`/`MdiContentCut`/`MdiContentPaste`) and context-menu entries drive the browser clipboard via the shared command path (`COPY`/`CUT`/`PASTE` UI-only intents). Number format/decimals are not carried (the viewport does not surface them) and `PasteRejected` is wired through `chrome::notify_event` but only fires once range protection lands (Post-MVP).)*
 - [x] Autofill / fill handle (sec.5.F): drag -> `FillRange` (Copy | Series) *(A small blue handle square is drawn at the selection's bottom-right corner (`ui::grid::fill_handle_rect`/`fill_handle_at`, `FILL_HANDLE_SIZE`); a press on it arms a fill drag (`TrameView::fill_drag`) instead of a new selection. Pointer moves grow a dashed destination preview (`TrameUiState::fill_preview`, drawn in `ui::renderer::draw_overlay`), locked to the dominant axis (`fill_dest`); the release emits `TrameCommand::FillRange { src, dest, mode }` and grows the selection over the filled range. Hovering the handle switches the canvas cursor to a crosshair (`TrameView::set_fill_cursor` on `#ambre-canvas`). The mode follows Excel/Sheets: a plain drag sends `Auto` (Logic picks Series vs Copy); holding Ctrl inverts it -- `Series` (+1) on a single-cell source, `Copy` on a multi-cell one. The Logic thread (`logic::fill`) reads the source cells from its document model and, per fill line (a column for a vertical fill, a row for a horizontal one), either extrapolates a numeric arithmetic `Series` or tiles/`Copy`s the source -- reindexing a copied formula's relative refs by its tile offset (`formula::shift`, as in `PasteRange`) and carrying each source cell's style (`apply_pasted_style`). `Auto` picks Series only when a line's source values form an arithmetic numeric progression. One undo group; replies `DataReset`.)*
-- [ ] Find & replace panel (sec.5.G): Ctrl+F / Ctrl+H -> `FindNext` / `ReplaceAll`; `FindResult` / `ReplaceDone` dispatch
+- [ ] Find & replace panel (sec.5.G): DOM chrome panel (Leptos `FindReplace` in `trame_chrome`, like the filter popover / format bar -- not a canvas overlay). Ctrl+F (find) / Ctrl+H (replace) -> `FindNext` / `ReplaceAll`; `FindResult` / `ReplaceDone` dispatch
 - [ ] Cell wrap + vertical alignment + empty-neighbour overflow rendering (sec.4.A/4.C)
 - [ ] Status bar (sec.13bis): selection aggregates via `RequestSelectionStats` -> `SelectionStats`
 - [ ] `on_logic_message` wiring: full `TrameEvent` dispatch (ViewportData, EditAck, FormulaError, SheetList, MergeRejected, MergeConflictDetected, FilterApplied, FilterCleared, SortComplete, StyleApplied, PasteRejected, FindResult, ReplaceDone, SelectionStats, ValidationError, UndoState, ImportProgress, ExportComplete)
