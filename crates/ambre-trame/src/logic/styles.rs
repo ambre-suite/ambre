@@ -171,6 +171,10 @@ impl TrameState {
             italic: self.italic.contains(&self.active),
             merged: self.merges.contains_key(&self.active)
                 || self.covered.contains(&self.active),
+            // Same numeric heuristic the renderer uses to resolve `HAlign::Auto`
+            // (see `render::content::cell_alignment`): a value that parses as a
+            // number aligns right, everything else left.
+            numeric: self.cell_text(self.active.0, self.active.1).parse::<f64>().is_ok(),
         }
     }
 

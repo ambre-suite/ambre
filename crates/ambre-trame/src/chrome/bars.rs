@@ -5,14 +5,16 @@
 // the rich-formatting controls emit a `StylePatch` through `on_style`.
 // ============================================================================
 
-use ambre_bus::{HAlign, StylePatch, VAlign};
+use ambre_bus::StylePatch;
 use ambre_chrome::commands::CommandId;
 use leptos::prelude::*;
 use leptos_icons::Icon;
 
 use super::color::{theme_bg_default, theme_fg_default};
 use super::commands::{BOLD, ITALIC, MERGE, REDO, UNDO, UNMERGE};
-use super::popovers::{BordersPopover, ColorPopover, FontPopover, NumberFormatPopover};
+use super::popovers::{
+    BordersPopover, ColorPopover, FontPopover, HAlignPopover, NumberFormatPopover, VAlignPopover,
+};
 use super::style::{StyleState, Toggles};
 
 /// The font sizes offered by the toolbar `<select>` (points).
@@ -39,21 +41,21 @@ pub fn FormatBar(
 ) -> impl IntoView {
     view! {
         <button
-            title="Bold"
+            aria-label="Bold"
             aria-pressed=move || style.bold.get().then_some("true")
             on:click=move |_| on_command.run(BOLD)
         >
             <Icon icon=icondata::BsTypeBold />
         </button>
         <button
-            title="Italic"
+            aria-label="Italic"
             aria-pressed=move || style.italic.get().then_some("true")
             on:click=move |_| on_command.run(ITALIC)
         >
             <Icon icon=icondata::BsTypeItalic />
         </button>
         <button
-            title="Underline"
+            aria-label="Underline"
             aria-pressed=move || style.underline.get().then_some("true")
             on:click=move |_| on_style.run(StylePatch {
                 underline: Some(!style.underline.get_untracked()),
@@ -63,7 +65,7 @@ pub fn FormatBar(
             <Icon icon=icondata::BsTypeUnderline />
         </button>
         <button
-            title="Strikethrough"
+            aria-label="Strikethrough"
             aria-pressed=move || style.strikethrough.get().then_some("true")
             on:click=move |_| on_style.run(StylePatch {
                 strikethrough: Some(!style.strikethrough.get_untracked()),
@@ -78,7 +80,7 @@ pub fn FormatBar(
         // typeface) + size.
         <FontPopover style=style on_style=on_style />
         <select
-            title="Font size"
+            aria-label="Font size"
             prop:value=move || {
                 style.size.get().map(|s| s.to_string()).unwrap_or_else(|| DEFAULT_SIZE.to_string())
             }
@@ -118,65 +120,24 @@ pub fn FormatBar(
         />
         <span class="sep"></span>
 
-        // Horizontal alignment.
-        <button
-            title="Align left"
-            aria-pressed=move || (style.h_align.get() == HAlign::Left).then_some("true")
-            on:click=move |_| on_style.run(StylePatch { h_align: Some(HAlign::Left), ..Default::default() })
-        >
-            <Icon icon=icondata::BiAlignLeftRegular />
-        </button>
-        <button
-            title="Align center"
-            aria-pressed=move || (style.h_align.get() == HAlign::Center).then_some("true")
-            on:click=move |_| on_style.run(StylePatch { h_align: Some(HAlign::Center), ..Default::default() })
-        >
-            <Icon icon=icondata::BiAlignMiddleRegular />
-        </button>
-        <button
-            title="Align right"
-            aria-pressed=move || (style.h_align.get() == HAlign::Right).then_some("true")
-            on:click=move |_| on_style.run(StylePatch { h_align: Some(HAlign::Right), ..Default::default() })
-        >
-            <Icon icon=icondata::BiAlignRightRegular />
-        </button>
-        <span class="sep"></span>
-
-        // Vertical alignment.
-        <button
-            title="Align top"
-            aria-pressed=move || (style.v_align.get() == VAlign::Top).then_some("true")
-            on:click=move |_| on_style.run(StylePatch { v_align: Some(VAlign::Top), ..Default::default() })
-        >
-            <Icon icon=icondata::AiVerticalAlignTopOutlined />
-        </button>
-        <button
-            title="Align middle"
-            aria-pressed=move || (style.v_align.get() == VAlign::Middle).then_some("true")
-            on:click=move |_| on_style.run(StylePatch { v_align: Some(VAlign::Middle), ..Default::default() })
-        >
-            <Icon icon=icondata::AiVerticalAlignMiddleOutlined />
-        </button>
-        <button
-            title="Align bottom"
-            aria-pressed=move || (style.v_align.get() == VAlign::Bottom).then_some("true")
-            on:click=move |_| on_style.run(StylePatch { v_align: Some(VAlign::Bottom), ..Default::default() })
-        >
-            <Icon icon=icondata::AiVerticalAlignBottomOutlined />
-        </button>
+        // Horizontal alignment: a single button (the active alignment's icon)
+        // opening a context-menu popover listing the three alignments.
+        <HAlignPopover style=style on_style=on_style />
+        // Vertical alignment: same composed popover, vertical variants.
+        <VAlignPopover style=style on_style=on_style />
         <span class="sep"></span>
 
         // Number format: a single button (the "123" icon) opening a context-menu
         // popover that lists the families, with a check on the active one.
         <NumberFormatPopover style=style on_style=on_style />
         <button
-            title="Decrease decimals"
+            aria-label="Decrease decimals"
             on:click=move |_| on_style.run(StylePatch { decimals: Some(Some(0)), ..Default::default() })
         >
             <Icon icon=icondata::LuDecimalsArrowLeft />
         </button>
         <button
-            title="Increase decimals"
+            aria-label="Increase decimals"
             on:click=move |_| on_style.run(StylePatch { decimals: Some(Some(2)), ..Default::default() })
         >
             <Icon icon=icondata::LuDecimalsArrowRight />
@@ -189,7 +150,7 @@ pub fn FormatBar(
 
         // Wrap text.
         <button
-            title="Wrap text"
+            aria-label="Wrap text"
             aria-pressed=move || style.wrap.get().then_some("true")
             on:click=move |_| on_style.run(StylePatch {
                 wrap: Some(!style.wrap.get_untracked()),
@@ -204,7 +165,7 @@ pub fn FormatBar(
         // plain selection it merges the range (MERGE). The Logic thread guards
         // both (single-cell merge is a no-op, non-empty covered cell rejects).
         <button
-            title="Merge cells"
+            aria-label="Merge cells"
             aria-pressed=move || style.merged.get().then_some("true")
             on:click=move |_| {
                 on_command.run(if style.merged.get_untracked() { UNMERGE } else { MERGE })
@@ -215,14 +176,14 @@ pub fn FormatBar(
         <span class="sep"></span>
 
         <button
-            title="Undo"
+            aria-label="Undo"
             disabled=move || !toggles.undo_enabled.get()
             on:click=move |_| on_command.run(UNDO)
         >
             <Icon icon=icondata::BiUndoRegular />
         </button>
         <button
-            title="Redo"
+            aria-label="Redo"
             disabled=move || !toggles.redo_enabled.get()
             on:click=move |_| on_command.run(REDO)
         >

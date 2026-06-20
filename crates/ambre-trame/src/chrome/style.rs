@@ -50,6 +50,10 @@ pub struct StyleState {
     pub wrap: RwSignal<bool>,
     pub h_align: RwSignal<HAlign>,
     pub v_align: RwSignal<VAlign>,
+    /// Whether the active cell's value is numeric. Lets the alignment control
+    /// resolve [`HAlign::Auto`] the way the renderer does (numbers right, text
+    /// left) so an `Auto` cell shows its de-facto alignment.
+    pub numeric: RwSignal<bool>,
     pub format: RwSignal<CellFormat>,
     /// Borders popover picker state: the stroke style and colour the next preset
     /// click applies. Seeded (best-effort) from the active cell's first present
@@ -82,6 +86,7 @@ impl StyleState {
             wrap: RwSignal::new(false),
             h_align: RwSignal::new(HAlign::Auto),
             v_align: RwSignal::new(VAlign::Middle),
+            numeric: RwSignal::new(false),
             format: RwSignal::new(CellFormat::General),
             border_line: RwSignal::new(BorderStyle::Solid),
             border_color: RwSignal::new(None),
@@ -98,7 +103,7 @@ impl StyleState {
 /// no-op for any other event; the launcher calls it for every event it relays.
 pub fn apply_style_event(s: &StyleState, ev: &UiEvent) {
     if let UiEvent::Viewport {
-        event: AppEvent::Trame(TrameEvent::StyleApplied { style, bold, italic, merged }),
+        event: AppEvent::Trame(TrameEvent::StyleApplied { style, bold, italic, merged, numeric }),
         ..
     } = ev
     {
@@ -110,6 +115,7 @@ pub fn apply_style_event(s: &StyleState, ev: &UiEvent) {
         s.wrap.set(style.wrap);
         s.h_align.set(style.h_align);
         s.v_align.set(style.v_align);
+        s.numeric.set(*numeric);
         s.format.set(style.format.clone());
         // The borders pen (line style + colour) is user-owned and sticky: it is
         // NOT reseeded from the selected cell. Seeding it here would clobber an

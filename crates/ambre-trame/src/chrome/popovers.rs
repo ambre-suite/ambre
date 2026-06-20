@@ -7,7 +7,8 @@
 // ============================================================================
 
 use ambre_bus::{
-    BorderEdit, BorderPreset, BorderStyle, CellFormat, FilterKind, FilterOp, StylePatch,
+    BorderEdit, BorderPreset, BorderStyle, CellFormat, FilterKind, FilterOp, HAlign, StylePatch,
+    VAlign,
 };
 use ambre_chrome::commands::CommandId;
 use leptos::html;
@@ -90,7 +91,7 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
     view! {
         <span class="ambre-borders" node_ref=root_ref>
             <button
-                title="Borders"
+                aria-label="Borders"
                 aria-haspopup="true"
                 aria-expanded=move || open.get().then_some("true")
                 on:click=move |_| open.update(|o| *o = !*o)
@@ -106,7 +107,7 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
                             .map(|&(preset, icon, label)| {
                                 view! {
                                     <button
-                                        title=label
+                                        aria-label=label
                                         on:click=move |_| apply(preset)
                                     >
                                         <Icon icon=icon />
@@ -123,7 +124,7 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
                         <span class="ambre-line-style">
                             <button
                                 class="line-style-trigger"
-                                title="Border style"
+                                aria-label="Border style"
                                 aria-haspopup="true"
                                 aria-expanded=move || line_open.get().then_some("true")
                                 on:click=move |_| line_open.update(|o| *o = !*o)
@@ -138,7 +139,7 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
                                             view! {
                                                 <button
                                                     class="line-style-item"
-                                                    title=label
+                                                    aria-label=label
                                                     on:click=move |_| {
                                                         style.border_line.set(bs);
                                                         line_open.set(false);
@@ -228,7 +229,7 @@ pub(crate) fn FontPopover(style: StyleState, on_style: Callback<StylePatch>) -> 
         <span class="ambre-font" node_ref=root_ref>
             <button
                 class="font-trigger"
-                title="Font"
+                aria-label="Font"
                 aria-haspopup="true"
                 aria-expanded=move || open.get().then_some("true")
                 style:font-family=current_css
@@ -318,7 +319,7 @@ pub(crate) fn NumberFormatPopover(
     view! {
         <span class="ambre-number-format" node_ref=root_ref>
             <button
-                title="Number format"
+                aria-label="Number format"
                 aria-haspopup="true"
                 aria-expanded=move || open.get().then_some("true")
                 on:click=move |_| open.update(|o| *o = !*o)
@@ -352,6 +353,184 @@ pub(crate) fn NumberFormatPopover(
                                         </Show>
                                     </span>
                                     <span class="label">{label.to_string()}</span>
+                                </button>
+                            }
+                        })
+                        .collect_view()}
+                </div>
+            </Show>
+        </span>
+    }
+}
+
+/// The horizontal alignments offered by the popover, each with its icon and
+/// tooltip. The trigger mirrors the active entry's icon.
+const H_ALIGNS: &[(HAlign, icondata::Icon, &str)] = &[
+    (HAlign::Left, icondata::BiAlignLeftRegular, "Align left"),
+    (HAlign::Center, icondata::BiAlignMiddleRegular, "Align center"),
+    (HAlign::Right, icondata::BiAlignRightRegular, "Align right"),
+];
+
+/// The vertical alignments offered by the popover, each with its icon and
+/// tooltip. The trigger mirrors the active entry's icon.
+const V_ALIGNS: &[(VAlign, icondata::Icon, &str)] = &[
+    (VAlign::Top, icondata::AiVerticalAlignTopOutlined, "Align top"),
+    (VAlign::Middle, icondata::AiVerticalAlignMiddleOutlined, "Align middle"),
+    (VAlign::Bottom, icondata::AiVerticalAlignBottomOutlined, "Align bottom"),
+];
+
+/// The composed horizontal-alignment control: a single toolbar button showing the
+/// active alignment's icon, toggling a context-menu popover that lists the three
+/// alignments with a check on the active one. Picking emits a [`StylePatch`].
+#[component]
+pub(crate) fn HAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -> impl IntoView {
+    let open = RwSignal::new(false);
+    let root_ref = NodeRef::<html::Span>::new();
+    let handle = window_event_listener(leptos::ev::pointerdown, move |ev| {
+        if !open.get_untracked() {
+            return;
+        }
+        let inside = root_ref
+            .get_untracked()
+            .zip(ev.target())
+            .and_then(|(root, target)| target.dyn_into::<web_sys::Node>().ok().map(|n| (root, n)))
+            .is_some_and(|(root, node)| root.contains(Some(&node)));
+        if !inside {
+            open.set(false);
+        }
+    });
+    on_cleanup(move || handle.remove());
+    // Resolve the effective horizontal alignment: `Auto` follows the renderer's
+    // heuristic (numbers right, text left), every explicit value is itself. This
+    // drives both the trigger icon and the menu's check so an `Auto` cell shows
+    // its de-facto alignment.
+    let effective = move || match style.h_align.get() {
+        HAlign::Auto if style.numeric.get() => HAlign::Right,
+        HAlign::Auto => HAlign::Left,
+        other => other,
+    };
+    // The effective alignment's icon, mirrored on the trigger.
+    let current_icon = move || {
+        let cur = effective();
+        H_ALIGNS
+            .iter()
+            .find(|(a, ..)| *a == cur)
+            .map_or(icondata::BiAlignLeftRegular, |(_, icon, _)| *icon)
+    };
+    view! {
+        <span class="ambre-align" node_ref=root_ref>
+            <button
+                aria-label="Horizontal alignment"
+                aria-haspopup="true"
+                aria-expanded=move || open.get().then_some("true")
+                on:click=move |_| open.update(|o| *o = !*o)
+            >
+                <Icon icon=Signal::derive(current_icon) />
+            </button>
+            <Show when=move || open.get() fallback=|| ()>
+                <div class="ambre-align-popover">
+                    {H_ALIGNS
+                        .iter()
+                        .map(|&(align, icon, label)| {
+                            view! {
+                                <button
+                                    class="align-item"
+                                    aria-label=label
+                                    on:click=move |_| {
+                                        on_style.run(StylePatch {
+                                            h_align: Some(align),
+                                            ..Default::default()
+                                        });
+                                        open.set(false);
+                                    }
+                                >
+                                    <span class="check">
+                                        // Check the effective alignment: `Auto`
+                                        // resolves to left (text) or right (number)
+                                        // exactly as the cell renders.
+                                        <Show
+                                            when=move || effective() == align
+                                            fallback=|| ()
+                                        >
+                                            <Icon icon=icondata::BsCheck />
+                                        </Show>
+                                    </span>
+                                    <Icon icon=icon />
+                                </button>
+                            }
+                        })
+                        .collect_view()}
+                </div>
+            </Show>
+        </span>
+    }
+}
+
+/// The composed vertical-alignment control: a single toolbar button showing the
+/// active alignment's icon, toggling a context-menu popover that lists the three
+/// alignments with a check on the active one. Picking emits a [`StylePatch`].
+#[component]
+pub(crate) fn VAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -> impl IntoView {
+    let open = RwSignal::new(false);
+    let root_ref = NodeRef::<html::Span>::new();
+    let handle = window_event_listener(leptos::ev::pointerdown, move |ev| {
+        if !open.get_untracked() {
+            return;
+        }
+        let inside = root_ref
+            .get_untracked()
+            .zip(ev.target())
+            .and_then(|(root, target)| target.dyn_into::<web_sys::Node>().ok().map(|n| (root, n)))
+            .is_some_and(|(root, node)| root.contains(Some(&node)));
+        if !inside {
+            open.set(false);
+        }
+    });
+    on_cleanup(move || handle.remove());
+    // The active alignment's icon, mirrored on the trigger.
+    let current_icon = move || {
+        let cur = style.v_align.get();
+        V_ALIGNS
+            .iter()
+            .find(|(a, ..)| *a == cur)
+            .map_or(icondata::AiVerticalAlignBottomOutlined, |(_, icon, _)| *icon)
+    };
+    view! {
+        <span class="ambre-align" node_ref=root_ref>
+            <button
+                aria-label="Vertical alignment"
+                aria-haspopup="true"
+                aria-expanded=move || open.get().then_some("true")
+                on:click=move |_| open.update(|o| *o = !*o)
+            >
+                <Icon icon=Signal::derive(current_icon) />
+            </button>
+            <Show when=move || open.get() fallback=|| ()>
+                <div class="ambre-align-popover">
+                    {V_ALIGNS
+                        .iter()
+                        .map(|&(align, icon, label)| {
+                            view! {
+                                <button
+                                    class="align-item"
+                                    aria-label=label
+                                    on:click=move |_| {
+                                        on_style.run(StylePatch {
+                                            v_align: Some(align),
+                                            ..Default::default()
+                                        });
+                                        open.set(false);
+                                    }
+                                >
+                                    <span class="check">
+                                        <Show
+                                            when=move || style.v_align.get() == align
+                                            fallback=|| ()
+                                        >
+                                            <Icon icon=icondata::BsCheck />
+                                        </Show>
+                                    </span>
+                                    <Icon icon=icon />
                                 </button>
                             }
                         })
@@ -406,7 +585,7 @@ pub(crate) fn ColorPopover(
     view! {
         <span class="ambre-color" node_ref=root_ref>
             <button
-                title=title
+                aria-label=title
                 aria-haspopup="true"
                 aria-expanded=move || open.get().then_some("true")
                 on:click=move |_| open.update(|o| *o = !*o)
@@ -437,7 +616,7 @@ pub(crate) fn ColorPopover(
                             .map(|&rgb| {
                                 view! {
                                     <button
-                                        title=format!("#{:06x}", rgb)
+                                        aria-label=format!("#{:06x}", rgb)
                                         style:background-color=format!("#{:06x}", rgb)
                                         on:click=move |_| {
                                             on_pick.run(Some(rgb));
