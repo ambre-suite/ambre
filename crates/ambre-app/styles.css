@@ -104,8 +104,15 @@
     display: block;
 }
 
-.ambre-commandbar button:hover {
+.ambre-commandbar button:hover:not(:disabled) {
     background: var(--surface);
+}
+
+/* Inactionable controls (e.g. Undo/Redo with an empty history stack, or the
+   decimals steppers on a non-decimal format) are greyed out and inert. */
+.ambre-commandbar button:disabled {
+    opacity: 0.4;
+    cursor: default;
 }
 
 .ambre-commandbar button[aria-pressed="true"] {

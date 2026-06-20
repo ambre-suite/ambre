@@ -707,6 +707,22 @@ pub enum CellFormat {
     Custom(String),
 }
 
+impl CellFormat {
+    /// Whether this format honours a decimal-places count (i.e. the
+    /// Increase/Decrease-decimals controls are meaningful). Only the numeric
+    /// families render with [`CellStyle::decimals`]; `General`, `Fraction`,
+    /// `Date`, `Time`, `Text` and `Custom` ignore it (see `format_number`).
+    pub fn has_decimals(&self) -> bool {
+        matches!(
+            self,
+            CellFormat::Number
+                | CellFormat::Currency
+                | CellFormat::Percent
+                | CellFormat::Scientific
+        )
+    }
+}
+
 /// A border preset naming a set of edges within the selection (`-ui.md`
 /// sec.5bis). Resolved per cell (merge-aware) by the Logic thread into the
 /// concrete edges of [`Borders`] the chosen stroke is applied to. Every preset

@@ -132,12 +132,14 @@ pub fn FormatBar(
         <NumberFormatPopover style=style on_style=on_style />
         <button
             aria-label="Decrease decimals"
+            disabled=move || !style.format.get().has_decimals()
             on:click=move |_| on_style.run(StylePatch { decimals: Some(Some(0)), ..Default::default() })
         >
             <Icon icon=icondata::LuDecimalsArrowLeft />
         </button>
         <button
             aria-label="Increase decimals"
+            disabled=move || !style.format.get().has_decimals()
             on:click=move |_| on_style.run(StylePatch { decimals: Some(Some(2)), ..Default::default() })
         >
             <Icon icon=icondata::LuDecimalsArrowRight />
