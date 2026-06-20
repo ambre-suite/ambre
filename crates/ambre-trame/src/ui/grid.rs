@@ -632,6 +632,12 @@ pub struct TrameUiState {
     /// clipboard. Stored as the normalized rectangle `(r1, c1, r2, c2)` in
     /// absolute grid coordinates. UI-only view state.
     pub clipboard_anchor: Option<CellRect>,
+
+    /// While the fill handle is being dragged, the destination rectangle the
+    /// release will fill (`-ui.md` sec.5.F), normalized and always containing the
+    /// source selection. `None` when no fill drag is in progress. Drawn as a
+    /// dashed preview outline. UI-only view state.
+    pub fill_preview: Option<CellRect>,
 }
 
 impl TrameUiState {
@@ -654,6 +660,7 @@ impl TrameUiState {
             filtered_col: None,
             hidden_rows: Vec::new(),
             clipboard_anchor: None,
+            fill_preview: None,
         };
         s.recompute_viewport_dims();
         s
@@ -1307,7 +1314,30 @@ impl TrameUiState {
         }
         Some((cx1, cy1, cx2 - cx1, cy2 - cy1))
     }
+
+    /// Screen pixel rect (x, y, w, h) of the autofill handle: a small square
+    /// centred on the bottom-right corner of the selection (`-ui.md` sec.5.F).
+    /// `None` when that corner cell is scrolled out of view.
+    pub fn fill_handle_rect(&self) -> Option<(f64, f64, f64, f64)> {
+        let (_, _, r2, c2) = self.selection.bounds();
+        let (x, y, w, h) = self.cell_pixel_rect(r2, c2)?;
+        let s = FILL_HANDLE_SIZE;
+        Some((x + w - s / 2.0, y + h - s / 2.0, s, s))
+    }
+
+    /// True if `(x, y)` (device px) hits the fill handle, with a small tolerance
+    /// margin so the ~7px square is easy to grab.
+    pub fn fill_handle_at(&self, x: f64, y: f64) -> bool {
+        self.fill_handle_rect().is_some_and(|(hx, hy, w, h)| {
+            let m = 2.0;
+            x >= hx - m && x <= hx + w + m && y >= hy - m && y <= hy + h + m
+        })
+    }
 }
+
+/// Side of the square autofill handle drawn at the selection's bottom-right
+/// corner, in device pixels (`-ui.md` sec.5.F).
+pub const FILL_HANDLE_SIZE: f64 = 7.0;
 
 #[cfg(test)]
 mod tests {

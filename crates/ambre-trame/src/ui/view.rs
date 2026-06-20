@@ -11,20 +11,23 @@
 // methods (see the dedicated impl block).
 // ============================================================================
 
-use ambre_bus::{AppCommand, AppEvent, DocumentId, LogicCommand, TrameCommand, TrameEvent, UiEvent};
-use ambre_draw::{Clock, FontContext, Rect};
+use ambre_bus::{
+    AppCommand, AppEvent, DocumentId, FillMode, GridRange, LogicCommand, TrameCommand, TrameEvent,
+    UiEvent,
+};
 use ambre_canvas::{
     Anchor, AnchorPublisher, ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan,
     TextCache, TextInput, Theme, ThemeControl, WgpuSurface,
 };
+use ambre_draw::{Clock, FontContext, Rect};
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::RwSignal;
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::{Get, Set};
 
 use super::grid::{
-    CellEditor, COL_WIDTH, CursorMove, HEADER_HEIGHT, HEADER_WIDTH, HitKind,
-    PendingHit, ROW_HEIGHT, TabDrag, TabMenu, TabMenuItem, TabRename, TrameUiState,
+    COL_WIDTH, CellEditor, CellRect, CursorMove, HEADER_HEIGHT, HEADER_WIDTH, HitKind, PendingHit,
+    ROW_HEIGHT, TabDrag, TabMenu, TabMenuItem, TabRename, TrameUiState,
 };
 use super::renderer::{self, DrawStats};
 #[cfg(target_arch = "wasm32")]
@@ -32,6 +35,25 @@ use crate::render::{CommitDirection, FormulaAction};
 
 /// Caret blink half-period: the standard ~530 ms on/off toggle (period ~1.06 s).
 const BLINK_MS: f64 = 530.0;
+
+/// Compute the autofill destination rectangle from the source selection `src`
+/// and the cell `(row, col)` under the dragged handle (`-ui.md` sec.5.F). The
+/// fill handle locks to a single axis: whichever direction the pointer extends
+/// farthest from the source wins, and the destination always contains the
+/// source. Returns the normalized rectangle `(r1, c1, r2, c2)`.
+fn fill_dest(src: CellRect, row: u32, col: u32) -> CellRect {
+    let (sr1, sc1, sr2, sc2) = src;
+    // Extent the pointer reaches beyond the source on each axis.
+    let drow = row.saturating_sub(sr2).max(sr1.saturating_sub(row));
+    let dcol = col.saturating_sub(sc2).max(sc1.saturating_sub(col));
+    if drow >= dcol {
+        // Vertical fill: extend rows toward the pointer, keep the source columns.
+        (sr1.min(row), sc1, sr2.max(row), sc2)
+    } else {
+        // Horizontal fill: extend columns, keep the source rows.
+        (sr1, sc1.min(col), sr2, sc2.max(col))
+    }
+}
 
 /// `Clock` adapter over the browser `performance.now()`. The renderer takes a
 /// `&dyn Clock` for its sub-phase timings so it can also run headless (tests
@@ -155,6 +177,16 @@ pub struct TrameView {
     /// navigation mode (between a press on a cell and its release). Pointer
     /// moves while set extend the live selection rectangle.
     selecting_drag: bool,
+    /// In-progress autofill drag from the fill handle, or `None` (`-ui.md`
+    /// sec.5.F). Holds the source rectangle the drag started from and whether
+    /// Ctrl was held at grab time (which forces Copy on a multi-cell source and a
+    /// +1 numeric Series on a single-cell one, Excel-style). Pointer moves grow
+    /// [`TrameUiState::fill_preview`] and the release emits a `FillRange`.
+    fill_drag: Option<(CellRect, bool)>,
+    /// True while the pointer is hovering the fill handle (without a press), so
+    /// the canvas cursor shows the crosshair affordance. Tracked to avoid
+    /// redundant DOM cursor writes on every pointer move.
+    hover_fill_handle: bool,
     /// Active in-place sheet-tab rename, or `None` (spec sec.13).
     tab_rename: Option<TabRename>,
     /// Open per-tab context menu (`{ Rename, Delete }`), or `None`.
@@ -269,6 +301,8 @@ impl TrameView {
             editor: None,
             editor_text_drag: false,
             selecting_drag: false,
+            fill_drag: None,
+            hover_fill_handle: false,
             tab_rename: None,
             tab_menu: None,
             tab_drag: None,
@@ -380,7 +414,11 @@ impl TrameView {
     /// formula bar's name box (spec sec.6).
     #[cfg(target_arch = "wasm32")]
     fn active_cell_ref(&self) -> String {
-        format!("{}{}", col_label(self.state.active_col()), self.state.active_row() + 1)
+        format!(
+            "{}{}",
+            col_label(self.state.active_col()),
+            self.state.active_row() + 1
+        )
     }
 
     /// Recompute the active cell's on-screen anchor and publish it for the
@@ -465,10 +503,13 @@ impl TrameView {
     /// Commit the current edit into the CRDT (via Logic) and update the local
     /// cache optimistically, then leave edit mode. No-op if not editing.
     fn commit_edit(&mut self) {
-        let Some(editor) = self.editor.take() else { return };
+        let Some(editor) = self.editor.take() else {
+            return;
+        };
         tracing::info!(
             "[UI] commit_edit → sending SetCellText row={} col={} text='{:.80}'",
-            editor.row, editor.col,
+            editor.row,
+            editor.col,
             editor.buffer,
         );
         if let Err(SendError::Full) = self.send_command_lossless(TrameCommand::SetCellText {
@@ -482,7 +523,8 @@ impl TrameView {
         // (§6.C). Lossless: it must not be dropped, or the group would stay open
         // until the next command and could absorb a later edit.
         let _ = self.send_command_lossless(TrameCommand::CommitEdit);
-        self.state.set_cell_text(editor.row, editor.col, editor.buffer);
+        self.state
+            .set_cell_text(editor.row, editor.col, editor.buffer);
         // Content layer must repaint to show the committed text; overlay too, to
         // drop the edit field.
         self.needs_full = true;
@@ -502,10 +544,16 @@ impl TrameView {
     /// references as typed (no per-cell relative reindexing -- that lives in the
     /// Logic thread's paste/fill path, not the UI).
     fn commit_edit_filled(&mut self) {
-        let Some(editor) = self.editor.take() else { return };
+        let Some(editor) = self.editor.take() else {
+            return;
+        };
         let text = editor.buffer;
         let cells = self.state.selection.selected_cells();
-        tracing::info!("[UI] commit_edit_filled -> {} cells, text='{:.80}'", cells.len(), text);
+        tracing::info!(
+            "[UI] commit_edit_filled -> {} cells, text='{:.80}'",
+            cells.len(),
+            text
+        );
         // One batch command so the whole fill is a single undo item (a stream of
         // SetCellText would be one undo item per cell).
         let batch = cells.iter().map(|&(r, c)| (r, c, text.clone())).collect();
@@ -585,15 +633,24 @@ impl TrameView {
                 // dispatcher consumes it. The canvas ignores it -- it renders
                 // per-cell formatting from the cache (refreshed by the accompanying
                 // DataReset), not from the active-cell style event.
-                Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::StyleApplied { .. }), .. }) => {}
-                Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::SheetList { sheets, active }), .. }) => {
+                Ok(UiEvent::Viewport {
+                    event: AppEvent::Trame(TrameEvent::StyleApplied { .. }),
+                    ..
+                }) => {}
+                Ok(UiEvent::Viewport {
+                    event: AppEvent::Trame(TrameEvent::SheetList { sheets, active }),
+                    ..
+                }) => {
                     // The active sheet may have changed (switch, or delete
                     // fallback decided by the Logic thread); adopt it and refresh
                     // the strip. A separate DataReset re-fetches the viewport.
                     self.state.on_sheet_list(sheets, active);
                     self.needs_full = true;
                 }
-                Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::Error { message }), .. }) => {
+                Ok(UiEvent::Viewport {
+                    event: AppEvent::Trame(TrameEvent::Error { message }),
+                    ..
+                }) => {
                     // A rejected lifecycle op (e.g. deleting the last sheet).
                     // No toast surface yet -- log it and announce for a11y.
                     tracing::warn!("[UI] Trame rejected: {message}");
@@ -601,22 +658,34 @@ impl TrameView {
                 }
                 // Shared filter (sec.5.D): track the filtered column for the funnel
                 // badge. The accompanying DataReset re-fetches the collapsed rows.
-                Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::FilterApplied { col, .. }), .. }) => {
+                Ok(UiEvent::Viewport {
+                    event: AppEvent::Trame(TrameEvent::FilterApplied { col, .. }),
+                    ..
+                }) => {
                     self.state.filtered_col = Some(col);
                     self.needs_full = true;
                 }
-                Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::FilterCleared), .. }) => {
+                Ok(UiEvent::Viewport {
+                    event: AppEvent::Trame(TrameEvent::FilterCleared),
+                    ..
+                }) => {
                     self.state.filtered_col = None;
                     self.needs_full = true;
                 }
-                Ok(UiEvent::Viewport { event: AppEvent::Trame(TrameEvent::DataReset), .. }) => {
+                Ok(UiEvent::Viewport {
+                    event: AppEvent::Trame(TrameEvent::DataReset),
+                    ..
+                }) => {
                     // Local snapshot restored: re-fetch the visible region so the
                     // restored cells render, then full-repaint with the result.
                     self.needs_full = true;
                     let cmd = self.state.scroll_viewport_cmd();
                     self.send_command_lossy(cmd);
                 }
-                Ok(UiEvent::Viewport { event: AppEvent::Trame(update), .. }) => {
+                Ok(UiEvent::Viewport {
+                    event: AppEvent::Trame(update),
+                    ..
+                }) => {
                     self.state.on_viewport_data(update);
                     // Just flag data dirty. If a scroll happens the same frame the
                     // strip path reads the refreshed cache; otherwise plan_repaint
@@ -734,8 +803,12 @@ impl TrameView {
                         }
                         self.commit_edit();
                         match dir {
-                            CommitDirection::Down => { self.nav_move(1, 0, false); }
-                            CommitDirection::Right => { self.nav_move(0, 1, false); }
+                            CommitDirection::Down => {
+                                self.nav_move(1, 0, false);
+                            }
+                            CommitDirection::Right => {
+                                self.nav_move(0, 1, false);
+                            }
                             CommitDirection::Stay => {}
                         }
                         // Return focus to the grid and reset the formula text to
@@ -862,7 +935,11 @@ impl TrameView {
             self.draw_stats.cells_drawn = 0;
         }
 
-        RepaintPlan { content, content_strip, overlay }
+        RepaintPlan {
+            content,
+            content_strip,
+            overlay,
+        }
     }
 
     pub fn paint_content(
@@ -960,7 +1037,13 @@ impl TrameView {
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
         // Wheel / two-finger touchpad scroll pans the viewport in any mode and
         // never disturbs the cursor or an open editor.
-        if let InputEvent::Wheel { dx, dy, delta_mode, ctrl_key } = ev {
+        if let InputEvent::Wheel {
+            dx,
+            dy,
+            delta_mode,
+            ctrl_key,
+        } = ev
+        {
             return self.handle_wheel(*dx, *dy, *delta_mode, *ctrl_key);
         }
         // An open tab rename owns text, IME and the editing keys until it ends.
@@ -994,7 +1077,9 @@ impl TrameView {
     /// grid (e.g. a pointer-down above the strip).
     fn handle_tab_input(&mut self, ev: &InputEvent) -> Option<bool> {
         match ev {
-            InputEvent::PointerDown { x, y, button: 0, .. } if self.state.in_tab_strip(*y) => {
+            InputEvent::PointerDown {
+                x, y, button: 0, ..
+            } if self.state.in_tab_strip(*y) => {
                 // Any open cell edit is committed before leaving the grid.
                 self.commit_edit();
                 if self.state.add_button_at(*x, *y) {
@@ -1003,17 +1088,28 @@ impl TrameView {
                     let (id, _) = self.state.sheets[i].clone();
                     self.activate_tab(id.clone());
                     // Arm a potential drag-reorder from this grab point.
-                    self.tab_drag = Some(TabDrag { sheet_id: id, grab_x: *x, cur_x: *x, moved: false });
+                    self.tab_drag = Some(TabDrag {
+                        sheet_id: id,
+                        grab_x: *x,
+                        cur_x: *x,
+                        moved: false,
+                    });
                 }
                 Some(true)
             }
             // Right-click a tab opens its context menu; consume so the browser
             // menu does not appear over the canvas.
-            InputEvent::PointerDown { x, y, button: 2, .. } if self.state.in_tab_strip(*y) => {
+            InputEvent::PointerDown {
+                x, y, button: 2, ..
+            } if self.state.in_tab_strip(*y) => {
                 if let Some(i) = self.state.tab_at(*x, *y) {
                     let (id, _) = self.state.sheets[i].clone();
                     let menu_h = 2.0 * super::grid::TAB_MENU_ITEM_HEIGHT;
-                    self.tab_menu = Some(TabMenu { sheet_id: id, x: *x, y: self.state.grid_bottom() - menu_h });
+                    self.tab_menu = Some(TabMenu {
+                        sheet_id: id,
+                        x: *x,
+                        y: self.state.grid_bottom() - menu_h,
+                    });
                     self.edit_dirty = true;
                     return Some(true);
                 }
@@ -1043,7 +1139,10 @@ impl TrameView {
                 {
                     let to_index = self.state.drop_index_at(d.cur_x);
                     if let Err(SendError::Full) =
-                        self.send_command_lossless(TrameCommand::MoveSheet { sheet_id: d.sheet_id, to_index })
+                        self.send_command_lossless(TrameCommand::MoveSheet {
+                            sheet_id: d.sheet_id,
+                            to_index,
+                        })
                     {
                         tracing::error!("Trame: UI->Logic channel full, MoveSheet dropped");
                     }
@@ -1058,7 +1157,9 @@ impl TrameView {
     /// Clicks while the tab context menu is open: select an item, or dismiss on
     /// an outside click (which then falls through to normal routing).
     fn handle_tab_menu_input(&mut self, ev: &InputEvent) -> Option<bool> {
-        let InputEvent::PointerDown { x, y, .. } = ev else { return None };
+        let InputEvent::PointerDown { x, y, .. } = ev else {
+            return None;
+        };
         let menu = self.tab_menu.as_ref()?;
         let item = menu.item_at(*x, *y);
         let sheet_id = menu.sheet_id.clone();
@@ -1109,7 +1210,9 @@ impl TrameView {
                 self.reset_blink();
                 Some(true)
             }
-            InputEvent::Key { key, ctrl, meta, .. } => {
+            InputEvent::Key {
+                key, ctrl, meta, ..
+            } => {
                 if *ctrl || *meta {
                     return Some(false);
                 }
@@ -1162,9 +1265,9 @@ impl TrameView {
         if sheet_id == self.state.active_sheet {
             return;
         }
-        if let Err(SendError::Full) =
-            self.send_command_lossless(TrameCommand::ActivateSheet { sheet_id: sheet_id.clone() })
-        {
+        if let Err(SendError::Full) = self.send_command_lossless(TrameCommand::ActivateSheet {
+            sheet_id: sheet_id.clone(),
+        }) {
             tracing::error!("Trame: UI->Logic channel full, ActivateSheet dropped");
         }
         self.state.active_sheet = sheet_id;
@@ -1180,8 +1283,7 @@ impl TrameView {
     /// (the Logic thread mints the id and replies `SheetList`).
     fn create_tab(&mut self) {
         let name = format!("Sheet{}", self.state.sheets.len() + 1);
-        if let Err(SendError::Full) =
-            self.send_command_lossless(TrameCommand::CreateSheet { name })
+        if let Err(SendError::Full) = self.send_command_lossless(TrameCommand::CreateSheet { name })
         {
             tracing::error!("Trame: UI->Logic channel full, CreateSheet dropped");
         }
@@ -1189,24 +1291,36 @@ impl TrameView {
 
     /// Open the in-place rename editor on tab `index`, seeded with its name.
     fn begin_tab_rename(&mut self, index: usize) {
-        let Some((id, name)) = self.state.sheets.get(index).cloned() else { return };
-        self.tab_rename = Some(TabRename { sheet_id: id, editor: CellEditor::new(0, 0, name) });
+        let Some((id, name)) = self.state.sheets.get(index).cloned() else {
+            return;
+        };
+        self.tab_rename = Some(TabRename {
+            sheet_id: id,
+            editor: CellEditor::new(0, 0, name),
+        });
         self.text_input.clear();
         self.text_input.focus();
         // Park the IME pipe on the tab (CSS px).
         let (x0, _) = self.state.tab_slot_x(index);
-        self.text_input
-            .set_caret(x0 / self.dpr, self.state.grid_bottom() / self.dpr, ROW_HEIGHT / self.dpr);
+        self.text_input.set_caret(
+            x0 / self.dpr,
+            self.state.grid_bottom() / self.dpr,
+            ROW_HEIGHT / self.dpr,
+        );
         self.reset_blink();
     }
 
     /// Commit the in-place rename (sends `RenameSheet` unless the name is blank).
     fn commit_tab_rename(&mut self) {
-        let Some(r) = self.tab_rename.take() else { return };
+        let Some(r) = self.tab_rename.take() else {
+            return;
+        };
         let name = r.editor.buffer.trim().to_owned();
         if !name.is_empty()
-            && let Err(SendError::Full) =
-                self.send_command_lossless(TrameCommand::RenameSheet { sheet_id: r.sheet_id, name })
+            && let Err(SendError::Full) = self.send_command_lossless(TrameCommand::RenameSheet {
+                sheet_id: r.sheet_id,
+                name,
+            })
         {
             tracing::error!("Trame: UI->Logic channel full, RenameSheet dropped");
         }
@@ -1234,7 +1348,41 @@ impl TrameView {
             // textarea.focus). Shift extends the range to the clicked cell;
             // Ctrl adds it as a disjoint range; a plain click collapses to it and
             // arms a drag-to-select.
-            InputEvent::PointerDown { x, y, button: 0, shift, ctrl } => {
+            // A press on the fill handle (bottom-right of the selection) arms an
+            // autofill drag instead of a new selection (sec.5.F). Checked before
+            // the plain selection press so the ~7px handle wins the hit.
+            InputEvent::PointerDown {
+                x, y, button: 0, ctrl, ..
+            } if self.fill_drag.is_none() && self.state.fill_handle_at(*x, *y) => {
+                self.text_input.focus();
+                self.fill_drag = Some((self.state.selection.bounds(), *ctrl));
+                self.set_fill_cursor(true);
+                true
+            }
+            // Dragging the handle grows the destination rectangle, locked to the
+            // dominant axis (a fill handle never fills two directions at once).
+            InputEvent::PointerMove { x, y } if self.fill_drag.is_some() => {
+                if let Some((row, col)) = self.state.cell_at(*x, *y)
+                    && let Some((src, _)) = self.fill_drag
+                {
+                    self.state.fill_preview = Some(fill_dest(src, row, col));
+                    self.edit_dirty = true; // repaint the preview outline.
+                }
+                true
+            }
+            // Release: emit the fill, grow the selection over the filled range,
+            // and clear the drag/preview.
+            InputEvent::PointerUp { .. } if self.fill_drag.is_some() => {
+                self.end_fill_drag();
+                true
+            }
+            InputEvent::PointerDown {
+                x,
+                y,
+                button: 0,
+                shift,
+                ctrl,
+            } => {
                 self.text_input.focus();
                 if let Some((row, col)) = self.state.cell_at(*x, *y) {
                     if *shift {
@@ -1261,10 +1409,23 @@ impl TrameView {
                 self.selecting_drag = false;
                 true
             }
+            // Bare hover (no button held): switch the canvas cursor to a crosshair
+            // over the fill handle to advertise the autofill affordance (sec.5.F),
+            // back to default elsewhere. Not consumed -- pure cursor feedback.
+            InputEvent::PointerMove { x, y } => {
+                let over = self.state.fill_handle_at(*x, *y);
+                if over != self.hover_fill_handle {
+                    self.hover_fill_handle = over;
+                    self.set_fill_cursor(over);
+                }
+                false
+            }
             // A right-click selects the cell under the cursor before the DOM
             // context menu opens on it (standard spreadsheet behaviour). We don't
             // preventDefault here -- the `contextmenu` listener owns the menu.
-            InputEvent::PointerDown { x, y, button: 2, .. } => {
+            InputEvent::PointerDown {
+                x, y, button: 2, ..
+            } => {
                 self.text_input.focus();
                 // Right-click inside the current multi-cell selection keeps it
                 // (so a context menu can act on the range); otherwise it collapses
@@ -1312,7 +1473,13 @@ impl TrameView {
                 self.edit_dirty = true;
                 true
             }
-            InputEvent::Key { key, ctrl, meta, alt, shift } => {
+            InputEvent::Key {
+                key,
+                ctrl,
+                meta,
+                alt,
+                shift,
+            } => {
                 let chord = *ctrl || *meta; // Ctrl (or Cmd on macOS) jump modifier.
                 // Shift extends the selection range across navigation keys
                 // (Shift+arrows, Shift+Page, Shift+Home/End, Shift+Ctrl+End).
@@ -1349,19 +1516,18 @@ impl TrameView {
                     }
                     "End" => {
                         let row = self.state.active_row();
-                        let col = self.state.last_content_col(row).unwrap_or(self.state.active_col());
+                        let col = self
+                            .state
+                            .last_content_col(row)
+                            .unwrap_or(self.state.active_col());
                         self.nav_goto(row, col, ext)
                     }
                     // Escape clears the marching-ants clipboard marquee (sec.5.E),
                     // if any; otherwise it is not ours.
-                    "Escape" => {
-                        if self.state.clipboard_anchor.take().is_some() {
-                            self.cut_pending = false;
-                            self.edit_dirty = true;
-                            true
-                        } else {
-                            false
-                        }
+                    "Escape" if self.state.clipboard_anchor.take().is_some() => {
+                        self.cut_pending = false;
+                        self.edit_dirty = true;
+                        true
                     }
                     // Shift+Delete is Cut: don't consume it, so the browser fires
                     // the native `cut` clipboard event the host services (sec.5.E).
@@ -1402,9 +1568,9 @@ impl TrameView {
         }
         // Normalise the unit to physical pixels. Deltas already include dpr.
         let (sx, sy) = match delta_mode {
-            1 => (COL_WIDTH, ROW_HEIGHT),                              // DOM_DELTA_LINE
-            2 => (self.state.canvas_width, self.state.canvas_height),  // DOM_DELTA_PAGE
-            _ => (1.0, 1.0),                                           // DOM_DELTA_PIXEL
+            1 => (COL_WIDTH, ROW_HEIGHT), // DOM_DELTA_LINE
+            2 => (self.state.canvas_width, self.state.canvas_height), // DOM_DELTA_PAGE
+            _ => (1.0, 1.0),              // DOM_DELTA_PIXEL
         };
         let (px, py) = (dx * sx, dy * sy);
 
@@ -1539,7 +1705,12 @@ impl TrameView {
     fn set_active_cmd(&self) -> TrameCommand {
         let (row, col) = self.state.selection.active;
         let (anchor_row, anchor_col) = self.state.selection.anchor;
-        TrameCommand::SetActiveCell { row, col, anchor_row, anchor_col }
+        TrameCommand::SetActiveCell {
+            row,
+            col,
+            anchor_row,
+            anchor_col,
+        }
     }
 
     /// Extend the live selection rectangle to `(row, col)` (Shift+click / drag),
@@ -1611,6 +1782,91 @@ impl TrameView {
         true
     }
 
+    /// Set the canvas cursor to the autofill crosshair (`on == true`) or back to
+    /// the default (`-ui.md` sec.5.F): the thin "+" Excel/Sheets show over the
+    /// fill handle. A DOM write on the `#ambre-canvas` element; a no-op off-wasm.
+    #[cfg(target_arch = "wasm32")]
+    fn set_fill_cursor(&self, on: bool) {
+        use wasm_bindgen::JsCast;
+        if let Some(el) = web_sys::window()
+            .and_then(|w| w.document())
+            .and_then(|d| d.get_element_by_id("ambre-canvas"))
+            .and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok())
+        {
+            let _ = el.style().set_property("cursor", if on { "crosshair" } else { "" });
+        }
+    }
+
+    /// Native/headless build: no DOM canvas to restyle.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn set_fill_cursor(&self, _on: bool) {}
+
+    /// Finish an autofill drag (sec.5.F): emit `FillRange` over the source +
+    /// dragged extent, grow the selection to cover the filled range, then clear
+    /// the drag/preview. A drag that never left the source (no extension) is a
+    /// no-op beyond clearing the state.
+    fn end_fill_drag(&mut self) {
+        // The drag is over: drop the crosshair (the next hover re-arms it).
+        self.set_fill_cursor(false);
+        self.hover_fill_handle = false;
+        let (Some((src, ctrl)), Some(dest)) =
+            (self.fill_drag.take(), self.state.fill_preview.take())
+        else {
+            self.fill_drag = None;
+            self.state.fill_preview = None;
+            self.edit_dirty = true;
+            return;
+        };
+        self.edit_dirty = true;
+        if dest == src {
+            return; // No extension: nothing to fill.
+        }
+        let (sr1, sc1, sr2, sc2) = src;
+        let (dr1, dc1, dr2, dc2) = dest;
+        // Ctrl inverts the default Excel/Sheets behaviour: on a single-cell source
+        // it forces a +1 numeric Series (rather than a plain copy), on a
+        // multi-cell source it forces a verbatim Copy (rather than a series).
+        // Without Ctrl, Auto lets the Logic thread pick Series vs Copy.
+        let mode = if ctrl {
+            if sr1 == sr2 && sc1 == sc2 {
+                FillMode::Series
+            } else {
+                FillMode::Copy
+            }
+        } else {
+            FillMode::Auto
+        };
+        let cmd = TrameCommand::FillRange {
+            sheet_id: self.state.active_sheet.clone(),
+            src: GridRange {
+                row: sr1,
+                col: sc1,
+                row_end: sr2,
+                col_end: sc2,
+            },
+            dest: GridRange {
+                row: dr1,
+                col: dc1,
+                row_end: dr2,
+                col_end: dc2,
+            },
+            mode,
+        };
+        if let Err(SendError::Full) = self.send_command_lossless(cmd) {
+            tracing::error!("Trame: UI->Logic channel full, FillRange dropped");
+        }
+        // Grow the selection to the whole filled rectangle (anchor top-left,
+        // active bottom-right), matching Sheets after a fill-handle drag.
+        self.state.selection.anchor = (dr1, dc1);
+        self.state.selection.active = (dr2, dc2);
+        self.state.selection.extra.clear();
+        self.viewport_changed = true;
+        if let Err(SendError::Full) = self.send_command_lossless(self.set_active_cmd()) {
+            tracing::error!("Trame: UI->Logic channel full, fill selection dropped");
+        }
+        self.announce_active();
+    }
+
     /// Select a cell directly (pointer hit), keeping Logic and the pipe in sync.
     fn select_cell(&mut self, row: u32, col: u32) {
         if row == self.state.active_row() && col == self.state.active_col() {
@@ -1672,7 +1928,11 @@ impl TrameView {
     ) -> Option<(String, Option<ambre_bus::ClipboardPayload>)> {
         // In-cell text selection takes precedence over the grid range.
         if self.editor.is_some() {
-            let text = if cut { self.cut_selection() } else { self.copy_selection() }?;
+            let text = if cut {
+                self.cut_selection()
+            } else {
+                self.copy_selection()
+            }?;
             return Some((text, None));
         }
         let payload = self.state.build_clipboard_payload();
@@ -1728,8 +1988,13 @@ impl TrameView {
         if cells.is_empty() {
             return;
         }
-        let payload =
-            ambre_bus::ClipboardPayload { src_row: row, src_col: col, rows, cols, cells };
+        let payload = ambre_bus::ClipboardPayload {
+            src_row: row,
+            src_col: col,
+            rows,
+            cols,
+            cells,
+        };
         if let Err(SendError::Full) = self.send_command_lossless(TrameCommand::PasteRange {
             target_row: row,
             target_col: col,
@@ -1763,7 +2028,9 @@ impl TrameView {
     /// True when physical pixel `(x, y)` falls on the cell currently being
     /// edited -- the gate for in-cell mouse text selection vs. committing.
     fn pointer_in_editor(&self, x: f64, y: f64) -> bool {
-        let Some(ed) = self.editor.as_ref() else { return false };
+        let Some(ed) = self.editor.as_ref() else {
+            return false;
+        };
         self.state.cell_at(x, y) == Some((ed.row, ed.col))
     }
 
@@ -1798,10 +2065,15 @@ impl TrameView {
             }
             // A press inside the edited cell starts a mouse text selection; a
             // press outside commits and reselects the clicked cell.
-            InputEvent::PointerDown { x, y, button: 0, .. } => {
+            InputEvent::PointerDown {
+                x, y, button: 0, ..
+            } => {
                 if self.pointer_in_editor(*x, *y) {
                     if let Some(ed) = self.editor.as_mut() {
-                        ed.pending = Some(PendingHit { x: *x, kind: HitKind::Place });
+                        ed.pending = Some(PendingHit {
+                            x: *x,
+                            kind: HitKind::Place,
+                        });
                     }
                     self.editor_text_drag = true;
                     self.reset_blink();
@@ -1817,7 +2089,10 @@ impl TrameView {
             // Drag inside the edited cell extends the text selection.
             InputEvent::PointerMove { x, .. } if self.editor_text_drag => {
                 if let Some(ed) = self.editor.as_mut() {
-                    ed.pending = Some(PendingHit { x: *x, kind: HitKind::Extend });
+                    ed.pending = Some(PendingHit {
+                        x: *x,
+                        kind: HitKind::Extend,
+                    });
                 }
                 self.reset_blink();
                 true
@@ -1829,7 +2104,10 @@ impl TrameView {
             // Double-click inside the edited cell selects the word under it.
             InputEvent::DoubleClick { x, y } if self.pointer_in_editor(*x, *y) => {
                 if let Some(ed) = self.editor.as_mut() {
-                    ed.pending = Some(PendingHit { x: *x, kind: HitKind::Word });
+                    ed.pending = Some(PendingHit {
+                        x: *x,
+                        kind: HitKind::Word,
+                    });
                 }
                 self.reset_blink();
                 true
@@ -1837,7 +2115,9 @@ impl TrameView {
             // A right-click commits and selects the cell under the cursor, so the
             // DOM context menu opens on it. We don't preventDefault (the
             // `contextmenu` listener owns the menu).
-            InputEvent::PointerDown { x, y, button: 2, .. } => {
+            InputEvent::PointerDown {
+                x, y, button: 2, ..
+            } => {
                 self.commit_edit();
                 self.text_input.focus();
                 if let Some((row, col)) = self.state.cell_at(*x, *y) {
@@ -1845,7 +2125,13 @@ impl TrameView {
                 }
                 false
             }
-            InputEvent::Key { key, ctrl, meta, shift, .. } => {
+            InputEvent::Key {
+                key,
+                ctrl,
+                meta,
+                shift,
+                ..
+            } => {
                 // Ctrl/Cmd+Enter fills the whole selection with the typed value;
                 // Ctrl/Cmd+A selects the whole buffer; other command chords
                 // (Ctrl/Cmd+X) fall through to the chrome keymap.
@@ -1902,28 +2188,44 @@ impl TrameView {
                     // Shift extends the selection; a bare arrow collapses it.
                     "ArrowLeft" => {
                         if let Some(ed) = self.editor.as_mut() {
-                            if *shift { ed.extend_left() } else { ed.move_left() }
+                            if *shift {
+                                ed.extend_left()
+                            } else {
+                                ed.move_left()
+                            }
                         }
                         self.reset_blink();
                         true
                     }
                     "ArrowRight" => {
                         if let Some(ed) = self.editor.as_mut() {
-                            if *shift { ed.extend_right() } else { ed.move_right() }
+                            if *shift {
+                                ed.extend_right()
+                            } else {
+                                ed.move_right()
+                            }
                         }
                         self.reset_blink();
                         true
                     }
                     "Home" => {
                         if let Some(ed) = self.editor.as_mut() {
-                            if *shift { ed.extend_home() } else { ed.move_home() }
+                            if *shift {
+                                ed.extend_home()
+                            } else {
+                                ed.move_home()
+                            }
                         }
                         self.reset_blink();
                         true
                     }
                     "End" => {
                         if let Some(ed) = self.editor.as_mut() {
-                            if *shift { ed.extend_end() } else { ed.move_end() }
+                            if *shift {
+                                ed.extend_end()
+                            } else {
+                                ed.move_end()
+                            }
                         }
                         self.reset_blink();
                         true

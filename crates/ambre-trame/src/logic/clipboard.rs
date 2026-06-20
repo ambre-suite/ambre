@@ -102,7 +102,7 @@ impl TrameState {
     /// in their own sets plus the format map, the rest in the rich-style map.
     /// Borders are taken verbatim from the source cell (no selection-level preset
     /// resolution -- the source already carries resolved per-edge borders).
-    fn apply_pasted_style(&mut self, row: u32, col: u32, cell: &ClipboardCell) {
+    pub(super) fn apply_pasted_style(&mut self, row: u32, col: u32, cell: &ClipboardCell) {
         let pos = (row, col);
         if cell.bold {
             self.bold.insert(pos);

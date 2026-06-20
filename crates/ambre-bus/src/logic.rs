@@ -404,6 +404,25 @@ pub enum TrameCommand {
         payload: ClipboardPayload,
     },
 
+    /// Autofill the `src` rectangle into `dest` (`-ui.md` sec.5.F). `dest`
+    /// contains `src` and extends it along a single axis (the fill handle locks to
+    /// one direction); the cells of `dest \ src` are the fill region. The Logic
+    /// thread reads the source cells from its document model and, per fill line,
+    /// either extrapolates a numeric arithmetic [`Series`](FillMode::Series) or
+    /// tiles/[`Copy`](FillMode::Copy)s the source values, reindexing a copied
+    /// formula's relative references by its tile offset (`formula::shift`, as in
+    /// [`PasteRange`](TrameCommand::PasteRange)) and carrying each source cell's
+    /// style. The whole fill is a single undo group. With [`FillMode::Auto`] the
+    /// thread picks Series when a line's source values form an arithmetic numeric
+    /// progression, Copy otherwise. Replies with a
+    /// [`DataReset`](crate::ui::TrameEvent::DataReset). A no-op when `dest == src`.
+    FillRange {
+        sheet_id: String,
+        src: GridRange,
+        dest: GridRange,
+        mode: FillMode,
+    },
+
     /// Undo the last local edit (`ambre-spec-trame-logic.md` §8). Backed by Loro's
     /// `UndoManager`: it replays the inverse of this session's most recent commit
     /// as fresh CRDT ops (1 `TrameCommand` == 1 commit == 1 undo item). The
@@ -995,6 +1014,21 @@ pub struct GridRange {
     pub col: u32,
     pub row_end: u32,
     pub col_end: u32,
+}
+
+/// How [`TrameCommand::FillRange`] fills `dest \ src` (`-ui.md` sec.5.F).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FillMode {
+    /// The Logic thread picks `Series` when a fill line's source values form an
+    /// arithmetic numeric progression, `Copy` otherwise. The fill handle default.
+    #[default]
+    Auto,
+    /// Tile the source values verbatim across the fill region (relative formula
+    /// references reindex by the tile offset).
+    Copy,
+    /// Extrapolate a numeric arithmetic progression from the source values; a
+    /// line whose source is not numeric falls back to `Copy`.
+    Series,
 }
 
 /// One key of a multi-column sort ([`TrameCommand::SortRangeMulti`],

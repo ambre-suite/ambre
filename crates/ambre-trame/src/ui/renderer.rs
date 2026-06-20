@@ -497,6 +497,24 @@ pub fn draw_overlay<S: DrawSurface>(
         dashed_v(surface, y, y + ht, x, c, phase);
         dashed_v(surface, y, y + ht, x + w, c, phase);
     }
+
+    // -- 2c. Autofill (sec.5.F): a dashed preview outline of the destination
+    //        rectangle while the handle is dragged, then the small blue handle
+    //        square at the selection's bottom-right corner.
+    if let Some((r1, c1, r2, c2)) = state.fill_preview
+        && let Some((x, y, w, ht)) = state.range_pixel_rect(r1, c1, r2, c2)
+    {
+        let c = palette.selection;
+        dashed_h(surface, x, x + w, y, c, 0.0);
+        dashed_h(surface, x, x + w, y + ht, c, 0.0);
+        dashed_v(surface, y, y + ht, x, c, 0.0);
+        dashed_v(surface, y, y + ht, x + w, c, 0.0);
+    }
+    if let Some((hx, hy, hw, hh)) = state.fill_handle_rect() {
+        let r = Rect::new(hx, hy, hx + hw, hy + hh);
+        surface.fill_rect(r, palette.selection);
+        surface.stroke_rect(r, palette.content_bg, 1.0);
+    }
     let t_after_hdrs = clock.now_ms();
 
     // -- 6. HUD overlay. ------------------------------------------------------
