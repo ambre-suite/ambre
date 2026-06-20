@@ -14,6 +14,18 @@
     --status-h: 26px;
 }
 
+/* Native form controls: tint the checked fill with the accent, and render the
+   box itself with the dark scheme under the dark theme so unchecked checkboxes
+   are not glaringly white. Global (every app chrome that uses checkboxes). */
+input[type="checkbox"],
+input[type="radio"] {
+    accent-color: var(--accent);
+}
+:root[data-theme="dark"] input[type="checkbox"],
+:root[data-theme="dark"] input[type="radio"] {
+    color-scheme: dark;
+}
+
 /* The shell fills the viewport; rows = header, command bar, formula bar, content, status. */
 .ambre-shell {
     display: grid;
@@ -1356,4 +1368,118 @@
     background: var(--accent);
     border-color: var(--accent);
     color: #fff;
+}
+
+/* ---------------------------------------------------------------------------
+   Find & Replace panel (ambre-spec-trame-ui.md sec.5.G). A DOM chrome panel
+   pinned top-right over the canvas; opened by Ctrl+F (find) / Ctrl+H (replace)
+   or the toolbar search button, dismissed by Escape.
+   --------------------------------------------------------------------------- */
+.ambre-find-panel {
+    min-width: 280px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    padding: 8px;
+    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+    color: var(--text);
+}
+.ambre-find-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+.ambre-find-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+}
+.ambre-find-count {
+    flex: 0 0 auto;
+    min-width: 36px;
+    text-align: right;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+}
+.ambre-find-panel button {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+}
+.ambre-find-panel button:hover {
+    background: var(--surface-2);
+}
+.ambre-find-replace-all {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+.ambre-find-opts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin-top: 2px;
+    color: var(--text-dim);
+    font-size: 12px;
+}
+.ambre-find-opts label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+}
+
+/* Title: alone on its own row, larger, separated from the content below; the
+   close cross is pulled flush to the dialog's right edge. */
+.ambre-find-title {
+    display: flex;
+    align-items: center;
+    margin-bottom: 14px;
+}
+.ambre-find-heading {
+    flex: 1 1 auto;
+    font-weight: 600;
+    font-size: 15px;
+}
+.ambre-find-toggle,
+.ambre-find-close {
+    border-color: transparent;
+    color: var(--text-dim);
+}
+.ambre-find-close {
+    margin-right: -2px;
+}
+/* The chevron sits in a fixed left gutter so it reads as the mode switch. */
+.ambre-find-toggle {
+    flex: 0 0 auto;
+    width: 28px;
+    padding: 2px 0;
+    justify-content: center;
+}
+/* Enlarge the chevron glyph (leptos_icons sizes the SVG at 1em). */
+.ambre-find-toggle svg {
+    width: 20px;
+    height: 20px;
+}
+/* Indent the replace row and the option checkboxes past the chevron gutter
+   (toggle width 22px + row gap 6px) so they align vertically with the Find
+   input. */
+.ambre-find-indent {
+    margin-left: 28px;
 }

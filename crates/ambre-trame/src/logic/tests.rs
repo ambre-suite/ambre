@@ -1,7 +1,7 @@
 // ambre-trame/src/logic/tests.rs
 // Unit tests for `TrameState` (moved verbatim out of logic.rs).
 
-    use super::{col_to_alpha, TrameState};
+    use super::{col_to_alpha, TrameOutcome, TrameState};
     use crate::model::Uid;
     use crate::{TrameCommand, TrameEvent};
 
@@ -1712,4 +1712,195 @@
             (at(2), at(3), at(4), at(5)),
             ("1".into(), "2".into(), "1".into(), "2".into()),
         );
+    }
+
+    // -- Find & Replace (sec.5.G) ---------------------------------------------
+
+    /// Seed a few cells on the active sheet for the find/replace tests.
+    fn seed_find(state: &mut TrameState) {
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "apple".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 1, col: 0, text: "Apple pie".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 2, col: 0, text: "banana".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 3, col: 0, text: "APPLE".to_owned() });
+    }
+
+    fn find_result(out: &TrameOutcome) -> (Vec<(u32, u32)>, Option<usize>) {
+        out.display
+            .iter()
+            .find_map(|e| match e {
+                TrameEvent::FindResult { matches, active } => Some((matches.clone(), *active)),
+                _ => None,
+            })
+            .expect("a FindResult")
+    }
+
+    /// FindNext scans displayed values, folds case by default, and picks the
+    /// match after the active cell (wrapping to the top).
+    #[test]
+    fn find_next_matches_and_wraps() {
+        let mut state = TrameState::new();
+        seed_find(&mut state);
+
+        // Active at A1 (0,0): the three "apple" cells (case-folded) match; the
+        // focused one is the first strictly after the active cell -> A2.
+        state.handle_command(TrameCommand::SetActiveCell { row: 0, col: 0, anchor_row: 0, anchor_col: 0 });
+        let out = state.handle_command(TrameCommand::FindNext {
+            query: "apple".to_owned(), match_case: false, whole_cell: false,
+        });
+        let (matches, active) = find_result(&out);
+        assert_eq!(matches, vec![(0, 0), (1, 0), (3, 0)]);
+        assert_eq!(active, Some(1), "next after A1 is A2");
+        // No CRDT delta for a read-only find.
+        assert!(out.update.is_none());
+
+        // Active at the last match A4 (3,0): the next wraps back to A1.
+        state.handle_command(TrameCommand::SetActiveCell { row: 3, col: 0, anchor_row: 3, anchor_col: 0 });
+        let out = state.handle_command(TrameCommand::FindNext {
+            query: "apple".to_owned(), match_case: false, whole_cell: false,
+        });
+        assert_eq!(find_result(&out).1, Some(0), "wraps to the first match");
+    }
+
+    /// match_case and whole_cell narrow the match set.
+    #[test]
+    fn find_next_honors_case_and_whole_cell() {
+        let mut state = TrameState::new();
+        seed_find(&mut state);
+        state.handle_command(TrameCommand::SetActiveCell { row: 0, col: 0, anchor_row: 0, anchor_col: 0 });
+
+        // Case-sensitive "apple": only the exact-case A1 substring matches.
+        let out = state.handle_command(TrameCommand::FindNext {
+            query: "apple".to_owned(), match_case: true, whole_cell: false,
+        });
+        assert_eq!(find_result(&out).0, vec![(0, 0)]);
+
+        // Whole-cell, case-insensitive "apple": A1 and A4 are exactly "apple"
+        // (folded); "Apple pie" is not.
+        let out = state.handle_command(TrameCommand::FindNext {
+            query: "apple".to_owned(), match_case: false, whole_cell: true,
+        });
+        assert_eq!(find_result(&out).0, vec![(0, 0), (3, 0)]);
+    }
+
+    fn replaced_count(out: &TrameOutcome) -> u32 {
+        out.display
+            .iter()
+            .find_map(|e| match e {
+                TrameEvent::ReplaceDone { replaced } => Some(*replaced),
+                _ => None,
+            })
+            .expect("a ReplaceDone")
+    }
+
+    /// ReplaceAll rewrites the raw text of every match, reports the count, and is
+    /// a single undo group (one Undo restores all cells).
+    #[test]
+    fn replace_all_rewrites_and_undoes_as_one_group() {
+        let mut state = TrameState::new();
+        seed_find(&mut state);
+
+        let out = state.handle_command(TrameCommand::ReplaceAll {
+            query: "apple".to_owned(), replacement: "cherry".to_owned(),
+            match_case: false, whole_cell: false, in_formulas: false, all_sheets: false,
+        });
+        assert_eq!(replaced_count(&out), 3);
+        assert_eq!(read_cell(&mut state, 0, 0), "cherry");
+        assert_eq!(read_cell(&mut state, 1, 0), "cherry pie");
+        assert_eq!(read_cell(&mut state, 3, 0), "cherry"); // case-insensitive substring
+        assert_eq!(read_cell(&mut state, 2, 0), "banana"); // untouched
+
+        // One Undo restores every replaced cell at once.
+        state.handle_command(TrameCommand::Undo);
+        assert_eq!(read_cell(&mut state, 0, 0), "apple");
+        assert_eq!(read_cell(&mut state, 1, 0), "Apple pie");
+        assert_eq!(read_cell(&mut state, 3, 0), "APPLE");
+    }
+
+    /// A formula-source cell is rewritten only when `in_formulas` is set; matching
+    /// still tests the displayed value.
+    #[test]
+    fn replace_all_gates_formula_cells() {
+        let mut state = TrameState::new();
+        // A1 = 2, A2 = "=A1" (displays "2"). Replace displayed "2" with "9".
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "2".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 1, col: 0, text: "=A1".to_owned() });
+
+        // Without in_formulas: the literal A1 is rewritten, the formula A2 is left.
+        let out = state.handle_command(TrameCommand::ReplaceAll {
+            query: "2".to_owned(), replacement: "9".to_owned(),
+            match_case: false, whole_cell: false, in_formulas: false, all_sheets: false,
+        });
+        assert_eq!(replaced_count(&out), 1);
+        assert_eq!(read_raw(&mut state, 0, 0), "9");
+        assert_eq!(read_raw(&mut state, 1, 0), "=A1", "formula source untouched");
+
+        // With in_formulas: a formula cell matches on its raw text. "=A1"
+        // contains "A1" -> rewrite the formula source to "=B2".
+        let out = state.handle_command(TrameCommand::ReplaceAll {
+            query: "A1".to_owned(), replacement: "B2".to_owned(),
+            match_case: false, whole_cell: false, in_formulas: true, all_sheets: false,
+        });
+        assert_eq!(replaced_count(&out), 1);
+        assert_eq!(read_raw(&mut state, 1, 0), "=B2");
+    }
+
+    /// ReplaceOne rewrites only the active cell's match and advances the
+    /// FindResult to the next hit; a non-matching active cell just advances.
+    #[test]
+    fn replace_one_replaces_active_and_advances() {
+        let mut state = TrameState::new();
+        seed_find(&mut state); // A1 "apple", A2 "Apple pie", A3 "banana", A4 "APPLE"
+
+        // Active on A1 (a match): replace just this cell, advance to A2.
+        state.handle_command(TrameCommand::SetActiveCell { row: 0, col: 0, anchor_row: 0, anchor_col: 0 });
+        let out = state.handle_command(TrameCommand::ReplaceOne {
+            query: "apple".to_owned(), replacement: "cherry".to_owned(),
+            match_case: false, whole_cell: false, in_formulas: false,
+        });
+        assert_eq!(replaced_count(&out), 1);
+        assert_eq!(read_cell(&mut state, 0, 0), "cherry");
+        assert_eq!(read_cell(&mut state, 1, 0), "Apple pie", "A2 untouched");
+        // The reply advances to the next remaining match (A2 at index 0 of the
+        // recomputed set).
+        let (matches, active) = find_result(&out);
+        assert_eq!(matches, vec![(1, 0), (3, 0)]);
+        assert_eq!(active, Some(0));
+
+        // Active on a non-match (A3): nothing replaced, but it advances.
+        state.handle_command(TrameCommand::SetActiveCell { row: 2, col: 0, anchor_row: 2, anchor_col: 0 });
+        let out = state.handle_command(TrameCommand::ReplaceOne {
+            query: "apple".to_owned(), replacement: "cherry".to_owned(),
+            match_case: false, whole_cell: false, in_formulas: false,
+        });
+        assert_eq!(replaced_count(&out), 0);
+        assert_eq!(find_result(&out).1, Some(1), "advances to A4 after A3");
+    }
+
+    /// `all_sheets` widens the rewrite to every sheet; a single Undo reverts both.
+    #[test]
+    fn replace_all_spans_sheets() {
+        let mut state = TrameState::new();
+        // Sheet1!A1 = "foo".
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "foo".to_owned() });
+        // Sheet2!A1 = "foo".
+        state.handle_command(TrameCommand::CreateSheet { name: "Sheet2".to_owned() });
+        let s2 = second_sheet_id(&state);
+        state.handle_command(TrameCommand::ActivateSheet { sheet_id: s2.clone() });
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "foo".to_owned() });
+        state.handle_command(TrameCommand::ActivateSheet { sheet_id: "s0".to_owned() });
+
+        let out = state.handle_command(TrameCommand::ReplaceAll {
+            query: "foo".to_owned(), replacement: "bar".to_owned(),
+            match_case: false, whole_cell: false, in_formulas: false, all_sheets: true,
+        });
+        assert_eq!(replaced_count(&out), 2);
+        assert_eq!(read_cell(&mut state, 0, 0), "bar");
+        state.handle_command(TrameCommand::ActivateSheet { sheet_id: s2.clone() });
+        assert_eq!(read_cell(&mut state, 0, 0), "bar", "other sheet rewritten");
+
+        // One Undo reverts the whole cross-sheet replace.
+        state.handle_command(TrameCommand::Undo);
+        assert_eq!(read_cell(&mut state, 0, 0), "foo");
+        state.handle_command(TrameCommand::ActivateSheet { sheet_id: "s0".to_owned() });
+        assert_eq!(read_cell(&mut state, 0, 0), "foo");
     }

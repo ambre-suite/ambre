@@ -246,6 +246,32 @@ impl TrameState {
                 self.fill_range(&sheet_id, src, dest, mode)
             }
 
+            TrameCommand::FindNext { query, match_case, whole_cell } => {
+                self.find_next(query, match_case, whole_cell)
+            }
+            TrameCommand::ReplaceAll {
+                query,
+                replacement,
+                match_case,
+                whole_cell,
+                in_formulas,
+                all_sheets,
+            } => self.replace_all(
+                query,
+                replacement,
+                match_case,
+                whole_cell,
+                in_formulas,
+                all_sheets,
+            ),
+            TrameCommand::ReplaceOne {
+                query,
+                replacement,
+                match_case,
+                whole_cell,
+                in_formulas,
+            } => self.replace_one(query, replacement, match_case, whole_cell, in_formulas),
+
             // Deferred feature surface (`ambre-spec-trame-features.md §10`): the
             // command vocabulary is complete and typed, but these handlers land
             // in later phases (personal views / multi-sort -> Phase 2,

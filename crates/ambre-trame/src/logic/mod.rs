@@ -265,6 +265,7 @@ mod clipboard;
 mod commands;
 mod fill;
 mod filters;
+mod find;
 mod helpers;
 mod merges;
 mod packing;

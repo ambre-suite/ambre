@@ -672,6 +672,22 @@ impl TrameView {
                     self.state.filtered_col = None;
                     self.needs_full = true;
                 }
+                // Find & Replace (sec.5.G): highlight the match set and jump the
+                // active cell onto the focused match (reusing the navigation path,
+                // so an off-screen match scrolls into view). An empty set clears
+                // the highlight without moving the cursor.
+                Ok(UiEvent::Viewport {
+                    event: AppEvent::Trame(TrameEvent::FindResult { matches, active }),
+                    ..
+                }) => {
+                    self.state.find_matches = matches.clone();
+                    self.needs_full = true;
+                    if let Some(i) = active
+                        && let Some(&(row, col)) = matches.get(i)
+                    {
+                        self.nav_goto(row, col, false);
+                    }
+                }
                 Ok(UiEvent::Viewport {
                     event: AppEvent::Trame(TrameEvent::DataReset),
                     ..

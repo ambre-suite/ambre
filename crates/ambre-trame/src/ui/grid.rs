@@ -638,6 +638,12 @@ pub struct TrameUiState {
     /// source selection. `None` when no fill drag is in progress. Drawn as a
     /// dashed preview outline. UI-only view state.
     pub fill_preview: Option<CellRect>,
+
+    /// Cells matched by the active Find query (`-ui.md` sec.5.G), drawn with a
+    /// translucent highlight. Absolute grid `(row, col)` pairs from the last
+    /// `TrameEvent::FindResult`; empty when the panel is closed or there is no
+    /// match. UI-only view state, never synced.
+    pub find_matches: Vec<(u32, u32)>,
 }
 
 impl TrameUiState {
@@ -661,6 +667,7 @@ impl TrameUiState {
             hidden_rows: Vec::new(),
             clipboard_anchor: None,
             fill_preview: None,
+            find_matches: Vec::new(),
         };
         s.recompute_viewport_dims();
         s
