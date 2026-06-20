@@ -121,6 +121,40 @@
     background: var(--border);
 }
 
+/* Toolbar tooltips: a discreet, theme-aware replacement for the native `title`
+   bubble (small muted text, thin border, surface background). Driven by
+   `aria-label` so the accessible name and the visual hint share one source. The
+   bubble fades in after a short delay so it stays out of the way. */
+.ambre-commandbar [aria-label] {
+    position: relative;
+}
+
+.ambre-commandbar [aria-label]::after {
+    content: attr(aria-label);
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.4;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    transition: opacity 0.1s ease 0.45s;
+}
+
+.ambre-commandbar [aria-label]:hover::after {
+    opacity: 1;
+}
+
 /* Font family / size dropdowns: borderless and blended into the toolbar, theme
    aware (closed control + native option list via color-scheme), with a discreet
    custom caret (BiDownArrowSolid) on the right and left padding so the value is
@@ -1089,6 +1123,58 @@
 
 .ambre-number-format-popover .number-format-item .label {
     flex: 1;
+}
+
+/* ---------------------------------------------------------------------------
+   Alignment popovers (horizontal & vertical): a toolbar button mirroring the
+   active alignment's icon, toggling a menu of the three alignments with a check
+   on the active one. Mirrors the number-format popover.
+   --------------------------------------------------------------------------- */
+.ambre-align {
+    position: relative;
+    display: inline-flex;
+}
+
+.ambre-align-popover {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 30;
+    margin-top: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    padding: 4px;
+}
+
+.ambre-align-popover .align-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 8px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+}
+
+.ambre-align-popover .align-item:hover {
+    background: var(--accent);
+    color: #fff;
+}
+
+.ambre-align-popover .align-item .check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
 }
 
 /* ---------------------------------------------------------------------------

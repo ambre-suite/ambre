@@ -197,6 +197,11 @@ pub enum TrameEvent {
         /// Whether the active cell is part of a merge (a master or a covered
         /// cell), driving the toolbar's merge/unmerge toggle pressed state.
         merged: bool,
+        /// Whether the active cell's display value parses as a number. Lets the
+        /// toolbar resolve [`HAlign::Auto`](crate::logic::HAlign::Auto) the same
+        /// way the renderer does (numbers right, text left), so the alignment
+        /// control reflects the de-facto alignment of an `Auto` cell.
+        numeric: bool,
     },
 
     /// The document's content was replaced wholesale (local snapshot restore at
