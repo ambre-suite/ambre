@@ -42,6 +42,59 @@ use ambre_canvas::{
 use ambre_draw::{Affine, Alignment, Brush, Color, DrawSurface, PositionedLayoutItem, Rect};
 use ambre_trame::ui::TrameView;
 
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
+
+/// Private clipboard MIME type carrying the base64 postcard
+/// [`ClipboardPayload`](ambre_bus::ClipboardPayload) for an internal round-trip
+/// on the *synchronous* `copy`/`paste` events (Ctrl+C/Ctrl+V). Browsers that
+/// reject it fall back to `text/plain` (`-ui.md` sec.5.E).
+const AMBRE_CLIPBOARD_TYPE: &str = "application/x-ambre-trame";
+
+/// The same payload under the `web ` prefix the *asynchronous* Clipboard API
+/// (`navigator.clipboard.read`/`write`) requires for a custom type. This is the
+/// channel the toolbar/menu Paste button uses, since it cannot ride a native
+/// `paste` event (`-ui.md` sec.5.E).
+pub(crate) const AMBRE_CLIPBOARD_WEB_TYPE: &str = "web application/x-ambre-trame";
+
+/// Base64-encode bytes for transport as a clipboard string (UTF-8 safe).
+pub(crate) fn base64_encode(bytes: &[u8]) -> String {
+    BASE64.encode(bytes)
+}
+
+/// Decode a base64 clipboard string back to bytes; `None` on malformed input.
+pub(crate) fn base64_decode(s: &str) -> Option<Vec<u8>> {
+    BASE64.decode(s).ok()
+}
+
+/// Best-effort asynchronous publish of a copied range to the OS clipboard via
+/// `navigator.clipboard.write`, carrying the tab-separated `text/plain` plus the
+/// private `web ` payload type so the async-reading Paste button gets full
+/// fidelity (styles + formula reindexing). Runs in addition to the synchronous
+/// `setData` (which serves Ctrl+V); any failure is ignored -- Ctrl+V still works.
+pub(crate) fn async_write_clipboard(tsv: String, payload_b64: Option<String>) {
+    let Some(clipboard) = web_sys::window().map(|w| w.navigator().clipboard()) else {
+        return;
+    };
+    wasm_bindgen_futures::spawn_local(async move {
+        // Build the `{ mime: Promise<string> }` record ClipboardItem expects.
+        let record = js_sys::Object::new();
+        let text_promise = js_sys::Promise::resolve(&JsValue::from_str(&tsv));
+        let _ = js_sys::Reflect::set(&record, &JsValue::from_str("text/plain"), &text_promise);
+        if let Some(b64) = payload_b64 {
+            let p = js_sys::Promise::resolve(&JsValue::from_str(&b64));
+            let _ =
+                js_sys::Reflect::set(&record, &JsValue::from_str(AMBRE_CLIPBOARD_WEB_TYPE), &p);
+        }
+        let Ok(item) = web_sys::ClipboardItem::new_with_record_from_str_to_str_promise(&record)
+        else {
+            return;
+        };
+        let items = js_sys::Array::of1(&item);
+        let _ = wasm_bindgen_futures::JsFuture::from(clipboard.write(&items)).await;
+    });
+}
+
 // -----------------------------------------------------------------------------
 // AppView — the closed per-app view registry
 // -----------------------------------------------------------------------------
@@ -111,15 +164,34 @@ impl AppView {
         }
     }
 
-    /// Text to put on the clipboard for a `copy`/`cut` event, or `None` to let
-    /// the browser's default run. `cut` deletes the selection as a side effect.
-    fn clipboard_extract(&mut self, cut: bool) -> Option<String> {
+    /// Build the clipboard contents for a `copy`/`cut`, or `None` to let the
+    /// browser default run. Returns the OS-interop text plus an optional typed
+    /// [`ClipboardPayload`](ambre_bus::ClipboardPayload) (present only for a grid
+    /// range, carrying styles + relative-formula reindexing for an internal
+    /// round-trip). `cut` deletes the source as a side effect.
+    fn clipboard_write(
+        &mut self,
+        cut: bool,
+    ) -> Option<(String, Option<ambre_bus::ClipboardPayload>)> {
+        match self {
+            AppView::Trame(v) => v.clipboard_write(cut),
+        }
+    }
+
+    /// Service a `paste`: a typed Ambre payload (internal round-trip) when
+    /// present, else the OS plain text.
+    fn paste_clipboard(&mut self, payload: Option<ambre_bus::ClipboardPayload>, text: String) {
         match self {
             AppView::Trame(v) => {
-                if cut {
-                    v.cut_selection()
+                if v.is_editing() {
+                    // In-cell edit: route through the same text-insertion path as
+                    // typing, so the paste lands at the caret (the typed payload,
+                    // if any, is meaningless inside a text field).
+                    v.handle_input(&InputEvent::Text { text });
+                } else if let Some(payload) = payload {
+                    v.grid_paste_payload(payload);
                 } else {
-                    v.copy_selection()
+                    v.grid_paste_text(&text);
                 }
             }
         }
@@ -193,11 +265,20 @@ impl FrameHost {
         self.view.handle_input(ev)
     }
 
-    /// Pull the text a `copy`/`cut` event should place on the clipboard (and,
-    /// for `cut`, remove it from the editor). `None` means "nothing selected --
-    /// let the browser default proceed".
-    pub fn clipboard_extract(&mut self, cut: bool) -> Option<String> {
-        self.view.clipboard_extract(cut)
+    /// Pull the clipboard contents a `copy`/`cut` event should place on the OS
+    /// clipboard (and, for `cut`, remove from the source). `None` means "nothing
+    /// selected -- let the browser default proceed".
+    pub fn clipboard_write(
+        &mut self,
+        cut: bool,
+    ) -> Option<(String, Option<ambre_bus::ClipboardPayload>)> {
+        self.view.clipboard_write(cut)
+    }
+
+    /// Service a `paste` event with the decoded Ambre payload (if any) and the
+    /// plain text fallback.
+    pub fn paste_clipboard(&mut self, payload: Option<ambre_bus::ClipboardPayload>, text: String) {
+        self.view.paste_clipboard(payload, text);
     }
 
     /// Switch the active document on the live view, keeping the GPU surface.
@@ -617,8 +698,11 @@ where
     // The browser maps Ctrl+C / Ctrl+Insert -> `copy`, Ctrl+X / Shift+Del ->
     // `cut`, Ctrl+V / Shift+Insert -> `paste`, so we never decode those chords
     // ourselves: we just service the three clipboard events. `copy`/`cut` write
-    // the editor's selection synchronously into `clipboardData`; `paste` reads
-    // plain text and feeds it through the same `Text` insertion path as typing.
+    // the in-cell text selection or the grid range synchronously into
+    // `clipboardData`; `paste` reads it back. A grid range carries two
+    // representations: tab-separated text (`text/plain`, for cross-app paste) and
+    // a base64 postcard `ClipboardPayload` under a private type (`-ui.md`
+    // sec.5.E), so an internal round-trip preserves styles and reindexes formulas.
     {
         let ta = text_input.element().clone();
         let host_c = Rc::clone(&host);
@@ -626,13 +710,27 @@ where
             let host_e = Rc::clone(&host_c);
             let cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(
                 move |event: web_sys::ClipboardEvent| {
-                    let Some(text) = host_e.borrow_mut().clipboard_extract(cut) else {
-                        return; // nothing selected -- let the default proceed
+                    let Some((text, payload)) = host_e.borrow_mut().clipboard_write(cut) else {
+                        return; // nothing to copy -- let the default proceed
                     };
+                    // Base64 postcard of the typed payload (UTF-8 safe), shared by
+                    // both the synchronous setData (Ctrl+V) and the asynchronous
+                    // write (Paste button). `None` for an in-cell text selection.
+                    let b64 = payload
+                        .as_ref()
+                        .and_then(|p| postcard::to_allocvec(p).ok())
+                        .map(|bytes| base64_encode(&bytes));
                     if let Some(data) = event.clipboard_data() {
                         let _ = data.set_data("text/plain", &text);
+                        if let Some(b64) = &b64 {
+                            let _ = data.set_data(AMBRE_CLIPBOARD_TYPE, b64);
+                        }
                         event.prevent_default();
                     }
+                    // Also publish via the async Clipboard API so the Paste button
+                    // (which cannot ride a native paste event) reads it back with
+                    // full fidelity. Best-effort; ignored where unsupported.
+                    async_write_clipboard(text, b64);
                 },
             );
             ta.add_event_listener_with_callback(
@@ -649,14 +747,22 @@ where
         let cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(
             move |event: web_sys::ClipboardEvent| {
                 let Some(data) = event.clipboard_data() else { return };
+                // Prefer the private Ambre payload (internal round-trip); fall back
+                // to plain text (external apps, or a browser that dropped the type).
+                let payload = data
+                    .get_data(AMBRE_CLIPBOARD_TYPE)
+                    .ok()
+                    .filter(|s| !s.is_empty())
+                    .and_then(|b64| base64_decode(&b64))
+                    .and_then(|bytes| postcard::from_bytes::<ambre_bus::ClipboardPayload>(&bytes).ok());
                 let text = data.get_data("text/plain").unwrap_or_default();
-                if text.is_empty() {
+                if payload.is_none() && text.is_empty() {
                     return;
                 }
                 // Prevent the native insert (which would also fire `input` and
-                // double-paste); route through the model's caret/selection path.
+                // double-paste); route through the host's paste path.
                 event.prevent_default();
-                host_c.borrow_mut().handle_input(&InputEvent::Text { text });
+                host_c.borrow_mut().paste_clipboard(payload, text);
             },
         );
         ta.add_event_listener_with_callback("paste", cb.as_ref().unchecked_ref())

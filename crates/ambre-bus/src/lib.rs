@@ -33,7 +33,8 @@ pub use sink::CommandSink;
 pub use event::LogicEvent;
 pub use logic::{
     AppCommand, BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellStyle,
-    CondFormatKind, CondStyle, FilterKind, FilterOp, GridRange, HAlign, LogicCommand, SortKey,
+    ClipboardCell, ClipboardPayload, CondFormatKind, CondStyle, FilterKind, FilterOp, GridRange,
+    HAlign, LogicCommand, SortKey,
     StylePatch, TrameCommand, VAlign, ValidationKind, ValidationOnInvalid, BORDER_EDGE_ALL,
     BORDER_EDGE_BOTTOM, BORDER_EDGE_LEFT, BORDER_EDGE_RIGHT, BORDER_EDGE_TOP,
 };

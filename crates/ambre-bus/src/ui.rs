@@ -291,6 +291,14 @@ pub enum TrameEvent {
     /// visible again. A no-op clear (no active filter) emits nothing.
     FilterCleared,
 
+    /// A local [`PasteRange`](crate::logic::TrameCommand::PasteRange) was refused
+    /// because the destination overlaps a protected range the current user may
+    /// not edit (`-ui.md` sec.5.E, range protection is Post-MVP). No CRDT
+    /// mutation occurred; the chrome surfaces `reason` as a toast.
+    PasteRejected {
+        reason: String,
+    },
+
     // ─────────────────────────────────────────────────────────────────────────
     // Deferred feature surface (Phase 2+)
     //

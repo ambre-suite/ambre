@@ -1,0 +1,132 @@
+//! Relative-reference shifting for clipboard paste (`ambre-spec-trame-ui.md`
+//! sec.5.E). When a range is copied and pasted elsewhere, every reference in a
+//! pasted formula moves by the same offset as the cell that carries it -- the
+//! standard "relative reference" behaviour. AMBRE has no absolute (`$A$1`)
+//! syntax, so every cell/range reference is relative and shifts.
+//!
+//! The shift is a parse -> rewrite -> render round-trip over the stored formula
+//! text: [`parse_formula`] yields the AST, [`shift_expr`] offsets every
+//! [`CellRef`]/[`RangeDep`] (a reference driven off the grid resolves to
+//! `#REF!`), and [`render`] serialises back to canonical formula text. The text
+//! shifted here is the *display* form the UI cached; the Logic thread
+//! re-canonicalises it on write, so cross-sheet qualifiers survive.
+
+use super::parser::parse_formula;
+use super::render::render;
+use super::types::{CellRef, CellValue, Expr, FormulaError, RangeDep};
+
+/// Re-index a stored formula's relative references by `(dr, dc)` rows/columns
+/// and return the new formula text *with* its leading `=`. A formula that fails
+/// to parse is returned verbatim (a paste must never silently drop user input).
+pub fn shift_formula(raw: &str, dr: i64, dc: i64) -> String {
+    if dr == 0 && dc == 0 {
+        return raw.to_owned();
+    }
+    let body = raw.strip_prefix('=').unwrap_or(raw);
+    match parse_formula(body) {
+        Ok(expr) => format!("={}", render(&shift_expr(expr, dr, dc))),
+        Err(_) => raw.to_owned(),
+    }
+}
+
+/// Offset a 0-based axis index, returning `None` when the shift drives it off
+/// the grid (a negative position) -- the caller turns that into `#REF!`.
+fn shift_idx(v: u32, d: i64) -> Option<u32> {
+    let n = v as i64 + d;
+    (n >= 0).then_some(n as u32)
+}
+
+/// Offset a single cell reference; a reference pushed off the grid becomes a
+/// `#REF!` error literal (matching Excel/Sheets).
+fn shift_cell(mut r: CellRef, dr: i64, dc: i64) -> Expr {
+    match (shift_idx(r.row, dr), shift_idx(r.col, dc)) {
+        (Some(row), Some(col)) => {
+            r.row = row;
+            r.col = col;
+            Expr::CellRef(r)
+        }
+        _ => Expr::Literal(CellValue::Error(FormulaError::BrokenRef)),
+    }
+}
+
+/// Offset a range reference; if any endpoint leaves the grid the whole range
+/// resolves to `#REF!`.
+fn shift_range(mut r: RangeDep, dr: i64, dc: i64) -> Expr {
+    match (
+        shift_idx(r.row_start, dr),
+        shift_idx(r.row_end, dr),
+        shift_idx(r.col_start, dc),
+        shift_idx(r.col_end, dc),
+    ) {
+        (Some(rs), Some(re), Some(cs), Some(ce)) => {
+            r.row_start = rs;
+            r.row_end = re;
+            r.col_start = cs;
+            r.col_end = ce;
+            Expr::Range(r)
+        }
+        _ => Expr::Literal(CellValue::Error(FormulaError::BrokenRef)),
+    }
+}
+
+/// Recursively offset every reference in `expr`. Cross-sheet references
+/// (`Sheet2!A1`) shift their inner cell/range too -- a relative cross-sheet ref
+/// tracks the paste like any other (`=Sheet2!A1` pasted one row down reads
+/// `=Sheet2!A2`). Named ranges and literals are left intact.
+fn shift_expr(expr: Expr, dr: i64, dc: i64) -> Expr {
+    match expr {
+        Expr::CellRef(r) => shift_cell(r, dr, dc),
+        Expr::Range(r) => shift_range(r, dr, dc),
+        Expr::SheetRef { sheet, inner } => Expr::SheetRef {
+            sheet,
+            inner: Box::new(shift_expr(*inner, dr, dc)),
+        },
+        Expr::BinOp { kind, lhs, rhs } => Expr::BinOp {
+            kind,
+            lhs: Box::new(shift_expr(*lhs, dr, dc)),
+            rhs: Box::new(shift_expr(*rhs, dr, dc)),
+        },
+        Expr::UnaryOp { kind, operand } => Expr::UnaryOp {
+            kind,
+            operand: Box::new(shift_expr(*operand, dr, dc)),
+        },
+        Expr::FnCall { name, args } => Expr::FnCall {
+            name,
+            args: args.into_iter().map(|a| shift_expr(a, dr, dc)).collect(),
+        },
+        leaf => leaf,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shifts_cell_and_range_down_right() {
+        // Pasted 2 rows down, 1 column right.
+        assert_eq!(shift_formula("=A1", 2, 1), "=B3");
+        assert_eq!(shift_formula("=SUM(A1:B2)", 2, 1), "=SUM(B3:C4)");
+    }
+
+    #[test]
+    fn no_shift_is_verbatim() {
+        assert_eq!(shift_formula("=A1+B2", 0, 0), "=A1+B2");
+    }
+
+    #[test]
+    fn off_grid_reference_becomes_ref_error() {
+        // A1 shifted up one row leaves the grid.
+        assert_eq!(shift_formula("=A1", -1, 0), "=#REF!");
+    }
+
+    #[test]
+    fn keeps_operators_and_functions() {
+        assert_eq!(shift_formula("=A1*2+SUM(C1:C3)", 1, 0), "=A2*2+SUM(C2:C4)");
+    }
+
+    #[test]
+    fn unparseable_left_verbatim() {
+        assert_eq!(shift_formula("=this is not (a formula", 1, 1), "=this is not (a formula");
+    }
+}
