@@ -41,14 +41,36 @@ const SHEET: &str = "s0";
 /// generators never depend on a tracked active cell / selection.
 #[derive(Debug, Clone)]
 enum Op {
-    SetText { row: u32, col: u32, text: String },
-    InsertRow { at: u32 },
-    DeleteRow { at: u32 },
-    InsertColumn { at: u32 },
-    DeleteColumn { at: u32 },
-    Sort { ascending: bool },
-    Merge { row: u32, col: u32, row_end: u32, col_end: u32 },
-    Unmerge { row: u32, col: u32 },
+    SetText {
+        row: u32,
+        col: u32,
+        text: String,
+    },
+    InsertRow {
+        at: u32,
+    },
+    DeleteRow {
+        at: u32,
+    },
+    InsertColumn {
+        at: u32,
+    },
+    DeleteColumn {
+        at: u32,
+    },
+    Sort {
+        ascending: bool,
+    },
+    Merge {
+        row: u32,
+        col: u32,
+        row_end: u32,
+        col_end: u32,
+    },
+    Unmerge {
+        row: u32,
+        col: u32,
+    },
     Fill,
 }
 
