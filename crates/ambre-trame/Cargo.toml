@@ -39,6 +39,23 @@ js-sys       = { workspace = true }
 [dev-dependencies]
 # Headless render tests: RecordingSurface mock DrawSurface + FixedClock.
 ambre-draw = { path = "../ambre-draw", features = ["testing"] }
-# CRDT convergence property tests (Epic `ET`, `ambre-spec-trame-logic.md` §14):
-# proptest-generated interleaved op sequences across two peers.
+
+# `proptest` pulls `wait-timeout`, which does not compile on
+# `wasm32-unknown-unknown`; gating it to the host target keeps the wasm tier
+# (`just test-wasm`, the chrome tests below) building. The CRDT convergence
+# property tests that use it are host-only anyway (Epic `ET`,
+# `ambre-spec-trame-logic.md` §14).
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }
+
+# Leptos UI tests (Epic `ET`, `ambre-spec-trame-ui.md` sec.14/18): the chrome is
+# `cfg(target_arch = "wasm32")` (leptos CSR + DOM), so its tests run under the
+# wasm target via `wasm-pack test --headless --chrome` (`just test-wasm`). These
+# dev-deps let the integration test name the chrome's public types directly
+# (ambre-bus events, the leptos signals, ambre-chrome stores, the perf snapshot).
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
+leptos       = { workspace = true }
+ambre-bus    = { path = "../ambre-bus" }
+ambre-chrome = { path = "../ambre-chrome" }
+ambre-canvas = { path = "../ambre-canvas" }

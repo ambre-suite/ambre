@@ -288,5 +288,8 @@ pub(crate) use schema::*;
 #[cfg(test)]
 mod tests;
 
-#[cfg(test)]
+// Host-only: built on `proptest`, which is a host-target dev-dependency (its
+// `wait-timeout` transitive dep does not compile on wasm32). The wasm tier runs
+// the chrome UI tests instead (`tests/chrome_ui.rs`).
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod convergence_tests;

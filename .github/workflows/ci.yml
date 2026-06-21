@@ -125,33 +125,29 @@ jobs:
           key: test-db
       - run: just test-db
 
-  # ===========================================================================
-  # DISABLED until later Epic ET stories land. The `justfile` recipe and the job
-  # definition below are complete and correct; they are commented out only so CI
-  # stays green until the prerequisite story lands. Re-enable by uncommenting.
-  # ===========================================================================
-  #
-  # test-wasm -- RE-ENABLE WITH ET story "Leptos UI tests (trame-ui section 18)".
-  # No wasm-bindgen-test targets exist yet, so `just test-wasm` has nothing to
-  # run. `cfg(target_arch = "wasm32")` surfaces under headless Chrome; the pinned
-  # nightly + rust-src (rust-toolchain.toml) supply `-Z build-std`.
-  #
-  # test-wasm:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v5
-  #     - name: Install just
-  #       uses: taiki-e/install-action@v2
-  #       with:
-  #         tool: just
-  #     - uses: Swatinem/rust-cache@v2
-  #       with:
-  #         key: test-wasm
-  #     - name: Install wasm-pack
-  #       uses: taiki-e/install-action@v2
-  #       with:
-  #         tool: wasm-pack
-  #     - run: just test-wasm
+  # ---------------------------------------------------------------------------
+  # test-wasm -- `cfg(target_arch = "wasm32")` surfaces (the Trame chrome: leptos
+  # CSR + DOM) under headless Chrome via `wasm-pack test`. The pinned nightly +
+  # rust-src (rust-toolchain.toml) supply `-Z build-std` for multi-threaded wasm.
+  # Tests live in `crates/ambre-trame/tests/chrome_ui.rs` (Epic `ET`, Leptos UI
+  # tests, `ambre-spec-trame-ui.md` sec.14/18).
+  # ---------------------------------------------------------------------------
+  test-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: test-wasm
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+      - run: just test-wasm
 
   # ---------------------------------------------------------------------------
   # coverage -- host-tier lcov baseline. Non-blocking: informative threshold
