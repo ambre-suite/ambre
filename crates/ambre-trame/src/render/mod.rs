@@ -54,7 +54,7 @@ mod merges;
 mod text;
 
 pub use cells::draw_cells_on;
-pub use content::{draw_cell_borders_on, CellContent};
+pub use content::{CellContent, draw_cell_borders_on};
 pub use grid::draw_grid_lines_on;
 pub use headers::{draw_col_headers_on, draw_row_headers_on};
 pub use layout::GridLayout;

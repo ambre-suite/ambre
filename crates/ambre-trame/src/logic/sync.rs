@@ -15,7 +15,10 @@ impl TrameState {
         if current == self.last_exported_vv {
             return None;
         }
-        let delta = self.doc.export(ExportMode::updates(&self.last_exported_vv)).ok();
+        let delta = self
+            .doc
+            .export(ExportMode::updates(&self.last_exported_vv))
+            .ok();
         self.last_exported_vv = current;
         if let Some(ref d) = delta {
             tracing::info!("[Logic] flush_delta → {} bytes of CRDT ops", d.len());
@@ -91,7 +94,10 @@ impl TrameState {
             LoroValue::Map(cells) => cells.len(),
             _ => 0,
         };
-        tracing::info!("[Logic] {origin} imported {} bytes, {cell_count} cell(s) now present", payload.len());
+        tracing::info!(
+            "[Logic] {origin} imported {} bytes, {cell_count} cell(s) now present",
+            payload.len()
+        );
         // Advance the cursor to include the imported ops: we did not author them
         // (or already persisted them), so the next `flush_delta` must not export
         // them back. Local edits are flushed each frame before remote applies, so
@@ -113,8 +119,11 @@ impl TrameState {
         self.rebuild_filter();
         // Refresh the toolbar / context-menu toggles for the active cell: after a
         // reload its formatting is only known once the `format` map is restored.
-        let mut events =
-            vec![TrameEvent::DataReset, self.sheet_list_event(), self.style_state_event()];
+        let mut events = vec![
+            TrameEvent::DataReset,
+            self.sheet_list_event(),
+            self.style_state_event(),
+        ];
         events.extend(conflicts);
         events
     }

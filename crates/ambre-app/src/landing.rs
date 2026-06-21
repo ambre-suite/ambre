@@ -51,7 +51,11 @@ pub fn landing_view(
     signals: LandingSignals,
     to_logic: flume::Sender<LogicCommand>,
 ) -> impl IntoView {
-    let LandingSignals { docs, username, dev_mode } = signals;
+    let LandingSignals {
+        docs,
+        username,
+        dev_mode,
+    } = signals;
 
     // New document: generate the id client-side (UUID v7) and pushState-navigate.
     // The server row is created lazily on the first edit, so no request here.

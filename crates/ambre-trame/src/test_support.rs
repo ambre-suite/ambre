@@ -53,10 +53,16 @@ impl MockSyncHandle {
     /// [`SyncCommand::SendEphemeral`]. Both are tagged with `document_id`.
     pub fn absorb(&self, document_id: DocumentId, outcome: &TrameOutcome) {
         if let Some(payload) = &outcome.update {
-            self.send(SyncCommand::SendUpdate { document_id, payload: payload.clone() });
+            self.send(SyncCommand::SendUpdate {
+                document_id,
+                payload: payload.clone(),
+            });
         }
         if let Some(payload) = &outcome.ephemeral {
-            self.send(SyncCommand::SendEphemeral { document_id, payload: payload.clone() });
+            self.send(SyncCommand::SendEphemeral {
+                document_id,
+                payload: payload.clone(),
+            });
         }
     }
 

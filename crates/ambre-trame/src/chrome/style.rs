@@ -6,7 +6,7 @@
 // `Copy` signal bundles that may live inside the `<Router>` subtree.
 // ============================================================================
 
-use ambre_bus::{AppEvent, CellFormat, BorderStyle, HAlign, TrameEvent, UiEvent, VAlign};
+use ambre_bus::{AppEvent, BorderStyle, CellFormat, HAlign, TrameEvent, UiEvent, VAlign};
 use ambre_chrome::CommandStates;
 use leptos::prelude::*;
 
@@ -103,7 +103,14 @@ impl StyleState {
 /// no-op for any other event; the launcher calls it for every event it relays.
 pub fn apply_style_event(s: &StyleState, ev: &UiEvent) {
     if let UiEvent::Viewport {
-        event: AppEvent::Trame(TrameEvent::StyleApplied { style, bold, italic, merged, numeric }),
+        event:
+            AppEvent::Trame(TrameEvent::StyleApplied {
+                style,
+                bold,
+                italic,
+                merged,
+                numeric,
+            }),
         ..
     } = ev
     {

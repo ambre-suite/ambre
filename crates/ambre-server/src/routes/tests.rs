@@ -6,8 +6,8 @@ mod handler_tests {
     use std::sync::Arc;
     use tower::ServiceExt;
 
-    use crate::state::{AppState, Config};
     use crate::routes;
+    use crate::state::{AppState, Config};
     use crate::ws;
 
     fn empty_oidc_clients() -> crate::oidc::OidcClients {
@@ -20,16 +20,45 @@ mod handler_tests {
             .route("/auth/dev/login", axum::routing::post(routes::dev_login))
             .route("/auth/me", axum::routing::get(routes::me))
             .route("/auth/logout", axum::routing::post(routes::logout))
-            .route("/keys/master", axum::routing::put(routes::store_master_keys).get(routes::get_master_keys))
+            .route(
+                "/keys/master",
+                axum::routing::put(routes::store_master_keys).get(routes::get_master_keys),
+            )
             .route("/users/search", axum::routing::get(routes::search_users))
-            .route("/users/{id}/pubkeys", axum::routing::get(routes::get_pubkeys))
-            .route("/documents", axum::routing::get(routes::list_documents).post(routes::create_document))
-            .route("/documents/{id}", axum::routing::get(routes::get_document).delete(routes::delete_document).patch(routes::rename_document))
-            .route("/documents/{id}/share", axum::routing::post(routes::invite_to_document))
-            .route("/documents/{id}/share/{uid}", axum::routing::delete(routes::revoke_from_document))
-            .route("/documents/{id}/members", axum::routing::get(routes::list_document_members))
-            .route("/documents/{id}/members/{uid}", axum::routing::patch(routes::update_document_member_role))
-            .route("/documents/{id}/rotate-key", axum::routing::post(routes::rotate_document_key))
+            .route(
+                "/users/{id}/pubkeys",
+                axum::routing::get(routes::get_pubkeys),
+            )
+            .route(
+                "/documents",
+                axum::routing::get(routes::list_documents).post(routes::create_document),
+            )
+            .route(
+                "/documents/{id}",
+                axum::routing::get(routes::get_document)
+                    .delete(routes::delete_document)
+                    .patch(routes::rename_document),
+            )
+            .route(
+                "/documents/{id}/share",
+                axum::routing::post(routes::invite_to_document),
+            )
+            .route(
+                "/documents/{id}/share/{uid}",
+                axum::routing::delete(routes::revoke_from_document),
+            )
+            .route(
+                "/documents/{id}/members",
+                axum::routing::get(routes::list_document_members),
+            )
+            .route(
+                "/documents/{id}/members/{uid}",
+                axum::routing::patch(routes::update_document_member_role),
+            )
+            .route(
+                "/documents/{id}/rotate-key",
+                axum::routing::post(routes::rotate_document_key),
+            )
             .route("/ws", axum::routing::get(ws::ws_upgrade));
         Router::new().nest("/api", api_router).with_state(state)
     }
@@ -40,7 +69,10 @@ mod handler_tests {
         let state = test_app_state(pool).await;
         let app = build_test_router(state);
 
-        let resp = app.oneshot(Request::get("/api/auth/me").body(Body::empty()).unwrap()).await.unwrap();
+        let resp = app
+            .oneshot(Request::get("/api/auth/me").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 

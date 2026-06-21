@@ -4,8 +4,8 @@
 // Submodule of `render`; reaches sibling helpers, constants and imports through
 // the `use super::*` glob (the parent re-exports every renderer item).
 
-use super::*;
 use super::content::{cell_alignment, cell_v_offset, rgb};
+use super::*;
 
 // -----------------------------------------------------------------------------
 // draw_cells_on -- cell backgrounds + body text
@@ -90,7 +90,11 @@ where
         // shape left-aligned and position the run horizontally ourselves: parley's
         // own alignment needs a finite advance, and an unbounded (non-wrap) layout
         // would push centred/right text off-screen.
-        let max_w = if content.wrap { cell_max_width } else { f32::MAX };
+        let max_w = if content.wrap {
+            cell_max_width
+        } else {
+            f32::MAX
+        };
         let font_size = content.size.map(|s| s as f32).unwrap_or(BODY_SIZE);
         let layout_text: &Layout<ParleyBrush> = text_cache.get_or_build_font(
             font_cx,
@@ -155,7 +159,9 @@ where
         let brush = Brush::Solid(content.fg.map(rgb).unwrap_or(palette.cell_text));
         for line in layout_text.lines() {
             for item in line.items() {
-                let PositionedLayoutItem::GlyphRun(run) = item else { continue };
+                let PositionedLayoutItem::GlyphRun(run) = item else {
+                    continue;
+                };
                 let tx = rect.x0 + CELL_PAD_X + x_off + run.offset() as f64;
                 let ty = rect.y0 + y_off + run.baseline() as f64;
                 surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
@@ -180,4 +186,3 @@ where
 
     drawn
 }
-

@@ -80,7 +80,12 @@ impl SheetIndex {
     pub fn build(rows: &LoroMovableList, cols: &LoroMovableList) -> Self {
         let (row_by_pos, row_to_pos) = collect_ids(rows);
         let (col_by_pos, col_to_pos) = collect_ids(cols);
-        Self { row_by_pos, col_by_pos, row_to_pos, col_to_pos }
+        Self {
+            row_by_pos,
+            col_by_pos,
+            row_to_pos,
+            col_to_pos,
+        }
     }
 
     /// Number of materialized rows / columns (the used-range high-water mark).
@@ -262,10 +267,26 @@ mod tests {
         let rows = doc.get_movable_list("rows");
         let cols = doc.get_movable_list("cols");
         for i in 0..n_rows {
-            rows.push(Uid { peer: 1, counter: i as u32 }.to_key_part().as_str()).unwrap();
+            rows.push(
+                Uid {
+                    peer: 1,
+                    counter: i as u32,
+                }
+                .to_key_part()
+                .as_str(),
+            )
+            .unwrap();
         }
         for i in 0..n_cols {
-            cols.push(Uid { peer: 2, counter: i as u32 }.to_key_part().as_str()).unwrap();
+            cols.push(
+                Uid {
+                    peer: 2,
+                    counter: i as u32,
+                }
+                .to_key_part()
+                .as_str(),
+            )
+            .unwrap();
         }
         doc.commit();
         let idx = SheetIndex::build(&rows, &cols);
@@ -274,9 +295,20 @@ mod tests {
 
     #[test]
     fn col_letter_round_trips() {
-        for (idx, letters) in [(0, "A"), (25, "Z"), (26, "AA"), (27, "AB"), (701, "ZZ"), (702, "AAA")] {
+        for (idx, letters) in [
+            (0, "A"),
+            (25, "Z"),
+            (26, "AA"),
+            (27, "AB"),
+            (701, "ZZ"),
+            (702, "AAA"),
+        ] {
             assert_eq!(SheetIndex::col_letter(idx), letters, "idx {idx}");
-            assert_eq!(SheetIndex::letter_to_index(letters), idx, "letters {letters}");
+            assert_eq!(
+                SheetIndex::letter_to_index(letters),
+                idx,
+                "letters {letters}"
+            );
         }
     }
 
@@ -298,8 +330,14 @@ mod tests {
     fn resolve_returns_none_in_virtual_space() {
         let (_doc, idx) = index_with(4, 2);
         assert!(idx.resolve(3, 1).is_some());
-        assert!(idx.resolve(4, 1).is_none(), "row beyond used range is virtual");
-        assert!(idx.resolve(3, 2).is_none(), "col beyond used range is virtual");
+        assert!(
+            idx.resolve(4, 1).is_none(),
+            "row beyond used range is virtual"
+        );
+        assert!(
+            idx.resolve(3, 2).is_none(),
+            "col beyond used range is virtual"
+        );
     }
 
     #[test]
@@ -308,7 +346,10 @@ mod tests {
         let original_first = idx.resolve(0, 0).unwrap().0;
 
         // Insert a synthetic id at position 0: the old row 0 becomes row 1.
-        let new_id = Uid { peer: 999, counter: 7 };
+        let new_id = Uid {
+            peer: 999,
+            counter: 7,
+        };
         idx.apply_insert_row(0, new_id);
         assert_eq!(idx.row_len(), 4);
         assert_eq!(idx.resolve(0, 0).unwrap().0, new_id);
@@ -348,13 +389,23 @@ mod tests {
 
     #[test]
     fn cell_key_is_fixed_length_and_stable() {
-        let r = Uid { peer: 0x1234_5678_9abc_def0, counter: 0xffff_ffff };
-        let c = Uid { peer: 1, counter: 2 };
+        let r = Uid {
+            peer: 0x1234_5678_9abc_def0,
+            counter: 0xffff_ffff,
+        };
+        let c = Uid {
+            peer: 1,
+            counter: 2,
+        };
         let key = cell_key(r, c);
         assert_eq!(key.len(), 51);
         assert_eq!(key, cell_key(r, c), "deterministic");
         assert_ne!(key, cell_key(c, r), "order matters");
-        assert_eq!(parse_cell_key(&key), Some((r, c)), "round-trips, full u32 counter");
+        assert_eq!(
+            parse_cell_key(&key),
+            Some((r, c)),
+            "round-trips, full u32 counter"
+        );
         assert!(parse_cell_key("garbage").is_none());
     }
 }

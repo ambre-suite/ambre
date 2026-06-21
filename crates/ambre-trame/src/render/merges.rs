@@ -4,8 +4,8 @@
 // Submodule of `render`; reaches sibling helpers, constants and imports through
 // the `use super::*` glob (the parent re-exports every renderer item).
 
-use super::*;
 use super::content::{cell_alignment, cell_v_offset, rgb};
+use super::*;
 
 // -----------------------------------------------------------------------------
 // draw_merges_on -- merge masters spanning their covered area
@@ -87,7 +87,9 @@ where
             surface.push_clip(rect);
             for line in layout_text.lines() {
                 for item in line.items() {
-                    let PositionedLayoutItem::GlyphRun(run) = item else { continue };
+                    let PositionedLayoutItem::GlyphRun(run) = item else {
+                        continue;
+                    };
                     let tx = rect.x0 + CELL_PAD_X + x_off + run.offset() as f64;
                     let ty = rect.y0 + y_off + run.baseline() as f64;
                     surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
@@ -109,4 +111,3 @@ where
 
     drawn
 }
-

@@ -330,16 +330,16 @@ pub enum Layer {
 /// without rebuilding the CPU side.
 struct LayerBatches {
     quad_vertices: Vec<QuadVertex>,
-    quad_indices:  Vec<u32>,
+    quad_indices: Vec<u32>,
     glyph_vertices: Vec<GlyphVertex>,
-    glyph_indices:  Vec<u32>,
+    glyph_indices: Vec<u32>,
     quad_vb: wgpu::Buffer,
     quad_ib: wgpu::Buffer,
     glyph_vb: wgpu::Buffer,
     glyph_ib: wgpu::Buffer,
     /// Number of quad indices in the last upload. Used as the draw_indexed
     /// upper bound on any subsequent frame that reuses the GPU buffer.
-    drawn_quad_indices:  u32,
+    drawn_quad_indices: u32,
     drawn_glyph_indices: u32,
     /// Set to `true` by `begin_rebuild()`. When set, `upload_if_rebuilding()`
     /// transfers the CPU vecs to the GPU and refreshes `drawn_*`. Otherwise
@@ -375,14 +375,14 @@ impl LayerBatches {
         });
         Self {
             quad_vertices: Vec::with_capacity(INITIAL_QUADS * 4),
-            quad_indices:  Vec::with_capacity(INITIAL_QUADS * 6),
+            quad_indices: Vec::with_capacity(INITIAL_QUADS * 6),
             glyph_vertices: Vec::with_capacity(INITIAL_GLYPHS * 4),
-            glyph_indices:  Vec::with_capacity(INITIAL_GLYPHS * 6),
+            glyph_indices: Vec::with_capacity(INITIAL_GLYPHS * 6),
             quad_vb,
             quad_ib,
             glyph_vb,
             glyph_ib,
-            drawn_quad_indices:  0,
+            drawn_quad_indices: 0,
             drawn_glyph_indices: 0,
             rebuilding: false,
         }
@@ -456,7 +456,7 @@ impl LayerBatches {
             queue.write_buffer(&self.glyph_ib, 0, bytemuck::cast_slice(&self.glyph_indices));
         }
         // Refresh the drawn counts for subsequent encode passes.
-        self.drawn_quad_indices  = self.quad_indices.len()  as u32;
+        self.drawn_quad_indices = self.quad_indices.len() as u32;
         self.drawn_glyph_indices = self.glyph_indices.len() as u32;
     }
 }
@@ -467,7 +467,7 @@ impl LayerBatches {
 
 struct OffscreenTarget {
     texture: wgpu::Texture,
-    view:    wgpu::TextureView,
+    view: wgpu::TextureView,
 }
 
 impl OffscreenTarget {
@@ -481,13 +481,13 @@ impl OffscreenTarget {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
             size: wgpu::Extent3d {
-                width:                   width.max(1),
-                height:                  height.max(1),
-                depth_or_array_layers:   1,
+                width: width.max(1),
+                height: height.max(1),
+                depth_or_array_layers: 1,
             },
             mip_level_count: 1,
-            sample_count:    1,
-            dimension:       wgpu::TextureDimension::D2,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
             format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
@@ -529,7 +529,6 @@ pub enum OverlayRepaint {
     Reuse,
 }
 
-
 // ============================================================================
 // QuadRenderer
 // ============================================================================
@@ -539,35 +538,35 @@ pub enum OverlayRepaint {
 /// batches.
 pub struct QuadRenderer {
     // -- Pipelines --
-    quad_pipeline:  wgpu::RenderPipeline,
+    quad_pipeline: wgpu::RenderPipeline,
     glyph_pipeline: wgpu::RenderPipeline,
-    blit_pipeline:  wgpu::RenderPipeline,
+    blit_pipeline: wgpu::RenderPipeline,
 
     // -- Shared uniform (viewport size) --
     uniform_buf: wgpu::Buffer,
-    uniform_bg:  wgpu::BindGroup,
+    uniform_bg: wgpu::BindGroup,
 
     // -- Glyph atlas + its bind group --
     atlas_bind_group: wgpu::BindGroup,
-    pub atlas:        GlyphAtlas,
+    pub atlas: GlyphAtlas,
 
     // -- Per-layer batches --
-    cells:   LayerBatches,
+    cells: LayerBatches,
     overlay: LayerBatches,
     active_layer: Layer,
 
     // -- Ping-pong offscreen pair for the cells layer --
     offscreen_format: wgpu::TextureFormat,
-    offscreens:       [OffscreenTarget; 2],
+    offscreens: [OffscreenTarget; 2],
     blit_bind_groups: [wgpu::BindGroup; 2],
-    blit_bgl:         wgpu::BindGroupLayout,
-    blit_sampler:     wgpu::Sampler,
+    blit_bgl: wgpu::BindGroupLayout,
+    blit_sampler: wgpu::Sampler,
     /// Index of the offscreen that holds the latest valid CELLS pixels.
     /// After a Full/Scroll repaint, we render into the OTHER index and flip.
     current_offscreen_idx: usize,
 
     // -- Viewport state --
-    width:  f32,
+    width: f32,
     height: f32,
 }
 
@@ -823,11 +822,23 @@ impl QuadRenderer {
             OffscreenTarget::new(device, offscreen_format, 1, 1, "cells_offscreen_b"),
         ];
         let blit_bind_groups = [
-            make_blit_bg(device, &blit_bgl, &offscreens[0].view, &blit_sampler, "blit_bg_a"),
-            make_blit_bg(device, &blit_bgl, &offscreens[1].view, &blit_sampler, "blit_bg_b"),
+            make_blit_bg(
+                device,
+                &blit_bgl,
+                &offscreens[0].view,
+                &blit_sampler,
+                "blit_bg_a",
+            ),
+            make_blit_bg(
+                device,
+                &blit_bgl,
+                &offscreens[1].view,
+                &blit_sampler,
+                "blit_bg_b",
+            ),
         ];
 
-        let cells   = LayerBatches::new(device, "cells");
+        let cells = LayerBatches::new(device, "cells");
         let overlay = LayerBatches::new(device, "overlay");
 
         Self {
@@ -847,7 +858,7 @@ impl QuadRenderer {
             blit_bgl,
             blit_sampler,
             current_offscreen_idx: 0,
-            width:  1.0,
+            width: 1.0,
             height: 1.0,
         }
     }
@@ -857,12 +868,36 @@ impl QuadRenderer {
     /// the next frame must use `ContentRepaint::Full`.
     pub fn resize_offscreens(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         self.offscreens = [
-            OffscreenTarget::new(device, self.offscreen_format, width, height, "cells_offscreen_a"),
-            OffscreenTarget::new(device, self.offscreen_format, width, height, "cells_offscreen_b"),
+            OffscreenTarget::new(
+                device,
+                self.offscreen_format,
+                width,
+                height,
+                "cells_offscreen_a",
+            ),
+            OffscreenTarget::new(
+                device,
+                self.offscreen_format,
+                width,
+                height,
+                "cells_offscreen_b",
+            ),
         ];
         self.blit_bind_groups = [
-            make_blit_bg(device, &self.blit_bgl, &self.offscreens[0].view, &self.blit_sampler, "blit_bg_a"),
-            make_blit_bg(device, &self.blit_bgl, &self.offscreens[1].view, &self.blit_sampler, "blit_bg_b"),
+            make_blit_bg(
+                device,
+                &self.blit_bgl,
+                &self.offscreens[0].view,
+                &self.blit_sampler,
+                "blit_bg_a",
+            ),
+            make_blit_bg(
+                device,
+                &self.blit_bgl,
+                &self.offscreens[1].view,
+                &self.blit_sampler,
+                "blit_bg_b",
+            ),
         ];
         self.current_offscreen_idx = 0;
     }
@@ -873,7 +908,7 @@ impl QuadRenderer {
     /// uploaded GPU state and can be redrawn from cache (idle frames).
     pub fn begin_frame(&mut self, width: f32, height: f32) {
         self.atlas.begin_frame();
-        self.width  = width;
+        self.width = width;
         self.height = height;
     }
 
@@ -887,7 +922,7 @@ impl QuadRenderer {
 
     fn batches_mut(&mut self, layer: Layer) -> &mut LayerBatches {
         match layer {
-            Layer::Content   => &mut self.cells,
+            Layer::Content => &mut self.cells,
             Layer::Overlay => &mut self.overlay,
         }
     }
@@ -911,10 +946,22 @@ impl QuadRenderer {
         let b = self.active_batches_mut();
         let base = b.quad_vertices.len() as u32;
         b.quad_vertices.extend_from_slice(&[
-            QuadVertex { pos: [x0, y0], color: c },
-            QuadVertex { pos: [x1, y0], color: c },
-            QuadVertex { pos: [x1, y1], color: c },
-            QuadVertex { pos: [x0, y1], color: c },
+            QuadVertex {
+                pos: [x0, y0],
+                color: c,
+            },
+            QuadVertex {
+                pos: [x1, y0],
+                color: c,
+            },
+            QuadVertex {
+                pos: [x1, y1],
+                color: c,
+            },
+            QuadVertex {
+                pos: [x0, y1],
+                color: c,
+            },
         ]);
         b.quad_indices
             .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
@@ -934,10 +981,22 @@ impl QuadRenderer {
         let b = self.active_batches_mut();
         let base = b.quad_vertices.len() as u32;
         b.quad_vertices.extend_from_slice(&[
-            QuadVertex { pos: [x0 + nx, y0 + ny], color: c },
-            QuadVertex { pos: [x0 - nx, y0 - ny], color: c },
-            QuadVertex { pos: [x1 - nx, y1 - ny], color: c },
-            QuadVertex { pos: [x1 + nx, y1 + ny], color: c },
+            QuadVertex {
+                pos: [x0 + nx, y0 + ny],
+                color: c,
+            },
+            QuadVertex {
+                pos: [x0 - nx, y0 - ny],
+                color: c,
+            },
+            QuadVertex {
+                pos: [x1 - nx, y1 - ny],
+                color: c,
+            },
+            QuadVertex {
+                pos: [x1 + nx, y1 + ny],
+                color: c,
+            },
         ]);
         b.quad_indices
             .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
@@ -962,10 +1021,26 @@ impl QuadRenderer {
         let b = self.active_batches_mut();
         let base = b.glyph_vertices.len() as u32;
         b.glyph_vertices.extend_from_slice(&[
-            GlyphVertex { pos: [x, y],         uv: [uv_min[0], uv_min[1]], color: c },
-            GlyphVertex { pos: [x + w, y],     uv: [uv_max[0], uv_min[1]], color: c },
-            GlyphVertex { pos: [x + w, y + h], uv: [uv_max[0], uv_max[1]], color: c },
-            GlyphVertex { pos: [x, y + h],     uv: [uv_min[0], uv_max[1]], color: c },
+            GlyphVertex {
+                pos: [x, y],
+                uv: [uv_min[0], uv_min[1]],
+                color: c,
+            },
+            GlyphVertex {
+                pos: [x + w, y],
+                uv: [uv_max[0], uv_min[1]],
+                color: c,
+            },
+            GlyphVertex {
+                pos: [x + w, y + h],
+                uv: [uv_max[0], uv_max[1]],
+                color: c,
+            },
+            GlyphVertex {
+                pos: [x, y + h],
+                uv: [uv_min[0], uv_max[1]],
+                color: c,
+            },
         ]);
         b.glyph_indices
             .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
@@ -998,7 +1073,7 @@ impl QuadRenderer {
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
         swapchain_view: &wgpu::TextureView,
-        cells:   ContentRepaint,
+        cells: ContentRepaint,
         overlay: OverlayRepaint,
     ) {
         // -- 0. Uniform + atlas + conditional batch uploads. ------------------
@@ -1006,7 +1081,7 @@ impl QuadRenderer {
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::cast_slice(&vp));
         self.atlas.flush_uploads(queue);
         // Only uploads if the matching `begin_rebuild` was called this frame.
-        self.cells  .upload_if_rebuilding(device, queue, "cells");
+        self.cells.upload_if_rebuilding(device, queue, "cells");
         if matches!(overlay, OverlayRepaint::Redraw) {
             self.overlay.upload_if_rebuilding(device, queue, "overlay");
         }
@@ -1023,17 +1098,21 @@ impl QuadRenderer {
             let src = &self.offscreens[self.current_offscreen_idx].texture;
             let dst = &self.offscreens[dst_idx].texture;
             copy_offscreen_with_offset(
-                encoder, src, dst,
-                self.width as u32, self.height as u32,
-                dx_px, dy_px,
+                encoder,
+                src,
+                dst,
+                self.width as u32,
+                self.height as u32,
+                dx_px,
+                dy_px,
             );
         }
 
         if cells_dirty {
             let load_op = match cells {
-                ContentRepaint::Full          => wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                ContentRepaint::Full => wgpu::LoadOp::Clear(wgpu::Color::WHITE),
                 ContentRepaint::Scroll { .. } => wgpu::LoadOp::Load,
-                ContentRepaint::Reuse         => wgpu::LoadOp::Load,
+                ContentRepaint::Reuse => wgpu::LoadOp::Load,
             };
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("cells_pass"),
@@ -1041,7 +1120,10 @@ impl QuadRenderer {
                     view: &self.offscreens[dst_idx].view,
                     resolve_target: None,
                     depth_slice: None,
-                    ops: wgpu::Operations { load: load_op, store: wgpu::StoreOp::Store },
+                    ops: wgpu::Operations {
+                        load: load_op,
+                        store: wgpu::StoreOp::Store,
+                    },
                 })],
                 ..Default::default()
             });
@@ -1075,7 +1157,7 @@ impl QuadRenderer {
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations {
-                        load:  wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                        load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -1097,7 +1179,7 @@ impl QuadRenderer {
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations {
-                        load:  wgpu::LoadOp::Load,
+                        load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -1128,7 +1210,7 @@ impl QuadRenderer {
 /// Frame-scoped `DrawSurface` backed by `QuadRenderer`. Push routing follows
 /// `renderer.active_layer`, set by the caller before each phase.
 pub struct WgpuSurface<'r> {
-    renderer:   &'r mut QuadRenderer,
+    renderer: &'r mut QuadRenderer,
     clip_stack: Vec<Rect>,
 }
 
@@ -1368,10 +1450,10 @@ fn copy_offscreen_with_offset(
     encoder: &mut wgpu::CommandEncoder,
     src: &wgpu::Texture,
     dst: &wgpu::Texture,
-    width:  u32,
+    width: u32,
     height: u32,
-    dx_px:  i32,
-    dy_px:  i32,
+    dx_px: i32,
+    dy_px: i32,
 ) {
     // Compute the overlapping region: source rect that has a valid mapping
     // into the destination. Out-of-range deltas leave nothing to copy.
@@ -1380,7 +1462,7 @@ fn copy_offscreen_with_offset(
     if dx_abs >= width || dy_abs >= height {
         return;
     }
-    let copy_w = width  - dx_abs;
+    let copy_w = width - dx_abs;
     let copy_h = height - dy_abs;
 
     let (src_x, dst_x) = if dx_px >= 0 {
@@ -1400,18 +1482,26 @@ fn copy_offscreen_with_offset(
         wgpu::TexelCopyTextureInfo {
             texture: src,
             mip_level: 0,
-            origin: wgpu::Origin3d { x: src_x, y: src_y, z: 0 },
+            origin: wgpu::Origin3d {
+                x: src_x,
+                y: src_y,
+                z: 0,
+            },
             aspect: wgpu::TextureAspect::All,
         },
         wgpu::TexelCopyTextureInfo {
             texture: dst,
             mip_level: 0,
-            origin: wgpu::Origin3d { x: dst_x, y: dst_y, z: 0 },
+            origin: wgpu::Origin3d {
+                x: dst_x,
+                y: dst_y,
+                z: 0,
+            },
             aspect: wgpu::TextureAspect::All,
         },
         wgpu::Extent3d {
-            width:                 copy_w,
-            height:                copy_h,
+            width: copy_w,
+            height: copy_h,
             depth_or_array_layers: 1,
         },
     );

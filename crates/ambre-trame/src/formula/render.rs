@@ -14,7 +14,7 @@
 //! and Sheets reformat typed formulas the same way).
 
 use super::types::{
-    col_to_alpha, BinOpKind, CellRef, CellValue, Expr, RangeDep, SheetQualifier, UnaryOpKind,
+    BinOpKind, CellRef, CellValue, Expr, RangeDep, SheetQualifier, UnaryOpKind, col_to_alpha,
 };
 
 // -----------------------------------------------------------------------------
@@ -131,7 +131,12 @@ fn render_node(expr: &Expr) -> String {
             } else {
                 (p, p + 1)
             };
-            format!("{}{}{}", emit(lhs, lhs_min), binop_symbol(*kind), emit(rhs, rhs_min))
+            format!(
+                "{}{}{}",
+                emit(lhs, lhs_min),
+                binop_symbol(*kind),
+                emit(rhs, rhs_min)
+            )
         }
         Expr::UnaryOp { kind, operand } => match kind {
             UnaryOpKind::Neg => format!("-{}", emit(operand, 6)),
@@ -223,8 +228,8 @@ fn binop_symbol(kind: BinOpKind) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::parser::parse_formula;
+    use super::*;
 
     /// Parse, render, and assert the round-trip yields the expected canonical text.
     fn roundtrip(src: &str) -> String {
@@ -250,7 +255,10 @@ mod tests {
     fn refs_and_ranges() {
         assert_eq!(roundtrip("A1"), "A1");
         assert_eq!(roundtrip("SUM(A1:B10)"), "SUM(A1:B10)");
-        assert_eq!(roundtrip("IF(A1>0,\"yes\",\"no\")"), "IF(A1>0,\"yes\",\"no\")");
+        assert_eq!(
+            roundtrip("IF(A1>0,\"yes\",\"no\")"),
+            "IF(A1>0,\"yes\",\"no\")"
+        );
     }
 
     #[test]

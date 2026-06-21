@@ -81,7 +81,14 @@ impl TrameState {
         let _ = self.undo_manager.group_start();
 
         // Active sheet first, through the regular write path (engine-aware).
-        let mut replaced = self.replace_in_active(&needle, &query, &replacement, match_case, whole_cell, in_formulas);
+        let mut replaced = self.replace_in_active(
+            &needle,
+            &query,
+            &replacement,
+            match_case,
+            whole_cell,
+            in_formulas,
+        );
 
         // Other sheets: edit their cells map directly, then reseed the engine so
         // their formula results recompute (the active write path only tracks the
@@ -94,7 +101,15 @@ impl TrameState {
                 .filter(|id| *id != self.active_sheet)
                 .collect();
             for sheet_id in others {
-                let n = self.replace_in_other(&sheet_id, &needle, &query, &replacement, match_case, whole_cell, in_formulas);
+                let n = self.replace_in_other(
+                    &sheet_id,
+                    &needle,
+                    &query,
+                    &replacement,
+                    match_case,
+                    whole_cell,
+                    in_formulas,
+                );
                 if n > 0 {
                     touched_other = true;
                     replaced += n;
@@ -131,8 +146,16 @@ impl TrameState {
         let (r, c) = self.active;
 
         let _ = self.undo_manager.group_start();
-        let replaced =
-            u32::from(self.replace_active_cell(r, c, &needle, &query, &replacement, match_case, whole_cell, in_formulas));
+        let replaced = u32::from(self.replace_active_cell(
+            r,
+            c,
+            &needle,
+            &query,
+            &replacement,
+            match_case,
+            whole_cell,
+            in_formulas,
+        ));
 
         // Recompute the match set so the UI can advance to (and highlight) the
         // next hit. After a successful replace the active cell no longer matches,
@@ -167,9 +190,16 @@ impl TrameState {
         let mut replaced = 0;
         for row in 0..rows {
             for col in 0..cols {
-                if self
-                    .replace_active_cell(row, col, needle, query, replacement, match_case, whole_cell, in_formulas)
-                {
+                if self.replace_active_cell(
+                    row,
+                    col,
+                    needle,
+                    query,
+                    replacement,
+                    match_case,
+                    whole_cell,
+                    in_formulas,
+                ) {
                     replaced += 1;
                 }
             }
@@ -201,7 +231,11 @@ impl TrameState {
         if is_formula && !in_formulas {
             return false;
         }
-        let haystack = if is_formula { raw.clone() } else { self.cell_text(row, col) };
+        let haystack = if is_formula {
+            raw.clone()
+        } else {
+            self.cell_text(row, col)
+        };
         if !cell_matches(&haystack, needle, match_case, whole_cell) {
             return false;
         }
@@ -236,7 +270,9 @@ impl TrameState {
         let mut edits: Vec<((Uid, Uid), Option<String>)> = Vec::new();
         for row in 0..rows {
             for col in 0..cols {
-                let Some((rl, cl)) = index.resolve(row, col) else { continue };
+                let Some((rl, cl)) = index.resolve(row, col) else {
+                    continue;
+                };
                 let raw = match map.get(&cell_key(rl, cl)).map(|v| v.get_deep_value()) {
                     Some(LoroValue::String(s)) => s.to_string(),
                     _ => continue,
@@ -310,7 +346,13 @@ fn cell_matches(haystack: &str, needle: &str, match_case: bool, whole_cell: bool
 /// Produce the rewritten raw text for a matched cell: the whole-cell case swaps
 /// the entire content for `replacement`; the substring case replaces every
 /// occurrence of `query` (case-insensitively when `match_case` is off).
-fn rewrite(raw: &str, query: &str, replacement: &str, match_case: bool, whole_cell: bool) -> String {
+fn rewrite(
+    raw: &str,
+    query: &str,
+    replacement: &str,
+    match_case: bool,
+    whole_cell: bool,
+) -> String {
     if whole_cell {
         return replacement.to_string();
     }

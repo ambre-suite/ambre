@@ -5,7 +5,7 @@
 
 use ambre_crypto::keys::{DocumentKey, MasterSeed};
 use ambre_crypto::{envelope, passphrase};
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 
 fn bench_envelope(c: &mut Criterion) {
@@ -28,7 +28,9 @@ fn bench_envelope(c: &mut Criterion) {
 fn bench_argon2(c: &mut Criterion) {
     let salt = [0xABu8; 16];
     c.bench_function("argon2id_derive", |b| {
-        b.iter(|| passphrase::derive_user_key(black_box(b"correct horse"), black_box(&salt)).unwrap());
+        b.iter(|| {
+            passphrase::derive_user_key(black_box(b"correct horse"), black_box(&salt)).unwrap()
+        });
     });
 }
 

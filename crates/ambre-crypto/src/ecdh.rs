@@ -63,6 +63,9 @@ pub fn unwrap_document_key(
     let shared = shared_secret(own_secret, peer_public);
     let kek = derive_kek(&shared);
     let bytes = aead::open(&wrapped.nonce, &wrapped.ciphertext, KEK_DOMAIN, &kek)?;
-    let arr: [u8; 32] = bytes.as_slice().try_into().map_err(|_| CryptoError::InvalidKeyLength)?;
+    let arr: [u8; 32] = bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| CryptoError::InvalidKeyLength)?;
     Ok(DocumentKey::from_array(arr))
 }

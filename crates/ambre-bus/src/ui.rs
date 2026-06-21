@@ -46,10 +46,7 @@ pub enum UiEvent {
     // ── Service plane (relayed request/response) ──────────────────────────────
     /// A [`RestEvent`] response, echoing the originating [`RequestId`] so the UI
     /// can route it to the call-site that issued the [`crate::RestCommand`].
-    Rest {
-        id: RequestId,
-        evt: RestEvent,
-    },
+    Rest { id: RequestId, evt: RestEvent },
 
     // ── Connection / status (server push) ─────────────────────────────────────
     /// WebSocket connection status for a document (online / offline indicator).
@@ -116,9 +113,7 @@ pub enum UiEvent {
 
     // ── Errors & warnings ─────────────────────────────────────────────────────
     /// Authentication error (wrong passphrase, corrupted vault, network failure).
-    AuthError {
-        message: String,
-    },
+    AuthError { message: String },
 
     /// REST or WebSocket operation error.
     ///
@@ -139,9 +134,7 @@ pub enum UiEvent {
     /// a channel *disconnect* on the UI Thread's inbound receiver — the UI
     /// treats that identically to a `FatalError`. See the "thread failure"
     /// section of `ambre-spec-architecture`.
-    FatalError {
-        message: String,
-    },
+    FatalError { message: String },
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -212,9 +205,7 @@ pub enum TrameEvent {
     /// A local [`MergeCells`](crate::logic::TrameCommand::MergeCells) was refused
     /// because a covered cell is non-empty (`ambre-spec-trame-logic.md` §6). The
     /// chrome surfaces `reason` to the user; no CRDT mutation was produced.
-    MergeRejected {
-        reason: String,
-    },
+    MergeRejected { reason: String },
 
     /// A merge ended up covering a non-empty cell after a concurrent edit
     /// converged (§6). The covered value is masked (not destroyed) while the
@@ -231,10 +222,7 @@ pub enum TrameEvent {
     /// [`Redo`](crate::logic::TrameCommand::Redo). Drives the enabled state of the
     /// chrome's Undo/Redo affordances. Reflects Loro's `UndoManager` stacks, whose
     /// scope is the current document session.
-    UndoState {
-        can_undo: bool,
-        can_redo: bool,
-    },
+    UndoState { can_undo: bool, can_redo: bool },
 
     /// The workbook's sheets, in tab-strip order: `(sheet_id, display_name)`.
     /// Emitted after any sheet-lifecycle command
@@ -251,9 +239,7 @@ pub enum TrameEvent {
 
     /// A command was rejected for a reason the user should see (e.g. deleting the
     /// last remaining sheet). Purely informational; no CRDT mutation occurred.
-    Error {
-        message: String,
-    },
+    Error { message: String },
 
     /// A local [`SortRange`](crate::logic::TrameCommand::SortRange) finished
     /// reordering the rows (`ambre-spec-trame-features.md` §3). The accompanying
@@ -270,20 +256,14 @@ pub enum TrameEvent {
     /// filter (non-active sheet / virtual column) emits nothing. `col` is the
     /// grid column the filter targets, so the UI can draw the funnel badge on its
     /// header (`-ui.md` sec.5.D).
-    FilterApplied {
-        hidden_row_count: u32,
-        col: u32,
-    },
+    FilterApplied { hidden_row_count: u32, col: u32 },
 
     /// The distinct visible values of a column, replying to
     /// [`RequestActiveColumnValues`](crate::logic::TrameCommand::RequestActiveColumnValues).
     /// Feeds the shared filter popover's "by values" checkbox list (`-ui.md`
     /// sec.5.D). `col` is the grid column the values belong to; `values` is the
     /// deduplicated, sorted display text of every non-hidden row.
-    ColumnValues {
-        col: u32,
-        values: Vec<String>,
-    },
+    ColumnValues { col: u32, values: Vec<String> },
 
     /// Selection aggregates for the status bar (`-ui.md` sec.13bis), replying to
     /// [`RequestSelectionStats`](crate::logic::TrameCommand::RequestSelectionStats).
@@ -321,17 +301,13 @@ pub enum TrameEvent {
     /// rewritten `replaced` cells (`-ui.md` sec.5.G). Paired with a
     /// [`DataReset`](Self::DataReset) that prompts the viewport re-fetch; the
     /// chrome surfaces the count as a toast.
-    ReplaceDone {
-        replaced: u32,
-    },
+    ReplaceDone { replaced: u32 },
 
     /// A local [`PasteRange`](crate::logic::TrameCommand::PasteRange) was refused
     /// because the destination overlaps a protected range the current user may
     /// not edit (`-ui.md` sec.5.E, range protection is Post-MVP). No CRDT
     /// mutation occurred; the chrome surfaces `reason` as a toast.
-    PasteRejected {
-        reason: String,
-    },
+    PasteRejected { reason: String },
 
     // ─────────────────────────────────────────────────────────────────────────
     // Deferred feature surface (Phase 2+)
@@ -342,13 +318,10 @@ pub enum TrameEvent {
     // views / conditional formatting -> Phase 2/3, validation -> Phase 2/3,
     // range protection -> Post-MVP).
     // ─────────────────────────────────────────────────────────────────────────
-
     /// A personal filter view was persisted to local storage
     /// ([`SaveFilterView`](crate::logic::TrameCommand::SaveFilterView),
     /// `ambre-spec-trame-features.md §1.B`). `view_id` is its stable local id.
-    FilterViewSaved {
-        view_id: String,
-    },
+    FilterViewSaved { view_id: String },
 
     /// The sheet's conditional-formatting rules changed
     /// ([`AddCondFormat`](crate::logic::TrameCommand::AddCondFormat) /
@@ -356,9 +329,7 @@ pub enum TrameEvent {
     /// [`RemoveCondFormat`](crate::logic::TrameCommand::RemoveCondFormat), §3).
     /// The accompanying [`DataReset`](Self::DataReset) prompts a viewport
     /// re-fetch with the new style overrides applied.
-    CondFormatsUpdated {
-        version: u64,
-    },
+    CondFormatsUpdated { version: u64 },
 
     /// A local edit was rejected by a [`ValidationOnInvalid::Reject`] rule
     /// (`ambre-spec-trame-features.md §5`). No CRDT delta was produced; the
@@ -410,10 +381,7 @@ pub enum TrameEvent {
     /// holds the document, so it serializes the bytes; the UI Thread receives them
     /// and triggers the browser download. `filename` already carries the right
     /// extension.
-    ExportComplete {
-        filename: String,
-        data: Vec<u8>,
-    },
+    ExportComplete { filename: String, data: Vec<u8> },
 
     /// A remote delta edited a protected range its author was not allowed to
     /// (`§6`). The delta IS applied (CRDT convergence is mandatory) but the UI

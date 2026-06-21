@@ -3,7 +3,7 @@
 // In-memory WebSocket transport for testing the Sync pipeline without WASM or
 // network. Two flume pairs form a bidirectional client⇄server loop.
 
-use ambre_protocol::ws::{decode_client_msg, WsClientMsg, WsServerMsg, WireDecodeError};
+use ambre_protocol::ws::{WireDecodeError, WsClientMsg, WsServerMsg, decode_client_msg};
 
 /// Bidirectional in-memory WebSocket transport for host tests.
 ///
@@ -31,7 +31,12 @@ impl MockWsTransport {
     pub fn new() -> Self {
         let (client_tx, server_rx) = flume::unbounded();
         let (server_tx, client_rx) = flume::unbounded();
-        Self { client_tx, server_rx, server_tx, client_rx }
+        Self {
+            client_tx,
+            server_rx,
+            server_tx,
+            client_rx,
+        }
     }
 }
 
@@ -50,7 +55,9 @@ impl MockWsTransport {
 
     /// Convenience: encode and push a server message.
     pub fn send_server_msg(&self, msg: WsServerMsg) {
-        self.server_tx.send(msg).expect("server channel disconnected");
+        self.server_tx
+            .send(msg)
+            .expect("server channel disconnected");
     }
 
     /// Convenience: drain all pending client messages.

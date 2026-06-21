@@ -88,7 +88,11 @@ impl TrameState {
         let mut outcome = self.finish_cell_writes();
         outcome.display.push(self.sheet_list_event());
         outcome.display.push(self.style_state_event());
-        outcome.display.push(TrameEvent::ImportComplete { sheet_id, rows, cols });
+        outcome.display.push(TrameEvent::ImportComplete {
+            sheet_id,
+            rows,
+            cols,
+        });
         outcome
     }
 
@@ -105,7 +109,11 @@ impl TrameState {
         let Some(&idx) = self.sheet_id_to_u16.get(sheet_id) else {
             return TrameOutcome::display_only(vec![]);
         };
-        let index = if idx == 0 { self.index.clone() } else { self.build_sheet_index(sheet_id) };
+        let index = if idx == 0 {
+            self.index.clone()
+        } else {
+            self.build_sheet_index(sheet_id)
+        };
         let (row_start, row_end, col_start, col_end) = match range {
             Some(r) => (r.row, r.row_end, r.col, r.col_end),
             None => match self.used_extent(sheet_id, &index) {
@@ -116,7 +124,9 @@ impl TrameState {
         };
 
         let delim = delimiter.unwrap_or(b',');
-        let mut writer = csv::WriterBuilder::new().delimiter(delim).from_writer(Vec::new());
+        let mut writer = csv::WriterBuilder::new()
+            .delimiter(delim)
+            .from_writer(Vec::new());
         for row in row_start..=row_end {
             let record: Vec<String> = (col_start..=col_end)
                 .map(|col| self.export_cell_text(sheet_id, idx, &index, row, col))
@@ -125,7 +135,12 @@ impl TrameState {
         }
         let data = writer.into_inner().unwrap_or_default();
 
-        let name = match self.doc.get_map(SHEETS_MAP).get(sheet_id).map(|v| v.get_deep_value()) {
+        let name = match self
+            .doc
+            .get_map(SHEETS_MAP)
+            .get(sheet_id)
+            .map(|v| v.get_deep_value())
+        {
             Some(LoroValue::String(s)) => s.to_string(),
             _ => sheet_id.to_owned(),
         };
@@ -153,7 +168,9 @@ impl TrameState {
             if matches!(value, LoroValue::String(s) if s.is_empty()) {
                 continue;
             }
-            let Some((rl, cl)) = parse_cell_key(key) else { continue };
+            let Some((rl, cl)) = parse_cell_key(key) else {
+                continue;
+            };
             if let (Some(r), Some(c)) = (index.row_pos(&rl), index.col_pos(&cl)) {
                 max_row = Some(max_row.map_or(r, |m: usize| m.max(r)));
                 max_col = Some(max_col.map_or(c, |m: usize| m.max(c)));
@@ -181,7 +198,12 @@ impl TrameState {
         {
             return text;
         }
-        match self.doc.get_map(cells_map_name(sheet_id)).get(&cell_key(rl, cl)).map(|v| v.get_deep_value()) {
+        match self
+            .doc
+            .get_map(cells_map_name(sheet_id))
+            .get(&cell_key(rl, cl))
+            .map(|v| v.get_deep_value())
+        {
             Some(LoroValue::String(s)) => s.to_string(),
             _ => String::new(),
         }
@@ -194,9 +216,5 @@ fn detect_csv_delimiter(data: &[u8]) -> u8 {
     let sample = &data[..data.len().min(1024)];
     let commas = sample.iter().filter(|&&b| b == b',').count();
     let semicolons = sample.iter().filter(|&&b| b == b';').count();
-    if semicolons > commas {
-        b';'
-    } else {
-        b','
-    }
+    if semicolons > commas { b';' } else { b',' }
 }

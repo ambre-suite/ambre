@@ -3,24 +3,26 @@
 //! Produces an [`Expr`] AST from a raw formula string (without the leading `=`).
 //! Uses nom 8.0 with the `Parser::parse` trait method.
 
+use nom::Parser;
 use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::{alpha1, alphanumeric1, char, digit1, multispace0, one_of};
 use nom::combinator::{map, map_res, opt, recognize, value};
 use nom::multi::{many0, many1, separated_list0};
 use nom::sequence::{delimited, preceded};
-use nom::Parser;
 
 use super::types::{
-    alpha_to_col, BinOpKind, CellRef, CellValue, Expr, FormulaCtx, FormulaError, NameTarget,
-    RangeDep, SheetQualifier, UnaryOpKind,
+    BinOpKind, CellRef, CellValue, Expr, FormulaCtx, FormulaError, NameTarget, RangeDep,
+    SheetQualifier, UnaryOpKind, alpha_to_col,
 };
 
 // -----------------------------------------------------------------------------
 // Whitespace
 // -----------------------------------------------------------------------------
 
-fn ws<'a, P, O>(mut inner: P) -> impl Parser<&'a str, Output = O, Error = nom::error::Error<&'a str>>
+fn ws<'a, P, O>(
+    mut inner: P,
+) -> impl Parser<&'a str, Output = O, Error = nom::error::Error<&'a str>>
 where
     P: Parser<&'a str, Output = O, Error = nom::error::Error<&'a str>>,
 {
@@ -38,11 +40,7 @@ where
 
 fn number(input: &str) -> nom::IResult<&str, f64> {
     map_res(
-        recognize((
-            opt(char('-')),
-            digit1,
-            opt((char('.'), digit1)),
-        )),
+        recognize((opt(char('-')), digit1, opt((char('.'), digit1)))),
         |s: &str| s.parse::<f64>(),
     )
     .parse(input)
@@ -170,7 +168,13 @@ fn sheet_qualified(input: &str) -> nom::IResult<&str, Expr> {
     let (input, sheet) = sheet_qualifier.parse(input)?;
     let (input, _) = char('!').parse(input)?;
     let (input, inner) = cell_or_range.parse(input)?;
-    Ok((input, Expr::SheetRef { sheet, inner: Box::new(inner) }))
+    Ok((
+        input,
+        Expr::SheetRef {
+            sheet,
+            inner: Box::new(inner),
+        },
+    ))
 }
 
 /// A bareword reference to a named range. Resolution happens in
@@ -196,10 +200,13 @@ fn function_call(input: &str) -> nom::IResult<&str, Expr> {
     let (input, _) = char('(').parse(input)?;
     let (input, args) = separated_list0(ws(char(',')), expr).parse(input)?;
     let (input, _) = ws(char(')')).parse(input)?;
-    Ok((input, Expr::FnCall {
-        name: name.to_uppercase(),
-        args,
-    }))
+    Ok((
+        input,
+        Expr::FnCall {
+            name: name.to_uppercase(),
+            args,
+        },
+    ))
 }
 
 // -----------------------------------------------------------------------------
@@ -248,7 +255,10 @@ fn unary(input: &str) -> nom::IResult<&str, Expr> {
     let (input, operand) = atom.parse(input)?;
     let mut result = operand;
     for _ in ops.into_iter().rev() {
-        result = Expr::UnaryOp { kind: UnaryOpKind::Neg, operand: Box::new(result) };
+        result = Expr::UnaryOp {
+            kind: UnaryOpKind::Neg,
+            operand: Box::new(result),
+        };
     }
     Ok((input, result))
 }
@@ -260,11 +270,14 @@ fn pow_expr(input: &str) -> nom::IResult<&str, Expr> {
     match rest {
         Some(_) => {
             let (input, rhs) = pow_expr(input)?;
-            Ok((input, Expr::BinOp {
-                kind: BinOpKind::Pow,
-                lhs: Box::new(lhs),
-                rhs: Box::new(rhs),
-            }))
+            Ok((
+                input,
+                Expr::BinOp {
+                    kind: BinOpKind::Pow,
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                },
+            ))
         }
         None => Ok((input, lhs)),
     }
@@ -282,7 +295,11 @@ fn mul_div(input: &str) -> nom::IResult<&str, Expr> {
         match op {
             Some(kind) => {
                 let (rest, rhs) = pow_expr.parse(rest)?;
-                lhs = Expr::BinOp { kind, lhs: Box::new(lhs), rhs: Box::new(rhs) };
+                lhs = Expr::BinOp {
+                    kind,
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                };
                 input = rest;
             }
             None => break,
@@ -303,7 +320,11 @@ fn add_sub(input: &str) -> nom::IResult<&str, Expr> {
         match op {
             Some(kind) => {
                 let (rest, rhs) = mul_div.parse(rest)?;
-                lhs = Expr::BinOp { kind, lhs: Box::new(lhs), rhs: Box::new(rhs) };
+                lhs = Expr::BinOp {
+                    kind,
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                };
                 input = rest;
             }
             None => break,
@@ -348,11 +369,14 @@ fn comparison(input: &str) -> nom::IResult<&str, Expr> {
     match op {
         Some(kind) => {
             let (input, rhs) = concat_expr.parse(input)?;
-            Ok((input, Expr::BinOp {
-                kind,
-                lhs: Box::new(lhs),
-                rhs: Box::new(rhs),
-            }))
+            Ok((
+                input,
+                Expr::BinOp {
+                    kind,
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                },
+            ))
         }
         None => Ok((input, lhs)),
     }
@@ -396,11 +420,7 @@ pub fn parse_formula(input: &str) -> Result<Expr, String> {
 /// `default_sheet` is the sheet the formula itself lives on (its unqualified
 /// references resolve there). Returns an error string for an unknown sheet name
 /// or undefined name.
-pub fn resolve_refs(
-    expr: Expr,
-    default_sheet: u16,
-    ctx: &dyn FormulaCtx,
-) -> Result<Expr, String> {
+pub fn resolve_refs(expr: Expr, default_sheet: u16, ctx: &dyn FormulaCtx) -> Result<Expr, String> {
     match expr {
         Expr::CellRef(mut r) => {
             r.sheet = default_sheet;
@@ -473,9 +493,14 @@ mod tests {
 
     #[test]
     fn literal_number() {
-        assert!(matches!(parse("42"), Expr::Literal(CellValue::Number(42.0))));
+        assert!(matches!(
+            parse("42"),
+            Expr::Literal(CellValue::Number(42.0))
+        ));
         assert!(matches!(parse("-5"), Expr::UnaryOp { .. }));
-        assert!(matches!(parse("1.23"), Expr::Literal(CellValue::Number(v)) if (v - 1.23).abs() < 0.001));
+        assert!(
+            matches!(parse("1.23"), Expr::Literal(CellValue::Number(v)) if (v - 1.23).abs() < 0.001)
+        );
     }
 
     #[test]
@@ -485,15 +510,34 @@ mod tests {
 
     #[test]
     fn literal_bool() {
-        assert!(matches!(parse("TRUE"), Expr::Literal(CellValue::Boolean(true))));
-        assert!(matches!(parse("FALSE"), Expr::Literal(CellValue::Boolean(false))));
+        assert!(matches!(
+            parse("TRUE"),
+            Expr::Literal(CellValue::Boolean(true))
+        ));
+        assert!(matches!(
+            parse("FALSE"),
+            Expr::Literal(CellValue::Boolean(false))
+        ));
     }
 
     #[test]
     fn cell_reference() {
-        assert!(matches!(parse("A1"), Expr::CellRef(CellRef { row: 0, col: 0, .. })));
-        assert!(matches!(parse("B2"), Expr::CellRef(CellRef { row: 1, col: 1, .. })));
-        assert!(matches!(parse("AA100"), Expr::CellRef(CellRef { row: 99, col: 26, .. })));
+        assert!(matches!(
+            parse("A1"),
+            Expr::CellRef(CellRef { row: 0, col: 0, .. })
+        ));
+        assert!(matches!(
+            parse("B2"),
+            Expr::CellRef(CellRef { row: 1, col: 1, .. })
+        ));
+        assert!(matches!(
+            parse("AA100"),
+            Expr::CellRef(CellRef {
+                row: 99,
+                col: 26,
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -512,7 +556,10 @@ mod tests {
     #[test]
     fn arithmetic_add() {
         match parse("A1+B2") {
-            Expr::BinOp { kind: BinOpKind::Add, .. } => {}
+            Expr::BinOp {
+                kind: BinOpKind::Add,
+                ..
+            } => {}
             other => panic!("expected Add, got {other:?}"),
         }
     }
@@ -521,8 +568,18 @@ mod tests {
     fn arithmetic_precedence() {
         let ast = parse("1+2*3");
         match &ast {
-            Expr::BinOp { kind: BinOpKind::Add, rhs, .. } => {
-                assert!(matches!(**rhs, Expr::BinOp { kind: BinOpKind::Mul, .. }));
+            Expr::BinOp {
+                kind: BinOpKind::Add,
+                rhs,
+                ..
+            } => {
+                assert!(matches!(
+                    **rhs,
+                    Expr::BinOp {
+                        kind: BinOpKind::Mul,
+                        ..
+                    }
+                ));
             }
             other => panic!("expected Add with Mul rhs, got {other:?}"),
         }
@@ -532,8 +589,18 @@ mod tests {
     fn parens_override_precedence() {
         let ast = parse("(1+2)*3");
         match &ast {
-            Expr::BinOp { kind: BinOpKind::Mul, lhs, .. } => {
-                assert!(matches!(**lhs, Expr::BinOp { kind: BinOpKind::Add, .. }));
+            Expr::BinOp {
+                kind: BinOpKind::Mul,
+                lhs,
+                ..
+            } => {
+                assert!(matches!(
+                    **lhs,
+                    Expr::BinOp {
+                        kind: BinOpKind::Add,
+                        ..
+                    }
+                ));
             }
             other => panic!("expected Mul with Add lhs, got {other:?}"),
         }
@@ -542,7 +609,10 @@ mod tests {
     #[test]
     fn comparison_eq() {
         match parse("A1=B1") {
-            Expr::BinOp { kind: BinOpKind::Eq, .. } => {}
+            Expr::BinOp {
+                kind: BinOpKind::Eq,
+                ..
+            } => {}
             other => panic!("expected Eq, got {other:?}"),
         }
     }
@@ -550,7 +620,10 @@ mod tests {
     #[test]
     fn comparison_chain() {
         match parse("A1<B1") {
-            Expr::BinOp { kind: BinOpKind::Lt, .. } => {}
+            Expr::BinOp {
+                kind: BinOpKind::Lt,
+                ..
+            } => {}
             other => panic!("expected Lt, got {other:?}"),
         }
     }
@@ -558,7 +631,10 @@ mod tests {
     #[test]
     fn concatenation() {
         match parse(r#"A1&"hello""#) {
-            Expr::BinOp { kind: BinOpKind::Concat, .. } => {}
+            Expr::BinOp {
+                kind: BinOpKind::Concat,
+                ..
+            } => {}
             other => panic!("expected Concat, got {other:?}"),
         }
     }
@@ -629,7 +705,11 @@ mod tests {
     #[test]
     fn sheet_qualified_resolves_index() {
         match resolve("Sheet2!A1", 0).unwrap() {
-            Expr::CellRef(CellRef { sheet: 2, row: 0, col: 0 }) => {}
+            Expr::CellRef(CellRef {
+                sheet: 2,
+                row: 0,
+                col: 0,
+            }) => {}
             other => panic!("expected sheet-2 cell, got {other:?}"),
         }
     }
@@ -637,7 +717,11 @@ mod tests {
     #[test]
     fn quoted_sheet_name_with_space() {
         match resolve("'My Sheet'!B2", 0).unwrap() {
-            Expr::CellRef(CellRef { sheet: 5, row: 1, col: 1 }) => {}
+            Expr::CellRef(CellRef {
+                sheet: 5,
+                row: 1,
+                col: 1,
+            }) => {}
             other => panic!("expected sheet-5 cell, got {other:?}"),
         }
     }
@@ -645,7 +729,12 @@ mod tests {
     #[test]
     fn sheet_qualified_range_resolves() {
         match resolve("Sheet2!A1:A10", 0).unwrap() {
-            Expr::Range(RangeDep { sheet: 2, row_start: 0, row_end: 9, .. }) => {}
+            Expr::Range(RangeDep {
+                sheet: 2,
+                row_start: 0,
+                row_end: 9,
+                ..
+            }) => {}
             other => panic!("expected sheet-2 range, got {other:?}"),
         }
     }
@@ -653,7 +742,11 @@ mod tests {
     #[test]
     fn id_qualified_cell_resolves_index() {
         match resolve("#s2!A1", 0).unwrap() {
-            Expr::CellRef(CellRef { sheet: 2, row: 0, col: 0 }) => {}
+            Expr::CellRef(CellRef {
+                sheet: 2,
+                row: 0,
+                col: 0,
+            }) => {}
             other => panic!("expected sheet-2 cell, got {other:?}"),
         }
     }
@@ -683,7 +776,11 @@ mod tests {
     #[test]
     fn unqualified_ref_takes_default_sheet() {
         match resolve("A1", 3).unwrap() {
-            Expr::CellRef(CellRef { sheet: 3, row: 0, col: 0 }) => {}
+            Expr::CellRef(CellRef {
+                sheet: 3,
+                row: 0,
+                col: 0,
+            }) => {}
             other => panic!("expected default-sheet cell, got {other:?}"),
         }
     }
@@ -700,7 +797,12 @@ mod tests {
                 assert_eq!(name, "SUM");
                 assert!(matches!(
                     &args[0],
-                    Expr::Range(RangeDep { sheet: 2, row_start: 0, row_end: 2, .. })
+                    Expr::Range(RangeDep {
+                        sheet: 2,
+                        row_start: 0,
+                        row_end: 2,
+                        ..
+                    })
                 ));
             }
             other => panic!("expected SUM(range), got {other:?}"),
@@ -712,7 +814,14 @@ mod tests {
         // PIVOT + 1 -> CellRef(sheet 0, E1) added to 1.
         match resolve("PIVOT+1", 0).unwrap() {
             Expr::BinOp { lhs, .. } => {
-                assert!(matches!(*lhs, Expr::CellRef(CellRef { sheet: 0, row: 4, col: 0 })));
+                assert!(matches!(
+                    *lhs,
+                    Expr::CellRef(CellRef {
+                        sheet: 0,
+                        row: 4,
+                        col: 0
+                    })
+                ));
             }
             other => panic!("expected BinOp, got {other:?}"),
         }
@@ -744,9 +853,19 @@ mod tests {
     fn power_right_associative() {
         let ast = parse("2^3^2");
         match &ast {
-            Expr::BinOp { kind: BinOpKind::Pow, lhs, rhs } => {
+            Expr::BinOp {
+                kind: BinOpKind::Pow,
+                lhs,
+                rhs,
+            } => {
                 assert!(matches!(**lhs, Expr::Literal(CellValue::Number(2.0))));
-                assert!(matches!(**rhs, Expr::BinOp { kind: BinOpKind::Pow, .. }));
+                assert!(matches!(
+                    **rhs,
+                    Expr::BinOp {
+                        kind: BinOpKind::Pow,
+                        ..
+                    }
+                ));
             }
             other => panic!("expected right-assoc pow, got {other:?}"),
         }

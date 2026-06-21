@@ -54,8 +54,8 @@ use leptos::prelude::*;
 use leptos_icons::Icon;
 use leptos_router::components::Router;
 use leptos_router::hooks::use_location;
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::*;
 
 mod host;
 mod landing;
@@ -296,8 +296,9 @@ pub fn main() {
     let devmode_slot: Rc<RefCell<Option<RwSignal<Option<bool>>>>> = Rc::new(RefCell::new(None));
     let current_doc_slot: Rc<RefCell<Option<RwSignal<Option<DocumentId>>>>> =
         Rc::new(RefCell::new(None));
-    let filter_popover_slot: Rc<RefCell<Option<RwSignal<Option<trame_chrome::FilterPopoverState>>>>> =
-        Rc::new(RefCell::new(None));
+    let filter_popover_slot: Rc<
+        RefCell<Option<RwSignal<Option<trame_chrome::FilterPopoverState>>>>,
+    > = Rc::new(RefCell::new(None));
     let filter_values_slot: Rc<RefCell<Option<RwSignal<Vec<String>>>>> =
         Rc::new(RefCell::new(None));
     let find_state_slot: Rc<RefCell<Option<RwSignal<Option<trame_chrome::FindReplaceState>>>>> =
@@ -331,13 +332,26 @@ pub fn main() {
         perf_snap,
     );
 
-    let store = store_slot.borrow().clone().expect("store created during mount");
-    let anchor_pos = anchor_slot.borrow().expect("anchor signal created during mount");
+    let store = store_slot
+        .borrow()
+        .clone()
+        .expect("store created during mount");
+    let anchor_pos = anchor_slot
+        .borrow()
+        .expect("anchor signal created during mount");
     let toasts = toasts_slot.borrow().expect("Toasts created during mount");
-    let username = user_slot.borrow().expect("user signal created during mount");
-    let docs = docs_slot.borrow().expect("docs signal created during mount");
-    let members = members_slot.borrow().expect("members signal created during mount");
-    let dev_mode = devmode_slot.borrow().expect("dev_mode signal created during mount");
+    let username = user_slot
+        .borrow()
+        .expect("user signal created during mount");
+    let docs = docs_slot
+        .borrow()
+        .expect("docs signal created during mount");
+    let members = members_slot
+        .borrow()
+        .expect("members signal created during mount");
+    let dev_mode = devmode_slot
+        .borrow()
+        .expect("dev_mode signal created during mount");
     let current_doc = current_doc_slot
         .borrow()
         .expect("current_doc signal created during mount");
@@ -361,7 +375,9 @@ pub fn main() {
         .expect("find_result signal created during mount");
     // Formatting-toolbar style state (`-ui.md` sec.5bis), read back for the
     // per-frame relay (which updates it on `TrameEvent::StyleApplied`).
-    let style_state = style_slot.borrow().expect("style state created during mount");
+    let style_state = style_slot
+        .borrow()
+        .expect("style state created during mount");
 
     // Learn whether the server enables dev login (drives the signed-out panel).
     // Unauthenticated, Main-thread fetch -- a pre-session concern.
@@ -382,7 +398,10 @@ pub fn main() {
         let store_slot = Rc::clone(&persist_store);
         let restore_tx = ui_to_logic_tx.clone();
         wasm_bindgen_futures::spawn_local(async move {
-            let store = match ambre_logic::persistence::PersistenceStore::open().recv_async().await {
+            let store = match ambre_logic::persistence::PersistenceStore::open()
+                .recv_async()
+                .await
+            {
                 Ok(Ok(store)) => store,
                 Ok(Err(e)) => {
                     tracing::warn!("Persistence: store unavailable ({e})");
@@ -394,8 +413,10 @@ pub fn main() {
                 }
             };
             if let Some((doc_type, document_id)) = boot_doc_typed {
-                if let Ok(Some(snapshot)) =
-                    store.load_snapshot(*document_id.as_bytes()).recv_async().await
+                if let Ok(Some(snapshot)) = store
+                    .load_snapshot(*document_id.as_bytes())
+                    .recv_async()
+                    .await
                 {
                     tracing::info!("Persistence: restoring doc ({} bytes)", snapshot.len());
                     let _ = restore_tx.try_send(LogicCommand::RestoreLocalSnapshot {
@@ -442,8 +463,10 @@ pub fn main() {
                     let _ = route_tx.try_send(LogicCommand::CloseDocument { document_id });
                 }
                 if let Some((doc_type, document_id)) = cur_doc {
-                    let _ =
-                        route_tx.try_send(LogicCommand::OpenDocument { document_id, doc_type });
+                    let _ = route_tx.try_send(LogicCommand::OpenDocument {
+                        document_id,
+                        doc_type,
+                    });
                 }
                 current_doc.set(cur_doc.map(|(_, id)| id));
             }
@@ -533,13 +556,20 @@ pub fn main() {
                 } => members.set(list.clone()),
                 // An invite succeeded: confirm and refresh the member list.
                 UiEvent::Rest {
-                    evt: ambre_bus::RestEvent::InviteSent { document_id, display_name, .. },
+                    evt:
+                        ambre_bus::RestEvent::InviteSent {
+                            document_id,
+                            display_name,
+                            ..
+                        },
                     ..
                 } => {
                     toasts.success(format!("Invited {display_name}"));
                     let _ = relay_tx.try_send(LogicCommand::Rest {
                         id: RequestId::next(),
-                        cmd: RestCommand::ListDocumentMembers { document_id: *document_id },
+                        cmd: RestCommand::ListDocumentMembers {
+                            document_id: *document_id,
+                        },
                     });
                 }
                 // Revocation done (key rotation complete): confirm and refresh.
@@ -550,7 +580,9 @@ pub fn main() {
                     toasts.success("Member revoked");
                     let _ = relay_tx.try_send(LogicCommand::Rest {
                         id: RequestId::next(),
-                        cmd: RestCommand::ListDocumentMembers { document_id: *document_id },
+                        cmd: RestCommand::ListDocumentMembers {
+                            document_id: *document_id,
+                        },
                     });
                 }
                 // A role change took effect: refresh the member list.
@@ -560,7 +592,9 @@ pub fn main() {
                 } => {
                     let _ = relay_tx.try_send(LogicCommand::Rest {
                         id: RequestId::next(),
-                        cmd: RestCommand::ListDocumentMembers { document_id: *document_id },
+                        cmd: RestCommand::ListDocumentMembers {
+                            document_id: *document_id,
+                        },
                     });
                 }
                 // A document was shared with us: refresh the landing list so it
@@ -824,7 +858,12 @@ fn AppRoot() -> impl IntoView {
 
     // The reactive client route, used only to show/hide the landing overlay.
     let location = use_location();
-    let is_landing = move || matches!(route::parse(&location.pathname.get()), route::Route::Landing);
+    let is_landing = move || {
+        matches!(
+            route::parse(&location.pathname.get()),
+            route::Route::Landing
+        )
+    };
 
     // Theme toggle drives only the button glyph; `theme_ctl` (canvas) and the
     // document `data-theme` (CSS custom properties) are the real switches.
@@ -933,7 +972,11 @@ fn AppRoot() -> impl IntoView {
                     {
                         let _ = el.focus();
                     }
-                    let cmd = if id == trame_chrome::COPY { "copy" } else { "cut" };
+                    let cmd = if id == trame_chrome::COPY {
+                        "copy"
+                    } else {
+                        "cut"
+                    };
                     if let Ok(html_doc) = doc.dyn_into::<web_sys::HtmlDocument>() {
                         let _ = html_doc.exec_command(cmd);
                     }
@@ -964,7 +1007,11 @@ fn AppRoot() -> impl IntoView {
                         // right away instead of deferring it to the next click.
                         let read_promise = clipboard.read();
                         wasm_bindgen_futures::spawn_local(paste_from_clipboard(
-                            read_promise, clipboard, document_id, tx, toasts,
+                            read_promise,
+                            clipboard,
+                            document_id,
+                            tx,
+                            toasts,
                         ));
                     } else {
                         toasts.warning(
@@ -1076,7 +1123,11 @@ fn AppRoot() -> impl IntoView {
     // re-runnable `Fn`; a plain `Sender` clone would be moved into it (making it
     // `FnOnce`). A `StoredValue` is `Copy`, so each row reads its own clone.
     let tx_member = StoredValue::new(to_logic.clone());
-    let landing_signals = LandingSignals { docs, username, dev_mode };
+    let landing_signals = LandingSignals {
+        docs,
+        username,
+        dev_mode,
+    };
     let landing_tx = to_logic.clone();
 
     view! {
@@ -1406,7 +1457,9 @@ fn dispatch_to_current(
 /// element is never attached to the DOM; the change closure is leaked because the
 /// picker is one-shot and lives only until the user picks a file.
 fn open_csv_picker(document_id: DocumentId, tx: flume::Sender<LogicCommand>, toasts: Toasts) {
-    let Some(document) = web_sys::window().and_then(|w| w.document()) else { return };
+    let Some(document) = web_sys::window().and_then(|w| w.document()) else {
+        return;
+    };
     let Some(input) = document
         .create_element("input")
         .ok()
@@ -1419,7 +1472,9 @@ fn open_csv_picker(document_id: DocumentId, tx: flume::Sender<LogicCommand>, toa
 
     let picker = input.clone();
     let onchange = Closure::<dyn FnMut()>::new(move || {
-        let Some(file) = picker.files().and_then(|fs| fs.get(0)) else { return };
+        let Some(file) = picker.files().and_then(|fs| fs.get(0)) else {
+            return;
+        };
         let tx = tx.clone();
         wasm_bindgen_futures::spawn_local(async move {
             match wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await {
@@ -1466,7 +1521,9 @@ async fn paste_from_clipboard(
         && let Ok(items) = val.dyn_into::<js_sys::Array>()
     {
         for item in items.iter() {
-            let Ok(item) = item.dyn_into::<web_sys::ClipboardItem>() else { continue };
+            let Ok(item) = item.dyn_into::<web_sys::ClipboardItem>() else {
+                continue;
+            };
             let types = item.types();
             let has = |t: &str| types.iter().any(|v| v.as_string().as_deref() == Some(t));
             if has(host::AMBRE_CLIPBOARD_WEB_TYPE)
@@ -1503,9 +1560,13 @@ async fn paste_from_clipboard(
 /// Read one MIME entry of a [`web_sys::ClipboardItem`] as a string (its blob
 /// decoded as UTF-8). `None` on any failure.
 async fn read_clipboard_item(item: &web_sys::ClipboardItem, mime: &str) -> Option<String> {
-    let blob_val = wasm_bindgen_futures::JsFuture::from(item.get_type(mime)).await.ok()?;
+    let blob_val = wasm_bindgen_futures::JsFuture::from(item.get_type(mime))
+        .await
+        .ok()?;
     let blob = blob_val.dyn_into::<web_sys::Blob>().ok()?;
-    let text_val = wasm_bindgen_futures::JsFuture::from(blob.text()).await.ok()?;
+    let text_val = wasm_bindgen_futures::JsFuture::from(blob.text())
+        .await
+        .ok()?;
     text_val.as_string()
 }
 
@@ -1598,29 +1659,36 @@ async fn fetch_dev_mode() -> bool {
 /// Up to two uppercase initials from a display name, for the header avatar.
 /// Empty / missing name falls back to a neutral dash.
 fn initials(name: Option<&str>) -> String {
-    let Some(name) = name else { return "-".to_owned() };
+    let Some(name) = name else {
+        return "-".to_owned();
+    };
     let letters: String = name
         .split_whitespace()
         .filter_map(|w| w.chars().next())
         .take(2)
         .collect::<String>()
         .to_uppercase();
-    if letters.is_empty() { "-".to_owned() } else { letters }
+    if letters.is_empty() {
+        "-".to_owned()
+    } else {
+        letters
+    }
 }
 
 fn spawn_sync_worker(to_logic: flume::Sender<LogicEvent>) -> web_sys::Worker {
     // Classic worker (the Trunk loader uses `importScripts`); not a module worker.
     let worker = web_sys::Worker::new(SYNC_WORKER_URL).expect("failed to spawn Sync worker");
 
-    let onmessage = Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |e: web_sys::MessageEvent| {
-        let bytes = js_sys::Uint8Array::new(&e.data()).to_vec();
-        match postcard::from_bytes::<LogicEvent>(&bytes) {
-            Ok(event) => {
-                let _ = to_logic.send(event);
+    let onmessage =
+        Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |e: web_sys::MessageEvent| {
+            let bytes = js_sys::Uint8Array::new(&e.data()).to_vec();
+            match postcard::from_bytes::<LogicEvent>(&bytes) {
+                Ok(event) => {
+                    let _ = to_logic.send(event);
+                }
+                Err(err) => tracing::error!("[Sync->UI] failed to decode LogicEvent: {err}"),
             }
-            Err(err) => tracing::error!("[Sync->UI] failed to decode LogicEvent: {err}"),
-        }
-    });
+        });
     worker.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
     // Leak the closure: it lives for the whole session (the worker never stops).
     onmessage.forget();
@@ -1665,7 +1733,9 @@ fn dispatch_command(
 /// initial `data-theme`. The chrome then reads colours/spacings as CSS custom
 /// properties; the canvas reads the matching `Palette` -- one source, `tokens.ron`.
 fn inject_theme(theme: ambre_canvas::Theme) {
-    let Some(document) = web_sys::window().and_then(|w| w.document()) else { return };
+    let Some(document) = web_sys::window().and_then(|w| w.document()) else {
+        return;
+    };
     if let Ok(Some(head)) = document.query_selector("head") {
         if let Ok(style) = document.create_element("style") {
             style.set_id("ambre-theme");
@@ -1719,8 +1789,8 @@ fn install_command_keys(
         .document()
         .expect("no document");
 
-    let cb = Closure::<dyn FnMut(web_sys::KeyboardEvent)>::new(
-        move |event: web_sys::KeyboardEvent| {
+    let cb =
+        Closure::<dyn FnMut(web_sys::KeyboardEvent)>::new(move |event: web_sys::KeyboardEvent| {
             let Some(chord) = ambre_chrome::keybinding_from_event(&event) else {
                 return;
             };
@@ -1743,8 +1813,7 @@ fn install_command_keys(
                 return;
             }
             dispatch_to_current(id, current_doc, &to_logic);
-        },
-    );
+        });
     document
         .add_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref())
         .expect("add command keydown listener");

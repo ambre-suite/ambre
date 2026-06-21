@@ -28,11 +28,7 @@ impl TrameState {
                 }
                 if self.cell_has_raw(row, col) {
                     return TrameOutcome::display_only(vec![TrameEvent::MergeRejected {
-                        reason: format!(
-                            "cell {}{} is not empty",
-                            col_to_alpha(col),
-                            row + 1
-                        ),
+                        reason: format!("cell {}{} is not empty", col_to_alpha(col), row + 1),
                     }]);
                 }
             }
@@ -47,10 +43,13 @@ impl TrameState {
         ) else {
             return TrameOutcome::display_only(vec![]);
         };
-        let _ = self.doc.get_map(merges_map_name(&self.active_sheet)).insert(
-            &cell_key(master.0, master.1),
-            cell_key(extent.0, extent.1).as_str(),
-        );
+        let _ = self
+            .doc
+            .get_map(merges_map_name(&self.active_sheet))
+            .insert(
+                &cell_key(master.0, master.1),
+                cell_key(extent.0, extent.1).as_str(),
+            );
         self.doc.commit();
         self.after_merge_change()
     }
@@ -58,16 +57,22 @@ impl TrameState {
     /// Split the merge whose rectangle contains `(row, col)`, restoring covered
     /// cells (and any masked value). A no-op when the cell is not in a merge.
     pub(super) fn unmerge_cells(&mut self, row: u32, col: u32) -> TrameOutcome {
-        let master = self.merges.iter().find_map(|(&(top, left), &(bottom, right))| {
-            (row >= top && row <= bottom && col >= left && col <= right).then_some((top, left))
-        });
+        let master = self
+            .merges
+            .iter()
+            .find_map(|(&(top, left), &(bottom, right))| {
+                (row >= top && row <= bottom && col >= left && col <= right).then_some((top, left))
+            });
         let Some((top, left)) = master else {
             return TrameOutcome::display_only(vec![]);
         };
         let Some((rl, cl)) = self.index.resolve(top as usize, left as usize) else {
             return TrameOutcome::display_only(vec![]);
         };
-        let _ = self.doc.get_map(merges_map_name(&self.active_sheet)).delete(&cell_key(rl, cl));
+        let _ = self
+            .doc
+            .get_map(merges_map_name(&self.active_sheet))
+            .delete(&cell_key(rl, cl));
         self.doc.commit();
         self.after_merge_change()
     }
@@ -81,7 +86,11 @@ impl TrameState {
         self.reseed_engine();
         display.push(TrameEvent::DataReset);
         let update = self.flush_delta();
-        TrameOutcome { display, update, ephemeral: None }
+        TrameOutcome {
+            display,
+            update,
+            ephemeral: None,
+        }
     }
 
     /// Whether grid `(row, col)` holds a non-empty string value in the CRDT.
@@ -113,8 +122,10 @@ impl TrameState {
         self.merges.clear();
         self.covered.clear();
         self.masked_cells.clear();
-        let LoroValue::Map(entries) =
-            self.doc.get_map(merges_map_name(&self.active_sheet)).get_value()
+        let LoroValue::Map(entries) = self
+            .doc
+            .get_map(merges_map_name(&self.active_sheet))
+            .get_value()
         else {
             return Vec::new();
         };
@@ -123,14 +134,20 @@ impl TrameState {
         let mut rects: Vec<MergeRect> = entries
             .iter()
             .filter_map(|(master_key, value)| {
-                let LoroValue::String(extent_key) = value else { return None };
+                let LoroValue::String(extent_key) = value else {
+                    return None;
+                };
                 let (mr, mc) = parse_cell_key(master_key)?;
                 let (er, ec) = parse_cell_key(extent_key)?;
                 let top = self.index.row_pos(&mr)? as u32;
                 let left = self.index.col_pos(&mc)? as u32;
                 let bottom = self.index.row_pos(&er)? as u32;
                 let right = self.index.col_pos(&ec)? as u32;
-                Some((master_key.to_string(), (top.min(bottom), left.min(right)), (top.max(bottom), right.max(left))))
+                Some((
+                    master_key.to_string(),
+                    (top.min(bottom), left.min(right)),
+                    (top.max(bottom), right.max(left)),
+                ))
             })
             .collect();
         rects.sort_by(|a, b| a.0.cmp(&b.0));
@@ -170,5 +187,4 @@ impl TrameState {
         }
         events
     }
-
 }

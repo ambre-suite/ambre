@@ -19,7 +19,12 @@ impl TrameState {
     /// (keyed by `row_uid`), persists the filter definition for convergence and
     /// later recompute, and broadcasts the delta. A no-op for a non-active sheet
     /// or a virtual (never-materialized) column.
-    pub(super) fn apply_filter(&mut self, sheet_id: &str, col: u32, kind: FilterKind) -> TrameOutcome {
+    pub(super) fn apply_filter(
+        &mut self,
+        sheet_id: &str,
+        col: u32,
+        kind: FilterKind,
+    ) -> TrameOutcome {
         if sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
         }
@@ -38,7 +43,10 @@ impl TrameState {
         let update = self.flush_delta();
         TrameOutcome {
             display: vec![
-                TrameEvent::FilterApplied { hidden_row_count: count, col },
+                TrameEvent::FilterApplied {
+                    hidden_row_count: count,
+                    col,
+                },
                 TrameEvent::DataReset,
             ],
             update,
@@ -122,8 +130,16 @@ impl TrameState {
                 }
             }
         }
-        let avg = if count_num > 0 { sum / count_num as f64 } else { 0.0 };
-        let (sum, min, max) = if count_num > 0 { (sum, min, max) } else { (0.0, 0.0, 0.0) };
+        let avg = if count_num > 0 {
+            sum / count_num as f64
+        } else {
+            0.0
+        };
+        let (sum, min, max) = if count_num > 0 {
+            (sum, min, max)
+        } else {
+            (0.0, 0.0, 0.0)
+        };
         TrameOutcome::display_only(vec![TrameEvent::SelectionStats {
             sum,
             avg,
@@ -231,8 +247,10 @@ impl TrameState {
     /// filtered column's uid and the reconstructed [`FilterKind`], or `None` when
     /// no (parseable) filter is stored.
     pub(super) fn load_active_filter(&self) -> Option<(Uid, FilterKind)> {
-        let LoroValue::Map(filters) =
-            self.doc.get_map(filters_map_name(&self.active_sheet)).get_value()
+        let LoroValue::Map(filters) = self
+            .doc
+            .get_map(filters_map_name(&self.active_sheet))
+            .get_value()
         else {
             return None;
         };
@@ -279,8 +297,10 @@ impl TrameState {
     /// (its row was deleted) is dropped.
     pub(super) fn rebuild_filter(&mut self) {
         self.hidden_rows.clear();
-        let LoroValue::Map(entries) =
-            self.doc.get_map(filter_hidden_map_name(&self.active_sheet)).get_value()
+        let LoroValue::Map(entries) = self
+            .doc
+            .get_map(filter_hidden_map_name(&self.active_sheet))
+            .get_value()
         else {
             return;
         };
@@ -293,5 +313,4 @@ impl TrameState {
             }
         }
     }
-
 }

@@ -20,7 +20,13 @@ pub fn seal(plaintext: &[u8], aad: &[u8], key: &DocumentKey) -> ([u8; NONCE_LEN]
     let nonce = crate::random::bytes::<NONCE_LEN>();
     let cipher = XChaCha20Poly1305::new(key.as_bytes().into());
     let ciphertext = cipher
-        .encrypt(XNonce::from_slice(&nonce), Payload { msg: plaintext, aad })
+        .encrypt(
+            XNonce::from_slice(&nonce),
+            Payload {
+                msg: plaintext,
+                aad,
+            },
+        )
         .expect("XChaCha20-Poly1305 encryption is infallible for valid keys");
     (nonce, ciphertext)
 }
@@ -34,6 +40,12 @@ pub fn open(
 ) -> Result<Vec<u8>, CryptoError> {
     let cipher = XChaCha20Poly1305::new(key.as_bytes().into());
     cipher
-        .decrypt(XNonce::from_slice(nonce), Payload { msg: ciphertext, aad })
+        .decrypt(
+            XNonce::from_slice(nonce),
+            Payload {
+                msg: ciphertext,
+                aad,
+            },
+        )
         .map_err(|_| CryptoError::AeadFailed)
 }

@@ -30,14 +30,22 @@ pub fn compile(ast: &Expr, indices: &SheetIndices) -> CellBytecode {
     let mut cell_deps = Vec::new();
     let mut range_deps = Vec::new();
     compile_into(ast, indices, &mut ops, &mut cell_deps, &mut range_deps);
-    CellBytecode { ops, cell_deps, range_deps }
+    CellBytecode {
+        ops,
+        cell_deps,
+        range_deps,
+    }
 }
 
 fn resolve_cell(r: &CellRef, indices: &SheetIndices) -> CellId {
     let idx = indices.get(&r.sheet);
     let row = bind(idx.and_then(|i| i.row_id(r.row as usize)), r.row);
     let col = bind(idx.and_then(|i| i.col_id(r.col as usize)), r.col);
-    CellId { sheet: r.sheet, row, col }
+    CellId {
+        sheet: r.sheet,
+        row,
+        col,
+    }
 }
 
 /// Compile a positional range into a uid-anchored [`RangeId`]. **Range endpoints
@@ -122,7 +130,10 @@ fn compile_into(
             for arg in args {
                 compile_into(arg, indices, ops, cell_deps, range_deps);
             }
-            ops.push(Op::CallFn { name: name.clone(), n_args: args.len() as u8 });
+            ops.push(Op::CallFn {
+                name: name.clone(),
+                n_args: args.len() as u8,
+            });
         }
         // `SheetRef`/`Name` are eliminated by `parser::resolve_refs` before
         // compilation. Reaching here means the caller skipped resolution; emit a
@@ -136,9 +147,9 @@ fn compile_into(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::parser::parse_formula;
     use super::super::test_index::index_with;
+    use super::*;
 
     fn compile_str(input: &str) -> CellBytecode {
         let ast = parse_formula(input).unwrap();
@@ -159,7 +170,14 @@ mod tests {
     #[test]
     fn cell_ref_extracts_bound_dep() {
         let bc = compile_str("A1");
-        assert!(matches!(&bc.ops[0], Op::PushCell(CellId { row: AxisId::Bound(_), col: AxisId::Bound(_), .. })));
+        assert!(matches!(
+            &bc.ops[0],
+            Op::PushCell(CellId {
+                row: AxisId::Bound(_),
+                col: AxisId::Bound(_),
+                ..
+            })
+        ));
         assert_eq!(bc.cell_deps.len(), 1);
     }
 
@@ -191,6 +209,12 @@ mod tests {
     fn ref_beyond_used_range_is_virtual() {
         // Column Z (25) is beyond the 10 materialized columns -> virtual.
         let bc = compile_str("Z1");
-        assert!(matches!(&bc.ops[0], Op::PushCell(CellId { col: AxisId::Virtual(25), .. })));
+        assert!(matches!(
+            &bc.ops[0],
+            Op::PushCell(CellId {
+                col: AxisId::Virtual(25),
+                ..
+            })
+        ));
     }
 }

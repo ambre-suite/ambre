@@ -15,8 +15,8 @@ mod ws;
 #[cfg(any(test, feature = "test-helpers"))]
 mod test_helpers;
 
-use axum::middleware as axum_mw;
 use axum::Router;
+use axum::middleware as axum_mw;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
@@ -36,17 +36,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://ambre:ambre@localhost:5432/ambre_dev".into());
-    let redis_url = std::env::var("REDIS_URL")
-        .unwrap_or_else(|_| "redis://localhost:6379".into());
+    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".into());
     let s3_endpoint = std::env::var("S3_ENDPOINT")
         .ok()
         .or_else(|| std::env::var("AWS_ENDPOINT_URL").ok());
-    let s3_bucket = std::env::var("S3_BUCKET")
-        .unwrap_or_else(|_| "ambre-dev".into());
-    let s3_env_prefix = std::env::var("S3_ENV_PREFIX")
-        .unwrap_or_else(|_| "dev-ambre".into());
-    let bind_addr = std::env::var("BIND_ADDR")
-        .unwrap_or_else(|_| "0.0.0.0:3000".into());
+    let s3_bucket = std::env::var("S3_BUCKET").unwrap_or_else(|_| "ambre-dev".into());
+    let s3_env_prefix = std::env::var("S3_ENV_PREFIX").unwrap_or_else(|_| "dev-ambre".into());
+    let bind_addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:3000".into());
 
     let db = sqlx::postgres::PgPoolOptions::new()
         .max_connections(20)
@@ -67,14 +63,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // an endpoint override is present (local MinIO) we default to its dev root
     // user so the stack works out of the box.
     let aws_region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_owned());
-    let mut s3_config = aws_sdk_s3::Config::builder()
-        .region(aws_sdk_s3::config::Region::new(aws_region));
+    let mut s3_config =
+        aws_sdk_s3::Config::builder().region(aws_sdk_s3::config::Region::new(aws_region));
     let local_dev = s3_endpoint.is_some();
-    let default_cred = || if local_dev { "minioadmin".to_owned() } else { String::new() };
+    let default_cred = || {
+        if local_dev {
+            "minioadmin".to_owned()
+        } else {
+            String::new()
+        }
+    };
     let access_key = std::env::var("AWS_ACCESS_KEY_ID").unwrap_or_else(|_| default_cred());
     let secret_key = std::env::var("AWS_SECRET_ACCESS_KEY").unwrap_or_else(|_| default_cred());
     s3_config = s3_config.credentials_provider(aws_sdk_s3::config::Credentials::new(
-        access_key, secret_key, None, None, "ambre-env",
+        access_key,
+        secret_key,
+        None,
+        None,
+        "ambre-env",
     ));
     if let Some(endpoint) = s3_endpoint {
         s3_config = s3_config.endpoint_url(&endpoint).force_path_style(true);
@@ -115,7 +121,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let jwt_keys = std::sync::Arc::new(jwt::JwtKeys::from_seed(&jwt_seed));
 
     let env_ttl = |name: &str, default: u64| {
-        std::env::var(name).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+        std::env::var(name)
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(default)
     };
 
     let config = Config {
@@ -186,36 +195,109 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let api_router = Router::new()
         .route("/auth/google/login", axum::routing::get(routes::oidc_login))
-        .route("/auth/google/callback", axum::routing::post(routes::oidc_callback))
+        .route(
+            "/auth/google/callback",
+            axum::routing::post(routes::oidc_callback),
+        )
         .route("/auth/setup", axum::routing::post(routes::setup_account))
         .route("/auth/dev/login", axum::routing::post(routes::dev_login))
         .route("/auth/config", axum::routing::get(routes::auth_config))
         .route("/auth/refresh", axum::routing::post(routes::refresh))
         .route("/auth/me", axum::routing::get(routes::me))
         .route("/auth/logout", axum::routing::post(routes::logout))
-        .route("/keys/master", axum::routing::put(routes::store_master_keys).get(routes::get_master_keys))
-        .route("/keys/master/rotate", axum::routing::put(routes::rotate_master_keys))
+        .route(
+            "/keys/master",
+            axum::routing::put(routes::store_master_keys).get(routes::get_master_keys),
+        )
+        .route(
+            "/keys/master/rotate",
+            axum::routing::put(routes::rotate_master_keys),
+        )
         .route("/users/search", axum::routing::get(routes::search_users))
-        .route("/users/{id}/pubkeys", axum::routing::get(routes::get_pubkeys))
-        .route("/documents", axum::routing::get(routes::list_documents).post(routes::create_document))
-        .route("/documents/{id}", axum::routing::get(routes::get_document).delete(routes::delete_document).patch(routes::rename_document))
-        .route("/documents/{id}/snapshot", axum::routing::get(routes::get_snapshot_metadata).post(routes::create_snapshot))
-        .route("/documents/{id}/snapshot/upload-url", axum::routing::post(routes::snapshot_upload_url))
-        .route("/documents/{id}/snapshot/download-url", axum::routing::post(routes::snapshot_download_url))
-        .route("/documents/{id}/deltas", axum::routing::get(routes::get_deltas))
-        .route("/documents/{id}/share", axum::routing::post(routes::invite_to_document))
-        .route("/documents/{id}/share/{uid}", axum::routing::delete(routes::revoke_from_document))
-        .route("/documents/{id}/members", axum::routing::get(routes::list_document_members))
-        .route("/documents/{id}/members/{uid}", axum::routing::patch(routes::update_document_member_role))
-        .route("/documents/{id}/rotate-key", axum::routing::post(routes::rotate_document_key))
-        .route("/documents/{id}/media/upload-url", axum::routing::post(routes::media_upload_url))
-        .route("/documents/{id}/media/download-url", axum::routing::post(routes::media_download_url))
-        .route("/documents/{id}/media", axum::routing::post(routes::media_confirm_upload))
-        .route("/organizations", axum::routing::get(routes::list_orgs).post(routes::create_org))
-        .route("/organizations/{id}", axum::routing::get(routes::get_org).patch(routes::update_org).delete(routes::delete_org))
-        .route("/organizations/{id}/members", axum::routing::post(routes::add_member).get(routes::list_members))
-        .route("/organizations/{id}/members/{uid}", axum::routing::delete(routes::remove_member).patch(routes::update_member_role))
-        .route("/organizations/{id}/recover/{uid}", axum::routing::post(routes::recover_master_key))
+        .route(
+            "/users/{id}/pubkeys",
+            axum::routing::get(routes::get_pubkeys),
+        )
+        .route(
+            "/documents",
+            axum::routing::get(routes::list_documents).post(routes::create_document),
+        )
+        .route(
+            "/documents/{id}",
+            axum::routing::get(routes::get_document)
+                .delete(routes::delete_document)
+                .patch(routes::rename_document),
+        )
+        .route(
+            "/documents/{id}/snapshot",
+            axum::routing::get(routes::get_snapshot_metadata).post(routes::create_snapshot),
+        )
+        .route(
+            "/documents/{id}/snapshot/upload-url",
+            axum::routing::post(routes::snapshot_upload_url),
+        )
+        .route(
+            "/documents/{id}/snapshot/download-url",
+            axum::routing::post(routes::snapshot_download_url),
+        )
+        .route(
+            "/documents/{id}/deltas",
+            axum::routing::get(routes::get_deltas),
+        )
+        .route(
+            "/documents/{id}/share",
+            axum::routing::post(routes::invite_to_document),
+        )
+        .route(
+            "/documents/{id}/share/{uid}",
+            axum::routing::delete(routes::revoke_from_document),
+        )
+        .route(
+            "/documents/{id}/members",
+            axum::routing::get(routes::list_document_members),
+        )
+        .route(
+            "/documents/{id}/members/{uid}",
+            axum::routing::patch(routes::update_document_member_role),
+        )
+        .route(
+            "/documents/{id}/rotate-key",
+            axum::routing::post(routes::rotate_document_key),
+        )
+        .route(
+            "/documents/{id}/media/upload-url",
+            axum::routing::post(routes::media_upload_url),
+        )
+        .route(
+            "/documents/{id}/media/download-url",
+            axum::routing::post(routes::media_download_url),
+        )
+        .route(
+            "/documents/{id}/media",
+            axum::routing::post(routes::media_confirm_upload),
+        )
+        .route(
+            "/organizations",
+            axum::routing::get(routes::list_orgs).post(routes::create_org),
+        )
+        .route(
+            "/organizations/{id}",
+            axum::routing::get(routes::get_org)
+                .patch(routes::update_org)
+                .delete(routes::delete_org),
+        )
+        .route(
+            "/organizations/{id}/members",
+            axum::routing::post(routes::add_member).get(routes::list_members),
+        )
+        .route(
+            "/organizations/{id}/members/{uid}",
+            axum::routing::delete(routes::remove_member).patch(routes::update_member_role),
+        )
+        .route(
+            "/organizations/{id}/recover/{uid}",
+            axum::routing::post(routes::recover_master_key),
+        )
         .route("/ws", axum::routing::get(ws::ws_upgrade))
         .layer({
             let state = state.clone();

@@ -7,7 +7,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::compile::{compile, SheetIndices};
+use super::compile::{SheetIndices, compile};
 use super::dag::DependencyGraph;
 use super::parser::{parse_formula, resolve_refs};
 use super::types::{CellBytecode, CellId, CellValue, FormulaCtx, FormulaError};
@@ -22,7 +22,10 @@ pub struct BytecodeCache {
 
 impl BytecodeCache {
     pub fn new() -> Self {
-        Self { entries: HashMap::new(), stale: HashSet::new() }
+        Self {
+            entries: HashMap::new(),
+            stale: HashSet::new(),
+        }
     }
 
     /// Mark a cell as needing recompilation (its raw text changed).
@@ -77,8 +80,7 @@ impl BytecodeCache {
         // ranges against the host context; unqualified refs land on the
         // formula's own sheet (`cell.sheet`). Positional `A1` is bound to a
         // row/column `Uid` by `compile` against `indices`.
-        let parsed =
-            parse_formula(formula_text).and_then(|ast| resolve_refs(ast, cell.sheet, ctx));
+        let parsed = parse_formula(formula_text).and_then(|ast| resolve_refs(ast, cell.sheet, ctx));
         match parsed {
             Ok(ast) => {
                 let bc = compile(&ast, indices);
@@ -117,13 +119,23 @@ impl Default for BytecodeCache {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::test_index::indices_with;
     use super::super::types::{AxisId, SingleSheetCtx};
+    use super::*;
     use crate::model::Uid;
 
     fn cell(row: u32, col: u32) -> CellId {
-        CellId::bound(0, Uid { peer: 1, counter: row }, Uid { peer: 2, counter: col })
+        CellId::bound(
+            0,
+            Uid {
+                peer: 1,
+                counter: row,
+            },
+            Uid {
+                peer: 2,
+                counter: col,
+            },
+        )
     }
 
     #[test]
@@ -165,7 +177,10 @@ mod tests {
 
         cache.invalidate(c);
         let err = cache.recompile_if_stale(c, "=SUM(", &idx, &mut deps, &SingleSheetCtx);
-        assert!(matches!(err, Some(CellValue::Error(FormulaError::ParseError(_)))));
+        assert!(matches!(
+            err,
+            Some(CellValue::Error(FormulaError::ParseError(_)))
+        ));
     }
 
     #[test]
@@ -193,7 +208,11 @@ mod tests {
         let bc = cache.get(&c).unwrap();
         assert!(matches!(
             bc.cell_deps[0],
-            CellId { row: AxisId::Bound(_), col: AxisId::Bound(_), .. }
+            CellId {
+                row: AxisId::Bound(_),
+                col: AxisId::Bound(_),
+                ..
+            }
         ));
     }
 }

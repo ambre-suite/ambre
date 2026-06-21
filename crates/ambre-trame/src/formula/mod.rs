@@ -1,13 +1,13 @@
-pub mod types;
-pub mod parser;
-pub mod compile;
-pub mod vm;
-pub mod dag;
 pub mod cache;
-pub mod functions;
+pub mod compile;
+pub mod dag;
 pub mod engine;
+pub mod functions;
+pub mod parser;
 pub mod render;
 pub mod shift;
+pub mod types;
+pub mod vm;
 
 #[cfg(test)]
 pub(crate) mod test_index;

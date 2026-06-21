@@ -38,15 +38,14 @@ mod style;
 
 pub use bars::FormatBar;
 pub use commands::{
-    bind_keys, command_to_app, context_entries, init_command_states, mirror_event, new_doc_label,
-    notify_event, status_label, BOLD, CLEAR_FILTER, COMMANDS, COPY, CUT, DELETE_COLS, DELETE_ROWS,
-    DOC_TYPE, EXPORT_CSV, FILTER_COLUMN, FIND, IMPORT_CSV, INSERT_COL_LEFT, INSERT_COL_RIGHT,
-    INSERT_ROW_ABOVE,
+    BOLD, CLEAR_FILTER, COMMANDS, COPY, CUT, DELETE_COLS, DELETE_ROWS, DOC_TYPE, EXPORT_CSV,
+    FILTER_COLUMN, FIND, IMPORT_CSV, INSERT_COL_LEFT, INSERT_COL_RIGHT, INSERT_ROW_ABOVE,
     INSERT_ROW_BELOW, ITALIC, MERGE, PASTE, REDO, REPLACE, SORT_RANGE_ASC, SORT_RANGE_DESC,
-    SORT_SHEET_ASC, SORT_SHEET_DESC, UNDO, UNMERGE,
+    SORT_SHEET_ASC, SORT_SHEET_DESC, UNDO, UNMERGE, bind_keys, command_to_app, context_entries,
+    init_command_states, mirror_event, new_doc_label, notify_event, status_label,
 };
 pub use find_replace::{FindMode, FindQuery, FindReplace, FindReplaceState, ReplaceRequest};
 pub use formula_bar::FormulaBar;
 pub use popovers::{FilterPopover, FilterPopoverState};
 pub use status::{SelStats, StatusBar};
-pub use style::{apply_style_event, StyleState, Toggles};
+pub use style::{StyleState, Toggles, apply_style_event};

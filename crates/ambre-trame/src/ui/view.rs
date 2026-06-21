@@ -1471,7 +1471,11 @@ impl TrameView {
             // autofill drag instead of a new selection (sec.5.F). Checked before
             // the plain selection press so the ~7px handle wins the hit.
             InputEvent::PointerDown {
-                x, y, button: 0, ctrl, ..
+                x,
+                y,
+                button: 0,
+                ctrl,
+                ..
             } if self.fill_drag.is_none() && self.state.fill_handle_at(*x, *y) => {
                 self.text_input.focus();
                 self.fill_drag = Some((self.state.selection.bounds(), *ctrl));
@@ -1912,7 +1916,9 @@ impl TrameView {
             .and_then(|d| d.get_element_by_id("ambre-canvas"))
             .and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok())
         {
-            let _ = el.style().set_property("cursor", if on { "crosshair" } else { "" });
+            let _ = el
+                .style()
+                .set_property("cursor", if on { "crosshair" } else { "" });
         }
     }
 

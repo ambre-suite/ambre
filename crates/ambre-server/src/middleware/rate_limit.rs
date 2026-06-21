@@ -119,12 +119,7 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
         .map(|a| a.0.ip().to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
-    let key = rate_limit_key(
-        &state,
-        &auth_header,
-        x_forwarded_for.as_deref(),
-        &remote_ip,
-    );
+    let key = rate_limit_key(&state, &auth_header, x_forwarded_for.as_deref(), &remote_ip);
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -226,18 +221,12 @@ mod tests {
 
     #[test]
     fn client_ip_falls_back_to_remote() {
-        assert_eq!(
-            client_ip_str(None, "192.168.1.1"),
-            "192.168.1.1"
-        );
+        assert_eq!(client_ip_str(None, "192.168.1.1"), "192.168.1.1");
     }
 
     #[test]
     fn client_ip_ignores_empty_forwarded() {
-        assert_eq!(
-            client_ip_str(Some(""), "remote"),
-            "remote"
-        );
+        assert_eq!(client_ip_str(Some(""), "remote"), "remote");
     }
 
     #[test]
@@ -270,10 +259,8 @@ mod tests {
 
     #[test]
     fn classify_api_documents() {
-        let category = RateLimitCategory::classify(
-            "/api/documents/abc123/snapshot",
-            &axum::http::Method::GET,
-        );
+        let category =
+            RateLimitCategory::classify("/api/documents/abc123/snapshot", &axum::http::Method::GET);
         assert!(matches!(category, RateLimitCategory::Api));
     }
 
@@ -288,10 +275,8 @@ mod tests {
 
     #[test]
     fn classify_api_organizations() {
-        let category = RateLimitCategory::classify(
-            "/api/organizations/abc/members",
-            &axum::http::Method::GET,
-        );
+        let category =
+            RateLimitCategory::classify("/api/organizations/abc/members", &axum::http::Method::GET);
         assert!(matches!(category, RateLimitCategory::Api));
     }
 

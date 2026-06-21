@@ -40,12 +40,17 @@ impl TrameState {
     pub(super) fn reseed_formatting(&mut self) {
         self.bold.clear();
         self.italic.clear();
-        if let LoroValue::Map(fmts) = self.doc.get_map(format_map_name(&self.active_sheet)).get_value() {
+        if let LoroValue::Map(fmts) = self
+            .doc
+            .get_map(format_map_name(&self.active_sheet))
+            .get_value()
+        {
             for (key, value) in fmts.iter() {
                 let (Some((rl, cl)), LoroValue::I64(mask)) = (parse_cell_key(key), value) else {
                     continue;
                 };
-                let (Some(row), Some(col)) = (self.index.row_pos(&rl), self.index.col_pos(&cl)) else {
+                let (Some(row), Some(col)) = (self.index.row_pos(&rl), self.index.col_pos(&cl))
+                else {
                     continue; // references a deleted row/column
                 };
                 let cell = (row as u32, col as u32);
@@ -131,8 +136,10 @@ impl TrameState {
                         BorderPreset::Left => [false, false, false, left_p],
                         BorderPreset::Right => [false, right_p, false, false],
                     };
-                    let new_edge = (edit.preset != BorderPreset::None)
-                        .then_some(CellBorder { style: edit.style, color: edit.color });
+                    let new_edge = (edit.preset != BorderPreset::None).then_some(CellBorder {
+                        style: edit.style,
+                        color: edit.color,
+                    });
                     let slots = [
                         &mut style.borders.top,
                         &mut style.borders.right,
@@ -169,12 +176,14 @@ impl TrameState {
             style: self.styles.get(&self.active).cloned().unwrap_or_default(),
             bold: self.bold.contains(&self.active),
             italic: self.italic.contains(&self.active),
-            merged: self.merges.contains_key(&self.active)
-                || self.covered.contains(&self.active),
+            merged: self.merges.contains_key(&self.active) || self.covered.contains(&self.active),
             // Same numeric heuristic the renderer uses to resolve `HAlign::Auto`
             // (see `render::content::cell_alignment`): a value that parses as a
             // number aligns right, everything else left.
-            numeric: self.cell_text(self.active.0, self.active.1).parse::<f64>().is_ok(),
+            numeric: self
+                .cell_text(self.active.0, self.active.1)
+                .parse::<f64>()
+                .is_ok(),
         }
     }
 
@@ -217,7 +226,11 @@ impl TrameState {
             style.borders.left,
         ];
         for (i, edge) in edges.into_iter().enumerate() {
-            put_color(&self.doc, bordcolor_map_name(&sheet, i), edge.and_then(|e| e.color));
+            put_color(
+                &self.doc,
+                bordcolor_map_name(&sheet, i),
+                edge.and_then(|e| e.color),
+            );
         }
 
         let font_map = self.doc.get_map(font_map_name(&sheet));
@@ -327,7 +340,13 @@ impl TrameState {
 
     /// Apply a cell's number format to its computed display `text`. A `General` /
     /// `Text` cell or a non-numeric value renders verbatim (`-ui.md` sec.5bis).
-    pub(super) fn format_display(&self, _row: u32, _col: u32, text: String, style: &CellStyle) -> String {
+    pub(super) fn format_display(
+        &self,
+        _row: u32,
+        _col: u32,
+        text: String,
+        style: &CellStyle,
+    ) -> String {
         match style.format {
             CellFormat::General | CellFormat::Text | CellFormat::Custom(_) => text,
             ref fmt => match text.parse::<f64>() {
@@ -336,5 +355,4 @@ impl TrameState {
             },
         }
     }
-
 }

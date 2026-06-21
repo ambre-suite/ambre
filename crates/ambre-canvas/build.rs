@@ -126,10 +126,14 @@ impl Scale {
 /// Parse `#rrggbb` into `(r, g, b)`. Panics on malformed input -- a token typo
 /// must fail the build, not ship a wrong colour.
 fn hex_rgb(hex: &str) -> (u8, u8, u8) {
-    let h = hex.strip_prefix('#').unwrap_or_else(|| panic!("token colour must start with '#': {hex}"));
+    let h = hex
+        .strip_prefix('#')
+        .unwrap_or_else(|| panic!("token colour must start with '#': {hex}"));
     assert_eq!(h.len(), 6, "token colour must be #rrggbb: {hex}");
-    let byte = |i: usize| u8::from_str_radix(&h[i..i + 2], 16)
-        .unwrap_or_else(|_| panic!("bad hex in token colour: {hex}"));
+    let byte = |i: usize| {
+        u8::from_str_radix(&h[i..i + 2], 16)
+            .unwrap_or_else(|_| panic!("bad hex in token colour: {hex}"))
+    };
     (byte(0), byte(2), byte(4))
 }
 
@@ -156,7 +160,9 @@ fn main() {
         rs.push_str(&format!("pub const {name}: Palette = Palette {{\n"));
         for (field, hex) in colors.fields() {
             let (r, g, b) = hex_rgb(hex);
-            rs.push_str(&format!("    {field}: Color::from_rgba8({r}, {g}, {b}, 255),\n"));
+            rs.push_str(&format!(
+                "    {field}: Color::from_rgba8({r}, {g}, {b}, 255),\n"
+            ));
         }
         rs.push_str("};\n\n");
     };

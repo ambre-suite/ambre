@@ -70,7 +70,11 @@ impl Default for CommandState {
     /// Enabled and visible, not toggled -- the neutral default for a command
     /// with no contextual constraints.
     fn default() -> Self {
-        Self { enabled: true, visible: true, toggled: false }
+        Self {
+            enabled: true,
+            visible: true,
+            toggled: false,
+        }
     }
 }
 
@@ -204,7 +208,10 @@ mod tests {
     fn keymap_resolves_default_bindings() {
         let km = Keymap::from_commands([COMMANDS]);
         assert_eq!(km.len(), 2);
-        assert_eq!(km.resolve(KeyBinding::ctrl('b')), Some(CommandId("prose.format.bold")));
+        assert_eq!(
+            km.resolve(KeyBinding::ctrl('b')),
+            Some(CommandId("prose.format.bold"))
+        );
         // Shift state matters: Ctrl+Shift+B is not bound.
         assert_eq!(km.resolve(KeyBinding::ctrl_shift('b')), None);
         assert_eq!(km.resolve(KeyBinding::ctrl('z')), None);
@@ -215,8 +222,14 @@ mod tests {
         let mut km = Keymap::from_commands([COMMANDS]);
         let displaced = km.bind(KeyBinding::ctrl('b'), CommandId("prose.format.italic"));
         assert_eq!(displaced, Some(CommandId("prose.format.bold")));
-        assert_eq!(km.resolve(KeyBinding::ctrl('b')), Some(CommandId("prose.format.italic")));
-        assert_eq!(km.unbind(KeyBinding::ctrl('b')), Some(CommandId("prose.format.italic")));
+        assert_eq!(
+            km.resolve(KeyBinding::ctrl('b')),
+            Some(CommandId("prose.format.italic"))
+        );
+        assert_eq!(
+            km.unbind(KeyBinding::ctrl('b')),
+            Some(CommandId("prose.format.italic"))
+        );
         assert!(km.resolve(KeyBinding::ctrl('b')).is_none());
     }
 

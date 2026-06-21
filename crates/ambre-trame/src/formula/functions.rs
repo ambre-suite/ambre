@@ -28,7 +28,11 @@ impl FnCtx {
     /// Context with only the clock set (helper for tests / non-positional calls).
     #[cfg(test)]
     fn at_clock(now_serial: f64) -> Self {
-        Self { now_serial, cell_row: 0, cell_col: 0 }
+        Self {
+            now_serial,
+            cell_row: 0,
+            cell_col: 0,
+        }
     }
 }
 
@@ -263,7 +267,10 @@ fn count(args: &[CellValue]) -> CellValue {
 
 fn counta(args: &[CellValue]) -> CellValue {
     let flat = flatten_all(args);
-    let non_empty = flat.iter().filter(|v| !matches!(v, CellValue::Empty)).count();
+    let non_empty = flat
+        .iter()
+        .filter(|v| !matches!(v, CellValue::Empty))
+        .count();
     CellValue::Number(non_empty as f64)
 }
 
@@ -286,10 +293,7 @@ fn round(args: &[CellValue]) -> CellValue {
         None => return CellValue::Error(FormulaError::TypeError),
     };
     let digits = if args.len() >= 2 {
-        flatten_numeric(&args[1..2])
-            .first()
-            .copied()
-            .unwrap_or(0.0) as i32
+        flatten_numeric(&args[1..2]).first().copied().unwrap_or(0.0) as i32
     } else {
         0
     };
@@ -364,7 +368,11 @@ fn round_dir(args: &[CellValue], up: bool) -> CellValue {
     };
     let factor = 10f64.powi(digits);
     let scaled = num * factor;
-    let rounded = if up { scaled.abs().ceil().copysign(scaled) } else { scaled.trunc() };
+    let rounded = if up {
+        scaled.abs().ceil().copysign(scaled)
+    } else {
+        scaled.trunc()
+    };
     CellValue::Number(rounded / factor)
 }
 
@@ -404,7 +412,11 @@ fn sumproduct(args: &[CellValue]) -> CellValue {
     }
     let columns: Vec<Vec<f64>> = args
         .iter()
-        .map(|a| range_cells(a).map(|v| v.as_number().unwrap_or(0.0)).collect())
+        .map(|a| {
+            range_cells(a)
+                .map(|v| v.as_number().unwrap_or(0.0))
+                .collect()
+        })
         .collect();
     let len = columns.iter().map(Vec::len).min().unwrap_or(0);
     let total = (0..len)
@@ -534,10 +546,7 @@ fn left(args: &[CellValue]) -> CellValue {
     }
     let s = args[0].to_display();
     let n = if args.len() >= 2 {
-        flatten_numeric(&args[1..2])
-            .first()
-            .copied()
-            .unwrap_or(1.0) as usize
+        flatten_numeric(&args[1..2]).first().copied().unwrap_or(1.0) as usize
     } else {
         1
     };
@@ -550,10 +559,7 @@ fn right(args: &[CellValue]) -> CellValue {
     }
     let s = args[0].to_display();
     let n = if args.len() >= 2 {
-        flatten_numeric(&args[1..2])
-            .first()
-            .copied()
-            .unwrap_or(1.0) as usize
+        flatten_numeric(&args[1..2]).first().copied().unwrap_or(1.0) as usize
     } else {
         1
     };
@@ -649,7 +655,10 @@ fn substitute(args: &[CellValue]) -> CellValue {
     if old.is_empty() {
         return CellValue::Text(text);
     }
-    let instance = args.get(3).and_then(|v| v.as_number().ok()).map(|n| n as usize);
+    let instance = args
+        .get(3)
+        .and_then(|v| v.as_number().ok())
+        .map(|n| n as usize);
     let result = match instance {
         None => text.replace(&old, &new),
         Some(target) if target >= 1 => {
@@ -857,7 +866,7 @@ impl Criterion {
         let (ord, negated) = match op_str {
             ">" => (Greater, false),
             "<" => (Less, false),
-            ">=" => (Less, true),  // not Less
+            ">=" => (Less, true),    // not Less
             "<=" => (Greater, true), // not Greater
             "<>" => (Equal, true),
             _ => (Equal, false),
@@ -881,11 +890,7 @@ impl Criterion {
                 Ok(n) => {
                     let cmp = n.partial_cmp(operand);
                     let hit = cmp == Some(*ord);
-                    if *negated {
-                        !hit
-                    } else {
-                        hit
-                    }
+                    if *negated { !hit } else { hit }
                 }
                 Err(_) => false,
             },
@@ -895,11 +900,7 @@ impl Criterion {
                     .to_lowercase()
                     .cmp(&operand.to_lowercase())
                     == *ord;
-                if *negated {
-                    !hit
-                } else {
-                    hit
-                }
+                if *negated { !hit } else { hit }
             }
         }
     }
@@ -958,7 +959,10 @@ fn vlookup(args: &[CellValue]) -> CellValue {
         };
         if approximate {
             // Largest key <= lookup (first column assumed ascending).
-            if compare_cells(key, &args[0]).map(|o| o.is_le()).unwrap_or(false) {
+            if compare_cells(key, &args[0])
+                .map(|o| o.is_le())
+                .unwrap_or(false)
+            {
                 best = Some(row);
             } else {
                 break;
@@ -985,7 +989,13 @@ fn index(args: &[CellValue]) -> CellValue {
     let range = match &args[0] {
         CellValue::Range(r) => r,
         // A scalar behaves like a 1x1 range.
-        other => return if to_index(&args[1]) == Some(1) { other.clone() } else { CellValue::Error(FormulaError::NaError) },
+        other => {
+            return if to_index(&args[1]) == Some(1) {
+                other.clone()
+            } else {
+                CellValue::Error(FormulaError::NaError)
+            };
+        }
     };
     let n1 = match to_index(&args[1]) {
         Some(n) => n,
@@ -1205,7 +1215,11 @@ trait NanDefault {
 
 impl NanDefault for f64 {
     fn let_ok_or(self, default: CellValue) -> CellValue {
-        if self.is_nan() { default } else { CellValue::Number(self) }
+        if self.is_nan() {
+            default
+        } else {
+            CellValue::Number(self)
+        }
     }
 }
 
@@ -1231,7 +1245,13 @@ fn trunc(args: &[CellValue]) -> CellValue {
 /// SIGN(number) -- -1, 0 or 1.
 fn sign(args: &[CellValue]) -> CellValue {
     match first_num(args) {
-        Some(n) => CellValue::Number(if n > 0.0 { 1.0 } else if n < 0.0 { -1.0 } else { 0.0 }),
+        Some(n) => CellValue::Number(if n > 0.0 {
+            1.0
+        } else if n < 0.0 {
+            -1.0
+        } else {
+            0.0
+        }),
         None => CellValue::Error(FormulaError::TypeError),
     }
 }
@@ -1266,7 +1286,10 @@ fn log_fn(args: &[CellValue]) -> CellValue {
         None => return CellValue::Error(FormulaError::TypeError),
     };
     let base = if args.len() >= 2 {
-        flatten_numeric(&args[1..2]).first().copied().unwrap_or(10.0)
+        flatten_numeric(&args[1..2])
+            .first()
+            .copied()
+            .unwrap_or(10.0)
     } else {
         10.0
     };
@@ -1288,7 +1311,12 @@ fn criteria_pairs(args: &[CellValue]) -> Option<Vec<(Vec<CellValue>, Criterion)>
     }
     Some(
         args.chunks_exact(2)
-            .map(|c| (range_cells(&c[0]).cloned().collect(), Criterion::parse(&c[1])))
+            .map(|c| {
+                (
+                    range_cells(&c[0]).cloned().collect(),
+                    Criterion::parse(&c[1]),
+                )
+            })
             .collect(),
     )
 }
@@ -1319,7 +1347,9 @@ fn averageif(args: &[CellValue]) -> CellValue {
         Some(r) => range_cells(r).cloned().collect(),
         None => test.clone(),
     };
-    let idx: Vec<usize> = (0..test.len()).filter(|&i| crit.matches(&test[i])).collect();
+    let idx: Vec<usize> = (0..test.len())
+        .filter(|&i| crit.matches(&test[i]))
+        .collect();
     average_at(&avg_src, &idx)
 }
 
@@ -1412,7 +1442,9 @@ fn rank(args: &[CellValue]) -> CellValue {
         Ok(n) => n,
         Err(e) => return CellValue::Error(e),
     };
-    let data: Vec<f64> = range_cells(&args[1]).filter_map(|v| v.as_number().ok()).collect();
+    let data: Vec<f64> = range_cells(&args[1])
+        .filter_map(|v| v.as_number().ok())
+        .collect();
     if !data.iter().any(|n| (n - num).abs() < f64::EPSILON) {
         return CellValue::Error(FormulaError::NaError);
     }
@@ -1433,7 +1465,10 @@ fn mode(args: &[CellValue]) -> CellValue {
     let mut best = nums[0];
     let mut best_count = 0usize;
     for (i, &a) in nums.iter().enumerate() {
-        let c = nums[i..].iter().filter(|&&b| (b - a).abs() < f64::EPSILON).count();
+        let c = nums[i..]
+            .iter()
+            .filter(|&&b| (b - a).abs() < f64::EPSILON)
+            .count();
         if c > best_count {
             best_count = c;
             best = a;
@@ -1456,7 +1491,9 @@ fn annuity_factor(rate: f64, nper: f64, paytype: f64) -> f64 {
 
 /// Optional positional argument as a number, with a default.
 fn opt_num(args: &[CellValue], i: usize, default: f64) -> f64 {
-    args.get(i).and_then(|v| v.as_number().ok()).unwrap_or(default)
+    args.get(i)
+        .and_then(|v| v.as_number().ok())
+        .unwrap_or(default)
 }
 
 /// PMT(rate, nper, pv, [fv], [type]).
@@ -1464,7 +1501,11 @@ fn pmt(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let (rate, nper, pv) = (opt_num(args, 0, 0.0), opt_num(args, 1, 0.0), opt_num(args, 2, 0.0));
+    let (rate, nper, pv) = (
+        opt_num(args, 0, 0.0),
+        opt_num(args, 1, 0.0),
+        opt_num(args, 2, 0.0),
+    );
     let fv = opt_num(args, 3, 0.0);
     let paytype = opt_num(args, 4, 0.0);
     if nper == 0.0 {
@@ -1483,7 +1524,11 @@ fn fv(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let (rate, nper, pmt_v) = (opt_num(args, 0, 0.0), opt_num(args, 1, 0.0), opt_num(args, 2, 0.0));
+    let (rate, nper, pmt_v) = (
+        opt_num(args, 0, 0.0),
+        opt_num(args, 1, 0.0),
+        opt_num(args, 2, 0.0),
+    );
     let pv = opt_num(args, 3, 0.0);
     let paytype = opt_num(args, 4, 0.0);
     let value = if rate == 0.0 {
@@ -1499,7 +1544,11 @@ fn pv(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let (rate, nper, pmt_v) = (opt_num(args, 0, 0.0), opt_num(args, 1, 0.0), opt_num(args, 2, 0.0));
+    let (rate, nper, pmt_v) = (
+        opt_num(args, 0, 0.0),
+        opt_num(args, 1, 0.0),
+        opt_num(args, 2, 0.0),
+    );
     let fv = opt_num(args, 3, 0.0);
     let paytype = opt_num(args, 4, 0.0);
     let value = if rate == 0.0 {
@@ -1515,7 +1564,11 @@ fn nper(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let (rate, pmt_v, pv) = (opt_num(args, 0, 0.0), opt_num(args, 1, 0.0), opt_num(args, 2, 0.0));
+    let (rate, pmt_v, pv) = (
+        opt_num(args, 0, 0.0),
+        opt_num(args, 1, 0.0),
+        opt_num(args, 2, 0.0),
+    );
     let fv = opt_num(args, 3, 0.0);
     let paytype = opt_num(args, 4, 0.0);
     if rate == 0.0 {
@@ -1539,7 +1592,11 @@ fn rate(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let (nper, pmt_v, pv) = (opt_num(args, 0, 0.0), opt_num(args, 1, 0.0), opt_num(args, 2, 0.0));
+    let (nper, pmt_v, pv) = (
+        opt_num(args, 0, 0.0),
+        opt_num(args, 1, 0.0),
+        opt_num(args, 2, 0.0),
+    );
     let fv = opt_num(args, 3, 0.0);
     let paytype = opt_num(args, 4, 0.0);
     let mut r = opt_num(args, 5, 0.1);
@@ -1604,7 +1661,11 @@ fn irr(args: &[CellValue]) -> CellValue {
     }
     let mut r = args.get(1).and_then(|v| v.as_number().ok()).unwrap_or(0.1);
     let npv_at = |r: f64| -> f64 {
-        flows.iter().enumerate().map(|(i, v)| v / (1.0 + r).powi(i as i32)).sum()
+        flows
+            .iter()
+            .enumerate()
+            .map(|(i, v)| v / (1.0 + r).powi(i as i32))
+            .sum()
     };
     for _ in 0..100 {
         let y = npv_at(r);
@@ -1737,7 +1798,10 @@ fn hlookup(args: &[CellValue]) -> CellValue {
             None => continue,
         };
         if approximate {
-            if compare_cells(key, &args[0]).map(|o| o.is_le()).unwrap_or(false) {
+            if compare_cells(key, &args[0])
+                .map(|o| o.is_le())
+                .unwrap_or(false)
+            {
                 best = Some(col);
             } else {
                 break;
@@ -1883,7 +1947,11 @@ fn time_fn(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let secs = match (args[0].as_number(), args[1].as_number(), args[2].as_number()) {
+    let secs = match (
+        args[0].as_number(),
+        args[1].as_number(),
+        args[2].as_number(),
+    ) {
         (Ok(h), Ok(m), Ok(s)) => h * 3600.0 + m * 60.0 + s,
         _ => return CellValue::Error(FormulaError::TypeError),
     };
@@ -1916,7 +1984,11 @@ fn weekday(args: &[CellValue]) -> CellValue {
     };
     // Excel serial 0 (1899-12-30) is a Saturday.
     let sat0 = serial.rem_euclid(7); // 0=Sat,1=Sun,..6=Fri
-    let wtype = args.get(1).and_then(|v| v.as_number().ok()).map(|n| n as i64).unwrap_or(1);
+    let wtype = args
+        .get(1)
+        .and_then(|v| v.as_number().ok())
+        .map(|n| n as i64)
+        .unwrap_or(1);
     let value = match wtype {
         2 => {
             // Mon=1..Sun=7
@@ -1975,8 +2047,8 @@ fn eomonth(args: &[CellValue]) -> CellValue {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::types::RangeValue;
+    use super::*;
 
     #[test]
     fn sum_basic() {
@@ -1999,8 +2071,7 @@ mod tests {
     #[test]
     fn average_basic() {
         assert_eq!(
-            average(&[CellValue::Number(10.0), CellValue::Number(20.0)])
-                .to_display(),
+            average(&[CellValue::Number(10.0), CellValue::Number(20.0)]).to_display(),
             "15"
         );
     }
@@ -2074,24 +2145,41 @@ mod tests {
 
     #[test]
     fn text_functions() {
-        assert_eq!(concat_fn(&[
-            CellValue::Text("hello".into()),
-            CellValue::Text(" ".into()),
-            CellValue::Text("world".into()),
-        ]).to_display(), "hello world");
+        assert_eq!(
+            concat_fn(&[
+                CellValue::Text("hello".into()),
+                CellValue::Text(" ".into()),
+                CellValue::Text("world".into()),
+            ])
+            .to_display(),
+            "hello world"
+        );
 
         assert_eq!(left(&[CellValue::Text("hello".into())]).to_display(), "h");
-        assert_eq!(left(&[CellValue::Text("hello".into()), CellValue::Number(3.0)]).to_display(), "hel");
+        assert_eq!(
+            left(&[CellValue::Text("hello".into()), CellValue::Number(3.0)]).to_display(),
+            "hel"
+        );
 
         assert_eq!(right(&[CellValue::Text("hello".into())]).to_display(), "o");
-        assert_eq!(mid(&[
-            CellValue::Text("hello".into()),
-            CellValue::Number(2.0),
-            CellValue::Number(3.0),
-        ]).to_display(), "ell");
+        assert_eq!(
+            mid(&[
+                CellValue::Text("hello".into()),
+                CellValue::Number(2.0),
+                CellValue::Number(3.0),
+            ])
+            .to_display(),
+            "ell"
+        );
 
-        assert_eq!(upper(&[CellValue::Text("hello".into())]).to_display(), "HELLO");
-        assert_eq!(lower(&[CellValue::Text("HELLO".into())]).to_display(), "hello");
+        assert_eq!(
+            upper(&[CellValue::Text("hello".into())]).to_display(),
+            "HELLO"
+        );
+        assert_eq!(
+            lower(&[CellValue::Text("HELLO".into())]).to_display(),
+            "hello"
+        );
         assert_eq!(trim(&[CellValue::Text("  hi  ".into())]).to_display(), "hi");
         assert_eq!(len(&[CellValue::Text("hello".into())]).to_display(), "5");
     }
@@ -2144,9 +2232,12 @@ mod tests {
             3,
             2,
             vec![
-                num(1.0), txt("one"),
-                num(3.0), txt("three"),
-                num(5.0), txt("five"),
+                num(1.0),
+                txt("one"),
+                num(3.0),
+                txt("three"),
+                num(5.0),
+                txt("five"),
             ],
         );
         // Exact match.
@@ -2176,7 +2267,10 @@ mod tests {
         assert_eq!(index(&[grid, num(2.0), num(2.0)]).to_display(), "4");
 
         // MATCH exact and approximate.
-        assert_eq!(match_fn(&[num(20.0), col.clone(), num(0.0)]).to_display(), "2");
+        assert_eq!(
+            match_fn(&[num(20.0), col.clone(), num(0.0)]).to_display(),
+            "2"
+        );
         assert_eq!(match_fn(&[num(25.0), col, num(1.0)]).to_display(), "2");
     }
 
@@ -2212,9 +2306,19 @@ mod tests {
     #[test]
     fn math_functions() {
         assert_eq!(abs(&[CellValue::Number(-5.0)]).to_display(), "5");
-        assert_eq!(round(&[CellValue::Number(std::f64::consts::PI), CellValue::Number(2.0)]).to_display(), "3.14");
+        assert_eq!(
+            round(&[
+                CellValue::Number(std::f64::consts::PI),
+                CellValue::Number(2.0)
+            ])
+            .to_display(),
+            "3.14"
+        );
         assert_eq!(sqrt(&[CellValue::Number(16.0)]).to_display(), "4");
-        assert_eq!(power(&[CellValue::Number(2.0), CellValue::Number(3.0)]).to_display(), "8");
+        assert_eq!(
+            power(&[CellValue::Number(2.0), CellValue::Number(3.0)]).to_display(),
+            "8"
+        );
     }
 
     #[test]
@@ -2227,14 +2331,23 @@ mod tests {
             mod_fn(&[num(1.0), num(0.0)]),
             CellValue::Error(FormulaError::DivisionByZero)
         ));
-        assert_eq!(round_dir(&[num(2.001), num(2.0)], true).to_display(), "2.01");
+        assert_eq!(
+            round_dir(&[num(2.001), num(2.0)], true).to_display(),
+            "2.01"
+        );
         assert_eq!(round_dir(&[num(2.009), num(2.0)], false).to_display(), "2");
-        assert_eq!(round_dir(&[num(-2.001), num(2.0)], true).to_display(), "-2.01");
+        assert_eq!(
+            round_dir(&[num(-2.001), num(2.0)], true).to_display(),
+            "-2.01"
+        );
         assert_eq!(ceil_floor(&[num(4.3), num(1.0)], true).to_display(), "5");
         assert_eq!(ceil_floor(&[num(4.7), num(1.0)], false).to_display(), "4");
         assert_eq!(product(&[num(2.0), num(3.0), num(4.0)]).to_display(), "24");
         assert_eq!(median(&[num(3.0), num(1.0), num(2.0)]).to_display(), "2");
-        assert_eq!(median(&[num(1.0), num(2.0), num(3.0), num(4.0)]).to_display(), "2.5");
+        assert_eq!(
+            median(&[num(1.0), num(2.0), num(3.0), num(4.0)]).to_display(),
+            "2.5"
+        );
     }
 
     #[test]
@@ -2243,14 +2356,24 @@ mod tests {
         let b = range(3, 1, vec![num(4.0), num(5.0), num(6.0)]);
         // 1*4 + 2*5 + 3*6 = 32.
         assert_eq!(sumproduct(&[a, b]).to_display(), "32");
-        let r = range(4, 1, vec![num(1.0), CellValue::Empty, txt("x"), CellValue::Empty]);
+        let r = range(
+            4,
+            1,
+            vec![num(1.0), CellValue::Empty, txt("x"), CellValue::Empty],
+        );
         assert_eq!(countblank(&[r]).to_display(), "2");
     }
 
     #[test]
     fn extra_logic_functions() {
-        assert_eq!(xor(&[CellValue::Boolean(true), CellValue::Boolean(false)]).to_display(), "true");
-        assert_eq!(xor(&[CellValue::Boolean(true), CellValue::Boolean(true)]).to_display(), "false");
+        assert_eq!(
+            xor(&[CellValue::Boolean(true), CellValue::Boolean(false)]).to_display(),
+            "true"
+        );
+        assert_eq!(
+            xor(&[CellValue::Boolean(true), CellValue::Boolean(true)]).to_display(),
+            "false"
+        );
         assert_eq!(is_blank(&[CellValue::Empty]).to_display(), "true");
         assert_eq!(is_blank(&[num(0.0)]).to_display(), "false");
         assert_eq!(is_number(&[num(1.0)]).to_display(), "true");
@@ -2260,14 +2383,20 @@ mod tests {
     #[test]
     fn extra_text_functions() {
         assert_eq!(proper(&[txt("hELLO wORLD")]).to_display(), "Hello World");
-        assert_eq!(substitute(&[txt("a-b-c"), txt("-"), txt("+")]).to_display(), "a+b+c");
+        assert_eq!(
+            substitute(&[txt("a-b-c"), txt("-"), txt("+")]).to_display(),
+            "a+b+c"
+        );
         assert_eq!(
             substitute(&[txt("a-b-c"), txt("-"), txt("+"), num(2.0)]).to_display(),
             "a-b+c"
         );
         assert_eq!(rept(&[txt("ab"), num(3.0)]).to_display(), "ababab");
         assert_eq!(find_fn(&[txt("c"), txt("abcabc")]).to_display(), "3");
-        assert_eq!(find_fn(&[txt("c"), txt("abcabc"), num(4.0)]).to_display(), "6");
+        assert_eq!(
+            find_fn(&[txt("c"), txt("abcabc"), num(4.0)]).to_display(),
+            "6"
+        );
         assert!(matches!(
             find_fn(&[txt("z"), txt("abc")]),
             CellValue::Error(FormulaError::TypeError)
@@ -2277,10 +2406,9 @@ mod tests {
 
     fn approx(v: CellValue, expected: f64) {
         match v {
-            CellValue::Number(n) => assert!(
-                (n - expected).abs() < 1e-4,
-                "expected {expected}, got {n}"
-            ),
+            CellValue::Number(n) => {
+                assert!((n - expected).abs() < 1e-4, "expected {expected}, got {n}")
+            }
             other => panic!("expected number, got {other:?}"),
         }
     }
@@ -2300,7 +2428,10 @@ mod tests {
             log_checked(&[num(-1.0)], |n| n.ln()),
             CellValue::Error(FormulaError::NumError)
         ));
-        approx(unary_math(&[num(180.0)], f64::to_radians), std::f64::consts::PI);
+        approx(
+            unary_math(&[num(180.0)], f64::to_radians),
+            std::f64::consts::PI,
+        );
     }
 
     #[test]
@@ -2312,7 +2443,10 @@ mod tests {
         assert_eq!(large_small(&[r.clone(), num(2.0)], false).to_display(), "2");
         // RANK of 4 within 1..5 descending = 2.
         assert_eq!(rank(&[num(4.0), r.clone()]).to_display(), "2");
-        assert_eq!(rank(&[num(4.0), r, CellValue::Boolean(true)]).to_display(), "4");
+        assert_eq!(
+            rank(&[num(4.0), r, CellValue::Boolean(true)]).to_display(),
+            "4"
+        );
         let m = range(5, 1, vec![num(2.0), num(3.0), num(3.0), num(5.0), num(3.0)]);
         assert_eq!(mode(&[m]).to_display(), "3");
     }
@@ -2327,7 +2461,10 @@ mod tests {
             "80"
         );
         assert_eq!(countifs(&[cat.clone(), txt("a")]).to_display(), "3");
-        assert_eq!(averageif(&[cat.clone(), txt("a"), amt.clone()]).to_display(), "26.666666666666668");
+        assert_eq!(
+            averageif(&[cat.clone(), txt("a"), amt.clone()]).to_display(),
+            "26.666666666666668"
+        );
         // Multi-criteria: category a AND amount > 15 -> 30 + 40 = 70.
         assert_eq!(
             sumifs(&[amt.clone(), cat.clone(), txt("a"), amt, txt(">15")]).to_display(),
@@ -2340,7 +2477,10 @@ mod tests {
         // Loan: 5%/yr over 10 periods, PV = 1000, FV = 0, end-of-period.
         approx(pmt(&[num(0.05), num(10.0), num(1000.0)]), -129.504_57);
         // FV of that payment stream should bring the balance to ~0.
-        approx(fv(&[num(0.05), num(10.0), num(-129.504_57), num(1000.0)]), 0.0);
+        approx(
+            fv(&[num(0.05), num(10.0), num(-129.504_57), num(1000.0)]),
+            0.0,
+        );
         // PV inverse.
         approx(pv(&[num(0.05), num(10.0), num(-129.504_57)]), 1000.0);
         // NPER inverse (~10 periods).
@@ -2349,37 +2489,84 @@ mod tests {
         approx(rate(&[num(10.0), num(-129.504_57), num(1000.0)]), 0.05);
         // NPV / IRR.
         approx(npv(&[num(0.1), num(100.0), num(200.0)]), 256.198_3);
-        approx(irr(&[range(3, 1, vec![num(-100.0), num(60.0), num(60.0)])]), 0.130_662);
+        approx(
+            irr(&[range(3, 1, vec![num(-100.0), num(60.0), num(60.0)])]),
+            0.130_662,
+        );
     }
 
     #[test]
     fn logic_info_functions() {
         assert_eq!(is_text(&[txt("x")]).to_display(), "true");
-        assert_eq!(is_error(&[CellValue::Error(FormulaError::NaError)]).to_display(), "true");
-        assert_eq!(is_na(&[CellValue::Error(FormulaError::NaError)]).to_display(), "true");
-        assert_eq!(is_na(&[CellValue::Error(FormulaError::DivisionByZero)]).to_display(), "false");
+        assert_eq!(
+            is_error(&[CellValue::Error(FormulaError::NaError)]).to_display(),
+            "true"
+        );
+        assert_eq!(
+            is_na(&[CellValue::Error(FormulaError::NaError)]).to_display(),
+            "true"
+        );
+        assert_eq!(
+            is_na(&[CellValue::Error(FormulaError::DivisionByZero)]).to_display(),
+            "false"
+        );
         assert_eq!(is_even(&[num(4.0)]).to_display(), "true");
         assert_eq!(is_odd(&[num(3.0)]).to_display(), "true");
-        assert_eq!(ifna(&[CellValue::Error(FormulaError::NaError), txt("fb")]).to_display(), "fb");
-        assert_eq!(ifs(&[CellValue::Boolean(false), txt("a"), CellValue::Boolean(true), txt("b")]).to_display(), "b");
-        assert_eq!(switch_fn(&[num(2.0), num(1.0), txt("one"), num(2.0), txt("two")]).to_display(), "two");
-        assert_eq!(switch_fn(&[num(9.0), num(1.0), txt("one"), txt("default")]).to_display(), "default");
+        assert_eq!(
+            ifna(&[CellValue::Error(FormulaError::NaError), txt("fb")]).to_display(),
+            "fb"
+        );
+        assert_eq!(
+            ifs(&[
+                CellValue::Boolean(false),
+                txt("a"),
+                CellValue::Boolean(true),
+                txt("b")
+            ])
+            .to_display(),
+            "b"
+        );
+        assert_eq!(
+            switch_fn(&[num(2.0), num(1.0), txt("one"), num(2.0), txt("two")]).to_display(),
+            "two"
+        );
+        assert_eq!(
+            switch_fn(&[num(9.0), num(1.0), txt("one"), txt("default")]).to_display(),
+            "default"
+        );
     }
 
     #[test]
     fn lookup_reference_functions() {
         // HLOOKUP: keys in the first row, return the 2nd row.
-        let table = range(2, 3, vec![num(1.0), num(3.0), num(5.0), txt("a"), txt("b"), txt("c")]);
+        let table = range(
+            2,
+            3,
+            vec![num(1.0), num(3.0), num(5.0), txt("a"), txt("b"), txt("c")],
+        );
         assert_eq!(
             hlookup(&[num(3.0), table.clone(), num(2.0), CellValue::Boolean(false)]).to_display(),
             "b"
         );
-        assert_eq!(choose(&[num(2.0), txt("x"), txt("y"), txt("z")]).to_display(), "y");
+        assert_eq!(
+            choose(&[num(2.0), txt("x"), txt("y"), txt("z")]).to_display(),
+            "y"
+        );
         let r = range(3, 4, vec![CellValue::Empty; 12]);
-        assert_eq!(call_builtin("ROWS", std::slice::from_ref(&r), FnCtx::at_clock(0.0)).to_display(), "3");
-        assert_eq!(call_builtin("COLUMNS", &[r], FnCtx::at_clock(0.0)).to_display(), "4");
+        assert_eq!(
+            call_builtin("ROWS", std::slice::from_ref(&r), FnCtx::at_clock(0.0)).to_display(),
+            "3"
+        );
+        assert_eq!(
+            call_builtin("COLUMNS", &[r], FnCtx::at_clock(0.0)).to_display(),
+            "4"
+        );
         // ROW()/COLUMN() with the evaluating cell at (row 7, col 2).
-        let ctx = FnCtx { now_serial: 0.0, cell_row: 7, cell_col: 2 };
+        let ctx = FnCtx {
+            now_serial: 0.0,
+            cell_row: 7,
+            cell_col: 2,
+        };
         assert_eq!(call_builtin("ROW", &[], ctx).to_display(), "7");
         assert_eq!(call_builtin("COLUMN", &[], ctx).to_display(), "2");
         // The reference form is deferred -> #N/A.
@@ -2392,11 +2579,21 @@ mod tests {
     #[test]
     fn more_text_functions() {
         assert_eq!(search_fn(&[txt("C"), txt("abcabc")]).to_display(), "3");
-        assert_eq!(replace_fn(&[txt("abcdef"), num(2.0), num(3.0), txt("XY")]).to_display(), "aXYef");
+        assert_eq!(
+            replace_fn(&[txt("abcdef"), num(2.0), num(3.0), txt("XY")]).to_display(),
+            "aXYef"
+        );
         assert_eq!(exact(&[txt("abc"), txt("abc")]).to_display(), "true");
         assert_eq!(exact(&[txt("abc"), txt("Abc")]).to_display(), "false");
         assert_eq!(
-            textjoin(&[txt("-"), CellValue::Boolean(true), txt("a"), CellValue::Empty, txt("b")]).to_display(),
+            textjoin(&[
+                txt("-"),
+                CellValue::Boolean(true),
+                txt("a"),
+                CellValue::Empty,
+                txt("b")
+            ])
+            .to_display(),
             "a-b"
         );
         assert_eq!(char_fn(&[num(65.0)]).to_display(), "A");

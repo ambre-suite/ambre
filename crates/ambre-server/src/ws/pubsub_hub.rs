@@ -58,7 +58,11 @@ impl PubSubHub {
     pub async fn subscribe(&self, channel: String, conn_id: String, sink: mpsc::Sender<Vec<u8>>) {
         let _ = self
             .cmd_tx
-            .send(HubCmd::Subscribe { channel, conn_id, sink })
+            .send(HubCmd::Subscribe {
+                channel,
+                conn_id,
+                sink,
+            })
             .await;
     }
 

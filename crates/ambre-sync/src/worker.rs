@@ -17,13 +17,13 @@
 // free for WebSocket / fetch callbacks and flume's wakers fire correctly.
 // ============================================================================
 
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::*;
 use web_sys::{DedicatedWorkerGlobalScope, MessageEvent};
 
 use ambre_bus::{LogicEvent, SyncCommand};
 
-use crate::{run_wasm, LogicSink};
+use crate::{LogicSink, run_wasm};
 
 /// Copy a JS `ArrayBuffer` (the `postMessage` payload) into a `Vec<u8>`.
 fn array_buffer_to_vec(data: &JsValue) -> Vec<u8> {
@@ -58,10 +58,12 @@ pub fn start() {
 
     // Outbound sink: encode each LogicEvent and post it back to Main.
     let sink_scope = scope.clone();
-    let logic_sink = LogicSink::new(move |event: LogicEvent| match postcard::to_allocvec(&event) {
-        Ok(bytes) => post_bytes(&sink_scope, &bytes),
-        Err(e) => tracing::error!("[Sync] failed to encode LogicEvent: {e}"),
-    });
+    let logic_sink = LogicSink::new(
+        move |event: LogicEvent| match postcard::to_allocvec(&event) {
+            Ok(bytes) => post_bytes(&sink_scope, &bytes),
+            Err(e) => tracing::error!("[Sync] failed to encode LogicEvent: {e}"),
+        },
+    );
 
     // Inbound: onmessage decodes SyncCommand bytes and feeds the select loop.
     let (cmd_tx, cmd_rx) = flume::unbounded::<SyncCommand>();

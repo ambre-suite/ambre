@@ -177,8 +177,7 @@ pub async fn oidc_callback(
         .get(&provider)
         .ok_or(AppError::UnknownProvider(provider.clone()))?;
 
-    let (pkce_verifier, nonce_str) =
-        redis_ops::oidc_state_take(&state.redis, &req.state).await?;
+    let (pkce_verifier, nonce_str) = redis_ops::oidc_state_take(&state.redis, &req.state).await?;
 
     use openidconnect::Nonce;
     let stored_state = oidc::OidcAuthState {
@@ -189,10 +188,7 @@ pub async fn oidc_callback(
     let claims = oidc::exchange_code(provider_state, req.code, &stored_state).await?;
 
     let oidc_subject = claims.subject().to_string();
-    let email = claims
-        .email()
-        .map(|e| e.to_string())
-        .unwrap_or_default();
+    let email = claims.email().map(|e| e.to_string()).unwrap_or_default();
     let display_name = claims
         .name()
         .and_then(|l| l.get(None).map(|s| s.to_string()))
@@ -204,14 +200,9 @@ pub async fn oidc_callback(
         })
         .unwrap_or_else(|| email.clone());
 
-    let user = db::upsert_user_from_oidc(
-        &state.db,
-        &provider,
-        &oidc_subject,
-        &email,
-        &display_name,
-    )
-    .await?;
+    let user =
+        db::upsert_user_from_oidc(&state.db, &provider, &oidc_subject, &email, &display_name)
+            .await?;
 
     let user_id = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
     let signing_pubkey = ambre_core::PublicKey::from_slice(&user.signing_pubkey)

@@ -344,15 +344,25 @@ fn compare_values(a: &CellValue, b: &CellValue) -> Option<std::cmp::Ordering> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::compile::compile;
     use super::super::parser::parse_formula;
     use super::super::test_index::{index_with, indices_with};
     use super::super::types::CellValue;
+    use super::*;
     use crate::model::Uid;
 
     fn cell(row: u32, col: u32) -> CellId {
-        CellId::bound(0, Uid { peer: 1, counter: row }, Uid { peer: 2, counter: col })
+        CellId::bound(
+            0,
+            Uid {
+                peer: 1,
+                counter: row,
+            },
+            Uid {
+                peer: 2,
+                counter: col,
+            },
+        )
     }
 
     /// Compile `src` for the cell at `(0, fcol)` over a 10x10 sheet, evaluate it
@@ -450,12 +460,18 @@ mod tests {
 
     #[test]
     fn division_by_zero() {
-        assert!(matches!(eval_formula("1/0"), CellValue::Error(FormulaError::DivisionByZero)));
+        assert!(matches!(
+            eval_formula("1/0"),
+            CellValue::Error(FormulaError::DivisionByZero)
+        ));
     }
 
     #[test]
     fn concatenation() {
-        assert_eq!(eval_formula(r#""hello"&" world""#).to_display(), "hello world");
+        assert_eq!(
+            eval_formula(r#""hello"&" world""#).to_display(),
+            "hello world"
+        );
     }
 
     #[test]

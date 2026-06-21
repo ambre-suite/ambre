@@ -87,7 +87,12 @@ impl LogicSink {
     /// (native) test can drain what Sync emits.
     pub fn channel() -> (Self, flume::Receiver<LogicEvent>) {
         let (tx, rx) = flume::unbounded();
-        (Self::new(move |ev| { let _ = tx.send(ev); }), rx)
+        (
+            Self::new(move |ev| {
+                let _ = tx.send(ev);
+            }),
+            rx,
+        )
     }
 
     /// Emit one event to the Logic thread.
@@ -151,7 +156,9 @@ enum SyncEvent {
     /// Result of a silent token refresh triggered by a WS auth rejection (close
     /// 4401). `ok` true means the access token was renewed and the socket can be
     /// reopened; false means the refresh failed and a fallback re-login is needed.
-    Reauthenticated { ok: bool },
+    Reauthenticated {
+        ok: bool,
+    },
     SessionReady {
         id: RequestId,
         user_id: UserId,
@@ -645,7 +652,11 @@ impl SyncState {
             tracing::warn!("[Sync→Server] ws_send called with no socket, dropping message");
             return;
         };
-        tracing::debug!("[Sync→Server] ws_send {:?} → {} bytes wire", std::mem::discriminant(msg), wire.len());
+        tracing::debug!(
+            "[Sync→Server] ws_send {:?} → {} bytes wire",
+            std::mem::discriminant(msg),
+            wire.len()
+        );
         // `wire` lives in the wasm heap, which is a SharedArrayBuffer under the
         // shared-memory threading model. Browsers reject `WebSocket.send` on a
         // view backed by a SharedArrayBuffer, so copy into a fresh (non-shared)
@@ -673,15 +684,19 @@ impl SyncState {
             SyncCommand::Rest { id, cmd } => self.handle_rest(id, cmd),
 
             // -- Document sync session (control) -------------------------------
-            SyncCommand::OpenDocument { document_id, doc_type } => {
-                self.handle_open_document(document_id, doc_type)
-            }
+            SyncCommand::OpenDocument {
+                document_id,
+                doc_type,
+            } => self.handle_open_document(document_id, doc_type),
             SyncCommand::CloseDocument { document_id } => self.handle_close_document(document_id),
             SyncCommand::SendUpdate {
                 document_id,
                 payload,
             } => {
-                tracing::info!("[Sync] received SendUpdate doc={document_id} delta_size={}", payload.len());
+                tracing::info!(
+                    "[Sync] received SendUpdate doc={document_id} delta_size={}",
+                    payload.len()
+                );
                 self.handle_send_update(document_id, payload);
             }
             SyncCommand::SendSnapshot {
@@ -873,7 +888,9 @@ impl SyncState {
                 let url = format!("{url_scheme}://{api_base}/api/keys/master");
                 match http::get_json_auth::<http::MasterKeyResponse>(&url, auth.clone()).await {
                     Ok(resp) => {
-                        let salt = match base64::engine::general_purpose::URL_SAFE.decode(&resp.master_key_salt) {
+                        let salt = match base64::engine::general_purpose::URL_SAFE
+                            .decode(&resp.master_key_salt)
+                        {
                             Ok(s) => s,
                             Err(e) => {
                                 let _ = logic_tx.send(LogicEvent::AuthError {
@@ -882,7 +899,9 @@ impl SyncState {
                                 return;
                             }
                         };
-                        let master_key_enc = match base64::engine::general_purpose::URL_SAFE.decode(&resp.master_key_enc) {
+                        let master_key_enc = match base64::engine::general_purpose::URL_SAFE
+                            .decode(&resp.master_key_enc)
+                        {
                             Ok(k) => k,
                             Err(e) => {
                                 let _ = logic_tx.send(LogicEvent::AuthError {
@@ -938,7 +957,9 @@ impl SyncState {
                         let exchange_key = master_seed.derive_exchange_key();
 
                         let auth_url = format!("{url_scheme}://{api_base}/api/auth/me");
-                        match http::get_json_auth::<http::AuthMeResponse>(&auth_url, auth.clone()).await {
+                        match http::get_json_auth::<http::AuthMeResponse>(&auth_url, auth.clone())
+                            .await
+                        {
                             Ok(me) => {
                                 let user_id = UserId::parse_str(&me.user_id)
                                     .unwrap_or_else(|_| UserId::new());
@@ -950,11 +971,13 @@ impl SyncState {
                                     master_seed,
                                     signing_key,
                                     exchange_key,
-                                    tokens: auth.tokens.borrow().as_ref().cloned().unwrap_or(http::TokenPair {
-                                        access_token: String::new(),
-                                        refresh_token: String::new(),
-                                        access_expires_in: 0,
-                                    }),
+                                    tokens: auth.tokens.borrow().as_ref().cloned().unwrap_or(
+                                        http::TokenPair {
+                                            access_token: String::new(),
+                                            refresh_token: String::new(),
+                                            access_expires_in: 0,
+                                        },
+                                    ),
                                 });
                             }
                             Err(e) => {
@@ -1104,7 +1127,8 @@ impl SyncState {
                 let url = format!("{url_scheme}://{api_base}/api/auth/setup");
                 let body = http::SetupAccountRequest {
                     passphrase: String::from_utf8_lossy(&passphrase).into_owned(),
-                    master_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&master_key_with_nonce),
+                    master_key_enc: base64::engine::general_purpose::URL_SAFE
+                        .encode(&master_key_with_nonce),
                     master_key_salt: base64::engine::general_purpose::URL_SAFE.encode(salt),
                     signing_pubkey: signing_pub_key,
                     exchange_pubkey: exchange_pub_key,
@@ -1179,8 +1203,17 @@ impl SyncState {
         // Mirror the REST scheme: `ws` on localhost (http), `wss` otherwise.
         // A hardcoded `wss://` fails on a localhost http dev server (TLS error,
         // WS close code 1015).
-        let ws_scheme = if self.url_scheme == "http" { "ws" } else { "wss" };
-        let Some(access_token) = self.tokens.borrow().as_ref().map(|t| t.access_token.clone()) else {
+        let ws_scheme = if self.url_scheme == "http" {
+            "ws"
+        } else {
+            "wss"
+        };
+        let Some(access_token) = self
+            .tokens
+            .borrow()
+            .as_ref()
+            .map(|t| t.access_token.clone())
+        else {
             tracing::warn!("Sync: WebSocket open requested before access token is ready");
             return;
         };
@@ -1224,7 +1257,9 @@ impl SyncState {
             .map(|(id, d)| (*id, d.last_seq))
             .collect::<Vec<_>>()
         {
-            self.ws_send(&WsClientMsg::Subscribe { document_id: doc_id });
+            self.ws_send(&WsClientMsg::Subscribe {
+                document_id: doc_id,
+            });
             self.ws_send(&WsClientMsg::RequestMissing {
                 document_id: doc_id,
                 after_seq: last_seq,
@@ -1311,7 +1346,9 @@ impl SyncState {
         let jitter = (js_sys::Math::random() * capped as f64) as u32;
         let delay_ms = (capped + jitter) as i32;
 
-        let Some(tx) = self.event_tx.clone() else { return };
+        let Some(tx) = self.event_tx.clone() else {
+            return;
+        };
         let cb = Closure::wrap(Box::new(move || {
             let _ = tx.send(SyncEvent::ReconnectNow);
         }) as Box<dyn FnMut()>);
@@ -1321,7 +1358,10 @@ impl SyncState {
                 cb.as_ref().unchecked_ref(),
                 delay_ms,
             );
-            tracing::warn!("Sync: reconnect scheduled in {delay_ms}ms (attempt {})", attempt + 1);
+            tracing::warn!(
+                "Sync: reconnect scheduled in {delay_ms}ms (attempt {})",
+                attempt + 1
+            );
         }
         // Keep the closure alive until it fires (replaces any previous pending one).
         self._reconnect_timer = Some(cb);
@@ -1339,7 +1379,9 @@ impl SyncState {
     /// does not block; the shared token store is updated in place on success.
     #[cfg(target_arch = "wasm32")]
     fn reauthenticate(&mut self) {
-        let Some(tx) = self.event_tx.clone() else { return };
+        let Some(tx) = self.event_tx.clone() else {
+            return;
+        };
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             let ok = match auth.refresh().await {
@@ -1410,7 +1452,9 @@ impl SyncState {
                     // Refresh token also dead (e.g. server restarted with a fresh
                     // ephemeral key and empty Redis): re-login with the same
                     // deterministic dev identity. SessionReady reopens the socket.
-                    tracing::warn!("Sync: refresh failed, re-running dev login for silent recovery");
+                    tracing::warn!(
+                        "Sync: refresh failed, re-running dev login for silent recovery"
+                    );
                     self.handle_dev_login(RequestId::next(), username);
                 } else {
                     // Real session with no usable refresh: surface so the UI can
@@ -1567,7 +1611,10 @@ impl SyncState {
                     self.handle_send_update(document_id, payload);
                 }
             }
-            SyncEvent::DocumentCreateFailed { document_id, message } => {
+            SyncEvent::DocumentCreateFailed {
+                document_id,
+                message,
+            } => {
                 if let Some(doc_state) = self.documents.get_mut(&document_id) {
                     doc_state.creating = false;
                 }
@@ -1802,7 +1849,9 @@ impl SyncState {
                         let members_url =
                             format!("{url_scheme}://{api_base}/api/documents/{doc_id}/members");
                         let members =
-                            match http::get_json_auth::<http::MembersResponse>(&members_url, auth).await {
+                            match http::get_json_auth::<http::MembersResponse>(&members_url, auth)
+                                .await
+                            {
                                 Ok(resp) => resp.members,
                                 Err(e) => {
                                     tracing::error!(
@@ -1873,9 +1922,15 @@ impl SyncState {
                 }
             }
 
-            WsServerMsg::DocumentShared { document_id, doc_type } => {
+            WsServerMsg::DocumentShared {
+                document_id,
+                doc_type,
+            } => {
                 tracing::info!("Sync: DocumentShared {document_id:?} ({doc_type:?})");
-                self.send_to_logic(LogicEvent::DocumentShared { document_id, doc_type });
+                self.send_to_logic(LogicEvent::DocumentShared {
+                    document_id,
+                    doc_type,
+                });
             }
 
             WsServerMsg::ChannelSubscribed { channel_id } => {
@@ -1926,10 +1981,9 @@ impl SyncState {
         // treat every update authored by THIS client as a high-water-mark and
         // advance `local_clock` past it -- the next `seal_update` then continues
         // from the right value.
-        let authored_by_us = self
-            .signing_key
-            .as_ref()
-            .is_some_and(|sk| sk.verifying_key().to_bytes() == *update.public_data.pub_key.as_array());
+        let authored_by_us = self.signing_key.as_ref().is_some_and(|sk| {
+            sk.verifying_key().to_bytes() == *update.public_data.pub_key.as_array()
+        });
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             tracing::warn!("Sync: Update for unopened doc {document_id:?}, dropping");
             return;
@@ -2095,11 +2149,17 @@ impl SyncState {
             let exchange_key = self.exchange_key.clone();
             let auth = self.auth_context();
             wasm_bindgen_futures::spawn_local(async move {
-                let members_url = format!("{url_scheme}://{api_base}/api/documents/{doc_id}/members");
+                let members_url =
+                    format!("{url_scheme}://{api_base}/api/documents/{doc_id}/members");
                 // 404 -> the doc does not exist server-side yet (local-only):
                 // generate a fresh key and defer creation to the first update.
                 let (doc_key, server_created) =
-                    match http::get_json_opt_auth::<http::MembersResponse>(&members_url, auth.clone()).await {
+                    match http::get_json_opt_auth::<http::MembersResponse>(
+                        &members_url,
+                        auth.clone(),
+                    )
+                    .await
+                    {
                         Ok(Some(resp)) => {
                             let key = match &exchange_key {
                                 Some(ek) => Self::unwrap_document_key(ek, &resp.members)
@@ -2116,7 +2176,12 @@ impl SyncState {
                 let snapshot_payload = if server_created {
                     let snapshot_url =
                         format!("{url_scheme}://{api_base}/api/documents/{doc_id}/snapshot/latest");
-                    match http::get_json_auth::<http::SnapshotPresignedResponse>(&snapshot_url, auth).await {
+                    match http::get_json_auth::<http::SnapshotPresignedResponse>(
+                        &snapshot_url,
+                        auth,
+                    )
+                    .await
+                    {
                         Ok(presigned) => http::fetch_bytes(&presigned.url).await.ok(),
                         Err(_) => None,
                     }
@@ -2269,7 +2334,8 @@ impl SyncState {
             // an F5 and DevLogin completing). Buffer instead of dropping; flushed
             // once the document opens (see `pending_pre_session_updates`).
             tracing::info!("[Sync] SendUpdate before session ready, buffering doc={document_id}");
-            self.pending_pre_session_updates.push((document_id, payload));
+            self.pending_pre_session_updates
+                .push((document_id, payload));
             return;
         };
         let Some(pub_key) = self.author_pub_key() else {
@@ -2353,9 +2419,7 @@ impl SyncState {
                 doc_key_enc,
                 document_id: Some(document_id.to_string()),
             };
-            match http::post_json_auth::<_, http::CreateDocumentResponse>(&url, &body, auth)
-                .await
-            {
+            match http::post_json_auth::<_, http::CreateDocumentResponse>(&url, &body, auth).await {
                 Ok(_) => {
                     let _ = tx.send(SyncEvent::DocumentMaterialized { document_id });
                 }
@@ -2599,7 +2663,10 @@ impl SyncState {
             let url_scheme = self.url_scheme;
             let auth = self.auth_context();
             let doc_id = document_id;
-            let doc_key = self.documents.get(&document_id).map(|ds| ds.doc_key.clone());
+            let doc_key = self
+                .documents
+                .get(&document_id)
+                .map(|ds| ds.doc_key.clone());
             wasm_bindgen_futures::spawn_local(async move {
                 // E2EE: the new name is sealed with the document key before it
                 // leaves the client. The server only ever stores ciphertext.
@@ -2610,7 +2677,8 @@ impl SyncState {
                     });
                     return;
                 };
-                let (nonce, ct) = ambre_crypto::aead::seal(name.as_bytes(), b"ambre-doc-name", &doc_key);
+                let (nonce, ct) =
+                    ambre_crypto::aead::seal(name.as_bytes(), b"ambre-doc-name", &doc_key);
                 let mut buf = nonce.to_vec();
                 buf.extend_from_slice(&ct);
                 let name_enc = base64::engine::general_purpose::URL_SAFE.encode(&buf);
@@ -2699,7 +2767,12 @@ impl SyncState {
                 "{url_scheme}://{api_base}/api/users/search?query={}",
                 invitee_email.replace('@', "%40")
             );
-            let users = match http::get_json_auth::<http::UserSearchResult>(&search_url, auth.clone()).await {
+            let users = match http::get_json_auth::<http::UserSearchResult>(
+                &search_url,
+                auth.clone(),
+            )
+            .await
+            {
                 Ok(resp) => resp.users,
                 Err(e) => {
                     let _ = logic_tx.send(LogicEvent::ApiError {
@@ -2755,9 +2828,7 @@ impl SyncState {
                 role: role.to_string(),
                 doc_key_enc,
             };
-            match http::post_json_auth::<_, http::InviteResponse>(&invite_url, &body, auth)
-                .await
-            {
+            match http::post_json_auth::<_, http::InviteResponse>(&invite_url, &body, auth).await {
                 Ok(resp) => {
                     let user_id =
                         UserId::parse_str(&resp.user_id).unwrap_or_else(|_| UserId::new());
@@ -2830,8 +2901,13 @@ impl SyncState {
             let new_doc_key = DocumentKey::generate();
 
             // 3. GET remaining members
-            let members_url = format!("{url_scheme}://{api_base}/api/documents/{document_id}/members");
-            let members = match http::get_json_auth::<http::DocumentMembersResponse>(&members_url, auth.clone()).await
+            let members_url =
+                format!("{url_scheme}://{api_base}/api/documents/{document_id}/members");
+            let members = match http::get_json_auth::<http::DocumentMembersResponse>(
+                &members_url,
+                auth.clone(),
+            )
+            .await
             {
                 Ok(resp) => resp.members,
                 Err(e) => {
@@ -2869,7 +2945,8 @@ impl SyncState {
             }
 
             // 5. POST /api/documents/{id}/rotate-key
-            let rotate_url = format!("{url_scheme}://{api_base}/api/documents/{document_id}/rotate-key");
+            let rotate_url =
+                format!("{url_scheme}://{api_base}/api/documents/{document_id}/rotate-key");
             let body = http::RotateKeyRequest { keys };
             if let Err(e) =
                 http::post_json_auth::<_, serde_json::Value>(&rotate_url, &body, auth).await
@@ -2959,8 +3036,9 @@ impl SyncState {
 
         if let Some(tx) = event_tx {
             wasm_bindgen_futures::spawn_local(async move {
-                let url =
-                    format!("{url_scheme}://{api_base}/api/documents/{document_id}/members/{user_id}");
+                let url = format!(
+                    "{url_scheme}://{api_base}/api/documents/{document_id}/members/{user_id}"
+                );
                 let body = serde_json::json!({ "role": role.to_string() });
                 match http::patch_json_auth(&url, &body, auth).await {
                     Ok(()) => {
@@ -3122,9 +3200,7 @@ impl SyncState {
             blob.extend_from_slice(&ciphertext);
             // S3 presigned PUT goes straight to object storage, not our API:
             // no session, no CSRF header.
-            if let Err(e) =
-                http::put_bytes(&upload_url, &blob, "application/octet-stream").await
-            {
+            if let Err(e) = http::put_bytes(&upload_url, &blob, "application/octet-stream").await {
                 let _ = logic_tx.send(LogicEvent::ApiError {
                     request: "UploadMedia".into(),
                     code: 500,
@@ -3133,7 +3209,8 @@ impl SyncState {
                 return;
             }
 
-            let confirm_url = format!("{url_scheme}://{api_base}/api/documents/{document_id}/media");
+            let confirm_url =
+                format!("{url_scheme}://{api_base}/api/documents/{document_id}/media");
             let confirm_body = http::ConfirmUploadRequest {
                 content_hash: content_hash.clone(),
                 mime_type,

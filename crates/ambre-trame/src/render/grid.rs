@@ -68,4 +68,3 @@ pub fn draw_grid_lines_on<S: DrawSurface>(
         }
     }
 }
-

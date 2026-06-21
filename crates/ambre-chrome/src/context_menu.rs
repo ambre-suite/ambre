@@ -28,7 +28,10 @@ pub struct MenuEntry {
 
 impl MenuEntry {
     pub fn new(command: CommandId, label: impl Into<String>) -> Self {
-        Self { command, label: label.into() }
+        Self {
+            command,
+            label: label.into(),
+        }
     }
 }
 
@@ -61,8 +64,16 @@ pub fn ContextMenu(
         if let Some(menu) = menu_ref.get() {
             let rect = menu.get_bounding_client_rect();
             let win = web_sys::window().unwrap();
-            let vw = win.inner_width().ok().and_then(|v| v.as_f64()).unwrap_or(rect.width());
-            let vh = win.inner_height().ok().and_then(|v| v.as_f64()).unwrap_or(rect.height());
+            let vw = win
+                .inner_width()
+                .ok()
+                .and_then(|v| v.as_f64())
+                .unwrap_or(rect.width());
+            let vh = win
+                .inner_height()
+                .ok()
+                .and_then(|v| v.as_f64())
+                .unwrap_or(rect.height());
             if lx + rect.width() > vw {
                 lx = (lx - rect.width()).max(0.0);
             }
@@ -83,19 +94,20 @@ pub fn ContextMenu(
     // singleton); it no-ops while closed and ignores clicks inside the menu.
     {
         let doc = web_sys::window().unwrap().document().unwrap();
-        let cb = Closure::<dyn FnMut(web_sys::PointerEvent)>::new(move |e: web_sys::PointerEvent| {
-            if pos.get_untracked().is_none() {
-                return;
-            }
-            // A click inside the menu is the item handlers' business; ignore it.
-            if let (Some(menu), Some(target)) = (menu_ref.get_untracked(), e.target())
-                && let Ok(node) = target.dyn_into::<web_sys::Node>()
-                && menu.contains(Some(&node))
-            {
-                return;
-            }
-            pos.set(None);
-        });
+        let cb =
+            Closure::<dyn FnMut(web_sys::PointerEvent)>::new(move |e: web_sys::PointerEvent| {
+                if pos.get_untracked().is_none() {
+                    return;
+                }
+                // A click inside the menu is the item handlers' business; ignore it.
+                if let (Some(menu), Some(target)) = (menu_ref.get_untracked(), e.target())
+                    && let Ok(node) = target.dyn_into::<web_sys::Node>()
+                    && menu.contains(Some(&node))
+                {
+                    return;
+                }
+                pos.set(None);
+            });
         let _ = doc.add_event_listener_with_callback_and_bool(
             "pointerdown",
             cb.as_ref().unchecked_ref(),
@@ -166,9 +178,9 @@ pub fn ContextMenu(
                 _ if key.chars().count() == 1 => {
                     let ch = key.chars().next().unwrap().to_ascii_lowercase();
                     let start = focused.get_untracked();
-                    if let Some(off) = (1..=len).find(|&o| {
-                        initials.get((start + o) % len.max(1)) == Some(&ch)
-                    }) {
+                    if let Some(off) =
+                        (1..=len).find(|&o| initials.get((start + o) % len.max(1)) == Some(&ch))
+                    {
                         focused.set((start + off) % len.max(1));
                     }
                 }

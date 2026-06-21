@@ -148,7 +148,11 @@ async fn handle_ws(
     // pushes not tied to an already-open document (e.g. `DocumentShared` on a
     // fresh invite) reach this connection.
     pubsub
-        .subscribe(user_pubsub_channel(&user_id), connection_id.clone(), outbound_tx.clone())
+        .subscribe(
+            user_pubsub_channel(&user_id),
+            connection_id.clone(),
+            outbound_tx.clone(),
+        )
         .await;
 
     while let Some(Ok(msg)) = ws_stream.next().await {
@@ -173,7 +177,11 @@ async fn handle_ws(
                 // granted (handle_subscribe records the subscription on success).
                 if conn.doc_subscriptions.contains(&document_id) {
                     pubsub
-                        .subscribe(doc_pubsub_channel(&document_id), connection_id.clone(), outbound_tx.clone())
+                        .subscribe(
+                            doc_pubsub_channel(&document_id),
+                            connection_id.clone(),
+                            outbound_tx.clone(),
+                        )
                         .await;
                 }
             }
@@ -195,14 +203,21 @@ async fn handle_ws(
             WsClientMsg::Ephemeral(eph) => {
                 handle_ephemeral(&state, &conn, eph).await;
             }
-            WsClientMsg::RequestMissing { document_id, after_seq } => {
+            WsClientMsg::RequestMissing {
+                document_id,
+                after_seq,
+            } => {
                 handle_request_missing(&state, &conn, document_id, after_seq, &outbound_tx).await;
             }
             WsClientMsg::SubscribeChannel { channel_id } => {
                 handle_subscribe_channel(&state, &mut conn, channel_id, &outbound_tx).await;
                 if conn.channel_subscriptions.contains(&channel_id) {
                     pubsub
-                        .subscribe(chan_pubsub_channel(&channel_id), connection_id.clone(), outbound_tx.clone())
+                        .subscribe(
+                            chan_pubsub_channel(&channel_id),
+                            connection_id.clone(),
+                            outbound_tx.clone(),
+                        )
                         .await;
                 }
             }
@@ -223,8 +238,13 @@ async fn handle_ws(
                 }
                 handle_channel_update(&state, channel_id, update).await;
             }
-            WsClientMsg::ChannelEphemeral { channel_id, ephemeral } => {
-                if !conn.channel_subscriptions.contains(&channel_id) { continue; }
+            WsClientMsg::ChannelEphemeral {
+                channel_id,
+                ephemeral,
+            } => {
+                if !conn.channel_subscriptions.contains(&channel_id) {
+                    continue;
+                }
                 handle_channel_ephemeral(&state, channel_id, ephemeral).await;
             }
         }
@@ -234,12 +254,18 @@ async fn handle_ws(
     // drops its Redis subscription when the last interested connection leaves).
     for doc_id in &conn.doc_subscriptions {
         let _ = redis_ops::doc_unsubscribe_session(&state.redis, doc_id, &connection_id).await;
-        pubsub.unsubscribe(doc_pubsub_channel(doc_id), connection_id.clone()).await;
+        pubsub
+            .unsubscribe(doc_pubsub_channel(doc_id), connection_id.clone())
+            .await;
     }
     for channel_id in &conn.channel_subscriptions {
-        pubsub.unsubscribe(chan_pubsub_channel(channel_id), connection_id.clone()).await;
+        pubsub
+            .unsubscribe(chan_pubsub_channel(channel_id), connection_id.clone())
+            .await;
     }
-    pubsub.unsubscribe(user_pubsub_channel(&user_id), connection_id.clone()).await;
+    pubsub
+        .unsubscribe(user_pubsub_channel(&user_id), connection_id.clone())
+        .await;
     outbound_handle.abort();
 }
 
@@ -250,7 +276,10 @@ async fn handle_subscribe(
     outbound_tx: &mpsc::Sender<Vec<u8>>,
 ) {
     if let Err(e) = verify_document_access(&state.db, document_id, conn.user_id).await {
-        let err = encode_server_msg(&WsServerMsg::Error { code: 403, message: e.to_string() });
+        let err = encode_server_msg(&WsServerMsg::Error {
+            code: 403,
+            message: e.to_string(),
+        });
         let _ = outbound_tx.send(err).await;
         return;
     }
@@ -266,7 +295,8 @@ async fn handle_unsubscribe(
     document_id: DocumentId,
 ) {
     conn.doc_subscriptions.remove(&document_id);
-    let _ = redis_ops::doc_unsubscribe_session(&state.redis, &document_id, &conn.connection_id).await;
+    let _ =
+        redis_ops::doc_unsubscribe_session(&state.redis, &document_id, &conn.connection_id).await;
 }
 
 async fn handle_update(
@@ -277,14 +307,20 @@ async fn handle_update(
 ) {
     let doc_id = update.public_data.document_id;
     if !conn.doc_subscriptions.contains(&doc_id) {
-        let err = encode_server_msg(&WsServerMsg::Error { code: 403, message: "not subscribed".into() });
+        let err = encode_server_msg(&WsServerMsg::Error {
+            code: 403,
+            message: "not subscribed".into(),
+        });
         let _ = outbound_tx.send(err).await;
         return;
     }
 
     let author_pubkey = update.public_data.pub_key.clone();
     if let Err(e) = verify_update_signature(&author_pubkey, &update) {
-        let err = encode_server_msg(&WsServerMsg::Error { code: 401, message: format!("invalid signature: {e}") });
+        let err = encode_server_msg(&WsServerMsg::Error {
+            code: 401,
+            message: format!("invalid signature: {e}"),
+        });
         let _ = outbound_tx.send(err).await;
         return;
     }
@@ -293,24 +329,39 @@ async fn handle_update(
     let clock = update.public_data.clock.0;
     let snapshot_id = update.public_data.snapshot_id;
 
-    let seq = match redis_ops::verify_clock_and_assign_seq(&state.redis, &doc_id, &pub_key_hex, clock).await {
-        Ok(s) => {
-            tracing::info!("[Server] seq assigned doc={doc_id} author={pub_key_hex} clock={clock} seq={s}");
-            s
-        }
-        Err(e) => {
-            let err = encode_server_msg(&WsServerMsg::Error { code: 409, message: e.to_string() });
-            let _ = outbound_tx.send(err).await;
-            return;
-        }
-    };
+    let seq =
+        match redis_ops::verify_clock_and_assign_seq(&state.redis, &doc_id, &pub_key_hex, clock)
+            .await
+        {
+            Ok(s) => {
+                tracing::info!(
+                    "[Server] seq assigned doc={doc_id} author={pub_key_hex} clock={clock} seq={s}"
+                );
+                s
+            }
+            Err(e) => {
+                let err = encode_server_msg(&WsServerMsg::Error {
+                    code: 409,
+                    message: e.to_string(),
+                });
+                let _ = outbound_tx.send(err).await;
+                return;
+            }
+        };
 
     let s3_key = crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, seq);
     tracing::info!("[Server→Postgres] insert_update doc={doc_id} seq={seq} clock={clock}");
     if let Err(e) = db::insert_update(
-        &state.db, &doc_id, author_pubkey.as_array(),
-        &snapshot_id, clock as i64, seq as i64, &s3_key,
-    ).await {
+        &state.db,
+        &doc_id,
+        author_pubkey.as_array(),
+        &snapshot_id,
+        clock as i64,
+        seq as i64,
+        &s3_key,
+    )
+    .await
+    {
         // The delta index is how reconnecting clients replay missed updates;
         // a failed insert silently loses durability, so it must be loud.
         tracing::error!("insert_update failed doc={doc_id} seq={seq}: {e}");
@@ -320,7 +371,8 @@ async fn handle_update(
     // (`handle_request_missing`). Serialize before the broadcast moves `update`.
     let update_wire = postcard::to_allocvec(&update).expect("postcard encode Update");
     tracing::info!("[Server→Redis] append_pending_delta doc={doc_id} seq={seq} s3_key={s3_key}");
-    let _ = redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update_wire).await;
+    let _ =
+        redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update_wire).await;
 
     let broadcast = encode_server_msg(&WsServerMsg::Update {
         seq: ambre_protocol::messages::Seq(seq),
@@ -337,11 +389,15 @@ async fn handle_ephemeral(
 ) {
     use base64::Engine;
     let doc_id = eph.public_data.document_id;
-    if !conn.doc_subscriptions.contains(&doc_id) { return; }
+    if !conn.doc_subscriptions.contains(&doc_id) {
+        return;
+    }
 
     let pub_key_hex = eph.public_data.pub_key.to_hex();
     let presence_enc_b64 = base64::engine::general_purpose::URL_SAFE.encode(&eph.ciphertext.0);
-    let _ = redis_ops::doc_presence_update(&state.redis, &doc_id, &pub_key_hex, &presence_enc_b64, 15).await;
+    let _ =
+        redis_ops::doc_presence_update(&state.redis, &doc_id, &pub_key_hex, &presence_enc_b64, 15)
+            .await;
 
     let broadcast = encode_server_msg(&WsServerMsg::Ephemeral(eph));
     let _ = redis_ops::doc_broadcast(&state.redis, &doc_id, &broadcast).await;
@@ -354,12 +410,18 @@ async fn handle_request_missing(
     after_seq: ambre_protocol::messages::Seq,
     outbound_tx: &mpsc::Sender<Vec<u8>>,
 ) {
-    if !conn.doc_subscriptions.contains(&document_id) { return; }
+    if !conn.doc_subscriptions.contains(&document_id) {
+        return;
+    }
 
-    let updates = match db::get_updates_after(&state.db, &document_id, after_seq.0 as i64, 1000).await {
-        Ok(u) => u,
-        Err(e) => { tracing::error!(error = %e, "failed to get updates after seq"); return; }
-    };
+    let updates =
+        match db::get_updates_after(&state.db, &document_id, after_seq.0 as i64, 1000).await {
+            Ok(u) => u,
+            Err(e) => {
+                tracing::error!(error = %e, "failed to get updates after seq");
+                return;
+            }
+        };
 
     // Rehydrate each indexed delta into the full sealed Update the client needs
     // to decrypt and verify. The bytes live in S3 once flushed, or in the Redis
@@ -372,9 +434,15 @@ async fn handle_request_missing(
             Ok(Some(bytes)) => Some(bytes),
             Ok(None) => match redis_ops::get_pending_delta(&state.redis, &document_id, seq).await {
                 Ok(b) => b,
-                Err(e) => { tracing::error!(seq, error = %e, "replay: pending lookup failed"); None }
+                Err(e) => {
+                    tracing::error!(seq, error = %e, "replay: pending lookup failed");
+                    None
+                }
             },
-            Err(e) => { tracing::error!(seq, error = %e, "replay: S3 fetch failed"); None }
+            Err(e) => {
+                tracing::error!(seq, error = %e, "replay: S3 fetch failed");
+                None
+            }
         };
         let Some(wire) = wire else {
             tracing::error!(seq, s3_key = %row.s3_key, "replay: delta not found in S3 or pending");
@@ -389,7 +457,10 @@ async fn handle_request_missing(
         }
     }
 
-    let msg = encode_server_msg(&WsServerMsg::MissingUpdates { document_id, updates: seq_updates });
+    let msg = encode_server_msg(&WsServerMsg::MissingUpdates {
+        document_id,
+        updates: seq_updates,
+    });
     let _ = outbound_tx.send(msg).await;
 }
 
@@ -422,14 +493,21 @@ async fn handle_channel_ephemeral(
     channel_id: ChannelId,
     ephemeral: ambre_protocol::Ephemeral,
 ) {
-    let broadcast = encode_server_msg(&WsServerMsg::ChannelEphemeral { channel_id, ephemeral });
+    let broadcast = encode_server_msg(&WsServerMsg::ChannelEphemeral {
+        channel_id,
+        ephemeral,
+    });
     let _ = redis_ops::chan_broadcast(&state.redis, &channel_id, &broadcast).await;
 }
 
 // -- ACL ----------------------------------------------------------
 
 /// Verifies the caller has a membership row for the document.
-async fn verify_document_access(pool: &sqlx::PgPool, document_id: DocumentId, user_id: UserId) -> Result<(), AppError> {
+async fn verify_document_access(
+    pool: &sqlx::PgPool,
+    document_id: DocumentId,
+    user_id: UserId,
+) -> Result<(), AppError> {
     db::get_document_member(pool, &document_id, &user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -447,8 +525,7 @@ fn verify_update_signature(
 ) -> Result<(), AppError> {
     use ed25519_dalek::{Signature as DalekSig, Verifier, VerifyingKey};
 
-    let public_data_bytes =
-        postcard::to_allocvec(&update.public_data).map_err(AppError::Decode)?;
+    let public_data_bytes = postcard::to_allocvec(&update.public_data).map_err(AppError::Decode)?;
 
     let mut signed_data = Vec::new();
     signed_data.extend_from_slice(&update.nonce.0);
@@ -456,10 +533,8 @@ fn verify_update_signature(
     signed_data.extend_from_slice(&public_data_bytes);
     signed_data.extend_from_slice(&update.commitment_tag.0);
 
-    let vk = VerifyingKey::from_bytes(pubkey.as_array())
-        .map_err(|_| AppError::InvalidSignature)?;
-    let sig = DalekSig::from_slice(&update.signature.0)
-        .map_err(|_| AppError::InvalidSignature)?;
+    let vk = VerifyingKey::from_bytes(pubkey.as_array()).map_err(|_| AppError::InvalidSignature)?;
+    let sig = DalekSig::from_slice(&update.signature.0).map_err(|_| AppError::InvalidSignature)?;
 
     vk.verify(&signed_data, &sig)
         .map_err(|_| AppError::InvalidSignature)?;
@@ -471,11 +546,14 @@ fn verify_update_signature(
 mod postcard_tests {
     use ambre_core::{DocumentId, PublicKey, SnapshotId, UserId};
     use ambre_protocol::messages::{
-        Ciphertext, Clock, CommitmentTag, Counter, Ephemeral, Nonce,
-        Seq, SeqUpdate, Signature, Update,
+        Ciphertext, Clock, CommitmentTag, Counter, Ephemeral, Nonce, Seq, SeqUpdate, Signature,
+        Update,
     };
     use ambre_protocol::public_data::{EphemeralPublicData, UpdatePublicData};
-    use ambre_protocol::ws::{encode_client_msg, decode_client_msg, encode_server_msg, decode_server_msg, WsClientMsg, WsServerMsg};
+    use ambre_protocol::ws::{
+        WsClientMsg, WsServerMsg, decode_client_msg, decode_server_msg, encode_client_msg,
+        encode_server_msg,
+    };
 
     fn make_update() -> Update {
         Update {
@@ -508,7 +586,9 @@ mod postcard_tests {
 
     #[test]
     fn roundtrip_client_subscribe() {
-        let msg = WsClientMsg::Subscribe { document_id: DocumentId::from_bytes([0u8; 16]) };
+        let msg = WsClientMsg::Subscribe {
+            document_id: DocumentId::from_bytes([0u8; 16]),
+        };
         let bytes = encode_client_msg(&msg);
         assert_eq!(bytes[0], 0x01);
         let decoded = decode_client_msg(&bytes).unwrap();
@@ -517,7 +597,9 @@ mod postcard_tests {
 
     #[test]
     fn roundtrip_client_unsubscribe() {
-        let msg = WsClientMsg::Unsubscribe { document_id: DocumentId::from_bytes([1u8; 16]) };
+        let msg = WsClientMsg::Unsubscribe {
+            document_id: DocumentId::from_bytes([1u8; 16]),
+        };
         let decoded = decode_client_msg(&encode_client_msg(&msg)).unwrap();
         assert!(matches!(decoded, WsClientMsg::Unsubscribe { .. }));
     }
@@ -550,14 +632,19 @@ mod postcard_tests {
 
     #[test]
     fn roundtrip_server_subscribed() {
-        let msg = WsServerMsg::Subscribed { document_id: DocumentId::from_bytes([2u8; 16]) };
+        let msg = WsServerMsg::Subscribed {
+            document_id: DocumentId::from_bytes([2u8; 16]),
+        };
         let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
         assert!(matches!(decoded, WsServerMsg::Subscribed { .. }));
     }
 
     #[test]
     fn roundtrip_server_update() {
-        let msg = WsServerMsg::Update { seq: Seq(100), update: make_update() };
+        let msg = WsServerMsg::Update {
+            seq: Seq(100),
+            update: make_update(),
+        };
         let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
         assert!(matches!(decoded, WsServerMsg::Update { seq: _, update: _ }));
     }
@@ -584,7 +671,9 @@ mod postcard_tests {
 
     #[test]
     fn roundtrip_server_snapshot_required() {
-        let msg = WsServerMsg::SnapshotRequired { document_id: DocumentId::from_bytes([4u8; 16]) };
+        let msg = WsServerMsg::SnapshotRequired {
+            document_id: DocumentId::from_bytes([4u8; 16]),
+        };
         let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
         assert!(matches!(decoded, WsServerMsg::SnapshotRequired { .. }));
     }
@@ -611,7 +700,10 @@ mod postcard_tests {
 
     #[test]
     fn roundtrip_server_error() {
-        let msg = WsServerMsg::Error { code: 409, message: "conflict".into() };
+        let msg = WsServerMsg::Error {
+            code: 409,
+            message: "conflict".into(),
+        };
         let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
         match decoded {
             WsServerMsg::Error { code, message } => {
@@ -624,7 +716,9 @@ mod postcard_tests {
 
     #[test]
     fn version_byte_is_01() {
-        let msg = WsClientMsg::Subscribe { document_id: DocumentId::from_bytes([0u8; 16]) };
+        let msg = WsClientMsg::Subscribe {
+            document_id: DocumentId::from_bytes([0u8; 16]),
+        };
         let bytes = encode_client_msg(&msg);
         assert_eq!(bytes[0], 0x01);
     }
@@ -658,10 +752,9 @@ mod ed25519_tests {
     #[test]
     fn valid_signature_is_accepted() {
         let secret_bytes: [u8; 32] = [
-            0xcd, 0x06, 0x85, 0x43, 0x6b, 0xa1, 0xf7, 0x1e,
-            0x32, 0xce, 0x9a, 0x84, 0xbd, 0xc6, 0xfe, 0xa0,
-            0xb6, 0x49, 0x12, 0x1d, 0x8b, 0xf8, 0x43, 0xa2,
-            0xdd, 0xc6, 0x9f, 0x14, 0xf3, 0x5a, 0x3c, 0xb9,
+            0xcd, 0x06, 0x85, 0x43, 0x6b, 0xa1, 0xf7, 0x1e, 0x32, 0xce, 0x9a, 0x84, 0xbd, 0xc6,
+            0xfe, 0xa0, 0xb6, 0x49, 0x12, 0x1d, 0x8b, 0xf8, 0x43, 0xa2, 0xdd, 0xc6, 0x9f, 0x14,
+            0xf3, 0x5a, 0x3c, 0xb9,
         ];
         let signing_key = SigningKey::from_bytes(&secret_bytes);
         let pubkey_bytes: [u8; 32] = signing_key.verifying_key().to_bytes();
@@ -721,10 +814,9 @@ mod ed25519_tests {
     #[test]
     fn tampered_ciphertext_rejects_signature() {
         let secret_bytes: [u8; 32] = [
-            0xab, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde,
-            0xf0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
-            0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
-            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+            0xab, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x11, 0x22, 0x33, 0x44, 0x55,
+            0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x01, 0x02, 0x03,
+            0x04, 0x05, 0x06, 0x07,
         ];
         let signing_key = SigningKey::from_bytes(&secret_bytes);
         let pubkey = PublicKey::from_array(signing_key.verifying_key().to_bytes());

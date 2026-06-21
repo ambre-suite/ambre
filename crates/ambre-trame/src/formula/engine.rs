@@ -133,7 +133,10 @@ impl FormulaEngine {
 
     /// Get the display text for a cell, or `None` if it has no cached result.
     pub fn evaluated_text(&self, cell: CellId) -> Option<String> {
-        self.formula_cache.borrow().get(&cell).map(|v| v.to_display())
+        self.formula_cache
+            .borrow()
+            .get(&cell)
+            .map(|v| v.to_display())
     }
 
     /// Get the evaluated [`CellValue`] for a cell (formula result or parsed
@@ -169,15 +172,25 @@ impl Default for FormulaEngine {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::compile::SheetIndices;
     use super::super::test_index::{index_with, indices_with};
     use super::super::types::SingleSheetCtx;
+    use super::*;
     use crate::model::Uid;
 
     /// Bound cell at grid `(row, col)` on sheet 0.
     fn cell(row: u32, col: u32) -> CellId {
-        CellId::bound(0, Uid { peer: 1, counter: row }, Uid { peer: 2, counter: col })
+        CellId::bound(
+            0,
+            Uid {
+                peer: 1,
+                counter: row,
+            },
+            Uid {
+                peer: 2,
+                counter: col,
+            },
+        )
     }
 
     #[test]
@@ -294,7 +307,12 @@ mod tests {
         let idx = indices_with(10, 10);
         let mut engine = FormulaEngine::new();
 
-        engine.on_cell_changed(cell(0, 0), "=IF(1>0, \"yes\", \"no\")", &idx, &SingleSheetCtx);
+        engine.on_cell_changed(
+            cell(0, 0),
+            "=IF(1>0, \"yes\", \"no\")",
+            &idx,
+            &SingleSheetCtx,
+        );
         engine.compute_all_dirty(&idx);
 
         assert_eq!(engine.evaluated_text(cell(0, 0)).unwrap(), "yes");
@@ -322,6 +340,10 @@ mod tests {
         indices.insert(0, moved);
         engine.mark_all_dirty();
         engine.compute_all_dirty(&indices);
-        assert_eq!(engine.evaluated_text(cell(0, 1)).unwrap(), "10", "ref follows the data, not the position");
+        assert_eq!(
+            engine.evaluated_text(cell(0, 1)).unwrap(),
+            "10",
+            "ref follows the data, not the position"
+        );
     }
 }

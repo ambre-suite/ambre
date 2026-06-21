@@ -35,11 +35,11 @@
 //! instead of whole-token TTL). Migration path: upgrade Valkey cluster,
 //! then replace `SETEX` with `HEXPIRE` in `redis_ops::presence_*` functions.
 
-use aws_sdk_s3::primitives::ByteStream;
-use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::Client as S3Client;
-use rustis::commands::{GenericCommands, ListCommands};
+use aws_sdk_s3::presigning::PresigningConfig;
+use aws_sdk_s3::primitives::ByteStream;
 use rustis::commands::ScanOptions;
+use rustis::commands::{GenericCommands, ListCommands};
 use std::time::Duration;
 #[allow(clippy::single_component_path_imports)]
 use tracing;
@@ -138,7 +138,10 @@ pub async fn fetch_object(
             // Use `as_service_error` (non-consuming, returns Option) rather than
             // `into_service_error`, which PANICS on a non-service error such as a
             // network/dispatch failure.
-            if e.as_service_error().map(|se| se.is_no_such_key()).unwrap_or(false) {
+            if e.as_service_error()
+                .map(|se| se.is_no_such_key())
+                .unwrap_or(false)
+            {
                 Ok(None)
             } else {
                 Err(AppError::S3(format!("get_object {key}: {e}")))
@@ -158,7 +161,9 @@ pub async fn global_s3_flusher(state: crate::state::AppState) -> ! {
 
         let mut cursor = 0u64;
         loop {
-            let opts = ScanOptions::default().match_pattern("doc:*:pending").count(100);
+            let opts = ScanOptions::default()
+                .match_pattern("doc:*:pending")
+                .count(100);
             let result: Result<(u64, Vec<String>), _> = state.redis.scan(cursor, opts).await;
 
             let (next_cursor, keys) = match result {

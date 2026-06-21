@@ -26,7 +26,9 @@ impl TrameState {
         // back to empty, has no stored value and renders blank.
         if let Some((rl, cl)) = self.index.resolve(row as usize, col as usize) {
             let map = self.doc.get_map(cells_map_name(&self.active_sheet));
-            if let Some(LoroValue::String(s)) = map.get(&cell_key(rl, cl)).map(|v| v.get_deep_value()) {
+            if let Some(LoroValue::String(s)) =
+                map.get(&cell_key(rl, cl)).map(|v| v.get_deep_value())
+            {
                 return s.to_string();
             }
         }
@@ -38,7 +40,9 @@ impl TrameState {
     pub(super) fn cell_raw(&self, row: u32, col: u32) -> String {
         if let Some((rl, cl)) = self.index.resolve(row as usize, col as usize) {
             let map = self.doc.get_map(cells_map_name(&self.active_sheet));
-            if let Some(LoroValue::String(s)) = map.get(&cell_key(rl, cl)).map(|v| v.get_deep_value()) {
+            if let Some(LoroValue::String(s)) =
+                map.get(&cell_key(rl, cl)).map(|v| v.get_deep_value())
+            {
                 return s.to_string();
             }
         }
@@ -65,7 +69,10 @@ impl TrameState {
                 .cloned()
         };
         match parse_formula(body) {
-            Ok(ast) => format!("={}", render::render(&render::canonicalize(ast, &name_to_id))),
+            Ok(ast) => format!(
+                "={}",
+                render::render(&render::canonicalize(ast, &name_to_id))
+            ),
             Err(_) => text.to_string(),
         }
     }
@@ -85,7 +92,10 @@ impl TrameState {
         }
         let id_to_name = |id: &str| self.sheet_id_to_name.get(id).cloned();
         match parse_formula(body) {
-            Ok(ast) => format!("={}", render::render(&render::to_display_form(ast, &id_to_name))),
+            Ok(ast) => format!(
+                "={}",
+                render::render(&render::to_display_form(ast, &id_to_name))
+            ),
             Err(_) => stored.to_string(),
         }
     }
@@ -99,7 +109,10 @@ impl TrameState {
     /// `(document PeerID, per-session counter)` is unique across peers, so
     /// concurrent materialize/insert ops never collide.
     pub(super) fn mint_uid(&mut self) -> Uid {
-        let uid = Uid { peer: self.doc.peer_id(), counter: self.uid_counter };
+        let uid = Uid {
+            peer: self.doc.peer_id(),
+            counter: self.uid_counter,
+        };
         self.uid_counter += 1;
         uid
     }
@@ -120,14 +133,18 @@ impl TrameState {
         let mut grew = false;
         while self.index.row_len() <= row {
             let uid = self.mint_uid();
-            let rows = self.doc.get_movable_list(rows_list_name(&self.active_sheet));
+            let rows = self
+                .doc
+                .get_movable_list(rows_list_name(&self.active_sheet));
             rows.push(uid.to_key_part().as_str()).ok()?;
             self.index.push_row(uid);
             grew = true;
         }
         while self.index.col_len() <= col {
             let uid = self.mint_uid();
-            let cols = self.doc.get_movable_list(cols_list_name(&self.active_sheet));
+            let cols = self
+                .doc
+                .get_movable_list(cols_list_name(&self.active_sheet));
             cols.push(uid.to_key_part().as_str()).ok()?;
             self.index.push_col(uid);
             grew = true;
@@ -150,8 +167,12 @@ impl TrameState {
     /// Called after any import, where peers' (or our own persisted) structural
     /// ops may have added rows/columns the cache does not yet know about.
     pub(super) fn rebuild_index(&mut self) {
-        let rows = self.doc.get_movable_list(rows_list_name(&self.active_sheet));
-        let cols = self.doc.get_movable_list(cols_list_name(&self.active_sheet));
+        let rows = self
+            .doc
+            .get_movable_list(rows_list_name(&self.active_sheet));
+        let cols = self
+            .doc
+            .get_movable_list(cols_list_name(&self.active_sheet));
         self.index = SheetIndex::build(&rows, &cols);
     }
 
@@ -162,7 +183,11 @@ impl TrameState {
     pub(super) fn engine_indices(&self) -> SheetIndices {
         let mut m = SheetIndices::new();
         for (idx, id) in self.sheets_by_idx.iter().enumerate() {
-            let index = if idx == 0 { self.index.clone() } else { self.build_sheet_index(id) };
+            let index = if idx == 0 {
+                self.index.clone()
+            } else {
+                self.build_sheet_index(id)
+            };
             m.insert(idx as u16, index);
         }
         m
@@ -180,7 +205,11 @@ impl TrameState {
             Some(u) => AxisId::Bound(u),
             None => AxisId::Virtual(col),
         };
-        CellId { sheet: 0, row: r, col: c }
+        CellId {
+            sheet: 0,
+            row: r,
+            col: c,
+        }
     }
 
     /// Apply a single cell write to the CRDT and the formula engine, without
@@ -200,7 +229,10 @@ impl TrameState {
         if text.is_empty() {
             // Clearing: only touch the CRDT if the cell was materialized.
             if let Some((rl, cl)) = self.index.resolve(row as usize, col as usize) {
-                let _ = self.doc.get_map(cells_map_name(&self.active_sheet)).delete(&cell_key(rl, cl));
+                let _ = self
+                    .doc
+                    .get_map(cells_map_name(&self.active_sheet))
+                    .delete(&cell_key(rl, cl));
             }
             let cell = self.active_cell_id(row, col);
             let indices = self.engine_indices();
@@ -218,7 +250,10 @@ impl TrameState {
             // Persist the canonical (`sheet_id`-bound) form so cross-sheet
             // references survive rename/reorder (§2.D).
             let stored = self.canonicalize_input(text);
-            let _ = self.doc.get_map(cells_map_name(&self.active_sheet)).insert(&cell_key(rl, cl), stored.as_str());
+            let _ = self
+                .doc
+                .get_map(cells_map_name(&self.active_sheet))
+                .insert(&cell_key(rl, cl), stored.as_str());
             let cell = CellId::bound(0, rl, cl);
             let indices = self.engine_indices();
             let ctx = TrameCtx {
@@ -246,7 +281,10 @@ impl TrameState {
         // feeds) renders its computed result immediately, without waiting for the
         // network echo. The optimistic UI-side update covers plain literals;
         // formulas need this round-trip.
-        TrameOutcome { display: vec![TrameEvent::DataReset], update, ephemeral: None }
+        TrameOutcome {
+            display: vec![TrameEvent::DataReset],
+            update,
+            ephemeral: None,
+        }
     }
-
 }

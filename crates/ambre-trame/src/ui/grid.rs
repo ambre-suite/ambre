@@ -139,7 +139,15 @@ impl CellEditor {
     /// Open an editor on `(row, col)` seeded with `text`, caret at the end.
     pub fn new(row: u32, col: u32, text: String) -> Self {
         let caret = text.len();
-        Self { row, col, buffer: text, caret, preview: String::new(), mark: None, pending: None }
+        Self {
+            row,
+            col,
+            buffer: text,
+            caret,
+            preview: String::new(),
+            mark: None,
+            pending: None,
+        }
     }
 
     /// The selected byte range `start..end` (start <= end), or `None` when the
@@ -167,7 +175,9 @@ impl CellEditor {
     /// Delete the selected range, collapsing the caret to its start. Returns
     /// `true` when something was removed.
     pub fn delete_selection(&mut self) -> bool {
-        let Some((s, e)) = self.selection() else { return false };
+        let Some((s, e)) = self.selection() else {
+            return false;
+        };
         self.buffer.drain(s..e);
         self.caret = s;
         self.mark = None;
@@ -315,7 +325,10 @@ impl CellEditor {
         let off = self.clamp_boundary(off);
         let is_word = |c: char| c.is_alphanumeric() || c == '_';
         // Anchor on the char to the right of the hit, falling back to the left.
-        let here = self.buffer[off..].chars().next().or_else(|| self.buffer[..off].chars().next_back());
+        let here = self.buffer[off..]
+            .chars()
+            .next()
+            .or_else(|| self.buffer[..off].chars().next_back());
         let Some(here) = here else {
             self.place_caret(off);
             return;
@@ -344,7 +357,11 @@ impl CellEditor {
         if self.buffer.is_char_boundary(off) {
             off
         } else {
-            self.buffer[..off].char_indices().next_back().map(|(i, _)| i).unwrap_or(0)
+            self.buffer[..off]
+                .char_indices()
+                .next_back()
+                .map(|(i, _)| i)
+                .unwrap_or(0)
         }
     }
 
@@ -403,7 +420,11 @@ impl Default for Selection {
 impl Selection {
     /// A selection collapsed to a single cell (`anchor == active`, no extras).
     pub fn single(row: u32, col: u32) -> Self {
-        Self { anchor: (row, col), active: (row, col), extra: Vec::new() }
+        Self {
+            anchor: (row, col),
+            active: (row, col),
+            extra: Vec::new(),
+        }
     }
 
     /// Move the active corner of the live rectangle, keeping the anchor (range
@@ -444,7 +465,10 @@ impl Selection {
     /// Iterator over every selected rectangle: the committed disjoint ones
     /// followed by the live rectangle.
     pub fn rects(&self) -> impl Iterator<Item = CellRect> + '_ {
-        self.extra.iter().copied().chain(std::iter::once(self.live_rect()))
+        self.extra
+            .iter()
+            .copied()
+            .chain(std::iter::once(self.live_rect()))
     }
 
     /// True when the selection covers more than a single cell -- either a
@@ -460,7 +484,9 @@ impl Selection {
     pub fn selected_cells(&self) -> Vec<(u32, u32)> {
         let mut cells: Vec<(u32, u32)> = self
             .rects()
-            .flat_map(|(r1, c1, r2, c2)| (r1..=r2).flat_map(move |r| (c1..=c2).map(move |c| (r, c))))
+            .flat_map(|(r1, c1, r2, c2)| {
+                (r1..=r2).flat_map(move |r| (c1..=c2).map(move |c| (r, c)))
+            })
             .collect();
         cells.sort_unstable();
         cells.dedup();
@@ -476,14 +502,20 @@ impl Selection {
     /// True if `col` is within the live rectangle's column span.
     #[allow(dead_code)]
     pub fn contains_col(&self, col: u32) -> bool {
-        let (c1, c2) = (self.anchor.1.min(self.active.1), self.anchor.1.max(self.active.1));
+        let (c1, c2) = (
+            self.anchor.1.min(self.active.1),
+            self.anchor.1.max(self.active.1),
+        );
         col >= c1 && col <= c2
     }
 
     /// True if `row` is within the live rectangle's row span.
     #[allow(dead_code)]
     pub fn contains_row(&self, row: u32) -> bool {
-        let (r1, r2) = (self.anchor.0.min(self.active.0), self.anchor.0.max(self.active.0));
+        let (r1, r2) = (
+            self.anchor.0.min(self.active.0),
+            self.anchor.0.max(self.active.0),
+        );
         row >= r1 && row <= r2
     }
 }
@@ -732,7 +764,8 @@ impl TrameUiState {
     /// return it unchanged. The single chokepoint that keeps the active cell on a
     /// master rather than a covered sub-cell.
     fn snap_to_master(&self, row: u32, col: u32) -> (u32, u32) {
-        self.merge_master_at(row, col).map_or((row, col), |(mr, mc, _, _)| (mr, mc))
+        self.merge_master_at(row, col)
+            .map_or((row, col), |(mr, mc, _, _)| (mr, mc))
     }
 
     /// Extend the live rectangle's active corner to `(row, col)`, keeping the
@@ -811,7 +844,11 @@ impl TrameUiState {
         // row: snap to the nearest visible one so the caret stays on shown data.
         let new_row = {
             let fwd = self.next_visible_row(new_row);
-            if self.is_row_hidden(fwd) { self.prev_visible_row(new_row) } else { fwd }
+            if self.is_row_hidden(fwd) {
+                self.prev_visible_row(new_row)
+            } else {
+                fwd
+            }
         };
 
         if new_row == self.active_row() && new_col == self.active_col() {
@@ -894,10 +931,8 @@ impl TrameUiState {
     /// cell (wheel / touchpad scroll). Clamps the top-left within the grid.
     /// Returns `true` if the scroll position actually changed.
     pub fn scroll_by(&mut self, dr: i32, dc: i32) -> bool {
-        let new_top =
-            (self.top_row as i64 + dr as i64).clamp(0, (TOTAL_ROWS - 1) as i64) as u32;
-        let new_left =
-            (self.left_col as i64 + dc as i64).clamp(0, (TOTAL_COLS - 1) as i64) as u32;
+        let new_top = (self.top_row as i64 + dr as i64).clamp(0, (TOTAL_ROWS - 1) as i64) as u32;
+        let new_left = (self.left_col as i64 + dc as i64).clamp(0, (TOTAL_COLS - 1) as i64) as u32;
         // Keep the top edge on a visible row so the collapsed-row slot math stays
         // consistent (`top_row` is slot 0).
         let new_top = self.next_visible_row(new_top);
@@ -935,8 +970,8 @@ impl TrameUiState {
         let row_end = (self.top_row + self.viewport_rows + row_pad + hidden_in_window)
             .min(TOTAL_ROWS.saturating_sub(1));
         let col_start = self.left_col.saturating_sub(PADDING_COLS);
-        let col_end = (self.left_col + self.viewport_cols + PADDING_COLS)
-            .min(TOTAL_COLS.saturating_sub(1));
+        let col_end =
+            (self.left_col + self.viewport_cols + PADDING_COLS).min(TOTAL_COLS.saturating_sub(1));
 
         // Evict cells that are no longer in the requested window.
         self.cell_cache.retain(|&(row, col), _| {
@@ -948,14 +983,22 @@ impl TrameUiState {
         let version = self.next_version;
         self.next_version += 1;
 
-        TrameCommand::ScrollViewport { version, row_start, row_end, col_start, col_end }
+        TrameCommand::ScrollViewport {
+            version,
+            row_start,
+            row_end,
+            col_start,
+            col_end,
+        }
     }
 
     /// Merge a `ViewportData` batch into the local cache.
     ///
     /// Older responses (stale version) are silently discarded.
     pub fn on_viewport_data(&mut self, update: TrameEvent) {
-        let TrameEvent::ViewportData { version, cells, .. } = update else { return };
+        let TrameEvent::ViewportData { version, cells, .. } = update else {
+            return;
+        };
         if version < self.accepted_version {
             return;
         }
@@ -1127,7 +1170,9 @@ impl TrameUiState {
         let mut cells = Vec::new();
         for row in r1..=r2 {
             for col in c1..=c2 {
-                let Some(data) = self.cell_cache.get(&(row, col)) else { continue };
+                let Some(data) = self.cell_cache.get(&(row, col)) else {
+                    continue;
+                };
                 if data.raw.is_empty() {
                     continue;
                 }
@@ -1153,7 +1198,13 @@ impl TrameUiState {
                 });
             }
         }
-        ambre_bus::ClipboardPayload { src_row: r1, src_col: c1, rows: r2 - r1 + 1, cols: c2 - c1 + 1, cells }
+        ambre_bus::ClipboardPayload {
+            src_row: r1,
+            src_col: c1,
+            rows: r2 - r1 + 1,
+            cols: c2 - c1 + 1,
+            cells,
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -1497,15 +1548,28 @@ mod tests {
             version: 0,
             row_start: 0,
             col_start: 0,
-            cells: vec![cell(0, false), cell(1, false), cell(2, true), cell(3, true), cell(4, false)],
+            cells: vec![
+                cell(0, false),
+                cell(1, false),
+                cell(2, true),
+                cell(3, true),
+                cell(4, false),
+            ],
         });
 
-        assert_eq!(state.hidden_rows, vec![2, 3], "filtered rows tracked, sorted");
+        assert_eq!(
+            state.hidden_rows,
+            vec![2, 3],
+            "filtered rows tracked, sorted"
+        );
         assert!(state.is_row_hidden(2) && state.is_row_hidden(3));
 
         // Row 4 draws on the 3rd visible slot (rows 0,1 above it; 2,3 collapsed).
         assert_eq!(state.visible_offset(4), 2);
-        assert!(state.cell_pixel_rect(2, 0).is_none(), "a hidden row is not drawn");
+        assert!(
+            state.cell_pixel_rect(2, 0).is_none(),
+            "a hidden row is not drawn"
+        );
         let r1 = state.cell_pixel_rect(1, 0).expect("row 1 visible");
         let r4 = state.cell_pixel_rect(4, 0).expect("row 4 visible");
         // Row 4 sits exactly one slot below row 1 (the two hidden rows took none).
@@ -1581,7 +1645,9 @@ mod tests {
         // No change -> None.
         assert!(state.move_to(0, 0, false).is_none());
         // Clamped to the last valid index.
-        state.move_to(crate::TOTAL_ROWS + 10, crate::TOTAL_COLS + 10, false).expect("moved");
+        state
+            .move_to(crate::TOTAL_ROWS + 10, crate::TOTAL_COLS + 10, false)
+            .expect("moved");
         assert_eq!(
             (state.active_row(), state.active_col()),
             (crate::TOTAL_ROWS - 1, crate::TOTAL_COLS - 1),
@@ -1596,12 +1662,42 @@ mod tests {
             row_start: 0,
             col_start: 0,
             cells: vec![
-                DisplayCell { row: 2, col: 5, text: "x".into(), raw: "x".into(),
-                    bold: false, italic: false, is_merged: false, merge_span: None, is_filtered: false, ..Default::default() },
-                DisplayCell { row: 2, col: 1, text: "y".into(), raw: "y".into(),
-                    bold: false, italic: false, is_merged: false, merge_span: None, is_filtered: false, ..Default::default() },
-                DisplayCell { row: 4, col: 3, text: "".into(), raw: "".into(),
-                    bold: false, italic: false, is_merged: false, merge_span: None, is_filtered: false, ..Default::default() },
+                DisplayCell {
+                    row: 2,
+                    col: 5,
+                    text: "x".into(),
+                    raw: "x".into(),
+                    bold: false,
+                    italic: false,
+                    is_merged: false,
+                    merge_span: None,
+                    is_filtered: false,
+                    ..Default::default()
+                },
+                DisplayCell {
+                    row: 2,
+                    col: 1,
+                    text: "y".into(),
+                    raw: "y".into(),
+                    bold: false,
+                    italic: false,
+                    is_merged: false,
+                    merge_span: None,
+                    is_filtered: false,
+                    ..Default::default()
+                },
+                DisplayCell {
+                    row: 4,
+                    col: 3,
+                    text: "".into(),
+                    raw: "".into(),
+                    bold: false,
+                    italic: false,
+                    is_merged: false,
+                    merge_span: None,
+                    is_filtered: false,
+                    ..Default::default()
+                },
             ],
         });
         // Rightmost non-empty col in row 2 is col 5; row 4's only cell is empty.
@@ -1671,7 +1767,10 @@ mod tests {
 
         state.set_formula_error(0, 0, "#REF!".to_owned());
         assert!(!state.dirty_cells.contains(&(0, 0)), "error clears dirty");
-        assert_eq!(state.formula_errors.get(&(0, 0)).map(String::as_str), Some("#REF!"));
+        assert_eq!(
+            state.formula_errors.get(&(0, 0)).map(String::as_str),
+            Some("#REF!")
+        );
 
         state.on_viewport_data(TrameEvent::ViewportData {
             version: 1,
@@ -1690,8 +1789,14 @@ mod tests {
                 ..Default::default()
             }],
         });
-        assert!(!state.formula_errors.contains_key(&(0, 0)), "valid value clears error");
-        assert!(!state.dirty_cells.contains(&(0, 0)), "valid value clears dirty");
+        assert!(
+            !state.formula_errors.contains_key(&(0, 0)),
+            "valid value clears error"
+        );
+        assert!(
+            !state.dirty_cells.contains(&(0, 0)),
+            "valid value clears dirty"
+        );
     }
 
     /// Insertion advances the caret; backspace and caret motion respect UTF-8
@@ -1769,7 +1874,11 @@ mod tests {
         assert!(state.add_button_at(2.0, y));
 
         state.on_sheet_list(
-            vec![("s0".into(), "A".into()), ("s1".into(), "B".into()), ("s2".into(), "C".into())],
+            vec![
+                ("s0".into(), "A".into()),
+                ("s1".into(), "B".into()),
+                ("s2".into(), "C".into()),
+            ],
             "s1".into(),
         );
         // "+" now follows the third tab; the slot before it is tab 2, not "+".
@@ -1796,7 +1905,11 @@ mod tests {
     /// clicks outside its box (left/right of the width, above/below the items).
     #[test]
     fn tab_menu_item_hit_testing() {
-        let menu = TabMenu { sheet_id: "s0".into(), x: 100.0, y: 200.0 };
+        let menu = TabMenu {
+            sheet_id: "s0".into(),
+            x: 100.0,
+            y: 200.0,
+        };
         // First row -> Rename, second -> Delete.
         assert_eq!(menu.item_at(110.0, 200.0 + 1.0), Some(TabMenuItem::Rename));
         assert_eq!(
@@ -1805,9 +1918,15 @@ mod tests {
         );
         // Outside the width / above / below the two items.
         assert_eq!(menu.item_at(99.0, 210.0), None);
-        assert_eq!(menu.item_at(100.0 + super::TAB_MENU_WIDTH + 1.0, 210.0), None);
+        assert_eq!(
+            menu.item_at(100.0 + super::TAB_MENU_WIDTH + 1.0, 210.0),
+            None
+        );
         assert_eq!(menu.item_at(110.0, 199.0), None);
-        assert_eq!(menu.item_at(110.0, 200.0 + 2.0 * super::TAB_MENU_ITEM_HEIGHT + 1.0), None);
+        assert_eq!(
+            menu.item_at(110.0, 200.0 + 2.0 * super::TAB_MENU_ITEM_HEIGHT + 1.0),
+            None
+        );
     }
 
     /// The column-header strip starts at the top of the canvas and the cell area

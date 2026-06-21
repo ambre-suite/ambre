@@ -134,7 +134,11 @@ fn styled_segment<S: DrawSurface>(
     let (width, period) = border_stroke(style);
     if style == Bs::Double {
         // Two 1px lines offset by 1px on each side of the edge.
-        let (dx, dy) = if (y1 - y0).abs() < f64::EPSILON { (0.0, 1.0) } else { (1.0, 0.0) };
+        let (dx, dy) = if (y1 - y0).abs() < f64::EPSILON {
+            (0.0, 1.0)
+        } else {
+            (1.0, 0.0)
+        };
         surface.stroke_line(x0 - dx, y0 - dy, x1 - dx, y1 - dy, color, 1.0);
         surface.stroke_line(x0 + dx, y0 + dy, x1 + dx, y1 + dy, color, 1.0);
         return;
@@ -154,7 +158,14 @@ fn styled_segment<S: DrawSurface>(
     while t < len {
         let s = t;
         let e = (t + on).min(len);
-        surface.stroke_line(x0 + ux * s, y0 + uy * s, x0 + ux * e, y0 + uy * e, color, width);
+        surface.stroke_line(
+            x0 + ux * s,
+            y0 + uy * s,
+            x0 + ux * e,
+            y0 + uy * e,
+            color,
+            width,
+        );
         t += period;
     }
 }
@@ -193,4 +204,3 @@ where
         }
     }
 }
-

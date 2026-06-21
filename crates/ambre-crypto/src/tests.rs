@@ -3,7 +3,7 @@
 use proptest::prelude::*;
 
 use crate::keys::{DocumentKey, MasterSeed};
-use crate::{ecdh, envelope, hash, passphrase, CryptoError};
+use crate::{CryptoError, ecdh, envelope, hash, passphrase};
 
 fn fixed_doc_key() -> DocumentKey {
     DocumentKey::from_array([0x11; 32])
@@ -61,7 +61,10 @@ fn commitment_tag_wrong_aad_rejected() {
         forged_aad,
         &sealed.commitment_tag,
     );
-    let forged = envelope::Sealed { signature, ..sealed };
+    let forged = envelope::Sealed {
+        signature,
+        ..sealed
+    };
     assert_eq!(
         envelope::open(&forged, forged_aad, &doc_key, &author),
         Err(CryptoError::CommitmentMismatch)

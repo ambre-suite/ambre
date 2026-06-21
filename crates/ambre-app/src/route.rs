@@ -32,7 +32,10 @@ impl Route {
     /// The routed document, if this is a document route.
     pub fn doc(&self) -> Option<(DocType, DocumentId)> {
         match self {
-            Route::Doc { doc_type, document_id } => Some((*doc_type, *document_id)),
+            Route::Doc {
+                doc_type,
+                document_id,
+            } => Some((*doc_type, *document_id)),
             Route::Landing => None,
         }
     }

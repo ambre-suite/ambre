@@ -11,12 +11,12 @@
 
 use std::io::Read;
 
-use ambre_crypto::{envelope, CryptoError, DocumentKey, Sealed};
+use ambre_crypto::{CryptoError, DocumentKey, Sealed, envelope};
 use ambre_protocol::messages::{Ciphertext, CommitmentTag, Nonce, Signature};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
 use ambre_protocol::{Ephemeral, Snapshot, Update};
 use ed25519_dalek::SigningKey;
-use ruzstd::encoding::{compress_to_vec, CompressionLevel};
+use ruzstd::encoding::{CompressionLevel, compress_to_vec};
 use thiserror::Error;
 
 /// Payloads at or below this size skip compression: zstd framing would add more
@@ -50,7 +50,10 @@ pub enum PipelineError {
 /// version byte and the (possibly compressed) body.
 fn compress(data: &[u8]) -> (u8, Vec<u8>) {
     if data.len() > COMPRESS_THRESHOLD {
-        (CompressionVersion::Zstd as u8, compress_to_vec(data, CompressionLevel::Fastest))
+        (
+            CompressionVersion::Zstd as u8,
+            compress_to_vec(data, CompressionLevel::Fastest),
+        )
     } else {
         (CompressionVersion::Raw as u8, data.to_vec())
     }
@@ -61,10 +64,12 @@ fn decompress(version: u8, body: &[u8]) -> Result<Vec<u8>, PipelineError> {
     match version {
         v if v == CompressionVersion::Raw as u8 => Ok(body.to_vec()),
         v if v == CompressionVersion::Zstd as u8 => {
-            let mut decoder =
-                ruzstd::decoding::StreamingDecoder::new(body).map_err(|_| PipelineError::Decompress)?;
+            let mut decoder = ruzstd::decoding::StreamingDecoder::new(body)
+                .map_err(|_| PipelineError::Decompress)?;
             let mut out = Vec::new();
-            decoder.read_to_end(&mut out).map_err(|_| PipelineError::Decompress)?;
+            decoder
+                .read_to_end(&mut out)
+                .map_err(|_| PipelineError::Decompress)?;
             Ok(out)
         }
         other => Err(PipelineError::UnknownVersion(other)),
@@ -73,7 +78,12 @@ fn decompress(version: u8, body: &[u8]) -> Result<Vec<u8>, PipelineError> {
 
 // ── Generic seal / open over the (version || body) plaintext ──────────────────
 
-fn seal_payload(payload: &[u8], aad: &[u8], doc_key: &DocumentKey, signing_key: &SigningKey) -> Sealed {
+fn seal_payload(
+    payload: &[u8],
+    aad: &[u8],
+    doc_key: &DocumentKey,
+    signing_key: &SigningKey,
+) -> Sealed {
     let (version, body) = compress(payload);
     let mut plaintext = Vec::with_capacity(1 + body.len());
     plaintext.push(version);
@@ -137,15 +147,31 @@ pub fn seal_update(
         payload.len(),
         ciphertext.0.len(),
     );
-    Ok(Update { ciphertext, nonce, public_data, commitment_tag, signature })
+    Ok(Update {
+        ciphertext,
+        nonce,
+        public_data,
+        commitment_tag,
+        signature,
+    })
 }
 
 /// Verifies, decrypts and decompresses an [`Update`] back to its CRDT payload.
 #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 pub fn open_update(update: &Update, doc_key: &DocumentKey) -> Result<Vec<u8>, PipelineError> {
     let aad = aad_of(&update.public_data)?;
-    let sealed = sealed_from(&update.ciphertext, &update.nonce, &update.commitment_tag, &update.signature);
-    let plaintext = open_payload(&sealed, &aad, doc_key, update.public_data.pub_key.as_array())?;
+    let sealed = sealed_from(
+        &update.ciphertext,
+        &update.nonce,
+        &update.commitment_tag,
+        &update.signature,
+    );
+    let plaintext = open_payload(
+        &sealed,
+        &aad,
+        doc_key,
+        update.public_data.pub_key.as_array(),
+    )?;
     tracing::debug!(
         "[Pipeline] open_update: {} bytes ciphertext → {} bytes plaintext",
         update.ciphertext.0.len(),
@@ -166,7 +192,13 @@ pub fn seal_snapshot(
     let aad = aad_of(&public_data)?;
     let sealed = seal_payload(payload, &aad, doc_key, signing_key);
     let (ciphertext, nonce, commitment_tag, signature) = message_parts(sealed);
-    Ok(Snapshot { ciphertext, nonce, public_data, commitment_tag, signature })
+    Ok(Snapshot {
+        ciphertext,
+        nonce,
+        public_data,
+        commitment_tag,
+        signature,
+    })
 }
 
 /// Verifies, decrypts and decompresses a [`Snapshot`] back to its CRDT payload.
@@ -175,9 +207,18 @@ pub fn seal_snapshot(
 #[allow(dead_code)]
 pub fn open_snapshot(snapshot: &Snapshot, doc_key: &DocumentKey) -> Result<Vec<u8>, PipelineError> {
     let aad = aad_of(&snapshot.public_data)?;
-    let sealed =
-        sealed_from(&snapshot.ciphertext, &snapshot.nonce, &snapshot.commitment_tag, &snapshot.signature);
-    open_payload(&sealed, &aad, doc_key, snapshot.public_data.pub_key.as_array())
+    let sealed = sealed_from(
+        &snapshot.ciphertext,
+        &snapshot.nonce,
+        &snapshot.commitment_tag,
+        &snapshot.signature,
+    );
+    open_payload(
+        &sealed,
+        &aad,
+        doc_key,
+        snapshot.public_data.pub_key.as_array(),
+    )
 }
 
 // ── Ephemeral ─────────────────────────────────────────────────────────────────
@@ -192,12 +233,21 @@ pub fn seal_ephemeral(
     let aad = aad_of(&public_data)?;
     let sealed = seal_payload(payload, &aad, doc_key, signing_key);
     let (ciphertext, nonce, commitment_tag, signature) = message_parts(sealed);
-    Ok(Ephemeral { ciphertext, nonce, public_data, commitment_tag, signature })
+    Ok(Ephemeral {
+        ciphertext,
+        nonce,
+        public_data,
+        commitment_tag,
+        signature,
+    })
 }
 
 /// Verifies, decrypts and decompresses an [`Ephemeral`] back to its payload.
 #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
-pub fn open_ephemeral(ephemeral: &Ephemeral, doc_key: &DocumentKey) -> Result<Vec<u8>, PipelineError> {
+pub fn open_ephemeral(
+    ephemeral: &Ephemeral,
+    doc_key: &DocumentKey,
+) -> Result<Vec<u8>, PipelineError> {
     let aad = aad_of(&ephemeral.public_data)?;
     let sealed = sealed_from(
         &ephemeral.ciphertext,
@@ -205,7 +255,12 @@ pub fn open_ephemeral(ephemeral: &Ephemeral, doc_key: &DocumentKey) -> Result<Ve
         &ephemeral.commitment_tag,
         &ephemeral.signature,
     );
-    open_payload(&sealed, &aad, doc_key, ephemeral.public_data.pub_key.as_array())
+    open_payload(
+        &sealed,
+        &aad,
+        doc_key,
+        ephemeral.public_data.pub_key.as_array(),
+    )
 }
 
 #[cfg(test)]

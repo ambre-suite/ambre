@@ -177,7 +177,11 @@ pub fn command_to_app(id: CommandId) -> Option<AppCommand> {
 /// no-op for any event that is not a Trame format-state notification; the
 /// launcher calls this for every event it relays, naming no Trame variant.
 pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
-    if let UiEvent::Viewport { event: AppEvent::Trame(te), .. } = ev {
+    if let UiEvent::Viewport {
+        event: AppEvent::Trame(te),
+        ..
+    } = ev
+    {
         match te {
             // Loro `UndoManager` stack availability -> the Undo/Redo affordances'
             // enabled state. The Logic thread is the single source of truth.
@@ -229,7 +233,13 @@ pub fn init_command_states(store: &CommandStates) {
 /// or the completion of a shared sort/filter. A no-op for every other event; the
 /// launcher calls this for each event it relays, naming no Trame variant itself.
 pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
-    let UiEvent::Viewport { event: AppEvent::Trame(te), .. } = ev else { return };
+    let UiEvent::Viewport {
+        event: AppEvent::Trame(te),
+        ..
+    } = ev
+    else {
+        return;
+    };
     match te {
         // Rejections / validation failures: no CRDT mutation occurred, the user
         // needs to know why their action did nothing.
@@ -242,14 +252,20 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
         TrameEvent::Error { message } => toasts.warning(message.clone()),
         // A converged concurrent edit masked a covered cell on an active merge.
         // Purely informational: the value reappears on unmerge.
-        TrameEvent::MergeConflictDetected { covered_row, covered_col, .. } => {
+        TrameEvent::MergeConflictDetected {
+            covered_row,
+            covered_col,
+            ..
+        } => {
             toasts.info(format!(
                 "A merge now covers a non-empty cell ({covered_row}, {covered_col}); its value is hidden until unmerge"
             ));
         }
         // Shared sort/filter completion: confirm the action took effect (the data
         // refresh rides on the accompanying `DataReset`).
-        TrameEvent::FilterApplied { hidden_row_count, .. } => {
+        TrameEvent::FilterApplied {
+            hidden_row_count, ..
+        } => {
             toasts.info(format!("Filter applied ({hidden_row_count} rows hidden)"));
         }
         TrameEvent::FilterCleared => toasts.info("Filter cleared"),
@@ -283,7 +299,9 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
             toasts.warning(format!("Edit blocked: {description}"));
         }
         TrameEvent::ProtectionViolationWarning { description, .. } => {
-            toasts.warning(format!("Protection violated by a collaborator: {description}"));
+            toasts.warning(format!(
+                "Protection violated by a collaborator: {description}"
+            ));
         }
         // No toast: state-only events (cell data / toolbar style / sheet list /
         // undo-redo / find matches / filter values) or wholesale refreshes whose

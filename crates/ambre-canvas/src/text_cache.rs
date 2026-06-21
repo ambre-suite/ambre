@@ -22,18 +22,18 @@ use rustc_hash::FxHashMap;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct CacheKey {
-    text:           Box<str>,
+    text: Box<str>,
     font_size_x100: u32,
-    max_width_x10:  u32,
-    align:          u8, // 0=Start, 1=Center, 2=End
-    bold:           bool,
-    italic:         bool,
+    max_width_x10: u32,
+    align: u8, // 0=Start, 1=Center, 2=End
+    bold: bool,
+    italic: bool,
     /// Allow emergency (within-word) breaking so a long unbreakable token wraps
     /// onto multiple lines instead of overflowing (cell "wrap text", sec.4.A).
-    break_word:     bool,
+    break_word: bool,
     /// Font family name (`None` = the grid default). Part of the key so each
     /// family of the same string is cached separately.
-    font:           Option<Box<str>>,
+    font: Option<Box<str>>,
 }
 
 // -----------------------------------------------------------------------------
@@ -41,27 +41,27 @@ struct CacheKey {
 // -----------------------------------------------------------------------------
 
 pub struct TextCache {
-    layouts:   FxHashMap<CacheKey, Layout<Brush>>,
+    layouts: FxHashMap<CacheKey, Layout<Brush>>,
     layout_cx: LayoutContext<Brush>,
-    scale:     f32,
+    scale: f32,
     // Per-frame diagnostics.
-    pub frame_hits:   usize,
+    pub frame_hits: usize,
     pub frame_misses: usize,
 }
 
 impl TextCache {
     pub fn new(scale: f32) -> Self {
         Self {
-            layouts:      FxHashMap::default(),
-            layout_cx:    LayoutContext::new(),
+            layouts: FxHashMap::default(),
+            layout_cx: LayoutContext::new(),
             scale,
-            frame_hits:   0,
+            frame_hits: 0,
             frame_misses: 0,
         }
     }
 
     pub fn reset_frame_stats(&mut self) {
-        self.frame_hits   = 0;
+        self.frame_hits = 0;
         self.frame_misses = 0;
     }
 
@@ -71,7 +71,11 @@ impl TextCache {
 
     pub fn hit_rate(&self) -> f32 {
         let total = (self.frame_hits + self.frame_misses) as f32;
-        if total == 0.0 { 0.0 } else { self.frame_hits as f32 / total }
+        if total == 0.0 {
+            0.0
+        } else {
+            self.frame_hits as f32 / total
+        }
     }
 
     /// Evict all entries when the cache exceeds `max_entries`.
@@ -89,15 +93,17 @@ impl TextCache {
     #[allow(clippy::too_many_arguments)]
     pub fn get_or_build(
         &mut self,
-        font_cx:   &mut FontContext,
-        text:      &str,
+        font_cx: &mut FontContext,
+        text: &str,
         font_size: f32,
         max_width: f32,
-        align:     Alignment,
-        bold:      bool,
-        italic:    bool,
+        align: Alignment,
+        bold: bool,
+        italic: bool,
     ) -> &Layout<Brush> {
-        self.get_or_build_font(font_cx, text, font_size, max_width, align, bold, italic, None, false)
+        self.get_or_build_font(
+            font_cx, text, font_size, max_width, align, bold, italic, None, false,
+        )
     }
 
     /// Like [`get_or_build`](Self::get_or_build) but selecting a font `family`
@@ -107,30 +113,30 @@ impl TextCache {
     #[allow(clippy::too_many_arguments)]
     pub fn get_or_build_font(
         &mut self,
-        font_cx:   &mut FontContext,
-        text:      &str,
+        font_cx: &mut FontContext,
+        text: &str,
         font_size: f32,
         max_width: f32,
-        align:     Alignment,
-        bold:      bool,
-        italic:    bool,
-        family:    Option<&str>,
+        align: Alignment,
+        bold: bool,
+        italic: bool,
+        family: Option<&str>,
         break_word: bool,
     ) -> &Layout<Brush> {
         let align_u8 = match align {
-            Alignment::Center           => 1,
+            Alignment::Center => 1,
             Alignment::End | Alignment::Right => 2,
-            _                           => 0,
+            _ => 0,
         };
         let key = CacheKey {
-            text:           text.into(),
+            text: text.into(),
             font_size_x100: (font_size * 100.0) as u32,
-            max_width_x10:  (max_width * 10.0) as u32,
-            align:          align_u8,
+            max_width_x10: (max_width * 10.0) as u32,
+            align: align_u8,
             bold,
             italic,
             break_word,
-            font:           family.map(Box::from),
+            font: family.map(Box::from),
         };
 
         use std::collections::hash_map::Entry;
@@ -143,8 +149,17 @@ impl TextCache {
                 self.frame_misses += 1;
                 let family = e.key().font.clone();
                 let layout = Self::build_layout(
-                    &mut self.layout_cx, font_cx, &e.key().text,
-                    font_size, max_width, align, bold, italic, family.as_deref(), break_word, self.scale,
+                    &mut self.layout_cx,
+                    font_cx,
+                    &e.key().text,
+                    font_size,
+                    max_width,
+                    align,
+                    bold,
+                    italic,
+                    family.as_deref(),
+                    break_word,
+                    self.scale,
                 );
                 e.insert(layout)
             }
@@ -154,16 +169,16 @@ impl TextCache {
     #[allow(clippy::too_many_arguments)]
     fn build_layout(
         layout_cx: &mut LayoutContext<Brush>,
-        font_cx:   &mut FontContext,
-        text:      &str,
+        font_cx: &mut FontContext,
+        text: &str,
         font_size: f32,
         max_width: f32,
-        align:     Alignment,
-        bold:      bool,
-        italic:    bool,
-        family:    Option<&str>,
+        align: Alignment,
+        bold: bool,
+        italic: bool,
+        family: Option<&str>,
         break_word: bool,
-        scale:     f32,
+        scale: f32,
     ) -> Layout<Brush> {
         let mut builder = layout_cx.ranged_builder(font_cx, text, scale, true);
         // Map the toolbar's family choices to the actually-registered faces

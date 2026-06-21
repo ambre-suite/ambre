@@ -66,7 +66,10 @@ impl Default for Toasts {
 
 impl Toasts {
     pub fn new() -> Self {
-        Self { items: RwSignal::new(Vec::new()), next_id: RwSignal::new(0) }
+        Self {
+            items: RwSignal::new(Vec::new()),
+            next_id: RwSignal::new(0),
+        }
     }
 
     pub fn info(self, message: impl Into<String>) {
@@ -86,10 +89,19 @@ impl Toasts {
     pub fn push(self, kind: ToastKind, message: impl Into<String>) {
         let id = self.next_id.get_untracked();
         self.next_id.set(id + 1);
-        self.items.update(|v| v.push(Toast { id, message: message.into(), kind }));
+        self.items.update(|v| {
+            v.push(Toast {
+                id,
+                message: message.into(),
+                kind,
+            })
+        });
 
         let items = self.items;
-        set_timeout(move || items.update(|v| v.retain(|t| t.id != id)), kind.dwell());
+        set_timeout(
+            move || items.update(|v| v.retain(|t| t.id != id)),
+            kind.dwell(),
+        );
     }
 
     fn dismiss(self, id: u64) {

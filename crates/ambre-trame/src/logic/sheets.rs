@@ -34,8 +34,11 @@ impl TrameState {
             .map(|(idx, id)| (id.clone(), idx as u16))
             .collect();
         for (sheet_id, idx) in sheets {
-            let Some(index) = indices.get(&idx) else { continue };
-            let LoroValue::Map(cells) = self.doc.get_map(cells_map_name(&sheet_id)).get_value() else {
+            let Some(index) = indices.get(&idx) else {
+                continue;
+            };
+            let LoroValue::Map(cells) = self.doc.get_map(cells_map_name(&sheet_id)).get_value()
+            else {
                 continue;
             };
             for (key, value) in cells.iter() {
@@ -152,7 +155,11 @@ impl TrameState {
         self.doc.commit();
         self.reseed_engine();
         let update = self.flush_delta();
-        TrameOutcome { display: vec![TrameEvent::DataReset], update, ephemeral: None }
+        TrameOutcome {
+            display: vec![TrameEvent::DataReset],
+            update,
+            ephemeral: None,
+        }
     }
 
     /// Remove a named range and reseed. A no-op if the name is undefined.
@@ -165,7 +172,11 @@ impl TrameState {
         self.doc.commit();
         self.reseed_engine();
         let update = self.flush_delta();
-        TrameOutcome { display: vec![TrameEvent::DataReset], update, ephemeral: None }
+        TrameOutcome {
+            display: vec![TrameEvent::DataReset],
+            update,
+            ephemeral: None,
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -196,8 +207,11 @@ impl TrameState {
             _ => Vec::new(),
         };
         let in_list: HashSet<&String> = listed.iter().collect();
-        let mut unlisted: Vec<String> =
-            self.all_sheet_ids().into_iter().filter(|id| !in_list.contains(id)).collect();
+        let mut unlisted: Vec<String> = self
+            .all_sheet_ids()
+            .into_iter()
+            .filter(|id| !in_list.contains(id))
+            .collect();
         // Default sheet first, the rest by id for a stable, peer-independent order.
         unlisted.sort_by(|a, b| {
             let a_def = a == DEFAULT_SHEET;
@@ -227,7 +241,10 @@ impl TrameState {
                 (id, name)
             })
             .collect();
-        TrameEvent::SheetList { sheets, active: self.active_sheet.clone() }
+        TrameEvent::SheetList {
+            sheets,
+            active: self.active_sheet.clone(),
+        }
     }
 
     /// Rebuild every active-sheet derived cache (index, merges, formula engine,
@@ -270,7 +287,11 @@ impl TrameState {
         // Refresh the name -> index map so the new sheet is addressable.
         self.rebuild_sheet_maps();
         let update = self.flush_delta();
-        TrameOutcome { display: vec![self.sheet_list_event()], update, ephemeral: None }
+        TrameOutcome {
+            display: vec![self.sheet_list_event()],
+            update,
+            ephemeral: None,
+        }
     }
 
     /// Rename a sheet's display label (LWW on the name). The stable id is
@@ -328,7 +349,11 @@ impl TrameState {
         let _ = list.mov(from, to);
         self.doc.commit();
         let update = self.flush_delta();
-        TrameOutcome { display: vec![self.sheet_list_event()], update, ephemeral: None }
+        TrameOutcome {
+            display: vec![self.sheet_list_event()],
+            update,
+            ephemeral: None,
+        }
     }
 
     /// Delete a sheet and its per-sheet containers (§2.D). Rejected locally if it
@@ -377,7 +402,11 @@ impl TrameState {
         display.push(self.sheet_list_event());
         display.push(TrameEvent::DataReset);
         let update = self.flush_delta();
-        TrameOutcome { display, update, ephemeral: None }
+        TrameOutcome {
+            display,
+            update,
+            ephemeral: None,
+        }
     }
 
     /// Drop every cell, formatting and merge entry of `sheet_id` and clear its
@@ -408,5 +437,4 @@ impl TrameState {
             let _ = self.doc.get_movable_list(name).clear();
         }
     }
-
 }

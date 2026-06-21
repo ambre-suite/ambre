@@ -133,16 +133,12 @@ pub enum RestCommand {
         passphrase: Vec<u8>,
     },
     /// First-time account setup. → `AccountCreated { recovery_words }`.
-    SetupAccount {
-        passphrase: Vec<u8>,
-    },
+    SetupAccount { passphrase: Vec<u8> },
     /// Dev-only: authenticate as `username` (created on the fly server-side),
     /// deriving keys deterministically from the username. Triggered by the
     /// `?user=<name>` URL param to test multi-user behaviour on one machine.
     /// Rejected unless the server runs with `DEV_MODE`. → `SessionReady`.
-    DevLogin {
-        username: String,
-    },
+    DevLogin { username: String },
     /// Change the account passphrase. → `PassphraseChanged`.
     ChangePassphrase {
         current_passphrase: Vec<u8>,
@@ -167,9 +163,7 @@ pub enum RestCommand {
         name: String,
     },
     /// Delete a document. The Logic thread drops its in-memory state (hook). → `DocumentDeleted`.
-    DeleteDocument {
-        document_id: DocumentId,
-    },
+    DeleteDocument { document_id: DocumentId },
     /// Rename a document. → `DocumentRenamed`.
     RenameDocument {
         document_id: DocumentId,
@@ -189,9 +183,7 @@ pub enum RestCommand {
         user_id: UserId,
     },
     /// List current members. → `DocumentMembers`.
-    ListDocumentMembers {
-        document_id: DocumentId,
-    },
+    ListDocumentMembers { document_id: DocumentId },
     /// Update a member's role. → `MemberRoleUpdated`.
     UpdateDocumentMemberRole {
         document_id: DocumentId,
@@ -201,9 +193,7 @@ pub enum RestCommand {
 
     // ── Users ────────────────────────────────────────────────────────────────
     /// Search users by email prefix. → `UserSearchResults`.
-    SearchUsers {
-        query: String,
-    },
+    SearchUsers { query: String },
 
     // ── Media ────────────────────────────────────────────────────────────────
     /// Upload a media file. → `MediaUploaded`.
@@ -223,13 +213,9 @@ pub enum RestCommand {
     /// List channels. → `ChannelList`.
     ListChannels,
     /// Create a channel. → `ChannelCreated`.
-    CreateChannel {
-        name: String,
-    },
+    CreateChannel { name: String },
     /// Delete a channel. → `ChannelDeleted`.
-    DeleteChannel {
-        channel_id: ChannelId,
-    },
+    DeleteChannel { channel_id: ChannelId },
     /// Invite a user to a channel. → `ChannelInviteSent`.
     InviteToChannel {
         channel_id: ChannelId,
@@ -242,9 +228,7 @@ pub enum RestCommand {
         user_id: UserId,
     },
     /// List channel members. → `ChannelMembers`.
-    ListChannelMembers {
-        channel_id: ChannelId,
-    },
+    ListChannelMembers { channel_id: ChannelId },
     /// Update a channel member's role. → `ChannelMemberRoleUpdated`.
     UpdateChannelMemberRole {
         channel_id: ChannelId,
@@ -261,21 +245,13 @@ pub enum RestCommand {
 
     // ── Meetings (Rendez-Vous) ───────────────────────────────────────────────
     /// Create an ephemeral meeting room. → `MeetingCreated`.
-    CreateMeeting {
-        name: String,
-    },
+    CreateMeeting { name: String },
     /// Join a meeting. → `MeetingJoined`.
-    JoinMeeting {
-        meeting_id: MeetingId,
-    },
+    JoinMeeting { meeting_id: MeetingId },
     /// Leave a meeting. → `MeetingLeft`.
-    LeaveMeeting {
-        meeting_id: MeetingId,
-    },
+    LeaveMeeting { meeting_id: MeetingId },
     /// End a meeting for all participants. → `MeetingEnded`.
-    EndMeeting {
-        meeting_id: MeetingId,
-    },
+    EndMeeting { meeting_id: MeetingId },
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

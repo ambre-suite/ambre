@@ -48,14 +48,14 @@ pub mod theme;
 pub mod request_registry;
 
 // -- Convenience re-exports --------------------------------------------------
-pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurface};
-pub use text_cache::TextCache;
-pub use view::{FrameStats, InputEvent, PerfSnapshot, RepaintPlan};
+pub use anchor::{Anchor, AnchorPublisher};
 pub use fatal::{fatal_message, signal_fatal};
 #[cfg(target_arch = "wasm32")]
 pub use host::{GpuState, RafControl, bootstrap_gpu, start_raf_loop};
-pub use text_input::TextInput;
-pub use anchor::{Anchor, AnchorPublisher};
 pub use perf::PerfPublisher;
-pub use theme::{Palette, Theme, ThemeControl};
+pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurface};
 pub use request_registry::{RequestRegistry, RequestTag};
+pub use text_cache::TextCache;
+pub use text_input::TextInput;
+pub use theme::{Palette, Theme, ThemeControl};
+pub use view::{FrameStats, InputEvent, PerfSnapshot, RepaintPlan};
