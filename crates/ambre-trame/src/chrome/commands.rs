@@ -172,7 +172,30 @@ pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
                 store.set_enabled(UNDO, *can_undo);
                 store.set_enabled(REDO, *can_redo);
             }
-            _ => {}
+            // Every other variant carries no command-toggle state. Listed
+            // explicitly so a future variant is a compile error here, not a
+            // silent drop.
+            TrameEvent::ViewportData { .. }
+            | TrameEvent::StyleApplied { .. }
+            | TrameEvent::DataReset
+            | TrameEvent::MergeRejected { .. }
+            | TrameEvent::MergeConflictDetected { .. }
+            | TrameEvent::SheetList { .. }
+            | TrameEvent::Error { .. }
+            | TrameEvent::SortComplete
+            | TrameEvent::FilterApplied { .. }
+            | TrameEvent::ColumnValues { .. }
+            | TrameEvent::SelectionStats { .. }
+            | TrameEvent::FilterCleared
+            | TrameEvent::FindResult { .. }
+            | TrameEvent::ReplaceDone { .. }
+            | TrameEvent::PasteRejected { .. }
+            | TrameEvent::FilterViewSaved { .. }
+            | TrameEvent::CondFormatsUpdated { .. }
+            | TrameEvent::ValidationError { .. }
+            | TrameEvent::ValidationWarning { .. }
+            | TrameEvent::ProtectionDenied { .. }
+            | TrameEvent::ProtectionViolationWarning { .. } => {}
         }
     }
 }
@@ -216,11 +239,43 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
         }
         TrameEvent::FilterCleared => toasts.info("Filter cleared"),
         TrameEvent::SortComplete => toasts.info("Range sorted"),
+        // A Replace All finished; confirm the rewritten-cell count (the data
+        // refresh rides on the accompanying DataReset). `ui.rs` documents this
+        // toast as the surface for ReplaceDone.
+        TrameEvent::ReplaceDone { replaced } => {
+            toasts.info(format!("{replaced} cells replaced"));
+        }
         // A paste blocked by a protected range (Post-MVP); no CRDT mutation.
         TrameEvent::PasteRejected { reason } => {
             toasts.warning(format!("Paste rejected: {reason}"));
         }
-        _ => {}
+        // Validation warning (§5): the edit was applied despite failing a Warn
+        // rule -- non-blocking, unlike ValidationError above.
+        TrameEvent::ValidationWarning { message, .. } => {
+            toasts.warning(format!("Validation warning: {message}"));
+        }
+        // Range protection (§6, Post-MVP): a local edit was blocked, or a remote
+        // delta violated a protection. Both inform the user; neither rolls back.
+        TrameEvent::ProtectionDenied { description, .. } => {
+            toasts.warning(format!("Edit blocked: {description}"));
+        }
+        TrameEvent::ProtectionViolationWarning { description, .. } => {
+            toasts.warning(format!("Protection violated by a collaborator: {description}"));
+        }
+        // No toast: state-only events (cell data / toolbar style / sheet list /
+        // undo-redo / find matches / filter values) or wholesale refreshes whose
+        // user feedback rides elsewhere. Listed explicitly so a future variant is
+        // a compile error here, not a silent drop.
+        TrameEvent::ViewportData { .. }
+        | TrameEvent::StyleApplied { .. }
+        | TrameEvent::DataReset
+        | TrameEvent::UndoState { .. }
+        | TrameEvent::SheetList { .. }
+        | TrameEvent::ColumnValues { .. }
+        | TrameEvent::SelectionStats { .. }
+        | TrameEvent::FindResult { .. }
+        | TrameEvent::FilterViewSaved { .. }
+        | TrameEvent::CondFormatsUpdated { .. } => {}
     }
 }
 
