@@ -24,9 +24,15 @@ fn update_roundtrip() {
 
     assert_eq!(update.ciphertext, decoded.ciphertext);
     assert_eq!(update.nonce, decoded.nonce);
-    assert_eq!(update.public_data.document_id, decoded.public_data.document_id);
+    assert_eq!(
+        update.public_data.document_id,
+        decoded.public_data.document_id
+    );
     assert_eq!(update.public_data.pub_key, decoded.public_data.pub_key);
-    assert_eq!(update.public_data.snapshot_id, decoded.public_data.snapshot_id);
+    assert_eq!(
+        update.public_data.snapshot_id,
+        decoded.public_data.snapshot_id
+    );
     assert_eq!(update.public_data.clock, decoded.public_data.clock);
     assert_eq!(update.commitment_tag, decoded.commitment_tag);
     assert_eq!(update.signature, decoded.signature);
@@ -56,11 +62,23 @@ fn snapshot_roundtrip() {
 
     assert_eq!(snapshot.ciphertext, decoded.ciphertext);
     assert_eq!(snapshot.nonce, decoded.nonce);
-    assert_eq!(snapshot.public_data.document_id, decoded.public_data.document_id);
+    assert_eq!(
+        snapshot.public_data.document_id,
+        decoded.public_data.document_id
+    );
     assert_eq!(snapshot.public_data.pub_key, decoded.public_data.pub_key);
-    assert_eq!(snapshot.public_data.snapshot_id, decoded.public_data.snapshot_id);
-    assert_eq!(snapshot.public_data.parent_snapshot_proof, decoded.public_data.parent_snapshot_proof);
-    assert_eq!(snapshot.public_data.parent_snapshot_update_clocks, decoded.public_data.parent_snapshot_update_clocks);
+    assert_eq!(
+        snapshot.public_data.snapshot_id,
+        decoded.public_data.snapshot_id
+    );
+    assert_eq!(
+        snapshot.public_data.parent_snapshot_proof,
+        decoded.public_data.parent_snapshot_proof
+    );
+    assert_eq!(
+        snapshot.public_data.parent_snapshot_update_clocks,
+        decoded.public_data.parent_snapshot_update_clocks
+    );
     assert_eq!(snapshot.commitment_tag, decoded.commitment_tag);
     assert_eq!(snapshot.signature, decoded.signature);
 }
@@ -84,7 +102,10 @@ fn ephemeral_roundtrip() {
 
     assert_eq!(ephemeral.ciphertext, decoded.ciphertext);
     assert_eq!(ephemeral.nonce, decoded.nonce);
-    assert_eq!(ephemeral.public_data.document_id, decoded.public_data.document_id);
+    assert_eq!(
+        ephemeral.public_data.document_id,
+        decoded.public_data.document_id
+    );
     assert_eq!(ephemeral.public_data.pub_key, decoded.public_data.pub_key);
     assert_eq!(ephemeral.public_data.counter, decoded.public_data.counter);
     assert_eq!(ephemeral.commitment_tag, decoded.commitment_tag);
@@ -116,11 +137,17 @@ fn ws_messages_roundtrip() {
         _ => panic!("wrong variant"),
     }
 
-    let server_msg = WsServerMsg::Update { seq: Seq(100), update };
+    let server_msg = WsServerMsg::Update {
+        seq: Seq(100),
+        update,
+    };
     let bytes = postcard::to_allocvec(&server_msg).unwrap();
     let decoded: WsServerMsg = postcard::from_bytes(&bytes).unwrap();
     match decoded {
-        WsServerMsg::Update { seq, update: decoded_update } => {
+        WsServerMsg::Update {
+            seq,
+            update: decoded_update,
+        } => {
             assert_eq!(seq, Seq(100));
             assert_eq!(decoded_update.ciphertext, Ciphertext(vec![1]));
         }
@@ -137,7 +164,10 @@ fn signaling_messages_roundtrip() {
     let bytes = postcard::to_allocvec(&client_msg).unwrap();
     let decoded: SignalingClientMsg = postcard::from_bytes(&bytes).unwrap();
     match decoded {
-        SignalingClientMsg::Offer { target_user_id: _, sdp } => {
+        SignalingClientMsg::Offer {
+            target_user_id: _,
+            sdp,
+        } => {
             assert_eq!(sdp, "test sdp");
         }
         _ => panic!("wrong variant"),
@@ -156,7 +186,7 @@ fn signaling_messages_roundtrip() {
 
 #[test]
 fn version_check() {
-    use version::{check_version, CURRENT_VERSION};
+    use version::{CURRENT_VERSION, check_version};
     assert!(check_version(CURRENT_VERSION).is_ok());
     let other_version = ambre_core::version::Version::new(2).unwrap();
     assert!(check_version(other_version).is_err());

@@ -150,7 +150,11 @@ impl TrameState {
         } else {
             let raw = &sources[k];
             if raw.starts_with('=') {
-                shift_formula(raw, row as i64 - src_row as i64, col as i64 - src_col as i64)
+                shift_formula(
+                    raw,
+                    row as i64 - src_row as i64,
+                    col as i64 - src_col as i64,
+                )
             } else {
                 raw.clone()
             }
@@ -161,7 +165,11 @@ impl TrameState {
         let cell = ClipboardCell {
             bold: self.bold.contains(&(src_row, src_col)),
             italic: self.italic.contains(&(src_row, src_col)),
-            style: self.styles.get(&(src_row, src_col)).cloned().unwrap_or_default(),
+            style: self
+                .styles
+                .get(&(src_row, src_col))
+                .cloned()
+                .unwrap_or_default(),
             ..Default::default()
         };
         self.apply_pasted_style(row, col, &cell);
@@ -171,7 +179,12 @@ impl TrameState {
 /// Normalize a [`GridRange`] (corners in any order) to `(r1, c1, r2, c2)` with
 /// `start <= end`.
 fn normalize(g: GridRange) -> (u32, u32, u32, u32) {
-    (g.row.min(g.row_end), g.col.min(g.col_end), g.row.max(g.row_end), g.col.max(g.col_end))
+    (
+        g.row.min(g.row_end),
+        g.col.min(g.col_end),
+        g.row.max(g.row_end),
+        g.col.max(g.col_end),
+    )
 }
 
 /// Decide whether a fill line extrapolates a numeric arithmetic series, and with
@@ -189,7 +202,10 @@ fn series_params(mode: FillMode, sources: &[String]) -> Option<(f64, f64)> {
     }
     // Every source cell must be a plain numeric literal (a formula or text breaks
     // the series and the line falls back to copy/reindex).
-    let nums: Vec<f64> = sources.iter().map(|s| parse_num(s)).collect::<Option<_>>()?;
+    let nums: Vec<f64> = sources
+        .iter()
+        .map(|s| parse_num(s))
+        .collect::<Option<_>>()?;
     match nums.as_slice() {
         [] => None,
         [only] => (mode == FillMode::Series).then_some((*only, 1.0)),

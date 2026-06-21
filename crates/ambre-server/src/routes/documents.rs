@@ -10,10 +10,16 @@ use crate::redis_ops;
 use crate::state::AppState;
 
 fn parse_doc_id(s: &str) -> Result<ambre_core::DocumentId, AppError> {
-    ambre_core::Uuid::parse_str(s).map(ambre_core::DocumentId::from_uuid).map_err(|_| AppError::NotFound { resource: "document" })
+    ambre_core::Uuid::parse_str(s)
+        .map(ambre_core::DocumentId::from_uuid)
+        .map_err(|_| AppError::NotFound {
+            resource: "document",
+        })
 }
 fn parse_user_id(s: &str) -> Result<ambre_core::UserId, AppError> {
-    ambre_core::Uuid::parse_str(s).map(ambre_core::UserId::from_uuid).map_err(|_| AppError::NotFound { resource: "user" })
+    ambre_core::Uuid::parse_str(s)
+        .map(ambre_core::UserId::from_uuid)
+        .map_err(|_| AppError::NotFound { resource: "user" })
 }
 
 // -- Setup Account -------------------------------------------------
@@ -34,21 +40,50 @@ pub struct SetupAccountRequest {
 /// Response after successful account setup. Carries the freshly minted token
 /// pair (kept in client memory) and the newly assigned user ID.
 #[derive(serde::Serialize)]
-pub struct SetupAccountResponse { pub user_id: String, pub access_token: String, pub refresh_token: String, pub access_expires_in: u64 }
+pub struct SetupAccountResponse {
+    pub user_id: String,
+    pub access_token: String,
+    pub refresh_token: String,
+    pub access_expires_in: u64,
+}
 
 pub async fn setup_account(
     State(state): State<Arc<AppState>>,
     Json(req): Json<SetupAccountRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
-    let mk_enc = base64::engine::general_purpose::URL_SAFE.decode(&req.master_key_enc).map_err(|e| AppError::Conflict { detail: e.to_string() })?;
-    let mk_salt = base64::engine::general_purpose::URL_SAFE.decode(&req.master_key_salt).map_err(|e| AppError::Conflict { detail: e.to_string() })?;
-    let spk = hex::decode(&req.signing_pubkey).map_err(|e| AppError::Conflict { detail: e.to_string() })?;
-    let epk = hex::decode(&req.exchange_pubkey).map_err(|e| AppError::Conflict { detail: e.to_string() })?;
+    let mk_enc = base64::engine::general_purpose::URL_SAFE
+        .decode(&req.master_key_enc)
+        .map_err(|e| AppError::Conflict {
+            detail: e.to_string(),
+        })?;
+    let mk_salt = base64::engine::general_purpose::URL_SAFE
+        .decode(&req.master_key_salt)
+        .map_err(|e| AppError::Conflict {
+            detail: e.to_string(),
+        })?;
+    let spk = hex::decode(&req.signing_pubkey).map_err(|e| AppError::Conflict {
+        detail: e.to_string(),
+    })?;
+    let epk = hex::decode(&req.exchange_pubkey).map_err(|e| AppError::Conflict {
+        detail: e.to_string(),
+    })?;
 
-    let user = db::create_user(&state.db, "temp@ambre.app", "User", &mk_enc, &mk_salt, &spk, &epk).await?;
+    let user = db::create_user(
+        &state.db,
+        "temp@ambre.app",
+        "User",
+        &mk_enc,
+        &mk_salt,
+        &spk,
+        &epk,
+    )
+    .await?;
     let user_id = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
-    let signing_pubkey = ambre_core::PublicKey::from_slice(&spk).map_err(|e| AppError::Conflict { detail: e.to_string() })?;
+    let signing_pubkey =
+        ambre_core::PublicKey::from_slice(&spk).map_err(|e| AppError::Conflict {
+            detail: e.to_string(),
+        })?;
 
     let tokens = auth::issue_session(&state, user_id, signing_pubkey).await?;
     tracing::debug!(user_id = %user_id, provider = "setup", "login");
@@ -65,16 +100,26 @@ pub async fn setup_account(
 
 /// Authenticated user profile returned by GET /auth/me.
 #[derive(serde::Serialize)]
-pub struct MeResponse { pub user_id: String, pub email: String, pub display_name: String }
+pub struct MeResponse {
+    pub user_id: String,
+    pub email: String,
+    pub display_name: String,
+}
 
 pub async fn me(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
-    let u = db::get_user(&state.db, &s.user_id).await?.ok_or(AppError::NotFound { resource: "user" })?;
+    let u = db::get_user(&state.db, &s.user_id)
+        .await?
+        .ok_or(AppError::NotFound { resource: "user" })?;
     let uid = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*u.id.as_bytes()));
-    Ok(axum::Json(MeResponse { user_id: uid.to_string(), email: u.email, display_name: u.display_name }))
+    Ok(axum::Json(MeResponse {
+        user_id: uid.to_string(),
+        email: u.email,
+        display_name: u.display_name,
+    }))
 }
 
 // -- Logout --------------------------------------------------------
@@ -82,7 +127,10 @@ pub async fn me(
 /// Request body for logout: the refresh token to revoke. The access token
 /// stays valid until its short `exp`; revoking the refresh prevents renewal.
 #[derive(serde::Deserialize)]
-pub struct LogoutRequest { #[serde(default)] pub refresh_token: Option<String> }
+pub struct LogoutRequest {
+    #[serde(default)]
+    pub refresh_token: Option<String>,
+}
 
 pub async fn logout(
     State(state): State<Arc<AppState>>,
@@ -102,10 +150,20 @@ pub async fn logout(
 /// Contains the encrypted name, the caller's role, and their encrypted
 /// copy of the document key.
 #[derive(serde::Serialize)]
-pub struct DocumentSummaryJson { pub id: String, pub owner_id: String, pub doc_type: String, pub name_enc: Option<String>, pub role: String, pub doc_key_enc: String, pub updated_at: String }
+pub struct DocumentSummaryJson {
+    pub id: String,
+    pub owner_id: String,
+    pub doc_type: String,
+    pub name_enc: Option<String>,
+    pub role: String,
+    pub doc_key_enc: String,
+    pub updated_at: String,
+}
 /// Response wrapper for the document listing.
 #[derive(serde::Serialize)]
-pub struct DocumentListResponse { pub documents: Vec<DocumentSummaryJson> }
+pub struct DocumentListResponse {
+    pub documents: Vec<DocumentSummaryJson>,
+}
 
 pub async fn list_documents(
     State(state): State<Arc<AppState>>,
@@ -114,12 +172,20 @@ pub async fn list_documents(
     use base64::Engine;
     let s = auth;
     let docs = db::list_documents_for_user(&state.db, &s.user_id).await?;
-    let json: Vec<_> = docs.into_iter().map(|d| DocumentSummaryJson {
-        id: d.id.to_string(), owner_id: d.owner_id.to_string(), doc_type: d.doc_type,
-        name_enc: d.name_enc.map(|n| base64::engine::general_purpose::URL_SAFE.encode(&n)),
-        role: d.role, doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&d.doc_key_enc),
-        updated_at: d.updated_at.to_rfc3339(),
-    }).collect();
+    let json: Vec<_> = docs
+        .into_iter()
+        .map(|d| DocumentSummaryJson {
+            id: d.id.to_string(),
+            owner_id: d.owner_id.to_string(),
+            doc_type: d.doc_type,
+            name_enc: d
+                .name_enc
+                .map(|n| base64::engine::general_purpose::URL_SAFE.encode(&n)),
+            role: d.role,
+            doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&d.doc_key_enc),
+            updated_at: d.updated_at.to_rfc3339(),
+        })
+        .collect();
     Ok(axum::Json(DocumentListResponse { documents: json }))
 }
 
@@ -139,7 +205,10 @@ pub struct CreateDocumentRequest {
     pub document_id: Option<String>,
 }
 #[derive(serde::Serialize)]
-pub struct CreateDocumentResponse { pub document_id: String, pub doc_type: String }
+pub struct CreateDocumentResponse {
+    pub document_id: String,
+    pub doc_type: String,
+}
 
 pub async fn create_document(
     State(state): State<Arc<AppState>>,
@@ -148,29 +217,75 @@ pub async fn create_document(
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
     let s = auth;
-    if !["prose","trame","toile","murmure"].contains(&req.doc_type.as_str()) { return Err(AppError::Conflict{detail:"invalid doc_type".into()}); }
+    if !["prose", "trame", "toile", "murmure"].contains(&req.doc_type.as_str()) {
+        return Err(AppError::Conflict {
+            detail: "invalid doc_type".into(),
+        });
+    }
 
-    let name_enc = req.name_enc.map(|n| base64::engine::general_purpose::URL_SAFE.decode(&n).map_err(|e| AppError::Conflict{detail:e.to_string()})).transpose()?;
+    let name_enc = req
+        .name_enc
+        .map(|n| {
+            base64::engine::general_purpose::URL_SAFE
+                .decode(&n)
+                .map_err(|e| AppError::Conflict {
+                    detail: e.to_string(),
+                })
+        })
+        .transpose()?;
     let client_id = req.document_id.as_deref().map(parse_doc_id).transpose()?;
-    let (doc, created) = db::create_document(&state.db, &s.user_id, &req.doc_type, name_enc.as_deref(), client_id.as_ref()).await?;
-    let doc_id = ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(*doc.id.as_bytes()));
+    let (doc, created) = db::create_document(
+        &state.db,
+        &s.user_id,
+        &req.doc_type,
+        name_enc.as_deref(),
+        client_id.as_ref(),
+    )
+    .await?;
+    let doc_id =
+        ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(*doc.id.as_bytes()));
     // Only the call that actually created the row (or an idempotent retry by the
     // same owner) registers the owner membership. A foreign caller hitting an
     // existing id never gains ownership.
-    let owner_uuid = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*doc.owner_id.as_bytes()));
+    let owner_uuid =
+        ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*doc.owner_id.as_bytes()));
     if created || owner_uuid == s.user_id {
-        let doc_key_enc = base64::engine::general_purpose::URL_SAFE.decode(&req.doc_key_enc).map_err(|e| AppError::Conflict{detail:e.to_string()})?;
-        db::add_document_member(&state.db, &doc_id, &s.user_id, "owner", &doc_key_enc, &s.user_id).await?;
+        let doc_key_enc = base64::engine::general_purpose::URL_SAFE
+            .decode(&req.doc_key_enc)
+            .map_err(|e| AppError::Conflict {
+                detail: e.to_string(),
+            })?;
+        db::add_document_member(
+            &state.db,
+            &doc_id,
+            &s.user_id,
+            "owner",
+            &doc_key_enc,
+            &s.user_id,
+        )
+        .await?;
     }
     tracing::info!(document_id = %doc_id, owner_id = %s.user_id, doc_type = %req.doc_type, created, "document create");
-    Ok(axum::Json(CreateDocumentResponse { document_id: doc_id.to_string(), doc_type: req.doc_type }))
+    Ok(axum::Json(CreateDocumentResponse {
+        document_id: doc_id.to_string(),
+        doc_type: req.doc_type,
+    }))
 }
 
 // -- Get Document --------------------------------------------------
 
 /// Full document details including the calling user's membership info.
 #[derive(serde::Serialize)]
-pub struct GetDocumentResponse { pub id: String, pub owner_id: String, pub doc_type: String, pub name_enc: Option<String>, pub role: Option<String>, pub doc_key_enc: Option<String>, pub created_at: String, pub updated_at: String }
+pub struct GetDocumentResponse {
+    pub id: String,
+    pub owner_id: String,
+    pub doc_type: String,
+    pub name_enc: Option<String>,
+    pub role: Option<String>,
+    pub doc_key_enc: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
 
 pub async fn get_document(
     State(state): State<Arc<AppState>>,
@@ -179,7 +294,11 @@ pub async fn get_document(
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
     let doc_id = parse_doc_id(&document_id)?;
-    let doc = db::get_document(&state.db, &doc_id).await?.ok_or(AppError::NotFound{resource:"document"})?;
+    let doc = db::get_document(&state.db, &doc_id)
+        .await?
+        .ok_or(AppError::NotFound {
+            resource: "document",
+        })?;
     // Membership (role + wrapped doc key) is only resolved for an authenticated
     // caller; an anonymous request gets the public routing metadata only.
     let mem = match &auth {
@@ -187,11 +306,16 @@ pub async fn get_document(
         None => None,
     };
     Ok(axum::Json(GetDocumentResponse {
-        id: doc.id.to_string(), owner_id: doc.owner_id.to_string(), doc_type: doc.doc_type,
-        name_enc: doc.name_enc.map(|n| base64::engine::general_purpose::URL_SAFE.encode(&n)),
+        id: doc.id.to_string(),
+        owner_id: doc.owner_id.to_string(),
+        doc_type: doc.doc_type,
+        name_enc: doc
+            .name_enc
+            .map(|n| base64::engine::general_purpose::URL_SAFE.encode(&n)),
         role: mem.as_ref().map(|m| m.role.clone()),
         doc_key_enc: mem.map(|m| base64::engine::general_purpose::URL_SAFE.encode(&m.doc_key_enc)),
-        created_at: doc.created_at.to_rfc3339(), updated_at: doc.updated_at.to_rfc3339(),
+        created_at: doc.created_at.to_rfc3339(),
+        updated_at: doc.updated_at.to_rfc3339(),
     }))
 }
 
@@ -199,7 +323,9 @@ pub async fn get_document(
 
 /// Request body for renaming a document. The name is E2EE encrypted.
 #[derive(serde::Deserialize)]
-pub struct RenameDocumentRequest { pub name_enc: String }
+pub struct RenameDocumentRequest {
+    pub name_enc: String,
+}
 
 pub async fn rename_document(
     State(state): State<Arc<AppState>>,
@@ -210,9 +336,17 @@ pub async fn rename_document(
     use base64::Engine;
     let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
-    let m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
-    if !["owner","editor"].contains(&m.role.as_str()) { return Err(AppError::Forbidden); }
-    let name_enc = base64::engine::general_purpose::URL_SAFE.decode(&req.name_enc).map_err(|e| AppError::Conflict{detail:e.to_string()})?;
+    let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
+        .await?
+        .ok_or(AppError::Forbidden)?;
+    if !["owner", "editor"].contains(&m.role.as_str()) {
+        return Err(AppError::Forbidden);
+    }
+    let name_enc = base64::engine::general_purpose::URL_SAFE
+        .decode(&req.name_enc)
+        .map_err(|e| AppError::Conflict {
+            detail: e.to_string(),
+        })?;
     db::rename_document(&state.db, &doc_id, &name_enc).await?;
     tracing::debug!(document_id = %doc_id, by = %s.user_id, "document renamed");
     Ok(axum::Json(serde_json::json!({"status":"renamed"})))
@@ -225,8 +359,12 @@ pub async fn delete_document(
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
-    let m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
-    if m.role != "owner" { return Err(AppError::Forbidden); }
+    let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
+        .await?
+        .ok_or(AppError::Forbidden)?;
+    if m.role != "owner" {
+        return Err(AppError::Forbidden);
+    }
     db::delete_document(&state.db, &doc_id).await?;
     tracing::info!(document_id = %doc_id, by = %s.user_id, "document deleted");
     Ok(axum::Json(serde_json::json!({"status":"deleted"})))
@@ -236,12 +374,23 @@ pub async fn delete_document(
 
 /// User info returned by search.
 #[derive(serde::Serialize)]
-pub struct UserInfoJson { pub id: String, pub email: String, pub display_name: String, pub signing_pubkey: String, pub exchange_pubkey: String }
+pub struct UserInfoJson {
+    pub id: String,
+    pub email: String,
+    pub display_name: String,
+    pub signing_pubkey: String,
+    pub exchange_pubkey: String,
+}
 #[derive(serde::Serialize)]
-pub struct UserSearchResult { pub users: Vec<UserInfoJson> }
+pub struct UserSearchResult {
+    pub users: Vec<UserInfoJson>,
+}
 /// Public keys for a user, fetched by the inviter during sharing.
 #[derive(serde::Serialize)]
-pub struct PubkeysResponse { pub signing_pubkey: String, pub exchange_pubkey: String }
+pub struct PubkeysResponse {
+    pub signing_pubkey: String,
+    pub exchange_pubkey: String,
+}
 
 pub async fn search_users(
     State(state): State<Arc<AppState>>,
@@ -251,10 +400,16 @@ pub async fn search_users(
     let _s = auth;
     let q = params.get("query").map(|s| s.as_str()).unwrap_or("");
     let users = db::search_users(&state.db, q).await?;
-    let json: Vec<_> = users.into_iter().map(|u| UserInfoJson {
-        id: u.id.to_string(), email: u.email, display_name: u.display_name,
-        signing_pubkey: hex::encode(&u.signing_pubkey), exchange_pubkey: hex::encode(&u.exchange_pubkey),
-    }).collect();
+    let json: Vec<_> = users
+        .into_iter()
+        .map(|u| UserInfoJson {
+            id: u.id.to_string(),
+            email: u.email,
+            display_name: u.display_name,
+            signing_pubkey: hex::encode(&u.signing_pubkey),
+            exchange_pubkey: hex::encode(&u.exchange_pubkey),
+        })
+        .collect();
     Ok(axum::Json(UserSearchResult { users: json }))
 }
 
@@ -265,8 +420,13 @@ pub async fn get_pubkeys(
 ) -> Result<impl IntoResponse, AppError> {
     let _s = auth;
     let uid = parse_user_id(&user_id)?;
-    let u = db::get_user(&state.db, &uid).await?.ok_or(AppError::NotFound{resource:"user"})?;
-    Ok(axum::Json(PubkeysResponse { signing_pubkey: hex::encode(&u.signing_pubkey), exchange_pubkey: hex::encode(&u.exchange_pubkey) }))
+    let u = db::get_user(&state.db, &uid)
+        .await?
+        .ok_or(AppError::NotFound { resource: "user" })?;
+    Ok(axum::Json(PubkeysResponse {
+        signing_pubkey: hex::encode(&u.signing_pubkey),
+        exchange_pubkey: hex::encode(&u.exchange_pubkey),
+    }))
 }
 
 // -- Members -------------------------------------------------------
@@ -299,23 +459,35 @@ pub async fn list_document_members(
     use base64::Engine;
     let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
-    let _m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
+    let _m = db::get_document_member(&state.db, &doc_id, &s.user_id)
+        .await?
+        .ok_or(AppError::Forbidden)?;
     let members = db::list_document_members(&state.db, &doc_id).await?;
-    let json: Vec<_> = members.into_iter().map(|m| MemberInfoJson {
-        user_id: m.user_id.to_string(), email: m.email, display_name: m.display_name, role: m.role,
-        signing_pub_key: hex::encode(&m.signing_pubkey),
-        exchange_pub_key: hex::encode(&m.exchange_pubkey),
-        doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&m.doc_key_enc),
-        wrapper_exchange_pub_key: hex::encode(
-            m.wrapper_exchange_pubkey.as_ref().unwrap_or(&m.exchange_pubkey),
-        ),
-    }).collect();
+    let json: Vec<_> = members
+        .into_iter()
+        .map(|m| MemberInfoJson {
+            user_id: m.user_id.to_string(),
+            email: m.email,
+            display_name: m.display_name,
+            role: m.role,
+            signing_pub_key: hex::encode(&m.signing_pubkey),
+            exchange_pub_key: hex::encode(&m.exchange_pubkey),
+            doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&m.doc_key_enc),
+            wrapper_exchange_pub_key: hex::encode(
+                m.wrapper_exchange_pubkey
+                    .as_ref()
+                    .unwrap_or(&m.exchange_pubkey),
+            ),
+        })
+        .collect();
     Ok(axum::Json(serde_json::json!({"members":json})))
 }
 
 /// Request body for changing a member's role.
 #[derive(serde::Deserialize)]
-pub struct UpdateMemberRoleRequest { pub role: String }
+pub struct UpdateMemberRoleRequest {
+    pub role: String,
+}
 
 pub async fn update_document_member_role(
     State(state): State<Arc<AppState>>,
@@ -326,9 +498,17 @@ pub async fn update_document_member_role(
     let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     let target = parse_user_id(&user_id)?;
-    let m = db::get_document_member(&state.db, &doc_id, &s.user_id).await?.ok_or(AppError::Forbidden)?;
-    if m.role != "owner" { return Err(AppError::Forbidden); }
-    if !["owner","editor","viewer"].contains(&req.role.as_str()) { return Err(AppError::Conflict{detail:"invalid role".into()}); }
+    let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
+        .await?
+        .ok_or(AppError::Forbidden)?;
+    if m.role != "owner" {
+        return Err(AppError::Forbidden);
+    }
+    if !["owner", "editor", "viewer"].contains(&req.role.as_str()) {
+        return Err(AppError::Conflict {
+            detail: "invalid role".into(),
+        });
+    }
     db::update_document_member_role(&state.db, &doc_id, &target, &req.role).await?;
     tracing::info!(document_id = %doc_id, target_user = %target, role = %req.role, by = %s.user_id, "member role updated");
     Ok(axum::Json(serde_json::json!({"status":"role_updated"})))

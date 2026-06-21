@@ -57,7 +57,11 @@ impl JwtKeys {
         // No audience/issuer checks: this is a single-tenant access token.
         validation.validate_aud = false;
 
-        Self { encoding, decoding, validation }
+        Self {
+            encoding,
+            decoding,
+            validation,
+        }
     }
 
     /// Mint a signed access token for `claims`.
@@ -118,7 +122,12 @@ mod tests {
         let b = JwtKeys::from_seed(&[2u8; 32]);
         let iat = now();
         let token = a
-            .mint(&Claims { sub: "s".into(), spk: "p".into(), iat, exp: iat + 900 })
+            .mint(&Claims {
+                sub: "s".into(),
+                spk: "p".into(),
+                iat,
+                exp: iat + 900,
+            })
             .expect("mint");
         assert!(b.verify(&token).is_err());
     }

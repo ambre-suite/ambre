@@ -140,8 +140,12 @@ mod tests {
         let mut reg = TestRegistry::new();
         let cmd1 = reg.prepare(RestCommand::ListDocuments, 0.0);
         let cmd2 = reg.prepare(RestCommand::ListDocuments, 0.0);
-        let LogicCommand::Rest { id: id1, .. } = cmd1 else { panic!() };
-        let LogicCommand::Rest { id: id2, .. } = cmd2 else { panic!() };
+        let LogicCommand::Rest { id: id1, .. } = cmd1 else {
+            panic!()
+        };
+        let LogicCommand::Rest { id: id2, .. } = cmd2 else {
+            panic!()
+        };
         assert_ne!(id1, id2);
         assert_eq!(reg.pending_count(), 2);
     }
@@ -150,7 +154,9 @@ mod tests {
     fn try_recv_matches_pending_id() {
         let mut reg = TestRegistry::new();
         let cmd = reg.prepare(RestCommand::ListDocuments, 0.0);
-        let LogicCommand::Rest { id, .. } = cmd else { panic!() };
+        let LogicCommand::Rest { id, .. } = cmd else {
+            panic!()
+        };
         assert!(reg.try_recv(id));
         assert!(!reg.try_recv(id)); // second call: already removed
         assert_eq!(reg.pending_count(), 0);
@@ -167,7 +173,9 @@ mod tests {
         let mut reg = TestRegistry::new();
         // Prepare with explicit 1000 ms timeout at t=0.
         let cmd = reg.prepare_with_timeout(RestCommand::ListDocuments, 0.0, 1000);
-        let LogicCommand::Rest { id, .. } = cmd else { panic!() };
+        let LogicCommand::Rest { id, .. } = cmd else {
+            panic!()
+        };
         assert_eq!(reg.pending_count(), 1);
 
         // Just before timeout — still alive.
@@ -195,8 +203,12 @@ mod tests {
         let mut reg = TestRegistry::new();
         let cmd_a = reg.prepare(RestCommand::ListDocuments, 0.0);
         let cmd_b = reg.prepare(RestCommand::Logout, 0.0);
-        let LogicCommand::Rest { id: id_a, .. } = cmd_a else { panic!() };
-        let LogicCommand::Rest { id: id_b, .. } = cmd_b else { panic!() };
+        let LogicCommand::Rest { id: id_a, .. } = cmd_a else {
+            panic!()
+        };
+        let LogicCommand::Rest { id: id_b, .. } = cmd_b else {
+            panic!()
+        };
 
         assert_eq!(reg.pending_count(), 2);
         assert!(reg.try_recv(id_a));

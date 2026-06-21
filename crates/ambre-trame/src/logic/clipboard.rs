@@ -93,7 +93,13 @@ impl TrameState {
             return TrameOutcome::display_only(vec![]);
         }
         // src == target -> zero shift, so any "=..." in external text stays as-is.
-        let payload = ClipboardPayload { src_row: row, src_col: col, rows, cols, cells };
+        let payload = ClipboardPayload {
+            src_row: row,
+            src_col: col,
+            rows,
+            cols,
+            cells,
+        };
         self.paste_range(row, col, payload)
     }
 

@@ -22,17 +22,43 @@ use crate::{
 /// Parley layout owned by the caller, and the count is what tests assert on.
 #[derive(Clone, Debug, PartialEq)]
 pub enum DrawOp {
-    FillRect { rect: Rect, color: Color },
-    StrokeRect { rect: Rect, color: Color, width: f64 },
-    StrokeLine { x0: f64, y0: f64, x1: f64, y1: f64, color: Color, width: f64 },
+    FillRect {
+        rect: Rect,
+        color: Color,
+    },
+    StrokeRect {
+        rect: Rect,
+        color: Color,
+        width: f64,
+    },
+    StrokeLine {
+        x0: f64,
+        y0: f64,
+        x1: f64,
+        y1: f64,
+        color: Color,
+        width: f64,
+    },
     /// A pre-shaped glyph run: how many glyphs, the solid brush colour (if any),
     /// and the run origin transform.
-    Glyphs { glyph_count: usize, color: Option<Color>, transform: Affine },
-    FillPath { color: Option<Color> },
-    StrokePath { color: Option<Color> },
-    PushClip { rect: Rect },
+    Glyphs {
+        glyph_count: usize,
+        color: Option<Color>,
+        transform: Affine,
+    },
+    FillPath {
+        color: Option<Color>,
+    },
+    StrokePath {
+        color: Option<Color>,
+    },
+    PushClip {
+        rect: Rect,
+    },
     PopClip,
-    PushTransform { transform: Affine },
+    PushTransform {
+        transform: Affine,
+    },
     PopTransform,
 }
 
@@ -110,7 +136,14 @@ impl DrawSurface for RecordingSurface {
     }
 
     fn stroke_line(&mut self, x0: f64, y0: f64, x1: f64, y1: f64, color: Color, width: f64) {
-        self.ops.push(DrawOp::StrokeLine { x0, y0, x1, y1, color, width });
+        self.ops.push(DrawOp::StrokeLine {
+            x0,
+            y0,
+            x1,
+            y1,
+            color,
+            width,
+        });
     }
 
     fn draw_glyphs(&mut self, run: &GlyphRun<'_, ParleyBrush>, brush: &Brush, transform: Affine) {
@@ -135,11 +168,15 @@ impl DrawSurface for RecordingSurface {
     }
 
     fn fill_path(&mut self, _path: &BezPath, brush: &Brush) {
-        self.ops.push(DrawOp::FillPath { color: brush_color(brush) });
+        self.ops.push(DrawOp::FillPath {
+            color: brush_color(brush),
+        });
     }
 
     fn stroke_path(&mut self, _path: &BezPath, brush: &Brush, _stroke: &Stroke) {
-        self.ops.push(DrawOp::StrokePath { color: brush_color(brush) });
+        self.ops.push(DrawOp::StrokePath {
+            color: brush_color(brush),
+        });
     }
 
     fn push_transform(&mut self, transform: Affine) {

@@ -1,12 +1,10 @@
 use openidconnect::core::{
-    CoreAuthenticationFlow, CoreClient, CoreIdTokenClaims,
-    CoreProviderMetadata,
+    CoreAuthenticationFlow, CoreClient, CoreIdTokenClaims, CoreProviderMetadata,
 };
 use openidconnect::{
-    AuthorizationCode, ClientId, ClientSecret, CsrfToken,
-    EndpointMaybeSet, EndpointNotSet, EndpointSet,
-    IssuerUrl, Nonce, PkceCodeChallenge, PkceCodeVerifier,
-    RedirectUrl, Scope, TokenResponse,
+    AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointMaybeSet, EndpointNotSet,
+    EndpointSet, IssuerUrl, Nonce, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope,
+    TokenResponse,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -209,7 +207,10 @@ pub async fn exchange_code(
 
     let claims = id_token
         .clone()
-        .into_claims(&client_with_redirect.id_token_verifier(), &stored_state.nonce)
+        .into_claims(
+            &client_with_redirect.id_token_verifier(),
+            &stored_state.nonce,
+        )
         .map_err(|e| AppError::Oidc(format!("id token verification failed: {e}")))?;
 
     Ok(claims)

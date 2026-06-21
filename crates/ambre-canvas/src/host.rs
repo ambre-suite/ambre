@@ -36,15 +36,15 @@ use crate::{QuadRenderer, TextCache};
 
 /// All wgpu resources needed to render one frame.
 pub struct GpuState {
-    pub device:         wgpu::Device,
-    pub queue:          wgpu::Queue,
-    pub surface:        wgpu::Surface<'static>,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
+    pub surface: wgpu::Surface<'static>,
     pub surface_format: wgpu::TextureFormat,
-    pub width:          u32,
-    pub height:         u32,
-    pub quad_renderer:  QuadRenderer,
-    pub font_cx:        parley::FontContext,
-    pub text_cache:     TextCache,
+    pub width: u32,
+    pub height: u32,
+    pub quad_renderer: QuadRenderer,
+    pub font_cx: parley::FontContext,
+    pub text_cache: TextCache,
 }
 
 // -----------------------------------------------------------------------------
@@ -74,7 +74,9 @@ impl Default for RafControl {
 
 impl RafControl {
     pub fn new() -> Self {
-        Self { running: Arc::new(AtomicBool::new(true)) }
+        Self {
+            running: Arc::new(AtomicBool::new(true)),
+        }
     }
 
     /// Freeze the canvas: the loop ticks but skips all per-frame work.
@@ -112,9 +114,7 @@ pub fn start_raf_loop(mut frame: impl FnMut(f64) + 'static, control: RafControl)
         // the loop alive is what lets `resume` take effect without re-arming.
         web_sys::window()
             .expect("no window")
-            .request_animation_frame(
-                cb_clone.borrow().as_ref().unwrap().as_ref().unchecked_ref(),
-            )
+            .request_animation_frame(cb_clone.borrow().as_ref().unwrap().as_ref().unchecked_ref())
             .expect("rAF");
     }));
 
@@ -163,7 +163,7 @@ fn url_flag(flag: &str) -> bool {
 }
 
 async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -> Option<GpuState> {
-    let width  = canvas.width();
+    let width = canvas.width();
     let height = canvas.height();
 
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
@@ -172,19 +172,22 @@ async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -
     });
 
     let surface = match instance.create_surface(wgpu::SurfaceTarget::Canvas(canvas)) {
-        Ok(s)  => s,
-        Err(e) => { tracing::error!("create_surface failed: {e:?}"); return None; }
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("create_surface failed: {e:?}");
+            return None;
+        }
     };
 
     let adapter = match instance
         .request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference:       wgpu::PowerPreference::HighPerformance,
-            compatible_surface:     Some(&surface),
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            compatible_surface: Some(&surface),
             force_fallback_adapter: false,
         })
         .await
     {
-        Ok(a)  => a,
+        Ok(a) => a,
         Err(e) => {
             tracing::error!("No GPU adapter: {e:?}");
             return None;
@@ -199,12 +202,19 @@ async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -
         })
         .await
     {
-        Ok(dq)  => dq,
-        Err(e)  => { tracing::error!("request_device failed: {e:?}"); return None; }
+        Ok(dq) => dq,
+        Err(e) => {
+            tracing::error!("request_device failed: {e:?}");
+            return None;
+        }
     };
 
-    let caps   = surface.get_capabilities(&adapter);
-    tracing::info!("surface caps: formats={:?} alpha_modes={:?}", caps.formats, caps.alpha_modes);
+    let caps = surface.get_capabilities(&adapter);
+    tracing::info!(
+        "surface caps: formats={:?} alpha_modes={:?}",
+        caps.formats,
+        caps.alpha_modes
+    );
     let format = caps
         .formats
         .iter()
@@ -215,14 +225,14 @@ async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -
     surface.configure(
         &device,
         &wgpu::SurfaceConfiguration {
-            usage:                        wgpu::TextureUsages::RENDER_ATTACHMENT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
             width,
             height,
-            present_mode:                 wgpu::PresentMode::AutoNoVsync,
+            present_mode: wgpu::PresentMode::AutoNoVsync,
             desired_maximum_frame_latency: 2,
-            alpha_mode:                   wgpu::CompositeAlphaMode::Auto,
-            view_formats:                 vec![],
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            view_formats: vec![],
         },
     );
 
@@ -265,7 +275,8 @@ async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -
     let info = adapter.get_info();
     tracing::info!(
         "GPU initialized: {} ({:?}) | {width}x{height} format={format:?}",
-        info.name, info.backend
+        info.name,
+        info.backend
     );
 
     Some(GpuState {
@@ -286,15 +297,17 @@ async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -
 // -----------------------------------------------------------------------------
 
 async fn fetch_bytes(url: &str) -> Option<Vec<u8>> {
-    let window   = web_sys::window()?;
-    let resp_val =
-        wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(url)).await.ok()?;
+    let window = web_sys::window()?;
+    let resp_val = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(url))
+        .await
+        .ok()?;
     let resp: web_sys::Response = resp_val.dyn_into().ok()?;
     if !resp.ok() {
         return None;
     }
-    let ab_val =
-        wasm_bindgen_futures::JsFuture::from(resp.array_buffer().ok()?).await.ok()?;
+    let ab_val = wasm_bindgen_futures::JsFuture::from(resp.array_buffer().ok()?)
+        .await
+        .ok()?;
     let ab: js_sys::ArrayBuffer = ab_val.dyn_into().ok()?;
     Some(js_sys::Uint8Array::new(&ab).to_vec())
 }

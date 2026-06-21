@@ -93,7 +93,9 @@ impl TrameState {
         // the move-invariant uid follow for free (§2.A, §12). Move each desired
         // uid into place left-to-right over the sortable region; `cur` mirrors the
         // list's evolving order so the `mov` indices stay correct.
-        let list = self.doc.get_movable_list(rows_list_name(&self.active_sheet));
+        let list = self
+            .doc
+            .get_movable_list(rows_list_name(&self.active_sheet));
         let mut cur: Vec<Uid> = self.index.row_ids().to_vec();
         let base = sort_start as usize;
         for (offset, want) in target.into_iter().enumerate() {
@@ -130,7 +132,10 @@ impl TrameState {
         let update = self.flush_delta();
         display.push(TrameEvent::DataReset);
         display.push(TrameEvent::SortComplete);
-        TrameOutcome { display, update, ephemeral: None }
+        TrameOutcome {
+            display,
+            update,
+            ephemeral: None,
+        }
     }
-
 }

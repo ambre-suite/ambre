@@ -48,7 +48,10 @@ impl CommandStates {
     pub fn new(ids: &[ambre_commands::CommandId]) -> Self {
         let toggled = ids.iter().map(|&id| (id, RwSignal::new(false))).collect();
         let enabled = ids.iter().map(|&id| (id, RwSignal::new(true))).collect();
-        Self { toggled: Rc::new(toggled), enabled: Rc::new(enabled) }
+        Self {
+            toggled: Rc::new(toggled),
+            enabled: Rc::new(enabled),
+        }
     }
 
     /// The reactive toggle signal for `id`, for a chrome view to subscribe to

@@ -6,8 +6,8 @@
 // Demux by document_id / channel_id in each message.
 // ============================================================================
 
-use crate::{Ephemeral, SeqUpdate, Update};
 use crate::messages::Seq;
+use crate::{Ephemeral, SeqUpdate, Update};
 use ambre_core::{ChannelId, DocType, DocumentId, SnapshotId, UserId};
 use serde::{Deserialize, Serialize};
 
@@ -33,7 +33,10 @@ pub enum WsClientMsg {
     Ephemeral(Ephemeral),
 
     /// Request missing updates for a specific document after a known seq.
-    RequestMissing { document_id: DocumentId, after_seq: Seq },
+    RequestMissing {
+        document_id: DocumentId,
+        after_seq: Seq,
+    },
 
     /// Subscribe to a channel (Murmure). Same WS, different subscription set.
     SubscribeChannel { channel_id: ChannelId },
@@ -42,7 +45,10 @@ pub enum WsClientMsg {
     UnsubscribeChannel { channel_id: ChannelId },
 
     /// Encrypted channel update. Routed to the active segment by the server.
-    ChannelUpdate { channel_id: ChannelId, update: Update },
+    ChannelUpdate {
+        channel_id: ChannelId,
+        update: Update,
+    },
 
     /// Encrypted channel ephemeral (typing indicator).
     ChannelEphemeral {

@@ -28,8 +28,8 @@
 
 use goose::prelude::*;
 use reqwest::cookie::Jar;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 // Number of active documents (user N maps to doc-(N % ACTIVE_DOCS)).
 const ACTIVE_DOCS: usize = 100;
@@ -47,10 +47,7 @@ async fn session_setup(user: &mut GooseUser) -> TransactionResult {
 
     // Build a cookie jar containing the session cookie.
     let jar = Jar::default();
-    jar.add_cookie_str(
-        &format!("session_id={session_id}"),
-        &user.base_url,
-    );
+    jar.add_cookie_str(&format!("session_id={session_id}"), &user.base_url);
     jar.add_cookie_str(
         &format!("csrf_token=load-csrf-{session_id}"),
         &user.base_url,
@@ -86,14 +83,18 @@ async fn get_document(user: &mut GooseUser) -> TransactionResult {
 /// `GET /api/documents/{id}/snapshot` — fetch latest snapshot metadata.
 async fn get_snapshot(user: &mut GooseUser) -> TransactionResult {
     let doc_id = user.get_session_data::<String>().unwrap().clone();
-    let _goose = user.get(&format!("/api/documents/{doc_id}/snapshot")).await?;
+    let _goose = user
+        .get(&format!("/api/documents/{doc_id}/snapshot"))
+        .await?;
     Ok(())
 }
 
 /// `GET /api/documents/{id}/deltas` — fetch deltas since seq 0.
 async fn get_deltas(user: &mut GooseUser) -> TransactionResult {
     let doc_id = user.get_session_data::<String>().unwrap().clone();
-    let _goose = user.get(&format!("/api/documents/{doc_id}/deltas?from_seq=0")).await?;
+    let _goose = user
+        .get(&format!("/api/documents/{doc_id}/deltas?from_seq=0"))
+        .await?;
     Ok(())
 }
 

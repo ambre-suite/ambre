@@ -21,12 +21,42 @@ pub struct Modifiers {
 }
 
 impl Modifiers {
-    pub const NONE: Self = Self { ctrl: false, alt: false, shift: false, meta: false };
-    pub const CTRL: Self = Self { ctrl: true, alt: false, shift: false, meta: false };
-    pub const ALT: Self = Self { ctrl: false, alt: true, shift: false, meta: false };
-    pub const SHIFT: Self = Self { ctrl: false, alt: false, shift: true, meta: false };
-    pub const CTRL_SHIFT: Self = Self { ctrl: true, alt: false, shift: true, meta: false };
-    pub const CTRL_ALT: Self = Self { ctrl: true, alt: true, shift: false, meta: false };
+    pub const NONE: Self = Self {
+        ctrl: false,
+        alt: false,
+        shift: false,
+        meta: false,
+    };
+    pub const CTRL: Self = Self {
+        ctrl: true,
+        alt: false,
+        shift: false,
+        meta: false,
+    };
+    pub const ALT: Self = Self {
+        ctrl: false,
+        alt: true,
+        shift: false,
+        meta: false,
+    };
+    pub const SHIFT: Self = Self {
+        ctrl: false,
+        alt: false,
+        shift: true,
+        meta: false,
+    };
+    pub const CTRL_SHIFT: Self = Self {
+        ctrl: true,
+        alt: false,
+        shift: true,
+        meta: false,
+    };
+    pub const CTRL_ALT: Self = Self {
+        ctrl: true,
+        alt: true,
+        shift: false,
+        meta: false,
+    };
 }
 
 impl Default for Modifiers {
@@ -81,12 +111,18 @@ impl KeyBinding {
 
     /// `Ctrl + <char>` convenience for the common accelerator shape.
     pub const fn ctrl(c: char) -> Self {
-        Self { mods: Modifiers::CTRL, key: Key::char(c) }
+        Self {
+            mods: Modifiers::CTRL,
+            key: Key::char(c),
+        }
     }
 
     /// `Ctrl + Shift + <char>` convenience.
     pub const fn ctrl_shift(c: char) -> Self {
-        Self { mods: Modifiers::CTRL_SHIFT, key: Key::char(c) }
+        Self {
+            mods: Modifiers::CTRL_SHIFT,
+            key: Key::char(c),
+        }
     }
 }
 
@@ -158,6 +194,9 @@ mod tests {
             KeyBinding::new(Modifiers::NONE, Key::Escape).to_string(),
             "Esc"
         );
-        assert_eq!(KeyBinding::new(Modifiers::NONE, Key::F(5)).to_string(), "F5");
+        assert_eq!(
+            KeyBinding::new(Modifiers::NONE, Key::F(5)).to_string(),
+            "F5"
+        );
     }
 }

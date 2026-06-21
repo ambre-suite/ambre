@@ -34,16 +34,20 @@ struct DocumentState {
 
 impl MockBlindRelay {
     pub fn new() -> Self {
-        Self { documents: HashMap::new(), clients: HashMap::new(), next_seq: 1 }
+        Self {
+            documents: HashMap::new(),
+            clients: HashMap::new(),
+            next_seq: 1,
+        }
     }
 
     /// Register a client and process all of its queued messages.
     /// Returns a channel pair: the client sends raw `WsClientMsg` bytes here,
     /// and receives `WsServerMsg` events on the returned receiver.
-    pub fn connect(&mut self, user_id: UserId) -> (
-        flume::Sender<Vec<u8>>,
-        flume::Receiver<WsServerMsg>,
-    ) {
+    pub fn connect(
+        &mut self,
+        user_id: UserId,
+    ) -> (flume::Sender<Vec<u8>>, flume::Receiver<WsServerMsg>) {
         let (client_tx, _relay_rx) = flume::unbounded::<Vec<u8>>();
         let (relay_tx, client_rx) = flume::unbounded::<WsServerMsg>();
         self.clients.insert(user_id, relay_tx);
@@ -59,11 +63,14 @@ impl MockBlindRelay {
         };
         match msg {
             WsClientMsg::Subscribe { document_id } => {
-                let _state = self.documents.entry(document_id).or_insert_with(|| DocumentState {
-                    updates: Vec::new(),
-                    snapshots: Vec::new(),
-                    subscribers: Vec::new(),
-                });
+                let _state = self
+                    .documents
+                    .entry(document_id)
+                    .or_insert_with(|| DocumentState {
+                        updates: Vec::new(),
+                        snapshots: Vec::new(),
+                        subscribers: Vec::new(),
+                    });
                 // Send existing updates to the new subscriber.
                 // (In a real test, the subscriber ID is tracked; here we broadcast.)
                 let doc_state = self.documents.get(&document_id).expect("just inserted");
@@ -79,16 +86,22 @@ impl MockBlindRelay {
             WsClientMsg::Unsubscribe { document_id: _ } => {}
             WsClientMsg::Update(update) => {
                 let doc_id = update.public_data.document_id;
-                let state = self.documents.entry(doc_id).or_insert_with(|| DocumentState {
-                    updates: Vec::new(),
-                    snapshots: Vec::new(),
-                    subscribers: Vec::new(),
-                });
+                let state = self
+                    .documents
+                    .entry(doc_id)
+                    .or_insert_with(|| DocumentState {
+                        updates: Vec::new(),
+                        snapshots: Vec::new(),
+                        subscribers: Vec::new(),
+                    });
                 let seq = self.next_seq;
                 self.next_seq += 1;
                 state.updates.push((Seq(seq), update.clone()));
                 for tx in self.clients.values() {
-                    let _ = tx.send(WsServerMsg::Update { seq: Seq(seq), update: update.clone() });
+                    let _ = tx.send(WsServerMsg::Update {
+                        seq: Seq(seq),
+                        update: update.clone(),
+                    });
                 }
             }
             WsClientMsg::Ephemeral(eph) => {
@@ -96,11 +109,19 @@ impl MockBlindRelay {
                     let _ = tx.send(WsServerMsg::Ephemeral(eph.clone()));
                 }
             }
-            WsClientMsg::RequestMissing { document_id, after_seq } => {
+            WsClientMsg::RequestMissing {
+                document_id,
+                after_seq,
+            } => {
                 if let Some(state) = self.documents.get(&document_id) {
-                    let missing: Vec<_> = state.updates.iter()
+                    let missing: Vec<_> = state
+                        .updates
+                        .iter()
                         .filter(|(s, _)| s.0 > after_seq.0)
-                        .map(|(s, u)| ambre_protocol::messages::SeqUpdate { seq: *s, update: u.clone() })
+                        .map(|(s, u)| ambre_protocol::messages::SeqUpdate {
+                            seq: *s,
+                            update: u.clone(),
+                        })
                         .collect();
                     if !missing.is_empty() {
                         for tx in self.clients.values() {
@@ -133,14 +154,20 @@ impl MockBlindRelay {
 
     /// Create a snapshot for a document and notify subscribers.
     pub fn create_snapshot(&mut self, document_id: DocumentId, snapshot_id: SnapshotId) {
-        let state = self.documents.entry(document_id).or_insert_with(|| DocumentState {
-            updates: Vec::new(),
-            snapshots: Vec::new(),
-            subscribers: Vec::new(),
-        });
+        let state = self
+            .documents
+            .entry(document_id)
+            .or_insert_with(|| DocumentState {
+                updates: Vec::new(),
+                snapshots: Vec::new(),
+                subscribers: Vec::new(),
+            });
         state.snapshots.push(snapshot_id);
         for tx in self.clients.values() {
-            let _ = tx.send(WsServerMsg::SnapshotAvailable { document_id, snapshot_id });
+            let _ = tx.send(WsServerMsg::SnapshotAvailable {
+                document_id,
+                snapshot_id,
+            });
         }
     }
 }

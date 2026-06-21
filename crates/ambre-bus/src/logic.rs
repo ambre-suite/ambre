@@ -73,10 +73,7 @@ pub enum LogicCommand {
     /// to the Sync thread as [`SyncCommand::Rest`], echoing `id` on the response.
     ///
     /// [`SyncCommand::Rest`]: crate::SyncCommand::Rest
-    Rest {
-        id: RequestId,
-        cmd: RestCommand,
-    },
+    Rest { id: RequestId, cmd: RestCommand },
 
     // ── P3 — Control plane (fire-and-forget, no correlatable response) ─────────
     /// Open a real-time sync session for a document.
@@ -94,19 +91,13 @@ pub enum LogicCommand {
 
     /// Close the real-time sync session for a document. The Logic thread drops
     /// the in-memory state; the Sync thread unsubscribes and zeroizes the key.
-    CloseDocument {
-        document_id: DocumentId,
-    },
+    CloseDocument { document_id: DocumentId },
 
     /// Open a real-time sync session for a channel (subscribe to messages).
-    OpenChannel {
-        channel_id: ChannelId,
-    },
+    OpenChannel { channel_id: ChannelId },
 
     /// Close the real-time sync session for a channel.
-    CloseChannel {
-        channel_id: ChannelId,
-    },
+    CloseChannel { channel_id: ChannelId },
 
     /// Send a message to a channel.
     ///
@@ -192,11 +183,7 @@ pub enum TrameCommand {
     /// pipe. The Logic thread stores the text in the document CRDT (the source
     /// of truth); an empty `text` clears the cell. The UI updates its own cache
     /// optimistically, so no echo event is required.
-    SetCellText {
-        row: u32,
-        col: u32,
-        text: String,
-    },
+    SetCellText { row: u32, col: u32, text: String },
 
     /// Set the plaintext content of many cells in one shot, as `(row, col,
     /// text)` triples. Emitted for a multi-cell fill (Ctrl+Enter) or a clear over
@@ -204,9 +191,7 @@ pub enum TrameCommand {
     /// inside a single `UndoManager` group, so the whole batch is one undo item
     /// (unlike a stream of `SetCellText`, each of which is its own item). An
     /// empty `text` clears that cell.
-    SetCellsBatch {
-        cells: Vec<(u32, u32, String)>,
-    },
+    SetCellsBatch { cells: Vec<(u32, u32, String)> },
 
     /// Close the undo group opened by the cell edit, on cell exit
     /// (`ambre-spec-trame-ui.md` §6.C, `-logic.md` §8). An interactive edit can
@@ -232,9 +217,7 @@ pub enum TrameCommand {
     /// the restyled viewport.
     ///
     /// [`DataReset`]: crate::ui::TrameEvent::DataReset
-    SetCellStyle {
-        patch: StylePatch,
-    },
+    SetCellStyle { patch: StylePatch },
 
     /// Insert a blank row at grid position `at`, shifting existing rows at
     /// `>= at` down by one. One `LoroMovableList` op; cells keyed by stable id
@@ -242,28 +225,20 @@ pub enum TrameCommand {
     /// A row inserted within a range formula is naturally included; references
     /// are never rewritten (§12). A no-op past the materialized used range
     /// (virtual rows are already blank).
-    InsertRow {
-        at: u32,
-    },
+    InsertRow { at: u32 },
 
     /// Delete the row at grid position `at`, shifting rows at `> at` up by one.
     /// Its cells/formatting are dropped and any formula referencing the now
     /// removed row id resolves to `#REF!` (§12). A no-op in virtual space.
-    DeleteRow {
-        at: u32,
-    },
+    DeleteRow { at: u32 },
 
     /// Insert a blank column at grid position `at`, shifting existing columns at
     /// `>= at` right by one. Column analogue of [`InsertRow`](TrameCommand::InsertRow).
-    InsertColumn {
-        at: u32,
-    },
+    InsertColumn { at: u32 },
 
     /// Delete the column at grid position `at`, shifting columns at `> at` left
     /// by one. Column analogue of [`DeleteRow`](TrameCommand::DeleteRow).
-    DeleteColumn {
-        at: u32,
-    },
+    DeleteColumn { at: u32 },
 
     /// Merge the rectangular range `[row..=row_end] x [col..=col_end]` into a
     /// single cell, the top-left corner becoming the master
@@ -282,10 +257,7 @@ pub enum TrameCommand {
     /// Split the merge whose rectangle contains grid cell `(row, col)`, restoring
     /// the covered cells. Any value masked by the merge (a concurrent-edit
     /// conflict, §6) reappears. A no-op if `(row, col)` is not inside a merge.
-    UnmergeCells {
-        row: u32,
-        col: u32,
-    },
+    UnmergeCells { row: u32, col: u32 },
 
     // -- Parameterless structural intents (grid context menu, `-ui.md` sec.5.C).
     // These carry no geometry: the Logic thread resolves them against the active
@@ -364,9 +336,7 @@ pub enum TrameCommand {
     /// [`TrameEvent::FilterApplied`](crate::ui::TrameEvent::FilterApplied).
     ///
     /// [`ApplyFilter`]: TrameCommand::ApplyFilter
-    ApplyFilterToActiveColumn {
-        kind: FilterKind,
-    },
+    ApplyFilterToActiveColumn { kind: FilterKind },
     /// Clear the shared filter on the active sheet (`-ui.md` sec.5.D). The
     /// parameterless sibling of [`ClearFilter`]: the Logic thread resolves the
     /// active sheet itself. Replies with
@@ -402,9 +372,7 @@ pub enum TrameCommand {
     /// state -- can paste without knowing the cursor. Each field becomes a
     /// literal cell (no relative-formula reindexing, the source is external).
     /// Replies with a [`DataReset`](crate::ui::TrameEvent::DataReset).
-    PasteText {
-        text: String,
-    },
+    PasteText { text: String },
 
     /// Paste a typed [`ClipboardPayload`] at the tracked active cell (`-ui.md`
     /// sec.5.E). The parameterless-geometry sibling of
@@ -413,9 +381,7 @@ pub enum TrameCommand {
     /// which reads the OS clipboard asynchronously via the Clipboard API and has
     /// no view state -- gets the same styled, formula-reindexed paste as a native
     /// Ctrl+V. The reindex offset is `active - payload.src`.
-    PasteClipboardAtActive {
-        payload: ClipboardPayload,
-    },
+    PasteClipboardAtActive { payload: ClipboardPayload },
 
     /// Autofill the `src` rectangle into `dest` (`-ui.md` sec.5.F). `dest`
     /// contains `src` and extends it along a single axis (the fill handle locks to
@@ -503,17 +469,12 @@ pub enum TrameCommand {
     /// CRDT map (LWW) and resolved positionally against the current grid each
     /// recomputation (`ambre-spec-trame-logic.md` §8, Phase 2). A reference that
     /// fails to parse leaves any formula using the name as `#PARSE!`.
-    DefineName {
-        name: String,
-        reference: String,
-    },
+    DefineName { name: String, reference: String },
 
     /// Remove a named range. Formulas referencing the now-undefined name
     /// re-evaluate to a parse error on the next recomputation. A no-op if the
     /// name does not exist.
-    DeleteName {
-        name: String,
-    },
+    DeleteName { name: String },
 
     /// Switch the sheet the UI is looking at to `sheet_id`. The Logic thread
     /// rebuilds its active-sheet derived caches (index, merges, formatting,
@@ -522,34 +483,24 @@ pub enum TrameCommand {
     /// is unknown.
     ///
     /// [`DataReset`]: crate::ui::TrameEvent::DataReset
-    ActivateSheet {
-        sheet_id: String,
-    },
+    ActivateSheet { sheet_id: String },
 
     /// Add a new sheet named `name`. Mints a peer-scoped stable `sheet_id`
     /// (`{peer:016x}_{counter:08x}`) so concurrent creates on two peers never
     /// collide, registers it in `sheets`, appends it to `sheet_order`, and
     /// replies with a refreshed [`SheetList`](crate::ui::TrameEvent::SheetList)
     /// (`ambre-spec-trame-logic.md` §2.D). Cells are created lazily on first write.
-    CreateSheet {
-        name: String,
-    },
+    CreateSheet { name: String },
 
     /// Rename `sheet_id`'s display label (LWW on the name field). The stable id
     /// is untouched, so same-name references keep resolving; cross-sheet formula
     /// text bound to the old display name is the known MVP gap (§2.D).
-    RenameSheet {
-        sheet_id: String,
-        name: String,
-    },
+    RenameSheet { sheet_id: String, name: String },
 
     /// Move `sheet_id` to position `to_index` in the tab strip (one
     /// `LoroMovableList` move op). Pure presentation: never touches a reference
     /// (§2.D). A no-op if the id is unknown or already at that position.
-    MoveSheet {
-        sheet_id: String,
-        to_index: u32,
-    },
+    MoveSheet { sheet_id: String, to_index: u32 },
 
     /// Sort the rows of the rectangular range `[row_start..=row_end] x
     /// [col_start..=col_end]` by the values in the column `col_start + sort_col`
@@ -581,9 +532,7 @@ pub enum TrameCommand {
     /// remaining sheet (a workbook always keeps >= 1). If the active sheet is
     /// deleted, the active sheet falls back to a neighbour. Cross-sheet formulas
     /// targeting the gone id resolve to `#REF!`.
-    DeleteSheet {
-        sheet_id: String,
-    },
+    DeleteSheet { sheet_id: String },
 
     /// Apply a shared filter to column `col` of `sheet_id`
     /// (`ambre-spec-trame-features.md` §1.A). The filter is stored in the document
@@ -610,9 +559,7 @@ pub enum TrameCommand {
     /// delta (`ambre-spec-trame-features.md` §1.A). Replies with
     /// [`TrameEvent::FilterCleared`](crate::ui::TrameEvent::FilterCleared). A no-op
     /// when no filter is active.
-    ClearFilter {
-        sheet_id: String,
-    },
+    ClearFilter { sheet_id: String },
 
     /// Import CSV bytes into the workbook (`ambre-spec-trame-interop.md` §4.A,
     /// interop MVP). All conversion happens in the Logic thread (Zero-Knowledge):
@@ -669,7 +616,6 @@ pub enum TrameCommand {
     // (personal filter views / multi-column sort -> Phase 2, conditional
     // formatting & validation -> Phase 2/3, range protection -> Post-MVP).
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Persist a personal (non-shared) filter view in local storage only
     /// (`ambre-spec-trame-features.md §1.B`). Never touches the `LoroDoc`, so it
     /// emits no CRDT delta. Replies with
@@ -686,9 +632,7 @@ pub enum TrameCommand {
     /// local storage, recomputes its hidden rows against the current doc state,
     /// and re-sends the viewport without them -- a purely local view change, no
     /// CRDT delta. A no-op if `view_id` is unknown.
-    ActivateFilterView {
-        view_id: String,
-    },
+    ActivateFilterView { view_id: String },
 
     /// Sort the rows of a range by several keys in decreasing priority
     /// (`ambre-spec-trame-features.md §2`, multi-column sort). Like
@@ -735,10 +679,7 @@ pub enum TrameCommand {
 
     /// Remove the conditional-formatting rule `id` from `sheet_id` (`§3`). A
     /// no-op if it does not exist.
-    RemoveCondFormat {
-        sheet_id: String,
-        id: String,
-    },
+    RemoveCondFormat { sheet_id: String, id: String },
 
     /// Attach a data-validation rule to `range` of `sheet_id`
     /// (`ambre-spec-trame-features.md §5`). Stored in `validations_{sheet}`,
@@ -756,10 +697,7 @@ pub enum TrameCommand {
 
     /// Remove the validation rule covering `range` on `sheet_id` (`§5`). A no-op
     /// if none is attached there.
-    RemoveValidation {
-        sheet_id: String,
-        range: GridRange,
-    },
+    RemoveValidation { sheet_id: String, range: GridRange },
 
     /// Protect `range` of `sheet_id` so only `allowed_user_ids` (plus the owner)
     /// may edit it (`ambre-spec-trame-features.md §6`, Post-MVP). Soft
@@ -775,10 +713,7 @@ pub enum TrameCommand {
 
     /// Remove the protection covering `range` on `sheet_id` (`§6`). A no-op if
     /// none is set there.
-    RemoveProtection {
-        sheet_id: String,
-        range: GridRange,
-    },
+    RemoveProtection { sheet_id: String, range: GridRange },
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1070,7 +1005,8 @@ impl ClipboardPayload {
     /// gaps (blank source cells, omitted from `cells`) render as empty fields. A
     /// formula cell contributes its raw text (e.g. `=A1*2`).
     pub fn to_tsv(&self) -> String {
-        let mut grid = vec![vec![String::new(); self.cols.max(1) as usize]; self.rows.max(1) as usize];
+        let mut grid =
+            vec![vec![String::new(); self.cols.max(1) as usize]; self.rows.max(1) as usize];
         for cell in &self.cells {
             if let Some(row) = grid.get_mut(cell.dr as usize)
                 && let Some(slot) = row.get_mut(cell.dc as usize)
@@ -1078,7 +1014,10 @@ impl ClipboardPayload {
                 *slot = cell.raw.clone();
             }
         }
-        grid.into_iter().map(|r| r.join("\t")).collect::<Vec<_>>().join("\n")
+        grid.into_iter()
+            .map(|r| r.join("\t"))
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
 

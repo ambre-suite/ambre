@@ -33,7 +33,9 @@ pub fn draw_text<S: DrawSurface>(
     let brush = Brush::Solid(color);
     for line in layout.lines() {
         for item in line.items() {
-            let PositionedLayoutItem::GlyphRun(run) = item else { continue };
+            let PositionedLayoutItem::GlyphRun(run) = item else {
+                continue;
+            };
             let tx = origin_x + run.offset() as f64;
             let ty = origin_y + run.baseline() as f64;
             surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
@@ -52,4 +54,3 @@ pub fn col_label(col: u32) -> String {
     }
     label.chars().rev().collect()
 }
-

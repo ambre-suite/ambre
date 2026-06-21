@@ -17,8 +17,8 @@ pub const TAG_LEN: usize = 32;
 type HmacSha256 = Hmac<Sha256>;
 
 fn mac(key: &DocumentKey, nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> HmacSha256 {
-    let mut m = HmacSha256::new_from_slice(key.as_bytes())
-        .expect("HMAC accepts a key of any length");
+    let mut m =
+        HmacSha256::new_from_slice(key.as_bytes()).expect("HMAC accepts a key of any length");
     m.update(nonce);
     m.update(ciphertext);
     m.update(aad);
@@ -32,7 +32,10 @@ pub fn commitment_tag(
     ciphertext: &[u8],
     aad: &[u8],
 ) -> [u8; TAG_LEN] {
-    mac(key, nonce, ciphertext, aad).finalize().into_bytes().into()
+    mac(key, nonce, ciphertext, aad)
+        .finalize()
+        .into_bytes()
+        .into()
 }
 
 /// Verifies `tag` against a freshly computed commitment, in constant time.

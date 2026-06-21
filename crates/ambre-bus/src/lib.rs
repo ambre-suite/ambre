@@ -29,19 +29,19 @@ pub mod ui;
 
 // Re‑export the main types for convenient use.
 pub use command::SyncCommand;
-pub use sink::CommandSink;
 pub use event::LogicEvent;
 pub use logic::{
-    AppCommand, BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellStyle,
-    ClipboardCell, ClipboardPayload, CondFormatKind, CondStyle, FillMode, FilterKind, FilterOp,
-    GridRange, HAlign, LogicCommand, SortKey,
-    StylePatch, TrameCommand, VAlign, ValidationKind, ValidationOnInvalid, BORDER_EDGE_ALL,
-    BORDER_EDGE_BOTTOM, BORDER_EDGE_LEFT, BORDER_EDGE_RIGHT, BORDER_EDGE_TOP,
+    AppCommand, BORDER_EDGE_ALL, BORDER_EDGE_BOTTOM, BORDER_EDGE_LEFT, BORDER_EDGE_RIGHT,
+    BORDER_EDGE_TOP, BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat,
+    CellStyle, ClipboardCell, ClipboardPayload, CondFormatKind, CondStyle, FillMode, FilterKind,
+    FilterOp, GridRange, HAlign, LogicCommand, SortKey, StylePatch, TrameCommand, VAlign,
+    ValidationKind, ValidationOnInvalid,
 };
 pub use rest::{
     ChannelSummary, DocumentSummary, MemberInfo, RequestId, RestCommand, RestEvent, UnreadCount,
     UserInfo,
 };
+pub use sink::CommandSink;
 pub use ui::{AppEvent, DisplayCell, TrameEvent, UiEvent};
 // Re‑export core types so that users don't need to depend on ambre‑core directly.
 pub use ambre_core::{

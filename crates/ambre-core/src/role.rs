@@ -163,7 +163,10 @@ mod tests {
         assert_eq!(Role::from_str("Viewer"), Ok(Role::Viewer));
         assert_eq!(Role::from_str("admin"), Ok(Role::Admin));
         assert_eq!(Role::from_str("member"), Ok(Role::Member));
-        assert_eq!(Role::from_str("guest"), Err(RoleError::InvalidString("guest".to_string())));
+        assert_eq!(
+            Role::from_str("guest"),
+            Err(RoleError::InvalidString("guest".to_string()))
+        );
     }
 
     #[test]

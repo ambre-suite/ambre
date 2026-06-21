@@ -9,10 +9,16 @@ use crate::model::{SheetIndex, Uid};
 pub fn index_with(rows: usize, cols: usize) -> SheetIndex {
     let mut idx = SheetIndex::default();
     for i in 0..rows {
-        idx.push_row(Uid { peer: 1, counter: i as u32 });
+        idx.push_row(Uid {
+            peer: 1,
+            counter: i as u32,
+        });
     }
     for i in 0..cols {
-        idx.push_col(Uid { peer: 2, counter: i as u32 });
+        idx.push_col(Uid {
+            peer: 2,
+            counter: i as u32,
+        });
     }
     idx
 }

@@ -80,7 +80,9 @@ pub struct ThemeControl {
 
 impl ThemeControl {
     pub fn new(theme: Theme) -> Self {
-        Self { v: Arc::new(AtomicU8::new(theme.as_u8())) }
+        Self {
+            v: Arc::new(AtomicU8::new(theme.as_u8())),
+        }
     }
 
     pub fn get(&self) -> Theme {

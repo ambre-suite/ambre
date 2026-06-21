@@ -1,5 +1,5 @@
-use sqlx::{PgPool, Row};
 use crate::error::AppError;
+use sqlx::{PgPool, Row};
 
 /// Row returned by `SELECT * FROM users`.
 #[derive(Debug)]
@@ -142,7 +142,10 @@ fn id_to_uuid(id: impl Into<ambre_core::Uuid>) -> uuid::Uuid {
 // Users --------------------------------------------------------------
 
 /// Fetches a user by their typed `UserId`.
-pub async fn get_user(pool: &PgPool, user_id: &ambre_core::UserId) -> Result<Option<UserRow>, AppError> {
+pub async fn get_user(
+    pool: &PgPool,
+    user_id: &ambre_core::UserId,
+) -> Result<Option<UserRow>, AppError> {
     let uid = id_to_uuid(*user_id);
     let row = sqlx::query(
         "SELECT id, oidc_provider, oidc_subject, email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id FROM users WHERE id = $1"
@@ -333,15 +336,17 @@ pub async fn search_users(pool: &PgPool, query: &str) -> Result<Vec<UserInfoRow>
     .fetch_all(pool)
     .await?;
 
-    rows.into_iter().map(|r| {
-        Ok(UserInfoRow {
-            id: r.try_get("id")?,
-            email: r.try_get("email")?,
-            display_name: r.try_get("display_name")?,
-            signing_pubkey: r.try_get("signing_pubkey")?,
-            exchange_pubkey: r.try_get("exchange_pubkey")?,
+    rows.into_iter()
+        .map(|r| {
+            Ok(UserInfoRow {
+                id: r.try_get("id")?,
+                email: r.try_get("email")?,
+                display_name: r.try_get("display_name")?,
+                signing_pubkey: r.try_get("signing_pubkey")?,
+                exchange_pubkey: r.try_get("exchange_pubkey")?,
+            })
         })
-    }).collect()
+        .collect()
 }
 
 /// Updates the encrypted master key and its salt for passphrase rotation.
@@ -366,7 +371,10 @@ pub async fn update_master_key(
 // Documents ----------------------------------------------------------
 
 /// Fetches a document by id.
-pub async fn get_document(pool: &PgPool, document_id: &ambre_core::DocumentId) -> Result<Option<DocumentRow>, AppError> {
+pub async fn get_document(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+) -> Result<Option<DocumentRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let row = sqlx::query(
         "SELECT id, owner_id, doc_type, name_enc, created_at, updated_at FROM documents WHERE id = $1"
@@ -389,7 +397,10 @@ pub async fn get_document(pool: &PgPool, document_id: &ambre_core::DocumentId) -
 }
 
 /// Lists all documents the user is a member of, with role and doc_key_enc.
-pub async fn list_documents_for_user(pool: &PgPool, user_id: &ambre_core::UserId) -> Result<Vec<DocumentSummaryRow>, AppError> {
+pub async fn list_documents_for_user(
+    pool: &PgPool,
+    user_id: &ambre_core::UserId,
+) -> Result<Vec<DocumentSummaryRow>, AppError> {
     let uid = id_to_uuid(*user_id);
     let rows = sqlx::query(
         "SELECT d.id, d.owner_id, d.doc_type, d.name_enc, d.updated_at, dm.role, dm.doc_key_enc FROM documents d INNER JOIN document_members dm ON dm.document_id = d.id WHERE dm.user_id = $1 ORDER BY d.updated_at DESC"
@@ -398,17 +409,19 @@ pub async fn list_documents_for_user(pool: &PgPool, user_id: &ambre_core::UserId
     .fetch_all(pool)
     .await?;
 
-    rows.into_iter().map(|r| {
-        Ok(DocumentSummaryRow {
-            id: r.try_get("id")?,
-            owner_id: r.try_get("owner_id")?,
-            doc_type: r.try_get("doc_type")?,
-            name_enc: r.try_get("name_enc")?,
-            updated_at: r.try_get("updated_at")?,
-            role: r.try_get("role")?,
-            doc_key_enc: r.try_get("doc_key_enc")?,
+    rows.into_iter()
+        .map(|r| {
+            Ok(DocumentSummaryRow {
+                id: r.try_get("id")?,
+                owner_id: r.try_get("owner_id")?,
+                doc_type: r.try_get("doc_type")?,
+                name_enc: r.try_get("name_enc")?,
+                updated_at: r.try_get("updated_at")?,
+                role: r.try_get("role")?,
+                doc_key_enc: r.try_get("doc_key_enc")?,
+            })
         })
-    }).collect()
+        .collect()
 }
 
 /// Creates a document and returns the full row.
@@ -484,7 +497,11 @@ pub async fn create_document(
 }
 
 /// Updates the encrypted name of a document.
-pub async fn rename_document(pool: &PgPool, document_id: &ambre_core::DocumentId, name_enc: &[u8]) -> Result<(), AppError> {
+pub async fn rename_document(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    name_enc: &[u8],
+) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     sqlx::query("UPDATE documents SET name_enc = $2, updated_at = now() WHERE id = $1")
         .bind(did)
@@ -495,7 +512,10 @@ pub async fn rename_document(pool: &PgPool, document_id: &ambre_core::DocumentId
 }
 
 /// Cascade-deletes a document and all associated rows (members, snapshots, updates).
-pub async fn delete_document(pool: &PgPool, document_id: &ambre_core::DocumentId) -> Result<(), AppError> {
+pub async fn delete_document(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     sqlx::query("DELETE FROM documents WHERE id = $1")
         .bind(did)
@@ -560,7 +580,10 @@ pub async fn get_document_member(
 }
 
 /// Lists all members of a document with user details.
-pub async fn list_document_members(pool: &PgPool, document_id: &ambre_core::DocumentId) -> Result<Vec<MemberWithUserRow>, AppError> {
+pub async fn list_document_members(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+) -> Result<Vec<MemberWithUserRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let rows = sqlx::query(
         "SELECT dm.user_id, u.email, u.display_name, dm.role, u.signing_pubkey, u.exchange_pubkey, dm.doc_key_enc, dm.invited_by, inv.exchange_pubkey AS wrapper_exchange_pubkey FROM document_members dm INNER JOIN users u ON u.id = dm.user_id LEFT JOIN users inv ON inv.id = dm.invited_by WHERE dm.document_id = $1"
@@ -569,23 +592,29 @@ pub async fn list_document_members(pool: &PgPool, document_id: &ambre_core::Docu
     .fetch_all(pool)
     .await?;
 
-    rows.into_iter().map(|r| {
-        Ok(MemberWithUserRow {
-            user_id: r.try_get("user_id")?,
-            email: r.try_get("email")?,
-            display_name: r.try_get("display_name")?,
-            role: r.try_get("role")?,
-            signing_pubkey: r.try_get("signing_pubkey")?,
-            exchange_pubkey: r.try_get("exchange_pubkey")?,
-            doc_key_enc: r.try_get("doc_key_enc")?,
-            invited_by: r.try_get("invited_by")?,
-            wrapper_exchange_pubkey: r.try_get("wrapper_exchange_pubkey")?,
+    rows.into_iter()
+        .map(|r| {
+            Ok(MemberWithUserRow {
+                user_id: r.try_get("user_id")?,
+                email: r.try_get("email")?,
+                display_name: r.try_get("display_name")?,
+                role: r.try_get("role")?,
+                signing_pubkey: r.try_get("signing_pubkey")?,
+                exchange_pubkey: r.try_get("exchange_pubkey")?,
+                doc_key_enc: r.try_get("doc_key_enc")?,
+                invited_by: r.try_get("invited_by")?,
+                wrapper_exchange_pubkey: r.try_get("wrapper_exchange_pubkey")?,
+            })
         })
-    }).collect()
+        .collect()
 }
 
 /// Removes a user from a document's membership.
-pub async fn remove_document_member(pool: &PgPool, document_id: &ambre_core::DocumentId, user_id: &ambre_core::UserId) -> Result<(), AppError> {
+pub async fn remove_document_member(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    user_id: &ambre_core::UserId,
+) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     let uid = id_to_uuid(*user_id);
     sqlx::query("DELETE FROM document_members WHERE document_id = $1 AND user_id = $2")
@@ -597,7 +626,12 @@ pub async fn remove_document_member(pool: &PgPool, document_id: &ambre_core::Doc
 }
 
 /// Updates the role of a document member.
-pub async fn update_document_member_role(pool: &PgPool, document_id: &ambre_core::DocumentId, user_id: &ambre_core::UserId, role: &str) -> Result<(), AppError> {
+pub async fn update_document_member_role(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    user_id: &ambre_core::UserId,
+    role: &str,
+) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     let uid = id_to_uuid(*user_id);
     sqlx::query("UPDATE document_members SET role = $3 WHERE document_id = $1 AND user_id = $2")
@@ -671,7 +705,10 @@ pub async fn create_snapshot(
 }
 
 /// Returns the most recent snapshot for a document (if any).
-pub async fn get_latest_snapshot(pool: &PgPool, document_id: &ambre_core::DocumentId) -> Result<Option<SnapshotRow>, AppError> {
+pub async fn get_latest_snapshot(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+) -> Result<Option<SnapshotRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let row = sqlx::query(
         "SELECT id, document_id, author_pubkey, parent_hash, parent_snapshot_proof, update_clocks, s3_key, created_at FROM snapshots WHERE document_id = $1 ORDER BY created_at DESC LIMIT 1"
@@ -696,7 +733,10 @@ pub async fn get_latest_snapshot(pool: &PgPool, document_id: &ambre_core::Docume
 }
 
 /// Fetches a specific snapshot by id.
-pub async fn get_snapshot(pool: &PgPool, snapshot_id: &ambre_core::SnapshotId) -> Result<Option<SnapshotRow>, AppError> {
+pub async fn get_snapshot(
+    pool: &PgPool,
+    snapshot_id: &ambre_core::SnapshotId,
+) -> Result<Option<SnapshotRow>, AppError> {
     let sid = id_to_uuid(*snapshot_id);
     let row = sqlx::query(
         "SELECT id, document_id, author_pubkey, parent_hash, parent_snapshot_proof, update_clocks, s3_key, created_at FROM snapshots WHERE id = $1"
@@ -749,7 +789,12 @@ pub async fn insert_update(
 }
 
 /// Returns updates with seq > `after_seq` for delta-sync after reconnect.
-pub async fn get_updates_after(pool: &PgPool, document_id: &ambre_core::DocumentId, after_seq: i64, limit: i64) -> Result<Vec<UpdateRow>, AppError> {
+pub async fn get_updates_after(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    after_seq: i64,
+    limit: i64,
+) -> Result<Vec<UpdateRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let rows = sqlx::query(
         "SELECT id, document_id, author_pubkey, snapshot_id, clock, seq, s3_key, created_at FROM updates WHERE document_id = $1 AND seq > $2 ORDER BY seq ASC LIMIT $3"
@@ -760,23 +805,29 @@ pub async fn get_updates_after(pool: &PgPool, document_id: &ambre_core::Document
     .fetch_all(pool)
     .await?;
 
-    rows.into_iter().map(|r| {
-        Ok(UpdateRow {
-            id: r.try_get("id")?,
-            document_id: r.try_get("document_id")?,
-            author_pubkey: r.try_get("author_pubkey")?,
-            snapshot_id: r.try_get("snapshot_id")?,
-            clock: r.try_get("clock")?,
-            seq: r.try_get("seq")?,
-            s3_key: r.try_get("s3_key")?,
-            created_at: r.try_get("created_at")?,
+    rows.into_iter()
+        .map(|r| {
+            Ok(UpdateRow {
+                id: r.try_get("id")?,
+                document_id: r.try_get("document_id")?,
+                author_pubkey: r.try_get("author_pubkey")?,
+                snapshot_id: r.try_get("snapshot_id")?,
+                clock: r.try_get("clock")?,
+                seq: r.try_get("seq")?,
+                s3_key: r.try_get("s3_key")?,
+                created_at: r.try_get("created_at")?,
+            })
         })
-    }).collect()
+        .collect()
 }
 
 /// Deletes updates whose seq <= `before_seq` (called after compaction).
 #[allow(dead_code)]
-pub async fn purge_updates_before_seq(pool: &PgPool, document_id: &ambre_core::DocumentId, before_seq: i64) -> Result<(), AppError> {
+pub async fn purge_updates_before_seq(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    before_seq: i64,
+) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     sqlx::query("DELETE FROM updates WHERE document_id = $1 AND seq <= $2")
         .bind(did)
@@ -858,7 +909,7 @@ pub async fn create_organization(
     let org = sqlx::query_as::<_, OrganizationRow>(
         "INSERT INTO organizations (id, name, org_pubkey, shamir_threshold, shamir_total)
          VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, name, org_pubkey, shamir_threshold, shamir_total, created_at"
+         RETURNING id, name, org_pubkey, shamir_threshold, shamir_total, created_at",
     )
     .bind(org_id)
     .bind(name)
@@ -870,7 +921,7 @@ pub async fn create_organization(
 
     sqlx::query(
         "INSERT INTO organization_members (org_id, user_id, role, shamir_share_enc)
-         VALUES ($1, $2, 'owner', $3)"
+         VALUES ($1, $2, 'owner', $3)",
     )
     .bind(org_id)
     .bind(uid)
@@ -883,10 +934,13 @@ pub async fn create_organization(
 }
 
 /// Fetches an organization by id.
-pub async fn get_organization(pool: &PgPool, org_id: uuid::Uuid) -> Result<Option<OrganizationRow>, AppError> {
+pub async fn get_organization(
+    pool: &PgPool,
+    org_id: uuid::Uuid,
+) -> Result<Option<OrganizationRow>, AppError> {
     sqlx::query_as::<_, OrganizationRow>(
         "SELECT id, name, org_pubkey, shamir_threshold, shamir_total, created_at
-         FROM organizations WHERE id = $1"
+         FROM organizations WHERE id = $1",
     )
     .bind(org_id)
     .fetch_optional(pool)
@@ -895,14 +949,17 @@ pub async fn get_organization(pool: &PgPool, org_id: uuid::Uuid) -> Result<Optio
 }
 
 /// Lists organizations for a given user.
-pub async fn list_user_organizations(pool: &PgPool, user_id: &ambre_core::UserId) -> Result<Vec<OrganizationRow>, AppError> {
+pub async fn list_user_organizations(
+    pool: &PgPool,
+    user_id: &ambre_core::UserId,
+) -> Result<Vec<OrganizationRow>, AppError> {
     let uid = id_to_uuid(*user_id);
     sqlx::query_as::<_, OrganizationRow>(
         "SELECT o.id, o.name, o.org_pubkey, o.shamir_threshold, o.shamir_total, o.created_at
          FROM organizations o
          JOIN organization_members om ON om.org_id = o.id
          WHERE om.user_id = $1
-         ORDER BY o.created_at"
+         ORDER BY o.created_at",
     )
     .bind(uid)
     .fetch_all(pool)
@@ -911,10 +968,14 @@ pub async fn list_user_organizations(pool: &PgPool, user_id: &ambre_core::UserId
 }
 
 /// Updates an organization name (owner only).
-pub async fn update_organization(pool: &PgPool, org_id: uuid::Uuid, name: &str) -> Result<Option<OrganizationRow>, AppError> {
+pub async fn update_organization(
+    pool: &PgPool,
+    org_id: uuid::Uuid,
+    name: &str,
+) -> Result<Option<OrganizationRow>, AppError> {
     sqlx::query_as::<_, OrganizationRow>(
         "UPDATE organizations SET name = $2 WHERE id = $1
-         RETURNING id, name, org_pubkey, shamir_threshold, shamir_total, created_at"
+         RETURNING id, name, org_pubkey, shamir_threshold, shamir_total, created_at",
     )
     .bind(org_id)
     .bind(name)
@@ -956,14 +1017,17 @@ pub async fn add_org_member(
 }
 
 /// Lists members of an organization.
-pub async fn list_org_members(pool: &PgPool, org_id: uuid::Uuid) -> Result<Vec<OrgMemberRow>, AppError> {
+pub async fn list_org_members(
+    pool: &PgPool,
+    org_id: uuid::Uuid,
+) -> Result<Vec<OrgMemberRow>, AppError> {
     sqlx::query_as::<_, OrgMemberRow>(
         "SELECT om.user_id, u.email, u.display_name, om.role, om.shamir_share_enc,
                 om.created_at
          FROM organization_members om
          JOIN users u ON u.id = om.user_id
          WHERE om.org_id = $1
-         ORDER BY om.created_at"
+         ORDER BY om.created_at",
     )
     .bind(org_id)
     .fetch_all(pool)
@@ -972,11 +1036,15 @@ pub async fn list_org_members(pool: &PgPool, org_id: uuid::Uuid) -> Result<Vec<O
 }
 
 /// Fetches a single org membership row (raw, without user join).
-pub async fn get_org_member(pool: &PgPool, org_id: uuid::Uuid, user_id: uuid::Uuid) -> Result<Option<OrgMembershipRow>, AppError> {
+pub async fn get_org_member(
+    pool: &PgPool,
+    org_id: uuid::Uuid,
+    user_id: uuid::Uuid,
+) -> Result<Option<OrgMembershipRow>, AppError> {
     sqlx::query_as::<_, OrgMembershipRow>(
         "SELECT org_id, user_id, role, shamir_share_enc, created_at
          FROM organization_members
-         WHERE org_id = $1 AND user_id = $2"
+         WHERE org_id = $1 AND user_id = $2",
     )
     .bind(org_id)
     .bind(user_id)
@@ -1001,45 +1069,56 @@ pub struct OrgMembershipRow {
 }
 
 /// Removes a member from an organization.
-pub async fn remove_org_member(pool: &PgPool, org_id: uuid::Uuid, user_id: uuid::Uuid) -> Result<bool, AppError> {
-    let rows = sqlx::query(
-        "DELETE FROM organization_members WHERE org_id = $1 AND user_id = $2"
-    )
-    .bind(org_id)
-    .bind(user_id)
-    .execute(pool)
-    .await?
-    .rows_affected();
+pub async fn remove_org_member(
+    pool: &PgPool,
+    org_id: uuid::Uuid,
+    user_id: uuid::Uuid,
+) -> Result<bool, AppError> {
+    let rows = sqlx::query("DELETE FROM organization_members WHERE org_id = $1 AND user_id = $2")
+        .bind(org_id)
+        .bind(user_id)
+        .execute(pool)
+        .await?
+        .rows_affected();
     Ok(rows > 0)
 }
 
 /// Updates a member's role.
-pub async fn update_org_member_role(pool: &PgPool, org_id: uuid::Uuid, user_id: uuid::Uuid, role: &str) -> Result<(), AppError> {
-    sqlx::query(
-        "UPDATE organization_members SET role = $3 WHERE org_id = $1 AND user_id = $2"
-    )
-    .bind(org_id)
-    .bind(user_id)
-    .bind(role)
-    .execute(pool)
-    .await?;
+pub async fn update_org_member_role(
+    pool: &PgPool,
+    org_id: uuid::Uuid,
+    user_id: uuid::Uuid,
+    role: &str,
+) -> Result<(), AppError> {
+    sqlx::query("UPDATE organization_members SET role = $3 WHERE org_id = $1 AND user_id = $2")
+        .bind(org_id)
+        .bind(user_id)
+        .bind(role)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
 /// Collects Shamir shares for a given organization from the database.
 #[allow(dead_code)]
-pub async fn get_org_shamir_shares(pool: &PgPool, org_id: uuid::Uuid) -> Result<Vec<(uuid::Uuid, Vec<u8>)>, AppError> {
+pub async fn get_org_shamir_shares(
+    pool: &PgPool,
+    org_id: uuid::Uuid,
+) -> Result<Vec<(uuid::Uuid, Vec<u8>)>, AppError> {
     let rows = sqlx::query(
         "SELECT user_id, shamir_share_enc FROM organization_members WHERE org_id = $1 AND shamir_share_enc IS NOT NULL"
     )
     .bind(org_id)
     .fetch_all(pool)
     .await?;
-    let shares: Vec<(uuid::Uuid, Vec<u8>)> = rows.iter().map(|r| {
-        let uid: uuid::Uuid = r.try_get("user_id").unwrap();
-        let share: Vec<u8> = r.try_get("shamir_share_enc").unwrap();
-        (uid, share)
-    }).collect();
+    let shares: Vec<(uuid::Uuid, Vec<u8>)> = rows
+        .iter()
+        .map(|r| {
+            let uid: uuid::Uuid = r.try_get("user_id").unwrap();
+            let share: Vec<u8> = r.try_get("shamir_share_enc").unwrap();
+            (uid, share)
+        })
+        .collect();
     Ok(shares)
 }
 
@@ -1053,7 +1132,7 @@ pub async fn log_org_recovery(
 ) -> Result<(), AppError> {
     sqlx::query(
         "INSERT INTO org_recovery_log (org_id, target_user_id, recovered_by, reason)
-         VALUES ($1, $2, $3, $4)"
+         VALUES ($1, $2, $3, $4)",
     )
     .bind(org_id)
     .bind(target_user_id)
@@ -1065,12 +1144,19 @@ pub async fn log_org_recovery(
 }
 
 /// Fetches the organization master key for a specific user (encrypted with org pubkey).
-pub async fn get_user_org_master_key_enc(pool: &PgPool, user_id: uuid::Uuid) -> Result<Option<Vec<u8>>, AppError> {
+pub async fn get_user_org_master_key_enc(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+) -> Result<Option<Vec<u8>>, AppError> {
     let row = sqlx::query("SELECT org_master_key_enc FROM users WHERE id = $1")
         .bind(user_id)
         .fetch_optional(pool)
         .await?;
-    Ok(row.and_then(|r| r.try_get::<Option<Vec<u8>>, _>("org_master_key_enc").ok().flatten()))
+    Ok(row.and_then(|r| {
+        r.try_get::<Option<Vec<u8>>, _>("org_master_key_enc")
+            .ok()
+            .flatten()
+    }))
 }
 
 // Compaction ----------------------------------------------------------
@@ -1087,14 +1173,17 @@ pub struct CompactSnapshot {
 /// Returns a list of snapshot ids and their S3 keys that should be
 /// deleted. Keeps at most `keep` snapshots per document (most recent
 /// by created_at DESC).
-pub async fn find_compactable_snapshots(pool: &PgPool, keep: i64) -> Result<Vec<CompactSnapshot>, AppError> {
+pub async fn find_compactable_snapshots(
+    pool: &PgPool,
+    keep: i64,
+) -> Result<Vec<CompactSnapshot>, AppError> {
     let rows = sqlx::query_as::<_, CompactSnapshot>(
         "WITH ranked AS (
             SELECT id, s3_key,
                    ROW_NUMBER() OVER (PARTITION BY document_id ORDER BY created_at DESC) AS rn
             FROM snapshots
         )
-        SELECT id, s3_key FROM ranked WHERE rn > $1"
+        SELECT id, s3_key FROM ranked WHERE rn > $1",
     )
     .bind(keep)
     .fetch_all(pool)

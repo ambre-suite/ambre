@@ -77,13 +77,9 @@ impl IntoResponse for AppError {
             AppError::NotFound { .. } => (StatusCode::NOT_FOUND, "NOT_FOUND"),
             AppError::Conflict { .. } => (StatusCode::CONFLICT, "CONFLICT"),
             AppError::ClockMismatch { .. } => (StatusCode::CONFLICT, "CLOCK_MISMATCH"),
-            AppError::InvalidSignature => {
-                (StatusCode::UNPROCESSABLE_ENTITY, "INVALID_SIGNATURE")
-            }
+            AppError::InvalidSignature => (StatusCode::UNPROCESSABLE_ENTITY, "INVALID_SIGNATURE"),
             AppError::SnapshotRequired => (StatusCode::CONFLICT, "SNAPSHOT_REQUIRED"),
-            AppError::CompactionLockHeld => {
-                (StatusCode::CONFLICT, "COMPACTION_LOCK_HELD")
-            }
+            AppError::CompactionLockHeld => (StatusCode::CONFLICT, "COMPACTION_LOCK_HELD"),
             AppError::UnknownProvider(_) => (StatusCode::BAD_REQUEST, "UNKNOWN_PROVIDER"),
             AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, "BAD_REQUEST"),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR"),
@@ -99,9 +95,12 @@ impl IntoResponse for AppError {
         }
 
         let message = match &self {
-            AppError::Database(_) | AppError::Redis(_) | AppError::S3(_) | AppError::Decode(_) | AppError::Oidc(_) | AppError::Internal(_) => {
-                "Internal server error".to_string()
-            }
+            AppError::Database(_)
+            | AppError::Redis(_)
+            | AppError::S3(_)
+            | AppError::Decode(_)
+            | AppError::Oidc(_)
+            | AppError::Internal(_) => "Internal server error".to_string(),
             other => other.to_string(),
         };
 
@@ -153,7 +152,10 @@ mod tests {
 
     #[tokio::test]
     async fn not_found_returns_404() {
-        let r = AppError::NotFound { resource: "document" }.into_response();
+        let r = AppError::NotFound {
+            resource: "document",
+        }
+        .into_response();
         assert_eq!(r.status(), StatusCode::NOT_FOUND);
         let b = extract_body(r).await;
         assert_eq!(b["error"], "NOT_FOUND");
@@ -161,7 +163,10 @@ mod tests {
 
     #[tokio::test]
     async fn conflict_returns_409() {
-        let r = AppError::Conflict { detail: "already exists".into() }.into_response();
+        let r = AppError::Conflict {
+            detail: "already exists".into(),
+        }
+        .into_response();
         assert_eq!(r.status(), StatusCode::CONFLICT);
         let b = extract_body(r).await;
         assert_eq!(b["error"], "CONFLICT");
@@ -169,7 +174,11 @@ mod tests {
 
     #[tokio::test]
     async fn clock_mismatch_returns_409() {
-        let r = AppError::ClockMismatch { expected: 5, got: 7 }.into_response();
+        let r = AppError::ClockMismatch {
+            expected: 5,
+            got: 7,
+        }
+        .into_response();
         assert_eq!(r.status(), StatusCode::CONFLICT);
         let b = extract_body(r).await;
         assert_eq!(b["error"], "CLOCK_MISMATCH");
@@ -246,4 +255,3 @@ mod tests {
         assert!(matches!(e, AppError::Decode(_)));
     }
 }
-

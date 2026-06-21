@@ -40,7 +40,12 @@ pub fn seal(
     let (nonce, ciphertext) = aead::seal(plaintext, aad, doc_key);
     let commitment_tag = commitment::commitment_tag(doc_key, &nonce, &ciphertext, aad);
     let signature = signature::sign(signing_key, &nonce, &ciphertext, aad, &commitment_tag);
-    Sealed { nonce, ciphertext, commitment_tag, signature }
+    Sealed {
+        nonce,
+        ciphertext,
+        commitment_tag,
+        signature,
+    }
 }
 
 /// Verifies and decrypts a [`Sealed`] envelope in the spec order: signature,

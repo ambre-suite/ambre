@@ -127,6 +127,9 @@ mod tests {
 
     #[test]
     fn unparseable_left_verbatim() {
-        assert_eq!(shift_formula("=this is not (a formula", 1, 1), "=this is not (a formula");
+        assert_eq!(
+            shift_formula("=this is not (a formula", 1, 1),
+            "=this is not (a formula"
+        );
     }
 }

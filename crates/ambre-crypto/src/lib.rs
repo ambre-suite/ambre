@@ -23,7 +23,7 @@ mod random;
 pub mod signature;
 
 pub use ecdh::WrappedKey;
-pub use envelope::{open, seal, Sealed};
+pub use envelope::{Sealed, open, seal};
 pub use error::CryptoError;
 pub use keys::{DocumentKey, MasterSeed};
 

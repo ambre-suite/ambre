@@ -16,8 +16,7 @@ impl TrameState {
         // Any command that produced a CRDT delta also moved the `UndoManager`
         // stacks, so the chrome's Undo/Redo affordances must be refreshed. Undo
         // and Redo already append their own `UndoState`; skip the duplicate.
-        let already_reported =
-            matches!(outcome.display.last(), Some(TrameEvent::UndoState { .. }));
+        let already_reported = matches!(outcome.display.last(), Some(TrameEvent::UndoState { .. }));
         if outcome.update.is_some() && !already_reported {
             outcome.display.push(self.undo_state_event());
         }
@@ -36,7 +35,12 @@ impl TrameState {
         // `group_end` is a no-op when no group is open.
         self.undo_manager.group_end();
         match cmd {
-            TrameCommand::SetActiveCell { row, col, anchor_row, anchor_col } => {
+            TrameCommand::SetActiveCell {
+                row,
+                col,
+                anchor_row,
+                anchor_col,
+            } => {
                 self.active = (row, col);
                 // Normalize the active cell and the anchor corner into the
                 // selection rectangle the structural intents resolve against.
@@ -60,7 +64,9 @@ impl TrameState {
             TrameCommand::SetCellText { row, col, text } => {
                 tracing::info!(
                     "[Logic] SetCellText row={} col={} text='{:.80}'",
-                    row, col, text,
+                    row,
+                    col,
+                    text,
                 );
                 // Open the edit group: the cell write below and any derived
                 // commit (filter recompute) merge into a single undo item, sealed
@@ -92,7 +98,13 @@ impl TrameState {
                 self.finish_cell_writes()
             }
             TrameCommand::SetCellStyle { patch } => self.set_cell_style(patch),
-            TrameCommand::ScrollViewport { version, row_start, row_end, col_start, col_end } => {
+            TrameCommand::ScrollViewport {
+                version,
+                row_start,
+                row_end,
+                col_start,
+                col_end,
+            } => {
                 // Clamp to grid bounds.
                 let row_end = row_end.min(TOTAL_ROWS.saturating_sub(1));
                 let col_end = col_end.min(TOTAL_COLS.saturating_sub(1));
@@ -157,8 +169,12 @@ impl TrameState {
                     }
                 }
 
-                let mut display =
-                    vec![TrameEvent::ViewportData { version, row_start, col_start, cells }];
+                let mut display = vec![TrameEvent::ViewportData {
+                    version,
+                    row_start,
+                    col_start,
+                    cells,
+                }];
                 // Hydrate the tab strip on the first viewport request of the
                 // session (the UI has no separate sheet-list fetch command).
                 if !self.sheet_list_sent {
@@ -171,9 +187,12 @@ impl TrameState {
             TrameCommand::DeleteRow { at } => self.delete_axis(at, Axis::Row),
             TrameCommand::InsertColumn { at } => self.insert_axis(at, Axis::Col),
             TrameCommand::DeleteColumn { at } => self.delete_axis(at, Axis::Col),
-            TrameCommand::MergeCells { row, col, row_end, col_end } => {
-                self.merge_cells(row, col, row_end, col_end)
-            }
+            TrameCommand::MergeCells {
+                row,
+                col,
+                row_end,
+                col_end,
+            } => self.merge_cells(row, col, row_end, col_end),
             TrameCommand::UnmergeCells { row, col } => self.unmerge_cells(row, col),
             // -- Parameterless structural intents (grid context menu). Geometry
             // comes from the tracked active cell / selection (`SetActiveCell`).
@@ -219,9 +238,11 @@ impl TrameState {
             } => self.sort_range(
                 &sheet_id, row_start, row_end, col_start, col_end, sort_col, ascending, has_header,
             ),
-            TrameCommand::ApplyFilter { sheet_id, col, kind } => {
-                self.apply_filter(&sheet_id, col, kind)
-            }
+            TrameCommand::ApplyFilter {
+                sheet_id,
+                col,
+                kind,
+            } => self.apply_filter(&sheet_id, col, kind),
             TrameCommand::ClearFilter { sheet_id } => self.clear_filter(&sheet_id),
             // Parameterless siblings: geometry resolved against the tracked active
             // cell / active sheet (`-ui.md` sec.5.D), like the sort intents above.
@@ -235,21 +256,28 @@ impl TrameState {
                 let sheet = self.active_sheet.clone();
                 self.clear_filter(&sheet)
             }
-            TrameCommand::PasteRange { target_row, target_col, payload } => {
-                self.paste_range(target_row, target_col, payload)
-            }
+            TrameCommand::PasteRange {
+                target_row,
+                target_col,
+                payload,
+            } => self.paste_range(target_row, target_col, payload),
             TrameCommand::PasteText { text } => self.paste_text(&text),
             TrameCommand::PasteClipboardAtActive { payload } => {
                 let (row, col) = self.active;
                 self.paste_range(row, col, payload)
             }
-            TrameCommand::FillRange { sheet_id, src, dest, mode } => {
-                self.fill_range(&sheet_id, src, dest, mode)
-            }
+            TrameCommand::FillRange {
+                sheet_id,
+                src,
+                dest,
+                mode,
+            } => self.fill_range(&sheet_id, src, dest, mode),
 
-            TrameCommand::FindNext { query, match_case, whole_cell } => {
-                self.find_next(query, match_case, whole_cell)
-            }
+            TrameCommand::FindNext {
+                query,
+                match_case,
+                whole_cell,
+            } => self.find_next(query, match_case, whole_cell),
             TrameCommand::ReplaceAll {
                 query,
                 replacement,
@@ -272,10 +300,19 @@ impl TrameState {
                 target_sheet_id,
                 start_row,
                 start_col,
-            } => self.import_csv(data, delimiter, has_header, target_sheet_id, start_row, start_col),
-            TrameCommand::ExportCsv { sheet_id, delimiter, range } => {
-                self.export_csv(&sheet_id, delimiter, range)
-            }
+            } => self.import_csv(
+                data,
+                delimiter,
+                has_header,
+                target_sheet_id,
+                start_row,
+                start_col,
+            ),
+            TrameCommand::ExportCsv {
+                sheet_id,
+                delimiter,
+                range,
+            } => self.export_csv(&sheet_id, delimiter, range),
             TrameCommand::ExportActiveSheetCsv => {
                 let sheet = self.active_sheet.clone();
                 self.export_csv(&sheet, None, None)
@@ -322,7 +359,12 @@ impl TrameState {
     ///
     /// [`UndoState`]: ambre_bus::TrameEvent::UndoState
     pub(super) fn apply_history(&mut self, undo: bool) -> TrameOutcome {
-        let changed = if undo { self.undo_manager.undo() } else { self.undo_manager.redo() }.unwrap_or(false);
+        let changed = if undo {
+            self.undo_manager.undo()
+        } else {
+            self.undo_manager.redo()
+        }
+        .unwrap_or(false);
 
         if !changed {
             return TrameOutcome::display_only(vec![self.undo_state_event()]);
@@ -343,5 +385,4 @@ impl TrameState {
             can_redo: self.undo_manager.can_redo(),
         }
     }
-
 }

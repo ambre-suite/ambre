@@ -62,13 +62,14 @@ pub struct RangeDep {
 
 impl RangeDep {
     /// Range on the default sheet (index 0). Used by single-sheet call sites.
-    pub fn new(
-        row_start: u32,
-        row_end: u32,
-        col_start: u32,
-        col_end: u32,
-    ) -> Self {
-        Self { sheet: 0, row_start, row_end, col_start, col_end }
+    pub fn new(row_start: u32, row_end: u32, col_start: u32, col_end: u32) -> Self {
+        Self {
+            sheet: 0,
+            row_start,
+            row_end,
+            col_start,
+            col_end,
+        }
     }
 
     /// Range on an explicit sheet index.
@@ -79,7 +80,13 @@ impl RangeDep {
         col_start: u32,
         col_end: u32,
     ) -> Self {
-        Self { sheet, row_start, row_end, col_start, col_end }
+        Self {
+            sheet,
+            row_start,
+            row_end,
+            col_start,
+            col_end,
+        }
     }
 
     /// Whether the given cell falls inside this range.
@@ -92,8 +99,14 @@ impl RangeDep {
 
     /// Number of cells spanned by this range.
     pub fn len(&self) -> usize {
-        let rows = self.row_end.saturating_sub(self.row_start).saturating_add(1) as usize;
-        let cols = self.col_end.saturating_sub(self.col_start).saturating_add(1) as usize;
+        let rows = self
+            .row_end
+            .saturating_sub(self.row_start)
+            .saturating_add(1) as usize;
+        let cols = self
+            .col_end
+            .saturating_sub(self.col_start)
+            .saturating_add(1) as usize;
         rows * cols
     }
 
@@ -146,7 +159,11 @@ impl CellId {
 
     /// Convenience constructor for a fully bound cell `(row_uid, col_uid)`.
     pub const fn bound(sheet: u16, row: Uid, col: Uid) -> Self {
-        Self { sheet, row: AxisId::Bound(row), col: AxisId::Bound(col) }
+        Self {
+            sheet,
+            row: AxisId::Bound(row),
+            col: AxisId::Bound(col),
+        }
     }
 
     /// The bound row `Uid`, or `None` when the row axis is virtual.
@@ -405,7 +422,10 @@ pub enum Op {
     // -- Function call ---------------------------------------------------------
     /// `n_args` values are popped from the stack and passed to the named
     /// built-in function; the result is pushed back.
-    CallFn { name: String, n_args: u8 },
+    CallFn {
+        name: String,
+        n_args: u8,
+    },
 }
 
 // -----------------------------------------------------------------------------
@@ -640,7 +660,10 @@ mod tests {
         assert_eq!(CellValue::Text("hello".into()).to_display(), "hello");
         assert_eq!(CellValue::Boolean(true).to_display(), "true");
         assert_eq!(CellValue::Empty.to_display(), "");
-        assert_eq!(CellValue::Error(FormulaError::DivisionByZero).to_display(), "#DIV/0!");
+        assert_eq!(
+            CellValue::Error(FormulaError::DivisionByZero).to_display(),
+            "#DIV/0!"
+        );
         assert_eq!(
             CellValue::Error(FormulaError::ParseError("oops".into())).to_display(),
             "#PARSE!(oops)"
@@ -653,10 +676,16 @@ mod tests {
     use crate::model::Uid;
 
     fn row_uid(p: u32) -> Uid {
-        Uid { peer: 1, counter: p }
+        Uid {
+            peer: 1,
+            counter: p,
+        }
     }
     fn col_uid(p: u32) -> Uid {
-        Uid { peer: 2, counter: p }
+        Uid {
+            peer: 2,
+            counter: p,
+        }
     }
     fn bound_range(r0: u32, r1: u32, c0: u32, c1: u32) -> RangeId {
         RangeId {
@@ -712,8 +741,14 @@ mod tests {
         let r = bound_range(1, 3, 1, 2); // rows 1..=3, cols 1..=2
         assert!(r.contains(row_uid(2), col_uid(1), &idx));
         assert!(!r.contains(row_uid(0), col_uid(1), &idx), "row above span");
-        assert!(!r.contains(row_uid(2), col_uid(3), &idx), "col right of span");
-        assert!(!r.contains(row_uid(999), col_uid(1), &idx), "deleted row not contained");
+        assert!(
+            !r.contains(row_uid(2), col_uid(3), &idx),
+            "col right of span"
+        );
+        assert!(
+            !r.contains(row_uid(999), col_uid(1), &idx),
+            "deleted row not contained"
+        );
     }
 
     #[test]
@@ -723,6 +758,9 @@ mod tests {
         assert_eq!(CellValue::Boolean(true).as_number().unwrap(), 1.0);
         assert_eq!(CellValue::Boolean(false).as_number().unwrap(), 0.0);
         assert_eq!(CellValue::Empty.as_number().unwrap(), 0.0);
-        assert!(matches!(CellValue::Text("abc".into()).as_number(), Err(FormulaError::TypeError)));
+        assert!(matches!(
+            CellValue::Text("abc".into()).as_number(),
+            Err(FormulaError::TypeError)
+        ));
     }
 }

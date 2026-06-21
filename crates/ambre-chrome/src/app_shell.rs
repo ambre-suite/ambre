@@ -48,8 +48,7 @@ pub fn AppShell(
     canvas_id: Option<String>,
     header: Header,
     toolbar: Toolbar,
-    #[prop(optional)]
-    formula_bar: Option<FormulaBar>,
+    #[prop(optional)] formula_bar: Option<FormulaBar>,
     status_bar: StatusBar,
 ) -> impl IntoView {
     let canvas_id = canvas_id.unwrap_or_else(|| "ambre-canvas".to_owned());

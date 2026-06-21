@@ -83,8 +83,7 @@ pub(crate) fn async_write_clipboard(tsv: String, payload_b64: Option<String>) {
         let _ = js_sys::Reflect::set(&record, &JsValue::from_str("text/plain"), &text_promise);
         if let Some(b64) = payload_b64 {
             let p = js_sys::Promise::resolve(&JsValue::from_str(&b64));
-            let _ =
-                js_sys::Reflect::set(&record, &JsValue::from_str(AMBRE_CLIPBOARD_WEB_TYPE), &p);
+            let _ = js_sys::Reflect::set(&record, &JsValue::from_str(AMBRE_CLIPBOARD_WEB_TYPE), &p);
         }
         let Ok(item) = web_sys::ClipboardItem::new_with_record_from_str_to_str_promise(&record)
         else {
@@ -296,19 +295,23 @@ impl FrameHost {
         }
         tracing::info!("GPU resize: {width}x{height}");
 
-        gpu.surface.configure(&gpu.device, &wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: gpu.surface_format,
-            width,
-            height,
-            present_mode: wgpu::PresentMode::AutoNoVsync,
-            desired_maximum_frame_latency: 2,
-            alpha_mode: wgpu::CompositeAlphaMode::Auto,
-            view_formats: vec![],
-        });
+        gpu.surface.configure(
+            &gpu.device,
+            &wgpu::SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                format: gpu.surface_format,
+                width,
+                height,
+                present_mode: wgpu::PresentMode::AutoNoVsync,
+                desired_maximum_frame_latency: 2,
+                alpha_mode: wgpu::CompositeAlphaMode::Auto,
+                view_formats: vec![],
+            },
+        );
         // Reallocate the ping-pong offscreens at the new size; previous content
         // is lost so the view's resize() must have flagged a full repaint.
-        gpu.quad_renderer.resize_offscreens(&gpu.device, width, height);
+        gpu.quad_renderer
+            .resize_offscreens(&gpu.device, width, height);
 
         gpu.width = width;
         gpu.height = height;
@@ -372,20 +375,27 @@ impl FrameHost {
         // -- Build CPU batches for whichever layers are being rebuilt. --------
         let t_draw_ms = if any_dirty {
             gpu.text_cache.reset_frame_stats();
-            gpu.quad_renderer.begin_frame(gpu.width as f32, gpu.height as f32);
+            gpu.quad_renderer
+                .begin_frame(gpu.width as f32, gpu.height as f32);
             let t_draw_start = self.perf.now();
             {
                 let mut surface = WgpuSurface::new(&mut gpu.quad_renderer);
                 if content_active {
                     surface.begin_layer(Layer::Content);
                     self.view.paint_content(
-                        &mut surface, &mut gpu.font_cx, &mut gpu.text_cache, plan.content_strip,
+                        &mut surface,
+                        &mut gpu.font_cx,
+                        &mut gpu.text_cache,
+                        plan.content_strip,
                     );
                 }
                 if overlay_redraw {
                     surface.begin_layer(Layer::Overlay);
                     self.view.paint_overlay(
-                        &mut surface, &mut gpu.font_cx, &mut gpu.text_cache, &stats,
+                        &mut surface,
+                        &mut gpu.font_cx,
+                        &mut gpu.text_cache,
+                        &stats,
                     );
                 }
             }
@@ -408,9 +418,12 @@ impl FrameHost {
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
 
         gpu.quad_renderer.flush_dirty_rect(
-            &gpu.device, &gpu.queue,
-            &mut encoder, &target_view,
-            plan.content, plan.overlay,
+            &gpu.device,
+            &gpu.queue,
+            &mut encoder,
+            &target_view,
+            plan.content,
+            plan.overlay,
         );
 
         gpu.queue.submit(std::iter::once(encoder.finish()));
@@ -456,11 +469,23 @@ impl FrameHost {
 
             // Lay out both blocks first so we can vertically center the stack.
             let title = gpu.text_cache.get_or_build(
-                &mut gpu.font_cx, TITLE_TEXT, FONT_HEADING, col_w, Alignment::Center, false, false,
+                &mut gpu.font_cx,
+                TITLE_TEXT,
+                FONT_HEADING,
+                col_w,
+                Alignment::Center,
+                false,
+                false,
             );
             let title_h = title.height() as f64;
             let body = gpu.text_cache.get_or_build(
-                &mut gpu.font_cx, message, FONT_BODY, col_w, Alignment::Center, false, false,
+                &mut gpu.font_cx,
+                message,
+                FONT_BODY,
+                col_w,
+                Alignment::Center,
+                false,
+                false,
             );
             let body_h = body.height() as f64;
 
@@ -469,21 +494,46 @@ impl FrameHost {
             let title_y = ((h as f64) - total_h) / 2.0;
             let body_y = title_y + title_h + gap;
 
-            draw_centered_text(&mut surface, &mut gpu.font_cx, &mut gpu.text_cache,
-                TITLE_TEXT, FONT_HEADING, col_w, origin_x, title_y, TITLE);
-            draw_centered_text(&mut surface, &mut gpu.font_cx, &mut gpu.text_cache,
-                message, FONT_BODY, col_w, origin_x, body_y, BODY);
+            draw_centered_text(
+                &mut surface,
+                &mut gpu.font_cx,
+                &mut gpu.text_cache,
+                TITLE_TEXT,
+                FONT_HEADING,
+                col_w,
+                origin_x,
+                title_y,
+                TITLE,
+            );
+            draw_centered_text(
+                &mut surface,
+                &mut gpu.font_cx,
+                &mut gpu.text_cache,
+                message,
+                FONT_BODY,
+                col_w,
+                origin_x,
+                body_y,
+                BODY,
+            );
         }
 
         let surface_tex = match gpu.surface.get_current_texture() {
             Ok(t) => t,
-            Err(e) => { tracing::error!("fatal screen get_current_texture: {e:?}"); return; }
+            Err(e) => {
+                tracing::error!("fatal screen get_current_texture: {e:?}");
+                return;
+            }
         };
         let target_view = surface_tex.texture.create_view(&Default::default());
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         gpu.quad_renderer.flush_dirty_rect(
-            &gpu.device, &gpu.queue, &mut encoder, &target_view,
-            ContentRepaint::Full, OverlayRepaint::Redraw,
+            &gpu.device,
+            &gpu.queue,
+            &mut encoder,
+            &target_view,
+            ContentRepaint::Full,
+            OverlayRepaint::Redraw,
         );
         gpu.queue.submit(std::iter::once(encoder.finish()));
         surface_tex.present();
@@ -507,11 +557,21 @@ fn draw_centered_text(
     if text.is_empty() {
         return;
     }
-    let layout = cache.get_or_build(font_cx, text, font_size, max_width, Alignment::Center, false, false);
+    let layout = cache.get_or_build(
+        font_cx,
+        text,
+        font_size,
+        max_width,
+        Alignment::Center,
+        false,
+        false,
+    );
     let brush = Brush::Solid(color);
     for line in layout.lines() {
         for item in line.items() {
-            let PositionedLayoutItem::GlyphRun(run) = item else { continue };
+            let PositionedLayoutItem::GlyphRun(run) = item else {
+                continue;
+            };
             let tx = origin_x + run.offset() as f64;
             let ty = origin_y + run.baseline() as f64;
             surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
@@ -599,7 +659,11 @@ where
         .expect("canvas parent is an Element");
     let text_input = TextInput::create(&document, &input_parent);
 
-    let view = make_view(canvas.width() as f64, canvas.height() as f64, text_input.clone());
+    let view = make_view(
+        canvas.width() as f64,
+        canvas.height() as f64,
+        text_input.clone(),
+    );
     let host = Rc::new(RefCell::new(FrameHost::new(view, perf)));
 
     // -- Async GPU init, then start the rAF loop. -----------------------------
@@ -643,21 +707,16 @@ where
                 // keyboard; forwarding them to the grid would double-process the
                 // event (e.g. a formula-bar Enter committing the cell, then the
                 // grid committing again and navigating off it).
-                if event
-                    .target()
-                    .is_some_and(|t| is_other_editable(&t, &pipe))
-                {
+                if event.target().is_some_and(|t| is_other_editable(&t, &pipe)) {
                     return;
                 }
-                let consumed = host_c
-                    .borrow_mut()
-                    .handle_input(&InputEvent::Key {
-                        key: event.key(),
-                        ctrl: event.ctrl_key(),
-                        alt: event.alt_key(),
-                        shift: event.shift_key(),
-                        meta: event.meta_key(),
-                    });
+                let consumed = host_c.borrow_mut().handle_input(&InputEvent::Key {
+                    key: event.key(),
+                    ctrl: event.ctrl_key(),
+                    alt: event.alt_key(),
+                    shift: event.shift_key(),
+                    meta: event.meta_key(),
+                });
                 if consumed {
                     event.prevent_default();
                 }
@@ -685,7 +744,9 @@ where
             }
             let value = ta_read.value();
             if !value.is_empty() {
-                host_c.borrow_mut().handle_input(&InputEvent::Text { text: value });
+                host_c
+                    .borrow_mut()
+                    .handle_input(&InputEvent::Text { text: value });
                 ta_read.set_value("");
             }
         });
@@ -746,7 +807,9 @@ where
         let host_c = Rc::clone(&host);
         let cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(
             move |event: web_sys::ClipboardEvent| {
-                let Some(data) = event.clipboard_data() else { return };
+                let Some(data) = event.clipboard_data() else {
+                    return;
+                };
                 // Prefer the private Ambre payload (internal round-trip); fall back
                 // to plain text (external apps, or a browser that dropped the type).
                 let payload = data
@@ -754,7 +817,9 @@ where
                     .ok()
                     .filter(|s| !s.is_empty())
                     .and_then(|b64| base64_decode(&b64))
-                    .and_then(|bytes| postcard::from_bytes::<ambre_bus::ClipboardPayload>(&bytes).ok());
+                    .and_then(|bytes| {
+                        postcard::from_bytes::<ambre_bus::ClipboardPayload>(&bytes).ok()
+                    });
                 let text = data.get_data("text/plain").unwrap_or_default();
                 if payload.is_none() && text.is_empty() {
                     return;
@@ -835,8 +900,8 @@ where
                 }
             },
         );
-        let observer = web_sys::ResizeObserver::new(cb.as_ref().unchecked_ref())
-            .expect("ResizeObserver");
+        let observer =
+            web_sys::ResizeObserver::new(cb.as_ref().unchecked_ref()).expect("ResizeObserver");
         observer.observe(&canvas_c);
         cb.forget();
     }
@@ -865,7 +930,9 @@ where
     // -- Pointer events -> view. -----------------------------------------------
     {
         let host_c = Rc::clone(&host);
-        let dpr = web_sys::window().map(|w| w.device_pixel_ratio()).unwrap_or(1.0);
+        let dpr = web_sys::window()
+            .map(|w| w.device_pixel_ratio())
+            .unwrap_or(1.0);
 
         let cb = Closure::<dyn FnMut(web_sys::PointerEvent)>::new(
             move |event: web_sys::PointerEvent| {
@@ -881,7 +948,11 @@ where
                         ctrl: event.ctrl_key() || event.meta_key(),
                     },
                     "pointermove" => InputEvent::PointerMove { x, y },
-                    "pointerup" => InputEvent::PointerUp { x, y, button: event.button() },
+                    "pointerup" => InputEvent::PointerUp {
+                        x,
+                        y,
+                        button: event.button(),
+                    },
                     _ => return,
                 };
                 let consumed = host_c.borrow_mut().handle_input(&ev);
@@ -905,9 +976,11 @@ where
     // pointer path.
     {
         let host_c = Rc::clone(&host);
-        let dpr = web_sys::window().map(|w| w.device_pixel_ratio()).unwrap_or(1.0);
-        let cb = Closure::<dyn FnMut(web_sys::MouseEvent)>::new(
-            move |event: web_sys::MouseEvent| {
+        let dpr = web_sys::window()
+            .map(|w| w.device_pixel_ratio())
+            .unwrap_or(1.0);
+        let cb =
+            Closure::<dyn FnMut(web_sys::MouseEvent)>::new(move |event: web_sys::MouseEvent| {
                 let ev = InputEvent::DoubleClick {
                     x: event.offset_x() as f64 * dpr,
                     y: event.offset_y() as f64 * dpr,
@@ -915,8 +988,7 @@ where
                 if host_c.borrow_mut().handle_input(&ev) {
                     event.prevent_default();
                 }
-            },
-        );
+            });
         canvas
             .add_event_listener_with_callback("dblclick", cb.as_ref().unchecked_ref())
             .expect("add dblclick listener");
@@ -930,9 +1002,11 @@ where
     // path and forward `delta_mode` so the view can normalise lines/pages.
     {
         let host_c = Rc::clone(&host);
-        let dpr = web_sys::window().map(|w| w.device_pixel_ratio()).unwrap_or(1.0);
-        let cb = Closure::<dyn FnMut(web_sys::WheelEvent)>::new(
-            move |event: web_sys::WheelEvent| {
+        let dpr = web_sys::window()
+            .map(|w| w.device_pixel_ratio())
+            .unwrap_or(1.0);
+        let cb =
+            Closure::<dyn FnMut(web_sys::WheelEvent)>::new(move |event: web_sys::WheelEvent| {
                 let ev = InputEvent::Wheel {
                     dx: event.delta_x() * dpr,
                     dy: event.delta_y() * dpr,
@@ -943,8 +1017,7 @@ where
                 if consumed {
                     event.prevent_default();
                 }
-            },
-        );
+            });
         canvas
             .add_event_listener_with_callback("wheel", cb.as_ref().unchecked_ref())
             .expect("add wheel listener");
@@ -995,7 +1068,9 @@ fn is_other_editable(target: &web_sys::EventTarget, pipe: &web_sys::HtmlTextArea
 }
 
 fn size_backing_store(canvas: &HtmlCanvasElement) -> Option<(u32, u32)> {
-    let dpr = web_sys::window().map(|w| w.device_pixel_ratio()).unwrap_or(1.0);
+    let dpr = web_sys::window()
+        .map(|w| w.device_pixel_ratio())
+        .unwrap_or(1.0);
     let w = (canvas.client_width() as f64 * dpr).round() as u32;
     let h = (canvas.client_height() as f64 * dpr).round() as u32;
     if w == 0 || h == 0 {

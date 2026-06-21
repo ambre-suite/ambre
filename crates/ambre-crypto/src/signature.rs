@@ -12,7 +12,8 @@ use crate::error::CryptoError;
 pub const SIGNATURE_LEN: usize = 64;
 
 fn message(nonce: &[u8], ciphertext: &[u8], aad: &[u8], commitment_tag: &[u8]) -> Vec<u8> {
-    let mut msg = Vec::with_capacity(nonce.len() + ciphertext.len() + aad.len() + commitment_tag.len());
+    let mut msg =
+        Vec::with_capacity(nonce.len() + ciphertext.len() + aad.len() + commitment_tag.len());
     msg.extend_from_slice(nonce);
     msg.extend_from_slice(ciphertext);
     msg.extend_from_slice(aad);

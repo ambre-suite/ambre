@@ -47,10 +47,7 @@ fn fmt_num(v: f64) -> String {
 /// The status bar component: app label, selection aggregates, and a clickable
 /// perf chip backed by `perf`. `stats` is `None` for a single-cell selection.
 #[component]
-pub fn StatusBar(
-    stats: RwSignal<Option<SelStats>>,
-    perf: RwSignal<PerfSnapshot>,
-) -> impl IntoView {
+pub fn StatusBar(stats: RwSignal<Option<SelStats>>, perf: RwSignal<PerfSnapshot>) -> impl IntoView {
     // Whether the full perf panel is expanded (collapsed by default: only the
     // fps chip shows).
     let show_perf = RwSignal::new(false);

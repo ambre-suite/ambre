@@ -242,9 +242,15 @@ mod tests {
     fn top_valign_only_style_has_nonzero_mask_and_roundtrips() {
         // Regression: a Top-only style used to pack to 0 and get deleted from the
         // CRDT, reverting to Middle on reload.
-        let style = CellStyle { v_align: VAlign::Top, ..Default::default() };
+        let style = CellStyle {
+            v_align: VAlign::Top,
+            ..Default::default()
+        };
         let mask = pack_style_mask(&style);
         assert_ne!(mask, 0, "Top valign must survive the zero-mask cull");
-        assert_eq!(unpack_valign((mask & STYLE_VALIGN_MASK) >> STYLE_VALIGN_SHIFT), VAlign::Top);
+        assert_eq!(
+            unpack_valign((mask & STYLE_VALIGN_MASK) >> STYLE_VALIGN_SHIFT),
+            VAlign::Top
+        );
     }
 }

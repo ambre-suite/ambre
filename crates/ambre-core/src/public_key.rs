@@ -91,7 +91,10 @@ mod tests {
     fn test_hex() {
         let pk = PublicKey::from_array([0x01; 32]);
         let hex = pk.to_hex();
-        assert_eq!(hex, "0101010101010101010101010101010101010101010101010101010101010101");
+        assert_eq!(
+            hex,
+            "0101010101010101010101010101010101010101010101010101010101010101"
+        );
         let parsed = PublicKey::from_hex(&hex).unwrap();
         assert_eq!(pk, parsed);
         let parsed_with_prefix = PublicKey::from_hex(&format!("0x{}", hex)).unwrap();

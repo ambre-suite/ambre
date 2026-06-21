@@ -165,7 +165,10 @@ impl TrameState {
         self.rebuild_filter();
         let update = self.flush_delta();
         display.push(TrameEvent::DataReset);
-        TrameOutcome { display, update, ephemeral: None }
+        TrameOutcome {
+            display,
+            update,
+            ephemeral: None,
+        }
     }
-
 }

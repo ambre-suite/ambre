@@ -17,10 +17,10 @@ use std::collections::{HashMap, HashSet};
 
 use loro::{ExportMode, LoroDoc, LoroList, LoroValue, UndoManager, VersionVector};
 
-use crate::formula::{render, AxisId, CellId, FormulaCtx, FormulaEngine, NameTarget, SheetIndices};
+use crate::formula::parser::{parse_formula, resolve_refs};
 use crate::formula::types::CellValue;
 use crate::formula::types::Expr;
-use crate::formula::parser::{parse_formula, resolve_refs};
+use crate::formula::{AxisId, CellId, FormulaCtx, FormulaEngine, NameTarget, SheetIndices, render};
 use crate::model::{SheetIndex, Uid, cell_key, parse_cell_key};
 use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 use ambre_bus::{
@@ -82,7 +82,11 @@ pub struct TrameOutcome {
 impl TrameOutcome {
     /// Convenience: display events only, no sync payloads.
     pub fn display_only(events: Vec<TrameEvent>) -> Self {
-        Self { display: events, update: None, ephemeral: None }
+        Self {
+            display: events,
+            update: None,
+            ephemeral: None,
+        }
     }
 }
 

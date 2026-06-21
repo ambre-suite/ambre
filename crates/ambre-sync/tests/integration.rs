@@ -34,11 +34,7 @@ fn setup(
     (state, logic_rx, mock)
 }
 
-fn send_rest(
-    state: &mut ambre_sync::SyncState,
-    id: RequestId,
-    cmd: RestCommand,
-) {
+fn send_rest(state: &mut ambre_sync::SyncState, id: RequestId, cmd: RestCommand) {
     state.handle_command(SyncCommand::Rest { id, cmd });
 }
 
@@ -51,7 +47,13 @@ fn unlock_returns_session_ready() {
     let (mut state, rx, _mock) = setup(false);
     let id = RequestId::next();
 
-    send_rest(&mut state, id, RestCommand::Unlock { passphrase: b"secret".to_vec() });
+    send_rest(
+        &mut state,
+        id,
+        RestCommand::Unlock {
+            passphrase: b"secret".to_vec(),
+        },
+    );
 
     match drain_rest(&rx, id) {
         RestEvent::SessionReady { .. } => {}
@@ -64,11 +66,20 @@ fn setup_account_returns_created_with_recovery_words() {
     let (mut state, rx, _mock) = setup(false);
     let id = RequestId::next();
 
-    send_rest(&mut state, id, RestCommand::SetupAccount { passphrase: b"secret".to_vec() });
+    send_rest(
+        &mut state,
+        id,
+        RestCommand::SetupAccount {
+            passphrase: b"secret".to_vec(),
+        },
+    );
 
     match drain_rest(&rx, id) {
         RestEvent::AccountCreated { recovery_words } => {
-            assert!(!recovery_words.is_empty(), "recovery words must not be empty");
+            assert!(
+                !recovery_words.is_empty(),
+                "recovery words must not be empty"
+            );
             assert_eq!(recovery_words.len(), 64, "32-byte hex-encoded string");
         }
         other => panic!("expected AccountCreated, got {other:?}"),
@@ -83,7 +94,9 @@ fn logout_returns_logged_out_and_clears_session() {
     send_rest(
         &mut state,
         RequestId::next(),
-        RestCommand::Unlock { passphrase: b"secret".to_vec() },
+        RestCommand::Unlock {
+            passphrase: b"secret".to_vec(),
+        },
     );
     rx.try_iter().count(); // drain SessionReady
 
@@ -108,11 +121,17 @@ fn create_document_returns_created() {
     send_rest(
         &mut state,
         id,
-        RestCommand::CreateDocument { doc_type: DocType::Trame, name: "My Sheet".into() },
+        RestCommand::CreateDocument {
+            doc_type: DocType::Trame,
+            name: "My Sheet".into(),
+        },
     );
 
     match drain_rest(&rx, id) {
-        RestEvent::DocumentCreated { document_id: _, doc_type } => {
+        RestEvent::DocumentCreated {
+            document_id: _,
+            doc_type,
+        } => {
             assert_eq!(doc_type, DocType::Trame);
         }
         other => panic!("expected DocumentCreated, got {other:?}"),
@@ -127,7 +146,10 @@ fn list_documents_includes_created() {
     send_rest(
         &mut state,
         create_id,
-        RestCommand::CreateDocument { doc_type: DocType::Trame, name: "My Sheet".into() },
+        RestCommand::CreateDocument {
+            doc_type: DocType::Trame,
+            name: "My Sheet".into(),
+        },
     );
     let created_doc_id = match drain_rest(&rx, create_id) {
         RestEvent::DocumentCreated { document_id, .. } => document_id,
@@ -155,7 +177,10 @@ fn delete_document_removes_from_list() {
     send_rest(
         &mut state,
         create_id,
-        RestCommand::CreateDocument { doc_type: DocType::Trame, name: "Temp".into() },
+        RestCommand::CreateDocument {
+            doc_type: DocType::Trame,
+            name: "Temp".into(),
+        },
     );
     let doc_id = match drain_rest(&rx, create_id) {
         RestEvent::DocumentCreated { document_id, .. } => document_id,
@@ -163,7 +188,13 @@ fn delete_document_removes_from_list() {
     };
 
     let del_id = RequestId::next();
-    send_rest(&mut state, del_id, RestCommand::DeleteDocument { document_id: doc_id });
+    send_rest(
+        &mut state,
+        del_id,
+        RestCommand::DeleteDocument {
+            document_id: doc_id,
+        },
+    );
 
     match drain_rest(&rx, del_id) {
         RestEvent::DocumentDeleted { document_id } => {
@@ -189,7 +220,10 @@ fn rename_document_updates_name() {
     send_rest(
         &mut state,
         create_id,
-        RestCommand::CreateDocument { doc_type: DocType::Trame, name: "Old".into() },
+        RestCommand::CreateDocument {
+            doc_type: DocType::Trame,
+            name: "Old".into(),
+        },
     );
     let doc_id = match drain_rest(&rx, create_id) {
         RestEvent::DocumentCreated { document_id, .. } => document_id,
@@ -200,7 +234,10 @@ fn rename_document_updates_name() {
     send_rest(
         &mut state,
         rename_id,
-        RestCommand::RenameDocument { document_id: doc_id, name: "New".into() },
+        RestCommand::RenameDocument {
+            document_id: doc_id,
+            name: "New".into(),
+        },
     );
 
     match drain_rest(&rx, rename_id) {
@@ -234,12 +271,17 @@ fn open_document_subscribes_via_mock_ws() {
     send_rest(
         &mut state,
         RequestId::next(),
-        RestCommand::Unlock { passphrase: b"secret".to_vec() },
+        RestCommand::Unlock {
+            passphrase: b"secret".to_vec(),
+        },
     );
     rx.try_iter().count(); // drain SessionReady
 
     let doc_id = ambre_core::DocumentId::new();
-    state.handle_command(SyncCommand::OpenDocument { document_id: doc_id, doc_type: DocType::Trame });
+    state.handle_command(SyncCommand::OpenDocument {
+        document_id: doc_id,
+        doc_type: DocType::Trame,
+    });
 
     // No Rest event is expected (OpenDocument is fire-and-forget).
     assert!(rx.try_iter().count() == 0);
@@ -263,15 +305,22 @@ fn close_document_unsubscribes_via_mock_ws() {
     send_rest(
         &mut state,
         RequestId::next(),
-        RestCommand::Unlock { passphrase: b"secret".to_vec() },
+        RestCommand::Unlock {
+            passphrase: b"secret".to_vec(),
+        },
     );
     rx.try_iter().count();
 
     let doc_id = ambre_core::DocumentId::new();
-    state.handle_command(SyncCommand::OpenDocument { document_id: doc_id, doc_type: DocType::Trame });
+    state.handle_command(SyncCommand::OpenDocument {
+        document_id: doc_id,
+        doc_type: DocType::Trame,
+    });
     mock.drain_client_msgs(); // drain Subscribe
 
-    state.handle_command(SyncCommand::CloseDocument { document_id: doc_id });
+    state.handle_command(SyncCommand::CloseDocument {
+        document_id: doc_id,
+    });
 
     let msgs = mock.drain_client_msgs();
     assert_eq!(msgs.len(), 1);
@@ -291,12 +340,17 @@ fn send_update_after_open_document_encrypts_and_sends() {
     send_rest(
         &mut state,
         RequestId::next(),
-        RestCommand::Unlock { passphrase: b"secret".to_vec() },
+        RestCommand::Unlock {
+            passphrase: b"secret".to_vec(),
+        },
     );
     rx.try_iter().count();
 
     let doc_id = ambre_core::DocumentId::new();
-    state.handle_command(SyncCommand::OpenDocument { document_id: doc_id, doc_type: DocType::Trame });
+    state.handle_command(SyncCommand::OpenDocument {
+        document_id: doc_id,
+        doc_type: DocType::Trame,
+    });
     mock.drain_client_msgs(); // drain Subscribe
 
     // A freshly opened doc is local-only; the direct-send path requires it to
@@ -329,7 +383,13 @@ fn full_session_flow_unlock_create_open_close_logout() {
 
     // 1. Unlock
     let id1 = RequestId::next();
-    send_rest(&mut state, id1, RestCommand::Unlock { passphrase: b"pass".to_vec() });
+    send_rest(
+        &mut state,
+        id1,
+        RestCommand::Unlock {
+            passphrase: b"pass".to_vec(),
+        },
+    );
     match drain_rest(&rx, id1) {
         RestEvent::SessionReady { .. } => {}
         other => panic!("expected SessionReady, got {other:?}"),
@@ -340,7 +400,10 @@ fn full_session_flow_unlock_create_open_close_logout() {
     send_rest(
         &mut state,
         id2,
-        RestCommand::CreateDocument { doc_type: DocType::Trame, name: "Budget".into() },
+        RestCommand::CreateDocument {
+            doc_type: DocType::Trame,
+            name: "Budget".into(),
+        },
     );
     let doc_id = match drain_rest(&rx, id2) {
         RestEvent::DocumentCreated { document_id, .. } => document_id,
@@ -362,10 +425,15 @@ fn full_session_flow_unlock_create_open_close_logout() {
     mock.drain_client_msgs();
 
     // 4. Open the document
-    state.handle_command(SyncCommand::OpenDocument { document_id: doc_id, doc_type: DocType::Trame });
+    state.handle_command(SyncCommand::OpenDocument {
+        document_id: doc_id,
+        doc_type: DocType::Trame,
+    });
     let open_msgs = mock.drain_client_msgs();
     assert!(
-        open_msgs.iter().any(|m| matches!(m, ambre_protocol::ws::WsClientMsg::Subscribe { .. })),
+        open_msgs
+            .iter()
+            .any(|m| matches!(m, ambre_protocol::ws::WsClientMsg::Subscribe { .. })),
         "OpenDocument should send Subscribe"
     );
 
@@ -381,10 +449,14 @@ fn full_session_flow_unlock_create_open_close_logout() {
     assert_eq!(update_msgs.len(), 1, "SendUpdate should send one Update");
 
     // 6. Close the document
-    state.handle_command(SyncCommand::CloseDocument { document_id: doc_id });
+    state.handle_command(SyncCommand::CloseDocument {
+        document_id: doc_id,
+    });
     let close_msgs = mock.drain_client_msgs();
     assert!(
-        close_msgs.iter().any(|m| matches!(m, ambre_protocol::ws::WsClientMsg::Unsubscribe { .. })),
+        close_msgs
+            .iter()
+            .any(|m| matches!(m, ambre_protocol::ws::WsClientMsg::Unsubscribe { .. })),
         "CloseDocument should send Unsubscribe"
     );
 

@@ -16,9 +16,9 @@
 
 use std::collections::{HashMap, HashSet};
 
+use petgraph::Direction;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{Dfs, EdgeRef};
-use petgraph::Direction;
 
 use crate::model::SheetIndex;
 
@@ -233,9 +233,9 @@ impl Default for DependencyGraph {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::test_index::index_with;
     use super::super::types::{AxisId, RangeEndpoint};
+    use super::*;
     use crate::model::Uid;
 
     /// Bound cell at grid `(row, col)` on sheet 0, matching `index_with`'s
@@ -243,15 +243,31 @@ mod tests {
     fn cell(row: u32, col: u32) -> CellId {
         CellId::bound(
             0,
-            Uid { peer: 1, counter: row },
-            Uid { peer: 2, counter: col },
+            Uid {
+                peer: 1,
+                counter: row,
+            },
+            Uid {
+                peer: 2,
+                counter: col,
+            },
         )
     }
 
     /// Bound range over grid rows `[r0, r1]` x cols `[c0, c1]` on sheet 0.
     fn range(r0: u32, r1: u32, c0: u32, c1: u32) -> RangeId {
-        let rid = |r: u32| RangeEndpoint::Specific(AxisId::Bound(Uid { peer: 1, counter: r }));
-        let cid = |c: u32| RangeEndpoint::Specific(AxisId::Bound(Uid { peer: 2, counter: c }));
+        let rid = |r: u32| {
+            RangeEndpoint::Specific(AxisId::Bound(Uid {
+                peer: 1,
+                counter: r,
+            }))
+        };
+        let cid = |c: u32| {
+            RangeEndpoint::Specific(AxisId::Bound(Uid {
+                peer: 2,
+                counter: c,
+            }))
+        };
         RangeId {
             sheet: 0,
             row_start: rid(r0),
@@ -291,7 +307,8 @@ mod tests {
         let mut dag = DependencyGraph::new();
 
         // C3 = SUM(A1:A3)
-        dag.update(cell(2, 2), vec![], vec![range(0, 2, 0, 0)]).unwrap();
+        dag.update(cell(2, 2), vec![], vec![range(0, 2, 0, 0)])
+            .unwrap();
 
         // Changing A2 (inside range) dirties C3.
         let dirty = dag.collect_dirty(cell(1, 0), &idx);
@@ -302,7 +319,8 @@ mod tests {
     fn range_outside_no_dirty() {
         let idx = index_with(10, 10);
         let mut dag = DependencyGraph::new();
-        dag.update(cell(2, 2), vec![], vec![range(0, 2, 0, 0)]).unwrap();
+        dag.update(cell(2, 2), vec![], vec![range(0, 2, 0, 0)])
+            .unwrap();
 
         // Changing B5 (outside range) does not dirty C3.
         let dirty = dag.collect_dirty(cell(4, 1), &idx);
@@ -333,7 +351,9 @@ mod tests {
         let mut dag = DependencyGraph::new();
         dag.update(cell(0, 0), vec![cell(0, 1)], vec![]).unwrap();
         dag.update(cell(0, 1), vec![cell(0, 2)], vec![]).unwrap();
-        let err = dag.update(cell(0, 2), vec![cell(0, 0)], vec![]).unwrap_err();
+        let err = dag
+            .update(cell(0, 2), vec![cell(0, 0)], vec![])
+            .unwrap_err();
         assert_eq!(err.0.len(), 3);
     }
 }

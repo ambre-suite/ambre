@@ -75,14 +75,24 @@ impl TextInput {
         // Polite live region: announces the focused cell as the selection moves.
         // Visually hidden (`.ambre-a11y-live` in the app stylesheet) but exposed
         // to assistive tech.
-        let live = document.create_element("div").expect("create a11y live region");
+        let live = document
+            .create_element("div")
+            .expect("create a11y live region");
         live.set_class_name("ambre-a11y-live");
-        for (k, v) in [("role", "status"), ("aria-live", "polite"), ("aria-atomic", "true")] {
+        for (k, v) in [
+            ("role", "status"),
+            ("aria-live", "polite"),
+            ("aria-atomic", "true"),
+        ] {
             let _ = live.set_attribute(k, v);
         }
         parent.append_child(&live).expect("attach a11y live region");
 
-        Self { textarea, live, composing: Rc::new(Cell::new(false)) }
+        Self {
+            textarea,
+            live,
+            composing: Rc::new(Cell::new(false)),
+        }
     }
 
     /// The underlying element (host listeners attach here).

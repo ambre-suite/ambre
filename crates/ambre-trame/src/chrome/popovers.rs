@@ -25,12 +25,28 @@ use super::style::StyleState;
 /// to the named edges; `None` clears every edge.
 const BORDER_BUTTONS: &[(BorderPreset, icondata::Icon, &str)] = &[
     (BorderPreset::All, icondata::BsBorderAll, "All borders"),
-    (BorderPreset::Inner, icondata::BsBorderInner, "Inner borders"),
-    (BorderPreset::InnerHorizontal, icondata::BsBorderMiddle, "Inner horizontal"),
-    (BorderPreset::InnerVertical, icondata::BsBorderCenter, "Inner vertical"),
+    (
+        BorderPreset::Inner,
+        icondata::BsBorderInner,
+        "Inner borders",
+    ),
+    (
+        BorderPreset::InnerHorizontal,
+        icondata::BsBorderMiddle,
+        "Inner horizontal",
+    ),
+    (
+        BorderPreset::InnerVertical,
+        icondata::BsBorderCenter,
+        "Inner vertical",
+    ),
     (BorderPreset::Outline, icondata::BsBorderOuter, "Outline"),
     (BorderPreset::Top, icondata::BsBorderTop, "Top border"),
-    (BorderPreset::Bottom, icondata::BsBorderBottom, "Bottom border"),
+    (
+        BorderPreset::Bottom,
+        icondata::BsBorderBottom,
+        "Bottom border",
+    ),
     (BorderPreset::Left, icondata::BsBorderLeft, "Left border"),
     (BorderPreset::Right, icondata::BsBorderRight, "Right border"),
     (BorderPreset::None, icondata::BsBorder, "Clear borders"),
@@ -367,16 +383,32 @@ pub(crate) fn NumberFormatPopover(
 /// tooltip. The trigger mirrors the active entry's icon.
 const H_ALIGNS: &[(HAlign, icondata::Icon, &str)] = &[
     (HAlign::Left, icondata::BiAlignLeftRegular, "Align left"),
-    (HAlign::Center, icondata::BiAlignMiddleRegular, "Align center"),
+    (
+        HAlign::Center,
+        icondata::BiAlignMiddleRegular,
+        "Align center",
+    ),
     (HAlign::Right, icondata::BiAlignRightRegular, "Align right"),
 ];
 
 /// The vertical alignments offered by the popover, each with its icon and
 /// tooltip. The trigger mirrors the active entry's icon.
 const V_ALIGNS: &[(VAlign, icondata::Icon, &str)] = &[
-    (VAlign::Top, icondata::AiVerticalAlignTopOutlined, "Align top"),
-    (VAlign::Middle, icondata::AiVerticalAlignMiddleOutlined, "Align middle"),
-    (VAlign::Bottom, icondata::AiVerticalAlignBottomOutlined, "Align bottom"),
+    (
+        VAlign::Top,
+        icondata::AiVerticalAlignTopOutlined,
+        "Align top",
+    ),
+    (
+        VAlign::Middle,
+        icondata::AiVerticalAlignMiddleOutlined,
+        "Align middle",
+    ),
+    (
+        VAlign::Bottom,
+        icondata::AiVerticalAlignBottomOutlined,
+        "Align bottom",
+    ),
 ];
 
 /// The composed horizontal-alignment control: a single toolbar button showing the
@@ -493,7 +525,9 @@ pub(crate) fn VAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -
         V_ALIGNS
             .iter()
             .find(|(a, ..)| *a == cur)
-            .map_or(icondata::AiVerticalAlignBottomOutlined, |(_, icon, _)| *icon)
+            .map_or(icondata::AiVerticalAlignBottomOutlined, |(_, icon, _)| {
+                *icon
+            })
     };
     view! {
         <span class="ambre-align" node_ref=root_ref>
@@ -544,8 +578,8 @@ pub(crate) fn VAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -
 /// Curated swatch palette for the colour picker popover (packed `0xRRGGBB`).
 /// A small office-style set: greys, then a saturated row and a muted row.
 const PALETTE: &[u32] = &[
-    0x000000, 0x404040, 0x808080, 0xb0b0b0, 0xd9d9d9, 0xffffff, 0xc00000, 0xff0000,
-    0xffc000, 0xffff00, 0x92d050, 0x00b050, 0x00b0f0, 0x0070c0, 0x002060, 0x7030a0,
+    0x000000, 0x404040, 0x808080, 0xb0b0b0, 0xd9d9d9, 0xffffff, 0xc00000, 0xff0000, 0xffc000,
+    0xffff00, 0x92d050, 0x00b050, 0x00b0f0, 0x0070c0, 0x002060, 0x7030a0,
 ];
 
 /// A composed colour control (text or fill): a single toolbar button toggling a
@@ -721,7 +755,10 @@ pub fn FilterPopover(
             FilterKind::Values(checked.get_untracked().into_iter().collect())
         } else {
             let (op, _) = FILTER_OPS[op_idx.get_untracked().min(FILTER_OPS.len() - 1)];
-            FilterKind::Condition { op, value: cond_value.get_untracked() }
+            FilterKind::Condition {
+                op,
+                value: cond_value.get_untracked(),
+            }
         };
         on_apply.run(kind);
         state.set(None);

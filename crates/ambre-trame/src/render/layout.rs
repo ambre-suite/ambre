@@ -57,7 +57,12 @@ pub struct GridLayout<'a> {
 impl GridLayout<'_> {
     /// The scrollable content area (everything below + right of the headers).
     pub fn content_area(&self) -> Rect {
-        Rect::new(self.header_width, self.top + self.header_height, self.width, self.height)
+        Rect::new(
+            self.header_width,
+            self.top + self.header_height,
+            self.width,
+            self.height,
+        )
     }
 
     /// True if `row` is collapsed by the shared filter (binary search over the
@@ -138,4 +143,3 @@ impl GridLayout<'_> {
         )
     }
 }
-

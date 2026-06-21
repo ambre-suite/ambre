@@ -43,13 +43,19 @@ pub fn bearer_token(parts: &Parts) -> Option<String> {
 
 /// Verify an access token and resolve the identity it carries.
 pub fn authenticate_token(state: &AppState, token: &str) -> Result<AuthSession, AppError> {
-    let claims = state.jwt.verify(token).map_err(|_| AppError::Unauthorized)?;
+    let claims = state
+        .jwt
+        .verify(token)
+        .map_err(|_| AppError::Unauthorized)?;
     let user_id = ambre_core::Uuid::parse_str(&claims.sub)
         .map(ambre_core::UserId::from_uuid)
         .map_err(|_| AppError::Unauthorized)?;
     let signing_pubkey =
         ambre_core::PublicKey::from_hex(&claims.spk).map_err(|_| AppError::Unauthorized)?;
-    Ok(AuthSession { user_id, signing_pubkey })
+    Ok(AuthSession {
+        user_id,
+        signing_pubkey,
+    })
 }
 
 /// Axum extractor: pull `Authorization: Bearer <jwt>` and verify it. Rejects
@@ -114,12 +120,19 @@ pub async fn issue_session(
     redis_ops::refresh_create(
         &state.redis,
         &refresh_token,
-        &RefreshData { user_id, signing_pubkey },
+        &RefreshData {
+            user_id,
+            signing_pubkey,
+        },
         state.config.refresh_ttl_secs,
     )
     .await?;
 
-    Ok(TokenPair { access_token, refresh_token, access_expires_in: access_ttl })
+    Ok(TokenPair {
+        access_token,
+        refresh_token,
+        access_expires_in: access_ttl,
+    })
 }
 
 /// Current Unix time in seconds.
