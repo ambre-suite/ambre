@@ -344,6 +344,19 @@ pub enum TrameCommand {
     /// [`TrameEvent::ColumnValues`](crate::ui::TrameEvent::ColumnValues)
     /// (deduplicated, sorted). A read-only query: no CRDT delta.
     RequestActiveColumnValues,
+    /// Request the aggregates (Sum / Average / Count / Min / Max) of the tracked
+    /// selection, for the status bar (`-ui.md` sec.13bis). The selection can
+    /// exceed the viewport, so only the Logic thread (which holds every cell) can
+    /// compute them. Parameterless: the Logic thread resolves the active sheet and
+    /// the tracked selection rectangle itself -- the same convention as the sort /
+    /// filter / [`RequestActiveColumnValues`] siblings (the sec.13bis sketch passed
+    /// `sheet_id`/`range`, but this codebase resolves geometry Logic-side). Replies
+    /// with [`TrameEvent::SelectionStats`](crate::ui::TrameEvent::SelectionStats).
+    /// A read-only query: no CRDT delta. The UI sends it only on a multi-cell
+    /// selection; a lone cell shows no aggregates.
+    ///
+    /// [`RequestActiveColumnValues`]: TrameCommand::RequestActiveColumnValues
+    RequestSelectionStats,
     /// Apply a shared filter to the active cell's column (`-ui.md` sec.5.D). The
     /// parameterless-geometry sibling of [`ApplyFilter`]: the Logic thread
     /// resolves `sheet_id`/`col` from the tracked active cell, so the UI only

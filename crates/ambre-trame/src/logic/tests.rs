@@ -1267,6 +1267,33 @@
         assert!(evts.update.is_none(), "a values query is read-only");
     }
 
+    /// `RequestSelectionStats` aggregates the tracked selection for the status bar
+    /// (`-ui.md` sec.13bis): `count` tallies non-empty cells, the numeric ones feed
+    /// `count_num`/`sum`/`avg`/`min`/`max`.
+    #[test]
+    fn selection_stats_aggregate_numeric_cells() {
+        let mut state = TrameState::new();
+        seed_col_a(&mut state, &["10", "20", "", "30", "apple"]);
+        // Select the whole column A range (0,0)..=(4,0).
+        state.handle_command(TrameCommand::SetActiveCell {
+            row: 4, col: 0, anchor_row: 0, anchor_col: 0,
+        });
+
+        let evts = state.handle_command(TrameCommand::RequestSelectionStats);
+        match &evts.display[0] {
+            TrameEvent::SelectionStats { sum, avg, count, count_num, min, max } => {
+                assert_eq!(*count, 4, "10/20/30/apple are non-empty");
+                assert_eq!(*count_num, 3, "only 10/20/30 are numeric");
+                assert_eq!(*sum, 60.0);
+                assert_eq!(*avg, 20.0);
+                assert_eq!(*min, 10.0);
+                assert_eq!(*max, 30.0);
+            }
+            other => panic!("expected SelectionStats, got {other:?}"),
+        }
+        assert!(evts.update.is_none(), "a stats query is read-only");
+    }
+
     /// The parameterless filter wrappers resolve the sheet/column from the tracked
     /// active cell, mirroring the sort intents (`-ui.md` sec.5.D).
     #[test]

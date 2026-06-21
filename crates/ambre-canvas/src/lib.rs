@@ -38,6 +38,9 @@ pub mod text_input;
 // -- Selection anchor: canvas->DOM channel for floating chrome UI ------------
 pub mod anchor;
 
+// -- Perf snapshot: canvas->DOM channel for the performance HUD --------------
+pub mod perf;
+
 // -- Design tokens (generated from tokens.ron): Palette + Theme + ThemeControl
 pub mod theme;
 
@@ -47,11 +50,12 @@ pub mod request_registry;
 // -- Convenience re-exports --------------------------------------------------
 pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurface};
 pub use text_cache::TextCache;
-pub use view::{FrameStats, InputEvent, RepaintPlan};
+pub use view::{FrameStats, InputEvent, PerfSnapshot, RepaintPlan};
 pub use fatal::{fatal_message, signal_fatal};
 #[cfg(target_arch = "wasm32")]
 pub use host::{GpuState, RafControl, bootstrap_gpu, start_raf_loop};
 pub use text_input::TextInput;
 pub use anchor::{Anchor, AnchorPublisher};
+pub use perf::PerfPublisher;
 pub use theme::{Palette, Theme, ThemeControl};
 pub use request_registry::{RequestRegistry, RequestTag};

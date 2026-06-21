@@ -85,8 +85,6 @@ pub struct DrawStats {
     /// Overlay layer non-HUD: header backgrounds, active tints, separator
     /// lines, active border, header labels.
     pub hdrs_ms: f32,
-    /// Overlay layer HUD overlay itself.
-    pub hud_ms: f32,
     /// Number of cells with non-empty text actually drawn this frame.
     pub cells_drawn: u32,
     /// Latest measured input->caret latency (keydown to caret paint), in ms.
@@ -409,16 +407,9 @@ pub fn draw_overlay<S: DrawSurface>(
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
     text_enabled: bool,
-    render_fps: f32,
-    last_frame_ms: f32,
-    last_drain_ms: f32,
-    last_draw_ms: f32,
-    last_gpu_ms: f32,
     clock: &dyn Clock,
     stats: &mut DrawStats,
 ) {
-    let h = state.canvas_height;
-
     let t0 = clock.now_ms();
 
     let layout = screen_layout(state);
@@ -541,54 +532,11 @@ pub fn draw_overlay<S: DrawSurface>(
     }
     let t_after_hdrs = clock.now_ms();
 
-    // -- 6. HUD overlay. ------------------------------------------------------
-    let fps_bg = Rect::new(4.0, h - 38.0, 520.0, h - 4.0);
-    surface.fill_rect(fps_bg, Color::from_rgba8(0, 0, 0, 160));
-
-    let text_tag = if text_enabled { "" } else { " [T=text]" };
-    let line1 = format!(
-        "{render_fps:.0}fps {last_frame_ms:.1}ms  \
-         drain:{last_drain_ms:.1} draw:{last_draw_ms:.1} gpu:{last_gpu_ms:.1}  \
-         miss:{}{text_tag}",
-        text_cache.frame_misses,
-    );
-    let line2 = format!(
-        "bg:{:.2} cells:{:.2} hdrs:{:.2} hud:{:.2}  drawn:{}  inlat:{:.1}ms",
-        stats.bg_ms,
-        stats.cells_ms,
-        stats.hdrs_ms,
-        stats.hud_ms,
-        stats.cells_drawn,
-        stats.input_latency_ms,
-    );
-    render::draw_text(
-        surface,
-        font_cx,
-        text_cache,
-        &line1,
-        11.0,
-        514.0,
-        Alignment::Start,
-        6.0,
-        h - 37.0,
-        Color::from_rgba8(255, 220, 0, 255),
-    );
-    render::draw_text(
-        surface,
-        font_cx,
-        text_cache,
-        &line2,
-        11.0,
-        514.0,
-        Alignment::Start,
-        6.0,
-        h - 21.0,
-        Color::from_rgba8(180, 220, 255, 255),
-    );
-
-    let t_end = clock.now_ms();
+    // The perf HUD no longer paints here: fps + frame timings are published to
+    // the DOM status bar (`ambre_canvas::PerfPublisher`) and rendered as plain
+    // text, so we never shape debug glyphs on the GPU. Only the timing the view
+    // feeds the snapshot is recorded.
     stats.hdrs_ms = (t_after_hdrs - t0) as f32;
-    stats.hud_ms = (t_end - t_after_hdrs) as f32;
 }
 
 // -----------------------------------------------------------------------------
@@ -1114,11 +1062,6 @@ mod tests {
             &mut font_cx,
             &mut cache,
             true,
-            60.0,
-            16.0,
-            1.0,
-            1.0,
-            1.0,
             &clock,
             &mut stats,
         );
@@ -1158,11 +1101,6 @@ mod tests {
             &mut font_cx,
             &mut cache,
             true,
-            60.0,
-            16.0,
-            1.0,
-            1.0,
-            1.0,
             &clock,
             &mut stats,
         );

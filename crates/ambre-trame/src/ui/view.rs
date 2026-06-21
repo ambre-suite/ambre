@@ -16,8 +16,8 @@ use ambre_bus::{
     UiEvent,
 };
 use ambre_canvas::{
-    Anchor, AnchorPublisher, ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan,
-    TextCache, TextInput, Theme, ThemeControl, WgpuSurface,
+    Anchor, AnchorPublisher, ContentRepaint, FrameStats, InputEvent, OverlayRepaint, PerfPublisher,
+    PerfSnapshot, RepaintPlan, TextCache, TextInput, Theme, ThemeControl, WgpuSurface,
 };
 use ambre_draw::{Clock, FontContext, Rect};
 #[cfg(target_arch = "wasm32")]
@@ -155,6 +155,15 @@ pub struct TrameView {
     anchor: AnchorPublisher,
     /// Last anchor published, so it is only re-published on change.
     last_anchor: Option<Anchor>,
+    /// Publishes the per-frame perf snapshot (fps + timings) so the DOM status
+    /// bar can render it -- the HUD migrated off the wgpu overlay (sec.13bis).
+    perf_pub: PerfPublisher,
+    /// Status-bar selection aggregates signal (`-ui.md` sec.13bis). The view
+    /// clears it to `None` on a single-cell selection; the Logic round-trip
+    /// (`RequestSelectionStats` -> `SelectionStats`) sets it from the launcher's
+    /// event loop on a multi-cell one. Browser-only, like the formula signals.
+    #[cfg(target_arch = "wasm32")]
+    sel_stats: RwSignal<Option<crate::chrome::SelStats>>,
 
     /// Shared theme switch (chrome toggles it, the canvas reads it).
     theme_ctl: ThemeControl,
@@ -267,10 +276,12 @@ impl TrameView {
         canvas_height: f64,
         text_input: TextInput,
         anchor: AnchorPublisher,
+        perf_pub: PerfPublisher,
         theme_ctl: ThemeControl,
         #[cfg(target_arch = "wasm32")] formula_ref: RwSignal<String>,
         #[cfg(target_arch = "wasm32")] formula_text: RwSignal<String>,
         #[cfg(target_arch = "wasm32")] formula_action: RwSignal<Option<FormulaAction>>,
+        #[cfg(target_arch = "wasm32")] sel_stats: RwSignal<Option<crate::chrome::SelStats>>,
     ) -> Self {
         let window = web_sys::window().expect("no window");
         let perf = window.performance().expect("no Performance API");
@@ -290,6 +301,9 @@ impl TrameView {
             dpr,
             anchor,
             last_anchor: None,
+            perf_pub,
+            #[cfg(target_arch = "wasm32")]
+            sel_stats,
             theme_ctl,
             theme,
             #[cfg(target_arch = "wasm32")]
@@ -408,6 +422,22 @@ impl TrameView {
             format!("{}{}, {}", col_label(col), row + 1, value)
         };
         self.text_input.announce(&desc);
+        self.refresh_selection_stats();
+    }
+
+    /// Refresh the status-bar selection aggregates (`-ui.md` sec.13bis) after a
+    /// selection change. A lone cell shows nothing, so we clear the signal
+    /// locally; any multi-cell selection asks the Logic thread (which holds every
+    /// cell, not just the viewport) for the aggregates, replied as
+    /// [`TrameEvent::SelectionStats`] and mirrored into the signal by the
+    /// launcher's event loop.
+    fn refresh_selection_stats(&self) {
+        if self.state.selection.is_multi() {
+            self.send_command_lossy(TrameCommand::RequestSelectionStats);
+        } else {
+            #[cfg(target_arch = "wasm32")]
+            self.sel_stats.set(None);
+        }
     }
 
     /// The active cell's spreadsheet reference (e.g. `"B2"`), shown in the
@@ -992,14 +1022,26 @@ impl TrameView {
             font_cx,
             text_cache,
             self.text_enabled,
-            stats.fps,
-            stats.frame_ms,
-            stats.drain_ms,
-            stats.draw_ms,
-            stats.gpu_ms,
             &PerfClock(&self.perf),
             &mut self.draw_stats,
         );
+
+        // Publish the per-frame perf snapshot to the DOM status bar (the HUD no
+        // longer paints on the wgpu overlay). Merge the driver timings (`stats`)
+        // with the view's sub-phase breakdown and the glyph-cache misses.
+        self.perf_pub.publish(PerfSnapshot {
+            fps: stats.fps,
+            frame_ms: stats.frame_ms,
+            drain_ms: stats.drain_ms,
+            draw_ms: stats.draw_ms,
+            gpu_ms: stats.gpu_ms,
+            bg_ms: self.draw_stats.bg_ms,
+            cells_ms: self.draw_stats.cells_ms,
+            hdrs_ms: self.draw_stats.hdrs_ms,
+            cells_drawn: self.draw_stats.cells_drawn,
+            input_lat_ms: self.draw_stats.input_latency_ms,
+            glyph_misses: text_cache.frame_misses as u32,
+        });
 
         // Bottom sheet-tab strip (sec.13), above the grid/HUD.
         renderer::draw_sheet_tabs(

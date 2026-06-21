@@ -326,6 +326,58 @@ input[type="radio"] {
     flex: 1;
 }
 
+/* Status bar: selection aggregates (sec.13bis). A label per aggregate, spaced. */
+.ambre-statusbar .statusbar-stats {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.ambre-statusbar .statusbar-stats .stat {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The perf chip + its collapsible diagnostics panel (the migrated wgpu HUD). */
+.ambre-statusbar .statusbar-perf {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.ambre-statusbar .statusbar-fps {
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    padding: 0 4px;
+    border-radius: 4px;
+}
+
+.ambre-statusbar .statusbar-fps:hover {
+    background: var(--surface-hover, rgba(127, 127, 127, 0.18));
+    color: var(--text);
+}
+
+.statusbar-perf-panel {
+    position: absolute;
+    right: 0;
+    bottom: calc(var(--status-h) + 4px);
+    min-width: 220px;
+    padding: 8px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.5;
+    z-index: 30;
+    white-space: nowrap;
+}
+
 /* Native <dialog> modal (ambre-chrome::Dialog). Padding lives on the body so
    the dialog element is only directly hit on its backdrop (for click-to-close);
    the frozen canvas behind makes the backdrop blur free. */

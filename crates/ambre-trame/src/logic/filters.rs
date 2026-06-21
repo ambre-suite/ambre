@@ -83,6 +83,57 @@ impl TrameState {
         TrameOutcome::display_only(vec![TrameEvent::ColumnValues { col, values }])
     }
 
+    /// Aggregate the tracked selection for the status bar (`-ui.md` sec.13bis).
+    /// Walks the selection rectangle (skipping filter-hidden rows, like
+    /// [`active_column_values`](Self::active_column_values)), pulling each cell's
+    /// evaluated value through the formula cache. `count` tallies non-empty cells;
+    /// numeric cells additionally feed `count_num`/`sum`/`min`/`max`. A read-only
+    /// query: no CRDT delta.
+    pub(super) fn selection_stats(&mut self) -> TrameOutcome {
+        let (r1, c1, r2, c2) = self.selection;
+        // Make sure evaluated values are current before reading them.
+        let indices = self.engine_indices();
+        self.engine.compute_all_dirty(&indices);
+
+        let mut count: u64 = 0;
+        let mut count_num: u64 = 0;
+        let mut sum = 0.0_f64;
+        let mut min = f64::INFINITY;
+        let mut max = f64::NEG_INFINITY;
+        for row in r1..=r2 {
+            if self.hidden_rows.contains(&row) {
+                continue;
+            }
+            for col in c1..=c2 {
+                let v = self
+                    .engine
+                    .evaluated_value(self.active_cell_id(row, col))
+                    .unwrap_or(CellValue::Empty);
+                match v {
+                    CellValue::Empty => {}
+                    CellValue::Number(n) => {
+                        count += 1;
+                        count_num += 1;
+                        sum += n;
+                        min = min.min(n);
+                        max = max.max(n);
+                    }
+                    _ => count += 1,
+                }
+            }
+        }
+        let avg = if count_num > 0 { sum / count_num as f64 } else { 0.0 };
+        let (sum, min, max) = if count_num > 0 { (sum, min, max) } else { (0.0, 0.0, 0.0) };
+        TrameOutcome::display_only(vec![TrameEvent::SelectionStats {
+            sum,
+            avg,
+            count,
+            count_num,
+            min,
+            max,
+        }])
+    }
+
     /// Clear the active shared filter: drop every `filter_hidden_{sheet}` entry
     /// and the stored `filters_{sheet}` definition, then broadcast (§1.A). A no-op
     /// (no delta) when nothing is filtered.

@@ -33,6 +33,7 @@ mod commands;
 mod find_replace;
 mod formula_bar;
 mod popovers;
+mod status;
 mod style;
 
 pub use bars::FormatBar;
@@ -46,4 +47,5 @@ pub use commands::{
 pub use find_replace::{FindMode, FindQuery, FindReplace, FindReplaceState, ReplaceRequest};
 pub use formula_bar::FormulaBar;
 pub use popovers::{FilterPopover, FilterPopoverState};
+pub use status::{SelStats, StatusBar};
 pub use style::{apply_style_event, StyleState, Toggles};

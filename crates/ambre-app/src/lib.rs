@@ -124,6 +124,13 @@ struct Wiring {
     /// Last `FindResult` summarized as `(active_1based, total)` for the panel's
     /// "k/n" counter. Set by the per-frame relay on `TrameEvent::FindResult`.
     find_result: RwSignal<Option<(usize, usize)>>,
+    /// Status-bar selection aggregates (`-ui.md` sec.13bis); `None` on a single
+    /// cell. Set by the per-frame relay on `TrameEvent::SelectionStats`, cleared
+    /// by the canvas view on a single-cell selection.
+    sel_stats: RwSignal<Option<trame_chrome::SelStats>>,
+    /// Status-bar perf snapshot (fps + frame timings), pumped from the canvas
+    /// view's `PerfPublisher` by the per-frame relay (~2 Hz).
+    perf_snap: RwSignal<ambre_canvas::PerfSnapshot>,
 }
 
 #[wasm_bindgen(start)]
@@ -193,11 +200,23 @@ pub fn main() {
     // and the floating selection toolbar transform-syncs onto it.
     let anchor_pub = ambre_canvas::AnchorPublisher::new();
 
+    // Canvas->DOM perf channel: the view publishes the per-frame perf snapshot
+    // (fps + timings), the dispatcher mirrors it into the `perf_snap` signal the
+    // status bar renders. The HUD migrated off the wgpu overlay (`-ui.md`
+    // sec.13bis) -- no point shaping debug glyphs on the GPU every frame.
+    let perf_pub = ambre_canvas::PerfPublisher::new();
+
     // Formula bar signals (HTML input -> TrameView sync). RwSignal is Copy, so
     // we create them once and pass clones to both TrameView and the Leptos shell.
     let formula_ref = RwSignal::new(String::new());
     let formula_text = RwSignal::new(String::new());
     let formula_action = RwSignal::new(None::<FormulaAction>);
+
+    // Status-bar signals (`-ui.md` sec.13bis): selection aggregates (set from the
+    // `SelectionStats` event / cleared by the view on a single cell) and the live
+    // perf snapshot pumped from `perf_pub` below.
+    let sel_stats = RwSignal::new(None::<trame_chrome::SelStats>);
+    let perf_snap = RwSignal::new(ambre_canvas::PerfSnapshot::default());
 
     // Design tokens: inject the generated CSS custom properties (theme.css) and
     // boot the dark theme. `theme_ctl` is the single source of truth for the
@@ -308,6 +327,8 @@ pub fn main() {
         formula_ref,
         formula_text,
         formula_action,
+        sel_stats,
+        perf_snap,
     );
 
     let store = store_slot.borrow().clone().expect("store created during mount");
@@ -392,8 +413,10 @@ pub fn main() {
     // persist drain, Logic->Sync relay, Logic->UI fan-out (command state to the
     // chrome, session/list to the landing, content to the view), anchor mirror.
     let anchor_pub_pump = anchor_pub.clone();
+    let perf_pub_pump = perf_pub.clone();
     let persist_store_frame = Rc::clone(&persist_store);
     let mut last_anchor: Option<(f64, f64)> = None;
+    let mut last_perf_push_ms: f64 = 0.0;
     let mut list_requested = false;
     let relay_tx = ui_to_logic_tx.clone();
 
@@ -575,6 +598,28 @@ pub fn main() {
                         ),
                     ..
                 } => filter_popover.set(None),
+                // Status bar (sec.13bis): selection aggregates for a multi-cell
+                // selection. The view clears the signal on a single cell; here we
+                // fill it from the Logic-computed totals.
+                UiEvent::Viewport {
+                    event:
+                        AppEvent::Trame(ambre_bus::TrameEvent::SelectionStats {
+                            sum,
+                            avg,
+                            count,
+                            count_num,
+                            min,
+                            max,
+                        }),
+                    ..
+                } => sel_stats.set(Some(trame_chrome::SelStats {
+                    sum: *sum,
+                    avg: *avg,
+                    count: *count,
+                    count_num: *count_num,
+                    min: *min,
+                    max: *max,
+                })),
                 // Find & Replace (sec.5.G): summarize the match set for the panel's
                 // "k/n" counter. The view (canvas) consumes the same event to move
                 // the active cell onto the focused match and highlight the set.
@@ -601,6 +646,17 @@ pub fn main() {
             last_anchor = next;
             anchor_pos.set(next);
         }
+
+        // Mirror the view's perf snapshot into the status-bar signal, throttled
+        // to ~2 Hz: the old wgpu HUD refreshed every 500 ms too, and a per-frame
+        // DOM update would be wasteful for a debug read-out.
+        let now_ms = web_sys::window()
+            .and_then(|w| w.performance())
+            .map_or(0.0, |p| p.now());
+        if now_ms - last_perf_push_ms >= 500.0 {
+            last_perf_push_ms = now_ms;
+            perf_snap.set(perf_pub_pump.read());
+        }
     };
 
     // Boot the canvas (once). It grabs the `<canvas>` the chrome just mounted,
@@ -621,10 +677,12 @@ pub fn main() {
                 h,
                 text_input,
                 anchor_pub,
+                perf_pub,
                 theme_ctl,
                 formula_ref_tv,
                 formula_text_tv,
                 formula_action_tv,
+                sel_stats,
             ))
         },
         pre_frame,
@@ -661,6 +719,8 @@ fn mount_shell(
     formula_ref: RwSignal<String>,
     formula_text: RwSignal<String>,
     formula_action: RwSignal<Option<FormulaAction>>,
+    sel_stats: RwSignal<Option<trame_chrome::SelStats>>,
+    perf_snap: RwSignal<ambre_canvas::PerfSnapshot>,
 ) {
     leptos::mount::mount_to_body(move || {
         // The store stays here (in the mount owner, NOT in the view): it is `Rc`
@@ -719,6 +779,8 @@ fn mount_shell(
             formula_ref,
             formula_text,
             formula_action,
+            sel_stats,
+            perf_snap,
         });
 
         view! {
@@ -756,6 +818,8 @@ fn AppRoot() -> impl IntoView {
         formula_ref,
         formula_text,
         formula_action,
+        sel_stats,
+        perf_snap,
     } = use_context::<Wiring>().expect("Wiring provided by mount_shell");
 
     // The reactive client route, used only to show/hide the landing overlay.
@@ -1091,9 +1155,7 @@ fn AppRoot() -> impl IntoView {
                 />
             </FormulaBar>
             <StatusBar slot>
-                <span>{trame_chrome::status_label()}</span>
-                <span class="spacer"></span>
-                <span>"100 %"</span>
+                <trame_chrome::StatusBar stats=sel_stats perf=perf_snap />
             </StatusBar>
         </AppShell>
 
