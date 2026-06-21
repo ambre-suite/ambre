@@ -1,0 +1,170 @@
+# Ambre CI -- the normative pipeline (architecture spec section 4 "CI").
+#
+# Each job invokes a `just` recipe so the command lines live in exactly one
+# place (the root `justfile`) and `just <recipe>` locally reproduces the job.
+# The pinned nightly toolchain (`-Z build-std` for multi-threaded wasm) is
+# picked up automatically from `rust-toolchain.toml`.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref to save runner minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # lint -- host target. fmt + clippy with warnings denied. The wasm
+  # `-A warnings` rustflag is scoped to `[target.wasm32-unknown-unknown]`, so
+  # host clippy keeps every warning.
+  # ---------------------------------------------------------------------------
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: extractions/setup-just@v2
+      - name: Toolchain (rustfmt + clippy)
+        run: rustup component add rustfmt clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: lint
+      - run: just lint
+
+  # ---------------------------------------------------------------------------
+  # test-host -- pure logic on x86_64 + the server on the host target.
+  # ---------------------------------------------------------------------------
+  test-host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: extractions/setup-just@v2
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: test-host
+      - run: just test-host
+
+  # ===========================================================================
+  # DISABLED until later Epic ET stories land. The `justfile` recipes and the
+  # job definitions below are complete and correct; they are commented out only
+  # so the first CI run (this story = workflow + justfile) stays green. Re-enable
+  # by uncommenting when the prerequisite story is done.
+  # ===========================================================================
+  #
+  # test-db -- RE-ENABLE WITH ET story "feature `db` on ambre-server". Until the
+  # `db` Cargo feature exists and gates the ~20 server tests, `just test-db`
+  # fails to compile (unknown feature). Server integration behind the `db`
+  # feature against real postgres / redis / minio service containers;
+  # `#[sqlx::test]` provisions an ephemeral database per test off DATABASE_URL.
+  #
+  # Image tags below are kept in sync with `docker-compose.yml` (the dev source
+  # of truth) so a test never passes on one Postgres/Redis and fails on another.
+  # Exception: minio. The compose uses the official `minio/minio` image, which
+  # requires `command: server /data` -- GA `services:` cannot override a
+  # container command, so CI uses `bitnami/minio` (env-configurable, auto-creates
+  # the bucket via MINIO_DEFAULT_BUCKETS). Same server, different entrypoint.
+  #
+  # test-db:
+  #   runs-on: ubuntu-latest
+  #   services:
+  #     postgres:
+  #       image: postgres:16-alpine   # keep in sync with docker-compose.yml
+  #       env:
+  #         POSTGRES_USER: ambre
+  #         POSTGRES_PASSWORD: ambre
+  #         POSTGRES_DB: ambre_dev
+  #       ports:
+  #         - 5432:5432
+  #       options: >-
+  #         --health-cmd "pg_isready -U ambre -d ambre_dev"
+  #         --health-interval 5s
+  #         --health-timeout 5s
+  #         --health-retries 5
+  #     redis:
+  #       image: redis:8-alpine     # keep in sync with docker-compose.yml
+  #       ports:
+  #         - 6379:6379
+  #       options: >-
+  #         --health-cmd "redis-cli ping"
+  #         --health-interval 5s
+  #         --health-timeout 5s
+  #         --health-retries 5
+  #     minio:
+  #       image: bitnami/minio:latest   # NOT minio/minio: see note above (no command override in services:)
+  #       env:
+  #         MINIO_ROOT_USER: minioadmin
+  #         MINIO_ROOT_PASSWORD: minioadmin
+  #         MINIO_DEFAULT_BUCKETS: ambre-dev
+  #       ports:
+  #         - 9000:9000
+  #       options: >-
+  #         --health-cmd "mc ready local"
+  #         --health-interval 5s
+  #         --health-timeout 5s
+  #         --health-retries 5
+  #   env:
+  #     DATABASE_URL: postgres://ambre:ambre@localhost:5432/ambre_dev
+  #     REDIS_URL: redis://localhost:6379
+  #     S3_ENDPOINT: http://localhost:9000
+  #     S3_BUCKET: ambre-dev
+  #     AWS_ACCESS_KEY_ID: minioadmin
+  #     AWS_SECRET_ACCESS_KEY: minioadmin
+  #     AWS_REGION: us-east-1
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: extractions/setup-just@v2
+  #     - uses: Swatinem/rust-cache@v2
+  #       with:
+  #         key: test-db
+  #     - run: just test-db
+  #
+  # test-wasm -- RE-ENABLE WITH ET story "Leptos UI tests (trame-ui section 18)".
+  # No wasm-bindgen-test targets exist yet, so `just test-wasm` has nothing to
+  # run. `cfg(target_arch = "wasm32")` surfaces under headless Chrome; the pinned
+  # nightly + rust-src (rust-toolchain.toml) supply `-Z build-std`.
+  #
+  # test-wasm:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: extractions/setup-just@v2
+  #     - uses: Swatinem/rust-cache@v2
+  #       with:
+  #         key: test-wasm
+  #     - name: Install wasm-pack
+  #       uses: taiki-e/install-action@v2
+  #       with:
+  #         tool: wasm-pack
+  #     - run: just test-wasm
+
+  # ---------------------------------------------------------------------------
+  # coverage -- host-tier lcov baseline. Non-blocking: informative threshold
+  # first (measure the baseline), regression target later.
+  # ---------------------------------------------------------------------------
+  coverage:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: extractions/setup-just@v2
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: coverage
+      - run: just cov
+      - name: Upload lcov artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lcov
+          path: lcov.info
+          if-no-files-found: error
