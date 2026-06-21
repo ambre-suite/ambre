@@ -39,3 +39,6 @@ js-sys       = { workspace = true }
 [dev-dependencies]
 # Headless render tests: RecordingSurface mock DrawSurface + FixedClock.
 ambre-draw = { path = "../ambre-draw", features = ["testing"] }
+# CRDT convergence property tests (Epic `ET`, `ambre-spec-trame-logic.md` §14):
+# proptest-generated interleaved op sequences across two peers.
+proptest = { workspace = true }

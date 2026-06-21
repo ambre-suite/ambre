@@ -287,3 +287,6 @@ pub(crate) use schema::*;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod convergence_tests;

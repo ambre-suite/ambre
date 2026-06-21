@@ -316,6 +316,7 @@ dependencies = [
  "loro",
  "nom",
  "petgraph",
+ "proptest",
  "tracing",
  "wasm-bindgen",
  "web-sys",
