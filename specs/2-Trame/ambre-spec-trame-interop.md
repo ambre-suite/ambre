@@ -564,6 +564,7 @@ Imports are split into batches of 500 cells with `yield` between each batch to a
 - [x] CSV import: `TrameCommand::ImportCsv` (auto-detect delimiter)
 - [x] CSV export: `TrameCommand::ExportCsv`
 - [x] `TrameEvent::ImportComplete` / `ExportComplete` returned in `dispatch()`'s `Vec<TrameEvent>` (CSV path)
+- [ ] **Tested DoD (test debt, Epic `ET`).** CSV import/export roundtrip green on the **host** tier in CI (`csv_import_export_roundtrip`, §8); plus a fuzz/robustness case proving malformed CSV input never panics (ragged rows, embedded quotes/newlines, mixed delimiters -> graceful result, no `unwrap` blow-up). The xlsx `#[test]`s in §8 follow their Phase 2 implementation. **DoD:** the CSV belt green in CI for the MVP.
 
 **Phase 2 — V1 (Epic E5, `Trame Phase 2+`)**
 - [ ] Basic .xlsx import: `TrameCommand::ImportXlsx` (values, simple formulas, basic styles, merges)
