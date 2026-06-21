@@ -36,6 +36,10 @@ pub struct EvalContext<'a> {
     /// Evaluation clock as an Excel serial number. Shared by every cell in the
     /// pass so `TODAY()`/`NOW()` are stable within one recomputation.
     pub now_serial: f64,
+    /// 1-based grid position of the cell currently being evaluated, used by the
+    /// no-argument `ROW()`/`COLUMN()`. `(0, 0)` means "unknown" (e.g. a bare
+    /// `execute` call in tests). Set by [`EvalContext::eval_cell`].
+    pub current_pos: (u32, u32),
 }
 
 /// Resolving one axis of a reference to a grid position.
@@ -59,7 +63,24 @@ impl<'a> EvalContext<'a> {
             formula_cache,
             indices,
             now_serial: 0.0,
+            current_pos: (0, 0),
         }
+    }
+
+    /// Resolve the 1-based grid position of a cell against its sheet index.
+    /// A bound id that has been deleted, or a missing sheet, yields `(0, 0)`.
+    fn grid_pos_of(&self, cell: CellId) -> (u32, u32) {
+        let Some(idx) = self.indices.get(&cell.sheet) else {
+            return (0, 0);
+        };
+        let axis = |a: AxisId, pos_of: &dyn Fn(&crate::model::Uid) -> Option<usize>| match a {
+            AxisId::Bound(u) => pos_of(&u).map(|p| p as u32 + 1).unwrap_or(0),
+            AxisId::Virtual(p) => p + 1,
+        };
+        (
+            axis(cell.row, &|u| idx.row_pos(u)),
+            axis(cell.col, &|u| idx.col_pos(u)),
+        )
     }
 
     /// Set the evaluation clock (see [`EvalContext::now_serial`]).
@@ -78,6 +99,8 @@ impl<'a> EvalContext<'a> {
             return v.clone();
         }
         self.eval_stack.insert(cell);
+        let prev_pos = self.current_pos;
+        self.current_pos = self.grid_pos_of(cell);
         let result = match self.bc.get(&cell) {
             Some(bc) => self.execute(bc),
             None => self
@@ -87,6 +110,7 @@ impl<'a> EvalContext<'a> {
                 .unwrap_or(CellValue::Empty),
         };
         self.eval_stack.remove(&cell);
+        self.current_pos = prev_pos;
         self.resolved.insert(cell, result.clone());
         result
     }
@@ -219,7 +243,12 @@ impl<'a> EvalContext<'a> {
                 Op::CallFn { name, n_args } => {
                     let split = stack.len().saturating_sub(*n_args as usize);
                     let args: Vec<CellValue> = stack.drain(split..).collect();
-                    stack.push(call_builtin(name, &args, self.now_serial));
+                    let fnctx = super::functions::FnCtx {
+                        now_serial: self.now_serial,
+                        cell_row: self.current_pos.0,
+                        cell_col: self.current_pos.1,
+                    };
+                    stack.push(call_builtin(name, &args, fnctx));
                 }
             }
         }

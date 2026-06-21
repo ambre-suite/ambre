@@ -11,11 +11,30 @@ use super::types::{CellValue, FormulaError};
 // Dispatch
 // -----------------------------------------------------------------------------
 
-/// Call the named built-in function with pre-evaluated arguments.
+/// Ambient evaluation context threaded into every built-in call.
 ///
-/// `now_serial` is the evaluation clock (Excel serial number) shared across the
-/// recomputation pass; it is only consumed by `TODAY`/`NOW`.
-pub fn call_builtin(name: &str, args: &[CellValue], now_serial: f64) -> CellValue {
+/// `now_serial` is the recomputation clock (shared so `TODAY()`/`NOW()` are
+/// stable within a pass); `cell_row`/`cell_col` are the 1-based grid position of
+/// the cell being evaluated, consumed by the no-argument `ROW()`/`COLUMN()`.
+/// A position of `0` means "unknown".
+#[derive(Clone, Copy)]
+pub struct FnCtx {
+    pub now_serial: f64,
+    pub cell_row: u32,
+    pub cell_col: u32,
+}
+
+impl FnCtx {
+    /// Context with only the clock set (helper for tests / non-positional calls).
+    #[cfg(test)]
+    fn at_clock(now_serial: f64) -> Self {
+        Self { now_serial, cell_row: 0, cell_col: 0 }
+    }
+}
+
+/// Call the named built-in function with pre-evaluated arguments.
+pub fn call_builtin(name: &str, args: &[CellValue], ctx: FnCtx) -> CellValue {
+    let now_serial = ctx.now_serial;
     match name {
         // Math
         "SUM" => sum(args),
@@ -30,6 +49,50 @@ pub fn call_builtin(name: &str, args: &[CellValue], now_serial: f64) -> CellValu
         "POWER" => power(args),
         "SUMIF" => sumif(args),
         "COUNTIF" => countif(args),
+        "INT" => int_fn(args),
+        "MOD" => mod_fn(args),
+        "ROUNDUP" => round_dir(args, true),
+        "ROUNDDOWN" => round_dir(args, false),
+        "CEILING" => ceil_floor(args, true),
+        "FLOOR" => ceil_floor(args, false),
+        "PRODUCT" => product(args),
+        "SUMPRODUCT" => sumproduct(args),
+        "MEDIAN" => median(args),
+        "COUNTBLANK" => countblank(args),
+        "TRUNC" => trunc(args),
+        "SIGN" => sign(args),
+        "SUMSQ" => sumsq(args),
+        "EXP" => unary_math(args, f64::exp),
+        "LN" => log_checked(args, |n| n.ln()),
+        "LOG10" => log_checked(args, |n| n.log10()),
+        "LOG" => log_fn(args),
+        "PI" => CellValue::Number(std::f64::consts::PI),
+        "SIN" => unary_math(args, f64::sin),
+        "COS" => unary_math(args, f64::cos),
+        "TAN" => unary_math(args, f64::tan),
+        "RADIANS" => unary_math(args, f64::to_radians),
+        "DEGREES" => unary_math(args, f64::to_degrees),
+
+        // Statistics
+        "AVERAGEIF" => averageif(args),
+        "AVERAGEIFS" => averageifs(args),
+        "SUMIFS" => sumifs(args),
+        "COUNTIFS" => countifs(args),
+        "STDEV" => stdev(args, true),
+        "VAR" => variance(args, true),
+        "LARGE" => large_small(args, true),
+        "SMALL" => large_small(args, false),
+        "RANK" => rank(args),
+        "MODE" => mode(args),
+
+        // Financial
+        "PMT" => pmt(args),
+        "FV" => fv(args),
+        "PV" => pv(args),
+        "RATE" => rate(args),
+        "NPER" => nper(args),
+        "NPV" => npv(args),
+        "IRR" => irr(args),
 
         // Logic
         "IF" => if_fn(args),
@@ -37,11 +100,30 @@ pub fn call_builtin(name: &str, args: &[CellValue], now_serial: f64) -> CellValu
         "AND" => and(args),
         "OR" => or(args),
         "NOT" => not(args),
+        "XOR" => xor(args),
+        "ISBLANK" => is_blank(args),
+        "ISNUMBER" => is_number(args),
+        "ISTEXT" => is_text(args),
+        "ISERROR" => is_error(args),
+        "ISNA" => is_na(args),
+        "ISEVEN" => is_even(args),
+        "ISODD" => is_odd(args),
+        "IFNA" => ifna(args),
+        "IFS" => ifs(args),
+        "SWITCH" => switch_fn(args),
+        "TRUE" => CellValue::Boolean(true),
+        "FALSE" => CellValue::Boolean(false),
 
         // Lookup
         "VLOOKUP" => vlookup(args),
+        "HLOOKUP" => hlookup(args),
         "INDEX" => index(args),
         "MATCH" => match_fn(args),
+        "CHOOSE" => choose(args),
+        "ROWS" => CellValue::Number(range_dims(args).map(|(r, _)| r).unwrap_or(0) as f64),
+        "COLUMNS" => CellValue::Number(range_dims(args).map(|(_, c)| c).unwrap_or(0) as f64),
+        "ROW" => row_col(args, ctx.cell_row),
+        "COLUMN" => row_col(args, ctx.cell_col),
 
         // Text
         "CONCAT" | "CONCATENATE" => concat_fn(args),
@@ -53,6 +135,17 @@ pub fn call_builtin(name: &str, args: &[CellValue], now_serial: f64) -> CellValu
         "LOWER" => lower(args),
         "TRIM" => trim(args),
         "LEN" => len(args),
+        "PROPER" => proper(args),
+        "SUBSTITUTE" => substitute(args),
+        "REPT" => rept(args),
+        "FIND" => find_fn(args),
+        "SEARCH" => search_fn(args),
+        "REPLACE" => replace_fn(args),
+        "EXACT" => exact(args),
+        "TEXTJOIN" => textjoin(args),
+        "CHAR" => char_fn(args),
+        "CODE" => code_fn(args),
+        "VALUE" => value_fn(args),
 
         // Date / time (serial-number based, epoch 1899-12-30)
         "TODAY" => CellValue::Number(now_serial.floor()),
@@ -61,6 +154,13 @@ pub fn call_builtin(name: &str, args: &[CellValue], now_serial: f64) -> CellValu
         "YEAR" => year(args),
         "MONTH" => month(args),
         "DAY" => day(args),
+        "TIME" => time_fn(args),
+        "HOUR" => time_part(args, 0),
+        "MINUTE" => time_part(args, 1),
+        "SECOND" => time_part(args, 2),
+        "WEEKDAY" => weekday(args),
+        "EDATE" => edate(args),
+        "EOMONTH" => eomonth(args),
 
         _ => CellValue::Error(FormulaError::NaError),
     }
@@ -223,6 +323,122 @@ fn power(args: &[CellValue]) -> CellValue {
     CellValue::Number(base.powf(exp))
 }
 
+/// Read the first argument as a single number, or `None` if absent/non-numeric.
+fn first_num(args: &[CellValue]) -> Option<f64> {
+    flatten_numeric(&args[..args.len().min(1)]).first().copied()
+}
+
+/// INT(n) -- round down to the nearest integer (toward negative infinity).
+fn int_fn(args: &[CellValue]) -> CellValue {
+    match first_num(args) {
+        Some(n) => CellValue::Number(n.floor()),
+        None => CellValue::Error(FormulaError::TypeError),
+    }
+}
+
+/// MOD(number, divisor) -- remainder with the sign of the divisor (Excel style).
+fn mod_fn(args: &[CellValue]) -> CellValue {
+    if args.len() < 2 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let (a, b) = match (first_num(&args[..1]), first_num(&args[1..2])) {
+        (Some(a), Some(b)) => (a, b),
+        _ => return CellValue::Error(FormulaError::TypeError),
+    };
+    if b == 0.0 {
+        return CellValue::Error(FormulaError::DivisionByZero);
+    }
+    CellValue::Number(a - b * (a / b).floor())
+}
+
+/// ROUNDUP / ROUNDDOWN(number, [digits]) -- round away from / toward zero.
+fn round_dir(args: &[CellValue], up: bool) -> CellValue {
+    let num = match first_num(args) {
+        Some(n) => n,
+        None => return CellValue::Error(FormulaError::TypeError),
+    };
+    let digits = if args.len() >= 2 {
+        flatten_numeric(&args[1..2]).first().copied().unwrap_or(0.0) as i32
+    } else {
+        0
+    };
+    let factor = 10f64.powi(digits);
+    let scaled = num * factor;
+    let rounded = if up { scaled.abs().ceil().copysign(scaled) } else { scaled.trunc() };
+    CellValue::Number(rounded / factor)
+}
+
+/// CEILING / FLOOR(number, [significance]) -- round to a multiple of `significance`.
+fn ceil_floor(args: &[CellValue], up: bool) -> CellValue {
+    let num = match first_num(args) {
+        Some(n) => n,
+        None => return CellValue::Error(FormulaError::TypeError),
+    };
+    let sig = if args.len() >= 2 {
+        flatten_numeric(&args[1..2]).first().copied().unwrap_or(1.0)
+    } else {
+        1.0
+    };
+    if sig == 0.0 {
+        return CellValue::Number(0.0);
+    }
+    let ratio = num / sig;
+    let stepped = if up { ratio.ceil() } else { ratio.floor() };
+    CellValue::Number(stepped * sig)
+}
+
+/// PRODUCT(...) -- product of all numeric arguments (empty input -> 0).
+fn product(args: &[CellValue]) -> CellValue {
+    let nums = flatten_numeric(args);
+    if nums.is_empty() {
+        return CellValue::Number(0.0);
+    }
+    CellValue::Number(nums.iter().product())
+}
+
+/// SUMPRODUCT(range1, range2, ...) -- sum of the element-wise products of the
+/// arguments, paired by position. Non-numeric cells contribute 0.
+fn sumproduct(args: &[CellValue]) -> CellValue {
+    if args.is_empty() {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let columns: Vec<Vec<f64>> = args
+        .iter()
+        .map(|a| range_cells(a).map(|v| v.as_number().unwrap_or(0.0)).collect())
+        .collect();
+    let len = columns.iter().map(Vec::len).min().unwrap_or(0);
+    let total = (0..len)
+        .map(|i| columns.iter().map(|c| c[i]).product::<f64>())
+        .sum();
+    CellValue::Number(total)
+}
+
+/// MEDIAN(...) -- middle value of the numeric arguments (mean of the two
+/// central values for an even count).
+fn median(args: &[CellValue]) -> CellValue {
+    let mut nums = flatten_numeric(args);
+    if nums.is_empty() {
+        return CellValue::Error(FormulaError::NumError);
+    }
+    nums.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let mid = nums.len() / 2;
+    let m = if nums.len().is_multiple_of(2) {
+        (nums[mid - 1] + nums[mid]) / 2.0
+    } else {
+        nums[mid]
+    };
+    CellValue::Number(m)
+}
+
+/// COUNTBLANK(range) -- count empty cells in the argument(s).
+fn countblank(args: &[CellValue]) -> CellValue {
+    let n = flatten_all(args)
+        .iter()
+        .filter(|v| matches!(v, CellValue::Empty))
+        .count();
+    CellValue::Number(n as f64)
+}
+
 // -----------------------------------------------------------------------------
 // Logic functions
 // -----------------------------------------------------------------------------
@@ -262,6 +478,31 @@ fn not(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     CellValue::Boolean(!is_truthy(&args[0]))
+}
+
+/// XOR(...) -- TRUE when an odd number of arguments are truthy.
+fn xor(args: &[CellValue]) -> CellValue {
+    if args.is_empty() {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let truthy = flatten_all(args).iter().filter(|v| is_truthy(v)).count();
+    CellValue::Boolean(truthy % 2 == 1)
+}
+
+/// ISBLANK(value) -- TRUE when the argument is an empty cell.
+fn is_blank(args: &[CellValue]) -> CellValue {
+    match args.first() {
+        Some(v) => CellValue::Boolean(matches!(v, CellValue::Empty)),
+        None => CellValue::Error(FormulaError::NaError),
+    }
+}
+
+/// ISNUMBER(value) -- TRUE when the argument is a number.
+fn is_number(args: &[CellValue]) -> CellValue {
+    match args.first() {
+        Some(v) => CellValue::Boolean(matches!(v, CellValue::Number(_))),
+        None => CellValue::Error(FormulaError::NaError),
+    }
 }
 
 fn is_truthy(value: &CellValue) -> bool {
@@ -369,6 +610,120 @@ fn len(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     CellValue::Number(args[0].to_display().chars().count() as f64)
+}
+
+/// PROPER(text) -- capitalize the first letter of each word, lowercase the rest.
+fn proper(args: &[CellValue]) -> CellValue {
+    if args.is_empty() {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let mut out = String::new();
+    let mut at_word_start = true;
+    for c in args[0].to_display().chars() {
+        if c.is_alphabetic() {
+            if at_word_start {
+                out.extend(c.to_uppercase());
+            } else {
+                out.extend(c.to_lowercase());
+            }
+            at_word_start = false;
+        } else {
+            out.push(c);
+            at_word_start = true;
+        }
+    }
+    CellValue::Text(out)
+}
+
+/// SUBSTITUTE(text, old, new, [instance]) -- replace occurrences of `old`.
+///
+/// Without `instance`, every occurrence is replaced; with it, only the Nth
+/// (1-based) occurrence is. An empty `old` returns the text unchanged.
+fn substitute(args: &[CellValue]) -> CellValue {
+    if args.len() < 3 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let text = args[0].to_display();
+    let old = args[1].to_display();
+    let new = args[2].to_display();
+    if old.is_empty() {
+        return CellValue::Text(text);
+    }
+    let instance = args.get(3).and_then(|v| v.as_number().ok()).map(|n| n as usize);
+    let result = match instance {
+        None => text.replace(&old, &new),
+        Some(target) if target >= 1 => {
+            let mut out = String::new();
+            let mut rest = text.as_str();
+            let mut seen = 0;
+            while let Some(pos) = rest.find(&old) {
+                seen += 1;
+                out.push_str(&rest[..pos]);
+                if seen == target {
+                    out.push_str(&new);
+                } else {
+                    out.push_str(&old);
+                }
+                rest = &rest[pos + old.len()..];
+            }
+            out.push_str(rest);
+            out
+        }
+        Some(_) => text,
+    };
+    CellValue::Text(result)
+}
+
+/// REPT(text, count) -- repeat `text` `count` times.
+fn rept(args: &[CellValue]) -> CellValue {
+    if args.len() < 2 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let n = match args[1].as_number() {
+        Ok(n) if n >= 0.0 => n as usize,
+        Ok(_) => return CellValue::Error(FormulaError::NumError),
+        Err(e) => return CellValue::Error(e),
+    };
+    CellValue::Text(args[0].to_display().repeat(n))
+}
+
+/// FIND(find_text, within_text, [start]) -- 1-based, case-sensitive position of
+/// `find_text` in `within_text`. Returns `#VALUE!` (TypeError) when not found.
+fn find_fn(args: &[CellValue]) -> CellValue {
+    if args.len() < 2 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let needle = args[0].to_display();
+    let haystack: Vec<char> = args[1].to_display().chars().collect();
+    let start = args
+        .get(2)
+        .and_then(|v| v.as_number().ok())
+        .map(|n| (n as usize).max(1) - 1)
+        .unwrap_or(0);
+    if start > haystack.len() {
+        return CellValue::Error(FormulaError::TypeError);
+    }
+    // Char-aware search from `start`: rebuild the searchable suffix as a string.
+    let suffix: String = haystack[start..].iter().collect();
+    match suffix.find(&needle) {
+        // `find` yields a byte offset; convert it to a char offset.
+        Some(byte_pos) => {
+            let char_off = suffix[..byte_pos].chars().count();
+            CellValue::Number((start + char_off + 1) as f64)
+        }
+        None => CellValue::Error(FormulaError::TypeError),
+    }
+}
+
+/// VALUE(text) -- coerce a textual number into a numeric value.
+fn value_fn(args: &[CellValue]) -> CellValue {
+    if args.is_empty() {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    match args[0].as_number() {
+        Ok(n) => CellValue::Number(n),
+        Err(_) => CellValue::Error(FormulaError::TypeError),
+    }
 }
 
 /// TEXT(value, format) -- minimal numeric formatting.
@@ -854,6 +1209,770 @@ impl NanDefault for f64 {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Math (cont.)
+// -----------------------------------------------------------------------------
+
+/// TRUNC(number, [digits]) -- truncate toward zero at `digits` decimals.
+fn trunc(args: &[CellValue]) -> CellValue {
+    let num = match first_num(args) {
+        Some(n) => n,
+        None => return CellValue::Error(FormulaError::TypeError),
+    };
+    let digits = if args.len() >= 2 {
+        flatten_numeric(&args[1..2]).first().copied().unwrap_or(0.0) as i32
+    } else {
+        0
+    };
+    let factor = 10f64.powi(digits);
+    CellValue::Number((num * factor).trunc() / factor)
+}
+
+/// SIGN(number) -- -1, 0 or 1.
+fn sign(args: &[CellValue]) -> CellValue {
+    match first_num(args) {
+        Some(n) => CellValue::Number(if n > 0.0 { 1.0 } else if n < 0.0 { -1.0 } else { 0.0 }),
+        None => CellValue::Error(FormulaError::TypeError),
+    }
+}
+
+/// SUMSQ(...) -- sum of the squares of all numeric arguments.
+fn sumsq(args: &[CellValue]) -> CellValue {
+    CellValue::Number(flatten_numeric(args).iter().map(|n| n * n).sum())
+}
+
+/// Apply a total `f64 -> f64` function to the single numeric argument.
+fn unary_math(args: &[CellValue], f: fn(f64) -> f64) -> CellValue {
+    match first_num(args) {
+        Some(n) => CellValue::Number(f(n)),
+        None => CellValue::Error(FormulaError::TypeError),
+    }
+}
+
+/// Apply a logarithm to the single argument, rejecting non-positive inputs.
+fn log_checked(args: &[CellValue], f: fn(f64) -> f64) -> CellValue {
+    match first_num(args) {
+        Some(n) if n > 0.0 => CellValue::Number(f(n)),
+        Some(_) => CellValue::Error(FormulaError::NumError),
+        None => CellValue::Error(FormulaError::TypeError),
+    }
+}
+
+/// LOG(number, [base=10]).
+fn log_fn(args: &[CellValue]) -> CellValue {
+    let num = match first_num(args) {
+        Some(n) if n > 0.0 => n,
+        Some(_) => return CellValue::Error(FormulaError::NumError),
+        None => return CellValue::Error(FormulaError::TypeError),
+    };
+    let base = if args.len() >= 2 {
+        flatten_numeric(&args[1..2]).first().copied().unwrap_or(10.0)
+    } else {
+        10.0
+    };
+    if base <= 0.0 || base == 1.0 {
+        return CellValue::Error(FormulaError::NumError);
+    }
+    CellValue::Number(num.log(base))
+}
+
+// -----------------------------------------------------------------------------
+// Statistics
+// -----------------------------------------------------------------------------
+
+/// Build the `(values, criterion)` pairs of a `*IFS`-style argument tail.
+/// Returns `None` when the tail is empty or has an odd length.
+fn criteria_pairs(args: &[CellValue]) -> Option<Vec<(Vec<CellValue>, Criterion)>> {
+    if args.is_empty() || !args.len().is_multiple_of(2) {
+        return None;
+    }
+    Some(
+        args.chunks_exact(2)
+            .map(|c| (range_cells(&c[0]).cloned().collect(), Criterion::parse(&c[1])))
+            .collect(),
+    )
+}
+
+/// Positions where every criterion in `pairs` matches (ranges paired by index).
+fn matching_indices(pairs: &[(Vec<CellValue>, Criterion)]) -> Vec<usize> {
+    let len = pairs.iter().map(|(v, _)| v.len()).min().unwrap_or(0);
+    (0..len)
+        .filter(|&i| pairs.iter().all(|(vals, crit)| crit.matches(&vals[i])))
+        .collect()
+}
+
+/// Sum the numeric values of `src` at the given indices.
+fn sum_at(src: &[CellValue], idx: &[usize]) -> f64 {
+    idx.iter()
+        .filter_map(|&i| src.get(i).and_then(|v| v.as_number().ok()))
+        .sum()
+}
+
+/// AVERAGEIF(range, criterion, [average_range]).
+fn averageif(args: &[CellValue]) -> CellValue {
+    if args.len() < 2 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let crit = Criterion::parse(&args[1]);
+    let test: Vec<CellValue> = range_cells(&args[0]).cloned().collect();
+    let avg_src: Vec<CellValue> = match args.get(2) {
+        Some(r) => range_cells(r).cloned().collect(),
+        None => test.clone(),
+    };
+    let idx: Vec<usize> = (0..test.len()).filter(|&i| crit.matches(&test[i])).collect();
+    average_at(&avg_src, &idx)
+}
+
+/// AVERAGEIFS(average_range, criteria_range1, criteria1, ...).
+fn averageifs(args: &[CellValue]) -> CellValue {
+    if args.len() < 3 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let avg_src: Vec<CellValue> = range_cells(&args[0]).cloned().collect();
+    let Some(pairs) = criteria_pairs(&args[1..]) else {
+        return CellValue::Error(FormulaError::NaError);
+    };
+    average_at(&avg_src, &matching_indices(&pairs))
+}
+
+/// Average the numeric values of `src` at the given indices (`#DIV/0!` if none).
+fn average_at(src: &[CellValue], idx: &[usize]) -> CellValue {
+    let nums: Vec<f64> = idx
+        .iter()
+        .filter_map(|&i| src.get(i).and_then(|v| v.as_number().ok()))
+        .collect();
+    if nums.is_empty() {
+        return CellValue::Error(FormulaError::DivisionByZero);
+    }
+    CellValue::Number(nums.iter().sum::<f64>() / nums.len() as f64)
+}
+
+/// SUMIFS(sum_range, criteria_range1, criteria1, ...).
+fn sumifs(args: &[CellValue]) -> CellValue {
+    if args.len() < 3 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let sum_src: Vec<CellValue> = range_cells(&args[0]).cloned().collect();
+    let Some(pairs) = criteria_pairs(&args[1..]) else {
+        return CellValue::Error(FormulaError::NaError);
+    };
+    CellValue::Number(sum_at(&sum_src, &matching_indices(&pairs)))
+}
+
+/// COUNTIFS(criteria_range1, criteria1, ...).
+fn countifs(args: &[CellValue]) -> CellValue {
+    let Some(pairs) = criteria_pairs(args) else {
+        return CellValue::Error(FormulaError::NaError);
+    };
+    CellValue::Number(matching_indices(&pairs).len() as f64)
+}
+
+/// STDEV / VAR over the sample (denominator `n - 1`).
+fn variance(args: &[CellValue], _sample: bool) -> CellValue {
+    let nums = flatten_numeric(args);
+    if nums.len() < 2 {
+        return CellValue::Error(FormulaError::DivisionByZero);
+    }
+    let mean = nums.iter().sum::<f64>() / nums.len() as f64;
+    let ss: f64 = nums.iter().map(|n| (n - mean).powi(2)).sum();
+    CellValue::Number(ss / (nums.len() - 1) as f64)
+}
+
+fn stdev(args: &[CellValue], sample: bool) -> CellValue {
+    match variance(args, sample) {
+        CellValue::Number(v) => CellValue::Number(v.sqrt()),
+        other => other,
+    }
+}
+
+/// LARGE / SMALL(array..., k) -- the k-th largest / smallest numeric value.
+fn large_small(args: &[CellValue], largest: bool) -> CellValue {
+    if args.len() < 2 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let k = match args[args.len() - 1].as_number() {
+        Ok(n) if n >= 1.0 => n as usize,
+        _ => return CellValue::Error(FormulaError::NumError),
+    };
+    let mut nums = flatten_numeric(&args[..args.len() - 1]);
+    if k > nums.len() {
+        return CellValue::Error(FormulaError::NumError);
+    }
+    nums.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let pick = if largest { nums.len() - k } else { k - 1 };
+    CellValue::Number(nums[pick])
+}
+
+/// RANK(number, ref, [order]) -- 1-based rank; order 0/omitted = descending.
+fn rank(args: &[CellValue]) -> CellValue {
+    if args.len() < 2 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let num = match args[0].as_number() {
+        Ok(n) => n,
+        Err(e) => return CellValue::Error(e),
+    };
+    let data: Vec<f64> = range_cells(&args[1]).filter_map(|v| v.as_number().ok()).collect();
+    if !data.iter().any(|n| (n - num).abs() < f64::EPSILON) {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let descending = !args.get(2).map(is_truthy).unwrap_or(false);
+    let better = data
+        .iter()
+        .filter(|&&n| if descending { n > num } else { n < num })
+        .count();
+    CellValue::Number((better + 1) as f64)
+}
+
+/// MODE(...) -- the most frequently occurring numeric value (first on ties).
+fn mode(args: &[CellValue]) -> CellValue {
+    let nums = flatten_numeric(args);
+    if nums.is_empty() {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let mut best = nums[0];
+    let mut best_count = 0usize;
+    for (i, &a) in nums.iter().enumerate() {
+        let c = nums[i..].iter().filter(|&&b| (b - a).abs() < f64::EPSILON).count();
+        if c > best_count {
+            best_count = c;
+            best = a;
+        }
+    }
+    if best_count < 2 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    CellValue::Number(best)
+}
+
+// -----------------------------------------------------------------------------
+// Financial (annuities; cash-flow sign convention follows Excel)
+// -----------------------------------------------------------------------------
+
+/// `(1+r)^n * pmt-coefficient` shared by the annuity formulas.
+fn annuity_factor(rate: f64, nper: f64, paytype: f64) -> f64 {
+    ((1.0 + rate).powf(nper) - 1.0) / rate * (1.0 + rate * paytype)
+}
+
+/// Optional positional argument as a number, with a default.
+fn opt_num(args: &[CellValue], i: usize, default: f64) -> f64 {
+    args.get(i).and_then(|v| v.as_number().ok()).unwrap_or(default)
+}
+
+/// PMT(rate, nper, pv, [fv], [type]).
+fn pmt(args: &[CellValue]) -> CellValue {
+    if args.len() < 3 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let (rate, nper, pv) = (opt_num(args, 0, 0.0), opt_num(args, 1, 0.0), opt_num(args, 2, 0.0));
+    let fv = opt_num(args, 3, 0.0);
+    let paytype = opt_num(args, 4, 0.0);
+    if nper == 0.0 {
+        return CellValue::Error(FormulaError::DivisionByZero);
+    }
+    let value = if rate == 0.0 {
+        -(pv + fv) / nper
+    } else {
+        -(pv * (1.0 + rate).powf(nper) + fv) / annuity_factor(rate, nper, paytype)
+    };
+    CellValue::Number(value)
+}
+
+/// FV(rate, nper, pmt, [pv], [type]).
+fn fv(args: &[CellValue]) -> CellValue {
+    if args.len() < 3 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let (rate, nper, pmt_v) = (opt_num(args, 0, 0.0), opt_num(args, 1, 0.0), opt_num(args, 2, 0.0));
+    let pv = opt_num(args, 3, 0.0);
+    let paytype = opt_num(args, 4, 0.0);
+    let value = if rate == 0.0 {
+        -(pv + pmt_v * nper)
+    } else {
+        -(pv * (1.0 + rate).powf(nper) + pmt_v * annuity_factor(rate, nper, paytype))
+    };
+    CellValue::Number(value)
+}
+
+/// PV(rate, nper, pmt, [fv], [type]).
+fn pv(args: &[CellValue]) -> CellValue {
+    if args.len() < 3 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let (rate, nper, pmt_v) = (opt_num(args, 0, 0.0), opt_num(args, 1, 0.0), opt_num(args, 2, 0.0));
+    let fv = opt_num(args, 3, 0.0);
+    let paytype = opt_num(args, 4, 0.0);
+    let value = if rate == 0.0 {
+        -(fv + pmt_v * nper)
+    } else {
+        -(fv + pmt_v * annuity_factor(rate, nper, paytype)) / (1.0 + rate).powf(nper)
+    };
+    CellValue::Number(value)
+}
+
+/// NPER(rate, pmt, pv, [fv], [type]).
+fn nper(args: &[CellValue]) -> CellValue {
+    if args.len() < 3 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let (rate, pmt_v, pv) = (opt_num(args, 0, 0.0), opt_num(args, 1, 0.0), opt_num(args, 2, 0.0));
+    let fv = opt_num(args, 3, 0.0);
+    let paytype = opt_num(args, 4, 0.0);
+    if rate == 0.0 {
+        if pmt_v == 0.0 {
+            return CellValue::Error(FormulaError::DivisionByZero);
+        }
+        return CellValue::Number(-(pv + fv) / pmt_v);
+    }
+    let adj = pmt_v * (1.0 + rate * paytype);
+    let num = adj - fv * rate;
+    let den = adj + pv * rate;
+    if den == 0.0 || num / den <= 0.0 {
+        return CellValue::Error(FormulaError::NumError);
+    }
+    CellValue::Number((num / den).ln() / (1.0 + rate).ln())
+}
+
+/// RATE(nper, pmt, pv, [fv], [type], [guess]) -- Newton-Raphson on the annuity
+/// balance equation. Returns `#NUM!` if it fails to converge.
+fn rate(args: &[CellValue]) -> CellValue {
+    if args.len() < 3 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let (nper, pmt_v, pv) = (opt_num(args, 0, 0.0), opt_num(args, 1, 0.0), opt_num(args, 2, 0.0));
+    let fv = opt_num(args, 3, 0.0);
+    let paytype = opt_num(args, 4, 0.0);
+    let mut r = opt_num(args, 5, 0.1);
+    // f(r) = pv*(1+r)^n + pmt*(1+r*type)*((1+r)^n-1)/r + fv
+    let f = |r: f64| -> f64 {
+        if r == 0.0 {
+            pv + pmt_v * nper + fv
+        } else {
+            pv * (1.0 + r).powf(nper) + pmt_v * annuity_factor(r, nper, paytype) + fv
+        }
+    };
+    for _ in 0..100 {
+        let y = f(r);
+        if y.abs() < 1e-9 {
+            return CellValue::Number(r);
+        }
+        // Numerical derivative.
+        let h = 1e-6;
+        let dy = (f(r + h) - f(r - h)) / (2.0 * h);
+        if dy.abs() < 1e-12 {
+            break;
+        }
+        let next = r - y / dy;
+        if !next.is_finite() {
+            break;
+        }
+        r = next;
+    }
+    CellValue::Error(FormulaError::NumError)
+}
+
+/// NPV(rate, value1, value2, ...) -- values discounted from period 1.
+fn npv(args: &[CellValue]) -> CellValue {
+    if args.len() < 2 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let rate = match args[0].as_number() {
+        Ok(r) => r,
+        Err(e) => return CellValue::Error(e),
+    };
+    if rate == -1.0 {
+        return CellValue::Error(FormulaError::DivisionByZero);
+    }
+    let flows = flatten_numeric(&args[1..]);
+    let total = flows
+        .iter()
+        .enumerate()
+        .map(|(i, v)| v / (1.0 + rate).powi(i as i32 + 1))
+        .sum();
+    CellValue::Number(total)
+}
+
+/// IRR(values, [guess]) -- Newton-Raphson on the NPV equation. Period-0 cash
+/// flow is undiscounted; `#NUM!` if it fails to converge.
+fn irr(args: &[CellValue]) -> CellValue {
+    if args.is_empty() {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let flows = flatten_numeric(&args[..1]);
+    if flows.len() < 2 {
+        return CellValue::Error(FormulaError::NumError);
+    }
+    let mut r = args.get(1).and_then(|v| v.as_number().ok()).unwrap_or(0.1);
+    let npv_at = |r: f64| -> f64 {
+        flows.iter().enumerate().map(|(i, v)| v / (1.0 + r).powi(i as i32)).sum()
+    };
+    for _ in 0..100 {
+        let y = npv_at(r);
+        if y.abs() < 1e-9 {
+            return CellValue::Number(r);
+        }
+        let h = 1e-6;
+        let dy = (npv_at(r + h) - npv_at(r - h)) / (2.0 * h);
+        if dy.abs() < 1e-12 {
+            break;
+        }
+        let next = r - y / dy;
+        if !next.is_finite() || next <= -1.0 {
+            break;
+        }
+        r = next;
+    }
+    CellValue::Error(FormulaError::NumError)
+}
+
+// -----------------------------------------------------------------------------
+// Logic / information (cont.)
+// -----------------------------------------------------------------------------
+
+fn is_text(args: &[CellValue]) -> CellValue {
+    match args.first() {
+        Some(v) => CellValue::Boolean(matches!(v, CellValue::Text(_))),
+        None => CellValue::Error(FormulaError::NaError),
+    }
+}
+
+fn is_error(args: &[CellValue]) -> CellValue {
+    match args.first() {
+        Some(v) => CellValue::Boolean(matches!(v, CellValue::Error(_))),
+        None => CellValue::Error(FormulaError::NaError),
+    }
+}
+
+fn is_na(args: &[CellValue]) -> CellValue {
+    match args.first() {
+        Some(v) => CellValue::Boolean(matches!(v, CellValue::Error(FormulaError::NaError))),
+        None => CellValue::Error(FormulaError::NaError),
+    }
+}
+
+fn is_even(args: &[CellValue]) -> CellValue {
+    match first_num(args) {
+        Some(n) => CellValue::Boolean((n.trunc() as i64).rem_euclid(2) == 0),
+        None => CellValue::Error(FormulaError::TypeError),
+    }
+}
+
+fn is_odd(args: &[CellValue]) -> CellValue {
+    match first_num(args) {
+        Some(n) => CellValue::Boolean((n.trunc() as i64).rem_euclid(2) == 1),
+        None => CellValue::Error(FormulaError::TypeError),
+    }
+}
+
+/// IFNA(value, fallback) -- `fallback` only when `value` is the `#N/A` error.
+fn ifna(args: &[CellValue]) -> CellValue {
+    if args.len() < 2 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    match &args[0] {
+        CellValue::Error(FormulaError::NaError) => args[1].clone(),
+        other => other.clone(),
+    }
+}
+
+/// IFS(cond1, val1, cond2, val2, ...) -- first truthy condition wins.
+fn ifs(args: &[CellValue]) -> CellValue {
+    if args.len() < 2 || !args.len().is_multiple_of(2) {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    for pair in args.chunks_exact(2) {
+        if is_truthy(&pair[0]) {
+            return pair[1].clone();
+        }
+    }
+    CellValue::Error(FormulaError::NaError)
+}
+
+/// SWITCH(expr, val1, res1, [val2, res2, ...], [default]).
+fn switch_fn(args: &[CellValue]) -> CellValue {
+    if args.len() < 3 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let subject = &args[0];
+    let rest = &args[1..];
+    let mut i = 0;
+    while i + 1 < rest.len() {
+        if values_equal_ci(subject, &rest[i]) {
+            return rest[i + 1].clone();
+        }
+        i += 2;
+    }
+    // A trailing unpaired argument is the default.
+    if !rest.len().is_multiple_of(2) {
+        return rest[rest.len() - 1].clone();
+    }
+    CellValue::Error(FormulaError::NaError)
+}
+
+// -----------------------------------------------------------------------------
+// Lookup / reference (cont.)
+// -----------------------------------------------------------------------------
+
+/// HLOOKUP(lookup, table, row_index, [range_lookup]) -- horizontal VLOOKUP.
+fn hlookup(args: &[CellValue]) -> CellValue {
+    if args.len() < 3 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let table = match &args[1] {
+        CellValue::Range(r) => r,
+        _ => return CellValue::Error(FormulaError::NaError),
+    };
+    let row_index = match args[2].as_number() {
+        Ok(n) if n >= 1.0 => n as usize - 1,
+        _ => return CellValue::Error(FormulaError::NaError),
+    };
+    if row_index >= table.rows {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let approximate = args.get(3).map(is_truthy).unwrap_or(true);
+    let mut best: Option<usize> = None;
+    for col in 0..table.cols {
+        let key = match table.get(0, col) {
+            Some(k) => k,
+            None => continue,
+        };
+        if approximate {
+            if compare_cells(key, &args[0]).map(|o| o.is_le()).unwrap_or(false) {
+                best = Some(col);
+            } else {
+                break;
+            }
+        } else if values_equal_ci(key, &args[0]) {
+            best = Some(col);
+            break;
+        }
+    }
+    match best.and_then(|col| table.get(row_index, col)) {
+        Some(v) => v.clone(),
+        None => CellValue::Error(FormulaError::NaError),
+    }
+}
+
+/// CHOOSE(index, value1, value2, ...) -- 1-based selection.
+fn choose(args: &[CellValue]) -> CellValue {
+    if args.len() < 2 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    match args[0].as_number() {
+        Ok(n) if n >= 1.0 && (n as usize) < args.len() => args[n as usize].clone(),
+        Ok(_) => CellValue::Error(FormulaError::NumError),
+        Err(e) => CellValue::Error(e),
+    }
+}
+
+/// Dimensions of the first argument: a `Range` yields `(rows, cols)`, a scalar
+/// behaves like a 1x1 range.
+fn range_dims(args: &[CellValue]) -> Option<(usize, usize)> {
+    match args.first()? {
+        CellValue::Range(r) => Some((r.rows, r.cols)),
+        _ => Some((1, 1)),
+    }
+}
+
+/// ROW()/COLUMN() -- only the no-argument form is supported (the evaluating
+/// cell's 1-based position). The reference form (`ROW(A1)`) needs
+/// reference-preserving compilation and is rejected with `#N/A` for now.
+fn row_col(args: &[CellValue], current: u32) -> CellValue {
+    if !args.is_empty() || current == 0 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    CellValue::Number(current as f64)
+}
+
+// -----------------------------------------------------------------------------
+// Text (cont.)
+// -----------------------------------------------------------------------------
+
+/// SEARCH(find_text, within_text, [start]) -- case-insensitive `FIND`.
+fn search_fn(args: &[CellValue]) -> CellValue {
+    if args.len() < 2 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let lowered = vec![
+        CellValue::Text(args[0].to_display().to_lowercase()),
+        CellValue::Text(args[1].to_display().to_lowercase()),
+    ];
+    let mut call: Vec<CellValue> = lowered;
+    if let Some(start) = args.get(2) {
+        call.push(start.clone());
+    }
+    find_fn(&call)
+}
+
+/// REPLACE(old_text, start_num, num_chars, new_text) -- positional replacement.
+fn replace_fn(args: &[CellValue]) -> CellValue {
+    if args.len() < 4 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let chars: Vec<char> = args[0].to_display().chars().collect();
+    let start = match args[1].as_number() {
+        Ok(n) if n >= 1.0 => n as usize - 1,
+        _ => return CellValue::Error(FormulaError::NumError),
+    };
+    let count = match args[2].as_number() {
+        Ok(n) if n >= 0.0 => n as usize,
+        _ => return CellValue::Error(FormulaError::NumError),
+    };
+    let new = args[3].to_display();
+    let start = start.min(chars.len());
+    let end = (start + count).min(chars.len());
+    let mut out: String = chars[..start].iter().collect();
+    out.push_str(&new);
+    out.extend(&chars[end..]);
+    CellValue::Text(out)
+}
+
+/// EXACT(text1, text2) -- case-sensitive equality.
+fn exact(args: &[CellValue]) -> CellValue {
+    if args.len() < 2 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    CellValue::Boolean(args[0].to_display() == args[1].to_display())
+}
+
+/// TEXTJOIN(delimiter, ignore_empty, text1, ...) -- join with a separator.
+fn textjoin(args: &[CellValue]) -> CellValue {
+    if args.len() < 3 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let delim = args[0].to_display();
+    let ignore_empty = is_truthy(&args[1]);
+    let parts: Vec<String> = flatten_all(&args[2..])
+        .iter()
+        .filter(|v| !(ignore_empty && matches!(v, CellValue::Empty)))
+        .map(|v| v.to_display())
+        .filter(|s| !(ignore_empty && s.is_empty()))
+        .collect();
+    CellValue::Text(parts.join(&delim))
+}
+
+/// CHAR(number) -- the character for a Unicode code point (1..=0x10FFFF).
+fn char_fn(args: &[CellValue]) -> CellValue {
+    match first_num(args) {
+        Some(n) if n >= 1.0 => match char::from_u32(n as u32) {
+            Some(c) => CellValue::Text(c.to_string()),
+            None => CellValue::Error(FormulaError::NumError),
+        },
+        Some(_) => CellValue::Error(FormulaError::NumError),
+        None => CellValue::Error(FormulaError::TypeError),
+    }
+}
+
+/// CODE(text) -- the code point of the first character.
+fn code_fn(args: &[CellValue]) -> CellValue {
+    if args.is_empty() {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    match args[0].to_display().chars().next() {
+        Some(c) => CellValue::Number(c as u32 as f64),
+        None => CellValue::Error(FormulaError::TypeError),
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Date / time (cont.)
+// -----------------------------------------------------------------------------
+
+/// TIME(hour, minute, second) -- fraction of a day (0..1).
+fn time_fn(args: &[CellValue]) -> CellValue {
+    if args.len() < 3 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let secs = match (args[0].as_number(), args[1].as_number(), args[2].as_number()) {
+        (Ok(h), Ok(m), Ok(s)) => h * 3600.0 + m * 60.0 + s,
+        _ => return CellValue::Error(FormulaError::TypeError),
+    };
+    // Excel wraps to a 24h fraction.
+    CellValue::Number((secs / 86_400.0).rem_euclid(1.0))
+}
+
+/// HOUR/MINUTE/SECOND -- `which` selects 0=hour, 1=minute, 2=second.
+fn time_part(args: &[CellValue], which: u8) -> CellValue {
+    let serial = match first_num(args) {
+        Some(n) => n,
+        None => return CellValue::Error(FormulaError::TypeError),
+    };
+    let frac = serial - serial.floor();
+    let total = (frac * 86_400.0).round() as i64;
+    let value = match which {
+        0 => (total / 3600) % 24,
+        1 => (total / 60) % 60,
+        _ => total % 60,
+    };
+    CellValue::Number(value as f64)
+}
+
+/// WEEKDAY(serial, [type]) -- type 1 (default) Sun=1..Sat=7; 2 Mon=1..Sun=7;
+/// 3 Mon=0..Sun=6.
+fn weekday(args: &[CellValue]) -> CellValue {
+    let serial = match first_num(args) {
+        Some(n) => n.floor() as i64,
+        None => return CellValue::Error(FormulaError::TypeError),
+    };
+    // Excel serial 0 (1899-12-30) is a Saturday.
+    let sat0 = serial.rem_euclid(7); // 0=Sat,1=Sun,..6=Fri
+    let wtype = args.get(1).and_then(|v| v.as_number().ok()).map(|n| n as i64).unwrap_or(1);
+    let value = match wtype {
+        2 => {
+            // Mon=1..Sun=7
+            let mon0 = (sat0 + 5).rem_euclid(7); // 0=Mon..6=Sun
+            mon0 + 1
+        }
+        3 => (sat0 + 5).rem_euclid(7), // Mon=0..Sun=6
+        _ => {
+            // type 1: Sun=1..Sat=7
+            if sat0 == 0 { 7 } else { sat0 }
+        }
+    };
+    CellValue::Number(value as f64)
+}
+
+/// Number of days in month `m` of year `y`.
+fn days_in_month(y: i64, m: i64) -> i64 {
+    serial_from_ymd(y, m + 1, 1) - serial_from_ymd(y, m, 1)
+}
+
+/// Shift `(year, month)` by `months`, normalizing into a valid month.
+fn shift_month(y: i64, m: i64, months: i64) -> (i64, i64) {
+    let total = (m - 1) + months;
+    (y + total.div_euclid(12), total.rem_euclid(12) + 1)
+}
+
+/// EDATE(start, months) -- same day-of-month `months` away (clamped to the
+/// target month length).
+fn edate(args: &[CellValue]) -> CellValue {
+    if args.len() < 2 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let (serial, months) = match (args[0].as_number(), args[1].as_number()) {
+        (Ok(s), Ok(m)) => (s.floor() as i64, m as i64),
+        _ => return CellValue::Error(FormulaError::TypeError),
+    };
+    let (y, m, d) = ymd_from_serial(serial);
+    let (ny, nm) = shift_month(y, m, months);
+    let nd = d.min(days_in_month(ny, nm));
+    CellValue::Number(serial_from_ymd(ny, nm, nd) as f64)
+}
+
+/// EOMONTH(start, months) -- last day of the month `months` away.
+fn eomonth(args: &[CellValue]) -> CellValue {
+    if args.len() < 2 {
+        return CellValue::Error(FormulaError::NaError);
+    }
+    let (serial, months) = match (args[0].as_number(), args[1].as_number()) {
+        (Ok(s), Ok(m)) => (s.floor() as i64, m as i64),
+        _ => return CellValue::Error(FormulaError::TypeError),
+    };
+    let (y, m, _) = ymd_from_serial(serial);
+    let (ny, nm) = shift_month(y, m, months);
+    CellValue::Number(serial_from_ymd(ny, nm, days_in_month(ny, nm)) as f64)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1096,5 +2215,234 @@ mod tests {
         assert_eq!(round(&[CellValue::Number(std::f64::consts::PI), CellValue::Number(2.0)]).to_display(), "3.14");
         assert_eq!(sqrt(&[CellValue::Number(16.0)]).to_display(), "4");
         assert_eq!(power(&[CellValue::Number(2.0), CellValue::Number(3.0)]).to_display(), "8");
+    }
+
+    #[test]
+    fn extra_math_functions() {
+        assert_eq!(int_fn(&[num(-2.5)]).to_display(), "-3");
+        assert_eq!(mod_fn(&[num(7.0), num(3.0)]).to_display(), "1");
+        // Excel MOD takes the sign of the divisor.
+        assert_eq!(mod_fn(&[num(-1.0), num(3.0)]).to_display(), "2");
+        assert!(matches!(
+            mod_fn(&[num(1.0), num(0.0)]),
+            CellValue::Error(FormulaError::DivisionByZero)
+        ));
+        assert_eq!(round_dir(&[num(2.001), num(2.0)], true).to_display(), "2.01");
+        assert_eq!(round_dir(&[num(2.009), num(2.0)], false).to_display(), "2");
+        assert_eq!(round_dir(&[num(-2.001), num(2.0)], true).to_display(), "-2.01");
+        assert_eq!(ceil_floor(&[num(4.3), num(1.0)], true).to_display(), "5");
+        assert_eq!(ceil_floor(&[num(4.7), num(1.0)], false).to_display(), "4");
+        assert_eq!(product(&[num(2.0), num(3.0), num(4.0)]).to_display(), "24");
+        assert_eq!(median(&[num(3.0), num(1.0), num(2.0)]).to_display(), "2");
+        assert_eq!(median(&[num(1.0), num(2.0), num(3.0), num(4.0)]).to_display(), "2.5");
+    }
+
+    #[test]
+    fn sumproduct_and_countblank() {
+        let a = range(3, 1, vec![num(1.0), num(2.0), num(3.0)]);
+        let b = range(3, 1, vec![num(4.0), num(5.0), num(6.0)]);
+        // 1*4 + 2*5 + 3*6 = 32.
+        assert_eq!(sumproduct(&[a, b]).to_display(), "32");
+        let r = range(4, 1, vec![num(1.0), CellValue::Empty, txt("x"), CellValue::Empty]);
+        assert_eq!(countblank(&[r]).to_display(), "2");
+    }
+
+    #[test]
+    fn extra_logic_functions() {
+        assert_eq!(xor(&[CellValue::Boolean(true), CellValue::Boolean(false)]).to_display(), "true");
+        assert_eq!(xor(&[CellValue::Boolean(true), CellValue::Boolean(true)]).to_display(), "false");
+        assert_eq!(is_blank(&[CellValue::Empty]).to_display(), "true");
+        assert_eq!(is_blank(&[num(0.0)]).to_display(), "false");
+        assert_eq!(is_number(&[num(1.0)]).to_display(), "true");
+        assert_eq!(is_number(&[txt("1")]).to_display(), "false");
+    }
+
+    #[test]
+    fn extra_text_functions() {
+        assert_eq!(proper(&[txt("hELLO wORLD")]).to_display(), "Hello World");
+        assert_eq!(substitute(&[txt("a-b-c"), txt("-"), txt("+")]).to_display(), "a+b+c");
+        assert_eq!(
+            substitute(&[txt("a-b-c"), txt("-"), txt("+"), num(2.0)]).to_display(),
+            "a-b+c"
+        );
+        assert_eq!(rept(&[txt("ab"), num(3.0)]).to_display(), "ababab");
+        assert_eq!(find_fn(&[txt("c"), txt("abcabc")]).to_display(), "3");
+        assert_eq!(find_fn(&[txt("c"), txt("abcabc"), num(4.0)]).to_display(), "6");
+        assert!(matches!(
+            find_fn(&[txt("z"), txt("abc")]),
+            CellValue::Error(FormulaError::TypeError)
+        ));
+        assert_eq!(value_fn(&[txt("42")]).to_display(), "42");
+    }
+
+    fn approx(v: CellValue, expected: f64) {
+        match v {
+            CellValue::Number(n) => assert!(
+                (n - expected).abs() < 1e-4,
+                "expected {expected}, got {n}"
+            ),
+            other => panic!("expected number, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn more_math_functions() {
+        assert_eq!(trunc(&[num(8.9)]).to_display(), "8");
+        assert_eq!(trunc(&[num(-8.9)]).to_display(), "-8");
+        assert_eq!(trunc(&[num(1.14159), num(2.0)]).to_display(), "1.14");
+        assert_eq!(sign(&[num(-3.0)]).to_display(), "-1");
+        assert_eq!(sign(&[num(0.0)]).to_display(), "0");
+        assert_eq!(sumsq(&[num(3.0), num(4.0)]).to_display(), "25");
+        approx(unary_math(&[num(0.0)], f64::exp), 1.0);
+        approx(log_checked(&[num(std::f64::consts::E)], |n| n.ln()), 1.0);
+        approx(log_fn(&[num(8.0), num(2.0)]), 3.0);
+        assert!(matches!(
+            log_checked(&[num(-1.0)], |n| n.ln()),
+            CellValue::Error(FormulaError::NumError)
+        ));
+        approx(unary_math(&[num(180.0)], f64::to_radians), std::f64::consts::PI);
+    }
+
+    #[test]
+    fn stats_functions() {
+        let r = range(5, 1, (1..=5).map(|n| num(n as f64)).collect());
+        approx(variance(std::slice::from_ref(&r), true), 2.5);
+        approx(stdev(std::slice::from_ref(&r), true), 2.5f64.sqrt());
+        assert_eq!(large_small(&[r.clone(), num(2.0)], true).to_display(), "4");
+        assert_eq!(large_small(&[r.clone(), num(2.0)], false).to_display(), "2");
+        // RANK of 4 within 1..5 descending = 2.
+        assert_eq!(rank(&[num(4.0), r.clone()]).to_display(), "2");
+        assert_eq!(rank(&[num(4.0), r, CellValue::Boolean(true)]).to_display(), "4");
+        let m = range(5, 1, vec![num(2.0), num(3.0), num(3.0), num(5.0), num(3.0)]);
+        assert_eq!(mode(&[m]).to_display(), "3");
+    }
+
+    #[test]
+    fn conditional_aggregation() {
+        // category | amount
+        let cat = range(4, 1, vec![txt("a"), txt("b"), txt("a"), txt("a")]);
+        let amt = range(4, 1, vec![num(10.0), num(20.0), num(30.0), num(40.0)]);
+        assert_eq!(
+            sumifs(&[amt.clone(), cat.clone(), txt("a")]).to_display(),
+            "80"
+        );
+        assert_eq!(countifs(&[cat.clone(), txt("a")]).to_display(), "3");
+        assert_eq!(averageif(&[cat.clone(), txt("a"), amt.clone()]).to_display(), "26.666666666666668");
+        // Multi-criteria: category a AND amount > 15 -> 30 + 40 = 70.
+        assert_eq!(
+            sumifs(&[amt.clone(), cat.clone(), txt("a"), amt, txt(">15")]).to_display(),
+            "70"
+        );
+    }
+
+    #[test]
+    fn financial_functions() {
+        // Loan: 5%/yr over 10 periods, PV = 1000, FV = 0, end-of-period.
+        approx(pmt(&[num(0.05), num(10.0), num(1000.0)]), -129.504_57);
+        // FV of that payment stream should bring the balance to ~0.
+        approx(fv(&[num(0.05), num(10.0), num(-129.504_57), num(1000.0)]), 0.0);
+        // PV inverse.
+        approx(pv(&[num(0.05), num(10.0), num(-129.504_57)]), 1000.0);
+        // NPER inverse (~10 periods).
+        approx(nper(&[num(0.05), num(-129.504_57), num(1000.0)]), 10.0);
+        // RATE recovers 5%.
+        approx(rate(&[num(10.0), num(-129.504_57), num(1000.0)]), 0.05);
+        // NPV / IRR.
+        approx(npv(&[num(0.1), num(100.0), num(200.0)]), 256.198_3);
+        approx(irr(&[range(3, 1, vec![num(-100.0), num(60.0), num(60.0)])]), 0.130_662);
+    }
+
+    #[test]
+    fn logic_info_functions() {
+        assert_eq!(is_text(&[txt("x")]).to_display(), "true");
+        assert_eq!(is_error(&[CellValue::Error(FormulaError::NaError)]).to_display(), "true");
+        assert_eq!(is_na(&[CellValue::Error(FormulaError::NaError)]).to_display(), "true");
+        assert_eq!(is_na(&[CellValue::Error(FormulaError::DivisionByZero)]).to_display(), "false");
+        assert_eq!(is_even(&[num(4.0)]).to_display(), "true");
+        assert_eq!(is_odd(&[num(3.0)]).to_display(), "true");
+        assert_eq!(ifna(&[CellValue::Error(FormulaError::NaError), txt("fb")]).to_display(), "fb");
+        assert_eq!(ifs(&[CellValue::Boolean(false), txt("a"), CellValue::Boolean(true), txt("b")]).to_display(), "b");
+        assert_eq!(switch_fn(&[num(2.0), num(1.0), txt("one"), num(2.0), txt("two")]).to_display(), "two");
+        assert_eq!(switch_fn(&[num(9.0), num(1.0), txt("one"), txt("default")]).to_display(), "default");
+    }
+
+    #[test]
+    fn lookup_reference_functions() {
+        // HLOOKUP: keys in the first row, return the 2nd row.
+        let table = range(2, 3, vec![num(1.0), num(3.0), num(5.0), txt("a"), txt("b"), txt("c")]);
+        assert_eq!(
+            hlookup(&[num(3.0), table.clone(), num(2.0), CellValue::Boolean(false)]).to_display(),
+            "b"
+        );
+        assert_eq!(choose(&[num(2.0), txt("x"), txt("y"), txt("z")]).to_display(), "y");
+        let r = range(3, 4, vec![CellValue::Empty; 12]);
+        assert_eq!(call_builtin("ROWS", std::slice::from_ref(&r), FnCtx::at_clock(0.0)).to_display(), "3");
+        assert_eq!(call_builtin("COLUMNS", &[r], FnCtx::at_clock(0.0)).to_display(), "4");
+        // ROW()/COLUMN() with the evaluating cell at (row 7, col 2).
+        let ctx = FnCtx { now_serial: 0.0, cell_row: 7, cell_col: 2 };
+        assert_eq!(call_builtin("ROW", &[], ctx).to_display(), "7");
+        assert_eq!(call_builtin("COLUMN", &[], ctx).to_display(), "2");
+        // The reference form is deferred -> #N/A.
+        assert!(matches!(
+            row_col(&[num(1.0)], 7),
+            CellValue::Error(FormulaError::NaError)
+        ));
+    }
+
+    #[test]
+    fn more_text_functions() {
+        assert_eq!(search_fn(&[txt("C"), txt("abcabc")]).to_display(), "3");
+        assert_eq!(replace_fn(&[txt("abcdef"), num(2.0), num(3.0), txt("XY")]).to_display(), "aXYef");
+        assert_eq!(exact(&[txt("abc"), txt("abc")]).to_display(), "true");
+        assert_eq!(exact(&[txt("abc"), txt("Abc")]).to_display(), "false");
+        assert_eq!(
+            textjoin(&[txt("-"), CellValue::Boolean(true), txt("a"), CellValue::Empty, txt("b")]).to_display(),
+            "a-b"
+        );
+        assert_eq!(char_fn(&[num(65.0)]).to_display(), "A");
+        assert_eq!(code_fn(&[txt("A")]).to_display(), "65");
+    }
+
+    #[test]
+    fn datetime_functions() {
+        // 06:00:00 -> a quarter of a day.
+        approx(time_fn(&[num(6.0), num(0.0), num(0.0)]), 0.25);
+        let t = match time_fn(&[num(13.0), num(30.0), num(15.0)]) {
+            CellValue::Number(n) => n,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(time_part(&[num(t)], 0).to_display(), "13");
+        assert_eq!(time_part(&[num(t)], 1).to_display(), "30");
+        assert_eq!(time_part(&[num(t)], 2).to_display(), "15");
+        // 2024-06-13 was a Thursday -> type 1 gives 5 (Sun=1).
+        let serial = match date(&[num(2024.0), num(6.0), num(13.0)]) {
+            CellValue::Number(n) => n,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(weekday(&[num(serial)]).to_display(), "5");
+        assert_eq!(weekday(&[num(serial), num(2.0)]).to_display(), "4"); // Mon=1
+        // EDATE +1 month -> 2024-07-13; EOMONTH +0 -> 2024-06-30.
+        let edate_s = match edate(&[num(serial), num(1.0)]) {
+            CellValue::Number(n) => n,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(month(&[num(edate_s)]).to_display(), "7");
+        assert_eq!(day(&[num(edate_s)]).to_display(), "13");
+        let eom = match eomonth(&[num(serial), num(0.0)]) {
+            CellValue::Number(n) => n,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(day(&[num(eom)]).to_display(), "30");
+        // EDATE day clamping: Jan 31 + 1 month -> Feb 29 (2024 leap year).
+        let jan31 = match date(&[num(2024.0), num(1.0), num(31.0)]) {
+            CellValue::Number(n) => n,
+            other => panic!("{other:?}"),
+        };
+        let feb = match edate(&[num(jan31), num(1.0)]) {
+            CellValue::Number(n) => n,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(month(&[num(feb)]).to_display(), "2");
+        assert_eq!(day(&[num(feb)]).to_display(), "29");
     }
 }
