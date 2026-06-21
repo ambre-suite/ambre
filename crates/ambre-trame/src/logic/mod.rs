@@ -15,7 +15,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use loro::{ExportMode, LoroDoc, LoroList, LoroValue, UndoManager, VersionVector};
+use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
 
 use crate::formula::parser::{parse_formula, resolve_refs};
 use crate::formula::types::CellValue;
