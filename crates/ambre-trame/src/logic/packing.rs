@@ -210,6 +210,23 @@ pub(crate) fn format_number(value: f64, fmt: &CellFormat, decimals: Option<u8>) 
     }
 }
 
+/// Convert a 0-based column index to a spreadsheet column label (A, B, ..., Z,
+/// AA, AB, ...).
+///
+/// col=0 -> "A", col=25 -> "Z", col=26 -> "AA", col=701 -> "ZZ".
+pub(crate) fn col_to_alpha(mut col: u32) -> String {
+    let mut result = String::new();
+    loop {
+        let rem = (col % 26) as u8;
+        result.insert(0, (b'A' + rem) as char);
+        if col < 26 {
+            break;
+        }
+        col = col / 26 - 1;
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -230,21 +247,4 @@ mod tests {
         assert_ne!(mask, 0, "Top valign must survive the zero-mask cull");
         assert_eq!(unpack_valign((mask & STYLE_VALIGN_MASK) >> STYLE_VALIGN_SHIFT), VAlign::Top);
     }
-}
-
-/// Convert a 0-based column index to a spreadsheet column label (A, B, ..., Z,
-/// AA, AB, ...).
-///
-/// col=0 -> "A", col=25 -> "Z", col=26 -> "AA", col=701 -> "ZZ".
-pub(crate) fn col_to_alpha(mut col: u32) -> String {
-    let mut result = String::new();
-    loop {
-        let rem = (col % 26) as u8;
-        result.insert(0, (b'A' + rem) as char);
-        if col < 26 {
-            break;
-        }
-        col = col / 26 - 1;
-    }
-    result
 }
