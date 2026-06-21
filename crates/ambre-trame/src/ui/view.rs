@@ -653,91 +653,100 @@ impl TrameView {
         self.anchor.publish(None);
     }
 
+    /// Canvas-side reaction to a single [`TrameEvent`] (`-ui.md` sec.18 "full
+    /// TrameEvent dispatch"). Exhaustive on purpose: a new variant must fail the
+    /// build here rather than be dropped silently. Variants that only affect the
+    /// DOM chrome (toasts, formatting toolbar, undo/redo enablement) are explicit
+    /// no-ops -- they are handled in the per-frame relay (`ambre-app`), not here.
+    fn dispatch_trame(&mut self, te: TrameEvent) {
+        match te {
+            // Cell content batch: merge into the cache and flag data dirty. If a
+            // scroll happens the same frame the strip path reads the refreshed
+            // cache; otherwise plan_repaint promotes data_dirty to a Full repaint.
+            TrameEvent::ViewportData { .. } => {
+                self.state.on_viewport_data(te);
+                self.data_dirty = true;
+            }
+            // The active sheet may have changed (switch, or delete fallback
+            // decided by the Logic thread); adopt it and refresh the strip. A
+            // separate DataReset re-fetches the viewport.
+            TrameEvent::SheetList { sheets, active } => {
+                self.state.on_sheet_list(sheets, active);
+                self.needs_full = true;
+            }
+            // A rejected lifecycle op (e.g. deleting the last sheet). The chrome
+            // toasts it; here we log it and announce it for a11y.
+            TrameEvent::Error { message } => {
+                tracing::warn!("[UI] Trame rejected: {message}");
+                self.text_input.announce(&message);
+            }
+            // Shared filter (sec.5.D): track the filtered column for the funnel
+            // badge. The accompanying DataReset re-fetches the collapsed rows.
+            TrameEvent::FilterApplied { col, .. } => {
+                self.state.filtered_col = Some(col);
+                self.needs_full = true;
+            }
+            TrameEvent::FilterCleared => {
+                self.state.filtered_col = None;
+                self.needs_full = true;
+            }
+            // Find & Replace (sec.5.G): highlight the match set and jump the
+            // active cell onto the focused match (reusing the navigation path, so
+            // an off-screen match scrolls into view). An empty set clears the
+            // highlight without moving the cursor.
+            TrameEvent::FindResult { matches, active } => {
+                self.state.find_matches = matches.clone();
+                self.needs_full = true;
+                if let Some(i) = active
+                    && let Some(&(row, col)) = matches.get(i)
+                {
+                    self.nav_goto(row, col, false);
+                }
+            }
+            // Wholesale content change: a local snapshot restore (DataReset) or a
+            // conditional-formatting rule change (CondFormatsUpdated, §3). Both
+            // invalidate the cache -- re-fetch the visible region, then full-repaint
+            // with the result.
+            TrameEvent::DataReset | TrameEvent::CondFormatsUpdated { .. } => {
+                self.needs_full = true;
+                let cmd = self.state.scroll_viewport_cmd();
+                self.send_command_lossy(cmd);
+            }
+            // Chrome-only variants: surfaced as toasts / toolbar state / undo-redo
+            // enablement by the per-frame relay (`ambre-app`). No canvas state
+            // changes -- the cache is refreshed by the DataReset that accompanies
+            // any of these that mutate content.
+            TrameEvent::StyleApplied { .. }
+            | TrameEvent::MergeRejected { .. }
+            | TrameEvent::MergeConflictDetected { .. }
+            | TrameEvent::UndoState { .. }
+            | TrameEvent::SortComplete
+            | TrameEvent::ColumnValues { .. }
+            | TrameEvent::SelectionStats { .. }
+            | TrameEvent::ReplaceDone { .. }
+            | TrameEvent::PasteRejected { .. }
+            | TrameEvent::FilterViewSaved { .. }
+            | TrameEvent::ValidationError { .. }
+            | TrameEvent::ValidationWarning { .. }
+            | TrameEvent::ProtectionDenied { .. }
+            | TrameEvent::ProtectionViolationWarning { .. } => {}
+        }
+    }
+
     pub fn update(&mut self) {
         // Drain every queued UiEvent without blocking. A `Disconnected` error
         // means the Logic thread is gone (panic=abort or shutdown) — there is
         // no recovery, so flip to the fatal state instead of silently looping.
         loop {
             match self.from_logic.try_recv() {
-                // StyleApplied targets the chrome formatting toolbar; the UI-thread
-                // dispatcher consumes it. The canvas ignores it -- it renders
-                // per-cell formatting from the cache (refreshed by the accompanying
-                // DataReset), not from the active-cell style event.
+                // Single entry point for every Trame logic message: an exhaustive
+                // dispatcher (`dispatch_trame`) decides the canvas-side reaction.
+                // The chrome side (toasts / toolbar / command store) consumes the
+                // same event in the per-frame relay; the two never overlap.
                 Ok(UiEvent::Viewport {
-                    event: AppEvent::Trame(TrameEvent::StyleApplied { .. }),
+                    event: AppEvent::Trame(te),
                     ..
-                }) => {}
-                Ok(UiEvent::Viewport {
-                    event: AppEvent::Trame(TrameEvent::SheetList { sheets, active }),
-                    ..
-                }) => {
-                    // The active sheet may have changed (switch, or delete
-                    // fallback decided by the Logic thread); adopt it and refresh
-                    // the strip. A separate DataReset re-fetches the viewport.
-                    self.state.on_sheet_list(sheets, active);
-                    self.needs_full = true;
-                }
-                Ok(UiEvent::Viewport {
-                    event: AppEvent::Trame(TrameEvent::Error { message }),
-                    ..
-                }) => {
-                    // A rejected lifecycle op (e.g. deleting the last sheet).
-                    // No toast surface yet -- log it and announce for a11y.
-                    tracing::warn!("[UI] Trame rejected: {message}");
-                    self.text_input.announce(&message);
-                }
-                // Shared filter (sec.5.D): track the filtered column for the funnel
-                // badge. The accompanying DataReset re-fetches the collapsed rows.
-                Ok(UiEvent::Viewport {
-                    event: AppEvent::Trame(TrameEvent::FilterApplied { col, .. }),
-                    ..
-                }) => {
-                    self.state.filtered_col = Some(col);
-                    self.needs_full = true;
-                }
-                Ok(UiEvent::Viewport {
-                    event: AppEvent::Trame(TrameEvent::FilterCleared),
-                    ..
-                }) => {
-                    self.state.filtered_col = None;
-                    self.needs_full = true;
-                }
-                // Find & Replace (sec.5.G): highlight the match set and jump the
-                // active cell onto the focused match (reusing the navigation path,
-                // so an off-screen match scrolls into view). An empty set clears
-                // the highlight without moving the cursor.
-                Ok(UiEvent::Viewport {
-                    event: AppEvent::Trame(TrameEvent::FindResult { matches, active }),
-                    ..
-                }) => {
-                    self.state.find_matches = matches.clone();
-                    self.needs_full = true;
-                    if let Some(i) = active
-                        && let Some(&(row, col)) = matches.get(i)
-                    {
-                        self.nav_goto(row, col, false);
-                    }
-                }
-                Ok(UiEvent::Viewport {
-                    event: AppEvent::Trame(TrameEvent::DataReset),
-                    ..
-                }) => {
-                    // Local snapshot restored: re-fetch the visible region so the
-                    // restored cells render, then full-repaint with the result.
-                    self.needs_full = true;
-                    let cmd = self.state.scroll_viewport_cmd();
-                    self.send_command_lossy(cmd);
-                }
-                Ok(UiEvent::Viewport {
-                    event: AppEvent::Trame(update),
-                    ..
-                }) => {
-                    self.state.on_viewport_data(update);
-                    // Just flag data dirty. If a scroll happens the same frame the
-                    // strip path reads the refreshed cache; otherwise plan_repaint
-                    // promotes data_dirty to a Full repaint.
-                    self.data_dirty = true;
-                }
+                }) => self.dispatch_trame(te),
                 Ok(UiEvent::FatalError { message }) => self.signal_fatal(&message),
                 // Other UiEvent variants (session, CRUD, channels…) are not yet
                 // consumed by the Trame view; ignore them for now.
