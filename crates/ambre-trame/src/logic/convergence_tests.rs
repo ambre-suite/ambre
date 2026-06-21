@@ -23,7 +23,7 @@
 
 use proptest::prelude::*;
 
-use ambre_bus::{FillMode, GridRange};
+use ambre_bus::{FillMode, FilterKind, FilterOp, GridRange};
 
 use super::TrameState;
 use crate::{TrameCommand, TrameEvent};
@@ -72,6 +72,15 @@ enum Op {
         col: u32,
     },
     Fill,
+    /// Apply a shared filter on column 0 (a plain CRDT mutation). Concurrent
+    /// filters on the two peers resolve by Loro LWW -- this folds the explicit
+    /// `concurrent_filters_converge_lww` case into the property test: the
+    /// converged `is_filtered` set is part of the asserted snapshot.
+    Filter {
+        op: FilterOp,
+        value: u32,
+    },
+    ClearFilter,
 }
 
 impl Op {
@@ -105,6 +114,17 @@ impl Op {
                 col_end,
             },
             Op::Unmerge { row, col } => TrameCommand::UnmergeCells { row, col },
+            Op::Filter { op, value } => TrameCommand::ApplyFilter {
+                sheet_id: SHEET.to_owned(),
+                col: 0,
+                kind: FilterKind::Condition {
+                    op,
+                    value: value.to_string(),
+                },
+            },
+            Op::ClearFilter => TrameCommand::ClearFilter {
+                sheet_id: SHEET.to_owned(),
+            },
             Op::Fill => TrameCommand::FillRange {
                 sheet_id: SHEET.to_owned(),
                 src: GridRange {
@@ -159,6 +179,19 @@ fn op_strategy() -> impl Strategy<Value = Op> {
         }),
         1 => (0..ROWS, 0..COLS).prop_map(|(row, col)| Op::Unmerge { row, col }),
         1 => Just(Op::Fill),
+        // A few filter operators over the value window so concurrent filters on
+        // the two peers race for the LWW-elected hidden set.
+        1 => (
+            prop_oneof![
+                Just(FilterOp::Gt),
+                Just(FilterOp::Lt),
+                Just(FilterOp::Gte),
+                Just(FilterOp::Ne),
+            ],
+            0..ROWS,
+        )
+            .prop_map(|(op, value)| Op::Filter { op, value }),
+        1 => Just(Op::ClearFilter),
     ]
 }
 
@@ -169,8 +202,9 @@ fn program_strategy() -> impl Strategy<Value = Vec<(bool, Op)>> {
 
 /// The materialized grid over the bounded window, as a peer would render it.
 /// Captures everything two converged peers must agree on: formula results
-/// (`text`), formatting (`bold`), and merge geometry.
-type Snapshot = Vec<(u32, u32, String, bool, bool, Option<(u32, u32)>)>;
+/// (`text`), formatting (`bold`), merge geometry, and the shared-filter hidden
+/// state (`is_filtered`) elected by LWW.
+type Snapshot = Vec<(u32, u32, String, bool, bool, Option<(u32, u32)>, bool)>;
 
 fn read_window(state: &mut TrameState) -> Snapshot {
     let evts = state.handle_command(TrameCommand::ScrollViewport {
@@ -198,6 +232,7 @@ fn read_window(state: &mut TrameState) -> Snapshot {
                 c.bold,
                 c.is_merged,
                 c.merge_span,
+                c.is_filtered,
             )
         })
         .collect();
