@@ -229,7 +229,7 @@ impl TrameState {
         match kind {
             FilterKind::Values(values) => {
                 let _ = filters.insert("kind", "values");
-                if let Ok(list) = filters.get_or_create_container("values", LoroList::new()) {
+                if let Ok(list) = filters.ensure_mergeable_list("values") {
                     for v in values {
                         let _ = list.push(v.as_str());
                     }
