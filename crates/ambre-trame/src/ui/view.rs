@@ -1948,12 +1948,17 @@ impl TrameView {
         }
         let (sr1, sc1, sr2, sc2) = src;
         let (dr1, dc1, dr2, dc2) = dest;
-        // Ctrl inverts the default Excel/Sheets behaviour: on a single-cell source
-        // it forces a +1 numeric Series (rather than a plain copy), on a
-        // multi-cell source it forces a verbatim Copy (rather than a series).
-        // Without Ctrl, Auto lets the Logic thread pick Series vs Copy.
+        // Ctrl inverts the default Excel/Sheets behaviour, but the single- vs
+        // multi-cell test is per fill line, i.e. on the source extent *along the
+        // drag axis* (a vertical drag fills column lines, so it cares about the
+        // source row count; a horizontal drag cares about the source col count).
+        // A single source value along that axis forces a +1 numeric Series; a
+        // multi-value source forces a verbatim Copy. Without Ctrl, Auto lets the
+        // Logic thread pick Series vs Copy.
+        let vertical = dr1 < sr1 || dr2 > sr2;
+        let single_line = if vertical { sr1 == sr2 } else { sc1 == sc2 };
         let mode = if ctrl {
-            if sr1 == sr2 && sc1 == sc2 {
+            if single_line {
                 FillMode::Series
             } else {
                 FillMode::Copy
