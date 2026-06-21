@@ -782,6 +782,125 @@ fn undo_with_empty_stack_is_a_noop() {
     ));
 }
 
+/// Undo is local-only (features spec §4): `UndoManager` tracks only this peer's
+/// commits, never imported remote ops. Peer B writes its own cell, receives a
+/// remote edit from A, then undoes -- only B's own edit is reverted; A's remote
+/// value stays put (Google Sheets / collaborative-editor behavior).
+#[test]
+fn undo_local_only_not_remote() {
+    // Shared base so both peers address the same row/column uids: materialize
+    // A1 and B1 with placeholders before either peer diverges.
+    let mut base = TrameState::new();
+    base.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "base_a".to_owned(),
+    });
+    base.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 1,
+        text: "base_b".to_owned(),
+    });
+    let base_snap = base.export_snapshot();
+
+    let mut a = TrameState::new();
+    a.import_snapshot(&base_snap);
+    let mut b = TrameState::new();
+    b.import_snapshot(&base_snap);
+
+    // A edits A1; B edits B1 locally.
+    a.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "alice".to_owned(),
+    });
+    b.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 1,
+        text: "bob".to_owned(),
+    });
+
+    // B receives A's edit (the remote op enters B's doc but not its undo stack).
+    // A full snapshot carries A's history from the shared base, so importing it
+    // yields the union without dangling deps.
+    b.apply_remote(&a.export_snapshot());
+    assert_eq!(read_cell(&mut b, 0, 0), "alice", "B sees A's remote value");
+    assert_eq!(read_cell(&mut b, 0, 1), "bob", "B sees its own value");
+
+    // B undoes: only its own last local op (B1) is reverted; A1 is untouched.
+    b.handle_command(TrameCommand::Undo);
+    assert_eq!(
+        read_cell(&mut b, 0, 0),
+        "alice",
+        "remote op is never undone"
+    );
+    assert_eq!(
+        read_cell(&mut b, 0, 1),
+        "base_b",
+        "only the local op is reverted"
+    );
+}
+
+/// Undoing an `InsertRow` must rebuild the `SheetIndex` so positions resolve
+/// against the restored row order: the row that had shifted down returns to its
+/// original position and the inserted blank row is gone.
+#[test]
+fn undo_insert_row_rebuilds_sheet_index() {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "top".to_owned(),
+    });
+    state.handle_command(TrameCommand::SetCellText {
+        row: 1,
+        col: 0,
+        text: "mid".to_owned(),
+    });
+
+    // Insert a blank row at 1: "mid" shifts down to row 2.
+    state.handle_command(TrameCommand::InsertRow { at: 1 });
+    assert_eq!(read_cell(&mut state, 2, 0), "mid", "mid shifted down");
+
+    // Undo: the index must rebuild so "mid" resolves back at row 1 and the
+    // inserted blank row no longer occupies a position.
+    let evts = state.handle_command(TrameCommand::Undo);
+    assert!(matches!(evts.display[0], TrameEvent::DataReset));
+    assert_eq!(read_cell(&mut state, 0, 0), "top");
+    assert_eq!(read_cell(&mut state, 1, 0), "mid", "row order restored");
+    assert_eq!(read_cell(&mut state, 2, 0), "", "inserted row removed");
+}
+
+/// The undo stack lives for the open-document session only (features spec §4:
+/// "no undo stack persistence between sessions"). Reopening a document from its
+/// persisted snapshot starts with a fresh, empty `UndoManager`: a prior edit is
+/// not undoable, so Ctrl+Z is a no-op on the reopened doc.
+#[test]
+fn undo_stack_cleared_on_doc_close() {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "hello".to_owned(),
+    });
+    assert!(state.undo_manager.can_undo(), "edit is undoable in-session");
+
+    // Close + reopen: persist a snapshot, restore into a fresh state.
+    let snapshot = state.export_snapshot();
+    let mut reopened = TrameState::new();
+    reopened.import_snapshot(&snapshot);
+
+    assert!(
+        !reopened.undo_manager.can_undo(),
+        "undo history does not survive a reopen"
+    );
+    // The value is intact (data persisted), but Ctrl+Z cannot revert it.
+    assert_eq!(read_cell(&mut reopened, 0, 0), "hello");
+    let evts = reopened.handle_command(TrameCommand::Undo);
+    assert!(evts.update.is_none(), "no inverse op on an empty stack");
+    assert_eq!(read_cell(&mut reopened, 0, 0), "hello", "value unchanged");
+}
+
 /// Inserting a row shifts the cells below it down by one position; cells are
 /// keyed by stable ids so their content follows the shift.
 #[test]
@@ -3049,6 +3168,79 @@ fn csv_import_export_roundtrip() {
     });
     let bytes = export_bytes(&out);
     assert_eq!(String::from_utf8(bytes).unwrap(), "a,b\nc,d\n");
+}
+
+/// Malformed CSV input must never panic the Logic thread (interop §10 DoD):
+/// ragged rows, embedded quotes/newlines, mixed delimiters, lone quotes and
+/// random bytes all parse to *some* graceful result -- no `unwrap` blow-up.
+#[test]
+fn csv_import_malformed_never_panics() {
+    // Hand-picked adversarial inputs covering the documented failure shapes.
+    let cases: &[&[u8]] = &[
+        b"",                                                // empty file
+        b"\n\n\n",                                          // only blank lines
+        b"a,b,c\n1,2\n3\n4,5,6,7,8",                        // ragged rows (varying field counts)
+        b"\"unterminated,quote\nnext,row",                  // lone opening quote spanning lines
+        b"a,\"b\nc\",d\n",         // embedded newline inside a quoted field
+        b"a,\"b\"\"q\"\"\",c\n",   // embedded escaped quotes
+        b"x;y,z\tw|v\n1;2,3\t4|5", // mixed delimiters on one line
+        b",,,\n,,,\n",             // all-empty fields
+        &[0xff, 0xfe, 0x00, 0x01, b'\n', 0x80, b',', 0x7f], // invalid UTF-8 / control bytes
+    ];
+    for (i, data) in cases.iter().enumerate() {
+        let mut state = TrameState::new();
+        // Each variant: auto-detect and forced delimiters, with/without header.
+        for delimiter in [None, Some(b','), Some(b';')] {
+            for has_header in [false, true] {
+                // Must return without panicking; the result is unspecified but
+                // well-formed (an ImportComplete or an Error event).
+                let _ = state.handle_command(TrameCommand::ImportCsv {
+                    data: data.to_vec(),
+                    delimiter,
+                    has_header,
+                    target_sheet_id: None,
+                    start_row: 0,
+                    start_col: 0,
+                });
+            }
+        }
+        // Sanity: the state survived and still serves a viewport.
+        let _ = read_cell(&mut state, 0, 0);
+        let _ = i; // index kept for readability when a case trips a debugger
+    }
+}
+
+/// Pseudo-random byte fuzz over `ImportCsv`: a deterministic LCG generates a few
+/// hundred arbitrary inputs; none may panic. Complements the crafted cases above
+/// with broad coverage of byte soup (interop §10 robustness DoD).
+#[test]
+fn csv_import_random_bytes_never_panics() {
+    // Deterministic linear-congruential generator -- no external rng dependency.
+    let mut seed: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut next = || {
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        (seed >> 33) as u32
+    };
+    for _ in 0..400 {
+        let len = (next() % 64) as usize;
+        // Bias toward CSV-significant bytes so structure (delimiters, quotes,
+        // newlines) shows up, with occasional arbitrary bytes mixed in.
+        let alphabet = b",;\n\"\r\t ab1\xff";
+        let data: Vec<u8> = (0..len)
+            .map(|_| alphabet[(next() as usize) % alphabet.len()])
+            .collect();
+        let mut state = TrameState::new();
+        let _ = state.handle_command(TrameCommand::ImportCsv {
+            data,
+            delimiter: None,
+            has_header: next() % 2 == 0,
+            target_sheet_id: None,
+            start_row: 0,
+            start_col: 0,
+        });
+    }
 }
 
 /// Export is bounded to the actually-used range: columns materialized by a
