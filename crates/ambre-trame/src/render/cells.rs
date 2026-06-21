@@ -11,6 +11,31 @@ use super::content::{cell_alignment, cell_v_offset, rgb};
 // draw_cells_on -- cell backgrounds + body text
 // -----------------------------------------------------------------------------
 
+/// Width (physical px) of the consecutive *empty* neighbour columns a non-wrapped
+/// overflowing cell may spill its text over, walking from `col` in `step` (`+1`
+/// right, `-1` left). The walk stops at the first non-empty neighbour, the grid
+/// edge, or once `need` pixels of spill are covered -- whichever comes first
+/// (Excel/Sheets overflow, `-ui.md` sec.4.A). The result never exceeds `need`.
+pub(super) fn spill_width<E: Fn(u32, u32) -> bool>(
+    layout: &GridLayout<'_>,
+    row: u32,
+    col: u32,
+    step: i64,
+    need: f64,
+    is_empty: &E,
+) -> f64 {
+    let mut acc = 0.0;
+    let mut c = col as i64 + step;
+    while acc < need && c >= 0 && (c as u32) < layout.total_cols {
+        if !is_empty(row, c as u32) {
+            break;
+        }
+        acc += layout.col_width;
+        c += step;
+    }
+    acc.min(need)
+}
+
 /// Draw the background fill and body text for each supplied cell.
 ///
 /// `cells` yields `(row, col, content)` for the cells that exist (on screen:
@@ -18,11 +43,17 @@ use super::content::{cell_alignment, cell_v_offset, rgb};
 /// gets an opaque `palette.content_bg` fill -- on screen this is what lifts a
 /// cell out of the "pending" grey -- followed by its text when `text_enabled`.
 ///
+/// `is_empty(row, col)` reports whether a neighbour cell carries no visible text,
+/// i.e. a non-wrapped overflowing line may spill over it. Overflow direction
+/// follows the resolved alignment (left text spills right, right text spills
+/// left, centred text both ways); the spill stops at the first non-empty
+/// neighbour and the text is clipped there (no ellipsis in the MVP, sec.4.A).
+///
 /// Grid lines are *not* drawn here: call [`draw_grid_lines_on`] afterwards so
 /// the separators sit on top of the fills. Returns the number of cells that
 /// actually had non-empty text drawn (font-independent tally for stats/tests).
 #[allow(clippy::too_many_arguments)]
-pub fn draw_cells_on<'a, S, I>(
+pub fn draw_cells_on<'a, S, I, E>(
     surface: &mut S,
     layout: &GridLayout<'_>,
     palette: &Palette,
@@ -30,10 +61,12 @@ pub fn draw_cells_on<'a, S, I>(
     text_cache: &mut TextCache,
     text_enabled: bool,
     cells: I,
+    is_empty: E,
 ) -> u32
 where
     S: DrawSurface,
     I: IntoIterator<Item = (u32, u32, CellContent<'a>)>,
+    E: Fn(u32, u32) -> bool,
 {
     let cell_max_width = (layout.col_width - 8.0) as f32;
     let mut drawn = 0u32;
@@ -68,23 +101,56 @@ where
             content.bold,
             content.italic,
             content.font,
+            content.wrap,
         );
         let text_h = layout_text.height() as f64;
         let text_w = layout_text.width() as f64;
         let y_off = cell_v_offset(content.v_align, layout.row_height, text_h);
-        // Horizontal alignment within the column content width (Auto resolves
-        // numbers right, text left). Overflow keeps the text pinned to the start.
         let avail = cell_max_width as f64;
-        let x_off = match cell_alignment(content.h_align, content.text) {
-            Alignment::Center => ((avail - text_w) / 2.0).max(0.0),
-            Alignment::End | Alignment::Right => (avail - text_w).max(0.0),
-            _ => 0.0,
+        // A non-wrapped single line wider than its column spills into empty
+        // neighbour cells (sec.4.A); wrapped or multi-line text is clipped to its
+        // own box. `single_line` guards against explicit newlines pushing a
+        // non-wrap value taller than the row -- that case clips like wrap does.
+        let align = cell_alignment(content.h_align, content.text);
+        let single_line = text_h <= layout.row_height;
+        let overflow = !content.wrap && single_line && text_w > avail;
+        let (x_off, clip_rect, needs_clip) = if overflow {
+            // Extend the clip rect into the empty neighbours in the spill
+            // direction(s); the text is shifted so its anchored edge stays put.
+            let need = text_w - avail;
+            match align {
+                Alignment::Center => {
+                    let half = need / 2.0;
+                    let left = spill_width(layout, row, col, -1, half, &is_empty);
+                    let right = spill_width(layout, row, col, 1, half, &is_empty);
+                    let clip = Rect::new(rect.x0 - left, rect.y0, rect.x1 + right, rect.y1);
+                    (-left, clip, true)
+                }
+                Alignment::End | Alignment::Right => {
+                    let left = spill_width(layout, row, col, -1, need, &is_empty);
+                    let clip = Rect::new(rect.x0 - left, rect.y0, rect.x1, rect.y1);
+                    // Right-anchored: keep the right edge inside the cell content
+                    // box (negative offset), clipped on the left at the spill.
+                    (avail - text_w, clip, true)
+                }
+                _ => {
+                    let right = spill_width(layout, row, col, 1, need, &is_empty);
+                    let clip = Rect::new(rect.x0, rect.y0, rect.x1 + right, rect.y1);
+                    (0.0, clip, true)
+                }
+            }
+        } else {
+            // Fits, or wrapped / multi-line: position within the cell content box
+            // and clip only the cases that can overshoot it vertically.
+            let x = match align {
+                Alignment::Center => ((avail - text_w) / 2.0).max(0.0),
+                Alignment::End | Alignment::Right => (avail - text_w).max(0.0),
+                _ => 0.0,
+            };
+            (x, rect, content.wrap || !single_line)
         };
-        // Clip wrapped or vertically oversized text to the cell box; a non-wrapped
-        // single line is allowed to overflow into empty neighbours.
-        let needs_clip = text_h > layout.row_height || content.wrap;
         if needs_clip {
-            surface.push_clip(rect);
+            surface.push_clip(clip_rect);
         }
         let brush = Brush::Solid(content.fg.map(rgb).unwrap_or(palette.cell_text));
         for line in layout_text.lines() {

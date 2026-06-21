@@ -60,15 +60,20 @@ where
             // and aligned within the span rect.
             let avail = (rect.width() - 2.0 * CELL_PAD_X).max(0.0);
             let font_size = content.size.map(|s| s as f32).unwrap_or(BODY_SIZE);
+            // Wrap constrains the layout to the span width (breaking long tokens
+            // within the word); otherwise the line lays out unbounded and is
+            // clipped to the span rect below (sec.4.A).
+            let max_w = if content.wrap { avail as f32 } else { f32::MAX };
             let layout_text: &Layout<ParleyBrush> = text_cache.get_or_build_font(
                 font_cx,
                 content.text,
                 font_size,
-                avail as f32,
+                max_w,
                 Alignment::Start,
                 content.bold,
                 content.italic,
                 content.font,
+                content.wrap,
             );
             let text_h = layout_text.height() as f64;
             let text_w = layout_text.width() as f64;

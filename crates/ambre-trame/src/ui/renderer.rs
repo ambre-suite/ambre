@@ -229,6 +229,15 @@ pub fn draw_cells<S: DrawSurface>(
                 })
             })
         });
+    // A neighbour is "empty" -- so an overflowing non-wrapped line may spill over
+    // it -- when the cache has no entry for it or its text is blank. A merge
+    // master keeps its (non-empty) text, so overflow stops at a merged block.
+    let is_empty = |row: u32, col: u32| {
+        state
+            .cell_cache
+            .get(&(row, col))
+            .is_none_or(|c| c.text.is_empty())
+    };
     let cells_drawn = render::draw_cells_on(
         surface,
         &layout,
@@ -237,6 +246,7 @@ pub fn draw_cells<S: DrawSurface>(
         text_cache,
         text_enabled,
         cells,
+        is_empty,
     );
     let t_cells = clock.now_ms();
 
