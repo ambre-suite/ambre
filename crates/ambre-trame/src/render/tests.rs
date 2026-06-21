@@ -71,7 +71,7 @@
             (0, 0, CellContent::plain("hi", false, false)),
             (1, 1, CellContent::plain("", false, false)),
         ];
-        let drawn = draw_cells_on(&mut s, &l, palette, &mut fc, &mut tc, true, cells);
+        let drawn = draw_cells_on(&mut s, &l, palette, &mut fc, &mut tc, true, cells, |_, _| true);
 
         // Both cells get a content_bg fill...
         assert_eq!(
@@ -81,6 +81,30 @@
         // ...but only the non-empty one is tallied.
         assert_eq!(drawn, 1);
         assert_eq!(s.clip_depth(), 0);
+    }
+
+    #[test]
+    fn spill_width_stops_at_first_non_empty_neighbour() {
+        use super::cells::spill_width;
+        let l = layout(); // col_width 80, 1000 cols
+
+        // All neighbours empty: capped at `need`, not at the column boundary.
+        let all_empty = |_, _| true;
+        assert_eq!(spill_width(&l, 0, 0, 1, 100.0, &all_empty), 100.0);
+
+        // Column 3 is occupied: spilling right from col 0 covers cols 1+2 (160px)
+        // then stops, even though `need` asks for more.
+        let occupied_3 = |_r, c| c != 3;
+        assert_eq!(spill_width(&l, 0, 0, 1, 1000.0, &occupied_3), 160.0);
+
+        // Spilling left from col 5 with col 3 occupied covers cols 4 only (80px).
+        assert_eq!(spill_width(&l, 0, 5, -1, 1000.0, &occupied_3), 80.0);
+
+        // An immediately non-empty neighbour yields no spill (text clips to cell).
+        assert_eq!(spill_width(&l, 0, 0, 1, 1000.0, &|_, _| false), 0.0);
+
+        // The grid edge bounds the leftward walk at column 0.
+        assert_eq!(spill_width(&l, 0, 1, -1, 1000.0, &all_empty), 80.0);
     }
 
     #[test]

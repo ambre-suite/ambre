@@ -20,16 +20,19 @@ pub(crate) fn unpack_halign(v: i64) -> HAlign {
         _ => HAlign::Auto,
     }
 }
+// `Middle` is the default `VAlign`, so it MUST pack to 0: `persist_style` treats
+// a zero style mask as "no style" and deletes the CRDT entry. If `Top` packed to
+// 0, a Top-only style would vanish on the round-trip and revert to Middle.
 pub(crate) fn pack_valign(a: VAlign) -> i64 {
     match a {
-        VAlign::Top => 0,
-        VAlign::Middle => 1,
+        VAlign::Middle => 0,
+        VAlign::Top => 1,
         VAlign::Bottom => 2,
     }
 }
 pub(crate) fn unpack_valign(v: i64) -> VAlign {
     match v {
-        0 => VAlign::Top,
+        1 => VAlign::Top,
         2 => VAlign::Bottom,
         _ => VAlign::Middle,
     }
@@ -204,6 +207,28 @@ pub(crate) fn format_number(value: f64, fmt: &CellFormat, decimals: Option<u8>) 
         CellFormat::Date | CellFormat::Time => format!("{value}"),
         // General / Text / Custom leave the value untouched here.
         _ => format!("{value}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_style_packs_to_zero_mask() {
+        // The "mask == 0 means no style" contract in `persist_style` requires the
+        // default of every mask-resident field to pack to 0.
+        assert_eq!(pack_style_mask(&CellStyle::default()), 0);
+    }
+
+    #[test]
+    fn top_valign_only_style_has_nonzero_mask_and_roundtrips() {
+        // Regression: a Top-only style used to pack to 0 and get deleted from the
+        // CRDT, reverting to Middle on reload.
+        let style = CellStyle { v_align: VAlign::Top, ..Default::default() };
+        let mask = pack_style_mask(&style);
+        assert_ne!(mask, 0, "Top valign must survive the zero-mask cull");
+        assert_eq!(unpack_valign((mask & STYLE_VALIGN_MASK) >> STYLE_VALIGN_SHIFT), VAlign::Top);
     }
 }
 

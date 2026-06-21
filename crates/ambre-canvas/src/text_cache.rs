@@ -12,7 +12,7 @@
 // ============================================================================
 
 use ambre_draw::{Brush, Color};
-use parley::style::{FontFamily, FontStack, FontStyle, FontWeight, StyleProperty};
+use parley::style::{FontFamily, FontStack, FontStyle, FontWeight, OverflowWrap, StyleProperty};
 use parley::{Alignment, AlignmentOptions, FontContext, Layout, LayoutContext};
 use rustc_hash::FxHashMap;
 
@@ -28,6 +28,9 @@ struct CacheKey {
     align:          u8, // 0=Start, 1=Center, 2=End
     bold:           bool,
     italic:         bool,
+    /// Allow emergency (within-word) breaking so a long unbreakable token wraps
+    /// onto multiple lines instead of overflowing (cell "wrap text", sec.4.A).
+    break_word:     bool,
     /// Font family name (`None` = the grid default). Part of the key so each
     /// family of the same string is cached separately.
     font:           Option<Box<str>>,
@@ -94,7 +97,7 @@ impl TextCache {
         bold:      bool,
         italic:    bool,
     ) -> &Layout<Brush> {
-        self.get_or_build_font(font_cx, text, font_size, max_width, align, bold, italic, None)
+        self.get_or_build_font(font_cx, text, font_size, max_width, align, bold, italic, None, false)
     }
 
     /// Like [`get_or_build`](Self::get_or_build) but selecting a font `family`
@@ -112,6 +115,7 @@ impl TextCache {
         bold:      bool,
         italic:    bool,
         family:    Option<&str>,
+        break_word: bool,
     ) -> &Layout<Brush> {
         let align_u8 = match align {
             Alignment::Center           => 1,
@@ -125,6 +129,7 @@ impl TextCache {
             align:          align_u8,
             bold,
             italic,
+            break_word,
             font:           family.map(Box::from),
         };
 
@@ -139,7 +144,7 @@ impl TextCache {
                 let family = e.key().font.clone();
                 let layout = Self::build_layout(
                     &mut self.layout_cx, font_cx, &e.key().text,
-                    font_size, max_width, align, bold, italic, family.as_deref(), self.scale,
+                    font_size, max_width, align, bold, italic, family.as_deref(), break_word, self.scale,
                 );
                 e.insert(layout)
             }
@@ -157,6 +162,7 @@ impl TextCache {
         bold:      bool,
         italic:    bool,
         family:    Option<&str>,
+        break_word: bool,
         scale:     f32,
     ) -> Layout<Brush> {
         let mut builder = layout_cx.ranged_builder(font_cx, text, scale, true);
@@ -176,6 +182,11 @@ impl TextCache {
         }
         if italic {
             builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
+        }
+        // Cell "wrap text": let an overlong unbreakable token break within the
+        // word so it flows onto the next line instead of overflowing (sec.4.A).
+        if break_word {
+            builder.push_default(StyleProperty::OverflowWrap(OverflowWrap::BreakWord));
         }
         builder.push_default(StyleProperty::Brush(Brush::Solid(Color::BLACK)));
         let mut layout = builder.build(text);

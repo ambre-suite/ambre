@@ -1188,14 +1188,25 @@ impl DrawSurface for WgpuSurface<'_> {
     }
 
     fn stroke_line(&mut self, x0: f64, y0: f64, x1: f64, y1: f64, color: Color, width: f64) {
-        // Conservative clip: reject lines fully outside the clip rect.
+        let (mut x0, mut y0, mut x1, mut y1) = (x0, y0, x1, y1);
         if let Some(clip) = self.active_clip() {
             let min_x = x0.min(x1);
             let max_x = x0.max(x1);
             let min_y = y0.min(y1);
             let max_y = y0.max(y1);
+            // Reject lines fully outside the clip rect.
             if max_x < clip.x0 || min_x > clip.x1 || max_y < clip.y0 || min_y > clip.y1 {
                 return;
+            }
+            // Trim axis-aligned segments to the clip so a clipped cell's
+            // underline / strikethrough cannot spill into its neighbour. A
+            // diagonal segment is left whole (none cross a clip today).
+            if (y0 - y1).abs() < f64::EPSILON {
+                x0 = x0.clamp(clip.x0, clip.x1);
+                x1 = x1.clamp(clip.x0, clip.x1);
+            } else if (x0 - x1).abs() < f64::EPSILON {
+                y0 = y0.clamp(clip.y0, clip.y1);
+                y1 = y1.clamp(clip.y0, clip.y1);
             }
         }
         self.renderer.push_line(
@@ -1250,18 +1261,33 @@ impl DrawSurface for WgpuSurface<'_> {
             let sw = slot.pixel_width as f32;
             let sh = slot.pixel_height as f32;
 
-            // Reject if fully outside clip rect.
-            if let Some(clip) = clip
-                && (sx + sw < clip.x0 as f32
-                    || sx > clip.x1 as f32
-                    || sy + sh < clip.y0 as f32
-                    || sy > clip.y1 as f32)
-            {
-                continue;
+            // Clip the glyph quad to the active clip rect. A glyph straddling an
+            // edge must be *trimmed* (with its UVs remapped proportionally), not
+            // drawn whole -- otherwise an overflowing cell's last glyph spills a
+            // full character into its neighbour (sec.4.A).
+            let (x0, y0, x1, y1) = (sx, sy, sx + sw, sy + sh);
+            if let Some(clip) = clip {
+                let (cx0, cy0) = (clip.x0 as f32, clip.y0 as f32);
+                let (cx1, cy1) = (clip.x1 as f32, clip.y1 as f32);
+                // Fully outside: skip.
+                if x1 <= cx0 || x0 >= cx1 || y1 <= cy0 || y0 >= cy1 {
+                    continue;
+                }
+                // Clamp the quad, then map the clamped extents back to UV space
+                // by the (axis-aligned) linear glyph mapping.
+                let (nx0, nx1) = (x0.max(cx0), x1.min(cx1));
+                let (ny0, ny1) = (y0.max(cy0), y1.min(cy1));
+                let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
+                let u0 = lerp(slot.uv_min[0], slot.uv_max[0], (nx0 - x0) / sw);
+                let u1 = lerp(slot.uv_min[0], slot.uv_max[0], (nx1 - x0) / sw);
+                let v0 = lerp(slot.uv_min[1], slot.uv_max[1], (ny0 - y0) / sh);
+                let v1 = lerp(slot.uv_min[1], slot.uv_max[1], (ny1 - y0) / sh);
+                self.renderer
+                    .push_glyph(nx0, ny0, nx1 - nx0, ny1 - ny0, [u0, v0], [u1, v1], color);
+            } else {
+                self.renderer
+                    .push_glyph(sx, sy, sw, sh, slot.uv_min, slot.uv_max, color);
             }
-
-            self.renderer
-                .push_glyph(sx, sy, sw, sh, slot.uv_min, slot.uv_max, color);
         }
     }
 
