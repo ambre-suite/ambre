@@ -398,7 +398,7 @@ mod lua_tests {
     }
 
     #[tokio::test]
-    #[ignore = "needs redis"]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn first_update_succeeds() {
         let redis = match connect_redis().await {
             Some(c) => c,
@@ -419,7 +419,7 @@ mod lua_tests {
     }
 
     #[tokio::test]
-    #[ignore = "needs redis"]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn sequential_clock_succeeds() {
         let redis = match connect_redis().await {
             Some(c) => c,
@@ -448,7 +448,7 @@ mod lua_tests {
     }
 
     #[tokio::test]
-    #[ignore = "needs redis"]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn clock_mismatch_rejected() {
         let redis = match connect_redis().await {
             Some(c) => c,
@@ -472,7 +472,7 @@ mod lua_tests {
     }
 
     #[tokio::test]
-    #[ignore = "needs redis"]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn duplicate_clock_rejected() {
         let redis = match connect_redis().await {
             Some(c) => c,
@@ -496,7 +496,7 @@ mod lua_tests {
     }
 
     #[tokio::test]
-    #[ignore = "needs redis"]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn independent_clients_have_independent_clocks() {
         let redis = match connect_redis().await {
             Some(c) => c,

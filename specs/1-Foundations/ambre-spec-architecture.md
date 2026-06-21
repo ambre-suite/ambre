@@ -668,7 +668,7 @@ impl MasterSeed {
 ### ARCH P6 — Test infrastructure (transverse)
 > Cross-cutting test plumbing for the whole workspace. Scheduled as Epic `ET` in `specs/ambre-roadmap.md`. Settles the test debt of the delivered Trame MVP before stacking new apps.
 - [x] CI GitHub Actions (`.github/workflows/ci.yml`): jobs `lint`, `test-native`, `test-db` (postgres/redis/minio services), `test-wasm` (wasm-pack + headless Chrome), `coverage` (non-blocking). Dep cache (`Swatinem/rust-cache`); the server is built for the native target explicitly. *(Each job calls a `just` recipe for CI/local parity. `lint` + `test-native` are live; `test-db` and `test-wasm` are written but commented out in the workflow -- re-enabled by their prerequisite ET stories (`db` feature gate; Leptos UI tests) so the first CI run stays green. `coverage` is non-blocking.)*
-- [ ] Feature `db` on `ambre-server` + replace the ~20 bare `#[ignore = "needs postgres/redis"]` with the `cfg_attr(not(feature = "db"), ignore = ...)` gate (§4).
+- [x] Feature `db` on `ambre-server` + replace the ~20 bare `#[ignore = "needs postgres/redis"]` with the `cfg_attr(not(feature = "db"), ignore = ...)` gate (§4). The 22 server tests (`#[sqlx::test]`) now run under `--features db` (85 pass against postgres/redis/minio); the `test-db` CI job is re-enabled. Migrated the stale auth tests from cookies to cookie-less Bearer JWT (`access_token` body) per ARCH P1.
 - [ ] `cargo-llvm-cov` host baseline + lcov artifact.
 - [x] Root `justfile` (`test-native` / `test-db` / `test-wasm` / `cov` / `lint`) for local/CI parity.
 - [ ] Generalize `proptest` convergence beyond `ambre-crypto` (Trame first -- see `ambre-spec-trame-logic.md §14`).

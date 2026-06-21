@@ -488,7 +488,7 @@ mod tests {
         }
 
         #[sqlx::test]
-        #[ignore = "needs postgres"]
+        #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
         #[allow(unreachable_code, unused_variables)]
         async fn list_organizations_requires_auth(pool: sqlx::PgPool) {
             let state = crate::test_helpers::test_app_state(pool).await;
@@ -505,7 +505,7 @@ mod tests {
         }
 
         #[sqlx::test]
-        #[ignore = "needs postgres"]
+        #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
         #[allow(unreachable_code, unused_variables)]
         async fn get_unknown_organization_returns_unauthorized(pool: sqlx::PgPool) {
             let state = crate::test_helpers::test_app_state(pool).await;
@@ -522,7 +522,7 @@ mod tests {
         }
 
         #[sqlx::test]
-        #[ignore = "needs postgres"]
+        #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
         #[allow(unreachable_code, unused_variables)]
         async fn delete_organization_requires_auth(pool: sqlx::PgPool) {
             let state = crate::test_helpers::test_app_state(pool).await;
@@ -539,7 +539,7 @@ mod tests {
         }
 
         #[sqlx::test]
-        #[ignore = "needs postgres"]
+        #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
         #[allow(unreachable_code, unused_variables)]
         async fn recovery_requires_auth(pool: sqlx::PgPool) {
             let state = crate::test_helpers::test_app_state(pool).await;

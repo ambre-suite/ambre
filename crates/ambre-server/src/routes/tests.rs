@@ -64,7 +64,7 @@ mod handler_tests {
     }
 
     #[sqlx::test]
-    #[ignore = "needs postgres"]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn unauth_endpoints_return_401(pool: sqlx::PgPool) {
         let state = test_app_state(pool).await;
         let app = build_test_router(state);
@@ -77,8 +77,8 @@ mod handler_tests {
     }
 
     #[sqlx::test]
-    #[ignore = "needs postgres"]
-    async fn setup_account_creates_user_and_returns_cookie(pool: sqlx::PgPool) {
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn setup_account_creates_user_and_returns_token(pool: sqlx::PgPool) {
         let state = test_app_state(pool).await;
         let app = build_test_router(state);
 
@@ -101,21 +101,21 @@ mod handler_tests {
             .unwrap();
 
         assert_eq!(resp.status(), StatusCode::OK);
-        assert!(resp.headers().get("set-cookie").is_some());
+        assert!(!access_token_of(resp).await.is_empty());
     }
 
     #[sqlx::test]
-    #[ignore = "needs postgres"]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn me_returns_user_details_when_authenticated(pool: sqlx::PgPool) {
         let state = test_app_state(pool).await;
         let app = build_test_router(state.clone());
 
-        let cookie = setup_and_get_cookie(&app).await;
+        let auth = setup_and_get_auth(&app).await;
 
         let resp = app
             .oneshot(
                 Request::get("/api/auth/me")
-                    .header("cookie", cookie)
+                    .header("authorization", auth)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -126,17 +126,17 @@ mod handler_tests {
     }
 
     #[sqlx::test]
-    #[ignore = "needs postgres"]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn list_documents_returns_empty_before_creation(pool: sqlx::PgPool) {
         let state = test_app_state(pool).await;
         let app = build_test_router(state.clone());
-        let cookie = setup_and_get_cookie(&app).await;
+        let auth = setup_and_get_auth(&app).await;
 
         let resp = app
             .clone()
             .oneshot(
                 Request::get("/api/documents")
-                    .header("cookie", &cookie)
+                    .header("authorization", &auth)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -150,11 +150,11 @@ mod handler_tests {
     }
 
     #[sqlx::test]
-    #[ignore = "needs postgres"]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn create_and_get_document(pool: sqlx::PgPool) {
         let state = test_app_state(pool).await;
         let app = build_test_router(state.clone());
-        let cookie = setup_and_get_cookie(&app).await;
+        let auth = setup_and_get_auth(&app).await;
 
         let body = serde_json::json!({
             "doc_type": "prose",
@@ -166,7 +166,7 @@ mod handler_tests {
             .oneshot(
                 Request::post("/api/documents")
                     .header("content-type", "application/json")
-                    .header("cookie", &cookie)
+                    .header("authorization", &auth)
                     .body(Body::from(serde_json::to_string(&body).unwrap()))
                     .unwrap(),
             )
@@ -180,7 +180,7 @@ mod handler_tests {
         let resp = app
             .oneshot(
                 Request::get(format!("/api/documents/{doc_id}"))
-                    .header("cookie", &cookie)
+                    .header("authorization", &auth)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -190,11 +190,11 @@ mod handler_tests {
     }
 
     #[sqlx::test]
-    #[ignore = "needs postgres"]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn invalid_doc_type_is_rejected(pool: sqlx::PgPool) {
         let state = test_app_state(pool).await;
         let app = build_test_router(state.clone());
-        let cookie = setup_and_get_cookie(&app).await;
+        let auth = setup_and_get_auth(&app).await;
 
         let body = serde_json::json!({
             "doc_type": "spreadsheet",
@@ -206,7 +206,7 @@ mod handler_tests {
             .oneshot(
                 Request::post("/api/documents")
                     .header("content-type", "application/json")
-                    .header("cookie", &cookie)
+                    .header("authorization", &auth)
                     .body(Body::from(serde_json::to_string(&body).unwrap()))
                     .unwrap(),
             )
@@ -216,17 +216,17 @@ mod handler_tests {
     }
 
     #[sqlx::test]
-    #[ignore = "needs postgres"]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn delete_document_only_by_owner(pool: sqlx::PgPool) {
         let state = test_app_state(pool).await;
         let app = build_test_router(state.clone());
-        let cookie = setup_and_get_cookie(&app).await;
-        let doc_id = create_test_doc(&app, &cookie).await;
+        let auth = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &auth).await;
 
         let resp = app
             .oneshot(
                 Request::delete(format!("/api/documents/{doc_id}"))
-                    .header("cookie", &cookie)
+                    .header("authorization", &auth)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -236,12 +236,12 @@ mod handler_tests {
     }
 
     #[sqlx::test]
-    #[ignore = "needs postgres"]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn invite_user_to_document(pool: sqlx::PgPool) {
         let state = test_app_state(pool).await;
         let app = build_test_router(state.clone());
-        let cookie = setup_and_get_cookie(&app).await;
-        let doc_id = create_test_doc(&app, &cookie).await;
+        let auth = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &auth).await;
 
         let invitee_email = "invitee@test.com";
         crate::test_helpers::create_test_user(&state.db, invitee_email).await;
@@ -256,7 +256,7 @@ mod handler_tests {
             .oneshot(
                 Request::post(format!("/api/documents/{doc_id}/share"))
                     .header("content-type", "application/json")
-                    .header("cookie", &cookie)
+                    .header("authorization", &auth)
                     .body(Body::from(serde_json::to_string(&body).unwrap()))
                     .unwrap(),
             )
@@ -266,17 +266,17 @@ mod handler_tests {
     }
 
     #[sqlx::test]
-    #[ignore = "needs postgres"]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn list_members_includes_owner(pool: sqlx::PgPool) {
         let state = test_app_state(pool).await;
         let app = build_test_router(state.clone());
-        let cookie = setup_and_get_cookie(&app).await;
-        let doc_id = create_test_doc(&app, &cookie).await;
+        let auth = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &auth).await;
 
         let resp = app
             .oneshot(
                 Request::get(format!("/api/documents/{doc_id}/members"))
-                    .header("cookie", &cookie)
+                    .header("authorization", &auth)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -286,17 +286,18 @@ mod handler_tests {
     }
 
     #[sqlx::test]
-    #[ignore = "needs postgres"]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn logout_clears_session(pool: sqlx::PgPool) {
         let state = test_app_state(pool).await;
         let app = build_test_router(state.clone());
-        let cookie = setup_and_get_cookie(&app).await;
+        let auth = setup_and_get_auth(&app).await;
 
         let resp = app
             .oneshot(
                 Request::post("/api/auth/logout")
-                    .header("cookie", &cookie)
-                    .body(Body::empty())
+                    .header("authorization", &auth)
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
                     .unwrap(),
             )
             .await
@@ -305,17 +306,17 @@ mod handler_tests {
     }
 
     #[sqlx::test]
-    #[ignore = "needs postgres"]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn get_delta_endpoint_requires_auth(pool: sqlx::PgPool) {
         let state = test_app_state(pool).await;
         let app = build_test_router(state.clone());
-        let cookie = setup_and_get_cookie(&app).await;
-        let doc_id = create_test_doc(&app, &cookie).await;
+        let auth = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &auth).await;
 
         let resp = app
             .oneshot(
                 Request::get(format!("/api/documents/{doc_id}/deltas?after_seq=0"))
-                    .header("cookie", &cookie)
+                    .header("authorization", &auth)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -381,7 +382,7 @@ mod handler_tests {
     }
 
     #[sqlx::test]
-    #[ignore = "needs postgres"]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn dev_login_rejected_when_dev_mode_off(pool: sqlx::PgPool) {
         // Default config has dev_mode = false.
         let state = test_app_state(pool).await;
@@ -401,8 +402,8 @@ mod handler_tests {
     }
 
     #[sqlx::test]
-    #[ignore = "needs postgres"]
-    async fn dev_login_creates_user_and_returns_cookie(pool: sqlx::PgPool) {
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn dev_login_creates_user_and_returns_token(pool: sqlx::PgPool) {
         let state = test_app_state_dev(pool).await;
         let app = build_test_router(state);
 
@@ -417,10 +418,20 @@ mod handler_tests {
             .unwrap();
 
         assert_eq!(resp.status(), StatusCode::OK);
-        assert!(resp.headers().get("set-cookie").is_some());
+        assert!(!access_token_of(resp).await.is_empty());
     }
 
-    async fn setup_and_get_cookie(app: &Router) -> String {
+    /// Pull the `access_token` out of an auth response body (setup / dev-login
+    /// both return `{ access_token, .. }` -- the suite is cookie-less Bearer JWT).
+    async fn access_token_of(resp: axum::response::Response) -> String {
+        let body_bytes = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        json["access_token"].as_str().unwrap().to_string()
+    }
+
+    /// Setup an account and return a ready-to-use `Authorization: Bearer <jwt>`
+    /// header value.
+    async fn setup_and_get_auth(app: &Router) -> String {
         let body = serde_json::json!({
             "passphrase": "test",
             "master_key_enc": base64_encode(&[1u8; 32]),
@@ -438,18 +449,10 @@ mod handler_tests {
             )
             .await
             .unwrap();
-        resp.headers()
-            .get("set-cookie")
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .split(';')
-            .next()
-            .unwrap()
-            .to_string()
+        format!("Bearer {}", access_token_of(resp).await)
     }
 
-    async fn create_test_doc(app: &Router, cookie: &str) -> String {
+    async fn create_test_doc(app: &Router, auth: &str) -> String {
         let body = serde_json::json!({
             "doc_type": "prose",
             "name_enc": base64_encode(b"test"),
@@ -460,7 +463,7 @@ mod handler_tests {
             .oneshot(
                 Request::post("/api/documents")
                     .header("content-type", "application/json")
-                    .header("cookie", cookie)
+                    .header("authorization", auth)
                     .body(Body::from(serde_json::to_string(&body).unwrap()))
                     .unwrap(),
             )
