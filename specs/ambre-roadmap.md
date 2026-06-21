@@ -30,6 +30,7 @@ The specs predate this file and use their own phase vocabulary. Mapping:
 | `E0`/`E1` (done) | `ARCH P0`-`P3`, `CANVAS P0`, `CHROME P1`-`P3`, `UI P0`-`P2`, `SYNC P0`-`P3`, `SRV P0`/`P2` | engine Phase 0/1 (logic), virtual scroll + inline editor (ui Phase 1) |
 | `E2` | `CANVAS P0` remaining items | -- |
 | `E3` | -- | `trame-logic §14`, `trame-features §10`, `trame-ui §18`, `trame-interop §10` (Phase 1) |
+| `ET` | `ARCH P6` (test infrastructure) | Trame "Tested DoD" debt items (logic/features/ui/interop) |
 | `E4` | `ARCH P2`/`P5`, `CANVAS P1`, `SYNC P4`, `SRV P1` | -- |
 | `E5` | `ARCH P4`, `CANVAS P2` | Trame Phase 2+ |
 
@@ -81,8 +82,8 @@ Stories:
   `InviteToDocument`/`RevokeFromDocument` flow (`SYNC P3`, sharing flow in `ambre-spec-sync.md §3`)
   to a chrome command + dialog. **Until this exists, genuine multi-user collaboration is unreachable
   from the UI** (see `E1` scope note). Unblocks real two-user testing of Trame.
-- `CANVAS P0` — generated canvas tokens (`tokens.ron` -> `theme.rs`) + headless tests (mock
-  `QuadRenderer`).
+- `CANVAS P0` — generated canvas tokens (`tokens.ron` -> `theme.rs`) + headless tests
+  (`RecordingSurface`, the mock `DrawSurface` in `ambre-draw`).
 - `ambreFatal` reconciliation — the `panic::set_hook` JS hook is done (`ARCH P1`); the remaining
   part is the canvas terminal screen (`CANVAS P1` item), wired in `host`/`ambre-app`.
 
@@ -104,6 +105,17 @@ Stories:
   find/replace, cell wrap + vertical alignment + overflow, selection status bar,
   full `on_logic_message` `TrameEvent` dispatch. *(virtual scroll + inline editor already done.)*
 - `trame-interop §10 Phase 1` — CSV import/export.
+
+## ET — Testing & CI foundation  `[ ]` (transverse) — *settles the MVP test debt*
+
+*Testability is a non-negotiable pillar (`ambre-context.md §3`, template §4, `ambre-spec-architecture.md §4`). The Trame MVP (`E3`) shipped functional but under-tested: ~20 server DB/redis tests are bare-`#[ignore]`, there is no CI, no measured coverage, no CRDT convergence property-test, and zero Leptos UI test. This Epic makes the existing tests run and closes the gaps before stacking new apps on `E4`. Per the tested Definition of Done (template §4), the apps it touches are only truly "done" once this is green.*
+
+Stories:
+- `ARCH P6` — CI GitHub Actions (`lint` / `test-host` / `test-db` / `test-wasm` / `coverage`) with postgres/redis/minio services; root `justfile` for local/CI parity.
+- `ARCH P6` — feature `db` on `ambre-server`; replace the ~20 bare `#[ignore = "needs postgres/redis"]` with the `cfg_attr(not(feature = "db"), ignore = ...)` gate so the already-written server tests run; `cargo-llvm-cov` host baseline + lcov artifact.
+- `trame-logic §14` — 2-peer CRDT convergence property-test (`proptest` + `MockSyncHandle`), targeting references-after-sort and structural-op reconciliation.
+- `trame-ui §18` — Leptos UI tests (`wasm-bindgen-test`, headless Chrome): reactive headless + real DOM for the Trame chrome.
+- `trame-features §10` / `trame-interop §10` — wire the "Tested DoD" belts (all listed `#[test]`s + CSV roundtrip/fuzz) green in CI.
 
 ## E4 — Application expansion  `[ ]` (deferred)
 

@@ -313,9 +313,9 @@ The rendering layer consists of pure drawing primitives. ZK audit:
 
 ### A. Rendering Pipeline Tests
 
-- **Dirty flag + conditional rendering:** test that `dirty=false` skips the build vertex batch phase. Mock `QuadRenderer` counting `begin_frame` calls.
+- **Dirty flag + conditional rendering:** test that `dirty=false` skips the build vertex batch phase, by counting draw calls on a `RecordingSurface`.
 - **GPU backend:** test GL vs WebGPU selection via mock `url_flag("webgpu")`.
-- **`DrawSurface`:** unit tests on `WgpuSurface` (mock `QuadRenderer`) and `KrillaSurface` with simple primitives → snapshot comparison.
+- **`DrawSurface` contract:** the app render layer is tested against `RecordingSurface` (the mock `DrawSurface` in `ambre-draw`, feature `testing`) -- assert the ordered `DrawOp` sequence (geometry, colours, clip balance, glyph-run counts) on host, no GPU. The wgpu pipeline itself (`QuadRenderer`/`WgpuSurface`/`GlyphAtlas` tessellation, shaders, atlas packing) needs a real `wgpu::Device` and is **not unit-tested**: thin, stable plumbing validated visually (`/run`). `KrillaSurface` (PDF) is verified by simple-primitive snapshot.
 ### B. Asset Tests
 
 - **Icon pipeline:** verify that the compiled blob covers all SVGs in `assets/icons/`, vertex count > 0 per icon.
@@ -325,7 +325,7 @@ The rendering layer consists of pure drawing primitives. ZK audit:
 
 ### C. Mocks & Environment
 
-- Headless tests via mock `QuadRenderer` and mock `DrawSurface` (no wgpu required).
+- Headless tests via `RecordingSurface` (mock `DrawSurface`, `ambre-draw` feature `testing`) -- no wgpu required.
 - `web_sys` mockable via `cfg(test)` feature flag.
 
 ### D. Benchmarks

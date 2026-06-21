@@ -117,7 +117,7 @@ Pure presentation layer:
 - **`ambre-commands`**: registry lookup, keybinding resolution, `CommandState` derivation. Pure functions, testable on host.
 - **`ambre-chrome`**: Leptos components via `wasm-bindgen-test` (DOM) — a11y patterns (roving tabindex, focus trap, `aria-*`), menu positioning (flip on viewport overflow).
 - **Canvas cohabitation**: an end-to-end command (click → `CommandId` → `LogicCommand` → `UiEvent` → toggle chrome + canvas repaint); an IME composition cycle; rAF suspension/resumption behind a modal.
-- **Mocks & environment**: `MockSurface` (`DrawSurface`) for headless content rendering; native `ambre-commands` tests outside WASM.
+- **Mocks & environment**: `RecordingSurface` (the mock `DrawSurface` in `ambre-draw`, feature `testing`) for headless content rendering; native `ambre-commands` tests outside WASM.
 
 ---
 

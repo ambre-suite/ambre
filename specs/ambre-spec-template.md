@@ -31,10 +31,13 @@
 ---
 
 ## 4. QUALITY & TESTABILITY
-* **Unit Tests:** Coverage strategy for pure functions and state machines.
-* **Prop-Testing / Fuzzing:** Use of property-based testing to validate CRDT convergence or calculation engine robustness.
-* **Mocks & Environment:** Isolated (headless) test method outside the WASM/Browser context.
-* **Benchmarks:** Target performance criteria (latency, CPU) and regression tests.
+> Prescriptive. Every spec MUST fill in each item below. See the transverse test architecture in `ambre-spec-architecture.md §4` (test tiering, CRDT convergence, CI, coverage) -- reference it, do not redefine it.
+* **Test tiers:** Declare which tiers this component touches -- **host** (`cargo test`, x86_64, default), **db** (server integration, feature `db` + docker compose), **wasm** (`wasm-bindgen-test`, headless Chrome, for any `cfg(target_arch = "wasm32")` / Leptos / GPU surface).
+* **Unit Tests:** Coverage strategy for pure functions and state machines. State an indicative coverage target (e.g. every predicate branch, every no-op guard, every error path).
+* **CRDT convergence:** If the component holds collaborative CRDT state, a 2-peer convergence property-test is **mandatory** (interleaved op sequences via `MockSyncHandle` + `apply_remote` -> identical final states). Otherwise state "N/A (no CRDT state)".
+* **Mocks & Environment:** Host seams used (`CommandSink` / `LogicSink` / `Mock*`); wasm via `wasm-bindgen-test`; DB via feature `db` + `docker compose up`. Isolated, headless, no live network.
+* **Benchmarks:** `criterion` targets and regression criteria (latency, CPU).
+* **Definition of Done (tested):** A feature/MVP is `[x]` **only when** its test belt -- unit + convergence (if CRDT) + at least one relevant integration/wasm test -- is **green in CI**. An untested increment is not done.
 
 ---
 
@@ -51,6 +54,6 @@
 ---
 
 ## 7. INTEGRATION PLAN (ROADMAP)
-* **Phase 0 (Core):** Pure business logic and fundamental tests.
+* **Phase 0 (Core):** Pure business logic and fundamental tests. Per the tested Definition of Done (§4), no phase ships `[x]` without its test belt green in CI.
 * **Phase 1 (Integration):** Hooking into the Logic Worker, DrawSurface (WgpuSurface / KrillaSurface), or the Blind Relay.
 * **Phase 2 (Optimization):** Performance refinement and edge case handling.
