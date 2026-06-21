@@ -1,4 +1,7 @@
 target
+# Coverage report produced by `just cov` (cargo-llvm-cov); CI re-generates it
+# and uploads it as the `lcov` artifact.
+lcov.info
 .vscode
 dist
 AGENTS.md
