@@ -69,18 +69,11 @@ jobs:
           key: test-native
       - run: just test-native
 
-  # ===========================================================================
-  # DISABLED until later Epic ET stories land. The `justfile` recipes and the
-  # job definitions below are complete and correct; they are commented out only
-  # so the first CI run (this story = workflow + justfile) stays green. Re-enable
-  # by uncommenting when the prerequisite story is done.
-  # ===========================================================================
-  #
-  # test-db -- RE-ENABLE WITH ET story "feature `db` on ambre-server". Until the
-  # `db` Cargo feature exists and gates the ~20 server tests, `just test-db`
-  # fails to compile (unknown feature). Server integration behind the `db`
-  # feature against real postgres / redis / minio service containers;
-  # `#[sqlx::test]` provisions an ephemeral database per test off DATABASE_URL.
+  # ---------------------------------------------------------------------------
+  # test-db -- server integration behind the `db` Cargo feature against real
+  # postgres / redis / minio service containers; `#[sqlx::test]` provisions an
+  # ephemeral database per test off DATABASE_URL. The `db` feature flips the
+  # `cfg_attr(not(feature = "db"), ignore = ...)` gate off (see ambre-server).
   #
   # Image tags below are kept in sync with `docker-compose.yml` (the dev source
   # of truth) so a test never passes on one Postgres/Redis and fails on another.
@@ -88,65 +81,71 @@ jobs:
   # requires `command: server /data` -- GA `services:` cannot override a
   # container command, so CI uses `bitnami/minio` (env-configurable, auto-creates
   # the bucket via MINIO_DEFAULT_BUCKETS). Same server, different entrypoint.
-  #
-  # test-db:
-  #   runs-on: ubuntu-latest
-  #   services:
-  #     postgres:
-  #       image: postgres:16-alpine   # keep in sync with docker-compose.yml
-  #       env:
-  #         POSTGRES_USER: ambre
-  #         POSTGRES_PASSWORD: ambre
-  #         POSTGRES_DB: ambre_dev
-  #       ports:
-  #         - 5432:5432
-  #       options: >-
-  #         --health-cmd "pg_isready -U ambre -d ambre_dev"
-  #         --health-interval 5s
-  #         --health-timeout 5s
-  #         --health-retries 5
-  #     redis:
-  #       image: redis:8-alpine     # keep in sync with docker-compose.yml
-  #       ports:
-  #         - 6379:6379
-  #       options: >-
-  #         --health-cmd "redis-cli ping"
-  #         --health-interval 5s
-  #         --health-timeout 5s
-  #         --health-retries 5
-  #     minio:
-  #       image: bitnami/minio:latest   # NOT minio/minio: see note above (no command override in services:)
-  #       env:
-  #         MINIO_ROOT_USER: minioadmin
-  #         MINIO_ROOT_PASSWORD: minioadmin
-  #         MINIO_DEFAULT_BUCKETS: ambre-dev
-  #       ports:
-  #         - 9000:9000
-  #       options: >-
-  #         --health-cmd "mc ready local"
-  #         --health-interval 5s
-  #         --health-timeout 5s
-  #         --health-retries 5
-  #   env:
-  #     DATABASE_URL: postgres://ambre:ambre@localhost:5432/ambre_dev
-  #     REDIS_URL: redis://localhost:6379
-  #     S3_ENDPOINT: http://localhost:9000
-  #     S3_BUCKET: ambre-dev
-  #     AWS_ACCESS_KEY_ID: minioadmin
-  #     AWS_SECRET_ACCESS_KEY: minioadmin
-  #     AWS_REGION: us-east-1
-  #   steps:
-  #     - uses: actions/checkout@v5
-  #     - name: System deps
-  #       run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
-  #     - name: Install just
-  #       uses: taiki-e/install-action@v2
-  #       with:
-  #         tool: just
-  #     - uses: Swatinem/rust-cache@v2
-  #       with:
-  #         key: test-db
-  #     - run: just test-db
+  # ---------------------------------------------------------------------------
+  test-db:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine   # keep in sync with docker-compose.yml
+        env:
+          POSTGRES_USER: ambre
+          POSTGRES_PASSWORD: ambre
+          POSTGRES_DB: ambre_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ambre -d ambre_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:8-alpine     # keep in sync with docker-compose.yml
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      minio:
+        image: bitnami/minio:latest   # NOT minio/minio: see note above (no command override in services:)
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+          MINIO_DEFAULT_BUCKETS: ambre-dev
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "mc ready local"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://ambre:ambre@localhost:5432/ambre_dev
+      REDIS_URL: redis://localhost:6379
+      S3_ENDPOINT: http://localhost:9000
+      S3_BUCKET: ambre-dev
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+    steps:
+      - uses: actions/checkout@v5
+      - name: System deps
+        run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: test-db
+      - run: just test-db
+
+  # ===========================================================================
+  # DISABLED until later Epic ET stories land. The `justfile` recipe and the job
+  # definition below are complete and correct; they are commented out only so CI
+  # stays green until the prerequisite story lands. Re-enable by uncommenting.
+  # ===========================================================================
   #
   # test-wasm -- RE-ENABLE WITH ET story "Leptos UI tests (trame-ui section 18)".
   # No wasm-bindgen-test targets exist yet, so `just test-wasm` has nothing to
