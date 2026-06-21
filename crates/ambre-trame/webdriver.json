@@ -1,0 +1,16 @@
+{
+  "//": "wasm-bindgen-test picks this up to configure the headless browser. The",
+  "//1": "chrome here loads a *multi-threaded* wasm module (shared memory: see the",
+  "//2": "--shared-memory / --import-memory / +atomics flags in .cargo/config.toml),",
+  "//3": "so the page must expose a SharedArrayBuffer. That normally requires",
+  "//4": "cross-origin isolation (COOP/COEP) which the test runner's static server",
+  "//5": "does not emit, so without this flag Chrome never instantiates the module:",
+  "//6": "'Loading Wasm module...' hangs, the runner times out and kills chromedriver",
+  "//7": "(SIGKILL). --enable-features=SharedArrayBuffer makes it available",
+  "//8": "unconditionally for the test origin.",
+  "goog:chromeOptions": {
+    "args": [
+      "--enable-features=SharedArrayBuffer"
+    ]
+  }
+}
