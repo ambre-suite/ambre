@@ -113,7 +113,7 @@ Stories:
 Stories:
 - `ARCH P6` — CI GitHub Actions (`lint` / `test-host` / `test-db` / `test-wasm` / `coverage`) with postgres/redis/minio services; root `justfile` for local/CI parity.
 - `ARCH P6` — feature `db` on `ambre-server`; replace the ~20 bare `#[ignore = "needs postgres/redis"]` with the `cfg_attr(not(feature = "db"), ignore = ...)` gate so the already-written server tests run; `cargo-llvm-cov` host baseline + lcov artifact.
-- `trame-logic §14` — 2-peer CRDT convergence property-test (`proptest` + `MockSyncHandle`), targeting references-after-sort and structural-op reconciliation.
+- `trame-logic §14` `[x]` — 2-peer CRDT convergence property-test (`proptest`), targeting references-after-sort and structural-op reconciliation. Landed as `ambre-trame/src/logic/convergence_tests.rs::two_peers_converge_under_interleaved_ops`.
 - `trame-ui §18` — Leptos UI tests (`wasm-bindgen-test`, headless Chrome): reactive headless + real DOM for the Trame chrome.
 - `trame-features §10` / `trame-interop §10` — wire the "Tested DoD" belts (all listed `#[test]`s + CSV roundtrip/fuzz) green in CI.
 
