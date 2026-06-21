@@ -8,13 +8,16 @@
 name: CI
 
 on:
+  # Run on every branch push (so CI fires on feature branches before any PR
+  # exists) and on pull requests (covers forks, which can't push here).
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
 
-# Cancel superseded runs on the same ref to save runner minutes.
+# Cancel superseded runs on the same ref to save runner minutes. Keyed by
+# event name + ref so a branch push and its PR don't cancel each other.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
