@@ -71,16 +71,18 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # test-db -- server integration behind the `db` Cargo feature against real
-  # postgres / redis / minio service containers; `#[sqlx::test]` provisions an
-  # ephemeral database per test off DATABASE_URL. The `db` feature flips the
+  # postgres / redis service containers; `#[sqlx::test]` provisions an ephemeral
+  # database per test off DATABASE_URL. The `db` feature flips the
   # `cfg_attr(not(feature = "db"), ignore = ...)` gate off (see ambre-server).
   #
-  # Image tags below are kept in sync with `docker-compose.yml` (the dev source
-  # of truth) so a test never passes on one Postgres/Redis and fails on another.
-  # Exception: minio. The compose uses the official `minio/minio` image, which
-  # requires `command: server /data` -- GA `services:` cannot override a
-  # container command, so CI uses `bitnami/minio` (env-configurable, auto-creates
-  # the bucket via MINIO_DEFAULT_BUCKETS). Same server, different entrypoint.
+  # Image tags are kept in sync with `docker-compose.yml` (the dev source of
+  # truth) so a test never passes on one Postgres/Redis and fails on another.
+  #
+  # No minio service: the gated tests build their S3 client from an empty config
+  # and never reach a real bucket (the S3 path -- snapshots, media -- has no db
+  # tier test yet). Add minio back (and the S3_* env) the day a test exercises
+  # `s3::*` end to end; that is also the trigger for the layered-compose
+  # migration noted in the spec's CI-debt section.
   # ---------------------------------------------------------------------------
   test-db:
     runs-on: ubuntu-latest
@@ -107,27 +109,9 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 5
-      minio:
-        image: bitnami/minio:latest   # NOT minio/minio: see note above (no command override in services:)
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-          MINIO_DEFAULT_BUCKETS: ambre-dev
-        ports:
-          - 9000:9000
-        options: >-
-          --health-cmd "mc ready local"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
     env:
       DATABASE_URL: postgres://ambre:ambre@localhost:5432/ambre_dev
       REDIS_URL: redis://localhost:6379
-      S3_ENDPOINT: http://localhost:9000
-      S3_BUCKET: ambre-dev
-      AWS_ACCESS_KEY_ID: minioadmin
-      AWS_SECRET_ACCESS_KEY: minioadmin
-      AWS_REGION: us-east-1
     steps:
       - uses: actions/checkout@v5
       - name: System deps
