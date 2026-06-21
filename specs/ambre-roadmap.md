@@ -86,7 +86,7 @@ Stories:
 - `ambreFatal` reconciliation — the `panic::set_hook` JS hook is done (`ARCH P1`); the remaining
   part is the canvas terminal screen (`CANVAS P1` item), wired in `host`/`ambre-app`.
 
-## E3 — Trame MVP (usual spreadsheet)  `[ ]` — *core objective*
+## E3 — Trame MVP (usual spreadsheet)  `[x]` (done) — *core objective*
 
 *Turn the Trame skeleton into a usable spreadsheet. Scope = the consolidated "Phase 1 / MVP" of the
 four Trame specs, deduplicated against what `E0`/`E1` already delivered (virtual scroll + inline cell
