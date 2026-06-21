@@ -614,6 +614,50 @@ pub enum TrameCommand {
         sheet_id: String,
     },
 
+    /// Import CSV bytes into the workbook (`ambre-spec-trame-interop.md` §4.A,
+    /// interop MVP). All conversion happens in the Logic thread (Zero-Knowledge):
+    /// the bytes never leave the client. When `target_sheet_id` is `None` the
+    /// Logic thread creates a fresh sheet; otherwise it writes into the named
+    /// sheet starting at `(start_row, start_col)`, extending the used range as
+    /// needed. `delimiter` is auto-detected (comma vs semicolon) when `None`.
+    /// Each field becomes a literal cell (no formula reindexing -- the source is
+    /// external). Replies with
+    /// [`TrameEvent::ImportComplete`](crate::ui::TrameEvent::ImportComplete) plus
+    /// a [`DataReset`](crate::ui::TrameEvent::DataReset); the whole import is a
+    /// single undo group.
+    ImportCsv {
+        data: Vec<u8>,
+        /// Field separator; `None` auto-detects comma vs semicolon.
+        delimiter: Option<u8>,
+        /// When `true` the first record is treated as a header row and skipped.
+        has_header: bool,
+        /// Target sheet; `None` creates a new "CSV Import" sheet.
+        target_sheet_id: Option<String>,
+        start_row: u32,
+        start_col: u32,
+    },
+
+    /// Export the **active** sheet to CSV (`ambre-spec-trame-interop.md` §4.B).
+    /// Parameterless sibling of [`ExportCsv`](TrameCommand::ExportCsv): the Logic
+    /// thread resolves the active sheet itself -- the same convention as the sort
+    /// / filter / selection-stats intents -- so a toolbar/menu "Export CSV" button
+    /// needs no view state. Comma delimiter, whole used range. Replies with
+    /// [`TrameEvent::ExportComplete`](crate::ui::TrameEvent::ExportComplete).
+    ExportActiveSheetCsv,
+
+    /// Export a sheet (or a sub-range of it) to CSV bytes
+    /// (`ambre-spec-trame-interop.md` §4.B, interop MVP). Read-only: no CRDT
+    /// delta. Cells are exported by their *displayed* value (formula results
+    /// included). `delimiter` defaults to comma; `range` of `None` exports the
+    /// whole materialized used range. Replies with
+    /// [`TrameEvent::ExportComplete`](crate::ui::TrameEvent::ExportComplete)
+    /// carrying the file bytes for the UI Thread to download.
+    ExportCsv {
+        sheet_id: String,
+        delimiter: Option<u8>,
+        range: Option<GridRange>,
+    },
+
     // ─────────────────────────────────────────────────────────────────────────
     // Deferred feature surface (Phase 2+)
     //

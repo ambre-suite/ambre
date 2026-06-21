@@ -267,6 +267,7 @@ mod fill;
 mod filters;
 mod find;
 mod helpers;
+mod interop;
 mod merges;
 mod packing;
 mod schema;

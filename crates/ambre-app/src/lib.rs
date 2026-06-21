@@ -972,6 +972,13 @@ fn AppRoot() -> impl IntoView {
                         );
                     }
                 }
+            } else if id == trame_chrome::IMPORT_CSV {
+                // Interop (`-interop.md` §4.A): open a file picker, read the chosen
+                // CSV bytes, and send them to the Logic thread, which creates a new
+                // sheet and converts client-side (Zero-Knowledge).
+                if let Some(document_id) = current_doc.get_untracked() {
+                    open_csv_picker(document_id, tx.clone(), toasts);
+                }
             } else {
                 dispatch_to_current(id, current_doc, &tx);
             }
@@ -1392,6 +1399,53 @@ fn dispatch_to_current(
 /// content is handed to the Logic thread, which resolves the target from the
 /// tracked active cell. Best-effort: a clipboard the browser will not surface
 /// (permission denied, unsupported) is logged, not fatal -- Ctrl+V still works.
+/// Open a transient `<input type="file">` picker for a CSV import
+/// (`-interop.md` §4.A). On selection it reads the file bytes off the main
+/// thread (`File::array_buffer`) and sends a [`TrameCommand::ImportCsv`] to the
+/// Logic thread, which converts them into a new sheet client-side. The picker
+/// element is never attached to the DOM; the change closure is leaked because the
+/// picker is one-shot and lives only until the user picks a file.
+fn open_csv_picker(document_id: DocumentId, tx: flume::Sender<LogicCommand>, toasts: Toasts) {
+    let Some(document) = web_sys::window().and_then(|w| w.document()) else { return };
+    let Some(input) = document
+        .create_element("input")
+        .ok()
+        .and_then(|e| e.dyn_into::<web_sys::HtmlInputElement>().ok())
+    else {
+        return;
+    };
+    input.set_type("file");
+    let _ = input.set_attribute("accept", ".csv,text/csv");
+
+    let picker = input.clone();
+    let onchange = Closure::<dyn FnMut()>::new(move || {
+        let Some(file) = picker.files().and_then(|fs| fs.get(0)) else { return };
+        let tx = tx.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            match wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await {
+                Ok(buf) => {
+                    let data = js_sys::Uint8Array::new(&buf).to_vec();
+                    let _ = tx.try_send(LogicCommand::App {
+                        document_id,
+                        command: AppCommand::Trame(TrameCommand::ImportCsv {
+                            data,
+                            delimiter: None,
+                            has_header: false,
+                            target_sheet_id: None,
+                            start_row: 0,
+                            start_col: 0,
+                        }),
+                    });
+                }
+                Err(_) => toasts.warning("Could not read the CSV file"),
+            }
+        });
+    });
+    input.set_onchange(Some(onchange.as_ref().unchecked_ref()));
+    onchange.forget();
+    input.click();
+}
+
 async fn paste_from_clipboard(
     read_promise: js_sys::Promise,
     clipboard: web_sys::Clipboard,

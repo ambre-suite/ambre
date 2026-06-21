@@ -560,17 +560,14 @@ Imports are split into batches of 500 cells with `yield` between each batch to a
 
 ## 10. ROADMAP
 
-> CSV import/export (Phase 1) is tracked as a Story of Epic **E3** in `specs/ambre-roadmap.md`.
-> Basic .xlsx import is deferred to Epic **E5**.
+**Phase 1 — MVP (Epic E3)**
+- [x] CSV import: `TrameCommand::ImportCsv` (auto-detect delimiter)
+- [x] CSV export: `TrameCommand::ExportCsv`
+- [x] `TrameEvent::ImportComplete` / `ExportComplete` returned in `dispatch()`'s `Vec<TrameEvent>` (CSV path)
 
-**Phase 1 — MVP**
-- [ ] CSV import: `TrameCommand::ImportCsv` (auto-detect delimiter)
-- [ ] CSV export: `TrameCommand::ExportCsv`
+**Phase 2 — V1 (Epic E5, `Trame Phase 2+`)**
 - [ ] Basic .xlsx import: `TrameCommand::ImportXlsx` (values, simple formulas, basic styles, merges)
 - [ ] Excel formula conversion via `formula_parser::parse(formula, sheet_index, sheet_name_to_id)` — cross-sheet resolution
-- [ ] `TrameEvent::ImportComplete` / `ExportComplete` returned in `dispatch()`'s `Vec<TrameEvent>`
-
-**Phase 2 — V1**
 - [ ] Full .xlsx export: `TrameCommand::ExportXlsx` (styles, merges, column widths, row heights)
 - [ ] .xlsx import: data validations, named ranges, comments
 - [ ] .xlsx import: cross-sheet references (`Sheet2!A1` via `sheet_name_to_id`)

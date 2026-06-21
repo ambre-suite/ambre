@@ -67,6 +67,14 @@ pub const FIND: CommandId = CommandId("trame.find.open");
 /// Open the find/replace panel in replace mode (Ctrl+H).
 pub const REPLACE: CommandId = CommandId("trame.find.replace");
 
+// Interop (`-interop.md` §4). UI-only intents the launcher intercepts: IMPORT_CSV
+// opens a file picker and reads the bytes, EXPORT_CSV asks the Logic thread to
+// serialize the active sheet (parameterless). Neither maps to an `AppCommand`.
+/// Import a CSV file into a new sheet.
+pub const IMPORT_CSV: CommandId = CommandId("trame.interop.import_csv");
+/// Export the active sheet to a CSV file.
+pub const EXPORT_CSV: CommandId = CommandId("trame.interop.export_csv");
+
 /// Copy the selection to the clipboard.
 pub const COPY: CommandId = CommandId("trame.clipboard.copy");
 /// Cut the selection to the clipboard.
@@ -100,6 +108,8 @@ pub const COMMANDS: &[CommandId] = &[
     COPY,
     CUT,
     PASTE,
+    IMPORT_CSV,
+    EXPORT_CSV,
 ];
 
 /// Bind Trame's command chords into the launcher's keymap.
@@ -148,6 +158,9 @@ pub fn command_to_app(id: CommandId) -> Option<AppCommand> {
         TrameCommand::SortSheetDesc
     } else if id == CLEAR_FILTER {
         TrameCommand::ClearActiveFilter
+    } else if id == EXPORT_CSV {
+        // Parameterless: the Logic thread serializes the active sheet itself.
+        TrameCommand::ExportActiveSheetCsv
     } else {
         // BOLD / ITALIC (style toggles), FILTER_COLUMN, FIND / REPLACE and the
         // clipboard commands are UI-only intents the launcher intercepts:
@@ -194,6 +207,8 @@ pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
             | TrameEvent::CondFormatsUpdated { .. }
             | TrameEvent::ValidationError { .. }
             | TrameEvent::ValidationWarning { .. }
+            | TrameEvent::ImportComplete { .. }
+            | TrameEvent::ExportComplete { .. }
             | TrameEvent::ProtectionDenied { .. }
             | TrameEvent::ProtectionViolationWarning { .. } => {}
         }
@@ -244,6 +259,14 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
         // toast as the surface for ReplaceDone.
         TrameEvent::ReplaceDone { replaced } => {
             toasts.info(format!("{replaced} cells replaced"));
+        }
+        // Interop (`-interop.md` §4): confirm an import/export finished (the
+        // download itself is triggered canvas-side on ExportComplete).
+        TrameEvent::ImportComplete { rows, cols, .. } => {
+            toasts.info(format!("Imported {rows} rows x {cols} columns"));
+        }
+        TrameEvent::ExportComplete { filename, .. } => {
+            toasts.info(format!("Exported {filename}"));
         }
         // A paste blocked by a protected range (Post-MVP); no CRDT mutation.
         TrameEvent::PasteRejected { reason } => {

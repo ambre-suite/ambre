@@ -265,6 +265,22 @@ impl TrameState {
                 in_formulas,
                 all_sheets,
             ),
+            TrameCommand::ImportCsv {
+                data,
+                delimiter,
+                has_header,
+                target_sheet_id,
+                start_row,
+                start_col,
+            } => self.import_csv(data, delimiter, has_header, target_sheet_id, start_row, start_col),
+            TrameCommand::ExportCsv { sheet_id, delimiter, range } => {
+                self.export_csv(&sheet_id, delimiter, range)
+            }
+            TrameCommand::ExportActiveSheetCsv => {
+                let sheet = self.active_sheet.clone();
+                self.export_csv(&sheet, None, None)
+            }
+
             TrameCommand::ReplaceOne {
                 query,
                 replacement,

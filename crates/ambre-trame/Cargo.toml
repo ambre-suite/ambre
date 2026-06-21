@@ -12,6 +12,8 @@ ambre-bus = { path = "../ambre-bus" }
 loro      = { workspace = true }
 petgraph  = { workspace = true }
 nom       = { workspace = true }
+# CSV import/export (Trame interop MVP, `ambre-spec-trame-interop.md` §4).
+csv       = { workspace = true }
 
 # UI side (UI Thread): DrawSurface renderer, text layout, frame channels.
 ambre-draw = { path = "../ambre-draw" }

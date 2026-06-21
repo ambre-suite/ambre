@@ -132,6 +132,48 @@ fn formula_input_focused() -> bool {
         .unwrap_or(false)
 }
 
+/// Trigger a browser download of `data` named `filename` (interop export,
+/// `ambre-spec-trame-interop.md` §3/§4). Wraps the bytes in a `Blob`, mints an
+/// object URL, and clicks a synthetic `<a download>`; the URL is revoked right
+/// after so it does not leak. Best-effort: any missing DOM handle is logged and
+/// skipped (the export bytes are already computed, only the download is lost).
+#[cfg(target_arch = "wasm32")]
+fn trigger_download(filename: &str, data: &[u8]) {
+    use wasm_bindgen::JsCast;
+    let array = js_sys::Uint8Array::from(data);
+    let parts = js_sys::Array::new();
+    parts.push(&array.buffer());
+    let blob = match web_sys::Blob::new_with_u8_array_sequence(&parts) {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!("[UI] download blob failed: {e:?}");
+            return;
+        }
+    };
+    let url = match web_sys::Url::create_object_url_with_blob(&blob) {
+        Ok(u) => u,
+        Err(e) => {
+            tracing::warn!("[UI] download URL failed: {e:?}");
+            return;
+        }
+    };
+    let anchor = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.create_element("a").ok())
+        .and_then(|e| e.dyn_into::<web_sys::HtmlAnchorElement>().ok());
+    if let Some(anchor) = anchor {
+        anchor.set_href(&url);
+        anchor.set_download(filename);
+        anchor.click();
+    }
+    let _ = web_sys::Url::revoke_object_url(&url);
+}
+
+/// Host-build stub: there is no DOM to download into outside the browser. Kept
+/// so the exhaustive `dispatch_trame` compiles in headless tests.
+#[cfg(not(target_arch = "wasm32"))]
+fn trigger_download(_filename: &str, _data: &[u8]) {}
+
 /// Trame's view: a virtual-scroll spreadsheet grid (an `AppView::Trame`).
 pub struct TrameView {
     /// The document this view renders (from the active route).
@@ -712,6 +754,16 @@ impl TrameView {
                 let cmd = self.state.scroll_viewport_cmd();
                 self.send_command_lossy(cmd);
             }
+            // Interop export (sec.18, `-interop.md` §3/§4): the Logic thread
+            // serialized the file bytes; the UI Thread owns the DOM, so the
+            // download is triggered here. No canvas state changes.
+            TrameEvent::ExportComplete { filename, data } => {
+                trigger_download(&filename, &data);
+            }
+            // Interop import finished (`-interop.md` §4.A): the accompanying
+            // DataReset already re-fetches the populated region, so this is purely
+            // informational here (the chrome relay may toast it).
+            TrameEvent::ImportComplete { .. } => {}
             // Chrome-only variants: surfaced as toasts / toolbar state / undo-redo
             // enablement by the per-frame relay (`ambre-app`). No canvas state
             // changes -- the cache is refreshed by the DataReset that accompanies
