@@ -44,8 +44,25 @@ test-db:
 # (rust-toolchain.toml) supply `-Z build-std`.
 
 # wasm tier: cfg(wasm32) surfaces under headless Chrome.
+#
+# RUSTFLAGS is overridden here to drop the threading flags that
+# `.cargo/config.toml` applies to every wasm32 build (+atomics, --shared-memory,
+# --import-memory, ...). A shared-memory module needs a SharedArrayBuffer, which
+# the browser only exposes on a cross-origin-isolated page (COOP/COEP). The
+# `wasm-bindgen-test-runner` server emits no such headers and multi-threaded wasm
+# is unsupported by the harness (wasm-bindgen issue #2892), so a threaded test
+# module never instantiates: "Loading Wasm module..." hangs, the runner times out
+# and kills chromedriver (SIGKILL).
+#
+# Setting RUSTFLAGS makes cargo ignore the `[target.wasm32-unknown-unknown]`
+# rustflags entirely, so the test module is built single-threaded and loads as a
+# plain WebAssembly.Memory. These are pure main-thread tests (leptos signals +
+# DOM); their behaviour is identical regardless of the memory model, and the
+# production build keeps its threaded codegen untouched. `-Z build-std` still
+# comes from `.cargo/config.toml`, rebuilding std consistently without atomics.
+# `-Awarnings` preserves the wasm warning policy.
 test-wasm:
-    wasm-pack test --headless --chrome crates/ambre-trame
+    RUSTFLAGS="-Awarnings" wasm-pack test --headless --chrome crates/ambre-trame
 
 # Host only: the wasm tier is `-Z build-std`-heavy and Chrome-bound, while
 # `cargo-llvm-cov` and proptest run far better on host.
