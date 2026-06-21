@@ -6,9 +6,10 @@
 # the workflow calls these recipes rather than duplicating the command lines.
 #
 # Tiers (architecture spec section 4 "Test tiering"):
-#   host  -- pure Rust on x86_64, zero external dependency (default tier).
-#   db    -- server integration behind the `db` Cargo feature (postgres/redis/minio).
-#   wasm  -- `cfg(target_arch = "wasm32")` surfaces via headless Chrome.
+#   native -- pure Rust on the native x86_64 target, zero external dependency
+#             (default tier; the spec calls this the "host" tier).
+#   db     -- server integration behind the `db` Cargo feature (postgres/redis/minio).
+#   wasm   -- `cfg(target_arch = "wasm32")` surfaces via headless Chrome.
 
 # List recipes.
 default:
@@ -18,7 +19,7 @@ default:
 # `[target.wasm32-unknown-unknown]` in `.cargo/config.toml`, so host clippy
 # keeps every warning and `-D warnings` makes them fatal.
 
-# Lint (host): fmt + clippy with warnings denied.
+# Lint (native): fmt + clippy with warnings denied.
 lint:
     cargo fmt --all --check
     cargo clippy --workspace --all-targets -- -D warnings
@@ -26,8 +27,8 @@ lint:
 # The server is excluded from `default-members` (native target), so it is
 # named explicitly with a second invocation.
 
-# host tier: workspace logic + the server on the host target.
-test-host:
+# native tier: workspace logic + the server on the native x86_64 target.
+test-native:
     cargo test --workspace
     cargo test -p ambre-server
 
@@ -49,7 +50,7 @@ test-wasm:
 # Host only: the wasm tier is `-Z build-std`-heavy and Chrome-bound, while
 # `cargo-llvm-cov` and proptest run far better on host.
 
-# Coverage (host tier): lcov baseline, non-blocking in CI.
+# Coverage (native tier): lcov baseline, non-blocking in CI.
 cov:
     cargo llvm-cov --workspace --lcov --output-path lcov.info
 
