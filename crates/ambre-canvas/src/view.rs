@@ -29,6 +29,26 @@ pub struct FrameStats {
     pub gpu_ms:   f32,
 }
 
+/// A full per-frame performance snapshot, published from the canvas view to the
+/// DOM status bar (the perf HUD migrated out of the wgpu overlay -- there is no
+/// point shaping debug glyphs on the GPU every frame). Carries the driver
+/// timings ([`FrameStats`]) plus the view's own sub-phase breakdown and glyph
+/// cache misses, so the DOM panel shows the same detail the old overlay did.
+#[derive(Default, Clone, Copy)]
+pub struct PerfSnapshot {
+    pub fps:          f32,
+    pub frame_ms:     f32,
+    pub drain_ms:     f32,
+    pub draw_ms:      f32,
+    pub gpu_ms:       f32,
+    pub bg_ms:        f32,
+    pub cells_ms:     f32,
+    pub hdrs_ms:      f32,
+    pub cells_drawn:  u32,
+    pub input_lat_ms: f32,
+    pub glyph_misses: u32,
+}
+
 /// What the view wants repainted this frame.
 ///
 /// `content` is the persistent layer (offscreen, supports scroll-strip reuse);

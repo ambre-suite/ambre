@@ -285,6 +285,21 @@ pub enum TrameEvent {
         values: Vec<String>,
     },
 
+    /// Selection aggregates for the status bar (`-ui.md` sec.13bis), replying to
+    /// [`RequestSelectionStats`](crate::logic::TrameCommand::RequestSelectionStats).
+    /// `count` is the number of non-empty cells in the selection; `count_num` is
+    /// the number of numeric cells, and drives whether the UI shows `sum`/`avg`/
+    /// `min`/`max` (they are meaningless, and left at `0.0`, when `count_num == 0`).
+    /// `avg` is `sum / count_num` (0.0 for no numeric cell).
+    SelectionStats {
+        sum: f64,
+        avg: f64,
+        count: u64,
+        count_num: u64,
+        min: f64,
+        max: f64,
+    },
+
     /// A local [`ClearFilter`](crate::logic::TrameCommand::ClearFilter) removed the
     /// active shared filter (`ambre-spec-trame-features.md` §1.A). The accompanying
     /// [`DataReset`](Self::DataReset) prompts a viewport re-fetch with every row
