@@ -103,7 +103,7 @@ Stories:
   formatting toolbar (bold/colors/H+V alignment/number format incl. currency/percent/scientific/fraction/date/time/custom/borders/wrap), copy/cut/paste, autofill,
   find/replace, cell wrap + vertical alignment + overflow, selection status bar,
   full `on_logic_message` `TrameEvent` dispatch. *(virtual scroll + inline editor already done.)*
-- `trame-interop §10 Phase 1` — CSV import/export. *(basic .xlsx import deferred to `E5`.)*
+- `trame-interop §10 Phase 1` — CSV import/export.
 
 ## E4 — Application expansion  `[ ]` (deferred)
 

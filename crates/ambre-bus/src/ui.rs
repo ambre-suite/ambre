@@ -394,6 +394,27 @@ pub enum TrameEvent {
         description: String,
     },
 
+    /// A [`ImportCsv`](crate::logic::TrameCommand::ImportCsv) finished writing
+    /// the parsed rows into the workbook (`ambre-spec-trame-interop.md` §4.A).
+    /// Rides alongside a [`DataReset`](Self::DataReset) so the UI re-fetches the
+    /// populated region. `rows` / `cols` are the dimensions actually written;
+    /// `sheet_id` is the (possibly freshly created) target sheet.
+    ImportComplete {
+        sheet_id: String,
+        rows: u32,
+        cols: u32,
+    },
+
+    /// An export ([`ExportCsv`](crate::logic::TrameCommand::ExportCsv)) produced
+    /// a file for download (`ambre-spec-trame-interop.md` §3/§4). The Logic thread
+    /// holds the document, so it serializes the bytes; the UI Thread receives them
+    /// and triggers the browser download. `filename` already carries the right
+    /// extension.
+    ExportComplete {
+        filename: String,
+        data: Vec<u8>,
+    },
+
     /// A remote delta edited a protected range its author was not allowed to
     /// (`§6`). The delta IS applied (CRDT convergence is mandatory) but the UI
     /// is warned. `from_user_id` is the offending author's stable

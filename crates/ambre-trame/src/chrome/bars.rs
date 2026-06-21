@@ -11,7 +11,9 @@ use leptos::prelude::*;
 use leptos_icons::Icon;
 
 use super::color::{theme_bg_default, theme_fg_default};
-use super::commands::{BOLD, COPY, CUT, FIND, ITALIC, MERGE, PASTE, REDO, UNDO, UNMERGE};
+use super::commands::{
+    BOLD, COPY, CUT, EXPORT_CSV, FIND, IMPORT_CSV, ITALIC, MERGE, PASTE, REDO, UNDO, UNMERGE,
+};
 use super::popovers::{
     BordersPopover, ColorPopover, FontPopover, HAlignPopover, NumberFormatPopover, VAlignPopover,
 };
@@ -80,6 +82,25 @@ pub fn FormatBar(
             on:click=move |_| on_command.run(FIND)
         >
             <Icon icon=icondata::AiSearchOutlined />
+        </button>
+        <span class="sep"></span>
+
+        // Interop (sec.18, `-interop.md` §4): import a CSV into a new sheet, or
+        // export the active sheet to CSV. UI-only intents the launcher services
+        // (IMPORT_CSV opens a file picker, EXPORT_CSV triggers the download).
+        <button
+            aria-label="Import CSV"
+            on:mousedown=move |ev| ev.prevent_default()
+            on:click=move |_| on_command.run(IMPORT_CSV)
+        >
+            <Icon icon=icondata::BiImportRegular />
+        </button>
+        <button
+            aria-label="Export CSV"
+            on:mousedown=move |ev| ev.prevent_default()
+            on:click=move |_| on_command.run(EXPORT_CSV)
+        >
+            <Icon icon=icondata::BiExportRegular />
         </button>
         <span class="sep"></span>
 

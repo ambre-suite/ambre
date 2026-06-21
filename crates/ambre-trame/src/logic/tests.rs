@@ -1931,3 +1931,185 @@
         state.handle_command(TrameCommand::ActivateSheet { sheet_id: "s0".to_owned() });
         assert_eq!(read_cell(&mut state, 0, 0), "foo");
     }
+
+    // -------------------------------------------------------------------------
+    // CSV interop (Trame interop MVP, `ambre-spec-trame-interop.md` §4)
+    // -------------------------------------------------------------------------
+
+    /// Pull the `ImportComplete` event out of an outcome.
+    fn import_result(out: &TrameOutcome) -> (String, u32, u32) {
+        out.display
+            .iter()
+            .find_map(|e| match e {
+                TrameEvent::ImportComplete { sheet_id, rows, cols } => {
+                    Some((sheet_id.clone(), *rows, *cols))
+                }
+                _ => None,
+            })
+            .expect("expected ImportComplete")
+    }
+
+    /// Pull the exported file bytes out of an outcome.
+    fn export_bytes(out: &TrameOutcome) -> Vec<u8> {
+        out.display
+            .iter()
+            .find_map(|e| match e {
+                TrameEvent::ExportComplete { data, .. } => Some(data.clone()),
+                _ => None,
+            })
+            .expect("expected ExportComplete")
+    }
+
+    /// A CSV import lands its values into a freshly created sheet, and the
+    /// reported dimensions match the parsed grid.
+    #[test]
+    fn csv_import_creates_sheet_and_cells() {
+        let mut state = TrameState::new();
+        let csv = b"a,b,c\n1,2,3\n".to_vec();
+        let out = state.handle_command(TrameCommand::ImportCsv {
+            data: csv,
+            delimiter: None,
+            has_header: false,
+            target_sheet_id: None,
+            start_row: 0,
+            start_col: 0,
+        });
+        let (sheet_id, rows, cols) = import_result(&out);
+        assert_eq!((rows, cols), (2, 3));
+        // The import activates the new sheet, so read_cell reads it.
+        assert_eq!(state.active_sheet, sheet_id);
+        assert_eq!(read_cell(&mut state, 0, 0), "a");
+        assert_eq!(read_cell(&mut state, 1, 2), "3");
+    }
+
+    /// `has_header` skips the first record.
+    #[test]
+    fn csv_import_skips_header() {
+        let mut state = TrameState::new();
+        let out = state.handle_command(TrameCommand::ImportCsv {
+            data: b"name,age\nalice,30\n".to_vec(),
+            delimiter: None,
+            has_header: true,
+            target_sheet_id: None,
+            start_row: 0,
+            start_col: 0,
+        });
+        let (_, rows, _) = import_result(&out);
+        assert_eq!(rows, 1);
+        assert_eq!(read_cell(&mut state, 0, 0), "alice");
+    }
+
+    /// A semicolon-delimited file is auto-detected.
+    #[test]
+    fn csv_delimiter_autodetect() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::ImportCsv {
+            data: b"x;y;z\n1;2;3\n".to_vec(),
+            delimiter: None,
+            has_header: false,
+            target_sheet_id: None,
+            start_row: 0,
+            start_col: 0,
+        });
+        assert_eq!(read_cell(&mut state, 0, 1), "y");
+        assert_eq!(read_cell(&mut state, 1, 2), "3");
+    }
+
+    /// Import then export reproduces the same grid (values round-trip).
+    #[test]
+    fn csv_import_export_roundtrip() {
+        let mut state = TrameState::new();
+        let out = state.handle_command(TrameCommand::ImportCsv {
+            data: b"a,b\nc,d\n".to_vec(),
+            delimiter: None,
+            has_header: false,
+            target_sheet_id: None,
+            start_row: 0,
+            start_col: 0,
+        });
+        let (sheet_id, _, _) = import_result(&out);
+        let out = state.handle_command(TrameCommand::ExportCsv {
+            sheet_id,
+            delimiter: None,
+            range: None,
+        });
+        let bytes = export_bytes(&out);
+        assert_eq!(String::from_utf8(bytes).unwrap(), "a,b\nc,d\n");
+    }
+
+    /// Export is bounded to the actually-used range: columns materialized by a
+    /// scroll or a since-cleared edit (here a far cell written then deleted) must
+    /// not pad the output with trailing empty columns.
+    #[test]
+    fn csv_export_trims_empty_trailing_columns() {
+        let mut state = TrameState::new();
+        // Materialize out to column R (17) by writing then clearing a far cell.
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 17, text: "x".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 17, text: String::new() });
+        // Real content only in columns A..C.
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "1".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 1, text: "2".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 2, text: "3".to_owned() });
+
+        let out = state.handle_command(TrameCommand::ExportActiveSheetCsv);
+        let bytes = export_bytes(&out);
+        assert_eq!(String::from_utf8(bytes).unwrap(), "1,2,3\n");
+    }
+
+    /// Reproduce the real flow: import a CSV whose rows carry trailing empty
+    /// columns, then export the active sheet -- the output must NOT carry the
+    /// padding columns back.
+    #[test]
+    fn csv_import_then_export_drops_trailing_empties() {
+        let mut state = TrameState::new();
+        let csv = b"12,13,14,15,16,17,,,,,,,,,,,,\n12,13,14,15,16,17,,,,,,,,,,,,\n".to_vec();
+        let out = state.handle_command(TrameCommand::ImportCsv {
+            data: csv,
+            delimiter: None,
+            has_header: false,
+            target_sheet_id: None,
+            start_row: 0,
+            start_col: 0,
+        });
+        let _ = import_result(&out);
+
+        let out = state.handle_command(TrameCommand::ExportActiveSheetCsv);
+        let text = String::from_utf8(export_bytes(&out)).unwrap();
+        assert_eq!(text, "12,13,14,15,16,17\n12,13,14,15,16,17\n");
+    }
+
+    /// The user's real scenario: type 6 columns x 10 rows (A1:F10), then export.
+    /// The output must be exactly 6 columns wide, no trailing empties.
+    #[test]
+    fn csv_export_typed_6x10_has_no_trailing_columns() {
+        let mut state = TrameState::new();
+        for row in 0..10u32 {
+            for col in 0..6u32 {
+                state.handle_command(TrameCommand::SetCellText {
+                    row,
+                    col,
+                    text: (14 + col).to_string(),
+                });
+            }
+        }
+        let out = state.handle_command(TrameCommand::ExportActiveSheetCsv);
+        let text = String::from_utf8(export_bytes(&out)).unwrap();
+        for line in text.lines() {
+            assert_eq!(line, "14,15,16,17,18,19", "line had trailing empties: {line:?}");
+        }
+    }
+
+    /// Export emits formula results, not the formula source.
+    #[test]
+    fn csv_export_evaluates_formulas() {
+        let mut state = TrameState::new();
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 0, text: "2".to_owned() });
+        state.handle_command(TrameCommand::SetCellText { row: 0, col: 1, text: "=A1*3".to_owned() });
+        let out = state.handle_command(TrameCommand::ExportCsv {
+            sheet_id: "s0".to_owned(),
+            delimiter: None,
+            range: None,
+        });
+        let bytes = export_bytes(&out);
+        assert_eq!(String::from_utf8(bytes).unwrap(), "2,6\n");
+    }
