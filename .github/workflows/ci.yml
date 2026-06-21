@@ -46,6 +46,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: lint
+          # Only the default branch writes caches; feature branches restore
+          # from main without consuming the shared 10 GB budget (avoids eviction).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: just lint
 
   # ---------------------------------------------------------------------------
@@ -67,6 +70,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: test-native
+          # Only the default branch writes caches; feature branches restore
+          # from main without consuming the shared 10 GB budget (avoids eviction).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: just test-native
 
   # ---------------------------------------------------------------------------
@@ -123,6 +129,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: test-db
+          # Only the default branch writes caches; feature branches restore
+          # from main without consuming the shared 10 GB budget (avoids eviction).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: just test-db
 
   # ---------------------------------------------------------------------------
@@ -143,6 +152,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: test-wasm
+          # Only the default branch writes caches; feature branches restore
+          # from main without consuming the shared 10 GB budget (avoids eviction).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install wasm-pack
         uses: taiki-e/install-action@v2
         with:
@@ -170,9 +182,11 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: coverage
+      # No rust-cache here: coverage rebuilds everything with
+      # `-C instrument-coverage` (artifacts unusable by other jobs) and its
+      # cache alone is large enough to push the repo over the 10 GB budget,
+      # evicting the caches that actually gate CI. Non-blocking job -> eat the
+      # cold build rather than thrash the shared cache.
       - run: just cov
       - name: Upload lcov artifact
         uses: actions/upload-artifact@v4
