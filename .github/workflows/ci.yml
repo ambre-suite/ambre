@@ -8,13 +8,16 @@
 name: CI
 
 on:
+  # Run on every branch push (so CI fires on feature branches before any PR
+  # exists) and on pull requests (covers forks, which can't push here).
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
 
-# Cancel superseded runs on the same ref to save runner minutes.
+# Cancel superseded runs on the same ref to save runner minutes. Keyed by
+# event name + ref so a branch push and its PR don't cancel each other.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -29,8 +32,15 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: extractions/setup-just@v2
+      - uses: actions/checkout@v5
+      # fontconfig dev headers: the font stack (fontique/parley via
+      # ambre-draw/ambre-canvas) links the system fontconfig at build time.
+      - name: System deps
+        run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
       - name: Toolchain (rustfmt + clippy)
         run: rustup component add rustfmt clippy
       - uses: Swatinem/rust-cache@v2
@@ -39,17 +49,25 @@ jobs:
       - run: just lint
 
   # ---------------------------------------------------------------------------
-  # test-host -- pure logic on x86_64 + the server on the host target.
+  # test-native -- pure Rust on the native x86_64 target (the spec's "host"
+  # tier): workspace logic + the server, zero external dependency.
   # ---------------------------------------------------------------------------
-  test-host:
+  test-native:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: extractions/setup-just@v2
+      - uses: actions/checkout@v5
+      # fontconfig dev headers: the font stack (fontique/parley via
+      # ambre-draw/ambre-canvas) links the system fontconfig at build time.
+      - name: System deps
+        run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
       - uses: Swatinem/rust-cache@v2
         with:
-          key: test-host
-      - run: just test-host
+          key: test-native
+      - run: just test-native
 
   # ===========================================================================
   # DISABLED until later Epic ET stories land. The `justfile` recipes and the
@@ -118,8 +136,13 @@ jobs:
   #     AWS_SECRET_ACCESS_KEY: minioadmin
   #     AWS_REGION: us-east-1
   #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: extractions/setup-just@v2
+  #     - uses: actions/checkout@v5
+  #     - name: System deps
+  #       run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
+  #     - name: Install just
+  #       uses: taiki-e/install-action@v2
+  #       with:
+  #         tool: just
   #     - uses: Swatinem/rust-cache@v2
   #       with:
   #         key: test-db
@@ -133,8 +156,11 @@ jobs:
   # test-wasm:
   #   runs-on: ubuntu-latest
   #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: extractions/setup-just@v2
+  #     - uses: actions/checkout@v5
+  #     - name: Install just
+  #       uses: taiki-e/install-action@v2
+  #       with:
+  #         tool: just
   #     - uses: Swatinem/rust-cache@v2
   #       with:
   #         key: test-wasm
@@ -152,8 +178,15 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
-      - uses: extractions/setup-just@v2
+      - uses: actions/checkout@v5
+      # fontconfig dev headers: the font stack (fontique/parley via
+      # ambre-draw/ambre-canvas) links the system fontconfig at build time.
+      - name: System deps
+        run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@v2
         with:
