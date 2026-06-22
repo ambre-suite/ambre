@@ -27,8 +27,9 @@ use ambre_trame::chrome::{
     self, BOLD, FindMode, FindQuery, FindReplace, FindReplaceState, REDO, ReplaceRequest, SelStats,
     StatusBar, StyleState, UNDO,
 };
-use leptos::mount::mount_to_body;
+use leptos::mount::mount_to;
 use leptos::prelude::*;
+use wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;
 
 // Every test touches the DOM (or at least the leptos reactive graph backed by
@@ -173,11 +174,35 @@ fn document() -> web_sys::Document {
     web_sys::window().unwrap().document().unwrap()
 }
 
+/// Mount `view` into a fresh `<div>` appended to the body and return it.
+///
+/// DOM tests must clean up after themselves, but they must NOT wipe the whole
+/// body: the `wasm-bindgen-test` browser harness keeps its own
+/// `<pre id="output">` / `<pre id="console_output">` elements there, and routes
+/// every `console.log` (including the final "test result: ..." line the runner
+/// polls for) through them. Clearing the body (`set_inner_html("")`) deletes
+/// those elements, so the next log throws `appendChild` on null, the summary is
+/// never written, and the runner times out (SIGKILL). Scoping each test to its
+/// own container -- removed via `container.remove()` -- leaves the harness
+/// elements untouched. `mount_to(..).forget()` keeps the view mounted for the
+/// assertions (like `mount_to_body`); the container removal tears it down.
+fn mount_in_container<F, N>(f: F) -> web_sys::Element
+where
+    F: FnOnce() -> N + 'static,
+    N: IntoView + 'static,
+{
+    let container = document().create_element("div").unwrap();
+    document().body().unwrap().append_child(&container).unwrap();
+    let target: web_sys::HtmlElement = container.clone().dyn_into().unwrap();
+    mount_to(target, f).forget();
+    container
+}
+
 /// DOM test: mounting the `StatusBar` renders the app label and the selection
 /// aggregates, and only shows the numeric aggregates when a number is selected.
 #[wasm_bindgen_test]
 fn status_bar_renders_label_and_aggregates() {
-    mount_to_body(|| {
+    let container = mount_in_container(|| {
         let stats = RwSignal::new(Some(SelStats {
             sum: 6.0,
             avg: 2.0,
@@ -190,13 +215,12 @@ fn status_bar_renders_label_and_aggregates() {
         view! { <StatusBar stats=stats perf=perf /> }
     });
 
-    let body = document().body().unwrap();
-    let text = body.text_content().unwrap_or_default();
+    let text = container.text_content().unwrap_or_default();
     assert!(text.contains("Trame"), "status label missing: {text}");
     assert!(text.contains("Sum: 6"), "sum aggregate missing: {text}");
     assert!(text.contains("Count: 3"), "count aggregate missing: {text}");
 
-    body.set_inner_html("");
+    container.remove();
 }
 
 /// DOM test: the `FindReplace` panel mounts hidden when closed and, once opened
@@ -204,7 +228,7 @@ fn status_bar_renders_label_and_aggregates() {
 #[wasm_bindgen_test]
 fn find_replace_panel_opens_in_find_mode() {
     let doc = document();
-    mount_to_body(|| {
+    let container = mount_in_container(|| {
         let state = RwSignal::new(None::<FindReplaceState>);
         let result = RwSignal::new(None::<(usize, usize)>);
         let noop_find = Callback::new(|_: FindQuery| {});
@@ -236,5 +260,5 @@ fn find_replace_panel_opens_in_find_mode() {
         "replace row must be hidden in find mode"
     );
 
-    doc.body().unwrap().set_inner_html("");
+    container.remove();
 }
