@@ -3487,8 +3487,16 @@ fn edit_after_reopen_broadcasts_causally_complete_delta() {
     reopened2.apply_remote(&u_a1);
     reopened2.apply_remote(&u_a2);
 
-    assert_eq!(read_cell(&mut reopened2, 0, 0), "1", "A1 survives reopen #2");
-    assert_eq!(read_cell(&mut reopened2, 1, 0), "1", "A2 survives reopen #2");
+    assert_eq!(
+        read_cell(&mut reopened2, 0, 0),
+        "1",
+        "A1 survives reopen #2"
+    );
+    assert_eq!(
+        read_cell(&mut reopened2, 1, 0),
+        "1",
+        "A2 survives reopen #2"
+    );
 }
 
 /// A server history replay applied as a batch repaints once: `apply_remote_batch`
