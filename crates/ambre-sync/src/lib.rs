@@ -1798,8 +1798,27 @@ impl SyncState {
                 document_id,
                 updates,
             } => {
+                // Decrypt the whole replay, then deliver it as one batch so the
+                // UI repaints once (not once per delta -- a cell that only
+                // appears in the last delta would otherwise flicker in). Updates
+                // whose parent snapshot is unknown are held in quarantine by
+                // `ingest_update` and released later; decrypt failures surface as
+                // their own `SyncWarning` (preserving the per-update path).
+                let mut payloads: Vec<Vec<u8>> = Vec::new();
                 for seq_update in updates {
-                    self.receive_update(seq_update.seq, seq_update.update);
+                    match self.ingest_update(seq_update.seq, seq_update.update) {
+                        Some(Ok(payload)) => payloads.push(payload),
+                        Some(Err(e)) => self.deliver_remote(document_id, Some(Err(e)), |_| {
+                            unreachable!("Err arm never builds an event")
+                        }),
+                        None => {}
+                    }
+                }
+                if !payloads.is_empty() {
+                    self.send_to_logic(LogicEvent::RemoteUpdateBatch {
+                        document_id,
+                        payloads,
+                    });
                 }
                 // The replay has advanced `local_clock` past everything the
                 // server already holds for us, so any update buffered before the
@@ -1975,6 +1994,28 @@ impl SyncState {
     #[allow(dead_code)]
     fn receive_update(&mut self, seq: Seq, update: Update) {
         let document_id = update.public_data.document_id;
+        if let Some(opened) = self.ingest_update(seq, update) {
+            self.deliver_remote(document_id, Some(opened), |payload| {
+                LogicEvent::RemoteUpdate {
+                    document_id,
+                    payload,
+                }
+            });
+        }
+    }
+
+    /// Bookkeeping + decrypt for one server-sequenced [`Update`], WITHOUT
+    /// delivering it to Logic. Returns the decrypted result when the update is
+    /// ready (its parent snapshot is known), or `None` when it was held in
+    /// quarantine (or the doc is not open). Split out of [`receive_update`] so a
+    /// batched replay ([`WsServerMsg::MissingUpdates`]) can collect many decrypted
+    /// payloads and deliver them as one [`LogicEvent::RemoteUpdateBatch`].
+    fn ingest_update(
+        &mut self,
+        seq: Seq,
+        update: Update,
+    ) -> Option<Result<Vec<u8>, pipeline::PipelineError>> {
+        let document_id = update.public_data.document_id;
         // The per-author clock counter is not persisted across a reload; after F5
         // it restarts at 0 and would re-emit a clock the server already consumed
         // (CLOCK_MISMATCH). The server echoes our own updates back to us, so we
@@ -1986,7 +2027,7 @@ impl SyncState {
         });
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             tracing::warn!("Sync: Update for unopened doc {document_id:?}, dropping");
-            return;
+            return None;
         };
         doc_state.last_seq = seq;
         if authored_by_us {
@@ -1997,18 +2038,12 @@ impl SyncState {
         if doc_state.known_snapshots.contains(&snapshot_id) {
             let opened = doc_state.open_update_fallback(&update);
             tracing::info!(
-                "[Sync→Logic] delivering RemoteUpdate doc={document_id} seq={} clock={} size={}",
+                "[Sync→Logic] decrypted update doc={document_id} seq={} clock={} size={}",
                 seq.0,
                 update.public_data.clock.0,
                 opened.as_ref().map(|b| b.len()).unwrap_or(0),
             );
-            self.deliver_remote(document_id, Some(opened), |payload| {
-                LogicEvent::RemoteUpdate {
-                    document_id,
-                    payload,
-                }
-            });
-            return;
+            return Some(opened);
         }
 
         doc_state
@@ -2021,6 +2056,7 @@ impl SyncState {
             seq.0,
         );
         self.enforce_quarantine_bounds(document_id);
+        None
     }
 
     /// Keep a document's quarantine within [`QUARANTINE_LIMIT`]: request the

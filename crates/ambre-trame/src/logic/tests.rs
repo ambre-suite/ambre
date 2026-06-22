@@ -3350,3 +3350,180 @@ fn csv_export_evaluates_formulas() {
     let bytes = export_bytes(&out);
     assert_eq!(String::from_utf8(bytes).unwrap(), "2,6\n");
 }
+
+/// Repro: a brand-new document where the author types a value, then autofills a
+/// numeric series down. A peer that re-opens the document hydrates from the
+/// replayed incremental `SendUpdate` deltas (NOT a full snapshot -- that is what
+/// "going back to the home page and reopening" does on the wire). The reopened
+/// peer must see the full filled series, not just the seed cell.
+#[test]
+fn autofill_series_survives_incremental_delta_replay() {
+    use ambre_bus::{FillMode, GridRange};
+
+    let mut author = TrameState::new();
+
+    // A1 = 1 (the seed).
+    let u1 = author
+        .handle_command(TrameCommand::SetCellText {
+            row: 0,
+            col: 0,
+            text: "1".to_owned(),
+        })
+        .update
+        .expect("seed write produces a delta");
+
+    // Autofill A1 down to A4: Auto mode on a single number -> 1,2,3,4.
+    let u2 = author
+        .handle_command(TrameCommand::FillRange {
+            sheet_id: "s0".to_owned(),
+            src: GridRange {
+                row: 0,
+                col: 0,
+                row_end: 0,
+                col_end: 0,
+            },
+            dest: GridRange {
+                row: 0,
+                col: 0,
+                row_end: 3,
+                col_end: 0,
+            },
+            mode: FillMode::Series,
+        })
+        .update
+        .expect("fill produces a delta");
+
+    // Author sees the full series locally.
+    assert_eq!(read_cell(&mut author, 0, 0), "1");
+    assert_eq!(read_cell(&mut author, 1, 0), "2");
+    assert_eq!(read_cell(&mut author, 2, 0), "3");
+    assert_eq!(read_cell(&mut author, 3, 0), "4");
+
+    // Reopen: a fresh peer replays the broadcast deltas in order.
+    let mut reopened = TrameState::new();
+    reopened.apply_remote(&u1);
+    reopened.apply_remote(&u2);
+
+    assert_eq!(read_cell(&mut reopened, 0, 0), "1", "seed survives reopen");
+    assert_eq!(read_cell(&mut reopened, 1, 0), "2", "A2 survives reopen");
+    assert_eq!(read_cell(&mut reopened, 2, 0), "3", "A3 survives reopen");
+    assert_eq!(read_cell(&mut reopened, 3, 0), "4", "A4 survives reopen");
+}
+
+/// Generalized guard against the autofill-class bug: any batched command that
+/// formats cells must broadcast a self-contained incremental delta. The
+/// convergence proptest exchanges full snapshots, so it cannot catch an
+/// incremental delta that drops ops (the failure mode where a per-cell helper
+/// flushed mid-batch and discarded the delta). Here a single author formats a
+/// 3x3 selection whose rows/columns are NOT yet materialized -- forcing
+/// `persist_format` to scaffold lines mid-loop -- then a fresh peer replays only
+/// the broadcast delta. Every formatted cell must survive the reopen.
+#[test]
+fn batched_formatting_broadcasts_complete_delta() {
+    let mut author = TrameState::new();
+
+    // Select A1:C3 on an empty sheet: nothing is materialized yet, so the bold
+    // pass must create rows 0..2 and columns 0..2 as it goes.
+    author.handle_command(TrameCommand::SetActiveCell {
+        row: 0,
+        col: 0,
+        anchor_row: 2,
+        anchor_col: 2,
+    });
+    let delta = author
+        .handle_command(TrameCommand::SetCellStyle {
+            patch: bold_patch(true),
+        })
+        .update
+        .expect("formatting a selection produces a delta");
+
+    // Reopen: a fresh peer replays only the broadcast delta.
+    let mut reopened = TrameState::new();
+    reopened.apply_remote(&delta);
+
+    for row in 0..=2 {
+        for col in 0..=2 {
+            assert!(
+                read_display(&mut reopened, row, col).bold,
+                "bold on ({row},{col}) must survive an incremental reopen"
+            );
+        }
+    }
+}
+
+/// Repro: edits made AFTER a reopen must broadcast a causally self-contained
+/// delta. A reopened session starts from a fresh `LoroDoc` (new random PeerID)
+/// whose constructor mints local genesis ops, THEN imports the document history.
+/// If the export cursor is advanced past those never-broadcast local ops, a
+/// later edit's delta depends on them -- a dangling causal dependency that a
+/// third peer (the next reopen) cannot apply, so the edit silently vanishes.
+#[test]
+fn edit_after_reopen_broadcasts_causally_complete_delta() {
+    // Original author creates the doc and writes A1.
+    let mut author = TrameState::new();
+    let u_a1 = author
+        .handle_command(TrameCommand::SetCellText {
+            row: 0,
+            col: 0,
+            text: "1".to_owned(),
+        })
+        .update
+        .expect("A1 write produces a delta");
+
+    // Reopen #1: fresh peer hydrates from the broadcast history, then writes A2.
+    let mut reopened = TrameState::new();
+    reopened.apply_remote(&u_a1);
+    let u_a2 = reopened
+        .handle_command(TrameCommand::SetCellText {
+            row: 1,
+            col: 0,
+            text: "1".to_owned(),
+        })
+        .update
+        .expect("A2 write produces a delta");
+
+    // Reopen #2: another fresh peer replays the full broadcast history.
+    let mut reopened2 = TrameState::new();
+    reopened2.apply_remote(&u_a1);
+    reopened2.apply_remote(&u_a2);
+
+    assert_eq!(read_cell(&mut reopened2, 0, 0), "1", "A1 survives reopen #2");
+    assert_eq!(read_cell(&mut reopened2, 1, 0), "1", "A2 survives reopen #2");
+}
+
+/// A server history replay applied as a batch repaints once: `apply_remote_batch`
+/// merges every delta, then emits a single `DataReset` (not one per delta), while
+/// reconstructing the full grid. This is the fix for the reopen flicker where a
+/// cell present only in the last delta flashed in across N intermediate renders.
+#[test]
+fn apply_remote_batch_emits_single_datareset_with_full_state() {
+    let mut author = TrameState::new();
+    let u1 = author
+        .handle_command(TrameCommand::SetCellText {
+            row: 0,
+            col: 0,
+            text: "1".to_owned(),
+        })
+        .update
+        .expect("A1 delta");
+    let u2 = author
+        .handle_command(TrameCommand::SetCellText {
+            row: 1,
+            col: 0,
+            text: "2".to_owned(),
+        })
+        .update
+        .expect("A2 delta");
+
+    let mut reopened = TrameState::new();
+    let events = reopened.apply_remote_batch(&[u1, u2]);
+
+    let resets = events
+        .iter()
+        .filter(|e| matches!(e, TrameEvent::DataReset))
+        .count();
+    assert_eq!(resets, 1, "the whole replay repaints exactly once");
+
+    assert_eq!(read_cell(&mut reopened, 0, 0), "1");
+    assert_eq!(read_cell(&mut reopened, 1, 0), "2");
+}

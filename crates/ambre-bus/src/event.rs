@@ -38,6 +38,16 @@ pub enum LogicEvent {
         payload: Vec<u8>,
     },
 
+    /// A batch of decrypted CRDT deltas to import as one merge+reseed. Emitted by
+    /// a server history replay (`WsServerMsg::MissingUpdates` on (re)open): the
+    /// Logic thread imports them all before repainting, so a cell that only
+    /// appears in the last delta does not flicker in across N intermediate
+    /// re-renders (one per delta). Order is preserved (server `seq` order).
+    RemoteUpdateBatch {
+        document_id: DocumentId,
+        payloads: Vec<Vec<u8>>,
+    },
+
     /// Decrypted and decompressed CRDT snapshot.
     RemoteSnapshot {
         document_id: DocumentId,
