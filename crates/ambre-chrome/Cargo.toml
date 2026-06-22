@@ -11,3 +11,11 @@ leptos         = { workspace = true }
 # DOM keyboard event -> KeyBinding translation, native <dialog> control.
 web-sys        = { workspace = true }
 wasm-bindgen   = { workspace = true }
+
+# Reactive/DOM tests for the chrome components (Epic `ET`,
+# ambre-spec-architecture.md §4 "wasm" tier): leptos CSR + real `document`, so
+# they run under the wasm target via `wasm-pack test --headless --chrome
+# crates/ambre-chrome` (`just test-wasm`). On host they are gated out and the
+# native tier runs only the pure `#[test]`s in `src/`.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"

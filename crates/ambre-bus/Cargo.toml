@@ -10,3 +10,9 @@ ambre-core = { path = "../ambre-core" }
 # their `Rest*` payloads): that link now crosses a `postMessage` boundary between
 # the Main instance and the separate Sync worker, so it is postcard-serialized.
 serde = { workspace = true }
+
+[dev-dependencies]
+# Used only by the host tests to round-trip the Logic <-> Sync envelopes through
+# the same codec (postcard) they cross the `postMessage` hop with. Not a runtime
+# dependency: the encode/decode itself lives in `ambre-app` / `ambre-sync`.
+postcard = { workspace = true }

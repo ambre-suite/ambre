@@ -61,6 +61,13 @@ mod host;
 mod landing;
 mod route;
 
+// The crate's unit tests (pure helpers in `route`/`host`) run under headless
+// Chrome via `wasm-pack test --headless --chrome` (`just test-wasm`). `--chrome`
+// sets `WASM_BINDGEN_TEST_ONLY_WEB`, so the runner skips any test binary not
+// configured for the browser -- declare it once here for the whole lib-test.
+#[cfg(test)]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
 use host::{AppView, DocSwitcher};
 
 use landing::{DocItem, LandingSignals};
@@ -133,6 +140,12 @@ struct Wiring {
     perf_snap: RwSignal<ambre_canvas::PerfSnapshot>,
 }
 
+// Gated out under `cfg(test)`: the wasm-bindgen-test harness generates its own
+// entry point, which collides with this `#[wasm_bindgen(start)] fn main`
+// ("entry symbol `main` declared multiple times"). The launcher boot path is not
+// what the unit tests exercise (they cover the pure helpers -- route/base64/fps),
+// so dropping `main` from the test build is harmless.
+#[cfg(not(test))]
 #[wasm_bindgen(start)]
 pub fn main() {
     tracing_wasm::set_as_global_default_with_config(

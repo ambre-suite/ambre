@@ -51,3 +51,11 @@ web-sys      = { workspace = true }
 js-sys = { workspace = true }
 
 console_error_panic_hook = { workspace = true }
+
+# The whole crate is `#![cfg(target_arch = "wasm32")]` (web_sys/wgpu/leptos), so
+# even its pure helpers (route parsing, base64, FPS window) can only be exercised
+# on the wasm target. Tests run via `wasm-pack test --headless --chrome
+# crates/ambre-app` (`just test-wasm`); on host the crate is empty and the native
+# tier skips it. See ambre-spec-architecture.md §4 + ambre-spec-testing.md.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"

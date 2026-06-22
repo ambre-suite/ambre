@@ -522,6 +522,8 @@ impl MasterSeed {
 
 * **CI (normative).** `.github/workflows/ci.yml` with jobs: `lint` (`cargo fmt --check` + `cargo clippy --all-targets -D warnings`, host -- note the wasm `-A warnings` rustflag is scoped `[target.wasm32-unknown-unknown]`, so host clippy keeps every warning), `test-native` (the "host" tier -- `cargo test --workspace` + `cargo test -p ambre-server` on the native x86_64 target), `test-db` (postgres/redis/minio `services:` + `--features db`), `test-wasm` (`wasm-pack test --headless --chrome`), `coverage` (non-blocking). All native-building jobs install `libfontconfig1-dev` (the font stack links system fontconfig). Local/CI parity via a root `justfile` (`test-native` / `test-db` / `test-wasm` / `cov` / `lint`) reusing the exact CI invocations.
 
+* **Realization & coverage debt:** the concrete per-crate wiring, the host-extraction seams actually used (`ambre-chrome` `key_from_dom`/`place_menu`, `ambre-app` `route`/`base64`/`tick_fps`), and the **deferred coverage debt** (notably the `ambre-app` end-to-end headless boot and the `ambre-chrome` `Dialog`/`ContextMenu` DOM-interaction tests) are tracked in `ambre-spec-testing.md`. `just test-wasm` covers `ambre-trame`, `ambre-chrome`, and `ambre-app`.
+
 * **Per-crate strategy:**
 
 | Crate | Unit tests | Integration tests | Prop-tests | Benchmarks |
@@ -529,15 +531,15 @@ impl MasterSeed {
 | `ambre-core` | 100% of types | — | — | — |
 | `ambre-crypto` | Round-trip, tampering, zeroize | — | ✓ (proptest) | ✓ (criterion) |
 | `ambre-protocol` | Serialization round-trip | — | ✓ (postcard roundtrip) | — |
-| `ambre-bus` | Envelope construction | — | — | — |
+| `ambre-bus` | **Envelope construction + content-plane helpers (host, `tests/host.rs`): `to_tsv`, `has_decimals`, `RequestId`, Logic<->Sync postcard round-trips** | — | — | — |
 | `ambre-logic` | **Typed dispatch on host (9 tests, flume mock)** | — | — | — |
 | `ambre-sync` | Crypto pipeline, quarantine, rotation | `MockBlindRelay` + `MockWsTransport` (`tests/integration.rs`) | ✓ (clock monotonic) | ✓ (encrypt/decrypt 1KB) |
 | `ambre-canvas` | TextCache, dirty/RepaintPlan; app render via `RecordingSurface` (mock `DrawSurface`, `ambre-draw` feature `testing`) | headless | — | frame budget |
 | `ambre-commands` | Registry lookup, keybindings, derived state (`CommandState`) | — | — | — |
-| `ambre-chrome` | Leptos components: reactive headless (signals/effects) + ARIA a11y, menu positioning (flip) | `wasm-bindgen-test` (DOM) | — | — |
+| `ambre-chrome` | **host: `key_from_dom`, `place_menu` (extracted).** Leptos components: reactive headless (`CommandStates`) + ARIA a11y, menu positioning (flip) | **`wasm-bindgen-test` (DOM): `CommandStates`, `ToastHost`, `AppShell` (`tests/chrome_ui.rs`); `Dialog`/`ContextMenu` interactions deferred (`ambre-spec-testing.md §5`)** | — | — |
 | `ambre-server` | Routes, ACL, Lua Redis | Docker Compose, feature `db` (`#[sqlx::test]` + redis) | ✓ (seq ordering) | ✓ (latency p99) |
 | `ambre-trame` | `TrameState` handlers, formulas, cycle detection | via `ambre-logic` + chrome `wasm-bindgen-test` | ✓ (**2-peer convergence via `MockSyncHandle`** + recalc determinism) | ✓ (recalc 10k) |
-| `ambre-app` | — | End-to-end headless | — | — |
+| `ambre-app` | **wasm: `route`/`base64`/`tick_fps` (inline, the crate is `cfg(wasm32)`-only)** | End-to-end headless **(deferred — needs a browser-automation harness, `ambre-spec-testing.md §5`)** | — | — |
 
 * **Mocks & environment:** native tests in `#[cfg(not(target_arch = "wasm32"))]`; WASM tests (GPU/DOM) via `wasm-bindgen-test`.
 
@@ -671,5 +673,6 @@ impl MasterSeed {
 - [x] Feature `db` on `ambre-server` + replace the ~20 bare `#[ignore = "needs postgres/redis"]` with the `cfg_attr(not(feature = "db"), ignore = ...)` gate (§4). The 22 server tests (`#[sqlx::test]`) now run under `--features db` (85 pass against postgres/redis/minio); the `test-db` CI job is re-enabled. Migrated the stale auth tests from cookies to cookie-less Bearer JWT (`access_token` body) per ARCH P1.
 - [x] `cargo-llvm-cov` host baseline + lcov artifact. *(`just cov` -> `cargo llvm-cov --workspace --lcov --output-path lcov.info`; non-blocking `coverage` CI job uploads the `lcov` artifact. Baseline verified locally: 253 tests pass, 103 source files in lcov.info.)*
 - [x] Root `justfile` (`test-native` / `test-db` / `test-wasm` / `cov` / `lint`) for local/CI parity.
+- [x] Close the `ambre-bus` / `ambre-chrome` / `ambre-app` coverage gaps (were 0 host tests on the shared chrome toolkit). `ambre-bus` host suite (`tests/host.rs`); `ambre-chrome` host extractions (`key_from_dom`, `place_menu`) + wasm belt (`CommandStates`/`ToastHost`/`AppShell`); `ambre-app` wasm helpers (`route`/`base64`/`tick_fps`). `just test-wasm` extended to `ambre-chrome` + `ambre-app`. Realization + remaining debt recorded in `ambre-spec-testing.md`. *(Remaining: `ambre-app` e2e headless boot, `ambre-chrome` `Dialog`/`ContextMenu` DOM interactions -- deferred, see that spec §5.)*
 - [x] Generalize `proptest` convergence beyond `ambre-crypto` (Trame first -- see `ambre-spec-trame-logic.md §14`). *(`ambre-trame/src/logic/convergence_tests.rs`: `two_peers_converge_under_interleaved_ops` generates interleaved `SetCellText` / insert-delete row-column / `SortRange` / merge / `FillRange` streams routed across 2 peers, then exchanges full history both ways and asserts identical materialized grids -- text, formula results, merge geometry -- plus a reload-determinism check. Snapshots (not incremental deltas) carry the implicit-s0 history, matching the §12 own-uid model. 256 cases per run.)*
 > **Debt (deferred, deliberate).** CI service containers are declared inline as GA `services:` (image tags kept in sync with `docker-compose.yml` by comment), not shared with the dev compose. Rationale: GA `services:` gives runner-managed health-gating/teardown and keeps the whole CI env in one readable file; at 2 trivial services (postgres + redis) the drift risk is ~2 image tags. **`minio` is not declared in CI**: no db-tier test reaches a real bucket yet (the tests build the S3 client from an empty config), so the `services:` `command:`-override constraint -- which forced the `minio/minio` vs `bitnami/minio` divergence -- does not bite. The day an S3 path test lands, bring minio back; since GA `services:` cannot override a container `command`, prefer starting it via a manual `docker run minio/minio server /data` step (the official image) rather than a deprecated `bitnami/minio` tag. **Migrate to a layered compose (`docker-compose.base.yml` defining services + versions, `+ .ci.yml` / `+ .dev.yml` overrides, driven via `docker compose up --wait -f base -f ci`) once the test service stack stops being trivial** (init scripts, multiple volumes, secrets) **or** once "reproduce CI locally byte-identical" becomes an explicit goal -- that base file is the only clean single-source for both.
