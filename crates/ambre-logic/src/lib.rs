@@ -211,6 +211,32 @@ impl LogicState {
         }
     }
 
+    /// Apply a batch of remote deltas (a server history replay on open) as one
+    /// merge+reseed, so the UI repaints once instead of once per delta. Mirrors
+    /// [`apply_remote`] for the local-persist and viewport-forward tail.
+    fn apply_remote_batch(&mut self, document_id: DocumentId, payloads: &[Vec<u8>]) {
+        let Some(doc) = self.docs.get_mut(&document_id) else {
+            tracing::warn!(
+                "Logic: apply_remote_batch for unopened doc {document_id} ({} delta(s)), dropping",
+                payloads.len()
+            );
+            return;
+        };
+        let (events, snapshot): (Vec<AppEvent>, Option<Vec<u8>>) = match doc {
+            DocState::Trame(state) => {
+                let events = state.apply_remote_batch(payloads);
+                let snapshot = (!events.is_empty()).then(|| state.export_snapshot());
+                (events.into_iter().map(AppEvent::Trame).collect(), snapshot)
+            }
+        };
+        for event in events {
+            self.send_to_ui(UiEvent::Viewport { document_id, event });
+        }
+        if let Some(snapshot) = snapshot {
+            self.send_to_persist(document_id, snapshot);
+        }
+    }
+
     /// Apply a remote ephemeral payload to a document and forward presence events.
     fn apply_ephemeral(&mut self, document_id: DocumentId, payload: &[u8]) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
@@ -370,6 +396,13 @@ impl LogicState {
                 payload,
             } => {
                 self.apply_remote(document_id, &payload);
+            }
+
+            LogicEvent::RemoteUpdateBatch {
+                document_id,
+                payloads,
+            } => {
+                self.apply_remote_batch(document_id, &payloads);
             }
 
             LogicEvent::RemoteEphemeral {

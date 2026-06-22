@@ -78,13 +78,49 @@ impl TrameState {
     /// cell values, and emit a `DataReset` so the UI re-fetches its viewport
     /// (the original request may predate this import and show an empty grid).
     pub(super) fn import_and_reseed(&mut self, payload: &[u8], origin: &str) -> Vec<TrameEvent> {
-        if payload.is_empty() {
+        if !self.merge_payload(payload, origin) {
             return Vec::new();
+        }
+        self.reseed_after_merge(origin)
+    }
+
+    /// Apply a batch of decrypted remote deltas as a SINGLE merge+reseed, so the
+    /// UI sees one `DataReset` instead of one per delta. A server history replay
+    /// on (re)open arrives as N sequenced updates; delivering them one by one
+    /// re-fetches and repaints the grid N times, and a cell that only appears in
+    /// the last delta visibly flickers in from blank. Merging the whole batch
+    /// first, then reseeding once, renders the final state in a single repaint.
+    /// A no-op (no display events) if nothing imported.
+    pub fn apply_remote_batch(&mut self, payloads: &[Vec<u8>]) -> Vec<TrameEvent> {
+        let mut merged_any = false;
+        for payload in payloads {
+            merged_any |= self.merge_payload(payload, "apply_remote_batch");
+        }
+        if !merged_any {
+            return Vec::new();
+        }
+        self.reseed_after_merge("apply_remote_batch")
+    }
+
+    /// Merge one decrypted Loro payload into the live document, returning whether
+    /// it actually imported (non-empty and accepted). Does NOT reseed: callers
+    /// batch the reseed over one or many merges via [`reseed_after_merge`].
+    fn merge_payload(&mut self, payload: &[u8], origin: &str) -> bool {
+        if payload.is_empty() {
+            return false;
         }
         if let Err(e) = self.doc.import(payload) {
             tracing::warn!("[Logic] {origin} import failed: {e:?}");
-            return Vec::new();
+            return false;
         }
+        true
+    }
+
+    /// Rebuild every derived cache from the merged document and emit the
+    /// `DataReset` (+ sheet list, style state, conflicts) the UI needs to repaint.
+    /// Shared tail of the single-delta [`import_and_reseed`] and the batched
+    /// [`apply_remote_batch`] / quarantine-release paths.
+    fn reseed_after_merge(&mut self, origin: &str) -> Vec<TrameEvent> {
         // Rebuild the position <-> id cache first: the merged doc may carry rows
         // or columns this cache does not yet know about, and both the engine
         // reseed and the formatting reseed below resolve cell keys through it.
@@ -94,15 +130,28 @@ impl TrameState {
             LoroValue::Map(cells) => cells.len(),
             _ => 0,
         };
-        tracing::info!(
-            "[Logic] {origin} imported {} bytes, {cell_count} cell(s) now present",
-            payload.len()
-        );
+        tracing::info!("[Logic] {origin} merged, {cell_count} cell(s) now present");
         // Advance the cursor to include the imported ops: we did not author them
         // (or already persisted them), so the next `flush_delta` must not export
-        // them back. Local edits are flushed each frame before remote applies, so
-        // there are no pending local-only ops to swallow here.
+        // them back. BUT preserve our own peer's cursor: a freshly constructed
+        // doc (every reopen mints a new random PeerID) commits local genesis ops
+        // in `new()` that have never been broadcast, and the first import on a
+        // reopen runs before any flush. Swallowing those here would make a later
+        // edit's delta causally depend on ops no other peer has -- a dangling
+        // dependency that silently drops the edit on the next reopen. Keeping our
+        // prior cursor re-exports our own un-broadcast ops with the next flush;
+        // for already-flushed peers it is a no-op (the cursor already matches).
+        let our_peer = self.doc.peer_id();
+        let prior_ours = self.last_exported_vv.get(&our_peer).copied();
         self.last_exported_vv = self.doc.oplog_vv();
+        match prior_ours {
+            Some(counter) => {
+                self.last_exported_vv.insert(our_peer, counter);
+            }
+            None => {
+                self.last_exported_vv.remove(&our_peer);
+            }
+        }
         // Rebuild the merge cache (and re-evaluate masking) before the engine
         // reseed so masked cells are excluded; conflict events ride along below.
         let conflicts = self.rebuild_merges();

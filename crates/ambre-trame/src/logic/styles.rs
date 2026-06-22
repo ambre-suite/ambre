@@ -8,10 +8,14 @@
 use super::*;
 
 impl TrameState {
-    /// Mirror a cell's current bold/italic state into the CRDT `format` map and
-    /// return the incremental delta to broadcast (and persist). A cell with no
-    /// formatting is removed from the map so it does not accumulate dead entries.
-    pub(super) fn persist_format(&mut self, row: u32, col: u32) -> Option<Vec<u8>> {
+    /// Mirror a cell's current bold/italic state into the CRDT `format` map. A
+    /// cell with no formatting is removed from the map so it does not accumulate
+    /// dead entries. Commits but does not flush: every caller batches many cell
+    /// writes (a style selection, a fill, a paste) and flushes the whole group
+    /// once. Flushing here would advance the export cursor mid-batch and strip
+    /// the intervening ops (row/column scaffolding, values) out of the broadcast
+    /// delta, so a re-opening peer would never see them (mirrors `persist_style`).
+    pub(super) fn persist_format(&mut self, row: u32, col: u32) -> Option<()> {
         let mut mask = 0i64;
         if self.bold.contains(&(row, col)) {
             mask |= FMT_BOLD;
@@ -30,7 +34,7 @@ impl TrameState {
             let _ = map.insert(&key, mask);
         }
         self.doc.commit();
-        self.flush_delta()
+        Some(())
     }
 
     /// Rebuild the in-memory bold/italic sets from the active sheet's
