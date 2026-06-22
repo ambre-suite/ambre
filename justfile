@@ -69,6 +69,8 @@ test-db:
 # irrelevant for these assertion-only UI tests.
 test-wasm:
     RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-trame
+    RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-chrome
+    RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-app
 
 # Host only: the wasm tier is `-Z build-std`-heavy and Chrome-bound, while
 # `cargo-llvm-cov` and proptest run far better on host.

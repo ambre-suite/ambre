@@ -1080,3 +1080,62 @@ fn size_backing_store(canvas: &HtmlCanvasElement) -> Option<(u32, u32)> {
     canvas.set_height(h);
     Some((w, h))
 }
+
+// ── Tests (wasm tier) ───────────────────────────────────────────────────────
+// Pure helpers only (base64 transport codec + the FPS sliding window). The crate
+// is `#![cfg(target_arch = "wasm32")]`, so these run under the wasm target via
+// the `wasm-bindgen-test-runner` (node, no DOM). See ambre-spec-testing.md.
+#[cfg(test)]
+mod tests {
+    use super::{FrameHost, base64_decode, base64_encode};
+    use std::collections::VecDeque;
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    #[wasm_bindgen_test]
+    fn base64_roundtrips() {
+        for bytes in [
+            Vec::new(),
+            vec![0u8],
+            vec![1, 2, 3, 4, 5],
+            vec![0, 255, 128, 64, 32, 16, 8],
+        ] {
+            assert_eq!(base64_decode(&base64_encode(&bytes)), Some(bytes));
+        }
+    }
+
+    #[wasm_bindgen_test]
+    fn base64_decode_rejects_malformed() {
+        assert_eq!(base64_decode("!!!not base64!!!"), None);
+    }
+
+    #[wasm_bindgen_test]
+    fn tick_fps_needs_two_samples() {
+        let mut times = VecDeque::new();
+        let mut fps = -1.0f32;
+        FrameHost::tick_fps(&mut times, &mut fps, 0.0);
+        // A single sample cannot establish a rate.
+        assert_eq!(fps, 0.0);
+    }
+
+    #[wasm_bindgen_test]
+    fn tick_fps_computes_rate_over_window() {
+        let mut times = VecDeque::new();
+        let mut fps = 0.0f32;
+        // 60 frames spaced 1/60 s over (just under) a second -> ~60 FPS.
+        for i in 0..60 {
+            FrameHost::tick_fps(&mut times, &mut fps, i as f64 * 1000.0 / 60.0);
+        }
+        assert!((fps - 60.0).abs() < 1.0, "expected ~60 fps, got {fps}");
+    }
+
+    #[wasm_bindgen_test]
+    fn tick_fps_evicts_samples_older_than_one_second() {
+        let mut times = VecDeque::new();
+        let mut fps = 0.0f32;
+        FrameHost::tick_fps(&mut times, &mut fps, 0.0);
+        FrameHost::tick_fps(&mut times, &mut fps, 5000.0); // 5 s later
+        // The 0.0 sample is > 1 s old and must be evicted, leaving one sample.
+        assert_eq!(times.len(), 1);
+        assert_eq!(fps, 0.0);
+    }
+}

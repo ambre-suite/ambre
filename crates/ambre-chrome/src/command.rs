@@ -133,3 +133,55 @@ fn key_from_dom(s: &str) -> Option<Key> {
         }
     })
 }
+
+// ── Tests (host tier) ───────────────────────────────────────────────────────
+// `key_from_dom` is pure (`&str -> Option<Key>`), the host-testable seam of the
+// keybinding manager: `keybinding_from_event` is reduced to wrapping it with the
+// modifier bits read off a `web_sys::KeyboardEvent` (covered in the wasm tier).
+// ambre-chrome compiles on host (leptos CSR + web-sys types), so this runs under
+// `cargo test -p ambre-chrome` -- see ambre-spec-testing.md.
+#[cfg(test)]
+mod tests {
+    use super::key_from_dom;
+    use ambre_commands::Key;
+
+    #[test]
+    fn named_keys_map() {
+        assert_eq!(key_from_dom("Enter"), Some(Key::Enter));
+        assert_eq!(key_from_dom("Escape"), Some(Key::Escape));
+        assert_eq!(key_from_dom("Esc"), Some(Key::Escape));
+        assert_eq!(key_from_dom("Del"), Some(Key::Delete));
+        assert_eq!(key_from_dom("Delete"), Some(Key::Delete));
+        assert_eq!(key_from_dom(" "), Some(Key::Space));
+        assert_eq!(key_from_dom("Spacebar"), Some(Key::Space));
+        assert_eq!(key_from_dom("ArrowUp"), Some(Key::ArrowUp));
+        assert_eq!(key_from_dom("PageDown"), Some(Key::PageDown));
+    }
+
+    #[test]
+    fn function_keys_in_range() {
+        assert_eq!(key_from_dom("F1"), Some(Key::F(1)));
+        assert_eq!(key_from_dom("F24"), Some(Key::F(24)));
+    }
+
+    #[test]
+    fn function_keys_out_of_range_rejected() {
+        assert_eq!(key_from_dom("F0"), None);
+        assert_eq!(key_from_dom("F25"), None);
+    }
+
+    #[test]
+    fn single_printable_char_maps() {
+        assert_eq!(key_from_dom("a"), Some(Key::char('a')));
+        assert_eq!(key_from_dom("A"), Some(Key::char('A')));
+        assert_eq!(key_from_dom("="), Some(Key::char('=')));
+    }
+
+    #[test]
+    fn unmodelled_keys_rejected() {
+        // Empty string (dead key / IME), multi-char named keys we don't model.
+        assert_eq!(key_from_dom(""), None);
+        assert_eq!(key_from_dom("MediaPlayPause"), None);
+        assert_eq!(key_from_dom("Unidentified"), None);
+    }
+}

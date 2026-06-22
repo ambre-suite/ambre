@@ -70,6 +70,7 @@ dependencies = [
  "tracing-wasm",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-bindgen-test",
  "wasm_thread",
  "web-sys",
  "wgpu",
@@ -80,6 +81,7 @@ name = "ambre-bus"
 version = "0.1.0"
 dependencies = [
  "ambre-core",
+ "postcard",
  "serde",
 ]
 
@@ -112,6 +114,7 @@ dependencies = [
  "ambre-commands",
  "leptos",
  "wasm-bindgen",
+ "wasm-bindgen-test",
  "web-sys",
 ]
 

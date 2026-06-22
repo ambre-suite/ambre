@@ -74,12 +74,7 @@ pub fn ContextMenu(
                 .ok()
                 .and_then(|v| v.as_f64())
                 .unwrap_or(rect.height());
-            if lx + rect.width() > vw {
-                lx = (lx - rect.width()).max(0.0);
-            }
-            if ty + rect.height() > vh {
-                ty = (ty - rect.height()).max(0.0);
-            }
+            (lx, ty) = place_menu(x, y, rect.width(), rect.height(), vw, vh);
         }
         menu_x.set(lx);
         menu_y.set(ty);
@@ -226,5 +221,67 @@ pub fn ContextMenu(
                 {items}
             </ul>
         })
+    }
+}
+
+/// Place a `w` x `h` menu opened at click point `(x, y)` inside a `vw` x `vh`
+/// viewport, flipping each axis that would overflow so the menu stays visible.
+///
+/// Pure geometry (no DOM): the `Effect` above reads the real rect/viewport from
+/// `web-sys` and delegates the decision here so it is host-testable (the
+/// `cfg(wasm32)` boundary stays at the DOM read). On the flipped axis the menu
+/// is anchored at `point - size`, clamped to `0` so a menu taller/wider than the
+/// viewport pins to the top/left edge rather than going off-screen.
+pub(crate) fn place_menu(x: f64, y: f64, w: f64, h: f64, vw: f64, vh: f64) -> (f64, f64) {
+    let lx = if x + w > vw { (x - w).max(0.0) } else { x };
+    let ty = if y + h > vh { (y - h).max(0.0) } else { y };
+    (lx, ty)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::place_menu;
+
+    #[test]
+    fn no_overflow_keeps_click_point() {
+        assert_eq!(
+            place_menu(10.0, 20.0, 100.0, 200.0, 1000.0, 800.0),
+            (10.0, 20.0)
+        );
+    }
+
+    #[test]
+    fn right_overflow_flips_horizontally() {
+        // x + w = 960 + 100 = 1060 > 1000 -> anchor at x - w = 860.
+        assert_eq!(
+            place_menu(960.0, 20.0, 100.0, 200.0, 1000.0, 800.0),
+            (860.0, 20.0)
+        );
+    }
+
+    #[test]
+    fn bottom_overflow_flips_vertically() {
+        // y + h = 700 + 200 = 900 > 800 -> anchor at y - h = 500.
+        assert_eq!(
+            place_menu(10.0, 700.0, 100.0, 200.0, 1000.0, 800.0),
+            (10.0, 500.0)
+        );
+    }
+
+    #[test]
+    fn corner_overflow_flips_both_axes() {
+        assert_eq!(
+            place_menu(960.0, 700.0, 100.0, 200.0, 1000.0, 800.0),
+            (860.0, 500.0)
+        );
+    }
+
+    #[test]
+    fn menu_larger_than_viewport_pins_to_origin() {
+        // Flipping would push negative; clamp to 0 (pin to top/left edge).
+        assert_eq!(
+            place_menu(50.0, 50.0, 2000.0, 2000.0, 1000.0, 800.0),
+            (0.0, 0.0)
+        );
     }
 }
