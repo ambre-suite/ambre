@@ -100,6 +100,42 @@ Mobile: < 600 dp   |   Tablet: 600–1024 dp   |   Desktop: > 1024 dp
 
 The DOM provides a11y primitives natively (ARIA, focus, screen readers). **Interaction patterns** are implemented in `ambre-chrome`: roving tabindex of menus, focus trap (except `<dialog>`), `aria-expanded`/`aria-controls`, live regions for toasts. Territory mapped by WAI-ARIA Authoring Practices, written **once** for shared chrome components. Canvas **content** a11y goes through **AccessKit**, on a perimeter reduced to content.
 
+### G. Launcher Screen (the `/` route)
+
+The launcher is the **app-agnostic** home shown on the `/` route: a full-bleed Leptos DOM overlay rendered **on top of** the persistent canvas (the canvas is never unmounted, only covered and its rAF paused — `ambre-spec-architecture.md §6`). It hosts no document content, only chrome, so it lives here and **not** in any app crate (`ambre-trame`, ...): every `DocType` is listed through the same view. Implemented in `ambre-app` (the launcher crate) on the shared `ambre-chrome` toolkit, **driven entirely by design tokens** (`ambre-spec-ui.md §2.D`) — no ad-hoc colours.
+
+It has two faces, switched on the session state (`username: Option<String>` filled by `RestEvent::SessionReady`):
+
+**Signed out — sign-in panel.** A centered panel carrying the Ambre wordmark and a one-line product tagline, then:
+- **OIDC** (production): a "Sign in with Google" button → `window.location = /api/auth/google/login`.
+- **Dev login** (server reports `dev_mode`): a username field dispatching `RestCommand::DevLogin` to the live Logic thread (no page reload — the Sync worker keeps its keys, `ambre-spec-architecture.md §6`).
+- A neutral "Connecting..." placeholder until `/api/auth/config` answers.
+
+**Signed in — document list.** A header (Ambre wordmark, current user, "new document" action) over a list of **document cards**. Each card is one `DocumentSummary` and shows:
+
+| Field | Source | Notes |
+|:---|:---|:---|
+| **Type icon** | `DocType` | One glyph per type (Prose / Trame / Toile / Murmure), from the icon set. |
+| **Name** | `DocumentSummary.name` | The **decrypted** title (see ZK note below). `None` → a dimmed/italic **"Untitled"** placeholder — **never** the raw `document_id` / a short hash, and **never** the document type word (the icon already carries the type). |
+| **Last modified** | `DocumentSummary.updated_at` | Relative time ("2 h ago"); routing metadata, plaintext, no crypto cost. |
+| **Shared badge** | member count > 1 | Discreet chip; member count is routing metadata (plaintext). |
+
+- **Open**: client `pushState` to `/{doc_type}/{id}`; the persistent canvas swaps document in place via `AppView::set_document` (no full-page nav, no worker respawn — `ambre-spec-architecture.md §6`).
+- **New document**: generate the id client-side (UUID v7) and **open it immediately** — **no name prompt** (friction on every create; the clean default is unnamed). The document opens **untitled** (`name = None`); the server row is created lazily on first edit. `CreateDocument { doc_type, name }` carries a name up to Sync (which encrypts it) only once the user actually sets one.
+- **Rename / Delete**: per-card actions → `RestCommand::RenameDocument` / `DeleteDocument`. Renaming is also available inline from the open document's header, at any time.
+- **Empty state**: a soigné placeholder ("No documents yet — create one above"), not a bare list.
+
+**Naming strategy (normative).** The default of a new document is the **absence of a name**, not a generated string:
+- Stored: `name = None` until the user renames. A placeholder is **never** persisted into `name_enc` (a stored "Untitled" / "Trame 1" is indistinguishable from a user who typed it, breaks "is this named yet?", and pollutes the ciphertext).
+- **No counters** ("Trame 1"): counter state collides across offline devices (each device has its own client-decrypted list, no server authority over names — `ambre-spec-architecture.md §3`) and rots after deletes.
+- **No type word in the name** ("Trame - ..."): the type is carried by the **icon** (and a small type chip) — repeating it is the redundant pattern this redesign removes.
+- **Icon-less contexts** (browser tab title, share invitations, future global search) compose the placeholder with the **generic, localized** type label (e.g. tab = "Untitled — Spreadsheet"), **at the point of use, never stored**. This generic label is distinct from the brand `DocType::name()` ("Trame") used as the type chip.
+- *(Deferred, see §6)* auto-suggesting a title from first content (A1 for Trame, first heading for Prose) — type-specific, out of MVP.
+
+**MVP scope (normative).** Type icon + name (or "Untitled" placeholder) + last-modified + shared badge; create-untitled, inline rename, delete; sign-in; empty state; full token theming. **Deferred (see §6):** document thumbnails/previews, content stats (cell/word/page counts), folders / favorites / custom ordering, auto-suggested titles.
+
+**ZK note.** Document names are **end-to-end encrypted**: the launcher only ever renders `DocumentSummary.name` already decrypted by the Sync thread (`name_enc` + `doc_key_enc` → Document Key → plaintext, `ambre-spec-architecture.md §3`). The chrome itself performs no crypto and no `fetch` (§3). Names being absent (`None`) is a normal state (never named, never opened, or key not yet available) and renders as the "Untitled" placeholder.
+
 ---
 
 ## 3. SECURITY & CONFIDENTIALITY (ZERO-KNOWLEDGE)
@@ -156,6 +192,8 @@ Pure presentation layer:
 - **Reimplementing focus trap / backdrop for modals**: native `<dialog>` provides them.
 - **CSS Anchor Positioning for menus**: cross-browser support too recent; manual positioning.
 - **All apps' chrome in `ambre-chrome`**: `ambre-chrome` only carries **shared** chrome; app-specific lives in each app crate (`ambre-spec-ui.md §2.B`).
+- **Launcher document previews / thumbnails (deferred, not rejected)**: an encrypted thumbnail is a full mini-pipeline — offscreen render on save (hot path), cross-peer invalidation policy, an extra encrypted blob per doc (S3, wrapped under the Document Key), and decrypt-N-images on list load (mobile memory/latency, against the < 3 s on 4G target). Purely cosmetic gain over icon + name + date. Reconsider only with Toile (the one type where a preview beats an icon). MVP shows **icon + name + last-modified + shared badge** (§2.G).
+- **Launcher content stats (cell/word/page counts) (deferred)**: unlike `updated_at` / role / member count (routing metadata, plaintext, free), content stats must be computed client-side and stored **encrypted** like the name — another coherent blob to maintain for low value. Out of MVP.
 
 ---
 
