@@ -118,7 +118,10 @@ CREATE TABLE documents (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_id   UUID NOT NULL REFERENCES users(id),
     doc_type   TEXT NOT NULL CHECK (doc_type IN ('prose', 'trame', 'toile', 'murmure')),
-    name_enc   BYTEA,                        -- E2EE encrypted name
+    name_enc   BYTEA,                        -- E2EE encrypted name (ciphertext under the Document Key; opaque to the server)
+                                             -- GET /documents returns name_enc TOGETHER WITH the caller's doc_key_enc
+                                             -- (from document_members) so the client decrypts the title without opening
+                                             -- the document. Source of DocumentSummary.name. See ambre-spec-architecture.md §3.
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

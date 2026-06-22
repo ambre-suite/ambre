@@ -64,6 +64,8 @@ ambre-app/        cdylib : mounts Leptos AppShell, creates flume channels, spawn
                   Logic/Sync, bootstraps canvas + injects active view.
 ```
 
+The launcher also owns the **`/` route home screen** (sign-in + document list, app-agnostic over every `DocType`): a DOM overlay on top of the persistent canvas. Visual + interaction contract in `ambre-spec-chrome.md §2.G`; the E2E-encrypted document name model it displays (`name_enc` / `DocumentSummary.name`) in `ambre-spec-architecture.md §3`.
+
 The **shared** lives in `ambre-canvas` (renderer) and `ambre-chrome` (toolkit); an app's **specific** (Trame formula bar, cell format dialog, `TrameView`...) lives in the app crate, built on top. Two pure crates per stack (`ambre-canvas` wgpu, `ambre-chrome` leptos) keep the renderer independent of Leptos.
 
 ### C. Command Model — everything is a command
