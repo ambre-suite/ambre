@@ -61,8 +61,14 @@ test-db:
 # production build keeps its threaded codegen untouched. `-Z build-std` still
 # comes from `.cargo/config.toml`, rebuilding std consistently without atomics.
 # `-Awarnings` preserves the wasm warning policy.
+#
+# `-C debuginfo=0` is critical: the dev profile's DWARF balloons the test module
+# to ~350 MB, which headless Chrome cannot compile within the runner's 20 s
+# detection window ("Loading Wasm module..." hangs, then SIGKILL). Dropping
+# debuginfo shrinks it to ~10 MB and the tests load instantly; stack traces are
+# irrelevant for these assertion-only UI tests.
 test-wasm:
-    RUSTFLAGS="-Awarnings" wasm-pack test --headless --chrome crates/ambre-trame
+    RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-trame
 
 # Host only: the wasm tier is `-Z build-std`-heavy and Chrome-bound, while
 # `cargo-llvm-cov` and proptest run far better on host.
