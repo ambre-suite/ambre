@@ -4,11 +4,12 @@ filehash = false
 
 # By default Trunk only watches the parent folder of `build.target`
 # (crates/ambre-app/), so edits to any other workspace crate (ambre-trame,
-# ambre-bus, ambre-logic, ...) never trigger a rebuild. Watch the whole
-# `crates` tree instead, and explicitly ignore target/dist to avoid rebuild
-# loops on build artifacts.
+# ambre-bus, ambre-logic, ...) never trigger a rebuild. Watch the whole `crates`
+# tree instead, and ignore target/dist to avoid rebuild loops on build outputs.
+# Both `watch` and `ignore` are resolved relative to the workspace root (where
+# Trunk.toml lives).
 [watch]
-paths = ["crates"]
+watch = ["crates"]
 ignore = ["target", "dist"]
 
 [serve]
