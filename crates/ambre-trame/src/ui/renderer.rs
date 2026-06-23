@@ -482,7 +482,7 @@ pub fn draw_overlay<S: DrawSurface>(
     // each rectangle with a translucent tint and outlines it.
     let sel = &state.selection;
     if sel.is_multi() {
-        for (r1, c1, r2, c2) in sel.rects() {
+        for (r1, c1, r2, c2) in state.selection_rects() {
             if let Some((x, y, w, ht)) = state.range_pixel_rect(r1, c1, r2, c2) {
                 let rect = Rect::new(x, y, x + w, y + ht);
                 surface.fill_rect(rect, palette.selection.with_alpha(0.16));
@@ -490,12 +490,16 @@ pub fn draw_overlay<S: DrawSurface>(
             }
         }
     }
-    // The active cell always gets a solid 2px border on top. When it sits in a
-    // merged block the border wraps the whole block, so the merge reads as one
-    // selected cell.
-    if let Some((x, y, cw, ch)) = state
-        .active_merge_rect()
-        .or_else(|| state.cell_pixel_rect(state.active_row(), state.active_col()))
+    // The active-cell 2px border is drawn only for a lone single-cell selection
+    // (Excel behaviour): in a multi-cell / disjoint selection the range fill +
+    // outline already mark the selection as one block, so a separate border on
+    // the active cell would read as a spurious second selection following the
+    // cursor. When the active cell sits in a merged block the border wraps the
+    // whole block, so the merge reads as one selected cell.
+    if !sel.is_multi()
+        && let Some((x, y, cw, ch)) = state
+            .active_merge_rect()
+            .or_else(|| state.cell_pixel_rect(state.active_row(), state.active_col()))
     {
         surface.stroke_rect(Rect::new(x, y, x + cw, y + ch), palette.selection, 2.0);
     }
@@ -1086,7 +1090,8 @@ mod tests {
     #[test]
     fn multi_cell_selection_fills_and_outlines_each_range() {
         // A live range (0,0)..=(1,1) plus a disjoint single cell (3,3): both get
-        // a translucent selection fill, and the active cell keeps its 2px border.
+        // a translucent selection fill, and no 2px active-cell border is drawn
+        // (Excel behaviour: the range outline alone marks the selection).
         let mut state = fixture(&[]);
         state.select(0, 0);
         state.select_extend(1, 1);
@@ -1113,13 +1118,13 @@ mod tests {
             )),
             2,
         );
-        // The active cell (3,3) still gets the 2px border.
+        // No 2px active-cell border in a multi-cell selection.
         assert_eq!(
             surface.count(|op| matches!(
                 op, DrawOp::StrokeRect { color, width, .. }
                     if *color == palette.selection && *width == 2.0
             )),
-            1,
+            0,
         );
     }
 

@@ -110,6 +110,9 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
                 aria-label="Borders"
                 aria-haspopup="true"
                 aria-expanded=move || open.get().then_some("true")
+                // Keep the grid's focus: a button steals it on mousedown, which
+                // would clear the active cell before on:click can apply the colour.
+                on:mousedown=move |ev| ev.prevent_default()
                 on:click=move |_| open.update(|o| *o = !*o)
             >
                 <Icon icon=icondata::BsBorderAll />
@@ -338,6 +341,9 @@ pub(crate) fn NumberFormatPopover(
                 aria-label="Number format"
                 aria-haspopup="true"
                 aria-expanded=move || open.get().then_some("true")
+                // Keep the grid's focus: a button steals it on mousedown, which
+                // would clear the active cell before on:click can apply the colour.
+                on:mousedown=move |ev| ev.prevent_default()
                 on:click=move |_| open.update(|o| *o = !*o)
             >
                 <Icon icon=icondata::Bs123 />
@@ -455,6 +461,9 @@ pub(crate) fn HAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -
                 aria-label="Horizontal alignment"
                 aria-haspopup="true"
                 aria-expanded=move || open.get().then_some("true")
+                // Keep the grid's focus: a button steals it on mousedown, which
+                // would clear the active cell before on:click can apply the colour.
+                on:mousedown=move |ev| ev.prevent_default()
                 on:click=move |_| open.update(|o| *o = !*o)
             >
                 <Icon icon=Signal::derive(current_icon) />
@@ -535,6 +544,9 @@ pub(crate) fn VAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -
                 aria-label="Vertical alignment"
                 aria-haspopup="true"
                 aria-expanded=move || open.get().then_some("true")
+                // Keep the grid's focus: a button steals it on mousedown, which
+                // would clear the active cell before on:click can apply the colour.
+                on:mousedown=move |ev| ev.prevent_default()
                 on:click=move |_| open.update(|o| *o = !*o)
             >
                 <Icon icon=Signal::derive(current_icon) />
@@ -622,6 +634,9 @@ pub(crate) fn ColorPopover(
                 aria-label=title
                 aria-haspopup="true"
                 aria-expanded=move || open.get().then_some("true")
+                // Keep the grid's focus: a button steals it on mousedown, which
+                // would clear the active cell before on:click can apply the colour.
+                on:mousedown=move |ev| ev.prevent_default()
                 on:click=move |_| open.update(|o| *o = !*o)
             >
                 <Icon icon=icon />
@@ -636,6 +651,7 @@ pub(crate) fn ColorPopover(
                     // Reset entry: "Automatic" (text) / "No fill (transparent)" (fill).
                     <button
                         class="reset"
+                        on:mousedown=move |ev| ev.prevent_default()
                         on:click=move |_| {
                             on_pick.run(None);
                             open.set(false);
@@ -652,6 +668,7 @@ pub(crate) fn ColorPopover(
                                     <button
                                         aria-label=format!("#{:06x}", rgb)
                                         style:background-color=format!("#{:06x}", rgb)
+                                        on:mousedown=move |ev| ev.prevent_default()
                                         on:click=move |_| {
                                             on_pick.run(Some(rgb));
                                             open.set(false);

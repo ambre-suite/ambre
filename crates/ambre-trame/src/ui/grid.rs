@@ -768,6 +768,24 @@ impl TrameUiState {
             .map_or((row, col), |(mr, mc, _, _)| (mr, mc))
     }
 
+    /// If the active cell now sits on a *covered* sub-cell of a merge, collapse
+    /// the selection onto the block master and return `true`. Covered sub-cells
+    /// are never individually selectable (spec sec.2), so this is always a safe
+    /// correction. Called after a viewport batch so a freshly-created merge
+    /// re-homes the cursor on its master (top-left): the editor and range ops
+    /// then target the master, not a covered cell that would reject the write as
+    /// a merge conflict. A no-op when the active cell is a master or unmerged.
+    pub fn snap_active_to_master(&mut self) -> bool {
+        let (ar, ac) = self.selection.active;
+        match self.merge_master_at(ar, ac) {
+            Some((mr, mc, _, _)) if (mr, mc) != (ar, ac) => {
+                self.selection = Selection::single(mr, mc);
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// Extend the live rectangle's active corner to `(row, col)`, keeping the
     /// anchor (Shift+click / drag). The selection's other corner is unchanged.
     pub fn select_extend(&mut self, row: u32, col: u32) {
@@ -1373,11 +1391,55 @@ impl TrameUiState {
         Some((cx1, cy1, cx2 - cx1, cy2 - cy1))
     }
 
+    /// Grow `rect` so it fully contains every merged block it intersects. A
+    /// merge is one logical cell (spec sec.2): a selection that touches any part
+    /// of a block must cover the whole block -- both for drawing (the drag reads
+    /// as selecting the merge at once, not cell by cell) and for the autofill
+    /// handle (anchored on the block's extent corner). Iterates to a fixpoint
+    /// because expanding onto one merge can bring a neighbouring one into range.
+    /// Scans the cached merge masters (bounded to the viewport, so it is cheap).
+    pub fn expand_to_merges(&self, rect: CellRect) -> CellRect {
+        let (mut r1, mut c1, mut r2, mut c2) = rect;
+        loop {
+            let mut grew = false;
+            for (&(mr, mc), data) in &self.cell_cache {
+                let Some((cs, rs)) = data.merge_span else {
+                    continue;
+                };
+                let (br, bc) = (mr + rs - 1, mc + cs - 1);
+                // Block (mr,mc)..=(br,bc) intersects the current rectangle?
+                if mr <= r2 && br >= r1 && mc <= c2 && bc >= c1 {
+                    let (nr1, nc1, nr2, nc2) =
+                        (r1.min(mr), c1.min(mc), r2.max(br), c2.max(bc));
+                    if (nr1, nc1, nr2, nc2) != (r1, c1, r2, c2) {
+                        (r1, c1, r2, c2) = (nr1, nc1, nr2, nc2);
+                        grew = true;
+                    }
+                }
+            }
+            if !grew {
+                return (r1, c1, r2, c2);
+            }
+        }
+    }
+
+    /// The selection rectangles to draw/operate on, each expanded to whole
+    /// merges (see [`expand_to_merges`](Self::expand_to_merges)). Mirrors
+    /// [`Selection::rects`] but merge-aware.
+    pub fn selection_rects(&self) -> Vec<CellRect> {
+        self.selection
+            .rects()
+            .map(|r| self.expand_to_merges(r))
+            .collect()
+    }
+
     /// Screen pixel rect (x, y, w, h) of the autofill handle: a small square
     /// centred on the bottom-right corner of the selection (`-ui.md` sec.5.F).
-    /// `None` when that corner cell is scrolled out of view.
+    /// When the selection's corner falls in a merge, the handle anchors on the
+    /// block's extent corner so it hugs the whole block. `None` when that corner
+    /// cell is scrolled out of view.
     pub fn fill_handle_rect(&self) -> Option<(f64, f64, f64, f64)> {
-        let (_, _, r2, c2) = self.selection.bounds();
+        let (_, _, r2, c2) = self.expand_to_merges(self.selection.bounds());
         let (x, y, w, h) = self.cell_pixel_rect(r2, c2)?;
         let s = FILL_HANDLE_SIZE;
         Some((x + w - s / 2.0, y + h - s / 2.0, s, s))
@@ -1523,6 +1585,83 @@ mod tests {
         assert_eq!(state.selection.anchor, (0, 0));
         assert_eq!(state.selection.active(), (2, 3));
         assert_eq!(state.selection.bounds(), (0, 0, 2, 3));
+    }
+
+    /// Seed a 2x2 merge master at (1,1) covering (1,1)..=(2,2) in the cache.
+    fn seed_merge_2x2(state: &mut TrameUiState) {
+        let cell = |row, col, span| DisplayCell {
+            row,
+            col,
+            text: String::new(),
+            raw: String::new(),
+            is_merged: true,
+            merge_span: span,
+            ..Default::default()
+        };
+        state.on_viewport_data(TrameEvent::ViewportData {
+            version: 0,
+            row_start: 0,
+            col_start: 0,
+            cells: vec![
+                cell(1, 1, Some((2, 2))), // master
+                cell(1, 2, None),
+                cell(2, 1, None),
+                cell(2, 2, None),
+            ],
+        });
+    }
+
+    /// Bug 2: selecting a merged block draws the autofill handle at the
+    /// bottom-right of the *whole block*, not of the master cell. With the
+    /// selection collapsed on the master (1,1), the handle must sit on the
+    /// extent corner (2,2).
+    #[test]
+    fn fill_handle_sits_on_merge_extent_corner() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        seed_merge_2x2(&mut state);
+        state.select(2, 2); // snaps to master (1,1)
+        assert_eq!(state.selection.bounds(), (1, 1, 1, 1));
+
+        let handle = state.fill_handle_rect().expect("handle visible");
+        let extent = state.cell_pixel_rect(2, 2).expect("extent corner visible");
+        let s = super::FILL_HANDLE_SIZE;
+        assert_eq!(handle.0, extent.0 + extent.2 - s / 2.0, "handle x on extent");
+        assert_eq!(handle.1, extent.1 + extent.3 - s / 2.0, "handle y on extent");
+    }
+
+    /// Bug 3: a drag-selection that touches part of a merge selects the whole
+    /// block at once. The drawn/operative rectangles snap out to full merges.
+    #[test]
+    fn drag_selection_expands_to_whole_merge() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        seed_merge_2x2(&mut state);
+        // Drag from (0,0) to (1,1): the raw live rect (0,0)..=(1,1) cuts the
+        // merge in half; the expanded rect must cover the whole (1,1)..=(2,2).
+        state.select(0, 0);
+        state.select_extend(1, 1);
+        let rects = state.selection_rects();
+        assert_eq!(rects, vec![(0, 0, 2, 2)], "rect grows to contain the merge");
+    }
+
+    /// After a merge, the active cell may sit on the block's bottom-right
+    /// (covered) sub-cell -- the drag-end corner. `snap_active_to_master`
+    /// re-homes the selection on the master so the editor targets the top-left,
+    /// not a covered cell (which would reject the write as a merge conflict).
+    #[test]
+    fn snap_active_to_master_rehomes_after_merge() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        seed_merge_2x2(&mut state);
+        // Simulate the post-merge selection: active on the bottom-right covered
+        // sub-cell (2,2), as left by a drag that ended there.
+        state.selection = Selection {
+            anchor: (1, 1),
+            active: (2, 2),
+            extra: Vec::new(),
+        };
+        assert!(state.snap_active_to_master(), "covered active cell snaps");
+        assert_eq!(state.selection, Selection::single(1, 1));
+        // Already on the master: nothing to do.
+        assert!(!state.snap_active_to_master());
     }
 
     /// Feed a single column of cells, flagging `filtered` rows as collapsed

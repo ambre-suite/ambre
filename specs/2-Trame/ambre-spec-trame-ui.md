@@ -989,9 +989,13 @@ the live rectangle into `Selection.extra`), **Shift+arrows / Shift+Page / Shift+
 (`move_cursor`/`move_to` take an `extend` flag), and **Shift+Ctrl+End** to grow to the last
 cached non-empty cell. `InputEvent::PointerDown` carries `shift` / `ctrl` (Cmd folded into
 `ctrl` by the host). Range rendering iterates `Selection::rects()` in `renderer::draw_overlay`
-(translucent fill + 1px outline per rectangle, 2px active-cell border on top); whole
-row/column selection by clicking a header and the header range highlight (sec.4.B) remain
-to do.
+(translucent fill + 1px outline per rectangle). The 2px active-cell border is drawn **only
+for a lone single-cell selection** (Excel behaviour): in a multi-cell or disjoint selection
+the range fill + outline already mark the block, so a separate active-cell border would read
+as a spurious second selection following the cursor. Each rendered rectangle is also expanded
+to whole merged blocks (`expand_to_merges`) so a drag touching part of a merge selects the
+block as one cell. Whole row/column selection by clicking a header and the header range
+highlight (sec.4.B) remain to do.
 
 > **Disjoint selection** is modelled by `Selection { anchor, active, extra: Vec<CellRect> }`:
 > `extra` holds the committed rectangles, `anchor..=active` is the live one. `is_multi()` gates
