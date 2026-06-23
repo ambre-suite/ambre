@@ -791,6 +791,21 @@ impl TrameView {
                 let cmd = self.state.scroll_viewport_cmd();
                 self.send_command_lossy(cmd);
             }
+            // Logic asks the canvas to adopt a selection it cannot derive locally
+            // (e.g. after an unmerge, the freed cells stay selected though the
+            // span-defining merge is gone). Active cell collapses to the top-left
+            // corner; the anchor sits at the bottom-right so the rectangle renders
+            // whole. Mirror the active cell back to Logic and the input pipe.
+            TrameEvent::SelectRange { r1, c1, r2, c2 } => {
+                self.state.select_rect(r1, c1, r2, c2);
+                self.needs_full = true;
+                self.viewport_changed = true;
+                if let Err(SendError::Full) = self.send_command_lossless(self.set_active_cmd()) {
+                    tracing::error!("Trame: UI->Logic channel full, SelectRange dropped");
+                }
+                self.park_input_on(r1, c1);
+                self.announce_active();
+            }
             // Interop export (sec.18, `-interop.md` §3/§4): the Logic thread
             // serialized the file bytes; the UI Thread owns the DOM, so the
             // download is triggered here. No canvas state changes.

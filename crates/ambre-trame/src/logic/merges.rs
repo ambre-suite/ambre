@@ -65,24 +65,73 @@ impl TrameState {
     /// Split the merge whose rectangle contains `(row, col)`, restoring covered
     /// cells (and any masked value). A no-op when the cell is not in a merge.
     pub(super) fn unmerge_cells(&mut self, row: u32, col: u32) -> TrameOutcome {
-        let master = self
-            .merges
-            .iter()
-            .find_map(|(&(top, left), &(bottom, right))| {
-                (row >= top && row <= bottom && col >= left && col <= right).then_some((top, left))
-            });
-        let Some((top, left)) = master else {
+        if !self.delete_merge_at(row, col) {
             return TrameOutcome::display_only(vec![]);
-        };
-        let Some((rl, cl)) = self.index.resolve(top as usize, left as usize) else {
-            return TrameOutcome::display_only(vec![]);
-        };
-        let _ = self
-            .doc
-            .get_map(merges_map_name(&self.active_sheet))
-            .delete(&cell_key(rl, cl));
+        }
         self.doc.commit();
         self.after_merge_change()
+    }
+
+    /// Split every merge intersecting the tracked selection rectangle. The
+    /// context-menu intent resolves against the whole selection, not just the
+    /// active cell, so a multi-merge selection is fully unmerged in one step.
+    pub(super) fn unmerge_selection(&mut self) -> TrameOutcome {
+        let (mut r1, mut c1, mut r2, mut c2) = self.selection;
+        // Masters whose rectangle intersects the selection. Snapshot first: the
+        // deletion mutates the CRDT, but `self.merges` stays put until rebuild.
+        let masters: Vec<(u32, u32, u32, u32)> = self
+            .merges
+            .iter()
+            .filter_map(|(&(top, left), &(bottom, right))| {
+                let intersects = top <= r2 && bottom >= r1 && left <= c2 && right >= c1;
+                intersects.then_some((top, left, bottom, right))
+            })
+            .collect();
+        let mut deleted = false;
+        for (top, left, bottom, right) in masters {
+            if self.delete_merge_at(top, left) {
+                deleted = true;
+                // Grow the post-unmerge selection over every freed block: a merge
+                // straddling the selection edge extends past it, so the user must
+                // see all the cells the split exposed (not just the drag rect).
+                r1 = r1.min(top);
+                c1 = c1.min(left);
+                r2 = r2.max(bottom);
+                c2 = c2.max(right);
+            }
+        }
+        if !deleted {
+            return TrameOutcome::display_only(vec![]);
+        }
+        self.doc.commit();
+        let mut outcome = self.after_merge_change();
+        outcome
+            .display
+            .push(TrameEvent::SelectRange { r1, c1, r2, c2 });
+        outcome
+    }
+
+    /// Delete the merge entry whose rectangle contains `(row, col)` from the
+    /// `merges_{sheet}` map. Returns whether an entry was removed; does not
+    /// commit or rebuild the derived caches -- the caller batches those.
+    fn delete_merge_at(&mut self, row: u32, col: u32) -> bool {
+        let Some((top, left)) =
+            self.merges
+                .iter()
+                .find_map(|(&(top, left), &(bottom, right))| {
+                    (row >= top && row <= bottom && col >= left && col <= right)
+                        .then_some((top, left))
+                })
+        else {
+            return false;
+        };
+        let Some((rl, cl)) = self.index.resolve(top as usize, left as usize) else {
+            return false;
+        };
+        self.doc
+            .get_map(merges_map_name(&self.active_sheet))
+            .delete(&cell_key(rl, cl))
+            .is_ok()
     }
 
     /// Shared tail of merge/unmerge: rebuild the derived merge cache (which also

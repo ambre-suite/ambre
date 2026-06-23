@@ -760,6 +760,19 @@ impl TrameUiState {
         self.selection = Selection::single(row, col);
     }
 
+    /// Replace the live selection with the rectangle `(r1,c1)`-`(r2,c2)` (corners
+    /// already ordered), collapsing the active cell onto the top-left corner. Used
+    /// when the Logic thread dictates a selection the canvas cannot derive locally
+    /// (a [`SelectRange`](ambre_bus::TrameEvent::SelectRange) after an unmerge):
+    /// the freed cells must stay selected though the span-defining merge is gone.
+    pub fn select_rect(&mut self, r1: u32, c1: u32, r2: u32, c2: u32) {
+        self.selection = Selection {
+            anchor: (r2, c2),
+            active: (r1, c1),
+            extra: Vec::new(),
+        };
+    }
+
     /// Resolve `(row, col)` to its merge master when inside a merged block, else
     /// return it unchanged. The single chokepoint that keeps the active cell on a
     /// master rather than a covered sub-cell.
@@ -1642,6 +1655,63 @@ mod tests {
         assert_eq!(state.selection.anchor, (0, 0));
         assert_eq!(state.selection.active(), (2, 3));
         assert_eq!(state.selection.bounds(), (0, 0, 2, 3));
+    }
+
+    /// Reported bug: two vertical merges A1:A2 and B1:B2 selected by their
+    /// masters only (row 0). Before the unmerge the cache holds the merges, so the
+    /// rendered selection expands to cover all four cells; after the unmerge the
+    /// Logic thread sends a `SelectRange` (applied via `select_rect`) so the freed
+    /// cells stay selected once the re-fetch clears the merge spans.
+    #[test]
+    fn select_rect_keeps_unmerged_cells_selected() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        let cell = |row, col, span: Option<(u32, u32)>| DisplayCell {
+            row,
+            col,
+            text: String::new(),
+            raw: String::new(),
+            is_merged: span.is_some(),
+            merge_span: span,
+            ..Default::default()
+        };
+        // A1:A2 (master (0,0), 1 col x 2 rows) and B1:B2 (master (0,1)).
+        state.on_viewport_data(TrameEvent::ViewportData {
+            version: 0,
+            row_start: 0,
+            col_start: 0,
+            cells: vec![
+                cell(0, 0, Some((1, 2))),
+                cell(1, 0, None),
+                cell(0, 1, Some((1, 2))),
+                cell(1, 1, None),
+            ],
+        });
+        // Selection spans the two masters only (A1:B1, row 0). With the merges in
+        // the cache the rendered rect already covers all four cells.
+        state.selection = Selection {
+            anchor: (0, 0),
+            active: (0, 1),
+            extra: Vec::new(),
+        };
+        assert_eq!(state.selection_rects(), vec![(0, 0, 1, 1)]);
+
+        // Logic's SelectRange after the unmerge: adopt the freed area.
+        state.select_rect(0, 0, 1, 1);
+        // The re-fetch clears the merge spans (now plain cells).
+        state.on_viewport_data(TrameEvent::ViewportData {
+            version: 1,
+            row_start: 0,
+            col_start: 0,
+            cells: vec![
+                cell(0, 0, None),
+                cell(1, 0, None),
+                cell(0, 1, None),
+                cell(1, 1, None),
+            ],
+        });
+        // All four freed cells remain selected (the bug left only row 0).
+        assert_eq!(state.selection_rects(), vec![(0, 0, 1, 1)]);
+        assert!(!state.snap_active_to_master(), "active master, no collapse");
     }
 
     /// Seed a 2x2 merge master at (1,1) covering (1,1)..=(2,2) in the cache.

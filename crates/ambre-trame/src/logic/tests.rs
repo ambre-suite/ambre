@@ -1238,6 +1238,124 @@ fn merge_and_unmerge_intents_use_the_selection() {
     );
 }
 
+/// `UnmergeActive` over a selection spanning several merges splits every one of
+/// them, not just the merge under the active cell (regression: only the last
+/// selected merge was freed).
+#[test]
+fn unmerge_active_splits_every_merge_in_selection() {
+    let mut state = TrameState::new();
+    // Build two separate merges: A1:B1 and A3:B3.
+    state.handle_command(TrameCommand::MergeCells {
+        row: 0,
+        col: 0,
+        row_end: 0,
+        col_end: 1,
+    });
+    state.handle_command(TrameCommand::MergeCells {
+        row: 2,
+        col: 0,
+        row_end: 2,
+        col_end: 1,
+    });
+    assert_eq!(read_display(&mut state, 0, 0).merge_span, Some((2, 1)));
+    assert_eq!(read_display(&mut state, 2, 0).merge_span, Some((2, 1)));
+
+    // Select A1:B3, covering both merges, then unmerge.
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: 0,
+        col: 0,
+        anchor_row: 2,
+        anchor_col: 1,
+    });
+    let out = state.handle_command(TrameCommand::UnmergeActive);
+
+    assert_eq!(
+        read_display(&mut state, 0, 0).merge_span,
+        None,
+        "first merge split"
+    );
+    assert_eq!(
+        read_display(&mut state, 2, 0).merge_span,
+        None,
+        "second merge split"
+    );
+
+    // The post-unmerge selection covers every freed cell.
+    let range = out.display.iter().find_map(|e| match e {
+        TrameEvent::SelectRange { r1, c1, r2, c2 } => Some((*r1, *c1, *r2, *c2)),
+        _ => None,
+    });
+    assert_eq!(range, Some((0, 0, 2, 1)), "selection covers all freed cells");
+}
+
+/// `UnmergeActive` over a selection that only clips the edge of a merge still
+/// grows the post-unmerge selection to the freed block: the merge extends past
+/// the drag rectangle, so the exposed cells must end up selected (the reported
+/// bug -- the selection was smaller than the unmerged cells).
+#[test]
+fn unmerge_selection_grows_to_cover_straddling_merge() {
+    let mut state = TrameState::new();
+    // A merge B2:C3 (rows 1..2, cols 1..2).
+    state.handle_command(TrameCommand::MergeCells {
+        row: 1,
+        col: 1,
+        row_end: 2,
+        col_end: 2,
+    });
+    // Select only A1:B2 -- it clips the merge's top-left corner.
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: 0,
+        col: 0,
+        anchor_row: 1,
+        anchor_col: 1,
+    });
+    let out = state.handle_command(TrameCommand::UnmergeActive);
+
+    assert_eq!(read_display(&mut state, 1, 1).merge_span, None, "merge split");
+    let range = out.display.iter().find_map(|e| match e {
+        TrameEvent::SelectRange { r1, c1, r2, c2 } => Some((*r1, *c1, *r2, *c2)),
+        _ => None,
+    });
+    // A1 corner (0,0) unioned with the full B2:C3 block -> A1:C3.
+    assert_eq!(range, Some((0, 0, 2, 2)), "selection grew over the merge");
+}
+
+/// Two vertical merges A1:A2 and B1:B2, selected by their masters only (row 0),
+/// then unmerged: the post-unmerge selection must grow down to row 1 to cover
+/// every freed cell (the exact case reported: only A1/B1 stayed selected).
+#[test]
+fn unmerge_two_vertical_merges_selected_by_masters() {
+    let mut state = TrameState::new();
+    // A1:A2 (rows 0..1, col 0).
+    state.handle_command(TrameCommand::MergeCells {
+        row: 0,
+        col: 0,
+        row_end: 1,
+        col_end: 0,
+    });
+    // B1:B2 (rows 0..1, col 1).
+    state.handle_command(TrameCommand::MergeCells {
+        row: 0,
+        col: 1,
+        row_end: 1,
+        col_end: 1,
+    });
+    // Selection spans the two masters only: A1:B1 (row 0).
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: 0,
+        col: 1,
+        anchor_row: 0,
+        anchor_col: 0,
+    });
+    let out = state.handle_command(TrameCommand::UnmergeActive);
+
+    let range = out.display.iter().find_map(|e| match e {
+        TrameEvent::SelectRange { r1, c1, r2, c2 } => Some((*r1, *c1, *r2, *c2)),
+        _ => None,
+    });
+    assert_eq!(range, Some((0, 0, 1, 1)), "selection grew to cover A1:B2");
+}
+
 /// `MergeSelection` over a lone single-cell selection is a silent no-op (a
 /// single cell is not a merge), producing no CRDT delta.
 #[test]
