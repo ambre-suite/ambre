@@ -202,6 +202,14 @@ pub enum TrameEvent {
     /// viewport response predated the restore, so the cache must be refreshed.
     DataReset,
 
+    /// Ask the UI Thread to replace the rendered grid selection with the
+    /// rectangle `(r1,c1)`-`(r2,c2)` (inclusive, corners ordered). Emitted when a
+    /// command changes the area the user should see selected and the canvas
+    /// cannot derive it locally -- e.g. after an unmerge, where the freed cells
+    /// must stay selected even though the merge that defined the span is gone.
+    /// The active cell collapses onto the top-left corner.
+    SelectRange { r1: u32, c1: u32, r2: u32, c2: u32 },
+
     /// A local [`MergeCells`](crate::logic::TrameCommand::MergeCells) was refused
     /// because a covered cell is non-empty (`ambre-spec-trame-logic.md` §6). The
     /// chrome surfaces `reason` to the user; no CRDT mutation was produced.

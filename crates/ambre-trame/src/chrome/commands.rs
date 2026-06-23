@@ -195,6 +195,7 @@ pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
             TrameEvent::ViewportData { .. }
             | TrameEvent::StyleApplied { .. }
             | TrameEvent::DataReset
+            | TrameEvent::SelectRange { .. }
             | TrameEvent::MergeRejected { .. }
             | TrameEvent::MergeConflictDetected { .. }
             | TrameEvent::SheetList { .. }
@@ -310,6 +311,7 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
         TrameEvent::ViewportData { .. }
         | TrameEvent::StyleApplied { .. }
         | TrameEvent::DataReset
+        | TrameEvent::SelectRange { .. }
         | TrameEvent::UndoState { .. }
         | TrameEvent::SheetList { .. }
         | TrameEvent::ColumnValues { .. }

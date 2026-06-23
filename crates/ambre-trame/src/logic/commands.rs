@@ -206,7 +206,7 @@ impl TrameState {
                 let (r1, c1, r2, c2) = self.selection;
                 self.merge_cells(r1, c1, r2, c2)
             }
-            TrameCommand::UnmergeActive => self.unmerge_cells(self.active.0, self.active.1),
+            TrameCommand::UnmergeActive => self.unmerge_selection(),
             // Single-column shared sort over the tracked selection (`-ui.md`
             // sec.5.C). Reference column = the range's first column (`sort_col = 0`),
             // no header row. The active sheet is the only sortable one (see
