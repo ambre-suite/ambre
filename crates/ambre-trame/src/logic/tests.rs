@@ -1285,7 +1285,11 @@ fn unmerge_active_splits_every_merge_in_selection() {
         TrameEvent::SelectRange { r1, c1, r2, c2 } => Some((*r1, *c1, *r2, *c2)),
         _ => None,
     });
-    assert_eq!(range, Some((0, 0, 2, 1)), "selection covers all freed cells");
+    assert_eq!(
+        range,
+        Some((0, 0, 2, 1)),
+        "selection covers all freed cells"
+    );
 }
 
 /// `UnmergeActive` over a selection that only clips the edge of a merge still
@@ -1311,7 +1315,11 @@ fn unmerge_selection_grows_to_cover_straddling_merge() {
     });
     let out = state.handle_command(TrameCommand::UnmergeActive);
 
-    assert_eq!(read_display(&mut state, 1, 1).merge_span, None, "merge split");
+    assert_eq!(
+        read_display(&mut state, 1, 1).merge_span,
+        None,
+        "merge split"
+    );
     let range = out.display.iter().find_map(|e| match e {
         TrameEvent::SelectRange { r1, c1, r2, c2 } => Some((*r1, *c1, *r2, *c2)),
         _ => None,

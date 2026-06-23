@@ -115,13 +115,12 @@ impl TrameState {
     /// `merges_{sheet}` map. Returns whether an entry was removed; does not
     /// commit or rebuild the derived caches -- the caller batches those.
     fn delete_merge_at(&mut self, row: u32, col: u32) -> bool {
-        let Some((top, left)) =
-            self.merges
-                .iter()
-                .find_map(|(&(top, left), &(bottom, right))| {
-                    (row >= top && row <= bottom && col >= left && col <= right)
-                        .then_some((top, left))
-                })
+        let Some((top, left)) = self
+            .merges
+            .iter()
+            .find_map(|(&(top, left), &(bottom, right))| {
+                (row >= top && row <= bottom && col >= left && col <= right).then_some((top, left))
+            })
         else {
             return false;
         };
