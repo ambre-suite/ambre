@@ -2771,6 +2771,167 @@ fn fill_copy_multi_cell_tiles_verbatim() {
     );
 }
 
+/// Autofill of a merged-cell source fills block by block and re-merges every
+/// tile (sec.5.F). A 2x1 merge at A1:A2 holding "x", dragged down to A6, yields
+/// merged blocks A3:A4 and A5:A6 each carrying "x"; the in-between covered cells
+/// stay blank and unmerged.
+#[test]
+fn fill_merged_source_tiles_and_remerges_blocks() {
+    use crate::{FillMode, GridRange};
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "x".to_owned(),
+    });
+    // Merge A1:A2 (1 col x 2 rows), master = A1.
+    state.handle_command(TrameCommand::MergeCells {
+        row: 0,
+        col: 0,
+        row_end: 1,
+        col_end: 0,
+    });
+
+    // Drag the handle down: source is the whole merge, dest snapped to A6.
+    state.handle_command(TrameCommand::FillRange {
+        sheet_id: state.active_sheet.clone(),
+        src: GridRange {
+            row: 0,
+            col: 0,
+            row_end: 1,
+            col_end: 0,
+        },
+        dest: GridRange {
+            row: 0,
+            col: 0,
+            row_end: 5,
+            col_end: 0,
+        },
+        mode: FillMode::Auto,
+    });
+
+    // Each block's master carries the value and a fresh 2x1 span; the masters
+    // (A3, A5) re-merge while the covered rows (A4, A6) stay blank.
+    let a3 = read_display(&mut state, 2, 0);
+    assert_eq!(a3.merge_span, Some((1, 2)), "A3 master spans 2 rows");
+    assert_eq!(a3.text, "x");
+    let a5 = read_display(&mut state, 4, 0);
+    assert_eq!(a5.merge_span, Some((1, 2)), "A5 master spans 2 rows");
+    assert_eq!(a5.text, "x");
+    let a4 = read_display(&mut state, 3, 0);
+    assert!(a4.is_merged, "A4 is covered by the A3 block");
+    assert_eq!(a4.merge_span, None);
+    assert_eq!(a4.text, "");
+}
+
+/// Ctrl-drag of a merged numeric source grows by +1 per block (Series), so the
+/// merge span and styling survive while each tile master increments. Mirrors the
+/// Ctrl path the UI resolves to `FillMode::Series` for a one-block source.
+#[test]
+fn fill_merged_series_increments_per_block() {
+    use crate::{FillMode, GridRange};
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "1".to_owned(),
+    });
+    // Merge A1:A2 (1 col x 2 rows), master = A1 holding the number 1.
+    state.handle_command(TrameCommand::MergeCells {
+        row: 0,
+        col: 0,
+        row_end: 1,
+        col_end: 0,
+    });
+
+    // Ctrl-drag down to A6: Series, so each block master grows by +1.
+    state.handle_command(TrameCommand::FillRange {
+        sheet_id: state.active_sheet.clone(),
+        src: GridRange {
+            row: 0,
+            col: 0,
+            row_end: 1,
+            col_end: 0,
+        },
+        dest: GridRange {
+            row: 0,
+            col: 0,
+            row_end: 5,
+            col_end: 0,
+        },
+        mode: FillMode::Series,
+    });
+
+    let a3 = read_display(&mut state, 2, 0);
+    assert_eq!(a3.merge_span, Some((1, 2)), "A3 master spans 2 rows");
+    assert_eq!(a3.text, "2", "second block increments to 2");
+    let a5 = read_display(&mut state, 4, 0);
+    assert_eq!(a5.merge_span, Some((1, 2)), "A5 master spans 2 rows");
+    assert_eq!(a5.text, "3", "third block increments to 3");
+}
+
+/// Dragging a stack of two equal merged blocks tiles the whole pattern: the
+/// fill re-merges every destination block and, under `Auto`, the two numeric
+/// masters form a series that keeps progressing across the new blocks.
+#[test]
+fn fill_multi_merged_source_continues_pattern() {
+    use crate::{FillMode, GridRange};
+    let mut state = TrameState::new();
+    // A1 = 1, A3 = 2; merge A1:A2 and A3:A4 into two 2x1 blocks.
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "1".to_owned(),
+    });
+    state.handle_command(TrameCommand::SetCellText {
+        row: 2,
+        col: 0,
+        text: "2".to_owned(),
+    });
+    state.handle_command(TrameCommand::MergeCells {
+        row: 0,
+        col: 0,
+        row_end: 1,
+        col_end: 0,
+    });
+    state.handle_command(TrameCommand::MergeCells {
+        row: 2,
+        col: 0,
+        row_end: 3,
+        col_end: 0,
+    });
+
+    // Drag the two-block source (A1:A4) down to A8 -> two more blocks.
+    state.handle_command(TrameCommand::FillRange {
+        sheet_id: state.active_sheet.clone(),
+        src: GridRange {
+            row: 0,
+            col: 0,
+            row_end: 3,
+            col_end: 0,
+        },
+        dest: GridRange {
+            row: 0,
+            col: 0,
+            row_end: 7,
+            col_end: 0,
+        },
+        mode: FillMode::Auto,
+    });
+
+    // A5 (block 3) and A7 (block 4) re-merge and continue the 1,2,... series.
+    let a5 = read_display(&mut state, 4, 0);
+    assert_eq!(a5.merge_span, Some((1, 2)), "A5 master spans 2 rows");
+    assert_eq!(a5.text, "3");
+    let a7 = read_display(&mut state, 6, 0);
+    assert_eq!(a7.merge_span, Some((1, 2)), "A7 master spans 2 rows");
+    assert_eq!(a7.text, "4");
+    // Covered rows of the new blocks stay blank.
+    let a6 = read_display(&mut state, 5, 0);
+    assert!(a6.is_merged);
+    assert_eq!(a6.text, "");
+}
+
 // -- Find & Replace (sec.5.G) ---------------------------------------------
 
 /// Seed a few cells on the active sheet for the find/replace tests.

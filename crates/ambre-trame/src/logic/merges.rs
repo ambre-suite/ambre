@@ -33,15 +33,25 @@ impl TrameState {
                 }
             }
         }
+        self.insert_merge_entry(top, left, bottom, right);
+        self.doc.commit();
+        self.after_merge_change()
+    }
+
+    /// Record one master->extent merge entry in `merges_{sheet}` for the
+    /// rectangle `(top,left)`-`(bottom,right)` (corners already ordered). Shared
+    /// by the context-menu merge and the merge-aware autofill (sec.5.F); does not
+    /// commit or rebuild the derived caches -- the caller batches those.
+    pub(super) fn insert_merge_entry(&mut self, top: u32, left: u32, bottom: u32, right: u32) {
         // Materialize the bottom-right corner so the whole rectangle has ids.
         if self.materialize(bottom, right).is_none() {
-            return TrameOutcome::display_only(vec![]);
+            return;
         }
         let (Some(master), Some(extent)) = (
             self.index.resolve(top as usize, left as usize),
             self.index.resolve(bottom as usize, right as usize),
         ) else {
-            return TrameOutcome::display_only(vec![]);
+            return;
         };
         let _ = self
             .doc
@@ -50,8 +60,6 @@ impl TrameState {
                 &cell_key(master.0, master.1),
                 cell_key(extent.0, extent.1).as_str(),
             );
-        self.doc.commit();
-        self.after_merge_change()
     }
 
     /// Split the merge whose rectangle contains `(row, col)`, restoring covered

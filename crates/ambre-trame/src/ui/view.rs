@@ -41,17 +41,39 @@ const BLINK_MS: f64 = 530.0;
 /// fill handle locks to a single axis: whichever direction the pointer extends
 /// farthest from the source wins, and the destination always contains the
 /// source. Returns the normalized rectangle `(r1, c1, r2, c2)`.
-fn fill_dest(src: CellRect, row: u32, col: u32) -> CellRect {
+///
+/// `block` is the source's fill granularity `(rows, cols)`: a plain cell source
+/// is `(1, 1)` and the destination tracks the pointer cell exactly, while a
+/// merged-cell source carries its block size so the extension snaps to whole
+/// blocks (Excel behaviour -- a 2x1 merge fills two rows at a time).
+fn fill_dest(src: CellRect, row: u32, col: u32, block: (u32, u32)) -> CellRect {
     let (sr1, sc1, sr2, sc2) = src;
+    let (bh, bw) = block;
     // Extent the pointer reaches beyond the source on each axis.
     let drow = row.saturating_sub(sr2).max(sr1.saturating_sub(row));
     let dcol = col.saturating_sub(sc2).max(sc1.saturating_sub(col));
     if drow >= dcol {
-        // Vertical fill: extend rows toward the pointer, keep the source columns.
-        (sr1.min(row), sc1, sr2.max(row), sc2)
+        // Vertical fill: extend rows toward the pointer, snapped to whole blocks.
+        if row > sr2 {
+            let nb = (row - sr2).div_ceil(bh);
+            (sr1, sc1, sr2 + nb * bh, sc2)
+        } else if row < sr1 {
+            let nb = (sr1 - row).div_ceil(bh);
+            (sr1.saturating_sub(nb * bh), sc1, sr2, sc2)
+        } else {
+            src
+        }
     } else {
-        // Horizontal fill: extend columns, keep the source rows.
-        (sr1, sc1.min(col), sr2, sc2.max(col))
+        // Horizontal fill: extend columns, snapped to whole blocks.
+        if col > sc2 {
+            let nb = (col - sc2).div_ceil(bw);
+            (sr1, sc1, sr2, sc2 + nb * bw)
+        } else if col < sc1 {
+            let nb = (sc1 - col).div_ceil(bw);
+            (sr1, sc1.saturating_sub(nb * bw), sr2, sc2)
+        } else {
+            src
+        }
     }
 }
 
@@ -231,9 +253,12 @@ pub struct TrameView {
     /// In-progress autofill drag from the fill handle, or `None` (`-ui.md`
     /// sec.5.F). Holds the source rectangle the drag started from and whether
     /// Ctrl was held at grab time (which forces Copy on a multi-cell source and a
-    /// +1 numeric Series on a single-cell one, Excel-style). Pointer moves grow
-    /// [`TrameUiState::fill_preview`] and the release emits a `FillRange`.
-    fill_drag: Option<(CellRect, bool)>,
+    /// +1 numeric Series on a single-cell one, Excel-style). The third element is
+    /// the source block granularity `(rows, cols)` -- `(1, 1)` for a plain cell,
+    /// the merge span for a merged-cell source so the drag snaps block by block.
+    /// Pointer moves grow [`TrameUiState::fill_preview`] and the release emits a
+    /// `FillRange`.
+    fill_drag: Option<(CellRect, bool, (u32, u32))>,
     /// True while the pointer is hovering the fill handle (without a press), so
     /// the canvas cursor shows the crosshair affordance. Tracked to avoid
     /// redundant DOM cursor writes on every pointer move.
@@ -1490,7 +1515,12 @@ impl TrameView {
                 ..
             } if self.fill_drag.is_none() && self.state.fill_handle_at(*x, *y) => {
                 self.text_input.focus();
-                self.fill_drag = Some((self.state.selection.bounds(), *ctrl));
+                // A merged-cell source fills block by block (Excel behaviour), so
+                // capture the merge-expanded source and its block granularity.
+                let bounds = self.state.selection.bounds();
+                let src = self.state.expand_to_merges(bounds);
+                let block = self.state.fill_source_block(bounds);
+                self.fill_drag = Some((src, *ctrl, block));
                 self.set_fill_cursor(true);
                 true
             }
@@ -1498,9 +1528,9 @@ impl TrameView {
             // dominant axis (a fill handle never fills two directions at once).
             InputEvent::PointerMove { x, y } if self.fill_drag.is_some() => {
                 if let Some((row, col)) = self.state.cell_at(*x, *y)
-                    && let Some((src, _)) = self.fill_drag
+                    && let Some((src, _, block)) = self.fill_drag
                 {
-                    self.state.fill_preview = Some(fill_dest(src, row, col));
+                    self.state.fill_preview = Some(fill_dest(src, row, col, block));
                     self.edit_dirty = true; // repaint the preview outline.
                 }
                 true
@@ -1946,7 +1976,7 @@ impl TrameView {
         // The drag is over: drop the crosshair (the next hover re-arms it).
         self.set_fill_cursor(false);
         self.hover_fill_handle = false;
-        let (Some((src, ctrl)), Some(dest)) =
+        let (Some((src, ctrl, block)), Some(dest)) =
             (self.fill_drag.take(), self.state.fill_preview.take())
         else {
             self.fill_drag = None;
@@ -1967,8 +1997,24 @@ impl TrameView {
         // A single source value along that axis forces a +1 numeric Series; a
         // multi-value source forces a verbatim Copy. Without Ctrl, Auto lets the
         // Logic thread pick Series vs Copy.
+        //
+        // A merged source counts blocks, not raw cells, along the drag axis: one
+        // block is a single value (Ctrl -> +1 Series), several blocks are several
+        // values (Ctrl -> Copy). `block` is the merge span; divide the source
+        // extent by it to get the block count along the axis.
         let vertical = dr1 < sr1 || dr2 > sr2;
-        let single_line = if vertical { sr1 == sr2 } else { sc1 == sc2 };
+        let single_line = if block != (1, 1) {
+            let n = if vertical {
+                (sr2 - sr1 + 1) / block.0
+            } else {
+                (sc2 - sc1 + 1) / block.1
+            };
+            n == 1
+        } else if vertical {
+            sr1 == sr2
+        } else {
+            sc1 == sc2
+        };
         let mode = if ctrl {
             if single_line {
                 FillMode::Series

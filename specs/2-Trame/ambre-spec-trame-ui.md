@@ -678,6 +678,21 @@ fn on_fill_handle_drag_end(&mut self, dest: (u32, u32)) {
 Hit-testing the handle uses a ~6px square at the selection's bottom-right corner; cursor
 switches to a crosshair on hover.
 
+**Merged-cell source (Excel behaviour).** When the source is tiled by equal merged blocks --
+either one block or a uniform grid of identically sized merges -- the fill is block-aware. The
+UI captures the merge-expanded source and its block size (`fill_source_block`, which checks the
+whole rect is a uniform tiling); the drag preview then snaps the extension to a whole number of
+blocks (`fill_dest`, a 2x1 merge fills two rows at a time) along the locked axis. On release the
+Logic thread (`logic::fill::merged_source_block` + `fill_merged`) tiles the blocks: each lane
+perpendicular to the drag axis extrapolates from its own stack of source blocks -- a numeric
+`Series` progresses across blocks, otherwise the source blocks are copied cyclically (a copied
+formula reindexes by the tile offset). Each tile master gets the value and its source block's
+style, the tile's covered cells are cleared, and a merge entry is recorded for every tile -- so
+the filled region is re-merged into blocks the same size as the source. The Ctrl single-vs-multi
+test counts blocks, not raw cells, along the drag axis: a single block is one value (Ctrl ->
+`Series` +1), several blocks are several values (Ctrl -> `Copy`). A plain (non-merged) source,
+or a mix of merge sizes, keeps the per-cell fill unchanged.
+
 ### G. Find & Replace -- MVP
 
 `Ctrl+F` / `Ctrl+H` open a **DOM chrome panel** (Leptos `FindReplace` component in

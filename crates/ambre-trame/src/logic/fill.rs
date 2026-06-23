@@ -50,6 +50,13 @@ impl TrameState {
         // `group_end`), mirroring `paste_range`.
         let _ = self.undo_manager.group_start();
 
+        // A source tiled by equal merged blocks (one block or a uniform grid of
+        // them) fills block by block and re-merges every tile (Excel behaviour,
+        // sec.5.F) instead of cell by cell.
+        if let Some((bh, bw)) = self.merged_source_block(sr1, sc1, sr2, sc2) {
+            return self.fill_merged(sr1, sc1, sr2, sc2, dr1, dc1, dr2, dc2, mode, bh, bw);
+        }
+
         // The fill handle locks to one axis; prefer the row axis when both look
         // extended (a diagonal drag), matching the handle's bottom-right anchor.
         if rows_extended {
@@ -59,6 +66,165 @@ impl TrameState {
         }
 
         self.finish_cell_writes()
+    }
+
+    /// Return the block size `(rows, cols)` when the source rect
+    /// `(sr1,sc1)-(sr2,sc2)` is exactly tiled by equal merged blocks -- one merge
+    /// or a uniform grid of identically sized merges, each with its master at the
+    /// tile corner (sec.5.F). `None` for a plain selection or a mix of sizes,
+    /// which then falls back to the per-cell fill.
+    fn merged_source_block(&self, sr1: u32, sc1: u32, sr2: u32, sc2: u32) -> Option<(u32, u32)> {
+        let (bb, rb) = self.merges.get(&(sr1, sc1)).copied()?;
+        let bh = bb - sr1 + 1;
+        let bw = rb - sc1 + 1;
+        if !(sr2 - sr1 + 1).is_multiple_of(bh) || !(sc2 - sc1 + 1).is_multiple_of(bw) {
+            return None;
+        }
+        let mut top = sr1;
+        while top <= sr2 {
+            let mut left = sc1;
+            while left <= sc2 {
+                if self.merges.get(&(top, left)).copied() != Some((top + bh - 1, left + bw - 1)) {
+                    return None;
+                }
+                left += bw;
+            }
+            top += bh;
+        }
+        Some((bh, bw))
+    }
+
+    /// Autofill a merged source (one block or a uniform grid of `bh` x `bw`
+    /// blocks) over `dest` (sec.5.F): tile the blocks along the drag axis and
+    /// re-merge every tile to the block span. Each lane perpendicular to the drag
+    /// extrapolates independently from its own source blocks: a numeric series
+    /// progresses, otherwise the source blocks are copied cyclically (a copied
+    /// formula's relative refs reindex by the tile offset). The UI snaps `dest` to
+    /// whole blocks, so the tiles align; source tiles are skipped.
+    #[allow(clippy::too_many_arguments)]
+    fn fill_merged(
+        &mut self,
+        sr1: u32,
+        sc1: u32,
+        sr2: u32,
+        sc2: u32,
+        dr1: u32,
+        dc1: u32,
+        dr2: u32,
+        dc2: u32,
+        mode: FillMode,
+        bh: u32,
+        bw: u32,
+    ) -> TrameOutcome {
+        let vertical = dr1 < sr1 || dr2 > sr2;
+        if vertical {
+            // Each block column is a lane; fill it from its own stack of masters.
+            let mut left = sc1;
+            while left + bw - 1 <= sc2 {
+                let sources: Vec<String> = (sr1..=sr2)
+                    .step_by(bh as usize)
+                    .map(|top| self.cell_raw(top, left))
+                    .collect();
+                let series = series_params(mode, &sources);
+                let k = sources.len() as i64;
+                let mut top = dr1;
+                while top + bh - 1 <= dr2 {
+                    if top < sr1 || top > sr2 {
+                        let tidx = (top as i64 - sr1 as i64).div_euclid(bh as i64);
+                        let sidx = tidx.rem_euclid(k) as usize;
+                        let src_top = sr1 + sidx as u32 * bh;
+                        let raw = sources[sidx].clone();
+                        self.fill_merged_tile(top, left, bh, bw, tidx, &raw, src_top, left, series);
+                    }
+                    top += bh;
+                }
+                left += bw;
+            }
+        } else {
+            // Each block row is a lane; fill it from its own row of masters.
+            let mut top = sr1;
+            while top + bh - 1 <= sr2 {
+                let sources: Vec<String> = (sc1..=sc2)
+                    .step_by(bw as usize)
+                    .map(|left| self.cell_raw(top, left))
+                    .collect();
+                let series = series_params(mode, &sources);
+                let k = sources.len() as i64;
+                let mut left = dc1;
+                while left + bw - 1 <= dc2 {
+                    if left < sc1 || left > sc2 {
+                        let tidx = (left as i64 - sc1 as i64).div_euclid(bw as i64);
+                        let sidx = tidx.rem_euclid(k) as usize;
+                        let src_left = sc1 + sidx as u32 * bw;
+                        let raw = sources[sidx].clone();
+                        self.fill_merged_tile(top, left, bh, bw, tidx, &raw, top, src_left, series);
+                    }
+                    left += bw;
+                }
+                top += bh;
+            }
+        }
+        // Rebuild the derived merge caches over the new entries and let masked /
+        // unmasked cells rejoin the engine before the standard write tail flushes.
+        self.rebuild_merges();
+        self.reseed_engine();
+        self.finish_cell_writes()
+    }
+
+    /// Write and merge one autofill tile whose master is `(top, left)` and whose
+    /// span is `bh` x `bw`. `tidx` is the tile's signed block offset from the
+    /// source along the drag axis (`0` = first source block). `src_raw` /
+    /// `(src_row, src_col)` are the source block this tile copies (cyclic for a
+    /// multi-block source). The covered cells are cleared so the merge is
+    /// accepted, the master gets the series/copied value and the source block's
+    /// style, and a merge entry is recorded for the tile.
+    #[allow(clippy::too_many_arguments)]
+    fn fill_merged_tile(
+        &mut self,
+        top: u32,
+        left: u32,
+        bh: u32,
+        bw: u32,
+        tidx: i64,
+        src_raw: &str,
+        src_row: u32,
+        src_col: u32,
+        series: Option<(f64, f64)>,
+    ) {
+        let text = if let Some((first, step)) = series {
+            format_number(first + tidx as f64 * step)
+        } else if src_raw.starts_with('=') {
+            shift_formula(
+                src_raw,
+                top as i64 - src_row as i64,
+                left as i64 - src_col as i64,
+            )
+        } else {
+            src_raw.to_string()
+        };
+        // Clear the covered cells first: merge_cells/rebuild only accept an empty
+        // block, and a previous value there would otherwise be masked.
+        for row in top..top + bh {
+            for col in left..left + bw {
+                if (row, col) != (top, left) {
+                    self.write_cell(row, col, "");
+                }
+            }
+        }
+        self.write_cell(top, left, &text);
+        // Carry the source master's formatting onto the tile master.
+        let cell = ClipboardCell {
+            bold: self.bold.contains(&(src_row, src_col)),
+            italic: self.italic.contains(&(src_row, src_col)),
+            style: self
+                .styles
+                .get(&(src_row, src_col))
+                .cloned()
+                .unwrap_or_default(),
+            ..Default::default()
+        };
+        self.apply_pasted_style(top, left, &cell);
+        self.insert_merge_entry(top, left, top + bh - 1, left + bw - 1);
     }
 
     /// Fill the rows of `[dr1..=dr2] \ [sr1..=sr2]` for every source column,
