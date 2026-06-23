@@ -125,9 +125,23 @@ fn render_node(expr: &Expr) -> String {
         }
         Expr::BinOp { kind, lhs, rhs } => {
             let p = precedence(expr);
-            // All binary operators are left-associative except `^` (right).
+            // Comparison operators are non-associative in the grammar (the parser
+            // accepts a single comparison, only a parenthesized one may nest), so
+            // both operands need a strictly tighter context. `^` is right- and the
+            // rest left-associative.
+            let is_cmp = matches!(
+                kind,
+                BinOpKind::Eq
+                    | BinOpKind::Ne
+                    | BinOpKind::Lt
+                    | BinOpKind::Le
+                    | BinOpKind::Gt
+                    | BinOpKind::Ge
+            );
             let (lhs_min, rhs_min) = if *kind == BinOpKind::Pow {
                 (p + 1, p)
+            } else if is_cmp {
+                (p + 1, p + 1)
             } else {
                 (p, p + 1)
             };
