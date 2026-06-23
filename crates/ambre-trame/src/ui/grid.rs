@@ -1423,6 +1423,45 @@ impl TrameUiState {
         }
     }
 
+    /// The fill granularity `(rows, cols)` of an autofill source `bounds`
+    /// (sec.5.F). When the source is tiled by equal merged blocks (one block or a
+    /// uniform grid of identically sized merges), returns the block span so the
+    /// drag snaps block by block and the release re-merges each tile (Excel
+    /// behaviour); otherwise `(1, 1)` keeps the plain per-cell fill. A source that
+    /// mixes merges of different sizes or a merge with extra cells is not
+    /// block-aligned and falls back to `(1, 1)`.
+    pub fn fill_source_block(&self, bounds: CellRect) -> (u32, u32) {
+        let (r1, c1, r2, c2) = self.expand_to_merges(bounds);
+        let Some(&(cs, rs)) = self
+            .cell_cache
+            .get(&(r1, c1))
+            .and_then(|d| d.merge_span.as_ref())
+        else {
+            return (1, 1);
+        };
+        let (bh, bw) = (rs, cs);
+        if !(r2 - r1 + 1).is_multiple_of(bh) || !(c2 - c1 + 1).is_multiple_of(bw) {
+            return (1, 1);
+        }
+        let mut top = r1;
+        while top <= r2 {
+            let mut left = c1;
+            while left <= c2 {
+                match self
+                    .cell_cache
+                    .get(&(top, left))
+                    .and_then(|d| d.merge_span.as_ref())
+                {
+                    Some(&(s_cs, s_rs)) if s_rs == bh && s_cs == bw => {}
+                    _ => return (1, 1),
+                }
+                left += bw;
+            }
+            top += bh;
+        }
+        (bh, bw)
+    }
+
     /// The selection rectangles to draw/operate on, each expanded to whole
     /// merges (see [`expand_to_merges`](Self::expand_to_merges)). Mirrors
     /// [`Selection::rects`] but merge-aware.
