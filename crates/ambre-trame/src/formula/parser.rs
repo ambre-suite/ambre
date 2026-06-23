@@ -400,9 +400,11 @@ pub fn parse_formula(input: &str) -> Result<Expr, String> {
         Ok(("", ast)) => Ok(ast),
         Ok((rest, _)) => Err(format!("unexpected trailing input: '{rest}'")),
         Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => {
-            let pos = e.input.len();
-            let ctx = &input.trim()[pos.saturating_sub(10).min(pos)..pos];
-            Err(format!("parse error at '{ctx}'"))
+            // Point at the unparsed remainder. Slice by `chars()` so a
+            // multi-byte codepoint at the failure site cannot split a UTF-8
+            // boundary (a byte-range slice here panics on non-ASCII input).
+            let near: String = e.input.chars().take(12).collect();
+            Err(format!("parse error near '{near}'"))
         }
         Err(nom::Err::Incomplete(_)) => Err("incomplete input".into()),
     }

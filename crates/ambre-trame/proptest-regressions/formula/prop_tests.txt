@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 5ace821e539c17651f5434997907fcfc3883ff8a6fa126318f878776db1f5dbd # shrinks to s = "\0𐀀A\u{b}\0𐀀"
+cc d82305806de614a9e37c2bd591acf73885223e4814b6c9ce10c6e10aaf117562 # shrinks to ast = BinOp { kind: Eq, lhs: BinOp { kind: Eq, lhs: Literal(Number(0.0)), rhs: Literal(Number(0.0)) }, rhs: Literal(Number(0.0)) }
