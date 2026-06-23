@@ -1838,7 +1838,10 @@ mod tests {
             active: (5, 0),
             extra: Vec::new(),
         };
-        assert!(state.snap_active_to_master(), "covered active corner re-homed");
+        assert!(
+            state.snap_active_to_master(),
+            "covered active corner re-homed"
+        );
         // The selection still spans all three blocks (rows 0..=4 after re-homing
         // the active corner onto the last master); it did not collapse.
         assert_eq!(state.selection.anchor, (0, 0));
