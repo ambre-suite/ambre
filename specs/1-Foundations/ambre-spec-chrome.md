@@ -122,7 +122,7 @@ It has two faces, switched on the session state (`username: Option<String>` fill
 
 - **Open**: client `pushState` to `/{doc_type}/{id}`; the persistent canvas swaps document in place via `AppView::set_document` (no full-page nav, no worker respawn — `ambre-spec-architecture.md §6`).
 - **New document**: generate the id client-side (UUID v7) and **open it immediately** — **no name prompt** (friction on every create; the clean default is unnamed). The document opens **untitled** (`name = None`); the server row is created lazily on first edit. `CreateDocument { doc_type, name }` carries a name up to Sync (which encrypts it) only once the user actually sets one.
-- **Rename / Delete**: per-card actions → `RestCommand::RenameDocument` / `DeleteDocument`. Renaming is also available inline from the open document's header, at any time.
+- **Rename / Delete**: per-card actions → `RestCommand::RenameDocument` / `DeleteDocument`. Renaming is also available inline from the open document's header, at any time. **Delete is irreversible** (E2EE: no server-side trash — the ciphertext and the keys are gone), so it goes through a confirmation `<dialog>` (`§2.B`) naming the document ("Untitled" when unnamed) before dispatching `DeleteDocument`; the card is removed optimistically on `DocumentDeleted`.
 - **Empty state**: a soigné placeholder ("No documents yet — create one above"), not a bare list.
 
 **Naming strategy (normative).** The default of a new document is the **absence of a name**, not a generated string:
@@ -226,6 +226,6 @@ Pure presentation layer:
 *The `/` home screen exists but is bare: it discards `DocumentSummary.name` and renders `doc_type` + a short id, off the design tokens. This Story makes it a real document home (§2.G). App-agnostic, drives every `DocType`.*
 - [ ] Decrypt `name_enc` in the Sync thread (`doc_key_enc` → Document Key → plaintext) and propagate it through `DocumentSummary.name` to the launcher (today Sync passes the blob through and the launcher ignores the field). See `ambre-spec-architecture.md §3`.
 - [ ] Document cards: type icon (one glyph per `DocType`) + name (or dimmed "Untitled" placeholder, never id/type word) + last-modified (relative) + shared badge (member count > 1)
-- [ ] Create-untitled (no name prompt; lazy server row) + inline rename + delete, wiring `CreateDocument`/`RenameDocument`/`DeleteDocument`
+- [ ] Create-untitled (no name prompt; lazy server row) + inline rename + delete, wiring `CreateDocument`/`RenameDocument`/`DeleteDocument`; delete behind a confirmation `<dialog>` (irreversible, no server-side trash) naming the target
 - [ ] Re-theme the launcher on the generated design tokens (remove the ad-hoc `--color-*` fallbacks that match nothing); soigné empty state; sign-in panel with Ambre wordmark + tagline
 - [ ] Generic localized type labels (distinct from the brand `DocType::name()`) for icon-less contexts (browser tab title, share invitations)
