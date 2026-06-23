@@ -28,7 +28,7 @@ The specs predate this file and use their own phase vocabulary. Mapping:
 | This file | Foundation specs (`1-Foundations/`) | Trame specs (`2-Trame/`) |
 | :--- | :--- | :--- |
 | `E0`/`E1` (done) | `ARCH P0`-`P3`, `CANVAS P0`, `CHROME P1`-`P3`, `UI P0`-`P2`, `SYNC P0`-`P3`, `SRV P0`/`P2` | engine Phase 0/1 (logic), virtual scroll + inline editor (ui Phase 1) |
-| `E2` | `CANVAS P0` remaining items | -- |
+| `E2` | `CANVAS P0` remaining items, `CHROME P4` (launcher) | -- |
 | `E3` | -- | `trame-logic §14`, `trame-features §10`, `trame-ui §18`, `trame-interop §10` (Phase 1) |
 | `ET` | `ARCH P6` (test infrastructure) | Trame "Tested DoD" debt items (logic/features/ui/interop) |
 | `E4` | `ARCH P2`/`P5`, `CANVAS P1`, `SYNC P4`, `SRV P1` | -- |
@@ -72,12 +72,21 @@ Stories (all `[x]`):
 > Dependencies: `SRV P0` precedes the network wiring of `SYNC P2` (need a target relay);
 > `SYNC P0` precedes `SYNC P1`-`P3` (crypto before integration).
 
-## E2 — Foundation finishing (minimal)  `[x]` (done)
+## E2 — Foundation finishing (minimal)  `[ ]` (reopened)
 
 *Close the visible/blocking foundation gaps. Deliberately minimal: offline durability, audits and
 benchmarks are deferred to `E5`.*
 
+> **Reopened** for `CHROME P4`: the `/` launcher exists but discards the (E2E-encrypted) document
+> name and is off the design tokens — a visible foundation gap in the same spirit as the sharing UI.
+> Per the golden rule the Epic status is derived, so adding an open Story flips E2 back to `[ ]`.
+
 Stories:
+- `CHROME P4` `[ ]` — **Launcher screen** (`ambre-spec-chrome.md §2.G`/`§7`): decrypt `name_enc`
+  through to `DocumentSummary.name`, document cards (type icon + name + last-modified + shared badge),
+  create-untitled / inline rename / delete, token re-theme + empty state + sign-in identity. Makes the
+  document home actually usable (today it shows `doc_type` + a short id). Naming/encryption contract in
+  `ambre-spec-architecture.md §3`.
 - **Document sharing UI (chrome)** — invite/revoke collaborators by user, wiring the existing
   `InviteToDocument`/`RevokeFromDocument` flow (`SYNC P3`, sharing flow in `ambre-spec-sync.md §3`)
   to a chrome command + dialog. **Until this exists, genuine multi-user collaboration is unreachable
