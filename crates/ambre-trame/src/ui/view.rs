@@ -708,6 +708,18 @@ impl TrameView {
             TrameEvent::ViewportData { .. } => {
                 self.state.on_viewport_data(te);
                 self.data_dirty = true;
+                // A batch may carry a newly-created merge whose span now covers
+                // the active cell (e.g. the drag-end corner after a merge). Re-home
+                // the cursor on the master so typing targets the top-left, not a
+                // covered cell (which would reject the write as a conflict). Skip
+                // while dragging/editing so an in-progress gesture is not disturbed.
+                if !self.selecting_drag
+                    && self.editor.is_none()
+                    && self.state.snap_active_to_master()
+                {
+                    self.send_command_lossy(self.set_active_cmd());
+                    self.needs_full = true;
+                }
             }
             // The active sheet may have changed (switch, or delete fallback
             // decided by the Logic thread); adopt it and refresh the strip. A

@@ -107,6 +107,7 @@ pub fn FormatBar(
         <button
             aria-label="Bold"
             aria-pressed=move || style.bold.get().then_some("true")
+            on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_command.run(BOLD)
         >
             <Icon icon=icondata::BsTypeBold />
@@ -114,6 +115,7 @@ pub fn FormatBar(
         <button
             aria-label="Italic"
             aria-pressed=move || style.italic.get().then_some("true")
+            on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_command.run(ITALIC)
         >
             <Icon icon=icondata::BsTypeItalic />
@@ -121,6 +123,7 @@ pub fn FormatBar(
         <button
             aria-label="Underline"
             aria-pressed=move || style.underline.get().then_some("true")
+            on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_style.run(StylePatch {
                 underline: Some(!style.underline.get_untracked()),
                 ..Default::default()
@@ -131,6 +134,7 @@ pub fn FormatBar(
         <button
             aria-label="Strikethrough"
             aria-pressed=move || style.strikethrough.get().then_some("true")
+            on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_style.run(StylePatch {
                 strikethrough: Some(!style.strikethrough.get_untracked()),
                 ..Default::default()
@@ -197,6 +201,7 @@ pub fn FormatBar(
         <button
             aria-label="Decrease decimals"
             disabled=move || !style.format.get().has_decimals()
+            on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_style.run(StylePatch { decimals: Some(Some(0)), ..Default::default() })
         >
             <Icon icon=icondata::LuDecimalsArrowLeft />
@@ -204,6 +209,7 @@ pub fn FormatBar(
         <button
             aria-label="Increase decimals"
             disabled=move || !style.format.get().has_decimals()
+            on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_style.run(StylePatch { decimals: Some(Some(2)), ..Default::default() })
         >
             <Icon icon=icondata::LuDecimalsArrowRight />
@@ -218,6 +224,7 @@ pub fn FormatBar(
         <button
             aria-label="Wrap text"
             aria-pressed=move || style.wrap.get().then_some("true")
+            on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_style.run(StylePatch {
                 wrap: Some(!style.wrap.get_untracked()),
                 ..Default::default()
@@ -233,6 +240,7 @@ pub fn FormatBar(
         <button
             aria-label="Merge cells"
             aria-pressed=move || style.merged.get().then_some("true")
+            on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| {
                 on_command.run(if style.merged.get_untracked() { UNMERGE } else { MERGE })
             }
@@ -244,6 +252,7 @@ pub fn FormatBar(
         <button
             aria-label="Undo"
             disabled=move || !toggles.undo_enabled.get()
+            on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_command.run(UNDO)
         >
             <Icon icon=icondata::BiUndoRegular />
@@ -251,6 +260,7 @@ pub fn FormatBar(
         <button
             aria-label="Redo"
             disabled=move || !toggles.redo_enabled.get()
+            on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_command.run(REDO)
         >
             <Icon icon=icondata::BiRedoRegular />
