@@ -778,8 +778,27 @@ impl TrameUiState {
     pub fn snap_active_to_master(&mut self) -> bool {
         let (ar, ac) = self.selection.active;
         match self.merge_master_at(ar, ac) {
-            Some((mr, mc, _, _)) if (mr, mc) != (ar, ac) => {
-                self.selection = Selection::single(mr, mc);
+            Some((mr, mc, cs, rs)) if (mr, mc) != (ar, ac) => {
+                // Collapse onto the master only when this one block covers the
+                // whole selection (e.g. drag-selected cells that just became a
+                // single merge). A selection spanning more than this block -- such
+                // as an autofill that produced a grid of merges, whose active
+                // corner landed on the last block's covered sub-cell -- must keep
+                // its full extent; we only re-home the active corner onto that
+                // block's master so it stops sitting on a covered sub-cell. The
+                // bounds then re-expand through `expand_to_merges`, so the rendered
+                // selection still covers every filled block.
+                let (sr1, sc1, sr2, sc2) = self.selection.bounds();
+                let covers_selection = self.selection.extra.is_empty()
+                    && sr1 >= mr
+                    && sc1 >= mc
+                    && sr2 <= mr + rs - 1
+                    && sc2 <= mc + cs - 1;
+                if covers_selection {
+                    self.selection = Selection::single(mr, mc);
+                } else {
+                    self.selection.active = (mr, mc);
+                }
                 true
             }
             _ => false,
@@ -1708,6 +1727,55 @@ mod tests {
         assert_eq!(state.selection, Selection::single(1, 1));
         // Already on the master: nothing to do.
         assert!(!state.snap_active_to_master());
+    }
+
+    /// Autofill bug: dragging the fill handle from a merged source produces a
+    /// grid of merges, leaving the selection spanning every filled block with the
+    /// active corner on the last block's covered sub-cell. `snap_active_to_master`
+    /// must keep the full multi-block selection (only re-homing the active corner
+    /// onto its block master), not collapse it down to the last block.
+    #[test]
+    fn snap_keeps_multi_block_fill_selection() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        let cell = |row, col, span| DisplayCell {
+            row,
+            col,
+            text: String::new(),
+            raw: String::new(),
+            is_merged: true,
+            merge_span: span,
+            ..Default::default()
+        };
+        // Three stacked 2x1 (1 col, 2 rows) merges in column 0: a source block
+        // filled down into two more, as a merge-aware autofill leaves them.
+        state.on_viewport_data(TrameEvent::ViewportData {
+            version: 0,
+            row_start: 0,
+            col_start: 0,
+            cells: vec![
+                cell(0, 0, Some((1, 2))), // master, rows 0..=1
+                cell(1, 0, None),
+                cell(2, 0, Some((1, 2))), // master, rows 2..=3
+                cell(3, 0, None),
+                cell(4, 0, Some((1, 2))), // master, rows 4..=5
+                cell(5, 0, None),
+            ],
+        });
+        // Post-fill selection: anchor on the source master, active on the last
+        // block's covered bottom sub-cell.
+        state.selection = Selection {
+            anchor: (0, 0),
+            active: (5, 0),
+            extra: Vec::new(),
+        };
+        assert!(state.snap_active_to_master(), "covered active corner re-homed");
+        // The selection still spans all three blocks (rows 0..=4 after re-homing
+        // the active corner onto the last master); it did not collapse.
+        assert_eq!(state.selection.anchor, (0, 0));
+        assert_eq!(state.selection.active, (4, 0));
+        assert_eq!(state.selection.bounds(), (0, 0, 4, 0));
+        // expand_to_merges re-grows the last block, so the render covers row 5 too.
+        assert_eq!(state.selection_rects(), vec![(0, 0, 5, 0)]);
     }
 
     /// Feed a single column of cells, flagging `filtered` rows as collapsed
