@@ -31,6 +31,7 @@ Here are your STRICT engagement rules to save my quota and time:
 3. ABSOLUTE CONCISENESS: Skip walls of theoretical explanations. I know my project's architecture. Produce the Rust code or the necessary diff directly.
 4. RESPECT THE SPECS: The sole source of truth is the Markdown specification document I provide. If the current code diverges but works for the requested case, do not try to refactor everything at once.
 5. OUTPUT FORMAT: Prefer targeted implementation blocks or "diffs" over rewriting 500-line `.rs` files.
+6. BUG-FIX WORKFLOW: When fixing a bug, first write an automated test that reproduces it (when feasible), then fix the bug, then confirm the test passes after the fix.
 
 ---
 
