@@ -221,3 +221,11 @@ Pure presentation layer:
 - [x] CSS Mobile/Tablet/Desktop breakpoints on the chrome
 - [x] ARIA a11y patterns in `ambre-chrome` (roving tabindex, focus trap, live regions); content a11y = DOM mirror (accessible textarea + live region announcing active cell). *AccessKit ruled out on the web: the a11y tree is the DOM, no web adapter — the DOM mirror replaces it.*
 - [x] `performance.mark`/`measure` profiling desktop **and** mobile (keydown → caret < 50 ms target / < 100 ms acceptable; sustained FPS while typing; paste 10 KB)
+
+### CHROME P4 — Launcher screen (§2.G)
+*The `/` home screen exists but is bare: it discards `DocumentSummary.name` and renders `doc_type` + a short id, off the design tokens. This Story makes it a real document home (§2.G). App-agnostic, drives every `DocType`.*
+- [ ] Decrypt `name_enc` in the Sync thread (`doc_key_enc` → Document Key → plaintext) and propagate it through `DocumentSummary.name` to the launcher (today Sync passes the blob through and the launcher ignores the field). See `ambre-spec-architecture.md §3`.
+- [ ] Document cards: type icon (one glyph per `DocType`) + name (or dimmed "Untitled" placeholder, never id/type word) + last-modified (relative) + shared badge (member count > 1)
+- [ ] Create-untitled (no name prompt; lazy server row) + inline rename + delete, wiring `CreateDocument`/`RenameDocument`/`DeleteDocument`
+- [ ] Re-theme the launcher on the generated design tokens (remove the ad-hoc `--color-*` fallbacks that match nothing); soigné empty state; sign-in panel with Ambre wordmark + tagline
+- [ ] Generic localized type labels (distinct from the brand `DocType::name()`) for icon-less contexts (browser tab title, share invitations)
