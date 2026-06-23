@@ -173,9 +173,8 @@ fn expr_strategy() -> impl Strategy<Value = Expr> {
                 kind: UnaryOpKind::Neg,
                 operand: Box::new(e),
             }),
-            (fn_name(), proptest::collection::vec(inner, 0..3)).prop_map(|(name, args)| {
-                Expr::FnCall { name, args }
-            }),
+            (fn_name(), proptest::collection::vec(inner, 0..3))
+                .prop_map(|(name, args)| { Expr::FnCall { name, args } }),
         ]
     })
 }
