@@ -251,14 +251,14 @@ pub struct TrameView {
     /// moves while set extend the live selection rectangle.
     selecting_drag: bool,
     /// In-progress autofill drag from the fill handle, or `None` (`-ui.md`
-    /// sec.5.F). Holds the source rectangle the drag started from and whether
-    /// Ctrl was held at grab time (which forces Copy on a multi-cell source and a
-    /// +1 numeric Series on a single-cell one, Excel-style). The third element is
-    /// the source block granularity `(rows, cols)` -- `(1, 1)` for a plain cell,
-    /// the merge span for a merged-cell source so the drag snaps block by block.
+    /// sec.5.F). Holds the source rectangle the drag started from and the source
+    /// block granularity `(rows, cols)` -- `(1, 1)` for a plain cell, the merge
+    /// span for a merged-cell source so the drag snaps block by block. Ctrl is
+    /// read at *release* time (forces Copy on a multi-cell source and a +1 numeric
+    /// Series on a single-cell one, Excel-style), so toggling it mid-drag counts.
     /// Pointer moves grow [`TrameUiState::fill_preview`] and the release emits a
     /// `FillRange`.
-    fill_drag: Option<(CellRect, bool, (u32, u32))>,
+    fill_drag: Option<(CellRect, (u32, u32))>,
     /// True while the pointer is hovering the fill handle (without a press), so
     /// the canvas cursor shows the crosshair affordance. Tracked to avoid
     /// redundant DOM cursor writes on every pointer move.
@@ -1511,7 +1511,6 @@ impl TrameView {
                 x,
                 y,
                 button: 0,
-                ctrl,
                 ..
             } if self.fill_drag.is_none() && self.state.fill_handle_at(*x, *y) => {
                 self.text_input.focus();
@@ -1520,7 +1519,7 @@ impl TrameView {
                 let bounds = self.state.selection.bounds();
                 let src = self.state.expand_to_merges(bounds);
                 let block = self.state.fill_source_block(bounds);
-                self.fill_drag = Some((src, *ctrl, block));
+                self.fill_drag = Some((src, block));
                 self.set_fill_cursor(true);
                 true
             }
@@ -1528,7 +1527,7 @@ impl TrameView {
             // dominant axis (a fill handle never fills two directions at once).
             InputEvent::PointerMove { x, y } if self.fill_drag.is_some() => {
                 if let Some((row, col)) = self.state.cell_at(*x, *y)
-                    && let Some((src, _, block)) = self.fill_drag
+                    && let Some((src, block)) = self.fill_drag
                 {
                     self.state.fill_preview = Some(fill_dest(src, row, col, block));
                     self.edit_dirty = true; // repaint the preview outline.
@@ -1537,8 +1536,8 @@ impl TrameView {
             }
             // Release: emit the fill, grow the selection over the filled range,
             // and clear the drag/preview.
-            InputEvent::PointerUp { .. } if self.fill_drag.is_some() => {
-                self.end_fill_drag();
+            InputEvent::PointerUp { ctrl, .. } if self.fill_drag.is_some() => {
+                self.end_fill_drag(*ctrl);
                 true
             }
             InputEvent::PointerDown {
@@ -1972,11 +1971,11 @@ impl TrameView {
     /// dragged extent, grow the selection to cover the filled range, then clear
     /// the drag/preview. A drag that never left the source (no extension) is a
     /// no-op beyond clearing the state.
-    fn end_fill_drag(&mut self) {
+    fn end_fill_drag(&mut self, ctrl: bool) {
         // The drag is over: drop the crosshair (the next hover re-arms it).
         self.set_fill_cursor(false);
         self.hover_fill_handle = false;
-        let (Some((src, ctrl, block)), Some(dest)) =
+        let (Some((src, block)), Some(dest)) =
             (self.fill_drag.take(), self.state.fill_preview.take())
         else {
             self.fill_drag = None;

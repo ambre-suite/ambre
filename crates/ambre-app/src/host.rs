@@ -952,6 +952,7 @@ where
                         x,
                         y,
                         button: event.button(),
+                        ctrl: event.ctrl_key() || event.meta_key(),
                     },
                     _ => return,
                 };

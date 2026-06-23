@@ -88,6 +88,9 @@ pub enum InputEvent {
         x: f64,
         y: f64,
         button: i16,
+        /// Modifier state at *release* time (Cmd folded into ctrl). Autofill
+        /// reads Ctrl here, not at grab time, so toggling it mid-drag counts.
+        ctrl: bool,
     },
     /// Native double-click (respects the platform's double-click speed). Used to
     /// enter cell edit mode.
