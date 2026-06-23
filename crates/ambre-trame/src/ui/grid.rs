@@ -1409,8 +1409,7 @@ impl TrameUiState {
                 let (br, bc) = (mr + rs - 1, mc + cs - 1);
                 // Block (mr,mc)..=(br,bc) intersects the current rectangle?
                 if mr <= r2 && br >= r1 && mc <= c2 && bc >= c1 {
-                    let (nr1, nc1, nr2, nc2) =
-                        (r1.min(mr), c1.min(mc), r2.max(br), c2.max(bc));
+                    let (nr1, nc1, nr2, nc2) = (r1.min(mr), c1.min(mc), r2.max(br), c2.max(bc));
                     if (nr1, nc1, nr2, nc2) != (r1, c1, r2, c2) {
                         (r1, c1, r2, c2) = (nr1, nc1, nr2, nc2);
                         grew = true;
@@ -1664,8 +1663,16 @@ mod tests {
         let handle = state.fill_handle_rect().expect("handle visible");
         let extent = state.cell_pixel_rect(2, 2).expect("extent corner visible");
         let s = super::FILL_HANDLE_SIZE;
-        assert_eq!(handle.0, extent.0 + extent.2 - s / 2.0, "handle x on extent");
-        assert_eq!(handle.1, extent.1 + extent.3 - s / 2.0, "handle y on extent");
+        assert_eq!(
+            handle.0,
+            extent.0 + extent.2 - s / 2.0,
+            "handle x on extent"
+        );
+        assert_eq!(
+            handle.1,
+            extent.1 + extent.3 - s / 2.0,
+            "handle y on extent"
+        );
     }
 
     /// Bug 3: a drag-selection that touches part of a merge selects the whole

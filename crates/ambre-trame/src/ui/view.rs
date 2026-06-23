@@ -1508,10 +1508,7 @@ impl TrameView {
             // autofill drag instead of a new selection (sec.5.F). Checked before
             // the plain selection press so the ~7px handle wins the hit.
             InputEvent::PointerDown {
-                x,
-                y,
-                button: 0,
-                ..
+                x, y, button: 0, ..
             } if self.fill_drag.is_none() && self.state.fill_handle_at(*x, *y) => {
                 self.text_input.focus();
                 // A merged-cell source fills block by block (Excel behaviour), so
