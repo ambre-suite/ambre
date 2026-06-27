@@ -139,6 +139,10 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     }
     let brush = Brush::Solid(palette.header_text);
     let max_width = (hw - 8.0) as f32;
+    // Clip every row label to the strip: the last visible row is usually
+    // partial, and its vertically centred number would otherwise spill below
+    // the grid bottom and bleed through onto the sheet-tab strip (spec sec.13).
+    surface.push_clip(Rect::new(0.0, cells_top, hw, h));
     let mut i = 0u32;
     while let Some(row) = layout.row_at_slot(i) {
         // The label at visible slot `i` is the i-th non-hidden row from the
@@ -178,4 +182,5 @@ pub fn draw_row_headers_on<S: DrawSurface>(
         }
         i += 1;
     }
+    surface.pop_clip();
 }
