@@ -101,6 +101,9 @@ pub struct SnapshotRow {
     #[allow(dead_code)]
     pub update_clocks: serde_json::Value,
     pub s3_key: String,
+    /// Highest delta `seq` folded into this snapshot. Clients gate their
+    /// post-open `RequestMissing` on this value to skip the replayed history.
+    pub covered_seq: i64,
     #[allow(dead_code)]
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
@@ -676,6 +679,7 @@ pub async fn rotate_document_keys(
 // Snapshots ----------------------------------------------------------
 
 /// Inserts snapshot metadata and returns the assigned `SnapshotId`.
+#[allow(clippy::too_many_arguments)]
 pub async fn create_snapshot(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
@@ -684,11 +688,12 @@ pub async fn create_snapshot(
     parent_snapshot_proof: Option<&[u8]>,
     update_clocks: &serde_json::Value,
     s3_key: &str,
+    covered_seq: i64,
 ) -> Result<ambre_core::SnapshotId, AppError> {
     let did = id_to_uuid(*document_id);
     let snapshot_id = uuid::Uuid::now_v7();
     sqlx::query(
-        "INSERT INTO snapshots (id, document_id, author_pubkey, parent_hash, parent_snapshot_proof, update_clocks, s3_key) VALUES ($1, $2, $3, $4, $5, $6, $7)"
+        "INSERT INTO snapshots (id, document_id, author_pubkey, parent_hash, parent_snapshot_proof, update_clocks, s3_key, covered_seq) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
     )
     .bind(snapshot_id)
     .bind(did)
@@ -697,6 +702,7 @@ pub async fn create_snapshot(
     .bind(parent_snapshot_proof)
     .bind(update_clocks)
     .bind(s3_key)
+    .bind(covered_seq)
     .execute(pool)
     .await?;
 
@@ -711,7 +717,7 @@ pub async fn get_latest_snapshot(
 ) -> Result<Option<SnapshotRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let row = sqlx::query(
-        "SELECT id, document_id, author_pubkey, parent_hash, parent_snapshot_proof, update_clocks, s3_key, created_at FROM snapshots WHERE document_id = $1 ORDER BY created_at DESC LIMIT 1"
+        "SELECT id, document_id, author_pubkey, parent_hash, parent_snapshot_proof, update_clocks, s3_key, covered_seq, created_at FROM snapshots WHERE document_id = $1 ORDER BY created_at DESC LIMIT 1"
     )
     .bind(did)
     .fetch_optional(pool)
@@ -726,6 +732,7 @@ pub async fn get_latest_snapshot(
             parent_snapshot_proof: r.try_get("parent_snapshot_proof")?,
             update_clocks: r.try_get("update_clocks")?,
             s3_key: r.try_get("s3_key")?,
+            covered_seq: r.try_get("covered_seq")?,
             created_at: r.try_get("created_at")?,
         })),
         None => Ok(None),
@@ -739,7 +746,7 @@ pub async fn get_snapshot(
 ) -> Result<Option<SnapshotRow>, AppError> {
     let sid = id_to_uuid(*snapshot_id);
     let row = sqlx::query(
-        "SELECT id, document_id, author_pubkey, parent_hash, parent_snapshot_proof, update_clocks, s3_key, created_at FROM snapshots WHERE id = $1"
+        "SELECT id, document_id, author_pubkey, parent_hash, parent_snapshot_proof, update_clocks, s3_key, covered_seq, created_at FROM snapshots WHERE id = $1"
     )
     .bind(sid)
     .fetch_optional(pool)
@@ -754,6 +761,7 @@ pub async fn get_snapshot(
             parent_snapshot_proof: r.try_get("parent_snapshot_proof")?,
             update_clocks: r.try_get("update_clocks")?,
             s3_key: r.try_get("s3_key")?,
+            covered_seq: r.try_get("covered_seq")?,
             created_at: r.try_get("created_at")?,
         })),
         None => Ok(None),
@@ -1198,4 +1206,71 @@ pub async fn delete_snapshot(pool: &PgPool, snapshot_id: uuid::Uuid) -> Result<(
         .execute(pool)
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Bridge a stored `uuid::Uuid` (FK columns) back to a typed core id.
+    fn core_id<T: From<ambre_core::Uuid>>(id: uuid::Uuid) -> T {
+        ambre_core::Uuid::from_bytes(*id.as_bytes()).into()
+    }
+
+    /// `covered_seq` survives the insert and both read paths. This is the value a
+    /// client gates its post-open `RequestMissing` on, so a silent reset to 0
+    /// would resurrect the full-history replay.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn create_snapshot_roundtrips_covered_seq(pool: PgPool) {
+        // A snapshot row needs an owning document, which needs an owner user (FKs).
+        let user = create_user(
+            &pool,
+            "snap@test.dev",
+            "Snap",
+            &[1u8; 32],
+            &[2u8; 16],
+            &[3u8; 32],
+            &[4u8; 32],
+        )
+        .await
+        .expect("create user");
+        let owner: ambre_core::UserId = core_id(user.id);
+        let (doc, created) = create_document(&pool, &owner, "trame", None, None)
+            .await
+            .expect("create document");
+        assert!(created);
+        let document_id: ambre_core::DocumentId = core_id(doc.id);
+
+        let author = [5u8; 32];
+        let clocks = serde_json::json!({});
+        let sid = create_snapshot(
+            &pool,
+            &document_id,
+            &author,
+            None,
+            None,
+            &clocks,
+            "s3/key/snap",
+            1500,
+        )
+        .await
+        .expect("create snapshot");
+
+        // get_latest_snapshot (the open path's GET /snapshot) carries it.
+        let latest = get_latest_snapshot(&pool, &document_id)
+            .await
+            .expect("query latest")
+            .expect("snapshot exists");
+        assert_eq!(latest.id, id_to_uuid(sid));
+        assert_eq!(latest.s3_key, "s3/key/snap");
+        assert_eq!(latest.covered_seq, 1500);
+
+        // get_snapshot (the download-url path) carries it too.
+        let by_id = get_snapshot(&pool, &sid)
+            .await
+            .expect("query by id")
+            .expect("snapshot exists");
+        assert_eq!(by_id.covered_seq, 1500);
+    }
 }

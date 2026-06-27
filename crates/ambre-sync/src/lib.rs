@@ -199,6 +199,10 @@ enum SyncEvent {
         doc_key: DocumentKey,
         snapshot_payload: Option<Vec<u8>>,
         snapshot_id: SnapshotId,
+        /// Highest delta `seq` folded into `snapshot_payload` (0 when no snapshot
+        /// was downloaded): the post-open `RequestMissing` starts after this seq
+        /// so the history already in the snapshot is not replayed.
+        covered_seq: Seq,
         /// Document kind, carried so a not-yet-on-server doc can be lazily created
         /// with the right type on its first outbound update.
         doc_type: DocType,
@@ -269,6 +273,13 @@ enum SyncEvent {
         id: RequestId,
         document_id: DocumentId,
         content_hash: String,
+    },
+    /// Snapshot upload completed: the sealed blob was PUT to S3 and the server
+    /// confirmed the insertion (and broadcast `SnapshotAvailable`). The returned
+    /// `snapshot_id` becomes this document's current parent for future deltas.
+    SnapshotUploaded {
+        document_id: DocumentId,
+        snapshot_id: SnapshotId,
     },
     /// Media download completed: the encrypted blob was fetched from S3 and
     /// decrypted. `data` is the raw plaintext bytes ready for display.
@@ -1542,6 +1553,7 @@ impl SyncState {
                 doc_key,
                 snapshot_payload,
                 snapshot_id,
+                covered_seq,
                 doc_type,
                 server_created,
             } => {
@@ -1552,6 +1564,10 @@ impl SyncState {
                 let doc_state = self.documents.get_mut(&document_id).expect("just inserted");
                 doc_state.current_snapshot_id = snapshot_id;
                 doc_state.known_snapshots.insert(snapshot_id);
+                // Advance the replay cursor past the history folded into the
+                // downloaded snapshot, so the RequestMissing below fetches only
+                // newer deltas instead of replaying everything since genesis.
+                doc_state.last_seq = covered_seq;
                 if let Some(payload) = snapshot_payload {
                     self.send_to_logic(LogicEvent::RemoteSnapshot {
                         document_id,
@@ -1567,8 +1583,9 @@ impl SyncState {
                     // loaded snapshot (if any) covers state up to its own point,
                     // but any deltas committed after it -- including the whole
                     // history when no snapshot was ever uploaded -- must be pulled
-                    // explicitly. Request everything after our last known seq (0
-                    // on a fresh open) so the document hydrates to the latest.
+                    // explicitly. `last_seq` was just set to the snapshot's covered
+                    // seq (0 when none), so this requests only the deltas the
+                    // snapshot does not already contain.
                     let after_seq = self
                         .documents
                         .get(&document_id)
@@ -1723,6 +1740,15 @@ impl SyncState {
                         data,
                     },
                 );
+            }
+            SyncEvent::SnapshotUploaded {
+                document_id,
+                snapshot_id,
+            } => {
+                // Adopt the freshly uploaded snapshot as the current parent and
+                // release anything quarantined under it (mirrors the remote
+                // `SnapshotAvailable` path).
+                self.snapshot_known(document_id, snapshot_id);
             }
         }
     }
@@ -2209,33 +2235,67 @@ impl SyncState {
                         // open; the doc still works locally and reconciles later.
                         Ok(None) | Err(_) => (DocumentKey::generate(), false),
                     };
-                let snapshot_payload = if server_created {
-                    let snapshot_url =
-                        format!("{url_scheme}://{api_base}/api/documents/{doc_id}/snapshot/latest");
-                    match http::get_json_auth::<http::SnapshotPresignedResponse>(
-                        &snapshot_url,
-                        auth,
+                // Download the latest snapshot (when one exists) so the open
+                // seeds from compacted state instead of replaying every delta
+                // since genesis. Two server round-trips: `GET /snapshot` for the
+                // latest id + key + covered seq (404 when never snapshotted), then
+                // `POST /snapshot/download-url` for a presigned S3 GET. Returns the
+                // sealed blob, the real snapshot id (to register as a known parent)
+                // and the covered seq (to gate the post-open `RequestMissing`).
+                let (snapshot_payload, downloaded_snapshot_id, covered_seq) = if server_created {
+                    let meta_url =
+                        format!("{url_scheme}://{api_base}/api/documents/{doc_id}/snapshot");
+                    match http::get_json_opt_auth::<http::SnapshotMetadataResponse>(
+                        &meta_url,
+                        auth.clone(),
                     )
                     .await
                     {
-                        Ok(presigned) => http::fetch_bytes(&presigned.url).await.ok(),
-                        Err(_) => None,
+                        Ok(Some(meta)) => {
+                            let snap_id = SnapshotId::parse_str(&meta.snapshot_id).ok();
+                            let dl_url = format!(
+                                "{url_scheme}://{api_base}/api/documents/{doc_id}/snapshot/download-url"
+                            );
+                            let body = http::SnapshotDownloadUrlRequest {
+                                snapshot_id: meta.snapshot_id,
+                            };
+                            let payload = match http::post_json_auth::<
+                                _,
+                                http::SnapshotDownloadUrlResponse,
+                            >(&dl_url, &body, auth)
+                            .await
+                            {
+                                Ok(resp) => http::fetch_bytes(&resp.download_url).await.ok(),
+                                Err(_) => None,
+                            };
+                            // Only gate on the covered seq if the blob actually
+                            // downloaded; otherwise a failed fetch would skip
+                            // history that was never applied (data loss).
+                            match payload {
+                                Some(_) => (payload, snap_id, meta.covered_seq),
+                                None => (None, None, 0),
+                            }
+                        }
+                        // No snapshot yet, or a transient error: fall back to the
+                        // full delta replay (RequestMissing from seq 0) on open.
+                        Ok(None) | Err(_) => (None, None, 0),
                     }
                 } else {
-                    None
+                    (None, None, 0)
                 };
-                // No snapshot-upload path exists yet: documents accumulate only
-                // deltas, all parented on the genesis snapshot. Seed the base
-                // with that same deterministic id so the replayed deltas (see the
-                // `RequestMissing` on open below) recognise their parent instead
-                // of quarantining. A real snapshot id supersedes this once the
-                // snapshot-upload flow lands.
-                let snapshot_id = SnapshotId::genesis(doc_id);
+                // Register the downloaded snapshot's real id as the known parent so
+                // post-snapshot deltas are not quarantined. Without a download, fall
+                // back to the deterministic genesis id (deltas authored before any
+                // snapshot upload are all parented on it). Genesis stays seeded in
+                // `SyncDocumentState::new` regardless, covering mixed histories.
+                let snapshot_id =
+                    downloaded_snapshot_id.unwrap_or_else(|| SnapshotId::genesis(doc_id));
                 let _ = tx.send(SyncEvent::OpenDocumentReady {
                     document_id: doc_id,
                     doc_key,
                     snapshot_payload,
                     snapshot_id,
+                    covered_seq: Seq(covered_seq as u64),
                     doc_type,
                     server_created,
                 });
@@ -2477,6 +2537,7 @@ impl SyncState {
         let Some(pub_key) = self.author_pub_key() else {
             return;
         };
+        let author_pubkey = hex::encode(pub_key.as_array());
         let Some(doc_state) = self.documents.get(&document_id) else {
             tracing::warn!("Sync: SendSnapshot for unknown doc {document_id:?}");
             return;
@@ -2485,16 +2546,122 @@ impl SyncState {
             document_id,
             pub_key,
             snapshot_id: doc_state.current_snapshot_id,
+            // The BLAKE2b parent chain is a post-MVP hardening (see
+            // ambre-spec-sync.md): an empty proof seals a standalone snapshot,
+            // which the compaction model accepts for the genesis-parented MVP.
             parent_snapshot_proof: Vec::new(),
             parent_snapshot_update_clocks: Vec::new(),
         };
-        match pipeline::seal_snapshot(&payload, public_data, &doc_state.doc_key, &signing_key) {
-            Ok(snapshot) => tracing::info!(
-                "Sync: SendSnapshot {document_id:?} sealed ({} bytes ciphertext), S3 upload pending",
+        let snapshot = match pipeline::seal_snapshot(
+            &payload,
+            public_data,
+            &doc_state.doc_key,
+            &signing_key,
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("Sync: SendSnapshot seal failed for {document_id:?}: {e}");
+                return;
+            }
+        };
+
+        // Off the wasm path (host tests / mock relay) there is no event channel
+        // and no real S3: sealing is the observable behavior, stop here.
+        let Some(tx) = self.event_tx.clone() else {
+            tracing::info!(
+                "Sync: SendSnapshot {document_id:?} sealed ({} bytes), no event channel (test path)",
                 snapshot.ciphertext.0.len()
-            ),
-            Err(e) => tracing::error!("Sync: SendSnapshot seal failed for {document_id:?}: {e}"),
-        }
+            );
+            return;
+        };
+
+        // Serialize the full sealed `Snapshot` as the S3 blob (the inverse of the
+        // open-path `postcard::from_bytes::<Snapshot>` + `open_snapshot`).
+        let blob = match postcard::to_allocvec(&snapshot) {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::error!("Sync: SendSnapshot serialize failed for {document_id:?}: {e}");
+                return;
+            }
+        };
+        // The snapshot folds in every delta this client had received, i.e. up to
+        // its high-water `last_seq`. The server stores it so other clients can
+        // gate their post-open replay and skip this history.
+        let covered_seq = doc_state.last_seq.0 as i64;
+        let api_base = self.api_base.clone();
+        let url_scheme = self.url_scheme;
+        let auth = self.auth_context();
+
+        // upload-url -> S3 PUT -> confirm metadata, on the media-upload template.
+        wasm_bindgen_futures::spawn_local(async move {
+            let upload_url_req = format!(
+                "{url_scheme}://{api_base}/api/documents/{document_id}/snapshot/upload-url"
+            );
+            let (upload_url, s3_key) = match http::post_json_auth::<
+                serde_json::Value,
+                http::SnapshotUploadUrlResponse,
+            >(
+                &upload_url_req, &serde_json::json!({}), auth.clone()
+            )
+            .await
+            {
+                Ok(resp) => (resp.upload_url, resp.s3_key),
+                Err(e) => {
+                    tracing::error!(
+                        "Sync: SendSnapshot upload-url failed for {document_id:?}: {e}"
+                    );
+                    return;
+                }
+            };
+
+            // Presigned PUT goes straight to S3 (no session, no CSRF header).
+            if let Err(e) = http::put_bytes(&upload_url, &blob, "application/octet-stream").await {
+                tracing::error!("Sync: SendSnapshot S3 PUT failed for {document_id:?}: {e}");
+                return;
+            }
+
+            let confirm_url =
+                format!("{url_scheme}://{api_base}/api/documents/{document_id}/snapshot");
+            let confirm_body = http::CreateSnapshotRequest {
+                snapshot_id: SnapshotId::new().to_string(),
+                author_pubkey,
+                parent_hash: None,
+                parent_snapshot_proof: None,
+                update_clocks: serde_json::json!({}),
+                s3_key,
+                covered_seq,
+            };
+            let new_snapshot_id = match http::post_json_auth::<_, http::CreateSnapshotResponse>(
+                &confirm_url,
+                &confirm_body,
+                auth,
+            )
+            .await
+            {
+                Ok(resp) => match SnapshotId::parse_str(&resp.snapshot_id) {
+                    Ok(id) => id,
+                    Err(e) => {
+                        tracing::error!(
+                            "Sync: SendSnapshot bad snapshot_id for {document_id:?}: {e}"
+                        );
+                        return;
+                    }
+                },
+                Err(e) => {
+                    tracing::error!("Sync: SendSnapshot confirm failed for {document_id:?}: {e}");
+                    return;
+                }
+            };
+
+            tracing::info!(
+                "Sync: SendSnapshot {document_id:?} uploaded ({} bytes), snapshot_id={new_snapshot_id:?}",
+                blob.len()
+            );
+            let _ = tx.send(SyncEvent::SnapshotUploaded {
+                document_id,
+                snapshot_id: new_snapshot_id,
+            });
+        });
     }
 
     fn handle_send_ephemeral(&mut self, document_id: DocumentId, payload: Vec<u8>) {
@@ -3580,5 +3747,110 @@ mod tests {
             .count();
         assert_eq!(warnings, 1, "exactly one overflow warning at the hard cap");
         assert_eq!(state.documents[&doc].quarantine_len(), QUARANTINE_LIMIT - 1);
+    }
+
+    // ── Snapshot lifecycle (upload adoption + cold-start seq gating) ──────────
+
+    /// Drain the WsClientMsg this state sent to its mock WS, decoded.
+    fn drain_ws(rx: &flume::Receiver<Vec<u8>>) -> Vec<WsClientMsg> {
+        rx.try_iter()
+            .filter_map(|wire| ambre_protocol::ws::decode_client_msg(&wire).ok())
+            .collect()
+    }
+
+    /// A downloaded snapshot covering up to seq N must make the post-open
+    /// `RequestMissing` start AFTER N -- replaying only the deltas the snapshot
+    /// does not already contain, not the whole history since genesis.
+    #[test]
+    fn open_document_ready_gates_request_missing_on_covered_seq() {
+        let (mut state, _rx, doc, key, _sk, _snap) = setup();
+        let (ws_tx, ws_rx) = flume::unbounded();
+        state.set_mock_ws(ws_tx);
+        let snapshot_id = SnapshotId::new();
+
+        state.handle_sync_event(SyncEvent::OpenDocumentReady {
+            document_id: doc,
+            doc_key: key,
+            snapshot_payload: Some(b"snap-blob".to_vec()),
+            snapshot_id,
+            covered_seq: Seq(1500),
+            doc_type: DocType::Trame,
+            server_created: true,
+        });
+
+        // The replay cursor advanced to the snapshot's covered seq.
+        assert_eq!(state.documents[&doc].last_seq, Seq(1500));
+        // The downloaded snapshot id is registered as a known parent.
+        assert!(state.documents[&doc].known_snapshots.contains(&snapshot_id));
+
+        let msgs = drain_ws(&ws_rx);
+        let after = msgs.iter().find_map(|m| match m {
+            WsClientMsg::RequestMissing { after_seq, .. } => Some(*after_seq),
+            _ => None,
+        });
+        assert_eq!(
+            after,
+            Some(Seq(1500)),
+            "RequestMissing must skip the history folded into the snapshot"
+        );
+    }
+
+    /// With no snapshot to download (`covered_seq == 0`), the open still requests
+    /// the full history from seq 0 -- the prior, replay-everything behavior.
+    #[test]
+    fn open_document_ready_without_snapshot_requests_full_history() {
+        let (mut state, _rx, doc, key, _sk, _snap) = setup();
+        let (ws_tx, ws_rx) = flume::unbounded();
+        state.set_mock_ws(ws_tx);
+
+        state.handle_sync_event(SyncEvent::OpenDocumentReady {
+            document_id: doc,
+            doc_key: key,
+            snapshot_payload: None,
+            snapshot_id: SnapshotId::genesis(doc),
+            covered_seq: Seq(0),
+            doc_type: DocType::Trame,
+            server_created: true,
+        });
+
+        assert_eq!(state.documents[&doc].last_seq, Seq(0));
+        let msgs = drain_ws(&ws_rx);
+        let after = msgs.iter().find_map(|m| match m {
+            WsClientMsg::RequestMissing { after_seq, .. } => Some(*after_seq),
+            _ => None,
+        });
+        assert_eq!(after, Some(Seq(0)));
+    }
+
+    /// A completed snapshot upload adopts the server-assigned snapshot id as the
+    /// document's current parent and registers it as known (so later deltas
+    /// parented on it are delivered, not quarantined).
+    #[test]
+    fn snapshot_uploaded_adopts_snapshot_id() {
+        let (mut state, _rx, doc, _key, _sk, _snap) = setup();
+        let new_id = SnapshotId::new();
+
+        state.handle_sync_event(SyncEvent::SnapshotUploaded {
+            document_id: doc,
+            snapshot_id: new_id,
+        });
+
+        assert_eq!(state.documents[&doc].current_snapshot_id, new_id);
+        assert!(state.documents[&doc].known_snapshots.contains(&new_id));
+    }
+
+    /// On the host (no event channel), `SendSnapshot` seals the payload without
+    /// attempting any network upload and leaves the document state untouched.
+    #[test]
+    fn send_snapshot_on_host_path_seals_without_upload() {
+        let (mut state, _rx, doc, _key, _sk, snap) = setup();
+        // Session keys are required to reach the seal step.
+        state.signing_key = Some(MasterSeed::generate().derive_signing_key());
+
+        state.handle_send_snapshot(doc, b"crdt-snapshot-state".to_vec());
+
+        // No event_tx in this setup: the upload path is skipped, the current
+        // snapshot id is unchanged (no SnapshotUploaded round-trip).
+        assert_eq!(state.documents[&doc].current_snapshot_id, snap);
     }
 }

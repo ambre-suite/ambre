@@ -28,6 +28,9 @@ fn parse_snap_id(s: &str) -> Result<ambre_core::SnapshotId, AppError> {
 pub struct SnapshotResponse {
     pub snapshot_id: String,
     pub s3_key: String,
+    /// Highest delta `seq` folded into this snapshot, so the client can gate its
+    /// post-open `RequestMissing` and skip the already-replayed history.
+    pub covered_seq: i64,
 }
 
 pub async fn get_snapshot_metadata(
@@ -48,6 +51,7 @@ pub async fn get_snapshot_metadata(
     Ok(axum::Json(SnapshotResponse {
         snapshot_id: snap.id.to_string(),
         s3_key: snap.s3_key,
+        covered_seq: snap.covered_seq,
     }))
 }
 
@@ -62,6 +66,10 @@ pub struct CreateSnapshotRequest {
     pub parent_snapshot_proof: Option<String>,
     pub update_clocks: serde_json::Value,
     pub s3_key: String,
+    /// Highest delta `seq` the snapshot author had applied at upload time.
+    /// Defaults to 0 for older clients (full replay preserved).
+    #[serde(default)]
+    pub covered_seq: i64,
 }
 #[derive(serde::Serialize)]
 pub struct CreateSnapshotResponse {
@@ -114,6 +122,7 @@ pub async fn create_snapshot(
         pp.as_deref(),
         &req.update_clocks,
         &req.s3_key,
+        req.covered_seq,
     )
     .await?;
     let msg = ambre_protocol::ws::encode_server_msg(

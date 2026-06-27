@@ -427,35 +427,55 @@ async fn handle_request_missing(
     // to decrypt and verify. The bytes live in S3 once flushed, or in the Redis
     // pending list until then; together they cover every seq. A delta we cannot
     // locate or decode is skipped (logged) rather than dropping the whole batch.
-    let mut seq_updates: Vec<ambre_protocol::SeqUpdate> = Vec::with_capacity(updates.len());
-    for row in updates {
+    //
+    // The fetches run CONCURRENTLY: a full replay (no snapshot upload yet) pulls
+    // every delta since genesis, and a sequential `.await` per object turned the
+    // open into N serial S3 round-trips (seconds for a doc with hundreds of edits
+    // behind only a few dozen cells). `get_updates_after` returns rows ordered by
+    // seq; we resolve them in parallel, then re-sort by seq to restore that order.
+    let fetches = updates.into_iter().map(|row| {
         let seq = row.seq as u64;
-        let wire = match crate::s3::fetch_object(&state.s3, &state.s3_bucket, &row.s3_key).await {
-            Ok(Some(bytes)) => Some(bytes),
-            Ok(None) => match redis_ops::get_pending_delta(&state.redis, &document_id, seq).await {
-                Ok(b) => b,
+        async move {
+            let wire = match crate::s3::fetch_object(&state.s3, &state.s3_bucket, &row.s3_key).await
+            {
+                Ok(Some(bytes)) => Some(bytes),
+                Ok(None) => {
+                    match redis_ops::get_pending_delta(&state.redis, &document_id, seq).await {
+                        Ok(b) => b,
+                        Err(e) => {
+                            tracing::error!(seq, error = %e, "replay: pending lookup failed");
+                            None
+                        }
+                    }
+                }
                 Err(e) => {
-                    tracing::error!(seq, error = %e, "replay: pending lookup failed");
+                    tracing::error!(seq, error = %e, "replay: S3 fetch failed");
                     None
                 }
-            },
-            Err(e) => {
-                tracing::error!(seq, error = %e, "replay: S3 fetch failed");
-                None
+            };
+            let Some(wire) = wire else {
+                tracing::error!(seq, s3_key = %row.s3_key, "replay: delta not found in S3 or pending");
+                return None;
+            };
+            match postcard::from_bytes::<ambre_protocol::Update>(&wire) {
+                Ok(update) => Some(ambre_protocol::SeqUpdate {
+                    seq: ambre_protocol::messages::Seq(seq),
+                    update,
+                }),
+                Err(e) => {
+                    tracing::error!(seq, error = %e, "replay: Update decode failed");
+                    None
+                }
             }
-        };
-        let Some(wire) = wire else {
-            tracing::error!(seq, s3_key = %row.s3_key, "replay: delta not found in S3 or pending");
-            continue;
-        };
-        match postcard::from_bytes::<ambre_protocol::Update>(&wire) {
-            Ok(update) => seq_updates.push(ambre_protocol::SeqUpdate {
-                seq: ambre_protocol::messages::Seq(seq),
-                update,
-            }),
-            Err(e) => tracing::error!(seq, error = %e, "replay: Update decode failed"),
         }
-    }
+    });
+
+    let mut seq_updates: Vec<ambre_protocol::SeqUpdate> = futures_util::future::join_all(fetches)
+        .await
+        .into_iter()
+        .flatten()
+        .collect();
+    seq_updates.sort_by_key(|u| u.seq.0);
 
     let msg = encode_server_msg(&WsServerMsg::MissingUpdates {
         document_id,

@@ -772,7 +772,7 @@ All tests compile in native mode (`#[cfg(not(target_arch = "wasm32"))]`) with `t
 ### SYNC P1 — Logic thread integration
 
 - [x] Entry point `ambre_sync::run(from_logic, to_logic)` (`flume` channels), blocking `recv()` loop, `SyncState` skeleton + `handle_command`/`handle_rest` dispatch (placeholders).
-- [x] **Wired crypto pipeline** (`ambre-sync::pipeline`): compression version-byte + `ambre-crypto::envelope`, `Update`/`Snapshot`/`Ephemeral` assembly/disassembly, outbound encryption (`SendUpdate`/`SendEphemeral` → `WsClientMsg`, Snapshot seal/S3 TODO) and inbound decryption (`handle_ws_message` → `RemoteUpdate`/`RemoteEphemeral`, failure → `SyncWarning`). Session keys derived from `MasterSeed` (local placeholder seed pending network Unlock). Host tests. *Real network/WebSocket out of scope (next item).*
+- [x] **Wired crypto pipeline** (`ambre-sync::pipeline`): compression version-byte + `ambre-crypto::envelope`, `Update`/`Snapshot`/`Ephemeral` assembly/disassembly, outbound encryption (`SendUpdate`/`SendEphemeral` → `WsClientMsg`, Snapshot seal) and inbound decryption (`handle_ws_message` → `RemoteUpdate`/`RemoteEphemeral`, failure → `SyncWarning`). Session keys derived from `MasterSeed` (local placeholder seed pending network Unlock). Host tests. *Real network/WebSocket out of scope (next item).*
 - [x] **Non-blocking loop** (`recv_async` + WS `JsFuture`) when the real WebSocket is wired — prerequisite `Atomics.wait` + cyclic deadlock fix (cf. `ambre-spec-architecture.md §7 ARCH P1`).
 - [x] `RestCommand::Unlock` implementation (fetch GET /api/keys/master + Argon2 → MasterSeed → keypair derivation)
 - [x] `RestCommand::SetupAccount` implementation (MasterSeed generation, key upload)
@@ -791,6 +791,8 @@ All tests compile in native mode (`#[cfg(not(target_arch = "wasm32"))]`) with `t
 - [x] Auth: `AuthContext` (in-memory access + refresh tokens), `Authorization: Bearer` on REST, `?token=` on the WS, 401 -> `/auth/refresh` -> retry wrapper.
 - [x] WS resilience (sec.2.G): exponential-backoff reconnect (250ms..10s + jitter), close **4401** -> silent reauth (refresh, or dev re-login), resubscribe + `RequestMissing` on `onopen`, pre-session update buffer, self-echo `local_clock` recovery.
 - [x] Hydration across refresh/devices: deterministic `SnapshotId::genesis(document_id)` anchors a never-snapshotted document's first deltas (no eternal quarantine).
+- [x] **Snapshot upload (client leg)**: `SyncCommand::SendSnapshot` -> seal -> `POST /snapshot/upload-url` -> S3 PUT -> `POST /snapshot` (with `covered_seq = last_seq`) -> adopt the returned `snapshot_id` as `current_snapshot_id` (`SyncEvent::SnapshotUploaded` -> `snapshot_known`). Host path stops after sealing (no network).
+- [x] **Snapshot download + cold-start seq gating**: on open, `GET /snapshot` -> `POST /snapshot/download-url` -> S3 GET -> `RemoteSnapshot`; the snapshot's `covered_seq` seeds `last_seq` so the post-open `RequestMissing` replays only newer deltas, not the whole history since genesis. Falls back to a full replay when no snapshot or the download fails. (4 host tests: gating on/off, upload adoption, host-path seal.)
 
 ### SYNC P3 — Sharing & Revocation
 

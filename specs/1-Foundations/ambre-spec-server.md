@@ -147,6 +147,8 @@ CREATE TABLE snapshots (
     parent_snapshot_proof BYTEA,            -- Full BLAKE2b chain (from ambre-protocol)
     update_clocks        JSONB NOT NULL,     -- {"pub_key_hex": clock, ...}
     s3_key               TEXT NOT NULL,
+    covered_seq          BIGINT NOT NULL DEFAULT 0, -- highest delta seq folded in;
+                                                    -- clients gate RequestMissing on it
     created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -534,15 +536,19 @@ Upload Snapshot (compaction initiator)
     ├── 3. PUTs directly to S3 (opaque blob — Caddy not involved)
     │
     ├── 4. POST /api/documents/{id}/snapshot
-    │      body: { snapshot_id, author_pubkey, parent_hash, parent_snapshot_proof, update_clocks, s3_key }
-    │      → server INSERTs snapshots PostgreSQL
+    │      body: { snapshot_id, author_pubkey, parent_hash, parent_snapshot_proof,
+    │             update_clocks, s3_key, covered_seq }
+    │      covered_seq = the author's high-water `last_seq` at snapshot time
+    │      → server INSERTs snapshots PostgreSQL (incl. covered_seq)
     │      → server purges prior deltas (seq <= clocks in update_clocks)
     │      → server Publishes doc:{doc_id} → WsServerMsg::SnapshotAvailable { snapshot_id }
 
-Download Snapshot (other clients)
+Download Snapshot (on open, and on SnapshotAvailable)
   Client (WASM Sync thread)
     │
-    ├── 1. Receives WsServerMsg::SnapshotAvailable { snapshot_id }
+    ├── 1a. On open: GET /api/documents/{id}/snapshot → { snapshot_id, s3_key, covered_seq }
+    │       (404 when never snapshotted → full delta replay from seq 0)
+    ├── 1b. Or: receives WsServerMsg::SnapshotAvailable { snapshot_id }
     │
     ├── 2. POST /api/documents/{id}/snapshot/download-url
     │      body: { snapshot_id }
@@ -550,8 +556,17 @@ Download Snapshot (other clients)
     │
     ├── 3. GETs directly from S3 → postcard blob
     │
-    └── 4. postcard::from_bytes → Snapshot → decryption → LogicEvent::RemoteSnapshot
+    ├── 4. postcard::from_bytes → Snapshot → decryption → LogicEvent::RemoteSnapshot
+    │
+    └── 5. Cold-start gating: set last_seq = covered_seq, then
+           RequestMissing { after_seq: covered_seq } so only deltas NOT folded
+           into the snapshot are replayed (not the whole history since genesis).
 ```
+
+> **Replay fan-out.** `handle_request_missing` rehydrates each delta from S3 (or the
+> Redis pending list). These fetches run **concurrently** (`join_all`), then the batch is
+> re-sorted by `seq`: a serial `.await` per object turned an open into N sequential S3
+> round-trips, which dominated cold start on documents with many small deltas.
 
 #### Async S3 Flush — Global Model
 
@@ -980,6 +995,8 @@ No push notifications in MVP. The client queries `GET /api/channels/unread` on r
 - [x] Redis Lua script (clock + seq)
 - [x] Global S3 flusher (single Tokio task, Redis SCAN) — *flusher loop + SCAN done; S3 upload wired*
 - [x] S3 presigned URLs (snapshots + media)
+- [x] Snapshot routes: `GET /snapshot` (latest id + s3_key + `covered_seq`), `POST /snapshot` (confirm + insert + `SnapshotAvailable` broadcast), `POST /snapshot/upload-url`, `POST /snapshot/download-url`. `snapshots.covered_seq` column gates the client replay.
+- [x] `RequestMissing` replay rehydrates deltas from S3/Redis **concurrently** (`join_all` + re-sort by seq), not serially.
 - [x] Media routes: upload-url + download-url + confirmation POST
 - [x] Typed error handling (`thiserror` → HTTP)
 - [x] Structured logging (`tracing` → JSON → Promtail → Loki)
