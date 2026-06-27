@@ -13,11 +13,14 @@
 
 use ambre_crypto::DocumentKey;
 use base64::Engine;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 use x25519_dalek::StaticSecret;
 
-use ambre_bus::{MemberInfo, Role, UserId};
+use ambre_bus::{DocumentId, LogicEvent, MemberInfo, RequestId, Role, UserId};
 
 use crate::http;
+use crate::{LogicSink, SyncEvent};
 
 /// Decodes a hex-encoded X25519 public key into its 32 raw bytes.
 pub(crate) fn decode_exchange_pubkey(hex_str: &str) -> Result<[u8; 32], String> {
@@ -91,6 +94,252 @@ pub(crate) fn map_members(entries: Vec<http::DocumentMemberEntry>) -> Vec<Member
             role: m.role.parse().unwrap_or(Role::Viewer),
         })
         .collect()
+}
+
+// ============================================================================
+// Transport boundary + orchestration tasks.
+//
+// The three sharing handlers in `lib.rs` used to inline their `fetch` calls and
+// their channel plumbing inside a `spawn_local`, which made the orchestration
+// (which call fires when, which error maps to which event) reachable only from a
+// real browser. Abstracting the HTTP surface behind `ShareHttp` lets the tasks
+// below run on `tokio` in native tests against a `FakeHttp`, so every error
+// branch is asserted without a browser or a live server. Production wires the
+// real `GlooHttp` (fetch + Bearer/refresh via `AuthContext`); the handlers keep
+// only their synchronous preconditions and the `spawn_local`.
+// ============================================================================
+
+/// The HTTP operations the sharing tasks need, abstracted over the transport.
+/// Authentication (Bearer token + refresh-on-401) is the implementation's
+/// concern, not the task's -- the real impl carries an `AuthContext`.
+#[allow(async_fn_in_trait)] // single-threaded worker; futures are intentionally !Send
+pub(crate) trait ShareHttp {
+    async fn get_json<T: DeserializeOwned>(&self, url: &str) -> Result<T, String>;
+    async fn post_json<B: Serialize, R: DeserializeOwned>(
+        &self,
+        url: &str,
+        body: &B,
+    ) -> Result<R, String>;
+    async fn delete(&self, url: &str) -> Result<(), String>;
+}
+
+/// Production transport: authenticated `gloo_net` fetch (wasm at runtime, but it
+/// compiles natively too). Thin pass-through to the `http` helpers.
+pub(crate) struct GlooHttp {
+    pub auth: http::AuthContext,
+}
+
+impl ShareHttp for GlooHttp {
+    async fn get_json<T: DeserializeOwned>(&self, url: &str) -> Result<T, String> {
+        http::get_json_auth::<T>(url, self.auth.clone()).await
+    }
+    async fn post_json<B: Serialize, R: DeserializeOwned>(
+        &self,
+        url: &str,
+        body: &B,
+    ) -> Result<R, String> {
+        http::post_json_auth::<B, R>(url, body, self.auth.clone()).await
+    }
+    async fn delete(&self, url: &str) -> Result<(), String> {
+        http::delete_auth(url, self.auth.clone()).await
+    }
+}
+
+/// Sends a `LogicEvent::ApiError` (the error channel for the sharing tasks).
+fn api_error(logic_tx: &LogicSink, request: &str, code: u16, message: String) {
+    let _ = logic_tx.send(LogicEvent::ApiError {
+        request: request.into(),
+        code,
+        message,
+    });
+}
+
+/// Inputs for [`invite_task`], gathered from `SyncState` before spawning.
+pub(crate) struct InviteParams {
+    pub id: RequestId,
+    pub document_id: DocumentId,
+    pub url_scheme: &'static str,
+    pub api_base: String,
+    pub invitee_email: String,
+    pub role: Role,
+    pub exchange_key: StaticSecret,
+    pub doc_key: DocumentKey,
+}
+
+/// Invite orchestration: search the invitee by email, ECDH-wrap the document key
+/// for them, POST the share. Success -> `SyncEvent::InviteSent`; every failure ->
+/// `LogicEvent::ApiError` with the leg-specific code.
+pub(crate) async fn invite_task<H: ShareHttp>(
+    http: &H,
+    p: InviteParams,
+    event_tx: &flume::Sender<SyncEvent>,
+    logic_tx: &LogicSink,
+) {
+    let search_url = format!(
+        "{}://{}/api/users/search?query={}",
+        p.url_scheme,
+        p.api_base,
+        p.invitee_email.replace('@', "%40")
+    );
+    let users = match http.get_json::<http::UserSearchResult>(&search_url).await {
+        Ok(resp) => resp.users,
+        Err(e) => {
+            return api_error(
+                logic_tx,
+                "InviteToDocument",
+                500,
+                format!("User search failed: {e}"),
+            );
+        }
+    };
+    let Some(invitee) = users.iter().find(|u| u.email == p.invitee_email) else {
+        return api_error(logic_tx, "InviteToDocument", 404, "User not found".into());
+    };
+    let body = match build_invite_request(
+        &p.exchange_key,
+        &invitee.exchange_pubkey,
+        p.invitee_email.clone(),
+        &p.doc_key,
+        p.role,
+    ) {
+        Ok(req) => req,
+        Err(message) => return api_error(logic_tx, "InviteToDocument", 500, message),
+    };
+    let invite_url = format!(
+        "{}://{}/api/documents/{}/share",
+        p.url_scheme, p.api_base, p.document_id
+    );
+    match http
+        .post_json::<_, http::InviteResponse>(&invite_url, &body)
+        .await
+    {
+        Ok(resp) => {
+            let user_id = UserId::parse_str(&resp.user_id).unwrap_or_else(|_| UserId::new());
+            let _ = event_tx.send(SyncEvent::InviteSent {
+                id: p.id,
+                document_id: p.document_id,
+                user_id,
+                display_name: resp.display_name,
+            });
+        }
+        Err(e) => api_error(logic_tx, "InviteToDocument", 500, e),
+    }
+}
+
+/// Inputs for [`revoke_task`], gathered from `SyncState` before spawning.
+pub(crate) struct RevokeParams {
+    pub id: RequestId,
+    pub document_id: DocumentId,
+    pub user_id: UserId,
+    pub url_scheme: &'static str,
+    pub api_base: String,
+    pub exchange_key: StaticSecret,
+}
+
+/// Revoke orchestration: DELETE the share, generate a fresh `DocumentKey`, fetch
+/// the remaining members, re-wrap the new key for each, POST the rotation.
+/// Success -> `SyncEvent::RevocationComplete` (the caller swaps the local key);
+/// every failure -> `LogicEvent::ApiError`.
+pub(crate) async fn revoke_task<H: ShareHttp>(
+    http: &H,
+    p: RevokeParams,
+    event_tx: &flume::Sender<SyncEvent>,
+    logic_tx: &LogicSink,
+) {
+    let revoke_url = format!(
+        "{}://{}/api/documents/{}/share/{}",
+        p.url_scheme, p.api_base, p.document_id, p.user_id
+    );
+    if let Err(e) = http.delete(&revoke_url).await {
+        return api_error(
+            logic_tx,
+            "RevokeFromDocument",
+            500,
+            format!("Revoke failed: {e}"),
+        );
+    }
+
+    let new_doc_key = DocumentKey::generate();
+
+    let members_url = format!(
+        "{}://{}/api/documents/{}/members",
+        p.url_scheme, p.api_base, p.document_id
+    );
+    let members = match http
+        .get_json::<http::DocumentMembersResponse>(&members_url)
+        .await
+    {
+        Ok(resp) => resp.members,
+        Err(e) => {
+            return api_error(
+                logic_tx,
+                "RevokeFromDocument",
+                500,
+                format!("Get members failed: {e}"),
+            );
+        }
+    };
+
+    let keys = rotate_entries_for(&p.exchange_key, &new_doc_key, &members);
+    let rotate_url = format!(
+        "{}://{}/api/documents/{}/rotate-key",
+        p.url_scheme, p.api_base, p.document_id
+    );
+    let body = http::RotateKeyRequest { keys };
+    if let Err(e) = http
+        .post_json::<_, serde_json::Value>(&rotate_url, &body)
+        .await
+    {
+        return api_error(
+            logic_tx,
+            "RevokeFromDocument",
+            500,
+            format!("Rotate key failed: {e}"),
+        );
+    }
+
+    let _ = event_tx.send(SyncEvent::RevocationComplete {
+        id: p.id,
+        document_id: p.document_id,
+        new_doc_key,
+    });
+}
+
+/// Inputs for [`list_members_task`].
+pub(crate) struct ListMembersParams {
+    pub id: RequestId,
+    pub document_id: DocumentId,
+    pub url_scheme: &'static str,
+    pub api_base: String,
+}
+
+/// Member-list orchestration: GET the members, map them, emit
+/// `SyncEvent::DocumentMembersReady`; on failure emit `SyncEvent::HttpError`.
+pub(crate) async fn list_members_task<H: ShareHttp>(
+    http: &H,
+    p: ListMembersParams,
+    event_tx: &flume::Sender<SyncEvent>,
+) {
+    let url = format!(
+        "{}://{}/api/documents/{}/members",
+        p.url_scheme, p.api_base, p.document_id
+    );
+    match http.get_json::<http::DocumentMembersResponse>(&url).await {
+        Ok(resp) => {
+            let members = map_members(resp.members);
+            let _ = event_tx.send(SyncEvent::DocumentMembersReady {
+                id: p.id,
+                document_id: p.document_id,
+                members,
+            });
+        }
+        Err(e) => {
+            let _ = event_tx.send(SyncEvent::HttpError {
+                id: p.id,
+                message: e,
+            });
+        }
+    }
 }
 
 #[cfg(test)]
@@ -217,5 +466,278 @@ mod tests {
         assert_eq!(mapped[0].role, Role::Editor);
         // Unknown role -> viewer; unparsable id -> a fresh (non-nil) id.
         assert_eq!(mapped[1].role, Role::Viewer);
+    }
+
+    // -- Orchestration tasks (Tier 2): driven natively against a fake transport.
+
+    use std::cell::RefCell;
+    use std::collections::VecDeque;
+
+    /// One recorded HTTP call (method + url + serialized body for POSTs).
+    #[derive(Debug)]
+    enum Call {
+        Get(String),
+        Post(String, serde_json::Value),
+        Delete(String),
+    }
+
+    /// A scripted [`ShareHttp`]: returns the queued responses in order and
+    /// records every call so a test can assert what the task did (and did NOT)
+    /// fire. A response is `Ok(json)` (deserialized into the requested type) or
+    /// `Err(message)` (the transport-level failure the real fetch would yield).
+    struct FakeHttp {
+        responses: RefCell<VecDeque<Result<serde_json::Value, String>>>,
+        calls: RefCell<Vec<Call>>,
+    }
+
+    impl FakeHttp {
+        fn new(responses: Vec<Result<serde_json::Value, String>>) -> Self {
+            Self {
+                responses: RefCell::new(responses.into()),
+                calls: RefCell::new(Vec::new()),
+            }
+        }
+        fn next(&self) -> Result<serde_json::Value, String> {
+            self.responses
+                .borrow_mut()
+                .pop_front()
+                .expect("unexpected extra HTTP call")
+        }
+        fn calls(&self) -> std::cell::Ref<'_, Vec<Call>> {
+            self.calls.borrow()
+        }
+    }
+
+    impl ShareHttp for FakeHttp {
+        async fn get_json<T: DeserializeOwned>(&self, url: &str) -> Result<T, String> {
+            self.calls.borrow_mut().push(Call::Get(url.to_string()));
+            let v = self.next()?;
+            serde_json::from_value(v).map_err(|e| e.to_string())
+        }
+        async fn post_json<B: Serialize, R: DeserializeOwned>(
+            &self,
+            url: &str,
+            body: &B,
+        ) -> Result<R, String> {
+            let bv = serde_json::to_value(body).unwrap();
+            self.calls
+                .borrow_mut()
+                .push(Call::Post(url.to_string(), bv));
+            let v = self.next()?;
+            serde_json::from_value(v).map_err(|e| e.to_string())
+        }
+        async fn delete(&self, url: &str) -> Result<(), String> {
+            self.calls.borrow_mut().push(Call::Delete(url.to_string()));
+            self.next().map(|_| ())
+        }
+    }
+
+    /// Fresh event + logic channels with their receivers.
+    fn channels() -> (
+        flume::Sender<SyncEvent>,
+        flume::Receiver<SyncEvent>,
+        LogicSink,
+        flume::Receiver<LogicEvent>,
+    ) {
+        let (etx, erx) = flume::unbounded();
+        let (sink, lrx) = LogicSink::channel();
+        (etx, erx, sink, lrx)
+    }
+
+    fn user_search_json(email: &str, exchange_pub_hex: &str) -> serde_json::Value {
+        serde_json::json!({ "users": [ {
+            "id": "55555555-5555-5555-5555-555555555555",
+            "email": email,
+            "display_name": "Invitee",
+            "signing_pubkey": "00",
+            "exchange_pubkey": exchange_pub_hex,
+        } ] })
+    }
+
+    fn invite_params(my_xk: &StaticSecret) -> InviteParams {
+        InviteParams {
+            id: RequestId::next(),
+            document_id: DocumentId::new(),
+            url_scheme: "https",
+            api_base: "api.test".into(),
+            invitee_email: "invitee@test.local".into(),
+            role: Role::Editor,
+            exchange_key: my_xk.clone(),
+            doc_key: DocumentKey::generate(),
+        }
+    }
+
+    #[tokio::test]
+    async fn invite_success_posts_wrapped_key_and_emits_invitesent() {
+        let (my_xk, my_pub_hex) = keypair(1);
+        let my_pub = decode_exchange_pubkey(&my_pub_hex).unwrap();
+        let (invitee_xk, invitee_pub_hex) = keypair(2);
+
+        let http = FakeHttp::new(vec![
+            Ok(user_search_json("invitee@test.local", &invitee_pub_hex)),
+            Ok(serde_json::json!({
+                "user_id": "55555555-5555-5555-5555-555555555555",
+                "display_name": "Invitee",
+            })),
+        ]);
+        let (etx, erx, sink, lrx) = channels();
+        invite_task(&http, invite_params(&my_xk), &etx, &sink).await;
+
+        // Success event, no error.
+        match erx.try_recv().expect("InviteSent emitted") {
+            SyncEvent::InviteSent { display_name, .. } => assert_eq!(display_name, "Invitee"),
+            _ => panic!("unexpected event (want InviteSent)"),
+        }
+        assert!(lrx.try_recv().is_err(), "no ApiError on success");
+
+        // Two calls: search then share; the share body wraps a key only the
+        // invitee can unwrap.
+        let calls = http.calls();
+        assert_eq!(calls.len(), 2);
+        match &calls[1] {
+            Call::Post(url, body) => {
+                assert!(url.ends_with("/share"));
+                let enc = body["doc_key_enc"].as_str().unwrap();
+                assert!(unwrap_b64(&invitee_xk, &my_pub, enc).is_ok());
+            }
+            other => panic!("expected share POST, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn invite_user_not_found_emits_404_and_skips_share() {
+        let (my_xk, _) = keypair(1);
+        let http = FakeHttp::new(vec![Ok(serde_json::json!({ "users": [] }))]);
+        let (etx, erx, sink, lrx) = channels();
+        invite_task(&http, invite_params(&my_xk), &etx, &sink).await;
+
+        match lrx.try_recv().expect("ApiError emitted") {
+            LogicEvent::ApiError { code, .. } => assert_eq!(code, 404),
+            other => panic!("unexpected: {other:?}"),
+        }
+        assert!(erx.try_recv().is_err(), "no success event");
+        // Only the search ran; no share POST attempted.
+        assert_eq!(http.calls().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn invite_search_failure_emits_500() {
+        let (my_xk, _) = keypair(1);
+        let http = FakeHttp::new(vec![Err("network down".into())]);
+        let (etx, _erx, sink, lrx) = channels();
+        invite_task(&http, invite_params(&my_xk), &etx, &sink).await;
+
+        match lrx.try_recv().expect("ApiError emitted") {
+            LogicEvent::ApiError { code, message, .. } => {
+                assert_eq!(code, 500);
+                assert!(message.contains("User search failed"));
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
+    }
+
+    fn revoke_params(my_xk: &StaticSecret) -> RevokeParams {
+        RevokeParams {
+            id: RequestId::next(),
+            document_id: DocumentId::new(),
+            user_id: UserId::new(),
+            url_scheme: "https",
+            api_base: "api.test".into(),
+            exchange_key: my_xk.clone(),
+        }
+    }
+
+    #[tokio::test]
+    async fn revoke_success_deletes_then_rotates_remaining_members() {
+        let (my_xk, _) = keypair(1);
+        let (_a_xk, a_pub) = keypair(2);
+
+        let http = FakeHttp::new(vec![
+            Ok(serde_json::json!({ "status": "revoked" })), // DELETE
+            Ok(serde_json::json!({ "members": [ {
+                "user_id": "11111111-1111-1111-1111-111111111111",
+                "display_name": "A", "email": "a@test.local",
+                "signing_pub_key": "00", "exchange_pub_key": a_pub,
+                "doc_key_enc": "", "role": "editor",
+            } ] })), // GET members
+            Ok(serde_json::json!({ "status": "rotated" })), // POST rotate
+        ]);
+        let (etx, erx, sink, lrx) = channels();
+        revoke_task(&http, revoke_params(&my_xk), &etx, &sink).await;
+
+        assert!(matches!(
+            erx.try_recv().expect("RevocationComplete"),
+            SyncEvent::RevocationComplete { .. }
+        ));
+        assert!(lrx.try_recv().is_err());
+
+        let calls = http.calls();
+        assert_eq!(calls.len(), 3);
+        assert!(matches!(&calls[0], Call::Delete(u) if u.contains("/share/")));
+        assert!(matches!(&calls[1], Call::Get(u) if u.ends_with("/members")));
+        match &calls[2] {
+            Call::Post(url, body) => {
+                assert!(url.ends_with("/rotate-key"));
+                assert_eq!(body["keys"].as_array().unwrap().len(), 1);
+            }
+            other => panic!("expected rotate POST, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn revoke_delete_failure_emits_500_and_stops() {
+        let (my_xk, _) = keypair(1);
+        let http = FakeHttp::new(vec![Err("403".into())]);
+        let (etx, erx, sink, lrx) = channels();
+        revoke_task(&http, revoke_params(&my_xk), &etx, &sink).await;
+
+        match lrx.try_recv().expect("ApiError emitted") {
+            LogicEvent::ApiError { code, message, .. } => {
+                assert_eq!(code, 500);
+                assert!(message.contains("Revoke failed"));
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
+        assert!(erx.try_recv().is_err());
+        // Stopped after the failed DELETE: no members fetch, no rotation.
+        assert_eq!(http.calls().len(), 1);
+    }
+
+    fn list_params() -> ListMembersParams {
+        ListMembersParams {
+            id: RequestId::next(),
+            document_id: DocumentId::new(),
+            url_scheme: "https",
+            api_base: "api.test".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn list_members_maps_on_success_and_errors_otherwise() {
+        // Success.
+        let http = FakeHttp::new(vec![Ok(serde_json::json!({ "members": [ {
+            "user_id": "11111111-1111-1111-1111-111111111111",
+            "display_name": "A", "email": "a@test.local",
+            "signing_pub_key": "00", "exchange_pub_key": "ab",
+            "doc_key_enc": "", "role": "viewer",
+        } ] }))]);
+        let (etx, erx, _sink, _lrx) = channels();
+        list_members_task(&http, list_params(), &etx).await;
+        match erx.try_recv().expect("DocumentMembersReady") {
+            SyncEvent::DocumentMembersReady { members, .. } => {
+                assert_eq!(members.len(), 1);
+                assert_eq!(members[0].role, Role::Viewer);
+            }
+            _ => panic!("unexpected event (want DocumentMembersReady)"),
+        }
+
+        // Failure -> HttpError.
+        let http = FakeHttp::new(vec![Err("boom".into())]);
+        let (etx, erx, _sink, _lrx) = channels();
+        list_members_task(&http, list_params(), &etx).await;
+        assert!(matches!(
+            erx.try_recv().expect("HttpError"),
+            SyncEvent::HttpError { .. }
+        ));
     }
 }
