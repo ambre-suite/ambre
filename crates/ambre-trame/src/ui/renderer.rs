@@ -185,9 +185,20 @@ pub fn draw_cells<S: DrawSurface>(
     // Cell area = canvas minus the formula bar band + fixed header strip
     // (top/left) and the bottom sheet-tab strip.
     let cell_area = Rect::new(HEADER_WIDTH, HEADER_HEIGHT, w, h);
-    let strip = match strip_rect {
-        Some(r) => r.intersect(cell_area),
-        None => cell_area,
+    // The base fill under the cells differs by repaint kind:
+    //  - Full (strip_rect == None): the grey "pending" veil, the first-load cue
+    //    shown until the initial ViewportData lands.
+    //  - Scroll (strip_rect == Some): the band entering the viewport sits on top
+    //    of the shifted pixels. Fill it with the blank content background, NOT
+    //    grey. The prefetch margin is meant to have these cells cached before
+    //    they scroll in, but it can never win the async Logic round-trip every
+    //    time (fast wheel, held arrow, a full-viewport Page Up jump). When it
+    //    loses the race a grey block flashes for a frame -- the flicker. White is
+    //    the graceful fallback: a not-yet-received cell reads as empty (which it
+    //    usually is) until its data lands, never a flashing grey strip.
+    let (strip, base_fill) = match strip_rect {
+        Some(r) => (r.intersect(cell_area), palette.content_bg),
+        None => (cell_area, palette.content_pending),
     };
     if strip.width() <= 0.0 || strip.height() <= 0.0 {
         stats.bg_ms = 0.0;
@@ -199,8 +210,8 @@ pub fn draw_cells<S: DrawSurface>(
     let layout = screen_layout(state);
     let t0 = clock.now_ms();
 
-    // -- 1. Pending grey over the strip (screen-only "not yet received"). -------
-    surface.fill_rect(strip, palette.content_pending);
+    // -- 1. Base fill over the strip (see `base_fill` above). -------------------
+    surface.fill_rect(strip, base_fill);
     let t_pending = clock.now_ms();
 
     // -- 2. Received-cell backgrounds + body text, via the shared primitive. ---
@@ -955,6 +966,53 @@ mod tests {
         // The clip stack is balanced and no cell bg was painted (empty cache).
         assert_eq!(surface.clip_depth(), 0);
         assert_eq!(stats.cells_drawn, 0);
+    }
+
+    #[test]
+    fn draw_cells_scroll_strip_base_is_blank_not_pending_grey() {
+        // A scroll strip repaints a band entering the viewport on top of the
+        // shifted pixels. Its base fill must be the blank content background, not
+        // the grey "pending" veil: a cell scrolled in faster than the Logic
+        // round-trip should read as empty until its data lands, never flash grey
+        // (the source of the Arrow/Page Up/wheel scroll flicker).
+        let state = fixture(&[]);
+        let palette = Theme::Light.palette();
+        let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
+
+        // One row entering at the top: [HEADER_HEIGHT, HEADER_HEIGHT + ROW_HEIGHT].
+        let strip = Rect::new(
+            HEADER_WIDTH,
+            HEADER_HEIGHT,
+            800.0,
+            HEADER_HEIGHT + ROW_HEIGHT,
+        );
+        draw_cells(
+            &mut surface,
+            &state,
+            palette,
+            &mut font_cx,
+            &mut cache,
+            true,
+            Some(strip),
+            &clock,
+            &mut stats,
+        );
+
+        // The strip base fill is content_bg, and the grey pending veil never
+        // appears during a scroll repaint.
+        assert_eq!(
+            surface.ops().first(),
+            Some(&DrawOp::FillRect {
+                rect: strip,
+                color: palette.content_bg,
+            }),
+        );
+        assert_eq!(
+            surface.count(|op| matches!(
+                op, DrawOp::FillRect { color, .. } if *color == palette.content_pending
+            )),
+            0,
+        );
     }
 
     #[test]
