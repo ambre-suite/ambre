@@ -107,6 +107,11 @@ const FLING_START_PX_PER_MS: f64 = 0.05;
 const FLING_STOP_PX_PER_MS: f64 = 0.012;
 /// Smoothing for the running velocity estimate: weight of the newest sample.
 const FLING_VELOCITY_BLEND: f64 = 0.8;
+/// A single pixel-mode `wheel` delta at or above this (physical px) is treated
+/// as a notched mouse wheel, not a touchpad glide: applied 1:1 with no inertia.
+/// Touchpad events stay well below this; a mouse notch (Chrome ~100 px/dpr,
+/// Firefox uses line mode anyway) sits comfortably above it.
+const DISCRETE_WHEEL_PX: f64 = 40.0;
 
 /// Result of folding the pixel accumulator into a viewport pan.
 enum ScrollOutcome {
@@ -1753,6 +1758,25 @@ impl TrameView {
         // The fingers are driving: any active momentum is overridden by the
         // direct input, so cancel the coast.
         self.coasting = false;
+
+        // A notched mouse wheel emits discrete, widely-spaced events: line/page
+        // units (`delta_mode != 0`) or chunky pixel jumps. Those must NOT feed
+        // the velocity estimator, otherwise a single click launches a momentum
+        // coast and scrolls far past one row. Only high-resolution pixel input
+        // (touchpad two-finger glide) gets kinetic scrolling.
+        let discrete = delta_mode != 0
+            || px.abs() >= DISCRETE_WHEEL_PX
+            || py.abs() >= DISCRETE_WHEEL_PX;
+        if discrete {
+            // No inertia: disarm any pending gesture and apply the step 1:1.
+            self.fling_vx = 0.0;
+            self.fling_vy = 0.0;
+            self.last_wheel_ms = 0.0;
+            self.scroll_accum_x += px;
+            self.scroll_accum_y += py;
+            self.apply_scroll_accum();
+            return true;
+        }
 
         // Update the velocity estimate (physical px/ms) from this sample's
         // interval, smoothed to ride out jitter. A long gap means a fresh
