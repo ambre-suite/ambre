@@ -494,6 +494,20 @@ pub fn main() {
                 // keeps running -- only the render is gated).
                 None => route_raf.pause(),
             }
+            // Browser tab title: an icon-less context, so it composes the generic
+            // localized type label (`DocType::generic_label`, distinct from the
+            // brand `name()`) rather than the type word -- `ambre-spec-chrome.md
+            // 2.G`. The open document's plaintext name is not available here, so
+            // an open doc shows the generic placeholder; the landing is "Ambre".
+            if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
+                let title = match cur_doc {
+                    Some((doc_type, _)) => {
+                        format!("Untitled - {}", doc_type.generic_label())
+                    }
+                    None => "Ambre".to_owned(),
+                };
+                doc.set_title(&title);
+            }
             prev_route = Some(cur_route);
         }
 
@@ -558,9 +572,26 @@ pub fn main() {
                             .map(|d| DocItem {
                                 document_id: d.document_id,
                                 doc_type: d.doc_type,
+                                name: d.name.clone(),
+                                updated_at: d.updated_at,
+                                member_count: d.member_count,
                             })
                             .collect(),
                     );
+                }
+                // A document was renamed or deleted (possibly from the launcher):
+                // re-list so the card reflects the new name / disappears. Delete is
+                // also removed optimistically by the card; re-listing reconciles.
+                UiEvent::Rest {
+                    evt:
+                        ambre_bus::RestEvent::DocumentRenamed { .. }
+                        | ambre_bus::RestEvent::DocumentDeleted { .. },
+                    ..
+                } => {
+                    let _ = relay_tx.try_send(LogicCommand::Rest {
+                        id: RequestId::next(),
+                        cmd: RestCommand::ListDocuments,
+                    });
                 }
                 // Share dialog: the current member list landed -> render it.
                 UiEvent::Rest {

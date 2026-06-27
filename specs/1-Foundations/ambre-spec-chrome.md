@@ -224,8 +224,8 @@ Pure presentation layer:
 
 ### CHROME P4 — Launcher screen (§2.G)
 *The `/` home screen exists but is bare: it discards `DocumentSummary.name` and renders `doc_type` + a short id, off the design tokens. This Story makes it a real document home (§2.G). App-agnostic, drives every `DocType`.*
-- [ ] Decrypt `name_enc` in the Sync thread (`doc_key_enc` → Document Key → plaintext) and propagate it through `DocumentSummary.name` to the launcher (today Sync passes the blob through and the launcher ignores the field). See `ambre-spec-architecture.md §3`.
-- [ ] Document cards: type icon (one glyph per `DocType`) + name (or dimmed "Untitled" placeholder, never id/type word) + last-modified (relative) + shared badge (member count > 1)
-- [ ] Create-untitled (no name prompt; lazy server row) + inline rename + delete, wiring `CreateDocument`/`RenameDocument`/`DeleteDocument`; delete behind a confirmation `<dialog>` (irreversible, no server-side trash) naming the target
-- [ ] Re-theme the launcher on the generated design tokens (remove the ad-hoc `--color-*` fallbacks that match nothing); soigné empty state; sign-in panel with Ambre wordmark + tagline
-- [ ] Generic localized type labels (distinct from the brand `DocType::name()`) for icon-less contexts (browser tab title, share invitations)
+- [x] Decrypt `name_enc` in the Sync thread (`doc_key_enc` → Document Key → plaintext) and propagate it through `DocumentSummary.name` to the launcher (Sync now ECDH-unwraps each wrapped doc key from the list response and AEAD-opens the name; the server list endpoint returns `doc_key_enc` + `wrapper_exchange_pub_key`). See `ambre-spec-architecture.md §3`.
+- [x] Document cards: type icon (`DocType::icon` monogram tile, one per type) + name (or dimmed italic "Untitled" placeholder, never id/type word) + last-modified (relative time from `updated_at`) + shared badge (server-computed `member_count > 1`)
+- [x] Create-untitled (no name prompt; lazy server row) + inline rename + delete, wiring `CreateDocument`/`RenameDocument`/`DeleteDocument` (`RenameDocument` fetches+unwraps the key when the doc is closed, for launcher rename); delete behind a confirmation `<dialog>` (irreversible, no server-side trash) naming the target
+- [x] Re-theme the launcher on the generated design tokens (removed the ad-hoc `--color-*` fallbacks that matched nothing; now `--bg`/`--surface`/`--accent`/...); soigné empty state; sign-in panel with Ambre wordmark + tagline
+- [x] Generic localized type labels (`DocType::generic_label`, distinct from the brand `DocType::name()`) for icon-less contexts (wired into the browser tab title; available for share invitations)

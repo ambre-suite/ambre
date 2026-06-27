@@ -50,6 +50,31 @@ impl DocType {
         }
     }
 
+    /// Short monogram glyph for the launcher document card (one badge per type).
+    /// ASCII-only (no emoji): the card styles it as a coloured tile. Distinct
+    /// across Trame/Toile (both start with "T").
+    pub const fn icon(self) -> &'static str {
+        match self {
+            Self::Prose => "Pr",
+            Self::Trame => "Tr",
+            Self::Toile => "To",
+            Self::Murmure => "Mu",
+        }
+    }
+
+    /// Generic, type-describing label for icon-less contexts (browser tab title,
+    /// share invitations, future global search). Distinct from the brand
+    /// [`Self::name`] ("Trame"): here the document is described generically
+    /// ("Spreadsheet") so an unnamed doc reads as "Untitled - Spreadsheet".
+    pub const fn generic_label(self) -> &'static str {
+        match self {
+            Self::Prose => "Document",
+            Self::Trame => "Spreadsheet",
+            Self::Toile => "Whiteboard",
+            Self::Murmure => "Channel",
+        }
+    }
+
     /// Returns a short description of the document type.
     pub const fn description(self) -> &'static str {
         match self {

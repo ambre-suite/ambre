@@ -334,7 +334,17 @@ pub(crate) struct DocumentEntry {
     #[serde(default)]
     pub name_enc: Option<String>,
     pub role: String,
-    #[allow(dead_code)]
+    /// The caller's wrapped copy of the DocumentKey (base64). Unwrapped via ECDH
+    /// to decrypt `name_enc` for the launcher list.
+    #[serde(default)]
+    pub doc_key_enc: String,
+    /// Exchange pubkey (hex) of whoever wrapped `doc_key_enc`. Empty => fall back
+    /// to our own key (self-wrapped owner row).
+    #[serde(default)]
+    pub wrapper_exchange_pub_key: String,
+    /// Total member count; `> 1` => shared.
+    #[serde(default)]
+    pub member_count: u32,
     pub updated_at: String,
 }
 

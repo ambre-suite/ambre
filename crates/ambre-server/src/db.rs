@@ -50,6 +50,13 @@ pub struct DocumentSummaryRow {
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub role: String,
     pub doc_key_enc: Vec<u8>,
+    /// Exchange public key of the member who wrapped the caller's `doc_key_enc`
+    /// (the inviter, or the owner at creation). `None` for a self-wrapped owner
+    /// row on older data; the client then falls back to its own key.
+    pub wrapper_exchange_pubkey: Option<Vec<u8>>,
+    /// Total number of members on the document (routing metadata, plaintext).
+    /// `> 1` means the document is shared.
+    pub member_count: i64,
 }
 
 /// Row from `document_members`.
@@ -405,8 +412,17 @@ pub async fn list_documents_for_user(
     user_id: &ambre_core::UserId,
 ) -> Result<Vec<DocumentSummaryRow>, AppError> {
     let uid = id_to_uuid(*user_id);
+    // `inv` resolves the exchange pubkey of whoever wrapped our `doc_key_enc`
+    // (so the client can ECDH-unwrap each doc key and decrypt the name for the
+    // launcher); the correlated subquery counts members for the shared badge.
     let rows = sqlx::query(
-        "SELECT d.id, d.owner_id, d.doc_type, d.name_enc, d.updated_at, dm.role, dm.doc_key_enc FROM documents d INNER JOIN document_members dm ON dm.document_id = d.id WHERE dm.user_id = $1 ORDER BY d.updated_at DESC"
+        "SELECT d.id, d.owner_id, d.doc_type, d.name_enc, d.updated_at, dm.role, dm.doc_key_enc, \
+         inv.exchange_pubkey AS wrapper_exchange_pubkey, \
+         (SELECT COUNT(*) FROM document_members dm2 WHERE dm2.document_id = d.id) AS member_count \
+         FROM documents d \
+         INNER JOIN document_members dm ON dm.document_id = d.id \
+         LEFT JOIN users inv ON inv.id = dm.invited_by \
+         WHERE dm.user_id = $1 ORDER BY d.updated_at DESC",
     )
     .bind(uid)
     .fetch_all(pool)
@@ -422,6 +438,8 @@ pub async fn list_documents_for_user(
                 updated_at: r.try_get("updated_at")?,
                 role: r.try_get("role")?,
                 doc_key_enc: r.try_get("doc_key_enc")?,
+                wrapper_exchange_pubkey: r.try_get("wrapper_exchange_pubkey")?,
+                member_count: r.try_get("member_count")?,
             })
         })
         .collect()
