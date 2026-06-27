@@ -91,6 +91,17 @@ Stories:
   `InviteToDocument`/`RevokeFromDocument` flow (`SYNC P3`, sharing flow in `ambre-spec-sync.md §3`)
   to a chrome command + dialog. **Until this exists, genuine multi-user collaboration is unreachable
   from the UI** (see `E1` scope note). Unblocks real two-user testing of Trame.
+- **Snapshot lifecycle (client legs)** `[x]` — wired the client end of the snapshot
+  upload/download flow (`ambre-spec-sync.md §"Snapshot Flow"`, `ambre-spec-server.md §2.B`):
+  - **Upload:** `Sync::handle_send_snapshot` now seals -> `POST /snapshot/upload-url` ->
+    S3 PUT -> `POST /snapshot` (with `covered_seq`) -> adopts the returned `snapshot_id`
+    (`SyncEvent::SnapshotUploaded`). Host path still stops after sealing.
+  - **Download + cold-start seq gating:** the open path uses the real routes
+    (`GET /snapshot` then `POST /snapshot/download-url`); the snapshot's new `covered_seq`
+    (DB column) seeds `last_seq` so the post-open `RequestMissing` replays only newer deltas
+    instead of the whole history since genesis. Server replay also parallelized
+    (`join_all` over S3 fetches). Closes the cold-start target (`ambre-spec-server.md §perf`).
+    *(Remaining post-MVP: BLAKE2b `parent_snapshot_proof` chain, still empty.)*
 - `CANVAS P0` — generated canvas tokens (`tokens.ron` -> `theme.rs`) + headless tests
   (`RecordingSurface`, the mock `DrawSurface` in `ambre-draw`).
 - `ambreFatal` reconciliation — the `panic::set_hook` JS hook is done (`ARCH P1`); the remaining

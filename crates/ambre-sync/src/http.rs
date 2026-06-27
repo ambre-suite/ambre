@@ -379,19 +379,54 @@ pub(crate) struct MemberEntry {
     pub wrapper_exchange_pub_key: String,
 }
 
+/// Response of `GET /api/documents/{id}/snapshot`: the latest snapshot's id and
+/// its S3 key (mirrors the server's `SnapshotResponse`).
 #[derive(Deserialize)]
-#[allow(dead_code)]
-pub(crate) struct SnapshotPresignedResponse {
-    pub url: String,
+pub(crate) struct SnapshotMetadataResponse {
+    pub snapshot_id: String,
+    #[allow(dead_code)]
+    pub s3_key: String,
+    /// Highest delta `seq` folded into the snapshot: the open path gates its
+    /// `RequestMissing` on this to skip the already-replayed history.
+    pub covered_seq: i64,
+}
+
+/// Response of `POST /api/documents/{id}/snapshot/upload-url`: a presigned PUT
+/// URL plus the S3 key the server will reference when the upload is confirmed.
+#[derive(Deserialize)]
+pub(crate) struct SnapshotUploadUrlResponse {
+    pub upload_url: String,
+    pub s3_key: String,
+}
+
+/// Body of `POST /api/documents/{id}/snapshot` (confirm upload + insert metadata).
+/// Mirrors the server's `CreateSnapshotRequest`.
+#[derive(Serialize)]
+pub(crate) struct CreateSnapshotRequest {
+    pub snapshot_id: String,
+    pub author_pubkey: String,
+    pub parent_hash: Option<String>,
+    pub parent_snapshot_proof: Option<String>,
+    pub update_clocks: serde_json::Value,
+    pub s3_key: String,
+    /// Highest delta `seq` this client had applied when it took the snapshot.
+    pub covered_seq: i64,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct CreateSnapshotResponse {
     pub snapshot_id: String,
 }
 
+/// Body of `POST /api/documents/{id}/snapshot/download-url`.
 #[derive(Serialize)]
-#[allow(dead_code)]
-pub(crate) struct SnapshotMetadataRequest {
+pub(crate) struct SnapshotDownloadUrlRequest {
     pub snapshot_id: String,
-    pub ciphertext_hash: String,
-    pub size: u64,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SnapshotDownloadUrlResponse {
+    pub download_url: String,
 }
 
 #[derive(Deserialize)]
