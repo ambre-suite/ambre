@@ -464,8 +464,7 @@ pub struct SyncState {
     /// envelope; its public half is the author identity in `public_data`.
     signing_key: Option<SigningKey>,
     /// X25519 exchange key, derived from the master seed. Used to wrap/unwrap
-    /// document keys when sharing (not yet wired).
-    #[allow(dead_code)]
+    /// document keys when sharing (invite + key rotation on revoke).
     exchange_key: Option<StaticSecret>,
 
     // -- Single multiplexed WebSocket -----------------------------------------
