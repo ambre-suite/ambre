@@ -1764,9 +1764,8 @@ impl TrameView {
         // the velocity estimator, otherwise a single click launches a momentum
         // coast and scrolls far past one row. Only high-resolution pixel input
         // (touchpad two-finger glide) gets kinetic scrolling.
-        let discrete = delta_mode != 0
-            || px.abs() >= DISCRETE_WHEEL_PX
-            || py.abs() >= DISCRETE_WHEEL_PX;
+        let discrete =
+            delta_mode != 0 || px.abs() >= DISCRETE_WHEEL_PX || py.abs() >= DISCRETE_WHEEL_PX;
         if discrete {
             // No inertia: disarm any pending gesture and apply the step 1:1.
             self.fling_vx = 0.0;
