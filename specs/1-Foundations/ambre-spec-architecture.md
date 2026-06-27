@@ -671,6 +671,7 @@ impl MasterSeed {
 
 ### ARCH P5 — Remaining Applications
 - [ ] `ambre-toile` (R-Tree + read-only embeds), `ambre-murmure` (channels, segments managed by Sync).
+- [ ] Typed Murmure channel surface: replace the opaque `LogicCommand::SendChannelMessage { payload: Vec<u8> }` envelope with a typed `AppCommand::Murmure(MurmureCommand)` family, like the document surface (`AppCommand::Trame`). Murmure is currently a stub, so the command plane stays `Vec<u8>` for now. *(Note: only the command **envelope** becomes typed; the channel **message content** stays real network `Vec<u8>` per the content-plane rule above. Tracked in code: `crates/ambre-bus/src/logic.rs` `SendChannelMessage`.)*
 - [ ] Composition (`AppCommand`/`TrameOutcome` recursion routed by `Uuid`). Encrypted presence. TOFU UI. Meetings (WebRTC signaling).
 
 ### ARCH P6 — Test infrastructure (transverse)
