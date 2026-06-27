@@ -3069,77 +3069,22 @@ impl SyncState {
             return;
         };
 
+        // Orchestration (search -> wrap -> share) lives in `sharing::invite_task`,
+        // generic over the HTTP transport so it is unit-tested natively. Here we
+        // only carry the gathered state into the spawned task.
+        let params = sharing::InviteParams {
+            id,
+            document_id,
+            url_scheme,
+            api_base,
+            invitee_email,
+            role,
+            exchange_key,
+            doc_key,
+        };
+        let http = sharing::GlooHttp { auth };
         wasm_bindgen_futures::spawn_local(async move {
-            let search_url = format!(
-                "{url_scheme}://{api_base}/api/users/search?query={}",
-                invitee_email.replace('@', "%40")
-            );
-            let users = match http::get_json_auth::<http::UserSearchResult>(
-                &search_url,
-                auth.clone(),
-            )
-            .await
-            {
-                Ok(resp) => resp.users,
-                Err(e) => {
-                    let _ = logic_tx.send(LogicEvent::ApiError {
-                        request: "InviteToDocument".into(),
-                        code: 500,
-                        message: format!("User search failed: {e}"),
-                    });
-                    return;
-                }
-            };
-            let invitee = match users.iter().find(|u| u.email == invitee_email) {
-                Some(u) => u,
-                None => {
-                    let _ = logic_tx.send(LogicEvent::ApiError {
-                        request: "InviteToDocument".into(),
-                        code: 404,
-                        message: "User not found".into(),
-                    });
-                    return;
-                }
-            };
-            // ECDH-wrap the document key for the invitee (pure glue in `sharing`).
-            let body = match sharing::build_invite_request(
-                &exchange_key,
-                &invitee.exchange_pubkey,
-                invitee_email.clone(),
-                &doc_key,
-                role,
-            ) {
-                Ok(req) => req,
-                Err(message) => {
-                    let _ = logic_tx.send(LogicEvent::ApiError {
-                        request: "InviteToDocument".into(),
-                        code: 500,
-                        message,
-                    });
-                    return;
-                }
-            };
-
-            let invite_url = format!("{url_scheme}://{api_base}/api/documents/{document_id}/share");
-            match http::post_json_auth::<_, http::InviteResponse>(&invite_url, &body, auth).await {
-                Ok(resp) => {
-                    let user_id =
-                        UserId::parse_str(&resp.user_id).unwrap_or_else(|_| UserId::new());
-                    let _ = tx.send(SyncEvent::InviteSent {
-                        id,
-                        document_id,
-                        user_id,
-                        display_name: resp.display_name,
-                    });
-                }
-                Err(e) => {
-                    let _ = logic_tx.send(LogicEvent::ApiError {
-                        request: "InviteToDocument".into(),
-                        code: 500,
-                        message: e,
-                    });
-                }
-            }
+            sharing::invite_task(&http, params, &tx, &logic_tx).await;
         });
     }
 
@@ -3161,8 +3106,6 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         let exchange_key = self.exchange_key.clone();
-        let doc_state = self.documents.get(&document_id);
-        let old_doc_key = doc_state.map(|ds| ds.doc_key.clone());
 
         let Some(tx) = event_tx else {
             self.reply(id, RestEvent::RevocationComplete { document_id });
@@ -3177,70 +3120,20 @@ impl SyncState {
             return;
         };
 
+        // Orchestration (DELETE -> new key -> members -> rotate) lives in
+        // `sharing::revoke_task`. The old key is dropped/zeroized when the local
+        // swap happens in `handle_sync_event` on `RevocationComplete`.
+        let params = sharing::RevokeParams {
+            id,
+            document_id,
+            user_id,
+            url_scheme,
+            api_base,
+            exchange_key,
+        };
+        let http = sharing::GlooHttp { auth };
         wasm_bindgen_futures::spawn_local(async move {
-            // 1. DELETE /api/documents/{id}/share/{uid}
-            let revoke_url =
-                format!("{url_scheme}://{api_base}/api/documents/{document_id}/share/{user_id}");
-            if let Err(e) = http::delete_auth(&revoke_url, auth.clone()).await {
-                let _ = logic_tx.send(LogicEvent::ApiError {
-                    request: "RevokeFromDocument".into(),
-                    code: 500,
-                    message: format!("Revoke failed: {e}"),
-                });
-                return;
-            }
-
-            // 2. Generate new DocumentKey
-            let new_doc_key = DocumentKey::generate();
-
-            // 3. GET remaining members
-            let members_url =
-                format!("{url_scheme}://{api_base}/api/documents/{document_id}/members");
-            let members = match http::get_json_auth::<http::DocumentMembersResponse>(
-                &members_url,
-                auth.clone(),
-            )
-            .await
-            {
-                Ok(resp) => resp.members,
-                Err(e) => {
-                    let _ = logic_tx.send(LogicEvent::ApiError {
-                        request: "RevokeFromDocument".into(),
-                        code: 500,
-                        message: format!("Get members failed: {e}"),
-                    });
-                    return;
-                }
-            };
-
-            // 4. Re-wrap the new key for each remaining member (pure glue;
-            //    members with a malformed exchange pubkey are skipped).
-            let keys = sharing::rotate_entries_for(&exchange_key, &new_doc_key, &members);
-
-            // 5. POST /api/documents/{id}/rotate-key
-            let rotate_url =
-                format!("{url_scheme}://{api_base}/api/documents/{document_id}/rotate-key");
-            let body = http::RotateKeyRequest { keys };
-            if let Err(e) =
-                http::post_json_auth::<_, serde_json::Value>(&rotate_url, &body, auth).await
-            {
-                let _ = logic_tx.send(LogicEvent::ApiError {
-                    request: "RevokeFromDocument".into(),
-                    code: 500,
-                    message: format!("Rotate key failed: {e}"),
-                });
-                return;
-            }
-
-            // 6. Send back new key for swap
-            let _ = tx.send(SyncEvent::RevocationComplete {
-                id,
-                document_id,
-                new_doc_key,
-            });
-            // old_doc_key is dropped (zeroized) here — old_keys cache is
-            // populated by handle_sync_event when it swaps the keys.
-            let _ = old_doc_key;
+            sharing::revoke_task(&http, params, &tx, &logic_tx).await;
         });
     }
 
@@ -3254,21 +3147,15 @@ impl SyncState {
         let auth = self.auth_context();
 
         if let Some(tx) = event_tx {
+            let params = sharing::ListMembersParams {
+                id,
+                document_id,
+                url_scheme,
+                api_base,
+            };
+            let http = sharing::GlooHttp { auth };
             wasm_bindgen_futures::spawn_local(async move {
-                let url = format!("{url_scheme}://{api_base}/api/documents/{document_id}/members");
-                match http::get_json_auth::<http::DocumentMembersResponse>(&url, auth).await {
-                    Ok(resp) => {
-                        let members = sharing::map_members(resp.members);
-                        let _ = tx.send(SyncEvent::DocumentMembersReady {
-                            id,
-                            document_id,
-                            members,
-                        });
-                    }
-                    Err(e) => {
-                        let _ = tx.send(SyncEvent::HttpError { id, message: e });
-                    }
-                }
+                sharing::list_members_task(&http, params, &tx).await;
             });
         } else {
             self.reply(

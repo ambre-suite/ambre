@@ -54,6 +54,11 @@ web-sys      = { workspace = true, features = [
 ] }
 futures-util = { workspace = true }
 
+# Native-only: a current-thread executor to drive the sharing orchestration
+# tasks (`invite_task` etc.) against a fake transport in unit tests.
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }
+
 # Sync worker bootstrap (wasm only): panic overlay + tracing into the console.
 # This is a separate wasm instance from Main, so it inits its own subscriber.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
