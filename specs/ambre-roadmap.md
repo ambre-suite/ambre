@@ -51,11 +51,10 @@ Stories (all `[x]`):
 
 *A Trame skeleton end-to-end encrypted and synchronized via the Blind Relay. Validates the whole stack.*
 
-> **Scope note -- "collaborative" is not yet reachable from the UI.** The real-time sync engine and
-> the sharing/revocation flow exist at the bus/sync/server layer (`SYNC P3`), but the **chrome has no
-> way to share a document with another user**. So today only multiple sessions of the *same* user
-> converge -- not genuine multi-user collaboration. The user-facing sharing UI is an explicit open
-> Story under `E2`.
+> **Scope note.** The real-time sync engine and the sharing/revocation flow exist at the
+> bus/sync/server layer (`SYNC P3`); the user-facing sharing UI that drives them from the chrome
+> landed under `E2` (Document sharing UI story). Genuine multi-user collaboration is now reachable
+> from the UI.
 
 Stories (all `[x]`):
 - `ARCH P1`/`ARCH P2` — typed Trame editing (`TrameOutcome`, lossless Logic dispatcher), real
@@ -65,21 +64,21 @@ Stories (all `[x]`):
   presigned URLs).
 - `SYNC P1`->`SYNC P3` — network sync, cookie-less auth (Bearer JWT + refresh), persistent SPA
   engine, live sync (PubSub hub, WS resilience, hydration), sharing & revocation **flow**
-  (DocumentKey rotation, media, anti-replay). *(Engine/protocol only -- no chrome UI yet, see `E2`.)*
+  (DocumentKey rotation, media, anti-replay). *(Engine/protocol; chrome UI landed under `E2`.)*
 - `SRV P2` — server hardening (rate limiting, organizations + Shamir, compaction; CSRF dropped
   with the move to Bearer JWT).
 
 > Dependencies: `SRV P0` precedes the network wiring of `SYNC P2` (need a target relay);
 > `SYNC P0` precedes `SYNC P1`-`P3` (crypto before integration).
 
-## E2 — Foundation finishing (minimal)  `[ ]` (reopened)
+## E2 — Foundation finishing (minimal)  `[x]` (done)
 
 *Close the visible/blocking foundation gaps. Deliberately minimal: offline durability, audits and
 benchmarks are deferred to `E5`.*
 
-> **Reopened** for `CHROME P4`: the `/` launcher exists but discards the (E2E-encrypted) document
-> name and is off the design tokens — a visible foundation gap in the same spirit as the sharing UI.
-> Per the golden rule the Epic status is derived, so adding an open Story flips E2 back to `[ ]`.
+> Was reopened for `CHROME P4` (the `/` launcher discarded the E2E-encrypted document name and was
+> off the design tokens). Both that launcher gap and the Document sharing UI Story have since landed,
+> so the derived Epic status is `[x]` again.
 
 Stories:
 - `CHROME P4` `[x]` — **Launcher screen** (`ambre-spec-chrome.md §2.G`/`§7`): Sync now decrypts
@@ -89,10 +88,14 @@ Stories:
   inline rename / delete (with confirmation `<dialog>`), token re-theme + empty state + sign-in
   wordmark/tagline, and the generic-label browser tab title. Naming/encryption contract in
   `ambre-spec-architecture.md §3`.
-- **Document sharing UI (chrome)** — invite/revoke collaborators by user, wiring the existing
-  `InviteToDocument`/`RevokeFromDocument` flow (`SYNC P3`, sharing flow in `ambre-spec-sync.md §3`)
-  to a chrome command + dialog. **Until this exists, genuine multi-user collaboration is unreachable
-  from the UI** (see `E1` scope note). Unblocks real two-user testing of Trame.
+- **Document sharing UI (chrome)** `[x]` — Share toolbar button (shown when a document is open) opens
+  a dialog that lists current members and wires the existing `InviteToDocument` /
+  `RevokeFromDocument` / `UpdateDocumentMemberRole` / `ListDocumentMembers` flow (`SYNC P3`): invite
+  by email (bare username -> `<name>@dev.local` in dev mode), per-member role select, revoke (with
+  server-side `DocumentKey` rotation), live `InviteSent` / `RevocationComplete` / `MemberRoleUpdated`
+  toasts that refresh the list, plus a `DocumentShared` toast that refreshes the launcher. Invite
+  does a real X25519 ECDH wrap of the document key for the invitee. Unblocks genuine multi-user
+  testing of Trame.
 - **Snapshot lifecycle (client legs)** `[x]` — wired the client end of the snapshot
   upload/download flow (`ambre-spec-sync.md §"Snapshot Flow"`, `ambre-spec-server.md §2.B`):
   - **Upload:** `Sync::handle_send_snapshot` now seals -> `POST /snapshot/upload-url` ->

@@ -323,6 +323,164 @@ mod handler_tests {
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
+    /// GET the member list and return the raw `members` JSON array. Asserts 200.
+    async fn list_members(app: &Router, auth: &str, doc_id: &str) -> Vec<serde_json::Value> {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::get(format!("/api/documents/{doc_id}/members"))
+                    .header("authorization", auth)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        json["members"].as_array().unwrap().clone()
+    }
+
+    /// Revoking a member drops them from the list, and a subsequent key
+    /// rotation replaces the owner's stored `doc_key_enc` with the new wrap.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn revoke_then_rotate_replaces_owner_key(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let auth = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &auth).await;
+
+        // Invite a second user, then confirm the list holds both members.
+        let invitee_email = "revoked@test.com";
+        let invitee_id = crate::test_helpers::create_test_user(&state.db, invitee_email).await;
+        let body = serde_json::json!({
+            "invitee_email": invitee_email,
+            "role": "editor",
+            "doc_key_enc": base64_encode(&[9u8; 32]),
+        });
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::post(format!("/api/documents/{doc_id}/share"))
+                    .header("content-type", "application/json")
+                    .header("authorization", &auth)
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(list_members(&app, &auth, &doc_id).await.len(), 2);
+
+        // Revoke the invitee -> only the owner remains.
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::delete(format!("/api/documents/{doc_id}/share/{invitee_id}"))
+                    .header("authorization", &auth)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let members = list_members(&app, &auth, &doc_id).await;
+        assert_eq!(members.len(), 1);
+        let owner_id = members[0]["user_id"].as_str().unwrap().to_string();
+        // The owner's key is still the one set at document creation.
+        assert_eq!(members[0]["doc_key_enc"], base64_encode(&[5u8; 32]));
+
+        // Rotate: re-wrap the document key for the remaining owner.
+        let new_key = base64_encode(&[0xABu8; 32]);
+        let rotate_body = serde_json::json!({
+            "keys": [ { "user_id": owner_id, "doc_key_enc": new_key } ],
+        });
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::post(format!("/api/documents/{doc_id}/rotate-key"))
+                    .header("content-type", "application/json")
+                    .header("authorization", &auth)
+                    .body(Body::from(serde_json::to_string(&rotate_body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // The stored wrap is now the rotated key.
+        let members = list_members(&app, &auth, &doc_id).await;
+        assert_eq!(members[0]["doc_key_enc"], new_key);
+    }
+
+    /// An owner can change a member's role; an unknown role string is rejected.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn update_member_role_changes_role(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let auth = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &auth).await;
+
+        let invitee_email = "rolechange@test.com";
+        let invitee_id = crate::test_helpers::create_test_user(&state.db, invitee_email).await;
+        let body = serde_json::json!({
+            "invitee_email": invitee_email,
+            "role": "editor",
+            "doc_key_enc": base64_encode(&[9u8; 32]),
+        });
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::post(format!("/api/documents/{doc_id}/share"))
+                    .header("content-type", "application/json")
+                    .header("authorization", &auth)
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // Promote/demote the invitee editor -> viewer.
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::patch(format!("/api/documents/{doc_id}/members/{invitee_id}"))
+                    .header("content-type", "application/json")
+                    .header("authorization", &auth)
+                    .body(Body::from(r#"{"role":"viewer"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let members = list_members(&app, &auth, &doc_id).await;
+        let invitee = members
+            .iter()
+            .find(|m| m["user_id"] == invitee_id.to_string())
+            .expect("invitee still a member");
+        assert_eq!(invitee["role"], "viewer");
+
+        // An invalid role string is rejected with 409 CONFLICT.
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::patch(format!("/api/documents/{doc_id}/members/{invitee_id}"))
+                    .header("content-type", "application/json")
+                    .header("authorization", &auth)
+                    .body(Body::from(r#"{"role":"superadmin"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+    }
+
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn logout_clears_session(pool: sqlx::PgPool) {
