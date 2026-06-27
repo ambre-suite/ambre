@@ -106,6 +106,7 @@ mod http;
 pub mod mock;
 pub mod mock_relay;
 mod pipeline;
+mod sharing;
 /// Web Worker entry point (`#[wasm_bindgen(start)]`): the postMessage bridge to
 /// the Main instance. wasm-only.
 #[cfg(target_arch = "wasm32")]
@@ -3100,40 +3101,26 @@ impl SyncState {
                     return;
                 }
             };
-            let peer_pub_bytes: [u8; 32] = match hex::decode(&invitee.exchange_pubkey) {
-                Ok(b) => match b.try_into() {
-                    Ok(arr) => arr,
-                    Err(_) => {
-                        let _ = logic_tx.send(LogicEvent::ApiError {
-                            request: "InviteToDocument".into(),
-                            code: 500,
-                            message: "Invalid exchange pubkey".into(),
-                        });
-                        return;
-                    }
-                },
-                Err(e) => {
+            // ECDH-wrap the document key for the invitee (pure glue in `sharing`).
+            let body = match sharing::build_invite_request(
+                &exchange_key,
+                &invitee.exchange_pubkey,
+                invitee_email.clone(),
+                &doc_key,
+                role,
+            ) {
+                Ok(req) => req,
+                Err(message) => {
                     let _ = logic_tx.send(LogicEvent::ApiError {
                         request: "InviteToDocument".into(),
                         code: 500,
-                        message: format!("Hex decode pubkey: {e}"),
+                        message,
                     });
                     return;
                 }
             };
 
-            let wrapped =
-                ambre_crypto::ecdh::wrap_document_key(&exchange_key, &peer_pub_bytes, &doc_key);
-            let mut enc = wrapped.nonce.to_vec();
-            enc.extend_from_slice(&wrapped.ciphertext);
-            let doc_key_enc = base64::engine::general_purpose::URL_SAFE.encode(&enc);
-
             let invite_url = format!("{url_scheme}://{api_base}/api/documents/{document_id}/share");
-            let body = http::InviteRequest {
-                invitee_email: invitee_email.clone(),
-                role: role.to_string(),
-                doc_key_enc,
-            };
             match http::post_json_auth::<_, http::InviteResponse>(&invite_url, &body, auth).await {
                 Ok(resp) => {
                     let user_id =
@@ -3226,29 +3213,9 @@ impl SyncState {
                 }
             };
 
-            // 4. Wrap new key for each remaining member
-            let mut keys = Vec::with_capacity(members.len());
-            for member in &members {
-                let peer_pub_bytes: [u8; 32] = match hex::decode(&member.exchange_pub_key) {
-                    Ok(b) => match b.try_into() {
-                        Ok(arr) => arr,
-                        Err(_) => continue,
-                    },
-                    Err(_) => continue,
-                };
-                let wrapped = ambre_crypto::ecdh::wrap_document_key(
-                    &exchange_key,
-                    &peer_pub_bytes,
-                    &new_doc_key,
-                );
-                let mut enc = wrapped.nonce.to_vec();
-                enc.extend_from_slice(&wrapped.ciphertext);
-                let doc_key_enc = base64::engine::general_purpose::URL_SAFE.encode(&enc);
-                keys.push(http::RotateKeyEntry {
-                    user_id: member.user_id.clone(),
-                    doc_key_enc,
-                });
-            }
+            // 4. Re-wrap the new key for each remaining member (pure glue;
+            //    members with a malformed exchange pubkey are skipped).
+            let keys = sharing::rotate_entries_for(&exchange_key, &new_doc_key, &members);
 
             // 5. POST /api/documents/{id}/rotate-key
             let rotate_url =
@@ -3291,17 +3258,7 @@ impl SyncState {
                 let url = format!("{url_scheme}://{api_base}/api/documents/{document_id}/members");
                 match http::get_json_auth::<http::DocumentMembersResponse>(&url, auth).await {
                     Ok(resp) => {
-                        let members: Vec<MemberInfo> = resp
-                            .members
-                            .into_iter()
-                            .map(|m| MemberInfo {
-                                user_id: UserId::parse_str(&m.user_id)
-                                    .unwrap_or_else(|_| UserId::new()),
-                                display_name: m.display_name,
-                                email: m.email,
-                                role: m.role.parse().unwrap_or(Role::Viewer),
-                            })
-                            .collect();
+                        let members = sharing::map_members(resp.members);
                         let _ = tx.send(SyncEvent::DocumentMembersReady {
                             id,
                             document_id,
