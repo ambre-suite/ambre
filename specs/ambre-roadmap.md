@@ -102,10 +102,12 @@ Stories:
     instead of the whole history since genesis. Server replay also parallelized
     (`join_all` over S3 fetches). Closes the cold-start target (`ambre-spec-server.md §perf`).
     *(Remaining post-MVP: BLAKE2b `parent_snapshot_proof` chain, still empty.)*
-- `CANVAS P0` — generated canvas tokens (`tokens.ron` -> `theme.rs`) + headless tests
-  (`RecordingSurface`, the mock `DrawSurface` in `ambre-draw`).
-- `ambreFatal` reconciliation — the `panic::set_hook` JS hook is done (`ARCH P1`); the remaining
-  part is the canvas terminal screen (`CANVAS P1` item), wired in `host`/`ambre-app`.
+- `CANVAS P0` `[x]` — generated canvas tokens (`tokens.ron` -> `theme.rs` via `ambre-canvas/build.rs`)
+  + headless tests (`RecordingSurface`, the mock `DrawSurface` in `ambre-draw/src/testing.rs`,
+  consumed by the Trame render tests).
+- `ambreFatal` reconciliation `[x]` — the `panic::set_hook` JS hook (`ARCH P1`) plus the canvas
+  terminal screen: `signal_fatal` is raised in `ambre-app/src/lib.rs` and `fatal_message` is painted
+  every frame in `ambre-app/src/host.rs`.
 
 ## E3 — Trame MVP (usual spreadsheet)  `[x]` (done) — *core objective*
 
