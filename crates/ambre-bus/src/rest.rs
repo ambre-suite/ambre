@@ -82,6 +82,8 @@ pub struct DocumentSummary {
     pub role: Role,
     /// Epoch milliseconds.
     pub updated_at: u64,
+    /// Total member count (routing metadata, plaintext). `> 1` => shared.
+    pub member_count: u32,
 }
 
 /// Member of a document or channel.

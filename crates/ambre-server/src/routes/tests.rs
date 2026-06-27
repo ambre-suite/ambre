@@ -151,6 +151,44 @@ mod handler_tests {
 
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn list_documents_carries_summary_fields(pool: sqlx::PgPool) {
+        // After creation, the list must carry the fields the launcher needs:
+        // the encrypted name, the caller's wrapped doc key, member_count (1 for a
+        // solo owner), and a timestamp. Validates the new LEFT JOIN + COUNT query.
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let auth = setup_and_get_auth(&app).await;
+        let _doc_id = create_test_doc(&app, &auth).await;
+
+        let resp = app
+            .oneshot(
+                Request::get("/api/documents")
+                    .header("authorization", &auth)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body_bytes = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let docs = json["documents"].as_array().unwrap();
+        assert_eq!(docs.len(), 1);
+        let d = &docs[0];
+        assert!(d["doc_key_enc"].as_str().is_some_and(|s| !s.is_empty()));
+        assert_eq!(d["member_count"].as_u64(), Some(1));
+        assert!(d["updated_at"].as_str().is_some());
+        // The owner wrapped their own key at creation (invited_by = self), so the
+        // wrapper exchange pubkey resolves to a non-empty hex string.
+        assert!(
+            d["wrapper_exchange_pub_key"]
+                .as_str()
+                .is_some_and(|s| !s.is_empty())
+        );
+    }
+
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn create_and_get_document(pool: sqlx::PgPool) {
         let state = test_app_state(pool).await;
         let app = build_test_router(state.clone());

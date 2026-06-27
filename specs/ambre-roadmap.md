@@ -82,10 +82,12 @@ benchmarks are deferred to `E5`.*
 > Per the golden rule the Epic status is derived, so adding an open Story flips E2 back to `[ ]`.
 
 Stories:
-- `CHROME P4` `[ ]` — **Launcher screen** (`ambre-spec-chrome.md §2.G`/`§7`): decrypt `name_enc`
-  through to `DocumentSummary.name`, document cards (type icon + name + last-modified + shared badge),
-  create-untitled / inline rename / delete, token re-theme + empty state + sign-in identity. Makes the
-  document home actually usable (today it shows `doc_type` + a short id). Naming/encryption contract in
+- `CHROME P4` `[x]` — **Launcher screen** (`ambre-spec-chrome.md §2.G`/`§7`): Sync now decrypts
+  `name_enc` through to `DocumentSummary.name` (ECDH-unwrap each list-row doc key, AEAD-open the name;
+  server list returns `doc_key_enc` + `wrapper_exchange_pub_key` + `member_count`), document cards
+  (type-icon monogram + name/"Untitled" + relative last-modified + shared badge), create-untitled /
+  inline rename / delete (with confirmation `<dialog>`), token re-theme + empty state + sign-in
+  wordmark/tagline, and the generic-label browser tab title. Naming/encryption contract in
   `ambre-spec-architecture.md §3`.
 - **Document sharing UI (chrome)** — invite/revoke collaborators by user, wiring the existing
   `InviteToDocument`/`RevokeFromDocument` flow (`SYNC P3`, sharing flow in `ambre-spec-sync.md §3`)

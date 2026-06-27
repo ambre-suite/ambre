@@ -157,6 +157,13 @@ pub struct DocumentSummaryJson {
     pub name_enc: Option<String>,
     pub role: String,
     pub doc_key_enc: String,
+    /// Exchange public key (hex) of whoever wrapped `doc_key_enc`. The client
+    /// ECDH-unwraps the doc key with it to decrypt the name for the launcher.
+    /// Empty when unknown (self-wrapped owner row): the client falls back to its
+    /// own key.
+    pub wrapper_exchange_pub_key: String,
+    /// Total member count (routing metadata). `> 1` => shared.
+    pub member_count: u32,
     pub updated_at: String,
 }
 /// Response wrapper for the document listing.
@@ -183,6 +190,11 @@ pub async fn list_documents(
                 .map(|n| base64::engine::general_purpose::URL_SAFE.encode(&n)),
             role: d.role,
             doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&d.doc_key_enc),
+            wrapper_exchange_pub_key: d
+                .wrapper_exchange_pubkey
+                .map(hex::encode)
+                .unwrap_or_default(),
+            member_count: d.member_count.max(0) as u32,
             updated_at: d.updated_at.to_rfc3339(),
         })
         .collect();
