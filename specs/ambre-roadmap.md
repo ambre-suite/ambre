@@ -109,13 +109,26 @@ Stories:
   terminal screen: `signal_fatal` is raised in `ambre-app/src/lib.rs` and `fatal_message` is painted
   every frame in `ambre-app/src/host.rs`.
 
-## E3 — Trame MVP (usual spreadsheet)  `[x]` (done) — *core objective*
+## E3 — Trame MVP (usual spreadsheet)  `[ ]` (reopened) — *core objective*
 
 *Turn the Trame skeleton into a usable spreadsheet. Scope = the consolidated "Phase 1 / MVP" of the
 four Trame specs, deduplicated against what `E0`/`E1` already delivered (virtual scroll + inline cell
 editor are done).*
 
+> **Reopened** for the header/column/row UX gap. The functional MVP shipped, but the structural-op
+> UX is below the bar set by the autofill handle: insert/delete live only in an unstyled context
+> menu, there is no whole-column/row selection, no hover affordance, no resize, and the filter gives
+> only a faint funnel badge. The promotion also pulls **multi-column sort** and **column/row resize**
+> forward from V1 into the MVP. Per the golden rule the Epic status is derived, so adding open
+> Stories flips E3 back to `[ ]`.
+
 Stories:
+- **Header/column/row UX (MVP promotion)** `[ ]` — `trame-ui §18 Phase 1` (new items) + `trame-logic §14 Phase 1` + `trame-features §10 Phase 1`:
+  - Header interactions (`trame-ui §4bis`): virtual whole-column/row selection, hover cursors, **column/row resize** (`ResizeCol`/`ResizeRow` + variable-metrics `GridLayout`, `trame-logic §9/§14`), **double-click auto-fit** (UI-side over cached cells, reuses `ResizeCol`/`ResizeRow`; whole-column auto-fit is a V1 refinement), inline "+" insert affordance.
+  - Context-menu polish (`trame-ui §5.C`): grouped iconed entries + separators + header-scoped menu.
+  - **Multi-column sort** (`SortRangeMulti`, `trame-features §2`): `SortDialog` UI + logic handler. *(was V1.)*
+  - Filter feedback on the first row (`trame-ui §5.D`): Excel-style autofilter buttons fed by `FilterApplied { col }`.
+- *(Below: the original E3 scope, delivered.)*
 - `trame-logic §14 Phase 1 & 2` — multi-sheet `LoroDoc` + `SheetIndex`; insert/delete rows/columns; cell merges;
   Undo/Redo (Loro `UndoManager`); complete the function set from 22 to ~50; manual cell formatting
   (`SetCellStyle` + `NumberFormat`), clipboard paste (`PasteRange`), autofill (`FillRange`),

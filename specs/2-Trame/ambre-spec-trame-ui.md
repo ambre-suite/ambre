@@ -404,6 +404,130 @@ fn handle_freeze_rows(&mut self, row: u32) {
 
 ---
 
+## 4bis. COLUMN / ROW HEADER INTERACTIONS (MVP)
+
+> **Why this is MVP.** The autofill handle received a thorough UX pass; the headers did not.
+> Today the only entry point for insert/delete is the grid context menu, and there is no
+> whole-column/row selection, no hover affordance, and no resize. This section raises the
+> header interaction to the same bar as the fill handle. All of it is **UI-thread view
+> state + existing typed commands** -- no new data plane (the `col_widths_{sheet}` /
+> `row_heights_{sheet}` Loro maps and `ResizeCol` / `ResizeRow` already exist, `-logic` §2.B/§9).
+
+The header band is divided into three hit zones per cell, resolved in `cell_at_pixel`'s
+header sibling `header_hit(x, y) -> HeaderHit`:
+
+```rust
+enum HeaderHit {
+    ColBody(u32),          // header body -> whole-column select / drag-extend
+    RowBody(u32),
+    ColBorder(u32),        // +/-4px around the right border of col i -> resize col i
+    RowBorder(u32),        // resize row i
+    ColInsert(u32),        // small "+" affordance shown on hover at a boundary
+    RowInsert(u32),
+    Corner,                // top-left corner -> select-all
+}
+```
+
+### A. Whole-column / whole-row selection (virtual)
+
+Left-clicking a column header selects the **entire** column; clicking a row header selects
+the entire row. The UI does not know the document height, so a whole-axis selection is a
+distinct selection kind, not a cell rectangle clamped to a guessed bound:
+
+```rust
+pub enum SelKind { Cells, Cols, Rows }   // added to Selection (sec.8)
+```
+
+`anchor`/`active` still carry the band endpoints (the perpendicular coordinate is ignored for
+`Cols`/`Rows`). Drag along the header extends the band; **Shift+click** extends, **Ctrl/Cmd+click**
+adds a disjoint band (`Selection.extra`, sec.8). The top-left **corner** selects the whole sheet.
+Rendering: the selected band's cells get the range fill, and the band's headers render with the
+**opaque active-header tint** (full column/row, sec.4.B) so the selection reads even though no
+cell rectangle bounds it on screen.
+
+A whole-axis selection feeds the existing **parameterless** intents unchanged: the Logic thread,
+which tracks the selection (`SetActiveCell` carries the anchor corner) and knows the **used range**,
+resolves "whole column C" to the used-range rectangle for sort / filter / `SetCellStyle` /
+`DeleteSelectedCols` / `RequestSelectionStats`. This is the same UI->Logic contract already used
+by every E3 feature; the UI never needs the document height (sec.16).
+
+> **Relation to `RangeEndpoint::EntireAxis` (`-logic` §3.A).** The whole-axis UI selection is the
+> interactive cousin of a formula's `A:A` / `1:1` -- and is resolved the **same way**: the Logic
+> thread clamps the unbounded axis to the used range `[0..hwm]` (exactly `endpoint_pos`'s `entire`
+> bound). They stay **separate types** -- `EntireAxis` lives in the compiled formula engine and is
+> currently reserved (the MVP parser never emits it); `SelKind::Cols`/`Rows` is UI view state.
+> No new data plane: the axis selection rides the existing tracked-selection contract.
+
+### B. Hover cursor feedback
+
+The canvas cursor (`#ambre-canvas` CSS `cursor`, generalised from `set_fill_cursor`, sec.5.F into
+`TrameView::set_cursor(CursorKind)`) tracks `header_hit` on every pointer move:
+
+| Zone | Cursor |
+|---|---|
+| `ColBody` | `s-resize`-style **down arrow** affordance (column-select) -- CSS `cursor: pointer` for MVP |
+| `RowBody` | row-select pointer |
+| `ColBorder` | `col-resize` |
+| `RowBorder` | `row-resize` |
+| `ColInsert` / `RowInsert` | `pointer` (over the "+" affordance) |
+| grid body | default / fill-crosshair over the handle (sec.5.F) |
+
+### C. Resize by dragging the header boundary
+
+Pressing on a `ColBorder(i)` / `RowBorder(i)` zone arms a resize drag (`TrameView::resize_drag`,
+the same arming pattern as `fill_drag`, sec.5.F) instead of a selection. Pointer moves draw a live
+guide line at the prospective edge (`TrameUiState::resize_preview`, painted in
+`ui::renderer::draw_overlay`); the release emits one command and grows nothing:
+
+```rust
+fn on_resize_drag_end(&mut self, hit: HeaderHit, px: f32) {
+    let v = self.next_version();
+    match hit {
+        HeaderHit::ColBorder(c) => {
+            let width = (px - self.col_left(c) + self.scroll_x).max(MIN_COL_WIDTH); // >= ~24px
+            self.logic_tx.send(TrameCommand::ResizeCol { version: v, sheet_id: self.ui_state.active_sheet, col: c, width_px: width });
+        }
+        HeaderHit::RowBorder(r) => {
+            let height = (px - self.row_top(r) + self.scroll_y).max(MIN_ROW_HEIGHT);
+            self.logic_tx.send(TrameCommand::ResizeRow { version: v, sheet_id: self.ui_state.active_sheet, row: r, height_px: height });
+        }
+        _ => {}
+    }
+    // Logic writes col_widths_{sheet}/row_heights_{sheet} (LWW per uid) and replies with a
+    // refreshed viewport carrying the new col_widths/row_heights; the UI rebuilds its offsets
+    // (sec.3.B). When a whole column/row is selected, the resize applies to every selected band.
+}
+```
+
+Resize is a **document mutation** (Loro, synchronised, undoable -- it is a per-uid LWW write, so
+two users resizing the same column converge on LWW, like any cell). If the dragged column/row is
+part of the current whole-axis selection, the new size is applied to **every** column/row in the
+selection (one command per band, one undo group).
+
+**Auto-fit on double-click (MVP).** Double-clicking a `ColBorder(i)` / `RowBorder(i)` zone fits the
+column/row to its content. This is **UI-side** and reuses `ResizeCol` / `ResizeRow` with no new
+command: the UI already owns the parley `font_cx` + `text_cache` and measures glyph runs, so it
+walks the column's **cached** cells (`cell_cache`, viewport + padding), takes the max natural width
+(`+2*CELL_PAD_X`, clamped to `MIN_COL_WIDTH`), and sends `ResizeCol { width_px }` (rows: max line
+height -> `ResizeRow`). One undo group, like a drag resize.
+
+> **Caveat (and the V1 upgrade path).** UI-side auto-fit fits the **cached** cells (what is on or
+> near screen), not necessarily the whole column -- correct in the overwhelming majority of cases
+> and instant. True whole-column auto-fit needs full-column text measurement, which would require a
+> parley `FontContext` in the Logic worker (fonts live UI/gpu-side today); that stays a **V1**
+> refinement (a Logic-side `AutoFitCol`/`AutoFitRow` measuring every materialized cell), not MVP.
+
+### D. Inline insert "+" affordance
+
+Hovering near a header boundary reveals a small "+" button (`ColInsert(i)` / `RowInsert(i)`),
+drawn in `draw_overlay`. Clicking it inserts a column to the left of `i` (resp. a row above `i`)
+through the existing parameterless intents: the UI first moves the tracked active cell onto column
+`i` / row `i`, then fires `InsertColLeft` / `InsertRowAbove` (sec.5.C), so the Logic thread resolves
+the position exactly as from the context menu. This gives a one-click inline insert without opening
+the menu, matching the fill-handle's directness.
+
+---
+
 ## 5. INPUT HANDLING
 
 ### A. Keyboard
@@ -596,6 +720,47 @@ fn send_sort(&mut self, sheet_id: SheetId, ascending: bool) {
 }
 ```
 
+**Menu polish (MVP).** The current DOM menu is an unstyled flat list ("fourre-tout"). For MVP
+`context_entries()` returns **grouped, iconed** entries with separators, in stable order:
+
+```text
+[Cut]  [Copy]  [Paste]                      (MdiContentCut / Copy / Paste)
+---
+[Insert row above] [Insert row below]       (MdiTableRowPlusBefore / After)
+[Insert column left] [Insert column right]  (MdiTableColumnPlusBefore / After)
+[Delete rows] [Delete columns]              (MdiTableRowRemove / TableColumnRemove)
+---
+[Sort ascending] [Sort descending]          (MdiSortAscending / Descending)
+[Sort range...]                             (MdiSort -> multi-column dialog, below)
+[Filter by column] [Clear filter]           (MdiFilter / FilterOff)
+---
+[Merge cells] [Unmerge]                     (MdiTableMergeCells / ...)
+```
+
+`ContextMenuItem` (`ambre-chrome`) gains an optional `icon: Option<IconId>` and a
+`Separator` variant so the same shared command path renders icons + dividers (toolbar and
+context menu still dispatch one `CommandId`, sec.5.C note). A **header right-click** opens a
+header-scoped menu (Insert / Delete / Resize... / Sort / Filter on the clicked column or row),
+sharing the same entries minus the cell-only ones.
+
+**Multi-column sort (MVP).** "Sort range..." opens a small DOM dialog (`SortDialog` in
+`trame_chrome`) listing ordered sort levels (column picker + asc/desc + a "data has header
+row" toggle), with add/remove level. Applying emits the typed `SortRangeMulti`:
+
+```rust
+fn on_sort_dialog_apply(&mut self, keys: Vec<SortKey>, has_header: bool) {
+    let (r1, c1, r2, c2) = self.ui_state.selection.bounds();   // whole-column sel resolved by Logic
+    self.ui_state.sort_pending = true;
+    self.logic_tx.send(TrameCommand::SortRangeMulti {
+        version: self.next_version(), sheet_id: self.ui_state.active_sheet,
+        row_start: r1, row_end: r2, col_start: c1, col_end: c2,
+        sort_keys: keys, has_header,
+    });
+    // SortKey { col: u32 /* index within range */, ascending: bool }, decreasing priority.
+    // Logic sorts lexicographically on sort_keys; SortComplete clears sort_pending (sec.2).
+}
+```
+
 ### D. Shared Filter Popover (MVP)
 
 `FilterByColumn` opens a **DOM chrome popover** (Leptos `FilterPopover` in `trame_chrome`)
@@ -619,8 +784,25 @@ fn apply_filter_from_popover(&mut self, sheet_id: SheetId, col: u32, p: &FilterP
 }
 ```
 
-> **Personal filter views, multi-column sort, conditional formatting, validation** stay
-> in Phase 2 (`-features` roadmap). Only the shared filter and single-column sort are MVP.
+**Filter feedback on the first row (MVP).** Today a filtered column is signalled only by a
+funnel badge on the column-letter header -- weak feedback, far from the column-letter band the
+data actually lives in. MVP moves the affordance to the **filter range's header row** (its first
+row), Excel autofilter style: each column of the range draws a small dropdown **filter button** at
+the right edge of its first-row cell (`ui::renderer::draw_overlay`, clipped to the cell), showing a
+plain chevron when the column is unfiltered and a **funnel** glyph when a filter is active on it.
+Clicking the button opens the existing `FilterPopover` (sec.5.D) anchored under that cell -- the
+same popover the context-menu entry opens, so there is one filter code path with two entry points.
+
+The filter range is the used range of the contiguous data block around the active cell (resolved
+Logic-side, like sort). The button row is the range's first row; with a `has_header` data block the
+buttons sit on the header labels (Excel), otherwise on row 1. The per-column filtered state comes
+from `FilterApplied { col }` (already dispatched, §18), so the render worker tracks the set of
+filtered columns and paints the funnel on exactly those buttons. The column-letter funnel badge is
+kept as a secondary cue.
+
+> **Personal filter views, conditional formatting, validation** stay in Phase 2 (`-features`
+> roadmap). The shared filter (with first-row autofilter buttons), single-column sort, and
+> multi-column sort are MVP.
 
 ### E. Clipboard (Copy / Cut / Paste) -- MVP
 
@@ -1009,8 +1191,11 @@ for a lone single-cell selection** (Excel behaviour): in a multi-cell or disjoin
 the range fill + outline already mark the block, so a separate active-cell border would read
 as a spurious second selection following the cursor. Each rendered rectangle is also expanded
 to whole merged blocks (`expand_to_merges`) so a drag touching part of a merge selects the
-block as one cell. Whole row/column selection by clicking a header and the header range
-highlight (sec.4.B) remain to do.
+block as one cell. **Whole row/column selection by clicking a header** (the virtual axis
+selection, sec.4bis.A) and the header range highlight (sec.4.B) are **MVP**: `Selection`
+carries a `kind: SelKind { Cells, Cols, Rows }`; `Cols`/`Rows` mark a whole-axis band whose
+perpendicular extent is resolved by the Logic thread against the used range (sec.4bis.A, sec.16).
+The range fill and header tint are driven from `kind` + `anchor`/`active`.
 
 > **Disjoint selection** is modelled by `Selection { anchor, active, extra: Vec<CellRect> }`:
 > `extra` holds the committed rectangles, `anchor..=active` is the live one. `is_multi()` gates
@@ -1519,6 +1704,10 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 - [x] Find & replace panel (sec.5.G): DOM chrome panel (Leptos `FindReplace` in `trame_chrome`, like the filter popover / format bar -- not a canvas overlay). Ctrl+F (find) / Ctrl+H (replace) -> `FindNext` / `ReplaceAll`; `FindResult` / `ReplaceDone` dispatch
 - [x] Cell wrap + vertical alignment + empty-neighbour overflow rendering (sec.4.A/4.C) *(All three honoured in the shared `render::draw_cells_on` primitive. **Wrap** constrains the parley layout to the cell content width (`col_width - 2*CELL_PAD_X`) so lines break; **vertical alignment** comes from `cell_v_offset` (Top/Middle/Bottom, clamped `>= 0`). **Empty-neighbour overflow:** a non-wrapped single line wider than its column spills into the adjacent **empty** cells -- `spill_width` walks the neighbours in the spill direction (left text spills right, right text spills left, centred both ways), accumulating `col_width` until the first non-empty neighbour, the grid edge, or the text extent; the clip rect is extended over the covered empties and the run is shifted so its anchored edge stays put. A non-empty neighbour clips the text at the cell edge (no ellipsis in MVP). The UI caller (`ui::renderer::draw_cells`) feeds occupancy via an `is_empty` closure over `cell_cache` (a merge master keeps its text, so overflow stops at a merged block). Wrapped or multi-line (explicit-newline) text is always clipped to its own box.)*
 - [x] Status bar (sec.13bis): selection aggregates via `RequestSelectionStats` -> `SelectionStats` *(Delivered as **DOM** Leptos chrome (`trame_chrome::StatusBar`), like every other E3 surface -- not a canvas `DrawSurface` band. `RequestSelectionStats` is **parameterless** (the Logic thread resolves the tracked selection rectangle itself, like the sort / filter / `RequestActiveColumnValues` siblings, rather than carrying `sheet_id`/`range` as the sec.13bis sketch showed). `logic::selection_stats` walks the selection (skipping filter-hidden rows) through the formula cache and replies `SelectionStats { sum, avg, count, count_num, min, max }`; `count_num` gates Sum/Avg/Min/Max visibility. The view (`ui::view`) requests it on every multi-cell selection change (`announce_active` -> `refresh_selection_stats`) and clears the `sel_stats` signal on a single cell; the launcher's event loop mirrors the reply into the status bar. **HUD migration:** the perf read-out (fps + frame/drain/draw/gpu/sub-phase timings + glyph misses) moved out of the wgpu overlay (`ui::renderer::draw_overlay` no longer shapes debug glyphs) into the same DOM status bar: the canvas view publishes a `PerfSnapshot` each frame (`ambre_canvas::PerfPublisher`), the relay pumps it (~2 Hz) into a signal, and the status bar shows a permanent `<fps> fps` chip that expands a diagnostics panel on click.)*
+- [ ] **Header interactions (sec.4bis): whole-column/row selection, hover cursors, resize, inline insert.** Header hit-zones (`HeaderHit`: body / border / insert / corner). (a) **Virtual axis selection** -- left-click/drag a header to select a whole column/row (`Selection.kind: SelKind { Cells, Cols, Rows }`, sec.8), Shift/Ctrl extend/disjoin, corner = select-all; the perpendicular extent is resolved Logic-side against the used range. (b) **Hover cursors** on `#ambre-canvas` (`set_cursor`, generalising `set_fill_cursor`): col/row-resize on borders, select pointer on bodies. (c) **Resize by dragging the header boundary** -> `ResizeCol` / `ResizeRow` (document mutation, undoable, LWW per uid), live guide line, `MIN_COL_WIDTH`/`MIN_ROW_HEIGHT` clamp, applied to every band of a whole-axis selection. **Double-click the boundary = auto-fit** (UI-side over cached cells, reuses `ResizeCol`/`ResizeRow`, sec.4bis.C). (d) **Inline "+" insert affordance** at boundaries -> existing `InsertColLeft`/`InsertRowAbove` intents. *(Whole-axis selection is also the prerequisite for the resize-whole-column and used-range sort/filter behaviours.)*
+- [ ] **Context menu polish (sec.5.C): grouped, iconed entries + separators + header-scoped menu.** `ContextMenuItem` gains `icon: Option<IconId>` + a `Separator` variant; `context_entries()` returns the grouped layout (clipboard / insert+delete / sort+filter / merge). Right-click on a header opens a header-scoped menu.
+- [ ] **Multi-column sort (sec.5.C): `SortRangeMulti` from a `SortDialog`** (ordered levels: column + asc/desc + has-header toggle, add/remove level). *(was `-features` / `-ui` Phase 2; promoted to MVP.)*
+- [ ] **Filter feedback on the first row (sec.5.D): Excel-style autofilter buttons** drawn on the filter range's header row (chevron unfiltered / funnel when filtered), opening the existing `FilterPopover`. The render worker tracks the filtered-column set from `FilterApplied { col }`.
 - [x] `on_logic_message` wiring: full, **exhaustive** `TrameEvent` dispatch *(one entry point per side over the real `ambre-bus::TrameEvent` enum, no `_ => {}` wildcard so a future variant is a compile error rather than a silent drop). **Canvas side** -- `ui::view::TrameView::dispatch_trame` (called from the single `UiEvent::Viewport(AppEvent::Trame(..))` arm in `update`): `ViewportData` -> cache merge + `data_dirty`; `SheetList` -> tab strip; `Error` -> log + a11y announce; `FilterApplied`/`FilterCleared` -> funnel-badge column; `FindResult` -> highlight set + `nav_goto`; `DataReset`/`CondFormatsUpdated` -> viewport re-fetch; every chrome-only variant is an explicit no-op. **Chrome side** (per-frame relay in `ambre-app`, fanned out to `trame_chrome`): `notify_event` toasts the user-facing variants (rejections, validation error/warning, protection denied/violation, merge conflict, sort/filter completion, **`ReplaceDone` -> "N cells replaced"**), `mirror_event` maps `UndoState` to the Undo/Redo toggle enablement, `apply_style_event` drives the formatting toolbar from `StyleApplied`; `ColumnValues`/`FilterApplied`/`FilterCleared`/`FindResult`/`SelectionStats` also feed the filter popover / find counter / status bar inline (the canvas treats them all as no-ops). The original sketch also named `EditAck`, `FormulaError`, `ImportProgress`, `ExportComplete`: these are **not** enum variants -- `FormulaError` rides on `DisplayCell::is_error` via `ViewportData`, edits are optimistic (no `EditAck`), and import/export are Phase 3.)*
 
 - [x] **Leptos UI tests (test debt, Epic `ET`).** The Trame chrome (`trame_chrome`: `formula_bar`, `find_replace`, filter/borders/color popovers, `FormatBar`, `StatusBar`, context menu) carries no test today. Baseline: `wasm-bindgen-test` (`cargo test --target wasm32-unknown-unknown --features <chrome-test>`, headless Chrome) covers the chrome end to end -- presentation logic and DOM -- and is self-sufficient (`ambre-spec-architecture.md §4`). Recommended optimization (not mandatory): extract the *pure* parts (formula-bar parsing, find/replace match computation, style-state derivation, `TrameEvent` -> view-state mapping) out of the `cfg(wasm32)` gate into host-tested functions -- faster, coverage/proptest-friendly -- leaving only the thin DOM glue in wasm. The shared `render` primitives stay host (`RecordingSurface` mock `DrawSurface`). Note: feature *behaviour* (merge/autofill/sort/filter) is already host-testable in `ambre-trame::logic` -- this story only covers the chrome layer. **DoD:** at least the reactive/presentation belt + one DOM `wasm-bindgen-test` green in CI. *(Done: `crates/ambre-trame/tests/chrome_ui.rs` -- a `cfg(target_arch = "wasm32")` `wasm-bindgen-test` suite run under headless Chrome via `wasm-pack` (`just test-wasm`). Reactive/presentation belt: `apply_style_event` (StyleApplied -> StyleState signals), `mirror_event` (UndoState -> command store), the `command_to_app` CommandId -> AppCommand mapping. DOM belt: `StatusBar` and `FindReplace` mounted into a real document and asserted via `web-sys`. Wire-up: wasm-only dev-deps; `proptest` scoped to the host target (its `wait-timeout` dep does not compile on wasm32) with `convergence_tests` gated to non-wasm; the `test-wasm` CI job re-enabled and a `wasm` tier added to `run_tests.sh`. The recommended pure-extraction optimization was not pursued -- the belt runs the existing functions directly in wasm.)*
@@ -1527,9 +1716,9 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 - [ ] Row/column freeze
 - [ ] Function autocompletion
 - [ ] Multi-user cursors (`TrameEvent::RemoteCursors`, identified by `UserId`)
-- [ ] Personal filter views + multi-column sort UI (`-features` Phase 2)
+- [ ] Personal filter views (`-features` Phase 2)
 - [ ] Conditional formatting (`style_override` rendering)
-- [ ] Column/row resize (drag)
+- [ ] Whole-column auto-fit (Logic-side `AutoFitCol`/`AutoFitRow` measuring every materialized cell -- upgrade over the MVP cached-cells auto-fit, sec.4bis.C)
 - [ ] Context menu extensions (conditional formatting, data validation entries)
 
 **Phase 3 — Post-V1**

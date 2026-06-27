@@ -235,7 +235,11 @@ fn compare_cell_values(a: &CellValue, b: &CellValue) -> std::cmp::Ordering {
 > `compare_cell_values` uses an explicit type-rank (`Number < Text < Boolean < Error < Empty`).
 > Emits `TrameEvent::SortComplete` + `DataReset`.
 
-### Multi-Column Sort
+### Multi-Column Sort (MVP)
+
+> **MVP.** Promoted from Phase 2: multi-column sort ships with the single-column sort. It is the
+> same pure row-order permutation (uid-anchored bytecode preserved, references follow), only the
+> comparator changes. UI entry point = the `SortDialog` (`-ui` §5.C).
 
 ```rust
 TrameCommand::SortRangeMulti {
@@ -722,8 +726,7 @@ pub enum TrameEvent {
 #[test] fn sort_range_descending_keeps_header()        { /* has_header pin + reverse order */ }
 #[test] fn sort_range_formulas_follow_data()           { /* refs track their physical cell, no #REF! */ }
 #[test] fn sort_range_noops()                          { /* wrong sheet / already sorted */ }
-// Phase 2:
-#[test] fn sort_multi_column_primary_secondary()        { }
+#[test] fn sort_multi_column_primary_secondary()        { /* MVP: lexicographic sort_keys */ }
 
 // Conditional formatting
 #[test] fn first_matching_rule_wins()                  { /* priority */ }
@@ -756,6 +759,8 @@ pub enum TrameEvent {
 **Phase 1 — MVP (with the engine)**
 - [x] Shared filter: `TrameCommand::ApplyFilter` / `ClearFilter`, `filter_hidden_{sheet}` Loro *(Epic `E3`: `FilterKind::Values` / `Condition { op, value }` typed in `ambre-bus`; the failing rows' `row_uid`s are written into `filter_hidden_{sheet}` and broadcast, the definition persisted flat in `filters_{sheet}` (LWW). Hidden rows ride the viewport flagged `DisplayCell::is_filtered` (still counted by `=SUM`); the uid-keyed hidden set follows the data across a sort/insert, and `SetCellText` recomputes the active filter. Undoable (plain CRDT mutation). Emits `TrameEvent::FilterApplied { hidden_row_count }` / `FilterCleared` + `DataReset`. Tests: by-values, condition, sum-unaffected, clear, follows-sort, recompute-on-edit, remote-import, LWW convergence, undoable, no-op guards, full predicate coverage.)*
 - [x] Simple sort: `TrameCommand::SortRange` (single column) *(Epic `E3`: typed sort keys via `engine.evaluated_value` + `compare_cell_values` precedence `Number < Text < Boolean < Error < Empty`; `has_header` pin, ascending/descending. Realized as a **pure `rows_{sheet}` order permutation** (`MovableList::mov`): cells keyed by their move-invariant `Uid` follow for free, references follow the data (`trame-logic §2.A`, §12). Emits `TrameEvent::SortComplete` + `DataReset`. Tests: ascending whole-row move, descending+header, formulas follow data, no-op guards.)* **Depends on the own-uid cell model (`trame-logic §14`).**
+- [ ] **Multi-column sort: `TrameCommand::SortRangeMulti`** *(promoted from Phase 2 to MVP; same pure permutation as single-column sort, lexicographic comparator over `sort_keys`. UI: `SortDialog`, `-ui` §5.C.)*
+- [ ] **Filter feedback on the first row** (UI story, `-ui` §5.D): Excel-style autofilter dropdown buttons on the filter range's header row, fed by `FilterApplied { col }`. *(Logic side unchanged -- the existing shared filter; this is the UX surface the funnel-only badge lacked.)*
 - [x] Undo/Redo: `TrameCommand::Undo` / `Redo` via `UndoManager` Loro *(delivered under `trame-logic` Phase 1 -- see that section)*
 - [x] All feature variants are in the `TrameCommand` / `TrameEvent` enums (defined in `ambre-bus`, re-exported by `ambre-trame`; transported in `AppCommand::Trame` / `AppEvent::Trame`) *(Epic `E3`: commands `SaveFilterView` / `ActivateFilterView` / `SortRangeMulti` (+ `SortKey`) / `AddCondFormat` / `UpdateCondFormat` / `RemoveCondFormat` / `AddValidation` / `RemoveValidation` / `SetProtection` / `RemoveProtection` with payload types `GridRange`, `CondFormatKind`, `CondStyle`, `ValidationKind`, `ValidationOnInvalid`; events `FilterViewSaved` / `CondFormatsUpdated` / `ValidationError` / `ValidationWarning` / `ProtectionDenied` / `ProtectionViolationWarning` (`from_user_id: UserId`). Ranges carried in grid coordinates at the bus level (`RangeDep` is engine-private). Logic-thread handlers are explicit no-ops until their phase lands.)*
 - [x] **Pure** handlers: return `TrameEvent` (display) and/or a `TrameOutcome` (CRDT delta → `SyncCommand::SendUpdate` by the Logic dispatcher) — no direct inter-thread send from the app model (preserves host testability, cf. `ambre-spec-architecture.md §4`) *(Epic `E3`: `TrameState::handle_command` returns `TrameOutcome { display, update, ephemeral }`; `TrameState` holds no sink/sender. The Logic dispatcher (`ambre-logic::LogicState`) fans the outcome out -- `display → UiEvent::Viewport`, `update → SyncCommand::SendUpdate`, `ephemeral → SendEphemeral` -- adding the `DocumentId` it holds. `CommandSink` remains the test seam (`MockSyncHandle`).)*
@@ -763,7 +768,6 @@ pub enum TrameEvent {
 
 **Phase 2 — V1**
 - [ ] Personal filter views (`TrameCommand::ActivateFilterView` / `SaveFilterView`, IndexedDB)
-- [ ] Multi-column sort: `TrameCommand::SortRangeMulti`
 - [ ] Conditional formatting: `TrameCommand::AddCondFormat` / `RemoveCondFormat` / `UpdateCondFormat`, basic kinds (value comparison, `IsEmpty`, `Formula`)
 - [ ] Data validation: `TrameCommand::AddValidation` / `RemoveValidation`, kinds `List`, `NumberRange`, `TextLength`
 - [ ] `SUBTOTAL` function in the engine (excludes filtered rows)
