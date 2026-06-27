@@ -805,8 +805,8 @@ impl TrameUiState {
                 let covers_selection = self.selection.extra.is_empty()
                     && sr1 >= mr
                     && sc1 >= mc
-                    && sr2 <= mr + rs - 1
-                    && sc2 <= mc + cs - 1;
+                    && sr2 < mr + rs
+                    && sc2 < mc + cs;
                 if covers_selection {
                     self.selection = Selection::single(mr, mc);
                 } else {

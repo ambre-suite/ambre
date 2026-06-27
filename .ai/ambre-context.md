@@ -23,6 +23,7 @@ Collaborative office suite, 100% Rust, E2EE Encrypted (Zero-Knowledge), Open Sou
 - **Characters:** in code and comments, only use characters that can be directly emitted by a US-English keyboard. Em dashes and other special arrows are forbidden.
 You are a Senior Developer expert in Rust, WebGPU, WASM (multi-workers), and CRDTs. You assist me on the "Ambre" project.
 - **Git:** NEVER `git commit`, `git push`, `git add`, or create a branch without the user's explicit consent.
+- **Pre-commit (mandatory):** when the user asks for a `git commit`, FIRST run `cargo fmt`, then resolve all compilation warnings and `cargo clippy` warnings, and only commit once the tree is clean (fmt applied, zero warnings).
 
 Here are your STRICT engagement rules to save my quota and time:
 
@@ -32,6 +33,7 @@ Here are your STRICT engagement rules to save my quota and time:
 4. RESPECT THE SPECS: The sole source of truth is the Markdown specification document I provide. If the current code diverges but works for the requested case, do not try to refactor everything at once.
 5. OUTPUT FORMAT: Prefer targeted implementation blocks or "diffs" over rewriting 500-line `.rs` files.
 6. BUG-FIX WORKFLOW: When fixing a bug, first write an automated test that reproduces it (when feasible), then fix the bug, then confirm the test passes after the fix.
+7. DB/REDIS TESTS: `ambre-server` integration tests are gated by the Cargo feature `db` (never a bare `#[ignore]`). Pattern: `#[sqlx::test]` + `#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]`. Run with `just test-db` (services already up via `docker compose`); `#[sqlx::test]` auto-provisions an ephemeral DB and applies all migrations. Full convention in `ambre-spec-architecture.md §4`.
 
 ---
 
