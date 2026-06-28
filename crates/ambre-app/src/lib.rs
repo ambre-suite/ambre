@@ -138,6 +138,9 @@ struct Wiring {
     /// Status-bar perf snapshot (fps + frame timings), pumped from the canvas
     /// view's `PerfPublisher` by the per-frame relay (~2 Hz).
     perf_snap: RwSignal<ambre_canvas::PerfSnapshot>,
+    /// Right-click context-menu scope (`-ui.md` sec.5.C): the canvas view sets it
+    /// (cell vs header) before the DOM menu opens; the shell derives the layout.
+    ctx_scope: RwSignal<trame_chrome::CtxScope>,
 }
 
 // Gated out under `cfg(test)`: the wasm-bindgen-test harness generates its own
@@ -230,6 +233,12 @@ pub fn main() {
     // perf snapshot pumped from `perf_pub` below.
     let sel_stats = RwSignal::new(None::<trame_chrome::SelStats>);
     let perf_snap = RwSignal::new(ambre_canvas::PerfSnapshot::default());
+
+    // Context-menu scope (`-ui.md` sec.5.C): the view sets it on each right-click
+    // (cell vs header) before the DOM `contextmenu` listener opens the menu; the
+    // shell derives the menu layout from it. Created here (like the formula
+    // signals) so both the view and the Leptos shell share the one signal.
+    let ctx_scope = RwSignal::new(trame_chrome::CtxScope::Cell);
 
     // Design tokens: inject the generated CSS custom properties (theme.css) and
     // boot the dark theme. `theme_ctl` is the single source of truth for the
@@ -343,6 +352,7 @@ pub fn main() {
         formula_action,
         sel_stats,
         perf_snap,
+        ctx_scope,
     );
 
     let store = store_slot
@@ -761,6 +771,7 @@ pub fn main() {
                 formula_text_tv,
                 formula_action_tv,
                 sel_stats,
+                ctx_scope,
             ))
         },
         pre_frame,
@@ -799,6 +810,7 @@ fn mount_shell(
     formula_action: RwSignal<Option<FormulaAction>>,
     sel_stats: RwSignal<Option<trame_chrome::SelStats>>,
     perf_snap: RwSignal<ambre_canvas::PerfSnapshot>,
+    ctx_scope: RwSignal<trame_chrome::CtxScope>,
 ) {
     leptos::mount::mount_to_body(move || {
         // The store stays here (in the mount owner, NOT in the view): it is `Rc`
@@ -859,6 +871,7 @@ fn mount_shell(
             formula_action,
             sel_stats,
             perf_snap,
+            ctx_scope,
         });
 
         view! {
@@ -898,6 +911,7 @@ fn AppRoot() -> impl IntoView {
         formula_action,
         sel_stats,
         perf_snap,
+        ctx_scope,
     } = use_context::<Wiring>().expect("Wiring provided by mount_shell");
 
     // The reactive client route, used only to show/hide the landing overlay.
@@ -1157,7 +1171,10 @@ fn AppRoot() -> impl IntoView {
         }
     });
 
-    let ctx_entries = trame_chrome::context_entries();
+    // The menu layout follows the right-click scope the view published (`-ui.md`
+    // sec.5.C): a cell right-click gets the full menu, a header right-click the
+    // header-scoped one (no clipboard / merge).
+    let ctx_entries = Memo::new(move |_| trame_chrome::context_entries_for(ctx_scope.get()));
 
     // Per-slot sender clones. Each slot's children is a `Fn` (re-runnable), so it
     // captures its own clone and re-clones inside the handler rather than moving

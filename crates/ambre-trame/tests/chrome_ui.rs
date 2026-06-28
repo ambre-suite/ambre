@@ -262,3 +262,69 @@ fn find_replace_panel_opens_in_find_mode() {
 
     container.remove();
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Context-menu scope (`-ui.md` sec.5.C): the grouped/iconed entries and the
+// header-scoped layout that drops the cell-only clipboard + merge groups.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Collect the command labels of an entry list, skipping separators.
+fn item_commands(entries: &[ambre_chrome::MenuEntry]) -> Vec<ambre_chrome::commands::CommandId> {
+    entries
+        .iter()
+        .filter_map(|e| match e {
+            ambre_chrome::MenuEntry::Item { command, .. } => Some(*command),
+            ambre_chrome::MenuEntry::Separator => None,
+        })
+        .collect()
+}
+
+#[wasm_bindgen_test]
+fn cell_menu_has_clipboard_and_merge() {
+    let entries = chrome::context_entries_for(chrome::CtxScope::Cell);
+    let cmds = item_commands(&entries);
+    // Clipboard + merge are cell-only; structural + sort/filter are shared.
+    for expected in [
+        chrome::CUT,
+        chrome::COPY,
+        chrome::PASTE,
+        chrome::MERGE,
+        chrome::UNMERGE,
+    ] {
+        assert!(cmds.contains(&expected), "cell menu must list {expected:?}");
+    }
+    // Separators group the entries (clipboard | structural | sort/filter | merge).
+    let seps = entries
+        .iter()
+        .filter(|e| matches!(e, ambre_chrome::MenuEntry::Separator))
+        .count();
+    assert_eq!(seps, 3, "cell menu has three group separators");
+}
+
+#[wasm_bindgen_test]
+fn header_menu_drops_cell_only_groups() {
+    let entries = chrome::context_entries_for(chrome::CtxScope::Header);
+    let cmds = item_commands(&entries);
+    // Structural + sort/filter survive...
+    for expected in [
+        chrome::INSERT_ROW_ABOVE,
+        chrome::DELETE_COLS,
+        chrome::SORT_RANGE_ASC,
+        chrome::FILTER_COLUMN,
+    ] {
+        assert!(
+            cmds.contains(&expected),
+            "header menu must list {expected:?}"
+        );
+    }
+    // ...the cell-only clipboard + merge groups do not.
+    for absent in [
+        chrome::CUT,
+        chrome::COPY,
+        chrome::PASTE,
+        chrome::MERGE,
+        chrome::UNMERGE,
+    ] {
+        assert!(!cmds.contains(&absent), "header menu must drop {absent:?}");
+    }
+}

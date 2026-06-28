@@ -23,7 +23,7 @@ use ambre_draw::{Clock, FontContext, Rect};
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::RwSignal;
 #[cfg(target_arch = "wasm32")]
-use leptos::prelude::{Get, Set};
+use leptos::prelude::{Get, GetUntracked, Set};
 
 use super::grid::{
     COL_WIDTH, CellEditor, CellRect, CursorMove, HEADER_HEIGHT, HEADER_WIDTH, HeaderHit, HitKind,
@@ -235,6 +235,12 @@ pub struct TrameView {
     /// event loop on a multi-cell one. Browser-only, like the formula signals.
     #[cfg(target_arch = "wasm32")]
     sel_stats: RwSignal<Option<crate::chrome::SelStats>>,
+    /// Which surface the last right-click landed on (cell vs header), published
+    /// so the launcher swaps the context-menu layout (`-ui.md` sec.5.C). Set in
+    /// the right-click `PointerDown` handler, which runs synchronously before the
+    /// DOM `contextmenu` listener opens the menu. Browser-only.
+    #[cfg(target_arch = "wasm32")]
+    ctx_scope: RwSignal<crate::ui::grid::CtxScope>,
 
     /// Shared theme switch (chrome toggles it, the canvas reads it).
     theme_ctl: ThemeControl,
@@ -369,6 +375,7 @@ impl TrameView {
         #[cfg(target_arch = "wasm32")] formula_text: RwSignal<String>,
         #[cfg(target_arch = "wasm32")] formula_action: RwSignal<Option<FormulaAction>>,
         #[cfg(target_arch = "wasm32")] sel_stats: RwSignal<Option<crate::chrome::SelStats>>,
+        #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<crate::ui::grid::CtxScope>,
     ) -> Self {
         let window = web_sys::window().expect("no window");
         let perf = window.performance().expect("no Performance API");
@@ -391,6 +398,8 @@ impl TrameView {
             perf_pub,
             #[cfg(target_arch = "wasm32")]
             sel_stats,
+            #[cfg(target_arch = "wasm32")]
+            ctx_scope,
             theme_ctl,
             theme,
             #[cfg(target_arch = "wasm32")]
@@ -1732,6 +1741,29 @@ impl TrameView {
                 }
                 false
             }
+            // A right-click on a header selects the whole column/row (or all, on
+            // the corner) before the DOM context menu opens, and flags the menu
+            // as header-scoped (sec.5.C). A border/insert band keeps the existing
+            // selection -- the header-scoped menu still acts on it. We don't
+            // preventDefault here; the `contextmenu` listener owns the menu.
+            InputEvent::PointerDown {
+                x, y, button: 2, ..
+            } if self.state.header_hit(*x, *y).is_some() => {
+                self.text_input.focus();
+                match self.state.header_hit(*x, *y).expect("guarded") {
+                    HeaderHit::ColBody(c) => self.select_axis(SelKind::Cols, c),
+                    HeaderHit::RowBody(r) => self.select_axis(SelKind::Rows, r),
+                    HeaderHit::Corner => self.select_all(),
+                    // Border / insert bands keep the current selection; the
+                    // header-scoped menu still acts on it.
+                    HeaderHit::ColBorder(_)
+                    | HeaderHit::RowBorder(_)
+                    | HeaderHit::ColInsert(_)
+                    | HeaderHit::RowInsert(_) => {}
+                }
+                self.set_ctx_scope(crate::ui::grid::CtxScope::Header);
+                false
+            }
             // A right-click selects the cell under the cursor before the DOM
             // context menu opens on it (standard spreadsheet behaviour). We don't
             // preventDefault here -- the `contextmenu` listener owns the menu.
@@ -1747,6 +1779,7 @@ impl TrameView {
                 {
                     self.select_cell(row, col);
                 }
+                self.set_ctx_scope(crate::ui::grid::CtxScope::Cell);
                 false
             }
             // Double-click opens an editor on the clicked cell's current text.
@@ -2149,6 +2182,18 @@ impl TrameView {
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn set_cursor(&self, _css: &str) {}
+
+    /// Publish the surface the latest right-click landed on so the launcher picks
+    /// the cell vs header context-menu layout (`-ui.md` sec.5.C). Only re-writes
+    /// the signal on a change (cheap). No-op off-wasm (headless tests).
+    #[cfg(target_arch = "wasm32")]
+    fn set_ctx_scope(&self, scope: crate::ui::grid::CtxScope) {
+        if self.ctx_scope.get_untracked() != scope {
+            self.ctx_scope.set(scope);
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn set_ctx_scope(&self, _scope: crate::ui::grid::CtxScope) {}
 
     // -- Header resize / insert (sec.4bis.C/D) ---------------------------------
 

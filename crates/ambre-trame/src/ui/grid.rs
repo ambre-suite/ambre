@@ -437,6 +437,21 @@ pub enum SelKind {
     Rows,
 }
 
+/// Which surface a right-click landed on, choosing the context-menu layout
+/// (`-ui.md` sec.5.C). A header right-click drops the cell-only entries
+/// (clipboard / merge) and keeps the structural / sort / filter ops scoped to
+/// the clicked column or row (which the header click has already selected).
+/// Lives here (always compiled) so the host-tested input handler can set it; the
+/// chrome layer re-exports it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum CtxScope {
+    /// Right-click on a grid cell: the full menu.
+    #[default]
+    Cell,
+    /// Right-click on a column/row header: the header-scoped menu.
+    Header,
+}
+
 /// A resolved pointer hit inside a header strip (`-ui.md` sec.4bis). The body
 /// zones select a whole column/row; the border zones (a +/- [`RESIZE_BAND`] band
 /// around a boundary) arm a resize; the insert zones host the inline "+"; the

@@ -112,7 +112,9 @@ name = "ambre-chrome"
 version = "0.1.0"
 dependencies = [
  "ambre-commands",
+ "icondata",
  "leptos",
+ "leptos_icons",
  "wasm-bindgen",
  "wasm-bindgen-test",
  "web-sys",
