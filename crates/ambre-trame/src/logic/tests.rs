@@ -3,7 +3,7 @@
 
 use super::{TrameOutcome, TrameState, col_to_alpha};
 use crate::model::Uid;
-use crate::{TrameCommand, TrameEvent};
+use crate::{SortKey, TrameCommand, TrameEvent};
 
 /// A bold patch over `bold: Some(true)`.
 fn bold_patch(on: bool) -> crate::StylePatch {
@@ -2113,6 +2113,243 @@ fn sort_sheet_sorts_used_range_by_active_column() {
         read_col(&mut state, 0, 2, 2),
         vec!["y", "z", "x"],
         "col A stays aligned"
+    );
+}
+
+/// Multi-column sort (`-features.md` §2): rows are ordered lexicographically by
+/// the keys in decreasing priority -- primary col 0 ascending, then secondary
+/// col 1 descending breaks ties. Whole rows travel by uid.
+#[test]
+fn sort_range_multi_lexicographic_with_per_key_direction() {
+    let mut state = TrameState::new();
+    // (A, B): ties on A=1 are broken by B descending; A=2 is a lone group.
+    for (r, (a, b)) in [("1", "a"), ("2", "z"), ("1", "c"), ("1", "b")]
+        .iter()
+        .enumerate()
+    {
+        state.handle_command(TrameCommand::SetCellText {
+            row: r as u32,
+            col: 0,
+            text: a.to_string(),
+        });
+        state.handle_command(TrameCommand::SetCellText {
+            row: r as u32,
+            col: 1,
+            text: b.to_string(),
+        });
+    }
+    let evts = state.handle_command(TrameCommand::SortRangeMulti {
+        sheet_id: "s0".to_owned(),
+        row_start: 0,
+        row_end: 3,
+        col_start: 0,
+        col_end: 1,
+        sort_keys: vec![
+            SortKey {
+                col: 0,
+                ascending: true,
+            },
+            SortKey {
+                col: 1,
+                ascending: false,
+            },
+        ],
+        has_header: false,
+    });
+    assert!(
+        evts.display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::SortComplete))
+    );
+    assert!(evts.update.is_some(), "a real reorder broadcasts a delta");
+    // A ascending: the three A=1 rows first, then A=2.
+    assert_eq!(read_col(&mut state, 0, 3, 1), vec!["1", "1", "1", "2"]);
+    // Within A=1, B descending: c, b, a. The A=2 row keeps its B ("z").
+    assert_eq!(read_col(&mut state, 1, 3, 2), vec!["c", "b", "a", "z"]);
+}
+
+/// The parameterless `SortSelectionMulti` intent (the "Sort range..." dialog,
+/// sec.5.C) resolves its range against the tracked selection, exactly like the
+/// single-column `SortSelectionAsc`. Keys are range-relative to the selection's
+/// first column.
+#[test]
+fn sort_selection_multi_resolves_against_tracked_selection() {
+    let mut state = TrameState::new();
+    for (r, (a, b)) in [("1", "b"), ("1", "a"), ("2", "a")].iter().enumerate() {
+        state.handle_command(TrameCommand::SetCellText {
+            row: r as u32,
+            col: 0,
+            text: a.to_string(),
+        });
+        state.handle_command(TrameCommand::SetCellText {
+            row: r as u32,
+            col: 1,
+            text: b.to_string(),
+        });
+    }
+    // Selection A1:B3 reported via SetActiveCell.
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: 0,
+        col: 0,
+        anchor_row: 2,
+        anchor_col: 1,
+    });
+    let evts = state.handle_command(TrameCommand::SortSelectionMulti {
+        sort_keys: vec![
+            SortKey {
+                col: 0,
+                ascending: true,
+            },
+            SortKey {
+                col: 1,
+                ascending: true,
+            },
+        ],
+        has_header: false,
+    });
+    assert!(
+        evts.display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::SortComplete))
+    );
+    assert_eq!(read_col(&mut state, 0, 2, 1), vec!["1", "1", "2"]);
+    // Within A=1, B ascending: a then b.
+    assert_eq!(read_col(&mut state, 1, 2, 2), vec!["a", "b", "a"]);
+}
+
+/// Multi-column sort honours `has_header`: the first range row is pinned and the
+/// rows below are ordered by the keys (A ascending, then B ascending).
+#[test]
+fn sort_range_multi_pins_header_row() {
+    let mut state = TrameState::new();
+    for (r, (a, b)) in [("Header", "h"), ("2", "b"), ("1", "a"), ("2", "a")]
+        .iter()
+        .enumerate()
+    {
+        state.handle_command(TrameCommand::SetCellText {
+            row: r as u32,
+            col: 0,
+            text: a.to_string(),
+        });
+        state.handle_command(TrameCommand::SetCellText {
+            row: r as u32,
+            col: 1,
+            text: b.to_string(),
+        });
+    }
+    state.handle_command(TrameCommand::SortRangeMulti {
+        sheet_id: "s0".to_owned(),
+        row_start: 0,
+        row_end: 3,
+        col_start: 0,
+        col_end: 1,
+        sort_keys: vec![
+            SortKey {
+                col: 0,
+                ascending: true,
+            },
+            SortKey {
+                col: 1,
+                ascending: true,
+            },
+        ],
+        has_header: true,
+    });
+    assert_eq!(read_col(&mut state, 0, 3, 1), vec!["Header", "1", "2", "2"]);
+    assert_eq!(read_col(&mut state, 1, 3, 2), vec!["h", "a", "a", "b"]);
+}
+
+/// Guards: an empty key list (or one whose every column falls outside the range)
+/// is a pure no-op -- no `SortComplete`, no CRDT delta.
+#[test]
+fn sort_range_multi_no_keys_is_noop() {
+    let mut state = TrameState::new();
+    for (r, a) in ["3", "1", "2"].iter().enumerate() {
+        state.handle_command(TrameCommand::SetCellText {
+            row: r as u32,
+            col: 0,
+            text: a.to_string(),
+        });
+    }
+    // No keys at all.
+    let empty = state.handle_command(TrameCommand::SortRangeMulti {
+        sheet_id: "s0".to_owned(),
+        row_start: 0,
+        row_end: 2,
+        col_start: 0,
+        col_end: 0,
+        sort_keys: vec![],
+        has_header: false,
+    });
+    assert!(empty.update.is_none());
+    assert!(
+        !empty
+            .display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::SortComplete))
+    );
+    // A key whose column is outside [col_start..=col_end] is dropped, leaving no
+    // usable key -- same no-op.
+    let out = state.handle_command(TrameCommand::SortRangeMulti {
+        sheet_id: "s0".to_owned(),
+        row_start: 0,
+        row_end: 2,
+        col_start: 0,
+        col_end: 0,
+        sort_keys: vec![SortKey {
+            col: 5,
+            ascending: true,
+        }],
+        has_header: false,
+    });
+    assert!(out.update.is_none());
+    // The order is untouched.
+    assert_eq!(read_col(&mut state, 0, 2, 1), vec!["3", "1", "2"]);
+}
+
+/// An already-sorted range acknowledges with `SortComplete` but produces no CRDT
+/// delta (the stable sort leaves the uid order untouched).
+#[test]
+fn sort_range_multi_already_sorted_emits_no_delta() {
+    let mut state = TrameState::new();
+    for (r, (a, b)) in [("1", "a"), ("1", "b"), ("2", "a")].iter().enumerate() {
+        state.handle_command(TrameCommand::SetCellText {
+            row: r as u32,
+            col: 0,
+            text: a.to_string(),
+        });
+        state.handle_command(TrameCommand::SetCellText {
+            row: r as u32,
+            col: 1,
+            text: b.to_string(),
+        });
+    }
+    let evts = state.handle_command(TrameCommand::SortRangeMulti {
+        sheet_id: "s0".to_owned(),
+        row_start: 0,
+        row_end: 2,
+        col_start: 0,
+        col_end: 1,
+        sort_keys: vec![
+            SortKey {
+                col: 0,
+                ascending: true,
+            },
+            SortKey {
+                col: 1,
+                ascending: true,
+            },
+        ],
+        has_header: false,
+    });
+    assert!(
+        evts.display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::SortComplete))
+    );
+    assert!(
+        evts.update.is_none(),
+        "an already-sorted range broadcasts no delta"
     );
 }
 

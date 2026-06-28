@@ -241,6 +241,11 @@ pub struct TrameView {
     /// DOM `contextmenu` listener opens the menu. Browser-only.
     #[cfg(target_arch = "wasm32")]
     ctx_scope: RwSignal<crate::ui::grid::CtxScope>,
+    /// Current selection rectangle `(r1, c1, r2, c2)`, published on every
+    /// selection change so the launcher can open the multi-column `SortDialog`
+    /// over the selection's columns (`-ui.md` sec.5.C). Browser-only.
+    #[cfg(target_arch = "wasm32")]
+    sel_bounds: RwSignal<Option<(u32, u32, u32, u32)>>,
 
     /// Shared theme switch (chrome toggles it, the canvas reads it).
     theme_ctl: ThemeControl,
@@ -376,6 +381,7 @@ impl TrameView {
         #[cfg(target_arch = "wasm32")] formula_action: RwSignal<Option<FormulaAction>>,
         #[cfg(target_arch = "wasm32")] sel_stats: RwSignal<Option<crate::chrome::SelStats>>,
         #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<crate::ui::grid::CtxScope>,
+        #[cfg(target_arch = "wasm32")] sel_bounds: RwSignal<Option<(u32, u32, u32, u32)>>,
     ) -> Self {
         let window = web_sys::window().expect("no window");
         let perf = window.performance().expect("no Performance API");
@@ -400,6 +406,8 @@ impl TrameView {
             sel_stats,
             #[cfg(target_arch = "wasm32")]
             ctx_scope,
+            #[cfg(target_arch = "wasm32")]
+            sel_bounds,
             theme_ctl,
             theme,
             #[cfg(target_arch = "wasm32")]
@@ -537,6 +545,10 @@ impl TrameView {
             #[cfg(target_arch = "wasm32")]
             self.sel_stats.set(None);
         }
+        // Publish the current selection rectangle so the launcher can open the
+        // multi-column sort dialog over the selection's columns (sec.5.C).
+        #[cfg(target_arch = "wasm32")]
+        self.sel_bounds.set(Some(self.state.selection.bounds()));
     }
 
     /// The active cell's spreadsheet reference (e.g. `"B2"`), shown in the

@@ -84,6 +84,97 @@ impl TrameState {
             if ascending { ord } else { ord.reverse() }
         });
         let target: Vec<Uid> = keyed.into_iter().map(|(uid, _)| uid).collect();
+        self.realize_sort(sort_start, &before, target)
+    }
+
+    /// Multi-column sort of a row range (`ambre-spec-trame-features.md` §2).
+    ///
+    /// Same pure row-order permutation as [`sort_range`](Self::sort_range), only
+    /// the comparator changes: rows are ordered lexicographically by `sort_keys`
+    /// in decreasing priority (`[primary, secondary, ...]`), each key applying its
+    /// own ascending/descending direction. Each `SortKey::col` is an index within
+    /// the range (`0` = `col_start`). Keys whose column falls outside the range are
+    /// skipped. Cells follow their move-invariant row `Uid`, references follow the
+    /// data (§12); LWW resolves concurrent sorts.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn sort_range_multi(
+        &mut self,
+        sheet_id: &str,
+        row_start: u32,
+        row_end: u32,
+        col_start: u32,
+        col_end: u32,
+        sort_keys: &[SortKey],
+        has_header: bool,
+    ) -> TrameOutcome {
+        // Only the active sheet has its values positioned in the engine cache.
+        if sheet_id != self.active_sheet {
+            return TrameOutcome::display_only(vec![]);
+        }
+        // Resolve the keys to absolute columns inside the range; drop out-of-range
+        // ones. With no usable key there is nothing to order by.
+        let keys: Vec<(u32, bool)> = sort_keys
+            .iter()
+            .filter(|k| col_start + k.col <= col_end)
+            .map(|k| (col_start + k.col, k.ascending))
+            .collect();
+        if keys.is_empty() {
+            return TrameOutcome::display_only(vec![]);
+        }
+        // Clamp the range to the materialized rows (virtual rows carry no data).
+        let last = self.index.row_len().saturating_sub(1) as u32;
+        let row_end = row_end.min(last);
+        if row_start > row_end {
+            return TrameOutcome::display_only(vec![]);
+        }
+        // First sortable position: the header row (if any) stays pinned in place.
+        let sort_start = if has_header { row_start + 1 } else { row_start };
+        if sort_start >= row_end {
+            // Zero or one sortable row: nothing to reorder.
+            return TrameOutcome::display_only(vec![]);
+        }
+
+        // Key each sortable row by its uid and the evaluated value in every sort
+        // column. Whole rows travel by uid, so no cell contents are rewritten.
+        let mut keyed: Vec<(Uid, Vec<CellValue>)> = (sort_start..=row_end)
+            .filter_map(|pos| {
+                let row_uid = self.index.row_id(pos as usize)?;
+                let values = keys
+                    .iter()
+                    .map(|&(col, _)| {
+                        self.engine
+                            .evaluated_value(self.active_cell_id(pos, col))
+                            .unwrap_or(CellValue::Empty)
+                    })
+                    .collect();
+                Some((row_uid, values))
+            })
+            .collect();
+
+        let before: Vec<Uid> = keyed.iter().map(|(uid, _)| *uid).collect();
+        keyed.sort_by(|(_, a), (_, b)| {
+            // Lexicographic over the keys: first non-equal column decides, each
+            // key applying its own direction.
+            for (i, (_, ascending)) in keys.iter().enumerate() {
+                let ord = compare_cell_values(&a[i], &b[i]);
+                let ord = if *ascending { ord } else { ord.reverse() };
+                if ord != std::cmp::Ordering::Equal {
+                    return ord;
+                }
+            }
+            std::cmp::Ordering::Equal
+        });
+        let target: Vec<Uid> = keyed.into_iter().map(|(uid, _)| uid).collect();
+        self.realize_sort(sort_start, &before, target)
+    }
+
+    /// Realize a computed row permutation as `mov` ops on `rows_{sheet}` and
+    /// refresh the derived caches. Shared by the single- and multi-column sorts:
+    /// `before` is the current uid order of the sortable region, `target` the
+    /// desired one (same multiset), and `sort_start` the first sortable position.
+    /// Returns [`TrameEvent::SortComplete`] alone (no CRDT delta) when the order
+    /// is already correct.
+    fn realize_sort(&mut self, sort_start: u32, before: &[Uid], target: Vec<Uid>) -> TrameOutcome {
         if before == target {
             // Stable sort left the order untouched: acknowledge, no CRDT delta.
             return TrameOutcome::display_only(vec![TrameEvent::SortComplete]);

@@ -1,0 +1,206 @@
+// ambre-trame/src/chrome/sort_dialog.rs
+// ============================================================================
+// The multi-column Sort dialog (`-ui.md` sec.5.C, "Sort range..."). A small DOM
+// dialog listing ordered sort levels (primary, secondary, ...), each a column
+// picker + ascending/descending direction, plus a "data has header row" toggle
+// and add/remove level. Applying emits a `SortApply` the launcher forwards as
+// [`ambre_bus::TrameCommand::SortRangeMulti`] over the snapshotted selection
+// rectangle; the Logic thread sorts the rows lexicographically by the keys
+// (`-features.md` §2) and replies `SortComplete`.
+//
+// The dialog is opened over a snapshot of the current selection bounds
+// (published by the canvas view): the columns it offers are exactly the
+// selection's columns, and each `SortKey::col` it emits is range-relative
+// (`0` = the selection's left column), matching the `SortRangeMulti` contract.
+// ============================================================================
+
+use ambre_bus::SortKey;
+use leptos::prelude::*;
+use leptos_icons::Icon;
+
+use crate::render::col_label;
+
+/// Open state of the sort dialog: a snapshot of the selection rectangle the sort
+/// applies to (`(r1, c1, r2, c2)`, inclusive, corners ordered). `None` means
+/// closed. The ordered sort levels live in the component's own signal (reset
+/// each time the dialog reopens).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SortDialogState {
+    pub r1: u32,
+    pub c1: u32,
+    pub r2: u32,
+    pub c2: u32,
+}
+
+/// A multi-column sort request. The launcher forwards it as the parameterless
+/// [`ambre_bus::TrameCommand::SortSelectionMulti`] (the Logic thread resolves the
+/// range from the tracked selection). `sort_keys` is in decreasing priority
+/// (`[primary, secondary, ...]`); each `col` is range-relative (`0` = the
+/// selection's left column), matching the snapshot the dialog was opened over.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SortApply {
+    pub sort_keys: Vec<SortKey>,
+    pub has_header: bool,
+}
+
+/// The multi-column sort dialog. `state` carries the selection snapshot the sort
+/// targets (set by the launcher when "Sort range..." is invoked); `on_apply`
+/// emits the chosen levels.
+#[component]
+pub fn SortDialog(
+    state: RwSignal<Option<SortDialogState>>,
+    on_apply: Callback<SortApply>,
+) -> impl IntoView {
+    // Ordered sort levels (decreasing priority). Reset to a single primary level
+    // (the selection's first column, ascending) each time the dialog reopens.
+    let levels = RwSignal::new(vec![SortKey {
+        col: 0,
+        ascending: true,
+    }]);
+    let has_header = RwSignal::new(false);
+
+    Effect::new(move |_| {
+        if state.get().is_some() {
+            levels.set(vec![SortKey {
+                col: 0,
+                ascending: true,
+            }]);
+            has_header.set(false);
+        }
+    });
+
+    let close = move || state.set(None);
+
+    let apply = move || {
+        if state.get_untracked().is_none() {
+            return;
+        }
+        // Keep only distinct columns (later duplicates are ignored), preserving
+        // priority order: a repeated column never decides past its first level.
+        let mut seen = Vec::new();
+        let keys: Vec<SortKey> = levels
+            .get_untracked()
+            .into_iter()
+            .filter(|k| {
+                if seen.contains(&k.col) {
+                    false
+                } else {
+                    seen.push(k.col);
+                    true
+                }
+            })
+            .collect();
+        if keys.is_empty() {
+            close();
+            return;
+        }
+        on_apply.run(SortApply {
+            sort_keys: keys,
+            has_header: has_header.get_untracked(),
+        });
+        close();
+    };
+
+    move || {
+        state.get().map(|st| {
+            // The selection's columns, offered as range-relative options
+            // (value = index within the range, label = absolute A1 column).
+            let cols: Vec<(u32, String)> = (st.c1..=st.c2)
+                .map(|abs| (abs - st.c1, col_label(abs)))
+                .collect();
+            let cols = StoredValue::new(cols);
+
+            view! {
+                <div class="ambre-sort-backdrop" on:click=move |_| close()></div>
+                <div class="ambre-sort-dialog" role="dialog" aria-label="Sort range">
+                    <div class="ambre-sort-title">
+                        <span class="ambre-sort-heading">"Sort range"</span>
+                        <button class="ambre-sort-close" aria-label="Close" on:click=move |_| close()>
+                            <Icon icon=icondata::AiCloseOutlined />
+                        </button>
+                    </div>
+
+                    <label class="ambre-sort-header-toggle">
+                        <input
+                            type="checkbox"
+                            prop:checked=move || has_header.get()
+                            on:change=move |ev| has_header.set(event_target_checked(&ev))
+                        />
+                        <span>"Data has header row"</span>
+                    </label>
+
+                    <div class="ambre-sort-levels">
+                        {move || levels.get().into_iter().enumerate().map(|(i, key)| {
+                            view! {
+                                <div class="ambre-sort-level">
+                                    <span class="ambre-sort-rank">
+                                        {if i == 0 { "Sort by" } else { "then by" }}
+                                    </span>
+                                    <select
+                                        class="ambre-sort-col"
+                                        on:change=move |ev| {
+                                            let v = event_target_value(&ev).parse::<u32>().unwrap_or(0);
+                                            levels.update(|ls| {
+                                                if let Some(l) = ls.get_mut(i) { l.col = v; }
+                                            });
+                                        }
+                                    >
+                                        {cols.get_value().into_iter().map(|(rel, label)| view! {
+                                            <option value=rel.to_string() selected=rel == key.col>
+                                                {format!("Column {label}")}
+                                            </option>
+                                        }).collect::<Vec<_>>()}
+                                    </select>
+                                    <select
+                                        class="ambre-sort-dir"
+                                        on:change=move |ev| {
+                                            let asc = event_target_value(&ev) == "asc";
+                                            levels.update(|ls| {
+                                                if let Some(l) = ls.get_mut(i) { l.ascending = asc; }
+                                            });
+                                        }
+                                    >
+                                        <option value="asc" selected=key.ascending>"Ascending"</option>
+                                        <option value="desc" selected=!key.ascending>"Descending"</option>
+                                    </select>
+                                    <button
+                                        class="ambre-sort-remove"
+                                        aria-label="Remove sort level"
+                                        // Keep at least one level.
+                                        prop:disabled=move || levels.with(|ls| ls.len() <= 1)
+                                        on:click=move |_| levels.update(|ls| {
+                                            if ls.len() > 1 { ls.remove(i); }
+                                        })
+                                    >
+                                        <Icon icon=icondata::AiDeleteOutlined />
+                                    </button>
+                                </div>
+                            }
+                        }).collect::<Vec<_>>()}
+                    </div>
+
+                    <div class="ambre-sort-actions">
+                        <button
+                            class="ambre-sort-add"
+                            // Cannot sort by more keys than the range has columns.
+                            prop:disabled=move || levels.with(|ls| ls.len() as usize >= cols.get_value().len())
+                            on:click=move |_| levels.update(|ls| {
+                                // New level defaults to the first not-yet-used column.
+                                let used: Vec<u32> = ls.iter().map(|k| k.col).collect();
+                                let next = cols.get_value().iter().map(|(rel, _)| *rel)
+                                    .find(|rel| !used.contains(rel)).unwrap_or(0);
+                                ls.push(SortKey { col: next, ascending: true });
+                            })
+                        >
+                            <Icon icon=icondata::AiPlusOutlined />
+                            <span>"Add sort level"</span>
+                        </button>
+                        <span class="ambre-sort-spacer"></span>
+                        <button class="ambre-sort-cancel" on:click=move |_| close()>"Cancel"</button>
+                        <button class="ambre-sort-apply" on:click=move |_| apply()>"Sort"</button>
+                    </div>
+                </div>
+            }
+        })
+    }
+}

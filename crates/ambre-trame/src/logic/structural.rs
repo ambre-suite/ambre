@@ -113,6 +113,23 @@ impl TrameState {
         self.sort_range(&sheet, 0, row_end, 0, col_end, sort_col, ascending, false)
     }
 
+    /// Multi-column sort over the tracked selection rectangle (`-ui.md` sec.5.C,
+    /// the "Sort range..." dialog). Parameterless sibling of
+    /// [`sort_selection`](Self::sort_selection): resolves the range against the
+    /// tracked selection and delegates to
+    /// [`sort_range_multi`](Self::sort_range_multi) on the active sheet. Keys are
+    /// in decreasing priority; each `col` is range-relative (`0` = the selection's
+    /// first column).
+    pub(super) fn sort_selection_multi(
+        &mut self,
+        sort_keys: &[SortKey],
+        has_header: bool,
+    ) -> TrameOutcome {
+        let (r1, c1, r2, c2) = self.selection;
+        let sheet = self.active_sheet.clone();
+        self.sort_range_multi(&sheet, r1, r2, c1, c2, sort_keys, has_header)
+    }
+
     /// Drop every cell and formatting entry whose key references the removed
     /// row/column id, so a deleted line leaves no orphan entries behind.
     pub(super) fn purge_axis(&mut self, removed: Uid, axis: Axis) {

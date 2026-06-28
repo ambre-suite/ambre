@@ -236,6 +236,12 @@ impl TrameState {
             // sec.5.C): sorts the full used range, ref column = active column.
             TrameCommand::SortSheetAsc => self.sort_sheet(true),
             TrameCommand::SortSheetDesc => self.sort_sheet(false),
+            // Multi-column sort over the tracked selection (the "Sort range..."
+            // dialog, sec.5.C): geometry + active sheet resolved by Logic.
+            TrameCommand::SortSelectionMulti {
+                sort_keys,
+                has_header,
+            } => self.sort_selection_multi(&sort_keys, has_header),
             TrameCommand::Undo => self.apply_history(true),
             TrameCommand::Redo => self.apply_history(false),
             TrameCommand::DefineName { name, reference } => self.define_name(&name, &reference),
@@ -256,6 +262,17 @@ impl TrameState {
                 has_header,
             } => self.sort_range(
                 &sheet_id, row_start, row_end, col_start, col_end, sort_col, ascending, has_header,
+            ),
+            TrameCommand::SortRangeMulti {
+                sheet_id,
+                row_start,
+                row_end,
+                col_start,
+                col_end,
+                sort_keys,
+                has_header,
+            } => self.sort_range_multi(
+                &sheet_id, row_start, row_end, col_start, col_end, &sort_keys, has_header,
             ),
             TrameCommand::ApplyFilter {
                 sheet_id,
@@ -353,7 +370,6 @@ impl TrameState {
             // display event, so an early UI build can issue them harmlessly.
             TrameCommand::SaveFilterView { .. }
             | TrameCommand::ActivateFilterView { .. }
-            | TrameCommand::SortRangeMulti { .. }
             | TrameCommand::AddCondFormat { .. }
             | TrameCommand::UpdateCondFormat { .. }
             | TrameCommand::RemoveCondFormat { .. }

@@ -141,6 +141,12 @@ struct Wiring {
     /// Right-click context-menu scope (`-ui.md` sec.5.C): the canvas view sets it
     /// (cell vs header) before the DOM menu opens; the shell derives the layout.
     ctx_scope: RwSignal<trame_chrome::CtxScope>,
+    /// Current selection rectangle `(r1, c1, r2, c2)`, published by the canvas
+    /// view on each selection change; read when opening the multi-column sort
+    /// dialog so it offers the selection's columns (`-ui.md` sec.5.C).
+    sel_bounds: RwSignal<Option<(u32, u32, u32, u32)>>,
+    /// Multi-column sort dialog open state (`-ui.md` sec.5.C); `None` = closed.
+    sort_dialog: RwSignal<Option<trame_chrome::SortDialogState>>,
 }
 
 // Gated out under `cfg(test)`: the wasm-bindgen-test harness generates its own
@@ -239,6 +245,10 @@ pub fn main() {
     // shell derives the menu layout from it. Created here (like the formula
     // signals) so both the view and the Leptos shell share the one signal.
     let ctx_scope = RwSignal::new(trame_chrome::CtxScope::Cell);
+    // Selection rectangle published by the canvas view (`-ui.md` sec.5.C), read
+    // when opening the multi-column sort dialog. Created here (like `ctx_scope`)
+    // so the view and the Leptos shell share the one signal.
+    let sel_bounds = RwSignal::new(None::<(u32, u32, u32, u32)>);
 
     // Design tokens: inject the generated CSS custom properties (theme.css) and
     // boot the dark theme. `theme_ctl` is the single source of truth for the
@@ -353,6 +363,7 @@ pub fn main() {
         sel_stats,
         perf_snap,
         ctx_scope,
+        sel_bounds,
     );
 
     let store = store_slot
@@ -772,6 +783,7 @@ pub fn main() {
                 formula_action_tv,
                 sel_stats,
                 ctx_scope,
+                sel_bounds,
             ))
         },
         pre_frame,
@@ -811,6 +823,7 @@ fn mount_shell(
     sel_stats: RwSignal<Option<trame_chrome::SelStats>>,
     perf_snap: RwSignal<ambre_canvas::PerfSnapshot>,
     ctx_scope: RwSignal<trame_chrome::CtxScope>,
+    sel_bounds: RwSignal<Option<(u32, u32, u32, u32)>>,
 ) {
     leptos::mount::mount_to_body(move || {
         // The store stays here (in the mount owner, NOT in the view): it is `Rc`
@@ -845,6 +858,9 @@ fn mount_shell(
         *find_result_slot.borrow_mut() = Some(find_result);
         let style_state = trame_chrome::StyleState::new();
         *style_slot.borrow_mut() = Some(style_state);
+        // Multi-column sort dialog state (`-ui.md` sec.5.C): opened by `on_command`
+        // and rendered in `AppRoot`, both inside this owner, so it needs no slot.
+        let sort_dialog = RwSignal::new(None::<trame_chrome::SortDialogState>);
 
         // Provide the wiring via context rather than as a prop: `<Router>`'s
         // children must be `Fn` (re-runnable), so the children closure cannot
@@ -872,6 +888,8 @@ fn mount_shell(
             sel_stats,
             perf_snap,
             ctx_scope,
+            sel_bounds,
+            sort_dialog,
         });
 
         view! {
@@ -912,6 +930,8 @@ fn AppRoot() -> impl IntoView {
         sel_stats,
         perf_snap,
         ctx_scope,
+        sel_bounds,
+        sort_dialog,
     } = use_context::<Wiring>().expect("Wiring provided by mount_shell");
 
     // The reactive client route, used only to show/hide the landing overlay.
@@ -988,6 +1008,12 @@ fn AppRoot() -> impl IntoView {
                     trame_chrome::FindMode::Replace
                 };
                 find_state.set(Some(trame_chrome::FindReplaceState { mode }));
+            } else if id == trame_chrome::SORT_RANGE_MULTI {
+                // UI-only intent (sec.5.C): open the multi-column sort dialog over
+                // the current selection (published by the canvas view). The dialog
+                // emits the typed `SortRangeMulti` itself via `on_sort_apply`.
+                let (r1, c1, r2, c2) = sel_bounds.get_untracked().unwrap_or((0, 0, 0, 0));
+                sort_dialog.set(Some(trame_chrome::SortDialogState { r1, c1, r2, c2 }));
             } else if id == trame_chrome::FILTER_COLUMN {
                 let (x, y) = client_anchor(anchor_pos.get_untracked());
                 // `col` is provisional; the ColumnValues reply carries the real one.
@@ -1114,6 +1140,25 @@ fn AppRoot() -> impl IntoView {
                 let _ = tx.try_send(LogicCommand::App {
                     document_id,
                     command: AppCommand::Trame(TrameCommand::ApplyFilterToActiveColumn { kind }),
+                });
+            }
+        }
+    });
+    // Multi-column sort (sec.5.C): the dialog emits the chosen levels; forward
+    // them as the parameterless `SortSelectionMulti`, like the single-column sort
+    // intents -- the Logic thread resolves the range and active sheet from the
+    // tracked selection. The dialog's snapshotted bounds are used only to label
+    // its column picker, so the keys are range-relative and match Logic's view.
+    let on_sort_apply = Callback::new({
+        let tx = to_logic.clone();
+        move |req: trame_chrome::SortApply| {
+            if let Some(document_id) = current_doc.get_untracked() {
+                let _ = tx.try_send(LogicCommand::App {
+                    document_id,
+                    command: AppCommand::Trame(TrameCommand::SortSelectionMulti {
+                        sort_keys: req.sort_keys,
+                        has_header: req.has_header,
+                    }),
                 });
             }
         }
@@ -1458,6 +1503,9 @@ fn AppRoot() -> impl IntoView {
             on_replace=on_replace
             on_replace_all=on_replace_all
         />
+
+        // Multi-column sort dialog (sec.5.C), opened from "Sort range...".
+        <trame_chrome::SortDialog state=sort_dialog on_apply=on_sort_apply />
 
         // Live-region toast host (announces transient messages politely).
         <ToastHost toasts=toasts />
