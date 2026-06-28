@@ -16,22 +16,48 @@
 use ambre_commands::CommandId;
 use leptos::html;
 use leptos::prelude::*;
+use leptos_icons::Icon;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 
-/// One entry: a command to invoke and its display label.
-#[derive(Clone)]
-pub struct MenuEntry {
-    pub command: CommandId,
-    pub label: String,
+/// One row of the context menu: either a selectable command item (optionally
+/// iconed) or a non-interactive group separator (`-ui.md` sec.5.C "grouped,
+/// iconed entries with separators"). A separator is skipped by keyboard
+/// navigation and carries no command.
+#[derive(Clone, PartialEq)]
+pub enum MenuEntry {
+    /// A selectable command, with an optional leading icon.
+    Item {
+        command: CommandId,
+        label: String,
+        icon: Option<icondata::Icon>,
+    },
+    /// A horizontal divider between two groups of items.
+    Separator,
 }
 
 impl MenuEntry {
+    /// A plain (icon-less) command entry.
     pub fn new(command: CommandId, label: impl Into<String>) -> Self {
-        Self {
+        Self::Item {
             command,
             label: label.into(),
+            icon: None,
         }
+    }
+
+    /// A command entry with a leading icon.
+    pub fn with_icon(command: CommandId, label: impl Into<String>, icon: icondata::Icon) -> Self {
+        Self::Item {
+            command,
+            label: label.into(),
+            icon: Some(icon),
+        }
+    }
+
+    /// A group separator.
+    pub const fn separator() -> Self {
+        Self::Separator
     }
 }
 
@@ -41,19 +67,16 @@ impl MenuEntry {
 #[component]
 pub fn ContextMenu(
     pos: RwSignal<Option<(f64, f64)>>,
-    entries: Vec<MenuEntry>,
+    /// The menu rows, reactive so the launcher can swap a cell-scoped layout for
+    /// a header-scoped one between right-clicks (`-ui.md` sec.5.C).
+    #[prop(into)]
+    entries: Signal<Vec<MenuEntry>>,
     on_command: Callback<CommandId>,
 ) -> impl IntoView {
     let menu_ref = NodeRef::<html::Ul>::new();
     let focused = RwSignal::new(0usize);
     let menu_x = RwSignal::new(0.0_f64);
     let menu_y = RwSignal::new(0.0_f64);
-    let commands: Vec<CommandId> = entries.iter().map(|e| e.command).collect();
-    // Lowercased first chars for first-letter typeahead (WAI-ARIA menu pattern).
-    let initials: Vec<char> = entries
-        .iter()
-        .map(|e| e.label.chars().next().unwrap_or(' ').to_ascii_lowercase())
-        .collect();
 
     // On open: reset highlight, then place at the click point and flip if the
     // menu would overflow the viewport (measured after it renders).
@@ -128,9 +151,29 @@ pub fn ContextMenu(
     move || {
         pos.get()?;
 
-        let len = commands.len();
-        let cmds = commands.clone();
-        let initials = initials.clone();
+        // Only `Item` rows are focusable: build the parallel command + typeahead
+        // vectors over them, skipping separators, so keyboard nav and the roving
+        // `data-idx` index the items (not the raw rows).
+        let rows = entries.get();
+        let cmds: Vec<CommandId> = rows
+            .iter()
+            .filter_map(|e| match e {
+                MenuEntry::Item { command, .. } => Some(*command),
+                MenuEntry::Separator => None,
+            })
+            .collect();
+        // Lowercased first chars for first-letter typeahead (WAI-ARIA menu pattern).
+        let initials: Vec<char> = rows
+            .iter()
+            .filter_map(|e| match e {
+                MenuEntry::Item { label, .. } => {
+                    Some(label.chars().next().unwrap_or(' ').to_ascii_lowercase())
+                }
+                MenuEntry::Separator => None,
+            })
+            .collect();
+
+        let len = cmds.len();
         let on_keydown = move |ev: web_sys::KeyboardEvent| {
             let key = ev.key();
             match key.as_str() {
@@ -183,26 +226,41 @@ pub fn ContextMenu(
             }
         };
 
-        let items = entries
-            .clone()
+        // Render rows in order. A separator is a non-interactive divider; an item
+        // carries the next focusable index (`data-idx`), used by the roving
+        // tabindex and typeahead above.
+        let mut focus_idx = 0usize;
+        let items = rows
             .into_iter()
-            .enumerate()
-            .map(|(i, e)| {
-                let cmd = e.command;
-                view! {
-                    <li
-                        class="ambre-ctx-item"
-                        role="menuitem"
-                        tabindex="-1"
-                        data-idx=i.to_string()
-                        on:click=move |_| {
-                            on_command.run(cmd);
-                            pos.set(None);
-                        }
-                        on:mouseenter=move |_| focused.set(i)
-                    >
-                        {e.label}
-                    </li>
+            .map(|e| match e {
+                MenuEntry::Separator => view! {
+                    <li class="ambre-ctx-sep" role="separator"></li>
+                }
+                .into_any(),
+                MenuEntry::Item {
+                    command,
+                    label,
+                    icon,
+                } => {
+                    let i = focus_idx;
+                    focus_idx += 1;
+                    view! {
+                        <li
+                            class="ambre-ctx-item"
+                            role="menuitem"
+                            tabindex="-1"
+                            data-idx=i.to_string()
+                            on:click=move |_| {
+                                on_command.run(command);
+                                pos.set(None);
+                            }
+                            on:mouseenter=move |_| focused.set(i)
+                        >
+                            {icon.map(|ic| view! { <span class="ambre-ctx-icon"><Icon icon=ic /></span> })}
+                            <span class="ambre-ctx-label">{label}</span>
+                        </li>
+                    }
+                    .into_any()
                 }
             })
             .collect_view();

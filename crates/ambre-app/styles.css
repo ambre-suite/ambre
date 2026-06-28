@@ -611,6 +611,9 @@ input[type="radio"] {
 }
 
 .ambre-ctx-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     padding: 6px 12px;
     border-radius: 5px;
     color: var(--text);
@@ -625,6 +628,33 @@ input[type="radio"] {
        not standard chrome interaction (cf. Google Sheets' grey menu hover). */
     background: var(--border);
     color: var(--text);
+}
+
+/* Leading icon column: a fixed gutter so labels align whether or not a given
+   entry carries an icon (grouped/iconed menu, `-ui.md` sec.5.C). */
+.ambre-ctx-icon {
+    display: inline-flex;
+    align-items: center;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    color: var(--text-dim);
+}
+
+.ambre-ctx-icon svg {
+    width: 18px;
+    height: 18px;
+}
+
+.ambre-ctx-label {
+    flex: 1 1 auto;
+}
+
+/* Group divider between item clusters. */
+.ambre-ctx-sep {
+    height: 1px;
+    margin: 4px 8px;
+    background: var(--border);
 }
 
 /* Shared keyboard-chord chip (ambre-chrome::Kbd). */
