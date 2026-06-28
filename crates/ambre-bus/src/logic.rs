@@ -259,6 +259,31 @@ pub enum TrameCommand {
     /// conflict, §6) reappears. A no-op if `(row, col)` is not inside a merge.
     UnmergeCells { row: u32, col: u32 },
 
+    /// Set the width (physical px) of column `col` on `sheet_id`
+    /// (`-ui.md` sec.4bis.C, `-logic.md` §9). The Logic thread writes the value
+    /// into the per-sheet `col_widths_{sheet}` LWW map keyed by the column's
+    /// stable `Uid`, clamped to a minimum, and replies with a [`DataReset`] so the
+    /// UI re-fetches the viewport (whose [`ViewportData`] now carries the new
+    /// per-column widths). A synchronised CRDT mutation, hence undoable; two peers
+    /// resizing the same column converge by LWW, like any cell write.
+    ///
+    /// [`DataReset`]: crate::ui::TrameEvent::DataReset
+    /// [`ViewportData`]: crate::ui::TrameEvent::ViewportData
+    ResizeCol {
+        version: u64,
+        sheet_id: String,
+        col: u32,
+        width_px: f32,
+    },
+    /// Set the height (physical px) of row `row` on `sheet_id`. Row analogue of
+    /// [`ResizeCol`](TrameCommand::ResizeCol): writes `row_heights_{sheet}`.
+    ResizeRow {
+        version: u64,
+        sheet_id: String,
+        row: u32,
+        height_px: f32,
+    },
+
     // -- Parameterless structural intents (grid context menu, `-ui.md` sec.5.C).
     // These carry no geometry: the Logic thread resolves them against the active
     // cell / selection rectangle it tracks (kept current by `SetActiveCell`).

@@ -1574,6 +1574,8 @@ mod tests {
             version: 0,
             row_start: 0,
             col_start: 0,
+            col_widths: vec![],
+            row_heights: vec![],
             cells: vec![
                 cell(1, 1, Some((2, 2))), // master
                 cell(1, 2, None),
@@ -1679,6 +1681,8 @@ mod tests {
             version: 0,
             row_start: 0,
             col_start: 0,
+            col_widths: vec![],
+            row_heights: vec![],
             cells: vec![
                 cell(0, 0, Some((1, 2))),
                 cell(1, 0, None),
@@ -1702,6 +1706,8 @@ mod tests {
             version: 1,
             row_start: 0,
             col_start: 0,
+            col_widths: vec![],
+            row_heights: vec![],
             cells: vec![
                 cell(0, 0, None),
                 cell(1, 0, None),
@@ -1729,6 +1735,8 @@ mod tests {
             version: 0,
             row_start: 0,
             col_start: 0,
+            col_widths: vec![],
+            row_heights: vec![],
             cells: vec![
                 cell(1, 1, Some((2, 2))), // master
                 cell(1, 2, None),
@@ -1822,6 +1830,8 @@ mod tests {
             version: 0,
             row_start: 0,
             col_start: 0,
+            col_widths: vec![],
+            row_heights: vec![],
             cells: vec![
                 cell(0, 0, Some((1, 2))), // master, rows 0..=1
                 cell(1, 0, None),
@@ -1874,6 +1884,8 @@ mod tests {
             version: 0,
             row_start: 0,
             col_start: 0,
+            col_widths: vec![],
+            row_heights: vec![],
             cells: vec![
                 cell(0, false),
                 cell(1, false),
@@ -1987,6 +1999,8 @@ mod tests {
             version: 1,
             row_start: 0,
             col_start: 0,
+            col_widths: vec![],
+            row_heights: vec![],
             cells: vec![
                 DisplayCell {
                     row: 2,
@@ -2043,6 +2057,8 @@ mod tests {
             version: 1,
             row_start: 0,
             col_start: 0,
+            col_widths: vec![],
+            row_heights: vec![],
             cells: vec![DisplayCell {
                 row: 0,
                 col: 2,
@@ -2102,6 +2118,8 @@ mod tests {
             version: 1,
             row_start: 0,
             col_start: 0,
+            col_widths: vec![],
+            row_heights: vec![],
             cells: vec![DisplayCell {
                 row: 0,
                 col: 0,

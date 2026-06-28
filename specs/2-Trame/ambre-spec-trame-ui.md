@@ -409,9 +409,12 @@ fn handle_freeze_rows(&mut self, row: u32) {
 > **Why this is MVP.** The autofill handle received a thorough UX pass; the headers did not.
 > Today the only entry point for insert/delete is the grid context menu, and there is no
 > whole-column/row selection, no hover affordance, and no resize. This section raises the
-> header interaction to the same bar as the fill handle. All of it is **UI-thread view
-> state + existing typed commands** -- no new data plane (the `col_widths_{sheet}` /
-> `row_heights_{sheet}` Loro maps and `ResizeCol` / `ResizeRow` already exist, `-logic` §2.B/§9).
+> header interaction to the same bar as the fill handle. Selection, hover cursors and the
+> inline insert affordance are **UI-thread view state + existing typed commands**. The
+> **resize** leg (sec.4bis.C) is the one part that needs a **new data plane**: the
+> `col_widths_{sheet}` / `row_heights_{sheet}` Loro maps and the `ResizeCol` / `ResizeRow`
+> commands are introduced under this story (`-logic` §2.B/§9), alongside a variable-metric
+> `GridLayout`. They do not exist yet -- only the uniform-metric layout does.
 
 The header band is divided into three hit zones per cell, resolved in `cell_at_pixel`'s
 header sibling `header_hit(x, y) -> HeaderHit`:

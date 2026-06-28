@@ -169,11 +169,18 @@ impl TrameState {
                     }
                 }
 
+                // Per-axis metric slices for the requested window: the UI feeds
+                // them straight into its variable-metric GridLayout (sec.4bis.C).
+                let col_widths = (col_start..=col_end).map(|c| self.col_width(c)).collect();
+                let row_heights = (row_start..=row_end).map(|r| self.row_height(r)).collect();
+
                 let mut display = vec![TrameEvent::ViewportData {
                     version,
                     row_start,
                     col_start,
                     cells,
+                    col_widths,
+                    row_heights,
                 }];
                 // Hydrate the tab strip on the first viewport request of the
                 // session (the UI has no separate sheet-list fetch command).
@@ -194,6 +201,18 @@ impl TrameState {
                 col_end,
             } => self.merge_cells(row, col, row_end, col_end),
             TrameCommand::UnmergeCells { row, col } => self.unmerge_cells(row, col),
+            TrameCommand::ResizeCol {
+                version: _,
+                sheet_id,
+                col,
+                width_px,
+            } => self.resize_col(&sheet_id, col, width_px),
+            TrameCommand::ResizeRow {
+                version: _,
+                sheet_id,
+                row,
+                height_px,
+            } => self.resize_row(&sheet_id, row, height_px),
             // -- Parameterless structural intents (grid context menu). Geometry
             // comes from the tracked active cell / selection (`SetActiveCell`).
             TrameCommand::InsertRowAbove => self.insert_axis(self.active.0, Axis::Row),

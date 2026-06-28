@@ -3822,3 +3822,120 @@ fn apply_remote_batch_emits_single_datareset_with_full_state() {
     assert_eq!(read_cell(&mut reopened, 0, 0), "1");
     assert_eq!(read_cell(&mut reopened, 1, 0), "2");
 }
+
+// -----------------------------------------------------------------------------
+// Column / row resize data plane (`-ui.md` sec.4bis.C, `-logic.md` §9)
+// -----------------------------------------------------------------------------
+
+/// Stable id of the default sheet a fresh `TrameState` carries (mirrors the
+/// private `DEFAULT_SHEET` const used by the handlers).
+const TEST_SHEET: &str = "s0";
+
+/// Pull the per-axis metric slices of a single-column-window viewport.
+fn viewport_metrics(
+    state: &mut TrameState,
+    r0: u32,
+    r1: u32,
+    c0: u32,
+    c1: u32,
+) -> (Vec<f32>, Vec<f32>) {
+    let evts = state.handle_command(TrameCommand::ScrollViewport {
+        version: 99,
+        row_start: r0,
+        row_end: r1,
+        col_start: c0,
+        col_end: c1,
+    });
+    let TrameEvent::ViewportData {
+        col_widths,
+        row_heights,
+        ..
+    } = evts.display.into_iter().next().expect("ViewportData")
+    else {
+        panic!("expected ViewportData");
+    };
+    (col_widths, row_heights)
+}
+
+#[test]
+fn resize_col_round_trips_through_viewport() {
+    let mut state = TrameState::new();
+    let evts = state.handle_command(TrameCommand::ResizeCol {
+        version: 1,
+        sheet_id: TEST_SHEET.to_owned(),
+        col: 1,
+        width_px: 150.0,
+    });
+    assert!(
+        matches!(evts.display.first(), Some(TrameEvent::DataReset)),
+        "resize replies a DataReset so the UI re-fetches"
+    );
+    assert!(
+        evts.update.is_some(),
+        "resize is a synchronised CRDT mutation"
+    );
+
+    // Columns 0..=2: only col 1 carries the new width; the rest stay default.
+    let (widths, _) = viewport_metrics(&mut state, 0, 0, 0, 2);
+    assert_eq!(widths, vec![80.0, 150.0, 80.0]);
+}
+
+#[test]
+fn resize_row_round_trips_and_clamps_to_minimum() {
+    let mut state = TrameState::new();
+    // A sub-minimum request is pinned to MIN_ROW_HEIGHT (12.0).
+    state.handle_command(TrameCommand::ResizeRow {
+        version: 1,
+        sheet_id: TEST_SHEET.to_owned(),
+        row: 2,
+        height_px: 1.0,
+    });
+    let (_, heights) = viewport_metrics(&mut state, 0, 3, 0, 0);
+    assert_eq!(heights, vec![20.0, 20.0, 12.0, 20.0]);
+}
+
+#[test]
+fn resize_survives_snapshot_roundtrip() {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::ResizeCol {
+        version: 1,
+        sheet_id: TEST_SHEET.to_owned(),
+        col: 0,
+        width_px: 200.0,
+    });
+    let snapshot = state.export_snapshot();
+    let mut restored = TrameState::new();
+    restored.import_snapshot(&snapshot);
+    let (widths, _) = viewport_metrics(&mut restored, 0, 0, 0, 0);
+    assert_eq!(widths, vec![200.0], "the persisted width reloads");
+}
+
+#[test]
+fn concurrent_resize_of_same_col_converges_lww() {
+    // Two peers resize the same column to different widths, then exchange full
+    // snapshots both ways: LWW must leave them on one identical value.
+    let mut a = TrameState::new();
+    let mut b = TrameState::new();
+    a.handle_command(TrameCommand::ResizeCol {
+        version: 1,
+        sheet_id: TEST_SHEET.to_owned(),
+        col: 0,
+        width_px: 120.0,
+    });
+    b.handle_command(TrameCommand::ResizeCol {
+        version: 1,
+        sheet_id: TEST_SHEET.to_owned(),
+        col: 0,
+        width_px: 300.0,
+    });
+    let (sa, sb) = (a.export_snapshot(), b.export_snapshot());
+    a.import_snapshot(&sb);
+    b.import_snapshot(&sa);
+    let (wa, _) = viewport_metrics(&mut a, 0, 0, 0, 0);
+    let (wb, _) = viewport_metrics(&mut b, 0, 0, 0, 0);
+    assert_eq!(wa, wb, "both peers converge to one width");
+    assert!(
+        wa[0] == 120.0 || wa[0] == 300.0,
+        "converged on one of the writes"
+    );
+}

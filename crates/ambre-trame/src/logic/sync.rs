@@ -162,6 +162,8 @@ impl TrameState {
         // Rebuild bold/italic from the merged `format_{sheet}` map.
         self.reseed_formatting();
         self.reseed_styles();
+        // Rebuild the column-width / row-height caches from the merged metric maps.
+        self.reseed_metrics();
         // Adopt the (possibly remote) hidden-row set directly: a peer's filter
         // arrives as `filter_hidden_{sheet}` ops and is applied without recompute
         // (§1.A -- only the filter author recomputes).

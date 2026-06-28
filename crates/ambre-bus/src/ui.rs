@@ -172,6 +172,16 @@ pub enum TrameEvent {
         row_start: u32,
         col_start: u32,
         cells: Vec<DisplayCell>,
+        /// Per-column widths (physical px) for the requested column window,
+        /// `col_widths[i]` being the width of column `col_start + i`
+        /// (`-ui.md` sec.4bis.C, `-logic.md` §9). A column never resized carries
+        /// the uniform default, so the UI can feed the slice straight into the
+        /// variable-metric `GridLayout`. Empty only on an out-of-range request.
+        col_widths: Vec<f32>,
+        /// Per-row heights (physical px) for the requested row window, aligned to
+        /// `row_start` the same way [`col_widths`](Self::ViewportData::col_widths)
+        /// is to `col_start`.
+        row_heights: Vec<f32>,
     },
 
     /// The resolved formatting of the **active cell** after a
