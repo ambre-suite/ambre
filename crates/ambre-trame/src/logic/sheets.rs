@@ -258,6 +258,7 @@ impl TrameState {
         self.reseed_formatting();
         self.reseed_styles();
         self.rebuild_filter();
+        self.reseed_metrics();
         conflicts
     }
 

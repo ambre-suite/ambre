@@ -154,6 +154,30 @@ pub(crate) fn filter_hidden_map_name(sheet: &str) -> String {
     format!("filter_hidden_{sheet}")
 }
 
+/// Per-sheet column-width map (`col_widths_{sheet}`): `{col_uid -> width_px}` as
+/// an f64, keyed by the column's stable `Uid` so the width follows its column
+/// across inserts/deletes/reorders (`-logic.md` §9). Absence = the uniform
+/// default [`DEFAULT_COL_WIDTH`]. LWW: concurrent resizes of the same column
+/// converge on the last writer, like any cell.
+pub(crate) fn col_widths_map_name(sheet: &str) -> String {
+    format!("col_widths_{sheet}")
+}
+/// Per-sheet row-height map (`row_heights_{sheet}`): `{row_uid -> height_px}`.
+/// Row analogue of [`col_widths_map_name`]; absence = [`DEFAULT_ROW_HEIGHT`].
+pub(crate) fn row_heights_map_name(sheet: &str) -> String {
+    format!("row_heights_{sheet}")
+}
+
+/// Uniform fallback metrics (physical px) for never-resized axes. Mirror the UI
+/// `COL_WIDTH` / `ROW_HEIGHT` defaults (`ui/grid.rs`); the viewport response
+/// fills unset columns/rows with these so the UI gets a complete slice.
+pub(crate) const DEFAULT_COL_WIDTH: f32 = 80.0;
+pub(crate) const DEFAULT_ROW_HEIGHT: f32 = 20.0;
+/// Lower clamp on a resize (physical px), matching the UI `MIN_COL_WIDTH` /
+/// `MIN_ROW_HEIGHT`. A drag that would shrink past this is pinned here.
+pub(crate) const MIN_COL_WIDTH: f32 = 24.0;
+pub(crate) const MIN_ROW_HEIGHT: f32 = 12.0;
+
 /// Which axis a structural op targets. Lets [`TrameState::insert_axis`] /
 /// [`delete_axis`](TrameState::delete_axis) share one body across rows/columns.
 #[derive(Clone, Copy)]

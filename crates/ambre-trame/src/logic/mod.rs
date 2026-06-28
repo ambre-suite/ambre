@@ -151,6 +151,15 @@ pub struct TrameState {
     /// Cells in these rows are flagged [`DisplayCell::is_filtered`] but still
     /// participate in calculations.
     hidden_rows: HashSet<u32>,
+    /// Active-sheet column widths (physical px) per grid column position,
+    /// derived cache of `col_widths_{sheet}` (a `{col_uid -> width}` map),
+    /// rebuilt by [`Self::reseed_metrics`] after any import or structural op.
+    /// Absence means the uniform [`DEFAULT_COL_WIDTH`]; the viewport response
+    /// fills the gap so the UI gets a complete slice (sec.4bis.C, §9).
+    col_widths: HashMap<u32, f32>,
+    /// Active-sheet row heights (physical px) per grid row position. Row analogue
+    /// of [`col_widths`](Self::col_widths); derived from `row_heights_{sheet}`.
+    row_heights: HashMap<u32, f32>,
     /// Stable cell keys of covered cells that still hold a non-empty value -- a
     /// concurrent-edit conflict (§6). Masked: excluded from the formula engine
     /// and not displayed, but never destroyed; reappear on unmerge.
@@ -225,6 +234,8 @@ impl TrameState {
             engine: FormulaEngine::new(),
             merges: HashMap::new(),
             covered: HashSet::new(),
+            col_widths: HashMap::new(),
+            row_heights: HashMap::new(),
             hidden_rows: HashSet::new(),
             masked_cells: HashSet::new(),
             sheets_by_idx: Vec::new(),
@@ -273,6 +284,7 @@ mod find;
 mod helpers;
 mod interop;
 mod merges;
+mod metrics;
 mod packing;
 mod schema;
 mod sheets;
