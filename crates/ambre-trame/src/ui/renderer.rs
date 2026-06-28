@@ -30,14 +30,15 @@ use ambre_canvas::{Palette, TextCache};
 
 use super::TrameUiState;
 use super::grid::{
-    ADD_BTN_WIDTH, COL_WIDTH, CellEditor, HEADER_HEIGHT, HEADER_WIDTH, HitKind, ROW_HEIGHT,
+    self, ADD_BTN_WIDTH, COL_WIDTH, CellEditor, HEADER_HEIGHT, HEADER_WIDTH, HitKind, ROW_HEIGHT,
     TAB_MENU_ITEM_HEIGHT, TAB_MENU_WIDTH, TAB_STRIP_HEIGHT, TAB_WIDTH, TabDrag, TabMenu, TabRename,
 };
 use crate::render::{self, BODY_SIZE, CELL_PAD_X, GridLayout};
 use crate::{TOTAL_COLS, TOTAL_ROWS};
 
-/// Build the shared [`GridLayout`] for the current screen viewport. Uniform
-/// metrics for the MVP; the cell-aligned scroll position is the layout origin.
+/// Build the shared [`GridLayout`] for the current screen viewport. Carries the
+/// per-axis width/height maps (sec.4bis.C) so resized columns/rows reflow; the
+/// cell-aligned scroll position is the layout origin.
 fn screen_layout(state: &TrameUiState) -> GridLayout<'_> {
     GridLayout {
         // Collapse the row axis over filter-hidden rows (sec.5.D).
@@ -47,6 +48,8 @@ fn screen_layout(state: &TrameUiState) -> GridLayout<'_> {
         top: 0.0,
         col_width: COL_WIDTH,
         row_height: ROW_HEIGHT,
+        col_widths: &state.col_widths,
+        row_heights: &state.row_heights,
         origin_col: state.left_col,
         origin_row: state.top_row,
         width: state.canvas_width,
@@ -124,28 +127,48 @@ impl CellSpan {
 /// Compute the cell-coordinate range that intersects `strip` in the cell area.
 fn rows_cols_in_strip(state: &TrameUiState, strip: Rect) -> CellSpan {
     let cells_top = HEADER_HEIGHT;
-    // The strip's y-slots index *visible* rows; map them back to absolute rows so
-    // the iterated span covers the right data once the axis is collapsed. The
-    // span may still contain hidden rows in between -- the cell iterator skips
-    // them (their slot collapses onto the next visible row).
-    let row_start_slot = if strip.y0 > cells_top {
-        ((strip.y0 - cells_top) / ROW_HEIGHT).floor() as u32
-    } else {
-        0
-    };
-    let row_end_slot = ((strip.y1 - cells_top) / ROW_HEIGHT).ceil() as u32;
-    let row_start = state.row_at_slot(row_start_slot);
-    let row_end = state
-        .row_at_slot(row_end_slot)
-        .saturating_add(1)
-        .min(TOTAL_ROWS);
-    let col_start = if strip.x0 > HEADER_WIDTH {
-        ((strip.x0 - HEADER_WIDTH) / COL_WIDTH).floor() as u32 + state.left_col
-    } else {
-        state.left_col
-    };
-    let col_end =
-        (((strip.x1 - HEADER_WIDTH) / COL_WIDTH).ceil() as u32 + state.left_col).min(TOTAL_COLS);
+    // Walk the variable column widths from the scroll origin: skip columns wholly
+    // left of the strip, then extend until the strip's right edge is covered.
+    let mut col_start = state.left_col;
+    let mut cx = HEADER_WIDTH;
+    while col_start + 1 < TOTAL_COLS && cx + state.col_width_of(col_start) <= strip.x0 {
+        cx += state.col_width_of(col_start);
+        col_start += 1;
+    }
+    let mut col_end = col_start;
+    let mut ex = cx;
+    while col_end < TOTAL_COLS && ex < strip.x1 {
+        ex += state.col_width_of(col_end);
+        col_end += 1;
+    }
+    let col_end = col_end.min(TOTAL_COLS);
+
+    // Same walk over the *visible* rows' variable heights (hidden rows take no
+    // vertical space; the cell iterator skips them too).
+    let mut row_start = state.top_row;
+    let mut cy = cells_top;
+    while row_start + 1 < TOTAL_ROWS {
+        if state.is_row_hidden(row_start) {
+            row_start += 1;
+            continue;
+        }
+        let h = state.row_height_of(row_start);
+        if cy + h <= strip.y0 {
+            cy += h;
+            row_start += 1;
+        } else {
+            break;
+        }
+    }
+    let mut row_end = row_start;
+    let mut ey = cy;
+    while row_end < TOTAL_ROWS && ey < strip.y1 {
+        if !state.is_row_hidden(row_end) {
+            ey += state.row_height_of(row_end);
+        }
+        row_end += 1;
+    }
+    let row_end = row_end.min(TOTAL_ROWS);
     CellSpan {
         row_start,
         row_end,
@@ -380,6 +403,15 @@ const MARCHING_DASH: f64 = 6.0;
 const MARCHING_GAP: f64 = 4.0;
 const MARCHING_PERIOD: f64 = MARCHING_DASH + MARCHING_GAP;
 
+/// Draw a small filled "+" badge centred on `(cx, cy)`: the inline-insert
+/// affordance shown on a hovered header boundary (sec.4bis.D).
+fn draw_plus<S: DrawSurface>(s: &mut S, cx: f64, cy: f64, c: Color) {
+    let arm = 4.0;
+    let t = 1.5;
+    s.fill_rect(Rect::new(cx - arm, cy - t, cx + arm, cy + t), c);
+    s.fill_rect(Rect::new(cx - t, cy - arm, cx + t, cy + arm), c);
+}
+
 /// Stroke a horizontal dashed line from `x0` to `x1` at height `y`, the dashes
 /// offset left by `phase` (the marching-ants crawl, sec.5.E).
 fn dashed_h<S: DrawSurface>(s: &mut S, x0: f64, x1: f64, y: f64, c: Color, phase: f64) {
@@ -486,13 +518,68 @@ pub fn draw_overlay<S: DrawSurface>(
         }
     }
 
+    // -- 1d. Whole-axis selection band (sec.4bis.A). A virtual column/row
+    //        selection has no on-screen rectangle bounding it, so fill the whole
+    //        band over the grid area and tint its headers opaquely.
+    let sel = &state.selection;
+    if sel.kind != grid::SelKind::Cells {
+        let (band_x0, band_x1, band_y0, band_y1, hx0, hx1, hy0, hy1) = match sel.kind {
+            grid::SelKind::Cols => {
+                let (c1, c2) = (
+                    sel.anchor.1.min(sel.active.1),
+                    sel.anchor.1.max(sel.active.1),
+                );
+                let x0 = state.col_x(c1).max(HEADER_WIDTH);
+                let x1 = (state.col_x(c2) + state.col_width_of(c2)).min(state.canvas_width);
+                // Band over the grid body, and the header tint over the strip.
+                (
+                    x0,
+                    x1,
+                    HEADER_HEIGHT,
+                    state.grid_bottom(),
+                    x0,
+                    x1,
+                    0.0,
+                    HEADER_HEIGHT,
+                )
+            }
+            _ => {
+                let (r1, r2) = (
+                    sel.anchor.0.min(sel.active.0),
+                    sel.anchor.0.max(sel.active.0),
+                );
+                let y0 = state.row_y(r1).max(HEADER_HEIGHT);
+                let y1 = (state.row_y(r2) + state.row_height_of(r2)).min(state.grid_bottom());
+                (
+                    HEADER_WIDTH,
+                    state.canvas_width,
+                    y0,
+                    y1,
+                    0.0,
+                    HEADER_WIDTH,
+                    y0,
+                    y1,
+                )
+            }
+        };
+        if band_x1 > band_x0 && band_y1 > band_y0 {
+            surface.fill_rect(
+                Rect::new(band_x0, band_y0, band_x1, band_y1),
+                palette.selection.with_alpha(0.16),
+            );
+        }
+        if hx1 > hx0 && hy1 > hy0 {
+            surface.fill_rect(Rect::new(hx0, hy0, hx1, hy1), palette.header_active);
+        }
+    }
+
     // -- 2. Selection (range fills + outlines) and active-cell border. --------
     // Lives in the overlay so it tracks the selection on every frame regardless
     // of scroll shifts in the persistent layer. A lone single cell shows only
     // the active border (no fill); any multi-cell or disjoint selection fills
-    // each rectangle with a translucent tint and outlines it.
-    let sel = &state.selection;
-    if sel.is_multi() {
+    // each rectangle with a translucent tint and outlines it. Skipped for a
+    // whole-axis band (drawn above): its `bounds()` collapses to row/col 0.
+    if sel.kind == grid::SelKind::Cells && sel.is_multi() {
         for (r1, c1, r2, c2) in state.selection_rects() {
             if let Some((x, y, w, ht)) = state.range_pixel_rect(r1, c1, r2, c2) {
                 let rect = Rect::new(x, y, x + w, y + ht);
@@ -507,7 +594,8 @@ pub fn draw_overlay<S: DrawSurface>(
     // the active cell would read as a spurious second selection following the
     // cursor. When the active cell sits in a merged block the border wraps the
     // whole block, so the merge reads as one selected cell.
-    if !sel.is_multi()
+    if sel.kind == grid::SelKind::Cells
+        && !sel.is_multi()
         && let Some((x, y, cw, ch)) = state
             .active_merge_rect()
             .or_else(|| state.cell_pixel_rect(state.active_row(), state.active_col()))
@@ -544,6 +632,41 @@ pub fn draw_overlay<S: DrawSurface>(
         let r = Rect::new(hx, hy, hx + hw, hy + hh);
         surface.fill_rect(r, palette.selection);
         surface.stroke_rect(r, palette.content_bg, 1.0);
+    }
+
+    // -- 2d. Header resize guide (sec.4bis.C): a full-height/width line at the
+    //        prospective boundary while a header border is dragged.
+    match state.resize_preview {
+        Some(grid::ResizePreview::Col(x)) => {
+            surface.stroke_line(
+                x,
+                layout.top,
+                x,
+                state.grid_bottom(),
+                palette.selection,
+                1.0,
+            );
+        }
+        Some(grid::ResizePreview::Row(y)) => {
+            surface.stroke_line(0.0, y, state.canvas_width, y, palette.selection, 1.0);
+        }
+        None => {}
+    }
+
+    // -- 2e. Inline insert "+" badge on the hovered header boundary (sec.4bis.D).
+    match state.insert_hint {
+        // ColInsert(i) inserts left of column i, i.e. at column i's left edge.
+        Some(grid::HeaderHit::ColInsert(i)) => {
+            let bx = state.col_x(i);
+            let cy = layout.top + layout.header_height * 0.5;
+            draw_plus(surface, bx, cy, palette.selection);
+        }
+        Some(grid::HeaderHit::RowInsert(i)) => {
+            let by = state.row_y(i);
+            let cx = HEADER_WIDTH * 0.5;
+            draw_plus(surface, cx, by, palette.selection);
+        }
+        _ => {}
     }
     let t_after_hdrs = clock.now_ms();
 

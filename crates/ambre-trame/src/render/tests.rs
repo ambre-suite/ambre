@@ -6,6 +6,13 @@ use ambre_canvas::{TextCache, Theme};
 use ambre_draw::FontContext;
 use ambre_draw::testing::{DrawOp, RecordingSurface};
 
+/// A shared empty metric map for uniform-layout fixtures (no resized axes).
+fn empty_metrics() -> &'static std::collections::HashMap<u32, f32> {
+    use std::sync::OnceLock;
+    static EMPTY: OnceLock<std::collections::HashMap<u32, f32>> = OnceLock::new();
+    EMPTY.get_or_init(std::collections::HashMap::new)
+}
+
 /// 800x600 surface, uniform 80x20 cells, 50x24 headers, origin at (0,0).
 fn layout() -> GridLayout<'static> {
     GridLayout {
@@ -15,6 +22,8 @@ fn layout() -> GridLayout<'static> {
         top: 0.0,
         col_width: 80.0,
         row_height: 20.0,
+        col_widths: empty_metrics(),
+        row_heights: empty_metrics(),
         origin_col: 0,
         origin_row: 0,
         width: 800.0,
@@ -39,6 +48,36 @@ fn cell_rect_maps_index_to_pixels() {
     assert_eq!((r.x0, r.y0), (50.0, 24.0));
     let r = l.cell_rect(2, 1);
     assert_eq!((r.x0, r.y0), (50.0 + 80.0, 24.0 + 2.0 * 20.0));
+}
+
+#[test]
+fn variable_metrics_shift_cells_and_hit_test() {
+    let mut l = layout();
+    // Column 1 widened to 200, row 0 heightened to 50 (absolute keys).
+    let cols = std::collections::HashMap::from([(1u32, 200.0f32)]);
+    let rows = std::collections::HashMap::from([(0u32, 50.0f32)]);
+    l.col_widths = &cols;
+    l.row_heights = &rows;
+
+    // col_w / row_h report the per-axis values, default elsewhere.
+    assert_eq!(l.col_w(1), 200.0);
+    assert_eq!(l.col_w(2), 80.0);
+    assert_eq!(l.row_h(0), 50.0);
+    assert_eq!(l.row_h(1), 20.0);
+
+    // cell_rect: col 2 starts after the widened col 1; row 1 starts below the
+    // tall row 0.
+    let r = l.cell_rect(1, 2);
+    assert_eq!(r.x0, 50.0 + 80.0 + 200.0); // header + col0(80) + col1(200)
+    assert_eq!(r.y0, 24.0 + 50.0); // header + row0(50)
+    assert_eq!(r.x1 - r.x0, 80.0);
+    assert_eq!(r.y1 - r.y0, 20.0);
+
+    // col_at / row_at invert the mapping through the variable bands.
+    assert_eq!(l.col_at(50.0 + 80.0 + 10.0), Some(1)); // inside the wide col 1
+    assert_eq!(l.col_at(50.0 + 80.0 + 200.0 + 5.0), Some(2));
+    assert_eq!(l.row_at(24.0 + 25.0), Some(0)); // inside the tall row 0
+    assert_eq!(l.row_at(24.0 + 50.0 + 5.0), Some(1));
 }
 
 #[test]

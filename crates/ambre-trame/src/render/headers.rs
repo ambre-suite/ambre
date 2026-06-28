@@ -35,10 +35,10 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     if let Some(col) = active_col
         && col >= layout.origin_col
     {
-        let x = layout.header_width + (col - layout.origin_col) as f64 * layout.col_width;
+        let x = layout.col_left(col);
         if x < w {
             surface.fill_rect(
-                Rect::new(x, top, x + layout.col_width, top + hh),
+                Rect::new(x, top, x + layout.col_w(col), top + hh),
                 palette.header_active,
             );
         }
@@ -51,22 +51,19 @@ pub fn draw_col_headers_on<S: DrawSurface>(
         return;
     }
     let brush = Brush::Solid(palette.header_text);
-    let mut i = 0u32;
+    let mut col = layout.origin_col;
+    let mut col_x = layout.header_width;
     loop {
-        let col = layout.origin_col + i;
-        if col >= layout.total_cols {
+        if col >= layout.total_cols || col_x >= w {
             break;
         }
-        let col_x = layout.header_width + i as f64 * layout.col_width;
-        if col_x >= w {
-            break;
-        }
+        let cw = layout.col_w(col);
         let label = col_label(col);
         let lyt: &Layout<ParleyBrush> = text_cache.get_or_build(
             font_cx,
             &label,
             HEADER_SIZE,
-            layout.col_width as f32,
+            cw as f32,
             Alignment::Center,
             false,
             false,
@@ -75,7 +72,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
         let y_off = ((hh - text_h) / 2.0).max(0.0);
         let needs_clip = text_h > hh;
         if needs_clip {
-            surface.push_clip(Rect::new(col_x, top, col_x + layout.col_width, top + hh));
+            surface.push_clip(Rect::new(col_x, top, col_x + cw, top + hh));
         }
         for line in lyt.lines() {
             for item in line.items() {
@@ -90,7 +87,8 @@ pub fn draw_col_headers_on<S: DrawSurface>(
         if needs_clip {
             surface.pop_clip();
         }
-        i += 1;
+        col_x += cw;
+        col += 1;
     }
 }
 
@@ -122,10 +120,10 @@ pub fn draw_row_headers_on<S: DrawSurface>(
         && row >= layout.origin_row
         && !layout.is_hidden(row)
     {
-        let y = cells_top + layout.visible_offset(row) as f64 * layout.row_height;
+        let y = layout.row_top(row);
         if y < h {
             surface.fill_rect(
-                Rect::new(0.0, y, hw, y + layout.row_height),
+                Rect::new(0.0, y, hw, y + layout.row_h(row)),
                 palette.header_active,
             );
         }
@@ -143,14 +141,16 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     // partial, and its vertically centred number would otherwise spill below
     // the grid bottom and bleed through onto the sheet-tab strip (spec sec.13).
     surface.push_clip(Rect::new(0.0, cells_top, hw, h));
-    let mut i = 0u32;
-    while let Some(row) = layout.row_at_slot(i) {
-        // The label at visible slot `i` is the i-th non-hidden row from the
-        // origin: filtered rows are collapsed out of the number strip too.
-        let row_y = cells_top + i as f64 * layout.row_height;
+    // Walk the visible rows, accumulating their variable heights. `slot` only
+    // tracks how many visible rows we have drawn (for `row_at_slot`); `row_y` is
+    // the running pixel top.
+    let mut slot = 0u32;
+    let mut row_y = cells_top;
+    while let Some(row) = layout.row_at_slot(slot) {
         if row_y >= h {
             break;
         }
+        let rh = layout.row_h(row);
         let label = (row + 1).to_string();
         let lyt: &Layout<ParleyBrush> = text_cache.get_or_build(
             font_cx,
@@ -162,10 +162,10 @@ pub fn draw_row_headers_on<S: DrawSurface>(
             false,
         );
         let text_h = lyt.height() as f64;
-        let y_off = ((layout.row_height - text_h) / 2.0).max(0.0);
-        let needs_clip = text_h > layout.row_height;
+        let y_off = ((rh - text_h) / 2.0).max(0.0);
+        let needs_clip = text_h > rh;
         if needs_clip {
-            surface.push_clip(Rect::new(0.0, row_y, hw, row_y + layout.row_height));
+            surface.push_clip(Rect::new(0.0, row_y, hw, row_y + rh));
         }
         for line in lyt.lines() {
             for item in line.items() {
@@ -180,7 +180,8 @@ pub fn draw_row_headers_on<S: DrawSurface>(
         if needs_clip {
             surface.pop_clip();
         }
-        i += 1;
+        row_y += rh;
+        slot += 1;
     }
     surface.pop_clip();
 }

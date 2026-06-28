@@ -30,7 +30,7 @@ pub(super) fn spill_width<E: Fn(u32, u32) -> bool>(
         if !is_empty(row, c as u32) {
             break;
         }
-        acc += layout.col_width;
+        acc += layout.col_w(c as u32);
         c += step;
     }
     acc.min(need)
@@ -68,11 +68,14 @@ where
     I: IntoIterator<Item = (u32, u32, CellContent<'a>)>,
     E: Fn(u32, u32) -> bool,
 {
-    let cell_max_width = (layout.col_width - 8.0) as f32;
     let mut drawn = 0u32;
 
     for (row, col, content) in cells {
         let rect = layout.cell_rect(row, col);
+        // Per-cell metrics (variable column width / row height).
+        let col_w = layout.col_w(col);
+        let row_h = layout.row_h(row);
+        let cell_max_width = (col_w - 8.0) as f32;
         // Lift the cell out of the pending grey with its fill (the manual fill
         // colour if set, else the opaque content background).
         let bg = content.bg.map(rgb).unwrap_or(palette.content_bg);
@@ -109,14 +112,14 @@ where
         );
         let text_h = layout_text.height() as f64;
         let text_w = layout_text.width() as f64;
-        let y_off = cell_v_offset(content.v_align, layout.row_height, text_h);
+        let y_off = cell_v_offset(content.v_align, row_h, text_h);
         let avail = cell_max_width as f64;
         // A non-wrapped single line wider than its column spills into empty
         // neighbour cells (sec.4.A); wrapped or multi-line text is clipped to its
         // own box. `single_line` guards against explicit newlines pushing a
         // non-wrap value taller than the row -- that case clips like wrap does.
         let align = cell_alignment(content.h_align, content.text);
-        let single_line = text_h <= layout.row_height;
+        let single_line = text_h <= row_h;
         let overflow = !content.wrap && single_line && text_w > avail;
         let (x_off, clip_rect, needs_clip) = if overflow {
             // Extend the clip rect into the empty neighbours in the spill
