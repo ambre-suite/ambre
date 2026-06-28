@@ -49,6 +49,11 @@ pub const SORT_RANGE_DESC: CommandId = CommandId("trame.sort.range_desc");
 pub const SORT_SHEET_ASC: CommandId = CommandId("trame.sort.sheet_asc");
 /// Sort the whole sheet descending by the active cell's column.
 pub const SORT_SHEET_DESC: CommandId = CommandId("trame.sort.sheet_desc");
+/// Open the multi-column sort dialog (`-ui.md` sec.5.C, "Sort range..."). A
+/// UI-only intent: it has no `AppCommand` mapping; the launcher intercepts it to
+/// open the `SortDialog` over the current selection, which emits the typed
+/// [`SortRangeMulti`](ambre_bus::TrameCommand::SortRangeMulti) itself.
+pub const SORT_RANGE_MULTI: CommandId = CommandId("trame.sort.range_multi");
 /// Open the shared filter popover for the active cell's column (sec.5.D). A
 /// UI-only intent: it has no `AppCommand` mapping; the launcher intercepts it to
 /// open the popover and request the column's distinct values.
@@ -103,6 +108,7 @@ pub const COMMANDS: &[CommandId] = &[
     SORT_RANGE_DESC,
     SORT_SHEET_ASC,
     SORT_SHEET_DESC,
+    SORT_RANGE_MULTI,
     FILTER_COLUMN,
     CLEAR_FILTER,
     FIND,
@@ -364,7 +370,7 @@ fn structural_group() -> [MenuEntry; 6] {
 // the full used range so rows stay aligned). Filter "by column" opens the
 // popover (values / condition); "Clear filter" drops the active sheet's filter
 // (a no-op when nothing is filtered).
-fn sort_filter_group() -> [MenuEntry; 6] {
+fn sort_filter_group() -> [MenuEntry; 7] {
     [
         MenuEntry::with_icon(
             SORT_RANGE_ASC,
@@ -386,6 +392,7 @@ fn sort_filter_group() -> [MenuEntry; 6] {
             "Sort sheet by column (desc)",
             icondata::MdiSort,
         ),
+        MenuEntry::with_icon(SORT_RANGE_MULTI, "Sort range...", icondata::MdiSortVariant),
         MenuEntry::with_icon(FILTER_COLUMN, "Filter by column", icondata::MdiFilter),
         MenuEntry::with_icon(CLEAR_FILTER, "Clear filter", icondata::MdiFilterOff),
     ]

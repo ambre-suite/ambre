@@ -333,6 +333,17 @@ pub enum TrameCommand {
     /// Sort the whole sheet descending on the active cell's column
     /// (see [`SortSheetAsc`](TrameCommand::SortSheetAsc)).
     SortSheetDesc,
+    /// Multi-column sort of the current selection rectangle (`-ui.md` sec.5.C,
+    /// the "Sort range..." dialog). Parameterless sibling of
+    /// [`SortRangeMulti`](TrameCommand::SortRangeMulti): the Logic thread resolves
+    /// the range and the active sheet from the tracked selection, then sorts the
+    /// rows lexicographically by `sort_keys` (decreasing priority; each `col` is
+    /// an index within the selection, `0` = the selection's left column). Replies
+    /// with [`TrameEvent::SortComplete`](crate::ui::TrameEvent::SortComplete).
+    SortSelectionMulti {
+        sort_keys: Vec<SortKey>,
+        has_header: bool,
+    },
 
     /// Request the distinct visible values of the active cell's column, for the
     /// shared filter popover's "by values" checkbox list (`-ui.md` sec.5.D). The

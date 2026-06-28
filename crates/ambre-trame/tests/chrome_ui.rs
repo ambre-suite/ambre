@@ -25,7 +25,7 @@ use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
 use ambre_trame::chrome::{
     self, BOLD, FindMode, FindQuery, FindReplace, FindReplaceState, REDO, ReplaceRequest, SelStats,
-    StatusBar, StyleState, UNDO,
+    SortApply, SortDialog, SortDialogState, StatusBar, StyleState, UNDO,
 };
 use leptos::mount::mount_to;
 use leptos::prelude::*;
@@ -164,6 +164,9 @@ fn command_to_app_maps_intents() {
     // BOLD is intercepted into a SetCellStyle patch by the launcher; no direct
     // AppCommand here.
     assert!(chrome::command_to_app(BOLD).is_none());
+    // "Sort range..." is a UI-only intent the launcher intercepts to open the
+    // SortDialog (the dialog emits SortSelectionMulti itself); no direct mapping.
+    assert!(chrome::command_to_app(chrome::SORT_RANGE_MULTI).is_none());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -263,6 +266,80 @@ fn find_replace_panel_opens_in_find_mode() {
     container.remove();
 }
 
+// Multi-column sort dialog (`-ui.md` sec.5.C): opens over a selection snapshot,
+// offers one level per "Add sort level", and emits the chosen levels on Sort.
+#[wasm_bindgen_test]
+fn sort_dialog_adds_levels_and_emits_on_apply() {
+    let doc = document();
+    // Capture what the dialog emits when the user clicks "Sort". A signal (not an
+    // Rc<RefCell>) so the callback stays Send + Sync as `Callback::new` requires.
+    let emitted = RwSignal::new(None::<SortApply>);
+
+    let container = mount_in_container(move || {
+        let state = RwSignal::new(None::<SortDialogState>);
+        let on_apply = Callback::new(move |req: SortApply| {
+            emitted.set(Some(req));
+        });
+        // Open over a three-column selection (A..C), so the picker offers 3 cols.
+        state.set(Some(SortDialogState {
+            r1: 0,
+            c1: 0,
+            r2: 4,
+            c2: 2,
+        }));
+        view! { <SortDialog state=state on_apply=on_apply /> }
+    });
+
+    // The dialog is mounted, with at least one sort level rendered.
+    assert!(
+        doc.query_selector(".ambre-sort-dialog").unwrap().is_some(),
+        "sort dialog should be mounted when open"
+    );
+    assert!(
+        doc.query_selector(".ambre-sort-level").unwrap().is_some(),
+        "starts with a (primary) sort level"
+    );
+
+    // "Add sort level" appends a second level (asserted through the emitted
+    // request below, which reads the levels signal directly).
+    let add = doc
+        .query_selector(".ambre-sort-add")
+        .unwrap()
+        .expect("add button present")
+        .dyn_into::<web_sys::HtmlElement>()
+        .unwrap();
+    add.click();
+
+    // Toggle the header-row checkbox so the emitted request carries it.
+    let header = doc
+        .query_selector(".ambre-sort-header-toggle input")
+        .unwrap()
+        .expect("header toggle present")
+        .dyn_into::<web_sys::HtmlInputElement>()
+        .unwrap();
+    header.click();
+
+    // Click "Sort": the dialog emits the levels (distinct columns) + has_header.
+    let apply = doc
+        .query_selector(".ambre-sort-apply")
+        .unwrap()
+        .expect("sort button present")
+        .dyn_into::<web_sys::HtmlElement>()
+        .unwrap();
+    apply.click();
+
+    let req = emitted.get_untracked().expect("Sort emitted a request");
+    assert!(req.has_header, "header toggle carried into the request");
+    // Two distinct levels (the add-level default picks the next unused column).
+    assert_eq!(req.sort_keys.len(), 2, "both levels emitted");
+    assert_ne!(
+        req.sort_keys[0].col, req.sort_keys[1].col,
+        "distinct columns: a repeated column is dropped"
+    );
+
+    container.remove();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Context-menu scope (`-ui.md` sec.5.C): the grouped/iconed entries and the
 // header-scoped layout that drops the cell-only clipboard + merge groups.
@@ -310,6 +387,7 @@ fn header_menu_drops_cell_only_groups() {
         chrome::INSERT_ROW_ABOVE,
         chrome::DELETE_COLS,
         chrome::SORT_RANGE_ASC,
+        chrome::SORT_RANGE_MULTI,
         chrome::FILTER_COLUMN,
     ] {
         assert!(
