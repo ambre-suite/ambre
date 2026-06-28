@@ -4,6 +4,8 @@
 // Submodule of `render`; reaches sibling helpers, constants and imports through
 // the `use super::*` glob (the parent re-exports every renderer item).
 
+use std::collections::HashMap;
+
 use super::*;
 
 // -----------------------------------------------------------------------------
@@ -36,10 +38,20 @@ pub struct GridLayout<'a> {
     /// the height of any band reserved above the column-header strip (the
     /// formula bar on screen, `0.0` for PDF export).
     pub top: f64,
-    /// Uniform column width (content area).
+    /// Default column width (content area), used for any column without an
+    /// explicit entry in [`col_widths`](Self::col_widths).
     pub col_width: f64,
-    /// Uniform row height (content area).
+    /// Default row height (content area), used for any row without an explicit
+    /// entry in [`row_heights`](Self::row_heights).
     pub row_height: f64,
+    /// Per-column widths (physical px) keyed by absolute grid column. A column
+    /// with no entry (the common case, and PDF export with an empty map) falls
+    /// back to the uniform [`col_width`](Self::col_width). Fed by the Logic
+    /// thread's `col_widths_{sheet}` map (`-ui.md` sec.4bis.C, `-logic.md` §9).
+    pub col_widths: &'a HashMap<u32, f32>,
+    /// Per-row heights keyed by absolute grid row. Row analogue of
+    /// [`col_widths`](Self::col_widths).
+    pub row_heights: &'a HashMap<u32, f32>,
     /// Absolute grid column at the content area's left edge.
     pub origin_col: u32,
     /// Absolute grid row at the content area's top edge.
@@ -69,6 +81,107 @@ impl GridLayout<'_> {
     /// sorted [`hidden_rows`](Self::hidden_rows) slice).
     pub fn is_hidden(&self, row: u32) -> bool {
         self.hidden_rows.binary_search(&row).is_ok()
+    }
+
+    /// Width (physical px) of column `col`: its per-column entry, else the
+    /// uniform [`col_width`](Self::col_width).
+    pub fn col_w(&self, col: u32) -> f64 {
+        self.col_widths
+            .get(&col)
+            .map(|&w| w as f64)
+            .unwrap_or(self.col_width)
+    }
+
+    /// Height (physical px) of row `row`: its per-row entry, else the uniform
+    /// [`row_height`](Self::row_height). A hidden row still reports its natural
+    /// height (callers skip it explicitly).
+    pub fn row_h(&self, row: u32) -> f64 {
+        self.row_heights
+            .get(&row)
+            .map(|&h| h as f64)
+            .unwrap_or(self.row_height)
+    }
+
+    /// X of column `col`'s left edge relative to the surface, summing the
+    /// variable widths from [`origin_col`](Self::origin_col). Columns left of the
+    /// origin yield a coordinate smaller than [`header_width`](Self::header_width)
+    /// (callers clip).
+    pub fn col_left(&self, col: u32) -> f64 {
+        let mut x = self.header_width;
+        if col >= self.origin_col {
+            for c in self.origin_col..col {
+                x += self.col_w(c);
+            }
+        } else {
+            for c in col..self.origin_col {
+                x -= self.col_w(c);
+            }
+        }
+        x
+    }
+
+    /// Y of row `row`'s top edge relative to the surface, summing the variable
+    /// heights of the *visible* rows from [`origin_row`](Self::origin_row) (the
+    /// row axis collapses over filtered rows, sec.5.D).
+    pub fn row_top(&self, row: u32) -> f64 {
+        let mut y = self.top + self.header_height;
+        if row >= self.origin_row {
+            for r in self.origin_row..row {
+                if !self.is_hidden(r) {
+                    y += self.row_h(r);
+                }
+            }
+        } else {
+            for r in row..self.origin_row {
+                if !self.is_hidden(r) {
+                    y -= self.row_h(r);
+                }
+            }
+        }
+        y
+    }
+
+    /// Absolute grid column whose band contains surface x `px` (in the content
+    /// area), walking the variable widths from the origin. `None` left of the
+    /// header strip or past the grid's last column.
+    pub fn col_at(&self, px: f64) -> Option<u32> {
+        if px < self.header_width {
+            return None;
+        }
+        let mut x = self.header_width;
+        let mut col = self.origin_col;
+        while col < self.total_cols {
+            let w = self.col_w(col);
+            if px < x + w {
+                return Some(col);
+            }
+            x += w;
+            col += 1;
+        }
+        None
+    }
+
+    /// Absolute grid row whose band contains surface y `py` (in the content
+    /// area), walking the *visible* variable heights from the origin. `None`
+    /// above the header strip or past the grid's last row.
+    pub fn row_at(&self, py: f64) -> Option<u32> {
+        let cells_top = self.top + self.header_height;
+        if py < cells_top {
+            return None;
+        }
+        let mut y = cells_top;
+        let mut row = self.origin_row;
+        while row < self.total_rows {
+            if !self.is_hidden(row) {
+                let h = self.row_h(row);
+                if py < y + h {
+                    return Some(row);
+                }
+                y += h;
+            }
+            row += 1;
+        }
+        None
     }
 
     /// Signed number of *visible* row slots between [`origin_row`](Self::origin_row)
@@ -120,9 +233,9 @@ impl GridLayout<'_> {
     /// `content_area()` or push their own clip. The vertical position accounts
     /// for collapsed (filtered) rows via [`visible_offset`](Self::visible_offset).
     pub fn cell_rect(&self, row: u32, col: u32) -> Rect {
-        let x = self.header_width + (col as i64 - self.origin_col as i64) as f64 * self.col_width;
-        let y = self.top + self.header_height + self.visible_offset(row) as f64 * self.row_height;
-        Rect::new(x, y, x + self.col_width, y + self.row_height)
+        let x = self.col_left(col);
+        let y = self.row_top(row);
+        Rect::new(x, y, x + self.col_w(col), y + self.row_h(row))
     }
 
     /// Pixel rect of a merge master `(row, col)` spanning `col_span` columns and
@@ -131,15 +244,14 @@ impl GridLayout<'_> {
     /// (a merge across a filtered row shrinks accordingly).
     pub fn merge_rect(&self, row: u32, col: u32, col_span: u32, row_span: u32) -> Rect {
         let base = self.cell_rect(row, col);
-        let vis_rows = (row..row + row_span.max(1))
+        // Variable-metric span: sum the covered columns' widths and the visible
+        // covered rows' heights (a merge across a filtered row shrinks).
+        let width: f64 = (col..col + col_span.max(1)).map(|c| self.col_w(c)).sum();
+        let height: f64 = (row..row + row_span.max(1))
             .filter(|&r| !self.is_hidden(r))
-            .count()
-            .max(1) as f64;
-        Rect::new(
-            base.x0,
-            base.y0,
-            base.x0 + col_span.max(1) as f64 * self.col_width,
-            base.y0 + vis_rows * self.row_height,
-        )
+            .map(|r| self.row_h(r))
+            .sum::<f64>()
+            .max(self.row_h(row));
+        Rect::new(base.x0, base.y0, base.x0 + width, base.y0 + height)
     }
 }

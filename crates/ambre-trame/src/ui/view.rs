@@ -26,10 +26,12 @@ use leptos::prelude::RwSignal;
 use leptos::prelude::{Get, Set};
 
 use super::grid::{
-    COL_WIDTH, CellEditor, CellRect, CursorMove, HEADER_HEIGHT, HEADER_WIDTH, HitKind, PendingHit,
-    ROW_HEIGHT, TabDrag, TabMenu, TabMenuItem, TabRename, TrameUiState,
+    COL_WIDTH, CellEditor, CellRect, CursorMove, HEADER_HEIGHT, HEADER_WIDTH, HeaderHit, HitKind,
+    PendingHit, ROW_HEIGHT, SelKind, Selection, TabDrag, TabMenu, TabMenuItem, TabRename,
+    TrameUiState,
 };
 use super::renderer::{self, DrawStats};
+use crate::TOTAL_COLS;
 #[cfg(target_arch = "wasm32")]
 use crate::render::{CommitDirection, FormulaAction};
 
@@ -255,6 +257,19 @@ pub struct TrameView {
     /// navigation mode (between a press on a cell and its release). Pointer
     /// moves while set extend the live selection rectangle.
     selecting_drag: bool,
+    /// In-progress whole-axis (column/row) selection drag from a header body
+    /// (`-ui.md` sec.4bis.A), or `None`. Holds which axis is being swept; pointer
+    /// moves extend the band to the column/row under the cursor.
+    axis_drag: Option<crate::ui::grid::SelKind>,
+    /// In-progress header-boundary resize drag (`-ui.md` sec.4bis.C), or `None`.
+    /// Holds the [`HeaderHit::ColBorder`] / [`HeaderHit::RowBorder`] being dragged
+    /// so the release knows which column/row to resize; pointer moves update the
+    /// live guide line ([`TrameUiState::resize_preview`]).
+    resize_drag: Option<HeaderHit>,
+    /// A pending column/row auto-fit (`-ui.md` sec.4bis.C) awaiting the parley
+    /// font context: set on a border double-click, resolved and cleared by the
+    /// next [`paint_content`](Self::paint_content) which owns the measurement.
+    pending_autofit: Option<HeaderHit>,
     /// In-progress autofill drag from the fill handle, or `None` (`-ui.md`
     /// sec.5.F). Holds the source rectangle the drag started from and the source
     /// block granularity `(rows, cols)` -- `(1, 1)` for a plain cell, the merge
@@ -264,10 +279,10 @@ pub struct TrameView {
     /// Pointer moves grow [`TrameUiState::fill_preview`] and the release emits a
     /// `FillRange`.
     fill_drag: Option<(CellRect, (u32, u32))>,
-    /// True while the pointer is hovering the fill handle (without a press), so
-    /// the canvas cursor shows the crosshair affordance. Tracked to avoid
-    /// redundant DOM cursor writes on every pointer move.
-    hover_fill_handle: bool,
+    /// The CSS cursor currently set on `#ambre-canvas` from bare hover feedback
+    /// (sec.4bis.B / sec.5.F): `"col-resize"` / `"row-resize"` / `"pointer"` /
+    /// `"crosshair"` / `""`. Tracked to avoid redundant DOM writes every move.
+    hover_cursor: String,
     /// Active in-place sheet-tab rename, or `None` (spec sec.13).
     tab_rename: Option<TabRename>,
     /// Open per-tab context menu (`{ Rename, Delete }`), or `None`.
@@ -387,8 +402,11 @@ impl TrameView {
             editor: None,
             editor_text_drag: false,
             selecting_drag: false,
+            axis_drag: None,
+            resize_drag: None,
+            pending_autofit: None,
             fill_drag: None,
-            hover_fill_handle: false,
+            hover_cursor: String::new(),
             tab_rename: None,
             tab_menu: None,
             tab_drag: None,
@@ -568,9 +586,9 @@ impl TrameView {
     /// Slide the textarea pipe onto a cell (CSS px) so the IME popup anchors
     /// there. The grid works in physical px; the DOM positions in CSS px.
     fn park_input_on(&self, row: u32, col: u32) {
-        if let Some((x, y, _, _)) = self.state.cell_pixel_rect(row, col) {
+        if let Some((x, y, _, h)) = self.state.cell_pixel_rect(row, col) {
             self.text_input
-                .set_caret(x / self.dpr, y / self.dpr, ROW_HEIGHT / self.dpr);
+                .set_caret(x / self.dpr, y / self.dpr, h / self.dpr);
         }
     }
 
@@ -1033,6 +1051,12 @@ impl TrameView {
             } else if dr != 0 && dc != 0 {
                 // Diagonal scroll would need an L-shaped strip; go full.
                 (ContentRepaint::Full, None)
+            } else if !self.state.col_widths.is_empty() || !self.state.row_heights.is_empty() {
+                // The blit-scroll shift below assumes uniform metrics: moving `dr`
+                // rows shifts the content by `dr * ROW_HEIGHT`. With any resized
+                // axis (sec.4bis.C) that pixel distance is wrong, so repaint fully
+                // rather than tear. Resized axes are rare; the cost is bounded.
+                (ContentRepaint::Full, None)
             } else {
                 let dy_px = -(dr as i32) * ROW_HEIGHT as i32;
                 let dx_px = -(dc as i32) * COL_WIDTH as i32;
@@ -1113,6 +1137,11 @@ impl TrameView {
         text_cache: &mut TextCache,
         strip: Option<Rect>,
     ) {
+        // Resolve a pending auto-fit now that the font context is in hand
+        // (sec.4bis.C): measure the column/row's cached cells and emit a resize.
+        if let Some(hit) = self.pending_autofit.take() {
+            self.resolve_autofit(hit, font_cx, text_cache);
+        }
         renderer::draw_cells(
             surface,
             &self.state,
@@ -1557,6 +1586,92 @@ impl TrameView {
                 self.end_fill_drag(*ctrl);
                 true
             }
+            // A press on a header strip (sec.4bis): body -> whole-column/row
+            // select (Shift extends, drag sweeps); corner -> select-all; a border
+            // band -> arm a resize drag (sec.4bis.C). Checked before the grid-cell
+            // press since headers sit outside the cell area anyway.
+            InputEvent::PointerDown {
+                x,
+                y,
+                button: 0,
+                shift,
+                ..
+            } if self.fill_drag.is_none() && self.state.header_hit(*x, *y).is_some() => {
+                self.text_input.focus();
+                match self.state.header_hit(*x, *y).expect("guarded") {
+                    HeaderHit::ColBody(c) => {
+                        if *shift && self.state.selection.kind == SelKind::Cols {
+                            self.extend_axis(c);
+                        } else {
+                            self.select_axis(SelKind::Cols, c);
+                            self.axis_drag = Some(SelKind::Cols);
+                        }
+                    }
+                    HeaderHit::RowBody(r) => {
+                        if *shift && self.state.selection.kind == SelKind::Rows {
+                            self.extend_axis(r);
+                        } else {
+                            self.select_axis(SelKind::Rows, r);
+                            self.axis_drag = Some(SelKind::Rows);
+                        }
+                    }
+                    HeaderHit::Corner => self.select_all(),
+                    // Resize bands / inline-insert affordance: handled in the
+                    // resize-drag wiring (sec.4bis.C/D).
+                    HeaderHit::ColBorder(c) => self.arm_col_resize(c, *x),
+                    HeaderHit::RowBorder(r) => self.arm_row_resize(r, *y),
+                    HeaderHit::ColInsert(c) => self.insert_col_at(c),
+                    HeaderHit::RowInsert(r) => self.insert_row_at(r),
+                }
+                true
+            }
+            // A header drag sweeps the whole-axis band to the column/row under the
+            // cursor (even below/right of the header strip).
+            InputEvent::PointerMove { x, y } if self.axis_drag.is_some() => {
+                match self.axis_drag {
+                    Some(SelKind::Cols) => {
+                        if let Some(c) = self.state.col_at_x(*x) {
+                            self.extend_axis(c);
+                        }
+                    }
+                    Some(SelKind::Rows) => {
+                        if let Some(r) = self.state.row_at_y(*y) {
+                            self.extend_axis(r);
+                        }
+                    }
+                    _ => {}
+                }
+                true
+            }
+            InputEvent::PointerUp { .. } if self.axis_drag.is_some() => {
+                self.axis_drag = None;
+                true
+            }
+            // Dragging a header boundary moves the live guide line (sec.4bis.C);
+            // the release emits the resize and clears the preview.
+            InputEvent::PointerMove { x, y } if self.resize_drag.is_some() => {
+                self.update_resize_preview(*x, *y);
+                true
+            }
+            InputEvent::PointerUp { .. } if self.resize_drag.is_some() => {
+                self.end_resize_drag();
+                true
+            }
+            // Double-click on a header boundary auto-fits the column/row to its
+            // cached content (sec.4bis.C).
+            InputEvent::DoubleClick { x, y }
+                if matches!(
+                    self.state.header_hit(*x, *y),
+                    Some(HeaderHit::ColBorder(_) | HeaderHit::RowBorder(_))
+                ) =>
+            {
+                match self.state.header_hit(*x, *y) {
+                    Some(HeaderHit::ColBorder(c)) => self.auto_fit_col(c),
+                    Some(HeaderHit::RowBorder(r)) => self.auto_fit_row(r),
+                    _ => {}
+                }
+                true
+            }
             InputEvent::PointerDown {
                 x,
                 y,
@@ -1590,14 +1705,30 @@ impl TrameView {
                 self.selecting_drag = false;
                 true
             }
-            // Bare hover (no button held): switch the canvas cursor to a crosshair
-            // over the fill handle to advertise the autofill affordance (sec.5.F),
-            // back to default elsewhere. Not consumed -- pure cursor feedback.
+            // Bare hover (no button held): advertise the affordance under the
+            // cursor (sec.4bis.B / sec.5.F) -- a header boundary shows the
+            // col/row-resize cursor, a header body the select pointer, the fill
+            // handle the crosshair, everything else the default. Pure feedback.
             InputEvent::PointerMove { x, y } => {
-                let over = self.state.fill_handle_at(*x, *y);
-                if over != self.hover_fill_handle {
-                    self.hover_fill_handle = over;
-                    self.set_fill_cursor(over);
+                let hit = self.state.header_hit(*x, *y);
+                let css = match hit {
+                    Some(HeaderHit::ColBorder(_)) => "col-resize",
+                    Some(HeaderHit::RowBorder(_)) => "row-resize",
+                    Some(_) => "pointer",
+                    None if self.state.fill_handle_at(*x, *y) => "crosshair",
+                    None => "",
+                };
+                if css != self.hover_cursor {
+                    self.hover_cursor = css.to_owned();
+                    self.set_cursor(css);
+                }
+                // Show the inline "+" badge while hovering an insert zone.
+                let insert = matches!(hit, Some(HeaderHit::ColInsert(_) | HeaderHit::RowInsert(_)))
+                    .then_some(hit)
+                    .flatten();
+                if insert != self.state.insert_hint {
+                    self.state.insert_hint = insert;
+                    self.edit_dirty = true;
                 }
                 false
             }
@@ -2002,6 +2133,249 @@ impl TrameView {
     #[cfg(not(target_arch = "wasm32"))]
     fn set_fill_cursor(&self, _on: bool) {}
 
+    /// Set an arbitrary CSS cursor on `#ambre-canvas` (`-ui.md` sec.4bis.B):
+    /// `"col-resize"` / `"row-resize"` over a header boundary, `"pointer"` over a
+    /// header body, `""` to reset. Generalises [`set_fill_cursor`]. No-op off-wasm.
+    #[cfg(target_arch = "wasm32")]
+    fn set_cursor(&self, css: &str) {
+        use wasm_bindgen::JsCast;
+        if let Some(el) = web_sys::window()
+            .and_then(|w| w.document())
+            .and_then(|d| d.get_element_by_id("ambre-canvas"))
+            .and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok())
+        {
+            let _ = el.style().set_property("cursor", css);
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn set_cursor(&self, _css: &str) {}
+
+    // -- Header resize / insert (sec.4bis.C/D) ---------------------------------
+
+    /// Arm a column resize from a press on column `c`'s right border. Shows the
+    /// live vertical guide at the pointer x.
+    fn arm_col_resize(&mut self, c: u32, x: f64) {
+        self.resize_drag = Some(HeaderHit::ColBorder(c));
+        self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Col(x));
+        self.set_cursor("col-resize");
+        self.edit_dirty = true;
+    }
+
+    /// Arm a row resize from a press on row `r`'s bottom border.
+    fn arm_row_resize(&mut self, r: u32, y: f64) {
+        self.resize_drag = Some(HeaderHit::RowBorder(r));
+        self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Row(y));
+        self.set_cursor("row-resize");
+        self.edit_dirty = true;
+    }
+
+    /// Move the live resize guide to the pointer, clamped so the dragged
+    /// column/row never shrinks below its minimum.
+    fn update_resize_preview(&mut self, x: f64, y: f64) {
+        match self.resize_drag {
+            Some(HeaderHit::ColBorder(c)) => {
+                let min_x = self.state.col_x(c) + crate::ui::grid::MIN_COL_WIDTH;
+                self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Col(x.max(min_x)));
+            }
+            Some(HeaderHit::RowBorder(r)) => {
+                let min_y = self.state.row_y(r) + crate::ui::grid::MIN_ROW_HEIGHT;
+                self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Row(y.max(min_y)));
+            }
+            _ => {}
+        }
+        self.edit_dirty = true;
+    }
+
+    /// Finish a resize drag: emit `ResizeCol` / `ResizeRow` for the new size and
+    /// clear the guide. When the dragged column/row is part of a whole-axis
+    /// selection, the size is applied to every band in the selection (sec.4bis.C).
+    fn end_resize_drag(&mut self) {
+        let drag = self.resize_drag.take();
+        let preview = self.state.resize_preview.take();
+        self.set_cursor("");
+        self.edit_dirty = true;
+        let (Some(drag), Some(preview)) = (drag, preview) else {
+            return;
+        };
+        match (drag, preview) {
+            (HeaderHit::ColBorder(c), crate::ui::grid::ResizePreview::Col(px)) => {
+                let width = (px - self.state.col_x(c)).max(crate::ui::grid::MIN_COL_WIDTH);
+                for col in self.resize_target_cols(c) {
+                    self.send_resize_col(col, width as f32);
+                }
+            }
+            (HeaderHit::RowBorder(r), crate::ui::grid::ResizePreview::Row(py)) => {
+                let height = (py - self.state.row_y(r)).max(crate::ui::grid::MIN_ROW_HEIGHT);
+                for row in self.resize_target_rows(r) {
+                    self.send_resize_row(row, height as f32);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Columns a column resize applies to: the whole-column selection's band when
+    /// the dragged column is part of it, else just the dragged column.
+    fn resize_target_cols(&self, c: u32) -> Vec<u32> {
+        let sel = &self.state.selection;
+        if sel.kind == SelKind::Cols {
+            let (c1, c2) = (
+                sel.anchor.1.min(sel.active.1),
+                sel.anchor.1.max(sel.active.1),
+            );
+            if c >= c1 && c <= c2 {
+                return (c1..=c2).collect();
+            }
+        }
+        vec![c]
+    }
+
+    /// Rows a row resize applies to (row analogue of [`resize_target_cols`]).
+    fn resize_target_rows(&self, r: u32) -> Vec<u32> {
+        let sel = &self.state.selection;
+        if sel.kind == SelKind::Rows {
+            let (r1, r2) = (
+                sel.anchor.0.min(sel.active.0),
+                sel.anchor.0.max(sel.active.0),
+            );
+            if r >= r1 && r <= r2 {
+                return (r1..=r2).collect();
+            }
+        }
+        vec![r]
+    }
+
+    /// Emit a `ResizeCol`, updating the local metric cache optimistically so the
+    /// grid reflows immediately (the echoing `DataReset` confirms it).
+    fn send_resize_col(&mut self, col: u32, width: f32) {
+        self.state.col_widths.insert(col, width);
+        let version = self.state.bump_version();
+        self.send_command_lossy(TrameCommand::ResizeCol {
+            version,
+            sheet_id: self.state.active_sheet.clone(),
+            col,
+            width_px: width,
+        });
+        self.viewport_changed = true;
+        self.needs_full = true;
+    }
+
+    /// Emit a `ResizeRow` (row analogue of [`send_resize_col`]).
+    fn send_resize_row(&mut self, row: u32, height: f32) {
+        self.state.row_heights.insert(row, height);
+        let version = self.state.bump_version();
+        self.send_command_lossy(TrameCommand::ResizeRow {
+            version,
+            sheet_id: self.state.active_sheet.clone(),
+            row,
+            height_px: height,
+        });
+        self.viewport_changed = true;
+        self.needs_full = true;
+    }
+
+    /// Request a column auto-fit (double-click on the border, sec.4bis.C). The
+    /// measurement needs the parley font context, so it is deferred to the next
+    /// paint, which owns it (mirrors the editor's deferred click resolution).
+    fn auto_fit_col(&mut self, c: u32) {
+        self.pending_autofit = Some(HeaderHit::ColBorder(c));
+        self.edit_dirty = true;
+    }
+    fn auto_fit_row(&mut self, r: u32) {
+        self.pending_autofit = Some(HeaderHit::RowBorder(r));
+        self.edit_dirty = true;
+    }
+
+    /// Measure a column/row's cached cells and emit a resize sized to its content
+    /// (sec.4bis.C). UI-side over the viewport cache: the parley layouts of every
+    /// cached cell of the axis are measured and the max natural extent (plus
+    /// padding, clamped to the minimum) becomes the new width/height. A column
+    /// with no cached content snaps to the default.
+    fn resolve_autofit(
+        &mut self,
+        hit: HeaderHit,
+        font_cx: &mut FontContext,
+        text_cache: &mut TextCache,
+    ) {
+        use ambre_draw::Alignment;
+        let pad = (crate::render::CELL_PAD_X * 2.0) as f32;
+        match hit {
+            HeaderHit::ColBorder(c) => {
+                let mut max_w = 0.0f32;
+                for ((_, col), data) in self.state.cell_cache.iter() {
+                    if *col != c || data.text.is_empty() {
+                        continue;
+                    }
+                    let size = data
+                        .size
+                        .map(|s| s as f32)
+                        .unwrap_or(crate::render::BODY_SIZE);
+                    let lyt = text_cache.get_or_build_font(
+                        font_cx,
+                        &data.text,
+                        size,
+                        f32::MAX,
+                        Alignment::Start,
+                        data.bold,
+                        data.italic,
+                        data.font.as_deref(),
+                        false,
+                    );
+                    max_w = max_w.max(lyt.width());
+                }
+                let width = if max_w > 0.0 {
+                    (max_w + pad).max(crate::ui::grid::MIN_COL_WIDTH as f32)
+                } else {
+                    crate::ui::grid::COL_WIDTH as f32
+                };
+                self.send_resize_col(c, width);
+            }
+            HeaderHit::RowBorder(r) => {
+                let mut max_h = 0.0f32;
+                for ((row, _), data) in self.state.cell_cache.iter() {
+                    if *row != r || data.text.is_empty() {
+                        continue;
+                    }
+                    let size = data
+                        .size
+                        .map(|s| s as f32)
+                        .unwrap_or(crate::render::BODY_SIZE);
+                    let lyt = text_cache.get_or_build_font(
+                        font_cx,
+                        &data.text,
+                        size,
+                        f32::MAX,
+                        Alignment::Start,
+                        data.bold,
+                        data.italic,
+                        data.font.as_deref(),
+                        false,
+                    );
+                    max_h = max_h.max(lyt.height());
+                }
+                let height = if max_h > 0.0 {
+                    (max_h + 4.0).max(crate::ui::grid::MIN_ROW_HEIGHT as f32)
+                } else {
+                    crate::ui::grid::ROW_HEIGHT as f32
+                };
+                self.send_resize_row(r, height);
+            }
+            _ => {}
+        }
+    }
+
+    /// Inline "+" insert at a column boundary (sec.4bis.D): move the tracked
+    /// active cell onto column `c`, then fire the existing `InsertColLeft` intent
+    /// so the Logic thread resolves the position exactly as from the menu.
+    fn insert_col_at(&mut self, c: u32) {
+        self.select_cell(self.state.active_row(), c);
+        self.send_command_lossy(TrameCommand::InsertColLeft);
+    }
+    fn insert_row_at(&mut self, r: u32) {
+        self.select_cell(r, self.state.active_col());
+        self.send_command_lossy(TrameCommand::InsertRowAbove);
+    }
+
     /// Finish an autofill drag (sec.5.F): emit `FillRange` over the source +
     /// dragged extent, grow the selection to cover the filled range, then clear
     /// the drag/preview. A drag that never left the source (no extension) is a
@@ -2009,7 +2383,7 @@ impl TrameView {
     fn end_fill_drag(&mut self, ctrl: bool) {
         // The drag is over: drop the crosshair (the next hover re-arms it).
         self.set_fill_cursor(false);
-        self.hover_fill_handle = false;
+        self.hover_cursor = String::new();
         let (Some((src, block)), Some(dest)) =
             (self.fill_drag.take(), self.state.fill_preview.take())
         else {
@@ -2101,6 +2475,72 @@ impl TrameView {
             tracing::error!("Trame: UI→Logic channel full, cell selection dropped");
         }
         self.park_input_on(row, col);
+        self.announce_active();
+    }
+
+    /// Build the active-cell report for a whole-axis selection (`-ui.md`
+    /// sec.4bis.A). The band has no on-screen rectangle, so the perpendicular
+    /// extent is bounded by the UI's used-range cache (sec.16): a column band
+    /// spans rows `0..=last_used_row`, a row band spans cols `0..=last_used_col`.
+    /// The Logic thread then resolves sort / filter / delete / style against that
+    /// rectangle, and tracks the clicked column/row as the active cell.
+    fn axis_active_cmd(&self) -> TrameCommand {
+        let sel = &self.state.selection;
+        let (last_row, last_col) = self
+            .state
+            .last_content_cell()
+            .unwrap_or((self.state.active_row(), self.state.active_col()));
+        match sel.kind {
+            crate::ui::grid::SelKind::Cols => TrameCommand::SetActiveCell {
+                row: 0,
+                col: sel.active.1,
+                anchor_row: last_row,
+                anchor_col: sel.anchor.1,
+            },
+            crate::ui::grid::SelKind::Rows => TrameCommand::SetActiveCell {
+                row: sel.active.0,
+                col: 0,
+                anchor_row: sel.anchor.0,
+                anchor_col: last_col,
+            },
+            crate::ui::grid::SelKind::Cells => self.set_active_cmd(),
+        }
+    }
+
+    /// Select a whole column/row band from a header click (sec.4bis.A) and report
+    /// it to Logic as a used-range rectangle.
+    fn select_axis(&mut self, kind: crate::ui::grid::SelKind, idx: u32) {
+        self.state.selection = Selection::axis(kind, idx, idx);
+        self.viewport_changed = true;
+        if let Err(SendError::Full) = self.send_command_lossless(self.axis_active_cmd()) {
+            tracing::error!("Trame: UI->Logic channel full, axis select dropped");
+        }
+        self.announce_active();
+    }
+
+    /// Extend the active whole-axis band to column/row `idx` (Shift+click or a
+    /// header drag), keeping the anchor.
+    fn extend_axis(&mut self, idx: u32) {
+        let sel = &mut self.state.selection;
+        match sel.kind {
+            crate::ui::grid::SelKind::Cols => sel.active = (0, idx),
+            crate::ui::grid::SelKind::Rows => sel.active = (idx, 0),
+            crate::ui::grid::SelKind::Cells => return,
+        }
+        self.viewport_changed = true;
+        if let Err(SendError::Full) = self.send_command_lossless(self.axis_active_cmd()) {
+            tracing::error!("Trame: UI->Logic channel full, axis extend dropped");
+        }
+    }
+
+    /// Select the whole sheet from the header corner (sec.4bis.A): a column band
+    /// spanning every column.
+    fn select_all(&mut self) {
+        self.state.selection = Selection::axis(crate::ui::grid::SelKind::Cols, 0, TOTAL_COLS - 1);
+        self.viewport_changed = true;
+        if let Err(SendError::Full) = self.send_command_lossless(self.axis_active_cmd()) {
+            tracing::error!("Trame: UI->Logic channel full, select-all dropped");
+        }
         self.announce_active();
     }
 

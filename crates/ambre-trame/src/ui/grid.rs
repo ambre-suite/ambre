@@ -22,6 +22,17 @@ pub const COL_WIDTH: f64 = 80.0;
 pub const HEADER_HEIGHT: f64 = 24.0;
 pub const HEADER_WIDTH: f64 = 50.0;
 
+// Header interaction metrics (`-ui.md` sec.4bis).
+/// Lower clamp on a column/row resize (physical px); mirrors the Logic-side
+/// `MIN_COL_WIDTH` / `MIN_ROW_HEIGHT` so the UI preview and the persisted value
+/// agree.
+pub const MIN_COL_WIDTH: f64 = 24.0;
+pub const MIN_ROW_HEIGHT: f64 = 12.0;
+/// Half-width (physical px) of the grab band straddling a header boundary that
+/// arms a resize drag (sec.4bis.C). A press within +/- this of a column's right
+/// edge (resp. a row's bottom edge) resizes instead of selecting.
+pub const RESIZE_BAND: f64 = 4.0;
+
 // Sheet-tab strip pinned to the bottom of the canvas (spec sec.13). The grid
 // area stops at `canvas_height - TAB_STRIP_HEIGHT`; the strip hosts the tabs and
 // the trailing "+" button.
@@ -409,6 +420,52 @@ pub struct Selection {
     /// rectangle (`anchor..=active`) is *not* in here; the full selection is
     /// `extra` plus that rectangle (see [`rects`](Self::rects)).
     pub extra: Vec<CellRect>,
+    /// Whether the live selection spans whole cells, columns, or rows
+    /// (`-ui.md` sec.4bis.A). For `Cols`/`Rows` the perpendicular coordinate of
+    /// `anchor`/`active` is ignored (the band runs the full axis); the Logic
+    /// thread resolves the band to the used-range rectangle. UI-only view state.
+    pub kind: SelKind,
+}
+
+/// Shape of the live selection (`-ui.md` sec.4bis.A). `Cells` is the ordinary
+/// rectangle; `Cols`/`Rows` are virtual whole-axis bands selected from a header.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum SelKind {
+    #[default]
+    Cells,
+    Cols,
+    Rows,
+}
+
+/// A resolved pointer hit inside a header strip (`-ui.md` sec.4bis). The body
+/// zones select a whole column/row; the border zones (a +/- [`RESIZE_BAND`] band
+/// around a boundary) arm a resize; the insert zones host the inline "+"; the
+/// top-left corner selects the whole sheet.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum HeaderHit {
+    /// Column header body -> select / drag-extend the whole column.
+    ColBody(u32),
+    /// Row header body -> select the whole row.
+    RowBody(u32),
+    /// Band around column `i`'s right border -> resize column `i`.
+    ColBorder(u32),
+    /// Band around row `i`'s bottom border -> resize row `i`.
+    RowBorder(u32),
+    /// Inline "+" affordance at a column boundary -> insert a column left of `i`.
+    ColInsert(u32),
+    /// Inline "+" affordance at a row boundary -> insert a row above `i`.
+    RowInsert(u32),
+    /// Top-left corner -> select the whole sheet.
+    Corner,
+}
+
+/// Live guide line shown while dragging a header boundary (`-ui.md` sec.4bis.C):
+/// a vertical guide at physical x for a column resize, a horizontal guide at y
+/// for a row resize.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum ResizePreview {
+    Col(f64),
+    Row(f64),
 }
 
 impl Default for Selection {
@@ -424,6 +481,26 @@ impl Selection {
             anchor: (row, col),
             active: (row, col),
             extra: Vec::new(),
+            kind: SelKind::Cells,
+        }
+    }
+
+    /// A whole-axis band selection from a header (`-ui.md` sec.4bis.A): the band
+    /// spans columns `anchor.1..=active.1` (`SelKind::Cols`) or rows
+    /// `anchor.0..=active.0` (`SelKind::Rows`); the perpendicular coordinate is
+    /// irrelevant (set to 0). `active` carries the clicked band so Shift extends
+    /// and arrow keys still resolve an active cell.
+    pub fn axis(kind: SelKind, anchor: u32, active: u32) -> Self {
+        let (anc, act) = match kind {
+            SelKind::Cols => ((0, anchor), (0, active)),
+            // Rows (and the degenerate Cells, never built here) key on the row.
+            _ => ((anchor, 0), (active, 0)),
+        };
+        Self {
+            anchor: anc,
+            active: act,
+            extra: Vec::new(),
+            kind,
         }
     }
 
@@ -659,6 +736,16 @@ pub struct TrameUiState {
     /// `GridLayout`. UI-only derived state.
     pub hidden_rows: Vec<u32>,
 
+    /// Per-column widths (physical px) keyed by absolute grid column, fed by the
+    /// Logic thread's `col_widths` viewport slice (`-ui.md` sec.4bis.C). A column
+    /// with no entry uses the uniform [`COL_WIDTH`]. Drives every pixel mapping
+    /// (the renderer's `GridLayout` and the hit-testing helpers below). UI-only
+    /// derived state, mirrors the CRDT `col_widths_{sheet}` map.
+    pub col_widths: HashMap<u32, f32>,
+    /// Per-row heights (physical px) keyed by absolute grid row. Row analogue of
+    /// [`col_widths`](Self::col_widths); absence uses [`ROW_HEIGHT`].
+    pub row_heights: HashMap<u32, f32>,
+
     /// The range last copied/cut, drawn with animated marching-ants until the
     /// next copy or an Escape (`-ui.md` sec.5.E). `None` when nothing is on the
     /// clipboard. Stored as the normalized rectangle `(r1, c1, r2, c2)` in
@@ -670,6 +757,17 @@ pub struct TrameUiState {
     /// source selection. `None` when no fill drag is in progress. Drawn as a
     /// dashed preview outline. UI-only view state.
     pub fill_preview: Option<CellRect>,
+
+    /// While a header boundary is being dragged (`-ui.md` sec.4bis.C), the live
+    /// guide line position: `Col(x)` for a column resize (a vertical guide at
+    /// physical x), `Row(y)` for a row resize (a horizontal guide at y). `None`
+    /// when no resize is in progress. UI-only view state.
+    pub resize_preview: Option<ResizePreview>,
+
+    /// The header boundary the pointer is hovering over the inline "+" zone of
+    /// (`-ui.md` sec.4bis.D), drawn as a small "+" badge. `Some(ColInsert(i))` /
+    /// `Some(RowInsert(i))` while hovered, `None` otherwise. UI-only view state.
+    pub insert_hint: Option<HeaderHit>,
 
     /// Cells matched by the active Find query (`-ui.md` sec.5.G), drawn with a
     /// translucent highlight. Absolute grid `(row, col)` pairs from the last
@@ -697,6 +795,10 @@ impl TrameUiState {
             next_version: 1,
             filtered_col: None,
             hidden_rows: Vec::new(),
+            col_widths: HashMap::new(),
+            row_heights: HashMap::new(),
+            resize_preview: None,
+            insert_hint: None,
             clipboard_anchor: None,
             fill_preview: None,
             find_matches: Vec::new(),
@@ -770,6 +872,7 @@ impl TrameUiState {
             anchor: (r2, c2),
             active: (r1, c1),
             extra: Vec::new(),
+            kind: SelKind::Cells,
         };
     }
 
@@ -1046,13 +1149,40 @@ impl TrameUiState {
     ///
     /// Older responses (stale version) are silently discarded.
     pub fn on_viewport_data(&mut self, update: TrameEvent) {
-        let TrameEvent::ViewportData { version, cells, .. } = update else {
+        let TrameEvent::ViewportData {
+            version,
+            row_start,
+            col_start,
+            cells,
+            col_widths,
+            row_heights,
+        } = update
+        else {
             return;
         };
         if version < self.accepted_version {
             return;
         }
         self.accepted_version = version;
+        // Adopt the per-axis metrics for the covered window (absolute keys). Only
+        // a non-default entry is stored; a column/row reset to the default drops
+        // out of the map so it falls back to the uniform metric (sec.4bis.C).
+        for (i, w) in col_widths.iter().enumerate() {
+            let col = col_start + i as u32;
+            if (*w as f64 - COL_WIDTH).abs() > f64::EPSILON {
+                self.col_widths.insert(col, *w);
+            } else {
+                self.col_widths.remove(&col);
+            }
+        }
+        for (i, h) in row_heights.iter().enumerate() {
+            let row = row_start + i as u32;
+            if (*h as f64 - ROW_HEIGHT).abs() > f64::EPSILON {
+                self.row_heights.insert(row, *h);
+            } else {
+                self.row_heights.remove(&row);
+            }
+        }
         for cell in cells {
             // Authoritative value supersedes the optimistic one: the cell is no
             // longer dirty, and any prior error is resolved unless re-reported.
@@ -1318,6 +1448,111 @@ impl TrameUiState {
     // Coordinate helpers
     // -------------------------------------------------------------------------
 
+    /// Mint the next monotonic command version (shared with the viewport
+    /// request). Used by commands that carry a `version` for echo ordering, e.g.
+    /// [`TrameCommand::ResizeCol`].
+    pub fn bump_version(&mut self) -> u64 {
+        let v = self.next_version;
+        self.next_version += 1;
+        v
+    }
+
+    /// Width (physical px) of column `col`: its resized entry, else [`COL_WIDTH`].
+    pub fn col_width_of(&self, col: u32) -> f64 {
+        self.col_widths
+            .get(&col)
+            .map(|&w| w as f64)
+            .unwrap_or(COL_WIDTH)
+    }
+    /// Height (physical px) of row `row`: its resized entry, else [`ROW_HEIGHT`].
+    pub fn row_height_of(&self, row: u32) -> f64 {
+        self.row_heights
+            .get(&row)
+            .map(|&h| h as f64)
+            .unwrap_or(ROW_HEIGHT)
+    }
+
+    /// X of column `col`'s left edge relative to the canvas, summing the variable
+    /// widths from [`left_col`](Self::left_col). Columns left of the scroll origin
+    /// yield a value smaller than [`HEADER_WIDTH`] (callers clip).
+    pub fn col_x(&self, col: u32) -> f64 {
+        let mut x = HEADER_WIDTH;
+        if col >= self.left_col {
+            for c in self.left_col..col {
+                x += self.col_width_of(c);
+            }
+        } else {
+            for c in col..self.left_col {
+                x -= self.col_width_of(c);
+            }
+        }
+        x
+    }
+
+    /// Y of row `row`'s top edge relative to the canvas, summing the *visible*
+    /// rows' variable heights from [`top_row`](Self::top_row) (collapsing hidden
+    /// rows, sec.5.D). Mirrors `GridLayout::row_top`.
+    pub fn row_y(&self, row: u32) -> f64 {
+        let cells_top = HEADER_HEIGHT;
+        let mut y = cells_top;
+        if row >= self.top_row {
+            for r in self.top_row..row {
+                if !self.is_row_hidden(r) {
+                    y += self.row_height_of(r);
+                }
+            }
+        } else {
+            for r in row..self.top_row {
+                if !self.is_row_hidden(r) {
+                    y -= self.row_height_of(r);
+                }
+            }
+        }
+        y
+    }
+
+    /// Absolute grid column whose band contains physical x `px` (>= the row
+    /// header strip), walking the variable widths. Used by a whole-axis drag,
+    /// where the pointer may be below the header strip. `None` left of the grid.
+    pub fn col_at_x(&self, px: f64) -> Option<u32> {
+        if px < HEADER_WIDTH {
+            return None;
+        }
+        let mut col = self.left_col;
+        let mut cx = HEADER_WIDTH;
+        while col < TOTAL_COLS {
+            let w = self.col_width_of(col);
+            if px < cx + w {
+                return Some(col);
+            }
+            cx += w;
+            col += 1;
+        }
+        None
+    }
+
+    /// Absolute *visible* grid row whose band contains physical y `py` (>= the
+    /// column header strip), walking the variable heights and skipping hidden
+    /// rows. `None` above the grid.
+    pub fn row_at_y(&self, py: f64) -> Option<u32> {
+        if py < HEADER_HEIGHT {
+            return None;
+        }
+        let mut row = self.top_row;
+        let mut cy = HEADER_HEIGHT;
+        while row < TOTAL_ROWS {
+            if !self.is_row_hidden(row) {
+                let h = self.row_height_of(row);
+                if py < cy + h {
+                    return Some(row);
+                }
+                cy += h;
+            }
+            row += 1;
+        }
+        None
+    }
+
     /// Cell `(row, col)` at physical pixel `(x, y)`, or `None` if the point is
     /// in a header strip or past the grid bounds. Inverse of `cell_pixel_rect`.
     pub fn cell_at(&self, x: f64, y: f64) -> Option<(u32, u32)> {
@@ -1328,15 +1563,102 @@ impl TrameUiState {
         if x >= self.canvas_width || y >= self.grid_bottom() {
             return None;
         }
-        let col = self.left_col + ((x - HEADER_WIDTH) / COL_WIDTH) as u32;
-        // The y slot indexes *visible* rows: map it back to the absolute row,
-        // skipping the collapsed (filtered) ones.
-        let slot = ((y - cells_top) / ROW_HEIGHT) as u32;
-        let row = self.row_at_slot(slot);
-        if row >= TOTAL_ROWS || col >= TOTAL_COLS {
-            return None;
+        // Walk the variable column widths from the scroll origin.
+        let mut col = self.left_col;
+        let mut cx = HEADER_WIDTH;
+        loop {
+            let w = self.col_width_of(col);
+            if x < cx + w {
+                break;
+            }
+            cx += w;
+            col += 1;
+            if col >= TOTAL_COLS {
+                return None;
+            }
+        }
+        // Walk the *visible* rows' variable heights from the scroll origin.
+        let mut row = self.top_row;
+        let mut cy = cells_top;
+        loop {
+            if !self.is_row_hidden(row) {
+                let h = self.row_height_of(row);
+                if y < cy + h {
+                    break;
+                }
+                cy += h;
+            }
+            row += 1;
+            if row >= TOTAL_ROWS {
+                return None;
+            }
         }
         Some((row, col))
+    }
+
+    /// Resolve a pointer at physical `(x, y)` to a header zone (`-ui.md`
+    /// sec.4bis), or `None` when the point is over the scrollable grid body (not a
+    /// header strip). The resize bands (a +/- [`RESIZE_BAND`] zone around a
+    /// boundary) take priority over the body so a grab on the edge resizes rather
+    /// than selects. Variable-metric aware (walks the per-axis widths/heights).
+    pub fn header_hit(&self, x: f64, y: f64) -> Option<HeaderHit> {
+        let in_col_strip = (0.0..HEADER_HEIGHT).contains(&y);
+        let in_row_strip = (0.0..HEADER_WIDTH).contains(&x);
+        // Top-left corner -> select-all.
+        if in_col_strip && in_row_strip {
+            return Some(HeaderHit::Corner);
+        }
+        // Column header strip (top): resolve the column under x, with its right
+        // border arming a resize.
+        if in_col_strip && x >= HEADER_WIDTH && x < self.canvas_width {
+            let mut col = self.left_col;
+            let mut cx = HEADER_WIDTH;
+            while col < TOTAL_COLS {
+                let right = cx + self.col_width_of(col);
+                // Boundary band: the top sliver hosts the inline "+" insert
+                // (insert left of the next column); the rest arms a resize.
+                if (x - right).abs() <= RESIZE_BAND {
+                    return Some(if y < HEADER_HEIGHT * 0.5 {
+                        HeaderHit::ColInsert(col + 1)
+                    } else {
+                        HeaderHit::ColBorder(col)
+                    });
+                }
+                if x < right {
+                    return Some(HeaderHit::ColBody(col));
+                }
+                cx = right;
+                col += 1;
+            }
+            return None;
+        }
+        // Row header strip (left): resolve the visible row under y, with its
+        // bottom border arming a resize.
+        if in_row_strip && y >= HEADER_HEIGHT && y < self.grid_bottom() {
+            let mut row = self.top_row;
+            let mut cy = HEADER_HEIGHT;
+            while row < TOTAL_ROWS {
+                if self.is_row_hidden(row) {
+                    row += 1;
+                    continue;
+                }
+                let bottom = cy + self.row_height_of(row);
+                if (y - bottom).abs() <= RESIZE_BAND {
+                    return Some(if x < HEADER_WIDTH * 0.5 {
+                        HeaderHit::RowInsert(row + 1)
+                    } else {
+                        HeaderHit::RowBorder(row)
+                    });
+                }
+                if y < bottom {
+                    return Some(HeaderHit::RowBody(row));
+                }
+                cy = bottom;
+                row += 1;
+            }
+            return None;
+        }
+        None
     }
 
     /// If `(row, col)` falls inside a merged block, return its master corner and
@@ -1369,22 +1691,21 @@ impl TrameUiState {
         if self.is_row_hidden(row) {
             return None;
         }
-        // Signed arithmetic to handle the cell being left/above the viewport. The
-        // row offset is in collapsed (visible-row) space.
-        let col_offset = col as i64 - self.left_col as i64;
-        let row_offset = self.visible_offset(row);
-
+        // Variable-metric edges; the helpers handle a cell left/above the
+        // viewport (negative offset) and collapse over hidden rows.
         let cells_top = HEADER_HEIGHT;
-        let x = HEADER_WIDTH + col_offset as f64 * COL_WIDTH;
-        let y = cells_top + row_offset as f64 * ROW_HEIGHT;
+        let x = self.col_x(col);
+        let y = self.row_y(row);
+        let cw = self.col_width_of(col);
+        let rh = self.row_height_of(row);
 
-        if x + COL_WIDTH <= HEADER_WIDTH || x >= self.canvas_width {
+        if x + cw <= HEADER_WIDTH || x >= self.canvas_width {
             return None;
         }
-        if y + ROW_HEIGHT <= cells_top || y >= self.grid_bottom() {
+        if y + rh <= cells_top || y >= self.grid_bottom() {
             return None;
         }
-        Some((x, y, COL_WIDTH, ROW_HEIGHT))
+        Some((x, y, cw, rh))
     }
 
     /// Screen pixel rect (x, y, w, h) covering the cell range
@@ -1403,14 +1724,17 @@ impl TrameUiState {
         // Row edges are in collapsed (visible-row) space: the top is the first
         // row's slot, the bottom is one slot past the last *visible* row of the
         // range (so a range straddling hidden rows shrinks to its visible height).
-        let x_left = HEADER_WIDTH + (c1 as i64 - self.left_col as i64) as f64 * COL_WIDTH;
-        let x_right = HEADER_WIDTH + (c2 as i64 - self.left_col as i64 + 1) as f64 * COL_WIDTH;
-        let top_slot = self.visible_offset(r1);
-        // Bottom edge: slot just below r2 if r2 is visible, else its own slot
-        // (its successors have already collapsed up onto it).
-        let bot_slot = self.visible_offset(r2) + if self.is_row_hidden(r2) { 0 } else { 1 };
-        let y_top = cells_top + top_slot as f64 * ROW_HEIGHT;
-        let y_bot = cells_top + bot_slot as f64 * ROW_HEIGHT;
+        let x_left = self.col_x(c1);
+        let x_right = self.col_x(c2) + self.col_width_of(c2);
+        let y_top = self.row_y(r1);
+        // Bottom edge: just below r2 if r2 is visible, else its own top (its
+        // successors have already collapsed up onto it).
+        let y_bot = self.row_y(r2)
+            + if self.is_row_hidden(r2) {
+                0.0
+            } else {
+                self.row_height_of(r2)
+            };
 
         // Clip to the visible cell area.
         let cx1 = x_left.max(HEADER_WIDTH);
@@ -1531,7 +1855,7 @@ pub const FILL_HANDLE_SIZE: f64 = 7.0;
 
 #[cfg(test)]
 mod tests {
-    use super::{CellEditor, Selection, TabMenu, TabMenuItem, TrameUiState};
+    use super::{CellEditor, HeaderHit, SelKind, Selection, TabMenu, TabMenuItem, TrameUiState};
     use crate::{DisplayCell, TrameEvent};
 
     /// A pointer hit collapses the selection to a single cell (`anchor ==
@@ -1550,6 +1874,124 @@ mod tests {
         state.move_cursor(1, 0, false).expect("cursor moved");
         assert_eq!(state.selection, Selection::single(6, 3));
         assert_eq!(state.selection.anchor, state.selection.active);
+    }
+
+    /// `col_at_x` / `row_at_y` resolve the axis band under a pointer through the
+    /// variable metrics (drives a whole-axis header drag, sec.4bis.A).
+    #[test]
+    fn axis_pointer_resolution_follows_variable_metrics() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        state.col_widths.insert(0, 160.0); // col 0 widened
+        // x just past the wide col 0 lands in col 1.
+        assert_eq!(state.col_at_x(super::HEADER_WIDTH + 160.0 + 5.0), Some(1));
+        assert_eq!(state.col_at_x(super::HEADER_WIDTH + 10.0), Some(0));
+        assert_eq!(state.col_at_x(0.0), None); // over the row-header strip
+
+        state.row_heights.insert(0, 50.0);
+        assert_eq!(state.row_at_y(super::HEADER_HEIGHT + 50.0 + 5.0), Some(1));
+        assert_eq!(state.row_at_y(super::HEADER_HEIGHT + 10.0), Some(0));
+        assert_eq!(state.row_at_y(0.0), None);
+    }
+
+    /// The insert "+" zone sits in the top/left sliver of a boundary band, the
+    /// resize grip in the rest (sec.4bis.C/D).
+    #[test]
+    fn header_boundary_splits_insert_and_resize() {
+        let state = TrameUiState::new(800.0, 600.0);
+        let boundary = super::HEADER_WIDTH + super::COL_WIDTH; // col 0's right edge
+        // Lower half -> resize col 0.
+        assert_eq!(
+            state.header_hit(boundary, super::HEADER_HEIGHT * 0.8),
+            Some(HeaderHit::ColBorder(0))
+        );
+        // Upper half -> insert left of col 1 (at this boundary).
+        assert_eq!(
+            state.header_hit(boundary, 2.0),
+            Some(HeaderHit::ColInsert(1))
+        );
+    }
+
+    /// `header_hit` resolves the three zones of each header strip plus the
+    /// corner, with the resize band winning over the body (sec.4bis).
+    #[test]
+    fn header_hit_resolves_zones() {
+        let state = TrameUiState::new(800.0, 600.0);
+        // Top-left corner.
+        assert_eq!(state.header_hit(10.0, 10.0), Some(HeaderHit::Corner));
+        // Column 0 body: header strip, x mid-column 0 ([50, 130)).
+        assert_eq!(
+            state.header_hit(super::HEADER_WIDTH + 30.0, 5.0),
+            Some(HeaderHit::ColBody(0))
+        );
+        // Column 0 right border (~130), lower half of the band, arms a resize.
+        assert_eq!(
+            state.header_hit(
+                super::HEADER_WIDTH + super::COL_WIDTH,
+                super::HEADER_HEIGHT * 0.8
+            ),
+            Some(HeaderHit::ColBorder(0))
+        );
+        // Row 1 body (rows start at HEADER_HEIGHT, each ROW_HEIGHT tall).
+        assert_eq!(
+            state.header_hit(10.0, super::HEADER_HEIGHT + super::ROW_HEIGHT + 5.0),
+            Some(HeaderHit::RowBody(1))
+        );
+        // Row 0 bottom border, right half of the band, resizes row 0.
+        assert_eq!(
+            state.header_hit(
+                super::HEADER_WIDTH * 0.8,
+                super::HEADER_HEIGHT + super::ROW_HEIGHT
+            ),
+            Some(HeaderHit::RowBorder(0))
+        );
+        // A point in the grid body is not a header hit.
+        assert_eq!(
+            state.header_hit(super::HEADER_WIDTH + 10.0, super::HEADER_HEIGHT + 10.0),
+            None
+        );
+    }
+
+    /// `Selection::axis` builds a whole-column / whole-row band whose perpendicular
+    /// coordinate is irrelevant (sec.4bis.A).
+    #[test]
+    fn axis_selection_spans_the_band() {
+        let cols = Selection::axis(SelKind::Cols, 2, 4);
+        assert_eq!(cols.kind, SelKind::Cols);
+        let (_, c1, _, c2) = cols.bounds();
+        assert_eq!((c1, c2), (2, 4));
+
+        let rows = Selection::axis(SelKind::Rows, 5, 3);
+        assert_eq!(rows.kind, SelKind::Rows);
+        let (r1, _, r2, _) = rows.bounds();
+        assert_eq!((r1, r2), (3, 5));
+    }
+
+    /// A resized column / row shifts the pixel mapping: `cell_at` and
+    /// `cell_pixel_rect` must agree on the variable geometry (sec.4bis.C).
+    #[test]
+    fn variable_metrics_round_trip_pixel_and_hit_test() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        // Col 0 widened to 160, row 0 heightened to 40.
+        state.col_widths.insert(0, 160.0);
+        state.row_heights.insert(0, 40.0);
+
+        assert_eq!(state.col_width_of(0), 160.0);
+        assert_eq!(state.col_width_of(1), super::COL_WIDTH);
+        assert_eq!(state.row_height_of(0), 40.0);
+
+        // Cell (1,1) sits after the wide col 0 and below the tall row 0.
+        let (x, y, w, h) = state.cell_pixel_rect(1, 1).expect("visible");
+        assert_eq!(x, super::HEADER_WIDTH + 160.0);
+        assert_eq!(y, super::HEADER_HEIGHT + 40.0);
+        assert_eq!((w, h), (super::COL_WIDTH, super::ROW_HEIGHT));
+
+        // Hit-testing the interior of that cell returns it.
+        assert_eq!(state.cell_at(x + 5.0, y + 5.0), Some((1, 1)));
+        // A point inside the tall row 0 / wide col 0 maps to (0, 0).
+        assert_eq!(
+            state.cell_at(super::HEADER_WIDTH + 100.0, super::HEADER_HEIGHT + 30.0),
+            Some((0, 0))
+        );
     }
 
     /// A 2x2 merge master at (1,1) covering (1,1)..=(2,2): selecting any covered
@@ -1696,6 +2138,7 @@ mod tests {
             anchor: (0, 0),
             active: (0, 1),
             extra: Vec::new(),
+            kind: SelKind::Cells,
         };
         assert_eq!(state.selection_rects(), vec![(0, 0, 1, 1)]);
 
@@ -1800,6 +2243,7 @@ mod tests {
             anchor: (1, 1),
             active: (2, 2),
             extra: Vec::new(),
+            kind: SelKind::Cells,
         };
         assert!(state.snap_active_to_master(), "covered active cell snaps");
         assert_eq!(state.selection, Selection::single(1, 1));
@@ -1847,6 +2291,7 @@ mod tests {
             anchor: (0, 0),
             active: (5, 0),
             extra: Vec::new(),
+            kind: SelKind::Cells,
         };
         assert!(
             state.snap_active_to_master(),
