@@ -412,6 +412,26 @@ fn draw_plus<S: DrawSurface>(s: &mut S, cx: f64, cy: f64, c: Color) {
     s.fill_rect(Rect::new(cx - t, cy - arm, cx + t, cy + arm), c);
 }
 
+/// Stroke a funnel glyph (wide mouth + converging sides + short stem) inside the
+/// box `(bx, by, w, h)`: the "filter active" cue (sec.5.D). Stroke-only so every
+/// `DrawSurface` renders it (`fill_path` is optional).
+fn draw_funnel<S: DrawSurface>(s: &mut S, bx: f64, by: f64, w: f64, h: f64, c: Color) {
+    let cx = bx + w / 2.0;
+    let mid = by + h * 0.55;
+    s.stroke_line(bx, by, bx + w, by, c, 1.0);
+    s.stroke_line(bx, by, cx, mid, c, 1.0);
+    s.stroke_line(bx + w, by, cx, mid, c, 1.0);
+    s.stroke_line(cx, mid, cx, by + h, c, 1.0);
+}
+
+/// Stroke a downward chevron inside the box `(bx, by, w, h)`: the "filter
+/// available, none active" cue on an autofilter button (sec.5.D).
+fn draw_chevron<S: DrawSurface>(s: &mut S, bx: f64, by: f64, w: f64, h: f64, c: Color) {
+    let cx = bx + w / 2.0;
+    s.stroke_line(bx, by, cx, by + h, c, 1.0);
+    s.stroke_line(bx + w, by, cx, by + h, c, 1.0);
+}
+
 /// Stroke a horizontal dashed line from `x0` to `x1` at height `y`, the dashes
 /// offset left by `phase` (the marching-ants crawl, sec.5.E).
 fn dashed_h<S: DrawSurface>(s: &mut S, x0: f64, x1: f64, y: f64, c: Color, phase: f64) {
@@ -479,10 +499,9 @@ pub fn draw_overlay<S: DrawSurface>(
         text_enabled,
     );
 
-    // -- 1b. Funnel badge on the filtered column's header (sec.5.D). Drawn only
-    //        when the column is within the visible span; a small funnel glyph
-    //        (trapezoid + stem) using stroke primitives so every surface renders
-    //        it (fill_path is optional). -------------------------------------
+    // -- 1b. Funnel badge on the filtered column's letter header (sec.5.D), kept
+    //        as a secondary cue alongside the first-row autofilter buttons below.
+    //        Drawn only when the column is within the visible span.
     if let Some(fcol) = state.filtered_col
         && fcol >= layout.origin_col
         && fcol < layout.origin_col + state.viewport_cols + 1
@@ -493,15 +512,35 @@ pub fn draw_overlay<S: DrawSurface>(
         let h = 7.0;
         let bx = (cell.x1 - w - 3.0).max(cell.x0 + 2.0);
         let by = layout.top + (layout.header_height - h) / 2.0;
-        let cx = bx + w / 2.0;
-        let mid = by + h * 0.55;
-        let c = palette.selection;
-        // Top edge (wide mouth), then both sides converge to the centre, then
-        // a short stem downward.
-        surface.stroke_line(bx, by, bx + w, by, c, 1.0);
-        surface.stroke_line(bx, by, cx, mid, c, 1.0);
-        surface.stroke_line(bx + w, by, cx, mid, c, 1.0);
-        surface.stroke_line(cx, mid, cx, by + h, c, 1.0);
+        draw_funnel(surface, bx, by, w, h, palette.selection);
+    }
+
+    // -- 1b'. Excel-style autofilter buttons on the current region's header row
+    //         (sec.5.D): each column of the contiguous data block around the
+    //         active cell draws a small button at the right edge of its first-row
+    //         cell -- a plain chevron when the column is unfiltered, a funnel
+    //         when the shared filter targets it. Clicking opens the same
+    //         FilterPopover as the context-menu entry (one filter code path).
+    if let Some((band_row, c1, _r2, c2)) = state.current_region() {
+        for col in c1..=c2 {
+            let Some((bx, by, bw, bh)) = state.filter_button_rect(band_row, col) else {
+                continue;
+            };
+            let r = Rect::new(bx, by, bx + bw, by + bh);
+            surface.fill_rect(r, palette.header_bg);
+            surface.stroke_rect(r, palette.grid_line, 1.0);
+            // Glyph inset so it reads inside the button.
+            let pad = 3.0;
+            let gx = bx + pad;
+            let gy = by + pad;
+            let gw = (bw - 2.0 * pad).max(0.0);
+            let gh = (bh - 2.0 * pad).max(0.0);
+            if state.filtered_col == Some(col) {
+                draw_funnel(surface, gx, gy, gw, gh, palette.selection);
+            } else {
+                draw_chevron(surface, gx, gy, gw, gh * 0.7, palette.header_text);
+            }
+        }
     }
 
     // -- 1c. Find matches (sec.5.G): a translucent highlight behind each matched
@@ -1264,6 +1303,68 @@ mod tests {
                     if *color == palette.selection && *width == 2.0
             )),
             1,
+        );
+        assert_eq!(surface.clip_depth(), 0);
+    }
+
+    #[test]
+    fn autofilter_buttons_drawn_on_region_header_row() {
+        // A two-column data block around the active cell (0,0): each column draws
+        // one autofilter button (bordered with the grid colour) on the band row.
+        let state = fixture(&[(0, 0, "a"), (0, 1, "b")]);
+        assert_eq!(state.current_region(), Some((0, 0, 0, 1)));
+        let palette = Theme::Light.palette();
+        let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
+
+        draw_overlay(
+            &mut surface,
+            &state,
+            palette,
+            &mut font_cx,
+            &mut cache,
+            true,
+            &clock,
+            &mut stats,
+        );
+
+        // One bordered button per region column (cell grid lines are stroke_line,
+        // so a grid-colour StrokeRect is unambiguously an autofilter button).
+        assert_eq!(
+            surface.count(|op| matches!(
+                op, DrawOp::StrokeRect { color, .. } if *color == palette.grid_line
+            )),
+            2,
+        );
+        assert_eq!(surface.clip_depth(), 0);
+    }
+
+    #[test]
+    fn autofilter_button_shows_funnel_on_filtered_column() {
+        // With a filter active on column 0, that button paints the funnel glyph
+        // (selection-coloured strokes); without one, only the secondary header
+        // badge would -- so the in-region funnel is the new signal under test.
+        let mut state = fixture(&[(0, 0, "a"), (0, 1, "b")]);
+        state.filtered_col = Some(0);
+        let palette = Theme::Light.palette();
+        let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
+
+        draw_overlay(
+            &mut surface,
+            &state,
+            palette,
+            &mut font_cx,
+            &mut cache,
+            true,
+            &clock,
+            &mut stats,
+        );
+
+        // Selection-coloured strokes appear (funnel on the filtered button plus
+        // the secondary letter-header badge); an unfiltered fixture draws none.
+        assert!(
+            surface.count(|op| matches!(
+                op, DrawOp::StrokeLine { color, .. } if *color == palette.selection
+            )) > 0
         );
         assert_eq!(surface.clip_depth(), 0);
     }

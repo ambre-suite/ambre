@@ -228,6 +228,13 @@ pub fn main() {
     // sec.13bis) -- no point shaping debug glyphs on the GPU every frame.
     let perf_pub = ambre_canvas::PerfPublisher::new();
 
+    // Canvas->DOM filter-open channel (`-ui.md` sec.5.D): the view raises this
+    // one-shot intent when an in-canvas autofilter button is clicked; the
+    // per-frame relay consumes it (after mirroring the anchor) and opens the DOM
+    // FilterPopover through the same path as the context-menu "Filter by column"
+    // entry, so there is one filter code path with two entry points.
+    let filter_open_pub = ambre_canvas::FilterOpenPublisher::new();
+
     // Formula bar signals (HTML input -> TrameView sync). RwSignal is Copy, so
     // we create them once and pass clones to both TrameView and the Leptos shell.
     let formula_ref = RwSignal::new(String::new());
@@ -469,6 +476,7 @@ pub fn main() {
     // chrome, session/list to the landing, content to the view), anchor mirror.
     let anchor_pub_pump = anchor_pub.clone();
     let perf_pub_pump = perf_pub.clone();
+    let filter_open_pump = filter_open_pub.clone();
     let persist_store_frame = Rc::clone(&persist_store);
     let mut last_anchor: Option<(f64, f64)> = None;
     let mut last_perf_push_ms: f64 = 0.0;
@@ -746,6 +754,25 @@ pub fn main() {
             anchor_pos.set(next);
         }
 
+        // Open the shared filter popover when the canvas raised the one-shot
+        // intent (`-ui.md` sec.5.D): a click on an in-canvas autofilter button.
+        // The view already moved the active cell onto the button's column (so the
+        // anchor mirrored just above points at it) and asked nothing else; this
+        // runs the exact body of the context-menu `FILTER_COLUMN` branch, so the
+        // two entry points share one filter code path.
+        if filter_open_pump.take() {
+            let (x, y) = client_anchor(anchor_pos.get_untracked());
+            // `col` is provisional; the ColumnValues reply carries the real one.
+            filter_popover.set(Some(trame_chrome::FilterPopoverState { col: 0, x, y }));
+            filter_values.set(Vec::new());
+            if let Some(document_id) = current_doc.get_untracked() {
+                let _ = relay_tx.try_send(LogicCommand::App {
+                    document_id,
+                    command: AppCommand::Trame(TrameCommand::RequestActiveColumnValues),
+                });
+            }
+        }
+
         // Mirror the view's perf snapshot into the status-bar signal, throttled
         // to ~2 Hz: the old wgpu HUD refreshed every 500 ms too, and a per-frame
         // DOM update would be wasteful for a debug read-out.
@@ -777,6 +804,7 @@ pub fn main() {
                 text_input,
                 anchor_pub,
                 perf_pub,
+                filter_open_pub,
                 theme_ctl,
                 formula_ref_tv,
                 formula_text_tv,
