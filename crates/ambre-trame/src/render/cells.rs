@@ -98,7 +98,9 @@ where
         } else {
             f32::MAX
         };
-        let font_size = content.size.map(|s| s as f32).unwrap_or(BODY_SIZE);
+        // True zoom: the glyph size scales with the grid (the per-axis metrics
+        // already do via `col_w`/`row_h`).
+        let font_size = content.size.map(|s| s as f32).unwrap_or(BODY_SIZE) * layout.zoom as f32;
         let layout_text: &Layout<ParleyBrush> = text_cache.get_or_build_font(
             font_cx,
             content.text,
@@ -165,7 +167,7 @@ where
                 let PositionedLayoutItem::GlyphRun(run) = item else {
                     continue;
                 };
-                let tx = rect.x0 + CELL_PAD_X + x_off + run.offset() as f64;
+                let tx = rect.x0 + CELL_PAD_X * layout.zoom + x_off + run.offset() as f64;
                 let ty = rect.y0 + y_off + run.baseline() as f64;
                 surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
                 let dec_color = content.fg.map(rgb).unwrap_or(palette.cell_text);

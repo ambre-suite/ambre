@@ -64,6 +64,11 @@ pub struct GridLayout<'a> {
     pub total_cols: u32,
     /// Total rows in the grid (iteration bound).
     pub total_rows: u32,
+    /// Application zoom factor (1.0 = 100%). Scales the content-area metrics
+    /// (`col_width`/`row_height` and the per-axis maps, which store BASE px). The
+    /// header strip sizes (`header_width`/`header_height`) are passed already
+    /// scaled by the caller, so they are not re-multiplied here.
+    pub zoom: f64,
 }
 
 impl GridLayout<'_> {
@@ -90,6 +95,7 @@ impl GridLayout<'_> {
             .get(&col)
             .map(|&w| w as f64)
             .unwrap_or(self.col_width)
+            * self.zoom
     }
 
     /// Height (physical px) of row `row`: its per-row entry, else the uniform
@@ -100,6 +106,7 @@ impl GridLayout<'_> {
             .get(&row)
             .map(|&h| h as f64)
             .unwrap_or(self.row_height)
+            * self.zoom
     }
 
     /// X of column `col`'s left edge relative to the surface, summing the

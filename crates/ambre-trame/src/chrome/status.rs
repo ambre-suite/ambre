@@ -44,13 +44,22 @@ fn fmt_num(v: f64) -> String {
     }
 }
 
-/// The status bar component: app label, selection aggregates, and a clickable
-/// perf chip backed by `perf`. `stats` is `None` for a single-cell selection.
+/// The status bar component: app label, selection aggregates, a clickable grid
+/// zoom menu, and a clickable perf chip backed by `perf`. `stats` is `None` for a
+/// single-cell selection. `zoom` is the shared grid zoom factor (`1.0` = 100%):
+/// the menu writes it and the canvas view polls it each frame.
 #[component]
-pub fn StatusBar(stats: RwSignal<Option<SelStats>>, perf: RwSignal<PerfSnapshot>) -> impl IntoView {
+pub fn StatusBar(
+    stats: RwSignal<Option<SelStats>>,
+    perf: RwSignal<PerfSnapshot>,
+    zoom: RwSignal<f64>,
+) -> impl IntoView {
     // Whether the full perf panel is expanded (collapsed by default: only the
     // fps chip shows).
     let show_perf = RwSignal::new(false);
+
+    // Whether the grid-zoom preset menu is open (collapsed by default).
+    let show_zoom = RwSignal::new(false);
 
     // The aggregates line, recomputed whenever the selection stats change.
     let aggregates = move || {
@@ -95,7 +104,46 @@ pub fn StatusBar(stats: RwSignal<Option<SelStats>>, perf: RwSignal<PerfSnapshot>
         <span class="statusbar-label">{status_label()}</span>
         <span class="statusbar-stats">{aggregates}</span>
         <span class="spacer"></span>
-        <span>"100 %"</span>
+        <div class="statusbar-zoom">
+            <button
+                class="statusbar-zoom-btn"
+                title="Grid zoom (scales the sheet only, not the toolbar)"
+                aria-haspopup="menu"
+                aria-expanded=move || show_zoom.get().then_some("true")
+                on:click=move |_| show_zoom.update(|v| *v = !*v)
+            >
+                {move || format!("{:.0} %", zoom.get() * 100.0)}
+            </button>
+            <Show when=move || show_zoom.get() fallback=|| ()>
+                <ul class="statusbar-zoom-menu" role="menu">
+                    {crate::ui::grid::TrameUiState::ZOOM_PRESETS
+                        .iter()
+                        .rev()
+                        .map(|&z| {
+                            let pct = format!("{:.0} %", z * 100.0);
+                            // `selected` highlights the row matching the live zoom.
+                            let selected = move || (zoom.get() - z).abs() < f64::EPSILON;
+                            view! {
+                                <li role="none">
+                                    <button
+                                        role="menuitemradio"
+                                        class="statusbar-zoom-item"
+                                        class:selected=selected
+                                        aria-checked=move || selected().then_some("true")
+                                        on:click=move |_| {
+                                            zoom.set(z);
+                                            show_zoom.set(false);
+                                        }
+                                    >
+                                        {pct}
+                                    </button>
+                                </li>
+                            }
+                        })
+                        .collect_view()}
+                </ul>
+            </Show>
+        </div>
         <div class="statusbar-perf">
             <button
                 class="statusbar-fps"

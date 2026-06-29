@@ -215,7 +215,8 @@ fn status_bar_renders_label_and_aggregates() {
             max: 3.0,
         }));
         let perf = RwSignal::new(PerfSnapshot::default());
-        view! { <StatusBar stats=stats perf=perf /> }
+        let zoom = RwSignal::new(1.0_f64);
+        view! { <StatusBar stats=stats perf=perf zoom=zoom /> }
     });
 
     let text = container.text_content().unwrap_or_default();
