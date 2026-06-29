@@ -147,6 +147,48 @@ struct Wiring {
     sel_bounds: RwSignal<Option<(u32, u32, u32, u32)>>,
     /// Multi-column sort dialog open state (`-ui.md` sec.5.C); `None` = closed.
     sort_dialog: RwSignal<Option<trame_chrome::SortDialogState>>,
+    /// Chrome status indicator (`-chrome.md` 2.G): drives the header sync label
+    /// and the document-loading overlay. Set by the per-frame relay on
+    /// `UiEvent::DocumentReady` / `ConnectionStatus`, and by the route poll on a
+    /// document switch (which arms `hydrating`).
+    chrome_status: RwSignal<ChromeStatus>,
+}
+
+/// Header status + loading state, derived from two independent signals carried
+/// in one value so the relay updates each field where it learns it.
+///
+/// - `hydrating`: true from opening a document until its initial snapshot lands
+///   (`UiEvent::DocumentReady`). Drives the canvas loading overlay and the
+///   transient "Syncing" label. An empty/brand-new document never produces a
+///   snapshot, so this is cleared by the explicit ready event, not by content.
+/// - `connected`: mirrors the document's WebSocket link
+///   (`UiEvent::ConnectionStatus`). Drives the "Synced" vs "Offline" label.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+struct ChromeStatus {
+    hydrating: bool,
+    connected: bool,
+}
+
+impl ChromeStatus {
+    /// Localized header label for the current state (`-chrome.md` 2.G). While the
+    /// document is hydrating the link state is irrelevant -- the user reads it as
+    /// "still loading".
+    fn label(self) -> &'static str {
+        match (self.hydrating, self.connected) {
+            (true, _) => "Syncing",
+            (false, true) => "Synced",
+            (false, false) => "Offline",
+        }
+    }
+
+    /// CSS modifier for the status dot colour (paired with `.dot` in styles.css).
+    fn dot_class(self) -> &'static str {
+        match (self.hydrating, self.connected) {
+            (true, _) => "dot syncing",
+            (false, true) => "dot",
+            (false, false) => "dot offline",
+        }
+    }
 }
 
 // Gated out under `cfg(test)`: the wasm-bindgen-test harness generates its own
@@ -345,6 +387,8 @@ pub fn main() {
     let find_result_slot: Rc<RefCell<Option<RwSignal<Option<(usize, usize)>>>>> =
         Rc::new(RefCell::new(None));
     let style_slot: Rc<RefCell<Option<trame_chrome::StyleState>>> = Rc::new(RefCell::new(None));
+    let chrome_status_slot: Rc<RefCell<Option<RwSignal<ChromeStatus>>>> =
+        Rc::new(RefCell::new(None));
 
     mount_shell(
         ui_to_logic_tx.clone(),
@@ -364,6 +408,7 @@ pub fn main() {
         Rc::clone(&find_state_slot),
         Rc::clone(&find_result_slot),
         Rc::clone(&style_slot),
+        Rc::clone(&chrome_status_slot),
         formula_ref,
         formula_text,
         formula_action,
@@ -419,6 +464,12 @@ pub fn main() {
     let style_state = style_slot
         .borrow()
         .expect("style state created during mount");
+    // Chrome status indicator, read back for the per-frame relay (sets it on
+    // `UiEvent::DocumentReady` / `ConnectionStatus`) and the route poll (arms
+    // `hydrating` on a document switch).
+    let chrome_status = chrome_status_slot
+        .borrow()
+        .expect("chrome_status signal created during mount");
 
     // Learn whether the server enables dev login (drives the signed-out panel).
     // Unauthenticated, Main-thread fetch -- a pre-session concern.
@@ -511,6 +562,15 @@ pub fn main() {
                     });
                 }
                 current_doc.set(cur_doc.map(|(_, id)| id));
+                // Arm the loading overlay when entering a document; clear it on
+                // the landing route. The relay clears `hydrating` on the matching
+                // `DocumentReady` (see the per-frame pump below).
+                chrome_status.update(|s| {
+                    s.hydrating = cur_doc.is_some();
+                    if cur_doc.is_none() {
+                        s.connected = false;
+                    }
+                });
             }
             match cur_doc {
                 Some((_, document_id)) => {
@@ -669,6 +729,23 @@ pub fn main() {
                             document_id: *document_id,
                         },
                     });
+                }
+                // Chrome status indicator (`-chrome.md` 2.G): mirror the active
+                // document's WebSocket link into the header label. Ignored for a
+                // non-active document (a stale push during a fast doc switch).
+                UiEvent::ConnectionStatus {
+                    document_id,
+                    connected,
+                } if current_doc.get_untracked() == Some(*document_id) => {
+                    chrome_status.update(|s| s.connected = *connected);
+                }
+                // Initial hydration finished: dismiss the loading overlay. Guarded
+                // on the active document so a late ready for a doc we already left
+                // does not clear the new doc's overlay.
+                UiEvent::DocumentReady { document_id }
+                    if current_doc.get_untracked() == Some(*document_id) =>
+                {
+                    chrome_status.update(|s| s.hydrating = false);
                 }
                 // A document was shared with us: refresh the landing list so it
                 // appears without a manual reload, and notify the user.
@@ -845,6 +922,7 @@ fn mount_shell(
     find_state_slot: Rc<RefCell<Option<RwSignal<Option<trame_chrome::FindReplaceState>>>>>,
     find_result_slot: Rc<RefCell<Option<RwSignal<Option<(usize, usize)>>>>>,
     style_slot: Rc<RefCell<Option<trame_chrome::StyleState>>>,
+    chrome_status_slot: Rc<RefCell<Option<RwSignal<ChromeStatus>>>>,
     formula_ref: RwSignal<String>,
     formula_text: RwSignal<String>,
     formula_action: RwSignal<Option<FormulaAction>>,
@@ -886,6 +964,14 @@ fn mount_shell(
         *find_result_slot.borrow_mut() = Some(find_result);
         let style_state = trame_chrome::StyleState::new();
         *style_slot.borrow_mut() = Some(style_state);
+        // Boot directly into a document => start hydrating; the landing route
+        // clears it on first poll. `connected` starts false until the first
+        // `ConnectionStatus` lands.
+        let chrome_status = RwSignal::new(ChromeStatus {
+            hydrating: boot_doc.is_some(),
+            connected: false,
+        });
+        *chrome_status_slot.borrow_mut() = Some(chrome_status);
         // Multi-column sort dialog state (`-ui.md` sec.5.C): opened by `on_command`
         // and rendered in `AppRoot`, both inside this owner, so it needs no slot.
         let sort_dialog = RwSignal::new(None::<trame_chrome::SortDialogState>);
@@ -918,6 +1004,7 @@ fn mount_shell(
             ctx_scope,
             sel_bounds,
             sort_dialog,
+            chrome_status,
         });
 
         view! {
@@ -960,6 +1047,7 @@ fn AppRoot() -> impl IntoView {
         ctx_scope,
         sel_bounds,
         sort_dialog,
+        chrome_status,
     } = use_context::<Wiring>().expect("Wiring provided by mount_shell");
 
     // The reactive client route, used only to show/hide the landing overlay.
@@ -1270,8 +1358,8 @@ fn AppRoot() -> impl IntoView {
                 <span class="title">"Ambre"</span>
                 <span class="spacer"></span>
                 <span class="ambre-sync">
-                    <span class="dot"></span>
-                    <span class="label">"Synced"</span>
+                    <span class=move || chrome_status.get().dot_class()></span>
+                    <span class="label">{move || chrome_status.get().label()}</span>
                 </span>
                 <button
                     class="icon"
@@ -1537,6 +1625,17 @@ fn AppRoot() -> impl IntoView {
 
         // Live-region toast host (announces transient messages politely).
         <ToastHost toasts=toasts />
+
+        // Document-loading overlay (`-chrome.md` 2.G): covers the canvas while a
+        // freshly opened document hydrates (snapshot fetch + decrypt), dismissed
+        // on `UiEvent::DocumentReady`. Reuses the boot loader's spinner visual.
+        // Never shown on the landing route -- `hydrating` is cleared there.
+        <Show when=move || chrome_status.get().hydrating>
+            <div class="ambre-doc-loading">
+                <div class="spinner"></div>
+                <p>"Loading..."</p>
+            </div>
+        </Show>
 
         // Landing overlay, shown on `/` over the (frozen, hidden) canvas.
         <Show when=is_landing>

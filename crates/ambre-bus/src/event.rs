@@ -60,6 +60,16 @@ pub enum LogicEvent {
         payload: Vec<u8>,
     },
 
+    /// Initial hydration of a freshly opened document is complete: the Sync
+    /// thread has fetched members and the latest snapshot (if any) and emitted
+    /// it ahead of this event. Fires exactly once per open, for both the
+    /// snapshot and the empty/brand-new paths, so the UI can dismiss its
+    /// document-loading overlay (an empty document never produces a snapshot,
+    /// so the overlay cannot key off `RemoteSnapshot`).
+    DocumentReady {
+        document_id: DocumentId,
+    },
+
     /// WebSocket connection status for a document.
     ConnectionStatus {
         document_id: DocumentId,

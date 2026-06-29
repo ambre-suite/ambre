@@ -339,6 +339,14 @@ struct SyncDocumentState {
     /// verifying key bytes. An inbound ephemeral whose counter is ≤ the stored
     /// value is silently dropped.
     ephemeral_remote_counters: HashMap<[u8; 32], u64>,
+    /// True between sending the post-open `RequestMissing` and receiving its
+    /// `MissingUpdates` reply. The initial catch-up replay is the point at which
+    /// the document is fully hydrated (snapshot + every delta the server already
+    /// holds), so `DocumentReady` is emitted when this clears -- not at open,
+    /// which would dismiss the UI loading overlay before delta-only documents
+    /// have any content. Stays `false` for local-only / offline opens, which
+    /// emit `DocumentReady` immediately (no replay to wait for).
+    awaiting_initial_hydration: bool,
 }
 
 impl SyncDocumentState {
@@ -369,6 +377,7 @@ impl SyncDocumentState {
             quarantine: HashMap::new(),
             old_keys: Vec::new(),
             ephemeral_remote_counters: HashMap::new(),
+            awaiting_initial_hydration: false,
         }
     }
 
@@ -1576,7 +1585,8 @@ impl SyncState {
                 }
                 // Only subscribe over WS if the document actually exists
                 // server-side; a local-only doc subscribes after lazy creation.
-                if server_created && self.ws_connected() {
+                let awaiting_replay = server_created && self.ws_connected();
+                if awaiting_replay {
                     self.ws_send(&WsClientMsg::Subscribe { document_id });
                     // Subscribing alone does not replay history (the server only
                     // forwards live updates to subscribers). On a fresh open the
@@ -1600,6 +1610,19 @@ impl SyncState {
                     document_id,
                     connected: self.ws_connected(),
                 });
+                // Hydration-complete signal (dismisses the UI loading overlay).
+                // When a replay was requested above, defer it to the matching
+                // `MissingUpdates`: the document is only fully hydrated once the
+                // deltas the snapshot does not cover (the whole history for a
+                // delta-only doc) have arrived. Without a replay (local-only or
+                // offline open) there is nothing to wait for, so signal now.
+                if awaiting_replay {
+                    if let Some(doc_state) = self.documents.get_mut(&document_id) {
+                        doc_state.awaiting_initial_hydration = true;
+                    }
+                } else {
+                    self.send_to_logic(LogicEvent::DocumentReady { document_id });
+                }
                 // A local-only doc issues no RequestMissing (nothing to replay),
                 // so flush any buffered pre-session updates here -- they will take
                 // the lazy-create path. A server-side doc instead flushes from the
@@ -1851,6 +1874,17 @@ impl SyncState {
                 // session was ready can now be sealed with a fresh, conflict-free
                 // clock.
                 self.flush_pre_session_updates(document_id);
+                // Initial catch-up done: the document is now fully hydrated
+                // (snapshot + every delta the server holds). Signal the UI to
+                // dismiss its loading overlay -- exactly once, on the first
+                // replay after open (a later reconnect replay leaves the flag
+                // cleared, so no duplicate fires).
+                if let Some(doc_state) = self.documents.get_mut(&document_id)
+                    && doc_state.awaiting_initial_hydration
+                {
+                    doc_state.awaiting_initial_hydration = false;
+                    self.send_to_logic(LogicEvent::DocumentReady { document_id });
+                }
             }
 
             WsServerMsg::SnapshotRequired { document_id } => {
@@ -3767,6 +3801,100 @@ mod tests {
             _ => None,
         });
         assert_eq!(after, Some(Seq(0)));
+    }
+
+    /// Count of `DocumentReady` events for `doc` in a drained event list.
+    fn ready_count(events: &[LogicEvent], doc: DocumentId) -> usize {
+        events
+            .iter()
+            .filter(
+                |e| matches!(e, LogicEvent::DocumentReady { document_id } if *document_id == doc),
+            )
+            .count()
+    }
+
+    /// A server document opened over a live WS is only fully hydrated once its
+    /// post-open catch-up replay (`MissingUpdates`) lands -- the snapshot does
+    /// not cover deltas committed after it, and a delta-only document has NO
+    /// snapshot at all. So `DocumentReady` (which dismisses the UI loading
+    /// overlay) must be DEFERRED to that first replay, not fired at open: firing
+    /// at open would clear the overlay while the grid is still empty, exactly the
+    /// 5s-empty-grid bug. The snapshot is still emitted at open.
+    #[test]
+    fn open_document_ready_deferred_to_initial_replay() {
+        let (mut state, rx, doc, key, _sk, _snap) = setup();
+        let (ws_tx, _ws_rx) = flume::unbounded();
+        state.set_mock_ws(ws_tx);
+
+        state.handle_sync_event(SyncEvent::OpenDocumentReady {
+            document_id: doc,
+            doc_key: key,
+            snapshot_payload: Some(b"snap-blob".to_vec()),
+            snapshot_id: SnapshotId::new(),
+            covered_seq: Seq(0),
+            doc_type: DocType::Trame,
+            server_created: true,
+        });
+        let at_open = drain(&rx);
+        assert!(
+            at_open
+                .iter()
+                .any(|e| matches!(e, LogicEvent::RemoteSnapshot { .. })),
+            "snapshot still emitted at open"
+        );
+        assert_eq!(
+            ready_count(&at_open, doc),
+            0,
+            "DocumentReady must NOT fire at open while the replay is pending"
+        );
+
+        // The initial catch-up reply (empty here -- nothing newer than the
+        // snapshot) marks hydration complete and releases exactly one
+        // DocumentReady.
+        state.handle_ws_message(WsServerMsg::MissingUpdates {
+            document_id: doc,
+            updates: Vec::new(),
+        });
+        let after_replay = drain(&rx);
+        assert_eq!(
+            ready_count(&after_replay, doc),
+            1,
+            "exactly one DocumentReady once the initial replay lands"
+        );
+
+        // A later reconnect replay must not fire a duplicate.
+        state.handle_ws_message(WsServerMsg::MissingUpdates {
+            document_id: doc,
+            updates: Vec::new(),
+        });
+        assert_eq!(
+            ready_count(&drain(&rx), doc),
+            0,
+            "no duplicate DocumentReady on a subsequent replay"
+        );
+    }
+
+    /// A local-only (not yet server-created) or offline open has no replay to
+    /// wait for, so `DocumentReady` fires immediately at open -- otherwise the
+    /// overlay would hang forever with no `MissingUpdates` ever coming.
+    #[test]
+    fn open_document_ready_immediate_without_replay() {
+        // Offline open (no WS): server_created but not connected.
+        let (mut state, rx, doc, key, _sk, _snap) = setup();
+        state.handle_sync_event(SyncEvent::OpenDocumentReady {
+            document_id: doc,
+            doc_key: key,
+            snapshot_payload: None,
+            snapshot_id: SnapshotId::genesis(doc),
+            covered_seq: Seq(0),
+            doc_type: DocType::Trame,
+            server_created: true,
+        });
+        assert_eq!(
+            ready_count(&drain(&rx), doc),
+            1,
+            "offline open signals readiness immediately (no replay to await)"
+        );
     }
 
     /// A completed snapshot upload adopts the server-assigned snapshot id as the
