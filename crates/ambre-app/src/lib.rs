@@ -552,12 +552,13 @@ pub fn main() {
     let route_tx = ui_to_logic_tx.clone();
     let route_raf = raf.clone();
     let mut prev_route: Option<route::Route> = None;
+    let mut last_title: Option<String> = None;
 
     let pre_frame = move || {
         let cur_route = route::current();
+        let cur_doc = cur_route.doc();
         if prev_route.as_ref() != Some(&cur_route) {
             let prev_doc = prev_route.as_ref().and_then(route::Route::doc);
-            let cur_doc = cur_route.doc();
             if prev_doc.map(|(_, id)| id) != cur_doc.map(|(_, id)| id) {
                 if let Some((_, document_id)) = prev_doc {
                     let _ = route_tx.try_send(LogicCommand::CloseDocument { document_id });
@@ -590,21 +591,36 @@ pub fn main() {
                 // keeps running -- only the render is gated).
                 None => route_raf.pause(),
             }
-            // Browser tab title: an icon-less context, so it composes the generic
-            // localized type label (`DocType::generic_label`, distinct from the
-            // brand `name()`) rather than the type word -- `ambre-spec-chrome.md
-            // 2.G`. The open document's plaintext name is not available here, so
-            // an open doc shows the generic placeholder; the landing is "Ambre".
+            prev_route = Some(cur_route);
+        }
+
+        // Browser tab title. Icon-less context: compose the document's plaintext
+        // name (decrypted into `docs`) with the generic localized type label
+        // (`DocType::generic_label`, not the brand `name()`) -- `ambre-spec-chrome.md
+        // 2.G`. Recomputed each frame so a rename or a late-arriving document list
+        // updates the tab; the DOM write happens only when the title changes. An
+        // open doc with no resolved name falls back to "Untitled - <label>"; the
+        // landing is "Ambre".
+        let title = match cur_doc {
+            Some((doc_type, document_id)) => {
+                let name = docs.with_untracked(|list| {
+                    list.iter()
+                        .find(|d| d.document_id == document_id)
+                        .and_then(|d| d.name.clone())
+                });
+                let label = doc_type.generic_label();
+                match name {
+                    Some(n) if !n.trim().is_empty() => format!("{n} - {label}"),
+                    _ => format!("Untitled - {label}"),
+                }
+            }
+            None => "Ambre".to_owned(),
+        };
+        if last_title.as_deref() != Some(title.as_str()) {
             if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
-                let title = match cur_doc {
-                    Some((doc_type, _)) => {
-                        format!("Untitled - {}", doc_type.generic_label())
-                    }
-                    None => "Ambre".to_owned(),
-                };
                 doc.set_title(&title);
             }
-            prev_route = Some(cur_route);
+            last_title = Some(title);
         }
 
         // Persist Logic -> local store: drain snapshots and save them once the
