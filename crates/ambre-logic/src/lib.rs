@@ -431,6 +431,13 @@ impl LogicState {
                 });
             }
 
+            // Initial hydration complete: any snapshot was applied by the
+            // preceding RemoteSnapshot arm (channel order is preserved), so the
+            // UI can dismiss its loading overlay.
+            LogicEvent::DocumentReady { document_id } => {
+                self.send_to_ui(UiEvent::DocumentReady { document_id });
+            }
+
             LogicEvent::SyncWarning {
                 document_id,
                 code,

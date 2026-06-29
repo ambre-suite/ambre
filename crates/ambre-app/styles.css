@@ -72,6 +72,23 @@ input[type="radio"] {
     background: var(--success);
 }
 
+/* Sync status modifiers (-chrome.md 2.G): "Syncing" (hydrating / catching up)
+   pulses amber, "Offline" (no WS link) shows a muted dot. */
+.ambre-sync .dot.syncing {
+    background: var(--warning, #d9a441);
+    animation: ambre-sync-pulse 1s ease-in-out infinite;
+}
+
+.ambre-sync .dot.offline {
+    background: var(--text-dim);
+}
+
+@keyframes ambre-sync-pulse {
+    50% {
+        opacity: 0.35;
+    }
+}
+
 .ambre-avatar {
     width: 26px;
     height: 26px;
@@ -262,6 +279,43 @@ input[type="radio"] {
     user-select: none;
     -webkit-tap-highlight-color: transparent;
     touch-action: none;
+}
+
+/* Document-loading overlay (-chrome.md 2.G): full-viewport spinner shown while a
+   freshly opened document hydrates, reusing the boot loader's look (index.html).
+   z-index sits above the canvas/popovers but below modal dialogs (z 1000+) and
+   the landing overlay (z 100); it is only ever visible on a document route. */
+.ambre-doc-loading {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    background: var(--bg);
+    color: var(--text-dim);
+}
+
+.ambre-doc-loading .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border, #333);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: ambre-spin 0.8s linear infinite;
+}
+
+.ambre-doc-loading p {
+    margin: 0;
+    font-size: 14px;
+}
+
+@keyframes ambre-spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* Transparent <textarea> keyboard/IME/clipboard pipe (ambre-spec-chrome 2.C).
