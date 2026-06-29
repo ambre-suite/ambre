@@ -708,6 +708,13 @@ pub struct TrameUiState {
     pub canvas_width: f64,
     pub canvas_height: f64,
 
+    /// Application zoom factor for the grid (1.0 = 100%). Scales cells, the
+    /// row/col header strips and the cell font together (`-ui.md` sec.13bis).
+    /// Pure local view state -- never persisted, never synced (like the scroll
+    /// position). The browser's own page zoom (Ctrl+wheel / Ctrl+/-) is left
+    /// untouched and zooms the whole page incl. chrome; this scales the grid only.
+    pub zoom: f64,
+
     /// Cache of received cells: (row, col) -> display data (text + formatting).
     ///
     /// A cell absent from the cache is shown as "pending" (grey background).
@@ -801,6 +808,7 @@ impl TrameUiState {
             viewport_cols: 0,
             canvas_width,
             canvas_height,
+            zoom: 1.0,
             cell_cache: HashMap::new(),
             dirty_cells: HashSet::new(),
             formula_errors: HashMap::new(),
@@ -837,19 +845,39 @@ impl TrameUiState {
     /// Bottom edge (physical px) of the scrollable grid area: the canvas height
     /// minus the sheet-tab strip pinned along the bottom (sec.13).
     pub fn grid_bottom(&self) -> f64 {
-        (self.canvas_height - TAB_STRIP_HEIGHT).max(HEADER_HEIGHT)
+        (self.canvas_height - TAB_STRIP_HEIGHT).max(self.header_h())
     }
 
     fn recompute_viewport_dims(&mut self) {
-        let grid_h = (self.grid_bottom() - HEADER_HEIGHT).max(0.0);
-        let grid_w = (self.canvas_width - HEADER_WIDTH).max(0.0);
+        let grid_h = (self.grid_bottom() - self.header_h()).max(0.0);
+        let grid_w = (self.canvas_width - self.header_w()).max(0.0);
         // ceil() already accounts for the partially-visible row/col at the edge.
         // No +1 needed: viewport_rows is the count of rows that start within the
         // grid area, whether fully or partially visible. scroll_to_include and
         // cell_pixel_rect must agree on this count, or the active cell can
         // appear "in viewport" to the scroll logic but off-canvas to the renderer.
-        self.viewport_rows = (grid_h / ROW_HEIGHT).ceil() as u32;
-        self.viewport_cols = (grid_w / COL_WIDTH).ceil() as u32;
+        self.viewport_rows = (grid_h / (ROW_HEIGHT * self.zoom)).ceil() as u32;
+        self.viewport_cols = (grid_w / (COL_WIDTH * self.zoom)).ceil() as u32;
+    }
+
+    /// Allowed grid zoom presets (50%..200%), shared with the status-bar menu.
+    pub const ZOOM_PRESETS: [f64; 6] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+
+    /// Set the grid zoom factor (clamped to the preset range), keeping the
+    /// top-left scroll origin pinned. Recomputes the visible range. Returns
+    /// `true` when the zoom actually changed, so the caller can repaint and
+    /// re-request the (now differently sized) viewport.
+    pub fn set_zoom(&mut self, zoom: f64) -> bool {
+        let z = zoom.clamp(
+            Self::ZOOM_PRESETS[0],
+            Self::ZOOM_PRESETS[Self::ZOOM_PRESETS.len() - 1],
+        );
+        if (z - self.zoom).abs() < f64::EPSILON {
+            return false;
+        }
+        self.zoom = z;
+        self.recompute_viewport_dims();
+        true
     }
 
     // -------------------------------------------------------------------------
@@ -1478,6 +1506,7 @@ impl TrameUiState {
             .get(&col)
             .map(|&w| w as f64)
             .unwrap_or(COL_WIDTH)
+            * self.zoom
     }
     /// Height (physical px) of row `row`: its resized entry, else [`ROW_HEIGHT`].
     pub fn row_height_of(&self, row: u32) -> f64 {
@@ -1485,13 +1514,25 @@ impl TrameUiState {
             .get(&row)
             .map(|&h| h as f64)
             .unwrap_or(ROW_HEIGHT)
+            * self.zoom
+    }
+
+    /// Width (physical px) of the fixed row-number strip on the left, scaled by
+    /// the current [`zoom`](Self::zoom). The header strips zoom with the grid.
+    pub fn header_w(&self) -> f64 {
+        HEADER_WIDTH * self.zoom
+    }
+    /// Height (physical px) of the fixed column-letter strip on top, scaled by
+    /// the current [`zoom`](Self::zoom).
+    pub fn header_h(&self) -> f64 {
+        HEADER_HEIGHT * self.zoom
     }
 
     /// X of column `col`'s left edge relative to the canvas, summing the variable
     /// widths from [`left_col`](Self::left_col). Columns left of the scroll origin
     /// yield a value smaller than [`HEADER_WIDTH`] (callers clip).
     pub fn col_x(&self, col: u32) -> f64 {
-        let mut x = HEADER_WIDTH;
+        let mut x = self.header_w();
         if col >= self.left_col {
             for c in self.left_col..col {
                 x += self.col_width_of(c);
@@ -1508,7 +1549,7 @@ impl TrameUiState {
     /// rows' variable heights from [`top_row`](Self::top_row) (collapsing hidden
     /// rows, sec.5.D). Mirrors `GridLayout::row_top`.
     pub fn row_y(&self, row: u32) -> f64 {
-        let cells_top = HEADER_HEIGHT;
+        let cells_top = self.header_h();
         let mut y = cells_top;
         if row >= self.top_row {
             for r in self.top_row..row {
@@ -1530,11 +1571,11 @@ impl TrameUiState {
     /// header strip), walking the variable widths. Used by a whole-axis drag,
     /// where the pointer may be below the header strip. `None` left of the grid.
     pub fn col_at_x(&self, px: f64) -> Option<u32> {
-        if px < HEADER_WIDTH {
+        if px < self.header_w() {
             return None;
         }
         let mut col = self.left_col;
-        let mut cx = HEADER_WIDTH;
+        let mut cx = self.header_w();
         while col < TOTAL_COLS {
             let w = self.col_width_of(col);
             if px < cx + w {
@@ -1550,11 +1591,11 @@ impl TrameUiState {
     /// column header strip), walking the variable heights and skipping hidden
     /// rows. `None` above the grid.
     pub fn row_at_y(&self, py: f64) -> Option<u32> {
-        if py < HEADER_HEIGHT {
+        if py < self.header_h() {
             return None;
         }
         let mut row = self.top_row;
-        let mut cy = HEADER_HEIGHT;
+        let mut cy = self.header_h();
         while row < TOTAL_ROWS {
             if !self.is_row_hidden(row) {
                 let h = self.row_height_of(row);
@@ -1571,8 +1612,8 @@ impl TrameUiState {
     /// Cell `(row, col)` at physical pixel `(x, y)`, or `None` if the point is
     /// in a header strip or past the grid bounds. Inverse of `cell_pixel_rect`.
     pub fn cell_at(&self, x: f64, y: f64) -> Option<(u32, u32)> {
-        let cells_top = HEADER_HEIGHT;
-        if x < HEADER_WIDTH || y < cells_top {
+        let cells_top = self.header_h();
+        if x < self.header_w() || y < cells_top {
             return None;
         }
         if x >= self.canvas_width || y >= self.grid_bottom() {
@@ -1580,7 +1621,7 @@ impl TrameUiState {
         }
         // Walk the variable column widths from the scroll origin.
         let mut col = self.left_col;
-        let mut cx = HEADER_WIDTH;
+        let mut cx = self.header_w();
         loop {
             let w = self.col_width_of(col);
             if x < cx + w {
@@ -1617,23 +1658,23 @@ impl TrameUiState {
     /// boundary) take priority over the body so a grab on the edge resizes rather
     /// than selects. Variable-metric aware (walks the per-axis widths/heights).
     pub fn header_hit(&self, x: f64, y: f64) -> Option<HeaderHit> {
-        let in_col_strip = (0.0..HEADER_HEIGHT).contains(&y);
-        let in_row_strip = (0.0..HEADER_WIDTH).contains(&x);
+        let in_col_strip = (0.0..self.header_h()).contains(&y);
+        let in_row_strip = (0.0..self.header_w()).contains(&x);
         // Top-left corner -> select-all.
         if in_col_strip && in_row_strip {
             return Some(HeaderHit::Corner);
         }
         // Column header strip (top): resolve the column under x, with its right
         // border arming a resize.
-        if in_col_strip && x >= HEADER_WIDTH && x < self.canvas_width {
+        if in_col_strip && x >= self.header_w() && x < self.canvas_width {
             let mut col = self.left_col;
-            let mut cx = HEADER_WIDTH;
+            let mut cx = self.header_w();
             while col < TOTAL_COLS {
                 let right = cx + self.col_width_of(col);
                 // Boundary band: the top sliver hosts the inline "+" insert
                 // (insert left of the next column); the rest arms a resize.
                 if (x - right).abs() <= RESIZE_BAND {
-                    return Some(if y < HEADER_HEIGHT * 0.5 {
+                    return Some(if y < self.header_h() * 0.5 {
                         HeaderHit::ColInsert(col + 1)
                     } else {
                         HeaderHit::ColBorder(col)
@@ -1649,9 +1690,9 @@ impl TrameUiState {
         }
         // Row header strip (left): resolve the visible row under y, with its
         // bottom border arming a resize.
-        if in_row_strip && y >= HEADER_HEIGHT && y < self.grid_bottom() {
+        if in_row_strip && y >= self.header_h() && y < self.grid_bottom() {
             let mut row = self.top_row;
-            let mut cy = HEADER_HEIGHT;
+            let mut cy = self.header_h();
             while row < TOTAL_ROWS {
                 if self.is_row_hidden(row) {
                     row += 1;
@@ -1659,7 +1700,7 @@ impl TrameUiState {
                 }
                 let bottom = cy + self.row_height_of(row);
                 if (y - bottom).abs() <= RESIZE_BAND {
-                    return Some(if x < HEADER_WIDTH * 0.5 {
+                    return Some(if x < self.header_w() * 0.5 {
                         HeaderHit::RowInsert(row + 1)
                     } else {
                         HeaderHit::RowBorder(row)
@@ -1708,13 +1749,13 @@ impl TrameUiState {
         }
         // Variable-metric edges; the helpers handle a cell left/above the
         // viewport (negative offset) and collapse over hidden rows.
-        let cells_top = HEADER_HEIGHT;
+        let cells_top = self.header_h();
         let x = self.col_x(col);
         let y = self.row_y(row);
         let cw = self.col_width_of(col);
         let rh = self.row_height_of(row);
 
-        if x + cw <= HEADER_WIDTH || x >= self.canvas_width {
+        if x + cw <= self.header_w() || x >= self.canvas_width {
             return None;
         }
         if y + rh <= cells_top || y >= self.grid_bottom() {
@@ -1734,7 +1775,7 @@ impl TrameUiState {
         r2: u32,
         c2: u32,
     ) -> Option<(f64, f64, f64, f64)> {
-        let cells_top = HEADER_HEIGHT;
+        let cells_top = self.header_h();
         // Unclipped edges (signed: the range may start left/above the viewport).
         // Row edges are in collapsed (visible-row) space: the top is the first
         // row's slot, the bottom is one slot past the last *visible* row of the
@@ -1752,7 +1793,7 @@ impl TrameUiState {
             };
 
         // Clip to the visible cell area.
-        let cx1 = x_left.max(HEADER_WIDTH);
+        let cx1 = x_left.max(self.header_w());
         let cx2 = x_right.min(self.canvas_width);
         let cy1 = y_top.max(cells_top);
         let cy2 = y_bot.min(self.grid_bottom());
@@ -2135,6 +2176,36 @@ mod tests {
             state.cell_at(super::HEADER_WIDTH + 100.0, super::HEADER_HEIGHT + 30.0),
             Some((0, 0))
         );
+    }
+
+    /// Grid zoom scales every metric (header strips, cell widths/heights) so the
+    /// pixel mapping and hit-testing stay self-consistent (`-ui.md` sec.13bis).
+    #[test]
+    fn zoom_scales_metrics_and_round_trips_hit_test() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        assert!(state.set_zoom(2.0));
+        assert_eq!(state.zoom, 2.0);
+
+        // Header strips and the default cell metrics double.
+        assert_eq!(state.header_w(), super::HEADER_WIDTH * 2.0);
+        assert_eq!(state.header_h(), super::HEADER_HEIGHT * 2.0);
+        assert_eq!(state.col_width_of(0), super::COL_WIDTH * 2.0);
+        assert_eq!(state.row_height_of(0), super::ROW_HEIGHT * 2.0);
+
+        // Column 1's left edge is the (doubled) header plus one (doubled) column.
+        assert_eq!(
+            state.col_x(1),
+            super::HEADER_WIDTH * 2.0 + super::COL_WIDTH * 2.0
+        );
+
+        // A point inside cell (2, 2) at 200% maps back to it.
+        let x = state.header_w() + super::COL_WIDTH * 2.0 * 2.0 + 1.0;
+        let y = state.header_h() + super::ROW_HEIGHT * 2.0 * 2.0 + 1.0;
+        assert_eq!(state.cell_at(x, y), Some((2, 2)));
+
+        // The preset clamp rejects out-of-range factors.
+        state.set_zoom(99.0);
+        assert_eq!(state.zoom, *TrameUiState::ZOOM_PRESETS.last().unwrap());
     }
 
     /// A 2x2 merge master at (1,1) covering (1,1)..=(2,2): selecting any covered

@@ -432,6 +432,67 @@ input[type="radio"] {
     white-space: nowrap;
 }
 
+/* The grid-zoom readout + its collapsible preset menu (scales the sheet only,
+   not the chrome). Mirrors the perf chip styling. */
+.ambre-statusbar .statusbar-zoom {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.ambre-statusbar .statusbar-zoom-btn {
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    padding: 0 4px;
+    border-radius: 4px;
+}
+
+.ambre-statusbar .statusbar-zoom-btn:hover {
+    background: var(--surface-hover, rgba(127, 127, 127, 0.18));
+    color: var(--text);
+}
+
+.statusbar-zoom-menu {
+    position: absolute;
+    right: 0;
+    bottom: calc(var(--status-h) + 4px);
+    min-width: 90px;
+    padding: 4px;
+    list-style: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    z-index: 30;
+}
+
+.statusbar-zoom-item {
+    display: block;
+    width: 100%;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    padding: 4px 10px;
+    border-radius: 4px;
+}
+
+.statusbar-zoom-item:hover {
+    background: var(--surface-hover, rgba(127, 127, 127, 0.18));
+}
+
+.statusbar-zoom-item.selected {
+    color: var(--accent, #4c8bf5);
+    font-weight: 600;
+}
+
 /* Native <dialog> modal (ambre-chrome::Dialog). Padding lives on the body so
    the dialog element is only directly hit on its backdrop (for click-to-close);
    the frozen canvas behind makes the backdrop blur free. */

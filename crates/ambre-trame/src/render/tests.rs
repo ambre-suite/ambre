@@ -30,6 +30,7 @@ fn layout() -> GridLayout<'static> {
         height: 600.0,
         total_cols: 1000,
         total_rows: 100_000,
+        zoom: 1.0,
     }
 }
 

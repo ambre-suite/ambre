@@ -138,6 +138,9 @@ struct Wiring {
     /// Status-bar perf snapshot (fps + frame timings), pumped from the canvas
     /// view's `PerfPublisher` by the per-frame relay (~2 Hz).
     perf_snap: RwSignal<ambre_canvas::PerfSnapshot>,
+    /// Grid zoom factor (`1.0` = 100%, `-ui.md` sec.13bis): the status-bar menu
+    /// writes it, the canvas view polls it each frame. Local view state, not synced.
+    zoom: RwSignal<f64>,
     /// Right-click context-menu scope (`-ui.md` sec.5.C): the canvas view sets it
     /// (cell vs header) before the DOM menu opens; the shell derives the layout.
     ctx_scope: RwSignal<trame_chrome::CtxScope>,
@@ -288,6 +291,9 @@ pub fn main() {
     // perf snapshot pumped from `perf_pub` below.
     let sel_stats = RwSignal::new(None::<trame_chrome::SelStats>);
     let perf_snap = RwSignal::new(ambre_canvas::PerfSnapshot::default());
+    // Grid zoom factor selected in the status-bar menu (`-ui.md` sec.13bis),
+    // polled by the canvas view each frame. Defaults to 100%.
+    let zoom = RwSignal::new(1.0_f64);
 
     // Context-menu scope (`-ui.md` sec.5.C): the view sets it on each right-click
     // (cell vs header) before the DOM `contextmenu` listener opens the menu; the
@@ -414,6 +420,7 @@ pub fn main() {
         formula_action,
         sel_stats,
         perf_snap,
+        zoom,
         ctx_scope,
         sel_bounds,
     );
@@ -889,6 +896,7 @@ pub fn main() {
                 sel_stats,
                 ctx_scope,
                 sel_bounds,
+                zoom,
             ))
         },
         pre_frame,
@@ -928,6 +936,7 @@ fn mount_shell(
     formula_action: RwSignal<Option<FormulaAction>>,
     sel_stats: RwSignal<Option<trame_chrome::SelStats>>,
     perf_snap: RwSignal<ambre_canvas::PerfSnapshot>,
+    zoom: RwSignal<f64>,
     ctx_scope: RwSignal<trame_chrome::CtxScope>,
     sel_bounds: RwSignal<Option<(u32, u32, u32, u32)>>,
 ) {
@@ -1001,6 +1010,7 @@ fn mount_shell(
             formula_action,
             sel_stats,
             perf_snap,
+            zoom,
             ctx_scope,
             sel_bounds,
             sort_dialog,
@@ -1044,6 +1054,7 @@ fn AppRoot() -> impl IntoView {
         formula_action,
         sel_stats,
         perf_snap,
+        zoom,
         ctx_scope,
         sel_bounds,
         sort_dialog,
@@ -1435,7 +1446,7 @@ fn AppRoot() -> impl IntoView {
                 />
             </FormulaBar>
             <StatusBar slot>
-                <trame_chrome::StatusBar stats=sel_stats perf=perf_snap />
+                <trame_chrome::StatusBar stats=sel_stats perf=perf_snap zoom=zoom />
             </StatusBar>
         </AppShell>
 

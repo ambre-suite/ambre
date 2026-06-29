@@ -58,8 +58,11 @@ where
             // Honour the master's full style (size, font, colour, alignment,
             // underline/strike) exactly like a plain cell, but always clipped to
             // and aligned within the span rect.
-            let avail = (rect.width() - 2.0 * CELL_PAD_X).max(0.0);
-            let font_size = content.size.map(|s| s as f32).unwrap_or(BODY_SIZE);
+            let avail = (rect.width() - 2.0 * CELL_PAD_X * layout.zoom).max(0.0);
+            // True zoom: scale the glyph size with the grid (span metrics already
+            // scale via `cell_rect`/`merge_rect`).
+            let font_size =
+                content.size.map(|s| s as f32).unwrap_or(BODY_SIZE) * layout.zoom as f32;
             // Wrap constrains the layout to the span width (breaking long tokens
             // within the word); otherwise the line lays out unbounded and is
             // clipped to the span rect below (sec.4.A).
@@ -90,7 +93,7 @@ where
                     let PositionedLayoutItem::GlyphRun(run) = item else {
                         continue;
                     };
-                    let tx = rect.x0 + CELL_PAD_X + x_off + run.offset() as f64;
+                    let tx = rect.x0 + CELL_PAD_X * layout.zoom + x_off + run.offset() as f64;
                     let ty = rect.y0 + y_off + run.baseline() as f64;
                     surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
                     let dec = content.fg.map(rgb).unwrap_or(palette.cell_text);

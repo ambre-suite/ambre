@@ -30,8 +30,8 @@ use ambre_canvas::{Palette, TextCache};
 
 use super::TrameUiState;
 use super::grid::{
-    self, ADD_BTN_WIDTH, COL_WIDTH, CellEditor, HEADER_HEIGHT, HEADER_WIDTH, HitKind, ROW_HEIGHT,
-    TAB_MENU_ITEM_HEIGHT, TAB_MENU_WIDTH, TAB_STRIP_HEIGHT, TAB_WIDTH, TabDrag, TabMenu, TabRename,
+    self, ADD_BTN_WIDTH, COL_WIDTH, CellEditor, HitKind, ROW_HEIGHT, TAB_MENU_ITEM_HEIGHT,
+    TAB_MENU_WIDTH, TAB_STRIP_HEIGHT, TAB_WIDTH, TabDrag, TabMenu, TabRename,
 };
 use crate::render::{self, BODY_SIZE, CELL_PAD_X, GridLayout};
 use crate::{TOTAL_COLS, TOTAL_ROWS};
@@ -43,8 +43,10 @@ fn screen_layout(state: &TrameUiState) -> GridLayout<'_> {
     GridLayout {
         // Collapse the row axis over filter-hidden rows (sec.5.D).
         hidden_rows: &state.hidden_rows,
-        header_width: HEADER_WIDTH,
-        header_height: HEADER_HEIGHT,
+        // Header strips zoom with the grid: pass the already-scaled sizes (the
+        // layout multiplies only the content-area metrics by `zoom`).
+        header_width: state.header_w(),
+        header_height: state.header_h(),
         top: 0.0,
         col_width: COL_WIDTH,
         row_height: ROW_HEIGHT,
@@ -57,6 +59,7 @@ fn screen_layout(state: &TrameUiState) -> GridLayout<'_> {
         height: state.grid_bottom(),
         total_cols: TOTAL_COLS,
         total_rows: TOTAL_ROWS,
+        zoom: state.zoom,
     }
 }
 
@@ -126,11 +129,11 @@ impl CellSpan {
 
 /// Compute the cell-coordinate range that intersects `strip` in the cell area.
 fn rows_cols_in_strip(state: &TrameUiState, strip: Rect) -> CellSpan {
-    let cells_top = HEADER_HEIGHT;
+    let cells_top = state.header_h();
     // Walk the variable column widths from the scroll origin: skip columns wholly
     // left of the strip, then extend until the strip's right edge is covered.
     let mut col_start = state.left_col;
-    let mut cx = HEADER_WIDTH;
+    let mut cx = state.header_w();
     while col_start + 1 < TOTAL_COLS && cx + state.col_width_of(col_start) <= strip.x0 {
         cx += state.col_width_of(col_start);
         col_start += 1;
@@ -207,7 +210,7 @@ pub fn draw_cells<S: DrawSurface>(
 
     // Cell area = canvas minus the formula bar band + fixed header strip
     // (top/left) and the bottom sheet-tab strip.
-    let cell_area = Rect::new(HEADER_WIDTH, HEADER_HEIGHT, w, h);
+    let cell_area = Rect::new(state.header_w(), state.header_h(), w, h);
     // The base fill under the cells differs by repaint kind:
     //  - Full (strip_rect == None): the grey "pending" veil, the first-load cue
     //    shown until the initial ViewportData lands.
@@ -568,18 +571,18 @@ pub fn draw_overlay<S: DrawSurface>(
                     sel.anchor.1.min(sel.active.1),
                     sel.anchor.1.max(sel.active.1),
                 );
-                let x0 = state.col_x(c1).max(HEADER_WIDTH);
+                let x0 = state.col_x(c1).max(state.header_w());
                 let x1 = (state.col_x(c2) + state.col_width_of(c2)).min(state.canvas_width);
                 // Band over the grid body, and the header tint over the strip.
                 (
                     x0,
                     x1,
-                    HEADER_HEIGHT,
+                    state.header_h(),
                     state.grid_bottom(),
                     x0,
                     x1,
                     0.0,
-                    HEADER_HEIGHT,
+                    state.header_h(),
                 )
             }
             _ => {
@@ -587,15 +590,15 @@ pub fn draw_overlay<S: DrawSurface>(
                     sel.anchor.0.min(sel.active.0),
                     sel.anchor.0.max(sel.active.0),
                 );
-                let y0 = state.row_y(r1).max(HEADER_HEIGHT);
+                let y0 = state.row_y(r1).max(state.header_h());
                 let y1 = (state.row_y(r2) + state.row_height_of(r2)).min(state.grid_bottom());
                 (
-                    HEADER_WIDTH,
+                    state.header_w(),
                     state.canvas_width,
                     y0,
                     y1,
                     0.0,
-                    HEADER_WIDTH,
+                    state.header_w(),
                     y0,
                     y1,
                 )
@@ -702,7 +705,7 @@ pub fn draw_overlay<S: DrawSurface>(
         }
         Some(grid::HeaderHit::RowInsert(i)) => {
             let by = state.row_y(i);
-            let cx = HEADER_WIDTH * 0.5;
+            let cx = state.header_w() * 0.5;
             draw_plus(surface, cx, by, palette.selection);
         }
         _ => {}
@@ -727,6 +730,7 @@ fn measure(
     text: &str,
     bold: bool,
     italic: bool,
+    zoom: f64,
 ) -> f64 {
     if text.is_empty() {
         return 0.0;
@@ -734,7 +738,7 @@ fn measure(
     let layout: &Layout<ParleyBrush> = cache.get_or_build(
         font_cx,
         text,
-        BODY_SIZE,
+        BODY_SIZE * zoom as f32,
         f32::MAX,
         Alignment::Start,
         bold,
@@ -754,12 +758,13 @@ fn offset_at_x(
     bold: bool,
     italic: bool,
     target: f64,
+    zoom: f64,
 ) -> usize {
     let mut prev_w = 0.0;
     let mut prev_off = 0;
     for (off, c) in text.char_indices() {
         let next_off = off + c.len_utf8();
-        let w = measure(font_cx, cache, &text[..next_off], bold, italic);
+        let w = measure(font_cx, cache, &text[..next_off], bold, italic, zoom);
         if target <= (prev_w + w) / 2.0 {
             return prev_off;
         }
@@ -796,9 +801,18 @@ pub fn draw_edit<S: DrawSurface>(
 
     // Resolve a deferred pointer hit now that we have font metrics: map its
     // physical x to a byte offset and apply the click/drag/word-select intent.
+    let pad = CELL_PAD_X * state.zoom;
     if let Some(hit) = editor.pending.take() {
-        let text_x = (hit.x - (x + CELL_PAD_X)).max(0.0);
-        let off = offset_at_x(font_cx, cache, &editor.buffer, bold, italic, text_x);
+        let text_x = (hit.x - (x + pad)).max(0.0);
+        let off = offset_at_x(
+            font_cx,
+            cache,
+            &editor.buffer,
+            bold,
+            italic,
+            text_x,
+            state.zoom,
+        );
         match hit.kind {
             HitKind::Place => editor.place_caret(off),
             HitKind::Extend => editor.extend_to(off),
@@ -815,8 +829,26 @@ pub fn draw_edit<S: DrawSurface>(
     // Selection highlight behind the text: a translucent band from the start to
     // the end of the selected range.
     if let Some((s, e)) = editor.selection() {
-        let sx = x + CELL_PAD_X + measure(font_cx, cache, &editor.buffer[..s], bold, italic);
-        let ex = x + CELL_PAD_X + measure(font_cx, cache, &editor.buffer[..e], bold, italic);
+        let sx = x
+            + pad
+            + measure(
+                font_cx,
+                cache,
+                &editor.buffer[..s],
+                bold,
+                italic,
+                state.zoom,
+            );
+        let ex = x
+            + pad
+            + measure(
+                font_cx,
+                cache,
+                &editor.buffer[..e],
+                bold,
+                italic,
+                state.zoom,
+            );
         surface.fill_rect(
             Rect::new(sx, y + 2.0, ex, y + ch - 2.0),
             palette.selection.with_alpha(0.30),
@@ -829,7 +861,7 @@ pub fn draw_edit<S: DrawSurface>(
         let layout: &Layout<ParleyBrush> = cache.get_or_build(
             font_cx,
             &display,
-            BODY_SIZE,
+            BODY_SIZE * state.zoom as f32,
             f32::MAX,
             Alignment::Start,
             bold,
@@ -843,7 +875,7 @@ pub fn draw_edit<S: DrawSurface>(
                 let PositionedLayoutItem::GlyphRun(run) = item else {
                     continue;
                 };
-                let tx = x + CELL_PAD_X + run.offset() as f64;
+                let tx = x + pad + run.offset() as f64;
                 let ty = y + y_off + run.baseline() as f64;
                 surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
             }
@@ -852,9 +884,16 @@ pub fn draw_edit<S: DrawSurface>(
 
     // Composition underline: a dotted line under the preview run.
     if !editor.preview.is_empty() {
-        let pre_w = measure(font_cx, cache, &editor.buffer[..editor.caret], bold, italic);
-        let prev_w = measure(font_cx, cache, &editor.preview, bold, italic);
-        let ux0 = x + CELL_PAD_X + pre_w;
+        let pre_w = measure(
+            font_cx,
+            cache,
+            &editor.buffer[..editor.caret],
+            bold,
+            italic,
+            state.zoom,
+        );
+        let prev_w = measure(font_cx, cache, &editor.preview, bold, italic, state.zoom);
+        let ux0 = x + pad + pre_w;
         let ux1 = ux0 + prev_w;
         let uy = (y + ch - 3.0).min(y + ch);
         // Dotted: 3px dash, 2px gap.
@@ -869,8 +908,15 @@ pub fn draw_edit<S: DrawSurface>(
     // Caret: a 1px vertical bar after the prefix + preview, drawn only on the
     // visible half of the blink cycle.
     if caret_visible {
-        let caret_w = measure(font_cx, cache, &editor.before_caret(), bold, italic);
-        let caret_x = x + CELL_PAD_X + caret_w;
+        let caret_w = measure(
+            font_cx,
+            cache,
+            &editor.before_caret(),
+            bold,
+            italic,
+            state.zoom,
+        );
+        let caret_x = x + pad + caret_w;
         surface.stroke_line(caret_x, y + 3.0, caret_x, y + ch - 3.0, palette.caret, 1.0);
     }
 
@@ -952,9 +998,18 @@ pub fn draw_sheet_tabs<S: DrawSurface>(
             }
             // Caret after the committed prefix + IME preview.
             if caret_on {
+                // The sheet-tab strip is chrome, not part of the zoomed grid:
+                // its label font is the unscaled body size (zoom = 1.0).
                 let cx = x0
                     + TAB_LABEL_PAD_X
-                    + measure(font_cx, text_cache, &r.editor.before_caret(), false, false);
+                    + measure(
+                        font_cx,
+                        text_cache,
+                        &r.editor.before_caret(),
+                        false,
+                        false,
+                        1.0,
+                    );
                 surface.stroke_line(cx, strip_y + 4.0, cx, bottom - 4.0, palette.caret, 1.0);
             }
         } else if text_enabled && !name.is_empty() {
@@ -1050,6 +1105,9 @@ pub fn draw_tab_menu<S: DrawSurface>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Header strip metrics: only the tests still reference the raw constants
+    // (production code goes through `state.header_w()` / `header_h()`).
+    use super::grid::{HEADER_HEIGHT, HEADER_WIDTH};
     use ambre_canvas::{TextCache, Theme};
     use ambre_draw::FontContext;
     use ambre_draw::testing::{DrawOp, FixedClock, RecordingSurface};

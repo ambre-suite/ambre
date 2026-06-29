@@ -27,9 +27,8 @@ use leptos::prelude::RwSignal;
 use leptos::prelude::{Get, GetUntracked, Set};
 
 use super::grid::{
-    COL_WIDTH, CellEditor, CellRect, CursorMove, HEADER_HEIGHT, HEADER_WIDTH, HeaderHit, HitKind,
-    PendingHit, ROW_HEIGHT, SelKind, Selection, TabDrag, TabMenu, TabMenuItem, TabRename,
-    TrameUiState,
+    COL_WIDTH, CellEditor, CellRect, CursorMove, HeaderHit, HitKind, PendingHit, ROW_HEIGHT,
+    SelKind, Selection, TabDrag, TabMenu, TabMenuItem, TabRename, TrameUiState,
 };
 use super::renderer::{self, DrawStats};
 use crate::TOTAL_COLS;
@@ -265,6 +264,12 @@ pub struct TrameView {
     formula_text: RwSignal<String>,
     #[cfg(target_arch = "wasm32")]
     formula_action: RwSignal<Option<FormulaAction>>,
+    /// Grid zoom factor (`1.0` = 100%) shared with the status-bar zoom menu
+    /// (`-ui.md` sec.13bis): the menu writes it, the view polls it each frame and
+    /// applies it via [`set_zoom`](Self::set_zoom). Browser-only, like the formula
+    /// signals; pure local view state, never synced.
+    #[cfg(target_arch = "wasm32")]
+    zoom_sig: RwSignal<f64>,
     /// Active in-cell edit session, or `None` in navigation mode.
     editor: Option<CellEditor>,
     /// True while the pointer is dragging out a text selection inside the open
@@ -389,6 +394,7 @@ impl TrameView {
         #[cfg(target_arch = "wasm32")] sel_stats: RwSignal<Option<crate::chrome::SelStats>>,
         #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<crate::ui::grid::CtxScope>,
         #[cfg(target_arch = "wasm32")] sel_bounds: RwSignal<Option<(u32, u32, u32, u32)>>,
+        #[cfg(target_arch = "wasm32")] zoom_sig: RwSignal<f64>,
     ) -> Self {
         let window = web_sys::window().expect("no window");
         let perf = window.performance().expect("no Performance API");
@@ -424,6 +430,8 @@ impl TrameView {
             formula_text,
             #[cfg(target_arch = "wasm32")]
             formula_action,
+            #[cfg(target_arch = "wasm32")]
+            zoom_sig,
             editor: None,
             editor_text_drag: false,
             selecting_drag: false,
@@ -915,6 +923,15 @@ impl TrameView {
             }
         }
 
+        // Apply the latest grid zoom selected in the status-bar menu (`-ui.md`
+        // sec.13bis). `set_zoom` is a no-op when unchanged; on a real change it
+        // queues the viewport re-request flushed just below.
+        #[cfg(target_arch = "wasm32")]
+        {
+            let z = self.zoom_sig.get_untracked();
+            self.set_zoom(z);
+        }
+
         // Advance any touchpad momentum coast before the viewport flush, so the
         // ScrollViewport it produces ships this same frame.
         self.step_momentum();
@@ -1087,8 +1104,9 @@ impl TrameView {
                 // rather than tear. Resized axes are rare; the cost is bounded.
                 (ContentRepaint::Full, None)
             } else {
-                let dy_px = -(dr as i32) * ROW_HEIGHT as i32;
-                let dx_px = -(dc as i32) * COL_WIDTH as i32;
+                // One whole-cell step is the base metric scaled by the grid zoom.
+                let dy_px = (-(dr as f64) * ROW_HEIGHT * self.state.zoom).round() as i32;
+                let dx_px = (-(dc as f64) * COL_WIDTH * self.state.zoom).round() as i32;
                 let w = self.state.canvas_width;
                 // Bottom edge of the *cell area*, not the full canvas: the
                 // sheet-tab strip (sec.13) occupies [grid_bottom, canvas_height]
@@ -1100,7 +1118,7 @@ impl TrameView {
                 let h = self.state.grid_bottom();
                 // Top of the scrollable cell area: below the formula bar band
                 // (sec.6) and the column-header strip.
-                let hh = HEADER_HEIGHT;
+                let hh = self.state.header_h();
                 // If the scroll exceeds the viewport, nothing useful to shift.
                 let abs_dx = dx_px.unsigned_abs();
                 let abs_dy = dy_px.unsigned_abs();
@@ -1109,7 +1127,7 @@ impl TrameView {
                 } else {
                     // Strip = the area of the destination offscreen exposed by
                     // the shift, restricted to the cell area.
-                    let hw = HEADER_WIDTH;
+                    let hw = self.state.header_w();
                     let strip = if dy_px > 0 {
                         Rect::new(hw, hh, w, hh + dy_px as f64)
                     } else if dy_px < 0 {
@@ -1266,6 +1284,25 @@ impl TrameView {
     pub fn resize(&mut self, width: u32, height: u32) {
         self.state.resize(width as f64, height as f64);
         self.needs_full = true;
+    }
+
+    /// Set the grid zoom factor (`1.0` = 100%); scales cells, header strips and
+    /// the cell font together (`-ui.md` sec.13bis). A no-op when unchanged. On a
+    /// real change the visible range shifts, so we request the new viewport and
+    /// force a full repaint. Pure local view state -- never synced.
+    pub fn set_zoom(&mut self, zoom: f64) -> bool {
+        if !self.state.set_zoom(zoom) {
+            return false;
+        }
+        self.needs_full = true;
+        self.viewport_changed = true;
+        self.pending_viewport = Some(self.state.scroll_viewport_cmd());
+        true
+    }
+
+    /// The current grid zoom factor (`1.0` = 100%), for the status-bar readout.
+    pub fn zoom(&self) -> f64 {
+        self.state.zoom
     }
 
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
@@ -1947,11 +1984,13 @@ impl TrameView {
         if ctrl_key {
             return false;
         }
-        // Normalise the unit to physical pixels. Deltas already include dpr.
+        // Normalise the unit to physical pixels. Deltas already include dpr. A
+        // line step is one zoomed cell, so it scales with the grid zoom.
+        let z = self.state.zoom;
         let (sx, sy) = match delta_mode {
-            1 => (COL_WIDTH, ROW_HEIGHT), // DOM_DELTA_LINE
+            1 => (COL_WIDTH * z, ROW_HEIGHT * z), // DOM_DELTA_LINE
             2 => (self.state.canvas_width, self.state.canvas_height), // DOM_DELTA_PAGE
-            _ => (1.0, 1.0),              // DOM_DELTA_PIXEL
+            _ => (1.0, 1.0),                      // DOM_DELTA_PIXEL
         };
         let (px, py) = (dx * sx, dy * sy);
 
@@ -2006,13 +2045,17 @@ impl TrameView {
     /// keeping the sub-cell remainder. Shared by direct wheel input and the
     /// momentum coast.
     fn apply_scroll_accum(&mut self) -> ScrollOutcome {
-        let dc = (self.scroll_accum_x / COL_WIDTH) as i32;
-        let dr = (self.scroll_accum_y / ROW_HEIGHT) as i32;
+        // A whole-cell step is the base metric scaled by the grid zoom.
+        let z = self.state.zoom;
+        let step_x = COL_WIDTH * z;
+        let step_y = ROW_HEIGHT * z;
+        let dc = (self.scroll_accum_x / step_x) as i32;
+        let dr = (self.scroll_accum_y / step_y) as i32;
         if dr == 0 && dc == 0 {
             return ScrollOutcome::Idle;
         }
-        self.scroll_accum_x -= dc as f64 * COL_WIDTH;
-        self.scroll_accum_y -= dr as f64 * ROW_HEIGHT;
+        self.scroll_accum_x -= dc as f64 * step_x;
+        self.scroll_accum_y -= dr as f64 * step_y;
         if self.state.scroll_by(dr, dc) {
             self.viewport_changed = true;
             self.pending_viewport = Some(self.state.scroll_viewport_cmd());
@@ -2255,11 +2298,13 @@ impl TrameView {
     fn update_resize_preview(&mut self, x: f64, y: f64) {
         match self.resize_drag {
             Some(HeaderHit::ColBorder(c)) => {
-                let min_x = self.state.col_x(c) + crate::ui::grid::MIN_COL_WIDTH;
+                // The guide is in physical px, so the minimum width is the base
+                // clamp scaled by the current zoom.
+                let min_x = self.state.col_x(c) + crate::ui::grid::MIN_COL_WIDTH * self.state.zoom;
                 self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Col(x.max(min_x)));
             }
             Some(HeaderHit::RowBorder(r)) => {
-                let min_y = self.state.row_y(r) + crate::ui::grid::MIN_ROW_HEIGHT;
+                let min_y = self.state.row_y(r) + crate::ui::grid::MIN_ROW_HEIGHT * self.state.zoom;
                 self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Row(y.max(min_y)));
             }
             _ => {}
@@ -2280,13 +2325,18 @@ impl TrameView {
         };
         match (drag, preview) {
             (HeaderHit::ColBorder(c), crate::ui::grid::ResizePreview::Col(px)) => {
-                let width = (px - self.state.col_x(c)).max(crate::ui::grid::MIN_COL_WIDTH);
+                // The guide is in physical (zoomed) px; the stored width is BASE
+                // px (zoom-independent content), so divide the on-screen extent
+                // back out by the zoom before persisting.
+                let width = ((px - self.state.col_x(c)) / self.state.zoom)
+                    .max(crate::ui::grid::MIN_COL_WIDTH);
                 for col in self.resize_target_cols(c) {
                     self.send_resize_col(col, width as f32);
                 }
             }
             (HeaderHit::RowBorder(r), crate::ui::grid::ResizePreview::Row(py)) => {
-                let height = (py - self.state.row_y(r)).max(crate::ui::grid::MIN_ROW_HEIGHT);
+                let height = ((py - self.state.row_y(r)) / self.state.zoom)
+                    .max(crate::ui::grid::MIN_ROW_HEIGHT);
                 for row in self.resize_target_rows(r) {
                     self.send_resize_row(row, height as f32);
                 }
