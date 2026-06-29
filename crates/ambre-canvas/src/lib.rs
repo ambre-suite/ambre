@@ -38,6 +38,9 @@ pub mod text_input;
 // -- Selection anchor: canvas->DOM channel for floating chrome UI ------------
 pub mod anchor;
 
+// -- One-shot UI intents: canvas->DOM "open a floating surface now" pulses ----
+pub mod intent;
+
 // -- Perf snapshot: canvas->DOM channel for the performance HUD --------------
 pub mod perf;
 
@@ -52,6 +55,7 @@ pub use anchor::{Anchor, AnchorPublisher};
 pub use fatal::{fatal_message, signal_fatal};
 #[cfg(target_arch = "wasm32")]
 pub use host::{GpuState, RafControl, bootstrap_gpu, start_raf_loop};
+pub use intent::FilterOpenPublisher;
 pub use perf::PerfPublisher;
 pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurface};
 pub use request_registry::{RequestRegistry, RequestTag};

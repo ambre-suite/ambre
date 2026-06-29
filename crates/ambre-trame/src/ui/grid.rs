@@ -1862,16 +1862,144 @@ impl TrameUiState {
             x >= hx - m && x <= hx + w + m && y >= hy - m && y <= hy + h + m
         })
     }
+
+    /// Excel-style "current region" around the active cell (`-ui.md` sec.5.D):
+    /// the contiguous rectangle of non-empty cells, grown one line at a time
+    /// until the bordering row/column is fully empty. Resolved from the viewport
+    /// `cell_cache` (cells beyond the cache read as empty -- acceptable for the
+    /// always-on autofilter affordance, which only draws on visible cells).
+    /// Returns absolute `(r1, c1, r2, c2)`; `None` when the active cell is an
+    /// isolated empty cell (no block to filter).
+    pub fn current_region(&self) -> Option<(u32, u32, u32, u32)> {
+        let non_empty = |r: u32, c: u32| {
+            self.cell_cache
+                .get(&(r, c))
+                .is_some_and(|d| !d.text.is_empty())
+        };
+        let (ar, ac) = (self.active_row(), self.active_col());
+        let (mut r1, mut r2, mut c1, mut c2) = (ar, ar, ac, ac);
+        loop {
+            let mut grew = false;
+            if r1 > 0 && (c1..=c2).any(|c| non_empty(r1 - 1, c)) {
+                r1 -= 1;
+                grew = true;
+            }
+            if (c1..=c2).any(|c| non_empty(r2 + 1, c)) {
+                r2 += 1;
+                grew = true;
+            }
+            if c1 > 0 && (r1..=r2).any(|r| non_empty(r, c1 - 1)) {
+                c1 -= 1;
+                grew = true;
+            }
+            if (r1..=r2).any(|r| non_empty(r, c2 + 1)) {
+                c2 += 1;
+                grew = true;
+            }
+            if !grew {
+                break;
+            }
+        }
+        if r1 == r2 && c1 == c2 && !non_empty(ar, ac) {
+            return None;
+        }
+        Some((r1, c1, r2, c2))
+    }
+
+    /// Screen pixel rect (x, y, w, h) of the autofilter button for column `col`
+    /// on the current region's header row `band_row` (`-ui.md` sec.5.D): a small
+    /// square hugging the right edge of cell `(band_row, col)`. `None` when that
+    /// cell is hidden or scrolled out of view.
+    pub fn filter_button_rect(&self, band_row: u32, col: u32) -> Option<(f64, f64, f64, f64)> {
+        let (x, y, w, h) = self.cell_pixel_rect(band_row, col)?;
+        let s = FILTER_BUTTON_SIZE.min(h - 2.0).max(0.0);
+        let bx = x + w - s - 1.0;
+        let by = y + (h - s) / 2.0;
+        Some((bx, by, s, s))
+    }
+
+    /// Hit-test the autofilter button row: returns `(band_row, col)` of the
+    /// button under `(x, y)` (device px), with a small tolerance margin. `None`
+    /// when no button is hit (or no current region exists).
+    pub fn filter_button_at(&self, x: f64, y: f64) -> Option<(u32, u32)> {
+        let (r1, c1, _r2, c2) = self.current_region()?;
+        (c1..=c2).find_map(|col| {
+            self.filter_button_rect(r1, col).and_then(|(bx, by, w, h)| {
+                let m = 2.0;
+                (x >= bx - m && x <= bx + w + m && y >= by - m && y <= by + h + m)
+                    .then_some((r1, col))
+            })
+        })
+    }
 }
 
 /// Side of the square autofill handle drawn at the selection's bottom-right
 /// corner, in device pixels (`-ui.md` sec.5.F).
 pub const FILL_HANDLE_SIZE: f64 = 7.0;
 
+/// Side of the square Excel-style autofilter button drawn at the right edge of
+/// each current-region header cell, in device pixels (`-ui.md` sec.5.D).
+pub const FILTER_BUTTON_SIZE: f64 = 13.0;
+
 #[cfg(test)]
 mod tests {
-    use super::{CellEditor, HeaderHit, SelKind, Selection, TabMenu, TabMenuItem, TrameUiState};
+    use super::{
+        CellData, CellEditor, HeaderHit, SelKind, Selection, TabMenu, TabMenuItem, TrameUiState,
+    };
     use crate::{DisplayCell, TrameEvent};
+
+    /// Seed a non-empty cell in the viewport cache (the rest of `CellData`
+    /// defaulted), so the current-region helpers see it as data.
+    fn put(state: &mut TrameUiState, row: u32, col: u32, text: &str) {
+        state.cell_cache.insert(
+            (row, col),
+            CellData {
+                text: text.to_owned(),
+                ..Default::default()
+            },
+        );
+    }
+
+    /// `current_region` returns `None` on an isolated empty active cell and the
+    /// bounding rectangle of an L-shaped contiguous block otherwise (sec.5.D).
+    #[test]
+    fn current_region_bounds_the_contiguous_block() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        // Isolated empty active cell -> no block to filter.
+        assert_eq!(state.current_region(), None);
+
+        // L-shaped block around the active cell (0,0): (0,0),(0,1),(1,0).
+        put(&mut state, 0, 0, "a");
+        put(&mut state, 0, 1, "b");
+        put(&mut state, 1, 0, "c");
+        // The region is the bounding rect of the contiguous block.
+        assert_eq!(state.current_region(), Some((0, 0, 1, 1)));
+
+        // A far-away non-contiguous cell is excluded.
+        put(&mut state, 10, 10, "z");
+        assert_eq!(state.current_region(), Some((0, 0, 1, 1)));
+    }
+
+    /// `filter_button_at` hit-tests the autofilter button drawn at the right edge
+    /// of each current-region header cell, returning `(band_row, col)` (sec.5.D).
+    #[test]
+    fn filter_button_hit_test_matches_drawn_rect() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        put(&mut state, 0, 0, "a");
+        put(&mut state, 0, 1, "b");
+        // (r1, c1, r2, c2): a one-row, two-column block.
+        assert_eq!(state.current_region(), Some((0, 0, 0, 1)));
+
+        // The button for column 1 sits at the right edge of cell (0, 1); hitting
+        // its centre resolves to that column on the region's header row.
+        let (bx, by, w, h) = state.filter_button_rect(0, 1).expect("button visible");
+        assert_eq!(
+            state.filter_button_at(bx + w / 2.0, by + h / 2.0),
+            Some((0, 1))
+        );
+        // A point well clear of any button misses.
+        assert_eq!(state.filter_button_at(bx + 400.0, by + h / 2.0), None);
+    }
 
     /// A pointer hit collapses the selection to a single cell (`anchor ==
     /// active`); keyboard navigation moves the single-cell selection and never

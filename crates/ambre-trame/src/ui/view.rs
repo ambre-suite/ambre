@@ -16,8 +16,9 @@ use ambre_bus::{
     UiEvent,
 };
 use ambre_canvas::{
-    Anchor, AnchorPublisher, ContentRepaint, FrameStats, InputEvent, OverlayRepaint, PerfPublisher,
-    PerfSnapshot, RepaintPlan, TextCache, TextInput, Theme, ThemeControl, WgpuSurface,
+    Anchor, AnchorPublisher, ContentRepaint, FilterOpenPublisher, FrameStats, InputEvent,
+    OverlayRepaint, PerfPublisher, PerfSnapshot, RepaintPlan, TextCache, TextInput, Theme,
+    ThemeControl, WgpuSurface,
 };
 use ambre_draw::{Clock, FontContext, Rect};
 #[cfg(target_arch = "wasm32")]
@@ -229,6 +230,11 @@ pub struct TrameView {
     /// Publishes the per-frame perf snapshot (fps + timings) so the DOM status
     /// bar can render it -- the HUD migrated off the wgpu overlay (sec.13bis).
     perf_pub: PerfPublisher,
+    /// One-shot canvas->launcher channel raised when an in-canvas autofilter
+    /// button is clicked (`-ui.md` sec.5.D). The launcher consumes it to open the
+    /// DOM `FilterPopover` over the active cell -- the same path as the
+    /// context-menu "Filter by column" entry, so there is one filter code path.
+    filter_open: FilterOpenPublisher,
     /// Status-bar selection aggregates signal (`-ui.md` sec.13bis). The view
     /// clears it to `None` on a single-cell selection; the Logic round-trip
     /// (`RequestSelectionStats` -> `SelectionStats`) sets it from the launcher's
@@ -375,6 +381,7 @@ impl TrameView {
         text_input: TextInput,
         anchor: AnchorPublisher,
         perf_pub: PerfPublisher,
+        filter_open: FilterOpenPublisher,
         theme_ctl: ThemeControl,
         #[cfg(target_arch = "wasm32")] formula_ref: RwSignal<String>,
         #[cfg(target_arch = "wasm32")] formula_text: RwSignal<String>,
@@ -402,6 +409,7 @@ impl TrameView {
             anchor,
             last_anchor: None,
             perf_pub,
+            filter_open,
             #[cfg(target_arch = "wasm32")]
             sel_stats,
             #[cfg(target_arch = "wasm32")]
@@ -1577,6 +1585,21 @@ impl TrameView {
             // A press on the fill handle (bottom-right of the selection) arms an
             // autofill drag instead of a new selection (sec.5.F). Checked before
             // the plain selection press so the ~7px handle wins the hit.
+            // A click on an in-canvas autofilter button (sec.5.D) selects the
+            // button's column on the region's header row, then raises the one-shot
+            // intent so the launcher opens the FilterPopover for that column --
+            // the same path as the context-menu entry (one filter code path).
+            // Tested before the fill handle / cells so the small button wins.
+            InputEvent::PointerDown {
+                x, y, button: 0, ..
+            } if self.fill_drag.is_none() && self.state.filter_button_at(*x, *y).is_some() => {
+                if let Some((row, col)) = self.state.filter_button_at(*x, *y) {
+                    self.text_input.focus();
+                    self.select_cell(row, col);
+                    self.filter_open.publish();
+                }
+                true
+            }
             InputEvent::PointerDown {
                 x, y, button: 0, ..
             } if self.fill_drag.is_none() && self.state.fill_handle_at(*x, *y) => {
@@ -1736,6 +1759,7 @@ impl TrameView {
                     Some(HeaderHit::ColBorder(_)) => "col-resize",
                     Some(HeaderHit::RowBorder(_)) => "row-resize",
                     Some(_) => "pointer",
+                    None if self.state.filter_button_at(*x, *y).is_some() => "pointer",
                     None if self.state.fill_handle_at(*x, *y) => "crosshair",
                     None => "",
                 };
