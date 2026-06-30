@@ -47,6 +47,20 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     // Bottom separator.
     surface.stroke_line(0.0, top + hh, w, top + hh, palette.header_border, 1.0);
 
+    // Per-column separators: a vertical hairline at each column's right edge, so
+    // the letter cells read as discrete buttons (spec sec.13). Walks the same
+    // visible columns as the label loop below, independent of `text_enabled`.
+    {
+        let mut col = layout.origin_col;
+        let mut col_x = layout.header_width;
+        while col < layout.total_cols && col_x < w {
+            let edge = col_x + layout.col_w(col);
+            surface.stroke_line(edge, top, edge, top + hh, palette.header_border, 1.0);
+            col_x = edge;
+            col += 1;
+        }
+    }
+
     if !text_enabled {
         return;
     }
@@ -131,6 +145,23 @@ pub fn draw_row_headers_on<S: DrawSurface>(
 
     // Right separator.
     surface.stroke_line(hw, top, hw, h, palette.header_border, 1.0);
+
+    // Per-row separators: a horizontal hairline at each visible row's bottom edge,
+    // so the numbers read as discrete buttons (spec sec.13). Walks the collapsed
+    // (filtered) row space like the number loop, independent of `text_enabled`.
+    {
+        let mut slot = 0u32;
+        let mut row_y = cells_top;
+        while let Some(row) = layout.row_at_slot(slot) {
+            if row_y >= h {
+                break;
+            }
+            let edge = row_y + layout.row_h(row);
+            surface.stroke_line(0.0, edge, hw, edge, palette.header_border, 1.0);
+            row_y = edge;
+            slot += 1;
+        }
+    }
 
     if !text_enabled {
         return;

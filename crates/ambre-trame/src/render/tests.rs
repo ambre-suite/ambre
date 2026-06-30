@@ -194,11 +194,30 @@ fn col_headers_draw_bg_separator_and_active_tint() {
             op, DrawOp::FillRect { color, .. } if *color == palette.header_active
         )) >= 1
     );
-    // The bottom separator.
+    // The bottom separator plus one per-column hairline: strictly more than the
+    // single bottom line, proving the inter-column separators are drawn.
     assert!(
         s.count(|op| matches!(
             op, DrawOp::StrokeLine { color, .. } if *color == palette.header_border
-        )) >= 1
+        )) >= 2
+    );
+    assert_eq!(s.clip_depth(), 0);
+}
+
+#[test]
+fn row_headers_draw_per_row_separators() {
+    let l = layout();
+    let palette = Theme::Light.palette();
+    let (mut s, mut fc, mut tc) = harness();
+
+    draw_row_headers_on(&mut s, &l, palette, None, &mut fc, &mut tc, true);
+
+    // The right separator plus one per-row hairline: strictly more than the
+    // single right line, proving the inter-row separators are drawn.
+    assert!(
+        s.count(|op| matches!(
+            op, DrawOp::StrokeLine { color, .. } if *color == palette.header_border
+        )) >= 2
     );
     assert_eq!(s.clip_depth(), 0);
 }
