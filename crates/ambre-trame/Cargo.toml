@@ -17,6 +17,9 @@ csv       = { workspace = true }
 
 # UI side (UI Thread): DrawSurface renderer, text layout, frame channels.
 ambre-draw = { path = "../ambre-draw" }
+# 2D path parsing/flattening: scanline-fill the MdiFilter glyph on the canvas
+# autofilter buttons (the GPU surface has no fill_path). Host + wasm.
+kurbo      = { workspace = true }
 ambre-canvas   = { path = "../ambre-canvas" }
 # UI Thread <-> Logic frame channels (shared memory, Main instance).
 flume      = { workspace = true }
