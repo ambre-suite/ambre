@@ -134,7 +134,7 @@ input[type="radio"] {
 }
 
 .ambre-commandbar button:hover:not(:disabled) {
-    background: var(--surface);
+    background: var(--surface-hover);
 }
 
 /* Inactionable controls (e.g. Undo/Redo with an empty history stack, or the
@@ -219,7 +219,7 @@ input[type="radio"] {
 }
 
 .ambre-commandbar select:hover {
-    background-color: var(--surface);
+    background-color: var(--surface-hover);
 }
 
 :root[data-theme="dark"] .ambre-commandbar select {
@@ -411,7 +411,7 @@ input[type="radio"] {
 }
 
 .ambre-statusbar .statusbar-fps:hover {
-    background: var(--surface-hover, rgba(127, 127, 127, 0.18));
+    background: var(--surface-hover);
     color: var(--text);
 }
 
@@ -452,7 +452,7 @@ input[type="radio"] {
 }
 
 .ambre-statusbar .statusbar-zoom-btn:hover {
-    background: var(--surface-hover, rgba(127, 127, 127, 0.18));
+    background: var(--surface-hover);
     color: var(--text);
 }
 
@@ -485,7 +485,7 @@ input[type="radio"] {
 }
 
 .statusbar-zoom-item:hover {
-    background: var(--surface-hover, rgba(127, 127, 127, 0.18));
+    background: var(--surface-hover);
 }
 
 .statusbar-zoom-item.selected {
@@ -697,7 +697,7 @@ input[type="radio"] {
 }
 
 .ambre-header button.icon:hover {
-    background: var(--surface-2);
+    background: var(--surface-hover);
     color: var(--text);
 }
 
@@ -969,7 +969,7 @@ input[type="radio"] {
 }
 
 .ambre-doc-item:hover {
-    background: var(--surface-2);
+    background: var(--surface-hover);
 }
 
 /* Type-icon tile: a coloured monogram badge (one per DocType). */
@@ -1064,7 +1064,7 @@ input[type="radio"] {
 }
 
 .ambre-doc-action:hover {
-    background: var(--surface-2);
+    background: var(--surface-hover);
     color: var(--text);
 }
 
@@ -1131,7 +1131,7 @@ input[type="radio"] {
 }
 
 .ambre-btn-secondary:hover {
-    background: var(--surface-2);
+    background: var(--surface-hover);
 }
 
 .ambre-btn-danger {
@@ -1752,7 +1752,7 @@ input[type="radio"] {
 }
 
 .ambre-filter-actions button:hover {
-    background: var(--surface-2);
+    background: var(--surface-hover);
 }
 
 .ambre-filter-actions button.primary {
@@ -1815,7 +1815,7 @@ input[type="radio"] {
     align-items: center;
 }
 .ambre-find-panel button:hover {
-    background: var(--surface-2);
+    background: var(--surface-hover);
 }
 .ambre-find-replace-all {
     flex: 0 0 auto;
@@ -1924,7 +1924,7 @@ input[type="radio"] {
     align-items: center;
 }
 .ambre-sort-close:hover {
-    background: var(--surface-2);
+    background: var(--surface-hover);
 }
 .ambre-sort-header-toggle {
     display: inline-flex;
@@ -1976,7 +1976,7 @@ input[type="radio"] {
     align-items: center;
 }
 .ambre-sort-remove:hover:not(:disabled) {
-    background: var(--surface-2);
+    background: var(--surface-hover);
 }
 .ambre-sort-remove:disabled {
     opacity: 0.4;
@@ -2004,7 +2004,7 @@ input[type="radio"] {
     font: inherit;
 }
 .ambre-sort-add:hover:not(:disabled) {
-    background: var(--surface-2);
+    background: var(--surface-hover);
 }
 .ambre-sort-add:disabled {
     opacity: 0.4;

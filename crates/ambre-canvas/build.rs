@@ -32,6 +32,7 @@ struct ChromeColors {
     bg: String,
     surface: String,
     surface_2: String,
+    surface_hover: String,
     border: String,
     text: String,
     text_dim: String,
@@ -44,11 +45,12 @@ struct ChromeColors {
 
 impl ChromeColors {
     /// (css-var-name, hex) pairs in declaration order.
-    fn vars(&self) -> [(&'static str, &str); 11] {
+    fn vars(&self) -> [(&'static str, &str); 12] {
         [
             ("bg", &self.bg),
             ("surface", &self.surface),
             ("surface-2", &self.surface_2),
+            ("surface-hover", &self.surface_hover),
             ("border", &self.border),
             ("text", &self.text),
             ("text-dim", &self.text_dim),
