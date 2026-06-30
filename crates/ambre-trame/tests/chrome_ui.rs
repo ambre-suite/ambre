@@ -360,7 +360,7 @@ fn item_commands(entries: &[ambre_chrome::MenuEntry]) -> Vec<ambre_chrome::comma
 
 #[wasm_bindgen_test]
 fn cell_menu_has_clipboard_and_merge() {
-    let entries = chrome::context_entries_for(chrome::CtxScope::Cell);
+    let entries = chrome::context_entries_for(chrome::CtxScope::Cell, false);
     let cmds = item_commands(&entries);
     // Clipboard + merge are cell-only; structural + sort/filter are shared.
     for expected in [
@@ -381,32 +381,76 @@ fn cell_menu_has_clipboard_and_merge() {
 }
 
 #[wasm_bindgen_test]
-fn header_menu_drops_cell_only_groups() {
-    let entries = chrome::context_entries_for(chrome::CtxScope::Header);
+fn column_menu_keeps_column_ops_drops_cell_and_row_ops() {
+    let entries = chrome::context_entries_for(chrome::CtxScope::Column, false);
     let cmds = item_commands(&entries);
-    // Structural + sort/filter survive...
+    // Column-axis structural + sort/filter survive...
     for expected in [
-        chrome::INSERT_ROW_ABOVE,
+        chrome::INSERT_COL_LEFT,
+        chrome::INSERT_COL_RIGHT,
         chrome::DELETE_COLS,
         chrome::SORT_RANGE_ASC,
-        chrome::SORT_RANGE_MULTI,
         chrome::FILTER_COLUMN,
     ] {
         assert!(
             cmds.contains(&expected),
-            "header menu must list {expected:?}"
+            "column menu must list {expected:?}"
         );
     }
-    // ...the cell-only clipboard + merge groups do not.
+    // ...the row-only inserts, the cell clipboard and merge do not.
     for absent in [
+        chrome::INSERT_ROW_ABOVE,
+        chrome::DELETE_ROWS,
         chrome::CUT,
-        chrome::COPY,
-        chrome::PASTE,
         chrome::MERGE,
-        chrome::UNMERGE,
     ] {
-        assert!(!cmds.contains(&absent), "header menu must drop {absent:?}");
+        assert!(!cmds.contains(&absent), "column menu must drop {absent:?}");
     }
+}
+
+#[wasm_bindgen_test]
+fn row_menu_keeps_row_ops_drops_column_inserts() {
+    let entries = chrome::context_entries_for(chrome::CtxScope::Row, false);
+    let cmds = item_commands(&entries);
+    for expected in [
+        chrome::INSERT_ROW_ABOVE,
+        chrome::INSERT_ROW_BELOW,
+        chrome::DELETE_ROWS,
+        chrome::SORT_RANGE_ASC,
+    ] {
+        assert!(cmds.contains(&expected), "row menu must list {expected:?}");
+    }
+    for absent in [chrome::INSERT_COL_LEFT, chrome::DELETE_COLS, chrome::CUT] {
+        assert!(!cmds.contains(&absent), "row menu must drop {absent:?}");
+    }
+}
+
+#[wasm_bindgen_test]
+fn corner_menu_has_sheet_sort_only() {
+    let entries = chrome::context_entries_for(chrome::CtxScope::Corner, false);
+    let cmds = item_commands(&entries);
+    assert!(cmds.contains(&chrome::SORT_SHEET_ASC));
+    // No per-row/column structural or clipboard ops on a whole-sheet selection.
+    for absent in [
+        chrome::INSERT_COL_LEFT,
+        chrome::INSERT_ROW_ABOVE,
+        chrome::CUT,
+        chrome::MERGE,
+    ] {
+        assert!(!cmds.contains(&absent), "corner menu must drop {absent:?}");
+    }
+}
+
+#[wasm_bindgen_test]
+fn filter_entry_toggles_with_filter_state() {
+    // No active filter -> "Filter by column" offered, "Clear filter" absent.
+    let none = item_commands(&chrome::context_entries_for(chrome::CtxScope::Cell, false));
+    assert!(none.contains(&chrome::FILTER_COLUMN));
+    assert!(!none.contains(&chrome::CLEAR_FILTER));
+    // Active filter -> "Remove filter" offered, "Filter by column" absent.
+    let active = item_commands(&chrome::context_entries_for(chrome::CtxScope::Cell, true));
+    assert!(active.contains(&chrome::CLEAR_FILTER));
+    assert!(!active.contains(&chrome::FILTER_COLUMN));
 }
 
 /// DOM test: the `SheetTabs` strip renders one `.tab` per sheet with the active

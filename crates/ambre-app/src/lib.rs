@@ -144,6 +144,10 @@ struct Wiring {
     /// Right-click context-menu scope (`-ui.md` sec.5.C): the canvas view sets it
     /// (cell vs header) before the DOM menu opens; the shell derives the layout.
     ctx_scope: RwSignal<trame_chrome::CtxScope>,
+    /// Whether the active sheet currently has a shared filter (`-ui.md` sec.5.D):
+    /// mirrored from `TrameEvent::FilterApplied`/`FilterCleared`. Drives the
+    /// context menu's dynamic filter entry (Filter by column XOR Remove filter).
+    filter_active: RwSignal<bool>,
     /// Current selection rectangle `(r1, c1, r2, c2)`, published by the canvas
     /// view on each selection change; read when opening the multi-column sort
     /// dialog so it offers the selection's columns (`-ui.md` sec.5.C).
@@ -311,6 +315,9 @@ pub fn main() {
     // shell derives the menu layout from it. Created here (like the formula
     // signals) so both the view and the Leptos shell share the one signal.
     let ctx_scope = RwSignal::new(trame_chrome::CtxScope::Cell);
+    // Active-filter flag (`-ui.md` sec.5.D), mirrored from the Logic thread's
+    // FilterApplied/FilterCleared. Drives the context menu's dynamic filter entry.
+    let filter_active = RwSignal::new(false);
     // Selection rectangle published by the canvas view (`-ui.md` sec.5.C), read
     // when opening the multi-column sort dialog. Created here (like `ctx_scope`)
     // so the view and the Leptos shell share the one signal.
@@ -433,6 +440,7 @@ pub fn main() {
         perf_snap,
         zoom,
         ctx_scope,
+        filter_active,
         sel_bounds,
         sheets,
         active_sheet,
@@ -809,15 +817,23 @@ pub fn main() {
                         }
                     });
                 }
-                // The filter took effect or was cleared -> close the popover.
+                // The filter took effect -> close the popover and flag the active
+                // sheet as filtered (drives the context menu's dynamic entry).
                 UiEvent::Viewport {
-                    event:
-                        AppEvent::Trame(
-                            ambre_bus::TrameEvent::FilterApplied { .. }
-                            | ambre_bus::TrameEvent::FilterCleared,
-                        ),
+                    event: AppEvent::Trame(ambre_bus::TrameEvent::FilterApplied { .. }),
                     ..
-                } => filter_popover.set(None),
+                } => {
+                    filter_popover.set(None);
+                    filter_active.set(true);
+                }
+                // The filter was cleared -> close the popover and drop the flag.
+                UiEvent::Viewport {
+                    event: AppEvent::Trame(ambre_bus::TrameEvent::FilterCleared),
+                    ..
+                } => {
+                    filter_popover.set(None);
+                    filter_active.set(false);
+                }
                 // Sheet-tab strip (sec.13): the sheet list / active id changed ->
                 // mirror it to the DOM `SheetTabs` signals. The canvas no longer
                 // draws the tabs, so this is the only consumer now.
@@ -981,6 +997,7 @@ fn mount_shell(
     perf_snap: RwSignal<ambre_canvas::PerfSnapshot>,
     zoom: RwSignal<f64>,
     ctx_scope: RwSignal<trame_chrome::CtxScope>,
+    filter_active: RwSignal<bool>,
     sel_bounds: RwSignal<Option<(u32, u32, u32, u32)>>,
     sheets: RwSignal<Vec<(String, String)>>,
     active_sheet: RwSignal<String>,
@@ -1057,6 +1074,7 @@ fn mount_shell(
             perf_snap,
             zoom,
             ctx_scope,
+            filter_active,
             sel_bounds,
             sort_dialog,
             chrome_status,
@@ -1103,6 +1121,7 @@ fn AppRoot() -> impl IntoView {
         perf_snap,
         zoom,
         ctx_scope,
+        filter_active,
         sel_bounds,
         sort_dialog,
         chrome_status,
@@ -1458,7 +1477,8 @@ fn AppRoot() -> impl IntoView {
     // The menu layout follows the right-click scope the view published (`-ui.md`
     // sec.5.C): a cell right-click gets the full menu, a header right-click the
     // header-scoped one (no clipboard / merge).
-    let ctx_entries = Memo::new(move |_| trame_chrome::context_entries_for(ctx_scope.get()));
+    let ctx_entries =
+        Memo::new(move |_| trame_chrome::context_entries_for(ctx_scope.get(), filter_active.get()));
 
     // Per-slot sender clones. Each slot's children is a `Fn` (re-runnable), so it
     // captures its own clone and re-clones inside the handler rather than moving

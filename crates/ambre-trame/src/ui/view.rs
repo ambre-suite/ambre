@@ -1506,18 +1506,26 @@ impl TrameView {
                 x, y, button: 2, ..
             } if self.state.header_hit(*x, *y).is_some() => {
                 self.text_input.focus();
-                match self.state.header_hit(*x, *y).expect("guarded") {
-                    HeaderHit::ColBody(c) => self.select_axis(SelKind::Cols, c),
-                    HeaderHit::RowBody(r) => self.select_axis(SelKind::Rows, r),
-                    HeaderHit::Corner => self.select_all(),
-                    // Border / insert bands keep the current selection; the
-                    // header-scoped menu still acts on it.
-                    HeaderHit::ColBorder(_)
-                    | HeaderHit::RowBorder(_)
-                    | HeaderHit::ColInsert(_)
-                    | HeaderHit::RowInsert(_) => {}
-                }
-                self.set_ctx_scope(crate::ui::grid::CtxScope::Header);
+                use crate::ui::grid::CtxScope;
+                let scope = match self.state.header_hit(*x, *y).expect("guarded") {
+                    HeaderHit::ColBody(c) => {
+                        self.select_axis(SelKind::Cols, c);
+                        CtxScope::Column
+                    }
+                    HeaderHit::RowBody(r) => {
+                        self.select_axis(SelKind::Rows, r);
+                        CtxScope::Row
+                    }
+                    HeaderHit::Corner => {
+                        self.select_all();
+                        CtxScope::Corner
+                    }
+                    // Border / insert bands keep the current selection; scope the
+                    // menu to the clicked axis so it still acts on that selection.
+                    HeaderHit::ColBorder(_) | HeaderHit::ColInsert(_) => CtxScope::Column,
+                    HeaderHit::RowBorder(_) | HeaderHit::RowInsert(_) => CtxScope::Row,
+                };
+                self.set_ctx_scope(scope);
                 false
             }
             // A right-click selects the cell under the cursor before the DOM
