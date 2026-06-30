@@ -1853,9 +1853,7 @@ pub const FILTER_BUTTON_SIZE: f64 = 13.0;
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        CellData, CellEditor, HeaderHit, SelKind, Selection, TrameUiState,
-    };
+    use super::{CellData, CellEditor, HeaderHit, SelKind, Selection, TrameUiState};
     use crate::{DisplayCell, TrameEvent};
 
     /// Seed a non-empty cell in the viewport cache (the rest of `CellData`
@@ -1923,10 +1921,7 @@ mod tests {
         let (.., w200, _) = state.filter_button_rect(0, 0).expect("button visible");
         // At 2x the cell is taller than the un-clamped button, so the side is the
         // zoom-scaled base: strictly larger than at 100%.
-        assert!(
-            w200 > w100,
-            "button must grow with zoom: {w100} -> {w200}"
-        );
+        assert!(w200 > w100, "button must grow with zoom: {w100} -> {w200}");
     }
 
     /// A pointer hit collapses the selection to a single cell (`anchor ==

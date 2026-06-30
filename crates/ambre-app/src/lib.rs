@@ -822,7 +822,11 @@ pub fn main() {
                 // mirror it to the DOM `SheetTabs` signals. The canvas no longer
                 // draws the tabs, so this is the only consumer now.
                 UiEvent::Viewport {
-                    event: AppEvent::Trame(ambre_bus::TrameEvent::SheetList { sheets: list, active }),
+                    event:
+                        AppEvent::Trame(ambre_bus::TrameEvent::SheetList {
+                            sheets: list,
+                            active,
+                        }),
                     ..
                 } => {
                     sheets.set(list.clone());
