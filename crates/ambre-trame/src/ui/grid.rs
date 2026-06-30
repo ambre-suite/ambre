@@ -1953,7 +1953,9 @@ impl TrameUiState {
     /// cell is hidden or scrolled out of view.
     pub fn filter_button_rect(&self, band_row: u32, col: u32) -> Option<(f64, f64, f64, f64)> {
         let (x, y, w, h) = self.cell_pixel_rect(band_row, col)?;
-        let s = FILTER_BUTTON_SIZE.min(h - 2.0).max(0.0);
+        // Scale the button with the grid zoom so it tracks the cell (which is
+        // already zoom-scaled via `cell_pixel_rect`); clamp to the cell height.
+        let s = (FILTER_BUTTON_SIZE * self.zoom).min(h - 2.0).max(0.0);
         let bx = x + w - s - 1.0;
         let by = y + (h - s) / 2.0;
         Some((bx, by, s, s))
@@ -1979,7 +1981,8 @@ impl TrameUiState {
 pub const FILL_HANDLE_SIZE: f64 = 7.0;
 
 /// Side of the square Excel-style autofilter button drawn at the right edge of
-/// each current-region header cell, in device pixels (`-ui.md` sec.5.D).
+/// each current-region header cell, in device pixels at 100% zoom (`-ui.md`
+/// sec.5.D). Scaled by the grid zoom in [`filter_button_rect`].
 pub const FILTER_BUTTON_SIZE: f64 = 13.0;
 
 #[cfg(test)]
@@ -2040,6 +2043,24 @@ mod tests {
         );
         // A point well clear of any button misses.
         assert_eq!(state.filter_button_at(bx + 400.0, by + h / 2.0), None);
+    }
+
+    /// The autofilter button scales with the grid zoom (it used to keep a fixed
+    /// device size, shrinking visually as the zoomed cells grew around it).
+    #[test]
+    fn filter_button_scales_with_zoom() {
+        let mut state = TrameUiState::new(800.0, 600.0);
+        put(&mut state, 0, 0, "a");
+        let (.., w100, _) = state.filter_button_rect(0, 0).expect("button visible");
+
+        state.set_zoom(2.0);
+        let (.., w200, _) = state.filter_button_rect(0, 0).expect("button visible");
+        // At 2x the cell is taller than the un-clamped button, so the side is the
+        // zoom-scaled base: strictly larger than at 100%.
+        assert!(
+            w200 > w100,
+            "button must grow with zoom: {w100} -> {w200}"
+        );
     }
 
     /// A pointer hit collapses the selection to a single cell (`anchor ==
