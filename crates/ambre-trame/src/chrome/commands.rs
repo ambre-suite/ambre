@@ -330,7 +330,7 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
     }
 }
 
-// -- Structural-op group (shared by the cell and header menus, sec.5.C) --------
+// -- Structural-op group (the full cell menu, sec.5.C) -------------------------
 fn structural_group() -> [MenuEntry; 6] {
     [
         MenuEntry::with_icon(
@@ -362,15 +362,51 @@ fn structural_group() -> [MenuEntry; 6] {
     ]
 }
 
-// -- Sort + filter group (shared by the cell and header menus, sec.5.C/5.D) ----
+// -- Column-only structural ops (column-header menu, sec.5.C) ------------------
+fn column_structural_group() -> [MenuEntry; 3] {
+    [
+        MenuEntry::with_icon(
+            INSERT_COL_LEFT,
+            "Insert column left",
+            icondata::MdiTableColumnPlusBefore,
+        ),
+        MenuEntry::with_icon(
+            INSERT_COL_RIGHT,
+            "Insert column right",
+            icondata::MdiTableColumnPlusAfter,
+        ),
+        MenuEntry::with_icon(
+            DELETE_COLS,
+            "Delete columns",
+            icondata::MdiTableColumnRemove,
+        ),
+    ]
+}
+
+// -- Row-only structural ops (row-header menu, sec.5.C) ------------------------
+fn row_structural_group() -> [MenuEntry; 3] {
+    [
+        MenuEntry::with_icon(
+            INSERT_ROW_ABOVE,
+            "Insert row above",
+            icondata::MdiTableRowPlusBefore,
+        ),
+        MenuEntry::with_icon(
+            INSERT_ROW_BELOW,
+            "Insert row below",
+            icondata::MdiTableRowPlusAfter,
+        ),
+        MenuEntry::with_icon(DELETE_ROWS, "Delete rows", icondata::MdiTableRowRemove),
+    ]
+}
+
+// -- Sort group (shared by the cell and header menus, sec.5.C) -----------------
 //
 // Single-column shared sort over the selection (reference column = the
 // selection's first column; the Logic thread no-ops an empty/single-row range)
 // and the whole-sheet sort by the active column (whole-column selection: sorts
-// the full used range so rows stay aligned). Filter "by column" opens the
-// popover (values / condition); "Clear filter" drops the active sheet's filter
-// (a no-op when nothing is filtered).
-fn sort_filter_group() -> [MenuEntry; 7] {
+// the full used range so rows stay aligned).
+fn sort_group() -> [MenuEntry; 5] {
     [
         MenuEntry::with_icon(
             SORT_RANGE_ASC,
@@ -393,58 +429,103 @@ fn sort_filter_group() -> [MenuEntry; 7] {
             icondata::MdiSort,
         ),
         MenuEntry::with_icon(SORT_RANGE_MULTI, "Sort range...", icondata::MdiSortVariant),
-        MenuEntry::with_icon(FILTER_COLUMN, "Filter by column", icondata::MdiFilter),
-        MenuEntry::with_icon(CLEAR_FILTER, "Clear filter", icondata::MdiFilterOff),
     ]
 }
 
-/// The right-click context-menu entries Trame contributes, grouped, iconed and
-/// separated (`-ui.md` sec.5.C). `scope` selects the cell menu (clipboard +
-/// structural + sort/filter + merge) or the header-scoped menu (structural +
-/// sort/filter only -- the cell-only clipboard and merge groups are dropped).
-pub fn context_entries_for(scope: CtxScope) -> Vec<MenuEntry> {
-    let mut entries = Vec::new();
-    // Clipboard (sec.5.E): cell-only. The launcher drives the browser clipboard.
-    if scope == CtxScope::Cell {
-        entries.push(MenuEntry::with_icon(CUT, "Cut", icondata::MdiContentCut));
-        entries.push(MenuEntry::with_icon(COPY, "Copy", icondata::MdiContentCopy));
-        entries.push(MenuEntry::with_icon(
-            PASTE,
-            "Paste",
-            icondata::MdiContentPaste,
-        ));
-        entries.push(MenuEntry::separator());
+// -- Dynamic shared-filter entry (sec.5.D) -------------------------------------
+//
+// Truly contextual: a single entry that toggles meaning with the active sheet's
+// filter state. With no filter it offers "Filter by column" (opens the popover);
+// with a filter active it offers "Remove filter" (drops it). Never both -- the
+// user complained the old menu always listed a clear-filter that did nothing.
+fn filter_entry(filter_active: bool) -> MenuEntry {
+    if filter_active {
+        MenuEntry::with_icon(CLEAR_FILTER, "Remove filter", icondata::MdiFilterOff)
+    } else {
+        MenuEntry::with_icon(FILTER_COLUMN, "Filter by column", icondata::MdiFilter)
     }
-    // Insert / delete rows+columns. The Logic thread resolves the geometry
-    // against the tracked active cell / selection.
-    entries.extend(structural_group());
-    entries.push(MenuEntry::separator());
-    // Sort + shared filter (sec.5.C / 5.D).
-    entries.extend(sort_filter_group());
-    // Merge (sec.2): cell-only. Always listed; the Logic thread guards it (Merge
-    // on a single cell is a silent no-op, Merge over a non-empty covered cell
-    // replies MergeRejected -> toast, Unmerge outside a merge is a no-op).
-    if scope == CtxScope::Cell {
-        entries.push(MenuEntry::separator());
-        entries.push(MenuEntry::with_icon(
-            MERGE,
-            "Merge cells",
-            icondata::MdiTableMergeCells,
-        ));
-        entries.push(MenuEntry::with_icon(
-            UNMERGE,
-            "Unmerge cells",
-            icondata::MdiTableSplitCell,
-        ));
+}
+
+/// The right-click context-menu entries Trame contributes, grouped, iconed and
+/// separated (`-ui.md` sec.5.C). `scope` selects the layout: the cell menu
+/// (clipboard + full structural + sort/filter + merge), the column- or row-header
+/// menu (axis-scoped structural + sort/filter, no clipboard/merge), or the corner
+/// menu (whole-sheet sort + filter). `filter_active` drives the dynamic
+/// [`filter_entry`] (Filter by column XOR Remove filter).
+pub fn context_entries_for(scope: CtxScope, filter_active: bool) -> Vec<MenuEntry> {
+    let mut entries = Vec::new();
+    match scope {
+        CtxScope::Cell => {
+            // Clipboard (sec.5.E): cell-only. The launcher drives the clipboard.
+            entries.push(MenuEntry::with_icon(CUT, "Cut", icondata::MdiContentCut));
+            entries.push(MenuEntry::with_icon(COPY, "Copy", icondata::MdiContentCopy));
+            entries.push(MenuEntry::with_icon(
+                PASTE,
+                "Paste",
+                icondata::MdiContentPaste,
+            ));
+            entries.push(MenuEntry::separator());
+            entries.extend(structural_group());
+            entries.push(MenuEntry::separator());
+            entries.extend(sort_group());
+            entries.push(filter_entry(filter_active));
+            entries.push(MenuEntry::separator());
+            // Merge (sec.2): cell-only. Always listed; the Logic thread guards it
+            // (single-cell Merge is a no-op, a covered non-empty cell replies
+            // MergeRejected -> toast, Unmerge outside a merge is a no-op).
+            entries.push(MenuEntry::with_icon(
+                MERGE,
+                "Merge cells",
+                icondata::MdiTableMergeCells,
+            ));
+            entries.push(MenuEntry::with_icon(
+                UNMERGE,
+                "Unmerge cells",
+                icondata::MdiTableSplitCell,
+            ));
+        }
+        CtxScope::Column => {
+            entries.extend(column_structural_group());
+            entries.push(MenuEntry::separator());
+            entries.extend(sort_group());
+            entries.push(filter_entry(filter_active));
+        }
+        CtxScope::Row => {
+            entries.extend(row_structural_group());
+            entries.push(MenuEntry::separator());
+            entries.extend(sort_group());
+            // Filtering is column-oriented, so a row menu only ever offers to drop
+            // an active filter (never to create one from a row).
+            if filter_active {
+                entries.push(filter_entry(true));
+            }
+        }
+        CtxScope::Corner => {
+            // The corner selects the whole sheet: only whole-sheet ops apply.
+            entries.push(MenuEntry::with_icon(
+                SORT_SHEET_ASC,
+                "Sort sheet by column (asc)",
+                icondata::MdiSort,
+            ));
+            entries.push(MenuEntry::with_icon(
+                SORT_SHEET_DESC,
+                "Sort sheet by column (desc)",
+                icondata::MdiSort,
+            ));
+            if filter_active {
+                entries.push(MenuEntry::separator());
+                entries.push(filter_entry(true));
+            }
+        }
     }
     entries
 }
 
-/// The default (cell-scoped) right-click context menu. Kept as the launcher's
-/// initial layout; a header right-click swaps in [`context_entries_for`]
-/// `(CtxScope::Header)`.
+/// The default (cell-scoped, no active filter) right-click context menu. Kept as
+/// the launcher's initial layout; a header right-click swaps in
+/// [`context_entries_for`] with the resolved scope and live filter state.
 pub fn context_entries() -> Vec<MenuEntry> {
-    context_entries_for(CtxScope::Cell)
+    context_entries_for(CtxScope::Cell, false)
 }
 
 /// The status-bar label for a Trame document.

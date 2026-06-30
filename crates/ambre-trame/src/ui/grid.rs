@@ -426,18 +426,23 @@ pub enum SelKind {
 }
 
 /// Which surface a right-click landed on, choosing the context-menu layout
-/// (`-ui.md` sec.5.C). A header right-click drops the cell-only entries
-/// (clipboard / merge) and keeps the structural / sort / filter ops scoped to
-/// the clicked column or row (which the header click has already selected).
-/// Lives here (always compiled) so the host-tested input handler can set it; the
-/// chrome layer re-exports it.
+/// (`-ui.md` sec.5.C). Each header scope drops the cell-only entries (clipboard /
+/// merge) and keeps only the structural + sort/filter ops relevant to the axis
+/// the click already selected: a column header offers column insert/delete, a row
+/// header row insert/delete, and the corner the whole-sheet ops. Lives here
+/// (always compiled) so the host-tested input handler can set it; the chrome
+/// layer re-exports it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum CtxScope {
     /// Right-click on a grid cell: the full menu.
     #[default]
     Cell,
-    /// Right-click on a column/row header: the header-scoped menu.
-    Header,
+    /// Right-click on a column header: column-scoped structural + sort/filter.
+    Column,
+    /// Right-click on a row header: row-scoped structural + sort/filter.
+    Row,
+    /// Right-click on the top-left corner: whole-sheet ops only.
+    Corner,
 }
 
 /// A resolved pointer hit inside a header strip (`-ui.md` sec.4bis). The body
