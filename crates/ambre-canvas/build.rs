@@ -69,6 +69,7 @@ struct CanvasColors {
     content_pending: String,
     header_bg: String,
     header_active: String,
+    header_hover: String,
     grid_line: String,
     header_border: String,
     selection: String,
@@ -80,12 +81,13 @@ struct CanvasColors {
 
 impl CanvasColors {
     /// (rust-field-name, hex) pairs in `Palette` field order.
-    fn fields(&self) -> [(&'static str, &str); 11] {
+    fn fields(&self) -> [(&'static str, &str); 12] {
         [
             ("content_bg", &self.content_bg),
             ("content_pending", &self.content_pending),
             ("header_bg", &self.header_bg),
             ("header_active", &self.header_active),
+            ("header_hover", &self.header_hover),
             ("grid_line", &self.grid_line),
             ("header_border", &self.header_border),
             ("selection", &self.selection),

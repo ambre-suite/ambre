@@ -719,6 +719,12 @@ pub struct TrameUiState {
     /// `Some(RowInsert(i))` while hovered, `None` otherwise. UI-only view state.
     pub insert_hint: Option<HeaderHit>,
 
+    /// The column/row header body the pointer is hovering over, tinted with
+    /// `header_hover` for chrome-consistent hover feedback (`-ui.md` sec.13).
+    /// Only ever `Some(ColBody(_))` / `Some(RowBody(_))`; `None` otherwise.
+    /// UI-only view state.
+    pub hover_header: Option<HeaderHit>,
+
     /// Cells matched by the active Find query (`-ui.md` sec.5.G), drawn with a
     /// translucent highlight. Absolute grid `(row, col)` pairs from the last
     /// `TrameEvent::FindResult`; empty when the panel is closed or there is no
@@ -749,6 +755,7 @@ impl TrameUiState {
             row_heights: HashMap::new(),
             resize_preview: None,
             insert_hint: None,
+            hover_header: None,
             clipboard_anchor: None,
             fill_preview: None,
             find_matches: Vec::new(),

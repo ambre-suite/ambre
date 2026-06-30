@@ -10,16 +10,19 @@ use super::*;
 // draw_col_headers_on / draw_row_headers_on -- fixed header strips
 // -----------------------------------------------------------------------------
 
-/// Draw the top column-header strip: opaque background, the active-column tint
+/// Draw the top column-header strip: opaque background, the hover tint (when
+/// `hover_col` is visible and not the active column), the active-column tint
 /// (when `active_col` is visible), the bottom separator, then the A/B/C labels.
 ///
-/// `active_col == None` (PDF) skips the highlight.
+/// `active_col == None` (PDF) skips the highlight; `hover_col == None` skips the
+/// hover tint.
 #[allow(clippy::too_many_arguments)]
 pub fn draw_col_headers_on<S: DrawSurface>(
     surface: &mut S,
     layout: &GridLayout<'_>,
     palette: &Palette,
     active_col: Option<u32>,
+    hover_col: Option<u32>,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
     text_enabled: bool,
@@ -30,6 +33,21 @@ pub fn draw_col_headers_on<S: DrawSurface>(
 
     // Opaque background over the full top strip (corner included).
     surface.fill_rect(Rect::new(0.0, top, w, top + hh), palette.header_bg);
+
+    // Hover tint, under the active tint so the active column always wins when a
+    // hover lands on it. Skipped when the hovered column is the active one.
+    if let Some(col) = hover_col
+        && Some(col) != active_col
+        && col >= layout.origin_col
+    {
+        let x = layout.col_left(col);
+        if x < w {
+            surface.fill_rect(
+                Rect::new(x, top, x + layout.col_w(col), top + hh),
+                palette.header_hover,
+            );
+        }
+    }
 
     // Active-column tint, over the bg and under the labels.
     if let Some(col) = active_col
@@ -106,16 +124,20 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     }
 }
 
-/// Draw the left row-header strip: opaque background, the active-row tint (when
+/// Draw the left row-header strip: opaque background, the hover tint (when
+/// `hover_row` is visible and not the active row), the active-row tint (when
 /// `active_row` is visible), the right separator, then the 1/2/3 numbers.
 ///
-/// `active_row == None` (PDF) skips the highlight.
+/// `active_row == None` (PDF) skips the highlight; `hover_row == None` skips the
+/// row hover tint; `hover_corner` tints the top-left select-all corner.
 #[allow(clippy::too_many_arguments)]
 pub fn draw_row_headers_on<S: DrawSurface>(
     surface: &mut S,
     layout: &GridLayout<'_>,
     palette: &Palette,
     active_row: Option<u32>,
+    hover_row: Option<u32>,
+    hover_corner: bool,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
     text_enabled: bool,
@@ -127,6 +149,28 @@ pub fn draw_row_headers_on<S: DrawSurface>(
 
     // Opaque background over the full left strip (below the formula bar band).
     surface.fill_rect(Rect::new(0.0, top, hw, h), palette.header_bg);
+
+    // Hover tint on the top-left corner (select-all affordance). The corner is
+    // the last bg drawn over this region, so the tint sits cleanly on top.
+    if hover_corner {
+        surface.fill_rect(Rect::new(0.0, top, hw, cells_top), palette.header_hover);
+    }
+
+    // Hover tint, under the active tint so the active row always wins when a
+    // hover lands on it. Skipped when the hovered row is the active one or hidden.
+    if let Some(row) = hover_row
+        && Some(row) != active_row
+        && row >= layout.origin_row
+        && !layout.is_hidden(row)
+    {
+        let y = layout.row_top(row);
+        if y < h {
+            surface.fill_rect(
+                Rect::new(0.0, y, hw, y + layout.row_h(row)),
+                palette.header_hover,
+            );
+        }
+    }
 
     // Active-row tint, over the bg and under the numbers. Positioned in collapsed
     // (filtered) row space; skipped when the active row is itself hidden.

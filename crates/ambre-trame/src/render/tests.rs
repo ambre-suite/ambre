@@ -180,7 +180,7 @@ fn col_headers_draw_bg_separator_and_active_tint() {
     let palette = Theme::Light.palette();
     let (mut s, mut fc, mut tc) = harness();
 
-    draw_col_headers_on(&mut s, &l, palette, Some(0), &mut fc, &mut tc, true);
+    draw_col_headers_on(&mut s, &l, palette, Some(0), None, &mut fc, &mut tc, true);
 
     // The full-width header strip.
     assert!(
@@ -205,12 +205,109 @@ fn col_headers_draw_bg_separator_and_active_tint() {
 }
 
 #[test]
+fn col_headers_draw_hover_tint() {
+    let l = layout();
+    let palette = Theme::Light.palette();
+    let (mut s, mut fc, mut tc) = harness();
+
+    // Hover column 1 while column 0 is active: both tints must be present.
+    draw_col_headers_on(
+        &mut s,
+        &l,
+        palette,
+        Some(0),
+        Some(1),
+        &mut fc,
+        &mut tc,
+        true,
+    );
+
+    assert!(
+        s.count(|op| matches!(
+            op, DrawOp::FillRect { color, .. } if *color == palette.header_hover
+        )) >= 1
+    );
+}
+
+#[test]
+fn col_headers_skip_hover_tint_on_active_column() {
+    let l = layout();
+    let palette = Theme::Light.palette();
+    let (mut s, mut fc, mut tc) = harness();
+
+    // Hover lands on the active column -> the active tint wins, no hover fill.
+    draw_col_headers_on(
+        &mut s,
+        &l,
+        palette,
+        Some(0),
+        Some(0),
+        &mut fc,
+        &mut tc,
+        true,
+    );
+
+    assert_eq!(
+        s.count(
+            |op| matches!(op, DrawOp::FillRect { color, .. } if *color == palette.header_hover)
+        ),
+        0,
+    );
+}
+
+#[test]
+fn row_headers_draw_hover_tint() {
+    let l = layout();
+    let palette = Theme::Light.palette();
+    let (mut s, mut fc, mut tc) = harness();
+
+    // Hover a non-active row -> hover tint present.
+    draw_row_headers_on(
+        &mut s,
+        &l,
+        palette,
+        None,
+        Some(1),
+        false,
+        &mut fc,
+        &mut tc,
+        true,
+    );
+
+    assert!(
+        s.count(|op| matches!(
+            op, DrawOp::FillRect { color, .. } if *color == palette.header_hover
+        )) >= 1
+    );
+}
+
+#[test]
+fn row_headers_draw_corner_hover_tint() {
+    let l = layout();
+    let palette = Theme::Light.palette();
+    let (mut s, mut fc, mut tc) = harness();
+
+    // Hovering the top-left corner tints it with header_hover.
+    draw_row_headers_on(
+        &mut s, &l, palette, None, None, true, &mut fc, &mut tc, true,
+    );
+
+    assert!(
+        s.count(|op| matches!(
+            op, DrawOp::FillRect { color, .. } if *color == palette.header_hover
+        )) >= 1
+    );
+}
+
+#[test]
 fn row_headers_draw_per_row_separators() {
     let l = layout();
     let palette = Theme::Light.palette();
     let (mut s, mut fc, mut tc) = harness();
 
-    draw_row_headers_on(&mut s, &l, palette, None, &mut fc, &mut tc, true);
+    draw_row_headers_on(
+        &mut s, &l, palette, None, None, false, &mut fc, &mut tc, true,
+    );
 
     // The right separator plus one per-row hairline: strictly more than the
     // single right line, proving the inter-row separators are drawn.
@@ -229,7 +326,9 @@ fn row_headers_skip_tint_when_inactive() {
     let (mut s, mut fc, mut tc) = harness();
 
     // No active row -> no header_active fill, just bg + separator.
-    draw_row_headers_on(&mut s, &l, palette, None, &mut fc, &mut tc, true);
+    draw_row_headers_on(
+        &mut s, &l, palette, None, None, false, &mut fc, &mut tc, true,
+    );
 
     assert_eq!(
         s.count(
