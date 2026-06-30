@@ -2205,10 +2205,15 @@ impl TrameView {
     fn insert_col_at(&mut self, c: u32) {
         self.select_cell(self.state.active_row(), c);
         self.send_command_lossy(TrameCommand::InsertColLeft);
+        // Select the freshly created column (it lands at `c`) so the insertion
+        // reads as a clear whole-column band rather than a silent shift.
+        self.select_axis(crate::ui::grid::SelKind::Cols, c);
     }
     fn insert_row_at(&mut self, r: u32) {
         self.select_cell(r, self.state.active_col());
         self.send_command_lossy(TrameCommand::InsertRowAbove);
+        // Select the freshly created row (it lands at `r`) for the same feedback.
+        self.select_axis(crate::ui::grid::SelKind::Rows, r);
     }
 
     /// Finish an autofill drag (sec.5.F): emit `FillRange` over the source +

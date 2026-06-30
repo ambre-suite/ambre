@@ -405,11 +405,44 @@ const MARCHING_PERIOD: f64 = MARCHING_DASH + MARCHING_GAP;
 
 /// Draw a small filled "+" badge centred on `(cx, cy)`: the inline-insert
 /// affordance shown on a hovered header boundary (sec.4bis.D).
-fn draw_plus<S: DrawSurface>(s: &mut S, cx: f64, cy: f64, c: Color) {
+/// Radius of the inline insert pill (sec.4bis.D).
+const BADGE_RADIUS: f64 = 7.5;
+
+/// Fill a disc of radius `r` centred on `(cx, cy)` with solid `color`, painted as
+/// 1px-tall horizontal `fill_rect` spans (the GPU surface only fills axis-aligned
+/// quads, so the circle is reproduced scanline by scanline). The half-pixel span
+/// height keeps the rim from looking ragged at small radii.
+fn fill_disc<S: DrawSurface>(s: &mut S, cx: f64, cy: f64, r: f64, color: Color) {
+    if r <= 0.0 {
+        return;
+    }
+    let mut y = (cy - r).floor() + 0.5;
+    while y < cy + r {
+        let dy = y - cy;
+        let half = (r * r - dy * dy).max(0.0).sqrt();
+        if half > 0.0 {
+            s.fill_rect(Rect::new(cx - half, y - 0.5, cx + half, y + 0.5), color);
+        }
+        y += 1.0;
+    }
+}
+
+/// Inline insert badge: an Excel-style filled pill floating on the hovered header
+/// boundary (sec.4bis.D). A solid `fill` disc with a 1px contrasting `ring` halo
+/// (so it reads on both header and content backgrounds) and a centred `glyph`-
+/// coloured "+". Sized to sit comfortably on a header border without overlapping
+/// the neighbouring labels.
+fn draw_insert_badge<S: DrawSurface>(s: &mut S, cx: f64, cy: f64, fill: Color, glyph: Color) {
+    let r = BADGE_RADIUS;
+    // Halo: a slightly larger disc in the glyph colour gives the pill a crisp
+    // outline against the header so it floats rather than smearing into it.
+    fill_disc(s, cx, cy, r + 1.0, glyph);
+    fill_disc(s, cx, cy, r, fill);
+    // The "+" sign, in the contrasting glyph colour.
     let arm = 4.0;
-    let t = 1.5;
-    s.fill_rect(Rect::new(cx - arm, cy - t, cx + arm, cy + t), c);
-    s.fill_rect(Rect::new(cx - t, cy - arm, cx + t, cy + arm), c);
+    let t = 1.0;
+    s.fill_rect(Rect::new(cx - arm, cy - t, cx + arm, cy + t), glyph);
+    s.fill_rect(Rect::new(cx - t, cy - arm, cx + t, cy + arm), glyph);
 }
 
 /// The Material Design `MdiFilter` funnel path (`viewBox 0 0 24 24`), the exact
@@ -801,13 +834,17 @@ pub fn draw_overlay<S: DrawSurface>(
         // ColInsert(i) inserts left of column i, i.e. at column i's left edge.
         Some(grid::HeaderHit::ColInsert(i)) => {
             let bx = state.col_x(i);
-            let cy = layout.top + layout.header_height * 0.5;
-            draw_plus(surface, bx, cy, palette.selection);
+            // At the top of the column separator: the pill hugs the header's top
+            // edge rather than floating in its centre.
+            let cy = layout.top + BADGE_RADIUS + 1.0;
+            draw_insert_badge(surface, bx, cy, palette.selection, palette.content_bg);
         }
         Some(grid::HeaderHit::RowInsert(i)) => {
             let by = state.row_y(i);
-            let cx = state.header_w() * 0.5;
-            draw_plus(surface, cx, by, palette.selection);
+            // At the left of the row separator: the pill hugs the row header's
+            // left edge.
+            let cx = BADGE_RADIUS + 1.0;
+            draw_insert_badge(surface, cx, by, palette.selection, palette.content_bg);
         }
         _ => {}
     }
