@@ -33,6 +33,14 @@ pub struct FormulaBar {
     children: ChildrenFn,
 }
 
+/// Tab strip: a thin band just below the content, above the status bar
+/// (app-provided content -- e.g. Trame's sheet tabs). Optional: apps with no
+/// tabbed content (Prose) omit it and the row collapses.
+#[slot]
+pub struct Tabs {
+    children: ChildrenFn,
+}
+
 /// Status bar: cursor position, zoom, sync state, counters (app-provided).
 #[slot]
 pub struct StatusBar {
@@ -49,6 +57,7 @@ pub fn AppShell(
     header: Header,
     toolbar: Toolbar,
     #[prop(optional)] formula_bar: Option<FormulaBar>,
+    #[prop(optional)] tabs: Option<Tabs>,
     status_bar: StatusBar,
 ) -> impl IntoView {
     let canvas_id = canvas_id.unwrap_or_else(|| "ambre-canvas".to_owned());
@@ -66,6 +75,11 @@ pub fn AppShell(
                 // by id and sizes its backing store to the cell.
                 <canvas id=canvas_id class="ambre-canvas" tabindex="0"></canvas>
             </main>
+            {if let Some(tabs) = tabs {
+                Some(view! { <div class="ambre-tabstrip">{(tabs.children)()}</div> })
+            } else {
+                None
+            }}
             <footer class="ambre-statusbar">{(status_bar.children)()}</footer>
         </div>
     }

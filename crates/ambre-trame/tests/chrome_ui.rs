@@ -24,8 +24,9 @@ use ambre_bus::{
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
 use ambre_trame::chrome::{
-    self, BOLD, FindMode, FindQuery, FindReplace, FindReplaceState, REDO, ReplaceRequest, SelStats,
-    SortApply, SortDialog, SortDialogState, StatusBar, StyleState, UNDO,
+    self, BOLD, FindMode, FindQuery, FindReplace, FindReplaceState, REDO, ReorderSheet,
+    ReplaceRequest, SelStats, SheetTabs, SortApply, SortDialog, SortDialogState, StatusBar,
+    StyleState, UNDO,
 };
 use leptos::mount::mount_to;
 use leptos::prelude::*;
@@ -406,4 +407,58 @@ fn header_menu_drops_cell_only_groups() {
     ] {
         assert!(!cmds.contains(&absent), "header menu must drop {absent:?}");
     }
+}
+
+/// DOM test: the `SheetTabs` strip renders one `.tab` per sheet with the active
+/// one flagged, a click on another tab emits `on_activate`, and the trailing
+/// "+" emits `on_create`. Guards the canvas->DOM migration of the tab strip.
+#[wasm_bindgen_test]
+fn sheet_tabs_render_active_and_emit_intents() {
+    let activated = RwSignal::new(None::<String>);
+    let created = RwSignal::new(0_u32);
+
+    let container = mount_in_container(move || {
+        let sheets = RwSignal::new(vec![
+            ("s0".to_owned(), "One".to_owned()),
+            ("s1".to_owned(), "Two".to_owned()),
+        ]);
+        let active = RwSignal::new("s1".to_owned());
+        view! {
+            <SheetTabs
+                sheets=sheets
+                active=active
+                on_activate=Callback::new(move |id| activated.set(Some(id)))
+                on_create=Callback::new(move |()| created.update(|n| *n += 1))
+                on_rename=Callback::new(move |_: (String, String)| {})
+                on_delete=Callback::new(move |_: String| {})
+                on_reorder=Callback::new(move |_: ReorderSheet| {})
+            />
+        }
+    });
+
+    let doc = document();
+    // Two tabs, and exactly one carries the `.active` class (the second sheet).
+    let tabs = container.query_selector_all(".tab").unwrap();
+    assert_eq!(tabs.length(), 2, "expected one button per sheet");
+    let active_tabs = container.query_selector_all(".tab.active").unwrap();
+    assert_eq!(active_tabs.length(), 1, "exactly one active tab");
+    let active_el: web_sys::Element = active_tabs.item(0).unwrap().dyn_into().unwrap();
+    assert_eq!(active_el.text_content().unwrap_or_default(), "Two");
+
+    // Clicking the first (inactive) tab emits `on_activate("s0")`.
+    let first: web_sys::HtmlElement = tabs.item(0).unwrap().dyn_into().unwrap();
+    first.click();
+    assert_eq!(activated.get_untracked().as_deref(), Some("s0"));
+
+    // Clicking the trailing "+" emits `on_create`.
+    let add: web_sys::HtmlElement = doc
+        .query_selector(".tab-add")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    add.click();
+    assert_eq!(created.get_untracked(), 1);
+
+    container.remove();
 }

@@ -26,10 +26,12 @@ input[type="radio"] {
     color-scheme: dark;
 }
 
-/* The shell fills the viewport; rows = header, command bar, formula bar, content, status. */
+/* The shell fills the viewport; rows = header, command bar, formula bar,
+   content, tab strip, status. The tab-strip row is `auto`: it collapses to 0
+   when the app provides no <Tabs> slot. */
 .ambre-shell {
     display: grid;
-    grid-template-rows: var(--header-h) auto auto 1fr var(--status-h);
+    grid-template-rows: var(--header-h) auto auto 1fr auto var(--status-h);
     grid-template-columns: 100%;
     width: 100%;
     height: 100%;
@@ -385,6 +387,121 @@ input[type="radio"] {
     display: flex;
     align-items: center;
     gap: 14px;
+}
+
+/* Sheet-tab strip (Trame, sec.13): the app-agnostic <Tabs> slot, sitting below
+   the canvas and above the status bar. Trame fills it with its SheetTabs DOM
+   component (migrated off the canvas so it shares the chrome's hover/tokens). */
+.ambre-tabstrip {
+    display: flex;
+    align-items: stretch;
+    height: 28px;
+    padding: 0 4px;
+    background: var(--surface-2);
+    border-top: 1px solid var(--border);
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.ambre-tabstrip .tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    border: none;
+    border-right: 1px solid var(--border);
+    border-top: 2px solid transparent;
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 12px;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+}
+
+.ambre-tabstrip .tab:hover {
+    background: var(--surface-hover);
+}
+
+/* Active tab: flush with the strip (no contrasting fill), marked only by the
+   amber top accent and a brighter label -- the design decision from the canvas
+   era, carried over verbatim. */
+.ambre-tabstrip .tab.active {
+    color: var(--text);
+    border-top-color: var(--accent);
+}
+
+/* In-place rename input, shown over the tab being renamed. */
+.ambre-tabstrip .tab-rename {
+    width: 92px;
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 12px;
+    padding: 1px 4px;
+}
+
+/* Trailing "+" add-sheet button: same flat-on-strip treatment as a tab. */
+.ambre-tabstrip .tab-add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    padding: 0 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.ambre-tabstrip .tab-add:hover {
+    background: var(--surface-hover);
+}
+
+/* Drag-reorder: the dragged tab dims; the drop target shows an amber left edge
+   marking where the tab would land. */
+.ambre-tabstrip .tab.dragging {
+    opacity: 0.5;
+}
+
+.ambre-tabstrip .tab.drop-before {
+    box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* Per-tab { Rename, Delete } context menu (fixed-positioned at the click). */
+.ambre-tab-menu {
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    min-width: 120px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+.ambre-tab-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.ambre-tab-menu button:hover {
+    background: var(--surface-hover);
 }
 
 .ambre-statusbar .statusbar-stats .stat {
