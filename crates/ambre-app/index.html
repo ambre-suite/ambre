@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 
 <head>
     <meta charset="utf-8" />
@@ -129,7 +129,7 @@
     <!-- Loading screen (hidden by WASM via window.ambreReady after GPU init). -->
     <div id="loading">
         <div class="spinner"></div>
-        <p>Chargement...</p>
+        <p>Loading...</p>
     </div>
 
     <!--
@@ -141,12 +141,12 @@
 
     <!-- Fallback for browsers without WebGL2 (IE11 and below). -->
     <div id="no-webgpu">
-        <h1>Navigateur non compatible</h1>
+        <h1>Unsupported browser</h1>
         <p>
-            Ambre utilise WebGL2 pour le rendu. Votre navigateur ne semble pas le supporter.
+            Ambre uses WebGL2 for rendering. Your browser does not appear to support it.
         </p>
         <p>
-            Navigateurs compatibles : Chrome 56+, Firefox 51+, Safari 15+, Edge 79+.
+            Supported browsers: Chrome 56+, Firefox 51+, Safari 15+, Edge 79+.
         </p>
     </div>
 
