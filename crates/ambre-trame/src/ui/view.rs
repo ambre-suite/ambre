@@ -1495,6 +1495,19 @@ impl TrameView {
                     self.state.insert_hint = insert;
                     self.edit_dirty = true;
                 }
+                // Tint the hovered column/row header (chrome-consistent hover
+                // feedback). Only the body zones tint; borders/insert bands keep
+                // their resize/"+" affordances instead.
+                let hover = match hit {
+                    Some(
+                        h @ (HeaderHit::ColBody(_) | HeaderHit::RowBody(_) | HeaderHit::Corner),
+                    ) => Some(h),
+                    _ => None,
+                };
+                if hover != self.state.hover_header {
+                    self.state.hover_header = hover;
+                    self.edit_dirty = true;
+                }
                 false
             }
             // A right-click on a header selects the whole column/row (or all, on

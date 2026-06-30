@@ -569,11 +569,21 @@ pub fn draw_overlay<S: DrawSurface>(
     // -- 1. Fixed header strips (bg + active tint + separator + labels), via
     //       the shared primitives. The primitives clip the active tint to the
     //       visible range, so passing the raw active index is safe. -----------
+    let hover_col = match state.hover_header {
+        Some(grid::HeaderHit::ColBody(c)) => Some(c),
+        _ => None,
+    };
+    let hover_row = match state.hover_header {
+        Some(grid::HeaderHit::RowBody(r)) => Some(r),
+        _ => None,
+    };
+    let hover_corner = matches!(state.hover_header, Some(grid::HeaderHit::Corner));
     render::draw_col_headers_on(
         surface,
         &layout,
         palette,
         Some(state.active_col()),
+        hover_col,
         font_cx,
         text_cache,
         text_enabled,
@@ -583,6 +593,8 @@ pub fn draw_overlay<S: DrawSurface>(
         &layout,
         palette,
         Some(state.active_row()),
+        hover_row,
+        hover_corner,
         font_cx,
         text_cache,
         text_enabled,
