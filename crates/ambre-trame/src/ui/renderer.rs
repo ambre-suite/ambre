@@ -599,10 +599,12 @@ pub fn draw_overlay<S: DrawSurface>(
         && fcol < layout.origin_col + state.viewport_cols + 1
     {
         let cell = layout.cell_rect(layout.origin_row, fcol);
-        // Anchor the badge to the header strip, right-aligned in the cell.
-        let w = 8.0;
-        let h = 7.0;
-        let bx = (cell.x1 - w - 3.0).max(cell.x0 + 2.0);
+        // Anchor the badge to the header strip, right-aligned in the cell. The
+        // glyph scales with the grid zoom so it tracks the zoomed header letters.
+        let z = state.zoom;
+        let w = 8.0 * z;
+        let h = 7.0 * z;
+        let bx = (cell.x1 - w - 3.0 * z).max(cell.x0 + 2.0);
         let by = layout.top + (layout.header_height - h) / 2.0;
         draw_funnel(surface, bx, by, w, h, palette.selection);
     }
@@ -621,8 +623,9 @@ pub fn draw_overlay<S: DrawSurface>(
             let r = Rect::new(bx, by, bx + bw, by + bh);
             surface.fill_rect(r, palette.header_bg);
             surface.stroke_rect(r, palette.grid_line, 1.0);
-            // Glyph inset so it reads inside the button.
-            let pad = 3.0;
+            // Glyph inset so it reads inside the button, scaled with the zoom
+            // (the button itself is zoom-scaled) so the inset stays proportional.
+            let pad = 3.0 * state.zoom;
             let gx = bx + pad;
             let gy = by + pad;
             let gw = (bw - 2.0 * pad).max(0.0);
