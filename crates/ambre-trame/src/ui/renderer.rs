@@ -415,16 +415,105 @@ fn draw_plus<S: DrawSurface>(s: &mut S, cx: f64, cy: f64, c: Color) {
     s.fill_rect(Rect::new(cx - t, cy - arm, cx + t, cy + arm), c);
 }
 
-/// Stroke a funnel glyph (wide mouth + converging sides + short stem) inside the
-/// box `(bx, by, w, h)`: the "filter active" cue (sec.5.D). Stroke-only so every
-/// `DrawSurface` renders it (`fill_path` is optional).
+/// The Material Design `MdiFilter` funnel path (`viewBox 0 0 24 24`), the exact
+/// `d` of `icondata::MdiFilter` used by the DOM chrome (`chrome/commands.rs`).
+/// Embedded as a const because `icondata` is a wasm-only dependency, whereas the
+/// renderer also compiles on the host for tests; this keeps the canvas glyph and
+/// the DOM icon a single, identical silhouette.
+const MDI_FILTER_PATH: &str = "M14,12V19.88C14.04,20.18 13.94,20.5 13.71,20.71C13.32,21.1 12.69,21.1 12.3,20.71L10.29,18.7C10.06,18.47 9.96,18.16 10,17.87V12H9.97L4.21,4.62C3.87,4.19 3.95,3.56 4.38,3.22C4.57,3.08 4.78,3 5,3V3H19V3C19.22,3 19.43,3.08 19.62,3.22C20.05,3.56 20.13,4.19 19.79,4.62L14.03,12H14Z";
+
+/// The `MdiFilter` outline, flattened to polylines and normalized into the unit
+/// box `[0,1]^2` (aspect-preserving, centred), computed once. Each inner `Vec`
+/// is one closed contour as `(x, y)` points; the GPU surface has no `fill_path`,
+/// so the glyph is reproduced by scanline-filling these contours (sec.5.D).
+fn mdi_filter_polygon() -> &'static Vec<Vec<(f64, f64)>> {
+    static POLY: std::sync::OnceLock<Vec<Vec<(f64, f64)>>> = std::sync::OnceLock::new();
+    POLY.get_or_init(|| {
+        let path =
+            kurbo::BezPath::from_svg(MDI_FILTER_PATH).expect("MdiFilter path is a valid SVG path");
+        // Flatten curves to line segments, grouping into contours at each MoveTo.
+        let mut contours: Vec<Vec<(f64, f64)>> = Vec::new();
+        kurbo::flatten(path.iter(), 0.05, |el| match el {
+            kurbo::PathEl::MoveTo(p) => contours.push(vec![(p.x, p.y)]),
+            kurbo::PathEl::LineTo(p) => {
+                if let Some(c) = contours.last_mut() {
+                    c.push((p.x, p.y));
+                }
+            }
+            // The scanline fill closes each contour implicitly; nothing to do.
+            _ => {}
+        });
+        // Normalize by the path bounding box, scaling both axes by the larger
+        // dimension so the funnel keeps its proportions, then centre in [0,1].
+        let bb = kurbo::Shape::bounding_box(&path);
+        let scale = bb.width().max(bb.height()).max(f64::EPSILON);
+        let (cx, cy) = (bb.center().x, bb.center().y);
+        for contour in &mut contours {
+            for p in contour.iter_mut() {
+                p.0 = 0.5 + (p.0 - cx) / scale;
+                p.1 = 0.5 + (p.1 - cy) / scale;
+            }
+        }
+        contours
+    })
+}
+
+/// Scanline-fill the unit-box `contours` into the box `(bx, by, w, h)` with solid
+/// `color`, using 1px-tall horizontal `fill_rect` spans (even-odd rule). The GPU
+/// surface only fills axis-aligned quads, so an arbitrary silhouette is painted
+/// row by row. `MdiFilter` is a single hole-less contour, so even-odd == nonzero.
+fn fill_unit_polygon<S: DrawSurface>(
+    s: &mut S,
+    contours: &[Vec<(f64, f64)>],
+    bx: f64,
+    by: f64,
+    w: f64,
+    h: f64,
+    color: Color,
+) {
+    if w <= 0.0 || h <= 0.0 {
+        return;
+    }
+    let mut xs: Vec<f64> = Vec::new();
+    let mut y = by + 0.5;
+    while y < by + h {
+        let uy = (y - by) / h; // scanline in unit space
+        xs.clear();
+        for contour in contours {
+            let n = contour.len();
+            for i in 0..n {
+                let (x0, y0) = contour[i];
+                let (x1, y1) = contour[(i + 1) % n]; // wrap = implicit close
+                // Half-open crossing test avoids double-counting shared vertices.
+                if (y0 <= uy && y1 > uy) || (y1 <= uy && y0 > uy) {
+                    let t = (uy - y0) / (y1 - y0);
+                    xs.push(x0 + t * (x1 - x0));
+                }
+            }
+        }
+        xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let mut i = 0;
+        while i + 1 < xs.len() {
+            let xa = bx + xs[i].clamp(0.0, 1.0) * w;
+            let xb = bx + xs[i + 1].clamp(0.0, 1.0) * w;
+            if xb > xa {
+                s.fill_rect(Rect::new(xa, y - 0.5, xb, y + 0.5), color);
+            }
+            i += 2;
+        }
+        y += 1.0;
+    }
+}
+
+/// Paint the `MdiFilter` funnel glyph (filled) inside the box `(bx, by, w, h)`:
+/// the "filter active" cue (sec.5.D). A faithful reproduction of the DOM
+/// `icondata::MdiFilter`, fitted aspect-preserving into a centred square so the
+/// proportions hold regardless of the box aspect.
 fn draw_funnel<S: DrawSurface>(s: &mut S, bx: f64, by: f64, w: f64, h: f64, c: Color) {
-    let cx = bx + w / 2.0;
-    let mid = by + h * 0.55;
-    s.stroke_line(bx, by, bx + w, by, c, 1.0);
-    s.stroke_line(bx, by, cx, mid, c, 1.0);
-    s.stroke_line(bx + w, by, cx, mid, c, 1.0);
-    s.stroke_line(cx, mid, cx, by + h, c, 1.0);
+    let side = w.min(h);
+    let ox = bx + (w - side) / 2.0;
+    let oy = by + (h - side) / 2.0;
+    fill_unit_polygon(s, mdi_filter_polygon(), ox, oy, side, side, c);
 }
 
 /// Stroke a downward chevron inside the box `(bx, by, w, h)`: the "filter
@@ -1398,9 +1487,10 @@ mod tests {
 
     #[test]
     fn autofilter_button_shows_funnel_on_filtered_column() {
-        // With a filter active on column 0, that button paints the funnel glyph
-        // (selection-coloured strokes); without one, only the secondary header
-        // badge would -- so the in-region funnel is the new signal under test.
+        // With a filter active on column 0, that button paints the MdiFilter
+        // funnel glyph as selection-coloured scanline FillRects (the GPU surface
+        // has no fill_path); the secondary letter-header badge fills it too. An
+        // unfiltered fixture draws no selection-coloured fills here.
         let mut state = fixture(&[(0, 0, "a"), (0, 1, "b")]);
         state.filtered_col = Some(0);
         let palette = Theme::Light.palette();
@@ -1417,14 +1507,27 @@ mod tests {
             &mut stats,
         );
 
-        // Selection-coloured strokes appear (funnel on the filtered button plus
-        // the secondary letter-header badge); an unfiltered fixture draws none.
+        // Several selection-coloured fill spans make up the funnel silhouette.
         assert!(
             surface.count(|op| matches!(
-                op, DrawOp::StrokeLine { color, .. } if *color == palette.selection
-            )) > 0
+                op, DrawOp::FillRect { color, .. } if *color == palette.selection
+            )) > 2
         );
         assert_eq!(surface.clip_depth(), 0);
+    }
+
+    #[test]
+    fn mdi_filter_polygon_parses_into_unit_box() {
+        // The embedded MdiFilter path flattens to at least one non-empty contour,
+        // normalized inside the unit box so the scanline fill maps cleanly.
+        let contours = super::mdi_filter_polygon();
+        assert!(contours.iter().any(|c| c.len() >= 3));
+        for c in contours {
+            for &(x, y) in c {
+                assert!((-1e-6..=1.0 + 1e-6).contains(&x), "x out of unit box: {x}");
+                assert!((-1e-6..=1.0 + 1e-6).contains(&y), "y out of unit box: {y}");
+            }
+        }
     }
 
     #[test]
