@@ -114,20 +114,38 @@ Stories:
   terminal screen: `signal_fatal` is raised in `ambre-app/src/lib.rs` and `fatal_message` is painted
   every frame in `ambre-app/src/host.rs`.
 
-## E3 — Trame MVP (usual spreadsheet)  `[x]` (done) — *core objective*
+## E3 — Trame MVP (usual spreadsheet)  `[ ]` (reopened) — *core objective*
 
 *Turn the Trame skeleton into a usable spreadsheet. Scope = the consolidated "Phase 1 / MVP" of the
 four Trame specs, deduplicated against what `E0`/`E1` already delivered (virtual scroll + inline cell
 editor are done).*
 
-> **Reopened** for the header/column/row UX gap. The functional MVP shipped, but the structural-op
-> UX is below the bar set by the autofill handle: insert/delete live only in an unstyled context
-> menu, there is no whole-column/row selection, no hover affordance, no resize, and the filter gives
-> only a faint funnel badge. The promotion also pulls **multi-column sort** and **column/row resize**
-> forward from V1 into the MVP. Per the golden rule the Epic status is derived; the four sub-items of
-> the header/column/row UX Story have now all landed, so E3 derives back to `[x]`.
+> **Reopened** (first pass) for the header/column/row UX gap — multi-column sort, column/row resize,
+> whole-axis selection, autofilter buttons: all landed, that Story is `[x]`.
+>
+> **Reopened again** (second pass) for a chrome UX polish round, tracked by the new
+> "Chrome UX polish pass" Story below. Some of its items have landed (zoom-correct autofilter glyphs,
+> a unified hover token, the sheet-tab strip moved off the canvas into DOM chrome); others are still
+> open (header separators, a context-aware menu, in-grid header hover). Per the golden rule the Epic
+> status is derived: with open sub-items in that Story, E3 is `[ ]` until they all land.
 
 Stories:
+- **Chrome UX polish pass** `[ ]` — bring the grid/chrome interaction quality up to the bar set by
+  the rest of the MVP (`trame-ui §4bis`/`§5.C`/`§5.D`/`§13`):
+  - `[x]` Autofilter glyphs (button + column-letter badge + in-button inset) scale with the grid zoom.
+  - `[x]` Unified neutral hover on a single generated `--surface-hover` token (`tokens.ron`),
+    shared by every chrome control (toolbar, status bar, menus, launcher cards, sheet tabs).
+  - `[x]` **Sheet-tab strip migrated from canvas to DOM chrome**: an app-agnostic `<Tabs>` AppShell
+    slot + a `SheetTabs` component (tabs, "+", inline rename, `{Rename,Delete}` menu, HTML5
+    drag-reorder via the existing `MoveSheet`), fed by `SheetList`-mirrored signals. The canvas tab
+    rendering / hit-testing / input routing is gone; `grid_bottom` now spans the full canvas.
+  - `[ ]` Header separators: hairlines between column letters and between row numbers (`render/headers.rs`).
+  - `[ ]` Context-aware right-click menu: `CtxScope::{Cell, Column, Row, Corner}` with pluralised
+    labels and a dynamic filter entry (**Create filter** XOR **Remove filter** per `filter_col`).
+  - `[ ]` In-grid header hover feedback: tint the hovered column/row header on the canvas, reading
+    the same `surface_hover` token (exposed canvas-side via `theme.rs`).
+  - `[ ]` Inter-column/row "+" insert affordance polish (floating pill on boundary hover). *(The
+    whole-axis drag-reorder of grid columns/rows is out of scope here — see the E5 story.)*
 - **Header/column/row UX (MVP promotion)** `[x]` — `trame-ui §18 Phase 1` (new items) + `trame-logic §14 Phase 1` + `trame-features §10 Phase 1`:
   - Header interactions (`trame-ui §4bis`): virtual whole-column/row selection, hover cursors, **column/row resize** (`ResizeCol`/`ResizeRow` + variable-metrics `GridLayout`, `trame-logic §9/§14`), **double-click auto-fit** (UI-side over cached cells, reuses `ResizeCol`/`ResizeRow`; whole-column auto-fit is a V1 refinement), inline "+" insert affordance.
   - Context-menu polish (`trame-ui §5.C`): grouped iconed entries + separators + header-scoped menu.
@@ -176,4 +194,12 @@ Stories:
   key-rotation hot-path benchmarks + ZK audit (`cargo tree`); wasm-only warnings audit.
 - `CANVAS P2` — frame budget profiling, dynamic theme, i18n/RTL, non-regression benchmarks.
 - Trame Phase 2+ — basic .xlsx import, conditional formatting, data validation.
+- **Trame column/row reorder (drag & drop)** `[ ]` — Excel-style drag handles to move a
+  whole column/row to a new position. This is **not** UI polish: it requires an *atomic*
+  `MoveColumn` / `MoveRow` op in the Logic layer (not insert+copy+delete), formula reference
+  rewriting across the move (extend `formula/shift.rs` beyond insert/delete shifts), `SheetIndex`
+  support, and a new 2-peer convergence case in `logic/convergence_tests.rs` (concurrent moves must
+  not corrupt references). Deferred out of the E3 "Chrome UX polish pass" deliberately: it is a
+  replicated-data invariant, not a render detail. *(This is the grid column/row reorder, distinct
+  from the sheet-tab reorder, which is plain `MoveSheet` and already ships in the DOM `SheetTabs`.)*
 - Rendez-Vous — SFrame encryption (E2EE video): `SYNC P4` / Rendez-Vous.
