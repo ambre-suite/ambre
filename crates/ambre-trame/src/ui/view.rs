@@ -28,7 +28,7 @@ use leptos::prelude::{Get, GetUntracked, Set};
 
 use super::grid::{
     COL_WIDTH, CellEditor, CellRect, CursorMove, HeaderHit, HitKind, PendingHit, ROW_HEIGHT,
-    SelKind, Selection, TabDrag, TabMenu, TabMenuItem, TabRename, TrameUiState,
+    SelKind, Selection, TrameUiState,
 };
 use super::renderer::{self, DrawStats};
 use crate::TOTAL_COLS;
@@ -305,12 +305,6 @@ pub struct TrameView {
     /// (sec.4bis.B / sec.5.F): `"col-resize"` / `"row-resize"` / `"pointer"` /
     /// `"crosshair"` / `""`. Tracked to avoid redundant DOM writes every move.
     hover_cursor: String,
-    /// Active in-place sheet-tab rename, or `None` (spec sec.13).
-    tab_rename: Option<TabRename>,
-    /// Open per-tab context menu (`{ Rename, Delete }`), or `None`.
-    tab_menu: Option<TabMenu>,
-    /// In-progress tab drag-reorder, or `None`.
-    tab_drag: Option<TabDrag>,
     /// The edit overlay changed this frame (keystroke, caret move, IME pass).
     edit_dirty: bool,
     /// Caret blink phase: `true` = caret drawn. Toggled every `BLINK_MS`, reset
@@ -440,9 +434,6 @@ impl TrameView {
             pending_autofit: None,
             fill_drag: None,
             hover_cursor: String::new(),
-            tab_rename: None,
-            tab_menu: None,
-            tab_drag: None,
             edit_dirty: false,
             caret_on: true,
             last_blink_ms: 0.0,
@@ -763,9 +754,6 @@ impl TrameView {
         self.document_id = document_id;
         self.state = TrameUiState::new(self.state.canvas_width, self.state.canvas_height);
         self.editor = None;
-        self.tab_rename = None;
-        self.tab_menu = None;
-        self.tab_drag = None;
         self.edit_dirty = false;
         self.initial_viewport_sent = false;
         self.pending_viewport = None;
@@ -807,10 +795,11 @@ impl TrameView {
                 }
             }
             // The active sheet may have changed (switch, or delete fallback
-            // decided by the Logic thread); adopt it and refresh the strip. A
-            // separate DataReset re-fetches the viewport.
-            TrameEvent::SheetList { sheets, active } => {
-                self.state.on_sheet_list(sheets, active);
+            // decided by the Logic thread); adopt it so edits target the right
+            // sheet. The DOM `SheetTabs` strip mirrors the same event for the UI;
+            // a separate DataReset re-fetches the viewport.
+            TrameEvent::SheetList { active, .. } => {
+                self.state.active_sheet = active;
                 self.needs_full = true;
             }
             // A rejected lifecycle op (e.g. deleting the last sheet). The chrome
@@ -964,7 +953,7 @@ impl TrameView {
         // Caret blink: while editing, flip the phase every half-period and dirty
         // the overlay so it redraws. Costs one overlay redraw per ~530 ms; idle
         // (non-editing) frames never touch it.
-        if self.editor.is_some() || self.tab_rename.is_some() {
+        if self.editor.is_some() {
             let now = self.perf.now();
             if now - self.last_blink_ms >= BLINK_MS {
                 self.caret_on = !self.caret_on;
@@ -1108,13 +1097,8 @@ impl TrameView {
                 let dy_px = (-(dr as f64) * ROW_HEIGHT * self.state.zoom).round() as i32;
                 let dx_px = (-(dc as f64) * COL_WIDTH * self.state.zoom).round() as i32;
                 let w = self.state.canvas_width;
-                // Bottom edge of the *cell area*, not the full canvas: the
-                // sheet-tab strip (sec.13) occupies [grid_bottom, canvas_height]
-                // and is repainted via the overlay. Computing the scroll strip
-                // with canvas_height would place the entering-row band inside the
-                // tab strip and leave the real bottom cell row (height
-                // TAB_STRIP_HEIGHT) stale after the shift -- the source of the
-                // edge flicker on Arrow/Page navigation.
+                // Bottom edge of the cell area (now the full canvas: the sheet-tab
+                // strip moved to DOM chrome, so it no longer reserves a band here).
                 let h = self.state.grid_bottom();
                 // Top of the scrollable cell area: below the formula bar band
                 // (sec.6) and the column-header strip.
@@ -1237,19 +1221,6 @@ impl TrameView {
             glyph_misses: text_cache.frame_misses as u32,
         });
 
-        // Bottom sheet-tab strip (sec.13), above the grid/HUD.
-        renderer::draw_sheet_tabs(
-            surface,
-            &self.state,
-            self.theme.palette(),
-            font_cx,
-            text_cache,
-            self.text_enabled,
-            self.tab_rename.as_ref(),
-            self.tab_drag.as_ref(),
-            self.caret_on,
-        );
-
         // The in-cell edit field sits above everything (after the active border).
         if let Some(editor) = &mut self.editor {
             renderer::draw_edit(
@@ -1273,11 +1244,6 @@ impl TrameView {
                     .perf
                     .measure_with_start_mark("ambre:input-to-caret", "ambre:input");
             }
-        }
-
-        // The tab context menu floats above all else.
-        if let Some(menu) = &self.tab_menu {
-            renderer::draw_tab_menu(surface, self.theme.palette(), font_cx, text_cache, menu);
         }
     }
 
@@ -1317,294 +1283,11 @@ impl TrameView {
         {
             return self.handle_wheel(*dx, *dy, *delta_mode, *ctrl_key);
         }
-        // An open tab rename owns text, IME and the editing keys until it ends.
-        if self.tab_rename.is_some()
-            && let Some(consumed) = self.handle_tab_rename_input(ev)
-        {
-            return consumed;
-        }
-        // An open tab context menu intercepts clicks (select item or dismiss).
-        if self.tab_menu.is_some()
-            && let Some(consumed) = self.handle_tab_menu_input(ev)
-        {
-            return consumed;
-        }
-        // Tab strip interactions (activate / create / rename / drag-reorder).
-        if let Some(consumed) = self.handle_tab_input(ev) {
-            return consumed;
-        }
         // An open edit session owns text, IME and the editing keys.
         if self.editor.is_some() {
             return self.handle_input_editing(ev);
         }
         self.handle_input_nav(ev)
-    }
-}
-
-// -- Sheet tabs (spec sec.13) -------------------------------------------------
-impl TrameView {
-    /// Pointer interactions on the bottom tab strip, plus an in-flight drag.
-    /// Returns `None` for events that are not ours, so they fall through to the
-    /// grid (e.g. a pointer-down above the strip).
-    fn handle_tab_input(&mut self, ev: &InputEvent) -> Option<bool> {
-        match ev {
-            InputEvent::PointerDown {
-                x, y, button: 0, ..
-            } if self.state.in_tab_strip(*y) => {
-                // Any open cell edit is committed before leaving the grid.
-                self.commit_edit();
-                if self.state.add_button_at(*x, *y) {
-                    self.create_tab();
-                } else if let Some(i) = self.state.tab_at(*x, *y) {
-                    let (id, _) = self.state.sheets[i].clone();
-                    self.activate_tab(id.clone());
-                    // Arm a potential drag-reorder from this grab point.
-                    self.tab_drag = Some(TabDrag {
-                        sheet_id: id,
-                        grab_x: *x,
-                        cur_x: *x,
-                        moved: false,
-                    });
-                }
-                Some(true)
-            }
-            // Right-click a tab opens its context menu; consume so the browser
-            // menu does not appear over the canvas.
-            InputEvent::PointerDown {
-                x, y, button: 2, ..
-            } if self.state.in_tab_strip(*y) => {
-                if let Some(i) = self.state.tab_at(*x, *y) {
-                    let (id, _) = self.state.sheets[i].clone();
-                    let menu_h = 2.0 * super::grid::TAB_MENU_ITEM_HEIGHT;
-                    self.tab_menu = Some(TabMenu {
-                        sheet_id: id,
-                        x: *x,
-                        y: self.state.grid_bottom() - menu_h,
-                    });
-                    self.edit_dirty = true;
-                    return Some(true);
-                }
-                Some(false)
-            }
-            // Double-click a tab starts an in-place rename.
-            InputEvent::DoubleClick { x, y } if self.state.in_tab_strip(*y) => {
-                self.commit_edit();
-                if let Some(i) = self.state.tab_at(*x, *y) {
-                    self.begin_tab_rename(i);
-                }
-                Some(true)
-            }
-            InputEvent::PointerMove { x, .. } if self.tab_drag.is_some() => {
-                if let Some(d) = self.tab_drag.as_mut() {
-                    d.cur_x = *x;
-                    if (d.cur_x - d.grab_x).abs() > 4.0 {
-                        d.moved = true;
-                    }
-                }
-                self.edit_dirty = true;
-                Some(true)
-            }
-            InputEvent::PointerUp { .. } if self.tab_drag.is_some() => {
-                if let Some(d) = self.tab_drag.take()
-                    && d.moved
-                {
-                    let to_index = self.state.drop_index_at(d.cur_x);
-                    if let Err(SendError::Full) =
-                        self.send_command_lossless(TrameCommand::MoveSheet {
-                            sheet_id: d.sheet_id,
-                            to_index,
-                        })
-                    {
-                        tracing::error!("Trame: UI->Logic channel full, MoveSheet dropped");
-                    }
-                }
-                self.edit_dirty = true;
-                Some(true)
-            }
-            _ => None,
-        }
-    }
-
-    /// Clicks while the tab context menu is open: select an item, or dismiss on
-    /// an outside click (which then falls through to normal routing).
-    fn handle_tab_menu_input(&mut self, ev: &InputEvent) -> Option<bool> {
-        let InputEvent::PointerDown { x, y, .. } = ev else {
-            return None;
-        };
-        let menu = self.tab_menu.as_ref()?;
-        let item = menu.item_at(*x, *y);
-        let sheet_id = menu.sheet_id.clone();
-        self.tab_menu = None;
-        self.edit_dirty = true;
-        match item {
-            Some(TabMenuItem::Rename) => {
-                if let Some(i) = self.state.sheets.iter().position(|(id, _)| *id == sheet_id) {
-                    self.begin_tab_rename(i);
-                }
-                Some(true)
-            }
-            Some(TabMenuItem::Delete) => {
-                if let Err(SendError::Full) =
-                    self.send_command_lossless(TrameCommand::DeleteSheet { sheet_id })
-                {
-                    tracing::error!("Trame: UI->Logic channel full, DeleteSheet dropped");
-                }
-                Some(true)
-            }
-            // Outside click: just dismiss, let the click proceed.
-            None => None,
-        }
-    }
-
-    /// Text/keyboard routing while an in-place tab rename is active.
-    fn handle_tab_rename_input(&mut self, ev: &InputEvent) -> Option<bool> {
-        match ev {
-            InputEvent::Text { text } => {
-                if let Some(r) = self.tab_rename.as_mut() {
-                    r.editor.insert(text);
-                }
-                self.reset_blink();
-                Some(true)
-            }
-            InputEvent::CompositionUpdate { text } => {
-                if let Some(r) = self.tab_rename.as_mut() {
-                    r.editor.preview = text.clone();
-                }
-                self.reset_blink();
-                Some(true)
-            }
-            InputEvent::CompositionEnd { text } => {
-                if let Some(r) = self.tab_rename.as_mut() {
-                    r.editor.preview.clear();
-                    r.editor.insert(text);
-                }
-                self.reset_blink();
-                Some(true)
-            }
-            InputEvent::Key {
-                key, ctrl, meta, ..
-            } => {
-                if *ctrl || *meta {
-                    return Some(false);
-                }
-                match key.as_str() {
-                    "Enter" => {
-                        self.commit_tab_rename();
-                        Some(true)
-                    }
-                    "Escape" => {
-                        self.cancel_tab_rename();
-                        Some(true)
-                    }
-                    "Backspace" => {
-                        if let Some(r) = self.tab_rename.as_mut() {
-                            r.editor.backspace();
-                        }
-                        self.reset_blink();
-                        Some(true)
-                    }
-                    "ArrowLeft" => {
-                        if let Some(r) = self.tab_rename.as_mut() {
-                            r.editor.move_left();
-                        }
-                        self.reset_blink();
-                        Some(true)
-                    }
-                    "ArrowRight" => {
-                        if let Some(r) = self.tab_rename.as_mut() {
-                            r.editor.move_right();
-                        }
-                        self.reset_blink();
-                        Some(true)
-                    }
-                    // Printable keys fall through to the textarea -> `Text`.
-                    _ => Some(false),
-                }
-            }
-            // A pointer-down elsewhere commits the rename, then proceeds.
-            InputEvent::PointerDown { .. } => {
-                self.commit_tab_rename();
-                None
-            }
-            _ => None,
-        }
-    }
-
-    /// Switch the active sheet to `sheet_id` (tab click). Resets the scroll and
-    /// selection; the Logic thread replies with `DataReset` + `SheetList`.
-    fn activate_tab(&mut self, sheet_id: String) {
-        if sheet_id == self.state.active_sheet {
-            return;
-        }
-        if let Err(SendError::Full) = self.send_command_lossless(TrameCommand::ActivateSheet {
-            sheet_id: sheet_id.clone(),
-        }) {
-            tracing::error!("Trame: UI->Logic channel full, ActivateSheet dropped");
-        }
-        self.state.active_sheet = sheet_id;
-        self.state.top_row = 0;
-        self.state.left_col = 0;
-        self.state.select(0, 0);
-        self.needs_full = true;
-        // Re-fetch immediately; the forthcoming DataReset will refresh again.
-        self.pending_viewport = Some(self.state.scroll_viewport_cmd());
-    }
-
-    /// Create a new sheet via the "+" button. Does not switch the active sheet
-    /// (the Logic thread mints the id and replies `SheetList`).
-    fn create_tab(&mut self) {
-        let name = format!("Sheet{}", self.state.sheets.len() + 1);
-        if let Err(SendError::Full) = self.send_command_lossless(TrameCommand::CreateSheet { name })
-        {
-            tracing::error!("Trame: UI->Logic channel full, CreateSheet dropped");
-        }
-    }
-
-    /// Open the in-place rename editor on tab `index`, seeded with its name.
-    fn begin_tab_rename(&mut self, index: usize) {
-        let Some((id, name)) = self.state.sheets.get(index).cloned() else {
-            return;
-        };
-        self.tab_rename = Some(TabRename {
-            sheet_id: id,
-            editor: CellEditor::new(0, 0, name),
-        });
-        self.text_input.clear();
-        self.text_input.focus();
-        // Park the IME pipe on the tab (CSS px).
-        let (x0, _) = self.state.tab_slot_x(index);
-        self.text_input.set_caret(
-            x0 / self.dpr,
-            self.state.grid_bottom() / self.dpr,
-            ROW_HEIGHT / self.dpr,
-        );
-        self.reset_blink();
-    }
-
-    /// Commit the in-place rename (sends `RenameSheet` unless the name is blank).
-    fn commit_tab_rename(&mut self) {
-        let Some(r) = self.tab_rename.take() else {
-            return;
-        };
-        let name = r.editor.buffer.trim().to_owned();
-        if !name.is_empty()
-            && let Err(SendError::Full) = self.send_command_lossless(TrameCommand::RenameSheet {
-                sheet_id: r.sheet_id,
-                name,
-            })
-        {
-            tracing::error!("Trame: UI->Logic channel full, RenameSheet dropped");
-        }
-        self.text_input.clear();
-        self.edit_dirty = true;
-    }
-
-    /// Abandon the in-place rename without writing anything.
-    fn cancel_tab_rename(&mut self) {
-        if self.tab_rename.take().is_some() {
-            self.text_input.clear();
-            self.edit_dirty = true;
-        }
     }
 }
 

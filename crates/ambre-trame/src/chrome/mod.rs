@@ -33,6 +33,7 @@ mod commands;
 mod find_replace;
 mod formula_bar;
 mod popovers;
+mod sheet_tabs;
 mod sort_dialog;
 mod status;
 mod style;
@@ -49,6 +50,7 @@ pub use commands::{
 pub use find_replace::{FindMode, FindQuery, FindReplace, FindReplaceState, ReplaceRequest};
 pub use formula_bar::FormulaBar;
 pub use popovers::{FilterPopover, FilterPopoverState};
+pub use sheet_tabs::{ReorderSheet, SheetTabs};
 pub use sort_dialog::{SortApply, SortDialog, SortDialogState};
 pub use status::{SelStats, StatusBar};
 pub use style::{StyleState, Toggles, apply_style_event};

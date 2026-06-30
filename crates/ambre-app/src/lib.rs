@@ -41,8 +41,8 @@ use ambre_bus::{
 };
 use ambre_chrome::commands::{CommandId, Keymap};
 use ambre_chrome::{
-    AppShell, CommandStates, ContextMenu, Dialog, FormulaBar, Header, StatusBar, ToastHost, Toasts,
-    Toolbar,
+    AppShell, CommandStates, ContextMenu, Dialog, FormulaBar, Header, StatusBar, Tabs, ToastHost,
+    Toasts, Toolbar,
 };
 // Trame-specific chrome (command wiring + toolbar / selection-toolbar markup +
 // status label). The launcher stays app-agnostic and reaches into this module
@@ -150,6 +150,12 @@ struct Wiring {
     sel_bounds: RwSignal<Option<(u32, u32, u32, u32)>>,
     /// Multi-column sort dialog open state (`-ui.md` sec.5.C); `None` = closed.
     sort_dialog: RwSignal<Option<trame_chrome::SortDialogState>>,
+    /// Sheet-tab strip model (`-ui.md` sec.13): `(id, name)` in display order.
+    /// Mirrored from `TrameEvent::SheetList` by the per-frame relay; drives the
+    /// DOM `SheetTabs` slot (the tabs no longer live on the canvas).
+    sheets: RwSignal<Vec<(String, String)>>,
+    /// Active sheet id, mirrored from `TrameEvent::SheetList`.
+    active_sheet: RwSignal<String>,
     /// Chrome status indicator (`-chrome.md` 2.G): drives the header sync label
     /// and the document-loading overlay. Set by the per-frame relay on
     /// `UiEvent::DocumentReady` / `ConnectionStatus`, and by the route poll on a
@@ -291,6 +297,11 @@ pub fn main() {
     // perf snapshot pumped from `perf_pub` below.
     let sel_stats = RwSignal::new(None::<trame_chrome::SelStats>);
     let perf_snap = RwSignal::new(ambre_canvas::PerfSnapshot::default());
+
+    // Sheet-tab strip model (`-ui.md` sec.13): mirrored from `TrameEvent::SheetList`
+    // by the relay below and fed to the DOM `SheetTabs` slot (off the canvas now).
+    let sheets = RwSignal::new(Vec::<(String, String)>::new());
+    let active_sheet = RwSignal::new(String::new());
     // Grid zoom factor selected in the status-bar menu (`-ui.md` sec.13bis),
     // polled by the canvas view each frame. Defaults to 100%.
     let zoom = RwSignal::new(1.0_f64);
@@ -423,6 +434,8 @@ pub fn main() {
         zoom,
         ctx_scope,
         sel_bounds,
+        sheets,
+        active_sheet,
     );
 
     let store = store_slot
@@ -805,6 +818,16 @@ pub fn main() {
                         ),
                     ..
                 } => filter_popover.set(None),
+                // Sheet-tab strip (sec.13): the sheet list / active id changed ->
+                // mirror it to the DOM `SheetTabs` signals. The canvas no longer
+                // draws the tabs, so this is the only consumer now.
+                UiEvent::Viewport {
+                    event: AppEvent::Trame(ambre_bus::TrameEvent::SheetList { sheets: list, active }),
+                    ..
+                } => {
+                    sheets.set(list.clone());
+                    active_sheet.set(active.clone());
+                }
                 // Status bar (sec.13bis): selection aggregates for a multi-cell
                 // selection. The view clears the signal on a single cell; here we
                 // fill it from the Logic-computed totals.
@@ -955,6 +978,8 @@ fn mount_shell(
     zoom: RwSignal<f64>,
     ctx_scope: RwSignal<trame_chrome::CtxScope>,
     sel_bounds: RwSignal<Option<(u32, u32, u32, u32)>>,
+    sheets: RwSignal<Vec<(String, String)>>,
+    active_sheet: RwSignal<String>,
 ) {
     leptos::mount::mount_to_body(move || {
         // The store stays here (in the mount owner, NOT in the view): it is `Rc`
@@ -1031,6 +1056,8 @@ fn mount_shell(
             sel_bounds,
             sort_dialog,
             chrome_status,
+            sheets,
+            active_sheet,
         });
 
         view! {
@@ -1075,6 +1102,8 @@ fn AppRoot() -> impl IntoView {
         sel_bounds,
         sort_dialog,
         chrome_status,
+        sheets,
+        active_sheet,
     } = use_context::<Wiring>().expect("Wiring provided by mount_shell");
 
     // The reactive client route, used only to show/hide the landing overlay.
@@ -1359,6 +1388,69 @@ fn AppRoot() -> impl IntoView {
         }
     });
 
+    // Sheet-tab strip (sec.13): each DOM `SheetTabs` intent maps onto its sheet
+    // `TrameCommand`. The Logic thread mints ids / resolves geometry and replies
+    // with a fresh `SheetList` that re-feeds the `sheets`/`active_sheet` signals.
+    let on_sheet_activate = Callback::new({
+        let tx = to_logic.clone();
+        move |sheet_id: String| {
+            if let Some(document_id) = current_doc.get_untracked() {
+                let _ = tx.try_send(LogicCommand::App {
+                    document_id,
+                    command: AppCommand::Trame(TrameCommand::ActivateSheet { sheet_id }),
+                });
+            }
+        }
+    });
+    let on_sheet_create = Callback::new({
+        let tx = to_logic.clone();
+        move |()| {
+            if let Some(document_id) = current_doc.get_untracked() {
+                let name = format!("Sheet{}", sheets.get_untracked().len() + 1);
+                let _ = tx.try_send(LogicCommand::App {
+                    document_id,
+                    command: AppCommand::Trame(TrameCommand::CreateSheet { name }),
+                });
+            }
+        }
+    });
+    let on_sheet_rename = Callback::new({
+        let tx = to_logic.clone();
+        move |(sheet_id, name): (String, String)| {
+            if let Some(document_id) = current_doc.get_untracked() {
+                let _ = tx.try_send(LogicCommand::App {
+                    document_id,
+                    command: AppCommand::Trame(TrameCommand::RenameSheet { sheet_id, name }),
+                });
+            }
+        }
+    });
+    let on_sheet_delete = Callback::new({
+        let tx = to_logic.clone();
+        move |sheet_id: String| {
+            if let Some(document_id) = current_doc.get_untracked() {
+                let _ = tx.try_send(LogicCommand::App {
+                    document_id,
+                    command: AppCommand::Trame(TrameCommand::DeleteSheet { sheet_id }),
+                });
+            }
+        }
+    });
+    let on_sheet_reorder = Callback::new({
+        let tx = to_logic.clone();
+        move |req: trame_chrome::ReorderSheet| {
+            if let Some(document_id) = current_doc.get_untracked() {
+                let _ = tx.try_send(LogicCommand::App {
+                    document_id,
+                    command: AppCommand::Trame(TrameCommand::MoveSheet {
+                        sheet_id: req.id,
+                        to_index: req.to_index as u32,
+                    }),
+                });
+            }
+        }
+    });
+
     // The menu layout follows the right-click scope the view published (`-ui.md`
     // sec.5.C): a cell right-click gets the full menu, a header right-click the
     // header-scoped one (no clipboard / merge).
@@ -1461,6 +1553,17 @@ fn AppRoot() -> impl IntoView {
                     on_action=Callback::new(move |action| formula_action.set(Some(action)))
                 />
             </FormulaBar>
+            <Tabs slot>
+                <trame_chrome::SheetTabs
+                    sheets=sheets
+                    active=active_sheet
+                    on_activate=on_sheet_activate
+                    on_create=on_sheet_create
+                    on_rename=on_sheet_rename
+                    on_delete=on_sheet_delete
+                    on_reorder=on_sheet_reorder
+                />
+            </Tabs>
             <StatusBar slot>
                 <trame_chrome::StatusBar stats=sel_stats perf=perf_snap zoom=zoom />
             </StatusBar>
