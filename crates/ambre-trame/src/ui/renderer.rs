@@ -829,6 +829,28 @@ pub fn draw_overlay<S: DrawSurface>(
         None => {}
     }
 
+    // -- 2d bis. Header reorder guide: a bold full-height/width line at the
+    //            prospective insertion boundary while a selected column/row is
+    //            dragged to a new position (Excel-style reorder preview).
+    match state.reorder_preview {
+        Some((grid::SelKind::Cols, i)) => {
+            let x = state.col_x(i);
+            surface.stroke_line(
+                x,
+                layout.top,
+                x,
+                state.grid_bottom(),
+                palette.selection,
+                2.5,
+            );
+        }
+        Some((grid::SelKind::Rows, i)) => {
+            let y = state.row_y(i);
+            surface.stroke_line(0.0, y, state.canvas_width, y, palette.selection, 2.5);
+        }
+        _ => {}
+    }
+
     // -- 2e. Inline insert "+" badge on the hovered header boundary (sec.4bis.D).
     match state.insert_hint {
         // ColInsert(i) inserts left of column i, i.e. at column i's left edge.

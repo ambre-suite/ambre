@@ -991,6 +991,57 @@ fn insert_and_delete_column_shift_cells() {
     assert_eq!(read_cell(&mut state, 0, 1), "b", "shift back after delete");
 }
 
+/// Drag reorder moves a whole row by uid: its cells travel with it, and a
+/// formula referencing the moved data follows it to the new position (§12, the
+/// same guarantee as sort -- no reference rewrite, no reseed).
+#[test]
+fn move_row_carries_cells_and_formula_follows_data() {
+    let mut state = TrameState::new();
+    for (r, t) in ["a", "b", "c"].iter().enumerate() {
+        state.handle_command(TrameCommand::SetCellText {
+            row: r as u32,
+            col: 0,
+            text: (*t).to_owned(),
+        });
+    }
+    // B1 references A1 ("a"). After moving row 0 down to position 2 the value
+    // "a" lives at A3, and the formula must resolve to it at its new home.
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 1,
+        text: "=A1".to_owned(),
+    });
+    assert_eq!(read_cell(&mut state, 0, 1), "a", "formula before move");
+
+    state.handle_command(TrameCommand::MoveRow { from: 0, to: 2 });
+    // Order is now b, c, a on column 0; the formula traveled with row "a".
+    assert_eq!(read_cell(&mut state, 0, 0), "b");
+    assert_eq!(read_cell(&mut state, 1, 0), "c");
+    assert_eq!(read_cell(&mut state, 2, 0), "a", "moved data at new row");
+    assert_eq!(
+        read_cell(&mut state, 2, 1),
+        "a",
+        "formula followed its row and still reads its source"
+    );
+}
+
+/// Column drag reorder is the horizontal analogue: cells travel by col uid.
+#[test]
+fn move_column_carries_cells() {
+    let mut state = TrameState::new();
+    for (c, t) in ["x", "y", "z"].iter().enumerate() {
+        state.handle_command(TrameCommand::SetCellText {
+            row: 0,
+            col: c as u32,
+            text: (*t).to_owned(),
+        });
+    }
+    state.handle_command(TrameCommand::MoveColumn { from: 2, to: 0 });
+    assert_eq!(read_cell(&mut state, 0, 0), "z", "moved column at front");
+    assert_eq!(read_cell(&mut state, 0, 1), "x");
+    assert_eq!(read_cell(&mut state, 0, 2), "y");
+}
+
 /// References are positional and never rewritten (§12): after deleting the
 /// row that held a formula's source, the formula reads whatever now sits at
 /// that grid position -- here an emptied cell. (Full id-based `#REF!` on

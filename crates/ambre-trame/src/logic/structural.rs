@@ -66,6 +66,33 @@ impl TrameState {
         self.after_structural()
     }
 
+    /// Move the row/column at grid position `from` to grid position `to`
+    /// (Excel-style drag reorder), realized as a single `LoroMovableList::mov` on
+    /// `rows_/cols_{sheet}`. Cells keyed by the move-invariant `(row_uid, col_uid)`
+    /// pair travel with their line for free; the formula engine is NOT reseeded, so
+    /// every reference resolves to its line's new position (`after_reorder`, §12).
+    /// A no-op if `from == to` or either index is outside the materialized used
+    /// range (virtual lines carry nothing to move).
+    pub(super) fn move_axis(&mut self, from: u32, to: u32, axis: Axis) -> TrameOutcome {
+        let used = match axis {
+            Axis::Row => self.index.row_len(),
+            Axis::Col => self.index.col_len(),
+        };
+        let (from, to) = (from as usize, to as usize);
+        if from == to || from >= used || to >= used {
+            return TrameOutcome::display_only(vec![]);
+        }
+        let list_name = match axis {
+            Axis::Row => rows_list_name(&self.active_sheet),
+            Axis::Col => cols_list_name(&self.active_sheet),
+        };
+        if self.doc.get_movable_list(list_name).mov(from, to).is_err() {
+            return TrameOutcome::display_only(vec![]);
+        }
+        self.doc.commit();
+        self.after_reorder()
+    }
+
     /// Delete every row/column spanned by the current selection rectangle,
     /// iterating from the far edge inward so earlier positions stay valid as the
     /// list shifts. Each line is its own [`delete_axis`](Self::delete_axis) commit

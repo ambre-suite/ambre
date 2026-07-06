@@ -58,6 +58,14 @@ enum Op {
     DeleteColumn {
         at: u32,
     },
+    MoveRow {
+        from: u32,
+        to: u32,
+    },
+    MoveColumn {
+        from: u32,
+        to: u32,
+    },
     Sort {
         ascending: bool,
     },
@@ -92,6 +100,8 @@ impl Op {
             Op::DeleteRow { at } => TrameCommand::DeleteRow { at },
             Op::InsertColumn { at } => TrameCommand::InsertColumn { at },
             Op::DeleteColumn { at } => TrameCommand::DeleteColumn { at },
+            Op::MoveRow { from, to } => TrameCommand::MoveRow { from, to },
+            Op::MoveColumn { from, to } => TrameCommand::MoveColumn { from, to },
             Op::Sort { ascending } => TrameCommand::SortRange {
                 sheet_id: SHEET.to_owned(),
                 row_start: 0,
@@ -170,6 +180,8 @@ fn op_strategy() -> impl Strategy<Value = Op> {
         1 => (0..ROWS).prop_map(|at| Op::DeleteRow { at }),
         1 => (0..COLS).prop_map(|at| Op::InsertColumn { at }),
         1 => (0..COLS).prop_map(|at| Op::DeleteColumn { at }),
+        1 => (0..ROWS, 0..ROWS).prop_map(|(from, to)| Op::MoveRow { from, to }),
+        1 => (0..COLS, 0..COLS).prop_map(|(from, to)| Op::MoveColumn { from, to }),
         1 => any::<bool>().prop_map(|ascending| Op::Sort { ascending }),
         1 => (0..ROWS - 1, 0..COLS - 1).prop_map(|(row, col)| Op::Merge {
             row,

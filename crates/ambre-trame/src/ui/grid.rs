@@ -725,6 +725,13 @@ pub struct TrameUiState {
     /// UI-only view state.
     pub hover_header: Option<HeaderHit>,
 
+    /// While a selected column/row header is being dragged to a new position
+    /// (Excel-style reorder), the target insertion slot: `(Cols, i)` means the
+    /// grabbed column would land left of column `i`, `(Rows, i)` above row `i`.
+    /// Drawn as a full-height/width guide line at that boundary. `None` when no
+    /// reorder drag is in progress. UI-only view state.
+    pub reorder_preview: Option<(SelKind, u32)>,
+
     /// Cells matched by the active Find query (`-ui.md` sec.5.G), drawn with a
     /// translucent highlight. Absolute grid `(row, col)` pairs from the last
     /// `TrameEvent::FindResult`; empty when the panel is closed or there is no
@@ -756,6 +763,7 @@ impl TrameUiState {
             resize_preview: None,
             insert_hint: None,
             hover_header: None,
+            reorder_preview: None,
             clipboard_anchor: None,
             fill_preview: None,
             find_matches: Vec::new(),
@@ -1463,6 +1471,26 @@ impl TrameUiState {
             col += 1;
         }
         None
+    }
+
+    /// Insertion slot for a column reorder drop at physical x `px`: the column
+    /// index the grabbed column would land *before*, snapping to the nearer
+    /// vertical boundary (left edge of the column under the cursor, or the next
+    /// one past its midpoint so the last position is reachable). `None` left of
+    /// the grid. The returned index may equal the column count (drop at the end).
+    pub fn col_drop_slot(&self, px: f64) -> Option<u32> {
+        let col = self.col_at_x(px)?;
+        let mid = self.col_x(col) + self.col_width_of(col) / 2.0;
+        Some(if px >= mid { col + 1 } else { col })
+    }
+
+    /// Insertion slot for a row reorder drop at physical y `py`: the row index
+    /// the grabbed row would land *above*, snapping to the nearer horizontal
+    /// boundary. Row analogue of [`col_drop_slot`](Self::col_drop_slot).
+    pub fn row_drop_slot(&self, py: f64) -> Option<u32> {
+        let row = self.row_at_y(py)?;
+        let mid = self.row_y(row) + self.row_height_of(row) / 2.0;
+        Some(if py >= mid { row + 1 } else { row })
     }
 
     /// Absolute *visible* grid row whose band contains physical y `py` (>= the

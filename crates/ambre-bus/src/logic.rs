@@ -240,6 +240,21 @@ pub enum TrameCommand {
     /// by one. Column analogue of [`DeleteRow`](TrameCommand::DeleteRow).
     DeleteColumn { at: u32 },
 
+    /// Move the row at grid position `from` to grid position `to` (Excel-style
+    /// drag reorder), shifting the rows in between to fill the gap. Realized as a
+    /// single `LoroMovableList::mov` on `rows_{sheet}`: cells keyed by the
+    /// move-invariant `(row_uid, col_uid)` pair travel with their row and no
+    /// reference is rewritten -- every `A1` resolves to its row's new position
+    /// (§12, the same guarantee as sort). Concurrent moves converge by LWW on the
+    /// list order. A no-op if `from == to` or either index is outside the
+    /// materialized used range.
+    MoveRow { from: u32, to: u32 },
+
+    /// Move the column at grid position `from` to grid position `to`. Column
+    /// analogue of [`MoveRow`](TrameCommand::MoveRow): a single `mov` on
+    /// `cols_{sheet}`.
+    MoveColumn { from: u32, to: u32 },
+
     /// Merge the rectangular range `[row..=row_end] x [col..=col_end]` into a
     /// single cell, the top-left corner becoming the master
     /// (`ambre-spec-trame-logic.md` §6). The corners may be given in any order.

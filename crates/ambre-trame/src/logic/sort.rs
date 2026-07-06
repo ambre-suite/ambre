@@ -203,13 +203,20 @@ impl TrameState {
         }
         self.doc.commit();
 
-        // Refresh the position<->uid cache and the position-keyed derived caches
-        // (merges, formatting) for the new row order. Crucially, do NOT reseed
-        // (re-parse) the formula engine: the compiled bytecode is uid-anchored,
-        // so preserving it and merely recomputing lets every reference resolve to
-        // its row/column's NEW position -- references follow the moved data, the
-        // section 12 guarantee. A full reseed would re-bind each `A1` against the
-        // post-sort index and collapse the engine back to positional semantics.
+        let mut outcome = self.after_reorder();
+        outcome.display.push(TrameEvent::SortComplete);
+        outcome
+    }
+
+    /// Shared tail of any whole-line reorder (sort, drag move): refresh the
+    /// position<->uid cache and the position-keyed derived caches (merges,
+    /// formatting, filter) for the new order. Crucially, do NOT reseed (re-parse)
+    /// the formula engine: the compiled bytecode is uid-anchored, so preserving it
+    /// and merely recomputing lets every reference resolve to its row/column's NEW
+    /// position -- references follow the moved data, the section 12 guarantee. A
+    /// full reseed would re-bind each `A1` against the post-move index and collapse
+    /// the engine back to positional semantics.
+    pub(super) fn after_reorder(&mut self) -> TrameOutcome {
         self.rebuild_index();
         let mut display = self.rebuild_merges();
         self.reseed_formatting();
@@ -222,7 +229,6 @@ impl TrameState {
         self.engine.compute_all_dirty(&indices);
         let update = self.flush_delta();
         display.push(TrameEvent::DataReset);
-        display.push(TrameEvent::SortComplete);
         TrameOutcome {
             display,
             update,

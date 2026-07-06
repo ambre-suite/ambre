@@ -301,6 +301,13 @@ pub struct TrameView {
     /// Pointer moves grow [`TrameUiState::fill_preview`] and the release emits a
     /// `FillRange`.
     fill_drag: Option<(CellRect, (u32, u32))>,
+    /// In-progress Excel-style header reorder drag, or `None`. Holds the grabbed
+    /// axis and the origin column/row index (`(Cols, from)` / `(Rows, from)`);
+    /// pointer moves update the [`TrameUiState::reorder_preview`] insertion slot
+    /// and the release emits a `MoveColumn` / `MoveRow` (a no-op if it lands back
+    /// on the origin). Armed only when the press lands on an already-selected
+    /// header body, so a plain click still selects/extends the axis.
+    reorder_drag: Option<(crate::ui::grid::SelKind, u32)>,
     /// The CSS cursor currently set on `#ambre-canvas` from bare hover feedback
     /// (sec.4bis.B / sec.5.F): `"col-resize"` / `"row-resize"` / `"pointer"` /
     /// `"crosshair"` / `""`. Tracked to avoid redundant DOM writes every move.
@@ -433,6 +440,7 @@ impl TrameView {
             resize_drag: None,
             pending_autofit: None,
             fill_drag: None,
+            reorder_drag: None,
             hover_cursor: String::new(),
             edit_dirty: false,
             caret_on: true,
@@ -1366,6 +1374,11 @@ impl TrameView {
                     HeaderHit::ColBody(c) => {
                         if *shift && self.state.selection.kind == SelKind::Cols {
                             self.extend_axis(c);
+                        } else if self.axis_sel_contains(SelKind::Cols, c) {
+                            // Press on an already-selected column: grab it for an
+                            // Excel-style drag reorder rather than re-selecting.
+                            self.reorder_drag = Some((SelKind::Cols, c));
+                            self.state.reorder_preview = Some((SelKind::Cols, c));
                         } else {
                             self.select_axis(SelKind::Cols, c);
                             self.axis_drag = Some(SelKind::Cols);
@@ -1374,6 +1387,9 @@ impl TrameView {
                     HeaderHit::RowBody(r) => {
                         if *shift && self.state.selection.kind == SelKind::Rows {
                             self.extend_axis(r);
+                        } else if self.axis_sel_contains(SelKind::Rows, r) {
+                            self.reorder_drag = Some((SelKind::Rows, r));
+                            self.state.reorder_preview = Some((SelKind::Rows, r));
                         } else {
                             self.select_axis(SelKind::Rows, r);
                             self.axis_drag = Some(SelKind::Rows);
@@ -1409,6 +1425,29 @@ impl TrameView {
             }
             InputEvent::PointerUp { .. } if self.axis_drag.is_some() => {
                 self.axis_drag = None;
+                true
+            }
+            // Dragging a grabbed header moves the live insertion guide to the
+            // boundary under the cursor (Excel-style reorder preview).
+            InputEvent::PointerMove { x, y } if self.reorder_drag.is_some() => {
+                let (kind, _) = self.reorder_drag.expect("guarded");
+                let slot = match kind {
+                    SelKind::Cols => self.state.col_drop_slot(*x).map(|s| (SelKind::Cols, s)),
+                    SelKind::Rows => self.state.row_drop_slot(*y).map(|s| (SelKind::Rows, s)),
+                    SelKind::Cells => None,
+                };
+                if let Some(slot) = slot
+                    && self.state.reorder_preview != Some(slot)
+                {
+                    self.state.reorder_preview = Some(slot);
+                    self.edit_dirty = true;
+                }
+                true
+            }
+            // Release drops the grabbed column/row at the previewed slot, emitting
+            // a `MoveColumn` / `MoveRow` unless it lands back on its origin.
+            InputEvent::PointerUp { .. } if self.reorder_drag.is_some() => {
+                self.end_reorder_drag();
                 true
             }
             // Dragging a header boundary moves the live guide line (sec.4bis.C);
@@ -2345,6 +2384,50 @@ impl TrameView {
             },
             crate::ui::grid::SelKind::Cells => self.set_active_cmd(),
         }
+    }
+
+    /// Whether the current whole-axis selection is of `kind` and its band covers
+    /// column/row `idx`. Gates the reorder-drag grab: a press on an already
+    /// selected header starts a move, any other press selects.
+    fn axis_sel_contains(&self, kind: crate::ui::grid::SelKind, idx: u32) -> bool {
+        let sel = &self.state.selection;
+        if sel.kind != kind {
+            return false;
+        }
+        let (a, b) = match kind {
+            crate::ui::grid::SelKind::Cols => (sel.anchor.1, sel.active.1),
+            crate::ui::grid::SelKind::Rows => (sel.anchor.0, sel.active.0),
+            crate::ui::grid::SelKind::Cells => return false,
+        };
+        (a.min(b)..=a.max(b)).contains(&idx)
+    }
+
+    /// Finish a header reorder drag (Excel-style): drop the grabbed column/row at
+    /// the previewed insertion slot, emitting `MoveColumn` / `MoveRow` unless it
+    /// lands back on its origin, then reselect the moved band and clear the drag.
+    /// The slot is an "insert before" index; `LoroMovableList::mov` takes the
+    /// destination index *after* the source is removed, so a slot past the origin
+    /// shifts down by one.
+    fn end_reorder_drag(&mut self) {
+        let Some((kind, from)) = self.reorder_drag.take() else {
+            return;
+        };
+        let slot = self.state.reorder_preview.take().map(|(_, s)| s);
+        self.edit_dirty = true;
+        let Some(slot) = slot else { return };
+        // Dropping on the origin's own slot or the one just past it is a no-op.
+        if slot == from || slot == from + 1 {
+            return;
+        }
+        let to = if slot > from { slot - 1 } else { slot };
+        let cmd = match kind {
+            crate::ui::grid::SelKind::Cols => TrameCommand::MoveColumn { from, to },
+            crate::ui::grid::SelKind::Rows => TrameCommand::MoveRow { from, to },
+            crate::ui::grid::SelKind::Cells => return,
+        };
+        self.send_command_lossy(cmd);
+        // Keep the moved column/row selected at its new position.
+        self.select_axis(kind, to);
     }
 
     /// Select a whole column/row band from a header click (sec.4bis.A) and report

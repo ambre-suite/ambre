@@ -194,12 +194,15 @@ Stories:
   key-rotation hot-path benchmarks + ZK audit (`cargo tree`); wasm-only warnings audit.
 - `CANVAS P2` — frame budget profiling, dynamic theme, i18n/RTL, non-regression benchmarks.
 - Trame Phase 2+ — basic .xlsx import, conditional formatting, data validation.
-- **Trame column/row reorder (drag & drop)** `[ ]` — Excel-style drag handles to move a
-  whole column/row to a new position. This is **not** UI polish: it requires an *atomic*
-  `MoveColumn` / `MoveRow` op in the Logic layer (not insert+copy+delete), formula reference
-  rewriting across the move (extend `formula/shift.rs` beyond insert/delete shifts), `SheetIndex`
-  support, and a new 2-peer convergence case in `logic/convergence_tests.rs` (concurrent moves must
-  not corrupt references). Deferred out of the E3 "Chrome UX polish pass" deliberately: it is a
-  replicated-data invariant, not a render detail. *(This is the grid column/row reorder, distinct
+- **Trame column/row reorder (drag & drop)** `[x]` — Excel-style drag to move a whole
+  column/row to a new position. **Pulled into the MVP** once investigation showed it was far
+  cheaper than assumed: cells are keyed by move-invariant `(row_uid, col_uid)` pairs and the
+  formula engine bytecode is uid-anchored, so a reorder is a single `LoroMovableList::mov` that
+  rewrites **no** references -- exactly the sort machinery (`realize_sort`), which already proves
+  "references follow the data" (§12). No `formula/shift.rs` change was needed (that module is
+  paste-only). Shipped as an atomic `MoveColumn` / `MoveRow` op reusing the shared `after_reorder`
+  tail (rebuild caches + recompute, crucially *not* `reseed_engine`), plus the 2-peer convergence
+  case in `logic/convergence_tests.rs` (concurrent moves converge by LWW on list order) and a
+  header drag-and-drop with an insertion guide line. *(This is the grid column/row reorder, distinct
   from the sheet-tab reorder, which is plain `MoveSheet` and already ships in the DOM `SheetTabs`.)*
 - Rendez-Vous — SFrame encryption (E2EE video): `SYNC P4` / Rendez-Vous.
