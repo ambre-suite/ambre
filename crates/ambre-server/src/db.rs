@@ -757,16 +757,23 @@ pub async fn get_latest_snapshot(
     }
 }
 
-/// Fetches a specific snapshot by id.
+/// Fetches a specific snapshot by id, scoped to its owning document.
+///
+/// The `document_id` filter is a mandatory object-level authorization guard:
+/// callers authorize membership on a document and must only ever resolve
+/// snapshots belonging to that same document (prevents a cross-document IDOR).
 pub async fn get_snapshot(
     pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
     snapshot_id: &ambre_core::SnapshotId,
 ) -> Result<Option<SnapshotRow>, AppError> {
     let sid = id_to_uuid(*snapshot_id);
+    let did = id_to_uuid(*document_id);
     let row = sqlx::query(
-        "SELECT id, document_id, author_pubkey, parent_hash, parent_snapshot_proof, update_clocks, s3_key, covered_seq, created_at FROM snapshots WHERE id = $1"
+        "SELECT id, document_id, author_pubkey, parent_hash, parent_snapshot_proof, update_clocks, s3_key, covered_seq, created_at FROM snapshots WHERE id = $1 AND document_id = $2"
     )
     .bind(sid)
+    .bind(did)
     .fetch_optional(pool)
     .await?;
 
@@ -1285,10 +1292,18 @@ mod tests {
         assert_eq!(latest.covered_seq, 1500);
 
         // get_snapshot (the download-url path) carries it too.
-        let by_id = get_snapshot(&pool, &sid)
+        let by_id = get_snapshot(&pool, &document_id, &sid)
             .await
             .expect("query by id")
             .expect("snapshot exists");
         assert_eq!(by_id.covered_seq, 1500);
+
+        // IDOR regression guard: resolving the same snapshot id under a foreign
+        // document must return None (never leak another document's blob).
+        let other_doc = ambre_core::DocumentId::new();
+        let cross = get_snapshot(&pool, &other_doc, &sid)
+            .await
+            .expect("query by id under wrong doc");
+        assert!(cross.is_none(), "snapshot must be scoped to its document");
     }
 }

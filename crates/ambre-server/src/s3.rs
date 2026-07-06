@@ -64,6 +64,20 @@ pub fn format_s3_delta_key(
     format!("{env_prefix}/documents/{document_id}/deltas/{seq:010}")
 }
 
+/// Validates a client-supplied media `content_hash` before it is interpolated
+/// into an S3 object key.
+///
+/// The spec mandates a BLAKE2b-256 digest rendered as 64 lowercase hex chars.
+/// Enforcing that shape rejects path-traversal payloads (`../`, absolute keys)
+/// that would otherwise let a caller read/write objects outside the document's
+/// own media prefix.
+pub fn is_valid_content_hash(content_hash: &str) -> bool {
+    content_hash.len() == 64
+        && content_hash
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
 /// S3 object key for an encrypted media blob (content-addressed by hash).
 pub fn format_s3_media_key(
     env_prefix: &str,
@@ -325,5 +339,21 @@ mod tests {
         let key = format_s3_media_key("dev", &doc_id, hash);
         assert!(key.ends_with("media/abc123def456"));
         assert!(key.contains("/documents/"));
+    }
+
+    #[test]
+    fn content_hash_validation() {
+        let valid = "a".repeat(64);
+        assert!(is_valid_content_hash(&valid));
+        assert!(is_valid_content_hash(&"0123456789abcdef".repeat(4)));
+
+        // Path traversal payloads and non-canonical shapes are rejected.
+        assert!(!is_valid_content_hash("../../snapshots/x"));
+        assert!(!is_valid_content_hash(&format!("../{}", "a".repeat(60))));
+        assert!(!is_valid_content_hash(&"A".repeat(64))); // uppercase
+        assert!(!is_valid_content_hash(&"g".repeat(64))); // non-hex
+        assert!(!is_valid_content_hash(&"a".repeat(63))); // too short
+        assert!(!is_valid_content_hash(&"a".repeat(65))); // too long
+        assert!(!is_valid_content_hash(""));
     }
 }

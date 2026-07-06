@@ -195,7 +195,9 @@ pub async fn snapshot_download_url(
         .await?
         .ok_or(AppError::Forbidden)?;
     let snap_id = parse_snap_id(&req.snapshot_id)?;
-    let snap = db::get_snapshot(&state.db, &snap_id)
+    // Resolve the snapshot scoped to the path document: a member of doc A must
+    // never obtain a download URL for a snapshot of doc B (cross-document IDOR).
+    let snap = db::get_snapshot(&state.db, &doc_id, &snap_id)
         .await?
         .ok_or(AppError::NotFound {
             resource: "snapshot",
