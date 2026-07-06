@@ -38,8 +38,8 @@ pub use logic::{
     ValidationKind, ValidationOnInvalid,
 };
 pub use rest::{
-    ChannelSummary, DocumentSummary, MemberInfo, RequestId, RestCommand, RestEvent, UnreadCount,
-    UserInfo,
+    ChannelSummary, DocumentSummary, MemberInfo, RequestId, RestCommand, RestEvent, SecretBytes,
+    SecretString, UnreadCount, UserInfo,
 };
 pub use sink::CommandSink;
 pub use ui::{AppEvent, DisplayCell, TrameEvent, UiEvent};

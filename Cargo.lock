@@ -83,6 +83,7 @@ dependencies = [
  "ambre-core",
  "postcard",
  "serde",
+ "zeroize",
 ]
 
 [[package]]

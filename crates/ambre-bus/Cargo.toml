@@ -10,6 +10,9 @@ ambre-core = { path = "../ambre-core" }
 # their `Rest*` payloads): that link now crosses a `postMessage` boundary between
 # the Main instance and the separate Sync worker, so it is postcard-serialized.
 serde = { workspace = true }
+# Zeroizing wrappers for the secret-carrying IPC fields (passphrase / recovery
+# words): wiped on drop everywhere along the UI -> Logic -> Sync relay (H5).
+zeroize = { workspace = true }
 
 [dev-dependencies]
 # Used only by the host tests to round-trip the Logic <-> Sync envelopes through

@@ -529,21 +529,29 @@ Each story carries its finding ID, the file to touch, and the concrete action.
 - [x] **M16** — `params.limit.unwrap_or(100).clamp(1, 1000)` in `get_deltas`.
       (`server/routes/sync.rs`)
 
-### Wave R2 — Make the E2EE story honest (fail-closed + secret hygiene)
+### Wave R2 — Make the E2EE story honest (fail-closed + secret hygiene) [x]
 
-- [ ] **H3** — replace `unwrap_or_else(|_| DocumentKey::generate())` with an
-      `AuthError` propagated to the Logic thread; never substitute a random key
-      for a failed unwrap. (`sync/lib.rs:2200-2210`)
-- [ ] **H4** — zeroize secret bytes in `handle_change_passphrase` /
-      `handle_recover_account` (explicit `.zeroize()`, drop the `let _ =`).
-      (`sync/lib.rs:1168-1176`)
-- [ ] **H5** — `Zeroizing<Vec<u8>>` / `Zeroizing<String>` in the IPC types
-      (`Unlock`/`SetupAccount`/`ChangePassphrase`/`RecoverAccount`); make the
-      `bus/rest.rs:132` "zeroized after use" comment true. (`bus/rest.rs`, `sync/lib.rs`)
-- [ ] **H2** — return 404 from `get_document` when `mem == None` and the caller
-      isn't the owner. (`server/routes/documents.rs:295-319`)
-- [ ] **C1** — redact `blob_str` in the S3 flusher error logs; keep only `seq`,
-      `document_id`, `s3_key`. (`server/s3.rs:215,223`)
+- [x] **H3** — the open-document task now sends `SyncEvent::OpenDocumentFailed`
+      (surfaced as `LogicEvent::AuthError`) when the wrapped DocumentKey cannot be
+      unwrapped for a server-side doc; the `unwrap_or_else(|_| generate())` random
+      fallback is gone. Local-only (404) opens still generate a fresh key as
+      before. (`sync/lib.rs`)
+- [x] **H4** — `handle_change_passphrase` / `handle_recover_account` take the new
+      `SecretBytes` / `SecretString` types, which zeroize on drop; the
+      `let _ = (...)` bind-and-leak is replaced by an explicit `drop(...)` with a
+      comment. (`sync/lib.rs`)
+- [x] **H5** — new `SecretBytes` (`Zeroizing<Vec<u8>>`) / `SecretString`
+      (`Zeroizing<String>`) IPC types carry the secret fields of
+      `Unlock`/`SetupAccount`/`ChangePassphrase`/`RecoverAccount`: redacted
+      `Debug`, wiped on drop everywhere along the relay, exposed only via `Deref`.
+      The `bus/rest.rs` "zeroized after use" comment is now true. (`bus/rest.rs`,
+      `sync/lib.rs`)
+- [x] **H2** — `get_document` returns 404 when the caller is neither a member nor
+      the owner, so `owner_id`/`doc_type`/existence no longer leak. Regression
+      guard: `get_document_hidden_from_non_member`. (`server/routes/documents.rs`)
+- [x] **C1** — the S3 flusher error paths no longer log `blob_str` (which carries
+      `update_b64` ciphertext); they log only `key`, `blob_len`, and once parsed
+      `s3_key` / `seq`. (`server/s3.rs`)
 
 ### Wave R3 — Crypto hardening (cheap, while the surface is small)
 

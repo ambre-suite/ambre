@@ -227,6 +227,30 @@ mod handler_tests {
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
+    // H2 regression: a non-member (here an anonymous caller who only holds the
+    // UUID) must not receive `owner_id` / `doc_type` metadata -- the route
+    // returns 404 instead of leaking the document's existence.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn get_document_hidden_from_non_member(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let auth = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &auth).await;
+
+        // Same document, fetched without any credentials: not a member, not the
+        // owner -> 404, not 200 with routing metadata.
+        let resp = app
+            .oneshot(
+                Request::get(format!("/api/documents/{doc_id}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn invalid_doc_type_is_rejected(pool: sqlx::PgPool) {
