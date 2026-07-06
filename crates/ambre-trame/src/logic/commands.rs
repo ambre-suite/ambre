@@ -194,6 +194,8 @@ impl TrameState {
             TrameCommand::DeleteRow { at } => self.delete_axis(at, Axis::Row),
             TrameCommand::InsertColumn { at } => self.insert_axis(at, Axis::Col),
             TrameCommand::DeleteColumn { at } => self.delete_axis(at, Axis::Col),
+            TrameCommand::MoveRow { from, to } => self.move_axis(from, to, Axis::Row),
+            TrameCommand::MoveColumn { from, to } => self.move_axis(from, to, Axis::Col),
             TrameCommand::MergeCells {
                 row,
                 col,
