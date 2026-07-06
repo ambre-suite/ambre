@@ -516,14 +516,17 @@ Each story carries its finding ID, the file to touch, and the concrete action.
 
 ### Wave R1 — Peer-triggered DoS & live-session authz
 
-- [ ] **H9** — bound zstd output: read in a loop into
-      `Vec::with_capacity(limit)`, error past a per-message ceiling derived from
-      `body.len()` × max-ratio. Reject before allocating. (`sync/pipeline.rs`)
-- [ ] **H8** — on `revoke`/`rotate`, push a targeted close (or resubscribe nudge)
-      to the revoked user's connections; add a short-TTL membership re-check in
-      `handle_update` rather than trusting `doc_subscriptions` indefinitely.
-      (`server/ws/handler.rs`, `routes/share.rs`)
-- [ ] **M16** — `params.limit.unwrap_or(100).clamp(1, 1000)` in `get_deltas`.
+- [x] **H9** — `decompress_zstd_bounded` streams the zstd body through a
+      `Read::take(ceiling + 1)` cap and rejects with `DecompressTooLarge` before
+      the full output allocates. Ceiling = `body.len() * 200` clamped to
+      `[1 MiB, 64 MiB]`. Guarded by `decompress_bomb_rejected` /
+      `decompress_within_ceiling_ok`. (`sync/pipeline.rs`)
+- [x] **H8** — `handle_update` re-consults `document_members` on a 30 s TTL
+      (`MEMBERSHIP_RECHECK_TTL`) via `doc_access_verified_at`; on a failed
+      re-check it drops the subscription (local + Redis session) and returns 403,
+      so a mid-session revoke stops write acceptance within the TTL instead of at
+      disconnect. (`server/ws/handler.rs`)
+- [x] **M16** — `params.limit.unwrap_or(100).clamp(1, 1000)` in `get_deltas`.
       (`server/routes/sync.rs`)
 
 ### Wave R2 — Make the E2EE story honest (fail-closed + secret hygiene)
