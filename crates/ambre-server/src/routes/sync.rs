@@ -245,7 +245,9 @@ pub async fn get_deltas(
         .await?
         .ok_or(AppError::Forbidden)?;
     let after = params.after_seq.unwrap_or(0);
-    let limit = params.limit.unwrap_or(100);
+    // Clamp the page size (M16): an unbounded `limit` forces a full-table scan of
+    // `updates` and a large response allocation. 1..=1000 is a trivial guard.
+    let limit = params.limit.unwrap_or(100).clamp(1, 1000);
     let updates = db::get_updates_after(&state.db, &doc_id, after, limit).await?;
     let deltas: Vec<_> = updates
         .into_iter()

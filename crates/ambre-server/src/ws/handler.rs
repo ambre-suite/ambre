@@ -12,8 +12,9 @@ use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use futures_util::{SinkExt, StreamExt};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 #[allow(clippy::single_component_path_imports)]
 use tracing;
@@ -78,6 +79,13 @@ pub async fn ws_upgrade(
     ws.on_upgrade(move |socket| handle_ws(socket, state, session))
 }
 
+/// How long a `Subscribe`-time membership check is trusted before `handle_update`
+/// re-consults `document_members` (H8). Membership is authorized once at
+/// `Subscribe`; without this bound, a member revoked mid-session keeps writing
+/// accepted updates until they disconnect. A short TTL caps that window while
+/// keeping the hot write path off the database on every message.
+const MEMBERSHIP_RECHECK_TTL: Duration = Duration::from_secs(30);
+
 /// Per-connection state tracking which documents and channels this client
 /// is currently subscribed to.
 struct WsConnectionState {
@@ -86,6 +94,9 @@ struct WsConnectionState {
     /// fresh per connection (the access token is stateless and carries no id).
     connection_id: String,
     doc_subscriptions: HashSet<DocumentId>,
+    /// Last instant membership was verified for each subscribed document. Drives
+    /// the [`MEMBERSHIP_RECHECK_TTL`] re-check in `handle_update` (H8).
+    doc_access_verified_at: HashMap<DocumentId, Instant>,
     channel_subscriptions: HashSet<ChannelId>,
 }
 
@@ -122,6 +133,7 @@ async fn handle_ws(
         user_id,
         connection_id: connection_id.clone(),
         doc_subscriptions: HashSet::new(),
+        doc_access_verified_at: HashMap::new(),
         channel_subscriptions: HashSet::new(),
     };
 
@@ -198,7 +210,7 @@ async fn handle_ws(
                     update.public_data.pub_key.to_hex(),
                     update.public_data.clock.0,
                 );
-                handle_update(&state, &conn, update, &outbound_tx).await;
+                handle_update(&state, &mut conn, update, &outbound_tx).await;
             }
             WsClientMsg::Ephemeral(eph) => {
                 handle_ephemeral(&state, &conn, eph).await;
@@ -284,6 +296,8 @@ async fn handle_subscribe(
         return;
     }
     conn.doc_subscriptions.insert(document_id);
+    conn.doc_access_verified_at
+        .insert(document_id, Instant::now());
     let _ = redis_ops::doc_subscribe_session(&state.redis, &document_id, &conn.connection_id).await;
     let ack = encode_server_msg(&WsServerMsg::Subscribed { document_id });
     let _ = outbound_tx.send(ack).await;
@@ -295,13 +309,14 @@ async fn handle_unsubscribe(
     document_id: DocumentId,
 ) {
     conn.doc_subscriptions.remove(&document_id);
+    conn.doc_access_verified_at.remove(&document_id);
     let _ =
         redis_ops::doc_unsubscribe_session(&state.redis, &document_id, &conn.connection_id).await;
 }
 
 async fn handle_update(
     state: &Arc<AppState>,
-    conn: &WsConnectionState,
+    conn: &mut WsConnectionState,
     update: ambre_protocol::Update,
     outbound_tx: &mpsc::Sender<Vec<u8>>,
 ) {
@@ -313,6 +328,30 @@ async fn handle_update(
         });
         let _ = outbound_tx.send(err).await;
         return;
+    }
+
+    // Re-validate membership on a short TTL (H8): the `Subscribe`-time check is
+    // stale after a mid-session revoke, so a revoked member could otherwise keep
+    // writing accepted, sequenced updates until they disconnect. On failure, drop
+    // the subscription so subsequent messages are rejected without a DB hit.
+    let stale = conn
+        .doc_access_verified_at
+        .get(&doc_id)
+        .is_none_or(|t| t.elapsed() >= MEMBERSHIP_RECHECK_TTL);
+    if stale {
+        if let Err(e) = verify_document_access(&state.db, doc_id, conn.user_id).await {
+            conn.doc_subscriptions.remove(&doc_id);
+            conn.doc_access_verified_at.remove(&doc_id);
+            let _ = redis_ops::doc_unsubscribe_session(&state.redis, &doc_id, &conn.connection_id)
+                .await;
+            let err = encode_server_msg(&WsServerMsg::Error {
+                code: 403,
+                message: e.to_string(),
+            });
+            let _ = outbound_tx.send(err).await;
+            return;
+        }
+        conn.doc_access_verified_at.insert(doc_id, Instant::now());
     }
 
     let author_pubkey = update.public_data.pub_key.clone();

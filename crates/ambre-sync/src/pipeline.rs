@@ -23,6 +23,25 @@ use thiserror::Error;
 /// bytes than it saves, and the CPU is wasted.
 const COMPRESS_THRESHOLD: usize = 256;
 
+/// Maximum decompression ratio accepted on the inbound path. zstd routinely
+/// reaches 1000:1+ on adversarial input, so a bomb-shaped plaintext could OOM
+/// the WASM Sync worker. The DocumentKey is shared with every collaborator, so a
+/// malicious-but-authorized peer can craft such a plaintext *after* passing
+/// AEAD/commitment/signature verification (H9). We bound the output at
+/// `max(body.len() * MAX_DECOMPRESS_RATIO, MIN_DECOMPRESS_CEILING)`, capped by
+/// [`ABSOLUTE_DECOMPRESS_CAP`], and reject anything larger before it fully
+/// allocates.
+const MAX_DECOMPRESS_RATIO: usize = 200;
+
+/// Floor for the per-message decompression ceiling, so tiny legitimate frames
+/// (a few compressed bytes expanding to a normal delta) are never rejected by
+/// the ratio bound alone.
+const MIN_DECOMPRESS_CEILING: usize = 1 << 20; // 1 MiB
+
+/// Hard upper bound on any single decompressed message, regardless of the
+/// ratio-derived ceiling. Matches the client-memory pillar (< 100 MB per doc).
+const ABSOLUTE_DECOMPRESS_CAP: usize = 64 << 20; // 64 MiB
+
 /// Compression scheme of a sealed plaintext, encoded as the first plaintext byte.
 #[repr(u8)]
 enum CompressionVersion {
@@ -40,6 +59,8 @@ pub enum PipelineError {
     UnknownVersion(u8),
     #[error("decompression failed")]
     Decompress,
+    #[error("decompressed size exceeds the per-message ceiling")]
+    DecompressTooLarge,
     #[error("public data serialization failed")]
     Postcard,
 }
@@ -63,17 +84,41 @@ fn compress(data: &[u8]) -> (u8, Vec<u8>) {
 fn decompress(version: u8, body: &[u8]) -> Result<Vec<u8>, PipelineError> {
     match version {
         v if v == CompressionVersion::Raw as u8 => Ok(body.to_vec()),
-        v if v == CompressionVersion::Zstd as u8 => {
-            let mut decoder = ruzstd::decoding::StreamingDecoder::new(body)
-                .map_err(|_| PipelineError::Decompress)?;
-            let mut out = Vec::new();
-            decoder
-                .read_to_end(&mut out)
-                .map_err(|_| PipelineError::Decompress)?;
-            Ok(out)
-        }
+        v if v == CompressionVersion::Zstd as u8 => decompress_zstd_bounded(body),
         other => Err(PipelineError::UnknownVersion(other)),
     }
+}
+
+/// Streams a zstd body into memory with a hard output ceiling (H9). The ceiling
+/// is derived from the compressed length and [`MAX_DECOMPRESS_RATIO`], floored
+/// at [`MIN_DECOMPRESS_CEILING`] and capped at [`ABSOLUTE_DECOMPRESS_CAP`]. We
+/// read in bounded chunks and abort as soon as the accumulated output would
+/// exceed the ceiling, so a decompression bomb never allocates the full output.
+fn decompress_zstd_bounded(body: &[u8]) -> Result<Vec<u8>, PipelineError> {
+    // MIN_DECOMPRESS_CEILING < ABSOLUTE_DECOMPRESS_CAP by construction, so clamp
+    // never panics.
+    let ceiling = body
+        .len()
+        .saturating_mul(MAX_DECOMPRESS_RATIO)
+        .clamp(MIN_DECOMPRESS_CEILING, ABSOLUTE_DECOMPRESS_CAP);
+
+    let mut decoder =
+        ruzstd::decoding::StreamingDecoder::new(body).map_err(|_| PipelineError::Decompress)?;
+
+    // Never pre-allocate the whole ceiling: grow the buffer as we go, reading
+    // one byte past the ceiling to distinguish "exactly at the limit" from
+    // "over the limit". `take` caps the reader at `ceiling + 1` bytes.
+    let mut out = Vec::new();
+    let read = decoder
+        .by_ref()
+        .take(ceiling as u64 + 1)
+        .read_to_end(&mut out)
+        .map_err(|_| PipelineError::Decompress)?;
+
+    if read > ceiling {
+        return Err(PipelineError::DecompressTooLarge);
+    }
+    Ok(out)
 }
 
 // ── Generic seal / open over the (version || body) plaintext ──────────────────
@@ -334,6 +379,30 @@ mod tests {
         let (v_large, body) = compress(&large);
         assert_eq!(v_large, CompressionVersion::Zstd as u8);
         assert_eq!(decompress(v_large, &body).unwrap(), large);
+    }
+
+    #[test]
+    fn decompress_bomb_rejected() {
+        // A few hundred compressed bytes expanding to 8 MiB is well past the
+        // 1 MiB floor with a small body, so the ratio-derived ceiling rejects it.
+        let bomb = vec![0u8; 8 << 20];
+        let compressed = compress_to_vec(bomb.as_slice(), CompressionLevel::Fastest);
+        assert!(compressed.len() * MAX_DECOMPRESS_RATIO < bomb.len());
+        assert!(matches!(
+            decompress(CompressionVersion::Zstd as u8, &compressed),
+            Err(PipelineError::DecompressTooLarge)
+        ));
+    }
+
+    #[test]
+    fn decompress_within_ceiling_ok() {
+        // A legitimate ~4 KiB payload round-trips unaffected by the bound.
+        let payload = vec![0x5Au8; 4096];
+        let compressed = compress_to_vec(payload.as_slice(), CompressionLevel::Fastest);
+        assert_eq!(
+            decompress(CompressionVersion::Zstd as u8, &compressed).unwrap(),
+            payload
+        );
     }
 
     #[test]
