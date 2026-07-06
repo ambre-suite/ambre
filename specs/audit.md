@@ -491,18 +491,28 @@ Each story carries its finding ID, the file to touch, and the concrete action.
 
 ### Wave R0 — Authorization holes (do first; small diffs, real bypasses)
 
-- [ ] **C4** — `db::get_snapshot` takes `document_id` and filters
+- [x] **C4** — `db::get_snapshot` takes `document_id` and filters
       `WHERE id = $1 AND document_id = $2`; `snapshot_download_url` passes the
       path `doc_id`, returns 404 on mismatch. (`server/db.rs`, `routes/sync.rs`)
-- [ ] **C4-audit** — sweep every "authorize on path id, fetch by body id" pair
-      for the same shape: `snapshot_metadata`, delta fetch, media by-hash.
+      Regression guard added in the `create_snapshot` roundtrip test.
+- [x] **C4-audit** — swept: `get_snapshot_metadata` (via `get_latest_snapshot`)
+      and `get_deltas` (via `get_updates_after`) already scope by `doc_id`;
+      `get_snapshot` was the only bare-id fetch, now fixed.
       (`server/routes/sync.rs`, `routes/media.rs`)
-- [ ] **C5** — validate `content_hash` against `^[0-9a-f]{64}$` before any key
-      builder; reject otherwise. Apply to all three media handlers.
+- [x] **C5** — `s3::is_valid_content_hash` enforces `^[0-9a-f]{64}$`; all three
+      media handlers reject a malformed hash with `BadRequest` before the key
+      builder runs. Unit-tested (`s3::tests::content_hash_validation`).
       (`server/routes/media.rs`, `s3.rs`)
-- [ ] **C5-hardening** — server computes/verifies BLAKE2b-256 of uploaded bytes
-      instead of trusting the client hash (defeats content-address spoofing).
-      (`server/routes/media.rs`)
+- [x] **C5-hardening** — WON'T DO (by design). Server-side BLAKE2b-256 re-hashing
+      of uploaded bytes would force the server to GET and stream the blob body,
+      breaking the Blind Relay pillar (server never touches blob content) and the
+      direct client->S3 presigned upload path. The traversal threat this story
+      guarded against is already fully closed by the `^[0-9a-f]{64}$` validation
+      (C5); the residual "hash does not match bytes" risk is inert here because
+      the payload is E2EE and its real integrity is enforced downstream at open
+      time by AEAD + HMAC commitment + Ed25519 signature. Trusting the client
+      hash only as an S3 key (never as an integrity proof) is acceptable given
+      those guarantees. (`server/routes/media.rs`)
 
 ### Wave R1 — Peer-triggered DoS & live-session authz
 

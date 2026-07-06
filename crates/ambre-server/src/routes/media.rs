@@ -46,6 +46,9 @@ pub async fn media_upload_url(
     if !["owner", "editor"].contains(&m.role.as_str()) {
         return Err(AppError::Forbidden);
     }
+    if !s3::is_valid_content_hash(&req.content_hash) {
+        return Err(AppError::BadRequest("invalid content_hash".into()));
+    }
     let key = s3::format_s3_media_key(&state.config.s3_env_prefix, &doc_id, &req.content_hash);
     let url = s3::generate_presigned_upload_url(
         &state.s3,
@@ -81,6 +84,9 @@ pub async fn media_download_url(
     db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
+    if !s3::is_valid_content_hash(&req.content_hash) {
+        return Err(AppError::BadRequest("invalid content_hash".into()));
+    }
     let key = s3::format_s3_media_key(&state.config.s3_env_prefix, &doc_id, &req.content_hash);
     let url = s3::generate_presigned_download_url(
         &state.s3,
@@ -112,6 +118,9 @@ pub async fn media_confirm_upload(
     db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
+    if !s3::is_valid_content_hash(&req.content_hash) {
+        return Err(AppError::BadRequest("invalid content_hash".into()));
+    }
     let key = s3::format_s3_media_key(&state.config.s3_env_prefix, &doc_id, &req.content_hash);
     db::insert_media(
         &state.db,
