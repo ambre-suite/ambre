@@ -51,7 +51,7 @@ fn unlock_returns_session_ready() {
         &mut state,
         id,
         RestCommand::Unlock {
-            passphrase: b"secret".to_vec(),
+            passphrase: b"secret".to_vec().into(),
         },
     );
 
@@ -70,7 +70,7 @@ fn setup_account_returns_created_with_recovery_words() {
         &mut state,
         id,
         RestCommand::SetupAccount {
-            passphrase: b"secret".to_vec(),
+            passphrase: b"secret".to_vec().into(),
         },
     );
 
@@ -95,7 +95,7 @@ fn logout_returns_logged_out_and_clears_session() {
         &mut state,
         RequestId::next(),
         RestCommand::Unlock {
-            passphrase: b"secret".to_vec(),
+            passphrase: b"secret".to_vec().into(),
         },
     );
     rx.try_iter().count(); // drain SessionReady
@@ -272,7 +272,7 @@ fn open_document_subscribes_via_mock_ws() {
         &mut state,
         RequestId::next(),
         RestCommand::Unlock {
-            passphrase: b"secret".to_vec(),
+            passphrase: b"secret".to_vec().into(),
         },
     );
     rx.try_iter().count(); // drain SessionReady
@@ -306,7 +306,7 @@ fn close_document_unsubscribes_via_mock_ws() {
         &mut state,
         RequestId::next(),
         RestCommand::Unlock {
-            passphrase: b"secret".to_vec(),
+            passphrase: b"secret".to_vec().into(),
         },
     );
     rx.try_iter().count();
@@ -341,7 +341,7 @@ fn send_update_after_open_document_encrypts_and_sends() {
         &mut state,
         RequestId::next(),
         RestCommand::Unlock {
-            passphrase: b"secret".to_vec(),
+            passphrase: b"secret".to_vec().into(),
         },
     );
     rx.try_iter().count();
@@ -387,7 +387,7 @@ fn full_session_flow_unlock_create_open_close_logout() {
         &mut state,
         id1,
         RestCommand::Unlock {
-            passphrase: b"pass".to_vec(),
+            passphrase: b"pass".to_vec().into(),
         },
     );
     match drain_rest(&rx, id1) {

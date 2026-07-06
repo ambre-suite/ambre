@@ -223,10 +223,18 @@ async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &str) {
 
     let mut uploaded_count: isize = 0;
     for blob_str in &blobs {
+        // Never log `blob_str`: it carries `update_b64`, the E2EE ciphertext.
+        // Only routing metadata (redis key, byte length, and once parsed the
+        // s3_key / seq) is safe to surface (C1).
         let parsed: serde_json::Value = match serde_json::from_str(blob_str) {
             Ok(v) => v,
             Err(e) => {
-                tracing::error!(blob = %blob_str, error = %e, "flush: json parse failed");
+                tracing::error!(
+                    key = pending_key,
+                    blob_len = blob_str.len(),
+                    error = %e,
+                    "flush: json parse failed"
+                );
                 continue;
             }
         };
@@ -234,7 +242,8 @@ async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &str) {
         let s3_key = match parsed["s3_key"].as_str() {
             Some(k) => k,
             None => {
-                tracing::error!(blob = %blob_str, "flush: missing s3_key");
+                let seq = parsed["seq"].as_u64().unwrap_or(0);
+                tracing::error!(key = pending_key, seq, "flush: missing s3_key");
                 continue;
             }
         };

@@ -317,6 +317,18 @@ pub async fn get_document(
         Some(s) => db::get_document_member(&state.db, &doc_id, &s.user_id).await?,
         None => None,
     };
+    // Non-members get nothing: leaking `owner_id`/`doc_type` (and even the
+    // document's existence) to an arbitrary caller who holds only the UUID is an
+    // unnecessary metadata disclosure. The owner keeps access even without a
+    // `document_members` row (they may have been the creator pre-membership).
+    let is_owner = auth
+        .as_ref()
+        .is_some_and(|s| s.user_id.as_uuid().as_bytes() == doc.owner_id.as_bytes());
+    if mem.is_none() && !is_owner {
+        return Err(AppError::NotFound {
+            resource: "document",
+        });
+    }
     Ok(axum::Json(GetDocumentResponse {
         id: doc.id.to_string(),
         owner_id: doc.owner_id.to_string(),

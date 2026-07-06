@@ -34,10 +34,110 @@
 //!   `RequestId` is a later refinement).
 
 use core::sync::atomic::{AtomicU64, Ordering};
+use std::fmt;
+use std::ops::Deref;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use zeroize::Zeroizing;
 
 use crate::{ChannelId, DocType, DocumentId, MeetingId, Role, UserId};
+
+// -----------------------------------------------------------------------------
+// Secret-carrying IPC fields (H5)
+// -----------------------------------------------------------------------------
+
+/// Secret byte material (passphrase) travelling across the UI -> Logic -> Sync
+/// IPC boundary.
+///
+/// Wraps [`Zeroizing<Vec<u8>>`], so the bytes are wiped when the value is
+/// dropped anywhere along the relay -- including the placeholder handlers that
+/// merely bind-and-drop. `Debug` is redacted so the secret can never leak into
+/// a log line, and the byte contents are exposed only through [`Deref`] to
+/// `[u8]` (which the crypto call sites already consume).
+#[derive(Clone, Default)]
+pub struct SecretBytes(Zeroizing<Vec<u8>>);
+
+impl SecretBytes {
+    /// Wrap owned bytes as a zeroizing secret.
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self(Zeroizing::new(bytes))
+    }
+}
+
+impl From<Vec<u8>> for SecretBytes {
+    fn from(bytes: Vec<u8>) -> Self {
+        Self::new(bytes)
+    }
+}
+
+impl Deref for SecretBytes {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl fmt::Debug for SecretBytes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SecretBytes([redacted; {} bytes])", self.0.len())
+    }
+}
+
+impl Serialize for SecretBytes {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.as_slice().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for SecretBytes {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(Self::new(Vec::<u8>::deserialize(deserializer)?))
+    }
+}
+
+/// Secret UTF-8 material (the 24-word BIP39 recovery phrase) travelling across
+/// the IPC boundary. Same guarantees as [`SecretBytes`], wrapping
+/// [`Zeroizing<String>`] and exposing the text through [`Deref`] to `str`.
+#[derive(Clone, Default)]
+pub struct SecretString(Zeroizing<String>);
+
+impl SecretString {
+    /// Wrap an owned string as a zeroizing secret.
+    pub fn new(s: String) -> Self {
+        Self(Zeroizing::new(s))
+    }
+}
+
+impl From<String> for SecretString {
+    fn from(s: String) -> Self {
+        Self::new(s)
+    }
+}
+
+impl Deref for SecretString {
+    type Target = str;
+    fn deref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Debug for SecretString {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SecretString([redacted; {} bytes])", self.0.len())
+    }
+}
+
+impl Serialize for SecretString {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.as_str().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for SecretString {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(Self::new(String::deserialize(deserializer)?))
+    }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RequestId — request/response correlation token
@@ -131,11 +231,12 @@ pub enum RestCommand {
     // ── Session ──────────────────────────────────────────────────────────────
     /// Bootstrap auth after OIDC callback. → `SessionReady` / `AccountSetupRequired`.
     Unlock {
-        /// UTF-8 passphrase bytes (zeroized by the Sync thread after use).
-        passphrase: Vec<u8>,
+        /// UTF-8 passphrase bytes. Zeroized on drop by [`SecretBytes`] once the
+        /// Sync thread finishes deriving the user key.
+        passphrase: SecretBytes,
     },
     /// First-time account setup. → `AccountCreated { recovery_words }`.
-    SetupAccount { passphrase: Vec<u8> },
+    SetupAccount { passphrase: SecretBytes },
     /// Dev-only: authenticate as `username` (created on the fly server-side),
     /// deriving keys deterministically from the username. Triggered by the
     /// `?user=<name>` URL param to test multi-user behaviour on one machine.
@@ -143,13 +244,13 @@ pub enum RestCommand {
     DevLogin { username: String },
     /// Change the account passphrase. → `PassphraseChanged`.
     ChangePassphrase {
-        current_passphrase: Vec<u8>,
-        new_passphrase: Vec<u8>,
+        current_passphrase: SecretBytes,
+        new_passphrase: SecretBytes,
     },
     /// Account recovery via 24-word BIP39 phrase. → `AccountRecovered`.
     RecoverAccount {
-        recovery_words: String,
-        new_passphrase: Vec<u8>,
+        recovery_words: SecretString,
+        new_passphrase: SecretBytes,
     },
     /// Log out. The Logic thread clears its document registry on dispatch (hook),
     /// then the Sync thread zeroizes all keys. → `LoggedOut`.

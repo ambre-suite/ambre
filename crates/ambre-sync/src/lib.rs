@@ -45,7 +45,8 @@ use web_sys::{CloseEvent, MessageEvent};
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
     ChannelId, DocType, DocumentId, DocumentSummary, LogicEvent, MemberInfo, RequestId,
-    RestCommand, RestEvent, Role, SnapshotId, SyncCommand, UserId, UserInfo,
+    RestCommand, RestEvent, Role, SecretBytes, SecretString, SnapshotId, SyncCommand, UserId,
+    UserInfo,
 };
 use ambre_core::PublicKey;
 use ambre_crypto::{DocumentKey, MasterSeed};
@@ -211,6 +212,14 @@ enum SyncEvent {
         /// local-only doc (server returned 404 for its members): no WebSocket
         /// subscription yet, and the first update triggers lazy creation.
         server_created: bool,
+    },
+    /// Opening a server-side document failed because its wrapped DocumentKey
+    /// could not be unwrapped (wrong exchange key, tampered server row, or a
+    /// genuine authorization failure). Surfaced as an `AuthError` instead of
+    /// silently opening with a random key (H3).
+    OpenDocumentFailed {
+        document_id: DocumentId,
+        message: String,
     },
     /// A local-only document was lazily materialized server-side. Flushes the
     /// buffered updates and opens the WebSocket subscription.
@@ -892,7 +901,7 @@ impl SyncState {
 
     // -- Session handlers ------------------------------------------------------
 
-    fn handle_unlock(&mut self, id: RequestId, passphrase: Vec<u8>) {
+    fn handle_unlock(&mut self, id: RequestId, passphrase: SecretBytes) {
         tracing::info!("Sync: Unlock (passphrase len={})", passphrase.len());
 
         let logic_tx = self.logic_tx.clone();
@@ -1109,7 +1118,7 @@ impl SyncState {
         }
     }
 
-    fn handle_setup_account(&mut self, id: RequestId, passphrase: Vec<u8>) {
+    fn handle_setup_account(&mut self, id: RequestId, passphrase: SecretBytes) {
         tracing::info!("Sync: SetupAccount (passphrase len={})", passphrase.len());
 
         let logic_tx = self.logic_tx.clone();
@@ -1185,14 +1194,29 @@ impl SyncState {
         }
     }
 
-    fn handle_change_passphrase(&mut self, current_passphrase: Vec<u8>, new_passphrase: Vec<u8>) {
+    fn handle_change_passphrase(
+        &mut self,
+        current_passphrase: SecretBytes,
+        new_passphrase: SecretBytes,
+    ) {
         tracing::info!("Sync: ChangePassphrase");
-        let _ = (current_passphrase, new_passphrase);
+        // Placeholder until the passphrase-rotation flow lands. The secrets are
+        // wiped when they leave scope here: `SecretBytes` zeroizes its bytes on
+        // drop, so binding-and-dropping no longer leaves passphrase material in
+        // freed memory (H4).
+        drop((current_passphrase, new_passphrase));
     }
 
-    fn handle_recover_account(&mut self, recovery_words: String, new_passphrase: Vec<u8>) {
+    fn handle_recover_account(
+        &mut self,
+        recovery_words: SecretString,
+        new_passphrase: SecretBytes,
+    ) {
         tracing::info!("Sync: RecoverAccount");
-        let _ = (recovery_words, new_passphrase);
+        // Placeholder until account recovery lands. The BIP39 recovery phrase
+        // (master-key equivalent) and the new passphrase are zeroized on drop by
+        // `SecretString` / `SecretBytes` (H4).
+        drop((recovery_words, new_passphrase));
     }
 
     /// Tear down the session (WebSocket, document sessions, keys). The
@@ -1630,6 +1654,13 @@ impl SyncState {
                 if !server_created {
                     self.flush_pre_session_updates(document_id);
                 }
+            }
+            SyncEvent::OpenDocumentFailed {
+                document_id,
+                message,
+            } => {
+                tracing::error!("Sync: open document {document_id:?} failed: {message}");
+                self.send_to_logic(LogicEvent::AuthError { message });
             }
             SyncEvent::DocumentMaterialized { document_id } => {
                 let pending = match self.documents.get_mut(&document_id) {
@@ -2257,12 +2288,32 @@ impl SyncState {
                     .await
                     {
                         Ok(Some(resp)) => {
-                            let key = match &exchange_key {
-                                Some(ek) => Self::unwrap_document_key(ek, &resp.members)
-                                    .unwrap_or_else(|_| DocumentKey::generate()),
-                                None => DocumentKey::generate(),
-                            };
-                            (key, true)
+                            // The document exists server-side: our wrapped
+                            // DocumentKey MUST unwrap cleanly. A failure here is a
+                            // genuine auth error (wrong exchange key, tampered row,
+                            // or a real attack) -- never substitute a random key,
+                            // which would "open" the document and then fail every
+                            // subsequent decrypt with a confusing commitment
+                            // mismatch instead of a clear auth error (H3).
+                            match &exchange_key {
+                                Some(ek) => match Self::unwrap_document_key(ek, &resp.members) {
+                                    Ok(key) => (key, true),
+                                    Err(_) => {
+                                        let _ = tx.send(SyncEvent::OpenDocumentFailed {
+                                            document_id: doc_id,
+                                            message: "cannot unwrap document key".into(),
+                                        });
+                                        return;
+                                    }
+                                },
+                                None => {
+                                    let _ = tx.send(SyncEvent::OpenDocumentFailed {
+                                        document_id: doc_id,
+                                        message: "session not ready".into(),
+                                    });
+                                    return;
+                                }
+                            }
                         }
                         // Not found, or a transient error: treat as local-only.
                         // A transient error simply means no remote history this
