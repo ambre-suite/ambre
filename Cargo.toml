@@ -101,6 +101,8 @@ swash = "0.2"
 # WASM
 gloo-net = { version = "0.7", features = ["http", "websocket"] }
 web-sys = { version = "0.3.85", features = [
+    "AbortController",
+    "AbortSignal",
     "Blob",
     "BlobPropertyBag",
     "Url",

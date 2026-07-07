@@ -273,6 +273,17 @@ impl SyncState {
             }
             SyncEvent::WsError => {
                 tracing::error!("Sync: WebSocket error");
+                // A raw socket `onerror` is not always followed by a clean
+                // `onclose`, so treat it as a disconnect: tear down the dead
+                // socket and reconnect on the same backoff path as
+                // `WsDisconnected` (M10). Without the teardown, an `onerror`
+                // with no close would leave `self.ws` set and stall the
+                // `ReconnectNow` guard (`self.ws.is_none()`); a following
+                // `onclose`, if any, is idempotent here.
+                self.handle_ws_disconnected(0, "ws error".to_owned());
+                if !self.documents.is_empty() {
+                    self.schedule_reconnect();
+                }
             }
             SyncEvent::ReconnectNow => {
                 self._reconnect_timer = None;

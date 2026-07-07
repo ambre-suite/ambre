@@ -48,6 +48,11 @@ pub(crate) fn user_pubsub_channel(user_id: &UserId) -> String {
 /// Query parameters on the WS upgrade. The browser WebSocket API forbids custom
 /// headers, so the access JWT travels in the `token` query parameter; it is
 /// verified at the handshake exactly like a `Authorization: Bearer` on REST.
+///
+/// Operational note (M15): this is a bearer credential in a URL. The server's
+/// `TraceLayer` span logs only the URI path (never the query), and the reverse
+/// proxy MUST strip `?token=` from its access logs; the short access-token TTL
+/// bounds the residual exposure. See `ambre-spec-server.md` sec.3.
 #[derive(serde::Deserialize)]
 pub struct WsQuery {
     token: Option<String>,
