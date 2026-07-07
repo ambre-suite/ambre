@@ -1,0 +1,752 @@
+// ambre-trame/src/ui/grid.rs
+// ============================================================================
+// Trame virtual-scroll grid state -- UI Thread side.
+//
+// Tracks the active cell, the scroll position (top-left of the visible area),
+// and a local cache of received DisplayCells. The cache is keyed by (row, col)
+// and grows as the Logic thread responds to ScrollViewport requests.
+//
+// Arrow key presses call `move_cursor()`, which returns a `TrameCommand` to
+// send to the Logic thread whenever the visible range changes.
+// ============================================================================
+
+use std::collections::{HashMap, HashSet};
+
+use crate::{TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
+
+// Cell layout.
+
+// The `impl TrameUiState` block is split across `state`/`geometry`; both reach
+// the types, consts and helpers here via `use super::*`.
+mod geometry;
+mod state;
+
+pub const ROW_HEIGHT: f64 = 20.0;
+
+pub const COL_WIDTH: f64 = 80.0;
+
+pub const HEADER_HEIGHT: f64 = 24.0;
+
+pub const HEADER_WIDTH: f64 = 50.0;
+
+/// Lower clamp on a column/row resize (physical px); mirrors the Logic-side
+/// `MIN_COL_WIDTH` / `MIN_ROW_HEIGHT` so the UI preview and the persisted value
+/// agree.
+pub const MIN_COL_WIDTH: f64 = 24.0;
+
+pub const MIN_ROW_HEIGHT: f64 = 12.0;
+
+/// Half-width (physical px) of the grab band straddling a header boundary that
+/// arms a resize drag (sec.4bis.C). A press within +/- this of a column's right
+/// edge (resp. a row's bottom edge) resizes instead of selecting.
+pub const RESIZE_BAND: f64 = 4.0;
+
+const PADDING_ROWS: u32 = 20;
+
+const PADDING_COLS: u32 = 5;
+
+/// A cached cell ready to render: text plus its pinned formatting runs.
+#[derive(Clone, Default)]
+pub struct CellData {
+    pub text: String,
+    /// Raw cell text (formula source for formula cells, equal to `text`
+    /// otherwise). Seeds the in-cell editor so formulas are editable as text.
+    pub raw: String,
+    pub bold: bool,
+    pub italic: bool,
+    /// Rich manual formatting (`-ui.md` sec.5bis): underline run, alignments,
+    /// wrap, text/fill colours, font family/size, border preset. Pinned to the
+    /// cell, fed by [`DisplayCell`](crate::DisplayCell).
+    pub underline: bool,
+    pub strikethrough: bool,
+    pub h_align: ambre_bus::HAlign,
+    pub v_align: ambre_bus::VAlign,
+    pub wrap: bool,
+    pub fg: Option<u32>,
+    pub bg: Option<u32>,
+    pub font: Option<String>,
+    pub size: Option<u16>,
+    pub borders: ambre_bus::Borders,
+    /// `Some((col_span, row_span))` on a merge master, `None` otherwise. Covered
+    /// cells arrive with empty text and are simply rendered blank.
+    pub merge_span: Option<(u32, u32)>,
+    /// The cell's row is hidden by the active shared filter (`-ui.md` sec.5.D):
+    /// the row axis collapses over it. Drives [`TrameUiState::hidden_rows`].
+    pub is_filtered: bool,
+}
+
+impl CellData {
+    /// Build the renderer's [`CellContent`](crate::render::CellContent) view of
+    /// this cached cell, with `text` supplied by the caller (a merge master draws
+    /// empty body text in the single-cell pass, its real text in the merge pass).
+    pub fn content<'a>(&'a self, text: &'a str) -> crate::render::CellContent<'a> {
+        crate::render::CellContent {
+            text,
+            bold: self.bold,
+            italic: self.italic,
+            underline: self.underline,
+            strikethrough: self.strikethrough,
+            h_align: self.h_align,
+            v_align: self.v_align,
+            fg: self.fg,
+            bg: self.bg,
+            font: self.font.as_deref(),
+            size: self.size,
+            wrap: self.wrap,
+            borders: self.borders,
+        }
+    }
+}
+
+/// A deferred pointer hit inside the in-cell editor. Resolving a click x to a
+/// byte offset needs text measurement (font metrics), which only the renderer
+/// has, so the view records the raw physical pointer x plus the intent here and
+/// the renderer resolves it into `caret` / `mark` on the next paint.
+#[derive(Clone, Copy)]
+pub struct PendingHit {
+    /// Physical pointer x (same space as `cell_pixel_rect`).
+    pub x: f64,
+    pub kind: HitKind,
+}
+
+/// What a resolved pointer hit does to the editor selection.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum HitKind {
+    /// Place the caret and collapse the selection (single click / drag start).
+    Place,
+    /// Extend the selection to the hit (drag move / shift-click).
+    Extend,
+    /// Select the word under the hit (double click).
+    Word,
+}
+
+/// In-progress edit of a single cell, driven by the transparent textarea pipe.
+///
+/// The `buffer` is the committed plaintext; `caret` is a byte offset into it
+/// (always on a char boundary). `preview` is the live IME composition string,
+/// conceptually inserted at the caret but kept separate so it can be styled and
+/// discarded/replaced atomically on each composition pass.
+///
+/// `mark` is the fixed end of a text selection (the moving end is `caret`);
+/// `None` means no selection (a bare caret). The selected range is
+/// `min(mark, caret)..max(mark, caret)`.
+#[derive(Clone, Default)]
+pub struct CellEditor {
+    pub row: u32,
+    pub col: u32,
+    pub buffer: String,
+    pub caret: usize,
+    pub preview: String,
+    pub mark: Option<usize>,
+    /// Pending pointer hit awaiting resolution by the renderer (then cleared).
+    pub pending: Option<PendingHit>,
+}
+
+impl CellEditor {
+    /// Open an editor on `(row, col)` seeded with `text`, caret at the end.
+    pub fn new(row: u32, col: u32, text: String) -> Self {
+        let caret = text.len();
+        Self {
+            row,
+            col,
+            buffer: text,
+            caret,
+            preview: String::new(),
+            mark: None,
+            pending: None,
+        }
+    }
+
+    /// The selected byte range `start..end` (start <= end), or `None` when the
+    /// selection is empty (no mark, or mark collapsed onto the caret).
+    pub fn selection(&self) -> Option<(usize, usize)> {
+        match self.mark {
+            Some(m) if m != self.caret => Some((m.min(self.caret), m.max(self.caret))),
+            _ => None,
+        }
+    }
+
+    /// The currently selected substring, or empty when nothing is selected.
+    pub fn selected_text(&self) -> &str {
+        match self.selection() {
+            Some((s, e)) => &self.buffer[s..e],
+            None => "",
+        }
+    }
+
+    /// Drop the active selection (keeps the caret where it is).
+    pub fn clear_selection(&mut self) {
+        self.mark = None;
+    }
+
+    /// Delete the selected range, collapsing the caret to its start. Returns
+    /// `true` when something was removed.
+    pub fn delete_selection(&mut self) -> bool {
+        let Some((s, e)) = self.selection() else {
+            return false;
+        };
+        self.buffer.drain(s..e);
+        self.caret = s;
+        self.mark = None;
+        true
+    }
+
+    /// Insert committed text at the caret (latin typing, paste, IME commit),
+    /// replacing the selection first if there is one.
+    pub fn insert(&mut self, s: &str) {
+        self.delete_selection();
+        self.buffer.insert_str(self.caret, s);
+        self.caret += s.len();
+    }
+
+    /// Delete the char before the caret, or the selection when there is one.
+    /// No-op at the start with no selection.
+    pub fn backspace(&mut self) {
+        if self.delete_selection() {
+            return;
+        }
+        if self.caret == 0 {
+            return;
+        }
+        let prev = self.buffer[..self.caret]
+            .chars()
+            .next_back()
+            .map(char::len_utf8)
+            .unwrap_or(0);
+        self.buffer.drain(self.caret - prev..self.caret);
+        self.caret -= prev;
+    }
+
+    /// Delete the selection, or the char after the caret when none (Del key).
+    /// Returns `true` when something was removed.
+    pub fn delete_forward(&mut self) -> bool {
+        if self.delete_selection() {
+            return true;
+        }
+        if let Some(c) = self.buffer[self.caret..].chars().next() {
+            self.buffer.drain(self.caret..self.caret + c.len_utf8());
+            return true;
+        }
+        false
+    }
+
+    /// Byte offset one char left of the caret (or the caret at the start).
+    fn prev_offset(&self) -> usize {
+        self.buffer[..self.caret]
+            .chars()
+            .next_back()
+            .map(|c| self.caret - c.len_utf8())
+            .unwrap_or(self.caret)
+    }
+
+    /// Byte offset one char right of the caret (or the caret at the end).
+    fn next_offset(&self) -> usize {
+        self.buffer[self.caret..]
+            .chars()
+            .next()
+            .map(|c| self.caret + c.len_utf8())
+            .unwrap_or(self.caret)
+    }
+
+    /// Move the caret one char left. Collapses an existing selection to its
+    /// left edge instead of moving past it (standard text-field behaviour).
+    pub fn move_left(&mut self) {
+        if let Some((s, _)) = self.selection() {
+            self.caret = s;
+        } else {
+            self.caret = self.prev_offset();
+        }
+        self.mark = None;
+    }
+
+    /// Move the caret one char right, collapsing a selection to its right edge.
+    pub fn move_right(&mut self) {
+        if let Some((_, e)) = self.selection() {
+            self.caret = e;
+        } else {
+            self.caret = self.next_offset();
+        }
+        self.mark = None;
+    }
+
+    /// Extend the selection one char left (Shift+Left).
+    pub fn extend_left(&mut self) {
+        self.mark.get_or_insert(self.caret);
+        self.caret = self.prev_offset();
+    }
+
+    /// Extend the selection one char right (Shift+Right).
+    pub fn extend_right(&mut self) {
+        self.mark.get_or_insert(self.caret);
+        self.caret = self.next_offset();
+    }
+
+    /// Move the caret to the start of the buffer (Home), dropping the selection.
+    pub fn move_home(&mut self) {
+        self.caret = 0;
+        self.mark = None;
+    }
+
+    /// Move the caret to the end of the buffer (End), dropping the selection.
+    pub fn move_end(&mut self) {
+        self.caret = self.buffer.len();
+        self.mark = None;
+    }
+
+    /// Extend the selection to the start of the buffer (Shift+Home).
+    pub fn extend_home(&mut self) {
+        self.mark.get_or_insert(self.caret);
+        self.caret = 0;
+    }
+
+    /// Extend the selection to the end of the buffer (Shift+End).
+    pub fn extend_end(&mut self) {
+        self.mark.get_or_insert(self.caret);
+        self.caret = self.buffer.len();
+    }
+
+    /// Select the whole buffer (Ctrl+A).
+    pub fn select_all(&mut self) {
+        self.mark = Some(0);
+        self.caret = self.buffer.len();
+    }
+
+    /// Place the caret at byte offset `off` (clamped to a char boundary) and
+    /// collapse the selection. Used to resolve a single-click hit.
+    pub fn place_caret(&mut self, off: usize) {
+        self.caret = self.clamp_boundary(off);
+        self.mark = None;
+    }
+
+    /// Extend the selection to byte offset `off` (drag / shift-click hit),
+    /// seeding the mark at the current caret if there is no selection yet.
+    pub fn extend_to(&mut self, off: usize) {
+        self.mark.get_or_insert(self.caret);
+        self.caret = self.clamp_boundary(off);
+    }
+
+    /// Select the word surrounding byte offset `off` (double-click hit). Words
+    /// are maximal runs of alphanumeric chars; a hit on a non-word char selects
+    /// that single char.
+    pub fn select_word(&mut self, off: usize) {
+        let off = self.clamp_boundary(off);
+        let is_word = |c: char| c.is_alphanumeric() || c == '_';
+        // Anchor on the char to the right of the hit, falling back to the left.
+        let here = self.buffer[off..]
+            .chars()
+            .next()
+            .or_else(|| self.buffer[..off].chars().next_back());
+        let Some(here) = here else {
+            self.place_caret(off);
+            return;
+        };
+        let word = is_word(here);
+        let start = self.buffer[..off]
+            .char_indices()
+            .rev()
+            .take_while(|(_, c)| is_word(*c) == word)
+            .last()
+            .map(|(i, _)| i)
+            .unwrap_or(off);
+        let end = self.buffer[off..]
+            .char_indices()
+            .take_while(|(_, c)| is_word(*c) == word)
+            .last()
+            .map(|(i, c)| off + i + c.len_utf8())
+            .unwrap_or(off);
+        self.mark = Some(start);
+        self.caret = end;
+    }
+
+    /// Snap a byte offset down to the nearest char boundary within the buffer.
+    fn clamp_boundary(&self, off: usize) -> usize {
+        let off = off.min(self.buffer.len());
+        if self.buffer.is_char_boundary(off) {
+            off
+        } else {
+            self.buffer[..off]
+                .char_indices()
+                .next_back()
+                .map(|(i, _)| i)
+                .unwrap_or(0)
+        }
+    }
+
+    /// The text shown before the caret (used to position caret + IME popup):
+    /// committed prefix followed by the live composition preview.
+    pub fn before_caret(&self) -> String {
+        let mut s = self.buffer[..self.caret].to_owned();
+        s.push_str(&self.preview);
+        s
+    }
+
+    /// The full visual string: prefix + preview + suffix.
+    pub fn display(&self) -> String {
+        let mut s = self.buffer[..self.caret].to_owned();
+        s.push_str(&self.preview);
+        s.push_str(&self.buffer[self.caret..]);
+        s
+    }
+}
+
+/// A normalized cell rectangle `(r1, c1, r2, c2)` with `r1 <= r2` and
+/// `c1 <= c2`. Used for the committed disjoint rectangles of a multi-range
+/// selection and as the return type of [`Selection::bounds`].
+pub type CellRect = (u32, u32, u32, u32);
+
+/// The grid selection (spec sec.8). A single-cell selection has `anchor ==
+/// active` and no extra ranges. A contiguous range keeps `anchor` fixed and
+/// moves `active` (drag, Shift+click, Shift+arrows). Disjoint ranges
+/// (Ctrl+click) push the live rectangle into `extra` and start a fresh one.
+///
+/// `active` is the cell the cursor, the inline editor and the formatting
+/// commands target; `anchor` is the opposite corner of the live rectangle.
+/// Selection is local view state -- never synced (sec.16).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Selection {
+    /// Fixed corner of the live rectangle (where this range started).
+    pub anchor: (u32, u32),
+    /// Active cell; the cursor / editor / formatting target.
+    pub active: (u32, u32),
+    /// Committed disjoint rectangles (Ctrl+click), each normalized. The live
+    /// rectangle (`anchor..=active`) is *not* in here; the full selection is
+    /// `extra` plus that rectangle (see [`rects`](Self::rects)).
+    pub extra: Vec<CellRect>,
+    /// Whether the live selection spans whole cells, columns, or rows
+    /// (`-ui.md` sec.4bis.A). For `Cols`/`Rows` the perpendicular coordinate of
+    /// `anchor`/`active` is ignored (the band runs the full axis); the Logic
+    /// thread resolves the band to the used-range rectangle. UI-only view state.
+    pub kind: SelKind,
+}
+
+/// Shape of the live selection (`-ui.md` sec.4bis.A). `Cells` is the ordinary
+/// rectangle; `Cols`/`Rows` are virtual whole-axis bands selected from a header.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum SelKind {
+    #[default]
+    Cells,
+    Cols,
+    Rows,
+}
+
+/// Which surface a right-click landed on, choosing the context-menu layout
+/// (`-ui.md` sec.5.C). Each header scope drops the cell-only entries (clipboard /
+/// merge) and keeps only the structural + sort/filter ops relevant to the axis
+/// the click already selected: a column header offers column insert/delete, a row
+/// header row insert/delete, and the corner the whole-sheet ops. Lives here
+/// (always compiled) so the host-tested input handler can set it; the chrome
+/// layer re-exports it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum CtxScope {
+    /// Right-click on a grid cell: the full menu.
+    #[default]
+    Cell,
+    /// Right-click on a column header: column-scoped structural + sort/filter.
+    Column,
+    /// Right-click on a row header: row-scoped structural + sort/filter.
+    Row,
+    /// Right-click on the top-left corner: whole-sheet ops only.
+    Corner,
+}
+
+/// A resolved pointer hit inside a header strip (`-ui.md` sec.4bis). The body
+/// zones select a whole column/row; the border zones (a +/- [`RESIZE_BAND`] band
+/// around a boundary) arm a resize; the insert zones host the inline "+"; the
+/// top-left corner selects the whole sheet.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum HeaderHit {
+    /// Column header body -> select / drag-extend the whole column.
+    ColBody(u32),
+    /// Row header body -> select the whole row.
+    RowBody(u32),
+    /// Band around column `i`'s right border -> resize column `i`.
+    ColBorder(u32),
+    /// Band around row `i`'s bottom border -> resize row `i`.
+    RowBorder(u32),
+    /// Inline "+" affordance at a column boundary -> insert a column left of `i`.
+    ColInsert(u32),
+    /// Inline "+" affordance at a row boundary -> insert a row above `i`.
+    RowInsert(u32),
+    /// Top-left corner -> select the whole sheet.
+    Corner,
+}
+
+/// Live guide line shown while dragging a header boundary (`-ui.md` sec.4bis.C):
+/// a vertical guide at physical x for a column resize, a horizontal guide at y
+/// for a row resize.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum ResizePreview {
+    Col(f64),
+    Row(f64),
+}
+
+impl Default for Selection {
+    fn default() -> Self {
+        Self::single(0, 0)
+    }
+}
+
+impl Selection {
+    /// A selection collapsed to a single cell (`anchor == active`, no extras).
+    pub fn single(row: u32, col: u32) -> Self {
+        Self {
+            anchor: (row, col),
+            active: (row, col),
+            extra: Vec::new(),
+            kind: SelKind::Cells,
+        }
+    }
+
+    /// A whole-axis band selection from a header (`-ui.md` sec.4bis.A): the band
+    /// spans columns `anchor.1..=active.1` (`SelKind::Cols`) or rows
+    /// `anchor.0..=active.0` (`SelKind::Rows`); the perpendicular coordinate is
+    /// irrelevant (set to 0). `active` carries the clicked band so Shift extends
+    /// and arrow keys still resolve an active cell.
+    pub fn axis(kind: SelKind, anchor: u32, active: u32) -> Self {
+        let (anc, act) = match kind {
+            SelKind::Cols => ((0, anchor), (0, active)),
+            // Rows (and the degenerate Cells, never built here) key on the row.
+            _ => ((anchor, 0), (active, 0)),
+        };
+        Self {
+            anchor: anc,
+            active: act,
+            extra: Vec::new(),
+            kind,
+        }
+    }
+
+    /// Move the active corner of the live rectangle, keeping the anchor (range
+    /// extension: drag, Shift+click, Shift+arrows).
+    pub fn extend_to(&mut self, row: u32, col: u32) {
+        self.active = (row, col);
+    }
+
+    /// Commit the live rectangle and start a fresh single-cell one at
+    /// `(row, col)` (Ctrl+click: disjoint selection).
+    pub fn add_disjoint(&mut self, row: u32, col: u32) {
+        self.extra.push(self.live_rect());
+        self.anchor = (row, col);
+        self.active = (row, col);
+    }
+
+    /// The active cell (row, col).
+    pub fn active(&self) -> (u32, u32) {
+        self.active
+    }
+
+    /// The live rectangle normalized to `(r1, c1, r2, c2)`.
+    pub fn live_rect(&self) -> CellRect {
+        (
+            self.anchor.0.min(self.active.0),
+            self.anchor.1.min(self.active.1),
+            self.anchor.0.max(self.active.0),
+            self.anchor.1.max(self.active.1),
+        )
+    }
+
+    /// Bounds of the live rectangle (the target of range ops: merge, sort,
+    /// style, fill...). Mirrors the spec's `sel.bounds()`.
+    pub fn bounds(&self) -> CellRect {
+        self.live_rect()
+    }
+
+    /// Iterator over every selected rectangle: the committed disjoint ones
+    /// followed by the live rectangle.
+    pub fn rects(&self) -> impl Iterator<Item = CellRect> + '_ {
+        self.extra
+            .iter()
+            .copied()
+            .chain(std::iter::once(self.live_rect()))
+    }
+
+    /// True when the selection covers more than a single cell -- either a
+    /// multi-cell live rectangle or any committed disjoint range. Drives the
+    /// range-fill rendering (a lone single cell shows only the active border).
+    pub fn is_multi(&self) -> bool {
+        !self.extra.is_empty() || self.anchor != self.active
+    }
+
+    /// Every distinct cell `(row, col)` covered by the selection, across all
+    /// rectangles, deduplicated (disjoint rectangles may overlap). Backs
+    /// Ctrl+Enter "fill the selection with the entered value".
+    pub fn selected_cells(&self) -> Vec<(u32, u32)> {
+        let mut cells: Vec<(u32, u32)> = self
+            .rects()
+            .flat_map(|(r1, c1, r2, c2)| {
+                (r1..=r2).flat_map(move |r| (c1..=c2).map(move |c| (r, c)))
+            })
+            .collect();
+        cells.sort_unstable();
+        cells.dedup();
+        cells
+    }
+
+    /// True if `(row, col)` falls inside any selected rectangle.
+    pub fn contains(&self, row: u32, col: u32) -> bool {
+        self.rects()
+            .any(|(r1, c1, r2, c2)| row >= r1 && row <= r2 && col >= c1 && col <= c2)
+    }
+
+    /// True if `col` is within the live rectangle's column span.
+    #[allow(dead_code)]
+    pub fn contains_col(&self, col: u32) -> bool {
+        let (c1, c2) = (
+            self.anchor.1.min(self.active.1),
+            self.anchor.1.max(self.active.1),
+        );
+        col >= c1 && col <= c2
+    }
+
+    /// True if `row` is within the live rectangle's row span.
+    #[allow(dead_code)]
+    pub fn contains_row(&self, row: u32) -> bool {
+        let (r1, r2) = (
+            self.anchor.0.min(self.active.0),
+            self.anchor.0.max(self.active.0),
+        );
+        row >= r1 && row <= r2
+    }
+}
+
+/// Outcome of a cursor move: the two commands the view forwards to Logic.
+pub struct CursorMove {
+    /// Always present -- the new active cell, so formatting toggles retarget.
+    pub active: TrameCommand,
+    /// Present only when the visible range changed and new cells must be fetched.
+    pub scroll: Option<TrameCommand>,
+}
+
+/// All mutable UI state for the Trame grid on the UI Thread.
+pub struct TrameUiState {
+    /// Top-left visible row (0-based).
+    pub top_row: u32,
+    /// Top-left visible column (0-based).
+    pub left_col: u32,
+
+    /// Current selection. Single-cell for now (`anchor == active`); the active
+    /// cell drives the cursor, inline editor and formatting commands (sec.8).
+    pub selection: Selection,
+
+    /// Number of full rows visible in the grid area (recomputed on resize).
+    pub viewport_rows: u32,
+    /// Number of full columns visible in the grid area.
+    pub viewport_cols: u32,
+
+    /// Canvas physical size (CSS pixels × devicePixelRatio, set by ResizeObserver).
+    pub canvas_width: f64,
+    pub canvas_height: f64,
+
+    /// Application zoom factor for the grid (1.0 = 100%). Scales cells, the
+    /// row/col header strips and the cell font together (`-ui.md` sec.13bis).
+    /// Pure local view state -- never persisted, never synced (like the scroll
+    /// position). The browser's own page zoom (Ctrl+wheel / Ctrl+/-) is left
+    /// untouched and zooms the whole page incl. chrome; this scales the grid only.
+    pub zoom: f64,
+
+    /// Cache of received cells: (row, col) -> display data (text + formatting).
+    ///
+    /// A cell absent from the cache is shown as "pending" (grey background).
+    /// Only cells within the last requested range + padding should be queried;
+    /// we never evict entries because the grid is read-only for now.
+    pub cell_cache: HashMap<(u32, u32), CellData>,
+
+    /// Cells edited locally whose authoritative (recomputed) value has not yet
+    /// arrived from the Logic thread. Rendered with a reduced-opacity veil so
+    /// the optimistic value reads as "not yet confirmed". Cleared per cell when
+    /// the next `ViewportData` carries it. UI-only derived state -- never synced.
+    pub dirty_cells: HashSet<(u32, u32)>,
+
+    /// Cells whose formula evaluation failed, keyed to the error string (e.g.
+    /// `#DIV/0!`). Rendered with a small corner marker. Populated by
+    /// `TrameEvent::FormulaError`, cleared when a valid value arrives. UI-only.
+    pub formula_errors: HashMap<(u32, u32), String>,
+
+    /// Version of the last accepted `ViewportData` response (anti-flicker).
+    pub accepted_version: u64,
+
+    /// Id of the sheet currently shown. Mirrors `TrameEvent::SheetList`; empty
+    /// until the first one arrives. Tags the view's edit commands so they target
+    /// the right sheet. The tab strip itself is DOM chrome (`SheetTabs`), fed by
+    /// the same event -- the canvas only needs the active id, not the full list.
+    pub active_sheet: String,
+
+    /// Monotonically increasing version counter for outgoing `ScrollViewport` commands.
+    next_version: u64,
+
+    /// Grid column carrying the active shared filter, drawn with a funnel badge on
+    /// its header (`-ui.md` sec.5.D). `None` when no filter is active. Tracked from
+    /// `TrameEvent::FilterApplied` / `FilterCleared`; UI-only derived state.
+    pub filtered_col: Option<u32>,
+
+    /// Absolute grid rows hidden by the active shared filter, sorted ascending
+    /// (`-ui.md` sec.5.D). Derived from the `is_filtered` flag of cached cells and
+    /// rebuilt whenever the cache changes. The row axis collapses over these (see
+    /// [`visible_offset`](Self::visible_offset)); fed to the renderer's
+    /// `GridLayout`. UI-only derived state.
+    pub hidden_rows: Vec<u32>,
+
+    /// Per-column widths (physical px) keyed by absolute grid column, fed by the
+    /// Logic thread's `col_widths` viewport slice (`-ui.md` sec.4bis.C). A column
+    /// with no entry uses the uniform [`COL_WIDTH`]. Drives every pixel mapping
+    /// (the renderer's `GridLayout` and the hit-testing helpers below). UI-only
+    /// derived state, mirrors the CRDT `col_widths_{sheet}` map.
+    pub col_widths: HashMap<u32, f32>,
+    /// Per-row heights (physical px) keyed by absolute grid row. Row analogue of
+    /// [`col_widths`](Self::col_widths); absence uses [`ROW_HEIGHT`].
+    pub row_heights: HashMap<u32, f32>,
+
+    /// The range last copied/cut, drawn with animated marching-ants until the
+    /// next copy or an Escape (`-ui.md` sec.5.E). `None` when nothing is on the
+    /// clipboard. Stored as the normalized rectangle `(r1, c1, r2, c2)` in
+    /// absolute grid coordinates. UI-only view state.
+    pub clipboard_anchor: Option<CellRect>,
+
+    /// While the fill handle is being dragged, the destination rectangle the
+    /// release will fill (`-ui.md` sec.5.F), normalized and always containing the
+    /// source selection. `None` when no fill drag is in progress. Drawn as a
+    /// dashed preview outline. UI-only view state.
+    pub fill_preview: Option<CellRect>,
+
+    /// While a header boundary is being dragged (`-ui.md` sec.4bis.C), the live
+    /// guide line position: `Col(x)` for a column resize (a vertical guide at
+    /// physical x), `Row(y)` for a row resize (a horizontal guide at y). `None`
+    /// when no resize is in progress. UI-only view state.
+    pub resize_preview: Option<ResizePreview>,
+
+    /// The header boundary the pointer is hovering over the inline "+" zone of
+    /// (`-ui.md` sec.4bis.D), drawn as a small "+" badge. `Some(ColInsert(i))` /
+    /// `Some(RowInsert(i))` while hovered, `None` otherwise. UI-only view state.
+    pub insert_hint: Option<HeaderHit>,
+
+    /// The column/row header body the pointer is hovering over, tinted with
+    /// `header_hover` for chrome-consistent hover feedback (`-ui.md` sec.13).
+    /// Only ever `Some(ColBody(_))` / `Some(RowBody(_))`; `None` otherwise.
+    /// UI-only view state.
+    pub hover_header: Option<HeaderHit>,
+
+    /// While a selected column/row header is being dragged to a new position
+    /// (Excel-style reorder), the target insertion slot: `(Cols, i)` means the
+    /// grabbed column would land left of column `i`, `(Rows, i)` above row `i`.
+    /// Drawn as a full-height/width guide line at that boundary. `None` when no
+    /// reorder drag is in progress. UI-only view state.
+    pub reorder_preview: Option<(SelKind, u32)>,
+
+    /// Cells matched by the active Find query (`-ui.md` sec.5.G), drawn with a
+    /// translucent highlight. Absolute grid `(row, col)` pairs from the last
+    /// `TrameEvent::FindResult`; empty when the panel is closed or there is no
+    /// match. UI-only view state, never synced.
+    pub find_matches: Vec<(u32, u32)>,
+}
+
+/// Side of the square autofill handle drawn at the selection's bottom-right
+/// corner, in device pixels (`-ui.md` sec.5.F).
+pub const FILL_HANDLE_SIZE: f64 = 7.0;
+
+/// Side of the square Excel-style autofilter button drawn at the right edge of
+/// each current-region header cell, in device pixels at 100% zoom (`-ui.md`
+/// sec.5.D). Scaled by the grid zoom in [`filter_button_rect`].
+pub const FILTER_BUTTON_SIZE: f64 = 13.0;
+
+#[cfg(test)]
+mod tests;

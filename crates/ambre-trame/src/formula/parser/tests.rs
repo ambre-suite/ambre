@@ -1,0 +1,400 @@
+// ambre-trame/src/formula/parser/tests.rs
+// Parser unit tests (descendant module: sees the private combinators).
+
+use super::*;
+
+fn parse(input: &str) -> Expr {
+    parse_formula(input).unwrap_or_else(|e| panic!("parse failed: {e}"))
+}
+
+#[test]
+fn literal_number() {
+    assert!(matches!(
+        parse("42"),
+        Expr::Literal(CellValue::Number(42.0))
+    ));
+    assert!(matches!(parse("-5"), Expr::UnaryOp { .. }));
+    assert!(
+        matches!(parse("1.23"), Expr::Literal(CellValue::Number(v)) if (v - 1.23).abs() < 0.001)
+    );
+}
+
+#[test]
+fn literal_string() {
+    assert!(matches!(parse(r#""hello""#), Expr::Literal(CellValue::Text(s)) if s == "hello"));
+}
+
+#[test]
+fn literal_bool() {
+    assert!(matches!(
+        parse("TRUE"),
+        Expr::Literal(CellValue::Boolean(true))
+    ));
+    assert!(matches!(
+        parse("FALSE"),
+        Expr::Literal(CellValue::Boolean(false))
+    ));
+}
+
+#[test]
+fn cell_reference() {
+    assert!(matches!(
+        parse("A1"),
+        Expr::CellRef(CellRef { row: 0, col: 0, .. })
+    ));
+    assert!(matches!(
+        parse("B2"),
+        Expr::CellRef(CellRef { row: 1, col: 1, .. })
+    ));
+    assert!(matches!(
+        parse("AA100"),
+        Expr::CellRef(CellRef {
+            row: 99,
+            col: 26,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn cell_range() {
+    match parse("A1:B10") {
+        Expr::Range(r) => {
+            assert_eq!(r.row_start, 0);
+            assert_eq!(r.row_end, 9);
+            assert_eq!(r.col_start, 0);
+            assert_eq!(r.col_end, 1);
+        }
+        other => panic!("expected Range, got {other:?}"),
+    }
+}
+
+#[test]
+fn arithmetic_add() {
+    match parse("A1+B2") {
+        Expr::BinOp {
+            kind: BinOpKind::Add,
+            ..
+        } => {}
+        other => panic!("expected Add, got {other:?}"),
+    }
+}
+
+#[test]
+fn arithmetic_precedence() {
+    let ast = parse("1+2*3");
+    match &ast {
+        Expr::BinOp {
+            kind: BinOpKind::Add,
+            rhs,
+            ..
+        } => {
+            assert!(matches!(
+                **rhs,
+                Expr::BinOp {
+                    kind: BinOpKind::Mul,
+                    ..
+                }
+            ));
+        }
+        other => panic!("expected Add with Mul rhs, got {other:?}"),
+    }
+}
+
+#[test]
+fn parens_override_precedence() {
+    let ast = parse("(1+2)*3");
+    match &ast {
+        Expr::BinOp {
+            kind: BinOpKind::Mul,
+            lhs,
+            ..
+        } => {
+            assert!(matches!(
+                **lhs,
+                Expr::BinOp {
+                    kind: BinOpKind::Add,
+                    ..
+                }
+            ));
+        }
+        other => panic!("expected Mul with Add lhs, got {other:?}"),
+    }
+}
+
+#[test]
+fn comparison_eq() {
+    match parse("A1=B1") {
+        Expr::BinOp {
+            kind: BinOpKind::Eq,
+            ..
+        } => {}
+        other => panic!("expected Eq, got {other:?}"),
+    }
+}
+
+#[test]
+fn comparison_chain() {
+    match parse("A1<B1") {
+        Expr::BinOp {
+            kind: BinOpKind::Lt,
+            ..
+        } => {}
+        other => panic!("expected Lt, got {other:?}"),
+    }
+}
+
+#[test]
+fn concatenation() {
+    match parse(r#"A1&"hello""#) {
+        Expr::BinOp {
+            kind: BinOpKind::Concat,
+            ..
+        } => {}
+        other => panic!("expected Concat, got {other:?}"),
+    }
+}
+
+#[test]
+fn function_no_args() {
+    match parse("PI()") {
+        Expr::FnCall { name, args } => {
+            assert_eq!(name, "PI");
+            assert!(args.is_empty());
+        }
+        other => panic!("expected FnCall, got {other:?}"),
+    }
+}
+
+#[test]
+fn function_single_arg() {
+    match parse("SUM(A1:A10)") {
+        Expr::FnCall { name, args } => {
+            assert_eq!(name, "SUM");
+            assert_eq!(args.len(), 1);
+            assert!(matches!(&args[0], Expr::Range(_)));
+        }
+        other => panic!("expected FnCall SUM, got {other:?}"),
+    }
+}
+
+// -- Sheet-qualified references & named ranges ----------------------------
+
+use super::super::types::{FormulaCtx, NameTarget, RangeDep};
+
+/// Test context: `Sheet2` -> index 2, name `TOTAL` -> `B1:B3` on sheet 2,
+/// canonical id `#s2` -> index 2 (`#gone` resolves to nothing).
+struct TestCtx;
+impl FormulaCtx for TestCtx {
+    fn resolve_sheet(&self, name: &str) -> Option<u16> {
+        match name {
+            "Sheet1" => Some(0),
+            "Sheet2" => Some(2),
+            "My Sheet" => Some(5),
+            _ => None,
+        }
+    }
+    fn resolve_sheet_id(&self, id: &str) -> Option<u16> {
+        match id {
+            "s2" => Some(2),
+            _ => None,
+        }
+    }
+    fn resolve_name(&self, name: &str) -> Option<NameTarget> {
+        match name {
+            "TOTAL" => Some(NameTarget::Range(RangeDep::with_sheet(2, 0, 2, 1, 1))),
+            "PIVOT" => Some(NameTarget::Cell(CellRef::with_sheet(0, 4, 0))),
+            _ => None,
+        }
+    }
+}
+
+fn resolve(src: &str, default_sheet: u16) -> Result<Expr, String> {
+    resolve_refs(parse(src), default_sheet, &TestCtx)
+}
+
+#[test]
+fn sheet_qualified_cell_parses() {
+    assert!(matches!(parse("Sheet2!A1"), Expr::SheetRef { .. }));
+}
+
+#[test]
+fn sheet_qualified_resolves_index() {
+    match resolve("Sheet2!A1", 0).unwrap() {
+        Expr::CellRef(CellRef {
+            sheet: 2,
+            row: 0,
+            col: 0,
+        }) => {}
+        other => panic!("expected sheet-2 cell, got {other:?}"),
+    }
+}
+
+#[test]
+fn quoted_sheet_name_with_space() {
+    match resolve("'My Sheet'!B2", 0).unwrap() {
+        Expr::CellRef(CellRef {
+            sheet: 5,
+            row: 1,
+            col: 1,
+        }) => {}
+        other => panic!("expected sheet-5 cell, got {other:?}"),
+    }
+}
+
+#[test]
+fn sheet_qualified_range_resolves() {
+    match resolve("Sheet2!A1:A10", 0).unwrap() {
+        Expr::Range(RangeDep {
+            sheet: 2,
+            row_start: 0,
+            row_end: 9,
+            ..
+        }) => {}
+        other => panic!("expected sheet-2 range, got {other:?}"),
+    }
+}
+
+#[test]
+fn id_qualified_cell_resolves_index() {
+    match resolve("#s2!A1", 0).unwrap() {
+        Expr::CellRef(CellRef {
+            sheet: 2,
+            row: 0,
+            col: 0,
+        }) => {}
+        other => panic!("expected sheet-2 cell, got {other:?}"),
+    }
+}
+
+#[test]
+fn id_qualified_with_underscore_and_leading_digit() {
+    // A peer-scoped id can start with a hex digit and contain '_'.
+    assert!(matches!(
+        parse("#00a_2f!A1"),
+        Expr::SheetRef { sheet: SheetQualifier::Id(id), .. } if id == "00a_2f"
+    ));
+}
+
+#[test]
+fn deleted_sheet_id_yields_broken_ref() {
+    match resolve("#gone!A1", 0).unwrap() {
+        Expr::Literal(CellValue::Error(FormulaError::BrokenRef)) => {}
+        other => panic!("expected #REF! literal, got {other:?}"),
+    }
+}
+
+#[test]
+fn unknown_sheet_name_is_parse_error() {
+    assert!(resolve("Nope!A1", 0).is_err());
+}
+
+#[test]
+fn unqualified_ref_takes_default_sheet() {
+    match resolve("A1", 3).unwrap() {
+        Expr::CellRef(CellRef {
+            sheet: 3,
+            row: 0,
+            col: 0,
+        }) => {}
+        other => panic!("expected default-sheet cell, got {other:?}"),
+    }
+}
+
+#[test]
+fn unknown_sheet_is_error() {
+    assert!(resolve("Nope!A1", 0).is_err());
+}
+
+#[test]
+fn named_range_resolves() {
+    match resolve("SUM(TOTAL)", 0).unwrap() {
+        Expr::FnCall { name, args } => {
+            assert_eq!(name, "SUM");
+            assert!(matches!(
+                &args[0],
+                Expr::Range(RangeDep {
+                    sheet: 2,
+                    row_start: 0,
+                    row_end: 2,
+                    ..
+                })
+            ));
+        }
+        other => panic!("expected SUM(range), got {other:?}"),
+    }
+}
+
+#[test]
+fn named_cell_in_arithmetic() {
+    // PIVOT + 1 -> CellRef(sheet 0, E1) added to 1.
+    match resolve("PIVOT+1", 0).unwrap() {
+        Expr::BinOp { lhs, .. } => {
+            assert!(matches!(
+                *lhs,
+                Expr::CellRef(CellRef {
+                    sheet: 0,
+                    row: 4,
+                    col: 0
+                })
+            ));
+        }
+        other => panic!("expected BinOp, got {other:?}"),
+    }
+}
+
+#[test]
+fn undefined_name_is_error() {
+    assert!(resolve("UNKNOWN", 0).is_err());
+}
+
+#[test]
+fn bareword_name_does_not_shadow_cell_ref() {
+    // `A1` is a valid cell ref, never treated as a name.
+    assert!(matches!(resolve("A1", 0).unwrap(), Expr::CellRef(_)));
+}
+
+#[test]
+fn function_multiple_args() {
+    match parse("IF(A1>5, 1, 0)") {
+        Expr::FnCall { name, args } => {
+            assert_eq!(name, "IF");
+            assert_eq!(args.len(), 3);
+        }
+        other => panic!("expected FnCall IF, got {other:?}"),
+    }
+}
+
+#[test]
+fn power_right_associative() {
+    let ast = parse("2^3^2");
+    match &ast {
+        Expr::BinOp {
+            kind: BinOpKind::Pow,
+            lhs,
+            rhs,
+        } => {
+            assert!(matches!(**lhs, Expr::Literal(CellValue::Number(2.0))));
+            assert!(matches!(
+                **rhs,
+                Expr::BinOp {
+                    kind: BinOpKind::Pow,
+                    ..
+                }
+            ));
+        }
+        other => panic!("expected right-assoc pow, got {other:?}"),
+    }
+}
+
+#[test]
+fn empty_formula() {
+    assert!(parse_formula("").is_err());
+    assert!(parse_formula("   ").is_err());
+}
+
+#[test]
+fn invalid_formula() {
+    assert!(parse_formula("=1").is_err());
+    assert!(parse_formula("SUM(").is_err());
+}
