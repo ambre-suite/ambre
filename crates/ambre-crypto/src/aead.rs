@@ -16,9 +16,16 @@ pub const NONCE_LEN: usize = 24;
 
 /// Encrypts `plaintext` under `key` with the given `aad`, returning a freshly
 /// generated nonce and the ciphertext (Poly1305 tag appended).
-pub fn seal(plaintext: &[u8], aad: &[u8], key: &DocumentKey) -> ([u8; NONCE_LEN], Vec<u8>) {
+pub fn seal(
+    plaintext: &[u8],
+    aad: &[u8],
+    key: &DocumentKey,
+) -> Result<([u8; NONCE_LEN], Vec<u8>), CryptoError> {
     let nonce = crate::random::bytes::<NONCE_LEN>();
     let cipher = XChaCha20Poly1305::new(key.as_bytes().into());
+    // Encryption is infallible for XChaCha20-Poly1305 except when the plaintext
+    // exceeds the AEAD size limit. Surface that as an error instead of panicking
+    // the Sync worker.
     let ciphertext = cipher
         .encrypt(
             XNonce::from_slice(&nonce),
@@ -27,8 +34,8 @@ pub fn seal(plaintext: &[u8], aad: &[u8], key: &DocumentKey) -> ([u8; NONCE_LEN]
                 aad,
             },
         )
-        .expect("XChaCha20-Poly1305 encryption is infallible for valid keys");
-    (nonce, ciphertext)
+        .map_err(|_| CryptoError::EncryptionFailed)?;
+    Ok((nonce, ciphertext))
 }
 
 /// Decrypts `ciphertext` under `key`, verifying the Poly1305 tag against `aad`.

@@ -52,7 +52,8 @@ impl SyncState {
         };
 
         wasm_bindgen_futures::spawn_local(async move {
-            let (nonce, ciphertext) = ambre_crypto::aead::seal(&data, b"ambre-media", &doc_key);
+            let (nonce, ciphertext) =
+                ambre_crypto::aead::seal(&data, b"ambre-media", &doc_key).expect("seal media");
             let encrypted_size = (ambre_crypto::aead::NONCE_LEN + ciphertext.len()) as u64;
 
             let content_hash = {

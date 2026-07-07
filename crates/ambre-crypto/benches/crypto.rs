@@ -16,10 +16,10 @@ fn bench_envelope(c: &mut Criterion) {
     let payload = vec![0x42u8; 1024];
 
     c.bench_function("seal_1kb", |b| {
-        b.iter(|| envelope::seal(black_box(&payload), black_box(aad), &doc_key, &signing));
+        b.iter(|| envelope::seal(black_box(&payload), black_box(aad), &doc_key, &signing).unwrap());
     });
 
-    let sealed = envelope::seal(&payload, aad, &doc_key, &signing);
+    let sealed = envelope::seal(&payload, aad, &doc_key, &signing).unwrap();
     c.bench_function("open_1kb", |b| {
         b.iter(|| envelope::open(black_box(&sealed), black_box(aad), &doc_key, &author).unwrap());
     });

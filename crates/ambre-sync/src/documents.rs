@@ -164,7 +164,8 @@ impl SyncState {
                     None
                 } else {
                     let (nonce, ct) =
-                        ambre_crypto::aead::seal(name.as_bytes(), b"ambre-doc-name", &doc_key);
+                        ambre_crypto::aead::seal(name.as_bytes(), b"ambre-doc-name", &doc_key)
+                            .expect("seal doc name");
                     let mut buf = nonce.to_vec();
                     buf.extend_from_slice(&ct);
                     Some(base64::engine::general_purpose::URL_SAFE.encode(&buf))
@@ -175,7 +176,8 @@ impl SyncState {
                     &exchange_key,
                     own_pub.as_bytes(),
                     &doc_key,
-                );
+                )
+                .expect("wrap doc key for self");
                 let mut enc = wrapped.nonce.to_vec();
                 enc.extend_from_slice(&wrapped.ciphertext);
                 let doc_key_enc = base64::engine::general_purpose::URL_SAFE.encode(&enc);
@@ -308,7 +310,8 @@ impl SyncState {
                     }
                 };
                 let (nonce, ct) =
-                    ambre_crypto::aead::seal(name.as_bytes(), b"ambre-doc-name", &doc_key);
+                    ambre_crypto::aead::seal(name.as_bytes(), b"ambre-doc-name", &doc_key)
+                        .expect("seal doc name");
                 let mut buf = nonce.to_vec();
                 buf.extend_from_slice(&ct);
                 let name_enc = base64::engine::general_purpose::URL_SAFE.encode(&buf);

@@ -553,18 +553,41 @@ Each story carries its finding ID, the file to touch, and the concrete action.
       `update_b64` ciphertext); they log only `key`, `blob_len`, and once parsed
       `s3_key` / `seq`. (`server/s3.rs`)
 
-### Wave R3 — Crypto hardening (cheap, while the surface is small)
+### Wave R3 — Crypto hardening (cheap, while the surface is small) [x]
 
-- [ ] **M13** — switch to `verify_strict` in `envelope::open` and
-      `verify_update_signature`. (`crypto/signature.rs`, `server/ws/handler.rs`)
-- [ ] **M14** — derive the KEK via HKDF-BLAKE2b with
-      `info = KEK_DOMAIN ‖ sender_pk ‖ recipient_pk`; reject an all-zero shared
-      secret (`CryptoError::WeakPublicKey`). (`crypto/ecdh.rs`)
-- [ ] **crypto-hygiene** — restrict `MasterSeed::as_bytes` to `pub(crate)` (or a
-      dedicated recovery API); reconsider `Clone` on `MasterSeed`/`DocumentKey`;
-      return `CryptoError` from `aead::seal` instead of `.expect`. (`crypto/keys.rs`, `aead.rs`)
-- [ ] **argon2-review** — confirm params against the real `Cargo.lock`; bump lane
-      count where the target affords it. (`crypto/passphrase.rs`)
+- [x] **M13** — `signature::verify` and the server's `verify_update_signature`
+      now use `verify_strict` (canonical `S`, no small-order `A`), closing
+      signature malleability on the author-attribution primitive. The `Verifier`
+      trait import is dropped on both sides (`verify_strict` is inherent).
+      (`crypto/signature.rs`, `server/ws/handler/message.rs`)
+- [x] **M14** — the KEK is now derived via HKDF-BLAKE2b (`SimpleHkdf`, required
+      by BLAKE2b's variable-output core) with
+      `info = KEK_DOMAIN ‖ sender_pk ‖ recipient_pk`; wrap/unwrap feed the
+      identity pair in the matching sender/recipient order. `shared_secret`
+      rejects a non-contributory (low-order) peer key with
+      `CryptoError::WeakPublicKey`. Domain bumped to `ambre-kek-v2` (not
+      wire-compatible with v1). Regression guards: `weak_peer_public_key_rejected`,
+      `kek_binds_peer_identity`. (`crypto/ecdh.rs`, `crypto/error.rs`)
+- [x] **crypto-hygiene** — `aead::seal` returns `Result<_, CryptoError>`
+      (`EncryptionFailed`) instead of `.expect`; the error propagates through
+      `envelope::seal` and the `pipeline::seal_*` chain. `MasterSeed` no longer
+      derives `Clone`; its raw `as_bytes` accessor is replaced by a named
+      `recovery_bytes()` (recovery escape hatch) plus a `wrap_for_storage()`
+      helper that seals the seed inside the crate, so the root seed never leaves
+      `ambre-crypto` on the storage path. `DocumentKey` keeps `Clone`
+      deliberately: it is moved into `spawn_local` closures while retained in Sync
+      state, so `Rc`-izing it is out of scope and buys nothing (each copy is still
+      `ZeroizeOnDrop`). Own-key seal/wrap call sites use `.expect` (infallible for
+      our own valid key + bounded plaintext), matching the existing
+      `.expect("CSPRNG")` style; peer-facing `wrap_key_b64` propagates the error
+      (invite fails, rotation skips the member). (`crypto/keys.rs`, `crypto/aead.rs`,
+      `sync/pipeline.rs`, `sync/sharing.rs`, `sync/auth.rs`)
+- [x] **argon2-review** — confirmed against `Cargo.lock`: `argon2` 0.5.3, no
+      relevant RUSTSEC advisory. `LANES` kept at 1 (documented): the KDF runs in a
+      single-threaded WASM worker, so `p > 1` only adds sequential work with no
+      parallel speedup, and memory-hardness is governed by `MEM_KIB`, not the lane
+      count. Params stay versioned so the lane count can rise if a threaded target
+      lands. (`crypto/passphrase.rs`)
 
 ### Wave R4 — Robustness / operational
 

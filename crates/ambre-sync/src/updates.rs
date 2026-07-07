@@ -513,7 +513,8 @@ impl SyncState {
         wasm_bindgen_futures::spawn_local(async move {
             let own_pub = x25519_dalek::PublicKey::from(&exchange_key);
             let wrapped =
-                ambre_crypto::ecdh::wrap_document_key(&exchange_key, own_pub.as_bytes(), &doc_key);
+                ambre_crypto::ecdh::wrap_document_key(&exchange_key, own_pub.as_bytes(), &doc_key)
+                    .expect("wrap doc key for self");
             let mut enc = wrapped.nonce.to_vec();
             enc.extend_from_slice(&wrapped.ciphertext);
             let doc_key_enc = base64::engine::general_purpose::URL_SAFE.encode(&enc);
