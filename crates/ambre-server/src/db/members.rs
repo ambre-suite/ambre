@@ -1,0 +1,185 @@
+// ambre-server/src/db/members.rs
+// Document-member rows and membership / key-rotation queries.
+
+use super::*;
+
+/// Row from `document_members`.
+#[derive(Debug)]
+pub struct MemberRow {
+    #[allow(dead_code)]
+    pub document_id: uuid::Uuid,
+    #[allow(dead_code)]
+    pub user_id: uuid::Uuid,
+    pub role: String,
+    pub doc_key_enc: Vec<u8>,
+    #[allow(dead_code)]
+    pub invited_by: Option<uuid::Uuid>,
+}
+
+/// `document_members` joined with `users` for display purposes. Carries the
+/// member's public keys and their wrapped copy of the document key so a client
+/// can locate its own entry and unwrap the key (or rewrap on rotation).
+#[derive(Debug)]
+pub struct MemberWithUserRow {
+    pub user_id: uuid::Uuid,
+    pub email: String,
+    pub display_name: String,
+    pub role: String,
+    pub signing_pubkey: Vec<u8>,
+    pub exchange_pubkey: Vec<u8>,
+    pub doc_key_enc: Vec<u8>,
+    #[allow(dead_code)]
+    pub invited_by: Option<uuid::Uuid>,
+    /// Exchange public key of the member who wrapped `doc_key_enc` (the inviter,
+    /// or the member themselves for a self-wrap at creation). The recipient needs
+    /// this peer key to perform the ECDH unwrap -- their own key is the wrong DH
+    /// partner. `None` only for legacy rows with no `invited_by`.
+    pub wrapper_exchange_pubkey: Option<Vec<u8>>,
+}
+
+/// Adds (or updates) a user to a document's membership with a role and encrypted document key.
+pub async fn add_document_member(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    user_id: &ambre_core::UserId,
+    role: &str,
+    doc_key_enc: &[u8],
+    invited_by: &ambre_core::UserId,
+) -> Result<(), AppError> {
+    let did = id_to_uuid(*document_id);
+    let uid = id_to_uuid(*user_id);
+    let inviter = id_to_uuid(*invited_by);
+    sqlx::query(
+        "INSERT INTO document_members (document_id, user_id, role, doc_key_enc, invited_by) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (document_id, user_id) DO UPDATE SET role = $3, doc_key_enc = $4, invited_by = $5"
+    )
+    .bind(did)
+    .bind(uid)
+    .bind(role)
+    .bind(doc_key_enc)
+    .bind(inviter)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Fetches a single document membership row.
+pub async fn get_document_member(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    user_id: &ambre_core::UserId,
+) -> Result<Option<MemberRow>, AppError> {
+    let did = id_to_uuid(*document_id);
+    let uid = id_to_uuid(*user_id);
+    let row = sqlx::query(
+        "SELECT document_id, user_id, role, doc_key_enc, invited_by FROM document_members WHERE document_id = $1 AND user_id = $2"
+    )
+    .bind(did)
+    .bind(uid)
+    .fetch_optional(pool)
+    .await?;
+
+    match row {
+        Some(r) => Ok(Some(MemberRow {
+            document_id: r.try_get("document_id")?,
+            user_id: r.try_get("user_id")?,
+            role: r.try_get("role")?,
+            doc_key_enc: r.try_get("doc_key_enc")?,
+            invited_by: r.try_get("invited_by")?,
+        })),
+        None => Ok(None),
+    }
+}
+
+/// Lists all members of a document with user details.
+pub async fn list_document_members(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+) -> Result<Vec<MemberWithUserRow>, AppError> {
+    let did = id_to_uuid(*document_id);
+    let rows = sqlx::query(
+        "SELECT dm.user_id, u.email, u.display_name, dm.role, u.signing_pubkey, u.exchange_pubkey, dm.doc_key_enc, dm.invited_by, inv.exchange_pubkey AS wrapper_exchange_pubkey FROM document_members dm INNER JOIN users u ON u.id = dm.user_id LEFT JOIN users inv ON inv.id = dm.invited_by WHERE dm.document_id = $1"
+    )
+    .bind(did)
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter()
+        .map(|r| {
+            Ok(MemberWithUserRow {
+                user_id: r.try_get("user_id")?,
+                email: r.try_get("email")?,
+                display_name: r.try_get("display_name")?,
+                role: r.try_get("role")?,
+                signing_pubkey: r.try_get("signing_pubkey")?,
+                exchange_pubkey: r.try_get("exchange_pubkey")?,
+                doc_key_enc: r.try_get("doc_key_enc")?,
+                invited_by: r.try_get("invited_by")?,
+                wrapper_exchange_pubkey: r.try_get("wrapper_exchange_pubkey")?,
+            })
+        })
+        .collect()
+}
+
+/// Removes a user from a document's membership.
+pub async fn remove_document_member(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    user_id: &ambre_core::UserId,
+) -> Result<(), AppError> {
+    let did = id_to_uuid(*document_id);
+    let uid = id_to_uuid(*user_id);
+    sqlx::query("DELETE FROM document_members WHERE document_id = $1 AND user_id = $2")
+        .bind(did)
+        .bind(uid)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Updates the role of a document member.
+pub async fn update_document_member_role(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    user_id: &ambre_core::UserId,
+    role: &str,
+) -> Result<(), AppError> {
+    let did = id_to_uuid(*document_id);
+    let uid = id_to_uuid(*user_id);
+    sqlx::query("UPDATE document_members SET role = $3 WHERE document_id = $1 AND user_id = $2")
+        .bind(did)
+        .bind(uid)
+        .bind(role)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Atomically replaces all `doc_key_enc` values for a document inside a transaction.
+///
+/// Called after key rotation: the caller computes new encrypted keys for
+/// each remaining member and this function applies them all at once.
+pub async fn rotate_document_keys(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    rotated_by: &ambre_core::UserId,
+    keys: &[(ambre_core::UserId, Vec<u8>)],
+) -> Result<(), AppError> {
+    let did = id_to_uuid(*document_id);
+    // The rotator re-wrapped every key with ITS exchange key, so it becomes the
+    // new wrapper of record: update `invited_by` alongside `doc_key_enc` or the
+    // ECDH unwrap would later use the stale inviter's key.
+    let rotator = id_to_uuid(*rotated_by);
+    let mut tx = pool.begin().await?;
+    for (user_id, key_enc) in keys {
+        let uid = id_to_uuid(*user_id);
+        sqlx::query("UPDATE document_members SET doc_key_enc = $3, invited_by = $4 WHERE document_id = $1 AND user_id = $2")
+            .bind(did)
+            .bind(uid)
+            .bind(key_enc)
+            .bind(rotator)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
