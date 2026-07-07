@@ -82,6 +82,38 @@ pub async fn append_pending_delta(
     Ok(())
 }
 
+/// Pushes a delta that could not be enqueued for S3 flushing onto a durable
+/// dead-letter list (`doc:{id}:deadletter`) so an operator can inspect and
+/// replay it (H1).
+///
+/// This is the fallback when `append_pending_delta` fails: the pending list is
+/// the only path a sequenced delta takes to S3, so without a dead-letter the
+/// seq is silently lost from the durable index after it has already been
+/// assigned and acknowledged. The list is never trimmed automatically; it is an
+/// operator signal, not a hot path.
+pub async fn push_dead_letter(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+    seq: u64,
+    s3_key: &str,
+    update_wire: &[u8],
+) -> Result<(), AppError> {
+    use base64::Engine;
+    let key = format!("doc:{document_id}:deadletter");
+    let update_b64 = base64::engine::general_purpose::URL_SAFE.encode(update_wire);
+    let blob = serde_json::json!({
+        "seq": seq,
+        "s3_key": s3_key,
+        "update_b64": update_b64,
+    })
+    .to_string();
+    redis
+        .rpush(&key, [&blob])
+        .await
+        .map_err(|e| AppError::Redis(format!("dead-letter push failed: {e}")))?;
+    Ok(())
+}
+
 /// Reads a still-pending delta's full Update wire from Redis by `seq`.
 ///
 /// Deltas live in `doc:{id}:pending` until the background flusher uploads them

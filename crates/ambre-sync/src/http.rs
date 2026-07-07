@@ -58,6 +58,22 @@ fn bearer(token: &str) -> String {
     format!("Bearer {token}")
 }
 
+/// Per-request timeout for every Sync HTTP call (M9). Without it a hung TCP
+/// connection or a stalled proxy would block the Sync worker's request future
+/// forever (the browser `fetch` has no default timeout).
+const REQUEST_TIMEOUT_MS: u32 = 30_000;
+
+/// Fresh `AbortSignal` that fires after [`REQUEST_TIMEOUT_MS`], aborting the
+/// associated `fetch`. A new signal is minted per request because a timeout
+/// signal starts counting down the moment it is created.
+///
+/// gloo-net copies the signal into the request's `RequestInit` (a JS object) as
+/// soon as `abort_signal` is called, so the returned value may be dropped on the
+/// Rust side while `fetch` still holds it alive.
+fn timeout_signal() -> web_sys::AbortSignal {
+    web_sys::AbortSignal::timeout_with_u32(REQUEST_TIMEOUT_MS)
+}
+
 async fn parse_json<T: serde::de::DeserializeOwned>(
     method: &str,
     url: &str,
@@ -85,6 +101,7 @@ pub(crate) async fn get_json_opt_auth<T: serde::de::DeserializeOwned>(
 ) -> Result<Option<T>, String> {
     let resp = gloo_net::http::Request::get(url)
         .header("Authorization", &bearer(&auth.access_token()?))
+        .abort_signal(Some(&timeout_signal()))
         .send()
         .await
         .map_err(|e| format!("GET {url}: {e}"))?;
@@ -95,6 +112,7 @@ pub(crate) async fn get_json_opt_auth<T: serde::de::DeserializeOwned>(
         auth.refresh().await?;
         let resp = gloo_net::http::Request::get(url)
             .header("Authorization", &bearer(&auth.access_token()?))
+            .abort_signal(Some(&timeout_signal()))
             .send()
             .await
             .map_err(|e| format!("GET {url}: {e}"))?;
@@ -110,6 +128,7 @@ pub(crate) async fn get_json_opt_auth<T: serde::de::DeserializeOwned>(
 #[allow(dead_code)]
 pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, String> {
     let resp = gloo_net::http::Request::get(url)
+        .abort_signal(Some(&timeout_signal()))
         .send()
         .await
         .map_err(|e| format!("GET {url}: {e}"))?;
@@ -122,6 +141,7 @@ pub(crate) async fn get_json_auth<T: serde::de::DeserializeOwned>(
 ) -> Result<T, String> {
     let resp = gloo_net::http::Request::get(url)
         .header("Authorization", &bearer(&auth.access_token()?))
+        .abort_signal(Some(&timeout_signal()))
         .send()
         .await
         .map_err(|e| format!("GET {url}: {e}"))?;
@@ -129,6 +149,7 @@ pub(crate) async fn get_json_auth<T: serde::de::DeserializeOwned>(
         auth.refresh().await?;
         let resp = gloo_net::http::Request::get(url)
             .header("Authorization", &bearer(&auth.access_token()?))
+            .abort_signal(Some(&timeout_signal()))
             .send()
             .await
             .map_err(|e| format!("GET {url}: {e}"))?;
@@ -145,6 +166,7 @@ pub(crate) async fn post_json<T: Serialize, R: serde::de::DeserializeOwned>(
         serde_json::to_vec(body).map_err(|e| format!("POST {url}: serialize error: {e}"))?;
     let resp = gloo_net::http::Request::post(url)
         .header("Content-Type", "application/json")
+        .abort_signal(Some(&timeout_signal()))
         .body(body_json)
         .map_err(|e| format!("POST {url}: body error: {e}"))?
         .send()
@@ -164,6 +186,7 @@ pub(crate) async fn post_json_auth<T: Serialize, R: serde::de::DeserializeOwned>
         gloo_net::http::Request::post(url)
             .header("Content-Type", "application/json")
             .header("Authorization", &bearer(&token))
+            .abort_signal(Some(&timeout_signal()))
             .body(body_json.clone())
     };
     let resp = send(auth.access_token()?)
@@ -186,6 +209,7 @@ pub(crate) async fn post_json_auth<T: Serialize, R: serde::de::DeserializeOwned>
 pub(crate) async fn delete_auth(url: &str, auth: AuthContext) -> Result<(), String> {
     let resp = gloo_net::http::Request::delete(url)
         .header("Authorization", &bearer(&auth.access_token()?))
+        .abort_signal(Some(&timeout_signal()))
         .send()
         .await
         .map_err(|e| format!("DELETE {url}: {e}"))?;
@@ -193,6 +217,7 @@ pub(crate) async fn delete_auth(url: &str, auth: AuthContext) -> Result<(), Stri
         auth.refresh().await?;
         let resp = gloo_net::http::Request::delete(url)
             .header("Authorization", &bearer(&auth.access_token()?))
+            .abort_signal(Some(&timeout_signal()))
             .send()
             .await
             .map_err(|e| format!("DELETE {url}: {e}"))?;
@@ -205,6 +230,7 @@ pub(crate) async fn delete_auth(url: &str, auth: AuthContext) -> Result<(), Stri
 pub(crate) async fn put_bytes(url: &str, data: &[u8], mime_type: &str) -> Result<(), String> {
     let resp = gloo_net::http::Request::put(url)
         .header("Content-Type", mime_type)
+        .abort_signal(Some(&timeout_signal()))
         .body(data.to_vec())
         .map_err(|e| format!("PUT {url}: body error: {e}"))?
         .send()
@@ -224,6 +250,7 @@ pub(crate) async fn patch_json_auth<T: Serialize>(
         gloo_net::http::Request::patch(url)
             .header("Content-Type", "application/json")
             .header("Authorization", &bearer(&token))
+            .abort_signal(Some(&timeout_signal()))
             .body(body_json.clone())
     };
     let resp = send(auth.access_token()?)
@@ -245,6 +272,7 @@ pub(crate) async fn patch_json_auth<T: Serialize>(
 
 pub(crate) async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
     let resp = gloo_net::http::Request::get(url)
+        .abort_signal(Some(&timeout_signal()))
         .send()
         .await
         .map_err(|e| format!("GET {url}: {e}"))?;

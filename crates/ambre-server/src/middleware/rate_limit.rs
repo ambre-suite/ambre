@@ -2,11 +2,43 @@ use axum::extract::Request;
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use rustis::commands::{GenericCommands, StringCommands};
+use rustis::commands::ScriptingCommands;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::error::AppError;
 use crate::state::AppState;
+
+/// Atomic sliding-window rate-limit script (M6).
+///
+/// Replaces the fixed-window `INCR`/`EXPIRE` pair (which allowed a 2x burst
+/// across the window boundary and could leave a TTL-less key if the process
+/// crashed between the two commands). One sorted set per limiter key holds the
+/// timestamps of recent requests; each call prunes entries older than the
+/// window, records the current request, counts the survivors, and refreshes the
+/// key TTL -- all atomically, so there is no boundary burst and no partial state.
+///
+/// - `KEYS[1]` = `rate:{prefix}:{key}` (sorted set: member -> request time ms)
+/// - `ARGV[1]` = now (ms)
+/// - `ARGV[2]` = window (ms)
+/// - `ARGV[3]` = unique member for this request
+///
+/// Returns the number of requests in the current sliding window (this one
+/// included).
+const SLIDING_WINDOW_LUA: &str = r#"
+local now    = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, now - window)
+redis.call('ZADD', KEYS[1], now, ARGV[3])
+local count = redis.call('ZCARD', KEYS[1])
+redis.call('PEXPIRE', KEYS[1], window)
+return count
+"#;
+
+/// Process-local monotonic counter, appended to each sorted-set member so two
+/// requests landing in the same millisecond (even across the same key) stay
+/// distinct entries instead of one clobbering the other.
+static REQUEST_NONCE: AtomicU64 = AtomicU64::new(0);
 
 /// Rate-limiting key derived from the request.
 ///
@@ -74,6 +106,15 @@ impl RateLimitCategory {
         }
     }
 
+    /// Whether a Redis outage should fail *closed* (reject) rather than
+    /// fail-open (allow). The auth tier gates brute-force-sensitive endpoints,
+    /// so a limiter blackout there must not become an open door (M6). The API
+    /// and WS tiers stay fail-open so a transient Redis blip does not take the
+    /// whole product offline.
+    fn fail_closed(&self) -> bool {
+        matches!(self, RateLimitCategory::Auth)
+    }
+
     /// Determines the rate-limit category from the request path and method.
     fn classify(path: &str, _method: &axum::http::Method) -> Self {
         if path.ends_with("/ws") {
@@ -121,24 +162,36 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
 
     let key = rate_limit_key(&state, &auth_header, x_forwarded_for.as_deref(), &remote_ip);
 
-    let now = std::time::SystemTime::now()
+    let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
-        .as_secs();
-    let current_window = now / window_secs;
-    let redis_key = format!("rate:{}:{}:{}", category.prefix(), key, current_window);
+        .as_millis() as u64;
+    let window_ms = window_secs.saturating_mul(1000);
+    // No window bucket in the key: the sorted set is the sliding window.
+    let redis_key = format!("rate:{}:{}", category.prefix(), key);
 
     let (allowed, remaining) =
-        match check_and_increment(&state, &redis_key, max_req, window_secs * 2).await {
-            Ok((true, rem)) => (true, rem),
-            Ok((false, rem)) => (false, rem),
+        match check_sliding_window(&state, &redis_key, now_ms, window_ms, max_req).await {
+            Ok((allowed, rem)) => (allowed, rem),
+            Err(e) if category.fail_closed() => {
+                tracing::error!("Rate limiter Redis error on auth tier: {e:?}, failing closed");
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    [("Retry-After", window_secs.to_string())],
+                    axum::Json(serde_json::json!({
+                        "error": "RATE_LIMITER_UNAVAILABLE",
+                        "message": "Service temporarily unavailable, please retry",
+                    })),
+                )
+                    .into_response();
+            }
             Err(e) => {
                 tracing::warn!("Rate limiter Redis error: {e:?}, allowing request");
                 return next.run(req).await;
             }
         };
 
-    let reset = (current_window + 1) * window_secs;
+    let reset = (now_ms + window_ms) / 1000;
 
     if !allowed {
         return (
@@ -171,30 +224,34 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
     response
 }
 
-/// Increments the Redis counter for `key` and returns whether the request
-/// is allowed along with the remaining quota.
-async fn check_and_increment(
+/// Records the current request in the sliding window for `key` and returns
+/// whether it is allowed along with the remaining quota.
+///
+/// Runs `SLIDING_WINDOW_LUA` atomically: prune-add-count-expire in one round
+/// trip, so there is no boundary burst and no TTL-less key window.
+async fn check_sliding_window(
     state: &AppState,
     key: &str,
+    now_ms: u64,
+    window_ms: u64,
     max_requests: u64,
-    ttl_secs: u64,
 ) -> Result<(bool, u64), AppError> {
+    let nonce = REQUEST_NONCE.fetch_add(1, Ordering::Relaxed);
+    // Unique per (process, request), so same-millisecond requests are distinct
+    // sorted-set members even across instances.
+    let member = format!("{now_ms}-{}-{nonce}", std::process::id());
+
     let count: i64 = state
         .redis
-        .incr(key)
+        .eval(
+            SLIDING_WINDOW_LUA,
+            [key],
+            [now_ms.to_string(), window_ms.to_string(), member],
+        )
         .await
-        .map_err(|e| AppError::Redis(format!("rate limit incr: {e}")))?;
+        .map_err(|e| AppError::Redis(format!("rate limit sliding-window eval: {e}")))?;
 
-    // Set expiry on first increment only (when count is 1).
-    if count == 1 {
-        let _ = state
-            .redis
-            .expire(key, ttl_secs, None)
-            .await
-            .map_err(|e| AppError::Redis(format!("rate limit expire: {e}")))?;
-    }
-
-    let count_u64 = count as u64;
+    let count_u64 = count.max(0) as u64;
     let allowed = count_u64 <= max_requests;
     let remaining = if allowed {
         max_requests.saturating_sub(count_u64)
@@ -262,6 +319,15 @@ mod tests {
         let category =
             RateLimitCategory::classify("/api/documents/abc123/snapshot", &axum::http::Method::GET);
         assert!(matches!(category, RateLimitCategory::Api));
+    }
+
+    #[test]
+    fn only_auth_tier_fails_closed() {
+        // The auth tier gates brute-force-sensitive endpoints, so a limiter
+        // outage there must reject; API/WS stay fail-open (M6).
+        assert!(RateLimitCategory::Auth.fail_closed());
+        assert!(!RateLimitCategory::Api.fail_closed());
+        assert!(!RateLimitCategory::WebSocket.fail_closed());
     }
 
     #[test]

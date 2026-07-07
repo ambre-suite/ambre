@@ -589,22 +589,40 @@ Each story carries its finding ID, the file to touch, and the concrete action.
       count. Params stay versioned so the lane count can rise if a threaded target
       lands. (`crypto/passphrase.rs`)
 
-### Wave R4 — Robustness / operational
+### Wave R4 — Robustness / operational [x]
 
-- [ ] **H1** — log `append_pending_delta` / `doc_broadcast` failures at ERROR;
-      add a dead-letter path for a delta that never reached S3. (`server/ws/handler.rs`)
-- [ ] **M6** — sliding-window rate limiter (sorted sets); `SET key 1 EX ttl NX`
-      for atomic TTL; fail-closed degraded mode on the auth tier. (`server/middleware/rate_limit.rs`)
-- [ ] **M7** — log OIDC discovery failure at ERROR; fail-fast on misconfig.
+- [x] **H1** — `handle_update` now logs `append_pending_delta` / `doc_broadcast`
+      failures at ERROR (instead of `let _ =`); a failed pending-push (the only
+      path a sequenced delta takes to S3) is dead-lettered via the new
+      `redis_ops::push_dead_letter` onto `doc:{id}:deadletter` for operator
+      replay. (`server/ws/handler/message.rs`, `redis_ops.rs`)
+- [x] **M6** — fixed-window `INCR`/`EXPIRE` replaced by an atomic sliding-window
+      sorted-set Lua script (`SLIDING_WINDOW_LUA`: prune/add/count/PEXPIRE in one
+      round trip), killing the 2x boundary burst and the TTL-less-key window.
+      The auth tier now fails **closed** (503) on a Redis outage
+      (`RateLimitCategory::fail_closed`); API/WS stay fail-open. Guard:
+      `only_auth_tier_fails_closed`. (`server/middleware/rate_limit.rs`)
+- [x] **M7** — OIDC init failure is no longer swallowed by `.ok().unwrap_or_default()`:
+      when credentials are configured a discovery failure logs at ERROR and
+      fail-fasts startup; when unconfigured it warns and disables provider login.
       (`server/main.rs`)
-- [ ] **M9** — 30s default timeout on all Sync HTTP calls (AbortController /
-      gloo-net timeout). (`sync/http.rs`)
-- [ ] **M10** — `WsError` triggers the same `schedule_reconnect()` as
-      `WsDisconnected`. (`sync/lib.rs:1466`)
-- [ ] **M15** — document proxy log-stripping of `?token=`; consider a one-time WS
-      ticket so the JWT never appears in a URL. (`server/ws/handler.rs`, deploy docs)
-- [ ] **M17** — config-driven CORS allow-list, default-deny; `Any` only behind a
-      dev flag. (`server/main.rs:191`)
+- [x] **M9** — every Sync HTTP call attaches an `AbortSignal::timeout(30s)`
+      (`timeout_signal`), so a hung connection aborts instead of stalling the
+      Sync worker future forever. `web-sys` gains the `AbortSignal` feature.
+      (`sync/http.rs`, root `Cargo.toml`)
+- [x] **M10** — `SyncEvent::WsError` now tears down the dead socket
+      (`handle_ws_disconnected`) and takes the same `schedule_reconnect()` backoff
+      path as `WsDisconnected`, instead of only logging; an `onerror` without a
+      following `onclose` no longer stalls reconnection. (`sync/websocket.rs`)
+- [x] **M15** — the server `TraceLayer` span records only the URI *path*, never
+      the query string (the WS `?token=` JWT no longer reaches the access log);
+      the reverse-proxy log-stripping requirement and a future one-time-ticket
+      option are documented in `ambre-spec-server.md` sec.3 and on `WsQuery`.
+      (`server/main.rs`, `ws/handler/mod.rs`, `spec-server.md`)
+- [x] **M17** — CORS is config-driven and default-deny: `CORS_ALLOWED_ORIGINS`
+      (comma-separated) drives an explicit allow-list; `allow_origin(Any)` is only
+      reachable behind `DEV_MODE` (logged at startup). Parsing guard:
+      `cors_tests`. (`server/main.rs`)
 
 ### Wave R5 — Maintainability debt (no security impact)
 

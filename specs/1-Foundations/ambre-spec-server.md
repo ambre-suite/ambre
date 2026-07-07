@@ -749,6 +749,10 @@ The full flow is specified in `ambre-spec-sync.md` §3. The initiator client cal
 
 TLS via **rustls** (Caddy as terminator). No OpenSSL in the Axum chain.
 
+> **Operational: `?token=` in logs (M15).** The WS upgrade carries the access JWT as a `?token=` query parameter (the browser `WebSocket` API forbids custom headers). A bearer credential in a URL lands in reverse-proxy access logs, browser history, and `Referer`. Mitigations: (1) the server's own `TraceLayer` span records only the URI **path**, never the query string; (2) the reverse proxy (Caddy) **MUST** strip or redact the `token` query parameter from its access logs; (3) the access token is short-lived (`ACCESS_TTL_SECS`, default 900s) to bound the exposure window. A future hardening is a one-time WS ticket (short-TTL Redis nonce minted over an authenticated POST, exchanged in the query) so the long-lived JWT never appears in a URL.
+
+> **Operational: CORS (M17).** `CORS_ALLOWED_ORIGINS` is a comma-separated allow-list of the self-hoster's origins; CORS is **default-deny**. The permissive `allow_origin(Any)` fallback is only reachable behind `DEV_MODE` and is logged at startup, so a production deployment cannot accidentally ship a wildcard origin.
+
 ---
 
 ## 4. QUALITY & TESTABILITY

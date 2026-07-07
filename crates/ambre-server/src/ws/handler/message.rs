@@ -133,15 +133,32 @@ pub(crate) async fn handle_update(
     // (`handle_request_missing`). Serialize before the broadcast moves `update`.
     let update_wire = postcard::to_allocvec(&update).expect("postcard encode Update");
     tracing::info!("[Server→Redis] append_pending_delta doc={doc_id} seq={seq} s3_key={s3_key}");
-    let _ =
-        redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update_wire).await;
+    if let Err(e) =
+        redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
+    {
+        // The pending list is the only path this sequenced delta takes to S3, so
+        // a failed push loses it durably after the seq was already assigned and
+        // will be acknowledged. Log loudly and dead-letter the full wire so an
+        // operator can replay it (H1).
+        tracing::error!("append_pending_delta failed doc={doc_id} seq={seq}: {e}");
+        if let Err(dl) =
+            redis_ops::push_dead_letter(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
+        {
+            tracing::error!("dead-letter push failed doc={doc_id} seq={seq}: {dl}");
+        }
+    }
 
     let broadcast = encode_server_msg(&WsServerMsg::Update {
         seq: ambre_protocol::messages::Seq(seq),
         update,
     });
     tracing::info!("[Server→RedisPubSub] broadcast Update doc={doc_id} seq={seq}");
-    let _ = redis_ops::doc_broadcast(&state.redis, &doc_id, &broadcast).await;
+    if let Err(e) = redis_ops::doc_broadcast(&state.redis, &doc_id, &broadcast).await {
+        // A dropped broadcast only delays live delivery: subscribers replay the
+        // missed seq via RequestMissing on reconnect, and the delta is already
+        // persisted above. Still surface it rather than swallowing (H1).
+        tracing::error!("doc_broadcast failed doc={doc_id} seq={seq}: {e}");
+    }
 }
 
 pub(crate) async fn handle_ephemeral(

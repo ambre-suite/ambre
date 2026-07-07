@@ -16,6 +16,7 @@ mod ws;
 mod test_helpers;
 
 use axum::Router;
+use axum::http::HeaderValue;
 use axum::middleware as axum_mw;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
@@ -138,14 +139,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
 
-    let oidc_clients = oidc::init_oidc_clients(
+    // OIDC is optional (a self-host / dev deployment may run without provider
+    // login). But when credentials ARE configured, a discovery failure is a
+    // misconfiguration we must not silently swallow into "login disabled": log
+    // at ERROR and fail-fast so the operator notices at startup (M7).
+    let oidc_configured = !oidc_google_client_id.is_empty();
+    let oidc_clients = match oidc::init_oidc_clients(
         &oidc_google_client_id,
         &oidc_google_client_secret,
         &oidc_google_redirect_uri,
     )
     .await
-    .ok()
-    .unwrap_or_default();
+    {
+        Ok(clients) => clients,
+        Err(e) if oidc_configured => {
+            tracing::error!("OIDC discovery failed with configured credentials: {e}");
+            return Err(format!("OIDC initialization failed: {e}").into());
+        }
+        Err(e) => {
+            tracing::warn!("OIDC not configured (provider login disabled): {e}");
+            Default::default()
+        }
+    };
 
     // One process-wide PubSub subscriber on the shared RESP3 connection, fanned
     // out in-process to interested WS connections. Cloned into every AppState.
@@ -188,10 +203,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     tokio::spawn(snapshot_compaction_task(compact_state));
 
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    // Config-driven, default-deny CORS (M17). `CORS_ALLOWED_ORIGINS` is a
+    // comma-separated allow-list of the self-hoster's origins. A wildcard
+    // (`allow_origin(Any)`) is only reachable behind `DEV_MODE`, so a production
+    // deployment cannot accidentally ship an open origin.
+    let cors = build_cors(
+        &std::env::var("CORS_ALLOWED_ORIGINS").unwrap_or_default(),
+        dev_mode,
+    );
 
     let api_router = Router::new()
         .route("/auth/google/login", axum::routing::get(routes::oidc_login))
@@ -310,9 +329,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .nest("/api", api_router)
         .layer(cors)
-        // Per-request access log (method, path, status, latency). Emits under
-        // the `tower_http::trace` target at DEBUG; enable with `tower_http=debug`.
-        .layer(TraceLayer::new_for_http())
+        // Per-request access log (method, path, status, latency). The span
+        // records only the URI *path*, never the query string: the WS upgrade
+        // carries the access JWT as `?token=`, and the default `new_for_http`
+        // span would log the full URI (M15). Enable with `tower_http=debug`.
+        .layer(TraceLayer::new_for_http().make_span_with(
+            |req: &axum::http::Request<axum::body::Body>| {
+                tracing::debug_span!(
+                    "request",
+                    method = %req.method(),
+                    path = %req.uri().path(),
+                )
+            },
+        ))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
@@ -321,6 +350,68 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+/// Builds the CORS layer from a comma-separated allow-list, default-deny (M17).
+///
+/// - A non-empty, parseable allow-list -> exactly those origins are allowed.
+/// - Empty list + `DEV_MODE` -> permissive `Any` (logged), for local dev only.
+/// - Empty list + production -> no origins allowed (cross-origin denied).
+///
+/// `Any` is never reachable outside `DEV_MODE`, so a production deployment
+/// cannot accidentally ship a wildcard origin.
+fn build_cors(allowed: &str, dev_mode: bool) -> CorsLayer {
+    let origins = parse_cors_origins(allowed);
+
+    if !origins.is_empty() {
+        return CorsLayer::new()
+            .allow_origin(origins)
+            .allow_methods(Any)
+            .allow_headers(Any);
+    }
+
+    if dev_mode {
+        tracing::warn!("DEV_MODE: CORS allow_origin(Any) (insecure, dev only)");
+        CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any)
+    } else {
+        tracing::warn!("CORS_ALLOWED_ORIGINS not set: all cross-origin requests will be denied");
+        CorsLayer::new()
+    }
+}
+
+/// Parses a comma-separated CORS allow-list into valid origin header values,
+/// dropping empty and unparseable entries. Split out from `build_cors` so the
+/// parsing is unit-testable without constructing a `CorsLayer`.
+fn parse_cors_origins(allowed: &str) -> Vec<HeaderValue> {
+    allowed
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .filter_map(|o| o.parse().ok())
+        .collect()
+}
+
+#[cfg(test)]
+mod cors_tests {
+    use super::parse_cors_origins;
+
+    #[test]
+    fn parses_and_trims_multiple_origins() {
+        let origins = parse_cors_origins(" https://a.example , https://b.example ");
+        assert_eq!(origins.len(), 2);
+        assert_eq!(origins[0], "https://a.example");
+        assert_eq!(origins[1], "https://b.example");
+    }
+
+    #[test]
+    fn empty_list_yields_no_origins() {
+        assert!(parse_cors_origins("").is_empty());
+        assert!(parse_cors_origins("   ").is_empty());
+        assert!(parse_cors_origins(" , , ").is_empty());
+    }
 }
 
 /// Background task that periodically compacts old snapshots.
