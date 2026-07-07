@@ -305,7 +305,7 @@ pub(crate) fn verify_update_signature(
     pubkey: &ambre_core::PublicKey,
     update: &ambre_protocol::Update,
 ) -> Result<(), AppError> {
-    use ed25519_dalek::{Signature as DalekSig, Verifier, VerifyingKey};
+    use ed25519_dalek::{Signature as DalekSig, VerifyingKey};
 
     let public_data_bytes = postcard::to_allocvec(&update.public_data).map_err(AppError::Decode)?;
 
@@ -318,7 +318,9 @@ pub(crate) fn verify_update_signature(
     let vk = VerifyingKey::from_bytes(pubkey.as_array()).map_err(|_| AppError::InvalidSignature)?;
     let sig = DalekSig::from_slice(&update.signature.0).map_err(|_| AppError::InvalidSignature)?;
 
-    vk.verify(&signed_data, &sig)
+    // Strict verification (canonical S, no small-order A) so a relayed signature
+    // cannot be malleated into a second valid signature over the same update.
+    vk.verify_strict(&signed_data, &sig)
         .map_err(|_| AppError::InvalidSignature)?;
 
     Ok(())

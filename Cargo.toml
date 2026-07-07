@@ -65,6 +65,7 @@ ed25519-dalek = { version = "2.0" }
 x25519-dalek = { version = "2.0", features = ["static_secrets"] }
 blake2 = { version = "0.10" }
 argon2 = { version = "0.5" }
+hkdf = { version = "0.12" }
 hmac = { version = "0.12" }
 sha2 = { version = "0.10" }
 # CSPRNG for nonces and key material. `wasm_js` selects the browser entropy

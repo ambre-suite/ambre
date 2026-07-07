@@ -231,7 +231,7 @@ impl SyncState {
         if let Some(tx) = event_tx {
             wasm_bindgen_futures::spawn_local(async move {
                 let master_seed = MasterSeed::generate();
-                let recovery_words = encode(master_seed.as_bytes());
+                let recovery_words = encode(master_seed.recovery_bytes());
                 let signing_key = master_seed.derive_signing_key();
                 let exchange_key = master_seed.derive_exchange_key();
                 let signing_pub_key = hex::encode(signing_key.verifying_key().to_bytes());
@@ -247,11 +247,9 @@ impl SyncState {
                 let user_key = ambre_crypto::passphrase::derive_user_key(&passphrase, &salt)
                     .expect("key derivation");
                 let user_doc_key = DocumentKey::from_array(user_key);
-                let (nonce, master_key_enc) = ambre_crypto::aead::seal(
-                    master_seed.as_bytes(),
-                    b"ambre-master-seed",
-                    &user_doc_key,
-                );
+                let (nonce, master_key_enc) = master_seed
+                    .wrap_for_storage(&user_doc_key, b"ambre-master-seed")
+                    .expect("wrap master seed");
                 let mut master_key_with_nonce = nonce.to_vec();
                 master_key_with_nonce.extend_from_slice(&master_key_enc);
 
@@ -289,7 +287,7 @@ impl SyncState {
             let master_seed = MasterSeed::generate();
             self.signing_key = Some(master_seed.derive_signing_key());
             self.exchange_key = Some(master_seed.derive_exchange_key());
-            let recovery_words = encode(master_seed.as_bytes());
+            let recovery_words = encode(master_seed.recovery_bytes());
             self.master_seed = Some(master_seed);
             self.open_websocket();
             self.reply(id, RestEvent::AccountCreated { recovery_words });

@@ -12,6 +12,8 @@ use ed25519_dalek::SigningKey;
 use x25519_dalek::StaticSecret;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+use crate::aead;
+use crate::error::CryptoError;
 use crate::random;
 
 /// Domain-separation tag for the Ed25519 signing key derivation.
@@ -33,7 +35,11 @@ fn derive32(domain: &[u8], seed: &[u8; 32]) -> [u8; 32] {
 
 /// The root secret of a user, decrypted at login from the server-stored,
 /// passphrase-wrapped master key. Source of both keypairs.
-#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+///
+/// Deliberately not `Clone`: the root seed is the single most sensitive secret
+/// (recovery-word equivalent), so silent duplication of copies to zeroize is
+/// disallowed. It is moved, never copied.
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct MasterSeed([u8; 32]);
 
 impl MasterSeed {
@@ -61,9 +67,22 @@ impl MasterSeed {
         StaticSecret::from(sk)
     }
 
-    /// Returns the raw seed bytes. Available for recovery-word generation.
-    pub fn as_bytes(&self) -> &[u8; 32] {
+    /// Returns the raw seed bytes for recovery-word encoding. This is the one
+    /// sanctioned escape hatch that exposes the root seed; its name flags that
+    /// the caller is handling recovery material and must not retain it.
+    pub fn recovery_bytes(&self) -> &[u8; 32] {
         &self.0
+    }
+
+    /// Seals the raw seed under `key` (the passphrase-derived user key) with the
+    /// given `aad`, for storage as the server-side passphrase-wrapped master key.
+    /// The raw seed never leaves this crate on this path.
+    pub fn wrap_for_storage(
+        &self,
+        key: &DocumentKey,
+        aad: &[u8],
+    ) -> Result<([u8; aead::NONCE_LEN], Vec<u8>), CryptoError> {
+        aead::seal(&self.0, aad, key)
     }
 }
 

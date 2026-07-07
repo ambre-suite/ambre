@@ -23,7 +23,7 @@ fn roundtrip_envelope() {
     let aad = b"public-data";
     let plaintext = b"hello, encrypted world";
 
-    let sealed = envelope::seal(plaintext, aad, &doc_key, &signing);
+    let sealed = envelope::seal(plaintext, aad, &doc_key, &signing).unwrap();
     let opened = envelope::open(&sealed, aad, &doc_key, &author).unwrap();
     assert_eq!(opened, plaintext);
 }
@@ -35,7 +35,7 @@ fn tampered_ciphertext_fails() {
     let author = signing.verifying_key().to_bytes();
     let aad = b"aad";
 
-    let mut sealed = envelope::seal(b"payload", aad, &doc_key, &signing);
+    let mut sealed = envelope::seal(b"payload", aad, &doc_key, &signing).unwrap();
     sealed.ciphertext[0] ^= 0xFF;
     // Signature covers the ciphertext, so this trips the signature check first.
     assert_eq!(
@@ -50,7 +50,7 @@ fn commitment_tag_wrong_aad_rejected() {
     let signing = fixed_seed().derive_signing_key();
     let author = signing.verifying_key().to_bytes();
 
-    let sealed = envelope::seal(b"payload", b"document-A", &doc_key, &signing);
+    let sealed = envelope::seal(b"payload", b"document-A", &doc_key, &signing).unwrap();
     // Re-sign over the altered aad so the signature passes but the HMAC commitment
     // (and the AEAD aad) no longer match -- models inter-document substitution.
     let forged_aad = b"document-B";
@@ -77,7 +77,7 @@ fn invalid_signature_rejected() {
     let signing = fixed_seed().derive_signing_key();
     let aad = b"aad";
 
-    let sealed = envelope::seal(b"payload", aad, &doc_key, &signing);
+    let sealed = envelope::seal(b"payload", aad, &doc_key, &signing).unwrap();
     let wrong_author = MasterSeed::from_array([0x99; 32])
         .derive_signing_key()
         .verifying_key()
@@ -95,7 +95,7 @@ fn wrong_document_key_rejected() {
     let author = signing.verifying_key().to_bytes();
     let aad = b"aad";
 
-    let sealed = envelope::seal(b"payload", aad, &doc_key, &signing);
+    let sealed = envelope::seal(b"payload", aad, &doc_key, &signing).unwrap();
     let other_key = DocumentKey::from_array([0x44; 32]);
     assert_eq!(
         envelope::open(&sealed, aad, &other_key, &author),
@@ -140,8 +140,8 @@ fn ecdh_symmetric() {
     let bob_pub = x25519_dalek::PublicKey::from(&bob).to_bytes();
 
     assert_eq!(
-        ecdh::shared_secret(&alice, &bob_pub),
-        ecdh::shared_secret(&bob, &alice_pub)
+        ecdh::shared_secret(&alice, &bob_pub).unwrap(),
+        ecdh::shared_secret(&bob, &alice_pub).unwrap()
     );
 }
 
@@ -153,9 +153,48 @@ fn wrap_unwrap_roundtrip() {
     let bob_pub = x25519_dalek::PublicKey::from(&bob).to_bytes();
 
     let doc_key = DocumentKey::from_array([0x55; 32]);
-    let wrapped = ecdh::wrap_document_key(&alice, &bob_pub, &doc_key);
+    let wrapped = ecdh::wrap_document_key(&alice, &bob_pub, &doc_key).unwrap();
     let unwrapped = ecdh::unwrap_document_key(&bob, &alice_pub, &wrapped).unwrap();
     assert_eq!(unwrapped.as_bytes(), doc_key.as_bytes());
+}
+
+#[test]
+fn weak_peer_public_key_rejected() {
+    // The all-zero u-coordinate is a low-order point: the X25519 output is the
+    // predictable all-zero secret. Both the raw exchange and the wrap must reject
+    // it (M14: reject a non-contributory shared secret).
+    let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
+    let weak_pub = [0u8; 32];
+
+    assert_eq!(
+        ecdh::shared_secret(&alice, &weak_pub),
+        Err(CryptoError::WeakPublicKey)
+    );
+
+    let doc_key = DocumentKey::from_array([0x55; 32]);
+    assert_eq!(
+        ecdh::wrap_document_key(&alice, &weak_pub, &doc_key).err(),
+        Some(CryptoError::WeakPublicKey)
+    );
+}
+
+#[test]
+fn kek_binds_peer_identity() {
+    // The KEK is derived over `sender_pk || recipient_pk`, so a key wrapped by
+    // Alice for Bob cannot be unwrapped by Carol even if Carol somehow presents
+    // Alice's public key as the sender: the recipient half of the transcript
+    // differs, so the KEK (and thus the AEAD open) fails.
+    let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
+    let bob = MasterSeed::from_array([0x02; 32]).derive_exchange_key();
+    let carol = MasterSeed::from_array([0x03; 32]).derive_exchange_key();
+    let alice_pub = x25519_dalek::PublicKey::from(&alice).to_bytes();
+    let bob_pub = x25519_dalek::PublicKey::from(&bob).to_bytes();
+
+    let doc_key = DocumentKey::from_array([0x55; 32]);
+    let wrapped = ecdh::wrap_document_key(&alice, &bob_pub, &doc_key).unwrap();
+
+    // Carol tries to unwrap Bob's envelope, claiming Alice as the sender.
+    assert!(ecdh::unwrap_document_key(&carol, &alice_pub, &wrapped).is_err());
 }
 
 // ── Argon2id ──────────────────────────────────────────────────────────────────
@@ -194,7 +233,7 @@ proptest! {
         let signing = fixed_seed().derive_signing_key();
         let author = signing.verifying_key().to_bytes();
         let aad = b"aad";
-        let sealed = envelope::seal(&data, aad, &doc_key, &signing);
+        let sealed = envelope::seal(&data, aad, &doc_key, &signing).unwrap();
         let opened = envelope::open(&sealed, aad, &doc_key, &author).unwrap();
         prop_assert_eq!(opened, data);
     }
@@ -209,7 +248,7 @@ proptest! {
         let signing = fixed_seed().derive_signing_key();
         let author = signing.verifying_key().to_bytes();
         let aad = b"aad";
-        let mut sealed = envelope::seal(&data, aad, &doc_key, &signing);
+        let mut sealed = envelope::seal(&data, aad, &doc_key, &signing).unwrap();
         let mask = 1u8 << bit;
         match idx {
             0 => sealed.ciphertext[0] ^= mask,

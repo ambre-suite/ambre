@@ -4,7 +4,7 @@
 //! over the commitment tag prevents a relay from substituting it. The author's
 //! public key (in the message's public data) is the verification key.
 
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 
 use crate::error::CryptoError;
 
@@ -46,7 +46,11 @@ pub fn verify(
         VerifyingKey::from_bytes(author_pub).map_err(|_| CryptoError::InvalidSignature)?;
     let sig = Signature::from_bytes(signature);
     let msg = message(nonce, ciphertext, aad, commitment_tag);
+    // Strict verification rejects non-canonical `S` and small-order `A`, so a
+    // valid `(R, S)` cannot be transformed into a distinct valid signature over
+    // the same message. Ambre treats "signature identifies the author" as
+    // load-bearing on the blind relay, so signature malleability is disallowed.
     verifying_key
-        .verify(&msg, &sig)
+        .verify_strict(&msg, &sig)
         .map_err(|_| CryptoError::InvalidSignature)
 }

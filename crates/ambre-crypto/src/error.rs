@@ -28,4 +28,13 @@ pub enum CryptoError {
     /// Argon2id key derivation failed.
     #[error("key derivation failed")]
     Argon2Failed,
+
+    /// XChaCha20-Poly1305 encryption failed (plaintext exceeds the AEAD limit).
+    #[error("AEAD encryption failed")]
+    EncryptionFailed,
+
+    /// The X25519 shared secret was non-contributory (peer sent a low-order
+    /// public key), yielding a predictable all-zero secret. Rejected.
+    #[error("weak public key")]
+    WeakPublicKey,
 }

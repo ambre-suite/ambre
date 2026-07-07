@@ -37,11 +37,13 @@ pub(crate) fn wrap_key_b64(
     my_xk: &StaticSecret,
     peer_pub: &[u8; 32],
     doc_key: &DocumentKey,
-) -> String {
-    let wrapped = ambre_crypto::ecdh::wrap_document_key(my_xk, peer_pub, doc_key);
+) -> Result<String, ambre_crypto::CryptoError> {
+    // Fails if the peer public key is non-contributory (low-order): we refuse to
+    // wrap under a predictable KEK rather than hand out a forgeable share.
+    let wrapped = ambre_crypto::ecdh::wrap_document_key(my_xk, peer_pub, doc_key)?;
     let mut enc = wrapped.nonce.to_vec();
     enc.extend_from_slice(&wrapped.ciphertext);
-    base64::engine::general_purpose::URL_SAFE.encode(&enc)
+    Ok(base64::engine::general_purpose::URL_SAFE.encode(&enc))
 }
 
 /// Builds the `POST /documents/{id}/share` body: ECDH-wraps `doc_key` for the
@@ -57,7 +59,7 @@ pub(crate) fn build_invite_request(
     Ok(http::InviteRequest {
         invitee_email,
         role: role.to_string(),
-        doc_key_enc: wrap_key_b64(my_xk, &peer, doc_key),
+        doc_key_enc: wrap_key_b64(my_xk, &peer, doc_key).map_err(|e| e.to_string())?,
     })
 }
 
@@ -75,7 +77,7 @@ pub(crate) fn rotate_entries_for(
             let peer = decode_exchange_pubkey(&m.exchange_pub_key).ok()?;
             Some(http::RotateKeyEntry {
                 user_id: m.user_id.clone(),
-                doc_key_enc: wrap_key_b64(my_xk, &peer, new_doc_key),
+                doc_key_enc: wrap_key_b64(my_xk, &peer, new_doc_key).ok()?,
             })
         })
         .collect()

@@ -128,12 +128,12 @@ fn seal_payload(
     aad: &[u8],
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
-) -> Sealed {
+) -> Result<Sealed, PipelineError> {
     let (version, body) = compress(payload);
     let mut plaintext = Vec::with_capacity(1 + body.len());
     plaintext.push(version);
     plaintext.extend_from_slice(&body);
-    envelope::seal(&plaintext, aad, doc_key, signing_key)
+    Ok(envelope::seal(&plaintext, aad, doc_key, signing_key)?)
 }
 
 fn open_payload(
@@ -185,7 +185,7 @@ pub fn seal_update(
     signing_key: &SigningKey,
 ) -> Result<Update, PipelineError> {
     let aad = aad_of(&public_data)?;
-    let sealed = seal_payload(payload, &aad, doc_key, signing_key);
+    let sealed = seal_payload(payload, &aad, doc_key, signing_key)?;
     let (ciphertext, nonce, commitment_tag, signature) = message_parts(sealed);
     tracing::debug!(
         "[Pipeline] seal_update: {} bytes plaintext → {} bytes ciphertext",
@@ -235,7 +235,7 @@ pub fn seal_snapshot(
     signing_key: &SigningKey,
 ) -> Result<Snapshot, PipelineError> {
     let aad = aad_of(&public_data)?;
-    let sealed = seal_payload(payload, &aad, doc_key, signing_key);
+    let sealed = seal_payload(payload, &aad, doc_key, signing_key)?;
     let (ciphertext, nonce, commitment_tag, signature) = message_parts(sealed);
     Ok(Snapshot {
         ciphertext,
@@ -276,7 +276,7 @@ pub fn seal_ephemeral(
     signing_key: &SigningKey,
 ) -> Result<Ephemeral, PipelineError> {
     let aad = aad_of(&public_data)?;
-    let sealed = seal_payload(payload, &aad, doc_key, signing_key);
+    let sealed = seal_payload(payload, &aad, doc_key, signing_key)?;
     let (ciphertext, nonce, commitment_tag, signature) = message_parts(sealed);
     Ok(Ephemeral {
         ciphertext,
