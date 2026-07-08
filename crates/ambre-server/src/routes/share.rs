@@ -7,6 +7,18 @@ use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
 
+/// Privilege rank of a document role. Higher binds more capability.
+/// `owner` (2) > `editor` (1) > `viewer` (0). An unknown role ranks below
+/// everything so it can never be granted.
+fn doc_role_rank(role: &str) -> Option<u8> {
+    match role {
+        "viewer" => Some(0),
+        "editor" => Some(1),
+        "owner" => Some(2),
+        _ => None,
+    }
+}
+
 fn parse_doc_id(s: &str) -> Result<ambre_core::DocumentId, AppError> {
     ambre_core::Uuid::parse_str(s)
         .map(ambre_core::DocumentId::from_uuid)
@@ -59,13 +71,19 @@ pub async fn invite_to_document(
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if !["owner", "editor"].contains(&m.role.as_str()) {
+    // The caller must be able to invite (owner/editor) and may only grant a role
+    // at or below their own rank (N2). Without this clamp an `editor` could mint an
+    // `owner`, who could then revoke/rotate -- a privilege escalation. Only an owner
+    // may grant `owner`.
+    let caller_rank = doc_role_rank(&m.role).ok_or(AppError::Forbidden)?;
+    if caller_rank < doc_role_rank("editor").expect("editor is a known role") {
         return Err(AppError::Forbidden);
     }
-    if !["owner", "editor", "viewer"].contains(&req.role.as_str()) {
-        return Err(AppError::Conflict {
-            detail: "invalid role".into(),
-        });
+    let granted_rank = doc_role_rank(&req.role).ok_or(AppError::Conflict {
+        detail: "invalid role".into(),
+    })?;
+    if granted_rank > caller_rank {
+        return Err(AppError::Forbidden);
     }
 
     let invitee = db::get_user_by_email(&state.db, &req.invitee_email)
