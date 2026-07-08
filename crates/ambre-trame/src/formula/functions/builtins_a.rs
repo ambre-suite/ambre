@@ -362,15 +362,32 @@ pub(crate) fn concat_fn(args: &[CellValue]) -> CellValue {
     CellValue::Text(result)
 }
 
+/// Resolve the optional character-count argument shared by `LEFT`/`RIGHT`.
+/// Returns the count as `usize`, or `#NUM!` for a negative value (a bare
+/// `as usize` cast wraps a negative `f64` to a gigantic length -- Excel returns
+/// an error here rather than silently taking the whole string).
+fn str_count_arg(args: &[CellValue], default: usize) -> Result<usize, FormulaError> {
+    if args.len() < 2 {
+        return Ok(default);
+    }
+    let n = flatten_numeric(&args[1..2])
+        .first()
+        .copied()
+        .unwrap_or(default as f64);
+    if n < 0.0 || !n.is_finite() {
+        return Err(FormulaError::NumError);
+    }
+    Ok(n as usize)
+}
+
 pub(crate) fn left(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
     let s = args[0].to_display();
-    let n = if args.len() >= 2 {
-        flatten_numeric(&args[1..2]).first().copied().unwrap_or(1.0) as usize
-    } else {
-        1
+    let n = match str_count_arg(args, 1) {
+        Ok(n) => n,
+        Err(e) => return CellValue::Error(e),
     };
     CellValue::Text(s.chars().take(n).collect())
 }
@@ -380,10 +397,9 @@ pub(crate) fn right(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let s = args[0].to_display();
-    let n = if args.len() >= 2 {
-        flatten_numeric(&args[1..2]).first().copied().unwrap_or(1.0) as usize
-    } else {
-        1
+    let n = match str_count_arg(args, 1) {
+        Ok(n) => n,
+        Err(e) => return CellValue::Error(e),
     };
     let chars: Vec<char> = s.chars().collect();
     let start = chars.len().saturating_sub(n);

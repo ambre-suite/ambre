@@ -150,16 +150,7 @@ pub fn draw_edit<S: DrawSurface>(
         let text_h = layout.height() as f64;
         let y_off = ((ch - text_h) / 2.0).max(0.0);
         let brush = Brush::Solid(palette.cell_text);
-        for line in layout.lines() {
-            for item in line.items() {
-                let PositionedLayoutItem::GlyphRun(run) = item else {
-                    continue;
-                };
-                let tx = x + pad + run.offset() as f64;
-                let ty = y + y_off + run.baseline() as f64;
-                surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
-            }
-        }
+        crate::render::draw_layout_runs(surface, layout, x + pad, y + y_off, &brush);
     }
 
     // Composition underline: a dotted line under the preview run.

@@ -112,6 +112,35 @@ impl FrameHost {
         gpu.height = height;
     }
 
+    /// Recover after the WebGL/WebGPU context was lost and restored. The GL
+    /// drawable and every GPU-side allocation were dropped, so we reconfigure
+    /// the surface and rebuild the ping-pong offscreens at the current size,
+    /// then force a full repaint through the view (a plain `resize` to the same
+    /// dimensions early-returns and would leave a blank canvas).
+    pub fn notify_context_restored(&mut self, width: u32, height: u32) {
+        let Some(gpu) = self.gpu.as_mut() else { return };
+        tracing::info!("GPU context restored, reconfiguring {width}x{height}");
+        gpu.surface.configure(
+            &gpu.device,
+            &wgpu::SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                format: gpu.surface_format,
+                width,
+                height,
+                present_mode: wgpu::PresentMode::AutoNoVsync,
+                desired_maximum_frame_latency: 2,
+                alpha_mode: wgpu::CompositeAlphaMode::Auto,
+                view_formats: vec![],
+            },
+        );
+        gpu.quad_renderer
+            .resize_offscreens(&gpu.device, width, height);
+        gpu.width = width;
+        gpu.height = height;
+        // Force the view to invalidate every cached layer for a clean repaint.
+        self.view.resize(width, height);
+    }
+
     pub(crate) fn tick_fps(times: &mut VecDeque<f64>, fps: &mut f32, now: f64) {
         times.push_back(now);
         while times.front().is_some_and(|&t| now - t > 1000.0) {
@@ -204,6 +233,29 @@ impl FrameHost {
         let t_gpu_start = self.perf.now();
         let surface_tex = match gpu.surface.get_current_texture() {
             Ok(t) => t,
+            // A lost/outdated surface is recoverable: the GL context was reset
+            // (tab backgrounded, GPU reset, `webglcontextrestored`) or the
+            // drawable went stale after a resize. Reconfigure with the current
+            // size and skip this frame; the next rAF tick draws fresh. Only a
+            // genuinely unrecoverable error (OOM, removed device) is logged and
+            // dropped.
+            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                tracing::warn!("surface lost/outdated, reconfiguring");
+                gpu.surface.configure(
+                    &gpu.device,
+                    &wgpu::SurfaceConfiguration {
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                        format: gpu.surface_format,
+                        width: gpu.width,
+                        height: gpu.height,
+                        present_mode: wgpu::PresentMode::AutoNoVsync,
+                        desired_maximum_frame_latency: 2,
+                        alpha_mode: wgpu::CompositeAlphaMode::Auto,
+                        view_formats: vec![],
+                    },
+                );
+                return;
+            }
             Err(e) => {
                 tracing::error!("get_current_texture: {e:?}");
                 return;

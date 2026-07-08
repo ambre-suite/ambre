@@ -22,8 +22,7 @@
 // ============================================================================
 
 use ambre_draw::{
-    Affine, Alignment, Brush, Clock, Color, DrawSurface, FontContext, Layout, ParleyBrush,
-    PositionedLayoutItem, Rect,
+    Alignment, Brush, Clock, Color, DrawSurface, FontContext, Layout, ParleyBrush, Rect,
 };
 
 use ambre_canvas::{Palette, TextCache};

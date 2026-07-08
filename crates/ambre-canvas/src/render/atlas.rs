@@ -22,6 +22,23 @@ struct GlyphKey {
     size_x100: u32, // font_size * 100 to avoid floats in hash key
 }
 
+/// Retained alpha bitmap for a packed glyph, kept so the atlas can repack its
+/// working set on overflow (LRU compaction) without re-rasterizing through
+/// Swash. Invisible glyphs (space) have no bitmap.
+struct GlyphBitmap {
+    w: u32,
+    h: u32,
+    data: Vec<u8>,
+}
+
+/// A cache entry: its current atlas slot, the frame it was last drawn on (for
+/// LRU compaction), and the retained bitmap (`None` for a zero-size glyph).
+struct CachedGlyph {
+    slot: AtlasSlot,
+    last_used: u64,
+    bitmap: Option<GlyphBitmap>,
+}
+
 /// UV rect and pixel-space bearing for one atlas entry.
 #[derive(Clone, Copy)]
 pub struct AtlasSlot {
@@ -88,12 +105,18 @@ impl ShelfPacker {
 pub struct GlyphAtlas {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
-    cache: FxHashMap<GlyphKey, AtlasSlot>,
+    cache: FxHashMap<GlyphKey, CachedGlyph>,
     packer: ShelfPacker,
     scale_cx: swash::scale::ScaleContext,
     /// Queued texture uploads: (x, y, w, h, alpha_data).
     pending: Vec<(u32, u32, u32, u32, Vec<u8>)>,
-    needs_clear: bool,
+    /// Monotonic frame counter, bumped in `begin_frame`. A glyph drawn this
+    /// frame has `last_used == frame`; compaction keeps that working set.
+    frame: u64,
+    /// Set when an allocation overflowed mid-frame. Compaction is deferred to
+    /// the next `begin_frame` so it never moves a glyph whose UVs were already
+    /// baked into this frame's vertex buffer.
+    needs_compact: bool,
 }
 
 impl GlyphAtlas {
@@ -121,19 +144,68 @@ impl GlyphAtlas {
             packer: ShelfPacker::new(ATLAS_SIZE),
             scale_cx: swash::scale::ScaleContext::new(),
             pending: Vec::new(),
-            needs_clear: false,
+            frame: 0,
+            needs_compact: false,
         }
     }
 
-    /// Called at the start of each frame. If the atlas overflowed last frame,
-    /// clear it now so the new frame starts with a clean state.
+    /// Called at the start of each frame. Advances the frame clock used to age
+    /// glyphs for LRU compaction, and runs a deferred compaction if the atlas
+    /// overflowed on the previous frame (deferred so it never rewrites the UVs
+    /// of glyphs already emitted into that frame's vertex buffer).
     pub fn begin_frame(&mut self) {
-        if self.needs_clear {
-            self.cache.clear();
-            self.packer.reset();
-            self.pending.clear();
-            self.needs_clear = false;
+        self.frame += 1;
+        if self.needs_compact {
+            self.compact();
+            self.needs_compact = false;
         }
+    }
+
+    /// Repack the recently-used glyphs into a fresh atlas, dropping the cold
+    /// ones. Called at frame start after an overflow. Instead of the old
+    /// full-clear (which threw away every glyph, including the ones still on
+    /// screen, causing a blank flash), we keep glyphs touched within the last
+    /// `KEEP_FRAMES` frames, re-pack them from their retained bitmaps (no
+    /// re-rasterization), and re-queue those bitmaps for upload.
+    fn compact(&mut self) {
+        // Keep the current frame plus a little history so glyphs that flicker
+        // in and out across a couple of frames are not thrashed.
+        const KEEP_FRAMES: u64 = 2;
+        let cutoff = self.frame.saturating_sub(KEEP_FRAMES);
+
+        self.packer.reset();
+        self.pending.clear();
+
+        let mut survivors: FxHashMap<GlyphKey, CachedGlyph> = FxHashMap::default();
+        // Re-pack in descending recency so the hottest glyphs are placed first
+        // and are the least likely to be evicted if the working set is tight.
+        let mut entries: Vec<(GlyphKey, CachedGlyph)> = self
+            .cache
+            .drain()
+            .filter(|(_, c)| c.last_used > cutoff)
+            .collect();
+        entries.sort_by_key(|(_, c)| std::cmp::Reverse(c.last_used));
+
+        let inv = 1.0 / ATLAS_SIZE as f32;
+        for (key, mut cached) in entries {
+            match &cached.bitmap {
+                // Zero-size (invisible) glyph: no atlas space, keep as-is.
+                None => {
+                    survivors.insert(key, cached);
+                }
+                Some(bmp) => {
+                    let Some((ax, ay)) = self.packer.allocate(bmp.w, bmp.h) else {
+                        // Working set itself overflows: drop the rest.
+                        continue;
+                    };
+                    cached.slot.uv_min = [ax as f32 * inv, ay as f32 * inv];
+                    cached.slot.uv_max = [(ax + bmp.w) as f32 * inv, (ay + bmp.h) as f32 * inv];
+                    self.pending.push((ax, ay, bmp.w, bmp.h, bmp.data.clone()));
+                    survivors.insert(key, cached);
+                }
+            }
+        }
+        self.cache = survivors;
     }
 
     /// Look up a glyph in the cache. If absent, rasterize it via Swash and
@@ -152,8 +224,9 @@ impl GlyphAtlas {
             size_x100: (font_size * 100.0) as u32,
         };
 
-        if let Some(&slot) = self.cache.get(&key) {
-            return Some(slot);
+        if let Some(cached) = self.cache.get_mut(&key) {
+            cached.last_used = self.frame;
+            return Some(cached.slot);
         }
 
         // Rasterize via Swash.
@@ -188,16 +261,24 @@ impl GlyphAtlas {
                 bearing_left: image.placement.left,
                 bearing_top: image.placement.top,
             };
-            self.cache.insert(key, slot);
+            self.cache.insert(
+                key,
+                CachedGlyph {
+                    slot,
+                    last_used: self.frame,
+                    bitmap: None,
+                },
+            );
             return Some(slot);
         }
 
-        // Pack into atlas.
+        // Pack into atlas. On overflow, flag a compaction for the next frame
+        // (deferred to avoid rewriting UVs already baked into this frame) and
+        // drop the glyph for now, exactly as the previous full-clear path did.
         let (ax, ay) = match self.packer.allocate(w, h) {
             Some(pos) => pos,
             None => {
-                // Atlas full -- will clear at next begin_frame().
-                self.needs_clear = true;
+                self.needs_compact = true;
                 return None;
             }
         };
@@ -212,8 +293,19 @@ impl GlyphAtlas {
             bearing_top: image.placement.top,
         };
 
-        self.pending.push((ax, ay, w, h, image.data));
-        self.cache.insert(key, slot);
+        self.pending.push((ax, ay, w, h, image.data.clone()));
+        self.cache.insert(
+            key,
+            CachedGlyph {
+                slot,
+                last_used: self.frame,
+                bitmap: Some(GlyphBitmap {
+                    w,
+                    h,
+                    data: image.data,
+                }),
+            },
+        );
         Some(slot)
     }
 

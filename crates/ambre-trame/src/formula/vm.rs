@@ -18,6 +18,12 @@ use super::compile::SheetIndices;
 use super::functions::call_builtin;
 use super::types::{AxisId, CellId, CellValue, FormulaError, Op, RangeId, RangeValue};
 
+/// Upper bound on the number of cells a single range reference may materialize
+/// during evaluation. Protects the WASM Logic worker from a peer-supplied
+/// formula (e.g. `=SUM(A1:ZZ100000)`) whose range would allocate gigabytes.
+/// 1M cells covers any realistic used area while capping the blast radius.
+const MAX_RANGE_CELLS: usize = 1_000_000;
+
 /// Holds the mutable evaluation state shared across all cell evaluations in a
 /// single recomputation pass (`compute_all_dirty`).
 pub struct EvalContext<'a> {
@@ -185,7 +191,13 @@ impl<'a> EvalContext<'a> {
                     let b = stack.pop().unwrap_or(CellValue::Empty);
                     let a = stack.pop().unwrap_or(CellValue::Empty);
                     stack.push(match (a.as_number(), b.as_number()) {
-                        (Ok(x), Ok(y)) => CellValue::Number(x.powf(y)),
+                        // Guard NaN/inf (e.g. `(-1)^0.5`, `0^-1`): a bare
+                        // `powf` result would propagate silently through later
+                        // arithmetic. Excel surfaces these as `#NUM!`.
+                        (Ok(x), Ok(y)) => match x.powf(y) {
+                            r if r.is_finite() => CellValue::Number(r),
+                            _ => CellValue::Error(FormulaError::NumError),
+                        },
                         _ => CellValue::Error(FormulaError::TypeError),
                     });
                 }
@@ -279,6 +291,16 @@ impl<'a> EvalContext<'a> {
         }
         let rows = re - rs + 1;
         let cols = ce - cs + 1;
+        // Bound the materialized range. A compiled range stores only its two
+        // endpoints (O(1) to register), but evaluating it allocates one
+        // `CellValue` per member cell. With remote apply live, a malicious peer
+        // can push `=SUM(A1:ZZ100000)` and force every collaborator to allocate
+        // ~70M values on each recompute. Cap the cell count and surface `#REF!`
+        // rather than let a single formula OOM the WASM Logic worker. The
+        // ceiling is generous relative to any real spreadsheet's used area.
+        if rows.saturating_mul(cols) > MAX_RANGE_CELLS {
+            return RangeValue::new(1, 1, vec![CellValue::Error(FormulaError::BrokenRef)]);
+        }
         let mut values = Vec::with_capacity(rows * cols);
         for rp in rs..=re {
             for cp in cs..=ce {
@@ -422,6 +444,25 @@ mod tests {
         cache.insert(cell(1, 0), CellValue::Number(2.0));
         cache.insert(cell(2, 0), CellValue::Number(3.0));
         assert_eq!(eval_with_cells("SUM(A1:A100)", 2, cache), "6");
+    }
+
+    #[test]
+    fn eval_range_over_cell_cap_yields_ref_error() {
+        // `A1:ZZ100000` spans 702 cols x 100000 rows (~70M cells), well past
+        // MAX_RANGE_CELLS. The evaluator must refuse to materialize it and
+        // collapse the range to a single #REF! value instead of allocating
+        // gigabytes on a co-editor's box. A bare range surfaces the raw
+        // `CellValue::Range`, so we can assert on its shape and content.
+        match eval_formula("A1:ZZ100000") {
+            CellValue::Range(r) => {
+                assert_eq!((r.rows, r.cols), (1, 1));
+                assert!(matches!(
+                    r.values.as_slice(),
+                    [CellValue::Error(FormulaError::BrokenRef)]
+                ));
+            }
+            other => panic!("expected a collapsed error range, got {other:?}"),
+        }
     }
 
     fn eval_formula(src: &str) -> CellValue {

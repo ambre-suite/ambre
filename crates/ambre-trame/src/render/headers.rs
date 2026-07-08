@@ -106,16 +106,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
         if needs_clip {
             surface.push_clip(Rect::new(col_x, top, col_x + cw, top + hh));
         }
-        for line in lyt.lines() {
-            for item in line.items() {
-                let PositionedLayoutItem::GlyphRun(run) = item else {
-                    continue;
-                };
-                let tx = col_x + run.offset() as f64;
-                let ty = top + y_off + run.baseline() as f64;
-                surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
-            }
-        }
+        draw_layout_runs(surface, lyt, col_x, top + y_off, &brush);
         if needs_clip {
             surface.pop_clip();
         }
@@ -242,16 +233,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
         if needs_clip {
             surface.push_clip(Rect::new(0.0, row_y, hw, row_y + rh));
         }
-        for line in lyt.lines() {
-            for item in line.items() {
-                let PositionedLayoutItem::GlyphRun(run) = item else {
-                    continue;
-                };
-                let tx = 4.0 + run.offset() as f64;
-                let ty = row_y + y_off + run.baseline() as f64;
-                surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
-            }
-        }
+        draw_layout_runs(surface, lyt, 4.0, row_y + y_off, &brush);
         if needs_clip {
             surface.pop_clip();
         }

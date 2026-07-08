@@ -14,6 +14,24 @@ use rustis::resp::RefBulkString;
 /// - `ARGV[2]` = incoming clock (must be last_clock + 1)
 ///
 /// Rejects the update if the clock is not strictly sequential.
+///
+/// # Why the clock hash is intentionally not pruned
+///
+/// `doc:{id}:clocks` grows one field per distinct authoring signing key, which
+/// is bounded by the document's active device set (each member device signs
+/// with one identity key). It is deliberately never expired or trimmed:
+///
+/// - A TTL that dropped the hash on a cold document would reset `current` to 0.
+///   A legitimate author returning with its persisted monotonic clock at N > 1
+///   would then fail `N == 0 + 1` forever -- the strict-clock invariant would
+///   lock them out of their own document.
+/// - Per-author pruning on member revoke is not possible here either: the
+///   server only ever sees the signing key inside an update envelope and has no
+///   `user_id -> signing_key` mapping to target.
+///
+/// Removing an entry would also reopen the replay window this hash exists to
+/// close (a pruned author could resubmit old signed updates from clock 1). The
+/// membership bound is the correct and safe ceiling.
 pub const CLOCK_AND_SEQ_LUA: &str = r#"
 local current  = tonumber(redis.call('HGET', KEYS[1], ARGV[1])) or 0
 local incoming = tonumber(ARGV[2])

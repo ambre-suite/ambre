@@ -137,16 +137,8 @@ pub(crate) enum SendError {
 
 /// Spreadsheet column label for a 0-based index (0 -> "A", 26 -> "AA"). Used for
 /// the screen-reader cell announcement.
-fn col_label(mut col: u32) -> String {
-    let mut label = String::new();
-    loop {
-        label.insert(0, (b'A' + (col % 26) as u8) as char);
-        if col < 26 {
-            break;
-        }
-        col = col / 26 - 1;
-    }
-    label
+fn col_label(col: u32) -> String {
+    crate::columns::col_to_alpha(col)
 }
 
 /// Whether the HTML formula bar `<input>` (id `ambre-formula-input`) currently

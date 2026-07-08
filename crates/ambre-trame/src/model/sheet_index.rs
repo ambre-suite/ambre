@@ -207,16 +207,7 @@ impl SheetIndex {
     /// Zero-based column index -> spreadsheet letters (0 -> "A", 25 -> "Z",
     /// 26 -> "AA"). From `ambre-spec-trame-logic.md` §2.C.
     pub fn col_letter(index: usize) -> String {
-        let mut chars = Vec::new();
-        let mut n = index;
-        loop {
-            chars.push((b'A' + (n % 26) as u8) as char);
-            if n < 26 {
-                break;
-            }
-            n = n / 26 - 1;
-        }
-        chars.into_iter().rev().collect()
+        crate::columns::col_to_alpha(index as u32)
     }
 
     /// Inverse of [`col_letter`](Self::col_letter): "A" -> 0, "AA" -> 26.

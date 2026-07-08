@@ -15,15 +15,21 @@ impl TrameState {
         if current == self.last_exported_vv {
             return None;
         }
-        let delta = self
-            .doc
-            .export(ExportMode::updates(&self.last_exported_vv))
-            .ok();
+        // Export the incremental ops. On failure we must NOT advance the export
+        // cursor: swallowing the error (the old `.ok()`) dropped the local delta
+        // for good, and since remote apply is now live a lost local delta means
+        // permanent divergence, not just a skipped frame. Leaving the cursor put
+        // means the next flush re-attempts the same range.
+        let delta = match self.doc.export(ExportMode::updates(&self.last_exported_vv)) {
+            Ok(delta) => delta,
+            Err(e) => {
+                tracing::error!("[Logic] flush_delta export failed, delta retained: {e:?}");
+                return None;
+            }
+        };
         self.last_exported_vv = current;
-        if let Some(ref d) = delta {
-            tracing::info!("[Logic] flush_delta → {} bytes of CRDT ops", d.len());
-        }
-        delta
+        tracing::info!("[Logic] flush_delta → {} bytes of CRDT ops", delta.len());
+        Some(delta)
     }
 
     /// Apply a remote CRDT delta and return display events.

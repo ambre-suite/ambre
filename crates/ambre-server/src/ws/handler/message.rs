@@ -131,7 +131,17 @@ pub(crate) async fn handle_update(
 
     // Persist the full sealed Update so it can be replayed verbatim later
     // (`handle_request_missing`). Serialize before the broadcast moves `update`.
-    let update_wire = postcard::to_allocvec(&update).expect("postcard encode Update");
+    // Encoding a just-decoded Update is effectively infallible, but a request-
+    // path `.expect()` would panic the whole connection task on the off chance
+    // it isn't; log and abort just this update instead (the seq is already
+    // assigned, so a reconnecting client refetches it from the durable index).
+    let update_wire = match postcard::to_allocvec(&update) {
+        Ok(wire) => wire,
+        Err(e) => {
+            tracing::error!("postcard encode Update failed doc={doc_id} seq={seq}: {e}");
+            return;
+        }
+    };
     tracing::info!("[Server→Redis] append_pending_delta doc={doc_id} seq={seq} s3_key={s3_key}");
     if let Err(e) =
         redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
