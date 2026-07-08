@@ -90,6 +90,30 @@ fn parse_user_id_str(s: &str) -> Result<uuid::Uuid, AppError> {
     uuid::Uuid::parse_str(s).map_err(|_| AppError::NotFound { resource: "user" })
 }
 
+/// Validates the escrow parameters at org creation.
+///
+/// Shamir k-of-n threshold reconstruction is not yet implemented (see
+/// `recover_master_key`, N1). Until it lands, recovery is single-authority
+/// (owner-only), so the schema must not advertise a quorum guarantee the server
+/// cannot keep: reject any threshold above 1. Basic bounds also keep
+/// `1 <= threshold <= total` coherent.
+fn validate_shamir_params(threshold: i16, total: i16) -> Result<(), AppError> {
+    if total < 1 || threshold < 1 || threshold > total {
+        return Err(AppError::Conflict {
+            detail: "shamir_threshold/shamir_total out of range (need 1 <= threshold <= total)"
+                .into(),
+        });
+    }
+    if threshold > 1 {
+        return Err(AppError::Conflict {
+            detail: "shamir_threshold > 1 is not yet supported: threshold reconstruction is \
+                     unimplemented and recovery is single-authority (owner-only)"
+                .into(),
+        });
+    }
+    Ok(())
+}
+
 async fn require_org_role(
     pool: &sqlx::PgPool,
     org_id: uuid::Uuid,
@@ -117,6 +141,8 @@ pub async fn create_org(
     let owner_uid = ambre_core::Uuid::parse_str(&session.user_id.to_string())
         .map_err(|_| AppError::Unauthorized)?;
     let owner_id = ambre_core::UserId::from_uuid(owner_uid);
+
+    validate_shamir_params(req.shamir_threshold, req.shamir_total)?;
 
     let org_pubkey = hex::decode(&req.org_pubkey).map_err(|e| AppError::Conflict {
         detail: format!("invalid org_pubkey hex: {e}"),
@@ -324,16 +350,18 @@ pub async fn update_member_role(
 
 /// `POST /organizations/{id}/recover/{uid}`
 ///
-/// Allows an organization admin/owner to recover a member's encrypted
-/// master key. The caller must be an admin or owner of the organization.
+/// Allows an organization **owner** to recover a member's encrypted master key.
 ///
-/// Returns the target user's `org_master_key_enc` (hex-encoded bytes).
-/// The caller is responsible for decrypting it client-side using their
-/// copy of the organization private key, then re-encrypting it for the
-/// target user.
+/// SINGLE-AUTHORITY recovery: Shamir k-of-n threshold reconstruction is not yet
+/// implemented, so a lone owner can release a member's key. Recovery is therefore
+/// deliberately restricted to the `owner` role (not `admin`) and org creation
+/// rejects `shamir_threshold > 1`, so the data model never advertises a quorum the
+/// server does not enforce (N1). When true threshold reconstruction lands, this
+/// gate is replaced by "collect k shares before releasing anything".
 ///
-/// Shamir's Secret Sharing (threshold recovery) will be added in a
-/// future iteration as specified in the roadmap.
+/// Returns the target user's `org_master_key_enc` (hex-encoded bytes). The caller
+/// decrypts it client-side with their copy of the organization private key, then
+/// re-encrypts it for the target user. Every recovery is logged (`log_org_recovery`).
 pub async fn recover_master_key(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
@@ -344,7 +372,7 @@ pub async fn recover_master_key(
     let caller_uid = parse_user_id_str(&session.user_id.to_string())?;
     let target_uid = parse_user_id_str(&target_uid)?;
 
-    require_org_role(&state.db, org_id, caller_uid, &["owner", "admin"]).await?;
+    require_org_role(&state.db, org_id, caller_uid, &["owner"]).await?;
 
     // Verify target user is a member of this org.
     db::get_org_member(&state.db, org_id, target_uid)
@@ -374,6 +402,29 @@ mod tests {
     use super::*;
 
     // -- Parsers ------------------------------------------------------------
+
+    // -- Shamir validation (N1) ---------------------------------------------
+
+    #[test]
+    fn shamir_threshold_1_accepted() {
+        assert!(validate_shamir_params(1, 1).is_ok());
+        assert!(validate_shamir_params(1, 5).is_ok());
+    }
+
+    #[test]
+    fn shamir_threshold_above_1_rejected_until_reconstruction_lands() {
+        // The data model must not advertise a k-of-n quorum the server does not
+        // enforce; recovery is single-authority (owner-only) for now.
+        assert!(validate_shamir_params(2, 3).is_err());
+        assert!(validate_shamir_params(3, 5).is_err());
+    }
+
+    #[test]
+    fn shamir_out_of_range_rejected() {
+        assert!(validate_shamir_params(0, 5).is_err()); // threshold < 1
+        assert!(validate_shamir_params(1, 0).is_err()); // total < 1
+        assert!(validate_shamir_params(2, 1).is_err()); // threshold > total
+    }
 
     #[test]
     fn parse_org_id_valid() {
