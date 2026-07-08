@@ -483,6 +483,69 @@ Confirmed against the current tree:
 
 ---
 
+## ADDENDUM 2026-07-08 — NEW SURFACE NOT IN THE 2026-07-05 PASS
+
+The 2026-07-05 snapshot predates the **organizations / key-escrow** subsystem
+(`routes/orgs.rs`, `routes/keys.rs`, `db/orgs.rs`, the org half of `routes/share.rs`).
+It is now wired in `main.rs` (`/organizations`, `/organizations/{id}/recover/{uid}`,
+`/keys/master`, `/keys/master/rotate`) and was never audited. Findings below.
+Everything in Waves R0-R5 is confirmed still applied (all commits since
+2026-07-05 are the remediation waves).
+
+### N1 (HIGH) — Org master-key recovery bypasses the advertised Shamir threshold
+
+**Crate:** `ambre-server` · **File:** `routes/orgs.rs:337-370`, `db/orgs.rs`
+
+`recover_master_key` returns a target member's `org_master_key_enc` on the
+authority of a **single** `owner`/`admin` (`require_org_role(... &["owner","admin"])`).
+The schema persists `shamir_threshold` / `shamir_total` and the create/add-member
+paths accept per-member `shamir_share_enc`, advertising a k-of-n escrow model, but
+**no code path enforces threshold reconstruction** (grep: `threshold` appears only
+in storage/echo, never in a check). The doc comment concedes Shamir "will be added
+in a future iteration."
+
+**Impact.** Confidentiality is bounded: the returned blob is sealed under the org
+private key the caller must hold client-side, and each recovery is logged
+(`log_org_recovery`). But a lone rogue/compromised admin can escrow-recover any
+member's master key, defeating the k-of-n quorum the data model promises. For a
+sovereignty/zero-knowledge product this is a governance deviation, not just a TODO.
+
+**Fix:** either gate recovery behind real threshold reconstruction (collect k
+shares before releasing anything), or, until Shamir lands, require the `owner`
+role only and document loudly that recovery is single-authority. Reject
+`shamir_threshold > 1` at org creation while unenforced, so the schema never
+advertises a guarantee the server doesn't keep.
+
+### N2 (MEDIUM) — `invite_to_document` lets an editor mint co-owners
+
+**Crate:** `ambre-server` · **File:** `routes/share.rs:62,65`
+
+The caller must be `owner` or `editor` (`["owner","editor"].contains(&m.role)`),
+but the granted role is only checked against `["owner","editor","viewer"]` — it is
+**not** bounded by the caller's own role. An `editor` can therefore invite an
+arbitrary user as `owner`; that new owner can then `revoke_from_document` /
+`rotate_document_key` (both `owner`-only). Privilege escalation from editor to
+(proxy) owner.
+
+**Fix:** clamp the invitable role to `<= caller.role` (only an `owner` may grant
+`owner`).
+
+### N3 (LOW, carried) — `setup_account` hardcoded placeholder identity
+
+`routes/documents.rs:74-75` still creates accounts as `temp@ambre.app` / `"User"`,
+rate-limited only by the global auth tier. Unchanged from the previous pass's
+"OTHER NOTABLE FINDINGS"; no wave addressed it. Account-creation spam vector.
+
+### Residuals from 2026-07-05 "OTHER NOTABLE FINDINGS" no wave covered
+
+Still open, re-confirmed: `signature.rs` positional (non-length-prefixed)
+`ciphertext ‖ aad` transcript; `MasterSeed`/`DocumentKey` `Clone` (DocumentKey by
+design, documented); sync `AuthError` messages still carry crypto detail
+(`auth.rs` sends raw `e`); ephemeral remote-counter map has no eviction. None are
+exploitable in isolation; track them or explicitly close as WON'T-DO.
+
+---
+
 ## REMEDIATION ROADMAP
 
 Security-first ordering, grouped into waves. Same `[ ]`/`[x]` convention as
@@ -678,3 +741,18 @@ Each story carries its finding ID, the file to touch, and the concrete action.
       `user_id -> signing_key` mapping to target, and either would reopen the
       replay window the hash exists to close; growth is already membership-bound.
       (`server/s3.rs`, `ws/handler/message.rs`, `redis_ops.rs`)
+
+### Wave R6 — Organizations / key-escrow subsystem (new surface, 2026-07-08)
+
+- [ ] **N1** — enforce the k-of-n Shamir threshold before `recover_master_key`
+      releases `org_master_key_enc`, or restrict recovery to `owner` and reject
+      `shamir_threshold > 1` at org creation while reconstruction is unimplemented.
+      (`server/routes/orgs.rs`, `db/orgs.rs`)
+- [ ] **N2** — in `invite_to_document`, clamp the granted role to `<= caller.role`
+      so an `editor` cannot mint an `owner`. (`server/routes/share.rs`)
+- [ ] **N3** — replace the hardcoded `temp@ambre.app` / `"User"` identity in
+      `setup_account` with the real client-supplied identity. (`server/routes/documents.rs`)
+- [ ] **R6-residuals** — triage the carried "OTHER FINDINGS" no wave touched:
+      length-prefix the signature transcript, strip crypto detail from sync
+      `AuthError` messages, bound the ephemeral remote-counter map; close each as
+      fixed or WON'T-DO. (`crypto/signature.rs`, `sync/auth.rs`, `sync/lib.rs`)
