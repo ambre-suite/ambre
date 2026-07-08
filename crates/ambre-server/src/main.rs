@@ -394,26 +394,6 @@ fn parse_cors_origins(allowed: &str) -> Vec<HeaderValue> {
         .collect()
 }
 
-#[cfg(test)]
-mod cors_tests {
-    use super::parse_cors_origins;
-
-    #[test]
-    fn parses_and_trims_multiple_origins() {
-        let origins = parse_cors_origins(" https://a.example , https://b.example ");
-        assert_eq!(origins.len(), 2);
-        assert_eq!(origins[0], "https://a.example");
-        assert_eq!(origins[1], "https://b.example");
-    }
-
-    #[test]
-    fn empty_list_yields_no_origins() {
-        assert!(parse_cors_origins("").is_empty());
-        assert!(parse_cors_origins("   ").is_empty());
-        assert!(parse_cors_origins(" , , ").is_empty());
-    }
-}
-
 /// Background task that periodically compacts old snapshots.
 ///
 /// Runs once per Axum instance. Every hour it queries for snapshots
@@ -470,5 +450,25 @@ async fn snapshot_compaction_task(state: state::AppState) {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod cors_tests {
+    use super::parse_cors_origins;
+
+    #[test]
+    fn parses_and_trims_multiple_origins() {
+        let origins = parse_cors_origins(" https://a.example , https://b.example ");
+        assert_eq!(origins.len(), 2);
+        assert_eq!(origins[0], "https://a.example");
+        assert_eq!(origins[1], "https://b.example");
+    }
+
+    #[test]
+    fn empty_list_yields_no_origins() {
+        assert!(parse_cors_origins("").is_empty());
+        assert!(parse_cors_origins("   ").is_empty());
+        assert!(parse_cors_origins(" , , ").is_empty());
     }
 }
