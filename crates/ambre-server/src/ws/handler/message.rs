@@ -323,7 +323,23 @@ pub(crate) async fn verify_document_access(
     Ok(())
 }
 
-/// Verifies an Ed25519 signature over `nonce || ciphertext || public_data_bytes || commitment_tag`.
+/// Appends `len(field) as u32 LE || field` to `msg`.
+///
+/// MUST match `ambre_crypto::signature::push_framed` byte-for-byte: the client
+/// signs with that framing and the server (which does not link `ambre-crypto`)
+/// reconstructs it here to verify.
+fn push_framed(msg: &mut Vec<u8>, field: &[u8]) {
+    let len = u32::try_from(field.len()).expect("signed field exceeds u32::MAX");
+    msg.extend_from_slice(&len.to_le_bytes());
+    msg.extend_from_slice(field);
+}
+
+/// Verifies an Ed25519 signature over the length-prefixed transcript
+/// `len(nonce)||nonce || len(ciphertext)||ciphertext ||
+/// len(public_data_bytes)||public_data_bytes || len(commitment_tag)||commitment_tag`
+/// (every `len` a `u32` LE). The framing MUST match
+/// `ambre_crypto::signature::message`; positional (unframed) concatenation would
+/// let a distinct `(ciphertext, aad)` split forge the same transcript.
 ///
 /// This is the ONLY cryptographic operation performed by the Blind Relay.
 /// The server never decrypts content -- it only checks that the sender
@@ -337,10 +353,10 @@ pub(crate) fn verify_update_signature(
     let public_data_bytes = postcard::to_allocvec(&update.public_data).map_err(AppError::Decode)?;
 
     let mut signed_data = Vec::new();
-    signed_data.extend_from_slice(&update.nonce.0);
-    signed_data.extend_from_slice(&update.ciphertext.0);
-    signed_data.extend_from_slice(&public_data_bytes);
-    signed_data.extend_from_slice(&update.commitment_tag.0);
+    push_framed(&mut signed_data, &update.nonce.0);
+    push_framed(&mut signed_data, &update.ciphertext.0);
+    push_framed(&mut signed_data, &public_data_bytes);
+    push_framed(&mut signed_data, &update.commitment_tag.0);
 
     let vk = VerifyingKey::from_bytes(pubkey.as_array()).map_err(|_| AppError::InvalidSignature)?;
     let sig = DalekSig::from_slice(&update.signature.0).map_err(|_| AppError::InvalidSignature)?;
@@ -583,10 +599,10 @@ mod ed25519_tests {
 
         let public_data_bytes = postcard::to_allocvec(&public_data).unwrap();
         let mut signed_data = Vec::new();
-        signed_data.extend_from_slice(&nonce.0);
-        signed_data.extend_from_slice(&ciphertext.0);
-        signed_data.extend_from_slice(&public_data_bytes);
-        signed_data.extend_from_slice(&commitment_tag.0);
+        push_framed(&mut signed_data, &nonce.0);
+        push_framed(&mut signed_data, &ciphertext.0);
+        push_framed(&mut signed_data, &public_data_bytes);
+        push_framed(&mut signed_data, &commitment_tag.0);
 
         let sig = signing_key.sign(&signed_data);
         let signature = Signature(sig.to_bytes());
@@ -644,10 +660,10 @@ mod ed25519_tests {
 
         let public_data_bytes = postcard::to_allocvec(&public_data).unwrap();
         let mut signed_data = vec![];
-        signed_data.extend_from_slice(&nonce.0);
-        signed_data.extend_from_slice(&ciphertext.0);
-        signed_data.extend_from_slice(&public_data_bytes);
-        signed_data.extend_from_slice(&commitment_tag.0);
+        push_framed(&mut signed_data, &nonce.0);
+        push_framed(&mut signed_data, &ciphertext.0);
+        push_framed(&mut signed_data, &public_data_bytes);
+        push_framed(&mut signed_data, &commitment_tag.0);
 
         let sig = signing_key.sign(&signed_data);
 

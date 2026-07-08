@@ -198,3 +198,32 @@ pub async fn rotate_document_key(
     let _ = crate::redis_ops::doc_broadcast(&state.redis, &doc_id, &msg).await;
     Ok(axum::Json(serde_json::json!({"status":"rotated"})))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn doc_role_rank_ordering() {
+        assert!(doc_role_rank("owner") > doc_role_rank("editor"));
+        assert!(doc_role_rank("editor") > doc_role_rank("viewer"));
+        assert_eq!(doc_role_rank("nonsense"), None);
+    }
+
+    /// N2: an editor may grant editor/viewer but never owner.
+    #[test]
+    fn editor_cannot_grant_owner() {
+        let caller = doc_role_rank("editor").unwrap();
+        assert!(doc_role_rank("owner").unwrap() > caller); // owner grant blocked
+        assert!(doc_role_rank("editor").unwrap() <= caller);
+        assert!(doc_role_rank("viewer").unwrap() <= caller);
+    }
+
+    #[test]
+    fn owner_can_grant_any_valid_role() {
+        let caller = doc_role_rank("owner").unwrap();
+        for role in ["owner", "editor", "viewer"] {
+            assert!(doc_role_rank(role).unwrap() <= caller);
+        }
+    }
+}

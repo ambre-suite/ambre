@@ -19,13 +19,23 @@ impl SyncState {
                 let url = format!("{url_scheme}://{api_base}/api/keys/master");
                 match http::get_json_auth::<http::MasterKeyResponse>(&url, auth.clone()).await {
                     Ok(resp) => {
+                        // User-facing AuthError messages are deliberately generic:
+                        // they never carry crypto detail (algorithm names, key/salt
+                        // lengths, decrypt-failure specifics) that would leak the
+                        // account's cryptographic shape to whatever renders the
+                        // error. The concrete cause is logged locally instead.
+                        const CORRUPT: &str = "Unlock failed: account data is corrupted";
+                        const BAD_PASS: &str =
+                            "Unlock failed: incorrect passphrase or corrupted account data";
+
                         let salt = match base64::engine::general_purpose::URL_SAFE
                             .decode(&resp.master_key_salt)
                         {
                             Ok(s) => s,
                             Err(e) => {
+                                tracing::warn!("Sync: master_key_salt base64 decode failed: {e}");
                                 let _ = logic_tx.send(LogicEvent::AuthError {
-                                    message: format!("Invalid salt: {e}"),
+                                    message: CORRUPT.into(),
                                 });
                                 return;
                             }
@@ -35,15 +45,20 @@ impl SyncState {
                         {
                             Ok(k) => k,
                             Err(e) => {
+                                tracing::warn!("Sync: master_key_enc base64 decode failed: {e}");
                                 let _ = logic_tx.send(LogicEvent::AuthError {
-                                    message: format!("Invalid master_key_enc: {e}"),
+                                    message: CORRUPT.into(),
                                 });
                                 return;
                             }
                         };
                         if master_key_enc.len() < 24 {
+                            tracing::warn!(
+                                "Sync: master_key_enc too short ({} bytes)",
+                                master_key_enc.len()
+                            );
                             let _ = logic_tx.send(LogicEvent::AuthError {
-                                message: "Master key too short".into(),
+                                message: CORRUPT.into(),
                             });
                             return;
                         }
@@ -53,8 +68,9 @@ impl SyncState {
                             match ambre_crypto::passphrase::derive_user_key(&passphrase, &salt) {
                                 Ok(k) => k,
                                 Err(e) => {
+                                    tracing::warn!("Sync: user-key derivation failed: {e}");
                                     let _ = logic_tx.send(LogicEvent::AuthError {
-                                        message: format!("Key derivation failed: {e}"),
+                                        message: BAD_PASS.into(),
                                     });
                                     return;
                                 }
@@ -68,8 +84,11 @@ impl SyncState {
                         ) {
                             Ok(bytes) => bytes,
                             Err(e) => {
+                                // Almost always the wrong passphrase (AEAD auth
+                                // failure); could also be a tampered/corrupt row.
+                                tracing::warn!("Sync: master-seed AEAD open failed: {e}");
                                 let _ = logic_tx.send(LogicEvent::AuthError {
-                                    message: format!("Master seed decryption failed: {e}"),
+                                    message: BAD_PASS.into(),
                                 });
                                 return;
                             }
@@ -77,8 +96,9 @@ impl SyncState {
                         let seed_arr: [u8; 32] = match seed_bytes.try_into() {
                             Ok(arr) => arr,
                             Err(_) => {
+                                tracing::warn!("Sync: decrypted master seed has unexpected length");
                                 let _ = logic_tx.send(LogicEvent::AuthError {
-                                    message: "Master seed wrong length".into(),
+                                    message: CORRUPT.into(),
                                 });
                                 return;
                             }
@@ -220,7 +240,13 @@ impl SyncState {
         }
     }
 
-    pub(crate) fn handle_setup_account(&mut self, id: RequestId, passphrase: SecretBytes) {
+    pub(crate) fn handle_setup_account(
+        &mut self,
+        id: RequestId,
+        passphrase: SecretBytes,
+        email: String,
+        display_name: String,
+    ) {
         tracing::info!("Sync: SetupAccount (passphrase len={})", passphrase.len());
 
         let logic_tx = self.logic_tx.clone();
@@ -256,6 +282,8 @@ impl SyncState {
                 let url = format!("{url_scheme}://{api_base}/api/auth/setup");
                 let body = http::SetupAccountRequest {
                     passphrase: String::from_utf8_lossy(&passphrase).into_owned(),
+                    email,
+                    display_name,
                     master_key_enc: base64::engine::general_purpose::URL_SAFE
                         .encode(&master_key_with_nonce),
                     master_key_salt: base64::engine::general_purpose::URL_SAFE.encode(salt),
@@ -283,7 +311,9 @@ impl SyncState {
                 }
             });
         } else {
-            let _ = passphrase;
+            // Host-test / offline path: the identity is not persisted anywhere, so
+            // the supplied fields are dropped (passphrase zeroizes on drop).
+            let _ = (passphrase, email, display_name);
             let master_seed = MasterSeed::generate();
             self.signing_key = Some(master_seed.derive_signing_key());
             self.exchange_key = Some(master_seed.derive_exchange_key());

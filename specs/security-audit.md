@@ -546,6 +546,59 @@ exploitable in isolation; track them or explicitly close as WON'T-DO.
 
 ---
 
+## ADDENDUM 2026-07-08 (2) — SURFACED WHILE IMPLEMENTING WAVE R6
+
+Two issues in the account-setup path noticed during the N3 work. Neither was in
+the R6 scope; both are recorded here for a follow-up wave.
+
+### N4 (HIGH) — Passphrase transmitted in cleartext to the server (zero-knowledge breach)
+
+**Crate:** `ambre-server` / `ambre-sync`
+**Files:** `sync/auth.rs` (`handle_setup_account`), `routes/documents.rs`
+(`SetupAccountRequest`)
+
+`handle_setup_account` puts the raw passphrase in the setup request body
+(`passphrase: String::from_utf8_lossy(&passphrase).into_owned()`), and the server
+`SetupAccountRequest` still has a `passphrase: String` field (marked
+`#[allow(dead_code)]`, never used). The passphrase is client-only secret material:
+the master key is derived from it *client-side* (Argon2) and only the *wrapped*
+seed plus salt should ever reach the server. Shipping the plaintext passphrase
+over the wire — where it lands in request logs, proxy buffers, and the server
+process — directly violates the Zero-Knowledge pillar ("the server only knows
+routing metadata; no content, no encryption keys"). The field being unused
+server-side does not help: it is on the wire and in memory.
+
+**Impact.** A compromised or curious server (or any log/proxy in the path) learns
+the passphrase, from which the master seed and every DocumentKey derive. This is
+the strongest secret in the system leaking to the exact party the E2EE model
+assumes is untrusted.
+
+**Fix:** drop the `passphrase` field from both the sync `http::SetupAccountRequest`
+and the server `SetupAccountRequest`; the server never needs it (it only stores
+`master_key_enc` + `master_key_salt`). Add a regression assert that the setup
+request body carries no passphrase field.
+
+### N5 (LOW) — No uniqueness on `users.email` weakens the N3 identity
+
+**Crate:** `ambre-server`
+**Files:** `migrations/20250101000000_initial_schema.sql` (`email TEXT NOT NULL`),
+`db/users.rs` (`get_user_by_email`)
+
+N3 now records the client-supplied `email`, but the column has no `UNIQUE`
+constraint, so multiple accounts can share one email. That (a) leaves the original
+account-creation spam vector from N3 only partially closed, and (b) makes
+`get_user_by_email` (used by `invite_to_document`) ambiguous — it resolves the
+first match, so which identity an invite targets is not well-defined once
+duplicates exist. Deferred from R6 because a `UNIQUE` constraint is a migration
+that must also account for the OIDC placeholder rows.
+
+**Fix:** add a `UNIQUE` constraint (or partial unique index) on `email`, decide
+the OIDC-vs-setup collision policy, and map the insert conflict to `409 Conflict`
+rather than the current `500` (a unique violation currently surfaces as
+`AppError::Database`).
+
+---
+
 ## REMEDIATION ROADMAP
 
 Security-first ordering, grouped into waves. Same `[ ]`/`[x]` convention as
@@ -742,17 +795,56 @@ Each story carries its finding ID, the file to touch, and the concrete action.
       replay window the hash exists to close; growth is already membership-bound.
       (`server/s3.rs`, `ws/handler/message.rs`, `redis_ops.rs`)
 
-### Wave R6 — Organizations / key-escrow subsystem (new surface, 2026-07-08)
+### Wave R6 — Organizations / key-escrow subsystem (new surface, 2026-07-08) [x]
 
-- [ ] **N1** — enforce the k-of-n Shamir threshold before `recover_master_key`
-      releases `org_master_key_enc`, or restrict recovery to `owner` and reject
-      `shamir_threshold > 1` at org creation while reconstruction is unimplemented.
-      (`server/routes/orgs.rs`, `db/orgs.rs`)
-- [ ] **N2** — in `invite_to_document`, clamp the granted role to `<= caller.role`
-      so an `editor` cannot mint an `owner`. (`server/routes/share.rs`)
-- [ ] **N3** — replace the hardcoded `temp@ambre.app` / `"User"` identity in
-      `setup_account` with the real client-supplied identity. (`server/routes/documents.rs`)
-- [ ] **R6-residuals** — triage the carried "OTHER FINDINGS" no wave touched:
-      length-prefix the signature transcript, strip crypto detail from sync
-      `AuthError` messages, bound the ephemeral remote-counter map; close each as
-      fixed or WON'T-DO. (`crypto/signature.rs`, `sync/auth.rs`, `sync/lib.rs`)
+- [x] **N1** — recovery is now `owner`-only (was `owner`/`admin`) and
+      `create_org` rejects `shamir_threshold > 1` (plus a `1 <= threshold <= total`
+      bounds check) via `validate_shamir_params`, so the schema never advertises a
+      k-of-n quorum the server cannot enforce while threshold reconstruction is
+      unimplemented. `recover_master_key`'s doc comment now states the
+      single-authority contract loudly. Guards: `shamir_threshold_1_accepted`,
+      `shamir_threshold_above_1_rejected_until_reconstruction_lands`,
+      `shamir_out_of_range_rejected`. (`server/routes/orgs.rs`)
+- [x] **N2** — `invite_to_document` ranks roles (`doc_role_rank`: owner > editor >
+      viewer) and clamps the granted role to `<= caller.role`, so only an `owner`
+      may grant `owner`; an unknown role is rejected. Guards: `doc_role_rank_ordering`,
+      `editor_cannot_grant_owner`, `owner_can_grant_any_valid_role`.
+      (`server/routes/share.rs`)
+- [x] **N3** — `SetupAccountRequest` now carries client-supplied `email` /
+      `display_name` (plumbed through `RestCommand::SetupAccount`, the sync
+      `handle_setup_account` -> `http::SetupAccountRequest`); the hardcoded
+      `temp@ambre.app` / `"User"` is gone. Server-side `validate_identity` bounds
+      the email (`3..=254`, must contain a non-terminal `@`) and display name
+      (non-empty, <= 128 chars). Guards: `validate_identity_*`.
+      (`server/routes/documents.rs`, `sync/auth.rs`, `bus/rest.rs`, `sync/http.rs`)
+- [x] **R6-residuals**:
+      - **Signature transcript length-prefixed** — `signature::message` now frames
+        each field as `len(u32 LE) || bytes` (nonce, ciphertext, aad,
+        commitment_tag), so the ciphertext|aad boundary is unambiguous. The
+        server's independent `verify_update_signature` mirrors the exact framing
+        (`push_framed`, must stay byte-identical, documented on both sides). Guards:
+        `ciphertext_aad_boundary_is_unambiguous`, `sign_then_verify_roundtrips`.
+        (`crypto/signature.rs`, `server/ws/handler/message.rs`)
+      - **Sync `AuthError` sanitized** — the unlock error paths no longer leak
+        crypto detail (algorithm names, key/salt lengths, decrypt specifics) into
+        the user-facing message; they emit two generic strings
+        (`account data is corrupted` / `incorrect passphrase or corrupted account
+        data`) and log the concrete cause at WARN. (`sync/auth.rs`)
+      - **Ephemeral remote-counter map bounded** — `accept_ephemeral_counter` caps
+        the per-document map at `MAX_EPHEMERAL_REMOTE_AUTHORS` (512) and evicts the
+        least-active (lowest-counter) author at the cap, so a peer minting
+        arbitrary signing keys can no longer grow it without bound. Guards:
+        `monotonic_counter_accepted_replay_dropped`, `author_map_is_bounded`.
+        (`sync/lib.rs`, `sync/websocket.rs`)
+
+### Wave R7 — Account-setup path (surfaced during R6)
+
+- [ ] **N4** — stop shipping the passphrase to the server: remove the
+      `passphrase` field from the sync `http::SetupAccountRequest` and the server
+      `SetupAccountRequest` (the server only needs `master_key_enc` +
+      `master_key_salt`). Restores the Zero-Knowledge invariant.
+      (`sync/auth.rs`, `sync/http.rs`, `server/routes/documents.rs`)
+- [ ] **N5** — add a `UNIQUE` constraint / partial unique index on `users.email`,
+      settle the OIDC-vs-setup collision policy, and map the insert conflict to
+      `409` instead of `500`. (`server/migrations/**`, `db/users.rs`,
+      `routes/documents.rs`)

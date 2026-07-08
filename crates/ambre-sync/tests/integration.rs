@@ -71,6 +71,8 @@ fn setup_account_returns_created_with_recovery_words() {
         id,
         RestCommand::SetupAccount {
             passphrase: b"secret".to_vec().into(),
+            email: "alice@example.com".into(),
+            display_name: "Alice".into(),
         },
     );
 

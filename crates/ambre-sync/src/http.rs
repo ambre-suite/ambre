@@ -288,6 +288,8 @@ pub(crate) async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
 #[allow(dead_code)]
 pub(crate) struct SetupAccountRequest {
     pub passphrase: String,
+    pub email: String,
+    pub display_name: String,
     pub master_key_enc: String,
     pub master_key_salt: String,
     pub signing_pubkey: String,

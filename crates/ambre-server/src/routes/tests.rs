@@ -84,6 +84,8 @@ mod handler_tests {
 
         let body = serde_json::json!({
             "passphrase": "test",
+            "email": "user@ambre.app",
+            "display_name": "Test User",
             "master_key_enc": base64_encode(&[1u8; 32]),
             "master_key_salt": base64_encode(&[2u8; 16]),
             "signing_pubkey": hex::encode([3u8; 32]),
@@ -654,6 +656,8 @@ mod handler_tests {
     async fn setup_and_get_auth(app: &Router) -> String {
         let body = serde_json::json!({
             "passphrase": "test",
+            "email": "user@ambre.app",
+            "display_name": "Test User",
             "master_key_enc": base64_encode(&[1u8; 32]),
             "master_key_salt": base64_encode(&[2u8; 16]),
             "signing_pubkey": hex::encode([3u8; 32]),

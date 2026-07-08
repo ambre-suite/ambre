@@ -620,15 +620,11 @@ impl SyncState {
                     return;
                 };
 
-                // Anti-replay: reject ephemerals with a non-monotonic counter
-                // for the same author.
+                // Anti-replay: reject ephemerals with a non-monotonic counter for
+                // the same author. The counter map is bounded (see
+                // `accept_ephemeral_counter` / `MAX_EPHEMERAL_REMOTE_AUTHORS`).
                 let author_pk = *eph.public_data.pub_key.as_array();
-                let last_counter = doc_state
-                    .ephemeral_remote_counters
-                    .get(&author_pk)
-                    .copied()
-                    .unwrap_or(0);
-                if eph.public_data.counter.0 <= last_counter {
+                if !doc_state.accept_ephemeral_counter(author_pk, eph.public_data.counter.0) {
                     tracing::debug!(
                         "Sync: dropping replayed ephemeral from {:?} (counter {})",
                         author_pk,
@@ -636,9 +632,6 @@ impl SyncState {
                     );
                     return;
                 }
-                doc_state
-                    .ephemeral_remote_counters
-                    .insert(author_pk, eph.public_data.counter.0);
 
                 let opened = doc_state.open_ephemeral_fallback(&eph);
                 self.deliver_remote(doc_id, Some(opened), |payload| {

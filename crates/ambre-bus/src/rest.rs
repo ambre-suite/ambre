@@ -236,7 +236,14 @@ pub enum RestCommand {
         passphrase: SecretBytes,
     },
     /// First-time account setup. → `AccountCreated { recovery_words }`.
-    SetupAccount { passphrase: SecretBytes },
+    /// `email`/`display_name` are the user-supplied identity; the server records
+    /// them verbatim instead of a hardcoded placeholder (N3). `email` is the
+    /// handle other members resolve when sharing a document.
+    SetupAccount {
+        passphrase: SecretBytes,
+        email: String,
+        display_name: String,
+    },
     /// Dev-only: authenticate as `username` (created on the fly server-side),
     /// deriving keys deterministically from the username. Triggered by the
     /// `?user=<name>` URL param to test multi-user behaviour on one machine.
