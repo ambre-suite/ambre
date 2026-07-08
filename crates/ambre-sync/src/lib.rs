@@ -142,6 +142,13 @@ const QUARANTINE_LIMIT: usize = 1000;
 /// mirrors HTTP 401. The client reacts by refreshing its token and reconnecting.
 const WS_CLOSE_UNAUTHORIZED: u16 = 4401;
 
+/// Hard cap on the per-document ephemeral anti-replay map
+/// ([`SyncDocumentState::ephemeral_remote_counters`]). In practice the author set
+/// is bounded by document membership, but a malicious peer can mint arbitrary
+/// signing keys, so the map is capped to bound heap; at the cap a new author
+/// evicts the least-active (lowest-counter) entry.
+const MAX_EPHEMERAL_REMOTE_AUTHORS: usize = 512;
+
 // -----------------------------------------------------------------------------
 // Internal event bus — carries WebSocket frames and spawned-task results
 // into the non-blocking select loop. Sent by JS callbacks (onmessage /
@@ -421,6 +428,40 @@ impl SyncDocumentState {
                 pipeline::open_ephemeral(eph, &self.doc_key)
             }
         }
+    }
+
+    /// Anti-replay gate for an inbound ephemeral. Returns `true` if `counter` is
+    /// strictly greater than the last value seen for `author_pk` (accept and
+    /// record it); `false` if it is a replay (drop).
+    ///
+    /// The counter map is bounded by [`MAX_EPHEMERAL_REMOTE_AUTHORS`]: when a new
+    /// author would exceed the cap, the least-active entry (lowest counter) is
+    /// evicted first. Eviction resets that author's baseline, so a later *stale*
+    /// ephemeral from an evicted author could replay once -- harmless for
+    /// presence, and it cannot affect an active author whose counter keeps rising.
+    fn accept_ephemeral_counter(&mut self, author_pk: [u8; 32], counter: u64) -> bool {
+        let last = self
+            .ephemeral_remote_counters
+            .get(&author_pk)
+            .copied()
+            .unwrap_or(0);
+        if counter <= last {
+            return false;
+        }
+        let is_new = !self.ephemeral_remote_counters.contains_key(&author_pk);
+        if is_new && self.ephemeral_remote_counters.len() >= MAX_EPHEMERAL_REMOTE_AUTHORS {
+            // Evict the least-active (lowest-counter) author to make room.
+            let evict = self
+                .ephemeral_remote_counters
+                .iter()
+                .min_by_key(|&(_, &c)| c)
+                .map(|(k, _)| *k);
+            if let Some(evict) = evict {
+                self.ephemeral_remote_counters.remove(&evict);
+            }
+        }
+        self.ephemeral_remote_counters.insert(author_pk, counter);
+        true
     }
 
     /// Decrypts an update with the active key, falling back to every key in the
@@ -781,7 +822,11 @@ impl SyncState {
         match cmd {
             // -- Session -------------------------------------------------------
             RestCommand::Unlock { passphrase } => self.handle_unlock(id, passphrase),
-            RestCommand::SetupAccount { passphrase } => self.handle_setup_account(id, passphrase),
+            RestCommand::SetupAccount {
+                passphrase,
+                email,
+                display_name,
+            } => self.handle_setup_account(id, passphrase, email, display_name),
             RestCommand::DevLogin { username } => self.handle_dev_login(id, username),
             RestCommand::ChangePassphrase {
                 current_passphrase,
@@ -952,4 +997,43 @@ pub async fn run_wasm(
     }
 
     tracing::info!("Ambre Sync worker exiting (command channel closed)");
+}
+
+#[cfg(test)]
+mod ephemeral_counter_tests {
+    use super::*;
+
+    fn doc_state() -> SyncDocumentState {
+        SyncDocumentState::new(
+            DocumentId::new(),
+            DocumentKey::generate(),
+            DocType::Prose,
+            false,
+        )
+    }
+
+    #[test]
+    fn monotonic_counter_accepted_replay_dropped() {
+        let mut d = doc_state();
+        let author = [1u8; 32];
+        assert!(d.accept_ephemeral_counter(author, 1));
+        assert!(d.accept_ephemeral_counter(author, 2));
+        // Replay / stale counters are dropped.
+        assert!(!d.accept_ephemeral_counter(author, 2));
+        assert!(!d.accept_ephemeral_counter(author, 1));
+        // Forward progress resumes.
+        assert!(d.accept_ephemeral_counter(author, 3));
+    }
+
+    #[test]
+    fn author_map_is_bounded() {
+        let mut d = doc_state();
+        // Insert well past the cap, each a distinct author.
+        for i in 0..(MAX_EPHEMERAL_REMOTE_AUTHORS as u64 + 100) {
+            let mut author = [0u8; 32];
+            author[..8].copy_from_slice(&i.to_le_bytes());
+            assert!(d.accept_ephemeral_counter(author, 1));
+        }
+        assert!(d.ephemeral_remote_counters.len() <= MAX_EPHEMERAL_REMOTE_AUTHORS);
+    }
 }

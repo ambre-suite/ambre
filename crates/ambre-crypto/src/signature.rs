@@ -1,8 +1,17 @@
 //! Ed25519 signatures over the encrypted envelope.
 //!
-//! The signed message is `nonce || ciphertext || aad || commitment_tag`. Signing
-//! over the commitment tag prevents a relay from substituting it. The author's
-//! public key (in the message's public data) is the verification key.
+//! The signed transcript length-prefixes each field:
+//! `len(nonce) || nonce || len(ciphertext) || ciphertext || len(aad) || aad ||
+//! len(commitment_tag) || commitment_tag`, where every `len` is a `u32`
+//! little-endian byte count. The prefixes make every field boundary explicit, so
+//! two distinct `(ciphertext, aad)` splits can never produce the same transcript
+//! (positional concatenation would let `ciphertext || aad` collide across splits).
+//! Signing over the commitment tag prevents a relay from substituting it. The
+//! author's public key (in the message's public data) is the verification key.
+//!
+//! NOTE: `ambre-server` re-implements this exact framing in
+//! `ws/handler/message.rs::verify_update_signature` (it must not link
+//! `ambre-crypto`); the two layouts MUST stay byte-identical.
 
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 
@@ -11,13 +20,23 @@ use crate::error::CryptoError;
 /// Length of an Ed25519 signature, in bytes.
 pub const SIGNATURE_LEN: usize = 64;
 
+/// Appends `len(field) as u32 LE || field` to `msg`.
+fn push_framed(msg: &mut Vec<u8>, field: &[u8]) {
+    // A field longer than u32::MAX is not representable on the wire and never
+    // occurs (nonce/tag are fixed-small, ciphertext is bounded by transport
+    // limits); truncating the length would break the transcript, so assert it.
+    let len = u32::try_from(field.len()).expect("signed field exceeds u32::MAX");
+    msg.extend_from_slice(&len.to_le_bytes());
+    msg.extend_from_slice(field);
+}
+
 fn message(nonce: &[u8], ciphertext: &[u8], aad: &[u8], commitment_tag: &[u8]) -> Vec<u8> {
     let mut msg =
-        Vec::with_capacity(nonce.len() + ciphertext.len() + aad.len() + commitment_tag.len());
-    msg.extend_from_slice(nonce);
-    msg.extend_from_slice(ciphertext);
-    msg.extend_from_slice(aad);
-    msg.extend_from_slice(commitment_tag);
+        Vec::with_capacity(16 + nonce.len() + ciphertext.len() + aad.len() + commitment_tag.len());
+    push_framed(&mut msg, nonce);
+    push_framed(&mut msg, ciphertext);
+    push_framed(&mut msg, aad);
+    push_framed(&mut msg, commitment_tag);
     msg
 }
 
@@ -53,4 +72,45 @@ pub fn verify(
     verifying_key
         .verify_strict(&msg, &sig)
         .map_err(|_| CryptoError::InvalidSignature)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ed25519_dalek::SigningKey;
+
+    fn test_key() -> SigningKey {
+        SigningKey::from_bytes(&[7u8; 32])
+    }
+
+    #[test]
+    fn sign_then_verify_roundtrips() {
+        let sk = test_key();
+        let pk = sk.verifying_key().to_bytes();
+        let sig = sign(&sk, b"nonce____", b"cipher", b"aad", b"tag");
+        assert!(verify(&pk, b"nonce____", b"cipher", b"aad", b"tag", &sig).is_ok());
+    }
+
+    #[test]
+    fn tampered_field_rejected() {
+        let sk = test_key();
+        let pk = sk.verifying_key().to_bytes();
+        let sig = sign(&sk, b"nonce____", b"cipher", b"aad", b"tag");
+        assert!(verify(&pk, b"nonce____", b"CIPHER", b"aad", b"tag", &sig).is_err());
+    }
+
+    /// The length prefixes make the ciphertext|aad boundary unambiguous: two
+    /// distinct splits that share the same concatenation must not verify under a
+    /// signature made for the other split. Without framing, `("ab","c")` and
+    /// `("a","bc")` would produce an identical transcript.
+    #[test]
+    fn ciphertext_aad_boundary_is_unambiguous() {
+        let sk = test_key();
+        let pk = sk.verifying_key().to_bytes();
+        let sig = sign(&sk, b"n", b"ab", b"c", b"t");
+        // Same concatenation, different split -> must be rejected.
+        assert!(verify(&pk, b"n", b"a", b"bc", b"t", &sig).is_err());
+        // Exact split -> accepted.
+        assert!(verify(&pk, b"n", b"ab", b"c", b"t", &sig).is_ok());
+    }
 }

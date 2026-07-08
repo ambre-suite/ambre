@@ -32,10 +32,34 @@ fn parse_user_id(s: &str) -> Result<ambre_core::UserId, AppError> {
 pub struct SetupAccountRequest {
     #[allow(dead_code)]
     pub passphrase: String,
+    /// User-supplied login handle. Recorded verbatim (N3) and resolved by other
+    /// members when sharing a document (`get_user_by_email`).
+    pub email: String,
+    /// User-supplied display name (N3).
+    pub display_name: String,
     pub master_key_enc: String,
     pub master_key_salt: String,
     pub signing_pubkey: String,
     pub exchange_pubkey: String,
+}
+
+/// Bounds the client-supplied identity: a syntactically plausible, length-bounded
+/// email and a non-empty, length-bounded display name. Full email verification is
+/// out of scope; this only rejects obvious garbage and unbounded input.
+fn validate_identity(email: &str, display_name: &str) -> Result<(), AppError> {
+    let email = email.trim();
+    let name = display_name.trim();
+    let email_ok = (3..=254).contains(&email.len())
+        && email.contains('@')
+        && !email.starts_with('@')
+        && !email.ends_with('@');
+    if !email_ok {
+        return Err(AppError::BadRequest("invalid email".into()));
+    }
+    if name.is_empty() || name.chars().count() > 128 {
+        return Err(AppError::BadRequest("invalid display_name".into()));
+    }
+    Ok(())
 }
 /// Response after successful account setup. Carries the freshly minted token
 /// pair (kept in client memory) and the newly assigned user ID.
@@ -52,6 +76,7 @@ pub async fn setup_account(
     Json(req): Json<SetupAccountRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
+    validate_identity(&req.email, &req.display_name)?;
     let mk_enc = base64::engine::general_purpose::URL_SAFE
         .decode(&req.master_key_enc)
         .map_err(|e| AppError::Conflict {
@@ -71,8 +96,8 @@ pub async fn setup_account(
 
     let user = db::create_user(
         &state.db,
-        "temp@ambre.app",
-        "User",
+        req.email.trim(),
+        req.display_name.trim(),
         &mk_enc,
         &mk_salt,
         &spk,
@@ -536,4 +561,35 @@ pub async fn update_document_member_role(
     db::update_document_member_role(&state.db, &doc_id, &target, &req.role).await?;
     tracing::info!(document_id = %doc_id, target_user = %target, role = %req.role, by = %s.user_id, "member role updated");
     Ok(axum::Json(serde_json::json!({"status":"role_updated"})))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- Identity validation (N3) -------------------------------------------
+
+    #[test]
+    fn validate_identity_accepts_plausible_input() {
+        assert!(validate_identity("alice@example.com", "Alice").is_ok());
+        assert!(validate_identity("  bob@ambre.app  ", "  Bob  ").is_ok());
+    }
+
+    #[test]
+    fn validate_identity_rejects_bad_email() {
+        assert!(validate_identity("no-at-sign", "Alice").is_err());
+        assert!(validate_identity("@example.com", "Alice").is_err());
+        assert!(validate_identity("alice@", "Alice").is_err());
+        assert!(validate_identity("", "Alice").is_err());
+        let long = format!("{}@x.com", "a".repeat(300));
+        assert!(validate_identity(&long, "Alice").is_err());
+    }
+
+    #[test]
+    fn validate_identity_rejects_bad_display_name() {
+        assert!(validate_identity("alice@example.com", "").is_err());
+        assert!(validate_identity("alice@example.com", "   ").is_err());
+        let long = "x".repeat(129);
+        assert!(validate_identity("alice@example.com", &long).is_err());
+    }
 }
