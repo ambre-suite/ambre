@@ -586,34 +586,10 @@ impl BinOpKind {
 // Helpers
 // -----------------------------------------------------------------------------
 
-/// Converts a zero-based column index to spreadsheet letters (A, B, ..., Z,
-/// AA, AB, ...).
-pub(crate) fn col_to_alpha(mut col: u32) -> String {
-    let mut chars = Vec::new();
-    loop {
-        chars.push((b'A' + (col % 26) as u8) as char);
-        if col < 26 {
-            break;
-        }
-        col = col / 26 - 1;
-    }
-    chars.into_iter().rev().collect()
-}
-
-/// Converts spreadsheet column letters to a zero-based index.
-pub(crate) fn alpha_to_col(s: &str) -> Result<u32, String> {
-    if s.is_empty() || !s.bytes().all(|b| b.is_ascii_uppercase()) {
-        return Err(format!("invalid column reference: {s}"));
-    }
-    let mut col = 0u32;
-    for b in s.bytes() {
-        col = col
-            .checked_mul(26)
-            .and_then(|c| c.checked_add((b - b'A') as u32 + 1))
-            .ok_or_else(|| format!("column overflow: {s}"))?;
-    }
-    Ok(col.saturating_sub(1))
-}
+// Column-label conversions moved to the crate-level `columns` module (single
+// source of truth); re-exported here so existing `types::col_to_alpha` /
+// `types::alpha_to_col` call sites keep compiling.
+pub(crate) use crate::columns::{alpha_to_col, col_to_alpha};
 
 #[cfg(test)]
 mod tests {

@@ -86,27 +86,21 @@ where
                 Alignment::End | Alignment::Right => (avail - text_w).max(0.0),
                 _ => 0.0,
             };
-            let brush = Brush::Solid(content.fg.map(rgb).unwrap_or(palette.cell_text));
+            let fg = content.fg.map(rgb).unwrap_or(palette.cell_text);
+            let brush = Brush::Solid(fg);
             surface.push_clip(rect);
-            for line in layout_text.lines() {
-                for item in line.items() {
-                    let PositionedLayoutItem::GlyphRun(run) = item else {
-                        continue;
-                    };
-                    let tx = rect.x0 + CELL_PAD_X * layout.zoom + x_off + run.offset() as f64;
-                    let ty = rect.y0 + y_off + run.baseline() as f64;
-                    surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
-                    let dec = content.fg.map(rgb).unwrap_or(palette.cell_text);
-                    let adv = run.advance() as f64;
-                    if content.underline {
-                        surface.stroke_line(tx, ty + 2.0, tx + adv, ty + 2.0, dec, 1.0);
-                    }
-                    if content.strikethrough {
-                        let sy = ty - (font_size as f64) * 0.3;
-                        surface.stroke_line(tx, sy, tx + adv, sy, dec, 1.0);
-                    }
-                }
-            }
+            let origin_x = rect.x0 + CELL_PAD_X * layout.zoom + x_off;
+            draw_layout_runs_decorated(
+                surface,
+                layout_text,
+                origin_x,
+                rect.y0 + y_off,
+                &brush,
+                fg,
+                font_size,
+                content.underline,
+                content.strikethrough,
+            );
             surface.pop_clip();
             drawn += 1;
         }

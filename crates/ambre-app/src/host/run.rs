@@ -303,20 +303,59 @@ where
     // When the window moves between displays of different density, the canvas
     // CSS size stays the same but devicePixelRatio changes. ResizeObserver does
     // not fire in that case, so we watch resolution changes separately.
+    //
+    // A `MediaQueryList` only fires `change` when it crosses ITS OWN threshold,
+    // so the old `match_media("(resolution)")` -- a feature-existence query with
+    // no threshold -- never fired. The correct pattern is to query the CURRENT
+    // `Ndppx` and re-arm a fresh listener after each change, since the new DPR
+    // needs a new query. `arm_dpi_watch` does exactly that.
+    fn arm_dpi_watch(host: Rc<RefCell<FrameHost>>, canvas: HtmlCanvasElement) {
+        let Some(window) = web_sys::window() else {
+            return;
+        };
+        let dpr = window.device_pixel_ratio();
+        let query = format!("(resolution: {dpr}dppx)");
+        let Ok(Some(mql)) = window.match_media(&query) else {
+            return;
+        };
+        let cb = Closure::once_into_js(move |_event: web_sys::MediaQueryListEvent| {
+            if let Some((w, h)) = size_backing_store(&canvas) {
+                host.borrow_mut().resize(w, h);
+            }
+            // Re-arm for the new device pixel ratio: this listener has fired and
+            // its query no longer matches the current DPR.
+            arm_dpi_watch(host.clone(), canvas.clone());
+        });
+        let _ = mql.add_event_listener_with_callback("change", cb.unchecked_ref());
+    }
+    arm_dpi_watch(Rc::clone(&host), canvas.clone());
+
+    // -- GPU context loss / restore -> host. -----------------------------------
+    // A WebGL/WebGPU context can be dropped by the browser (GPU reset, the tab
+    // backgrounded, driver hiccup). Without handling, the canvas stays blank
+    // forever. `preventDefault` on `webglcontextlost` is REQUIRED for the
+    // browser to later fire `webglcontextrestored`; on restore we reconfigure
+    // the surface and force a full repaint.
+    {
+        let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
+            tracing::warn!("webglcontextlost");
+            event.prevent_default();
+        });
+        let _ = canvas
+            .add_event_listener_with_callback("webglcontextlost", cb.as_ref().unchecked_ref());
+        cb.forget();
+    }
     {
         let host_c = Rc::clone(&host);
         let canvas_c = canvas.clone();
-        let cb = Closure::<dyn FnMut(web_sys::MediaQueryListEvent)>::new(move |_event| {
+        let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |_event| {
+            tracing::info!("webglcontextrestored");
             if let Some((w, h)) = size_backing_store(&canvas_c) {
-                host_c.borrow_mut().resize(w, h);
+                host_c.borrow_mut().notify_context_restored(w, h);
             }
         });
-        if let Some(mql) = web_sys::window()
-            .and_then(|w| w.match_media("(resolution)").ok())
-            .flatten()
-        {
-            let _ = mql.add_event_listener_with_callback("change", cb.as_ref().unchecked_ref());
-        }
+        let _ = canvas
+            .add_event_listener_with_callback("webglcontextrestored", cb.as_ref().unchecked_ref());
         cb.forget();
     }
 

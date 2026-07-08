@@ -55,7 +55,11 @@ impl DrawSurface for WgpuSurface<'_> {
 
     fn stroke_rect(&mut self, rect: Rect, color: Color, width: f64) {
         let hw = width * 0.5;
-        // 4 edge quads with mitered corners.
+        // Picture-frame decomposition: two full-width horizontal bars (which
+        // own the four corners) plus two verticals INSET to sit strictly
+        // between them. The quads share only zero-area edges, so no pixel is
+        // painted twice -- a translucent stroke keeps a uniform alpha instead of
+        // the doubled corners a naive 4-overlapping-quad frame produces.
         self.fill_rect(
             Rect::new(rect.x0 - hw, rect.y0 - hw, rect.x1 + hw, rect.y0 + hw),
             color,
@@ -64,14 +68,19 @@ impl DrawSurface for WgpuSurface<'_> {
             Rect::new(rect.x0 - hw, rect.y1 - hw, rect.x1 + hw, rect.y1 + hw),
             color,
         );
-        self.fill_rect(
-            Rect::new(rect.x0 - hw, rect.y0 + hw, rect.x0 + hw, rect.y1 - hw),
-            color,
-        );
-        self.fill_rect(
-            Rect::new(rect.x1 - hw, rect.y0 + hw, rect.x1 + hw, rect.y1 - hw),
-            color,
-        );
+        // Skip the inset verticals when the rect is shorter than the stroke:
+        // the two horizontal bars already overlap and cover the whole span, and
+        // an inverted `y0 + hw > y1 - hw` rect would otherwise produce garbage.
+        if rect.y1 - rect.y0 > width {
+            self.fill_rect(
+                Rect::new(rect.x0 - hw, rect.y0 + hw, rect.x0 + hw, rect.y1 - hw),
+                color,
+            );
+            self.fill_rect(
+                Rect::new(rect.x1 - hw, rect.y0 + hw, rect.x1 + hw, rect.y1 - hw),
+                color,
+            );
+        }
     }
 
     fn stroke_line(&mut self, x0: f64, y0: f64, x1: f64, y1: f64, color: Color, width: f64) {

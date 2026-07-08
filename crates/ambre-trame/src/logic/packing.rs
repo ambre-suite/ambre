@@ -210,22 +210,9 @@ pub(crate) fn format_number(value: f64, fmt: &CellFormat, decimals: Option<u8>) 
     }
 }
 
-/// Convert a 0-based column index to a spreadsheet column label (A, B, ..., Z,
-/// AA, AB, ...).
-///
-/// col=0 -> "A", col=25 -> "Z", col=26 -> "AA", col=701 -> "ZZ".
-pub(crate) fn col_to_alpha(mut col: u32) -> String {
-    let mut result = String::new();
-    loop {
-        let rem = (col % 26) as u8;
-        result.insert(0, (b'A' + rem) as char);
-        if col < 26 {
-            break;
-        }
-        col = col / 26 - 1;
-    }
-    result
-}
+// Column-label conversion now lives in the crate-level `columns` module;
+// re-exported so `packing::col_to_alpha` call sites keep compiling.
+pub(crate) use crate::columns::col_to_alpha;
 
 #[cfg(test)]
 mod tests {

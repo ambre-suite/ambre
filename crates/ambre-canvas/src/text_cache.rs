@@ -40,10 +40,21 @@ struct CacheKey {
 // TextCache
 // -----------------------------------------------------------------------------
 
+/// A cached layout plus the monotonic tick of its last access, used to drive
+/// least-recently-used eviction instead of clearing the whole cache.
+struct CachedLayout {
+    layout: Layout<Brush>,
+    last_used: u64,
+}
+
 pub struct TextCache {
-    layouts: FxHashMap<CacheKey, Layout<Brush>>,
+    layouts: FxHashMap<CacheKey, CachedLayout>,
     layout_cx: LayoutContext<Brush>,
     scale: f32,
+    /// Monotonic access clock; bumped on every `get_or_build` so eviction can
+    /// rank entries by recency. Wraps only after 2^64 accesses (never in
+    /// practice).
+    tick: u64,
     // Per-frame diagnostics.
     pub frame_hits: usize,
     pub frame_misses: usize,
@@ -55,6 +66,7 @@ impl TextCache {
             layouts: FxHashMap::default(),
             layout_cx: LayoutContext::new(),
             scale,
+            tick: 0,
             frame_hits: 0,
             frame_misses: 0,
         }
@@ -78,11 +90,34 @@ impl TextCache {
         }
     }
 
-    /// Evict all entries when the cache exceeds `max_entries`.
+    /// Evict the least-recently-used entries when the cache exceeds
+    /// `max_entries`, keeping the hottest layouts warm across frames.
+    ///
+    /// The previous implementation `clear()`ed the entire map on overflow,
+    /// which threw away every still-visible cell's layout and forced a full
+    /// re-shape on the next frame (a visible stall right when the sheet is
+    /// busiest). Instead we drop entries in ascending `last_used` order down to
+    /// a low-water mark (75% of the cap), so a single overflow frame reshapes
+    /// only the coldest quarter rather than everything.
     pub fn evict_if_oversized(&mut self, max_entries: usize) {
-        if self.layouts.len() > max_entries {
-            self.layouts.clear();
+        if self.layouts.len() <= max_entries {
+            return;
         }
+        // Low-water mark: retain the hottest 75% so we do not re-run eviction
+        // every frame once we hover near the cap.
+        let target = max_entries - max_entries / 4;
+        let to_remove = self.layouts.len() - target;
+        // Partial selection of the `to_remove` smallest `last_used` ticks. A
+        // full sort of the keys is O(n log n); collecting the ticks and picking
+        // a threshold is O(n) and enough here since caps are a few thousand.
+        let mut ticks: Vec<u64> = self.layouts.values().map(|c| c.last_used).collect();
+        // `select_nth_unstable` partitions so everything left of `to_remove`
+        // is <= the pivot: that pivot is the eviction threshold.
+        let threshold = *ticks.select_nth_unstable(to_remove - 1).1;
+        // Retain entries strictly hotter than the threshold. Ties on the
+        // threshold tick are kept, so we may retain slightly more than `target`
+        // (harmless: the next overflow trims again).
+        self.layouts.retain(|_, c| c.last_used > threshold);
     }
 
     /// Return a shaped `Layout` for `text`, building it on first access.
@@ -139,11 +174,16 @@ impl TextCache {
             font: family.map(Box::from),
         };
 
+        self.tick += 1;
+        let tick = self.tick;
+
         use std::collections::hash_map::Entry;
         match self.layouts.entry(key) {
             Entry::Occupied(e) => {
                 self.frame_hits += 1;
-                e.into_mut()
+                let cached = e.into_mut();
+                cached.last_used = tick;
+                &cached.layout
             }
             Entry::Vacant(e) => {
                 self.frame_misses += 1;
@@ -161,7 +201,11 @@ impl TextCache {
                     break_word,
                     self.scale,
                 );
-                e.insert(layout)
+                &e.insert(CachedLayout {
+                    layout,
+                    last_used: tick,
+                })
+                .layout
             }
         }
     }

@@ -624,20 +624,57 @@ Each story carries its finding ID, the file to touch, and the concrete action.
       reachable behind `DEV_MODE` (logged at startup). Parsing guard:
       `cors_tests`. (`server/main.rs`)
 
-### Wave R5 — Maintainability debt (no security impact)
+### Wave R5 — Maintainability debt (no security impact) [x]
 
-- [ ] **trame-formula** — bound `formula/dag.rs` range registration (currently
-      O(range_size); now reachable via remote apply); stop `.ok()`-swallowing
-      Loro export errors in `flush_delta`. (`trame/src/logic/sync.rs`, `formula/dag.rs`)
-- [ ] **trame-dedup** — collapse the ×4 `col_to_alpha` and ×5 glyph-draw copies;
-      add guards for `LEFT`/`RIGHT` negative length, `Pow` NaN/inf, negative-float
-      `as u32`. (`trame/src/**`)
-- [ ] **canvas-eviction** — weighted-LRU eviction for the glyph atlas and text
-      cache instead of full-clear (M3/M4). (`canvas/render/mod.rs`, `text_cache.rs`)
-- [ ] **canvas-gpu** — `webglcontextlost`/`webglcontextrestored` + device
-      re-creation; fix the `matchMedia` DPI listener (M1/M2). (`canvas/host.rs`)
-- [ ] **canvas-stroke** — single mitered quad strip for `stroke_rect` to kill the
-      translucent-corner double-blend (M5). (`canvas/render/mod.rs:1251`)
-- [ ] **server-hygiene** — prune the `doc:{id}:clocks` hash; fix the flusher
-      partial-failure re-upload (`ltrim` skipped on `break`); audit request-path
-      `.expect()` calls. (`server/redis_ops.rs`, `s3.rs`, `ws/handler.rs`)
+- [x] **trame-formula** — range registration in `formula/dag.rs` is already
+      two-level (O(ranges), not O(range_size)); the residual O(range_size) hazard
+      was `eval_range` materializing one `CellValue` per member cell, so a peer's
+      `=SUM(A1:ZZ100000)` could OOM a collaborator's Logic worker. Capped at
+      `MAX_RANGE_CELLS` (1M) -> `#REF!` past the ceiling
+      (`eval_range_over_cell_cap_yields_ref_error`). `flush_delta` no longer
+      `.ok()`-swallows a failed Loro export: it logs at ERROR and RETAINS the
+      export cursor so the delta is retried instead of silently lost (which,
+      with remote apply live, would mean permanent divergence).
+      (`trame/src/logic/sync.rs`, `formula/vm.rs`)
+- [x] **trame-dedup** — the four `col_to_alpha`/`col_label`/`col_letter` copies
+      and the two `alpha_to_col` copies now delegate to a single crate-level
+      `columns` module; the five `lines() -> GlyphRun -> draw_glyphs` loops
+      collapse into `render::text::draw_layout_runs` (+ a `_decorated` variant
+      for the underline/strikethrough cell paths). Guards added: `LEFT`/`RIGHT`
+      reject a negative/non-finite length with `#NUM!` (`str_count_arg`, no more
+      `as usize` wrap), `Pow` surfaces NaN/inf as `#NUM!`. (`trame/src/columns.rs`,
+      `formula/vm.rs`, `formula/functions/builtins_a.rs`, `render/**`, `ui/**`)
+- [x] **canvas-eviction** — `TextCache` evicts by LRU (`last_used` tick) down to
+      a 75% low-water mark instead of `clear()`ing the whole map (M4). The glyph
+      atlas keeps a per-glyph retained bitmap + `last_used` frame and, on
+      overflow, defers to a next-frame `compact()` that repacks the last
+      `KEEP_FRAMES` working set from the retained bitmaps (no re-rasterization,
+      no blank flash) instead of the old full-clear (M3). Deferred so it never
+      rewrites UVs already baked into the current frame's vertex buffer.
+      (`canvas/text_cache.rs`, `canvas/render/atlas.rs`)
+- [x] **canvas-gpu** — `webglcontextlost` (with the required `preventDefault`)
+      and `webglcontextrestored` listeners are wired on the canvas;
+      restore reconfigures the surface + offscreens and forces a full repaint
+      (`FrameHost::notify_context_restored`). A `Lost`/`Outdated`
+      `get_current_texture` now reconfigures and skips the frame instead of just
+      logging. The DPI watcher is fixed: the old `match_media("(resolution)")`
+      never fired (no threshold); it now queries `(resolution: Ndppx)` and
+      re-arms on each change (M1/M2). (`app/host/run.rs`, `app/host/frame.rs`)
+- [x] **canvas-stroke** — `stroke_rect` was already a non-overlapping
+      picture-frame (two full-width horizontals owning the corners + two inset
+      verticals), so the M5 translucent double-blend was closed by the refactor;
+      documented, and guarded the degenerate rect-shorter-than-stroke case that
+      would otherwise emit an inverted vertical quad. (`canvas/render/surface.rs`)
+- [x] **server-hygiene** — the flusher `ltrim` desync is fixed: it now trims by a
+      `processed` count that advances on BOTH successful uploads and dead-lettered
+      poison entries and stops only on the first TRANSIENT failure, so a poison
+      entry ahead of a good one no longer re-uploads the good one every cycle and
+      a trailing poison no longer retries forever (dead-lettered to
+      `{prefix}:deadletter`). The request-path `postcard::to_allocvec(update)
+      .expect(...)` is replaced by log-and-return (the remaining non-test
+      `.expect()`s are startup/config invariants). Pruning `doc:{id}:clocks` is a
+      WON'T DO (documented on the Lua script): a TTL would lock a returning
+      author out under the strict-clock invariant, per-author prune has no
+      `user_id -> signing_key` mapping to target, and either would reopen the
+      replay window the hash exists to close; growth is already membership-bound.
+      (`server/s3.rs`, `ws/handler/message.rs`, `redis_ops.rs`)

@@ -221,52 +221,58 @@ async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &str) {
         return;
     }
 
-    let mut uploaded_count: isize = 0;
+    // Dead-letter list for permanently-bad entries (malformed JSON / base64),
+    // derived from the pending key so we do not need to re-parse the doc id.
+    let deadletter_key = pending_key
+        .strip_suffix(":pending")
+        .map(|prefix| format!("{prefix}:deadletter"));
+
+    // Count of contiguous FRONT entries we have finished with -- either
+    // uploaded to S3 or dead-lettered as poison. This is the exact `ltrim`
+    // start index. It must track BOTH outcomes: the old code trimmed by the
+    // upload count alone, so a `continue`d poison entry ahead of a good one
+    // desynced the index (re-uploading the good entry every cycle) and a
+    // trailing poison entry was retried forever. We only advance the front and
+    // stop on the first TRANSIENT (retryable) failure, so the trim never skips
+    // an entry we still need to retry.
+    let mut processed: isize = 0;
     for blob_str in &blobs {
         // Never log `blob_str`: it carries `update_b64`, the E2EE ciphertext.
         // Only routing metadata (redis key, byte length, and once parsed the
         // s3_key / seq) is safe to surface (C1).
-        let parsed: serde_json::Value = match serde_json::from_str(blob_str) {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::error!(
-                    key = pending_key,
-                    blob_len = blob_str.len(),
-                    error = %e,
-                    "flush: json parse failed"
-                );
-                continue;
-            }
+        let parsed: Option<serde_json::Value> = serde_json::from_str(blob_str).ok();
+        let poison = |reason: &str, seq: u64| {
+            tracing::error!(
+                key = pending_key,
+                seq,
+                blob_len = blob_str.len(),
+                reason,
+                "flush: dead-lettering poison entry"
+            );
         };
 
-        let s3_key = match parsed["s3_key"].as_str() {
-            Some(k) => k,
-            None => {
-                let seq = parsed["seq"].as_u64().unwrap_or(0);
-                tracing::error!(key = pending_key, seq, "flush: missing s3_key");
-                continue;
-            }
-        };
-
-        let seq = parsed["seq"].as_u64().unwrap_or(0);
-
-        let update_b64 = match parsed["update_b64"].as_str() {
-            Some(c) => c,
-            None => {
-                tracing::error!(s3_key, seq, "flush: missing update_b64");
-                continue;
-            }
-        };
-
-        let update_wire = {
+        // Resolve the routing fields; any structural defect is a permanent
+        // poison entry (it will never parse), so dead-letter it and advance
+        // past it rather than blocking the queue forever.
+        let fields = parsed.as_ref().and_then(|p| {
+            let s3_key = p["s3_key"].as_str()?;
+            let update_b64 = p["update_b64"].as_str()?;
+            let seq = p["seq"].as_u64().unwrap_or(0);
             use base64::Engine;
-            match base64::engine::general_purpose::URL_SAFE.decode(update_b64) {
-                Ok(data) => data,
-                Err(e) => {
-                    tracing::error!(s3_key, seq, error = %e, "flush: base64 decode failed");
-                    continue;
-                }
+            let wire = base64::engine::general_purpose::URL_SAFE
+                .decode(update_b64)
+                .ok()?;
+            Some((s3_key.to_string(), seq, wire))
+        });
+
+        let Some((s3_key, seq, update_wire)) = fields else {
+            let seq = parsed.as_ref().and_then(|p| p["seq"].as_u64()).unwrap_or(0);
+            poison("malformed json / missing fields / bad base64", seq);
+            if let Some(dlk) = &deadletter_key {
+                let _: Result<usize, _> = state.redis.rpush(dlk, [blob_str]).await;
             }
+            processed += 1;
+            continue;
         };
 
         let body = ByteStream::from(update_wire);
@@ -274,24 +280,26 @@ async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &str) {
             .s3
             .put_object()
             .bucket(&state.s3_bucket)
-            .key(s3_key)
+            .key(&s3_key)
             .body(body)
             .send()
             .await
         {
             Ok(_) => {
                 tracing::debug!(s3_key, seq, "flushed delta to S3");
-                uploaded_count += 1;
+                processed += 1;
             }
             Err(e) => {
-                tracing::error!(s3_key, seq, error = %e, "flush: S3 upload failed");
+                // Transient (retryable) failure: stop here so the front trim
+                // keeps this entry and everything after it for the next cycle.
+                tracing::error!(s3_key, seq, error = %e, "flush: S3 upload failed, will retry");
                 break;
             }
         }
     }
 
-    if uploaded_count > 0 {
-        let _: Result<(), _> = state.redis.ltrim(pending_key, uploaded_count, -1).await;
+    if processed > 0 {
+        let _: Result<(), _> = state.redis.ltrim(pending_key, processed, -1).await;
     }
 }
 

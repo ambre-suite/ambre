@@ -16,6 +16,9 @@
 //! The UI half is consumed by `ambre-app` and the logic half by `ambre-logic`;
 //! both link into the single WASM binary.
 
+/// Canonical spreadsheet column-label conversions (`col_to_alpha` /
+/// `alpha_to_col`), shared by the formula engine, logic, and UI/chrome.
+pub mod columns;
 pub mod formula;
 pub mod logic;
 pub mod model;

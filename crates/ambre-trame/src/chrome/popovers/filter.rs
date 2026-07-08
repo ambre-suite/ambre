@@ -33,17 +33,8 @@ const FILTER_OPS: &[(FilterOp, &str)] = &[
 ];
 
 /// A1-style column label for a 0-based grid column index (0 -> "A", 26 -> "AA").
-fn col_label(mut col: u32) -> String {
-    let mut out = Vec::new();
-    loop {
-        out.push(b'A' + (col % 26) as u8);
-        if col < 26 {
-            break;
-        }
-        col = col / 26 - 1;
-    }
-    out.reverse();
-    String::from_utf8(out).unwrap_or_default()
+fn col_label(col: u32) -> String {
+    crate::columns::col_to_alpha(col)
 }
 
 /// The shared filter popover: anchored under the active column header, it offers
