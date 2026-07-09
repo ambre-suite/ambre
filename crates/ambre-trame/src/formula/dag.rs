@@ -85,15 +85,11 @@ impl DependencyGraph {
     ) -> Result<(), CycleError> {
         let node = self.get_or_create_node(formula_cell);
 
-        // Remove old cell edges pointing to formula_cell (incoming).
-        let old_edges: Vec<_> = self
-            .cell_dag
-            .edges_directed(node, Direction::Incoming)
-            .map(|e| e.id())
-            .collect();
-        for e in old_edges {
-            self.cell_dag.remove_edge(e);
-        }
+        // Drop the previous dependencies, cell and range alike. Both are cleared
+        // up front so that a rejected formula (cycle) is left depending on
+        // nothing, rather than keeping range entries its bytecode no longer has.
+        self.clear_incoming(node);
+        self.clear_range_deps(formula_cell);
 
         // Add new cell edges: dep -> formula_cell (dependency points to the
         // formula that depends on it).
@@ -109,23 +105,9 @@ impl DependencyGraph {
         if petgraph::algo::is_cyclic_directed(&self.cell_dag) {
             let culprits = self.find_cycle_cells();
             // Rollback the edges we just added.
-            let added: Vec<_> = self
-                .cell_dag
-                .edges_directed(node, Direction::Incoming)
-                .map(|e| e.id())
-                .collect();
-            for e in added {
-                self.cell_dag.remove_edge(e);
-            }
+            self.clear_incoming(node);
             return Err(CycleError(culprits));
         }
-
-        // Update range dependencies: clear previous range entries for this
-        // formula across all sheets, then re-register per sheet.
-        for entries in self.range_index.values_mut() {
-            entries.retain(|(fc, _)| *fc != formula_cell);
-        }
-        self.range_deps.remove(&formula_cell);
 
         if !new_range_deps.is_empty() {
             for dep in &new_range_deps {
@@ -140,21 +122,39 @@ impl DependencyGraph {
         Ok(())
     }
 
-    /// Remove a formula cell entirely from the graph (called when a cell is
-    /// cleared or its formula is deleted).
-    pub fn remove(&mut self, cell: CellId) {
-        // Remove cell_dag node.
+    /// Drop the dependencies *of* `cell` -- the cells and ranges it reads --
+    /// when it stops being a formula (cleared, or replaced by a literal).
+    ///
+    /// The node itself survives as long as something still points out of it:
+    /// an edge `cell -> dependent` is owned by the *dependent*'s formula, and
+    /// removing the node would silently unhook it, freezing that dependent on
+    /// its last computed value. Only a node left with no edge at all is dropped.
+    pub fn clear_deps(&mut self, cell: CellId) {
         if let Some(&node) = self.cell_to_node.get(&cell) {
-            self.cell_dag.remove_node(node);
-            self.cell_to_node.remove(&cell);
-            // Rebuild cell_to_node since StableGraph may reindex.
-            self.cell_to_node.clear();
-            for idx in self.cell_dag.node_indices() {
-                self.cell_to_node.insert(self.cell_dag[idx], idx);
+            self.clear_incoming(node);
+            if self.cell_dag.edges(node).next().is_none() {
+                self.cell_dag.remove_node(node);
+                self.cell_to_node.remove(&cell);
             }
         }
+        self.clear_range_deps(cell);
+    }
 
-        // Remove range deps for this cell.
+    /// Remove every edge pointing *into* `node`, i.e. the dependencies its own
+    /// formula declared. Outgoing edges (its dependents) are untouched.
+    fn clear_incoming(&mut self, node: petgraph::graph::NodeIndex) {
+        let incoming: Vec<_> = self
+            .cell_dag
+            .edges_directed(node, Direction::Incoming)
+            .map(|e| e.id())
+            .collect();
+        for e in incoming {
+            self.cell_dag.remove_edge(e);
+        }
+    }
+
+    /// Unregister every range `cell` reads, on every sheet.
+    fn clear_range_deps(&mut self, cell: CellId) {
         self.range_deps.remove(&cell);
         for entries in self.range_index.values_mut() {
             entries.retain(|(fc, _)| *fc != cell);
@@ -163,44 +163,53 @@ impl DependencyGraph {
 
     /// Collect all cells that must be marked dirty after `changed` is modified.
     ///
-    /// Returns the transitive closure of downstream dependents: all cells in
-    /// `cell_dag` reachable from `changed`, plus any formula whose range
-    /// contains `changed` (resolved through `index`) and its transitive
-    /// cell-level dependents.
+    /// Returns the transitive closure of downstream dependents across *both*
+    /// levels. A single sweep does not suffice: a range dependent found at
+    /// level 2 may itself sit inside another formula's range (`B1=SUM(A1:A3)`,
+    /// `C1=SUM(B1:B3)`), a link the `cell_dag` does not carry. So newly dirtied
+    /// cells are queued and re-expanded until the set reaches a fixpoint.
     pub fn collect_dirty(&self, changed: CellId, index: &SheetIndex) -> HashSet<CellId> {
         let mut dirty = HashSet::new();
+        let mut queue = vec![changed];
+        let mut seen: HashSet<CellId> = HashSet::from([changed]);
 
-        // Level 1: DFS descendants in cell_dag (cells that depend on `changed`).
-        if let Some(&node) = self.cell_to_node.get(&changed) {
-            let mut dfs = Dfs::new(&self.cell_dag, node);
-            while let Some(n) = dfs.next(&self.cell_dag) {
-                let cell = self.cell_dag[n];
-                if cell != changed {
+        while let Some(cur) = queue.pop() {
+            // Level 1: DFS descendants in cell_dag (cells that depend on `cur`).
+            if let Some(&node) = self.cell_to_node.get(&cur) {
+                let mut dfs = Dfs::new(&self.cell_dag, node);
+                while let Some(n) = dfs.next(&self.cell_dag) {
+                    let cell = self.cell_dag[n];
+                    if cell == cur {
+                        continue;
+                    }
                     dirty.insert(cell);
+                    if seen.insert(cell) {
+                        queue.push(cell);
+                    }
                 }
             }
-        }
 
-        // Level 2: formulas on the same sheet whose range contains `changed`.
-        // A range is keyed by row/column `Uid`s, so containment needs the
-        // changed cell's bound uids; a virtual cell cannot be inside a range.
-        if let (Some(row), Some(col)) = (changed.row_uid(), changed.col_uid())
-            && let Some(entries) = self.range_index.get(&changed.sheet)
-        {
-            for (formula_cell, dep) in entries {
-                if !dep.contains(row, col, index) {
-                    continue;
-                }
-                dirty.insert(*formula_cell);
-                if let Some(&node) = self.cell_to_node.get(formula_cell) {
-                    let mut dfs = Dfs::new(&self.cell_dag, node);
-                    while let Some(n) = dfs.next(&self.cell_dag) {
-                        dirty.insert(self.cell_dag[n]);
+            // Level 2: formulas on the same sheet whose range contains `cur`.
+            // A range is keyed by row/column `Uid`s, so containment needs the
+            // cell's bound uids; a virtual cell cannot be inside a range.
+            if let (Some(row), Some(col)) = (cur.row_uid(), cur.col_uid())
+                && let Some(entries) = self.range_index.get(&cur.sheet)
+            {
+                for (formula_cell, dep) in entries {
+                    if *formula_cell == cur || !dep.contains(row, col, index) {
+                        continue;
+                    }
+                    dirty.insert(*formula_cell);
+                    if seen.insert(*formula_cell) {
+                        queue.push(*formula_cell);
                     }
                 }
             }
         }
 
+        // `changed` is dirtied by its own caller; a formula sitting inside the
+        // range it reads must not re-enter the set through level 2.
+        dirty.remove(&changed);
         dirty
     }
 
@@ -328,14 +337,56 @@ mod tests {
     }
 
     #[test]
-    fn remove_formula_cleans_up() {
+    fn clear_deps_drops_the_formula_and_its_now_orphan_node() {
         let mut dag = DependencyGraph::new();
         dag.update(cell(0, 1), vec![cell(0, 0)], vec![]).unwrap();
         assert_eq!(dag.node_count(), 2);
 
-        dag.remove(cell(0, 1));
+        // B1 stops being a formula: it reads nothing and nothing reads it.
+        dag.clear_deps(cell(0, 1));
         assert_eq!(dag.node_count(), 1);
         assert!(dag.range_deps.is_empty());
+    }
+
+    #[test]
+    fn clear_deps_keeps_the_node_that_dependents_read() {
+        let idx = index_with(10, 10);
+        let mut dag = DependencyGraph::new();
+        // B1 = A1, then A1 turns into a plain literal.
+        dag.update(cell(0, 1), vec![cell(0, 0)], vec![]).unwrap();
+        dag.clear_deps(cell(0, 0));
+
+        assert_eq!(dag.node_count(), 2, "A1's node still carries A1 -> B1");
+        assert!(dag.collect_dirty(cell(0, 0), &idx).contains(&cell(0, 1)));
+    }
+
+    #[test]
+    fn collect_dirty_reaches_a_fixpoint_over_chained_ranges() {
+        let idx = index_with(10, 10);
+        let mut dag = DependencyGraph::new();
+        // B1 = SUM(A1:A3), C1 = SUM(B1:B3): the B1 -> C1 link exists only at
+        // the range level, so one sweep would stop at B1.
+        dag.update(cell(0, 1), vec![], vec![range(0, 2, 0, 0)])
+            .unwrap();
+        dag.update(cell(0, 2), vec![], vec![range(0, 2, 1, 1)])
+            .unwrap();
+
+        let dirty = dag.collect_dirty(cell(0, 0), &idx);
+        assert!(dirty.contains(&cell(0, 1)));
+        assert!(dirty.contains(&cell(0, 2)));
+    }
+
+    #[test]
+    fn rejected_cycle_leaves_no_stale_range_deps() {
+        let mut dag = DependencyGraph::new();
+        dag.update(cell(0, 0), vec![cell(0, 1)], vec![]).unwrap();
+        // B1 = SUM(C1:C3) first, then B1 = A1 which closes a cycle.
+        dag.update(cell(0, 1), vec![], vec![range(0, 2, 2, 2)])
+            .unwrap();
+        assert!(dag.update(cell(0, 1), vec![cell(0, 0)], vec![]).is_err());
+
+        assert!(dag.range_deps.is_empty());
+        assert!(dag.range_index.values().all(|e| e.is_empty()));
     }
 
     #[test]

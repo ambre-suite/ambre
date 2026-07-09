@@ -63,7 +63,7 @@ impl FormulaEngine {
         self.dirty.insert(cell);
         self.dirty.extend(downstream);
 
-        let _ = self
+        let rejected = self
             .bytecode
             .recompile_if_stale(cell, raw, indices, &mut self.deps, ctx);
 
@@ -76,6 +76,11 @@ impl FormulaEngine {
             } else {
                 cache.insert(cell, literal_value(raw));
             }
+        } else if let Some(err @ CellValue::Error(_)) = rejected {
+            // A rejected formula (cycle, parse error) has no bytecode, so the VM
+            // pass will not overwrite the cache. Publish the error here, else the
+            // cell keeps displaying the result of its previous text.
+            self.formula_cache.borrow_mut().insert(cell, err);
         }
     }
 
@@ -299,7 +304,89 @@ mod tests {
         engine.on_cell_changed(cell(0, 1), "=A1", &idx, &SingleSheetCtx);
         engine.compute_all_dirty(&idx);
 
-        assert!(engine.evaluated_text(cell(0, 1)).is_none());
+        assert_eq!(engine.evaluated_text(cell(0, 1)).unwrap(), "#CIRCULAR!");
+    }
+
+    #[test]
+    fn plain_cell_keeps_dependents_across_repeated_edits() {
+        // A plain literal is not a formula, so it carries no bytecode -- but a
+        // formula referencing it owns an edge out of its node. Rewriting the
+        // literal must not tear that edge down, or the dependent silently
+        // freezes on its last computed value.
+        let idx = indices_with(10, 10);
+        let mut engine = FormulaEngine::new();
+
+        engine.on_cell_changed(cell(0, 0), "1", &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 1), "=A1+0", &idx, &SingleSheetCtx);
+        engine.compute_all_dirty(&idx);
+        assert_eq!(engine.evaluated_text(cell(0, 1)).unwrap(), "1");
+
+        for (n, expected) in [("2", "2"), ("3", "3"), ("4", "4")] {
+            engine.on_cell_changed(cell(0, 0), n, &idx, &SingleSheetCtx);
+            engine.compute_all_dirty(&idx);
+            assert_eq!(
+                engine.evaluated_text(cell(0, 1)).unwrap(),
+                expected,
+                "A1 = {n}"
+            );
+        }
+    }
+
+    #[test]
+    fn range_dependency_propagates_through_a_chain() {
+        // Range deps live outside the cell DAG, so dirty collection must reach a
+        // fixpoint over them: C1 depends on B1 only through `B1:B3`.
+        let idx = indices_with(10, 10);
+        let mut engine = FormulaEngine::new();
+
+        engine.on_cell_changed(cell(0, 0), "1", &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 1), "=SUM(A1:A3)", &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 2), "=SUM(B1:B3)", &idx, &SingleSheetCtx);
+        engine.compute_all_dirty(&idx);
+        assert_eq!(engine.evaluated_text(cell(0, 2)).unwrap(), "1");
+
+        engine.on_cell_changed(cell(0, 0), "10", &idx, &SingleSheetCtx);
+        engine.compute_all_dirty(&idx);
+        assert_eq!(engine.evaluated_text(cell(0, 1)).unwrap(), "10", "direct");
+        assert_eq!(engine.evaluated_text(cell(0, 2)).unwrap(), "10", "chained");
+    }
+
+    #[test]
+    fn cycle_replaces_the_stale_value_with_an_error() {
+        // B1 holds a good value, then A1 is edited into a cycle with it. The
+        // rejected formula must surface `#CIRCULAR!`, not keep displaying the
+        // result its previous text produced.
+        let idx = indices_with(10, 10);
+        let mut engine = FormulaEngine::new();
+
+        engine.on_cell_changed(cell(0, 0), "=1", &idx, &SingleSheetCtx);
+        engine.on_cell_changed(cell(0, 1), "=A1", &idx, &SingleSheetCtx);
+        engine.compute_all_dirty(&idx);
+        assert_eq!(engine.evaluated_text(cell(0, 1)).unwrap(), "1");
+
+        engine.on_cell_changed(cell(0, 0), "=B1", &idx, &SingleSheetCtx);
+        engine.compute_all_dirty(&idx);
+        assert_eq!(engine.evaluated_text(cell(0, 0)).unwrap(), "#CIRCULAR!");
+    }
+
+    #[test]
+    fn parse_error_replaces_the_stale_value() {
+        let idx = indices_with(10, 10);
+        let mut engine = FormulaEngine::new();
+
+        engine.on_cell_changed(cell(0, 0), "=1+1", &idx, &SingleSheetCtx);
+        engine.compute_all_dirty(&idx);
+        assert_eq!(engine.evaluated_text(cell(0, 0)).unwrap(), "2");
+
+        engine.on_cell_changed(cell(0, 0), "=SUM(", &idx, &SingleSheetCtx);
+        engine.compute_all_dirty(&idx);
+        assert!(
+            engine
+                .evaluated_text(cell(0, 0))
+                .unwrap()
+                .starts_with("#PARSE!"),
+            "a broken formula must not keep its previous result"
+        );
     }
 
     #[test]
