@@ -376,6 +376,11 @@ fn first_error(a: &CellValue, b: &CellValue) -> Option<CellValue> {
     }
 }
 
+/// An empty operand takes the zero of whatever type it is weighed against: `0`
+/// for a number, `""` for text, `false` for a boolean. [`CellValue::as_number`]
+/// already reads `Empty` as `0`, so without this the same blank cell answered `1`
+/// in `=A1+1` and `#TYPE!` in `=A1>0` -- the case a formula hits the moment it is
+/// dragged one row past the end of its data. Excel coerces the same way.
 fn values_equal(a: &CellValue, b: &CellValue) -> bool {
     match (a, b) {
         (CellValue::Number(x), CellValue::Number(y)) => nearly_equal(*x, *y),
@@ -385,14 +390,33 @@ fn values_equal(a: &CellValue, b: &CellValue) -> bool {
         (CellValue::Empty, CellValue::Text(s)) | (CellValue::Text(s), CellValue::Empty) => {
             s.is_empty()
         }
+        (CellValue::Empty, CellValue::Number(n)) | (CellValue::Number(n), CellValue::Empty) => {
+            nearly_equal(0.0, *n)
+        }
+        (CellValue::Empty, CellValue::Boolean(b)) | (CellValue::Boolean(b), CellValue::Empty) => {
+            !*b
+        }
         _ => false,
     }
 }
 
+/// Order two operands, or `None` when the pair has no ordering (`#TYPE!`). Blanks
+/// coerce as in [`values_equal`]; booleans order `false` before `true`. Mixed
+/// number/text/boolean pairs stay unordered: Excel ranks them by type, we would
+/// rather surface the mistake than answer a comparison nobody meant to write.
 fn compare_values(a: &CellValue, b: &CellValue) -> Option<std::cmp::Ordering> {
+    use std::cmp::Ordering;
     match (a, b) {
         (CellValue::Number(x), CellValue::Number(y)) => x.partial_cmp(y),
         (CellValue::Text(x), CellValue::Text(y)) => Some(x.cmp(y)),
+        (CellValue::Boolean(x), CellValue::Boolean(y)) => Some(x.cmp(y)),
+        (CellValue::Empty, CellValue::Empty) => Some(Ordering::Equal),
+        (CellValue::Empty, CellValue::Number(y)) => 0.0f64.partial_cmp(y),
+        (CellValue::Number(x), CellValue::Empty) => x.partial_cmp(&0.0),
+        (CellValue::Empty, CellValue::Text(y)) => Some("".cmp(y.as_str())),
+        (CellValue::Text(x), CellValue::Empty) => Some(x.as_str().cmp("")),
+        (CellValue::Empty, CellValue::Boolean(y)) => Some(false.cmp(y)),
+        (CellValue::Boolean(x), CellValue::Empty) => Some(x.cmp(&false)),
         _ => None,
     }
 }
@@ -502,6 +526,48 @@ mod tests {
             ctx.execute(&bc),
             CellValue::Error(FormulaError::BrokenRef)
         ));
+    }
+
+    #[test]
+    fn an_empty_operand_compares_at_its_peer_zero() {
+        // `as_number` reads `Empty` as 0, so `=A1+1` answers 1 on a blank A1. The
+        // comparisons refused that same operand and answered `#TYPE!`, so a
+        // formula dragged one row past the end of its data (`=IF(A1>5,..)`,
+        // `=A1=0`) broke on the blank cell instead of reading it as a zero.
+        for (src, expect) in [
+            ("A1=0", "true"),
+            ("A1<>0", "false"),
+            ("A1<1", "true"),
+            ("A1>0", "false"),
+            ("A1>=0", "true"),
+            ("A1<=0", "true"),
+            ("IF(A1>5,\"big\",\"small\")", "small"),
+            // Against text, the zero is the empty string.
+            ("A1<\"x\"", "true"),
+            ("A1=\"\"", "true"),
+            // Against a boolean, it is `false`.
+            ("A1=FALSE", "true"),
+            ("A1<TRUE", "true"),
+        ] {
+            assert_eq!(
+                eval_with_cells(src, 1, HashMap::new()),
+                expect,
+                "formula: ={src}"
+            );
+        }
+        // Two blanks are equal, and order as equal.
+        assert_eq!(eval_with_cells("A1=B1", 2, HashMap::new()), "true");
+        assert_eq!(eval_with_cells("A1<B1", 2, HashMap::new()), "false");
+        assert_eq!(eval_with_cells("A1>=B1", 2, HashMap::new()), "true");
+    }
+
+    #[test]
+    fn booleans_order_false_before_true() {
+        // Ordering two booleans used to be `#TYPE!`, which left `=A1<TRUE` on a
+        // blank cell answering a boolean while `=FALSE<TRUE` errored.
+        assert_eq!(eval_formula("FALSE<TRUE").to_display(), "true");
+        assert_eq!(eval_formula("TRUE>FALSE").to_display(), "true");
+        assert_eq!(eval_formula("TRUE>=TRUE").to_display(), "true");
     }
 
     #[test]

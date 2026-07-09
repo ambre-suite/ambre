@@ -363,22 +363,86 @@ fn rewrite(
     }
 }
 
+/// Byte length, measured in `hay`, of a case-insensitive match of `needle_lower`
+/// anchored at the start of `hay`. `None` when `hay` does not start with it.
+///
+/// Lowercasing is compared character by character rather than on a pre-folded
+/// copy of `hay`, because `to_lowercase` is not length-preserving: `I` (U+0130)
+/// grows from 2 bytes to 3, the Kelvin sign `K` (U+212A) shrinks from 3 to 1. An
+/// offset found in the folded text therefore does not address the original.
+fn ci_match_len(hay: &str, needle_lower: &str) -> Option<usize> {
+    let mut needle = needle_lower.chars();
+    let mut pending = needle.next();
+    for (offset, ch) in hay.char_indices() {
+        if pending.is_none() {
+            return Some(offset);
+        }
+        // One source char can lowercase to several; all of them must line up, so
+        // a needle ending mid-expansion is not a match.
+        for lower in ch.to_lowercase() {
+            match pending {
+                Some(want) if want == lower => pending = needle.next(),
+                _ => return None,
+            }
+        }
+    }
+    pending.is_none().then_some(hay.len())
+}
+
 /// Case-insensitive substring replace: replace every occurrence of `query` in
 /// `raw` (compared case-folded) with `replacement`, preserving the surrounding
 /// text verbatim. `query` is assumed non-empty.
 fn replace_ci(raw: &str, query: &str, replacement: &str) -> String {
-    let hay = raw.to_lowercase();
     let needle = query.to_lowercase();
     let mut out = String::with_capacity(raw.len());
-    let mut last = 0;
-    let mut search = 0;
-    while let Some(rel) = hay[search..].find(&needle) {
-        let start = search + rel;
-        out.push_str(&raw[last..start]);
-        out.push_str(replacement);
-        last = start + needle.len();
-        search = last;
+    let mut rest = raw;
+    while !rest.is_empty() {
+        // A non-empty needle always consumes at least one char, so `rest` shrinks
+        // on every iteration whichever branch is taken.
+        match ci_match_len(rest, &needle) {
+            Some(len) if len > 0 => {
+                out.push_str(replacement);
+                rest = &rest[len..];
+            }
+            _ => {
+                let ch = rest.chars().next().expect("rest is not empty");
+                out.push(ch);
+                rest = &rest[ch.len_utf8()..];
+            }
+        }
     }
-    out.push_str(&raw[last..]);
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{replace_ci, rewrite};
+
+    #[test]
+    fn case_insensitive_replace_survives_a_non_length_preserving_lowercase() {
+        // `to_lowercase` grows U+0130 (2 bytes -> 3) and shrinks the Kelvin sign
+        // U+212A (3 -> 1). Offsets taken from the folded copy used to index the
+        // original string, which panicked the Logic worker -- out of bounds on the
+        // first, off a char boundary on the second -- and killed the session.
+        assert_eq!(replace_ci("\u{0130}x", "x", "Z"), "\u{0130}Z");
+        assert_eq!(replace_ci("\u{212A}elvin", "elvin", "Z"), "\u{212A}Z");
+        // The match may also start on the offending char itself.
+        assert_eq!(replace_ci("a\u{212A}b", "k", "Z"), "aZb");
+    }
+
+    #[test]
+    fn case_insensitive_replace_handles_the_ordinary_cases() {
+        assert_eq!(replace_ci("Hello hello", "HELLO", "hi"), "hi hi");
+        assert_eq!(replace_ci("aaa", "aa", "b"), "ba");
+        assert_eq!(replace_ci("abc", "z", "y"), "abc");
+        assert_eq!(replace_ci("abc", "abc", ""), "");
+        // A replacement containing the query must not be rescanned.
+        assert_eq!(replace_ci("a", "a", "aa"), "aa");
+    }
+
+    #[test]
+    fn whole_cell_rewrite_swaps_the_entire_content() {
+        assert_eq!(rewrite("=A1+1", "x", "y", false, true), "y");
+        assert_eq!(rewrite("Xx", "x", "y", true, false), "Xy");
+    }
 }
