@@ -837,14 +837,28 @@ Each story carries its finding ID, the file to touch, and the concrete action.
         `monotonic_counter_accepted_replay_dropped`, `author_map_is_bounded`.
         (`sync/lib.rs`, `sync/websocket.rs`)
 
-### Wave R7 — Account-setup path (surfaced during R6)
+### Wave R7 — Account-setup path (surfaced during R6) [x]
 
-- [ ] **N4** — stop shipping the passphrase to the server: remove the
-      `passphrase` field from the sync `http::SetupAccountRequest` and the server
-      `SetupAccountRequest` (the server only needs `master_key_enc` +
-      `master_key_salt`). Restores the Zero-Knowledge invariant.
-      (`sync/auth.rs`, `sync/http.rs`, `server/routes/documents.rs`)
-- [ ] **N5** — add a `UNIQUE` constraint / partial unique index on `users.email`,
-      settle the OIDC-vs-setup collision policy, and map the insert conflict to
-      `409` instead of `500`. (`server/migrations/**`, `db/users.rs`,
-      `routes/documents.rs`)
+- [x] **N4** — the passphrase no longer ships to the server: the `passphrase`
+      field is removed from both the sync `http::SetupAccountRequest` and the
+      server `SetupAccountRequest` (the server only receives `master_key_enc` +
+      `master_key_salt`), restoring the Zero-Knowledge invariant; the invariant
+      is documented on both structs. The sync worker also stops logging the
+      passphrase length on the Unlock/SetupAccount paths (secret metadata in
+      the console). (`sync/auth.rs`, `sync/http.rs`, `server/routes/documents.rs`)
+- [x] **N5** — `users.email` is now globally unique, case-insensitively
+      (`users_email_lower_unique` on `lower(email)`). Collision policy settled:
+      the email namespace is shared by ALL providers (setup / oidc / dev) and
+      the first claimant wins; a later claim -- a `/auth/setup` insert or an
+      OIDC login refreshing its email onto a squatted address -- hits the
+      unique violation, which `map_email_conflict` maps to `409 Conflict`
+      ("email already registered") instead of an opaque `500`; surfacing the
+      squat beats silently rebinding the email. `get_user_by_email` (the
+      sharing resolver) now matches case-insensitively, consistent with the
+      index, so at most one row can match. Guards:
+      `setup_account_duplicate_email_returns_409`,
+      `create_user_duplicate_email_is_conflict`,
+      `oidc_login_with_squatted_email_is_conflict`,
+      `get_user_by_email_is_case_insensitive`.
+      (`server/migrations/20260708000000_users_email_unique.sql`,
+      `db/users.rs`, `routes/tests.rs`)

@@ -4,7 +4,7 @@ impl SyncState {
     // -- Session handlers ------------------------------------------------------
 
     pub(crate) fn handle_unlock(&mut self, id: RequestId, passphrase: SecretBytes) {
-        tracing::info!("Sync: Unlock (passphrase len={})", passphrase.len());
+        tracing::info!("Sync: Unlock");
 
         let logic_tx = self.logic_tx.clone();
         let api_base = self.api_base.clone();
@@ -247,7 +247,7 @@ impl SyncState {
         email: String,
         display_name: String,
     ) {
-        tracing::info!("Sync: SetupAccount (passphrase len={})", passphrase.len());
+        tracing::info!("Sync: SetupAccount");
 
         let logic_tx = self.logic_tx.clone();
         let api_base = self.api_base.clone();
@@ -279,9 +279,11 @@ impl SyncState {
                 let mut master_key_with_nonce = nonce.to_vec();
                 master_key_with_nonce.extend_from_slice(&master_key_enc);
 
+                // Zero-Knowledge (N4): only the wrapped master key and its salt go
+                // over the wire; the passphrase stays in this worker and zeroizes
+                // on drop.
                 let url = format!("{url_scheme}://{api_base}/api/auth/setup");
                 let body = http::SetupAccountRequest {
-                    passphrase: String::from_utf8_lossy(&passphrase).into_owned(),
                     email,
                     display_name,
                     master_key_enc: base64::engine::general_purpose::URL_SAFE

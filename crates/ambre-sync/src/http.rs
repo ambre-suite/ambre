@@ -284,10 +284,12 @@ pub(crate) async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
         .map_err(|e| format!("GET {url}: binary error: {e}"))
 }
 
+/// Account-setup payload. Zero-Knowledge invariant (N4): the passphrase NEVER
+/// leaves the client; the server only receives the wrapped master key and the
+/// Argon2 salt needed to re-derive the unwrap key locally on future unlocks.
 #[derive(Serialize)]
 #[allow(dead_code)]
 pub(crate) struct SetupAccountRequest {
-    pub passphrase: String,
     pub email: String,
     pub display_name: String,
     pub master_key_enc: String,
