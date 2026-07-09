@@ -20,8 +20,7 @@ use petgraph::Direction;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{Dfs, EdgeRef};
 
-use crate::model::SheetIndex;
-
+use super::compile::SheetIndices;
 use super::types::{CellId, RangeId};
 
 // -----------------------------------------------------------------------------
@@ -168,7 +167,11 @@ impl DependencyGraph {
     /// level 2 may itself sit inside another formula's range (`B1=SUM(A1:A3)`,
     /// `C1=SUM(B1:B3)`), a link the `cell_dag` does not carry. So newly dirtied
     /// cells are queued and re-expanded until the set reaches a fixpoint.
-    pub fn collect_dirty(&self, changed: CellId, index: &SheetIndex) -> HashSet<CellId> {
+    ///
+    /// Containment is tested per sheet: `indices` carries every sheet's index
+    /// because a dependent reached through a cross-sheet edge lives on its own
+    /// sheet, whose uids the edited cell's index knows nothing about.
+    pub fn collect_dirty(&self, changed: CellId, indices: &SheetIndices) -> HashSet<CellId> {
         let mut dirty = HashSet::new();
         let mut queue = vec![changed];
         let mut seen: HashSet<CellId> = HashSet::from([changed]);
@@ -194,6 +197,7 @@ impl DependencyGraph {
             // cell's bound uids; a virtual cell cannot be inside a range.
             if let (Some(row), Some(col)) = (cur.row_uid(), cur.col_uid())
                 && let Some(entries) = self.range_index.get(&cur.sheet)
+                && let Some(index) = indices.get(&cur.sheet)
             {
                 for (formula_cell, dep) in entries {
                     if *formula_cell == cur || !dep.contains(row, col, index) {
@@ -242,9 +246,11 @@ impl Default for DependencyGraph {
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_index::index_with;
+    use super::super::compile::SheetIndices;
+    use super::super::test_index::indices_with;
     use super::super::types::{AxisId, RangeEndpoint};
     use super::*;
+    use crate::model::SheetIndex;
     use crate::model::Uid;
 
     /// Bound cell at grid `(row, col)` on sheet 0, matching `index_with`'s
@@ -288,7 +294,7 @@ mod tests {
 
     #[test]
     fn simple_dependency_propagation() {
-        let idx = index_with(10, 10);
+        let idx = indices_with(10, 10);
         let mut dag = DependencyGraph::new();
 
         // B1 depends on A1.
@@ -312,7 +318,7 @@ mod tests {
 
     #[test]
     fn range_dirty_collection() {
-        let idx = index_with(10, 10);
+        let idx = indices_with(10, 10);
         let mut dag = DependencyGraph::new();
 
         // C3 = SUM(A1:A3)
@@ -326,7 +332,7 @@ mod tests {
 
     #[test]
     fn range_outside_no_dirty() {
-        let idx = index_with(10, 10);
+        let idx = indices_with(10, 10);
         let mut dag = DependencyGraph::new();
         dag.update(cell(2, 2), vec![], vec![range(0, 2, 0, 0)])
             .unwrap();
@@ -350,7 +356,7 @@ mod tests {
 
     #[test]
     fn clear_deps_keeps_the_node_that_dependents_read() {
-        let idx = index_with(10, 10);
+        let idx = indices_with(10, 10);
         let mut dag = DependencyGraph::new();
         // B1 = A1, then A1 turns into a plain literal.
         dag.update(cell(0, 1), vec![cell(0, 0)], vec![]).unwrap();
@@ -362,7 +368,7 @@ mod tests {
 
     #[test]
     fn collect_dirty_reaches_a_fixpoint_over_chained_ranges() {
-        let idx = index_with(10, 10);
+        let idx = indices_with(10, 10);
         let mut dag = DependencyGraph::new();
         // B1 = SUM(A1:A3), C1 = SUM(B1:B3): the B1 -> C1 link exists only at
         // the range level, so one sweep would stop at B1.
@@ -387,6 +393,89 @@ mod tests {
 
         assert!(dag.range_deps.is_empty());
         assert!(dag.range_index.values().all(|e| e.is_empty()));
+    }
+
+    /// A `SheetIndex` for `sheet`, with per-sheet peers so that no uid is shared
+    /// between two sheets (as in a live document, where each sheet owns its own
+    /// Loro row/column lists).
+    fn sheet_index(sheet: u16, rows: usize, cols: usize) -> SheetIndex {
+        let mut idx = SheetIndex::default();
+        for i in 0..rows {
+            idx.push_row(Uid {
+                peer: sheet as u64 * 10 + 1,
+                counter: i as u32,
+            });
+        }
+        for i in 0..cols {
+            idx.push_col(Uid {
+                peer: sheet as u64 * 10 + 2,
+                counter: i as u32,
+            });
+        }
+        idx
+    }
+
+    /// Bound cell at grid `(row, col)` on `sheet`, matching `sheet_index`'s uids.
+    fn cell_on(sheet: u16, row: u32, col: u32) -> CellId {
+        CellId::bound(
+            sheet,
+            Uid {
+                peer: sheet as u64 * 10 + 1,
+                counter: row,
+            },
+            Uid {
+                peer: sheet as u64 * 10 + 2,
+                counter: col,
+            },
+        )
+    }
+
+    /// Bound range on `sheet`, matching `sheet_index`'s uids.
+    fn range_on(sheet: u16, r0: u32, r1: u32, c0: u32, c1: u32) -> RangeId {
+        let rid = |r: u32| {
+            RangeEndpoint::Specific(AxisId::Bound(Uid {
+                peer: sheet as u64 * 10 + 1,
+                counter: r,
+            }))
+        };
+        let cid = |c: u32| {
+            RangeEndpoint::Specific(AxisId::Bound(Uid {
+                peer: sheet as u64 * 10 + 2,
+                counter: c,
+            }))
+        };
+        RangeId {
+            sheet,
+            row_start: rid(r0),
+            row_end: rid(r1),
+            col_start: cid(c0),
+            col_end: cid(c1),
+        }
+    }
+
+    #[test]
+    fn collect_dirty_tests_containment_against_each_cell_own_sheet() {
+        // Sheet1!B1 = Sheet0!A1 (a level-1 cross-sheet edge), and
+        // Sheet1!C1 = SUM(Sheet1!B1:B3) (a level-2 range on sheet 1).
+        // Editing Sheet0!A1 must reach C1: once the fixpoint walks past B1 it has
+        // to test B1's containment through *sheet 1's* index. Sheet 0's index
+        // knows none of sheet 1's uids, so reusing it silently drops the link.
+        let mut indices = SheetIndices::new();
+        indices.insert(0, sheet_index(0, 10, 10));
+        indices.insert(1, sheet_index(1, 10, 10));
+
+        let mut dag = DependencyGraph::new();
+        dag.update(cell_on(1, 0, 1), vec![cell_on(0, 0, 0)], vec![])
+            .unwrap();
+        dag.update(cell_on(1, 0, 2), vec![], vec![range_on(1, 0, 2, 1, 1)])
+            .unwrap();
+
+        let dirty = dag.collect_dirty(cell_on(0, 0, 0), &indices);
+        assert!(dirty.contains(&cell_on(1, 0, 1)), "direct cross-sheet edge");
+        assert!(
+            dirty.contains(&cell_on(1, 0, 2)),
+            "range dependent living on the other sheet"
+        );
     }
 
     #[test]
