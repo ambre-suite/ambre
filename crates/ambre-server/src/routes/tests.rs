@@ -83,7 +83,6 @@ mod handler_tests {
         let app = build_test_router(state);
 
         let body = serde_json::json!({
-            "passphrase": "test",
             "email": "user@ambre.app",
             "display_name": "Test User",
             "master_key_enc": base64_encode(&[1u8; 32]),
@@ -104,6 +103,39 @@ mod handler_tests {
 
         assert_eq!(resp.status(), StatusCode::OK);
         assert!(!access_token_of(resp).await.is_empty());
+    }
+
+    /// N5 guard: a second setup claiming an already-registered email (even with
+    /// a different case) is rejected with 409, not a 500 from the raw insert.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn setup_account_duplicate_email_returns_409(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state);
+
+        let _first = setup_and_get_auth(&app).await;
+
+        // setup_and_get_auth registered "user@ambre.app"; re-claim it with a
+        // case variant and fresh key material.
+        let body = serde_json::json!({
+            "email": "User@Ambre.App",
+            "display_name": "Impostor",
+            "master_key_enc": base64_encode(&[9u8; 32]),
+            "master_key_salt": base64_encode(&[8u8; 16]),
+            "signing_pubkey": hex::encode([7u8; 32]),
+            "exchange_pubkey": hex::encode([6u8; 32]),
+        });
+        let resp = app
+            .oneshot(
+                Request::post("/api/auth/setup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
     }
 
     #[sqlx::test]
@@ -655,7 +687,6 @@ mod handler_tests {
     /// header value.
     async fn setup_and_get_auth(app: &Router) -> String {
         let body = serde_json::json!({
-            "passphrase": "test",
             "email": "user@ambre.app",
             "display_name": "Test User",
             "master_key_enc": base64_encode(&[1u8; 32]),

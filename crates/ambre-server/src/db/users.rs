@@ -61,10 +61,27 @@ pub async fn get_user(
     }
 }
 
-/// Fetches a user by email address.
+/// Maps a unique violation on `users_email_lower_unique` to a 409 Conflict
+/// (N5 policy: the email namespace is global and first-claimant-wins). Any
+/// other error stays an infrastructure-level `Database` error (500).
+fn map_email_conflict(e: sqlx::Error) -> AppError {
+    match &e {
+        sqlx::Error::Database(db)
+            if db.is_unique_violation() && db.constraint() == Some("users_email_lower_unique") =>
+        {
+            AppError::Conflict {
+                detail: "email already registered".into(),
+            }
+        }
+        _ => AppError::Database(e),
+    }
+}
+
+/// Fetches a user by email address. Case-insensitive, matching the
+/// `users_email_lower_unique` index, so at most one row can match.
 pub async fn get_user_by_email(pool: &PgPool, email: &str) -> Result<Option<UserRow>, AppError> {
     let row = sqlx::query(
-        "SELECT id, oidc_provider, oidc_subject, email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id FROM users WHERE email = $1"
+        "SELECT id, oidc_provider, oidc_subject, email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id FROM users WHERE lower(email) = lower($1)"
     )
     .bind(email)
     .fetch_optional(pool)
@@ -88,6 +105,9 @@ pub async fn get_user_by_email(pool: &PgPool, email: &str) -> Result<Option<User
 }
 
 /// Inserts a new user row and returns it.
+///
+/// A duplicate email (any provider, any case) is rejected with 409 Conflict
+/// via `map_email_conflict` (N5).
 pub async fn create_user(
     pool: &PgPool,
     email: &str,
@@ -107,7 +127,8 @@ pub async fn create_user(
     .bind(signing_pubkey)
     .bind(exchange_pubkey)
     .fetch_one(pool)
-    .await?;
+    .await
+    .map_err(map_email_conflict)?;
 
     tracing::info!(user_id = %row.try_get::<uuid::Uuid, _>("id")?, provider = "setup", "user created");
 
@@ -132,6 +153,12 @@ pub async fn create_user(
 /// the master key, signing key, and exchange key are only set later via
 /// `PUT /keys/master`. The `ON CONFLICT DO UPDATE` refreshes `email` and
 /// `display_name` on each login but preserves existing key material.
+///
+/// N5 collision policy: if the IdP-supplied email is already held by a
+/// DIFFERENT account (e.g. claimed earlier through /auth/setup, where emails
+/// are unverified), the insert or the email refresh violates
+/// `users_email_lower_unique` and the login fails with 409. Surfacing the
+/// squat explicitly is preferred over silently rebinding the email.
 pub async fn upsert_user_from_oidc(
     pool: &PgPool,
     oidc_provider: &str,
@@ -149,7 +176,8 @@ pub async fn upsert_user_from_oidc(
     .bind(vec![0u8; 32])
     .bind(vec![0u8; 32])
     .fetch_one(pool)
-    .await?;
+    .await
+    .map_err(map_email_conflict)?;
 
     let inserted: bool = row.try_get("inserted")?;
     if inserted {
@@ -195,7 +223,8 @@ pub async fn dev_upsert_user(
     .bind(signing_pubkey)
     .bind(exchange_pubkey)
     .fetch_one(pool)
-    .await?;
+    .await
+    .map_err(map_email_conflict)?;
 
     let inserted: bool = row.try_get("inserted")?;
     if inserted {
@@ -256,4 +285,86 @@ pub async fn update_master_key(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// N5 guard: an OIDC login whose IdP email is already claimed by a setup
+    /// account fails with `Conflict` (409), not an opaque `Database` (500).
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn oidc_login_with_squatted_email_is_conflict(pool: PgPool) {
+        create_user(
+            &pool,
+            "alice@example.com",
+            "Alice",
+            &[1u8; 32],
+            &[2u8; 16],
+            &[3u8; 32],
+            &[4u8; 32],
+        )
+        .await
+        .expect("setup account");
+
+        let err = upsert_user_from_oidc(&pool, "google", "sub-123", "Alice@example.com", "Alice")
+            .await
+            .expect_err("email is already claimed");
+        assert!(matches!(err, AppError::Conflict { .. }), "got {err:?}");
+    }
+
+    /// N5 guard: uniqueness is case-insensitive across setup accounts too.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn create_user_duplicate_email_is_conflict(pool: PgPool) {
+        create_user(
+            &pool,
+            "bob@example.com",
+            "Bob",
+            &[1u8; 32],
+            &[2u8; 16],
+            &[3u8; 32],
+            &[4u8; 32],
+        )
+        .await
+        .expect("first claim");
+
+        let err = create_user(
+            &pool,
+            "BOB@example.com",
+            "Impostor",
+            &[9u8; 32],
+            &[8u8; 16],
+            &[7u8; 32],
+            &[6u8; 32],
+        )
+        .await
+        .expect_err("second claim must conflict");
+        assert!(matches!(err, AppError::Conflict { .. }), "got {err:?}");
+    }
+
+    /// The sharing resolver matches case-insensitively, consistent with the
+    /// unique index, so at most one row can match.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn get_user_by_email_is_case_insensitive(pool: PgPool) {
+        let created = create_user(
+            &pool,
+            "carol@example.com",
+            "Carol",
+            &[1u8; 32],
+            &[2u8; 16],
+            &[3u8; 32],
+            &[4u8; 32],
+        )
+        .await
+        .expect("create user");
+
+        let found = get_user_by_email(&pool, "CAROL@EXAMPLE.COM")
+            .await
+            .expect("query")
+            .expect("must resolve despite case difference");
+        assert_eq!(found.id, created.id);
+    }
 }

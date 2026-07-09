@@ -1,0 +1,13 @@
+-- N5: enforce global, case-insensitive uniqueness on users.email.
+--
+-- Collision policy (settled 2026-07-08): the email namespace is shared by ALL
+-- providers (setup, oidc, dev) and the first claimant wins. A later claim --
+-- a /auth/setup insert or an OIDC login refreshing its email -- hits the
+-- unique violation, which the server maps to HTTP 409 (see db/users.rs).
+-- Surfacing the conflict beats the previous behavior where a duplicate row
+-- made `get_user_by_email` (the sharing resolver) ambiguous and the insert
+-- path returned an opaque 500.
+--
+-- This migration fails if pre-existing rows already collide; such rows only
+-- exist in dev databases and must be resolved manually before upgrading.
+CREATE UNIQUE INDEX users_email_lower_unique ON users (lower(email));

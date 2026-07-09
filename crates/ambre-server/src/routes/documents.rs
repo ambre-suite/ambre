@@ -28,10 +28,10 @@ fn parse_user_id(s: &str) -> Result<ambre_core::UserId, AppError> {
 ///
 /// Contains the encrypted master key, Argon2 salt, and public keys
 /// derived from the master seed (Ed25519 for signing, X25519 for exchange).
+/// Zero-Knowledge invariant (N4): the passphrase is NOT part of this payload
+/// and must never be; the server only stores the wrapped key and the salt.
 #[derive(serde::Deserialize)]
 pub struct SetupAccountRequest {
-    #[allow(dead_code)]
-    pub passphrase: String,
     /// User-supplied login handle. Recorded verbatim (N3) and resolved by other
     /// members when sharing a document (`get_user_by_email`).
     pub email: String,
