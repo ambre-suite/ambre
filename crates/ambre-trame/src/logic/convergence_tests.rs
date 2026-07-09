@@ -509,3 +509,79 @@ fn concurrent_whole_cell_style_edits_do_not_blend_across_containers() {
          peer B wrote: {b_intent:?}"
     );
 }
+
+/// Regression: a whole-cell style edit must stay atomic even against a peer that
+/// touches only a *subset* of the style containers. Two full concurrent rewrites
+/// already converge atomically (each cell's `format` and rich-`style` commits sit
+/// at adjacent Lamports, so the same writer wins every register). The gap the old
+/// multi-container schema left open is asymmetric edits: a colour-only patch does
+/// not carry bold, so `set_cell_style` skips the bold container entirely. Peer A
+/// recolours A1 (text colour only); peer B, concurrently, rewrites A1's whole
+/// style (bold + both colours). The bold container is written by B alone, while
+/// the text-colour container races -- and if A wins its colour, the cell
+/// converges on B's bold plus A's colour, a style neither peer ever wrote. A
+/// single `cellstyle_` register makes the edit atomic: one race, one winner,
+/// always a style one peer actually wrote.
+#[test]
+fn subset_style_edit_does_not_tear_a_whole_cell_rewrite() {
+    // Shared base: plain A1 with a value, no style.
+    let mut a = TrameState::new();
+    a.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "x".to_owned(),
+    });
+    let base = a.export_snapshot();
+    let mut b = TrameState::new();
+    b.import_snapshot(&base);
+
+    // Peer A runs several unrelated edits first, so its recolour op carries a
+    // strictly higher Lamport than peer B's write and wins the text-colour
+    // register outright -- the exact ordering that tore the cell under the old
+    // schema. The patch carries no bold, so it never touches the bold container.
+    for i in 0..5 {
+        a.handle_command(TrameCommand::SetCellText {
+            row: 10,
+            col: 0,
+            text: i.to_string(),
+        });
+    }
+    apply_style(
+        &mut a,
+        StylePatch {
+            fg: Some(Some(0x00FF_0000)),
+            ..Default::default()
+        },
+    );
+    let a_intent = read_style(&mut a);
+
+    // Peer B: one whole-cell rewrite -- bold plus different text/fill colours.
+    apply_style(
+        &mut b,
+        StylePatch {
+            bold: Some(true),
+            fg: Some(Some(0x0000_00FF)),
+            bg: Some(Some(0x0044_5566)),
+            ..Default::default()
+        },
+    );
+    let b_intent = read_style(&mut b);
+    assert_ne!(a_intent, b_intent, "the two edits must actually differ");
+
+    // Full bidirectional exchange.
+    let sa = a.export_snapshot();
+    let sb = b.export_snapshot();
+    a.apply_remote(&sb);
+    b.apply_remote(&sa);
+
+    let conv_a = read_style(&mut a);
+    let conv_b = read_style(&mut b);
+    assert_eq!(conv_a, conv_b, "peers diverged after full history exchange");
+    assert!(
+        conv_a == a_intent || conv_a == b_intent,
+        "torn style neither peer wrote:\n\
+         converged: {conv_a:?}\n\
+         peer A wrote: {a_intent:?}\n\
+         peer B wrote: {b_intent:?}"
+    );
+}

@@ -162,16 +162,8 @@ impl TrameState {
     pub(super) fn purge_axis(&mut self, removed: Uid, axis: Axis) {
         for name in [
             cells_map_name(&self.active_sheet),
-            format_map_name(&self.active_sheet),
-            style_map_name(&self.active_sheet),
-            fgcolor_map_name(&self.active_sheet),
-            bgcolor_map_name(&self.active_sheet),
-            font_map_name(&self.active_sheet),
-            numfmt_map_name(&self.active_sheet),
-        ]
-        .into_iter()
-        .chain((0..BORDER_EDGE_ORDER).map(|e| bordcolor_map_name(&self.active_sheet, e)))
-        {
+            cellstyle_map_name(&self.active_sheet),
+        ] {
             let map = self.doc.get_map(name);
             let LoroValue::Map(entries) = map.get_value() else {
                 continue;
@@ -202,7 +194,6 @@ impl TrameState {
         // engine reseed so masked cells are excluded from the DAG.
         let mut display = self.rebuild_merges();
         self.reseed_engine();
-        self.reseed_formatting();
         self.reseed_styles();
         // The hidden set is keyed by stable row uid, so a structural shift just
         // remaps it to the new positions (no recompute).

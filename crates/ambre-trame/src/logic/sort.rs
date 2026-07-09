@@ -219,7 +219,6 @@ impl TrameState {
     pub(super) fn after_reorder(&mut self) -> TrameOutcome {
         self.rebuild_index();
         let mut display = self.rebuild_merges();
-        self.reseed_formatting();
         self.reseed_styles();
         // The hidden set is keyed by row uid, so it follows the rows across the
         // permutation -- remap positions, do not recompute.

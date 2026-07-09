@@ -610,3 +610,41 @@ fn undo_then_redo_round_trips_a_cell_edit() {
         "redo restores the value"
     );
 }
+
+/// A `SetCellStyle` over a multi-cell selection is a single undo step: one Undo
+/// must clear the whole selection, not just the last cell. `persist_cell_style`
+/// commits per cell and Loro records one undo item per commit, so the selection
+/// loop is wrapped in one `UndoManager` group (`-ui.md` §6.C, `-logic.md` §8).
+#[test]
+fn selection_style_is_a_single_undo() {
+    let mut state = TrameState::new();
+    // Selection A1:C1 (row 0, cols 0..2).
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: 0,
+        col: 2,
+        anchor_row: 0,
+        anchor_col: 0,
+    });
+    state.handle_command(TrameCommand::SetCellStyle {
+        patch: bold_patch(true),
+    });
+    // One undo.
+    state.handle_command(TrameCommand::Undo);
+    let evts = state.handle_command(TrameCommand::ScrollViewport {
+        version: 1,
+        row_start: 0,
+        row_end: 0,
+        col_start: 0,
+        col_end: 2,
+    });
+    let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
+        panic!("expected ViewportData");
+    };
+    for c in 0..=2u32 {
+        let cell = cells.iter().find(|x| x.row == 0 && x.col == c).unwrap();
+        assert!(
+            !cell.bold,
+            "col {c} still bold after ONE undo -> style was multi-undo"
+        );
+    }
+}
