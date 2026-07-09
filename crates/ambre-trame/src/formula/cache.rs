@@ -69,9 +69,10 @@ impl BytecodeCache {
         }
 
         if !raw.starts_with('=') {
-            // No longer a formula: remove bytecode and graph edges.
+            // No longer a formula: drop its bytecode and the dependencies it
+            // declared. The graph node stays if other formulas read this cell.
             self.entries.remove(&cell);
-            deps.remove(cell);
+            deps.clear_deps(cell);
             return Some(CellValue::Empty);
         }
 
@@ -96,7 +97,10 @@ impl BytecodeCache {
                 }
             }
             Err(msg) => {
+                // A formula that no longer parses reads nothing: drop its old
+                // dependencies too, or it would keep being recomputed from them.
                 self.entries.remove(&cell);
+                deps.clear_deps(cell);
                 Some(CellValue::Error(FormulaError::ParseError(msg)))
             }
         }
