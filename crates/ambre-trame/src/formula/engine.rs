@@ -13,8 +13,6 @@ use std::collections::{HashMap, HashSet};
 
 use petgraph::visit::Topo;
 
-use crate::model::SheetIndex;
-
 use super::cache::BytecodeCache;
 use super::compile::SheetIndices;
 use super::dag::DependencyGraph;
@@ -57,9 +55,7 @@ impl FormulaEngine {
         ctx: &dyn FormulaCtx,
     ) {
         self.bytecode.invalidate(cell);
-        let empty = SheetIndex::default();
-        let idx = indices.get(&cell.sheet).unwrap_or(&empty);
-        let downstream = self.deps.collect_dirty(cell, idx);
+        let downstream = self.deps.collect_dirty(cell, indices);
         self.dirty.insert(cell);
         self.dirty.extend(downstream);
 
