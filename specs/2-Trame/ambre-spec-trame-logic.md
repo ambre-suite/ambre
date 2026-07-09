@@ -1471,6 +1471,92 @@ proptest! {
 
 ---
 
+## 11 bis. SCALING & CONSISTENCY DEBT (2026-07 ARCHITECTURE REVIEW)
+
+> Findings of the 2026-07-09 architecture review of `ambre-trame`. The identity layer
+> (`Uid` / `SheetIndex` / `AxisId`, §2-§3) is sound; every finding below is a recomputation
+> strategy sitting on top of it, so all are fixable without a document-format migration.
+> Tracked as **Phase 4** Stories in §14 (Epic `E5` in `specs/ambre-roadmap.md`).
+
+### A. Incremental remote apply (kill the O(document) reseed)
+
+**Divergence from §8.** The P3 table (§8, Priorities and Budgets) prescribes
+`doc.import() -> diff -> dirty -> compute_all_dirty()`. The implementation instead routes every
+remote batch through `reseed_after_merge` -> `reseed_engine` (`logic/sync.rs`, `logic/sheets.rs`),
+which does `engine.reset()` and re-parses/recompiles **every formula of every sheet**. The same
+full reseed runs on undo/redo, sheet rename, define/delete name, and sheet switch/delete. In
+active collaboration each peer keystroke costs O(total cells) on the receiver -- incompatible with
+the <= 50 ms client processing budget (`ambre-context.md` §4) at the 100k-cell target.
+
+**Target design (restores §8 P3).** Drive the apply path from Loro's subscription diff events:
+- changed `cells_{sheet}` keys -> `engine.on_cell_changed` per touched cell (existing entry point);
+- `rows_/cols_{sheet}` list diffs -> the incremental `SheetIndex::apply_insert/delete/move_*`
+  methods (already implemented, §2.C);
+- derived caches (merges, formatting, metrics, filter) rebuilt only for the containers that
+  actually changed.
+
+The full reseed remains the fallback for snapshot import (`import_snapshot`) and for any diff the
+incremental path cannot classify. Second step (separate story item): shrink the per-batch
+`TrameEvent::DataReset` to an invalidated-range event so the UI stops re-fetching the whole
+viewport on every remote batch; `DataReset` stays as the fallback.
+
+### B. Cached `SheetIndices` (divergence from §7)
+
+The §7 state sketch carries a persistent `sheet_indices: HashMap<SheetId, SheetIndex>`. The
+implementation instead rebuilds on **every call** to `engine_indices()` (`logic/cells.rs`): the
+active sheet's index is cloned and every non-active sheet's index is reconstructed by reading its
+full Loro lists. `engine_indices()` runs per `write_cell` (per cell inside `SetCellsBatch`), per
+`finish_cell_writes`, and per `ScrollViewport` -- a scroll frame on sheet 1 rebuilds sheet 2's
+50k-row index. This threatens the P1 < 15 ms budget on any multi-sheet document.
+
+**Target.** Materialize `SheetIndices` as state with per-sheet invalidation (structural op or
+import on that sheet), the active entry sharing the maintained `Self::index` by borrow, not clone.
+Engine call sites take the cached map by reference.
+
+### C. Stable engine sheet indices (de-pin the active sheet from 0)
+
+The active sheet is pinned to local engine index 0 (`rebuild_sheet_maps`), so `ActivateSheet`
+remaps every `CellId.sheet` and forces a full `reseed_engine`: switching a tab costs O(all cells).
+This couples a *view* state (which sheet is displayed) to engine identity.
+
+**Target.** Intern sheet indices per session at first sight, stable for the document lifetime.
+A sheet switch then rebuilds only the active-sheet display caches (formatting, merges, metrics,
+filter) -- no engine reset. The `CellRef::new` sheet-0 convenience is retired in favor of the
+explicit index the call sites already carry.
+
+### D. Dependency-graph and engine micro-fixes
+
+| Finding | Fix |
+|---|---|
+| `DependencyGraph::remove` rebuilds the whole `cell_to_node` map per removal; its comment claims `StableGraph` may reindex on removal -- it never does (that is the `Stable` guarantee). | Drop the O(N) rebuild; remove the map entry only. |
+| Static cycle check runs `is_cyclic_directed` on the **whole** graph per formula edit: O(V+E) per keystroke. | Targeted check: a new cycle exists iff `formula_cell` is reachable from one of its newly added deps (DFS bounded to the affected region). |
+| `compute_all_dirty` walks a `Topo` over the **entire** DAG and skips non-dirty nodes: O(all formula cells) per recompute, on every scroll. | Topological order restricted to the dirty closure (Kahn over the dirty set's induced subgraph). |
+| Dead tail loop in `compute_all_dirty` re-inserts values already in the cache (no-op). | Delete. |
+| `formula_cache: RefCell<HashMap<...>>` -- interior mutability is no longer needed (results are staged in a `Vec` before write-back). | Plain field + disjoint borrows, per the §7 sketch. |
+
+### E. View-independent merge masking (consistency)
+
+`masked_cells` is excluded from the engine feed **only for the active sheet** (`reseed_engine`
+skips masked keys only at local index 0). A cross-sheet reference to a masked, conflicted cell
+therefore evaluates differently depending on which sheet is currently displayed. This contradicts
+§6 ("DAG and Masked Cells": masked cells do not participate in any computation) and the rule that
+formula results never depend on view state.
+
+**Target.** Derive masking per sheet from `merges_{sheet}` at feed time and exclude uniformly on
+every sheet; add a cross-sheet convergence test asserting a conflicted masked cell reads
+identically regardless of the active tab. *Tracked as an Epic `E3` / Phase 1 Story (a formula
+result that depends on view state is wrong at any document size), not with the Phase 4 scaling
+debt.*
+
+### F. Fold bold/italic into `CellStyle`
+
+Font style has two sources of truth: the `bold`/`italic` sets mirroring `format_{sheet}` plus the
+`styles` map mirroring the style containers -- three reseeds and duplicated plumbing through
+`DisplayCell`. Fold bold/italic into `CellStyle`/`styles`; keep reading legacy `format_{sheet}`
+entries, write the unified form on next edit (no bulk CRDT rewrite).
+
+---
+
 ## 12. ASSUMED SEMANTIC DIFFERENCES WITH EXCEL
 
 Trame is not a semantic clone of Excel. These differences are **intentional**, documented, and motivated by the collaborative CRDT model. They must be clearly communicated to users coming from Excel.
@@ -1552,6 +1638,7 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 - [x] `DisplayViewport` + anti-flickering (`tx_version`)
 - [x] Insert/delete rows/columns (`TrameCommand::Insert/DeleteRow/Column { at }`): one `LoroMovableList` op, `rebuild_index` + positional engine reseed + formatting reseed; delete purges the removed line's cells/formatting; no-op past the used range *(Epic `E3`)*
 - [x] Merges: `merges_{sheet}` LWW map (master/extent stable-id pairs), client-side non-empty rejection (`MergeRejected`), `DisplayCell.is_merged`/`merge_span`, masked covered cells (`masked_cells`, excluded from the engine, restored on unmerge), deterministic overlap precedence, conflict detection (`MergeConflictDetected`) on import. Merges follow their cells across structural ops *(Epic `E3`)*
+- [ ] **View-independent merge masking (correction, §11 bis.E).** `masked_cells` is currently excluded from the engine feed only for the active sheet (`reseed_engine` skips masked keys only at local index 0), so a cross-sheet reference to a masked conflicted cell evaluates differently depending on the displayed tab -- a formula result that depends on view state, contradicting §6 ("masked cells do not participate in any computation"). Fix: derive masking per sheet from `merges_{sheet}` at feed time, exclude uniformly on every sheet, + a cross-sheet test asserting a conflicted masked cell reads identically regardless of the active tab. *(Epic `E3`)*
 - [x] Shared rendering module `ambre-trame/src/render.rs`: `GridLayout` + `draw_cells_on<S>()`, `draw_grid_lines_on<S>()`, `draw_col_headers_on<S>()`, `draw_row_headers_on<S>()`, all `DrawSurface`-generic. `ui::renderer` composes them (cells layer + header overlay); uniform-metrics `GridLayout` (variable widths/heights land with the resize story below); `DisplayViewport`-fed PDF path lands with `export_pdf.rs` (Phase 3). *(Epic `E3`)*
 - [x] `MockSyncHandle` for controller tests (via `CommandSink`) *(`ambre-bus::CommandSink` seam + `ambre-trame::test_support::MockSyncHandle`: captures emitted `SyncCommand`s and relays CRDT deltas peer-to-peer. Production forwards `TrameOutcome` payloads from `ambre-logic`; the test seam mirrors that exact relay via `MockSyncHandle::absorb`, so tests drive the same `SyncCommand`s the dispatcher emits) (Epic `E3`)*
 - [x] Undo/Redo via Loro `UndoManager` (`TrameCommand::Undo/Redo` -> `undo_manager.undo()/redo()` + full derived-cache reseed via `after_structural` + `flush_delta` broadcast of the inverse ops; `TrameEvent::UndoState { can_undo, can_redo }`; chrome `UNDO`/`REDO` commands bound to Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y). Implicit row/column materialization is committed under an excluded origin (`add_exclude_origin_prefix`) so undo reverts only the value and the cell key still resolves to its stable list-element ids on redo *(Epic `E3`)*
@@ -1594,3 +1681,28 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 - [ ] `SheetIndex` O(log N) for shifts
 - [ ] PDF export via `KrillaSurface` in `ambre-trame/src/export_pdf.rs` (lazy-loaded)
 - [ ] 1M-cell benchmarks
+
+**Phase 4 — Scaling & consistency debt (2026-07 architecture review, §11 bis)**
+
+> Tracked as the "Trame scaling & consistency debt" Story of Epic **E5** in
+> `specs/ambre-roadmap.md`. Ordered by impact; A/B unblock the collaboration and P1 budgets.
+
+- [ ] **Incremental remote apply (§11 bis.A):** Loro subscription diffs drive `on_cell_changed` +
+  incremental `SheetIndex` maintenance + targeted derived-cache rebuilds; full reseed demoted to
+  the snapshot-import / unclassifiable-diff fallback. Restores the §8 P3 contract.
+- [ ] **Invalidated-range display events (§11 bis.A, step 2):** replace the per-remote-batch
+  `TrameEvent::DataReset` with a ranged invalidation; `DataReset` stays as fallback.
+- [ ] **Cached `SheetIndices` with per-sheet invalidation (§11 bis.B):** stop rebuilding non-active
+  indices and cloning the active one on every `write_cell` / `finish_cell_writes` /
+  `ScrollViewport`. Restores the §7 state shape.
+- [ ] **Stable engine sheet indices (§11 bis.C):** de-pin the active sheet from local index 0;
+  `ActivateSheet` rebuilds display caches only, no engine reset.
+- [ ] **Engine micro-fixes (§11 bis.D):** O(1) `DependencyGraph::remove` (fix the false StableGraph
+  reindex comment), targeted cycle check instead of whole-graph `is_cyclic_directed`,
+  dirty-subgraph topological recompute, delete the dead write-back loop, drop the `formula_cache`
+  `RefCell`.
+- [ ] **Fold bold/italic into `CellStyle` (§11 bis.F):** single style source of truth, legacy
+  `format_{sheet}` read-compat, no bulk rewrite.
+
+> **View-independent merge masking (§11 bis.E)** is a correctness defect, not scaling debt, so it
+> is tracked as an **E3 / Phase 1** Story (see the Phase 1 list above), not in this phase.

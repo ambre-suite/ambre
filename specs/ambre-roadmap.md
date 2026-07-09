@@ -32,7 +32,7 @@ The specs predate this file and use their own phase vocabulary. Mapping:
 | `E3` | -- | `trame-logic §14`, `trame-features §10`, `trame-ui §18`, `trame-interop §10` (Phase 1) |
 | `ET` | `ARCH P6` (test infrastructure) | Trame "Tested DoD" debt items (logic/features/ui/interop) |
 | `E4` | `ARCH P2`/`P5`, `CANVAS P1`, `SYNC P4`, `SRV P1` | -- |
-| `E5` | `ARCH P4`, `CANVAS P2` | Trame Phase 2+ |
+| `E5` | `ARCH P4`, `CANVAS P2` | Trame Phase 2+, `trame-logic §14 Phase 4` (scaling debt) |
 
 ---
 
@@ -130,6 +130,16 @@ editor are done).*
 > status is derived: with open sub-items in that Story, E3 is `[ ]` until they all land.
 
 Stories:
+- **View-independent merge masking (correctness)** `[ ]` — `trame-logic §14 Phase 1`
+  (finding `trame-logic §11 bis.E`). A masked cell (covered by a merge, non-empty -> conflict) is
+  currently excluded from the formula engine **only on the active sheet** (`reseed_engine` skips
+  `masked_cells` at local index 0), so a cross-sheet reference (`=Sheet2!A1`) to a conflicted cell
+  evaluates to a **different value depending on which sheet is displayed** -- a formula result that
+  depends on view state, contradicting `trame-logic §6` ("masked cells do not participate in any
+  computation"). Wrong at any document size, so it is an MVP correctness item, not scaling debt.
+  Fix: derive masking per sheet from `merges_{sheet}` at feed time and exclude uniformly on every
+  sheet; add a cross-sheet convergence test where a conflicted masked cell reads identically
+  regardless of the active tab.
 - **Chrome UX polish pass** `[ ]` — bring the grid/chrome interaction quality up to the bar set by
   the rest of the MVP (`trame-ui §4bis`/`§5.C`/`§5.D`/`§13`):
   - `[x]` Autofilter glyphs (button + column-letter badge + in-button inset) scale with the grid zoom.
@@ -193,6 +203,19 @@ Stories:
 - `ARCH P4` — offline durability (Loro IndexedDB persistence, flush + `RequestMissing` on reconnect);
   key-rotation hot-path benchmarks + ZK audit (`cargo tree`); wasm-only warnings audit.
 - `CANVAS P2` — frame budget profiling, dynamic theme, i18n/RTL, non-regression benchmarks.
+- **Trame scaling & consistency debt (2026-07 architecture review)** `[ ]` —
+  `trame-logic §14 Phase 4` (findings detailed in `trame-logic §11 bis`). The identity layer
+  (`Uid`/`SheetIndex`/`AxisId`) is sound; the debt is recomputation strategy, fixable without a
+  document-format migration: **incremental remote apply** via Loro subscription diffs (kill the
+  O(document) `reseed_engine` on every remote batch / undo / rename -- restores the `§8 P3`
+  contract) + ranged display invalidation replacing the per-batch `DataReset`; **cached per-sheet
+  `SheetIndices`** (currently rebuilt on every write/scroll -- P1 budget, restores the `§7` state
+  shape); **stable engine sheet indices** (de-pin the active sheet from index 0 so `ActivateSheet`
+  stops resetting the engine); **dependency-graph micro-fixes** (O(N) `remove`, whole-graph cycle
+  check, full-DAG topo walk, dead write-back loop, `formula_cache` `RefCell`);
+  **bold/italic folded into `CellStyle`**.
+  *(View-independent merge masking, being a correctness defect rather than scaling debt, moved to
+  the `E3` Story below.)*
 - Trame Phase 2+ — basic .xlsx import, conditional formatting, data validation.
 - **Trame column/row reorder (drag & drop)** `[x]` — Excel-style drag to move a whole
   column/row to a new position. **Pulled into the MVP** once investigation showed it was far
