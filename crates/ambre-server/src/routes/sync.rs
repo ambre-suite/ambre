@@ -92,6 +92,13 @@ pub async fn create_snapshot(
         return Err(AppError::Forbidden);
     }
 
+    // The `s3_key` is client-supplied; it MUST resolve inside this document's own
+    // snapshot prefix. Otherwise a writer could register a row pointing at another
+    // document's blob, later downloadable by this document's members (IDOR).
+    if !s3::is_valid_snapshot_key(&state.config.s3_env_prefix, &doc_id, &req.s3_key) {
+        return Err(AppError::BadRequest("invalid s3_key for document".into()));
+    }
+
     let apk = hex::decode(&req.author_pubkey).map_err(|e| AppError::Conflict {
         detail: e.to_string(),
     })?;

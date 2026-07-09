@@ -447,7 +447,13 @@ pub async fn search_users(
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<impl IntoResponse, AppError> {
     let _s = auth;
-    let q = params.get("query").map(|s| s.as_str()).unwrap_or("");
+    let q = params.get("query").map(|s| s.as_str()).unwrap_or("").trim();
+    // Require a minimum query length: a 1-char (or empty) `ILIKE '%q%'` returns an
+    // near-arbitrary slice of the whole user table (email + pubkeys) and turns the
+    // sharing lookup into a directory-enumeration primitive.
+    if q.chars().count() < 2 {
+        return Ok(axum::Json(UserSearchResult { users: Vec::new() }));
+    }
     let users = db::search_users(&state.db, q).await?;
     let json: Vec<_> = users
         .into_iter()

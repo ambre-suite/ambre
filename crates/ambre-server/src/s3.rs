@@ -78,6 +78,27 @@ pub fn is_valid_content_hash(content_hash: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+/// Validates that a client-supplied snapshot `s3_key` actually belongs to the
+/// document the caller is authorized on, before it is persisted and later handed
+/// back as a presigned download URL.
+///
+/// Without this, a writer could register a snapshot row whose `s3_key` points at
+/// another document's object (`.../documents/{other}/snapshots/...`); any member
+/// of THIS document could then obtain a presigned URL for that foreign blob
+/// (cross-document IDOR). We require the exact per-document snapshot prefix and a
+/// single, slash-free object id (which also rejects `../` traversal).
+pub fn is_valid_snapshot_key(
+    env_prefix: &str,
+    document_id: &ambre_core::DocumentId,
+    s3_key: &str,
+) -> bool {
+    let expected_prefix = format!("{env_prefix}/documents/{document_id}/snapshots/");
+    let Some(id) = s3_key.strip_prefix(&expected_prefix) else {
+        return false;
+    };
+    !id.is_empty() && !id.contains('/')
+}
+
 /// S3 object key for an encrypted media blob (content-addressed by hash).
 pub fn format_s3_media_key(
     env_prefix: &str,
@@ -356,6 +377,36 @@ mod tests {
         let key = format_s3_media_key("dev", &doc_id, hash);
         assert!(key.ends_with("media/abc123def456"));
         assert!(key.contains("/documents/"));
+    }
+
+    #[test]
+    fn snapshot_key_validation_scopes_to_document() {
+        let doc = DocumentId::from_bytes([9u8; 16]);
+        let other = DocumentId::from_bytes([8u8; 16]);
+        let valid = format_s3_snapshot_key("dev", &doc, &SnapshotId::from_bytes([1u8; 16]));
+        assert!(is_valid_snapshot_key("dev", &doc, &valid));
+
+        // Another document's snapshot prefix is rejected (cross-document IDOR).
+        let foreign = format_s3_snapshot_key("dev", &other, &SnapshotId::from_bytes([1u8; 16]));
+        assert!(!is_valid_snapshot_key("dev", &doc, &foreign));
+
+        // Wrong env prefix, path traversal, empty id, and nested paths are rejected.
+        assert!(!is_valid_snapshot_key("prod", &doc, &valid));
+        assert!(!is_valid_snapshot_key(
+            "dev",
+            &doc,
+            &format!("dev/documents/{doc}/snapshots/../../{other}/snapshots/x")
+        ));
+        assert!(!is_valid_snapshot_key(
+            "dev",
+            &doc,
+            &format!("dev/documents/{doc}/snapshots/")
+        ));
+        assert!(!is_valid_snapshot_key(
+            "dev",
+            &doc,
+            &format!("dev/documents/{doc}/snapshots/a/b")
+        ));
     }
 
     #[test]

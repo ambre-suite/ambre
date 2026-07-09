@@ -188,6 +188,15 @@ pub async fn oidc_callback(
     let claims = oidc::exchange_code(provider_state, req.code, &stored_state).await?;
 
     let oidc_subject = claims.subject().to_string();
+    // Reject an unverified email: it is the resolution key for document sharing
+    // (`get_user_by_email`), so binding an unverified address to an account would
+    // let an attacker squat a victim's email and receive documents shared to it.
+    // A provider that omits the claim (`None`) is treated as unverified.
+    if claims.email().is_some() && claims.email_verified() != Some(true) {
+        return Err(AppError::BadRequest(
+            "OIDC provider returned an unverified email".into(),
+        ));
+    }
     let email = claims.email().map(|e| e.to_string()).unwrap_or_default();
     let display_name = claims
         .name()
