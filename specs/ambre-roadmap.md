@@ -114,7 +114,7 @@ Stories:
   terminal screen: `signal_fatal` is raised in `ambre-app/src/lib.rs` and `fatal_message` is painted
   every frame in `ambre-app/src/host.rs`.
 
-## E3 — Trame MVP (usual spreadsheet)  `[ ]` (reopened) — *core objective*
+## E3 — Trame MVP (usual spreadsheet)  `[x]` (done) — *core objective*
 
 *Turn the Trame skeleton into a usable spreadsheet. Scope = the consolidated "Phase 1 / MVP" of the
 four Trame specs, deduplicated against what `E0`/`E1` already delivered (virtual scroll + inline cell
@@ -123,11 +123,9 @@ editor are done).*
 > **Reopened** (first pass) for the header/column/row UX gap — multi-column sort, column/row resize,
 > whole-axis selection, autofilter buttons: all landed, that Story is `[x]`.
 >
-> **Reopened again** (second pass) for a chrome UX polish round, tracked by the new
-> "Chrome UX polish pass" Story below. Some of its items have landed (zoom-correct autofilter glyphs,
-> a unified hover token, the sheet-tab strip moved off the canvas into DOM chrome); others are still
-> open (header separators, a context-aware menu, in-grid header hover). Per the golden rule the Epic
-> status is derived: with open sub-items in that Story, E3 is `[ ]` until they all land.
+> **Reopened again** (second pass) for a chrome UX polish round, tracked by the "Chrome UX polish
+> pass" Story below. Every item in it has now landed, so per the golden rule the derived Epic status
+> is `[x]` again.
 
 Stories:
 - **View-independent merge masking (correctness)** `[x]` — `trame-logic §14 Phase 1`
@@ -141,7 +139,7 @@ Stories:
   excluded uniformly on every sheet; the cross-sheet regression
   `masked_cell_excluded_across_sheets_regardless_of_active_tab` proves a conflicted masked cell reads
   identically regardless of the active tab.
-- **Chrome UX polish pass** `[ ]` — bring the grid/chrome interaction quality up to the bar set by
+- **Chrome UX polish pass** `[x]` — bring the grid/chrome interaction quality up to the bar set by
   the rest of the MVP (`trame-ui §4bis`/`§5.C`/`§5.D`/`§13`):
   - `[x]` Autofilter glyphs (button + column-letter badge + in-button inset) scale with the grid zoom.
   - `[x]` Unified neutral hover on a single generated `--surface-hover` token (`tokens.ron`),
@@ -150,13 +148,22 @@ Stories:
     slot + a `SheetTabs` component (tabs, "+", inline rename, `{Rename,Delete}` menu, HTML5
     drag-reorder via the existing `MoveSheet`), fed by `SheetList`-mirrored signals. The canvas tab
     rendering / hit-testing / input routing is gone; `grid_bottom` now spans the full canvas.
-  - `[ ]` Header separators: hairlines between column letters and between row numbers (`render/headers.rs`).
-  - `[ ]` Context-aware right-click menu: `CtxScope::{Cell, Column, Row, Corner}` with pluralised
-    labels and a dynamic filter entry (**Create filter** XOR **Remove filter** per `filter_col`).
-  - `[ ]` In-grid header hover feedback: tint the hovered column/row header on the canvas, reading
-    the same `surface_hover` token (exposed canvas-side via `theme.rs`).
-  - `[ ]` Inter-column/row "+" insert affordance polish (floating pill on boundary hover). *(The
-    whole-axis drag-reorder of grid columns/rows is out of scope here — see the E5 story.)*
+  - `[x]` Header separators: hairlines at each visible column's right edge and each visible row's
+    bottom edge, so the letters/numbers read as discrete buttons (`render/headers.rs`, drawn
+    independently of `text_enabled` so the PDF path keeps them).
+  - `[x]` Context-aware right-click menu: `CtxScope::{Cell, Column, Row, Corner}` (set by the view's
+    right-click `PointerDown`, read through a launcher-owned `RwSignal`) selects the entry layout in
+    `chrome::commands::context_entries_for`, with axis-plural structural labels and the dynamic
+    `filter_entry` (**Filter by column** XOR **Remove filter**, never both). A row menu only ever
+    offers to drop an active filter, since filtering is column-oriented.
+  - `[x]` In-grid header hover feedback: `HeaderHit`-derived `hover_col` / `hover_row` /
+    `hover_corner` tint the hovered column, row or select-all corner on the canvas with the
+    `header_hover` palette entry, generated from `tokens.ron` on the same value as the chrome's
+    `surface_hover`, and always drawn under the active tint so the active axis wins.
+  - `[x]` Inter-column/row "+" insert affordance: a badge pinned to the hovered header boundary
+    (`insert_hint` -> `draw_insert_badge`), clicking it inserts at that edge and selects the new
+    column/row. *(The whole-axis drag-reorder of grid columns/rows shipped separately — see the E5
+    story, pulled into the MVP.)*
 - **Header/column/row UX (MVP promotion)** `[x]` — `trame-ui §18 Phase 1` (new items) + `trame-logic §14 Phase 1` + `trame-features §10 Phase 1`:
   - Header interactions (`trame-ui §4bis`): virtual whole-column/row selection, hover cursors, **column/row resize** (`ResizeCol`/`ResizeRow` + variable-metrics `GridLayout`, `trame-logic §9/§14`), **double-click auto-fit** (UI-side over cached cells, reuses `ResizeCol`/`ResizeRow`; whole-column auto-fit is a V1 refinement), inline "+" insert affordance.
   - Context-menu polish (`trame-ui §5.C`): grouped iconed entries + separators + header-scoped menu.
