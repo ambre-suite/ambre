@@ -22,10 +22,10 @@ impl TrameState {
         // Feed every sheet's cells under a uid-anchored [`CellId`], tagged with
         // the sheet's local index. The active sheet is index 0 (see
         // `sheets_by_idx`), so its cells address the same keys the single-sheet
-        // read paths use. Only the active sheet tracks merge masking. Each cell's
-        // stable key already carries its `(row_uid, col_uid)`, so feeding is a
-        // direct `CellId::bound`; a cell whose row/column uid is absent from the
-        // sheet index (a deleted line) is skipped.
+        // read paths use. Each cell's stable key already carries its
+        // `(row_uid, col_uid)`, so feeding is a direct `CellId::bound`; a cell
+        // whose row/column uid is absent from the sheet index (a deleted line) is
+        // skipped.
         let indices = self.engine_indices();
         let sheets: Vec<(String, u16)> = self
             .sheets_by_idx
@@ -41,10 +41,15 @@ impl TrameState {
             else {
                 continue;
             };
+            // Masking is derived per sheet from that sheet's `merges_{sheet}` map,
+            // so a masked conflicted cell is excluded from the DAG on *every*
+            // sheet -- a cross-sheet reference to it converges regardless of the
+            // active tab (§6). For the active sheet this equals `self.masked_cells`.
+            let masked = self.masked_cells_for(&sheet_id, index);
             for (key, value) in cells.iter() {
                 // Masked cells (covered by a merge, conflicting value) stay out of
-                // the DAG on the active sheet; other sheets have no masking.
-                if idx == 0 && self.masked_cells.contains(key) {
+                // the DAG.
+                if masked.contains(key) {
                     continue;
                 }
                 let (Some((rl, cl)), LoroValue::String(text)) = (parse_cell_key(key), value) else {

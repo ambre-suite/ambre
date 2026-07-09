@@ -474,6 +474,107 @@ fn cross_sheet_formula_evaluates_end_to_end() {
     assert_eq!(read_cell(&mut state, 0, 1), "10", "B1 = Sheet2!A1 * 2");
 }
 
+/// A masked cell (covered by a merge, non-empty -> concurrent conflict) is
+/// excluded from computation on *every* sheet, not only the displayed one (§6).
+/// Regression for the view-dependent masking bug: masking was applied to the
+/// engine feed only at local index 0 (the active sheet), so a cross-sheet
+/// reference to a masked cell on a *non-active* sheet leaked the hidden value,
+/// making the formula result depend on which tab was shown.
+#[test]
+fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
+    // Shared base: Sheet2 exists with rows 0/1 materialized under stable ids
+    // (seed+clear A2), a same-sheet reader `Sheet2!C1 = =A2`, and a cross-sheet
+    // reader `Sheet1!B1 = =Sheet2!A2`. Both peers inherit identical ids.
+    let mut base = TrameState::new();
+    base.handle_command(TrameCommand::CreateSheet {
+        name: "Sheet2".to_owned(),
+    });
+    let s2 = second_sheet_id(&base);
+    base.handle_command(TrameCommand::ActivateSheet {
+        sheet_id: s2.clone(),
+    });
+    base.handle_command(TrameCommand::SetCellText {
+        row: 1,
+        col: 0,
+        text: "seed".to_owned(),
+    });
+    base.handle_command(TrameCommand::SetCellText {
+        row: 1,
+        col: 0,
+        text: String::new(),
+    });
+    // Same-sheet reader on Sheet2 (read while Sheet2 is the active tab).
+    base.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 2,
+        text: "=A2".to_owned(),
+    });
+    // Cross-sheet reader on Sheet1 (read while Sheet1 is the active tab, so the
+    // masked cell lives on a *non-active* sheet).
+    base.handle_command(TrameCommand::ActivateSheet {
+        sheet_id: "s0".to_owned(),
+    });
+    base.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 1,
+        text: "=Sheet2!A2".to_owned(),
+    });
+    let base_snap = base.export_snapshot();
+
+    let mut a = TrameState::new();
+    a.import_snapshot(&base_snap);
+    let mut b = TrameState::new();
+    b.import_snapshot(&base_snap);
+
+    // Peer A merges Sheet2!A1:A2 (both empty on its side).
+    a.handle_command(TrameCommand::ActivateSheet {
+        sheet_id: s2.clone(),
+    });
+    a.handle_command(TrameCommand::MergeCells {
+        row: 0,
+        col: 0,
+        row_end: 1,
+        col_end: 0,
+    });
+    let merge_delta = a.export_snapshot();
+
+    // Peer B concurrently writes Sheet2!A2, then receives A's merge -> A2 is
+    // masked (covered + non-empty), and stays the active tab.
+    b.handle_command(TrameCommand::ActivateSheet {
+        sheet_id: s2.clone(),
+    });
+    b.handle_command(TrameCommand::SetCellText {
+        row: 1,
+        col: 0,
+        text: "77".to_owned(),
+    });
+    let conflicts = b.apply_remote(&merge_delta);
+    assert!(
+        conflicts
+            .iter()
+            .any(|e| matches!(e, TrameEvent::MergeConflictDetected { .. })),
+        "the covered non-empty cell is reported as a conflict"
+    );
+
+    // Sheet2 is active: the same-sheet reader sees the masked cell excluded.
+    let target_active = read_cell(&mut b, 0, 2);
+
+    // Switch to Sheet1: the cross-sheet reader now targets a *non-active* sheet.
+    b.handle_command(TrameCommand::ActivateSheet {
+        sheet_id: "s0".to_owned(),
+    });
+    let target_inactive = read_cell(&mut b, 0, 1);
+
+    assert_ne!(
+        target_inactive, "77",
+        "the cross-sheet reader must not leak the masked value when its target sheet is inactive"
+    );
+    assert_eq!(
+        target_inactive, target_active,
+        "a masked cell reads identically whether or not its sheet is the active tab (view-independent, §6)"
+    );
+}
+
 /// Renaming changes only the display label; the stable id (and the cells
 /// keyed under it) are untouched.
 #[test]

@@ -130,16 +130,17 @@ editor are done).*
 > status is derived: with open sub-items in that Story, E3 is `[ ]` until they all land.
 
 Stories:
-- **View-independent merge masking (correctness)** `[ ]` — `trame-logic §14 Phase 1`
-  (finding `trame-logic §11 bis.E`). A masked cell (covered by a merge, non-empty -> conflict) is
-  currently excluded from the formula engine **only on the active sheet** (`reseed_engine` skips
+- **View-independent merge masking (correctness)** `[x]` — `trame-logic §14 Phase 1`
+  (finding `trame-logic §11 bis.E`). A masked cell (covered by a merge, non-empty -> conflict) was
+  excluded from the formula engine **only on the active sheet** (`reseed_engine` skipped
   `masked_cells` at local index 0), so a cross-sheet reference (`=Sheet2!A1`) to a conflicted cell
-  evaluates to a **different value depending on which sheet is displayed** -- a formula result that
-  depends on view state, contradicting `trame-logic §6` ("masked cells do not participate in any
-  computation"). Wrong at any document size, so it is an MVP correctness item, not scaling debt.
-  Fix: derive masking per sheet from `merges_{sheet}` at feed time and exclude uniformly on every
-  sheet; add a cross-sheet convergence test where a conflicted masked cell reads identically
-  regardless of the active tab.
+  evaluated to a **different value depending on which sheet was displayed** -- a formula result that
+  depended on view state, contradicting `trame-logic §6` ("masked cells do not participate in any
+  computation"). Wrong at any document size, so it was an MVP correctness item, not scaling debt.
+  Fixed: masking is derived per sheet from `merges_{sheet}` at feed time (`masked_cells_for`) and
+  excluded uniformly on every sheet; the cross-sheet regression
+  `masked_cell_excluded_across_sheets_regardless_of_active_tab` proves a conflicted masked cell reads
+  identically regardless of the active tab.
 - **Chrome UX polish pass** `[ ]` — bring the grid/chrome interaction quality up to the bar set by
   the rest of the MVP (`trame-ui §4bis`/`§5.C`/`§5.D`/`§13`):
   - `[x]` Autofilter glyphs (button + column-letter badge + in-button inset) scale with the grid zoom.
