@@ -16,7 +16,9 @@ use std::collections::{HashMap, HashSet};
 use super::cache::BytecodeCache;
 use super::compile::SheetIndices;
 use super::functions::call_builtin;
-use super::types::{AxisId, CellId, CellValue, FormulaError, Op, RangeId, RangeValue};
+use super::types::{
+    AxisId, CellId, CellValue, FormulaError, Op, RangeId, RangeValue, nearly_equal,
+};
 
 /// Upper bound on the number of cells a single range reference may materialize
 /// during evaluation. Protects the WASM Logic worker from a peer-supplied
@@ -182,15 +184,18 @@ impl<'a> EvalContext<'a> {
                     let b = stack.pop().unwrap_or(CellValue::Empty);
                     let a = stack.pop().unwrap_or(CellValue::Empty);
                     stack.push(match (a.as_number(), b.as_number()) {
+                        // An operand's own error outranks the division rules:
+                        // `=1/A1` on a `#REF!` cell is `#REF!`, not `#TYPE!`.
+                        (Err(e), _) | (_, Err(e)) => CellValue::Error(e),
                         (Ok(_), Ok(0.0)) => CellValue::Error(FormulaError::DivisionByZero),
                         (Ok(x), Ok(y)) => CellValue::Number(x / y),
-                        _ => CellValue::Error(FormulaError::TypeError),
                     });
                 }
                 Op::Pow => {
                     let b = stack.pop().unwrap_or(CellValue::Empty);
                     let a = stack.pop().unwrap_or(CellValue::Empty);
                     stack.push(match (a.as_number(), b.as_number()) {
+                        (Err(e), _) | (_, Err(e)) => CellValue::Error(e),
                         // Guard NaN/inf (e.g. `(-1)^0.5`, `0^-1`): a bare
                         // `powf` result would propagate silently through later
                         // arithmetic. Excel surfaces these as `#NUM!`.
@@ -198,22 +203,31 @@ impl<'a> EvalContext<'a> {
                             r if r.is_finite() => CellValue::Number(r),
                             _ => CellValue::Error(FormulaError::NumError),
                         },
-                        _ => CellValue::Error(FormulaError::TypeError),
                     });
                 }
                 Op::Eq => {
                     let b = stack.pop().unwrap_or(CellValue::Empty);
                     let a = stack.pop().unwrap_or(CellValue::Empty);
-                    stack.push(CellValue::Boolean(values_equal(&a, &b)));
+                    stack.push(match first_error(&a, &b) {
+                        Some(e) => e,
+                        None => CellValue::Boolean(values_equal(&a, &b)),
+                    });
                 }
                 Op::Ne => {
                     let b = stack.pop().unwrap_or(CellValue::Empty);
                     let a = stack.pop().unwrap_or(CellValue::Empty);
-                    stack.push(CellValue::Boolean(!values_equal(&a, &b)));
+                    stack.push(match first_error(&a, &b) {
+                        Some(e) => e,
+                        None => CellValue::Boolean(!values_equal(&a, &b)),
+                    });
                 }
                 Op::Lt | Op::Le | Op::Gt | Op::Ge => {
                     let b = stack.pop().unwrap_or(CellValue::Empty);
                     let a = stack.pop().unwrap_or(CellValue::Empty);
+                    if let Some(e) = first_error(&a, &b) {
+                        stack.push(e);
+                        continue;
+                    }
                     stack.push(match compare_values(&a, &b) {
                         Some(ord) => {
                             let ok = match op {
@@ -229,9 +243,14 @@ impl<'a> EvalContext<'a> {
                     });
                 }
                 Op::Concat => {
-                    let b = stack.pop().unwrap_or(CellValue::Empty).to_display();
-                    let a = stack.pop().unwrap_or(CellValue::Empty).to_display();
-                    stack.push(CellValue::Text(a + &b));
+                    let b = stack.pop().unwrap_or(CellValue::Empty);
+                    let a = stack.pop().unwrap_or(CellValue::Empty);
+                    // Without this an error operand would be stringified into the
+                    // result ("x#REF!") instead of surfacing as the cell's error.
+                    stack.push(match first_error(&a, &b) {
+                        Some(e) => e,
+                        None => CellValue::Text(a.to_display() + &b.to_display()),
+                    });
                 }
                 Op::Neg => {
                     let v = stack.pop().unwrap_or(CellValue::Empty);
@@ -242,18 +261,21 @@ impl<'a> EvalContext<'a> {
                 }
                 Op::Not => {
                     let v = stack.pop().unwrap_or(CellValue::Empty);
+                    if let CellValue::Error(_) = v {
+                        stack.push(v);
+                        continue;
+                    }
                     let truthy = match &v {
                         CellValue::Boolean(false) => false,
                         CellValue::Number(n) if *n == 0.0 => false,
                         CellValue::Text(s) if s.is_empty() => false,
                         CellValue::Empty => false,
-                        CellValue::Error(_) => false,
                         _ => true,
                     };
                     stack.push(CellValue::Boolean(!truthy));
                 }
                 Op::CallFn { name, n_args } => {
-                    let split = stack.len().saturating_sub(*n_args as usize);
+                    let split = stack.len().saturating_sub(*n_args);
                     let args: Vec<CellValue> = stack.drain(split..).collect();
                     let fnctx = super::functions::FnCtx {
                         now_serial: self.now_serial,
@@ -343,9 +365,20 @@ impl<'a> EvalContext<'a> {
 // Value comparison helpers
 // -----------------------------------------------------------------------------
 
+/// The leftmost error among two operands, if either carries one. Every operator
+/// consults this before coercing: an error is a value that must reach the cell,
+/// not one to be turned into a number, a boolean or a piece of text.
+fn first_error(a: &CellValue, b: &CellValue) -> Option<CellValue> {
+    match (a, b) {
+        (CellValue::Error(_), _) => Some(a.clone()),
+        (_, CellValue::Error(_)) => Some(b.clone()),
+        _ => None,
+    }
+}
+
 fn values_equal(a: &CellValue, b: &CellValue) -> bool {
     match (a, b) {
-        (CellValue::Number(x), CellValue::Number(y)) => (x - y).abs() < f64::EPSILON,
+        (CellValue::Number(x), CellValue::Number(y)) => nearly_equal(*x, *y),
         (CellValue::Text(x), CellValue::Text(y)) => x == y,
         (CellValue::Boolean(x), CellValue::Boolean(y)) => x == y,
         (CellValue::Empty, CellValue::Empty) => true,
@@ -433,6 +466,63 @@ mod tests {
             ctx.eval_cell(cell(0, 1)),
             CellValue::Error(FormulaError::BrokenRef)
         ));
+    }
+
+    #[test]
+    fn every_operator_propagates_an_operand_error() {
+        // An operand carrying `#REF!` must surface `#REF!`, whatever the operator.
+        // `Div`/`Pow` used to collapse it into `#TYPE!`, `Concat` rendered it as
+        // the text "#REF!", and the comparisons answered a plain boolean.
+        for src in [
+            "1/A1", "A1/1", "A1^2", "2^A1", "1+A1", "\"x\"&A1", "A1&\"x\"", "A1=1", "A1<>1",
+            "A1<1", "A1>=1",
+        ] {
+            let mut cache = HashMap::new();
+            cache.insert(cell(0, 0), CellValue::Error(FormulaError::BrokenRef));
+            assert_eq!(eval_with_cells(src, 1, cache), "#REF!", "formula: ={src}");
+        }
+    }
+
+    #[test]
+    fn unary_not_propagates_an_operand_error() {
+        // The parser never emits a unary NOT today, so drive the op directly.
+        let bc = super::super::types::CellBytecode {
+            ops: vec![
+                Op::PushError(FormulaError::BrokenRef),
+                super::super::types::Op::Not,
+            ],
+            cell_deps: vec![],
+            range_deps: vec![],
+        };
+        let bcc = BytecodeCache::new();
+        let cache = HashMap::new();
+        let indices = indices_with(10, 10);
+        let mut ctx = EvalContext::new(&bcc, &cache, &indices);
+        assert!(matches!(
+            ctx.execute(&bc),
+            CellValue::Error(FormulaError::BrokenRef)
+        ));
+    }
+
+    #[test]
+    fn equality_is_relative_not_absolute() {
+        // An absolute `f64::EPSILON` tolerance calls every pair of tiny numbers
+        // equal: 1e-16 and 2e-16 differ by less than EPSILON yet are distinct.
+        assert_eq!(
+            eval_formula("0.0000000000000001=0.0000000000000002").to_display(),
+            "false"
+        );
+        // ... while remaining tolerant of the usual binary-fraction drift.
+        assert_eq!(eval_formula("0.1+0.2=0.3").to_display(), "true");
+    }
+
+    #[test]
+    fn call_with_more_than_255_arguments_keeps_them_all() {
+        // `n_args` used to be a `u8`: the 256th argument wrapped the count to 0,
+        // so `SUM` was called with no argument and the formula silently answered
+        // the last operand left on the stack instead of the total.
+        let args = std::iter::repeat_n("1", 256).collect::<Vec<_>>().join(",");
+        assert_eq!(eval_formula(&format!("SUM({args})")).to_display(), "256");
     }
 
     #[test]

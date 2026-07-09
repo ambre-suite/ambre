@@ -132,7 +132,7 @@ fn compile_into(
             }
             ops.push(Op::CallFn {
                 name: name.clone(),
-                n_args: args.len() as u8,
+                n_args: args.len(),
             });
         }
         // `SheetRef`/`Name` are eliminated by `parser::resolve_refs` before

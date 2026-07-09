@@ -5,7 +5,7 @@
 use super::*;
 
 /// STDEV / VAR over the sample (denominator `n - 1`).
-pub(crate) fn variance(args: &[CellValue], _sample: bool) -> CellValue {
+pub(crate) fn variance(args: &[CellValue]) -> CellValue {
     let nums = flatten_numeric(args);
     if nums.len() < 2 {
         return CellValue::Error(FormulaError::DivisionByZero);
@@ -15,8 +15,8 @@ pub(crate) fn variance(args: &[CellValue], _sample: bool) -> CellValue {
     CellValue::Number(ss / (nums.len() - 1) as f64)
 }
 
-pub(crate) fn stdev(args: &[CellValue], sample: bool) -> CellValue {
-    match variance(args, sample) {
+pub(crate) fn stdev(args: &[CellValue]) -> CellValue {
+    match variance(args) {
         CellValue::Number(v) => CellValue::Number(v.sqrt()),
         other => other,
     }
@@ -52,7 +52,7 @@ pub(crate) fn rank(args: &[CellValue]) -> CellValue {
     let data: Vec<f64> = range_cells(&args[1])
         .filter_map(|v| v.as_number().ok())
         .collect();
-    if !data.iter().any(|n| (n - num).abs() < f64::EPSILON) {
+    if !data.iter().any(|n| nearly_equal(*n, num)) {
         return CellValue::Error(FormulaError::NaError);
     }
     let descending = !args.get(2).map(is_truthy).unwrap_or(false);
@@ -72,10 +72,7 @@ pub(crate) fn mode(args: &[CellValue]) -> CellValue {
     let mut best = nums[0];
     let mut best_count = 0usize;
     for (i, &a) in nums.iter().enumerate() {
-        let c = nums[i..]
-            .iter()
-            .filter(|&&b| (b - a).abs() < f64::EPSILON)
-            .count();
+        let c = nums[i..].iter().filter(|&&b| nearly_equal(b, a)).count();
         if c > best_count {
             best_count = c;
             best = a;

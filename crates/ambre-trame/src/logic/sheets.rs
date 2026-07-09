@@ -46,7 +46,13 @@ impl TrameState {
             // sheet -- a cross-sheet reference to it converges regardless of the
             // active tab (§6). For the active sheet this equals `self.masked_cells`.
             let masked = self.masked_cells_for(&sheet_id, index);
-            for (key, value) in cells.iter() {
+            // Feed the cells in stable key order. The map iterates in hash order,
+            // and the feed order decides which cell of a cycle gets rejected: a
+            // document where `A1=B1` and `B1=A1` met through a CRDT merge would
+            // otherwise flag a different culprit on each reseed.
+            let mut keys: Vec<&String> = cells.keys().collect();
+            keys.sort_unstable();
+            for (key, value) in keys.into_iter().map(|k| (k, &cells[k])) {
                 // Masked cells (covered by a merge, conflicting value) stay out of
                 // the DAG.
                 if masked.contains(key) {

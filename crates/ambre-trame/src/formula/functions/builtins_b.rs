@@ -382,7 +382,7 @@ pub(crate) fn range_cells(value: &CellValue) -> Box<dyn Iterator<Item = &CellVal
 /// Case-insensitive equality used by lookups (numbers compared numerically).
 pub(crate) fn values_equal_ci(a: &CellValue, b: &CellValue) -> bool {
     match (a.as_number(), b.as_number()) {
-        (Ok(x), Ok(y)) => (x - y).abs() < f64::EPSILON,
+        (Ok(x), Ok(y)) => nearly_equal(x, y),
         _ => a.to_display().eq_ignore_ascii_case(&b.to_display()),
     }
 }
