@@ -243,4 +243,77 @@ impl TrameState {
         }
         events
     }
+
+    /// Compute the masked-cell key set for an arbitrary sheet, using `index` for
+    /// position<->id resolution. This is the masking half of
+    /// [`Self::rebuild_merges`] made sheet-parametric and side-effect-free: it
+    /// touches no active-sheet cache and emits no event. The formula engine feed
+    /// ([`Self::reseed_engine`]) uses it to exclude masked cells uniformly on
+    /// every sheet, not only the displayed one -- so a cross-sheet reference to a
+    /// masked conflicted cell reads the same value regardless of the active tab
+    /// (§6: "masked cells do not participate in any computation"). For the active
+    /// sheet (fed with [`Self::index`]) it returns exactly [`Self::masked_cells`].
+    pub(super) fn masked_cells_for(&self, sheet_id: &str, index: &SheetIndex) -> HashSet<String> {
+        let mut masked = HashSet::new();
+        let LoroValue::Map(entries) = self.doc.get_map(merges_map_name(sheet_id)).get_value()
+        else {
+            return masked;
+        };
+        let cells = self.doc.get_map(cells_map_name(sheet_id));
+        // Same deterministic, peer-independent overlap precedence as
+        // `rebuild_merges`: ascending master-key order, skip any rectangle that
+        // intersects an already-placed one.
+        let mut rects: Vec<MergeRect> = entries
+            .iter()
+            .filter_map(|(master_key, value)| {
+                let LoroValue::String(extent_key) = value else {
+                    return None;
+                };
+                let (mr, mc) = parse_cell_key(master_key)?;
+                let (er, ec) = parse_cell_key(extent_key)?;
+                let top = index.row_pos(&mr)? as u32;
+                let left = index.col_pos(&mc)? as u32;
+                let bottom = index.row_pos(&er)? as u32;
+                let right = index.col_pos(&ec)? as u32;
+                Some((
+                    master_key.to_string(),
+                    (top.min(bottom), left.min(right)),
+                    (top.max(bottom), right.max(left)),
+                ))
+            })
+            .collect();
+        rects.sort_by(|a, b| a.0.cmp(&b.0));
+
+        let mut occupied: HashSet<(u32, u32)> = HashSet::new();
+        for (_key, (top, left), (bottom, right)) in rects {
+            let overlaps = (top..=bottom)
+                .flat_map(|r| (left..=right).map(move |c| (r, c)))
+                .any(|cell| occupied.contains(&cell));
+            if overlaps {
+                continue;
+            }
+            for row in top..=bottom {
+                for col in left..=right {
+                    occupied.insert((row, col));
+                    if (row, col) == (top, left) {
+                        continue;
+                    }
+                    // A covered cell that still holds a value is a concurrent
+                    // conflict: mask it (keep the data, exclude it from the DAG).
+                    let Some((rl, cl)) = index.resolve(row as usize, col as usize) else {
+                        continue;
+                    };
+                    let key = cell_key(rl, cl);
+                    let has_value = cells
+                        .get(&key)
+                        .map(|v| v.get_deep_value())
+                        .is_some_and(|v| matches!(v, LoroValue::String(s) if !s.is_empty()));
+                    if has_value {
+                        masked.insert(key);
+                    }
+                }
+            }
+        }
+        masked
+    }
 }
