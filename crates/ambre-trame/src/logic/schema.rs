@@ -43,7 +43,9 @@ pub(crate) const STYLE_WRAP: i64 = 1 << 1;
 /// Horizontal align: bits 2-3 (`0` Auto, `1` Left, `2` Center, `3` Right).
 pub(crate) const STYLE_HALIGN_SHIFT: i64 = 2;
 pub(crate) const STYLE_HALIGN_MASK: i64 = 0b11 << STYLE_HALIGN_SHIFT;
-/// Vertical align: bits 4-5 (`0` Top, `1` Middle, `2` Bottom).
+/// Vertical align: bits 4-5 (`0` Middle, `1` Top, `2` Bottom). Middle, the
+/// default, MUST stay at 0: a zero mask means "no style" and is culled from the
+/// CRDT (see `pack_valign`).
 pub(crate) const STYLE_VALIGN_SHIFT: i64 = 4;
 pub(crate) const STYLE_VALIGN_MASK: i64 = 0b11 << STYLE_VALIGN_SHIFT;
 /// Number-format family: bits 9-12 (`0` General .. `9` Custom).

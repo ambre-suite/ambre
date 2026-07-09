@@ -108,7 +108,9 @@ pub(crate) fn pack_style_mask(s: &CellStyle) -> i64 {
     pack_borders(&s.borders, &mut m);
     m |= pack_numfmt(&s.format) << STYLE_NUMFMT_SHIFT;
     if let Some(d) = s.decimals {
-        m |= ((d as i64 + 1) << STYLE_DECIMALS_SHIFT) & STYLE_DECIMALS_MASK;
+        // 5 bits hold `d + 1`, so 30 is the widest storable count. Clamp: masking
+        // a larger value would keep its low bits and read back as a wrong count.
+        m |= ((d.min(30) as i64 + 1) << STYLE_DECIMALS_SHIFT) & STYLE_DECIMALS_MASK;
     }
     if let Some(sz) = s.size {
         m |= ((sz as i64).min(127) << STYLE_SIZE_SHIFT) & STYLE_SIZE_MASK;
@@ -192,12 +194,19 @@ pub(crate) fn format_number(value: f64, fmt: &CellFormat, decimals: Option<u8>) 
         CellFormat::Scientific => format!("{:.*e}", dec(2), value),
         CellFormat::Fraction => {
             // Simple proper-fraction rendering over a /16 denominator (MVP).
-            let whole = value.trunc() as i64;
-            let frac = (value.fract().abs() * 16.0).round() as i64;
+            // Round the whole value to sixteenths in one step so a fraction that
+            // rounds up to 16/16 carries into the integer part instead of being
+            // printed as such.
+            let sixteenths = (value * 16.0).round() as i64;
+            let whole = sixteenths / 16;
+            let frac = (sixteenths % 16).abs();
             if frac == 0 {
                 whole.to_string()
             } else if whole == 0 {
-                format!("{frac}/16")
+                // A zero integer part cannot carry the sign of a negative value,
+                // so the fraction has to: "-8/16", not "8/16".
+                let sign = if sixteenths < 0 { "-" } else { "" };
+                format!("{sign}{frac}/16")
             } else {
                 format!("{whole} {frac}/16")
             }
@@ -223,6 +232,32 @@ mod tests {
         // The "mask == 0 means no style" contract in `persist_style` requires the
         // default of every mask-resident field to pack to 0.
         assert_eq!(pack_style_mask(&CellStyle::default()), 0);
+    }
+
+    #[test]
+    fn oversized_decimals_clamp_instead_of_vanishing() {
+        // The field holds `decimals + 1` in 5 bits. Masking a larger value kept
+        // only its low bits, so 200 decimals used to read back as 8: a wrong
+        // number, not a rejected one. Saturate at the widest the field can hold.
+        let style = CellStyle {
+            decimals: Some(200),
+            ..Default::default()
+        };
+        let raw = (pack_style_mask(&style) & STYLE_DECIMALS_MASK) >> STYLE_DECIMALS_SHIFT;
+        assert_eq!(raw, 31, "clamped to 30 decimals, stored as 30 + 1");
+    }
+
+    #[test]
+    fn fraction_format_keeps_the_sign_and_carries() {
+        let frac = |v: f64| format_number(v, &CellFormat::Fraction, None);
+        // A value below 1 has a zero integer part, which cannot carry the sign.
+        assert_eq!(frac(-0.5), "-8/16");
+        assert_eq!(frac(0.5), "8/16");
+        // Rounding to the nearest sixteenth must carry, not print "16/16".
+        assert_eq!(frac(0.97), "1");
+        assert_eq!(frac(-0.97), "-1");
+        assert_eq!(frac(-1.5), "-1 8/16");
+        assert_eq!(frac(2.0), "2");
     }
 
     #[test]

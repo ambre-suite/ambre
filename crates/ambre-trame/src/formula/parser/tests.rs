@@ -398,3 +398,50 @@ fn invalid_formula() {
     assert!(parse_formula("=1").is_err());
     assert!(parse_formula("SUM(").is_err());
 }
+
+#[test]
+fn error_literal_reparses() {
+    // The renderer emits `#REF!` whenever a paste drives a reference off the
+    // grid, and the Logic thread re-parses that text on write. Without an error
+    // literal in the grammar the cell would settle on `#PARSE!`, not `#REF!`.
+    assert!(matches!(
+        parse("#REF!"),
+        Expr::Literal(CellValue::Error(FormulaError::BrokenRef))
+    ));
+    assert!(matches!(parse("1+#REF!"), Expr::BinOp { .. }));
+    assert!(matches!(
+        parse("#N/A"),
+        Expr::Literal(CellValue::Error(FormulaError::NaError))
+    ));
+    assert!(matches!(
+        parse("#DIV/0!"),
+        Expr::Literal(CellValue::Error(FormulaError::DivisionByZero))
+    ));
+}
+
+#[test]
+fn sheet_qualifier_still_wins_over_the_error_literal() {
+    // Both start with `#`: `#s0!A1` must stay a sheet-qualified reference.
+    assert!(matches!(parse("#s0!A1"), Expr::SheetRef { .. }));
+}
+
+#[test]
+fn row_zero_is_not_a_reference() {
+    // Rows are 1-based in A1 syntax, so `A0` names nothing. It must fall through
+    // to the named-range parser rather than silently aliasing row 1.
+    assert!(matches!(parse("A0"), Expr::Name(n) if n == "A0"));
+    assert!(matches!(parse("A1"), Expr::CellRef(r) if r.row == 0));
+}
+
+#[test]
+fn bool_literal_matches_only_a_whole_word() {
+    // A named range that merely starts with TRUE/FALSE must stay a bareword;
+    // consuming the prefix left ":VALUE" as unparsed trailing input.
+    assert!(matches!(parse("TRUEVALUE"), Expr::Name(n) if n == "TRUEVALUE"));
+    assert!(matches!(parse("FALSEY"), Expr::Name(n) if n == "FALSEY"));
+    assert!(matches!(
+        parse("TRUE"),
+        Expr::Literal(CellValue::Boolean(true))
+    ));
+    assert!(matches!(parse("TRUE+1"), Expr::BinOp { .. }));
+}
