@@ -96,7 +96,7 @@ pub(crate) async fn handle_update(
             .await
         {
             Ok(s) => {
-                tracing::info!(
+                tracing::debug!(
                     "[Server] seq assigned doc={doc_id} author={pub_key_hex} clock={clock} seq={s}"
                 );
                 s
@@ -112,7 +112,7 @@ pub(crate) async fn handle_update(
         };
 
     let s3_key = crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, seq);
-    tracing::info!("[Server→Postgres] insert_update doc={doc_id} seq={seq} clock={clock}");
+    tracing::debug!("[Server->Postgres] insert_update doc={doc_id} seq={seq} clock={clock}");
     if let Err(e) = db::insert_update(
         &state.db,
         &doc_id,
@@ -142,7 +142,7 @@ pub(crate) async fn handle_update(
             return;
         }
     };
-    tracing::info!("[Server→Redis] append_pending_delta doc={doc_id} seq={seq} s3_key={s3_key}");
+    tracing::debug!("[Server->Redis] append_pending_delta doc={doc_id} seq={seq} s3_key={s3_key}");
     if let Err(e) =
         redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
     {
@@ -162,7 +162,7 @@ pub(crate) async fn handle_update(
         seq: ambre_protocol::messages::Seq(seq),
         update,
     });
-    tracing::info!("[Server→RedisPubSub] broadcast Update doc={doc_id} seq={seq}");
+    tracing::debug!("[Server->RedisPubSub] broadcast Update doc={doc_id} seq={seq}");
     if let Err(e) = redis_ops::doc_broadcast(&state.redis, &doc_id, &broadcast).await {
         // A dropped broadcast only delays live delivery: subscribers replay the
         // missed seq via RequestMissing on reconnect, and the delta is already

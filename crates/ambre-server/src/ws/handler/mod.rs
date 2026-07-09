@@ -209,8 +209,8 @@ async fn handle_ws(
                     .await;
             }
             WsClientMsg::Update(update) => {
-                tracing::info!(
-                    "[Server←Sync] WS Update doc={} author={} clock={}",
+                tracing::debug!(
+                    "[Server<-Sync] WS Update doc={} author={} clock={}",
                     update.public_data.document_id,
                     update.public_data.pub_key.to_hex(),
                     update.public_data.clock.0,

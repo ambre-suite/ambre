@@ -109,7 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .try_into()
                 .map_err(|_| "JWT_SIGNING_SEED must be 32 bytes (64 hex chars)")?
         }
-        Err(_) => {
+        Err(_) if dev_mode => {
             tracing::warn!(
                 "JWT_SIGNING_SEED not set: generating an ephemeral signing key (tokens \
                  do not survive a restart, and multi-instance verification will fail)"
@@ -117,6 +117,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut seed = [0u8; 32];
             getrandom::fill(&mut seed).expect("CSPRNG");
             seed
+        }
+        Err(_) => {
+            // Outside DEV_MODE an ephemeral key is a misconfiguration: it breaks
+            // multi-instance token verification and silently logs everyone out on
+            // restart. Fail fast so the operator sets a shared seed.
+            return Err("JWT_SIGNING_SEED must be set (64 hex chars) outside DEV_MODE".into());
         }
     };
     let jwt_keys = std::sync::Arc::new(jwt::JwtKeys::from_seed(&jwt_seed));
@@ -128,12 +134,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or(default)
     };
 
+    // Only trust `X-Forwarded-For` when explicitly opted in (server behind a
+    // reverse proxy that overwrites the header). Otherwise a client could forge
+    // the header to rotate its rate-limit bucket and defeat brute-force limits.
+    let trust_proxy_headers = std::env::var("TRUST_PROXY_HEADERS")
+        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
+        .unwrap_or(false);
+
     let config = Config {
         s3_env_prefix,
         oidc_google_client_id: oidc_google_client_id.clone(),
         oidc_google_client_secret: oidc_google_client_secret.clone(),
         oidc_google_redirect_uri: oidc_google_redirect_uri.clone(),
         dev_mode,
+        trust_proxy_headers,
         access_ttl_secs: env_ttl("ACCESS_TTL_SECS", 900),
         refresh_ttl_secs: env_ttl("REFRESH_TTL_SECS", 30 * 24 * 3600),
         ..Default::default()
@@ -347,7 +361,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
     tracing::info!("Ambre Blind Relay listening on {}", bind_addr);
 
-    axum::serve(listener, app).await?;
+    // `into_make_service_with_connect_info` is REQUIRED for the rate limiter to
+    // see the peer socket address (`ConnectInfo<SocketAddr>`). Without it the
+    // extension is absent and every unauthenticated client collapses into one
+    // shared `ip:unknown` bucket.
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }

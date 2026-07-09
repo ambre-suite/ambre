@@ -115,6 +115,35 @@ The only real server-side addition. The server tracks a "last read seq" cursor p
 
 Native use case for SecSync **Ephemeral messages** — never persisted, anti-replay counter.
 
+### Server-side authorization (Blind Relay enforcement)
+
+> **MANDATORY when Murmure lands.** The current WS handler (`ambre-server`) enforces
+> real access control for documents but NOT for channels: `handle_subscribe_channel`
+> accepts any `channel_id` with no membership check, and `handle_channel_update` /
+> `handle_channel_ephemeral` rebroadcast without verifying the Ed25519 signature.
+> Since Murmure is not started, no channel path is wired to real data yet; before it
+> is, the relay MUST mirror the document guarantees so E2EE is not the ONLY line of
+> defense.
+
+A channel is one document crypto-side (see *Key management*), so it reuses the same
+membership model. The relay MUST enforce, server-side:
+
+1. **Subscription ACL** — `SubscribeChannel` requires a `channel_members` row for the
+   caller (same shape as `document_members`), re-checked on a short TTL exactly like
+   `MEMBERSHIP_RECHECK_TTL` for documents. Without it any authenticated user who learns
+   a `channel_id` can receive every broadcast (Zero-Knowledge leak: sender identity,
+   timing, volume — even though the ciphertext stays sealed) and inject traffic.
+2. **Signature verification** — every `ChannelUpdate` MUST pass `verify_update_signature`
+   before it is sequenced/persisted/broadcast, identical to `handle_update`. Ephemerals
+   (typing/presence) carry the anti-replay counter and are signature-checked too.
+3. **Clock + seq** — persisted channel updates go through the same
+   `verify_clock_and_assign_seq` Lua path (per active segment) as document deltas.
+
+Rationale: the Blind Relay's promise is "the server only knows routing metadata for
+*authorized* members." An unauthenticated-to-the-channel subscriber breaks that promise
+at the metadata layer, and unsigned rebroadcast lets a non-member pollute members'
+sessions (integrity / DoS). E2EE protects content, not membership metadata or integrity.
+
 ### Key management
 
 One channel = one document from a crypto standpoint, with its Document Key. Sharing = encrypting the Document Key with each member's X25519 pubkey. When a member leaves: rotation via the flow described in section 6.

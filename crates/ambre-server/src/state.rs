@@ -62,6 +62,13 @@ pub struct Config {
     /// enabled, letting `?user=<name>` authenticate as an on-the-fly user
     /// (deterministic keys, no OIDC). MUST stay false in production.
     pub dev_mode: bool,
+    /// Whether to trust the `X-Forwarded-For` header for the client IP used in
+    /// rate limiting. MUST stay false unless the server runs behind a reverse
+    /// proxy that OVERWRITES `X-Forwarded-For` with the real client address
+    /// (e.g. nginx `proxy_set_header X-Forwarded-For $remote_addr`). When false,
+    /// the header is ignored and the socket peer address is used, so a client
+    /// cannot spoof its rate-limit bucket by forging the header.
+    pub trust_proxy_headers: bool,
 }
 
 impl Default for Config {
@@ -76,6 +83,7 @@ impl Default for Config {
             oidc_google_client_secret: String::new(),
             oidc_google_redirect_uri: String::new(),
             dev_mode: false,
+            trust_proxy_headers: false,
         }
     }
 }

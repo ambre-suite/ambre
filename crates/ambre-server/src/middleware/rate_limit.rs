@@ -149,11 +149,17 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .to_string();
-    let x_forwarded_for = req
-        .headers()
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
+    // Only consult `X-Forwarded-For` when the operator has vouched for a proxy
+    // that overwrites it; otherwise it is attacker-controlled and must be
+    // ignored so the socket peer address is authoritative.
+    let x_forwarded_for = if state.config.trust_proxy_headers {
+        req.headers()
+            .get("x-forwarded-for")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string())
+    } else {
+        None
+    };
     let remote_ip = req
         .extensions()
         .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
