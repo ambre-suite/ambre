@@ -169,6 +169,12 @@ Stories:
   - Context-menu polish (`trame-ui §5.C`): grouped iconed entries + separators + header-scoped menu.
   - **Multi-column sort** (`SortRangeMulti`, `trame-features §2`): `SortDialog` UI + logic handler. *(was V1.)*
   - Filter feedback on the first row (`trame-ui §5.D`): Excel-style autofilter buttons fed by `FilterApplied { col }`.
+> **Known schema deferral (does not gate `E3`).** `trame-logic §14 Phase 0` stays `[~]`: the
+> `{v,t,s}` cell sub-map and the shared `styles` map of `§2.B` were never implemented. The MVP is
+> functionally complete without them, and the 2026-07-09 review split the remainder in two — the
+> style fan-out consolidation (an `E5` Story, gated on the public Beta) and the `styles` dictionary
+> (deferred behind a benchmark). See `trame-logic §11 bis.F`.
+
 - *(Below: the original E3 scope, delivered.)*
 - `trame-logic §14 Phase 1 & 2` — multi-sheet `LoroDoc` + `SheetIndex`; insert/delete rows/columns; cell merges;
   Undo/Redo (Loro `UndoManager`); complete the function set from 22 to ~50; manual cell formatting
@@ -220,10 +226,25 @@ Stories:
   `SheetIndices`** (currently rebuilt on every write/scroll -- P1 budget, restores the `§7` state
   shape); **stable engine sheet indices** (de-pin the active sheet from index 0 so `ActivateSheet`
   stops resetting the engine); **dependency-graph micro-fixes** (O(N) `remove`, whole-graph cycle
-  check, full-DAG topo walk, dead write-back loop, `formula_cache` `RefCell`);
-  **bold/italic folded into `CellStyle`**.
+  check, full-DAG topo walk, dead write-back loop, `formula_cache` `RefCell`).
   *(View-independent merge masking, being a correctness defect rather than scaling debt, moved to
-  the `E3` Story below.)*
+  the `E3` Story below. Bold/italic folding is absorbed by the style-consolidation Story below.)*
+- **Trame per-cell style consolidation (schema, `trame-logic §11 bis.F`)** `[ ]` — a cell's style is
+  scattered over up to 11 per-sheet `LoroMap`s (`format_`, `style_`, `fgcolor_`, `bgcolor_`,
+  `bordcolor{0..3}_`, `font_`, `numfmt_`) instead of the single style reference `trame-logic §2.B`
+  prescribes. Costs: `set_cell_style` touches 9 containers per cell and commits **per cell** inside
+  the selection loop; `format_{sheet}` survives as a vestigial bold/italic mask duplicating
+  `style_{sheet}`; no style deduplication. Target: one style container per cell holding the whole
+  `CellStyle`, one transaction per selection.
+  **Not a correctness defect** — the suspicion that concurrent whole-cell style edits could converge
+  to a per-container blend was tested and refuted (a whole-cell edit writes every container in one
+  monotonic-Lamport burst, so Loro's LWW elects the same winner in each); locked in by
+  `logic/convergence_tests.rs::concurrent_whole_cell_style_edits_do_not_blend_across_containers`.
+  **Ordering:** it does *not* preempt `E4`, but it changes the persisted schema, so it must land
+  **before the public Beta**, while no third-party document exists and no migration path has to be
+  carried forever. *(The shared `styles` dictionary + `"s"` indirection and the `{v,t,s}` cell
+  sub-map are explicitly out of scope: deferred behind a benchmark — Loro does not GC orphaned map
+  entries, so the indirection would force a style-reclamation policy.)*
 - Trame Phase 2+ — basic .xlsx import, conditional formatting, data validation.
 - **Trame column/row reorder (drag & drop)** `[x]` — Excel-style drag to move a whole
   column/row to a new position. **Pulled into the MVP** once investigation showed it was far
