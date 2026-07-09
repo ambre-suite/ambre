@@ -78,8 +78,18 @@ fn string_literal(input: &str) -> nom::IResult<&str, String> {
     Ok((&input[pos..], s))
 }
 
+/// `TRUE` / `FALSE`, matched as a whole word only. A bareword that merely starts
+/// with one -- a named range `TRUEVALUE`, a sheet `FALSEY` -- must reach the name
+/// and sheet parsers intact instead of leaving its tail as trailing input.
 fn parse_bool(input: &str) -> nom::IResult<&str, bool> {
-    alt((value(true, tag("TRUE")), value(false, tag("FALSE")))).parse(input)
+    let (rest, b) = alt((value(true, tag("TRUE")), value(false, tag("FALSE")))).parse(input)?;
+    if rest.starts_with(|c: char| c.is_alphanumeric() || c == '_') {
+        return Err(nom::Err::Error(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::Tag,
+        )));
+    }
+    Ok((rest, b))
 }
 
 // -----------------------------------------------------------------------------
@@ -90,10 +100,14 @@ fn col_letters(input: &str) -> nom::IResult<&str, &str> {
     recognize(many1(one_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ"))).parse(input)
 }
 
+/// The 1-based row number of an A1 reference, as a 0-based index. Row 0 does not
+/// exist: `A0` is rejected here so it falls through to the named-range parser,
+/// where it surfaces as an undefined name. Saturating it to row 1 would silently
+/// rewrite the user's `=A0` into `=A1` on the canonicalization round-trip.
 fn row_number(input: &str) -> nom::IResult<&str, u32> {
     map_res(digit1, |s: &str| -> Result<u32, ()> {
         let n: u32 = s.parse().map_err(|_| ())?;
-        Ok(n.saturating_sub(1))
+        n.checked_sub(1).ok_or(())
     })
     .parse(input)
 }
@@ -177,6 +191,28 @@ fn sheet_qualified(input: &str) -> nom::IResult<&str, Expr> {
     ))
 }
 
+/// An error literal (`#REF!`, `#DIV/0!`, ...). The renderer emits these whenever
+/// a rewrite invalidates a reference: a paste that drives one off the grid
+/// (`shift_formula`), or a sheet qualifier that no longer resolves. That text is
+/// written back to the CRDT and re-parsed, so the grammar has to read back
+/// everything the renderer writes -- otherwise `=#REF!` settles on `#PARSE!`.
+///
+/// `#PARSE!(msg)` is deliberately absent: evaluation produces it, no AST holds it.
+fn error_literal(input: &str) -> nom::IResult<&str, FormulaError> {
+    preceded(
+        char('#'),
+        alt((
+            value(FormulaError::BrokenRef, tag("REF!")),
+            value(FormulaError::DivisionByZero, tag("DIV/0!")),
+            value(FormulaError::CircularReference, tag("CIRCULAR!")),
+            value(FormulaError::TypeError, tag("TYPE!")),
+            value(FormulaError::NumError, tag("NUM!")),
+            value(FormulaError::NaError, tag("N/A")),
+        )),
+    )
+    .parse(input)
+}
+
 /// A bareword reference to a named range. Resolution happens in
 /// [`resolve_refs`]; here we only capture the identifier.
 fn name_ref(input: &str) -> nom::IResult<&str, Expr> {
@@ -232,6 +268,11 @@ fn atom_inner(input: &str) -> nom::IResult<&str, Expr> {
     // Sheet-qualified (`Sheet2!A1`) before a plain ref: it starts like an
     // identifier but is disambiguated by the `!`.
     if let Ok(result) = sheet_qualified(input) {
+        return Ok(result);
+    }
+    // After `sheet_qualified`: both open on `#`, and a stable sheet id followed
+    // by a reference (`#s0!A1`) must not be read as an error literal.
+    if let Ok(result) = map(error_literal, |e| Expr::Literal(CellValue::Error(e))).parse(input) {
         return Ok(result);
     }
     if let Ok(result) = cell_or_range(input) {

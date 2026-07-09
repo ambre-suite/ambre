@@ -126,6 +126,20 @@ mod tests {
     }
 
     #[test]
+    fn ref_error_text_is_reparseable() {
+        // The shifted text is written back to the CRDT and re-parsed by the
+        // engine. If `#REF!` is not part of the grammar the pasted cell settles
+        // on `#PARSE!(...)` instead of the `#REF!` the shift decided on.
+        let shifted = shift_formula("=A1+B1", -1, 0);
+        assert_eq!(shifted, "=#REF!+#REF!");
+        let body = shifted.strip_prefix('=').unwrap();
+        assert!(
+            parse_formula(body).is_ok(),
+            "the renderer must only emit text the parser accepts"
+        );
+    }
+
+    #[test]
     fn unparseable_left_verbatim() {
         assert_eq!(
             shift_formula("=this is not (a formula", 1, 1),
