@@ -110,6 +110,14 @@ speeds the position query; it does not remove the shared-counter hazard.
 
 ### B. CRDT Schema
 
+> **Target schema, not as-built.** The cell sub-map (`{v,t,s}`) and the shared `styles` map below
+> are **not** implemented: cell values are stored flat in `cells_{sheet_id}`, and a cell's style is
+> scattered over up to 11 per-sheet maps (`format_`, `style_`, `fgcolor_`, `bgcolor_`,
+> `bordcolor{0..3}_`, `font_`, `numfmt_`). Consolidating that fan-out into one style container per
+> cell is finding §11 bis.F, scheduled before the public Beta. The shared `styles` dictionary and
+> the `"s"` indirection stay deferred behind a benchmark (§11 bis.F, "out of scope"). See §14
+> Phase 0.
+
 ```
 LoroDoc
 ├── "workbook" (LoroMap)              → {name, author, created}
@@ -1474,9 +1482,11 @@ proptest! {
 ## 11 bis. SCALING & CONSISTENCY DEBT (2026-07 ARCHITECTURE REVIEW)
 
 > Findings of the 2026-07-09 architecture review of `ambre-trame`. The identity layer
-> (`Uid` / `SheetIndex` / `AxisId`, §2-§3) is sound; every finding below is a recomputation
-> strategy sitting on top of it, so all are fixable without a document-format migration.
-> Tracked as **Phase 4** Stories in §14 (Epic `E5` in `specs/ambre-roadmap.md`).
+> (`Uid` / `SheetIndex` / `AxisId`, §2-§3) is sound. Findings A-E are recomputation strategies
+> sitting on top of it, fixable without a document-format migration. **Finding F is the exception:**
+> it is a divergence of the persisted schema itself (§2.B), so it must land before the public Beta,
+> while no third-party document exists and the fix is a writer/reader change with no migration path
+> to carry. Tracked as **Phase 4** Stories in §14 (Epic `E5` in `specs/ambre-roadmap.md`).
 
 ### A. Incremental remote apply (kill the O(document) reseed)
 
@@ -1548,12 +1558,51 @@ identically regardless of the active tab. *Tracked as an Epic `E3` / Phase 1 Sto
 result that depends on view state is wrong at any document size), not with the Phase 4 scaling
 debt.*
 
-### F. Fold bold/italic into `CellStyle`
+### F. Consolidate the per-cell style fan-out (schema divergence from §2.B)
 
-Font style has two sources of truth: the `bold`/`italic` sets mirroring `format_{sheet}` plus the
-`styles` map mirroring the style containers -- three reseeds and duplicated plumbing through
-`DisplayCell`. Fold bold/italic into `CellStyle`/`styles`; keep reading legacy `format_{sheet}`
-entries, write the unified form on next edit (no bulk CRDT rewrite).
+**Divergence from §2.B.** The schema prescribes one style reference per cell (the `"s"` key of the
+cell sub-map) pointing into a shared `styles` map. The implementation instead scatters one cell's
+style across up to **11 per-sheet `LoroMap`s**, each an independent LWW register keyed by the cell
+id pair: `format_` (a legacy bold/italic mask), `style_` (the packed rich mask: underline, wrap,
+alignments, border presence/style, number-format family, decimals, font size), `fgcolor_`,
+`bgcolor_`, `bordcolor{0..3}_` (one per edge), `font_` and `numfmt_`. Neither the `{v,t,s}` cell
+sub-map nor the shared `styles` map exists.
+
+Consequences, in order of weight:
+
+1. **Write amplification.** `set_cell_style` touches 9 containers per cell, and `persist_format`
+   commits **per cell** inside the selection loop: formatting an N-cell selection is N Loro
+   transactions whose delta fans out over 11 containers, each compressed and encrypted on the sync
+   path.
+2. **Two sources of truth for font style.** `format_{sheet}` now carries only the bold/italic mask
+   although `style_{sheet}` already holds a richer one -- a vestigial container, three reseeds and
+   duplicated plumbing through `DisplayCell`. (This was the original scope of this finding.)
+3. **No deduplication.** Every cell stores its own copy of every attribute; the shared `styles` map
+   exists in §2.B precisely to make storage O(distinct styles).
+
+**Not a convergence defect.** The fan-out was suspected of breaking the atomicity of a whole-cell
+style edit: two peers concurrently rewriting the same cell's style race once *per container*, and
+nothing obviously forces the same writer to win every register -- the converged cell could carry a
+blend neither peer wrote. **Tested and refuted.** A whole-cell edit writes every container in one
+burst of monotonic-Lamport ops, so the relative order of the two peers' ops is identical in each
+container and Loro's LWW elects the same winner throughout. Locked in by
+`logic/convergence_tests.rs::concurrent_whole_cell_style_edits_do_not_blend_across_containers`
+(peer A clears the style while peer B rewrites it; the converged style must be one the peers
+actually wrote), which also held under deliberately desynchronized Lamport clocks. A *partial*
+patch racing a whole-cell one does blend per attribute -- but that is the intended, Excel-like
+semantics for disjoint attribute edits, not a defect. This finding therefore rests on cost and
+complexity, **not** correctness: it must not preempt Epic `E4`.
+
+**Target.** One style container per cell, holding the whole `CellStyle` (which folds bold/italic in,
+closing consequence 2 for free), written in a single transaction per selection. The above test
+becomes a structural guarantee rather than a happy accident of Lamport ordering.
+
+**Deliberately out of scope.** The shared `styles` dictionary and the `"s"` style-id indirection
+(consequence 3) are a memory/bandwidth optimization with a real cost: Loro does not garbage-collect
+orphaned map entries, so the indirection forces a reclamation policy for unreferenced styles plus a
+dereference on every cell read. Deferred until benchmarks justify it -- the same treatment §14
+Phase 3 gives the `SheetRangeIndex` interval tree. The `{v,t,s}` cell sub-map falls under the same
+rule: `"t"` is a type cache the engine already rederives.
 
 ---
 
@@ -1622,7 +1671,14 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 > `specs/ambre-roadmap.md`.
 
 **Phase 0 — Core standalone**
-- [~] Multi-sheet `LoroDoc`, per-sheet CRDT schema (§2.B: `sheets`, `cells_/format_/rows_/cols_{sheet}`, dense stable-id model) *(structural foundation landed: implicit default sheet, lazy materialization, `MATERIALIZE_CAP`; the `{v,t,s}` cell sub-map, shared `styles`, and the feature maps `filter_hidden`/`cond_formats`/`validations`/`protections` arrive with their features; explicit add-sheet + `sheet_order` arrive with the tabs UI)*
+- [~] Multi-sheet `LoroDoc`, per-sheet CRDT schema (§2.B: `sheets`, `cells_/format_/rows_/cols_{sheet}`, dense stable-id model) *(Landed: the structural foundation -- implicit default sheet, lazy materialization, `MATERIALIZE_CAP`, explicit add-sheet + `sheet_order` (with the tabs UI), and `filter_hidden_{sheet}` (with the shared filter). `cond_formats`/`validations`/`protections` legitimately await their Phase 2 / Post-MVP features.*
+  **Still open, and the reason this box is `[~]`:** the `{v,t,s}` cell sub-map and the shared
+  `styles` map were never implemented -- values are flat in `cells_{sheet}` and styles fan out over
+  11 per-sheet maps. Split in two by the 2026-07-09 review (§11 bis.F): **(a)** consolidating the
+  style fan-out into one container per cell is scheduled **before the public Beta** (Phase 4, Epic
+  `E5`), since it is a schema change and no third-party document exists yet; **(b)** the shared
+  `styles` dictionary + `"s"` indirection and the `{v,t,s}` sub-map are **deferred behind a
+  benchmark** and are not a prerequisite for anything.*
 - [x] Bidirectional `SheetIndex` (`model::SheetIndex`, dense over used range) + `sheet_name_to_id`
 - [x] `nom` parser: arithmetic, `CellRef`, `Range` (bounded + `EntireAxis`), basic functions, cross-sheet references (`Sheet2!A1` via `sheet_name_to_id`)
 - [x] Bytecode VM: full `Op` set, `compile()`, `execute()`, `EvalContext`
@@ -1668,7 +1724,7 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
   - Date/time: TIME, HOUR, MINUTE, SECOND, WEEKDAY, EDATE, EOMONTH
   - Lookup/reference: HLOOKUP, CHOOSE, ROWS, COLUMNS, ROW, COLUMN. **Context note:** `ROW()`/`COLUMN()` need the evaluating cell's position, threaded into `call_builtin` via `FnCtx` (`EvalContext::current_pos`, set in `eval_cell` from the cell's `SheetIndex` position -- same pattern as `now_serial`). Only the **no-argument** form is supported; the reference form (`ROW(A1)`) and `OFFSET`/`INDIRECT` need reference-preserving compilation (args are pre-evaluated to values, losing the reference identity) and are **deferred to Phase 3**.
 - [x] Named ranges, cross-sheet references *(Epic `E3`: `CellRef`/`RangeDep` carry a local `sheet: u16`; the parser emits `Expr::SheetRef`/`Expr::Name`, resolved by a context-aware `resolve_refs` pass against a `FormulaCtx` (sheet display name -> index, defined name -> target). Named ranges fully wired e2e: `named_ranges` LWW CRDT map, `TrameCommand::DefineName`/`DeleteName`, positional resolution on reseed. `reseed_engine` is multi-sheet (active sheet pinned to index 0; cross-sheet `Sheet2!A1` evaluates in the engine, unit-tested). **Gap:** the end-to-end cross-sheet path needs a sheet-creation command (`CreateSheet`/`ActivateSheet`), which lands with the sheet-tabs UI (see Phase 0) -- the engine is ready, only the entry point is missing)*
-- [x] Sheet lifecycle commands `CreateSheet` / `RenameSheet` / `MoveSheet` / `DeleteSheet` + `ActivateSheet` (§2.D): peer-scoped `sheet_id` minting (`{peer:016x}_{counter:08x}`), `sheet_order` `LoroMovableList` ops (default sheet implicit-first, never eagerly pushed), last-sheet-deletion guard (`TrameEvent::Error`), active-sheet fallback on delete, delete-driven reseed (drops per-sheet containers) + full engine remap. `TrameEvent::SheetList { sheets, active }` refreshes the tab strip (also on load). Unlocks the end-to-end cross-sheet path (unit-tested `cross_sheet_formula_evaluates_end_to_end`). *(Epic `E3`; convergent last-sheet re-insert under concurrency and the sheet-tabs UI still pending)*
+- [x] Sheet lifecycle commands `CreateSheet` / `RenameSheet` / `MoveSheet` / `DeleteSheet` + `ActivateSheet` (§2.D): peer-scoped `sheet_id` minting (`{peer:016x}_{counter:08x}`), `sheet_order` `LoroMovableList` ops (default sheet implicit-first, never eagerly pushed), last-sheet-deletion guard (`TrameEvent::Error`), active-sheet fallback on delete, delete-driven reseed (drops per-sheet containers) + full engine remap. `TrameEvent::SheetList { sheets, active }` refreshes the tab strip (also on load). Unlocks the end-to-end cross-sheet path (unit-tested `cross_sheet_formula_evaluates_end_to_end`). *(Epic `E3`. The sheet-tabs UI has since landed as the DOM `SheetTabs` component. **Still open:** the last-sheet-deletion guard is enforced **locally** only; its behaviour under concurrent deletion by two peers is unspecified and untested. Post-MVP, no Story yet -- needs a 2-peer convergence case before any fix is designed.)*
 - [x] Cross-sheet references bound to `sheet_id` (not display name): the CRDT `v` text is canonicalized to an id-qualified form (`#s0!A1` via the `#` sigil) at edit time, and the formula-bar text is reconstructed through `sheet_id -> name`, so rename/reorder preserve references and delete yields cross-sheet `#REF!` (§2.D rename note, §12). *(Epic `E3`: `formula::SheetQualifier` on `Expr::SheetRef`, parser `#id` token + `FormulaCtx::resolve_sheet_id`, `FormulaError::BrokenRef`/`Op::PushError`, `formula::render` AST printer with `canonicalize`/`to_display_form`, `TrameState::canonicalize_input`/`formula_display` + `sheet_id_to_u16`/`sheet_id_to_name` maps. Tests: parser `#id`/`#REF!`, render round-trips, `cross_sheet_reference_survives_rename_and_breaks_on_delete`, `cross_sheet_reference_converges_across_peers_on_rename`)* **Interop note (deferred):** xlsx/CSV export must map `#id -> name` and import `name -> #id` (tracked in the interop spec). Pre-existing display-name formulas are canonicalized on next edit (no bulk rewrite).
 
 **Phase 3 — Optimization & Completion**
@@ -1701,8 +1757,14 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
   reindex comment), targeted cycle check instead of whole-graph `is_cyclic_directed`,
   dirty-subgraph topological recompute, delete the dead write-back loop, drop the `formula_cache`
   `RefCell`.
-- [ ] **Fold bold/italic into `CellStyle` (§11 bis.F):** single style source of truth, legacy
-  `format_{sheet}` read-compat, no bulk rewrite.
+- [ ] **Consolidate the per-cell style fan-out (§11 bis.F):** one style container per cell holding
+  the whole `CellStyle` (folding bold/italic in, so `format_{sheet}` becomes read-compat only), one
+  transaction per selection instead of one per cell. **Ordering: the only Phase 4 item gated on the
+  public Beta** -- it changes the persisted schema (§2.B), so it is cheap exactly as long as no
+  third-party document exists. It is *not* a correctness fix (see §11 bis.F, "Not a convergence
+  defect"), so it does **not** preempt Epic `E4`: land it after `E4`, before the Beta.
+  *(The shared `styles` dictionary + `"s"` indirection and the `{v,t,s}` sub-map are explicitly
+  **not** part of this item -- deferred behind a benchmark, §11 bis.F "out of scope".)*
 
 > **View-independent merge masking (§11 bis.E)** is a correctness defect, not scaling debt, so it
 > is tracked as an **E3 / Phase 1** Story (see the Phase 1 list above), not in this phase.

@@ -23,7 +23,10 @@
 
 use proptest::prelude::*;
 
-use ambre_bus::{FillMode, FilterKind, FilterOp, GridRange};
+use ambre_bus::{
+    BorderEdit, BorderPreset, BorderStyle, Borders, CellFormat, FillMode, FilterKind, FilterOp,
+    GridRange, HAlign, StylePatch, VAlign,
+};
 
 use super::TrameState;
 use crate::{TrameCommand, TrameEvent};
@@ -304,4 +307,205 @@ proptest! {
         c.import_snapshot(&a.export_snapshot());
         prop_assert_eq!(read_window(&mut c), grid_a, "reload diverged from live peer");
     }
+}
+
+// ============================================================================
+// Concurrent whole-cell style edits (§2.B schema divergence).
+//
+// A cell's style does not live in one CRDT container: it is scattered over
+// `format_` (bold/italic mask), `style_` (packed rich mask), `fgcolor_`,
+// `bgcolor_`, `bordcolor{0..3}_`, `font_` and `numfmt_` -- up to 11 per-sheet
+// LoroMaps, each an independent LWW register keyed by the cell id pair.
+//
+// Two peers that concurrently rewrite the *same* cell's style as a whole
+// therefore race once per container, not once per cell. Nothing forces the
+// same writer to win every register. The invariant under test is atomicity of
+// a whole-cell style edit: the converged cell must carry a style one of the
+// two peers actually wrote -- never a per-attribute blend of both.
+// ============================================================================
+
+/// The observable style of a cell, as a peer renders it. Number format and
+/// decimals are absent on purpose: `DisplayCell` does not surface them (the
+/// Logic thread folds them into `text`), so they cannot be asserted here even
+/// though they occupy their own `numfmt_` container.
+type StyleView = (
+    bool,
+    bool,
+    bool,
+    bool,
+    HAlign,
+    VAlign,
+    bool,
+    Option<u32>,
+    Option<u32>,
+    Option<String>,
+    Option<u16>,
+    Borders,
+);
+
+/// Read A1's style through a viewport request, the way the UI thread sees it.
+fn read_style(state: &mut TrameState) -> StyleView {
+    let evts = state.handle_command(TrameCommand::ScrollViewport {
+        version: u64::MAX,
+        row_start: 0,
+        row_end: 0,
+        col_start: 0,
+        col_end: 0,
+    });
+    let cells = evts
+        .display
+        .iter()
+        .find_map(|e| match e {
+            TrameEvent::ViewportData { cells, .. } => Some(cells),
+            _ => None,
+        })
+        .expect("ScrollViewport yields ViewportData");
+    let c = cells
+        .iter()
+        .find(|c| c.row == 0 && c.col == 0)
+        .expect("A1 is materialized");
+    (
+        c.bold,
+        c.italic,
+        c.underline,
+        c.strikethrough,
+        c.h_align,
+        c.v_align,
+        c.wrap,
+        c.fg,
+        c.bg,
+        c.font.clone(),
+        c.size,
+        c.borders,
+    )
+}
+
+/// Select A1, then rewrite its whole style.
+fn apply_style(state: &mut TrameState, patch: StylePatch) {
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: 0,
+        col: 0,
+        anchor_row: 0,
+        anchor_col: 0,
+    });
+    state.handle_command(TrameCommand::SetCellStyle { patch });
+}
+
+/// The style the shared base pins on A1 before the peers diverge. Touches every
+/// style container, so both concurrent edits below emit real ops in each of
+/// them (a `clear` over an unstyled cell would delete absent keys -- a no-op --
+/// and the race would never happen).
+fn base_style() -> StylePatch {
+    StylePatch {
+        bold: Some(true),
+        underline: Some(true),
+        wrap: Some(true),
+        h_align: Some(HAlign::Right),
+        v_align: Some(VAlign::Bottom),
+        fg: Some(Some(0x00FF_0000)),
+        bg: Some(Some(0x0000_FF00)),
+        font: Some(Some("Arial".to_owned())),
+        size: Some(Some(18)),
+        format: Some(CellFormat::Percent),
+        border: Some(BorderEdit {
+            preset: BorderPreset::All,
+            style: BorderStyle::Solid,
+            color: Some(0x00FF_00FF),
+        }),
+        ..Default::default()
+    }
+}
+
+/// Peer A's edit: clear the cell's style back to the grid defaults.
+fn clear_style() -> StylePatch {
+    StylePatch {
+        bold: Some(false),
+        italic: Some(false),
+        underline: Some(false),
+        strikethrough: Some(false),
+        wrap: Some(false),
+        h_align: Some(HAlign::default()),
+        v_align: Some(VAlign::default()),
+        fg: Some(None),
+        bg: Some(None),
+        font: Some(None),
+        size: Some(None),
+        format: Some(CellFormat::default()),
+        decimals: Some(None),
+        border: Some(BorderEdit {
+            preset: BorderPreset::None,
+            ..Default::default()
+        }),
+    }
+}
+
+/// Peer B's edit: rewrite the cell with a different whole style. Every field
+/// differs from [`base_style`], so a register B loses is observable.
+fn other_style() -> StylePatch {
+    StylePatch {
+        bold: Some(false),
+        italic: Some(true),
+        underline: Some(false),
+        strikethrough: Some(true),
+        wrap: Some(false),
+        h_align: Some(HAlign::Left),
+        v_align: Some(VAlign::Top),
+        fg: Some(Some(0x0000_00FF)),
+        bg: Some(Some(0x00FF_FF00)),
+        font: Some(Some("Times".to_owned())),
+        size: Some(Some(9)),
+        format: Some(CellFormat::General),
+        decimals: Some(None),
+        border: Some(BorderEdit {
+            preset: BorderPreset::Outline,
+            style: BorderStyle::Dashed,
+            color: Some(0x0000_FFFF),
+        }),
+    }
+}
+
+/// Peer A clears A1's style while peer B rewrites it, concurrently. After a
+/// full history exchange both peers must agree (CRDT convergence) *and* the
+/// style they agree on must be one of the two written styles -- not a
+/// per-container blend of A's and B's registers.
+#[test]
+fn concurrent_whole_cell_style_edits_do_not_blend_across_containers() {
+    // Shared base: A1 styled, history known to both peers.
+    let mut a = TrameState::new();
+    a.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "42".to_owned(),
+    });
+    apply_style(&mut a, base_style());
+    let base = a.export_snapshot();
+    let mut b = TrameState::new();
+    b.import_snapshot(&base);
+
+    // Concurrent whole-cell rewrites of the same cell.
+    apply_style(&mut a, clear_style());
+    apply_style(&mut b, other_style());
+
+    // The style each peer intended, as it reads back locally before exchange.
+    let a_intent = read_style(&mut a);
+    let b_intent = read_style(&mut b);
+    assert_ne!(a_intent, b_intent, "the two edits must actually differ");
+
+    // Full bidirectional exchange.
+    let sa = a.export_snapshot();
+    let sb = b.export_snapshot();
+    a.apply_remote(&sb);
+    b.apply_remote(&sa);
+
+    let conv_a = read_style(&mut a);
+    let conv_b = read_style(&mut b);
+    assert_eq!(conv_a, conv_b, "peers diverged after full history exchange");
+
+    assert!(
+        conv_a == a_intent || conv_a == b_intent,
+        "converged style is a blend neither peer wrote:\n\
+         converged: {conv_a:?}\n\
+         peer A wrote: {a_intent:?}\n\
+         peer B wrote: {b_intent:?}"
+    );
 }
