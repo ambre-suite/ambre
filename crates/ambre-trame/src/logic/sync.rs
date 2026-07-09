@@ -50,9 +50,15 @@ impl TrameState {
         vec![]
     }
 
-    /// Export the full CRDT state for snapshot compaction.
+    /// Export the full CRDT state for snapshot compaction. A failed export is
+    /// logged (not silently swallowed): the caller persists the returned bytes to
+    /// IndexedDB, so an empty snapshot from a dropped error would silently wipe the
+    /// stored document on the next compaction.
     pub fn export_snapshot(&self) -> Vec<u8> {
-        self.doc.export(ExportMode::Snapshot).unwrap_or_default()
+        self.doc.export(ExportMode::Snapshot).unwrap_or_else(|e| {
+            tracing::error!("[Logic] export_snapshot failed, returning empty snapshot: {e:?}");
+            Vec::new()
+        })
     }
 
     /// Import a full CRDT snapshot (local restore from IndexedDB at startup).
@@ -165,7 +171,7 @@ impl TrameState {
         // stable key pair back to its grid position via the rebuilt index. A
         // merge may have moved cells under their stable keys, so reset first.
         self.reseed_engine();
-        // Rebuild bold/italic from the merged `format_{sheet}` map.
+        // Rebuild bold/italic + rich styles from the merged `cellstyle_{sheet}` map.
         self.reseed_styles();
         // Rebuild the column-width / row-height caches from the merged metric maps.
         self.reseed_metrics();
