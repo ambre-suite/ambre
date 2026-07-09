@@ -173,6 +173,16 @@ fn countif_and_sumif() {
 }
 
 #[test]
+fn countif_numeric_criterion_over_non_numeric_cells() {
+    // A cell that does not coerce to a number can never satisfy an ordering
+    // criterion, but `<>5` must count it: "not equal to 5" is true of any text.
+    let r = range(3, 1, vec![num(5.0), txt("apple"), num(7.0)]);
+    assert_eq!(countif(&[r.clone(), txt("<>5")]).to_display(), "2");
+    assert_eq!(countif(&[r.clone(), txt(">5")]).to_display(), "1");
+    assert_eq!(countif(&[r, txt(">=5")]).to_display(), "2");
+}
+
+#[test]
 fn countif_text() {
     let r = range(3, 1, vec![txt("apple"), txt("Banana"), txt("apple")]);
     assert_eq!(countif(&[r.clone(), txt("apple")]).to_display(), "2");
@@ -391,8 +401,8 @@ fn more_math_functions() {
 #[test]
 fn stats_functions() {
     let r = range(5, 1, (1..=5).map(|n| num(n as f64)).collect());
-    approx(variance(std::slice::from_ref(&r), true), 2.5);
-    approx(stdev(std::slice::from_ref(&r), true), 2.5f64.sqrt());
+    approx(variance(std::slice::from_ref(&r)), 2.5);
+    approx(stdev(std::slice::from_ref(&r)), 2.5f64.sqrt());
     assert_eq!(large_small(&[r.clone(), num(2.0)], true).to_display(), "4");
     assert_eq!(large_small(&[r.clone(), num(2.0)], false).to_display(), "2");
     // RANK of 4 within 1..5 descending = 2.

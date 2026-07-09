@@ -125,11 +125,12 @@ impl FormulaEngine {
             }
         }
 
-        for cell in self.dirty.drain() {
-            if let Some(value) = cache.get(&cell).cloned() {
-                cache.insert(cell, value);
-            }
-        }
+        // Whatever the topological walk did not visit has no node in `cell_dag`:
+        // a plain literal nobody references. Its cached value was published by
+        // `on_cell_changed` and needs no recomputation, so just drop it from the
+        // dirty set. (Re-reading and re-inserting it, as this loop once did, was
+        // a no-op that read like a fixup.)
+        self.dirty.clear();
     }
 
     /// Get the display text for a cell, or `None` if it has no cached result.

@@ -5,7 +5,7 @@
 //! `Range` values transparently (so `SUM(A1:A10)` works with the range as a
 //! single argument containing 10 values).
 
-use super::types::{CellValue, FormulaError};
+use super::types::{CellValue, FormulaError, nearly_equal};
 
 // -----------------------------------------------------------------------------
 // Dispatch
@@ -92,8 +92,8 @@ pub fn call_builtin(name: &str, args: &[CellValue], ctx: FnCtx) -> CellValue {
         "AVERAGEIFS" => averageifs(args),
         "SUMIFS" => sumifs(args),
         "COUNTIFS" => countifs(args),
-        "STDEV" => stdev(args, true),
-        "VAR" => variance(args, true),
+        "STDEV" => stdev(args),
+        "VAR" => variance(args),
         "LARGE" => large_small(args, true),
         "SMALL" => large_small(args, false),
         "RANK" => rank(args),
@@ -238,7 +238,10 @@ impl Criterion {
                     let hit = cmp == Some(*ord);
                     if *negated { !hit } else { hit }
                 }
-                Err(_) => false,
+                // A cell that does not coerce to a number cannot be ordered
+                // against one, so `>5` and `>=5` reject it. `<>5` is the sole
+                // exception: "different from 5" holds of any non-number.
+                Err(_) => *negated && *ord == std::cmp::Ordering::Equal,
             },
             Criterion::Text(ord, operand, negated) => {
                 let hit = value

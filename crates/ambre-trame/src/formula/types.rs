@@ -251,8 +251,25 @@ fn endpoint_pos(
 }
 
 // -----------------------------------------------------------------------------
-// CellValue — runtime value in the stack VM
+// CellValue -- runtime value in the stack VM
 // -----------------------------------------------------------------------------
+
+/// Whether two floats are equal to within a few units in the last place.
+///
+/// A fixed absolute tolerance such as `f64::EPSILON` (~2.2e-16) is meaningless
+/// once the operands leave the neighbourhood of 1.0: below it, `1e-16` and
+/// `2e-16` are two distinct numbers it declares equal. Scaling the tolerance by
+/// the operands' magnitude keeps the test at "equal to a few ulps" everywhere,
+/// which is also what Excel's 15-significant-digit comparison amounts to.
+pub fn nearly_equal(x: f64, y: f64) -> bool {
+    // Exact hit first: covers both zeros and same-sign infinities, where the
+    // relative test below would compute `inf - inf`.
+    if x == y {
+        return true;
+    }
+    let scale = x.abs().max(y.abs());
+    (x - y).abs() <= scale * 1e-15
+}
 
 /// A rectangular block of values produced by evaluating a range reference.
 ///
@@ -424,7 +441,7 @@ pub enum Op {
     /// built-in function; the result is pushed back.
     CallFn {
         name: String,
-        n_args: u8,
+        n_args: usize,
     },
 }
 
