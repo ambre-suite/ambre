@@ -14,6 +14,11 @@ petgraph  = { workspace = true }
 nom       = { workspace = true }
 # CSV import/export (Trame interop MVP, `ambre-spec-trame-interop.md` §4).
 csv       = { workspace = true }
+# One atomic per-cell style record (`cellstyle_{sheet}`): serde-derived
+# `CellStyle` postcard-encoded into a single CRDT binary register, so concurrent
+# whole-cell restyles race once instead of once per style container.
+serde     = { workspace = true }
+postcard  = { workspace = true }
 
 # UI side (UI Thread): DrawSurface renderer, text layout, frame channels.
 ambre-draw = { path = "../ambre-draw" }

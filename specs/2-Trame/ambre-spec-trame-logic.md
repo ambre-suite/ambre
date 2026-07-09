@@ -112,10 +112,14 @@ speeds the position query; it does not remove the shared-counter hazard.
 
 > **Target schema, not as-built.** The cell sub-map (`{v,t,s}`) and the shared `styles` map below
 > are **not** implemented: cell values are stored flat in `cells_{sheet_id}`, and a cell's style is
-> scattered over up to 11 per-sheet maps (`format_`, `style_`, `fgcolor_`, `bgcolor_`,
-> `bordcolor{0..3}_`, `font_`, `numfmt_`). Consolidating that fan-out into one style container per
-> cell is finding §11 bis.F, scheduled before the public Beta. The shared `styles` dictionary and
-> the `"s"` indirection stay deferred behind a benchmark (§11 bis.F, "out of scope"). See §14
+> stored **as-built** in one per-sheet map `cellstyle_{sheet_id}` -- key `"{row_uid}:{col_uid}"`,
+> value = the whole style of the cell (bold/italic plus the full `CellStyle`: alignments, wrap,
+> colours, borders, font, number format, decimals, size) postcard-encoded into a single binary LWW
+> register. This is one register **per cell**, not one **per attribute**: it is the convergence
+> invariant (§11 bis.F). It replaced an earlier fan-out over up to 11 per-sheet maps, which had two
+> real defects (a border-colour tear and a colour/font reseed data-loss, §11 bis.F). The shared
+> `styles` dictionary and the `"s"` indirection -- a *deduplication* optimization, orthogonal to the
+> consolidation just landed -- stay deferred behind a benchmark (§11 bis.F, "out of scope"). See §14
 > Phase 0.
 
 ```
@@ -139,8 +143,10 @@ LoroDoc
 │
 ├── "merges_{sheet_id}" (LoroMap)     → {"{row_uid}:{col_uid}": "{row_uid_end}:{col_uid_end}"}
 │
-├── "styles" (LoroMap)                → shared styles
+├── "styles" (LoroMap)                → shared styles (TARGET dedup, deferred -- §11 bis.F "out of scope")
 │   └── "style_007" (LoroMap)         → {bold, italic, underline, font, size, fg, bg, fmt, halign, valign, wrap, border}
+│                                        AS-BUILT instead: one register per cell, whole style inline --
+├── "cellstyle_{sheet_id}" (LoroMap) → {"{row_uid}:{col_uid}": Binary(postcard(StyleRecord{bold,italic,CellStyle}))}
 │
 ├── "named_ranges" (LoroMap)          → {"TOTAL": {sheet_id, range}}
 ├── "media" (LoroMap)                 → {hash_blake2b: {dims, anchor, mime}}
@@ -282,7 +288,7 @@ index assignment, never resolution (references are by `sheet_id`). No recompute.
 sheet_order.delete(index, 1)
 sheets.delete(sheet_id)
 // drop per-sheet containers: cells_{id}, rows_{id}, cols_{id},
-// format_{id}, merges_{id}, and the feature maps of trame-features.
+// cellstyle_{id}, merges_{id}, and the feature maps of trame-features.
 ```
 
 - **Cross-sheet `#REF!`.** A formula `=Sheet2!A1` whose `sheet_id` is gone
@@ -1558,51 +1564,69 @@ identically regardless of the active tab. *Tracked as an Epic `E3` / Phase 1 Sto
 result that depends on view state is wrong at any document size), not with the Phase 4 scaling
 debt.*
 
-### F. Consolidate the per-cell style fan-out (schema divergence from §2.B)
+### F. Consolidate the per-cell style fan-out (schema divergence from §2.B) -- LANDED
 
-**Divergence from §2.B.** The schema prescribes one style reference per cell (the `"s"` key of the
-cell sub-map) pointing into a shared `styles` map. The implementation instead scatters one cell's
-style across up to **11 per-sheet `LoroMap`s**, each an independent LWW register keyed by the cell
-id pair: `format_` (a legacy bold/italic mask), `style_` (the packed rich mask: underline, wrap,
-alignments, border presence/style, number-format family, decimals, font size), `fgcolor_`,
-`bgcolor_`, `bordcolor{0..3}_` (one per edge), `font_` and `numfmt_`. Neither the `{v,t,s}` cell
-sub-map nor the shared `styles` map exists.
+**Original divergence from §2.B.** The schema prescribes one style reference per cell (the `"s"` key
+of the cell sub-map) pointing into a shared `styles` map. The implementation instead **used to**
+scatter one cell's style across up to **11 per-sheet `LoroMap`s**, each an independent LWW register
+keyed by the cell id pair: `format_` (a legacy bold/italic mask), `style_` (the packed rich mask:
+underline, wrap, alignments, border presence/style, number-format family, decimals, font size),
+`fgcolor_`, `bgcolor_`, `bordcolor{0..3}_` (one per edge), `font_` and `numfmt_`.
 
-Consequences, in order of weight:
+**Resolution (landed).** The style fan-out is now **one register per cell**: a per-sheet map
+`cellstyle_{sheet}` whose value is the whole style -- bold/italic plus the full `CellStyle` --
+postcard-encoded into a single binary LWW register (`StyleRecord { bold, italic, style }`, see
+`logic/styles.rs`). The packed-mask machinery (`pack_style_mask` and the `STYLE_*`/`FMT_*` bit
+constants) is deleted; `CellStyle` is stored serde-verbatim. `set_cell_style` pre-materializes the
+selection, writes every register without committing, then commits **once** inside one `UndoManager`
+group -- so a selection restyle is one delta and one undo item.
 
-1. **Write amplification.** `set_cell_style` touches 9 containers per cell, and `persist_format`
-   commits **per cell** inside the selection loop: formatting an N-cell selection is N Loro
-   transactions whose delta fans out over 11 containers, each compressed and encrypted on the sync
-   path.
-2. **Two sources of truth for font style.** `format_{sheet}` now carries only the bold/italic mask
-   although `style_{sheet}` already holds a richer one -- a vestigial container, three reseeds and
-   duplicated plumbing through `DisplayCell`. (This was the original scope of this finding.)
-3. **No deduplication.** Every cell stores its own copy of every attribute; the shared `styles` map
-   exists in §2.B precisely to make storage O(distinct styles).
+This closed four problems at once:
 
-**Not a convergence defect.** The fan-out was suspected of breaking the atomicity of a whole-cell
-style edit: two peers concurrently rewriting the same cell's style race once *per container*, and
-nothing obviously forces the same writer to win every register -- the converged cell could carry a
-blend neither peer wrote. **Tested and refuted.** A whole-cell edit writes every container in one
-burst of monotonic-Lamport ops, so the relative order of the two peers' ops is identical in each
-container and Loro's LWW elects the same winner throughout. Locked in by
-`logic/convergence_tests.rs::concurrent_whole_cell_style_edits_do_not_blend_across_containers`
-(peer A clears the style while peer B rewrites it; the converged style must be one the peers
-actually wrote), which also held under deliberately desynchronized Lamport clocks. A *partial*
-patch racing a whole-cell one does blend per attribute -- but that is the intended, Excel-like
-semantics for disjoint attribute edits, not a defect. This finding therefore rests on cost and
-complexity, **not** correctness: it must not preempt Epic `E4`.
+1. **Write amplification.** `set_cell_style` touched 9 containers per cell and committed **per cell**
+   inside the selection loop (N Loro transactions, each fanned out over 11 containers, compressed and
+   encrypted on the sync path). Now: one register, one commit per selection.
+2. **Two sources of truth for font style.** `format_{sheet}` carried only bold/italic while
+   `style_{sheet}` held a richer mask -- a vestigial container with duplicated `DisplayCell`
+   plumbing. Folded into the single record.
+3. **Border-colour tear (correctness).** Border *presence/style* lived in the `style_` mask while
+   border *colour* lived in `bordcolor{edge}_`: two concurrent edits of one edge could converge on
+   one peer's presence with the other's colour -- a torn value inside a single conceptual attribute.
+   Gone: the whole edge is in one register.
+4. **Colour/font reseed data-loss (correctness).** `reseed_styles` iterated only the `style_` mask
+   map; a cell whose *only* style was a colour or font had mask 0, hence no `style_` entry, hence was
+   **dropped on reload** -- the colour/font vanished on reopen. Gone: reseed iterates the one map
+   that holds every styled cell.
 
-**Target.** One style container per cell, holding the whole `CellStyle` (which folds bold/italic in,
-closing consequence 2 for free), written in a single transaction per selection. The above test
-becomes a structural guarantee rather than a happy accident of Lamport ordering.
+**Convergence semantics (revised -- this replaces the earlier "not a convergence defect" note).**
+Style is now atomic **per cell**: two peers concurrently restyling the same cell race exactly once,
+so the converged cell always carries a style *one* peer actually wrote -- never a per-attribute blend
+across containers. This is a deliberate choice of **whole-cell last-writer-wins** over per-attribute
+merge, documented as an assumed Excel difference in §12. The earlier claim that the fan-out was "not
+a convergence defect" was **wrong on two counts**: it only checked two *whole-cell* rewrites (which
+did converge, because each cell's containers were written at adjacent Lamports) and missed both the
+*subset*-vs-whole tear and the border-colour tear above. Locked in by two regression tests in
+`logic/convergence_tests.rs`: `concurrent_whole_cell_style_edits_do_not_blend_across_containers`
+(the original whole-cell case) and `subset_style_edit_does_not_tear_a_whole_cell_rewrite` (a
+colour-only patch racing a whole-cell rewrite, which tore under the old schema).
 
-**Deliberately out of scope.** The shared `styles` dictionary and the `"s"` style-id indirection
-(consequence 3) are a memory/bandwidth optimization with a real cost: Loro does not garbage-collect
-orphaned map entries, so the indirection forces a reclamation policy for unreferenced styles plus a
-dereference on every cell read. Deferred until benchmarks justify it -- the same treatment §14
-Phase 3 gives the `SheetRangeIndex` interval tree. The `{v,t,s}` cell sub-map falls under the same
-rule: `"t"` is a type cache the engine already rederives.
+*Why whole-cell and not per-attribute:* per-attribute merge (Alice bolds while Bob recolours, both
+stick) is what a **server-authoritative** suite like Google Sheets does cheaply because a central
+server linearizes every op. Ambre is a blind relay with no server-side content ordering, so
+per-attribute merge costs exactly the multi-container fan-out we just removed (and it was inconsistent
+anyway: the `style_` mask already merged underline/wrap/aligns as one block). Whole-cell LWW is
+predictable, matches a single "apply this style" user action, and is closer to Excel co-authoring
+(which resolves same-cell conflicts coarsely, even escalating to a manual merge pane). A future
+per-attribute model, if ever justified, would be a nested `LoroMap` per cell -- not a return to the
+flat fan-out.
+
+**Deliberately still out of scope.** The shared `styles` dictionary and the `"s"` style-id
+indirection are a *deduplication* optimization (storage O(distinct styles)), orthogonal to the
+consolidation above and with a real cost: Loro does not garbage-collect orphaned map entries, so the
+indirection forces a reclamation policy for unreferenced styles plus a dereference on every cell
+read. Deferred until benchmarks justify it -- the same treatment §14 Phase 3 gives the
+`SheetRangeIndex` interval tree. The `{v,t,s}` cell sub-map falls under the same rule: `"t"` is a
+type cache the engine already rederives.
 
 ---
 
@@ -1644,6 +1668,14 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 
 **Why this is correct for a CRDT:** Excel's rename-rewrite is the same non-idempotent rewrite hazard as its row-insert rewrite (§12, "References After Structural Operations"). Binding to `sheet_id` makes rename and reorder convergent and reference-preserving, leaving `#REF!` to mean exactly one thing: the target no longer exists.
 
+### Concurrent Cell Formatting
+
+**Excel / Google Sheets:** both are server-authoritative (a central server linearizes every op), so they can merge concurrent formatting of the same cell at a fine grain. Sheets in particular tends toward per-attribute merge (Alice bolds while Bob recolours -> both stick); Excel co-authoring is coarser and can escalate a same-cell conflict to a manual merge pane.
+
+**Trame:** a cell's whole style is **one CRDT register** (`cellstyle_{sheet}`, §2.B / §11 bis.F), so concurrent restyles of the same cell resolve by **whole-cell last-writer-wins**: the converged cell carries the style *one* peer wrote, never a per-attribute blend. This is atomic **per cell, not per selection** -- a `SetCellStyle` over a range writes each cell's register independently, so two concurrent restyles of *overlapping, differently-shaped* selections can leave the overlap split cell-by-cell between the two writers (each cell still internally consistent). Applying the style again reconciles it.
+
+**Why this is correct for a blind relay:** per-attribute merge is only cheap with a server that orders content; Ambre's server is a blind relay that never sees plaintext, so the only content ordering is per-register LWW. Splitting one cell's style back over ~11 registers to fake per-attribute merge is exactly the fan-out §11 bis.F removed (and it tore borders and lost colours on reload). Whole-cell LWW is predictable, matches a single "apply this style" intent, and is closer to Excel than to Sheets. A finer model, if ever justified, is a nested per-cell `LoroMap` -- never the flat fan-out.
+
 ---
 
 ## 13. REJECTED ARCHITECTURAL DECISIONS
@@ -1662,6 +1694,7 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 | **Computed values in Loro** | Pointlessly replicated. Each client recomputes from `raw`. |
 | **Loro for formula cycle detection** | Loro DAG manages CRDT causal order, orthogonal to formula dependencies. |
 | **Rayon (MVP)** | 4th Web Worker context unjustified before 100k cells. Phase 3+. |
+| **Per-attribute style merge (one CRDT register per style attribute)** | Splitting a cell's style over many registers (the old `format_`/`style_`/`fgcolor_`/... fan-out) to let concurrent edits of different attributes both survive. Only cheap with a server that orders content (Google Sheets); on a blind relay it forces per-register LWW with **no** cross-register atomicity -> whole-cell edits tear (border presence vs colour) and colour/font-only cells were lost on reload (§11 bis.F). Replaced by one whole-cell register with whole-cell LWW (§12, "Concurrent Cell Formatting"). A finer model, if justified, is a nested per-cell `LoroMap`, not a flat fan-out. |
 
 ---
 
@@ -1673,11 +1706,11 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 **Phase 0 — Core standalone**
 - [~] Multi-sheet `LoroDoc`, per-sheet CRDT schema (§2.B: `sheets`, `cells_/format_/rows_/cols_{sheet}`, dense stable-id model) *(Landed: the structural foundation -- implicit default sheet, lazy materialization, `MATERIALIZE_CAP`, explicit add-sheet + `sheet_order` (with the tabs UI), and `filter_hidden_{sheet}` (with the shared filter). `cond_formats`/`validations`/`protections` legitimately await their Phase 2 / Post-MVP features.*
   **Still open, and the reason this box is `[~]`:** the `{v,t,s}` cell sub-map and the shared
-  `styles` map were never implemented -- values are flat in `cells_{sheet}` and styles fan out over
-  11 per-sheet maps. Split in two by the 2026-07-09 review (§11 bis.F): **(a)** consolidating the
-  style fan-out into one container per cell is scheduled **before the public Beta** (Phase 4, Epic
-  `E5`), since it is a schema change and no third-party document exists yet; **(b)** the shared
-  `styles` dictionary + `"s"` indirection and the `{v,t,s}` sub-map are **deferred behind a
+  `styles` map were never implemented -- values are flat in `cells_{sheet}`. Split in two by the
+  2026-07-09 review (§11 bis.F): **(a)** consolidating the style fan-out into one container per cell
+  is **DONE** -- styles now live in one `cellstyle_{sheet}` register per cell (whole-cell LWW), which
+  also fixed a border tear and a colour/font reseed data-loss; **(b)** the shared `styles` dictionary
+  + `"s"` indirection (a *dedup* optimization) and the `{v,t,s}` sub-map are **deferred behind a
   benchmark** and are not a prerequisite for anything.*
 - [x] Bidirectional `SheetIndex` (`model::SheetIndex`, dense over used range) + `sheet_name_to_id`
 - [x] `nom` parser: arithmetic, `CellRef`, `Range` (bounded + `EntireAxis`), basic functions, cross-sheet references (`Sheet2!A1` via `sheet_name_to_id`)
@@ -1757,12 +1790,13 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
   reindex comment), targeted cycle check instead of whole-graph `is_cyclic_directed`,
   dirty-subgraph topological recompute, delete the dead write-back loop, drop the `formula_cache`
   `RefCell`.
-- [ ] **Consolidate the per-cell style fan-out (§11 bis.F):** one style container per cell holding
-  the whole `CellStyle` (folding bold/italic in, so `format_{sheet}` becomes read-compat only), one
-  transaction per selection instead of one per cell. **Ordering: the only Phase 4 item gated on the
-  public Beta** -- it changes the persisted schema (§2.B), so it is cheap exactly as long as no
-  third-party document exists. It is *not* a correctness fix (see §11 bis.F, "Not a convergence
-  defect"), so it does **not** preempt Epic `E4`: land it after `E4`, before the Beta.
+- [x] **Consolidate the per-cell style fan-out (§11 bis.F):** DONE. One `cellstyle_{sheet}` register
+  per cell holding the whole style (bold/italic + `CellStyle`, postcard-encoded), one commit per
+  selection inside a single undo group. Folded bold/italic in (the `format_`/`style_`/colour/font/
+  numfmt maps are gone), and turned out to be a **correctness** fix after all, not just cost: the old
+  fan-out tore border colour vs presence and lost colour/font-only cells on reload. Convergence is now
+  whole-cell last-writer-wins (§12, "Concurrent Cell Formatting"). Covered by
+  `subset_style_edit_does_not_tear_a_whole_cell_rewrite` and `selection_style_is_a_single_undo`.
   *(The shared `styles` dictionary + `"s"` indirection and the `{v,t,s}` sub-map are explicitly
   **not** part of this item -- deferred behind a benchmark, §11 bis.F "out of scope".)*
 

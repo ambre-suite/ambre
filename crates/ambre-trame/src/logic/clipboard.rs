@@ -103,11 +103,16 @@ impl TrameState {
         self.paste_range(row, col, payload)
     }
 
-    /// Write a pasted cell's formatting into the style containers, mirroring the
-    /// per-cell tail of [`set_cell_style`](Self::set_cell_style): bold/italic live
-    /// in their own sets plus the format map, the rest in the rich-style map.
-    /// Borders are taken verbatim from the source cell (no selection-level preset
-    /// resolution -- the source already carries resolved per-edge borders).
+    /// Write a pasted cell's formatting into the single `cellstyle_{sheet}`
+    /// register, mirroring the per-cell tail of
+    /// [`set_cell_style`](Self::set_cell_style): bold/italic go into their own
+    /// in-memory sets, the rest into the cell's `CellStyle`, and
+    /// [`write_cell_style`](Self::write_cell_style) folds the whole thing into one
+    /// record. Like [`write_cell`](Self::write_cell) it does not commit: the whole
+    /// paste is committed once by [`finish_cell_writes`](Self::finish_cell_writes),
+    /// so a styled paste is a single undo item. Borders are taken verbatim from
+    /// the source cell (no selection-level preset resolution -- the source already
+    /// carries resolved per-edge borders).
     pub(super) fn apply_pasted_style(&mut self, row: u32, col: u32, cell: &ClipboardCell) {
         let pos = (row, col);
         if cell.bold {
@@ -120,14 +125,13 @@ impl TrameState {
         } else {
             self.italic.remove(&pos);
         }
-        let _ = self.persist_format(row, col);
-
-        // A default style removes the entry so the map never accumulates dead keys.
+        // A default style is not tracked (absence == default) so the map never
+        // accumulates dead keys.
         if cell.style == CellStyle::default() {
             self.styles.remove(&pos);
         } else {
             self.styles.insert(pos, cell.style.clone());
         }
-        let _ = self.persist_style(row, col, &cell.style);
+        let _ = self.write_cell_style(row, col);
     }
 }

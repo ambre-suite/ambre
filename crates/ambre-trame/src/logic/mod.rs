@@ -24,8 +24,8 @@ use crate::formula::{AxisId, CellId, FormulaCtx, FormulaEngine, NameTarget, Shee
 use crate::model::{SheetIndex, Uid, cell_key, parse_cell_key};
 use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 use ambre_bus::{
-    BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellStyle, ClipboardCell,
-    ClipboardPayload, FilterKind, FilterOp, HAlign, SortKey, StylePatch, VAlign,
+    BorderPreset, CellBorder, CellFormat, CellStyle, ClipboardCell, ClipboardPayload, FilterKind,
+    FilterOp, SortKey, StylePatch,
 };
 
 // -----------------------------------------------------------------------------

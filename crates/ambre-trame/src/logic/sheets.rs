@@ -266,7 +266,6 @@ impl TrameState {
         self.rebuild_index();
         let conflicts = self.rebuild_merges();
         self.reseed_engine();
-        self.reseed_formatting();
         self.reseed_styles();
         self.rebuild_filter();
         self.reseed_metrics();
@@ -426,17 +425,9 @@ impl TrameState {
     pub(super) fn drop_sheet_containers(&mut self, sheet_id: &str) {
         for name in [
             cells_map_name(sheet_id),
-            format_map_name(sheet_id),
-            style_map_name(sheet_id),
-            fgcolor_map_name(sheet_id),
-            bgcolor_map_name(sheet_id),
-            font_map_name(sheet_id),
-            numfmt_map_name(sheet_id),
+            cellstyle_map_name(sheet_id),
             merges_map_name(sheet_id),
-        ]
-        .into_iter()
-        .chain((0..BORDER_EDGE_ORDER).map(|e| bordcolor_map_name(sheet_id, e)))
-        {
+        ] {
             let map = self.doc.get_map(name);
             if let LoroValue::Map(entries) = map.get_value() {
                 let keys: Vec<String> = entries.keys().cloned().collect();

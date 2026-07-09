@@ -166,7 +166,6 @@ impl TrameState {
         // merge may have moved cells under their stable keys, so reset first.
         self.reseed_engine();
         // Rebuild bold/italic from the merged `format_{sheet}` map.
-        self.reseed_formatting();
         self.reseed_styles();
         // Rebuild the column-width / row-height caches from the merged metric maps.
         self.reseed_metrics();
