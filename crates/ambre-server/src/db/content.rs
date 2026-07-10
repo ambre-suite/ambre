@@ -226,8 +226,12 @@ pub async fn insert_media(
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     let uid = id_to_uuid(*uploaded_by);
+    // Idempotent like `insert_update`: the `id` PK is the content hash, so a
+    // retried `confirm` (after the S3 PUT already succeeded) or two clients
+    // confirming the same blob would otherwise raise a unique violation and
+    // surface as a 500. The row is content-addressed, so a re-insert is a no-op.
     sqlx::query(
-        "INSERT INTO media (id, document_id, uploaded_by, mime_type, size_bytes, s3_key) VALUES ($1, $2, $3, $4, $5, $6)"
+        "INSERT INTO media (id, document_id, uploaded_by, mime_type, size_bytes, s3_key) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING"
     )
     .bind(content_hash)
     .bind(did)

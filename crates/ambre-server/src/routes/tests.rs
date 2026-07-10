@@ -811,6 +811,40 @@ mod handler_tests {
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
+    /// Confirming the same media twice is idempotent: `insert_media` uses
+    /// `ON CONFLICT (id) DO NOTHING`, so a retried confirm (or a second client
+    /// registering the same content-addressed blob) returns 200 both times
+    /// instead of surfacing the PK unique violation as a 500.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn media_confirm_upload_is_idempotent(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+
+        let body = serde_json::json!({
+            "content_hash": "b".repeat(64),
+            "mime_type": "image/png",
+            "size_bytes": 42,
+        });
+
+        for _ in 0..2 {
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::post(format!("/api/documents/{doc_id}/media"))
+                        .header("content-type", "application/json")
+                        .header("authorization", &owner)
+                        .body(Body::from(serde_json::to_string(&body).unwrap()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+        }
+    }
+
     /// A snapshot's `author_pubkey` is bound to the session identity (the token's
     /// `spk` claim), like the WS `Update` author-key check: a member may only
     /// create a snapshot under their own key, never attribute one to another.
