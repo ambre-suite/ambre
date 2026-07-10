@@ -8,7 +8,7 @@
 
 use crate::messages::Seq;
 use crate::{Ephemeral, SeqUpdate, Update};
-use ambre_core::{ChannelId, DocType, DocumentId, SnapshotId, UserId};
+use ambre_core::{ChannelId, DocType, DocumentId, SnapshotId};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -87,11 +87,19 @@ pub enum WsServerMsg {
         snapshot_id: SnapshotId,
     },
 
-    /// A member was revoked — fetch new doc_key_enc.
-    KeyRotationRequired {
-        document_id: DocumentId,
-        revoked_user_id: UserId,
-    },
+    /// The document key was rotated: every REMAINING member must re-fetch its
+    /// freshly wrapped `doc_key_enc` from `/members` and swap it in. Broadcast on
+    /// the document channel. Carries no user identity: it is not a revocation
+    /// signal, so no recipient can mistake it for "you were revoked" (that is the
+    /// separate, targeted `DocumentRevoked`). Rotation typically follows a revoke,
+    /// but the two are distinct events.
+    KeyRotationRequired { document_id: DocumentId },
+
+    /// The authenticated user was removed from a document. Pushed ONLY to the
+    /// revoked user, on their per-user channel (`user:{id}`), by the server's
+    /// revoke handler. The client closes the document locally. Distinct from
+    /// `KeyRotationRequired` so a member managing keys never revokes themselves.
+    DocumentRevoked { document_id: DocumentId },
 
     /// A document was just shared with this user. Pushed on the per-user channel
     /// (`user:{id}`), which every connection subscribes to, so the invitee learns

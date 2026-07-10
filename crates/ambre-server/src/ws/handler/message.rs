@@ -671,10 +671,18 @@ mod postcard_tests {
     fn roundtrip_server_key_rotation_required() {
         let msg = WsServerMsg::KeyRotationRequired {
             document_id: DocumentId::from_bytes([7u8; 16]),
-            revoked_user_id: UserId::from_bytes([8u8; 16]),
         };
         let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
         assert!(matches!(decoded, WsServerMsg::KeyRotationRequired { .. }));
+    }
+
+    #[test]
+    fn roundtrip_server_document_revoked() {
+        let msg = WsServerMsg::DocumentRevoked {
+            document_id: DocumentId::from_bytes([9u8; 16]),
+        };
+        let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
+        assert!(matches!(decoded, WsServerMsg::DocumentRevoked { .. }));
     }
 
     #[test]

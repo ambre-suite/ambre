@@ -289,7 +289,6 @@ enum SyncEvent {
     KeyRotated {
         document_id: DocumentId,
         new_doc_key: DocumentKey,
-        revoked_user_id: UserId,
     },
     /// Media upload completed: the encrypted blob was PUT to S3 and the server
     /// confirmed the insertion in the `media` table.
