@@ -683,6 +683,60 @@ mod handler_tests {
         assert!(!access_token_of(resp).await.is_empty());
     }
 
+    fn store_master_keys_body() -> serde_json::Value {
+        serde_json::json!({
+            "master_key_enc": base64_encode(&[1u8; 32]),
+            "master_key_salt": base64_encode(&[2u8; 16]),
+            "signing_pubkey": hex::encode([3u8; 32]),
+            "exchange_pubkey": hex::encode([4u8; 32]),
+        })
+    }
+
+    async fn put_master_keys(app: &Router, auth: &str) -> StatusCode {
+        app.clone()
+            .oneshot(
+                Request::put("/api/keys/master")
+                    .header("content-type", "application/json")
+                    .header("authorization", auth)
+                    .body(Body::from(store_master_keys_body().to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+            .status()
+    }
+
+    /// `store_master_keys` is the one-shot first-time upload path (an OIDC/dev
+    /// account is created with a NULL `master_key_enc`, then fills it here). The
+    /// first call must succeed; a second call must be rejected with 409 instead of
+    /// overwriting `signing_pubkey`/`exchange_pubkey` -- an unconditional overwrite
+    /// would strand every `doc_key_enc` wrapped to the previous exchange key,
+    /// silently locking the caller out of its own shared documents.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn store_master_keys_is_first_time_only(pool: sqlx::PgPool) {
+        let state = test_app_state_dev(pool).await;
+        let app = build_test_router(state);
+
+        // dev-login creates a user whose master_key_enc is still NULL.
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::post("/api/auth/dev/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(dev_login_body("alice").to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let auth = format!("Bearer {}", access_token_of(resp).await);
+
+        // First upload succeeds; the re-store is rejected, not silently applied.
+        assert_eq!(put_master_keys(&app, &auth).await, StatusCode::OK);
+        assert_eq!(put_master_keys(&app, &auth).await, StatusCode::CONFLICT);
+    }
+
     /// Pull the `access_token` out of an auth response body (setup / dev-login
     /// both return `{ access_token, .. }` -- the suite is cookie-less Bearer JWT).
     async fn access_token_of(resp: axum::response::Response) -> String {
