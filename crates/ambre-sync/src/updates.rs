@@ -608,22 +608,22 @@ impl SyncState {
             let upload_url_req = format!(
                 "{url_scheme}://{api_base}/api/documents/{document_id}/snapshot/upload-url"
             );
-            let (upload_url, s3_key) = match http::post_json_auth::<
-                serde_json::Value,
-                http::SnapshotUploadUrlResponse,
-            >(
-                &upload_url_req, &serde_json::json!({}), auth.clone()
-            )
-            .await
-            {
-                Ok(resp) => (resp.upload_url, resp.s3_key),
-                Err(e) => {
-                    tracing::error!(
-                        "Sync: SendSnapshot upload-url failed for {document_id:?}: {e}"
-                    );
-                    return;
-                }
-            };
+            let (upload_url, s3_key) =
+                match http::post_json_auth::<serde_json::Value, http::SnapshotUploadUrlResponse>(
+                    &upload_url_req,
+                    &serde_json::json!({ "size_bytes": blob.len() }),
+                    auth.clone(),
+                )
+                .await
+                {
+                    Ok(resp) => (resp.upload_url, resp.s3_key),
+                    Err(e) => {
+                        tracing::error!(
+                            "Sync: SendSnapshot upload-url failed for {document_id:?}: {e}"
+                        );
+                        return;
+                    }
+                };
 
             // Presigned PUT goes straight to S3 (no session, no CSRF header).
             if let Err(e) = http::put_bytes(&upload_url, &blob, "application/octet-stream").await {

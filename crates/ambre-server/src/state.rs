@@ -47,6 +47,14 @@ pub struct Config {
     pub refresh_ttl_secs: u64,
     /// Presigned S3 URL lifetime in seconds (default 15 min).
     pub presigned_url_ttl_secs: u64,
+    /// Maximum size in bytes of a single encrypted media blob (default 100 MiB).
+    /// The declared size is validated against this cap and then bound into the
+    /// presigned PUT URL (`Content-Length`), so a member cannot upload an
+    /// arbitrarily large object to the bucket.
+    pub media_max_bytes: u64,
+    /// Maximum size in bytes of a single encrypted snapshot blob (default 50 MiB).
+    /// Bound into the presigned PUT URL exactly like `media_max_bytes`.
+    pub snapshot_max_bytes: u64,
     /// Prefix for S3 object keys (e.g. "dev-ambre").
     pub s3_env_prefix: String,
     /// Google OIDC client ID.
@@ -78,6 +86,8 @@ impl Default for Config {
             access_ttl_secs: 900,
             refresh_ttl_secs: 30 * 24 * 3600,
             presigned_url_ttl_secs: 900,
+            media_max_bytes: 100 * 1024 * 1024,
+            snapshot_max_bytes: 50 * 1024 * 1024,
             s3_env_prefix: "dev-ambre".into(),
             oidc_google_client_id: String::new(),
             oidc_google_client_secret: String::new(),

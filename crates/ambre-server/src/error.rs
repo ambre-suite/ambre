@@ -16,6 +16,9 @@ pub enum AppError {
     #[error("Bad request: {0}")]
     BadRequest(String),
 
+    #[error("Payload too large: {0}")]
+    PayloadTooLarge(String),
+
     #[error("Session expired")]
     SessionExpired,
 
@@ -82,6 +85,7 @@ impl IntoResponse for AppError {
             AppError::CompactionLockHeld => (StatusCode::CONFLICT, "COMPACTION_LOCK_HELD"),
             AppError::UnknownProvider(_) => (StatusCode::BAD_REQUEST, "UNKNOWN_PROVIDER"),
             AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, "BAD_REQUEST"),
+            AppError::PayloadTooLarge(_) => (StatusCode::PAYLOAD_TOO_LARGE, "PAYLOAD_TOO_LARGE"),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR"),
         };
 
@@ -208,6 +212,14 @@ mod tests {
     fn unknown_provider_returns_400() {
         let r = AppError::UnknownProvider("gitlab".into()).into_response();
         assert_eq!(r.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn payload_too_large_returns_413() {
+        let r = AppError::PayloadTooLarge("blob exceeds 100 MiB".into()).into_response();
+        assert_eq!(r.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let b = extract_body(r).await;
+        assert_eq!(b["error"], "PAYLOAD_TOO_LARGE");
     }
 
     #[tokio::test]

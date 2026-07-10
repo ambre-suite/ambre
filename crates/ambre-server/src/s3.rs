@@ -108,15 +108,21 @@ pub fn format_s3_media_key(
     format!("{env_prefix}/documents/{document_id}/media/{content_hash}")
 }
 
-/// Generates a presigned S3 PUT URL valid for `ttl_secs`.
+/// Generates a presigned S3 PUT URL valid for `ttl_secs`, bound to exactly
+/// `content_length` bytes.
 ///
-/// The client uploads the encrypted blob directly to S3; the server
-/// never sees the plaintext body.
+/// The client uploads the encrypted blob directly to S3; the server never sees
+/// the plaintext body. Setting `content_length` puts `Content-Length` into the
+/// SigV4 signed headers, so S3 rejects any upload whose body length differs from
+/// the size the caller declared (and the caller validated against its cap). This
+/// stops a member from writing an arbitrarily large object to the bucket through
+/// an otherwise key-only presigned URL.
 pub async fn generate_presigned_upload_url(
     s3: &S3Client,
     bucket: &str,
     key: &str,
     ttl_secs: u64,
+    content_length: u64,
 ) -> Result<String, AppError> {
     let config = PresigningConfig::expires_in(Duration::from_secs(ttl_secs))
         .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
@@ -124,6 +130,7 @@ pub async fn generate_presigned_upload_url(
     s3.put_object()
         .bucket(bucket)
         .key(key)
+        .content_length(content_length as i64)
         .presigned(config)
         .await
         .map(|req| req.uri().to_string())
@@ -442,6 +449,45 @@ mod tests {
             &doc,
             &format!("dev/documents/{doc}/snapshots/a/b")
         ));
+    }
+
+    /// Builds an offline S3 client (static credentials, no network) for
+    /// presigning, which is a purely local SigV4 computation.
+    fn test_s3_client() -> S3Client {
+        let conf = aws_sdk_s3::Config::builder()
+            .region(aws_sdk_s3::config::Region::new("us-east-1"))
+            .credentials_provider(aws_sdk_s3::config::Credentials::new(
+                "test-access",
+                "test-secret",
+                None,
+                None,
+                "test",
+            ))
+            .build();
+        aws_sdk_s3::Client::from_conf(conf)
+    }
+
+    /// The presigned upload URL must bind `Content-Length`: S3 then rejects any
+    /// body whose length differs from the declared (and cap-validated) size, so
+    /// the key-scoped URL cannot be used to write an arbitrarily large object.
+    #[tokio::test]
+    async fn presigned_upload_url_signs_content_length() {
+        let s3 = test_s3_client();
+        let url =
+            generate_presigned_upload_url(&s3, "bucket", "dev/documents/x/media/y", 900, 4096)
+                .await
+                .expect("presign");
+        let lower = url.to_lowercase();
+        // SigV4 lists signed headers in `X-Amz-SignedHeaders`; content-length
+        // must be among them for S3 to enforce it.
+        let signed = lower
+            .split("x-amz-signedheaders=")
+            .nth(1)
+            .expect("signed headers present");
+        assert!(
+            signed.contains("content-length"),
+            "content-length must be a signed header, got: {url}"
+        );
     }
 
     #[test]
