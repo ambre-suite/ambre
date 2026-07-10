@@ -91,6 +91,18 @@ pub async fn invite_to_document(
         .ok_or(AppError::NotFound { resource: "user" })?;
     let invitee_id =
         ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*invitee.id.as_bytes()));
+    // `add_document_member` upserts (ON CONFLICT DO UPDATE), so invite is also
+    // the role-change path for an EXISTING member. Clamp the target too: a caller
+    // may only touch a member currently at or below their own rank. Without this
+    // an `editor` could re-invite an existing `owner` as `editor` and, since an
+    // editor holds the document key, supply a valid wrap -- demoting an owner and
+    // overwriting their key entry despite never being an owner.
+    if let Some(existing) = db::get_document_member(&state.db, &doc_id, &invitee_id).await? {
+        let target_rank = doc_role_rank(&existing.role).ok_or(AppError::Forbidden)?;
+        if target_rank > caller_rank {
+            return Err(AppError::Forbidden);
+        }
+    }
     let doc_key_enc = base64::engine::general_purpose::URL_SAFE
         .decode(&req.doc_key_enc)
         .map_err(|e| AppError::Conflict {

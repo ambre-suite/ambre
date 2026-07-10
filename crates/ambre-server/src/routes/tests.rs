@@ -974,6 +974,50 @@ mod handler_tests {
             .to_string()
     }
 
+    /// D1: an `editor` holds the document key, so the invite upsert (which is
+    /// also the role-change path) must not let it demote an existing `owner` and
+    /// overwrite the owner's key entry. The N2 target-rank clamp applied to the
+    /// document share route.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn editor_cannot_demote_owner_via_invite(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+
+        // Owner (user@ambre.app) creates the document and invites an editor.
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+
+        let editor_email = "editor@ambre.app";
+        let editor = setup_named(&app, editor_email, 5).await;
+        invite(&app, &owner, &doc_id, editor_email, "editor").await;
+
+        // The editor tries to re-invite the owner as `editor`: the granted role is
+        // within its rank, but the target is an owner (rank above it) -> 403.
+        assert_eq!(
+            invite_status(&app, &editor, &doc_id, "user@ambre.app", "editor").await,
+            StatusCode::FORBIDDEN,
+            "editor must not demote an owner through the invite upsert"
+        );
+
+        // The owner is still an owner (unchanged role and key entry).
+        let members = list_members(&app, &owner, &doc_id).await;
+        let owner_row = members
+            .iter()
+            .find(|m| m["email"] == "user@ambre.app")
+            .expect("owner still a member");
+        assert_eq!(owner_row["role"], "owner");
+        assert_eq!(owner_row["doc_key_enc"], base64_encode(&[5u8; 32]));
+
+        // Nominal path: the editor may still invite a fresh viewer.
+        let viewer_email = "viewer2@ambre.app";
+        crate::test_helpers::create_test_user(&state.db, viewer_email).await;
+        assert_eq!(
+            invite_status(&app, &editor, &doc_id, viewer_email, "viewer").await,
+            StatusCode::OK
+        );
+    }
+
     /// D2: the sole owner must not be able to revoke or demote themselves --
     /// with no owner-membership left, nobody could manage sharing.
     #[sqlx::test]
