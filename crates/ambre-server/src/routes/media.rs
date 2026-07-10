@@ -115,9 +115,16 @@ pub async fn media_confirm_upload(
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
-    db::get_document_member(&state.db, &doc_id, &s.user_id)
+    let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
+    // Writing a `media` row must be gated exactly like `media_upload_url`
+    // (owner/editor). A viewer cannot obtain an upload URL, so it must not be
+    // able to register a media row either; otherwise the two halves of the
+    // upload flow would disagree on who may add media.
+    if !["owner", "editor"].contains(&m.role.as_str()) {
+        return Err(AppError::Forbidden);
+    }
     if !s3::is_valid_content_hash(&req.content_hash) {
         return Err(AppError::BadRequest("invalid content_hash".into()));
     }
