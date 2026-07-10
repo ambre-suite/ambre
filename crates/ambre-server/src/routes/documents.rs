@@ -163,7 +163,17 @@ pub async fn logout(
     Json(req): Json<LogoutRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     if let Some(token) = req.refresh_token.as_deref() {
-        redis_ops::refresh_delete(&state.redis, token).await?;
+        // Only revoke a token that actually belongs to the caller: without this an
+        // authenticated user could delete another user's refresh token (session
+        // revocation of a third party) by presenting it here. The token is an
+        // unguessable UUID so this is defense-in-depth, but logout must act on the
+        // caller's own credential only.
+        match redis_ops::refresh_get(&state.redis, token).await? {
+            Some(data) if data.user_id == auth.user_id => {
+                redis_ops::refresh_delete(&state.redis, token).await?;
+            }
+            _ => {}
+        }
     }
     tracing::debug!(user_id = %auth.user_id, "logout");
     Ok(axum::Json(serde_json::json!({ "status": "logged_out" })))
@@ -286,6 +296,15 @@ pub async fn create_document(
     // existing id never gains ownership.
     let owner_uuid =
         ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*doc.owner_id.as_bytes()));
+    // A foreign caller who supplied an id that already exists and belongs to
+    // someone else must not learn it exists (nor its `doc_type`): answer 404 as if
+    // the id were free-but-unowned-by-them, instead of echoing back the row. The
+    // legitimate owner's idempotent retry still succeeds below.
+    if !created && owner_uuid != s.user_id {
+        return Err(AppError::NotFound {
+            resource: "document",
+        });
+    }
     if created || owner_uuid == s.user_id {
         let doc_key_enc = base64::engine::general_purpose::URL_SAFE
             .decode(&req.doc_key_enc)

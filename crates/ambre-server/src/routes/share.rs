@@ -185,7 +185,13 @@ pub async fn rotate_document_key(
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if !["owner", "editor"].contains(&m.role.as_str()) {
+    // Owner-only, symmetric with `revoke_from_document`. Rotating the document key
+    // rewraps EVERY member's `doc_key_enc` and makes the caller the wrapper of
+    // record, so an editor allowed here could omit members from the payload
+    // (leaving their key stale after rotation -> lockout) or re-key the document
+    // out from under the owner. Key rotation is membership management; it belongs
+    // to the owner exactly like revoke.
+    if m.role != "owner" {
         return Err(AppError::Forbidden);
     }
 
