@@ -55,6 +55,13 @@ pub struct Config {
     /// Maximum size in bytes of a single encrypted snapshot blob (default 50 MiB).
     /// Bound into the presigned PUT URL exactly like `media_max_bytes`.
     pub snapshot_max_bytes: u64,
+    /// Maximum size in bytes of a single encrypted delta (`Update`) ciphertext
+    /// carried inline over the WebSocket (default 4 MiB). A CRDT delta is small;
+    /// a large blob belongs on the media path. Bounding this stops an authorized
+    /// writer from pushing oversized deltas that are persisted durably (S3 +
+    /// Redis pending) and fanned out to every subscriber -- the same storage/cost
+    /// abuse the media and snapshot caps close, on the hot write path.
+    pub delta_max_bytes: usize,
     /// Prefix for S3 object keys (e.g. "dev-ambre").
     pub s3_env_prefix: String,
     /// Google OIDC client ID.
@@ -88,6 +95,7 @@ impl Default for Config {
             presigned_url_ttl_secs: 900,
             media_max_bytes: 100 * 1024 * 1024,
             snapshot_max_bytes: 50 * 1024 * 1024,
+            delta_max_bytes: 4 * 1024 * 1024,
             s3_env_prefix: "dev-ambre".into(),
             oidc_google_client_id: String::new(),
             oidc_google_client_secret: String::new(),
