@@ -40,6 +40,15 @@ return count
 /// distinct entries instead of one clobbering the other.
 static REQUEST_NONCE: AtomicU64 = AtomicU64::new(0);
 
+/// Random per-instance id, mixed into each sorted-set member so two pods cannot
+/// collide on the same member. The process id is NOT enough: containers usually
+/// run the server as PID 1, and each process's `REQUEST_NONCE` restarts at 0, so
+/// two pods handling their first request in the same millisecond would produce
+/// an identical member and one `ZADD` would clobber the other (undercounting the
+/// shared window). A fresh random id per boot removes that overlap.
+static INSTANCE_ID: std::sync::LazyLock<String> =
+    std::sync::LazyLock::new(|| uuid::Uuid::new_v4().simple().to_string());
+
 /// Rate-limiting key derived from the request.
 ///
 /// Prefers the authenticated user id (verified statelessly from the
@@ -243,9 +252,9 @@ async fn check_sliding_window(
     max_requests: u64,
 ) -> Result<(bool, u64), AppError> {
     let nonce = REQUEST_NONCE.fetch_add(1, Ordering::Relaxed);
-    // Unique per (process, request), so same-millisecond requests are distinct
-    // sorted-set members even across instances.
-    let member = format!("{now_ms}-{}-{nonce}", std::process::id());
+    // Unique per (instance, request), so same-millisecond requests are distinct
+    // sorted-set members even across pods (see `INSTANCE_ID`).
+    let member = format!("{now_ms}-{}-{nonce}", *INSTANCE_ID);
 
     let count: i64 = state
         .redis
