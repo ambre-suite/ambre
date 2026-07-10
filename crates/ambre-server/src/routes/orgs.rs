@@ -952,5 +952,97 @@ mod tests {
                 StatusCode::OK
             );
         }
+
+        // -- Last-owner lockout (B1) ----------------------------------------
+
+        /// The sole owner must not be able to remove themselves: with no owner
+        /// left, nobody could manage the org or recover member keys.
+        #[sqlx::test]
+        #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+        async fn owner_cannot_remove_last_owner(pool: sqlx::PgPool) {
+            let state = crate::test_helpers::test_app_state(pool).await;
+            let app = build_org_router(state.clone());
+
+            let owner = setup_org_user(&app, "owner@ambre.app", 40).await;
+            let owner_uid = user_id(&state, "owner@ambre.app").await;
+            let org_id = create_org(&app, &owner).await;
+
+            assert_eq!(
+                delete_member(&app, &owner, &org_id, &owner_uid).await,
+                StatusCode::CONFLICT,
+                "removing the last owner must be refused"
+            );
+        }
+
+        /// The sole owner must not be able to demote themselves to a lesser role.
+        #[sqlx::test]
+        #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+        async fn owner_cannot_demote_last_owner(pool: sqlx::PgPool) {
+            let state = crate::test_helpers::test_app_state(pool).await;
+            let app = build_org_router(state.clone());
+
+            let owner = setup_org_user(&app, "owner@ambre.app", 41).await;
+            let owner_uid = user_id(&state, "owner@ambre.app").await;
+            let org_id = create_org(&app, &owner).await;
+
+            // Both the PATCH and the upsert paths must refuse the demotion.
+            assert_eq!(
+                patch_member_role(&app, &owner, &org_id, &owner_uid, "member").await,
+                StatusCode::CONFLICT,
+                "demoting the last owner via PATCH must be refused"
+            );
+            assert_eq!(
+                post_member(&app, &owner, &org_id, &owner_uid, "member").await,
+                StatusCode::CONFLICT,
+                "demoting the last owner via the add upsert must be refused"
+            );
+        }
+
+        /// Once a second owner exists, the first may step down: the invariant
+        /// is "at least one owner remains", not "owners can never leave".
+        #[sqlx::test]
+        #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+        async fn owner_can_leave_when_another_owner_remains(pool: sqlx::PgPool) {
+            let state = crate::test_helpers::test_app_state(pool).await;
+            let app = build_org_router(state.clone());
+
+            let owner = setup_org_user(&app, "owner@ambre.app", 42).await;
+            let _second = setup_org_user(&app, "second@ambre.app", 43).await;
+            let owner_uid = user_id(&state, "owner@ambre.app").await;
+            let second_uid = user_id(&state, "second@ambre.app").await;
+            let org_id = create_org(&app, &owner).await;
+
+            // Promote a second owner, then the first can leave.
+            assert_eq!(
+                post_member(&app, &owner, &org_id, &second_uid, "owner").await,
+                StatusCode::CREATED
+            );
+            assert_eq!(
+                delete_member(&app, &owner, &org_id, &owner_uid).await,
+                StatusCode::OK,
+                "an owner may leave while another owner remains"
+            );
+        }
+
+        // -- Unknown target user (B2) ---------------------------------------
+
+        /// Adding a well-formed but unknown `user_id` must surface as a clean
+        /// 404, not a raw 500 from the `user_id` foreign-key violation.
+        #[sqlx::test]
+        #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+        async fn add_member_unknown_user_is_not_found(pool: sqlx::PgPool) {
+            let state = crate::test_helpers::test_app_state(pool).await;
+            let app = build_org_router(state.clone());
+
+            let owner = setup_org_user(&app, "owner@ambre.app", 44).await;
+            let org_id = create_org(&app, &owner).await;
+
+            let ghost = "00000000-0000-0000-0000-0000000000ff";
+            assert_eq!(
+                post_member(&app, &owner, &org_id, ghost, "member").await,
+                StatusCode::NOT_FOUND,
+                "unknown user must be a clean 404, not a raw DB 500"
+            );
+        }
     }
 }

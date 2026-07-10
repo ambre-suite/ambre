@@ -130,7 +130,30 @@ pub async fn delete_organization(pool: &PgPool, org_id: uuid::Uuid) -> Result<bo
     Ok(rows > 0)
 }
 
+/// Maps a foreign-key violation on the member's `user_id` to a clean 404
+/// instead of surfacing the FK error as an opaque 500. The `user_id` in the
+/// request is only format-validated as a UUID, so a well-formed but unknown
+/// user reaches the INSERT and trips `organization_members_user_id_fkey`.
+fn map_member_user_fk(e: sqlx::Error) -> AppError {
+    match &e {
+        sqlx::Error::Database(db)
+            if db.is_foreign_key_violation()
+                && db.constraint() == Some("organization_members_user_id_fkey") =>
+        {
+            AppError::NotFound { resource: "user" }
+        }
+        _ => AppError::Database(e),
+    }
+}
+
 /// Adds a member to an organization with an optional encrypted Shamir share.
+///
+/// The upsert doubles as the role-change path (`ON CONFLICT DO UPDATE`), so it
+/// enforces the same last-owner invariant as `update_org_member_role`: it
+/// refuses to demote the organization's only remaining owner, which would leave
+/// it with no one able to manage membership or recover keys. The check and the
+/// write run in one transaction with the owner row locked (`FOR UPDATE`) so
+/// concurrent demotions cannot both pass the count.
 pub async fn add_org_member(
     pool: &PgPool,
     org_id: uuid::Uuid,
@@ -138,6 +161,20 @@ pub async fn add_org_member(
     role: &str,
     shamir_share_enc: Option<&[u8]>,
 ) -> Result<(), AppError> {
+    let mut tx = pool.begin().await?;
+
+    let current_role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM organization_members WHERE org_id = $1 AND user_id = $2 FOR UPDATE",
+    )
+    .bind(org_id)
+    .bind(user_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    if current_role.as_deref() == Some("owner") && role != "owner" {
+        ensure_not_last_owner(&mut tx, org_id).await?;
+    }
+
     sqlx::query(
         "INSERT INTO organization_members (org_id, user_id, role, shamir_share_enc)
          VALUES ($1, $2, $3, $4)
@@ -147,8 +184,31 @@ pub async fn add_org_member(
     .bind(user_id)
     .bind(role)
     .bind(shamir_share_enc)
-    .execute(pool)
+    .execute(&mut *tx)
+    .await
+    .map_err(map_member_user_fk)?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Fails with a 409 if the organization has only one owner left. Callers hold
+/// the target owner's row locked, so the count is stable for the transaction.
+async fn ensure_not_last_owner(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    org_id: uuid::Uuid,
+) -> Result<(), AppError> {
+    let owners: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM organization_members WHERE org_id = $1 AND role = 'owner'",
+    )
+    .bind(org_id)
+    .fetch_one(&mut **tx)
     .await?;
+    if owners <= 1 {
+        return Err(AppError::Conflict {
+            detail: "cannot remove the last owner of the organization".into(),
+        });
+    }
     Ok(())
 }
 
@@ -205,33 +265,76 @@ pub struct OrgMembershipRow {
 }
 
 /// Removes a member from an organization.
+///
+/// Refuses to delete the organization's only remaining owner (last-owner
+/// lockout): with no owner left, nobody could manage membership or recover
+/// member keys. The check and the delete share one transaction with the target
+/// row locked so two concurrent removals cannot both see two owners.
 pub async fn remove_org_member(
     pool: &PgPool,
     org_id: uuid::Uuid,
     user_id: uuid::Uuid,
 ) -> Result<bool, AppError> {
+    let mut tx = pool.begin().await?;
+
+    let current_role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM organization_members WHERE org_id = $1 AND user_id = $2 FOR UPDATE",
+    )
+    .bind(org_id)
+    .bind(user_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let Some(current_role) = current_role else {
+        return Ok(false);
+    };
+    if current_role == "owner" {
+        ensure_not_last_owner(&mut tx, org_id).await?;
+    }
+
     let rows = sqlx::query("DELETE FROM organization_members WHERE org_id = $1 AND user_id = $2")
         .bind(org_id)
         .bind(user_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?
         .rows_affected();
+
+    tx.commit().await?;
     Ok(rows > 0)
 }
 
 /// Updates a member's role.
+///
+/// Enforces the last-owner invariant: demoting the organization's only owner is
+/// refused with a 409 (see `remove_org_member`).
 pub async fn update_org_member_role(
     pool: &PgPool,
     org_id: uuid::Uuid,
     user_id: uuid::Uuid,
     role: &str,
 ) -> Result<(), AppError> {
+    let mut tx = pool.begin().await?;
+
+    let current_role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM organization_members WHERE org_id = $1 AND user_id = $2 FOR UPDATE",
+    )
+    .bind(org_id)
+    .bind(user_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    if current_role.as_deref() == Some("owner") && role != "owner" {
+        ensure_not_last_owner(&mut tx, org_id).await?;
+    }
+
     sqlx::query("UPDATE organization_members SET role = $3 WHERE org_id = $1 AND user_id = $2")
         .bind(org_id)
         .bind(user_id)
         .bind(role)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
     Ok(())
 }
 
