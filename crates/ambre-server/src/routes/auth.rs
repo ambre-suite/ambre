@@ -113,19 +113,19 @@ pub struct RefreshResponse {
 
 /// `POST /auth/refresh` (unauthenticated; the refresh token is the credential)
 ///
-/// Looks up the refresh token in Redis, rotates it (delete + recreate inside
-/// `issue_session`) to detect replay, and returns a new access + refresh pair.
-/// A revoked or expired token yields 401.
+/// Atomically claims the refresh token in Redis, rotating it so that a stolen
+/// token replayed after its first legitimate use is rejected, and returns a new
+/// access + refresh pair. A revoked, expired, or already-claimed token yields 401.
+///
+/// The claim has to be atomic: reading the record and then deleting it would let
+/// two concurrent requests bearing the same token both mint a session.
 pub async fn refresh(
     State(state): State<Arc<AppState>>,
     Json(req): Json<RefreshRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let data = redis_ops::refresh_get(&state.redis, &req.refresh_token)
+    let data = redis_ops::refresh_consume(&state.redis, &req.refresh_token)
         .await?
         .ok_or(AppError::Unauthorized)?;
-    // Rotation: invalidate the presented token before minting the new pair, so a
-    // stolen-and-replayed token is rejected after its first legitimate use.
-    redis_ops::refresh_delete(&state.redis, &req.refresh_token).await?;
     let tokens = auth::issue_session(&state, data.user_id, data.signing_pubkey).await?;
     Ok(axum::Json(RefreshResponse {
         access_token: tokens.access_token,

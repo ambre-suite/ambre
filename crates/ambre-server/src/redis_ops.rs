@@ -285,6 +285,38 @@ pub async fn refresh_delete(redis: &Client, token: &str) -> Result<(), AppError>
     Ok(())
 }
 
+/// Claims a refresh-token record, returning `true` only for the caller that
+/// actually removed the key.
+///
+/// `DEL` is atomic and reports how many keys it removed, so when several callers
+/// race on the same token exactly one observes `1`. That caller owns the claim;
+/// every other one observes `0` and must be rejected as a replay.
+pub async fn refresh_claim(redis: &Client, token: &str) -> Result<bool, AppError> {
+    let key = format!("refresh:{token}");
+    let removed: usize = redis
+        .del([&key])
+        .await
+        .map_err(|e| AppError::Redis(format!("refresh claim del: {e}")))?;
+    Ok(removed == 1)
+}
+
+/// Reads a refresh-token record and claims it, yielding the data only to the
+/// caller that won the claim.
+///
+/// A `refresh_get` followed by an unchecked `refresh_delete` is not sufficient
+/// for rotation. Two concurrent requests presenting the same token both observe
+/// the record before either deletes it, so both mint a fresh session and the
+/// replay goes undetected. Gating on the [`refresh_claim`] result closes that.
+pub async fn refresh_consume(redis: &Client, token: &str) -> Result<Option<RefreshData>, AppError> {
+    let Some(data) = refresh_get(redis, token).await? else {
+        return Ok(None);
+    };
+    if !refresh_claim(redis, token).await? {
+        return Ok(None);
+    }
+    Ok(Some(data))
+}
+
 /// Registers this WebSocket session as an active subscriber of the document.
 ///
 /// Used for per-document presence tracking and broadcast targeting.
@@ -748,5 +780,64 @@ mod redis_integration_tests {
         );
 
         let _ = redis.del([key.as_str()]).await;
+    }
+
+    async fn seed_refresh(redis: &Client) -> String {
+        let token = uuid::Uuid::new_v4().to_string();
+        let data = RefreshData {
+            user_id: ambre_core::UserId::new(),
+            signing_pubkey: ambre_core::PublicKey::from_array([3u8; 32]),
+        };
+        refresh_create(redis, &token, &data, 60)
+            .await
+            .expect("refresh create");
+        token
+    }
+
+    /// Reproduces the rotation race: two requests bearing the same token both
+    /// read the record before either deletes it. Only the caller whose `DEL`
+    /// actually removed the key may claim it; the other is a replay.
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn only_one_racing_caller_claims_a_refresh_token() {
+        let Some(redis) = connect_redis().await else {
+            return;
+        };
+        let token = seed_refresh(&redis).await;
+
+        // Both callers observe the record: this is the interleaving that makes an
+        // unchecked delete unsafe.
+        assert!(refresh_get(&redis, &token).await.expect("get a").is_some());
+        assert!(refresh_get(&redis, &token).await.expect("get b").is_some());
+
+        assert!(refresh_claim(&redis, &token).await.expect("claim a"));
+        assert!(
+            !refresh_claim(&redis, &token).await.expect("claim b"),
+            "a token already claimed by a concurrent request must not be claimable again"
+        );
+    }
+
+    /// End to end on the rotation path: the second presentation of a token that
+    /// was already consumed yields nothing, so the handler answers 401.
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn refresh_consume_rejects_a_replayed_token() {
+        let Some(redis) = connect_redis().await else {
+            return;
+        };
+        let token = seed_refresh(&redis).await;
+
+        assert!(
+            refresh_consume(&redis, &token)
+                .await
+                .expect("first")
+                .is_some()
+        );
+        assert!(
+            refresh_consume(&redis, &token)
+                .await
+                .expect("replay")
+                .is_none()
+        );
     }
 }
