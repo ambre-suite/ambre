@@ -17,8 +17,9 @@ use crate::state::AppState;
 pub struct AuthSession {
     /// User the token belongs to.
     pub user_id: ambre_core::UserId,
-    /// Cached Ed25519 public key -- avoids a Postgres lookup per WS message.
-    #[allow(dead_code)]
+    /// Cached Ed25519 public key -- avoids a Postgres lookup per WS message, and
+    /// binds every authored `Update` to this session identity (see the WS
+    /// `handle_update` author-key check).
     pub signing_pubkey: ambre_core::PublicKey,
 }
 
