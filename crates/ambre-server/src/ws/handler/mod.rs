@@ -95,6 +95,11 @@ const MEMBERSHIP_RECHECK_TTL: Duration = Duration::from_secs(30);
 /// is currently subscribed to.
 struct WsConnectionState {
     user_id: UserId,
+    /// Ed25519 signing key bound to this session (from the access token's `spk`
+    /// claim). Every authored `Update` MUST carry this exact key: it bounds the
+    /// per-document clock hash to one entry per member and stops a member from
+    /// authoring under an arbitrary self-generated key (impersonation).
+    signing_pubkey: ambre_core::PublicKey,
     /// Identifies this socket in Redis presence/subscription sets. Generated
     /// fresh per connection (the access token is stateless and carries no id).
     connection_id: String,
@@ -136,6 +141,7 @@ async fn handle_ws(
 
     let mut conn = WsConnectionState {
         user_id,
+        signing_pubkey: session.signing_pubkey.clone(),
         connection_id: connection_id.clone(),
         doc_subscriptions: HashSet::new(),
         doc_access_verified_at: HashMap::new(),

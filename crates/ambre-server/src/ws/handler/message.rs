@@ -78,6 +78,21 @@ pub(crate) async fn handle_update(
     }
 
     let author_pubkey = update.public_data.pub_key.clone();
+    // Bind the authored key to the session identity. The current model is one
+    // signing key per user (`users.signing_pubkey`, carried in the token's `spk`
+    // claim), so a member may only author under their own key. Without this a
+    // member could sign valid updates under unlimited self-generated keys, each
+    // adding a field to the never-pruned `doc:{id}:clocks` hash (unbounded Redis
+    // growth) and attributing edits to a forged identity. Reject the mismatch
+    // before the signature check so the clock hash only ever sees known keys.
+    if author_pubkey != conn.signing_pubkey {
+        let err = encode_server_msg(&WsServerMsg::Error {
+            code: 403,
+            message: "author key does not match session identity".into(),
+        });
+        let _ = outbound_tx.send(err).await;
+        return;
+    }
     if let Err(e) = verify_update_signature(&author_pubkey, &update) {
         let err = encode_server_msg(&WsServerMsg::Error {
             code: 401,
@@ -273,12 +288,22 @@ pub(crate) async fn handle_request_missing(
     let _ = outbound_tx.send(msg).await;
 }
 
+// NOTE (Murmure not implemented): the channel handlers below deliberately skip
+// the subscription ACL, signature verification, and clock/seq path that the
+// document handlers enforce. Murmure is unstarted and no channel path is wired
+// to real data, so this is intentional, NOT an oversight -- do not re-flag it in
+// audits. The MANDATORY hardening to apply before Murmure lands (channel_members
+// ACL, `verify_update_signature` on every ChannelUpdate/Ephemeral, and the
+// `verify_clock_and_assign_seq` Lua path per segment) is specified in
+// `specs/Todo/ambre-murmure.md` sec.3 "Server-side authorization".
 pub(crate) async fn handle_subscribe_channel(
     _state: &Arc<AppState>,
     conn: &mut WsConnectionState,
     channel_id: ChannelId,
     outbound_tx: &mpsc::Sender<Vec<u8>>,
 ) {
+    // TODO(murmure): enforce the channel_members subscription ACL here, mirroring
+    // `handle_subscribe`/`verify_document_access`. See ambre-murmure.md sec.3.
     conn.channel_subscriptions.insert(channel_id);
     let ack = encode_server_msg(&WsServerMsg::ChannelSubscribed { channel_id });
     let _ = outbound_tx.send(ack).await;
@@ -289,6 +314,10 @@ pub(crate) async fn handle_channel_update(
     channel_id: ChannelId,
     update: ambre_protocol::Update,
 ) {
+    // TODO(murmure): before Murmure lands, gate this on `verify_update_signature`
+    // and the `verify_clock_and_assign_seq` path exactly like `handle_update`, and
+    // persist the delta. Rebroadcasting unsigned, unsequenced updates is only safe
+    // while no channel is wired to real data. See ambre-murmure.md sec.3.
     let broadcast = encode_server_msg(&WsServerMsg::ChannelUpdate {
         channel_id,
         seq: ambre_protocol::messages::Seq(0),
@@ -302,6 +331,8 @@ pub(crate) async fn handle_channel_ephemeral(
     channel_id: ChannelId,
     ephemeral: ambre_protocol::Ephemeral,
 ) {
+    // TODO(murmure): signature-check the ephemeral (typing/presence carries the
+    // anti-replay counter) once channel ACLs exist. See ambre-murmure.md sec.3.
     let broadcast = encode_server_msg(&WsServerMsg::ChannelEphemeral {
         channel_id,
         ephemeral,
