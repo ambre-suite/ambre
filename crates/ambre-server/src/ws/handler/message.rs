@@ -203,8 +203,9 @@ pub(crate) async fn handle_ephemeral(
     // member could use any key, they could: (a) attribute a cursor to another
     // member's identity, (b) overwrite that member's presence entry, and (c) add
     // unlimited fields to the presence hash. Each user has one signing key (`spk`
-    // claim), so a member may only send presence under their own key. The client
-    // expects no reply on this path, so drop a mismatch without an error message.
+    // claim), so a member may only send presence under their own key. Ephemerals
+    // are fire-and-forget (the client expects no reply here), so drop a mismatch
+    // silently without an error message.
     if eph.public_data.pub_key != conn.signing_pubkey {
         return;
     }
@@ -612,8 +613,8 @@ mod postcard_tests {
 }
 
 // Test for the ephemeral author-key check (same idea as the `handle_update`
-// check). It needs a live Redis to read back the presence hash, so it is gated by
-// the `db` feature like the other integration tests.
+// check). It needs a live Redis to observe the presence-hash side effect, so it
+// is gated by the `db` feature like the other integration tests.
 #[cfg(test)]
 mod ephemeral_binding_tests {
     use super::*;
@@ -630,8 +631,8 @@ mod ephemeral_binding_tests {
             .ok()?;
         let s3 = aws_sdk_s3::Client::from_conf(aws_sdk_s3::Config::builder().build());
         let pubsub = crate::ws::PubSubHub::spawn(redis.clone());
-        // The ephemeral path never queries Postgres, so a lazy pool that is never
-        // connected is enough to build the AppState.
+        // The ephemeral path never touches Postgres, so a lazy pool (never
+        // connected) is enough to satisfy the AppState shape.
         let db = sqlx::postgres::PgPoolOptions::new()
             .connect_lazy("postgres://localhost/ambre")
             .ok()?;
