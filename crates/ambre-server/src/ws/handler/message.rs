@@ -10,17 +10,24 @@ pub(crate) async fn handle_subscribe(
     document_id: DocumentId,
     outbound_tx: &mpsc::Sender<Vec<u8>>,
 ) {
-    if let Err(e) = verify_document_access(&state.db, document_id, conn.user_id).await {
-        let err = encode_server_msg(&WsServerMsg::Error {
-            code: 403,
-            message: e.to_string(),
-        });
-        let _ = outbound_tx.send(err).await;
-        return;
-    }
+    let role = match verify_document_access(&state.db, document_id, conn.user_id).await {
+        Ok(role) => role,
+        Err(e) => {
+            let err = encode_server_msg(&WsServerMsg::Error {
+                code: 403,
+                message: e.to_string(),
+            });
+            let _ = outbound_tx.send(err).await;
+            return;
+        }
+    };
     conn.doc_subscriptions.insert(document_id);
     conn.doc_access_verified_at
         .insert(document_id, Instant::now());
+    // Cache the write capability so `handle_update` can reject a read-only
+    // (`viewer`) member's delta without re-hitting the database per message.
+    conn.doc_write_allowed
+        .insert(document_id, role_can_write(&role));
     let _ = redis_ops::doc_subscribe_session(&state.redis, &document_id, &conn.connection_id).await;
     let ack = encode_server_msg(&WsServerMsg::Subscribed { document_id });
     let _ = outbound_tx.send(ack).await;
@@ -33,6 +40,7 @@ pub(crate) async fn handle_unsubscribe(
 ) {
     conn.doc_subscriptions.remove(&document_id);
     conn.doc_access_verified_at.remove(&document_id);
+    conn.doc_write_allowed.remove(&document_id);
     let _ =
         redis_ops::doc_unsubscribe_session(&state.redis, &document_id, &conn.connection_id).await;
 }
@@ -80,6 +88,21 @@ pub(crate) async fn handle_update(
         let err = encode_server_msg(&WsServerMsg::Error {
             code: 403,
             message: "document access revoked".into(),
+        });
+        let _ = outbound_tx.send(err).await;
+        return;
+    }
+
+    // Enforce the write role (owner/editor). Every REST write path gates on the
+    // same set; without this the hot WS write path would let a `viewer` -- a
+    // legitimately invited read-only member who holds the doc key and its own
+    // signing key -- author sequenced, persisted, broadcast deltas. The capability
+    // is cached at Subscribe and refreshed by `membership_still_valid` above, so
+    // this is a map lookup, not a DB hit.
+    if conn.doc_write_allowed.get(&doc_id) != Some(&true) {
+        let err = encode_server_msg(&WsServerMsg::Error {
+            code: 403,
+            message: "read-only role cannot write to this document".into(),
         });
         let _ = outbound_tx.send(err).await;
         return;
@@ -449,30 +472,42 @@ async fn membership_still_valid(
     if fresh {
         return true;
     }
-    if verify_document_access(&state.db, doc_id, conn.user_id)
-        .await
-        .is_err()
-    {
-        conn.doc_subscriptions.remove(&doc_id);
-        conn.doc_access_verified_at.remove(&doc_id);
-        let _ =
-            redis_ops::doc_unsubscribe_session(&state.redis, &doc_id, &conn.connection_id).await;
-        return false;
+    match verify_document_access(&state.db, doc_id, conn.user_id).await {
+        Ok(role) => {
+            conn.doc_access_verified_at.insert(doc_id, Instant::now());
+            // Refresh the cached write capability too: a mid-session role change
+            // (e.g. editor demoted to viewer) takes effect within the TTL.
+            conn.doc_write_allowed.insert(doc_id, role_can_write(&role));
+            true
+        }
+        Err(_) => {
+            conn.doc_subscriptions.remove(&doc_id);
+            conn.doc_access_verified_at.remove(&doc_id);
+            conn.doc_write_allowed.remove(&doc_id);
+            let _ = redis_ops::doc_unsubscribe_session(&state.redis, &doc_id, &conn.connection_id)
+                .await;
+            false
+        }
     }
-    conn.doc_access_verified_at.insert(doc_id, Instant::now());
-    true
 }
 
-/// Verifies the caller has a membership row for the document.
+/// Whether a document role may author content. Mirrors the `["owner","editor"]`
+/// gate every REST write path enforces; a `viewer` (or unknown role) is read-only.
+fn role_can_write(role: &str) -> bool {
+    matches!(role, "owner" | "editor")
+}
+
+/// Verifies the caller has a membership row for the document and returns their
+/// role, so callers can gate write operations on it.
 pub(crate) async fn verify_document_access(
     pool: &sqlx::PgPool,
     document_id: DocumentId,
     user_id: UserId,
-) -> Result<(), AppError> {
-    db::get_document_member(pool, &document_id, &user_id)
+) -> Result<String, AppError> {
+    let m = db::get_document_member(pool, &document_id, &user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    Ok(())
+    Ok(m.role)
 }
 
 /// Appends `len(field) as u32 LE || field` to `msg`.
@@ -776,6 +811,9 @@ mod ephemeral_binding_tests {
             // exercise their own concern (author-key binding / size cap) without
             // the `membership_still_valid` recheck reaching for a real Postgres.
             doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
+            // A writer role, so the size-cap / author-key tests exercise their own
+            // concern rather than tripping the read-only gate.
+            doc_write_allowed: HashMap::from([(doc_id, true)]),
             last_replay_at: HashMap::new(),
             channel_subscriptions: HashSet::new(),
         }
@@ -886,6 +924,9 @@ mod delta_size_cap_tests {
             // exercise their own concern (author-key binding / size cap) without
             // the `membership_still_valid` recheck reaching for a real Postgres.
             doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
+            // A writer role, so the size-cap / author-key tests exercise their own
+            // concern rather than tripping the read-only gate.
+            doc_write_allowed: HashMap::from([(doc_id, true)]),
             last_replay_at: HashMap::new(),
             channel_subscriptions: HashSet::new(),
         }
@@ -934,6 +975,46 @@ mod delta_size_cap_tests {
         assert!(matches!(
             decoded,
             ambre_protocol::ws::WsServerMsg::Error { code: 413, .. }
+        ));
+
+        let _ = state.redis.del([&pending_key]).await;
+    }
+
+    /// A read-only (`viewer`) member must not be able to author a delta over the
+    /// WS write path: it is rejected with 403 before any durable write, so the
+    /// pending list stays empty. Without the role gate a viewer -- a legitimately
+    /// invited member holding the doc key and its own signing key -- could push
+    /// sequenced, persisted, broadcast updates despite REST write paths refusing
+    /// them.
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn viewer_role_delta_writes_no_pending() {
+        let Some(state) = test_state(1024).await else {
+            return;
+        };
+        let doc_id = DocumentId::new();
+        let session_key = PublicKey::from_array([1u8; 32]);
+        let pending_key = format!("doc:{doc_id}:pending");
+        let _ = state.redis.del([&pending_key]).await;
+
+        // Fresh membership, but a read-only role: the write capability is cached
+        // false, exactly as `handle_subscribe` would set it for a `viewer`.
+        let mut conn = conn_with(session_key.clone(), doc_id);
+        conn.doc_write_allowed.insert(doc_id, false);
+        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(8);
+
+        handle_update(&state, &mut conn, update_with(session_key, doc_id, 16), &tx).await;
+
+        let pending_len: usize = state.redis.llen(&pending_key).await.unwrap();
+        assert_eq!(
+            pending_len, 0,
+            "a viewer's delta must not be pushed to the pending list"
+        );
+        let reply = rx.try_recv().expect("a 403 error reply must be sent");
+        let decoded = ambre_protocol::ws::decode_server_msg(&reply).unwrap();
+        assert!(matches!(
+            decoded,
+            ambre_protocol::ws::WsServerMsg::Error { code: 403, .. }
         ));
 
         let _ = state.redis.del([&pending_key]).await;
