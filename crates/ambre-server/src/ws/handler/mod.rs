@@ -122,6 +122,13 @@ struct WsConnectionState {
     /// Last instant membership was verified for each subscribed document. Drives
     /// the [`MEMBERSHIP_RECHECK_TTL`] re-check in `handle_update` (H8).
     doc_access_verified_at: HashMap<DocumentId, Instant>,
+    /// Whether the caller's role on each subscribed document permits writing
+    /// (`owner`/`editor`, not `viewer`). Captured at `Subscribe` and refreshed on
+    /// the H8 membership recheck, so `handle_update` can reject a read-only
+    /// member's delta without a per-message DB hit. The REST write paths gate on
+    /// the same role set; without this the hot WS write path would let a `viewer`
+    /// author sequenced, persisted, broadcast updates.
+    doc_write_allowed: HashMap<DocumentId, bool>,
     /// Last instant a `RequestMissing` replay was served per document, enforcing
     /// [`REPLAY_MIN_INTERVAL`] against replay amplification.
     last_replay_at: HashMap<DocumentId, Instant>,
@@ -163,6 +170,7 @@ async fn handle_ws(
         connection_id: connection_id.clone(),
         doc_subscriptions: HashSet::new(),
         doc_access_verified_at: HashMap::new(),
+        doc_write_allowed: HashMap::new(),
         last_replay_at: HashMap::new(),
         channel_subscriptions: HashSet::new(),
     };
