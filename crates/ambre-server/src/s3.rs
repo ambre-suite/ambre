@@ -227,7 +227,42 @@ pub async fn global_s3_flusher(state: crate::state::AppState) -> ! {
 }
 
 /// Drains the pending list of a single document and uploads entries to S3.
+///
+/// The whole drain is serialized per document by a Redis lock: the flusher runs
+/// once per server instance, and without the lock two instances could `LRANGE`
+/// the same list, both upload, then both `LTRIM` the front by their own count --
+/// trimming away deltas a client `RPUSH`ed during the window (durable loss of an
+/// already-sequenced, acknowledged delta). A losing instance simply skips this
+/// document; the next 15 s cycle picks it up. The client write path never takes
+/// this lock, so collaboration latency is unaffected.
 async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &str) {
+    let Some(lock_key) = pending_key
+        .strip_suffix(":pending")
+        .map(|prefix| format!("{prefix}:flush:lock"))
+    else {
+        return;
+    };
+    // TTL comfortably exceeds one flush cycle; if the holder dies mid-flush the
+    // lock auto-expires and the next cycle retries.
+    let token = uuid::Uuid::new_v4().to_string();
+    match crate::redis_ops::try_acquire_flush_lock(&state.redis, &lock_key, &token, 60).await {
+        Ok(true) => {}
+        Ok(false) => return,
+        Err(e) => {
+            tracing::error!(key = pending_key, error = %e, "flush: lock acquire failed");
+            return;
+        }
+    }
+
+    flush_doc_pending_locked(state, pending_key).await;
+
+    if let Err(e) = crate::redis_ops::release_flush_lock(&state.redis, &lock_key, &token).await {
+        tracing::warn!(key = pending_key, error = %e, "flush: lock release failed");
+    }
+}
+
+/// Drain body, run under the per-document flush lock held by [`flush_doc_pending`].
+async fn flush_doc_pending_locked(state: &crate::state::AppState, pending_key: &str) {
     let blobs: Result<Vec<String>, _> = state.redis.lrange(pending_key, 0, -1).await;
 
     let blobs = match blobs {

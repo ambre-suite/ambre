@@ -199,7 +199,7 @@ pub(crate) async fn handle_ephemeral(
 
     // Check the ephemeral author key against the session identity, like the
     // `handle_update` check. The presence hash `doc:{id}:presence` is indexed by
-    // `pub_key_hex` and its fields have no TTL (only `presence_ts:*` expires). If a
+    // `pub_key_hex` and each field self-expires via per-field `HEXPIRE`. If a
     // member could use any key, they could: (a) attribute a cursor to another
     // member's identity, (b) overwrite that member's presence entry, and (c) add
     // unlimited fields to the presence hash. Each user has one signing key (`spk`
@@ -231,74 +231,103 @@ pub(crate) async fn handle_request_missing(
         return;
     }
 
-    let updates =
-        match db::get_updates_after(&state.db, &document_id, after_seq.0 as i64, 1000).await {
+    // Load the still-pending (not-yet-flushed) deltas ONCE as a `seq -> wire` map.
+    // Each replayed seq is resolved from S3 first and falls back to this map; the
+    // old per-seq lookup issued a full `LRANGE` of the whole pending list for
+    // every missed seq inside the concurrent fan-out (O(N^2) on the pre-flush
+    // window). A single load makes the fallback a map lookup.
+    let pending = match redis_ops::get_pending_deltas_map(&state.redis, &document_id).await {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::error!(error = %e, "replay: pending map load failed");
+            HashMap::new()
+        }
+    };
+
+    // Page through the durable delta index in bounded chunks, emitting one
+    // `MissingUpdates` per page. A single hard-capped batch silently truncated a
+    // client more than PAGE_SIZE deltas behind: the client applies the batch and
+    // declares itself hydrated, never re-requesting the tail. Paging replays the
+    // full history in order across several messages instead.
+    const PAGE_SIZE: i64 = 1000;
+    let mut cursor = after_seq.0 as i64;
+    loop {
+        let updates = match db::get_updates_after(&state.db, &document_id, cursor, PAGE_SIZE).await
+        {
             Ok(u) => u,
             Err(e) => {
                 tracing::error!(error = %e, "failed to get updates after seq");
                 return;
             }
         };
+        if updates.is_empty() {
+            return;
+        }
+        let page_len = updates.len();
+        // Rows are ordered by seq; the last one is this page's high-water mark
+        // and the cursor for the next page.
+        let next_cursor = updates[page_len - 1].seq;
 
-    // Rehydrate each indexed delta into the full sealed Update the client needs
-    // to decrypt and verify. The bytes live in S3 once flushed, or in the Redis
-    // pending list until then; together they cover every seq. A delta we cannot
-    // locate or decode is skipped (logged) rather than dropping the whole batch.
-    //
-    // The fetches run CONCURRENTLY: a full replay (no snapshot upload yet) pulls
-    // every delta since genesis, and a sequential `.await` per object turned the
-    // open into N serial S3 round-trips (seconds for a doc with hundreds of edits
-    // behind only a few dozen cells). `get_updates_after` returns rows ordered by
-    // seq; we resolve them in parallel, then re-sort by seq to restore that order.
-    let fetches = updates.into_iter().map(|row| {
-        let seq = row.seq as u64;
-        async move {
-            let wire = match crate::s3::fetch_object(&state.s3, &state.s3_bucket, &row.s3_key).await
-            {
-                Ok(Some(bytes)) => Some(bytes),
-                Ok(None) => {
-                    match redis_ops::get_pending_delta(&state.redis, &document_id, seq).await {
-                        Ok(b) => b,
+        // Rehydrate each indexed delta into the full sealed Update the client
+        // needs to decrypt and verify. The bytes live in S3 once flushed, or in
+        // the pending map until then; together they cover every seq. A delta we
+        // cannot locate or decode is skipped (logged), not fatal to the page.
+        //
+        // The fetches run CONCURRENTLY: a full replay (no snapshot upload yet)
+        // pulls every delta since genesis, and a sequential `.await` per object
+        // turned the open into N serial S3 round-trips.
+        let pending = &pending;
+        let fetches = updates.into_iter().map(|row| {
+            let seq = row.seq as u64;
+            async move {
+                let wire =
+                    match crate::s3::fetch_object(&state.s3, &state.s3_bucket, &row.s3_key).await {
+                        Ok(Some(bytes)) => Some(bytes),
+                        Ok(None) => pending.get(&seq).cloned(),
                         Err(e) => {
-                            tracing::error!(seq, error = %e, "replay: pending lookup failed");
-                            None
+                            tracing::error!(seq, error = %e, "replay: S3 fetch failed");
+                            pending.get(&seq).cloned()
                         }
+                    };
+                let Some(wire) = wire else {
+                    tracing::error!(seq, s3_key = %row.s3_key, "replay: delta not found in S3 or pending");
+                    return None;
+                };
+                match postcard::from_bytes::<ambre_protocol::Update>(&wire) {
+                    Ok(update) => Some(ambre_protocol::SeqUpdate {
+                        seq: ambre_protocol::messages::Seq(seq),
+                        update,
+                    }),
+                    Err(e) => {
+                        tracing::error!(seq, error = %e, "replay: Update decode failed");
+                        None
                     }
                 }
-                Err(e) => {
-                    tracing::error!(seq, error = %e, "replay: S3 fetch failed");
-                    None
-                }
-            };
-            let Some(wire) = wire else {
-                tracing::error!(seq, s3_key = %row.s3_key, "replay: delta not found in S3 or pending");
-                return None;
-            };
-            match postcard::from_bytes::<ambre_protocol::Update>(&wire) {
-                Ok(update) => Some(ambre_protocol::SeqUpdate {
-                    seq: ambre_protocol::messages::Seq(seq),
-                    update,
-                }),
-                Err(e) => {
-                    tracing::error!(seq, error = %e, "replay: Update decode failed");
-                    None
-                }
             }
+        });
+
+        let mut seq_updates: Vec<ambre_protocol::SeqUpdate> =
+            futures_util::future::join_all(fetches)
+                .await
+                .into_iter()
+                .flatten()
+                .collect();
+        seq_updates.sort_by_key(|u| u.seq.0);
+
+        let msg = encode_server_msg(&WsServerMsg::MissingUpdates {
+            document_id,
+            updates: seq_updates,
+        });
+        if outbound_tx.send(msg).await.is_err() {
+            return;
         }
-    });
 
-    let mut seq_updates: Vec<ambre_protocol::SeqUpdate> = futures_util::future::join_all(fetches)
-        .await
-        .into_iter()
-        .flatten()
-        .collect();
-    seq_updates.sort_by_key(|u| u.seq.0);
-
-    let msg = encode_server_msg(&WsServerMsg::MissingUpdates {
-        document_id,
-        updates: seq_updates,
-    });
-    let _ = outbound_tx.send(msg).await;
+        // A short page means the index is exhausted.
+        if (page_len as i64) < PAGE_SIZE {
+            return;
+        }
+        cursor = next_cursor;
+    }
 }
 
 // NOTE (Murmure not implemented): the channel handlers below deliberately skip
