@@ -527,18 +527,20 @@ mod tests {
 mod lua_tests {
     use super::*;
 
-    async fn connect_redis() -> Option<rustis::client::Client> {
+    async fn connect_redis() -> rustis::client::Client {
+        // These tests run only under `--features db`, where the backing Redis is
+        // expected up (`just services-up`). A missing connection is a broken test
+        // environment, not a reason to silently pass, so fail loudly.
         let url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".into());
-        rustis::client::Client::connect(url.as_str()).await.ok()
+        rustis::client::Client::connect(url.as_str())
+            .await
+            .expect("db-tier tests require a reachable Redis (REDIS_URL / just services-up)")
     }
 
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn first_update_succeeds() {
-        let redis = match connect_redis().await {
-            Some(c) => c,
-            None => return,
-        };
+        let redis = connect_redis().await;
         let doc_id = ambre_core::DocumentId::new();
         let pk_hex = "abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc1";
 
@@ -556,10 +558,7 @@ mod lua_tests {
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn sequential_clock_succeeds() {
-        let redis = match connect_redis().await {
-            Some(c) => c,
-            None => return,
-        };
+        let redis = connect_redis().await;
         let doc_id = ambre_core::DocumentId::new();
         let pk = "def456def456def456def456def456def456def456def456def456def456def4";
 
@@ -585,10 +584,7 @@ mod lua_tests {
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn clock_mismatch_rejected() {
-        let redis = match connect_redis().await {
-            Some(c) => c,
-            None => return,
-        };
+        let redis = connect_redis().await;
         let doc_id = ambre_core::DocumentId::new();
         let pk = "1111111111111111111111111111111111111111111111111111111111111111";
 
@@ -609,10 +605,7 @@ mod lua_tests {
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn duplicate_clock_rejected() {
-        let redis = match connect_redis().await {
-            Some(c) => c,
-            None => return,
-        };
+        let redis = connect_redis().await;
         let doc_id = ambre_core::DocumentId::new();
         let pk = "2222222222222222222222222222222222222222222222222222222222222222";
 
@@ -633,10 +626,7 @@ mod lua_tests {
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn independent_clients_have_independent_clocks() {
-        let redis = match connect_redis().await {
-            Some(c) => c,
-            None => return,
-        };
+        let redis = connect_redis().await;
         let doc_id = ambre_core::DocumentId::new();
         let pk_a = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         let pk_b = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -678,17 +668,20 @@ mod lua_tests {
 mod redis_integration_tests {
     use super::*;
 
-    async fn connect_redis() -> Option<rustis::client::Client> {
+    async fn connect_redis() -> rustis::client::Client {
+        // These tests run only under `--features db`, where the backing Redis is
+        // expected up (`just services-up`). A missing connection is a broken test
+        // environment, not a reason to silently pass, so fail loudly.
         let url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".into());
-        rustis::client::Client::connect(url.as_str()).await.ok()
+        rustis::client::Client::connect(url.as_str())
+            .await
+            .expect("db-tier tests require a reachable Redis (REDIS_URL / just services-up)")
     }
 
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn flush_lock_is_mutually_exclusive() {
-        let Some(redis) = connect_redis().await else {
-            return;
-        };
+        let redis = connect_redis().await;
         let lock_key = format!("test:flush:lock:{}", ambre_core::DocumentId::new());
         let _ = redis.del([lock_key.as_str()]).await;
 
@@ -726,9 +719,7 @@ mod redis_integration_tests {
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn pending_map_roundtrips_seq_to_wire() {
-        let Some(redis) = connect_redis().await else {
-            return;
-        };
+        let redis = connect_redis().await;
         let doc = ambre_core::DocumentId::new();
         let key = format!("doc:{doc}:pending");
         let _ = redis.del([key.as_str()]).await;
@@ -751,9 +742,7 @@ mod redis_integration_tests {
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn presence_field_self_expires() {
-        let Some(redis) = connect_redis().await else {
-            return;
-        };
+        let redis = connect_redis().await;
         let doc = ambre_core::DocumentId::new();
         let key = format!("doc:{doc}:presence");
         let pk = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef0";
@@ -800,9 +789,7 @@ mod redis_integration_tests {
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn only_one_racing_caller_claims_a_refresh_token() {
-        let Some(redis) = connect_redis().await else {
-            return;
-        };
+        let redis = connect_redis().await;
         let token = seed_refresh(&redis).await;
 
         // Both callers observe the record: this is the interleaving that makes an
@@ -822,9 +809,7 @@ mod redis_integration_tests {
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn refresh_consume_rejects_a_replayed_token() {
-        let Some(redis) = connect_redis().await else {
-            return;
-        };
+        let redis = connect_redis().await;
         let token = seed_refresh(&redis).await;
 
         assert!(
