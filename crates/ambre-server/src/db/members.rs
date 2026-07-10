@@ -38,6 +38,12 @@ pub struct MemberWithUserRow {
 }
 
 /// Adds (or updates) a user to a document's membership with a role and encrypted document key.
+///
+/// The upsert doubles as the role-change path (`ON CONFLICT DO UPDATE`), so it
+/// enforces the same last-owner invariant as `update_document_member_role`: it
+/// refuses to demote the document's only remaining owner. The check and the
+/// write run in one transaction with the target row locked (`FOR UPDATE`) so
+/// concurrent demotions cannot both pass the count.
 pub async fn add_document_member(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
@@ -49,6 +55,21 @@ pub async fn add_document_member(
     let did = id_to_uuid(*document_id);
     let uid = id_to_uuid(*user_id);
     let inviter = id_to_uuid(*invited_by);
+
+    let mut tx = pool.begin().await?;
+
+    let current_role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM document_members WHERE document_id = $1 AND user_id = $2 FOR UPDATE",
+    )
+    .bind(did)
+    .bind(uid)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    if current_role.as_deref() == Some("owner") && role != "owner" {
+        ensure_not_last_owner(&mut tx, did).await?;
+    }
+
     sqlx::query(
         "INSERT INTO document_members (document_id, user_id, role, doc_key_enc, invited_by) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (document_id, user_id) DO UPDATE SET role = $3, doc_key_enc = $4, invited_by = $5"
     )
@@ -57,8 +78,35 @@ pub async fn add_document_member(
     .bind(role)
     .bind(doc_key_enc)
     .bind(inviter)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Fails with a 409 if the document has only one owner left. Callers hold the
+/// target owner's row locked, so the count is stable for the transaction.
+///
+/// A document also carries an `owner_id` column that survives membership
+/// changes, but every management operation (invite, revoke, role change)
+/// requires a live `owner` membership row: without one, nobody could manage
+/// sharing anymore.
+async fn ensure_not_last_owner(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    document_id: uuid::Uuid,
+) -> Result<(), AppError> {
+    let owners: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM document_members WHERE document_id = $1 AND role = 'owner'",
+    )
+    .bind(document_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    if owners <= 1 {
+        return Err(AppError::Conflict {
+            detail: "cannot remove the last owner of the document".into(),
+        });
+    }
     Ok(())
 }
 
@@ -121,6 +169,11 @@ pub async fn list_document_members(
 }
 
 /// Removes a user from a document's membership.
+///
+/// Refuses to delete the document's only remaining owner (last-owner lockout):
+/// with no owner left, nobody could manage sharing. The check and the delete
+/// share one transaction with the target row locked so two concurrent removals
+/// cannot both see two owners.
 pub async fn remove_document_member(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
@@ -128,15 +181,35 @@ pub async fn remove_document_member(
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     let uid = id_to_uuid(*user_id);
+
+    let mut tx = pool.begin().await?;
+
+    let current_role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM document_members WHERE document_id = $1 AND user_id = $2 FOR UPDATE",
+    )
+    .bind(did)
+    .bind(uid)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    if current_role.as_deref() == Some("owner") {
+        ensure_not_last_owner(&mut tx, did).await?;
+    }
+
     sqlx::query("DELETE FROM document_members WHERE document_id = $1 AND user_id = $2")
         .bind(did)
         .bind(uid)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
     Ok(())
 }
 
 /// Updates the role of a document member.
+///
+/// Enforces the last-owner invariant: demoting the document's only owner is
+/// refused with a 409 (see `remove_document_member`).
 pub async fn update_document_member_role(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
@@ -145,12 +218,29 @@ pub async fn update_document_member_role(
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     let uid = id_to_uuid(*user_id);
+
+    let mut tx = pool.begin().await?;
+
+    let current_role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM document_members WHERE document_id = $1 AND user_id = $2 FOR UPDATE",
+    )
+    .bind(did)
+    .bind(uid)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    if current_role.as_deref() == Some("owner") && role != "owner" {
+        ensure_not_last_owner(&mut tx, did).await?;
+    }
+
     sqlx::query("UPDATE document_members SET role = $3 WHERE document_id = $1 AND user_id = $2")
         .bind(did)
         .bind(uid)
         .bind(role)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
     Ok(())
 }
 

@@ -902,6 +902,135 @@ mod handler_tests {
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
+    /// POST an invite as `auth`, returning the raw status (no assertion). Used
+    /// by the privilege-clamp / last-owner tests that expect non-200 outcomes.
+    async fn invite_status(
+        app: &Router,
+        auth: &str,
+        doc_id: &str,
+        invitee_email: &str,
+        role: &str,
+    ) -> StatusCode {
+        let body = serde_json::json!({
+            "invitee_email": invitee_email,
+            "role": role,
+            "doc_key_enc": base64_encode(&[9u8; 32]),
+        });
+        app.clone()
+            .oneshot(
+                Request::post(format!("/api/documents/{doc_id}/share"))
+                    .header("content-type", "application/json")
+                    .header("authorization", auth)
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+            .status()
+    }
+
+    /// DELETE a document member as `auth`, returning the raw status.
+    async fn revoke_status(app: &Router, auth: &str, doc_id: &str, uid: &str) -> StatusCode {
+        app.clone()
+            .oneshot(
+                Request::delete(format!("/api/documents/{doc_id}/share/{uid}"))
+                    .header("authorization", auth)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+            .status()
+    }
+
+    /// PATCH a document member's role as `auth`, returning the raw status.
+    async fn patch_role_status(
+        app: &Router,
+        auth: &str,
+        doc_id: &str,
+        uid: &str,
+        role: &str,
+    ) -> StatusCode {
+        let body = serde_json::json!({ "role": role });
+        app.clone()
+            .oneshot(
+                Request::patch(format!("/api/documents/{doc_id}/members/{uid}"))
+                    .header("content-type", "application/json")
+                    .header("authorization", auth)
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+            .status()
+    }
+
+    async fn doc_user_id(state: &AppState, email: &str) -> String {
+        crate::db::get_user_by_email(&state.db, email)
+            .await
+            .unwrap()
+            .unwrap()
+            .id
+            .to_string()
+    }
+
+    /// D2: the sole owner must not be able to revoke or demote themselves --
+    /// with no owner-membership left, nobody could manage sharing.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn owner_cannot_drop_last_owner(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let owner_uid = doc_user_id(&state, "user@ambre.app").await;
+
+        // Revoke self as the last owner -> 409.
+        assert_eq!(
+            revoke_status(&app, &owner, &doc_id, &owner_uid).await,
+            StatusCode::CONFLICT,
+            "revoking the last owner must be refused"
+        );
+        // Demote self via PATCH -> 409.
+        assert_eq!(
+            patch_role_status(&app, &owner, &doc_id, &owner_uid, "viewer").await,
+            StatusCode::CONFLICT,
+            "demoting the last owner via PATCH must be refused"
+        );
+        // Demote self via the invite upsert -> 409.
+        assert_eq!(
+            invite_status(&app, &owner, &doc_id, "user@ambre.app", "viewer").await,
+            StatusCode::CONFLICT,
+            "demoting the last owner via the invite upsert must be refused"
+        );
+    }
+
+    /// D2: once a second owner exists, the first may step down. The invariant is
+    /// "at least one owner remains", not "owners can never leave".
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn owner_can_leave_when_another_owner_remains(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let owner_uid = doc_user_id(&state, "user@ambre.app").await;
+
+        // Promote a second member to owner.
+        let second_email = "second@ambre.app";
+        let _second = setup_named(&app, second_email, 6).await;
+        invite(&app, &owner, &doc_id, second_email, "owner").await;
+
+        // The first owner can now leave.
+        assert_eq!(
+            revoke_status(&app, &owner, &doc_id, &owner_uid).await,
+            StatusCode::OK,
+            "an owner may leave while another owner remains"
+        );
+    }
+
     async fn create_test_doc(app: &Router, auth: &str) -> String {
         let body = serde_json::json!({
             "doc_type": "prose",
