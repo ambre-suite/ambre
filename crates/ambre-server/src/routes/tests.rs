@@ -59,6 +59,14 @@ mod handler_tests {
                 "/documents/{id}/rotate-key",
                 axum::routing::post(routes::rotate_document_key),
             )
+            .route(
+                "/documents/{id}/media",
+                axum::routing::post(routes::media_confirm_upload),
+            )
+            .route(
+                "/documents/{id}/snapshot",
+                axum::routing::post(routes::create_snapshot),
+            )
             .route("/ws", axum::routing::get(ws::ws_upgrade));
         Router::new().nest("/api", api_router).with_state(state)
     }
@@ -705,6 +713,159 @@ mod handler_tests {
             .await
             .unwrap();
         format!("Bearer {}", access_token_of(resp).await)
+    }
+
+    /// Setup a second account under an explicit email and signing key, returning
+    /// a ready `Authorization: Bearer <jwt>` header. Used to act as a non-owner
+    /// (e.g. a `viewer`) in role-gated route tests.
+    async fn setup_named(app: &Router, email: &str, spk_byte: u8) -> String {
+        let body = serde_json::json!({
+            "email": email,
+            "display_name": "Second User",
+            "master_key_enc": base64_encode(&[1u8; 32]),
+            "master_key_salt": base64_encode(&[2u8; 16]),
+            "signing_pubkey": hex::encode([spk_byte; 32]),
+            "exchange_pubkey": hex::encode([spk_byte; 32]),
+        });
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::post("/api/auth/setup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        format!("Bearer {}", access_token_of(resp).await)
+    }
+
+    /// Invite `invitee_email` to `doc_id` with `role`, as `auth`. Asserts 200.
+    async fn invite(app: &Router, auth: &str, doc_id: &str, invitee_email: &str, role: &str) {
+        let body = serde_json::json!({
+            "invitee_email": invitee_email,
+            "role": role,
+            "doc_key_enc": base64_encode(&[9u8; 32]),
+        });
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::post(format!("/api/documents/{doc_id}/share"))
+                    .header("content-type", "application/json")
+                    .header("authorization", auth)
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    /// A `viewer` cannot obtain a media upload URL, so it must not be able to
+    /// register a `media` row either: `media_confirm_upload` is gated to
+    /// owner/editor exactly like `media_upload_url`.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn media_confirm_upload_denied_to_viewer(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+
+        let viewer_email = "viewer@ambre.app";
+        let viewer = setup_named(&app, viewer_email, 5).await;
+        invite(&app, &owner, &doc_id, viewer_email, "viewer").await;
+
+        let body = serde_json::json!({
+            "content_hash": "a".repeat(64),
+            "mime_type": "image/png",
+            "size_bytes": 10,
+        });
+
+        // Viewer is a member but not owner/editor -> 403.
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::post(format!("/api/documents/{doc_id}/media"))
+                    .header("content-type", "application/json")
+                    .header("authorization", &viewer)
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+        // The owner may register the same media row.
+        let resp = app
+            .oneshot(
+                Request::post(format!("/api/documents/{doc_id}/media"))
+                    .header("content-type", "application/json")
+                    .header("authorization", &owner)
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    /// A snapshot's `author_pubkey` is bound to the session identity (the token's
+    /// `spk` claim), like the WS `Update` author-key check: a member may only
+    /// create a snapshot under their own key, never attribute one to another.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn create_snapshot_rejects_forged_author(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        // setup_and_get_auth registers signing_pubkey [3u8; 32].
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+
+        let snap_uuid = uuid::Uuid::new_v4();
+        // Valid per-document snapshot key (default env prefix is "dev-ambre"), so
+        // the request reaches the author-key binding check.
+        let s3_key = format!("dev-ambre/documents/{doc_id}/snapshots/{snap_uuid}");
+
+        // Forged author key (not the session's [3u8; 32]) -> 403.
+        let forged = serde_json::json!({
+            "snapshot_id": snap_uuid.to_string(),
+            "author_pubkey": hex::encode([9u8; 32]),
+            "update_clocks": {},
+            "s3_key": s3_key,
+        });
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::post(format!("/api/documents/{doc_id}/snapshot"))
+                    .header("content-type", "application/json")
+                    .header("authorization", &owner)
+                    .body(Body::from(serde_json::to_string(&forged).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+        // The author key matching the session identity is accepted.
+        let genuine = serde_json::json!({
+            "snapshot_id": snap_uuid.to_string(),
+            "author_pubkey": hex::encode([3u8; 32]),
+            "update_clocks": {},
+            "s3_key": s3_key,
+        });
+        let resp = app
+            .oneshot(
+                Request::post(format!("/api/documents/{doc_id}/snapshot"))
+                    .header("content-type", "application/json")
+                    .header("authorization", &owner)
+                    .body(Body::from(serde_json::to_string(&genuine).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
     }
 
     async fn create_test_doc(app: &Router, auth: &str) -> String {

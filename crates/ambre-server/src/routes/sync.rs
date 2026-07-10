@@ -102,6 +102,13 @@ pub async fn create_snapshot(
     let apk = hex::decode(&req.author_pubkey).map_err(|e| AppError::Conflict {
         detail: e.to_string(),
     })?;
+    // Bind the snapshot author to the session identity, like the WS `Update`
+    // author-key check. Each user has one signing key (the token's `spk` claim),
+    // so a member may only create a snapshot under their own key -- never
+    // attribute one to another member.
+    if apk != s.signing_pubkey.as_slice() {
+        return Err(AppError::Forbidden);
+    }
     let ph = req
         .parent_hash
         .map(|h| {
