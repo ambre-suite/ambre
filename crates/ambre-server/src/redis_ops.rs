@@ -481,7 +481,12 @@ pub async fn oidc_state_take(
     csrf_state: &str,
 ) -> Result<(String, String), AppError> {
     let key = format!("oidc:state:{csrf_state}");
-    let fields: Vec<String> = redis
+    // Read into a `HashMap`, NOT a `Vec<String>`: under RESP3 rustis returns a
+    // hash reply as a map, and deserializing that into a flat `Vec<String>` fails
+    // with "invalid type: sequence, expected a string" -- which surfaced here as a
+    // spurious `SessionExpired` on EVERY OIDC callback (login fully broken). Mirror
+    // `refresh_get`, which reads the same shape correctly.
+    let fields: std::collections::HashMap<String, String> = redis
         .hgetall(&key)
         .await
         .map_err(|e| AppError::Redis(format!("oidc state get: {e}")))?;
@@ -490,16 +495,8 @@ pub async fn oidc_state_take(
         return Err(AppError::SessionExpired);
     }
 
-    let mut pkce_verifier = String::new();
-    let mut nonce = String::new();
-    let mut chunks = fields.chunks(2);
-    while let Some([field, value]) = chunks.next() {
-        match field.as_str() {
-            "pkce_verifier" => pkce_verifier = value.clone(),
-            "nonce" => nonce = value.clone(),
-            _ => {}
-        }
-    }
+    let pkce_verifier = fields.get("pkce_verifier").cloned().unwrap_or_default();
+    let nonce = fields.get("nonce").cloned().unwrap_or_default();
 
     redis
         .del([&key])
@@ -737,6 +734,21 @@ mod redis_integration_tests {
         assert_eq!(map.get(&8).map(Vec::as_slice), Some(&[4u8, 5][..]));
 
         let _ = redis.del([key.as_str()]).await;
+    }
+
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn oidc_state_roundtrips() {
+        let redis = connect_redis().await;
+        let csrf = uuid::Uuid::new_v4().to_string();
+        oidc_state_set(&redis, &csrf, "verifier-xyz", "nonce-abc")
+            .await
+            .expect("oidc state set");
+        let (v, n) = oidc_state_take(&redis, &csrf)
+            .await
+            .expect("oidc state take");
+        assert_eq!(v, "verifier-xyz");
+        assert_eq!(n, "nonce-abc");
     }
 
     #[tokio::test]
