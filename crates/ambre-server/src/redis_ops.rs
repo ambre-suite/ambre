@@ -1,7 +1,7 @@
 use crate::error::AppError;
 use rustis::client::Client;
 use rustis::commands::{
-    GenericCommands, HashCommands, ListCommands, PubSubCommands, ScriptingCommands, StringCommands,
+    GenericCommands, HashCommands, ListCommands, PubSubCommands, ScriptingCommands,
 };
 use rustis::resp::RefBulkString;
 
@@ -132,33 +132,82 @@ pub async fn push_dead_letter(
     Ok(())
 }
 
-/// Reads a still-pending delta's full Update wire from Redis by `seq`.
+/// Loads the whole pending list of a document into a `seq -> full Update wire`
+/// map in ONE round-trip.
 ///
 /// Deltas live in `doc:{id}:pending` until the background flusher uploads them
-/// to S3 and trims the list. A replay requested before the flush finds the
-/// delta here rather than in S3, so the two stores together cover every seq.
-pub async fn get_pending_delta(
+/// to S3 and trims the list. A replay requested before the flush finds them here
+/// rather than in S3, so the two stores together cover every seq.
+///
+/// Replay resolves each missed seq from S3 first and falls back to a still-
+/// pending delta. Doing that fallback with a per-seq lookup issued one full
+/// `LRANGE` (plus a JSON re-parse of the entire list) for EACH missed seq inside
+/// the concurrent fan-out -- O(N^2) on the pre-flush window. Loading the list
+/// once turns every fallback into a map lookup.
+pub async fn get_pending_deltas_map(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
-    seq: u64,
-) -> Result<Option<Vec<u8>>, AppError> {
+) -> Result<std::collections::HashMap<u64, Vec<u8>>, AppError> {
     use base64::Engine;
     let key = format!("doc:{document_id}:pending");
     let blobs: Vec<String> = redis
         .lrange(&key, 0, -1)
         .await
         .map_err(|e| AppError::Redis(format!("pending lrange failed: {e}")))?;
+    let mut map = std::collections::HashMap::with_capacity(blobs.len());
     for blob in &blobs {
         let Ok(parsed) = serde_json::from_str::<serde_json::Value>(blob) else {
             continue;
         };
-        if parsed["seq"].as_u64() == Some(seq)
-            && let Some(b64) = parsed["update_b64"].as_str()
-        {
-            return Ok(base64::engine::general_purpose::URL_SAFE.decode(b64).ok());
+        let (Some(seq), Some(b64)) = (parsed["seq"].as_u64(), parsed["update_b64"].as_str()) else {
+            continue;
+        };
+        if let Ok(wire) = base64::engine::general_purpose::URL_SAFE.decode(b64) {
+            map.insert(seq, wire);
         }
     }
-    Ok(None)
+    Ok(map)
+}
+
+/// Tries to acquire the per-document flush lock (`SET lock_key token NX EX ttl`).
+///
+/// Returns `true` if this caller now holds the lock. The background S3 flusher
+/// runs once per server instance; without this lock two instances can `LRANGE`
+/// the same pending list, both upload, then both `LTRIM` the front by their own
+/// processed count. Deltas `RPUSH`ed by clients during the flush window sit at
+/// the tail and get trimmed away by the second, stale `LTRIM` -- a durable loss
+/// of an already-sequenced, already-acknowledged delta. Serializing the flush
+/// per document closes that race. The write path (`RPUSH` in `handle_update`)
+/// never touches this lock, so collaborators are unaffected.
+pub async fn try_acquire_flush_lock(
+    redis: &Client,
+    lock_key: &str,
+    token: &str,
+    ttl_secs: u64,
+) -> Result<bool, AppError> {
+    const LUA: &str = "return redis.call('SET', KEYS[1], ARGV[1], 'NX', 'EX', ARGV[2])";
+    let ttl = ttl_secs.to_string();
+    let res: Option<String> = redis
+        .eval::<Option<String>>(LUA, [lock_key], [token, ttl.as_str()])
+        .await
+        .map_err(|e| AppError::Redis(format!("flush lock acquire: {e}")))?;
+    Ok(res.is_some())
+}
+
+/// Releases the per-document flush lock, but only if `token` still matches
+/// (check-and-del) so an expired-then-reacquired lock owned by another instance
+/// is never dropped by a slow predecessor.
+pub async fn release_flush_lock(
+    redis: &Client,
+    lock_key: &str,
+    token: &str,
+) -> Result<(), AppError> {
+    const LUA: &str = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end";
+    let _: i64 = redis
+        .eval::<i64>(LUA, [lock_key], [token])
+        .await
+        .map_err(|e| AppError::Redis(format!("flush lock release: {e}")))?;
+    Ok(())
 }
 
 /// Retrieves a refresh-token record from Redis.
@@ -334,15 +383,19 @@ pub async fn doc_presence_update(
         .await
         .map_err(|e| AppError::Redis(format!("presence update: {e}")))?;
 
-    let ts_key = format!("doc:{document_id}:presence_ts:{pub_key_hex}");
+    // Expire THIS member's field individually (Redis 7.4+ / Valkey 8 `HEXPIRE`),
+    // so a member who leaves without a clean unsubscribe self-prunes from the
+    // hash. Without a per-field TTL the presence hash grew one dead field per
+    // distinct author forever. `HEXPIRE key ttl FIELDS 1 field` returns an array
+    // of per-field status codes; the outcome is advisory here (a missing field or
+    // unsupported server is non-fatal for a fire-and-forget presence write).
+    const HEXPIRE_LUA: &str =
+        "return redis.call('HEXPIRE', KEYS[1], ARGV[1], 'FIELDS', 1, ARGV[2])";
+    let ttl = ttl_secs.to_string();
     redis
-        .set(&ts_key, "1")
+        .eval::<Vec<i64>>(HEXPIRE_LUA, [key.as_str()], [ttl.as_str(), pub_key_hex])
         .await
-        .map_err(|e| AppError::Redis(format!("presence ts set: {e}")))?;
-    redis
-        .expire(&ts_key, ttl_secs, None)
-        .await
-        .map_err(|e| AppError::Redis(format!("presence ts expire: {e}")))?;
+        .map_err(|e| AppError::Redis(format!("presence hexpire: {e}")))?;
     Ok(())
 }
 
@@ -583,5 +636,117 @@ mod lua_tests {
         assert!(CLOCK_AND_SEQ_LUA.contains("INCR"));
         assert!(CLOCK_AND_SEQ_LUA.contains("+ 1"));
         assert!(CLOCK_AND_SEQ_LUA.contains("HSET"));
+    }
+}
+
+// Redis integration tests for the flush lock, pending-delta map, and per-field
+// presence TTL. Gated by the `db` feature (like the other integration tests) so
+// they run under `./run_tests.sh db`, not only behind `test-helpers`.
+#[cfg(test)]
+mod redis_integration_tests {
+    use super::*;
+
+    async fn connect_redis() -> Option<rustis::client::Client> {
+        let url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".into());
+        rustis::client::Client::connect(url.as_str()).await.ok()
+    }
+
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn flush_lock_is_mutually_exclusive() {
+        let Some(redis) = connect_redis().await else {
+            return;
+        };
+        let lock_key = format!("test:flush:lock:{}", ambre_core::DocumentId::new());
+        let _ = redis.del([lock_key.as_str()]).await;
+
+        // First caller acquires; a concurrent instance cannot while it is held.
+        assert!(
+            try_acquire_flush_lock(&redis, &lock_key, "tokA", 60)
+                .await
+                .unwrap()
+        );
+        assert!(
+            !try_acquire_flush_lock(&redis, &lock_key, "tokB", 60)
+                .await
+                .unwrap()
+        );
+
+        // A non-owner (wrong token) must not be able to release it.
+        release_flush_lock(&redis, &lock_key, "tokB").await.unwrap();
+        assert!(
+            !try_acquire_flush_lock(&redis, &lock_key, "tokB", 60)
+                .await
+                .unwrap()
+        );
+
+        // The real owner releases; the lock is now free again.
+        release_flush_lock(&redis, &lock_key, "tokA").await.unwrap();
+        assert!(
+            try_acquire_flush_lock(&redis, &lock_key, "tokB", 60)
+                .await
+                .unwrap()
+        );
+
+        let _ = redis.del([lock_key.as_str()]).await;
+    }
+
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn pending_map_roundtrips_seq_to_wire() {
+        let Some(redis) = connect_redis().await else {
+            return;
+        };
+        let doc = ambre_core::DocumentId::new();
+        let key = format!("doc:{doc}:pending");
+        let _ = redis.del([key.as_str()]).await;
+
+        append_pending_delta(&redis, &doc, 7, "s3-a", &[1, 2, 3])
+            .await
+            .unwrap();
+        append_pending_delta(&redis, &doc, 8, "s3-b", &[4, 5])
+            .await
+            .unwrap();
+
+        let map = get_pending_deltas_map(&redis, &doc).await.unwrap();
+        assert_eq!(map.len(), 2);
+        assert_eq!(map.get(&7).map(Vec::as_slice), Some(&[1u8, 2, 3][..]));
+        assert_eq!(map.get(&8).map(Vec::as_slice), Some(&[4u8, 5][..]));
+
+        let _ = redis.del([key.as_str()]).await;
+    }
+
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn presence_field_self_expires() {
+        let Some(redis) = connect_redis().await else {
+            return;
+        };
+        let doc = ambre_core::DocumentId::new();
+        let key = format!("doc:{doc}:presence");
+        let pk = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef0";
+        let _ = redis.del([key.as_str()]).await;
+
+        doc_presence_update(&redis, &doc, pk, "blob", 15)
+            .await
+            .unwrap();
+
+        // HTTL returns the remaining per-field TTL; a positive value proves the
+        // field will self-prune instead of leaking forever.
+        let ttl: Vec<i64> = redis
+            .eval::<Vec<i64>>(
+                "return redis.call('HTTL', KEYS[1], 'FIELDS', 1, ARGV[1])",
+                [key.as_str()],
+                [pk],
+            )
+            .await
+            .unwrap();
+        assert_eq!(ttl.len(), 1);
+        assert!(
+            ttl[0] > 0 && ttl[0] <= 15,
+            "expected a positive ttl, got {ttl:?}"
+        );
+
+        let _ = redis.del([key.as_str()]).await;
     }
 }
