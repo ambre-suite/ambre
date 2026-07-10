@@ -145,6 +145,21 @@ pub(crate) async fn handle_update(
         };
 
     let s3_key = crate::s3::format_s3_delta_key(&state.config.s3_env_prefix, &doc_id, seq);
+
+    // Serialize the full sealed Update up front: it is both what we dead-letter on
+    // an index-write failure and what we persist for verbatim replay below.
+    // Encoding a just-decoded Update is effectively infallible, but a request-path
+    // `.expect()` would panic the whole connection task on the off chance it
+    // isn't; log and abort just this update instead (the seq is already assigned,
+    // so a reconnecting client refetches it from the durable index).
+    let update_wire = match postcard::to_allocvec(&update) {
+        Ok(wire) => wire,
+        Err(e) => {
+            tracing::error!("postcard encode Update failed doc={doc_id} seq={seq}: {e}");
+            return;
+        }
+    };
+
     tracing::debug!("[Server->Postgres] insert_update doc={doc_id} seq={seq} clock={clock}");
     if let Err(e) = db::insert_update(
         &state.db,
@@ -157,24 +172,22 @@ pub(crate) async fn handle_update(
     )
     .await
     {
-        // The delta index is how reconnecting clients replay missed updates;
-        // a failed insert silently loses durability, so it must be loud.
+        // The delta index (Postgres) is the ONLY thing `handle_request_missing`
+        // reads to replay this seq. The clock was already consumed atomically in
+        // Redis, so we cannot cleanly reject and let the client retry (a retry at
+        // the same clock would fail CLOCK_MISMATCH). If we merely logged, the delta
+        // would still reach S3 via the pending list but no index row would ever
+        // reference it -- an orphaned, unreplayable object, so live subscribers get
+        // it while a reconnecting client misses it forever. Dead-letter the full
+        // wire so an operator can rebuild the index row (H1) instead of losing it.
         tracing::error!("insert_update failed doc={doc_id} seq={seq}: {e}");
+        if let Err(dl) =
+            redis_ops::push_dead_letter(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
+        {
+            tracing::error!("dead-letter push failed doc={doc_id} seq={seq}: {dl}");
+        }
     }
 
-    // Persist the full sealed Update so it can be replayed verbatim later
-    // (`handle_request_missing`). Serialize before the broadcast moves `update`.
-    // Encoding a just-decoded Update is effectively infallible, but a request-
-    // path `.expect()` would panic the whole connection task on the off chance
-    // it isn't; log and abort just this update instead (the seq is already
-    // assigned, so a reconnecting client refetches it from the durable index).
-    let update_wire = match postcard::to_allocvec(&update) {
-        Ok(wire) => wire,
-        Err(e) => {
-            tracing::error!("postcard encode Update failed doc={doc_id} seq={seq}: {e}");
-            return;
-        }
-    };
     tracing::debug!("[Server->Redis] append_pending_delta doc={doc_id} seq={seq} s3_key={s3_key}");
     if let Err(e) =
         redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
