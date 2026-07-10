@@ -197,6 +197,19 @@ pub(crate) async fn handle_ephemeral(
         return;
     }
 
+    // Bind the ephemeral author key to the session identity, mirroring the
+    // `handle_update` check. The presence hash `doc:{id}:presence` is indexed by
+    // `pub_key_hex` and its fields carry no TTL (only `presence_ts:*` expires), so
+    // an authorized member forging arbitrary keys could otherwise (a) attribute a
+    // cursor/presence to a peer's identity, (b) overwrite that peer's presence
+    // entry, and (c) grow the presence hash without bound. One signing key per
+    // user (`spk` claim) means a member may only announce presence under its own
+    // key; drop the mismatch silently (ephemerals are fire-and-forget, no error
+    // channel is expected by clients on this path).
+    if eph.public_data.pub_key != conn.signing_pubkey {
+        return;
+    }
+
     let pub_key_hex = eph.public_data.pub_key.to_hex();
     let presence_enc_b64 = base64::engine::general_purpose::URL_SAFE.encode(&eph.ciphertext.0);
     let _ =
@@ -596,6 +609,105 @@ mod postcard_tests {
     fn garbage_data_returns_error_not_panics() {
         let result = decode_client_msg(&[0x01, 0xFF, 0xFE, 0xFD]);
         assert!(result.is_err());
+    }
+}
+
+// Behavioral test for the ephemeral author-key binding (mirrors the `handle_update`
+// guard). Needs a live Redis to observe the presence-hash side effect, so it is
+// gated by the `db` feature like the other integration tests.
+#[cfg(test)]
+mod ephemeral_binding_tests {
+    use super::*;
+    use ambre_core::{DocumentId, PublicKey};
+    use ambre_protocol::messages::{Ciphertext, CommitmentTag, Counter, Ephemeral, Nonce, Signature};
+    use ambre_protocol::public_data::EphemeralPublicData;
+    use rustis::commands::{GenericCommands, HashCommands};
+
+    async fn test_state() -> Option<Arc<AppState>> {
+        let redis = rustis::client::Client::connect("redis://localhost:6379")
+            .await
+            .ok()?;
+        let s3 = aws_sdk_s3::Client::from_conf(aws_sdk_s3::Config::builder().build());
+        let pubsub = crate::ws::PubSubHub::spawn(redis.clone());
+        // The ephemeral path never touches Postgres, so a lazily-connected pool
+        // (never queried) is enough to satisfy the AppState shape.
+        let db = sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://localhost/ambre")
+            .ok()?;
+        Some(Arc::new(AppState {
+            db,
+            redis,
+            pubsub,
+            s3,
+            s3_bucket: "test-bucket".into(),
+            config: Arc::new(crate::state::Config::default()),
+            jwt: Arc::new(crate::jwt::JwtKeys::from_seed(&[7u8; 32])),
+            oidc_clients: Arc::new(std::collections::HashMap::new()),
+        }))
+    }
+
+    fn conn_with(session_key: PublicKey, doc_id: DocumentId) -> WsConnectionState {
+        let mut doc_subscriptions = HashSet::new();
+        doc_subscriptions.insert(doc_id);
+        WsConnectionState {
+            user_id: UserId::new(),
+            signing_pubkey: session_key,
+            connection_id: "test-conn".into(),
+            doc_subscriptions,
+            doc_access_verified_at: HashMap::new(),
+            channel_subscriptions: HashSet::new(),
+        }
+    }
+
+    fn ephemeral_from(pub_key: PublicKey, doc_id: DocumentId) -> Ephemeral {
+        Ephemeral {
+            ciphertext: Ciphertext(vec![1, 2, 3]),
+            nonce: Nonce([0u8; 24]),
+            public_data: EphemeralPublicData {
+                document_id: doc_id,
+                pub_key,
+                counter: Counter(1),
+            },
+            commitment_tag: CommitmentTag([0u8; 32]),
+            signature: Signature([0u8; 64]),
+        }
+    }
+
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn forged_author_key_writes_no_presence() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let doc_id = DocumentId::new();
+        let session_key = PublicKey::from_array([1u8; 32]);
+        let forged_key = PublicKey::from_array([2u8; 32]);
+        let presence_key = format!("doc:{doc_id}:presence");
+        let _ = state.redis.del([&presence_key]).await;
+
+        let conn = conn_with(session_key.clone(), doc_id);
+
+        // A forged author key must be dropped before any Redis write.
+        handle_ephemeral(&state, &conn, ephemeral_from(forged_key, doc_id)).await;
+        let after_forged: std::collections::HashMap<String, String> =
+            state.redis.hgetall(&presence_key).await.unwrap();
+        assert!(
+            after_forged.is_empty(),
+            "forged author key must not write a presence entry"
+        );
+
+        // The session's own key is accepted and recorded.
+        handle_ephemeral(&state, &conn, ephemeral_from(session_key.clone(), doc_id)).await;
+        let after_valid: std::collections::HashMap<String, String> =
+            state.redis.hgetall(&presence_key).await.unwrap();
+        assert_eq!(
+            after_valid.len(),
+            1,
+            "the session key must record exactly one presence entry"
+        );
+        assert!(after_valid.contains_key(&session_key.to_hex()));
+
+        let _ = state.redis.del([&presence_key]).await;
     }
 }
 
