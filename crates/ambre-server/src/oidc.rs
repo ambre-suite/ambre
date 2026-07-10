@@ -33,6 +33,11 @@ pub type OidcClient = CoreClient<
 pub struct OidcProviderState {
     pub client: OidcClient,
     pub redirect_uri: RedirectUrl,
+    /// Shared HTTP client for token exchange. `reqwest::Client` owns a
+    /// connection pool internally and is cheap to clone, so one instance is
+    /// built at discovery time and reused for every callback rather than
+    /// spinning up a fresh pool (and TLS handshake) per request.
+    pub http_client: reqwest::Client,
 }
 
 /// Map of OIDC provider name ("google", "github", …) to its state.
@@ -122,6 +127,7 @@ pub async fn init_oidc_clients(
         OidcProviderState {
             client,
             redirect_uri,
+            http_client,
         },
     );
 
@@ -184,7 +190,7 @@ pub async fn exchange_code(
     let auth_code = AuthorizationCode::new(code);
     let pkce_verifier = PkceCodeVerifier::new(stored_state.pkce_verifier_secret.clone());
 
-    let http_client = reqwest::Client::new();
+    let http_client = &provider.http_client;
     let client_with_redirect = provider
         .client
         .clone()
@@ -197,7 +203,7 @@ pub async fn exchange_code(
 
     let token_response = exchange_req
         .set_pkce_verifier(pkce_verifier)
-        .request_async(&http_client)
+        .request_async(http_client)
         .await
         .map_err(|e| AppError::Oidc(format!("token exchange failed: {e}")))?;
 
