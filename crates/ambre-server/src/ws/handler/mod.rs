@@ -98,6 +98,14 @@ pub async fn ws_upgrade(
 /// keeping the hot write path off the database on every message.
 const MEMBERSHIP_RECHECK_TTL: Duration = Duration::from_secs(30);
 
+/// Minimum interval between two `RequestMissing` replays for the same document on
+/// one connection. A single `RequestMissing{after_seq:0}` triggers a full paged
+/// replay of the document history from S3 (concurrent GET fan-out per page), so
+/// an unthrottled client could spam it and turn a trivial message into an O(n)
+/// storage-read amplification. One replay per reconnect is the legitimate need;
+/// this cooldown bounds the abuse without touching that path.
+const REPLAY_MIN_INTERVAL: Duration = Duration::from_secs(1);
+
 /// Per-connection state tracking which documents and channels this client
 /// is currently subscribed to.
 struct WsConnectionState {
@@ -114,6 +122,9 @@ struct WsConnectionState {
     /// Last instant membership was verified for each subscribed document. Drives
     /// the [`MEMBERSHIP_RECHECK_TTL`] re-check in `handle_update` (H8).
     doc_access_verified_at: HashMap<DocumentId, Instant>,
+    /// Last instant a `RequestMissing` replay was served per document, enforcing
+    /// [`REPLAY_MIN_INTERVAL`] against replay amplification.
+    last_replay_at: HashMap<DocumentId, Instant>,
     channel_subscriptions: HashSet<ChannelId>,
 }
 
@@ -152,6 +163,7 @@ async fn handle_ws(
         connection_id: connection_id.clone(),
         doc_subscriptions: HashSet::new(),
         doc_access_verified_at: HashMap::new(),
+        last_replay_at: HashMap::new(),
         channel_subscriptions: HashSet::new(),
     };
 
@@ -231,13 +243,14 @@ async fn handle_ws(
                 handle_update(&state, &mut conn, update, &outbound_tx).await;
             }
             WsClientMsg::Ephemeral(eph) => {
-                handle_ephemeral(&state, &conn, eph).await;
+                handle_ephemeral(&state, &mut conn, eph).await;
             }
             WsClientMsg::RequestMissing {
                 document_id,
                 after_seq,
             } => {
-                handle_request_missing(&state, &conn, document_id, after_seq, &outbound_tx).await;
+                handle_request_missing(&state, &mut conn, document_id, after_seq, &outbound_tx)
+                    .await;
             }
             WsClientMsg::SubscribeChannel { channel_id } => {
                 handle_subscribe_channel(&state, &mut conn, channel_id, &outbound_tx).await;
