@@ -73,26 +73,16 @@ pub(crate) async fn handle_update(
 
     // Re-validate membership on a short TTL (H8): the `Subscribe`-time check is
     // stale after a mid-session revoke, so a revoked member could otherwise keep
-    // writing accepted, sequenced updates until they disconnect. On failure, drop
-    // the subscription so subsequent messages are rejected without a DB hit.
-    let stale = conn
-        .doc_access_verified_at
-        .get(&doc_id)
-        .is_none_or(|t| t.elapsed() >= MEMBERSHIP_RECHECK_TTL);
-    if stale {
-        if let Err(e) = verify_document_access(&state.db, doc_id, conn.user_id).await {
-            conn.doc_subscriptions.remove(&doc_id);
-            conn.doc_access_verified_at.remove(&doc_id);
-            let _ = redis_ops::doc_unsubscribe_session(&state.redis, &doc_id, &conn.connection_id)
-                .await;
-            let err = encode_server_msg(&WsServerMsg::Error {
-                code: 403,
-                message: e.to_string(),
-            });
-            let _ = outbound_tx.send(err).await;
-            return;
-        }
-        conn.doc_access_verified_at.insert(doc_id, Instant::now());
+    // writing accepted, sequenced updates until they disconnect. On failure the
+    // helper drops the subscription so subsequent messages are rejected without a
+    // DB hit; tell this client its access was revoked.
+    if !membership_still_valid(state, conn, doc_id).await {
+        let err = encode_server_msg(&WsServerMsg::Error {
+            code: 403,
+            message: "document access revoked".into(),
+        });
+        let _ = outbound_tx.send(err).await;
+        return;
     }
 
     let author_pubkey = update.public_data.pub_key.clone();
@@ -219,12 +209,19 @@ pub(crate) async fn handle_update(
 
 pub(crate) async fn handle_ephemeral(
     state: &Arc<AppState>,
-    conn: &WsConnectionState,
+    conn: &mut WsConnectionState,
     eph: ambre_protocol::Ephemeral,
 ) {
     use base64::Engine;
     let doc_id = eph.public_data.document_id;
     if !conn.doc_subscriptions.contains(&doc_id) {
+        return;
+    }
+
+    // Re-check membership on the same short TTL as `handle_update` (H8): a member
+    // revoked mid-session must stop broadcasting presence too, not only sequenced
+    // updates. Fire-and-forget, so a failed recheck just drops silently.
+    if !membership_still_valid(state, conn, doc_id).await {
         return;
     }
 
@@ -253,12 +250,29 @@ pub(crate) async fn handle_ephemeral(
 
 pub(crate) async fn handle_request_missing(
     state: &Arc<AppState>,
-    conn: &WsConnectionState,
+    conn: &mut WsConnectionState,
     document_id: DocumentId,
     after_seq: ambre_protocol::messages::Seq,
     outbound_tx: &mpsc::Sender<Vec<u8>>,
 ) {
     if !conn.doc_subscriptions.contains(&document_id) {
+        return;
+    }
+
+    // Throttle replays (M-amp): one full paged replay per reconnect is legitimate,
+    // but an unthrottled `RequestMissing{after_seq:0}` is an O(history) S3-read
+    // amplification. Drop calls that arrive within REPLAY_MIN_INTERVAL of the last
+    // served replay for this document.
+    if let Some(last) = conn.last_replay_at.get(&document_id)
+        && last.elapsed() < REPLAY_MIN_INTERVAL
+    {
+        return;
+    }
+    conn.last_replay_at.insert(document_id, Instant::now());
+
+    // Re-check membership on the short TTL (H8): a member revoked mid-session must
+    // not be able to keep pulling the full history down from storage.
+    if !membership_still_valid(state, conn, document_id).await {
         return;
     }
 
@@ -414,6 +428,40 @@ pub(crate) async fn handle_channel_ephemeral(
 }
 
 // -- ACL ----------------------------------------------------------
+
+/// Re-verifies membership using the short [`MEMBERSHIP_RECHECK_TTL`] cache (H8)
+/// and reports whether the caller still has access to `doc_id`.
+///
+/// Returns `true` immediately while the cached check is fresh. Once it is stale
+/// it hits `document_members`; on a revoked membership it drops the subscription,
+/// clears the cached timestamp, and unsubscribes the Redis session so every hot
+/// path (update, presence, replay) stops serving a member revoked mid-session.
+/// The caller decides whether to notify the client.
+async fn membership_still_valid(
+    state: &Arc<AppState>,
+    conn: &mut WsConnectionState,
+    doc_id: DocumentId,
+) -> bool {
+    let fresh = conn
+        .doc_access_verified_at
+        .get(&doc_id)
+        .is_some_and(|t| t.elapsed() < MEMBERSHIP_RECHECK_TTL);
+    if fresh {
+        return true;
+    }
+    if verify_document_access(&state.db, doc_id, conn.user_id)
+        .await
+        .is_err()
+    {
+        conn.doc_subscriptions.remove(&doc_id);
+        conn.doc_access_verified_at.remove(&doc_id);
+        let _ =
+            redis_ops::doc_unsubscribe_session(&state.redis, &doc_id, &conn.connection_id).await;
+        return false;
+    }
+    conn.doc_access_verified_at.insert(doc_id, Instant::now());
+    true
+}
 
 /// Verifies the caller has a membership row for the document.
 pub(crate) async fn verify_document_access(
@@ -716,7 +764,11 @@ mod ephemeral_binding_tests {
             signing_pubkey: session_key,
             connection_id: "test-conn".into(),
             doc_subscriptions,
-            doc_access_verified_at: HashMap::new(),
+            // Seed the membership cache as freshly verified so these unit tests
+            // exercise their own concern (author-key binding / size cap) without
+            // the `membership_still_valid` recheck reaching for a real Postgres.
+            doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
+            last_replay_at: HashMap::new(),
             channel_subscriptions: HashSet::new(),
         }
     }
@@ -747,10 +799,10 @@ mod ephemeral_binding_tests {
         let presence_key = format!("doc:{doc_id}:presence");
         let _ = state.redis.del([&presence_key]).await;
 
-        let conn = conn_with(session_key.clone(), doc_id);
+        let mut conn = conn_with(session_key.clone(), doc_id);
 
         // A forged author key must be dropped before any Redis write.
-        handle_ephemeral(&state, &conn, ephemeral_from(forged_key, doc_id)).await;
+        handle_ephemeral(&state, &mut conn, ephemeral_from(forged_key, doc_id)).await;
         let after_forged: std::collections::HashMap<String, String> =
             state.redis.hgetall(&presence_key).await.unwrap();
         assert!(
@@ -759,7 +811,12 @@ mod ephemeral_binding_tests {
         );
 
         // The session's own key is accepted and recorded.
-        handle_ephemeral(&state, &conn, ephemeral_from(session_key.clone(), doc_id)).await;
+        handle_ephemeral(
+            &state,
+            &mut conn,
+            ephemeral_from(session_key.clone(), doc_id),
+        )
+        .await;
         let after_valid: std::collections::HashMap<String, String> =
             state.redis.hgetall(&presence_key).await.unwrap();
         assert_eq!(
@@ -817,7 +874,11 @@ mod delta_size_cap_tests {
             signing_pubkey: session_key,
             connection_id: "test-conn".into(),
             doc_subscriptions,
-            doc_access_verified_at: HashMap::new(),
+            // Seed the membership cache as freshly verified so these unit tests
+            // exercise their own concern (author-key binding / size cap) without
+            // the `membership_still_valid` recheck reaching for a real Postgres.
+            doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
+            last_replay_at: HashMap::new(),
             channel_subscriptions: HashSet::new(),
         }
     }
