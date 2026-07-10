@@ -80,6 +80,18 @@ pub struct UpdateOrgRequest {
     pub name: String,
 }
 
+/// Privilege rank of an organization role. Higher binds more capability.
+/// `owner` (2) > `admin` (1) > `member` (0). An unknown role ranks below
+/// everything so it can never be granted.
+fn org_role_rank(role: &str) -> Option<u8> {
+    match role {
+        "member" => Some(0),
+        "admin" => Some(1),
+        "owner" => Some(2),
+        _ => None,
+    }
+}
+
 fn parse_org_id(s: &str) -> Result<uuid::Uuid, AppError> {
     uuid::Uuid::parse_str(s).map_err(|_| AppError::NotFound {
         resource: "organization",
@@ -262,9 +274,30 @@ pub async fn add_member(
     let org_id = parse_org_id(&org_id)?;
     let uid = parse_user_id_str(&session.user_id.to_string())?;
 
-    require_org_role(&state.db, org_id, uid, &["owner", "admin"]).await?;
+    let caller = require_org_role(&state.db, org_id, uid, &["owner", "admin"]).await?;
 
     let member_user_id = parse_user_id_str(&req.user_id)?;
+
+    // `add_org_member` upserts (ON CONFLICT DO UPDATE SET role), so this handler
+    // is also the role-change path. Two clamps keep it from being an escalation
+    // vector, mirroring the document `invite` N2 clamp:
+    //   1. A caller may only grant a role at or below their own rank, so an admin
+    //      can never mint (or self-promote to) an owner.
+    //   2. A caller may only touch a member currently at or below their own rank,
+    //      so an admin can never demote or lock out an owner via the upsert.
+    let caller_rank = org_role_rank(&caller.role).ok_or(AppError::Forbidden)?;
+    let granted_rank = org_role_rank(&req.role).ok_or(AppError::Conflict {
+        detail: "invalid role".into(),
+    })?;
+    if granted_rank > caller_rank {
+        return Err(AppError::Forbidden);
+    }
+    if let Some(existing) = db::get_org_member(&state.db, org_id, member_user_id).await? {
+        let target_rank = org_role_rank(&existing.role).ok_or(AppError::Forbidden)?;
+        if target_rank > caller_rank {
+            return Err(AppError::Forbidden);
+        }
+    }
 
     let share_enc = req
         .shamir_share_enc
@@ -319,7 +352,17 @@ pub async fn remove_member(
     let target_uid = parse_user_id_str(&target_uid)?;
 
     // Owner or admin can remove. Members cannot remove others.
-    require_org_role(&state.db, org_id, uid, &["owner", "admin"]).await?;
+    let caller = require_org_role(&state.db, org_id, uid, &["owner", "admin"]).await?;
+
+    // Same rank clamp as `add_member`: a caller may only remove a member at or
+    // below their own rank, so an admin can never remove (or lock out) the owner.
+    let caller_rank = org_role_rank(&caller.role).ok_or(AppError::Forbidden)?;
+    if let Some(existing) = db::get_org_member(&state.db, org_id, target_uid).await? {
+        let target_rank = org_role_rank(&existing.role).ok_or(AppError::Forbidden)?;
+        if target_rank > caller_rank {
+            return Err(AppError::Forbidden);
+        }
+    }
 
     let removed = db::remove_org_member(&state.db, org_id, target_uid).await?;
     if !removed {
@@ -343,6 +386,12 @@ pub async fn update_member_role(
     let target_uid = parse_user_id_str(&target_uid)?;
 
     require_org_role(&state.db, org_id, uid, &["owner"]).await?;
+
+    // Validate the role before hitting the DB so an unknown value returns a clean
+    // 409 instead of surfacing the `role IN (...)` CHECK violation as a raw 500.
+    org_role_rank(&req.role).ok_or(AppError::Conflict {
+        detail: "invalid role".into(),
+    })?;
 
     db::update_org_member_role(&state.db, org_id, target_uid, &req.role).await?;
     Ok(axum::Json(serde_json::json!({ "status": "updated" })))
@@ -402,6 +451,25 @@ mod tests {
     use super::*;
 
     // -- Parsers ------------------------------------------------------------
+
+    // -- Role rank ordering -------------------------------------------------
+
+    #[test]
+    fn org_role_rank_ordering() {
+        assert!(org_role_rank("owner") > org_role_rank("admin"));
+        assert!(org_role_rank("admin") > org_role_rank("member"));
+        assert_eq!(org_role_rank("nonsense"), None);
+    }
+
+    /// An admin may grant admin/member but never owner, and the grant clamp
+    /// rejects any role above the caller's own rank.
+    #[test]
+    fn admin_cannot_grant_owner() {
+        let caller = org_role_rank("admin").unwrap();
+        assert!(org_role_rank("owner").unwrap() > caller); // owner grant blocked
+        assert!(org_role_rank("admin").unwrap() <= caller);
+        assert!(org_role_rank("member").unwrap() <= caller);
+    }
 
     // -- Shamir validation (N1) ---------------------------------------------
 
@@ -513,6 +581,7 @@ mod tests {
 
         fn build_org_router(state: std::sync::Arc<crate::state::AppState>) -> axum::Router {
             let api_router = Router::new()
+                .route("/auth/setup", axum::routing::post(routes::setup_account))
                 .route(
                     "/organizations",
                     axum::routing::get(routes::list_orgs).post(routes::create_org),
@@ -606,6 +675,282 @@ mod tests {
                 .await
                 .unwrap();
             assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        }
+
+        // -- Role clamp on member add/update (privilege escalation) ---------
+
+        use base64::Engine as _;
+
+        /// Setup an account under `email`/`spk` and return a ready
+        /// `Authorization: Bearer <jwt>` header. Each caller must pass a distinct
+        /// `spk` byte: the `users.signing_pubkey` column is unique.
+        async fn setup_org_user(app: &Router, email: &str, spk: u8) -> String {
+            let body = serde_json::json!({
+                "email": email,
+                "display_name": "Org User",
+                "master_key_enc": base64::engine::general_purpose::URL_SAFE.encode([1u8; 32]),
+                "master_key_salt": base64::engine::general_purpose::URL_SAFE.encode([2u8; 16]),
+                "signing_pubkey": hex::encode([spk; 32]),
+                "exchange_pubkey": hex::encode([spk; 32]),
+            });
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::post("/api/auth/setup")
+                        .header("content-type", "application/json")
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            let bytes = axum::body::to_bytes(resp.into_body(), 8192).await.unwrap();
+            let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            format!("Bearer {}", json["access_token"].as_str().unwrap())
+        }
+
+        /// POST a member add/update as `auth`, returning the response status.
+        async fn post_member(
+            app: &Router,
+            auth: &str,
+            org_id: &str,
+            user_id: &str,
+            role: &str,
+        ) -> StatusCode {
+            let body = serde_json::json!({ "user_id": user_id, "role": role });
+            app.clone()
+                .oneshot(
+                    Request::post(format!("/api/organizations/{org_id}/members"))
+                        .header("content-type", "application/json")
+                        .header("authorization", auth)
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap()
+                .status()
+        }
+
+        /// DELETE a member as `auth`, returning the response status.
+        async fn delete_member(app: &Router, auth: &str, org_id: &str, uid: &str) -> StatusCode {
+            app.clone()
+                .oneshot(
+                    Request::delete(format!("/api/organizations/{org_id}/members/{uid}"))
+                        .header("authorization", auth)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap()
+                .status()
+        }
+
+        /// PATCH a member's role as `auth`, returning the response status.
+        async fn patch_member_role(
+            app: &Router,
+            auth: &str,
+            org_id: &str,
+            uid: &str,
+            role: &str,
+        ) -> StatusCode {
+            let body = serde_json::json!({ "role": role });
+            app.clone()
+                .oneshot(
+                    Request::patch(format!("/api/organizations/{org_id}/members/{uid}"))
+                        .header("content-type", "application/json")
+                        .header("authorization", auth)
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap()
+                .status()
+        }
+
+        /// Create an org owned by `owner` and return its id.
+        async fn create_org(app: &Router, owner: &str) -> String {
+            let create = serde_json::json!({
+                "name": "Acme",
+                "org_pubkey": hex::encode([5u8; 32]),
+                "shamir_threshold": 1,
+                "shamir_total": 1,
+            });
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::post("/api/organizations")
+                        .header("content-type", "application/json")
+                        .header("authorization", owner)
+                        .body(Body::from(create.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::CREATED);
+            let bytes = axum::body::to_bytes(resp.into_body(), 8192).await.unwrap();
+            serde_json::from_slice::<serde_json::Value>(&bytes).unwrap()["id"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        }
+
+        async fn user_id(state: &crate::state::AppState, email: &str) -> String {
+            crate::db::get_user_by_email(&state.db, email)
+                .await
+                .unwrap()
+                .unwrap()
+                .id
+                .to_string()
+        }
+
+        /// An org `admin` may add admins/members but must not be able to mint an
+        /// `owner` (self-promotion) nor demote the existing owner via the upsert
+        /// path. The document `invite` N2 clamp, applied to organizations.
+        #[sqlx::test]
+        #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+        async fn admin_cannot_escalate_via_add_member(pool: sqlx::PgPool) {
+            let state = crate::test_helpers::test_app_state(pool).await;
+            let app = build_org_router(state.clone());
+
+            let owner = setup_org_user(&app, "owner@ambre.app", 10).await;
+            let admin = setup_org_user(&app, "admin@ambre.app", 11).await;
+            let _third = setup_org_user(&app, "member@ambre.app", 12).await;
+            let owner_uid = crate::db::get_user_by_email(&state.db, "owner@ambre.app")
+                .await
+                .unwrap()
+                .unwrap()
+                .id
+                .to_string();
+            let admin_uid = crate::db::get_user_by_email(&state.db, "admin@ambre.app")
+                .await
+                .unwrap()
+                .unwrap()
+                .id
+                .to_string();
+            let member_uid = crate::db::get_user_by_email(&state.db, "member@ambre.app")
+                .await
+                .unwrap()
+                .unwrap()
+                .id
+                .to_string();
+
+            // Owner creates the org and promotes `admin` to admin.
+            let create = serde_json::json!({
+                "name": "Acme",
+                "org_pubkey": hex::encode([5u8; 32]),
+                "shamir_threshold": 1,
+                "shamir_total": 1,
+            });
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::post("/api/organizations")
+                        .header("content-type", "application/json")
+                        .header("authorization", &owner)
+                        .body(Body::from(create.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::CREATED);
+            let bytes = axum::body::to_bytes(resp.into_body(), 8192).await.unwrap();
+            let org_id = serde_json::from_slice::<serde_json::Value>(&bytes).unwrap()["id"]
+                .as_str()
+                .unwrap()
+                .to_string();
+            assert_eq!(
+                post_member(&app, &owner, &org_id, &admin_uid, "admin").await,
+                StatusCode::CREATED
+            );
+
+            // Escalation attempts by the admin are refused.
+            assert_eq!(
+                post_member(&app, &admin, &org_id, &admin_uid, "owner").await,
+                StatusCode::FORBIDDEN,
+                "admin must not self-promote to owner"
+            );
+            assert_eq!(
+                post_member(&app, &admin, &org_id, &owner_uid, "member").await,
+                StatusCode::FORBIDDEN,
+                "admin must not demote the owner"
+            );
+
+            // The nominal path still works: admin adds a plain member.
+            assert_eq!(
+                post_member(&app, &admin, &org_id, &member_uid, "member").await,
+                StatusCode::CREATED
+            );
+        }
+
+        /// An org `admin` must not be able to remove the owner via DELETE, but
+        /// may still remove a plain member (nominal path).
+        #[sqlx::test]
+        #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+        async fn admin_cannot_remove_owner(pool: sqlx::PgPool) {
+            let state = crate::test_helpers::test_app_state(pool).await;
+            let app = build_org_router(state.clone());
+
+            let owner = setup_org_user(&app, "owner@ambre.app", 20).await;
+            let admin = setup_org_user(&app, "admin@ambre.app", 21).await;
+            let _third = setup_org_user(&app, "member@ambre.app", 22).await;
+            let owner_uid = user_id(&state, "owner@ambre.app").await;
+            let admin_uid = user_id(&state, "admin@ambre.app").await;
+            let member_uid = user_id(&state, "member@ambre.app").await;
+
+            let org_id = create_org(&app, &owner).await;
+            assert_eq!(
+                post_member(&app, &owner, &org_id, &admin_uid, "admin").await,
+                StatusCode::CREATED
+            );
+            assert_eq!(
+                post_member(&app, &owner, &org_id, &member_uid, "member").await,
+                StatusCode::CREATED
+            );
+
+            // Admin must not remove the owner.
+            assert_eq!(
+                delete_member(&app, &admin, &org_id, &owner_uid).await,
+                StatusCode::FORBIDDEN,
+                "admin must not remove the owner"
+            );
+
+            // Nominal path: admin removes a plain member.
+            assert_eq!(
+                delete_member(&app, &admin, &org_id, &member_uid).await,
+                StatusCode::OK
+            );
+        }
+
+        /// `update_member_role` must reject an unknown role with a clean 409
+        /// rather than letting the DB CHECK violation surface as a 500.
+        #[sqlx::test]
+        #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+        async fn update_member_role_rejects_invalid_role(pool: sqlx::PgPool) {
+            let state = crate::test_helpers::test_app_state(pool).await;
+            let app = build_org_router(state.clone());
+
+            let owner = setup_org_user(&app, "owner@ambre.app", 30).await;
+            let _member = setup_org_user(&app, "member@ambre.app", 31).await;
+            let member_uid = user_id(&state, "member@ambre.app").await;
+
+            let org_id = create_org(&app, &owner).await;
+            assert_eq!(
+                post_member(&app, &owner, &org_id, &member_uid, "member").await,
+                StatusCode::CREATED
+            );
+
+            // Invalid role is rejected cleanly.
+            assert_eq!(
+                patch_member_role(&app, &owner, &org_id, &member_uid, "superuser").await,
+                StatusCode::CONFLICT,
+                "unknown role must be a clean 409, not a raw DB error"
+            );
+
+            // Nominal path: a valid role update succeeds.
+            assert_eq!(
+                patch_member_role(&app, &owner, &org_id, &member_uid, "admin").await,
+                StatusCode::OK
+            );
         }
     }
 }
