@@ -41,14 +41,22 @@ pub async fn store_master_keys(
         detail: e.to_string(),
     })?;
 
-    db::update_master_key(&state.db, &s.user_id, &mk_enc, &mk_salt).await?;
+    // Write the master key material and the pubkeys in ONE statement: they
+    // describe a single identity, so a partial write (new master_key_enc but
+    // stale pubkeys, or vice versa) would leave the account unable to unwrap its
+    // own material. A single UPDATE to the one row is atomic without a
+    // transaction round-trip.
     let uid = uuid::Uuid::from_bytes(*s.user_id.as_uuid().as_bytes());
-    sqlx::query("UPDATE users SET signing_pubkey = $2, exchange_pubkey = $3 WHERE id = $1")
-        .bind(uid)
-        .bind(&spk)
-        .bind(&epk)
-        .execute(&state.db)
-        .await?;
+    sqlx::query(
+        "UPDATE users SET master_key_enc = $2, master_key_salt = $3, signing_pubkey = $4, exchange_pubkey = $5, updated_at = now() WHERE id = $1"
+    )
+    .bind(uid)
+    .bind(&mk_enc)
+    .bind(&mk_salt)
+    .bind(&spk)
+    .bind(&epk)
+    .execute(&state.db)
+    .await?;
 
     // The signing pubkey just changed, so the claims carried by the current
     // access token (and any refresh) are now stale. Issue a fresh pair bound to
