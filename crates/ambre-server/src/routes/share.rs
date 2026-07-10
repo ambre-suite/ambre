@@ -157,6 +157,17 @@ pub async fn revoke_from_document(
     }
     db::remove_document_member(&state.db, &doc_id, &target).await?;
     tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, "member revoked");
+
+    // Notify the revoked user directly on their personal channel so their client
+    // closes the document. Targeted (not a doc broadcast): only the removed user
+    // learns they were revoked, and no remaining member can mistake this for their
+    // own revocation. Best-effort -- the membership row is the source of truth.
+    let msg =
+        ambre_protocol::ws::encode_server_msg(&ambre_protocol::ws::WsServerMsg::DocumentRevoked {
+            document_id: doc_id,
+        });
+    let _ = crate::redis_ops::user_broadcast(&state.redis, &target, &msg).await;
+
     Ok(axum::Json(serde_json::json!({"status":"revoked"})))
 }
 
@@ -207,10 +218,12 @@ pub async fn rotate_document_key(
     }
     db::rotate_document_keys(&state.db, &doc_id, &s.user_id, &keys).await?;
     tracing::info!(document_id = %doc_id, by = %s.user_id, members = keys.len(), "document key rotated");
+    // Tell every REMAINING member to re-fetch its freshly wrapped key. No user id:
+    // this is a re-key signal, not a revocation, so the rotator (an owner) never
+    // appears as "revoked" and cannot kick itself out of its own document.
     let msg = ambre_protocol::ws::encode_server_msg(
         &ambre_protocol::ws::WsServerMsg::KeyRotationRequired {
             document_id: doc_id,
-            revoked_user_id: s.user_id,
         },
     );
     let _ = crate::redis_ops::doc_broadcast(&state.redis, &doc_id, &msg).await;

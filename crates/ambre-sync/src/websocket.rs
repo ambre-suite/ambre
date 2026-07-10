@@ -532,15 +532,13 @@ impl SyncState {
             SyncEvent::KeyRotated {
                 document_id,
                 new_doc_key,
-                revoked_user_id,
             } => {
+                // Swap the local key cache. This is the remaining-member path: a
+                // rotation is not a revocation, so nothing is reported as a member
+                // loss here (a revoked user is told via `DocumentRevoked`).
                 if let Some(doc_state) = self.documents.get_mut(&document_id) {
                     doc_state.rotate_key(new_doc_key);
                 }
-                self.send_to_logic(LogicEvent::MemberRevoked {
-                    document_id,
-                    revoked_user_id,
-                });
             }
             SyncEvent::MediaUploaded {
                 id,
@@ -698,22 +696,11 @@ impl SyncState {
                 self.snapshot_known(document_id, snapshot_id);
             }
 
-            WsServerMsg::KeyRotationRequired {
-                document_id,
-                revoked_user_id,
-            } => {
-                // If WE are the revoked user, close the document and notify.
-                if Some(revoked_user_id) == self.user_id {
-                    self.documents.remove(&document_id);
-                    self.send_to_logic(LogicEvent::MemberRevoked {
-                        document_id,
-                        revoked_user_id,
-                    });
-                    return;
-                }
-
-                // Otherwise, fetch the new wrapped key from the server,
-                // unwrap it, and rotate locally.
+            WsServerMsg::KeyRotationRequired { document_id } => {
+                // Remaining-member re-key path only. Being revoked is a separate,
+                // targeted signal now (`DocumentRevoked`), so this message never
+                // closes a document: fetch our freshly wrapped key, unwrap it, and
+                // rotate the local cache.
                 let event_tx = self.event_tx.clone();
                 let api_base = self.api_base.clone();
                 let url_scheme = self.url_scheme;
@@ -794,8 +781,21 @@ impl SyncState {
                         let _ = tx.send(SyncEvent::KeyRotated {
                             document_id: doc_id,
                             new_doc_key,
-                            revoked_user_id,
                         });
+                    });
+                }
+            }
+
+            WsServerMsg::DocumentRevoked { document_id } => {
+                // The server removed us from this document (targeted push on our
+                // personal channel). Close it locally and tell the Logic thread we
+                // were revoked so the UI can react.
+                tracing::info!("Sync: DocumentRevoked {document_id:?}");
+                self.documents.remove(&document_id);
+                if let Some(uid) = self.user_id {
+                    self.send_to_logic(LogicEvent::MemberRevoked {
+                        document_id,
+                        revoked_user_id: uid,
                     });
                 }
             }
