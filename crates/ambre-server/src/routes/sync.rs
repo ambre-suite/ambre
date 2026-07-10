@@ -151,6 +151,14 @@ pub async fn create_snapshot(
     }))
 }
 
+/// Request for a presigned snapshot upload URL. `size_bytes` is the size of the
+/// encrypted snapshot blob; it is validated against `snapshot_max_bytes` and
+/// bound into the presigned PUT URL so the upload cannot exceed it.
+#[derive(serde::Deserialize)]
+pub struct SnapshotUploadUrlRequest {
+    pub size_bytes: u64,
+}
+
 /// Presigned PUT URL for direct client-to-S3 upload of an encrypted snapshot.
 #[derive(serde::Serialize)]
 pub struct SnapshotUploadUrlResponse {
@@ -162,6 +170,7 @@ pub async fn snapshot_upload_url(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
     Path(document_id): Path<String>,
+    Json(req): Json<SnapshotUploadUrlRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
@@ -171,6 +180,14 @@ pub async fn snapshot_upload_url(
     if !["owner", "editor"].contains(&m.role.as_str()) {
         return Err(AppError::Forbidden);
     }
+    // Reject an oversized snapshot before handing out an upload URL, and bind the
+    // declared size into the presigned PUT so the actual upload cannot exceed it.
+    if req.size_bytes == 0 || req.size_bytes > state.config.snapshot_max_bytes {
+        return Err(AppError::PayloadTooLarge(format!(
+            "snapshot size {} bytes outside 1..={}",
+            req.size_bytes, state.config.snapshot_max_bytes
+        )));
+    }
 
     let snapshot_id = ambre_core::SnapshotId::new();
     let key = s3::format_s3_snapshot_key(&state.config.s3_env_prefix, &doc_id, &snapshot_id);
@@ -179,6 +196,7 @@ pub async fn snapshot_upload_url(
         &state.s3_bucket,
         &key,
         state.config.presigned_url_ttl_secs,
+        req.size_bytes,
     )
     .await?;
     Ok(axum::Json(SnapshotUploadUrlResponse {

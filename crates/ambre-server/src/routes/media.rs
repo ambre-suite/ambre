@@ -23,7 +23,8 @@ pub struct UploadUrlRequest {
     pub content_hash: String,
     #[allow(dead_code)]
     pub mime_type: String,
-    #[allow(dead_code)]
+    /// Declared size of the encrypted blob. Validated against `media_max_bytes`
+    /// and bound into the presigned PUT URL so the upload cannot exceed it.
     pub size_bytes: u64,
 }
 #[derive(serde::Serialize)]
@@ -49,12 +50,21 @@ pub async fn media_upload_url(
     if !s3::is_valid_content_hash(&req.content_hash) {
         return Err(AppError::BadRequest("invalid content_hash".into()));
     }
+    // Reject an oversized blob before handing out an upload URL, and bind the
+    // declared size into the presigned PUT so the actual upload cannot exceed it.
+    if req.size_bytes == 0 || req.size_bytes > state.config.media_max_bytes {
+        return Err(AppError::PayloadTooLarge(format!(
+            "media size {} bytes outside 1..={}",
+            req.size_bytes, state.config.media_max_bytes
+        )));
+    }
     let key = s3::format_s3_media_key(&state.config.s3_env_prefix, &doc_id, &req.content_hash);
     let url = s3::generate_presigned_upload_url(
         &state.s3,
         &state.s3_bucket,
         &key,
         state.config.presigned_url_ttl_secs,
+        req.size_bytes,
     )
     .await?;
     Ok(axum::Json(UploadUrlResponse {
@@ -127,6 +137,14 @@ pub async fn media_confirm_upload(
     }
     if !s3::is_valid_content_hash(&req.content_hash) {
         return Err(AppError::BadRequest("invalid content_hash".into()));
+    }
+    // Mirror the upload-url cap so a recorded `media` row can never claim a size
+    // the upload path would have refused.
+    if req.size_bytes <= 0 || req.size_bytes as u64 > state.config.media_max_bytes {
+        return Err(AppError::PayloadTooLarge(format!(
+            "media size {} bytes outside 1..={}",
+            req.size_bytes, state.config.media_max_bytes
+        )));
     }
     let key = s3::format_s3_media_key(&state.config.s3_env_prefix, &doc_id, &req.content_hash);
     db::insert_media(
