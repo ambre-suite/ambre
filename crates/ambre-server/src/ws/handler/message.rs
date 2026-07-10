@@ -197,15 +197,14 @@ pub(crate) async fn handle_ephemeral(
         return;
     }
 
-    // Bind the ephemeral author key to the session identity, mirroring the
+    // Check the ephemeral author key against the session identity, like the
     // `handle_update` check. The presence hash `doc:{id}:presence` is indexed by
-    // `pub_key_hex` and its fields carry no TTL (only `presence_ts:*` expires), so
-    // an authorized member forging arbitrary keys could otherwise (a) attribute a
-    // cursor/presence to a peer's identity, (b) overwrite that peer's presence
-    // entry, and (c) grow the presence hash without bound. One signing key per
-    // user (`spk` claim) means a member may only announce presence under its own
-    // key; drop the mismatch silently (ephemerals are fire-and-forget, no error
-    // channel is expected by clients on this path).
+    // `pub_key_hex` and its fields have no TTL (only `presence_ts:*` expires). If a
+    // member could use any key, they could: (a) attribute a cursor to another
+    // member's identity, (b) overwrite that member's presence entry, and (c) add
+    // unlimited fields to the presence hash. Each user has one signing key (`spk`
+    // claim), so a member may only send presence under their own key. The client
+    // expects no reply on this path, so drop a mismatch without an error message.
     if eph.public_data.pub_key != conn.signing_pubkey {
         return;
     }
@@ -612,14 +611,16 @@ mod postcard_tests {
     }
 }
 
-// Behavioral test for the ephemeral author-key binding (mirrors the `handle_update`
-// guard). Needs a live Redis to observe the presence-hash side effect, so it is
-// gated by the `db` feature like the other integration tests.
+// Test for the ephemeral author-key check (same idea as the `handle_update`
+// check). It needs a live Redis to read back the presence hash, so it is gated by
+// the `db` feature like the other integration tests.
 #[cfg(test)]
 mod ephemeral_binding_tests {
     use super::*;
     use ambre_core::{DocumentId, PublicKey};
-    use ambre_protocol::messages::{Ciphertext, CommitmentTag, Counter, Ephemeral, Nonce, Signature};
+    use ambre_protocol::messages::{
+        Ciphertext, CommitmentTag, Counter, Ephemeral, Nonce, Signature,
+    };
     use ambre_protocol::public_data::EphemeralPublicData;
     use rustis::commands::{GenericCommands, HashCommands};
 
@@ -629,8 +630,8 @@ mod ephemeral_binding_tests {
             .ok()?;
         let s3 = aws_sdk_s3::Client::from_conf(aws_sdk_s3::Config::builder().build());
         let pubsub = crate::ws::PubSubHub::spawn(redis.clone());
-        // The ephemeral path never touches Postgres, so a lazily-connected pool
-        // (never queried) is enough to satisfy the AppState shape.
+        // The ephemeral path never queries Postgres, so a lazy pool that is never
+        // connected is enough to build the AppState.
         let db = sqlx::postgres::PgPoolOptions::new()
             .connect_lazy("postgres://localhost/ambre")
             .ok()?;
