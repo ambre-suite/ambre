@@ -150,13 +150,18 @@ pub async fn oidc_login(
 
     let (login_resp, auth_state) = oidc::login_url(oidc_state).await?;
 
-    let _ = redis_ops::oidc_state_set(
+    // Persisting the transient auth state must succeed: the callback validates
+    // the returned CSRF `state` against this Redis entry. If the write is
+    // dropped, the client authenticates at the provider and only then hits a
+    // `SessionExpired` on callback -- a confusing failure after credentials were
+    // already handed over. Surface the failure now instead.
+    redis_ops::oidc_state_set(
         &state.redis,
         &login_resp.state,
         &auth_state.pkce_verifier_secret,
         &auth_state.nonce.secret().clone(),
     )
-    .await;
+    .await?;
 
     Ok(axum::Json(login_resp))
 }
