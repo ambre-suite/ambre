@@ -53,6 +53,24 @@ pub(crate) async fn handle_update(
         return;
     }
 
+    // Cap the inline delta ciphertext before any signature check or durable
+    // write. A CRDT delta is small; a large blob belongs on the media path. This
+    // stops an authorized writer from pushing oversized deltas that are persisted
+    // durably (S3 + Redis pending) and fanned out to every subscriber -- the same
+    // storage/cost abuse the media and snapshot caps close, on the hot path.
+    let cipher_len = update.ciphertext.0.len();
+    if cipher_len > state.config.delta_max_bytes {
+        let err = encode_server_msg(&WsServerMsg::Error {
+            code: 413,
+            message: format!(
+                "delta ciphertext {} bytes exceeds max {}",
+                cipher_len, state.config.delta_max_bytes
+            ),
+        });
+        let _ = outbound_tx.send(err).await;
+        return;
+    }
+
     // Re-validate membership on a short TTL (H8): the `Subscribe`-time check is
     // stale after a mid-session revoke, so a revoked member could otherwise keep
     // writing accepted, sequenced updates until they disconnect. On failure, drop
@@ -739,6 +757,104 @@ mod ephemeral_binding_tests {
         assert!(after_valid.contains_key(&session_key.to_hex()));
 
         let _ = state.redis.del([&presence_key]).await;
+    }
+}
+
+// Test for the delta size cap in `handle_update`. The cap is checked before any
+// durable write, so an oversized ciphertext must leave the Redis pending list
+// empty. Needs a live Redis to observe the (non-)write, so it is gated by `db`.
+#[cfg(test)]
+mod delta_size_cap_tests {
+    use super::*;
+    use ambre_core::{DocumentId, PublicKey, SnapshotId};
+    use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Signature, Update};
+    use ambre_protocol::public_data::UpdatePublicData;
+    use rustis::commands::{GenericCommands, ListCommands};
+
+    async fn test_state(delta_max_bytes: usize) -> Option<Arc<AppState>> {
+        let redis = rustis::client::Client::connect("redis://localhost:6379")
+            .await
+            .ok()?;
+        let s3 = aws_sdk_s3::Client::from_conf(aws_sdk_s3::Config::builder().build());
+        let pubsub = crate::ws::PubSubHub::spawn(redis.clone());
+        let db = sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://localhost/ambre")
+            .ok()?;
+        let config = crate::state::Config {
+            delta_max_bytes,
+            ..Default::default()
+        };
+        Some(Arc::new(AppState {
+            db,
+            redis,
+            pubsub,
+            s3,
+            s3_bucket: "test-bucket".into(),
+            config: Arc::new(config),
+            jwt: Arc::new(crate::jwt::JwtKeys::from_seed(&[7u8; 32])),
+            oidc_clients: Arc::new(std::collections::HashMap::new()),
+        }))
+    }
+
+    fn conn_with(session_key: PublicKey, doc_id: DocumentId) -> WsConnectionState {
+        let mut doc_subscriptions = HashSet::new();
+        doc_subscriptions.insert(doc_id);
+        WsConnectionState {
+            user_id: UserId::new(),
+            signing_pubkey: session_key,
+            connection_id: "test-conn".into(),
+            doc_subscriptions,
+            doc_access_verified_at: HashMap::new(),
+            channel_subscriptions: HashSet::new(),
+        }
+    }
+
+    fn update_with(pub_key: PublicKey, doc_id: DocumentId, cipher_len: usize) -> Update {
+        Update {
+            ciphertext: Ciphertext(vec![0u8; cipher_len]),
+            nonce: Nonce([0u8; 24]),
+            public_data: UpdatePublicData {
+                document_id: doc_id,
+                pub_key,
+                snapshot_id: SnapshotId::from_bytes([0u8; 16]),
+                clock: Clock(1),
+            },
+            commitment_tag: CommitmentTag([0u8; 32]),
+            signature: Signature([0u8; 64]),
+        }
+    }
+
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn oversized_delta_writes_no_pending() {
+        let Some(state) = test_state(8).await else {
+            return;
+        };
+        let doc_id = DocumentId::new();
+        let session_key = PublicKey::from_array([1u8; 32]);
+        let pending_key = format!("doc:{doc_id}:pending");
+        let _ = state.redis.del([&pending_key]).await;
+
+        let mut conn = conn_with(session_key.clone(), doc_id);
+        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(8);
+
+        // 9 bytes > the 8-byte cap: rejected before any durable write.
+        handle_update(&state, &mut conn, update_with(session_key, doc_id, 9), &tx).await;
+
+        let pending_len: usize = state.redis.llen(&pending_key).await.unwrap();
+        assert_eq!(
+            pending_len, 0,
+            "an oversized delta must not be pushed to the pending list"
+        );
+        // The client is told why (413), so it can move the blob to the media path.
+        let reply = rx.try_recv().expect("a 413 error reply must be sent");
+        let decoded = ambre_protocol::ws::decode_server_msg(&reply).unwrap();
+        assert!(matches!(
+            decoded,
+            ambre_protocol::ws::WsServerMsg::Error { code: 413, .. }
+        ));
+
+        let _ = state.redis.del([&pending_key]).await;
     }
 }
 

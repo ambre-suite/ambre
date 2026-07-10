@@ -65,6 +65,13 @@ pub async fn ws_upgrade(
     State(state): State<Arc<AppState>>,
     axum::extract::Query(query): axum::extract::Query<WsQuery>,
 ) -> impl IntoResponse {
+    // Bound the inbound frame so the server never buffers an oversized message
+    // (axum defaults to 64 MiB). The delta ciphertext cap is enforced per-message
+    // in `handle_update`; this is the outer envelope guard, sized with headroom
+    // for the wire framing (version byte, postcard tag, public_data) around a
+    // `delta_max_bytes` ciphertext.
+    let max_frame = state.config.delta_max_bytes.saturating_add(64 * 1024);
+    let ws = ws.max_message_size(max_frame).max_frame_size(max_frame);
     let session = match query.token {
         Some(token) => auth::authenticate_token(&state, &token),
         None => Err(AppError::Unauthorized),
