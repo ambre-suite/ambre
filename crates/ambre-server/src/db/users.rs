@@ -247,9 +247,17 @@ pub async fn dev_upsert_user(
 
 /// Full-text search over users by email or display name (ILIKE).
 pub async fn search_users(pool: &PgPool, query: &str) -> Result<Vec<UserInfoRow>, AppError> {
-    let pattern = format!("%{query}%");
+    // Escape the LIKE metacharacters (`\ % _`) in the user-supplied query so they
+    // match literally. Without this a caller could pass `%` / `_` as wildcards and
+    // widen `ILIKE '%q%'` into a directory-enumeration primitive, defeating the
+    // minimum-length guard at the route. `ESCAPE '\'` binds the escape char.
+    let escaped = query
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
+    let pattern = format!("%{escaped}%");
     let rows = sqlx::query(
-        "SELECT id, email, display_name, signing_pubkey, exchange_pubkey FROM users WHERE email ILIKE $1 OR display_name ILIKE $1 LIMIT 20"
+        "SELECT id, email, display_name, signing_pubkey, exchange_pubkey FROM users WHERE email ILIKE $1 ESCAPE '\\' OR display_name ILIKE $1 ESCAPE '\\' LIMIT 20"
     )
     .bind(pattern)
     .fetch_all(pool)

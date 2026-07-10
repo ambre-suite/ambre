@@ -1150,4 +1150,113 @@ mod handler_tests {
         let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
         json["document_id"].as_str().unwrap().to_string()
     }
+
+    /// #1 regression: document-key rotation is owner-only. An editor holds the
+    /// document key but must not be able to rotate it -- that is membership
+    /// management (it rewraps every member and could lock others out), gated to
+    /// the owner exactly like revoke.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn rotate_key_denied_to_editor(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+
+        let editor = setup_named(&app, "editor@test.com", 71).await;
+        invite(&app, &owner, &doc_id, "editor@test.com", "editor").await;
+        let editor_uid = doc_user_id(&state, "editor@test.com").await;
+
+        let rotate_body = serde_json::json!({
+            "keys": [ { "user_id": editor_uid, "doc_key_enc": base64_encode(&[0xABu8; 32]) } ],
+        });
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::post(format!("/api/documents/{doc_id}/rotate-key"))
+                    .header("content-type", "application/json")
+                    .header("authorization", &editor)
+                    .body(Body::from(serde_json::to_string(&rotate_body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::FORBIDDEN,
+            "an editor must not be able to rotate the document key"
+        );
+    }
+
+    /// #6 regression: LIKE wildcards in the search query are escaped, so a bare
+    /// `%` no longer acts as "match everything" (directory enumeration). It must
+    /// match the character literally and return no rows here.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn search_users_escapes_like_wildcards(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let auth = setup_and_get_auth(&app).await;
+        // Seed a couple of users the wildcard would otherwise sweep in.
+        let _ = setup_named(&app, "alice@test.com", 81).await;
+        let _ = setup_named(&app, "bob@test.com", 82).await;
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::get("/api/users/search?query=%25%25") // "%%" url-encoded
+                    .header("authorization", &auth)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), 8192).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            json["users"].as_array().unwrap().len(),
+            0,
+            "'%%' must be matched literally, not as a wildcard sweep"
+        );
+    }
+
+    /// #3 regression: re-creating an existing document id owned by someone else
+    /// must not leak that it exists (nor its `doc_type`). A foreign caller gets a
+    /// clean 404, not the echoed row.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn create_document_with_foreign_existing_id_is_not_found(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+
+        // A different user re-POSTs create with the SAME id.
+        let intruder = setup_named(&app, "intruder@test.com", 72).await;
+        let body = serde_json::json!({
+            "doc_type": "prose",
+            "doc_key_enc": base64_encode(&[6u8; 32]),
+            "document_id": doc_id,
+        });
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::post("/api/documents")
+                    .header("content-type", "application/json")
+                    .header("authorization", &intruder)
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::NOT_FOUND,
+            "a foreign caller must not learn an existing document id exists"
+        );
+
+        // The intruder gained no membership: the owner still lists exactly itself.
+        assert_eq!(list_members(&app, &owner, &doc_id).await.len(), 1);
+    }
 }
