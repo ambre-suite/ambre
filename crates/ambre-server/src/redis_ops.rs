@@ -97,6 +97,61 @@ pub async fn append_pending_delta(
         .rpush(&key, [&blob])
         .await
         .map_err(|e| AppError::Redis(format!("pending push failed: {e}")))?;
+    // Mark this document's pending list dirty AFTER the RPUSH so the flusher can
+    // iterate only documents that actually have pending deltas (SMEMBERS) instead
+    // of SCANning the whole keyspace every cycle. The RPUSH-then-SADD order is
+    // load-bearing: `clear_pending_dirty_if_empty` relies on the entry being
+    // visible in the list before the marker exists, so an append concurrent with a
+    // drain can never leave the list non-empty while the marker is cleared.
+    //
+    // The mark is a best-effort hint, NOT a durability guard: the delta is already
+    // safely RPUSHed, and the flusher's periodic SCAN reconciliation re-marks any
+    // pending key that missed its SADD. So a failed mark is logged, not
+    // propagated -- returning an error here would make `handle_update` dead-letter
+    // a delta that is in fact safely queued.
+    if let Err(e) = mark_pending_dirty(redis, &key).await {
+        tracing::warn!(key = %key, error = %e, "pending dirty mark failed (reconcile will recover)");
+    }
+    Ok(())
+}
+
+/// Redis SET holding the `doc:{id}:pending` keys that currently have unflushed
+/// deltas. The flusher reads this instead of SCANning the keyspace.
+pub const FLUSH_DIRTY_SET: &str = "flush:dirty";
+
+/// Records `pending_key` in the dirty set so the flusher will visit it.
+pub async fn mark_pending_dirty(redis: &Client, pending_key: &str) -> Result<(), AppError> {
+    use rustis::commands::SetCommands;
+    redis
+        .sadd(FLUSH_DIRTY_SET, [pending_key])
+        .await
+        .map_err(|e| AppError::Redis(format!("mark pending dirty: {e}")))?;
+    Ok(())
+}
+
+/// Returns the pending keys currently marked dirty (the flusher's work list).
+pub async fn dirty_pending_keys(redis: &Client) -> Result<Vec<String>, AppError> {
+    use rustis::commands::SetCommands;
+    redis
+        .smembers(FLUSH_DIRTY_SET)
+        .await
+        .map_err(|e| AppError::Redis(format!("dirty pending keys: {e}")))
+}
+
+/// Atomically clears `pending_key` from the dirty set, but ONLY if its pending
+/// list is now empty. Run after a drain: an entry appended concurrently (RPUSH
+/// before its SADD, see `append_pending_delta`) is already visible in the list
+/// here, so `LLEN > 0` keeps the marker and the delta is retried next cycle --
+/// an acknowledged delta is never stranded.
+pub async fn clear_pending_dirty_if_empty(
+    redis: &Client,
+    pending_key: &str,
+) -> Result<(), AppError> {
+    const LUA: &str = "if redis.call('LLEN', KEYS[1]) == 0 then return redis.call('SREM', KEYS[2], ARGV[1]) else return 0 end";
+    let _: i64 = redis
+        .eval::<i64>(LUA, [pending_key, FLUSH_DIRTY_SET], [pending_key])
+        .await
+        .map_err(|e| AppError::Redis(format!("clear pending dirty: {e}")))?;
     Ok(())
 }
 
@@ -711,6 +766,51 @@ mod redis_integration_tests {
         );
 
         let _ = redis.del([lock_key.as_str()]).await;
+    }
+
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn dirty_set_marks_on_append_and_clears_only_when_drained() {
+        use rustis::commands::SetCommands;
+        let redis = connect_redis().await;
+        let doc = ambre_core::DocumentId::new();
+        let pending_key = format!("doc:{doc}:pending");
+        let _ = redis.del([pending_key.as_str()]).await;
+        // Start from a clean marker for this doc's key.
+        let _: Result<usize, _> = redis.srem(FLUSH_DIRTY_SET, [pending_key.as_str()]).await;
+
+        // Appending a delta marks the pending list dirty.
+        append_pending_delta(&redis, &doc, 1, "s3-x", &[1, 2, 3])
+            .await
+            .unwrap();
+        let members = dirty_pending_keys(&redis).await.unwrap();
+        assert!(
+            members.contains(&pending_key),
+            "append must mark the pending key dirty"
+        );
+
+        // A non-empty list must NOT be cleared (an acknowledged delta is pending).
+        clear_pending_dirty_if_empty(&redis, &pending_key)
+            .await
+            .unwrap();
+        let still: bool = redis
+            .sismember(FLUSH_DIRTY_SET, pending_key.as_str())
+            .await
+            .unwrap();
+        assert!(still, "a non-empty pending list must keep its dirty marker");
+
+        // Once drained, the marker clears.
+        let _ = redis.del([pending_key.as_str()]).await;
+        clear_pending_dirty_if_empty(&redis, &pending_key)
+            .await
+            .unwrap();
+        let gone: bool = redis
+            .sismember(FLUSH_DIRTY_SET, pending_key.as_str())
+            .await
+            .unwrap();
+        assert!(!gone, "a drained pending list must clear its dirty marker");
+
+        let _ = redis.srem(FLUSH_DIRTY_SET, [pending_key.as_str()]).await;
     }
 
     #[tokio::test]
