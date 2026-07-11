@@ -198,20 +198,35 @@ pub async fn get_updates_after(
         .collect()
 }
 
-/// Deletes updates whose seq <= `before_seq` (called after compaction).
-#[allow(dead_code)]
-pub async fn purge_updates_before_seq(
-    pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-    before_seq: i64,
-) -> Result<(), AppError> {
-    let did = id_to_uuid(*document_id);
-    sqlx::query("DELETE FROM updates WHERE document_id = $1 AND seq <= $2")
-        .bind(did)
-        .bind(before_seq)
-        .execute(pool)
-        .await?;
-    Ok(())
+/// Trims the delta index of every `updates` row that all retained snapshots have
+/// already folded in, returning the number of rows deleted.
+///
+/// The purge horizon per document is `MIN(covered_seq)` across its remaining
+/// snapshots: a client restores from one of those snapshots and only ever needs
+/// updates past its `covered_seq`, so an update with `seq <= MIN(covered_seq)` is
+/// redundant for every possible restore point. Documents with no snapshot yet are
+/// skipped (nothing covers their updates).
+///
+/// This is the delta index's only garbage collector for a long-lived document.
+/// The `updates.snapshot_id -> snapshots(id)` FK was dropped (see the
+/// `drop_updates_snapshot_fk` migration), so deleting an old snapshot no longer
+/// cascades its deltas away; without this pass the table would grow without bound.
+/// Run once per compaction cycle, independent of snapshot deletion.
+pub async fn purge_superseded_updates(pool: &PgPool) -> Result<u64, AppError> {
+    let deleted = sqlx::query(
+        "WITH horizon AS (
+            SELECT document_id, MIN(covered_seq) AS min_covered
+            FROM snapshots
+            GROUP BY document_id
+        )
+        DELETE FROM updates u
+        USING horizon h
+        WHERE u.document_id = h.document_id AND u.seq <= h.min_covered",
+    )
+    .execute(pool)
+    .await?
+    .rows_affected();
+    Ok(deleted)
 }
 
 /// Confirms a completed S3 upload by inserting a `media` row.
@@ -274,7 +289,12 @@ pub async fn find_compactable_snapshots(
     Ok(rows)
 }
 
-/// Deletes a single snapshot row (cascades to updates via FK).
+/// Deletes a single snapshot row.
+///
+/// This does NOT touch `updates`: the `updates.snapshot_id` FK was dropped (see
+/// the `drop_updates_snapshot_fk` migration), so `snapshot_id` is now an opaque
+/// client-side correlation tag with no cascade. Superseded deltas are trimmed
+/// separately by [`purge_superseded_updates`]; the caller removes the S3 blob.
 pub async fn delete_snapshot(pool: &PgPool, snapshot_id: uuid::Uuid) -> Result<(), AppError> {
     sqlx::query("DELETE FROM snapshots WHERE id = $1")
         .bind(snapshot_id)
