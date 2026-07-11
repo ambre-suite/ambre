@@ -241,6 +241,14 @@ pub(crate) async fn handle_ephemeral(
         return;
     }
 
+    // Cap the ephemeral ciphertext before any broadcast or Redis write. A presence
+    // blob is tiny; this mirrors the `handle_update` delta cap for the fire-and-
+    // forget path so an oversized ephemeral cannot be fanned out to every
+    // subscriber and stored in the presence hash. Fire-and-forget: drop silently.
+    if eph.ciphertext.0.len() > state.config.ephemeral_max_bytes {
+        return;
+    }
+
     // Re-check membership on the same short TTL as `handle_update` (H8): a member
     // revoked mid-session must stop broadcasting presence too, not only sequenced
     // updates. Fire-and-forget, so a failed recheck just drops silently.
@@ -258,6 +266,14 @@ pub(crate) async fn handle_ephemeral(
     // are fire-and-forget (the client expects no reply here), so drop a mismatch
     // silently without an error message.
     if eph.public_data.pub_key != conn.signing_pubkey {
+        return;
+    }
+
+    // Verify the envelope signature, like `handle_update`. The relay must not
+    // broadcast (or record in the presence hash) a ciphertext the author key did
+    // not actually sign; an unsigned blob would be rejected by every recipient on
+    // open. Fire-and-forget: a bad signature is dropped silently.
+    if verify_ephemeral_signature(&eph.public_data.pub_key, &eph).is_err() {
         return;
     }
 
@@ -535,21 +551,67 @@ pub(crate) fn verify_update_signature(
     pubkey: &ambre_core::PublicKey,
     update: &ambre_protocol::Update,
 ) -> Result<(), AppError> {
+    let public_data_bytes = postcard::to_allocvec(&update.public_data).map_err(AppError::Decode)?;
+    verify_sealed_signature(
+        pubkey,
+        &update.nonce.0,
+        &update.ciphertext.0,
+        &public_data_bytes,
+        &update.commitment_tag.0,
+        &update.signature.0,
+    )
+}
+
+/// Verifies the Ed25519 signature over an [`ambre_protocol::Ephemeral`] envelope.
+///
+/// Presence/cursor blobs are relayed and written to the Redis presence hash. The
+/// durable `Update` path is signature-checked; without the same check here the
+/// relay would broadcast an unauthenticated ciphertext under an author key,
+/// which every recipient's client would then reject on open (a presence-display
+/// DoS). The transcript matches `verify_update_signature` byte-for-byte, with the
+/// `aad` being the postcard of the EPHEMERAL public data.
+pub(crate) fn verify_ephemeral_signature(
+    pubkey: &ambre_core::PublicKey,
+    ephemeral: &ambre_protocol::Ephemeral,
+) -> Result<(), AppError> {
+    let public_data_bytes =
+        postcard::to_allocvec(&ephemeral.public_data).map_err(AppError::Decode)?;
+    verify_sealed_signature(
+        pubkey,
+        &ephemeral.nonce.0,
+        &ephemeral.ciphertext.0,
+        &public_data_bytes,
+        &ephemeral.commitment_tag.0,
+        &ephemeral.signature.0,
+    )
+}
+
+/// Shared Ed25519 verification over the length-prefixed sealed-envelope transcript
+/// `len(nonce)||nonce || len(ciphertext)||ciphertext || len(public_data)||public_data
+/// || len(commitment_tag)||commitment_tag` (every `len` a `u32` LE), matching
+/// `ambre_crypto::signature::message`. Factored out so the `Update` and
+/// `Ephemeral` paths cannot drift apart.
+fn verify_sealed_signature(
+    pubkey: &ambre_core::PublicKey,
+    nonce: &[u8],
+    ciphertext: &[u8],
+    public_data_bytes: &[u8],
+    commitment_tag: &[u8],
+    signature: &[u8; 64],
+) -> Result<(), AppError> {
     use ed25519_dalek::{Signature as DalekSig, VerifyingKey};
 
-    let public_data_bytes = postcard::to_allocvec(&update.public_data).map_err(AppError::Decode)?;
-
     let mut signed_data = Vec::new();
-    push_framed(&mut signed_data, &update.nonce.0);
-    push_framed(&mut signed_data, &update.ciphertext.0);
-    push_framed(&mut signed_data, &public_data_bytes);
-    push_framed(&mut signed_data, &update.commitment_tag.0);
+    push_framed(&mut signed_data, nonce);
+    push_framed(&mut signed_data, ciphertext);
+    push_framed(&mut signed_data, public_data_bytes);
+    push_framed(&mut signed_data, commitment_tag);
 
     let vk = VerifyingKey::from_bytes(pubkey.as_array()).map_err(|_| AppError::InvalidSignature)?;
-    let sig = DalekSig::from_slice(&update.signature.0).map_err(|_| AppError::InvalidSignature)?;
+    let sig = DalekSig::from_slice(signature).map_err(|_| AppError::InvalidSignature)?;
 
     // Strict verification (canonical S, no small-order A) so a relayed signature
-    // cannot be malleated into a second valid signature over the same update.
+    // cannot be malleated into a second valid signature over the same envelope.
     vk.verify_strict(&signed_data, &sig)
         .map_err(|_| AppError::InvalidSignature)?;
 
@@ -822,7 +884,10 @@ mod ephemeral_binding_tests {
         }
     }
 
-    fn ephemeral_from(pub_key: PublicKey, doc_id: DocumentId) -> Ephemeral {
+    /// An unsigned ephemeral (all-zero signature) under `pub_key`. Used only for
+    /// the forged-author-key path, which is dropped by the identity check before
+    /// the signature is ever examined.
+    fn unsigned_ephemeral(pub_key: PublicKey, doc_id: DocumentId) -> Ephemeral {
         Ephemeral {
             ciphertext: Ciphertext(vec![1, 2, 3]),
             nonce: Nonce([0u8; 24]),
@@ -836,6 +901,38 @@ mod ephemeral_binding_tests {
         }
     }
 
+    /// A properly signed ephemeral: the transcript matches
+    /// `verify_ephemeral_signature`, so the relay accepts and records it.
+    fn signed_ephemeral(
+        signing_key: &ed25519_dalek::SigningKey,
+        pub_key: &PublicKey,
+        doc_id: DocumentId,
+        ciphertext: Vec<u8>,
+    ) -> Ephemeral {
+        use ed25519_dalek::Signer;
+        let public_data = EphemeralPublicData {
+            document_id: doc_id,
+            pub_key: pub_key.clone(),
+            counter: Counter(1),
+        };
+        let nonce = Nonce([5u8; 24]);
+        let commitment_tag = CommitmentTag([6u8; 32]);
+        let public_data_bytes = postcard::to_allocvec(&public_data).unwrap();
+        let mut signed_data = Vec::new();
+        push_framed(&mut signed_data, &nonce.0);
+        push_framed(&mut signed_data, &ciphertext);
+        push_framed(&mut signed_data, &public_data_bytes);
+        push_framed(&mut signed_data, &commitment_tag.0);
+        let sig = signing_key.sign(&signed_data);
+        Ephemeral {
+            ciphertext: Ciphertext(ciphertext),
+            nonce,
+            public_data,
+            commitment_tag,
+            signature: Signature(sig.to_bytes()),
+        }
+    }
+
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn forged_author_key_writes_no_presence() {
@@ -843,7 +940,8 @@ mod ephemeral_binding_tests {
             return;
         };
         let doc_id = DocumentId::new();
-        let session_key = PublicKey::from_array([1u8; 32]);
+        let signing_key = ed25519_dalek::SigningKey::from_bytes(&[21u8; 32]);
+        let session_key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
         let forged_key = PublicKey::from_array([2u8; 32]);
         let presence_key = format!("doc:{doc_id}:presence");
         let _ = state.redis.del([&presence_key]).await;
@@ -851,7 +949,7 @@ mod ephemeral_binding_tests {
         let mut conn = conn_with(session_key.clone(), doc_id);
 
         // A forged author key must be dropped before any Redis write.
-        handle_ephemeral(&state, &mut conn, ephemeral_from(forged_key, doc_id)).await;
+        handle_ephemeral(&state, &mut conn, unsigned_ephemeral(forged_key, doc_id)).await;
         let after_forged: std::collections::HashMap<String, String> =
             state.redis.hgetall(&presence_key).await.unwrap();
         assert!(
@@ -859,11 +957,11 @@ mod ephemeral_binding_tests {
             "forged author key must not write a presence entry"
         );
 
-        // The session's own key is accepted and recorded.
+        // The session's own key with a valid signature is accepted and recorded.
         handle_ephemeral(
             &state,
             &mut conn,
-            ephemeral_from(session_key.clone(), doc_id),
+            signed_ephemeral(&signing_key, &session_key, doc_id, vec![1, 2, 3]),
         )
         .await;
         let after_valid: std::collections::HashMap<String, String> =
@@ -874,6 +972,72 @@ mod ephemeral_binding_tests {
             "the session key must record exactly one presence entry"
         );
         assert!(after_valid.contains_key(&session_key.to_hex()));
+
+        let _ = state.redis.del([&presence_key]).await;
+    }
+
+    /// An ephemeral carrying the correct author key but an invalid signature must
+    /// be dropped before any presence write (the relay must not broadcast an
+    /// unauthenticated blob).
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn bad_signature_writes_no_presence() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let doc_id = DocumentId::new();
+        let signing_key = ed25519_dalek::SigningKey::from_bytes(&[22u8; 32]);
+        let session_key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let presence_key = format!("doc:{doc_id}:presence");
+        let _ = state.redis.del([&presence_key]).await;
+
+        let mut conn = conn_with(session_key.clone(), doc_id);
+
+        // Correct author key, but tamper the ciphertext after signing.
+        let mut eph = signed_ephemeral(&signing_key, &session_key, doc_id, vec![1, 2, 3]);
+        eph.ciphertext = Ciphertext(vec![9, 9, 9]);
+        handle_ephemeral(&state, &mut conn, eph).await;
+
+        let after: std::collections::HashMap<String, String> =
+            state.redis.hgetall(&presence_key).await.unwrap();
+        assert!(
+            after.is_empty(),
+            "an invalid signature must not write a presence entry"
+        );
+
+        let _ = state.redis.del([&presence_key]).await;
+    }
+
+    /// An oversized ephemeral ciphertext must be dropped before any presence
+    /// write, mirroring the delta size cap on the durable path.
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn oversized_ephemeral_writes_no_presence() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        // Tighten the cap so the test payload is unambiguously oversized.
+        Arc::get_mut(&mut state).unwrap().config = Arc::new(crate::state::Config {
+            ephemeral_max_bytes: 8,
+            ..Default::default()
+        });
+        let doc_id = DocumentId::new();
+        let signing_key = ed25519_dalek::SigningKey::from_bytes(&[23u8; 32]);
+        let session_key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let presence_key = format!("doc:{doc_id}:presence");
+        let _ = state.redis.del([&presence_key]).await;
+
+        let mut conn = conn_with(session_key.clone(), doc_id);
+        // 9 bytes > the 8-byte cap: dropped before the signature check even runs.
+        let eph = signed_ephemeral(&signing_key, &session_key, doc_id, vec![0u8; 9]);
+        handle_ephemeral(&state, &mut conn, eph).await;
+
+        let after: std::collections::HashMap<String, String> =
+            state.redis.hgetall(&presence_key).await.unwrap();
+        assert!(
+            after.is_empty(),
+            "an oversized ephemeral must not write a presence entry"
+        );
 
         let _ = state.redis.del([&presence_key]).await;
     }
@@ -1135,5 +1299,74 @@ mod ed25519_tests {
         };
 
         assert!(verify_update_signature(&pubkey, &tampered).is_err());
+    }
+
+    fn sign_ephemeral(
+        signing_key: &SigningKey,
+        pubkey: &PublicKey,
+        doc_id: DocumentId,
+        ciphertext: Vec<u8>,
+    ) -> ambre_protocol::Ephemeral {
+        use ambre_protocol::messages::Counter;
+        use ambre_protocol::public_data::EphemeralPublicData;
+        let public_data = EphemeralPublicData {
+            document_id: doc_id,
+            pub_key: pubkey.clone(),
+            counter: Counter(1),
+        };
+        let nonce = Nonce([2u8; 24]);
+        let commitment_tag = CommitmentTag([3u8; 32]);
+        let public_data_bytes = postcard::to_allocvec(&public_data).unwrap();
+        let mut signed_data = Vec::new();
+        push_framed(&mut signed_data, &nonce.0);
+        push_framed(&mut signed_data, &ciphertext);
+        push_framed(&mut signed_data, &public_data_bytes);
+        push_framed(&mut signed_data, &commitment_tag.0);
+        let sig = signing_key.sign(&signed_data);
+        ambre_protocol::Ephemeral {
+            ciphertext: Ciphertext(ciphertext),
+            nonce,
+            public_data,
+            commitment_tag,
+            signature: Signature(sig.to_bytes()),
+        }
+    }
+
+    #[test]
+    fn valid_ephemeral_signature_is_accepted() {
+        let signing_key = SigningKey::from_bytes(&[11u8; 32]);
+        let pubkey = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let doc_id = DocumentId::from_bytes([9u8; 16]);
+        let eph = sign_ephemeral(&signing_key, &pubkey, doc_id, vec![1, 2, 3, 4]);
+        verify_ephemeral_signature(&pubkey, &eph).expect("valid ephemeral signature accepted");
+    }
+
+    #[test]
+    fn tampered_ephemeral_ciphertext_rejects_signature() {
+        let signing_key = SigningKey::from_bytes(&[12u8; 32]);
+        let pubkey = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let doc_id = DocumentId::from_bytes([9u8; 16]);
+        let mut eph = sign_ephemeral(&signing_key, &pubkey, doc_id, vec![1, 2, 3, 4]);
+        // Flip the ciphertext after signing: the signature must no longer verify.
+        eph.ciphertext = Ciphertext(vec![9, 9, 9, 9]);
+        assert!(verify_ephemeral_signature(&pubkey, &eph).is_err());
+    }
+
+    #[test]
+    fn unsigned_ephemeral_is_rejected() {
+        // The old handler broadcast this (all-zero signature) unverified.
+        let pubkey = PublicKey::from_array([7u8; 32]);
+        let eph = ambre_protocol::Ephemeral {
+            ciphertext: Ciphertext(vec![1, 2, 3]),
+            nonce: Nonce([0u8; 24]),
+            public_data: ambre_protocol::public_data::EphemeralPublicData {
+                document_id: DocumentId::from_bytes([0u8; 16]),
+                pub_key: pubkey.clone(),
+                counter: ambre_protocol::messages::Counter(1),
+            },
+            commitment_tag: CommitmentTag([0u8; 32]),
+            signature: Signature([0u8; 64]),
+        };
+        assert!(verify_ephemeral_signature(&pubkey, &eph).is_err());
     }
 }
