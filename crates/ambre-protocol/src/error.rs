@@ -32,32 +32,18 @@ pub enum SerializationError {
     Postcard(#[from] postcard::Error),
 }
 
-/// Errors related to field validation.
+/// Errors related to field validation, enforced by the `validate()` methods on
+/// the wire messages (see [`crate::messages`]).
+///
+/// Length invariants (nonce = 24, commitment tag = 32, signature = 64, public
+/// key = 32) are intentionally absent: those fields are fixed-size arrays, so
+/// postcard decoding already rejects any other length. Only invariants that a
+/// well-formed decode can still violate live here.
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum ValidationError {
-    /// Nonce length is incorrect (expected 24 bytes).
-    #[error("invalid nonce length: expected 24 bytes, got {0}")]
-    InvalidNonceLength(usize),
-
-    /// Commitment tag length is incorrect (expected 32 bytes).
-    #[error("invalid commitment tag length: expected 32 bytes, got {0}")]
-    InvalidCommitmentTagLength(usize),
-
-    /// Signature length is incorrect (expected 64 bytes).
-    #[error("invalid signature length: expected 64 bytes, got {0}")]
-    InvalidSignatureLength(usize),
-
-    /// Public key length is incorrect (expected 32 bytes).
-    #[error("invalid public key length: expected 32 bytes, got {0}")]
-    InvalidPublicKeyLength(usize),
-
     /// Ciphertext is empty (must contain at least one byte).
     #[error("ciphertext cannot be empty")]
     EmptyCiphertext,
-
-    /// Snapshot proof is empty (must contain at least one byte).
-    #[error("snapshot proof cannot be empty")]
-    EmptySnapshotProof,
 
     /// Clock value is zero (clocks start at 1).
     #[error("clock must be greater than zero")]
@@ -70,8 +56,4 @@ pub enum ValidationError {
     /// The same public key appears twice in `parent_snapshot_update_clocks`.
     #[error("duplicate public key in parent snapshot update clocks")]
     DuplicatePublicKey,
-
-    /// The snapshot ID equals the parent snapshot ID (no self‑reference).
-    #[error("snapshot ID cannot be equal to its parent snapshot ID")]
-    SelfReferentialSnapshot,
 }

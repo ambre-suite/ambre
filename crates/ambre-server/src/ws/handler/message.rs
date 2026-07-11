@@ -79,6 +79,18 @@ pub(crate) async fn handle_update(
         return;
     }
 
+    // Reject a structurally valid but semantically meaningless delta (empty
+    // ciphertext, zero clock) before any DB/Redis work. Cheap, and it keeps the
+    // durable index and the per-author clock hash free of no-op entries.
+    if let Err(e) = update.validate() {
+        let err = encode_server_msg(&WsServerMsg::Error {
+            code: 400,
+            message: format!("invalid update: {e}"),
+        });
+        let _ = outbound_tx.send(err).await;
+        return;
+    }
+
     // Re-validate membership on a short TTL (H8): the `Subscribe`-time check is
     // stale after a mid-session revoke, so a revoked member could otherwise keep
     // writing accepted, sequenced updates until they disconnect. On failure the
@@ -246,6 +258,13 @@ pub(crate) async fn handle_ephemeral(
     // forget path so an oversized ephemeral cannot be fanned out to every
     // subscriber and stored in the presence hash. Fire-and-forget: drop silently.
     if eph.ciphertext.0.len() > state.config.ephemeral_max_bytes {
+        return;
+    }
+
+    // Reject a structurally valid but meaningless presence blob (empty ciphertext,
+    // zero counter) before broadcasting or writing the presence hash. Fire-and-
+    // forget, so drop silently like the other ephemeral rejections.
+    if eph.validate().is_err() {
         return;
     }
 
