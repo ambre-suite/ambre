@@ -84,6 +84,17 @@ pub struct Config {
     /// the header is ignored and the socket peer address is used, so a client
     /// cannot spoof its rate-limit bucket by forging the header.
     pub trust_proxy_headers: bool,
+    /// Sustained inbound-message rate per WebSocket connection, in messages per
+    /// second (default 60). The WS *upgrade* is rate-limited, but once a socket
+    /// is open each `Update` drives a Postgres INSERT + Redis RPUSH + S3 pending
+    /// write + PubSub fan-out; without a per-connection bound an authorized
+    /// `editor` flooding updates is a storage/cost amplification. Enforced by an
+    /// in-memory token bucket, so it costs no Redis round-trip.
+    pub ws_msg_rate_per_sec: u32,
+    /// Burst allowance for the per-connection message bucket (default 120). Lets a
+    /// client send a short batch (e.g. the initial subscribes plus a rapid edit
+    /// burst) without being throttled, while the sustained rate stays capped.
+    pub ws_msg_burst: u32,
 }
 
 impl Default for Config {
@@ -102,6 +113,8 @@ impl Default for Config {
             oidc_google_redirect_uri: String::new(),
             dev_mode: false,
             trust_proxy_headers: false,
+            ws_msg_rate_per_sec: 60,
+            ws_msg_burst: 120,
         }
     }
 }

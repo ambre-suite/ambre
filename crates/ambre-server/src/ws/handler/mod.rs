@@ -133,6 +133,12 @@ struct WsConnectionState {
     /// [`REPLAY_MIN_INTERVAL`] against replay amplification.
     last_replay_at: HashMap<DocumentId, Instant>,
     channel_subscriptions: HashSet<ChannelId>,
+    /// Per-connection inbound-message rate limiter. The WS upgrade is rate-limited
+    /// once, but a long-lived socket is otherwise unbounded: each `Update` drives
+    /// a Postgres + Redis + S3 write and a fan-out, so an authorized flooder is a
+    /// storage/cost amplification. One token is spent per inbound message; when
+    /// the bucket is empty the message is rejected before any handler runs.
+    msg_bucket: TokenBucket,
 }
 
 async fn handle_ws(
@@ -173,6 +179,7 @@ async fn handle_ws(
         doc_write_allowed: HashMap::new(),
         last_replay_at: HashMap::new(),
         channel_subscriptions: HashSet::new(),
+        msg_bucket: TokenBucket::new(state.config.ws_msg_burst, state.config.ws_msg_rate_per_sec),
     };
 
     let (mut ws_sink, mut ws_stream) = socket.split();
@@ -219,6 +226,21 @@ async fn handle_ws(
                 continue;
             }
         };
+
+        // Per-connection message rate limit (#1). Spend one token per inbound
+        // message before dispatching: an open socket is otherwise unbounded, and
+        // an `Update`/`Ephemeral` flood turns into a Postgres + Redis + S3 + fan-out
+        // amplification. When the bucket is empty we reject with 429 and drop the
+        // message before any handler (and any durable write) runs. The token
+        // costs no Redis round-trip; it lives entirely on `conn`.
+        if !conn.msg_bucket.try_consume(Instant::now()) {
+            let err = encode_server_msg(&WsServerMsg::Error {
+                code: 429,
+                message: "message rate limit exceeded".into(),
+            });
+            let _ = outbound_tx.send(err).await;
+            continue;
+        }
 
         match client_msg {
             WsClientMsg::Subscribe { document_id } => {
@@ -324,3 +346,8 @@ async fn handle_ws(
 // reached (and their pub(crate) fns brought into scope) via `use self::message::*`.
 mod message;
 use message::*;
+
+// Per-connection inbound-message rate limiter, kept in its own module so the
+// pure token-bucket logic is unit-testable without a socket.
+mod token_bucket;
+use token_bucket::TokenBucket;

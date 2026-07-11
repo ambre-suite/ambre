@@ -558,7 +558,7 @@ pub(crate) fn verify_update_signature(
 
 #[cfg(test)]
 mod postcard_tests {
-    use ambre_core::{DocumentId, PublicKey, SnapshotId, UserId};
+    use ambre_core::{DocumentId, PublicKey, SnapshotId};
     use ambre_protocol::messages::{
         Ciphertext, Clock, CommitmentTag, Counter, Ephemeral, Nonce, Seq, SeqUpdate, Signature,
         Update,
@@ -816,6 +816,9 @@ mod ephemeral_binding_tests {
             doc_write_allowed: HashMap::from([(doc_id, true)]),
             last_replay_at: HashMap::new(),
             channel_subscriptions: HashSet::new(),
+            // A wide bucket so these tests exercise their own concern, not the
+            // rate limit (which the loop enforces, covered by its own test).
+            msg_bucket: TokenBucket::new(1000, 1000),
         }
     }
 
@@ -929,6 +932,9 @@ mod delta_size_cap_tests {
             doc_write_allowed: HashMap::from([(doc_id, true)]),
             last_replay_at: HashMap::new(),
             channel_subscriptions: HashSet::new(),
+            // A wide bucket so these tests exercise their own concern, not the
+            // rate limit (which the loop enforces, covered by its own test).
+            msg_bucket: TokenBucket::new(1000, 1000),
         }
     }
 
