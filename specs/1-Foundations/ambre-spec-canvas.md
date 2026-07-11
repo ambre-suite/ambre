@@ -4,7 +4,7 @@
 
 > GPU pipeline, frame lifecycle, GPU bootstrap + rAF driver (`bootstrap_gpu` / `start_raf_loop`), assets (icons, fonts, GlyphAtlas), `DrawSurface` abstraction, PDF export (krilla), and HiDPI handling. The frame **driver** (`FrameHost`) and the closed `AppView` registry live one layer up in `ambre-app` (see §A). This document covers **only content rendering** in the `<canvas>` (`ambre-canvas` crate), shared across all applications. The application **chrome** (menus, toolbars, dialogs, panels) is **DOM/Leptos** (`ambre-spec-chrome.md`); the canvas/DOM boundary, command registry, and design tokens are in the umbrella `ambre-spec-ui.md`. Everything executes in the **UI Thread** (page's main thread) — no business logic, no network, no crypto in this layer.
 >
-> **Architecture note.** The client is a single WASM binary with 3 `wasm_thread` threads sharing memory over `flume` channels. On the rendering side: (1) the layer lives in the **`ambre-canvas`** crate; (2) the displayed content arrives from the Logic thread as **typed `UiEvent` values** drained from a `flume` channel (no serialization on the UI side). See `ambre-spec-architecture.md`.
+> **Architecture note.** Per the two-instance model (`ambre-spec-architecture.md §1/§2.B`), the **Main** WASM instance hosts the **UI thread** and the **Logic thread** (a `wasm_thread` Web Worker) sharing one linear memory over `flume`; the **Sync** worker is a *separate* WASM instance over `postMessage`. Rendering lives in the UI thread. On the rendering side: (1) the layer lives in the **`ambre-canvas`** crate; (2) the displayed content arrives from the Logic thread as **typed `UiEvent` values** drained from a `flume` channel (no serialization on the UI side). See `ambre-spec-architecture.md`.
 
 ---
 
@@ -363,7 +363,7 @@ The rendering layer consists of pure drawing primitives. ZK audit:
 | Icon atlas blob (vertex buffers) | < 200 KB | ~500 tessellated icons |
 | `image` (PNG/JPEG/WebP) | ~60 KB | Feature-flagged, only activated decoders |
 
-> **Note:** there is **only a single WASM binary** (3 threads, shared memory); wgpu/lyon/swash are linked once and deduplicated with the rest. See `ambre-spec-architecture.md` §5 for the global binary budget < 2 MB gzip.
+> **Note:** the heavy render crates live in the **Main** instance (UI + Logic, shared memory); wgpu/lyon/swash are linked once there and deduplicated with the rest (the separate Sync instance links none of them). See `ambre-spec-architecture.md` §5 for the global binary budget < 2 MB gzip.
 
 ### C. UI Thread Memory Budget
 

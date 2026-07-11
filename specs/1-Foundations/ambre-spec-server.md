@@ -157,7 +157,11 @@ CREATE TABLE updates (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     author_pubkey BYTEA NOT NULL,
-    snapshot_id UUID NOT NULL REFERENCES snapshots(id),
+    snapshot_id UUID NOT NULL,      -- opaque client-side base tag; NO FK to
+                                    -- snapshots(id): the server never dereferences
+                                    -- it, and a document's first deltas reference a
+                                    -- base snapshot the client invents and never
+                                    -- uploads (see migration drop_updates_snapshot_fk)
     clock       BIGINT NOT NULL,
     seq         BIGINT NOT NULL,
     s3_key      TEXT NOT NULL,
@@ -280,9 +284,11 @@ doc:{doc_id}:presence          → HASH { pub_key_hex: presence_enc_b64 }
                                   MVP: periodic sweep (last_seen > 15s via auxiliary field)
                                   Valkey 8+: HEXPIRE 15s per field
 
-# Active WebSocket sessions per document
-# Populated at Subscribe, cleaned at Unsubscribe or multiplexed WS disconnect
-doc:{doc_id}:sessions          → HASH { connection_id: "1" }
+# (removed) doc:{doc_id}:sessions -- a per-document connection registry was
+# specced but never consumed: live delivery runs entirely through the doc:{doc_id}
+# PubSub channel + the in-process PubSubHub, which never reads such a hash. It was
+# dropped to save two hot-path Redis writes per (un)subscribe. If targeted routing
+# is ever needed (e.g. force-disconnect on revoke), reintroduce it WITH a TTL.
 
 # Reverse lookup user → open documents
 user:{user_id}:open_docs       → SET { doc_id_1, doc_id_2 }
@@ -540,8 +546,10 @@ Upload Snapshot (compaction initiator)
     │             update_clocks, s3_key, covered_seq }
     │      covered_seq = the author's high-water `last_seq` at snapshot time
     │      → server INSERTs snapshots PostgreSQL (incl. covered_seq)
-    │      → server purges prior deltas (seq <= clocks in update_clocks)
     │      → server Publishes doc:{doc_id} → WsServerMsg::SnapshotAvailable { snapshot_id }
+    │      (delta purge is NOT done here: the hourly compaction job trims the
+    │       updates index to seq <= MIN(covered_seq) of a document's retained
+    │       snapshots, the only GC now that updates.snapshot_id has no FK cascade)
 
 Download Snapshot (on open, and on SnapshotAvailable)
   Client (WASM Sync thread)
@@ -745,7 +753,7 @@ The full flow is specified in `ambre-spec-sync.md` §3. The initiator client cal
 ))
 ```
 
-> ⚠️ **COOP/COEP Note (REQUIRED).** The client runs 3 `wasm_thread` threads sharing a **linear memory** (`SharedArrayBuffer`) — see `ambre-spec-architecture.md §2.B`. `SharedArrayBuffer` requires the page to be **cross-origin isolated**, so the headers `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` (or `credentialless`) **must** be served on the main HTML document (and the worker bootstrap). Consequence to document for self-hosting: any embedded cross-origin resource must carry appropriate `Cross-Origin-Resource-Policy` / CORS, otherwise it is blocked. This is the accepted cost of copy-free typed `flume` transport across threads.
+> ⚠️ **COOP/COEP Note (REQUIRED).** The client's **Main** instance shares a **linear memory** (`SharedArrayBuffer`) between its UI and Logic threads (`wasm_thread`); the separate Sync worker inherits cross-origin isolation from it — see `ambre-spec-architecture.md §2.B`. `SharedArrayBuffer` requires the page to be **cross-origin isolated**, so the headers `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` (or `credentialless`) **must** be served on the main HTML document (and the worker bootstrap). Consequence to document for self-hosting: any embedded cross-origin resource must carry appropriate `Cross-Origin-Resource-Policy` / CORS, otherwise it is blocked. This is the accepted cost of copy-free typed `flume` transport across threads.
 
 TLS via **rustls** (Caddy as terminator). No OpenSSL in the Axum chain.
 
@@ -816,7 +824,7 @@ CI: `cargo test` with `DATABASE_URL` pointing to test PostgreSQL. `#[cfg(feature
 | Global S3 flush batch (15s cycle) | < 2s for 1000 deltas | Parallel S3 upload |
 | Presence sweep MVP (30s) | < 10ms | Redis SCAN |
 
-**Horizontal scalability:** the server is stateless at the application level. State is in Redis (PubSub, sessions) and PostgreSQL. Multiple Axum instances coexist behind Caddy. Redis PubSub ensures WebSocket broadcasts reach clients on any instance.
+**Horizontal scalability:** the server is stateless at the application level. State is in Redis (PubSub, refresh tokens, presence, pending deltas, clocks/seq) and PostgreSQL. Multiple Axum instances coexist behind Caddy. Redis PubSub ensures WebSocket broadcasts reach clients on any instance.
 
 **Memory:** no in-process blob cache. Buffer `LIST doc:{id}:pending` in Redis. Average delta ~1 KB. 15s buffer on an active document ≈ 50 deltas × 1 KB = ~50 KB per open document.
 
@@ -1023,7 +1031,7 @@ No push notifications in MVP. The client queries `GET /api/channels/unread` on r
 - [x] ~~CSRF protection (Double Submit Cookie)~~ -- **removed**: Bearer JWT carries no ambient credential, so there is no cross-site request forgery surface (see sec.8).
 - [x] Organizations feature + Shamir's Secret Sharing (crate `sharks`)
 - [x] Route `POST /api/organizations/{id}/recover/{uid}`
-- [x] Server-side compaction (cron: purge old snapshots > 10 per document)
+- [x] Server-side compaction (hourly cron: purge old snapshots > 10 per document, then trim the `updates` index to `seq <= MIN(covered_seq)` of a document's retained snapshots)
 - [x] S3 lifecycle policies (messaging segments > 12 months)
 - [x] Load tests (goose: 1000 simultaneous users, 100 active documents)
 - [x] Valkey 8+ migration (per-field HEXPIRE for presence)

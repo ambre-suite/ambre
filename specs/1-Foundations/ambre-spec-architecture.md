@@ -163,7 +163,7 @@ The frame driver `host::run_with` and the closed `AppView` registry live in `amb
 
 **Multi-document sync:** the Sync thread manages **N sync sessions in parallel** (`HashMap<DocumentId, SyncDocumentState>`) over a **single multiplexed WebSocket**. Required for embedded documents (a Toile can include a Prose + a Trame, each with its `DocumentKey` and `LoroDoc`). Demultiplexing by `document_id`. `OpenDocument` → `Subscribe`, `CloseDocument` → `Unsubscribe`. WS opened at `Unlock`, closed at `Logout`; reconnection → automatic resubscribe.
 
-**Embedded documents (Toile → Prose/Trame):** MVP read-only live (the Logic thread opens a viewer state, receives `RemoteUpdate`, never emits `SendUpdate`); post-MVP editable in-place (input routing by focus, dedicated spec). The nesting relationship is stored in the Toile's `LoroDoc` (encrypted content, server-invisible). No embedding Postgres table.
+**Embedded documents (Toile → Prose/Trame):** MVP **editable in-place** (the Logic thread opens a full child `DocState`, applies its `RemoteUpdate`s **and** emits `SendUpdate` for it, role-gated; input routed to the focused embed — see `ambre-spec-toile-logic.md §2.I`). The nesting relationship is stored in the Toile's `LoroDoc` (encrypted content, server-invisible). No embedding Postgres table.
 
 ### C. Transport & Bootstrap (`ambre-app::main` + `ambre-sync::worker`)
 
@@ -670,7 +670,7 @@ impl MasterSeed {
 - [ ] Audit wasm-only warnings (`-A warnings` masks dead code on `ambre-app`/`ambre-canvas::host`/`ambre-sync`); confirm `CanvasRenderingContext2d`/`ImageData` are dead.
 
 ### ARCH P5 — Remaining Applications
-- [ ] `ambre-toile` (R-Tree + read-only embeds), `ambre-murmure` (channels, segments managed by Sync).
+- [ ] `ambre-toile` (R-Tree + in-place editable embeds, role-gated), `ambre-murmure` (channels, segments managed by Sync).
 - [ ] Typed Murmure channel surface: replace the opaque `LogicCommand::SendChannelMessage { payload: Vec<u8> }` envelope with a typed `AppCommand::Murmure(MurmureCommand)` family, like the document surface (`AppCommand::Trame`). Murmure is currently a stub, so the command plane stays `Vec<u8>` for now. *(Note: only the command **envelope** becomes typed; the channel **message content** stays real network `Vec<u8>` per the content-plane rule above. Tracked in code: `crates/ambre-bus/src/logic.rs` `SendChannelMessage`.)*
 - [ ] Composition (`AppCommand`/`TrameOutcome` recursion routed by `Uuid`). Encrypted presence. TOFU UI. Meetings (WebRTC signaling).
 
