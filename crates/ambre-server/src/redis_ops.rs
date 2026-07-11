@@ -372,36 +372,6 @@ pub async fn refresh_consume(redis: &Client, token: &str) -> Result<Option<Refre
     Ok(Some(data))
 }
 
-/// Registers this WebSocket session as an active subscriber of the document.
-///
-/// Used for per-document presence tracking and broadcast targeting.
-pub async fn doc_subscribe_session(
-    redis: &Client,
-    document_id: &ambre_core::DocumentId,
-    session_id: &str,
-) -> Result<(), AppError> {
-    let key = format!("doc:{document_id}:sessions");
-    redis
-        .hset(&key, [(session_id, "1")])
-        .await
-        .map_err(|e| AppError::Redis(format!("doc subscribe session: {e}")))?;
-    Ok(())
-}
-
-/// Removes this WebSocket session from the document's active subscribers.
-pub async fn doc_unsubscribe_session(
-    redis: &Client,
-    document_id: &ambre_core::DocumentId,
-    session_id: &str,
-) -> Result<(), AppError> {
-    let key = format!("doc:{document_id}:sessions");
-    redis
-        .hdel(&key, [session_id])
-        .await
-        .map_err(|e| AppError::Redis(format!("doc unsubscribe session: {e}")))?;
-    Ok(())
-}
-
 /// Publishes a message to the Redis PubSub channel for the given document.
 ///
 /// All active subscribers (across Axum instances) receive the message.
