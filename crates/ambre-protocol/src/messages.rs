@@ -3,9 +3,11 @@
 //! This module defines the core encrypted payloads that travel between client and server.
 //! All fields are opaque to the Blind Relay; only the public data is visible.
 
+use crate::error::ValidationError;
 use crate::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
 use serde::{Deserialize, Serialize};
 use serde_bytes;
+use std::collections::HashSet;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Newtype wrappers for binary buffers
@@ -63,6 +65,23 @@ pub struct Update {
     pub signature: Signature,
 }
 
+impl Update {
+    /// Checks the semantic invariants a well-formed decode can still violate:
+    /// a non-empty ciphertext and a clock that started at 1. Fixed-size fields
+    /// (nonce, tags, keys) are already length-checked by postcard. Called on the
+    /// relay's decode path before a delta is signed-checked, sequenced, and
+    /// persisted, so a structurally valid but meaningless delta is refused early.
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        if self.ciphertext.0.is_empty() {
+            return Err(ValidationError::EmptyCiphertext);
+        }
+        if self.public_data.clock.0 == 0 {
+            return Err(ValidationError::ZeroClock);
+        }
+        Ok(())
+    }
+}
+
 /// An encrypted, signed snapshot carrying a full CRDT state.
 ///
 /// Snapshots are uploaded/downloaded via S3 presigned URLs, not through WebSocket.
@@ -79,6 +98,29 @@ pub struct Snapshot {
     pub commitment_tag: CommitmentTag,
     /// Ed25519 signature of (nonce || ciphertext || public_data_bytes || commitment_tag)
     pub signature: Signature,
+}
+
+impl Snapshot {
+    /// Checks the semantic invariants of a decoded snapshot: a non-empty
+    /// ciphertext and no author appearing twice in `parent_snapshot_update_clocks`.
+    /// Called by the client before upload (snapshots travel client-to-S3 directly,
+    /// so the Blind Relay never sees this struct to enforce it).
+    ///
+    /// The parent proof is deliberately NOT required to be non-empty: the first
+    /// snapshot of a document has the genesis base as its parent and carries no
+    /// proof (see [`ambre_core::SnapshotId::genesis`]).
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        if self.ciphertext.0.is_empty() {
+            return Err(ValidationError::EmptyCiphertext);
+        }
+        let mut seen = HashSet::new();
+        for (pub_key, _) in &self.public_data.parent_snapshot_update_clocks {
+            if !seen.insert(pub_key) {
+                return Err(ValidationError::DuplicatePublicKey);
+            }
+        }
+        Ok(())
+    }
 }
 
 /// An encrypted, signed ephemeral message (cursors, presence, etc.).
@@ -99,6 +141,22 @@ pub struct Ephemeral {
     pub signature: Signature,
 }
 
+impl Ephemeral {
+    /// Checks the semantic invariants a well-formed decode can still violate:
+    /// a non-empty ciphertext and a counter that started at 1. Called on the
+    /// relay's decode path before the presence blob is broadcast and written to
+    /// the presence hash.
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        if self.ciphertext.0.is_empty() {
+            return Err(ValidationError::EmptyCiphertext);
+        }
+        if self.public_data.counter.0 == 0 {
+            return Err(ValidationError::ZeroCounter);
+        }
+        Ok(())
+    }
+}
+
 /// An update paired with its server‑assigned sequence number.
 ///
 /// Used in `MissingUpdates` responses to allow clients to catch up.
@@ -108,4 +166,131 @@ pub struct SeqUpdate {
     pub seq: Seq,
     /// The update itself.
     pub update: Update,
+}
+
+#[cfg(test)]
+mod validate_tests {
+    use super::*;
+    use crate::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
+    use ambre_core::{DocumentId, PublicKey, SnapshotId};
+
+    fn update(cipher: Vec<u8>, clock: u64) -> Update {
+        Update {
+            ciphertext: Ciphertext(cipher),
+            nonce: Nonce([0u8; 24]),
+            public_data: UpdatePublicData {
+                document_id: DocumentId::from_bytes([1u8; 16]),
+                pub_key: PublicKey::from_array([2u8; 32]),
+                snapshot_id: SnapshotId::from_bytes([3u8; 16]),
+                clock: Clock(clock),
+            },
+            commitment_tag: CommitmentTag([0u8; 32]),
+            signature: Signature([0u8; 64]),
+        }
+    }
+
+    fn ephemeral(cipher: Vec<u8>, counter: u64) -> Ephemeral {
+        Ephemeral {
+            ciphertext: Ciphertext(cipher),
+            nonce: Nonce([0u8; 24]),
+            public_data: EphemeralPublicData {
+                document_id: DocumentId::from_bytes([1u8; 16]),
+                pub_key: PublicKey::from_array([2u8; 32]),
+                counter: Counter(counter),
+            },
+            commitment_tag: CommitmentTag([0u8; 32]),
+            signature: Signature([0u8; 64]),
+        }
+    }
+
+    #[test]
+    fn update_valid() {
+        assert!(update(vec![1], 1).validate().is_ok());
+    }
+
+    #[test]
+    fn update_rejects_empty_ciphertext() {
+        assert_eq!(
+            update(vec![], 1).validate(),
+            Err(ValidationError::EmptyCiphertext)
+        );
+    }
+
+    #[test]
+    fn update_rejects_zero_clock() {
+        assert_eq!(
+            update(vec![1], 0).validate(),
+            Err(ValidationError::ZeroClock)
+        );
+    }
+
+    #[test]
+    fn ephemeral_valid() {
+        assert!(ephemeral(vec![1], 1).validate().is_ok());
+    }
+
+    #[test]
+    fn ephemeral_rejects_empty_ciphertext() {
+        assert_eq!(
+            ephemeral(vec![], 1).validate(),
+            Err(ValidationError::EmptyCiphertext)
+        );
+    }
+
+    #[test]
+    fn ephemeral_rejects_zero_counter() {
+        assert_eq!(
+            ephemeral(vec![1], 0).validate(),
+            Err(ValidationError::ZeroCounter)
+        );
+    }
+
+    fn snapshot(cipher: Vec<u8>, proof: Vec<u8>, clocks: Vec<(PublicKey, Clock)>) -> Snapshot {
+        Snapshot {
+            ciphertext: Ciphertext(cipher),
+            nonce: Nonce([0u8; 24]),
+            public_data: SnapshotPublicData {
+                document_id: DocumentId::from_bytes([1u8; 16]),
+                pub_key: PublicKey::from_array([2u8; 32]),
+                snapshot_id: SnapshotId::from_bytes([3u8; 16]),
+                parent_snapshot_proof: proof,
+                parent_snapshot_update_clocks: clocks,
+            },
+            commitment_tag: CommitmentTag([0u8; 32]),
+            signature: Signature([0u8; 64]),
+        }
+    }
+
+    #[test]
+    fn snapshot_valid() {
+        let clocks = vec![
+            (PublicKey::from_array([9u8; 32]), Clock(1)),
+            (PublicKey::from_array([8u8; 32]), Clock(2)),
+        ];
+        assert!(snapshot(vec![1], vec![1], clocks).validate().is_ok());
+    }
+
+    #[test]
+    fn snapshot_valid_with_empty_genesis_proof() {
+        // The first snapshot has the genesis base as parent and no proof.
+        assert!(snapshot(vec![1], vec![], vec![]).validate().is_ok());
+    }
+
+    #[test]
+    fn snapshot_rejects_empty_ciphertext() {
+        assert_eq!(
+            snapshot(vec![], vec![1], vec![]).validate(),
+            Err(ValidationError::EmptyCiphertext)
+        );
+    }
+
+    #[test]
+    fn snapshot_rejects_duplicate_author() {
+        let dup = PublicKey::from_array([7u8; 32]);
+        let clocks = vec![(dup.clone(), Clock(1)), (dup, Clock(2))];
+        assert_eq!(
+            snapshot(vec![1], vec![1], clocks).validate(),
+            Err(ValidationError::DuplicatePublicKey)
+        );
+    }
 }

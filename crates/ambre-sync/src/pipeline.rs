@@ -63,6 +63,8 @@ pub enum PipelineError {
     DecompressTooLarge,
     #[error("public data serialization failed")]
     Postcard,
+    #[error("snapshot validation failed: {0}")]
+    Validation(#[from] ambre_protocol::error::ValidationError),
 }
 
 // ── Compression layer ─────────────────────────────────────────────────────────
@@ -237,13 +239,17 @@ pub fn seal_snapshot(
     let aad = aad_of(&public_data)?;
     let sealed = seal_payload(payload, &aad, doc_key, signing_key)?;
     let (ciphertext, nonce, commitment_tag, signature) = message_parts(sealed);
-    Ok(Snapshot {
+    let snapshot = Snapshot {
         ciphertext,
         nonce,
         public_data,
         commitment_tag,
         signature,
-    })
+    };
+    // Enforce the wire invariants before upload: the Blind Relay never sees this
+    // struct (snapshots go client-to-S3), so this is the only enforcement point.
+    snapshot.validate()?;
+    Ok(snapshot)
 }
 
 /// Verifies, decrypts and decompresses a [`Snapshot`] back to its CRDT payload.
