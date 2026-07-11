@@ -95,6 +95,12 @@ pub struct Config {
     /// client send a short batch (e.g. the initial subscribes plus a rapid edit
     /// burst) without being throttled, while the sustained rate stays capped.
     pub ws_msg_burst: u32,
+    /// Maximum size in bytes of an `Ephemeral` (presence/cursor) ciphertext
+    /// carried over the WebSocket (default 64 KiB). A presence blob is tiny (a
+    /// cursor position and a display name); this bounds the fire-and-forget
+    /// broadcast + Redis presence-hash write, mirroring `delta_max_bytes` for the
+    /// durable `Update` path.
+    pub ephemeral_max_bytes: usize,
 }
 
 impl Default for Config {
@@ -115,6 +121,7 @@ impl Default for Config {
             trust_proxy_headers: false,
             ws_msg_rate_per_sec: 60,
             ws_msg_burst: 120,
+            ephemeral_max_bytes: 64 * 1024,
         }
     }
 }
