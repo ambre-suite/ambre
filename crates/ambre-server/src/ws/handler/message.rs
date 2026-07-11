@@ -28,21 +28,14 @@ pub(crate) async fn handle_subscribe(
     // (`viewer`) member's delta without re-hitting the database per message.
     conn.doc_write_allowed
         .insert(document_id, role_can_write(&role));
-    let _ = redis_ops::doc_subscribe_session(&state.redis, &document_id, &conn.connection_id).await;
     let ack = encode_server_msg(&WsServerMsg::Subscribed { document_id });
     let _ = outbound_tx.send(ack).await;
 }
 
-pub(crate) async fn handle_unsubscribe(
-    state: &Arc<AppState>,
-    conn: &mut WsConnectionState,
-    document_id: DocumentId,
-) {
+pub(crate) fn handle_unsubscribe(conn: &mut WsConnectionState, document_id: DocumentId) {
     conn.doc_subscriptions.remove(&document_id);
     conn.doc_access_verified_at.remove(&document_id);
     conn.doc_write_allowed.remove(&document_id);
-    let _ =
-        redis_ops::doc_unsubscribe_session(&state.redis, &document_id, &conn.connection_id).await;
 }
 
 pub(crate) async fn handle_update(
@@ -519,8 +512,6 @@ async fn membership_still_valid(
             conn.doc_subscriptions.remove(&doc_id);
             conn.doc_access_verified_at.remove(&doc_id);
             conn.doc_write_allowed.remove(&doc_id);
-            let _ = redis_ops::doc_unsubscribe_session(&state.redis, &doc_id, &conn.connection_id)
-                .await;
             false
         }
     }
@@ -886,7 +877,6 @@ mod ephemeral_binding_tests {
         WsConnectionState {
             user_id: UserId::new(),
             signing_pubkey: session_key,
-            connection_id: "test-conn".into(),
             doc_subscriptions,
             // Seed the membership cache as freshly verified so these unit tests
             // exercise their own concern (author-key binding / size cap) without
@@ -1104,7 +1094,6 @@ mod delta_size_cap_tests {
         WsConnectionState {
             user_id: UserId::new(),
             signing_pubkey: session_key,
-            connection_id: "test-conn".into(),
             doc_subscriptions,
             // Seed the membership cache as freshly verified so these unit tests
             // exercise their own concern (author-key binding / size cap) without

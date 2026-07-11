@@ -115,9 +115,6 @@ struct WsConnectionState {
     /// per-document clock hash to one entry per member and stops a member from
     /// authoring under an arbitrary self-generated key (impersonation).
     signing_pubkey: ambre_core::PublicKey,
-    /// Identifies this socket in Redis presence/subscription sets. Generated
-    /// fresh per connection (the access token is stateless and carries no id).
-    connection_id: String,
     doc_subscriptions: HashSet<DocumentId>,
     /// Last instant membership was verified for each subscribed document. Drives
     /// the [`MEMBERSHIP_RECHECK_TTL`] re-check in `handle_update` (H8).
@@ -173,7 +170,6 @@ async fn handle_ws(
     let mut conn = WsConnectionState {
         user_id,
         signing_pubkey: session.signing_pubkey.clone(),
-        connection_id: connection_id.clone(),
         doc_subscriptions: HashSet::new(),
         doc_access_verified_at: HashMap::new(),
         doc_write_allowed: HashMap::new(),
@@ -258,7 +254,7 @@ async fn handle_ws(
                 }
             }
             WsClientMsg::Unsubscribe { document_id } => {
-                handle_unsubscribe(&state, &mut conn, document_id).await;
+                handle_unsubscribe(&mut conn, document_id);
                 pubsub
                     .unsubscribe(doc_pubsub_channel(&document_id), connection_id.clone())
                     .await;
@@ -326,7 +322,6 @@ async fn handle_ws(
     // Deregister every channel this connection watched from the hub (the hub
     // drops its Redis subscription when the last interested connection leaves).
     for doc_id in &conn.doc_subscriptions {
-        let _ = redis_ops::doc_unsubscribe_session(&state.redis, doc_id, &connection_id).await;
         pubsub
             .unsubscribe(doc_pubsub_channel(doc_id), connection_id.clone())
             .await;
