@@ -25,14 +25,15 @@
 
 The specs predate this file and use their own phase vocabulary. Mapping:
 
-| This file | Foundation specs (`1-Foundations/`) | Trame specs (`2-Trame/`) |
-| :--- | :--- | :--- |
-| `E0`/`E1` (done) | `ARCH P0`-`P3`, `CANVAS P0`, `CHROME P1`-`P3`, `UI P0`-`P2`, `SYNC P0`-`P3`, `SRV P0`/`P2` | engine Phase 0/1 (logic), virtual scroll + inline editor (ui Phase 1) |
-| `E2` | `CANVAS P0` remaining items, `CHROME P4` (launcher) | -- |
-| `E3` | -- | `trame-logic §14`, `trame-features §10`, `trame-ui §18`, `trame-interop §10` (Phase 1) |
-| `ET` | `ARCH P6` (test infrastructure) | Trame "Tested DoD" debt items (logic/features/ui/interop) |
-| `E4` | `ARCH P2`/`P5`, `CANVAS P1`, `SYNC P4`, `SRV P1` | -- |
-| `E5` | `ARCH P4`, `CANVAS P2` | Trame Phase 2+, `trame-logic §14 Phase 4` (scaling debt) |
+| This file | Foundation specs (`1-Foundations/`) | Trame specs (`2-Trame/`) | Toile specs (`3-Toile/`) |
+| :--- | :--- | :--- | :--- |
+| `E0`/`E1` (done) | `ARCH P0`-`P3`, `CANVAS P0`, `CHROME P1`-`P3`, `UI P0`-`P2`, `SYNC P0`-`P3`, `SRV P0`/`P2` | engine Phase 0/1 (logic), virtual scroll + inline editor (ui Phase 1) | -- |
+| `E2` | `CANVAS P0` remaining items, `CHROME P4` (launcher) | -- | -- |
+| `E3` | -- | `trame-logic §14`, `trame-features §10`, `trame-ui §18`, `trame-interop §10` (Phase 1) | -- |
+| `ET` | `ARCH P6` (test infrastructure) | Trame "Tested DoD" debt items (logic/features/ui/interop) | -- |
+| `E4` | `ARCH P5` (`ambre-toile`), `CANVAS P1` (paths/PDF) | -- | `toile-logic §13`, `toile-features §9`, `toile-ui §13`, `toile-interop §10` (Phase 0/1) |
+| `E5` | `ARCH P2`/`P5` (`ambre-prose`, `ambre-murmure`), `SYNC P4`, `SRV P1` | -- | -- |
+| `E6` | `ARCH P4`, `CANVAS P2` | Trame Phase 2+, `trame-logic §14 Phase 4` (scaling debt) | Toile Phase 2 (optimization) |
 
 ---
 
@@ -74,7 +75,7 @@ Stories (all `[x]`):
 ## E2 — Foundation finishing (minimal)  `[x]` (done)
 
 *Close the visible/blocking foundation gaps. Deliberately minimal: offline durability, audits and
-benchmarks are deferred to `E5`.*
+benchmarks are deferred to `E6`.*
 
 > Was reopened for `CHROME P4` (the `/` launcher discarded the E2E-encrypted document name and was
 > off the design tokens). Both that launcher gap and the Document sharing UI Story have since landed,
@@ -162,7 +163,7 @@ Stories:
     `surface_hover`, and always drawn under the active tint so the active axis wins.
   - `[x]` Inter-column/row "+" insert affordance: a badge pinned to the hovered header boundary
     (`insert_hint` -> `draw_insert_badge`), clicking it inserts at that edge and selects the new
-    column/row. *(The whole-axis drag-reorder of grid columns/rows shipped separately — see the E5
+    column/row. *(The whole-axis drag-reorder of grid columns/rows shipped separately — see the E6
     story, pulled into the MVP.)*
 - **Header/column/row UX (MVP promotion)** `[x]` — `trame-ui §18 Phase 1` (new items) + `trame-logic §14 Phase 1` + `trame-features §10 Phase 1`:
   - Header interactions (`trame-ui §4bis`): virtual whole-column/row selection, hover cursors, **column/row resize** (`ResizeCol`/`ResizeRow` + variable-metrics `GridLayout`, `trame-logic §9/§14`), **double-click auto-fit** (UI-side over cached cells, reuses `ResizeCol`/`ResizeRow`; whole-column auto-fit is a V1 refinement), inline "+" insert affordance.
@@ -172,7 +173,7 @@ Stories:
 > **Known schema deferral (does not gate `E3`).** `trame-logic §14 Phase 0` stays `[~]`: the
 > `{v,t,s}` cell sub-map and the shared `styles` map of `§2.B` were never implemented. The MVP is
 > functionally complete without them, and the 2026-07-09 review split the remainder in two — the
-> style fan-out consolidation (an `E5` Story, gated on the public Beta) and the `styles` dictionary
+> style fan-out consolidation (an `E6` Story, gated on the public Beta) and the `styles` dictionary
 > (deferred behind a benchmark). See `trame-logic §11 bis.F`.
 
 - *(Below: the original E3 scope, delivered.)*
@@ -190,7 +191,7 @@ Stories:
 
 ## ET — Testing & CI foundation  `[x]` (transverse) — *settles the MVP test debt*
 
-*Testability is a non-negotiable pillar (`ambre-context.md §3`, template §4, `ambre-spec-architecture.md §4`). The Trame MVP (`E3`) shipped functional but under-tested: ~20 server DB/redis tests are bare-`#[ignore]`, there is no CI, no measured coverage, no CRDT convergence property-test, and zero Leptos UI test. This Epic makes the existing tests run and closes the gaps before stacking new apps on `E4`. Per the tested Definition of Done (template §4), the apps it touches are only truly "done" once this is green.*
+*Testability is a non-negotiable pillar (`ambre-context.md §3`, template §4, `ambre-spec-architecture.md §4`). The Trame MVP (`E3`) shipped functional but under-tested: ~20 server DB/redis tests are bare-`#[ignore]`, there is no CI, no measured coverage, no CRDT convergence property-test, and zero Leptos UI test. This Epic makes the existing tests run and closes the gaps before stacking new apps (`E4` onward). Per the tested Definition of Done (template §4), the apps it touches are only truly "done" once this is green.*
 
 Stories:
 - `ARCH P6` `[x]` — CI GitHub Actions (`lint` / `test-host` / `test-db` / `test-wasm` / `coverage`) with postgres/redis/minio services; root `justfile` for local/CI parity.
@@ -199,17 +200,47 @@ Stories:
 - `trame-ui §18` `[x]` — Leptos UI tests (`wasm-bindgen-test`, headless Chrome): reactive headless + real DOM for the Trame chrome. Landed as `ambre-trame/tests/chrome_ui.rs` (reactive belt + DOM `StatusBar`/`FindReplace`), run via `just test-wasm` in the re-enabled CI job.
 - `trame-features §10` / `trame-interop §10` `[x]` — wired the "Tested DoD" belts green in CI: the MVP filter/sort/undo `#[test]`s (added the three Phase-1 undo belts), the concurrent-filter LWW case folded into the 2-peer convergence property-test (`ApplyFilter`/`ClearFilter` ops + `is_filtered` in the converged snapshot), and the CSV roundtrip + malformed/byte-soup fuzz robustness cases. *(Conditional-formatting / validation / protection tests follow their Phase 2 / Post-MVP implementation.)*
 
-## E4 — Application expansion  `[ ]` (deferred)
+## E4 — Toile MVP (infinite whiteboard + presentations)  `[ ]` (deferred) — *next core objective*
 
-*Deploy the other building blocks on the validated foundation.*
+*Second product on the validated stack: an infinite collaborative whiteboard with a presentation mode.
+Mirrors the `E3` model — scope = the consolidated **Phase 0 + Phase 1** of the four Toile specs
+(`3-Toile/`). Toile reuses the whole `E0`/`E1` foundation (threading, sync, blind relay, crypto,
+launcher/sharing UI); what is new is the spatial document model and the GPU vector-canvas.*
+
+> Dependencies: `ET` (test foundation) precedes it — every Story ships with its test belt green, per the
+> tested DoD. Toile's PDF export and vector tools carry `CANVAS P1` (paths/transform + krilla), so that
+> foundation Story lands here rather than under `E5`.
 
 Stories:
-- `ARCH P2` — `ambre-prose` (LoroText): second pilot, validates the text/CRDT axis.
-- `ARCH P5` — `ambre-toile` (R-Tree + read-only embeds), `ambre-murmure` (channels).
-- `SYNC P4` + `SRV P1` — channels & meetings (segments managed by Sync, unread, WebRTC signaling).
-- `CANVAS P1` — paths/transform + PDF export (krilla).
+- `ARCH P5` (`ambre-toile`) — new spatial `DocState`: typed `ToileState` behind the `ambre-logic` `match`,
+  `rstar` R-tree culling, in-place editable nested embeds (Prose/Trame). *(embeds start at the read-only subset.)*
+- `CANVAS P1` — `lyon` / `WgpuSurface` vector pipeline (quad + path), `ViewportTransform`, glyph atlas, and
+  PDF export via `KrillaSurface` (krilla). The shared canvas foundation the vector tools and the PDF path need.
+- `toile-logic §13 Phase 0/1` — CRDT schema + `SpatialIndex` + element/connector/group/stroke lifecycle +
+  clipboard + `DisplayViewport`, then dispatcher/Sync wiring, `apply_ephemeral` / `apply_remote`, snapshot &
+  persistence paths, `my_user_id` from `SessionReady`, `UndoManager`, Find + selection stats, `UserId` presence.
+  Includes the 2-peer convergence property-test (**DoD**).
+- `toile-ui §13 Phase 0/1` — `ViewportTransform` / batcher / adaptive grid / hit-testing / Select tool, then
+  the full tool set (Pen/Shape/Connector/Draw/Sticky/Text), Parley inline editor, shortcuts + OS-clipboard
+  mirror, context menu / find panel / status bar, `PeerPresence` overlay with cross-app `UserId` colors,
+  wasm render/input tests.
+- `toile-features §9 Phase 0/1` — presentation sequence CRDT + playback machine, speaker notes, Smart Animate
+  + auto-layout solvers, reactions/votes CRDT keyed by `UserId` + derived tally, boolean ops; then playback
+  wired to the camera pass, presenter overlay, reactions render, "follow presenter" ephemeral broadcast.
+- `toile-interop §10 Phase 0/1` — SVG import/export, raster import, safety limits, media hashing + placeholder;
+  then PDF export (presentation order), Figma/Miro converters, media pipeline on the crypto/Sync layer.
+  Golden fixtures + wasm export tests.
 
-## E5 — Polish & hardening  `[ ]` (deferred)
+## E5 — Application expansion  `[ ]` (deferred)
+
+*Deploy the remaining building blocks on the validated foundation.*
+
+Stories:
+- `ARCH P2` — `ambre-prose` (LoroText): the text/CRDT pilot.
+- `ARCH P5` (`ambre-murmure`) — channels.
+- `SYNC P4` + `SRV P1` — channels & meetings (segments managed by Sync, unread, WebRTC signaling).
+
+## E6 — Polish & hardening  `[ ]` (deferred)
 
 *Launch quality, public Beta, advanced Rendez-Vous.*
 
@@ -240,7 +271,7 @@ Stories:
   to a per-container blend was tested and refuted (a whole-cell edit writes every container in one
   monotonic-Lamport burst, so Loro's LWW elects the same winner in each); locked in by
   `logic/convergence_tests.rs::concurrent_whole_cell_style_edits_do_not_blend_across_containers`.
-  **Ordering:** it does *not* preempt `E4`, but it changes the persisted schema, so it must land
+  **Ordering:** it does *not* preempt `E5`, but it changes the persisted schema, so it must land
   **before the public Beta**, while no third-party document exists and no migration path has to be
   carried forever. *(The shared `styles` dictionary + `"s"` indirection and the `{v,t,s}` cell
   sub-map are explicitly out of scope: deferred behind a benchmark — Loro does not GC orphaned map
