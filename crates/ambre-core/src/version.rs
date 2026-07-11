@@ -37,15 +37,6 @@ impl Version {
         }
     }
 
-    /// Creates a version from a `u8` without checking.
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure `value <= 127`. Violating this may cause incompatible serialization.
-    pub const unsafe fn new_unchecked(value: u8) -> Self {
-        Self(value)
-    }
-
     /// Returns the underlying version byte.
     pub const fn as_u8(self) -> u8 {
         self.0

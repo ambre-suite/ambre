@@ -8,6 +8,10 @@
 //! - [`Version`]: version byte for serialization
 //! - [`Error`]: core error types
 
+// No hand-written `unsafe` in this crate (constitution pillar). Any future
+// `unsafe` block breaks the build rather than silently landing.
+#![forbid(unsafe_code)]
+
 pub mod doc_type;
 pub mod error;
 pub mod id;

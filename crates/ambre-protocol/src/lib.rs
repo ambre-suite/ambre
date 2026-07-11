@@ -6,6 +6,10 @@
 //! This crate is the single source of truth for wire types; neither `ambre-sync`
 //! nor `ambre-server` redefine these structures.
 
+// No hand-written `unsafe` in this crate (constitution pillar): any future
+// `unsafe` block breaks the build.
+#![forbid(unsafe_code)]
+
 pub mod error;
 pub mod messages;
 pub mod public_data;
