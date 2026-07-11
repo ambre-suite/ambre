@@ -433,50 +433,55 @@ async fn snapshot_compaction_task(state: state::AppState) {
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
 
-        let compactable = match db::find_compactable_snapshots(&state.db, KEEP_PER_DOCUMENT).await {
-            Ok(snapshots) => snapshots,
-            Err(e) => {
-                tracing::error!("compaction query failed: {e:?}");
-                continue;
-            }
-        };
+        // 1. Compact old snapshots: keep the N most recent per document, delete
+        //    the rest from S3 and Postgres.
+        match db::find_compactable_snapshots(&state.db, KEEP_PER_DOCUMENT).await {
+            Ok(compactable) if !compactable.is_empty() => {
+                tracing::info!(
+                    count = compactable.len(),
+                    "compaction: deleting old snapshots"
+                );
+                for snap in &compactable {
+                    // Delete S3 object (best-effort; orphaned objects are harmless).
+                    if let Err(e) = state
+                        .s3
+                        .delete_object()
+                        .bucket(&state.s3_bucket)
+                        .key(&snap.s3_key)
+                        .send()
+                        .await
+                    {
+                        tracing::warn!(
+                            snapshot_id = %snap.id,
+                            s3_key = %snap.s3_key,
+                            error = %e,
+                            "compaction: S3 delete failed, removing DB row anyway"
+                        );
+                    }
 
-        if compactable.is_empty() {
-            tracing::debug!("compaction: no snapshots to delete");
-            continue;
+                    if let Err(e) = db::delete_snapshot(&state.db, snap.id).await {
+                        tracing::error!(
+                            snapshot_id = %snap.id,
+                            error = %e,
+                            "compaction: DB delete failed"
+                        );
+                    }
+                }
+            }
+            Ok(_) => tracing::debug!("compaction: no snapshots to delete"),
+            Err(e) => tracing::error!("compaction query failed: {e:?}"),
         }
 
-        tracing::info!(
-            count = compactable.len(),
-            "compaction: deleting old snapshots"
-        );
-
-        for snap in &compactable {
-            // Delete S3 object (best-effort; orphaned objects are harmless).
-            if let Err(e) = state
-                .s3
-                .delete_object()
-                .bucket(&state.s3_bucket)
-                .key(&snap.s3_key)
-                .send()
-                .await
-            {
-                tracing::warn!(
-                    snapshot_id = %snap.id,
-                    s3_key = %snap.s3_key,
-                    error = %e,
-                    "compaction: S3 delete failed, removing DB row anyway"
-                );
-            }
-
-            // Delete the snapshot row (cascades to updates via FK).
-            if let Err(e) = db::delete_snapshot(&state.db, snap.id).await {
-                tracing::error!(
-                    snapshot_id = %snap.id,
-                    error = %e,
-                    "compaction: DB delete failed"
-                );
-            }
+        // 2. Trim the delta index: drop `updates` every retained snapshot has
+        //    already folded in (seq <= MIN(covered_seq) per document). Runs every
+        //    cycle regardless of snapshot deletion -- a document can gain a
+        //    covering snapshot without crossing the keep threshold. Without this
+        //    the `updates` table grows unbounded (the dropped snapshot FK no
+        //    longer cascades old deltas away).
+        match db::purge_superseded_updates(&state.db).await {
+            Ok(0) => {}
+            Ok(n) => tracing::info!(purged = n, "compaction: trimmed superseded updates"),
+            Err(e) => tracing::error!("compaction: purge superseded updates failed: {e:?}"),
         }
     }
 }

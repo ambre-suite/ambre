@@ -104,4 +104,135 @@ mod tests {
             .expect("query by id under wrong doc");
         assert!(cross.is_none(), "snapshot must be scoped to its document");
     }
+
+    /// F1: once a snapshot has folded in a prefix of the delta history, the
+    /// compaction pass must trim the superseded `updates` rows. The dropped
+    /// `updates.snapshot_id` FK no longer cascades them away, so without an
+    /// explicit purge the delta index grows without bound.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn purge_superseded_updates_trims_covered_deltas(pool: PgPool) {
+        let user = create_user(
+            &pool,
+            "purge@test.dev",
+            "Purge",
+            &[1u8; 32],
+            &[2u8; 16],
+            &[3u8; 32],
+            &[4u8; 32],
+        )
+        .await
+        .expect("create user");
+        let owner: ambre_core::UserId = core_id(user.id);
+        let (doc, _) = create_document(&pool, &owner, "prose", None, None)
+            .await
+            .expect("create document");
+        let document_id: ambre_core::DocumentId = core_id(doc.id);
+        let author = [5u8; 32];
+        let snap = ambre_core::SnapshotId::new();
+
+        // Ten deltas, seq (and clock) 1..=10.
+        for seq in 1..=10i64 {
+            insert_update(
+                &pool,
+                &document_id,
+                &author,
+                &snap,
+                seq,
+                seq,
+                &format!("k{seq}"),
+            )
+            .await
+            .expect("insert update");
+        }
+        // A snapshot folding in everything through seq 6.
+        create_snapshot(
+            &pool,
+            &document_id,
+            &author,
+            None,
+            None,
+            &serde_json::json!({}),
+            "s3/snap",
+            6,
+        )
+        .await
+        .expect("create snapshot");
+
+        let deleted = purge_superseded_updates(&pool).await.expect("purge");
+        assert_eq!(
+            deleted, 6,
+            "seq 1..=6 are covered by the snapshot and purged"
+        );
+
+        let remaining = get_updates_after(&pool, &document_id, 0, 100)
+            .await
+            .expect("list remaining");
+        let seqs: Vec<i64> = remaining.iter().map(|u| u.seq).collect();
+        assert_eq!(seqs, vec![7, 8, 9, 10], "only the uncovered tail survives");
+    }
+
+    /// F1: the purge horizon is the MIN `covered_seq` across the RETAINED
+    /// snapshots, so an update still needed by the oldest retained snapshot for
+    /// incremental catch-up is never deleted.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn purge_horizon_is_min_covered_seq(pool: PgPool) {
+        let user = create_user(
+            &pool,
+            "horizon@test.dev",
+            "Horizon",
+            &[1u8; 32],
+            &[2u8; 16],
+            &[3u8; 32],
+            &[4u8; 32],
+        )
+        .await
+        .expect("create user");
+        let owner: ambre_core::UserId = core_id(user.id);
+        let (doc, _) = create_document(&pool, &owner, "prose", None, None)
+            .await
+            .expect("create document");
+        let document_id: ambre_core::DocumentId = core_id(doc.id);
+        let author = [5u8; 32];
+        let snap = ambre_core::SnapshotId::new();
+
+        for seq in 1..=10i64 {
+            insert_update(
+                &pool,
+                &document_id,
+                &author,
+                &snap,
+                seq,
+                seq,
+                &format!("k{seq}"),
+            )
+            .await
+            .expect("insert update");
+        }
+        // Two retained snapshots: covered_seq 3 (oldest) and 8 (newest).
+        for covered in [3i64, 8] {
+            create_snapshot(
+                &pool,
+                &document_id,
+                &author,
+                None,
+                None,
+                &serde_json::json!({}),
+                &format!("s3/snap-{covered}"),
+                covered,
+            )
+            .await
+            .expect("create snapshot");
+        }
+
+        let deleted = purge_superseded_updates(&pool).await.expect("purge");
+        assert_eq!(deleted, 3, "MIN(3, 8) = 3, so only seq 1..=3 are purged");
+
+        let remaining = get_updates_after(&pool, &document_id, 0, 100)
+            .await
+            .expect("list remaining");
+        let seqs: Vec<i64> = remaining.iter().map(|u| u.seq).collect();
+        assert_eq!(seqs, vec![4, 5, 6, 7, 8, 9, 10]);
+    }
 }
