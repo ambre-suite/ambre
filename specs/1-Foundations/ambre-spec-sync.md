@@ -4,9 +4,9 @@
 
 > End-to-end encrypted synchronization layer between WASM clients and the Blind Relay. This module implements the SecSync protocol in pure Rust: it transforms CRDT deltas produced by the Logic thread into cryptographically sealed messages, routes them via WebSocket, and re-injects remote updates into the Loro document — without ever exposing plaintext outside the client process.
 >
-> `ambre-sync` runs exclusively in the **Sync thread** (a `wasm_thread`, i.e. a Web Worker sharing linear memory). It has no access to the `LoroDoc` (Logic thread) or the WebGPU canvas (UI thread).
+> `ambre-sync` runs exclusively in the **Sync worker** — a *separate* WASM instance with its **own** linear memory, in a dedicated `web_sys::Worker` (not a `wasm_thread`; see the two-instance rationale in `ambre-spec-architecture.md §1/§6`). It has no access to the `LoroDoc` (Logic thread) or the WebGPU canvas (UI thread).
 >
-> **Architecture note.** The client is a single WASM binary with 3 `wasm_thread` threads sharing memory over `flume` channels — see `ambre-spec-architecture.md`. For `ambre-sync`: (1) Logic ↔ Sync communication goes through **`flume` channels** carrying **typed Rust values** (`SyncCommand`/`LogicEvent`), no serialization on this path; (2) the entry point is `ambre_sync::run(from_logic, to_logic)`; (3) **postcard only applies on the network wire** (`ambre-protocol`). The crypto pipeline, quarantine, batching, and security are described below.
+> **Architecture note.** Two-instance model (`ambre-spec-architecture.md §1/§2.B`): the **Main** instance runs UI + Logic (`wasm_thread`, shared memory, `flume`); the **Sync** worker is a *separate* WASM instance reached over `postMessage`. For `ambre-sync`: (1) Logic ↔ Sync envelopes (`SyncCommand`/`LogicEvent`) are `postcard`-encoded on the `postMessage` hop (the Main thread relays), while inside the Sync worker `flume` carries typed values by move between its own `onmessage` and its WS/HTTP callbacks; (2) the entry point is `ambre_sync::run(from_logic, to_logic)`, driven by `worker.rs`; (3) **postcard applies on the network wire** (`ambre-protocol`) **and** on the Main ↔ Sync `postMessage` hop. The crypto pipeline, quarantine, batching, and security are described below.
 
 ---
 
@@ -35,7 +35,7 @@
 | `wasm-bindgen-futures` | `spawn_local` for async operations | Rust future bridge → JS event loop (HTTP fetch, WebSocket connect, rotation) |
 | `tokio-tungstenite` (`cfg not(wasm32)`) | Native WebSocket for tests | Headless test backend only |
 
-> **Transport note.** `ambre-sync` receives its commands by blocking on a `flume::Receiver<SyncCommand>` (`from_logic.recv()`) and emits `LogicEvent` on a `flume::Sender<LogicEvent>` (`to_logic`). Values travel **by move** in the shared heap — no serialization, no transport abstraction. ⚠️ **`Atomics.wait` limitation**: blocking on `flume` in a WASM Worker freezes the Worker's JS event loop (WebSocket/`setTimeout`). Tolerated while the WS pipeline is a placeholder; **once the real WebSocket is wired, the loop must become non-blocking** (`recv_async` + WS driven by `JsFuture`/`spawn_local`, WS branch disabled when `to_logic` is full). See §2.C and `ambre-spec-architecture.md §7 ARCH P1`.
+> **Transport note.** The Sync worker is a **separate WASM instance**, so `SyncCommand`/`LogicEvent` cross the Main ↔ Sync boundary as `postcard`-encoded `postMessage` payloads (big blobs on a Transferable `ArrayBuffer`), relayed by the Main thread. **Inside** the worker, `worker.rs` decodes each `SyncCommand` in its `onmessage` and pushes it onto an **internal** `flume` channel; `run_wasm` runs a **non-blocking** `select!` loop over that channel plus the WS/HTTP event channel, and emits `LogicEvent` back through a `LogicSink` closure that `postcard`-encodes + `postMessage`s to Main. Both ends of every internal `flume` live **in this same worker**, so flume's async waker fires correctly (the old cross-worker `Atomics.wait` freeze — Sync being a `wasm_thread` blocking on a channel fed from another worker — no longer exists; see `ambre-spec-architecture.md §2.B/§6`). In native tests `run(from_logic, to_logic)` is driven directly over `flume`.
 
 > **Note on `ambre-bus`:** `ambre-sync` depends on `ambre-bus` for `SyncCommand`/`LogicEvent` (+ the `RestCommand`/`RestEvent`/`RequestId` service family) — not for `LogicCommand`, `UiEvent`, or UI types.
 
@@ -90,7 +90,7 @@ struct PlaintextPayload {
 ```rust
 /// Global Sync thread state -- one per browser tab.
 /// Manages N sync sessions in parallel (one per open document,
-/// including read-only embedded documents in Toile).
+/// including in-place editable embedded documents in Toile).
 /// (In code: `SyncState`.)
 struct SyncState {
     /// Master Seed decrypted at login (SyncCommand::Unlock) -- ZeroizeOnDrop
@@ -120,8 +120,9 @@ struct SyncState {
     /// MVP: no cache, ECDH recomputed on each ListDocuments (acceptable for < 20 docs).
     // doc_key_cache: HashMap<Uuid, DocumentKey>,
 
-    /// Outbound channel to the Logic thread (typed `LogicEvent` values, by move).
-    logic_tx: flume::Sender<LogicEvent>,
+    /// Outbound sink for `LogicEvent`s: a `postMessage`(postcard) closure in the
+    /// worker instance, a bare `flume::Sender` in native tests (`LogicSink` abstracts both).
+    logic_sink: LogicSink,
 
     /// In-memory access + refresh tokens (never localStorage/cookies). Bearer on
     /// REST, `?token=` on the WS. Holds the 401->refresh->retry logic. (Code: `AuthContext`.)
@@ -174,11 +175,14 @@ struct SyncDocumentState {
 }
 ```
 
-> **No transport trait.** `flume` is the transport in both WASM and native: `ambre-sync` emits directly on a bare `flume::Sender<LogicEvent>` (`send_to_logic`), without abstraction.
+> **`LogicSink`, not a transport trait.** Outbound `LogicEvent`s go through a thin `LogicSink` closure — a
+> `postMessage`(postcard) sink in the worker instance, a `flume`-backed sink (`LogicSink::channel`) in native
+> tests (same seam architecture §4 uses to host-test `SyncState`). Inbound `SyncCommand`s arrive via `onmessage`
+> (worker) or a `flume::Receiver` (native). No heavyweight transport abstraction.
 
-**Execution model (coming with the real WebSocket):**
+**Execution model (separate instance, non-blocking loop):**
 
-The Sync thread is a `wasm_thread` looping on `from_logic.recv()` (blocking via `Atomics.wait`). This is valid while the WebSocket is a placeholder. **When the real WS is wired**, a blocking loop would freeze the Worker's JS event loop (therefore the WS callbacks): a non-blocking `select` will be needed — `select { cmd = from_logic.recv_async() => ..., frame = ws.next() if to_logic_not_full => ... }` — where network I/O (HTTP fetch presigned URLs, rotation, WS connect) is driven by `wasm_bindgen_futures::spawn_local` / `JsFuture`. The WS branch is **disabled when `to_logic` is full** (backpressure: Sync stops reading the socket → TCP backpressure; see `ambre-spec-architecture.md §7 ARCH P1`, "cyclic deadlock").
+`worker.rs` is the Sync worker's `#[wasm_bindgen(start)]` entry (its own instance). It (1) sets `onmessage` to `postcard`-decode each `SyncCommand` and push it onto an internal `flume` command channel, and (2) `spawn_local`s the async `run_wasm` loop, a **non-blocking** `select!` over that command channel and the internal WS/HTTP `SyncEvent` channel: `select { cmd = cmd_rx.recv_async() => handle_command(cmd), frame = ws.next() if to_logic_not_full => handle_ws(frame) }`. Network I/O (HTTP fetch presigned URLs, key rotation, WS connect) is driven by `wasm_bindgen_futures::spawn_local` / `JsFuture` on the worker's **free JS event loop**. The WS branch is **disabled while the outbound path to Main is full** (backpressure: Sync stops reading the socket → TCP backpressure; see `ambre-spec-architecture.md §7 ARCH P1`, "cyclic deadlock"). Because Sync is its **own** instance (not a `wasm_thread`), the loop never had to choose between blocking its stack to stay alive and keeping a free event loop for the socket — the historical freeze is gone by construction.
 
 ### B. Cryptographic Pipeline
 
@@ -237,7 +241,7 @@ PlaintextPayload = [version_byte | data]
   ├─ version == 0x00 → data as is
   └─ unknown version → Err(UnknownCompressionVersion) → DROP
   ▼
-CRDT bytes → logic_tx.send_to_logic(LogicEvent::RemoteUpdate { .. })
+CRDT bytes → send_to_logic(LogicEvent::RemoteUpdate { .. })   // via LogicSink
 ```
 
 **Key to use during decryption:**
@@ -246,27 +250,39 @@ CRDT bytes → logic_tx.send_to_logic(LogicEvent::RemoteUpdate { .. })
 
 ### C. Interface Contract (API)
 
-**Entry point (WASM and native):**
+**Entry points.** The Sync worker has two: `worker.rs`'s `#[wasm_bindgen(start)]` (the real WASM instance) and
+the transport-agnostic `run_wasm` async loop it drives. Native tests call `run_wasm` (or the thin `run` shim)
+directly over `flume`, no worker needed.
 
 ```rust
-/// Sync thread entry point. Spawned by `ambre-app` via wasm_thread (or
-/// called directly in native tests). Blocking loop while WS is a
-/// placeholder; to be made non-blocking when the real WebSocket is wired (cf.
-/// "Atomics.wait" note above). Exits when the Logic thread disappears.
-pub fn run(
-    logic_rx: flume::Receiver<SyncCommand>,
-    logic_tx: flume::Sender<LogicEvent>,
-) {
-    let mut state = SyncState::new(logic_tx, /* api_base */ String::new());
-    while let Ok(cmd) = logic_rx.recv() {
-        state.handle_command(cmd);
-    }
-    // logic_rx disconnected => Logic closed => teardown.
+// ambre-sync/src/worker.rs -- the Sync worker's own instance entry.
+#[wasm_bindgen(start)]
+pub fn start() {
+    let scope: DedicatedWorkerGlobalScope = js_sys::global().dyn_into().unwrap();
+    let api_base = scope.location().host();
+    // Outbound: LogicEvent -> postcard -> postMessage to Main (relayed to Logic).
+    let logic_sink = LogicSink::new(move |ev| post_bytes(&scope, &postcard::to_allocvec(&ev).unwrap()));
+    // Inbound: onmessage decodes SyncCommand -> internal flume command channel.
+    let (cmd_tx, cmd_rx) = flume::unbounded::<SyncCommand>();
+    scope.set_onmessage(/* ... postcard-decode -> cmd_tx.send(cmd) ... */);
+    // Non-blocking select loop on the worker's free event loop.
+    wasm_bindgen_futures::spawn_local(run_wasm(cmd_rx, logic_sink, api_base));
+}
+
+/// The async loop (WASM). `LogicSink` abstracts "emit a LogicEvent": a postMessage
+/// closure in the worker, a flume sender in native tests. Non-blocking select over
+/// the command channel and the internal WS/HTTP SyncEvent channel.
+pub async fn run_wasm(cmd_rx: flume::Receiver<SyncCommand>, logic_sink: LogicSink, api_base: String) {
+    let mut state = SyncState::new(logic_sink, api_base);
+    // select! { cmd = cmd_rx.recv_async() => state.handle_command(cmd),
+    //           ev  = state.sync_events.recv_async() => state.handle_sync_event(ev) }
+    // exits when the command channel disconnects (Main/Logic gone) => teardown.
 }
 
 impl SyncState {
-    /// Emits an event to the Logic thread (typed value, by move).
-    fn send_to_logic(&self, event: LogicEvent) { let _ = self.logic_tx.send(event); }
+    /// Emits an event upward. In the worker this postcard-encodes + postMessages
+    /// (via the LogicSink closure); in native tests it is a bare flume send.
+    fn send_to_logic(&self, event: LogicEvent) { self.logic_sink.emit(event); }
 
     /// Responds to a service request by echoing its RequestId.
     fn reply(&self, id: RequestId, evt: RestEvent) {
@@ -707,7 +723,7 @@ All tests compile in native mode (`#[cfg(not(target_arch = "wasm32"))]`) with `t
 
 **Performance budget:**
 
-- The Sync thread is a dedicated `wasm_thread` (Web Worker sharing linear memory): it executes in **true parallelism** from the Logic thread and the UI thread, on its own core if available.
+- The Sync worker is a **separate WASM instance** (its own linear memory, a dedicated `web_sys::Worker`): it executes in **true parallelism** from the Logic thread and the UI thread, on its own core if available.
 - Crypto operations are blocking in the Sync thread but affect neither the Logic thread nor the UI thread (separate threads, separate event loops). `flume` transport moves payloads **by move** in the shared heap — no boundary recopy.
 - Target latency for a 1 KB update: outbound encryption < 200 us (P95 mobile), ceiling < 500 us.
 
@@ -748,7 +764,7 @@ All tests compile in native mode (`#[cfg(not(target_arch = "wasm32"))]`) with `t
 | **Wire types redefined in `ambre-sync`** | `ambre-protocol` is the source of truth. Redefining locally (`SecSyncUpdate`, etc.) creates guaranteed divergence (e.g. `[u8; 32]` vs `Vec<u8>` for `pub_key`). |
 | **Yrs instead of Loro** | Out of scope. Yrs and Loro snapshots have comparable compression ratios (3:1 to 8:1 on text). The Loro choice imposes no constraint on `ambre-sync`. |
 | **Shared-nothing UI <-> Logic (`postMessage` + `MessagePort` + postcard on every link)** | Imposes `postcard` + 2 WASM↔JS memcpy per hop and a transport trait. The UI <-> Logic link instead uses **`flume` channels** carrying typed Rust values by move (shared memory). Do not go back: it would reintroduce serialization and transport abstraction for nothing. The accepted cost (nightly toolchain `-Z build-std`, COOP/COEP headers for `SharedArrayBuffer`) is documented in `ambre-spec-architecture.md §6`. |
-| **`wasm_thread::spawn` + `SharedArrayBuffer` — ADOPTED (was rejected in v1)** | Now **adopted**: the Sync thread is a `wasm_thread` sharing linear memory. Requires `+atomics,+bulk-memory,+mutable-globals` + `-Z build-std` + nightly + COOP/COEP headers — accepted to benefit from copy-free typed `flume` transport. |
+| **`wasm_thread` for the Sync worker** | **Rejected** (`ambre-spec-architecture.md §6`): `wasm_thread` is run-to-completion, so an async `spawn_local` Sync loop returns and gets GC-terminated after the first poll (the historical freeze). Sync is instead its **own** WASM instance in a normal `web_sys::Worker` with a permanent event loop, reached over `postMessage`. `wasm_thread` + shared memory (`+atomics`/`-Z build-std`/COOP-COEP) is kept **only** for the UI ↔ Logic link inside the Main instance. |
 | **One Sync thread per open document** | Would imply N additional threads for a Toile with embedded documents — each with its own RustCrypto copy. Unacceptable on mobile. Single multi-document Sync thread (`HashMap<Uuid, SyncDocumentState>`) with a single multiplexed WebSocket (Subscribe/Unsubscribe per document). |
 | **Blocking `flume` loop with a real WebSocket** | `Atomics.wait` (under `flume::recv`) freezes the Worker's JS event loop, therefore the WS callbacks. To avoid once the real WS is wired: non-blocking loop `select { recv_async ..., ws.next() ... }`. Detail in `ambre-spec-architecture.md §7 ARCH P1`. |
 | **One WebSocket per open document** | Connection waste (5 WS for a Toile with 4 embedded documents). Browser limits (~6 connections per origin), keepalives costly on mobile battery. Messages already carry `document_id` in `publicData` — the server demultiplexes. Single multiplexed WS per session with Subscribe/Unsubscribe. |
