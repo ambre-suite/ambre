@@ -194,41 +194,74 @@ pub async fn fetch_object(
 
 /// Background task that periodically flushes pending deltas from Redis to S3.
 ///
-/// Runs once per Axum instance. It scans `doc:*:pending` keys, spawns a
-/// task per key, and trims the list after successful upload. The cycle
-/// repeats every 15 seconds.
+/// Runs once per Axum instance, every 15 seconds. The work list is the
+/// `flush:dirty` SET (documents that actually have unflushed deltas, maintained
+/// by `append_pending_delta`), so the common path is O(dirty docs) instead of an
+/// O(keyspace) `SCAN doc:*:pending` every cycle. A full SCAN reconciliation runs
+/// only occasionally (and on the first cycle, seeding the set on upgrade) to
+/// re-mark any pending key missing from the set, so no acknowledged delta can be
+/// stranded by a lost marker.
 pub async fn global_s3_flusher(state: crate::state::AppState) -> ! {
+    // One full-keyspace reconciliation every RECONCILE_EVERY cycles (~5 min at a
+    // 15 s cycle). Cycle 0 reconciles first, seeding the dirty set from any
+    // pre-existing pending lists on a fresh deploy/upgrade.
+    const RECONCILE_EVERY: u32 = 20;
+    let mut cycle: u32 = 0;
+
     loop {
+        if cycle == 0 {
+            reconcile_dirty_set(&state).await;
+        }
+        cycle = (cycle + 1) % RECONCILE_EVERY;
+
         tokio::time::sleep(Duration::from_secs(15)).await;
 
-        let mut cursor = 0u64;
-        loop {
-            let opts = ScanOptions::default()
-                .match_pattern("doc:*:pending")
-                .count(100);
-            let result: Result<(u64, Vec<String>), _> = state.redis.scan(cursor, opts).await;
-
-            let (next_cursor, keys) = match result {
-                Ok((c, keys)) => (c, keys),
-                Err(e) => {
-                    tracing::error!("flusher SCAN failed: {e}");
-                    break;
-                }
-            };
-
-            let tasks: Vec<_> = keys
-                .into_iter()
-                .map(|key| {
-                    let state = state.clone();
-                    tokio::spawn(async move { flush_doc_pending(&state, &key).await })
-                })
-                .collect();
-            futures_util::future::join_all(tasks).await;
-
-            cursor = next_cursor;
-            if cursor == 0 {
-                break;
+        let keys = match crate::redis_ops::dirty_pending_keys(&state.redis).await {
+            Ok(keys) => keys,
+            Err(e) => {
+                tracing::error!("flusher dirty-set read failed: {e}");
+                continue;
             }
+        };
+
+        let tasks: Vec<_> = keys
+            .into_iter()
+            .map(|key| {
+                let state = state.clone();
+                tokio::spawn(async move { flush_doc_pending(&state, &key).await })
+            })
+            .collect();
+        futures_util::future::join_all(tasks).await;
+    }
+}
+
+/// Re-marks every existing `doc:*:pending` key in the dirty set via a single
+/// keyspace SCAN. Bounds the SCAN to a low frequency while guaranteeing that a
+/// pending list which somehow missed its `SADD` (an upgrade from before the
+/// dirty-set existed, or a crash between RPUSH and SADD) is still eventually
+/// flushed rather than stranded.
+async fn reconcile_dirty_set(state: &crate::state::AppState) {
+    let mut cursor = 0u64;
+    loop {
+        let opts = ScanOptions::default()
+            .match_pattern("doc:*:pending")
+            .count(100);
+        let result: Result<(u64, Vec<String>), _> = state.redis.scan(cursor, opts).await;
+        let (next_cursor, keys) = match result {
+            Ok((c, keys)) => (c, keys),
+            Err(e) => {
+                tracing::error!("flusher reconcile SCAN failed: {e}");
+                return;
+            }
+        };
+        for key in &keys {
+            if let Err(e) = crate::redis_ops::mark_pending_dirty(&state.redis, key).await {
+                tracing::warn!(key, error = %e, "flusher reconcile: mark dirty failed");
+            }
+        }
+        cursor = next_cursor;
+        if cursor == 0 {
+            return;
         }
     }
 }
@@ -262,6 +295,15 @@ async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &str) {
     }
 
     flush_doc_pending_locked(state, pending_key).await;
+
+    // Drop the dirty marker iff the list fully drained (atomic LLEN-then-SREM).
+    // A transient S3 failure leaves entries, so LLEN > 0 keeps the marker and the
+    // document is revisited next cycle. Done under the lock so a losing instance
+    // never clears a marker for a list it did not drain.
+    if let Err(e) = crate::redis_ops::clear_pending_dirty_if_empty(&state.redis, pending_key).await
+    {
+        tracing::warn!(key = pending_key, error = %e, "flush: clear dirty marker failed");
+    }
 
     if let Err(e) = crate::redis_ops::release_flush_lock(&state.redis, &lock_key, &token).await {
         tracing::warn!(key = pending_key, error = %e, "flush: lock release failed");
