@@ -153,6 +153,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         media_max_bytes: env_ttl("MEDIA_MAX_BYTES", 100 * 1024 * 1024),
         snapshot_max_bytes: env_ttl("SNAPSHOT_MAX_BYTES", 50 * 1024 * 1024),
         delta_max_bytes: env_ttl("DELTA_MAX_BYTES", 4 * 1024 * 1024) as usize,
+        ws_msg_rate_per_sec: env_ttl("WS_MSG_RATE_PER_SEC", 60) as u32,
+        ws_msg_burst: env_ttl("WS_MSG_BURST", 120) as u32,
         ..Default::default()
     };
 
