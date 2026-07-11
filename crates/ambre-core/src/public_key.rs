@@ -1,19 +1,21 @@
 //! Public key wrapper (`[u8; 32]`).
 //!
 //! A type‑safe wrapper for 32‑byte public keys used in Ed25519 signatures and X25519 key exchange.
-//! The internal bytes are zeroed on drop.
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::error::PublicKeyError;
 
 /// A 32‑byte public key.
 ///
 /// The underlying array is always 32 bytes, as required by Ed25519 and X25519.
-/// The key is zeroed on drop (via `ZeroizeOnDrop`).
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+///
+/// Public keys are not secret, so this type deliberately does NOT zeroize on
+/// drop: doing so would only add a memset to a hot, frequently-cloned type
+/// (every `UpdatePublicData` carries one) while implying a confidentiality it
+/// does not have. Zeroize is reserved for the real secret-key types.
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PublicKey([u8; 32]);
 
 impl PublicKey {
@@ -107,12 +109,5 @@ mod tests {
         let serialized = serde_json::to_string(&pk).unwrap();
         let deserialized: PublicKey = serde_json::from_str(&serialized).unwrap();
         assert_eq!(pk, deserialized);
-    }
-
-    #[test]
-    fn test_zeroize() {
-        let mut pk = PublicKey::from_array([0xaa; 32]);
-        pk.zeroize();
-        assert_eq!(pk.as_array(), &[0u8; 32]);
     }
 }
