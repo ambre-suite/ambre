@@ -30,6 +30,10 @@ pub struct UserRow {
 pub struct UserInfoRow {
     pub id: uuid::Uuid,
     pub email: String,
+    /// Whether the email was provider-verified (see [`UserRow::email_verified`]).
+    /// Surfaced in search so the sharer sees the TOFU signal for an unverified,
+    /// possibly-squatted recipient before wrapping the doc key to them (#3).
+    pub email_verified: bool,
     pub display_name: String,
     pub signing_pubkey: Vec<u8>,
     pub exchange_pubkey: Vec<u8>,
@@ -295,7 +299,7 @@ pub async fn search_users(pool: &PgPool, query: &str) -> Result<Vec<UserInfoRow>
         .replace('_', "\\_");
     let pattern = format!("%{escaped}%");
     let rows = sqlx::query(
-        "SELECT id, email, display_name, signing_pubkey, exchange_pubkey FROM users WHERE email ILIKE $1 ESCAPE '\\' OR display_name ILIKE $1 ESCAPE '\\' LIMIT 20"
+        "SELECT id, email, email_verified, display_name, signing_pubkey, exchange_pubkey FROM users WHERE email ILIKE $1 ESCAPE '\\' OR display_name ILIKE $1 ESCAPE '\\' LIMIT 20"
     )
     .bind(pattern)
     .fetch_all(pool)
@@ -306,6 +310,7 @@ pub async fn search_users(pool: &PgPool, query: &str) -> Result<Vec<UserInfoRow>
             Ok(UserInfoRow {
                 id: r.try_get("id")?,
                 email: r.try_get("email")?,
+                email_verified: r.try_get("email_verified")?,
                 display_name: r.try_get("display_name")?,
                 signing_pubkey: r.try_get("signing_pubkey")?,
                 exchange_pubkey: r.try_get("exchange_pubkey")?,

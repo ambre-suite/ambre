@@ -23,6 +23,10 @@ pub struct MemberRow {
 pub struct MemberWithUserRow {
     pub user_id: uuid::Uuid,
     pub email: String,
+    /// Whether the member's email was provider-verified vs self-asserted at
+    /// `/auth/setup` (#3). Lets the member list flag an unverified peer for the
+    /// TOFU out-of-band key check.
+    pub email_verified: bool,
     pub display_name: String,
     pub role: String,
     pub signing_pubkey: Vec<u8>,
@@ -145,7 +149,7 @@ pub async fn list_document_members(
 ) -> Result<Vec<MemberWithUserRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let rows = sqlx::query(
-        "SELECT dm.user_id, u.email, u.display_name, dm.role, u.signing_pubkey, u.exchange_pubkey, dm.doc_key_enc, dm.invited_by, inv.exchange_pubkey AS wrapper_exchange_pubkey FROM document_members dm INNER JOIN users u ON u.id = dm.user_id LEFT JOIN users inv ON inv.id = dm.invited_by WHERE dm.document_id = $1"
+        "SELECT dm.user_id, u.email, u.email_verified, u.display_name, dm.role, u.signing_pubkey, u.exchange_pubkey, dm.doc_key_enc, dm.invited_by, inv.exchange_pubkey AS wrapper_exchange_pubkey FROM document_members dm INNER JOIN users u ON u.id = dm.user_id LEFT JOIN users inv ON inv.id = dm.invited_by WHERE dm.document_id = $1"
     )
     .bind(did)
     .fetch_all(pool)
@@ -156,6 +160,7 @@ pub async fn list_document_members(
             Ok(MemberWithUserRow {
                 user_id: r.try_get("user_id")?,
                 email: r.try_get("email")?,
+                email_verified: r.try_get("email_verified")?,
                 display_name: r.try_get("display_name")?,
                 role: r.try_get("role")?,
                 signing_pubkey: r.try_get("signing_pubkey")?,
