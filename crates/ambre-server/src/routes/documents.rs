@@ -445,6 +445,10 @@ pub async fn delete_document(
 pub struct UserInfoJson {
     pub id: String,
     pub email: String,
+    /// Whether the email was provider-verified (OIDC) vs self-asserted at
+    /// `/auth/setup` (#3). The share UI should flag an unverified recipient for
+    /// the TOFU out-of-band key check. Additive field; older clients ignore it.
+    pub email_verified: bool,
     pub display_name: String,
     pub signing_pubkey: String,
     pub exchange_pubkey: String,
@@ -479,6 +483,7 @@ pub async fn search_users(
         .map(|u| UserInfoJson {
             id: u.id.to_string(),
             email: u.email,
+            email_verified: u.email_verified,
             display_name: u.display_name,
             signing_pubkey: hex::encode(&u.signing_pubkey),
             exchange_pubkey: hex::encode(&u.exchange_pubkey),
@@ -514,6 +519,9 @@ pub async fn get_pubkeys(
 pub struct MemberInfoJson {
     pub user_id: String,
     pub email: String,
+    /// Whether the member's email was provider-verified (#3). Additive field;
+    /// older clients ignore it.
+    pub email_verified: bool,
     pub display_name: String,
     pub role: String,
     pub signing_pub_key: String,
@@ -542,6 +550,7 @@ pub async fn list_document_members(
         .map(|m| MemberInfoJson {
             user_id: m.user_id.to_string(),
             email: m.email,
+            email_verified: m.email_verified,
             display_name: m.display_name,
             role: m.role,
             signing_pub_key: hex::encode(&m.signing_pubkey),
