@@ -57,6 +57,12 @@ pub struct InviteRequest {
 pub struct InviteResponse {
     pub user_id: String,
     pub display_name: String,
+    /// Whether the invitee's email was provider-verified (OIDC) rather than
+    /// self-asserted at `/auth/setup` (#3). The document key is wrapped to the
+    /// invitee's exchange key here; an unverified recipient is a squat candidate,
+    /// so the client should surface the TOFU out-of-band key check before trusting
+    /// the wrap. Additive field; older clients ignore it.
+    pub email_verified: bool,
 }
 
 pub async fn invite_to_document(
@@ -138,6 +144,7 @@ pub async fn invite_to_document(
     Ok(axum::Json(InviteResponse {
         user_id: invitee_id.to_string(),
         display_name: invitee.display_name,
+        email_verified: invitee.email_verified,
     }))
 }
 

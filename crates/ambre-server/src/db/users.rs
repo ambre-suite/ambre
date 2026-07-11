@@ -12,6 +12,10 @@ pub struct UserRow {
     #[allow(dead_code)]
     pub oidc_subject: Option<String>,
     pub email: String,
+    /// Whether `email` was proven by a provider (OIDC/dev) rather than merely
+    /// self-asserted at `/auth/setup`. A verified email wins any collision (#3):
+    /// an OIDC login reclaims an unverified holder's email.
+    pub email_verified: bool,
     pub display_name: String,
     pub master_key_enc: Option<Vec<u8>>,
     pub master_key_salt: Option<Vec<u8>>,
@@ -38,7 +42,7 @@ pub async fn get_user(
 ) -> Result<Option<UserRow>, AppError> {
     let uid = id_to_uuid(*user_id);
     let row = sqlx::query(
-        "SELECT id, oidc_provider, oidc_subject, email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id FROM users WHERE id = $1"
+        "SELECT id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id FROM users WHERE id = $1"
     )
     .bind(uid)
     .fetch_optional(pool)
@@ -50,6 +54,7 @@ pub async fn get_user(
             oidc_provider: r.try_get("oidc_provider")?,
             oidc_subject: r.try_get("oidc_subject")?,
             email: r.try_get("email")?,
+            email_verified: r.try_get("email_verified")?,
             display_name: r.try_get("display_name")?,
             master_key_enc: r.try_get("master_key_enc")?,
             master_key_salt: r.try_get("master_key_salt")?,
@@ -81,7 +86,7 @@ fn map_email_conflict(e: sqlx::Error) -> AppError {
 /// `users_email_lower_unique` index, so at most one row can match.
 pub async fn get_user_by_email(pool: &PgPool, email: &str) -> Result<Option<UserRow>, AppError> {
     let row = sqlx::query(
-        "SELECT id, oidc_provider, oidc_subject, email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id FROM users WHERE lower(email) = lower($1)"
+        "SELECT id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id FROM users WHERE lower(email) = lower($1)"
     )
     .bind(email)
     .fetch_optional(pool)
@@ -93,6 +98,7 @@ pub async fn get_user_by_email(pool: &PgPool, email: &str) -> Result<Option<User
             oidc_provider: r.try_get("oidc_provider")?,
             oidc_subject: r.try_get("oidc_subject")?,
             email: r.try_get("email")?,
+            email_verified: r.try_get("email_verified")?,
             display_name: r.try_get("display_name")?,
             master_key_enc: r.try_get("master_key_enc")?,
             master_key_salt: r.try_get("master_key_salt")?,
@@ -118,7 +124,7 @@ pub async fn create_user(
     exchange_pubkey: &[u8],
 ) -> Result<UserRow, AppError> {
     let row = sqlx::query(
-        "INSERT INTO users (email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, oidc_provider, oidc_subject, email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id"
+        "INSERT INTO users (email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id"
     )
     .bind(email)
     .bind(display_name)
@@ -137,6 +143,7 @@ pub async fn create_user(
         oidc_provider: row.try_get("oidc_provider")?,
         oidc_subject: row.try_get("oidc_subject")?,
         email: row.try_get("email")?,
+        email_verified: row.try_get("email_verified")?,
         display_name: row.try_get("display_name")?,
         master_key_enc: row.try_get("master_key_enc")?,
         master_key_salt: row.try_get("master_key_salt")?,
@@ -152,13 +159,18 @@ pub async fn create_user(
 /// New users are inserted with placeholder (zero-filled) key columns because
 /// the master key, signing key, and exchange key are only set later via
 /// `PUT /keys/master`. The `ON CONFLICT DO UPDATE` refreshes `email` and
-/// `display_name` on each login but preserves existing key material.
+/// `display_name` on each login but preserves existing key material. The email
+/// is provider-verified, so the row is marked `email_verified = true`.
 ///
-/// N5 collision policy: if the IdP-supplied email is already held by a
-/// DIFFERENT account (e.g. claimed earlier through /auth/setup, where emails
-/// are unverified), the insert or the email refresh violates
-/// `users_email_lower_unique` and the login fails with 409. Surfacing the
-/// squat explicitly is preferred over silently rebinding the email.
+/// Collision policy (#3, supersedes the earlier "always 409" note for the
+/// verified-vs-unverified case): a provider-verified email wins over a
+/// self-asserted one. Before upserting, this RECLAIMS the email from any
+/// UNVERIFIED account currently holding it (that account is a `/auth/setup`
+/// squatter; its email is unbound to a unique, non-resolvable sentinel). A
+/// collision with another VERIFIED identity is left intact, so the upsert then
+/// violates `users_email_lower_unique` and the login fails with 409 -- verified
+/// identities never silently steal each other's email. Reclaim + upsert run in
+/// one transaction so a concurrent login cannot observe a half-freed email.
 pub async fn upsert_user_from_oidc(
     pool: &PgPool,
     oidc_provider: &str,
@@ -166,8 +178,28 @@ pub async fn upsert_user_from_oidc(
     email: &str,
     display_name: &str,
 ) -> Result<UserRow, AppError> {
+    let mut tx = pool.begin().await?;
+
+    // Reclaim the email from any UNVERIFIED holder that is not this same OIDC
+    // identity. The sentinel keeps the NOT NULL + unique invariants while making
+    // the squatter's address non-resolvable for sharing (`get_user_by_email`
+    // will no longer return it) and re-settable by that account later. A verified
+    // holder is deliberately NOT touched, so the upsert below surfaces 409.
+    sqlx::query(
+        "UPDATE users \
+         SET email = 'reclaimed-' || id::text || '@invalid.local', email_verified = false \
+         WHERE lower(email) = lower($1) \
+           AND email_verified = false \
+           AND (oidc_provider IS DISTINCT FROM $2 OR oidc_subject IS DISTINCT FROM $3)",
+    )
+    .bind(email)
+    .bind(oidc_provider)
+    .bind(oidc_subject)
+    .execute(&mut *tx)
+    .await?;
+
     let row = sqlx::query(
-        "INSERT INTO users (oidc_provider, oidc_subject, email, display_name, signing_pubkey, exchange_pubkey) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $3, display_name = $4 RETURNING id, oidc_provider, oidc_subject, email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id, (xmax = 0) AS inserted"
+        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name, signing_pubkey, exchange_pubkey) VALUES ($1, $2, $3, true, $4, $5, $6) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $3, email_verified = true, display_name = $4 RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id, (xmax = 0) AS inserted"
     )
     .bind(oidc_provider)
     .bind(oidc_subject)
@@ -175,27 +207,32 @@ pub async fn upsert_user_from_oidc(
     .bind(display_name)
     .bind(vec![0u8; 32])
     .bind(vec![0u8; 32])
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await
     .map_err(map_email_conflict)?;
 
     let inserted: bool = row.try_get("inserted")?;
-    if inserted {
-        tracing::info!(user_id = %row.try_get::<uuid::Uuid, _>("id")?, provider = %oidc_provider, "user created");
-    }
-
-    Ok(UserRow {
+    let user = UserRow {
         id: row.try_get("id")?,
         oidc_provider: row.try_get("oidc_provider")?,
         oidc_subject: row.try_get("oidc_subject")?,
         email: row.try_get("email")?,
+        email_verified: row.try_get("email_verified")?,
         display_name: row.try_get("display_name")?,
         master_key_enc: row.try_get("master_key_enc")?,
         master_key_salt: row.try_get("master_key_salt")?,
         signing_pubkey: row.try_get("signing_pubkey")?,
         exchange_pubkey: row.try_get("exchange_pubkey")?,
         org_id: row.try_get("org_id")?,
-    })
+    };
+
+    tx.commit().await?;
+
+    if inserted {
+        tracing::info!(user_id = %user.id, provider = %oidc_provider, "user created");
+    }
+
+    Ok(user)
 }
 
 /// Dev-only: upserts a user identified by a `?user=<username>` parameter.
@@ -216,7 +253,7 @@ pub async fn dev_upsert_user(
     // `(xmax = 0)` is true only for a freshly INSERTed row (vs an ON CONFLICT
     // UPDATE), so we can log creation without a prior existence check.
     let row = sqlx::query(
-        "INSERT INTO users (oidc_provider, oidc_subject, email, display_name, signing_pubkey, exchange_pubkey) VALUES ('dev', $1, $2, $1, $3, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $2, display_name = $1, signing_pubkey = $3, exchange_pubkey = $4 RETURNING id, oidc_provider, oidc_subject, email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id, (xmax = 0) AS inserted"
+        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name, signing_pubkey, exchange_pubkey) VALUES ('dev', $1, $2, true, $1, $3, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $2, email_verified = true, display_name = $1, signing_pubkey = $3, exchange_pubkey = $4 RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id, (xmax = 0) AS inserted"
     )
     .bind(username)
     .bind(&email)
@@ -236,6 +273,7 @@ pub async fn dev_upsert_user(
         oidc_provider: row.try_get("oidc_provider")?,
         oidc_subject: row.try_get("oidc_subject")?,
         email: row.try_get("email")?,
+        email_verified: row.try_get("email_verified")?,
         display_name: row.try_get("display_name")?,
         master_key_enc: row.try_get("master_key_enc")?,
         master_key_salt: row.try_get("master_key_salt")?,
@@ -299,12 +337,14 @@ pub async fn update_master_key(
 mod tests {
     use super::*;
 
-    /// N5 guard: an OIDC login whose IdP email is already claimed by a setup
-    /// account fails with `Conflict` (409), not an opaque `Database` (500).
+    /// #3: a provider-verified OIDC login RECLAIMS an email squatted by an
+    /// unverified `/auth/setup` account. The login succeeds (closing the
+    /// unauthenticated login-DoS), the OIDC row owns the verified email, and the
+    /// squatter's row no longer resolves for that email.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
-    async fn oidc_login_with_squatted_email_is_conflict(pool: PgPool) {
-        create_user(
+    async fn oidc_login_reclaims_email_from_unverified_squatter(pool: PgPool) {
+        let squatter = create_user(
             &pool,
             "alice@example.com",
             "Alice",
@@ -315,11 +355,88 @@ mod tests {
         )
         .await
         .expect("setup account");
+        assert!(!squatter.email_verified, "a setup email is unverified");
 
-        let err = upsert_user_from_oidc(&pool, "google", "sub-123", "Alice@example.com", "Alice")
+        let oidc = upsert_user_from_oidc(&pool, "google", "sub-123", "Alice@example.com", "Alice")
             .await
-            .expect_err("email is already claimed");
+            .expect("verified login must reclaim the squatted email");
+        assert!(oidc.email_verified, "the OIDC email is verified");
+        assert_ne!(oidc.id, squatter.id, "a distinct OIDC identity");
+
+        // The email now resolves to the verified OIDC account, not the squatter.
+        let resolved = get_user_by_email(&pool, "alice@example.com")
+            .await
+            .expect("query")
+            .expect("email still resolves");
+        assert_eq!(resolved.id, oidc.id);
+
+        // The squatter row survives but its email was unbound to a sentinel.
+        let squatter_now = get_user(
+            &pool,
+            &ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*squatter.id.as_bytes())),
+        )
+        .await
+        .expect("query")
+        .expect("squatter row still exists");
+        assert_ne!(
+            squatter_now.email.to_lowercase(),
+            "alice@example.com",
+            "the squatter no longer holds the reclaimed email"
+        );
+    }
+
+    /// #3: a verified email is NOT reclaimable. Once an OIDC identity owns it, a
+    /// later `/auth/setup` claim for the same email fails with 409.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn verified_email_cannot_be_squatted_by_setup(pool: PgPool) {
+        upsert_user_from_oidc(&pool, "google", "sub-1", "dave@example.com", "Dave")
+            .await
+            .expect("verified login");
+
+        let err = create_user(
+            &pool,
+            "DAVE@example.com",
+            "Impostor",
+            &[9u8; 32],
+            &[8u8; 16],
+            &[7u8; 32],
+            &[6u8; 32],
+        )
+        .await
+        .expect_err("a verified email must not be claimable via setup");
         assert!(matches!(err, AppError::Conflict { .. }), "got {err:?}");
+    }
+
+    /// #3: two DIFFERENT verified identities cannot hold the same email -- the
+    /// second login surfaces 409 rather than silently stealing it (reclaim only
+    /// applies to UNVERIFIED holders).
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn verified_email_collision_is_conflict(pool: PgPool) {
+        upsert_user_from_oidc(&pool, "google", "sub-a", "erin@example.com", "Erin")
+            .await
+            .expect("first verified login");
+
+        let err = upsert_user_from_oidc(&pool, "github", "sub-b", "erin@example.com", "Erin")
+            .await
+            .expect_err("a second verified identity must not steal the email");
+        assert!(matches!(err, AppError::Conflict { .. }), "got {err:?}");
+    }
+
+    /// A returning OIDC identity refreshing its own email is idempotent (the
+    /// reclaim skips its own row, so it does not self-conflict).
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn oidc_relogin_keeps_its_own_email(pool: PgPool) {
+        let first = upsert_user_from_oidc(&pool, "google", "sub-x", "frank@example.com", "Frank")
+            .await
+            .expect("first login");
+        let second = upsert_user_from_oidc(&pool, "google", "sub-x", "frank@example.com", "Frank")
+            .await
+            .expect("re-login must not self-conflict");
+        assert_eq!(first.id, second.id);
+        assert!(second.email_verified);
     }
 
     /// N5 guard: uniqueness is case-insensitive across setup accounts too.
