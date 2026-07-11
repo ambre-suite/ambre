@@ -8,7 +8,6 @@ description = "Types fondamentaux d'Ambre (UUID, DocType, PublicKey)"
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 uuid = { workspace = true }
-zeroize = { workspace = true }
 hex = { workspace = true }
 
 [dev-dependencies]
