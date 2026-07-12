@@ -311,6 +311,62 @@ impl Viewport {
 }
 
 // =============================================================================
+// Clipboard payload -- id-free, slot-indexed, portable across boards (§8 ter)
+// =============================================================================
+
+/// One captured CRDT scalar field value. Covers the four `LoroValue` leaf kinds
+/// an element / connector map stores (§2.B); container fields (a group's
+/// `children` list) are never captured here -- membership is remapped to slots.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum ClipValue {
+    F64(f64),
+    Bool(bool),
+    Str(String),
+    Bin(Vec<u8>),
+}
+
+/// An element captured id-free: the full scalar field set of its map (type,
+/// geometry, style blob, per-type payload). Referenced elsewhere in the payload
+/// by its **slot** (index in [`ClipboardPayload::elements`]), never by id, so an
+/// old id can never leak into the paste.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ClipElement {
+    pub fields: Vec<(String, ClipValue)>,
+}
+
+/// A connector captured with both endpoints remapped to element slot indices.
+/// A connector whose partner was not copied is never captured (it would dangle),
+/// so both slots always resolve.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ClipConnector {
+    pub from_slot: usize,
+    pub to_slot: usize,
+    /// Non-endpoint scalar fields (anchors, path type, arrows).
+    pub fields: Vec<(String, ClipValue)>,
+}
+
+/// Group / frame membership remapped from ids to element slot indices.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ClipMembership {
+    pub parent_slot: usize,
+    pub child_slots: Vec<usize>,
+}
+
+/// Self-contained, id-free snapshot of a selection produced by `CopyElements`
+/// (§8 ter). Portable across boards and sessions (postcard round-trips for the
+/// OS clipboard). Media are referenced by content hash only (blobs stay on
+/// MinIO, `toile-interop §5`); a `doc_embed` copies the same `document_id` (a
+/// second reference to the one nested document, not a clone).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ClipboardPayload {
+    pub elements: Vec<ClipElement>,
+    pub connectors: Vec<ClipConnector>,
+    pub membership: Vec<ClipMembership>,
+    /// Source union bounds, for the paste-at-cursor offset.
+    pub origin: Rect,
+}
+
+// =============================================================================
 // Commands (UI/Logic -> ToileState)
 // =============================================================================
 
@@ -427,6 +483,26 @@ pub enum ToileCommand {
         style: ElementStyle,
     },
 
+    // -- Clipboard (§8 ter) --
+    /// Read the selection into a self-contained, id-free [`ClipboardPayload`]
+    /// (does not mutate the doc); answered by `ToileEvent::Clipboard`. Cut is the
+    /// UI issuing this then `DeleteElements` on the same selection.
+    CopyElements {
+        ids: Vec<ElementId>,
+    },
+    /// Re-mint every node in `payload`, offset so `payload.origin` lands at `at`,
+    /// and insert above the current top of the z-order. One undo item.
+    PasteElements {
+        payload: ClipboardPayload,
+        at: Point,
+    },
+    /// Copy + paste fused into a single undo item, offset by `delta` (the
+    /// alt-drag / Ctrl+D nudge).
+    DuplicateElements {
+        ids: Vec<ElementId>,
+        delta: Vec2,
+    },
+
     // -- Selection aggregates for the status bar (§8 quinquies) --
     RequestSelectionStats {
         ids: Vec<ElementId>,
@@ -470,6 +546,9 @@ pub struct SelectionStats {
 pub enum ToileEvent {
     ViewportData(DisplayViewport),
     ElementCreated(ElementId),
+    /// Result of `CopyElements`: the UI stashes it and may mirror it to the OS
+    /// clipboard for cross-tab paste (§8 ter).
+    Clipboard(ClipboardPayload),
     SelectionStats(SelectionStats),
     DanglingConnector(ConnectorId),
     /// Local undo/redo stack availability, driving the chrome affordances (§8 bis).
