@@ -9,6 +9,7 @@ members = [
     "crates/ambre-protocol",
     "crates/ambre-bus",
     "crates/ambre-draw",
+    "crates/ambre-pdf",
     "crates/ambre-logic",
     "crates/ambre-sync",
     "crates/ambre-trame",
@@ -32,6 +33,7 @@ default-members = [
     "crates/ambre-protocol",
     "crates/ambre-bus",
     "crates/ambre-draw",
+    "crates/ambre-pdf",
     "crates/ambre-logic",
     "crates/ambre-sync",
     "crates/ambre-trame",
@@ -205,7 +207,10 @@ jsonwebtoken      = "9"
 
 # Import/export
 docx-rs = "0.4"
-krilla = "0.7"
+# default-features off: consumers (ambre-pdf) opt into only the vector/glyph
+# core, keeping the lazy-loaded PDF chunk small on wasm (no raster-images,
+# simple-text, or rayon unless explicitly enabled).
+krilla = { version = "0.7", default-features = false }
 html5ever = "0.39"
 pulldown-cmark = "0.13"
 
