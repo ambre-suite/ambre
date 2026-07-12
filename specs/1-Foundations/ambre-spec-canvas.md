@@ -445,7 +445,7 @@ Empirical figures (release build, `opt-level = z` + LTO) validating the `AutoNoV
 ### CANVAS P1 — Integration
 
 - [x] `KrillaSurface`: `DrawSurface` implementation for PDF export (Logic thread, lazy-loaded). New **`ambre-pdf`** crate (krilla backend); geometry / glyph / path / clip / transform mapped to krilla, headless PDF-serialization tests. *(ToUnicode text mapping deferred -- glyphs render, text not yet selectable.)*
-- [ ] `push_transform` / `pop_transform` on `WgpuSurface` (Prose margins, Toile pan/zoom)
+- [x] `push_transform` / `pop_transform` on `WgpuSurface` (Prose margins, Toile pan/zoom)
 - [ ] `fill_path` / `stroke_path` on `WgpuSurface` via lyon (Toile, Trame charts)
 - [ ] Lazy loading CJK/Arabic/Devanagari fonts (trigger on missing codepoint)
 - [x] `ambreFatal` **terminal screen** (panic → canvas terminal render) wired in `host`/`ambre-app`. *(The `panic::set_hook` JS hook itself is done -- see `ambre-spec-architecture.md §7 ARCH P1`; only the canvas-side terminal screen remains. Roadmap Epic `E2`.)*
