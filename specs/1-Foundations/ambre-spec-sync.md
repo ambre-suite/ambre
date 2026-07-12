@@ -523,6 +523,31 @@ onopen ──► resubscribe_all(): for each server-created doc, ws_send(Subscri
 - **Double Compaction**: Redis lock `SET NX TTL 30s` server-side + `compaction_lock` client-side.
 - **Plaintext presence**: Ephemeral payloads (cursor, selection, name) are **encrypted** with the Document Key before sending. The server only sees `document_id`, `pub_key`, `counter`.
 
+### Presence identity — `pub_key` → canonical `UserId`
+
+An `Ephemeral` frame authenticates its author by the Ed25519 `public_data.pub_key`
+(verified at reception, sec.2.F). That key is **per-session/per-device**, so it is
+the wrong key for presence: the same user on two devices would otherwise show up as
+two collaborators in two colors, and it cannot be reconciled with the cross-app
+peer color/name (`prose-ui::peer_color`, hashed on `UserId`). The app engines
+therefore require presence keyed by the **canonical `UserId`** (`toile-logic §7`,
+`trame-logic §7`): the Sync thread must resolve the author `pub_key` to a `UserId`
+**before** delivering the frame, and it does so on the trusted side — a peer cannot
+put another user's id in the payload.
+
+Consequently `LogicEvent::RemoteEphemeral` carries a resolved
+`from_user_id: UserId` (not just the opaque `payload`); the Logic thread keys peer
+presence on it. Resolution needs a **directory of members' signing keys**
+(`pub_key` -> `UserId`) for the document. That directory does not exist yet: the
+`GET /members` response and `MemberInfo` expose only the X25519 `exchange_pub_key`
+(for key wrapping), not the Ed25519 verifying key that authors ephemerals, and
+there is no key-transparency / trusted-keys store on the client (TOFU, V2). Until
+it lands, `SyncDocumentState::resolve_ephemeral_author` returns `None` and an
+inbound ephemeral is **dropped** (presence is best-effort; a cursor is never shown
+under a guessed identity). Tracked in "SYNC P4" below. The anti-replay counter
+(sec. above) stays keyed by `pub_key`: it is a per-device replay guard, orthogonal
+to the per-user presence identity.
+
 ### Document Sharing — Key Wrapping
 
 The DocumentKey is shared via **static X25519 ECDH**: the wrapper seals it under a
@@ -824,6 +849,7 @@ All tests compile in native mode (`#[cfg(not(target_arch = "wasm32"))]`) with `t
 
 ### SYNC P4 — Channels, Meetings & Optimization
 
+- [ ] Presence identity resolution: a per-document `pub_key` -> `UserId` directory (members' Ed25519 signing keys, exposed by `GET /members` / `MemberInfo`, or a trusted-keys store) so `SyncDocumentState::resolve_ephemeral_author` returns the canonical `UserId` and inbound `RemoteEphemeral` is delivered with a spoof-proof `from_user_id` (§ "Presence identity"; consumed by `toile-logic §7` / `trame-logic §7`). Until then inbound ephemerals are dropped; the contract (`RemoteEphemeral.from_user_id`) and the Logic-side handling already exist.
 - [ ] Murmure channels: `OpenChannel`, `SendChannelUpdate`, `SendChannelEphemeral`, internal segment management (creation, sealing, routing — the Logic thread does not see segment_ids)
 - [ ] Meetings: WebRTC signaling (`SignalingClientMsg` / `SignalingServerMsg`)
 - [ ] Compression threshold tuning (default 256 bytes — adjust if benchmarks justify)
