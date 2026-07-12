@@ -227,7 +227,7 @@ Stories:
   deferred `ToileCommand` variant that lands with Prose's shared `TextDelta` (`ARCH P2` / `E5`), like the Trame
   schema deferral did not gate `E3`. Presence **render** and the `DisplayViewport` -> `WgpuSurface` feed are UI
   work under `toile-ui §13`.)*
-- `[ ]` `CANVAS P1` — `lyon` / `WgpuSurface` vector pipeline (quad + path), `ViewportTransform`, glyph atlas, and
+- `[x]` `CANVAS P1` — `lyon` / `WgpuSurface` vector pipeline (quad + path), `ViewportTransform`, glyph atlas, and
   PDF export via `KrillaSurface` (krilla). The shared canvas foundation the vector tools and the PDF path need.
 - `[ ]` `toile-ui §13 Phase 0/1` — `ViewportTransform` / batcher / adaptive grid / hit-testing / Select tool, then
   the full tool set (Pen/Shape/Connector/Draw/Sticky/Text), Parley inline editor, shortcuts + OS-clipboard
