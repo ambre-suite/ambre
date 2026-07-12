@@ -31,7 +31,7 @@ The specs predate this file and use their own phase vocabulary. Mapping:
 | `E2` | `CANVAS P0` remaining items, `CHROME P4` (launcher) | -- | -- |
 | `E3` | -- | `trame-logic §14`, `trame-features §10`, `trame-ui §18`, `trame-interop §10` (Phase 1) | -- |
 | `ET` | `ARCH P5` (test infrastructure) | Trame "Tested DoD" debt items (logic/features/ui/interop) | -- |
-| `E4` | `ARCH P6` (composition / in-place embeds), `CANVAS P1` (paths/PDF) | -- | `toile-logic §13`, `toile-features §9`, `toile-ui §13`, `toile-interop §10` (Phase 0/1) |
+| `E4` | `CANVAS P1` (paths/PDF), `ARCH P6` (composition / in-place embeds) | -- | `toile-logic §13`, `toile-ui §13`, `toile-features §9`, `toile-interop §10` (Phase 0/1) |
 | `E5` | `ARCH P2` (`ambre-prose`), `ARCH P7` (`ambre-murmure`), `SYNC P4`, `SRV P1` | -- | -- |
 | `E6` | `ARCH P4`, `CANVAS P2` | Trame Phase 2+, `trame-logic §14 Phase 4` (scaling debt) | Toile Phase 2 (optimization) |
 
@@ -212,14 +212,6 @@ launcher/sharing UI); what is new is the spatial document model and the GPU vect
 > foundation Story lands here rather than under `E5`.
 
 Stories:
-- `[ ]` `ARCH P6` (composition) — in-place editable nested embeds: `AppCommand`/`TrameOutcome` recursion routed by
-  `Uuid` so a `doc_embed` (Prose/Trame) is editable in place, role-gated (`toile-logic §2.I`). *(embeds start at the
-  read-only subset.)* The spatial `DocState` itself -- typed `ToileState` behind the `ambre-logic` `match`, `rstar`
-  R-tree culling, the IPC contract (`ambre-bus::app::toile`, `AppCommand::Toile`/`AppEvent::Toile`, `DocState::Toile`,
-  remote/snapshot/ephemeral legs) -- lands under the `toile-logic §13` story below, not here. Open here: the recursive
-  command routing + input-focus transform (`ToileCommand::Embedded`).
-- `[ ]` `CANVAS P1` — `lyon` / `WgpuSurface` vector pipeline (quad + path), `ViewportTransform`, glyph atlas, and
-  PDF export via `KrillaSurface` (krilla). The shared canvas foundation the vector tools and the PDF path need.
 - `[~]` `toile-logic §13 Phase 0/1` — CRDT schema + `SpatialIndex` + element/connector/group/stroke lifecycle +
   clipboard + `DisplayViewport`, then dispatcher/Sync wiring, `apply_ephemeral` / `apply_remote`, snapshot &
   persistence paths, `my_user_id` from `SessionReady`, `UndoManager`, Find + selection stats, `UserId` presence.
@@ -229,6 +221,8 @@ Stories:
   snapshot + local-restore paths). Clipboard (copy/paste/duplicate, §8 ter) landed with its convergence test
   belt. Open: frames content, Find; `my_user_id` from `SessionReady`, selection-stats plumbing to the status
   bar, and `UserId` presence.)*
+- `[ ]` `CANVAS P1` — `lyon` / `WgpuSurface` vector pipeline (quad + path), `ViewportTransform`, glyph atlas, and
+  PDF export via `KrillaSurface` (krilla). The shared canvas foundation the vector tools and the PDF path need.
 - `[ ]` `toile-ui §13 Phase 0/1` — `ViewportTransform` / batcher / adaptive grid / hit-testing / Select tool, then
   the full tool set (Pen/Shape/Connector/Draw/Sticky/Text), Parley inline editor, shortcuts + OS-clipboard
   mirror, context menu / find panel / status bar, `PeerPresence` overlay with cross-app `UserId` colors,
@@ -239,6 +233,12 @@ Stories:
 - `[ ]` `toile-interop §10 Phase 0/1` — SVG import/export, raster import, safety limits, media hashing + placeholder;
   then PDF export (presentation order), Figma/Miro converters, media pipeline on the crypto/Sync layer.
   Golden fixtures + wasm export tests.
+- `[ ]` `ARCH P6` (composition) — in-place editable nested embeds: `AppCommand`/`TrameOutcome` recursion routed by
+  `Uuid` so a `doc_embed` (Prose/Trame) is editable in place, role-gated (`toile-logic §2.I`). *(embeds start at the
+  read-only subset.)* The spatial `DocState` itself -- typed `ToileState` behind the `ambre-logic` `match`, `rstar`
+  R-tree culling, the IPC contract (`ambre-bus::app::toile`, `AppCommand::Toile`/`AppEvent::Toile`, `DocState::Toile`,
+  remote/snapshot/ephemeral legs) -- lands under the `toile-logic §13` story above, not here. Open here: the recursive
+  command routing + input-focus transform (`ToileCommand::Embedded`). Sits on top of the logic/canvas/ui stack.
 
 ## E5 — Application expansion  `[ ]` (deferred)
 
