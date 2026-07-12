@@ -1,11 +1,11 @@
 //! Toile IPC contract (§8) and the data-oriented display structures (§9).
 //!
-//! **Scope note (Phase 0).** This is the *core standalone* slice of the
-//! contract: the element / connector / stroke lifecycle and the `DisplayViewport`
-//! derivation. Text bodies, frames content, groups, clipboard, find, nested
-//! `doc_embed` and undo/redo are later Phase-0 / Phase-1 slices and their
-//! commands are added as they land, keeping every shipped variant fully handled
-//! (no `todo!()` per the project constitution).
+//! **Scope note (Phase 0).** This covers the element / connector / stroke
+//! lifecycle, the `DisplayViewport` derivation, groups (§2.F bis) and local
+//! undo/redo (§8 bis). Text bodies, frames content, clipboard, find and nested
+//! `doc_embed` editing are later Phase-0 / Phase-1 slices and their commands are
+//! added as they land, keeping every shipped variant fully handled (no `todo!()`
+//! per the project constitution).
 //!
 //! **Outcome shape.** [`ToileOutcome`] mirrors `TrameOutcome` rather than the
 //! spec's literal `sync: Vec<SyncCommand>`: it returns raw CRDT / ephemeral
@@ -99,6 +99,22 @@ pub enum ToileCommand {
         to: ZTarget,
     },
 
+    // -- Groups (§2.F bis) --
+    /// Bind a set of elements into a fresh group element (selects/transforms as
+    /// one). One undo item.
+    GroupElements {
+        ids: Vec<ElementId>,
+    },
+    /// Drop a group's binding, re-parenting its children to the group's own
+    /// parent. The children survive; only the group node is removed. One undo item.
+    UngroupElements {
+        group: ElementId,
+    },
+
+    // -- Undo / redo (local-only, §8 bis) --
+    Undo,
+    Redo,
+
     // -- Connectors --
     CreateConnector {
         from: ElementId,
@@ -169,6 +185,11 @@ pub enum ToileEvent {
     ElementCreated(ElementId),
     SelectionStats(SelectionStats),
     DanglingConnector(ConnectorId),
+    /// Local undo/redo stack availability, driving the chrome affordances (§8 bis).
+    UndoState {
+        can_undo: bool,
+        can_redo: bool,
+    },
     Error(ToileError),
 }
 

@@ -958,16 +958,16 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
 > No phase ships `[x]` without its test belt green.
 
 **Phase 0 — Core standalone**
-- [~] `ToileState` + CRDT schema (§2): `elements`, `connectors`, `drawings`, unified `layers` z-order, one per-element `ElementStyle` register **landed**; `frames` content / `groups` / `media` maps still open.
+- [~] `ToileState` + CRDT schema (§2): `elements`, `connectors`, `drawings`, unified `layers` z-order, one per-element `ElementStyle` register, and `groups` (per-group `children` list, derived-only bounds) **landed**; `frames` content / `media` maps still open.
 - [x] Move-invariant `ElementId` minting (`{peer:016x}_{counter:08x}`, §1)
 - [x] `SpatialIndex` (`rstar` R-tree) with the index-equivalence property test (indexed cull vs brute-force agree)
 - [x] Element lifecycle commands (create / update / delete / transform / lock / reorder) with test belt
-- [ ] Group / ungroup (§2.F bis) with bounds-union derivation
+- [x] Group / ungroup (§2.F bis) with bounds-union derivation. **DoD:** green in `ambre-toile/src/convergence_tests.rs` (union bounds + below-members z-order, group move translates members, ungroup keeps children/order, delete cascades).
 - [ ] Clipboard: copy / paste / duplicate (§8 ter) with test belt
 - [x] Connector routing (§5) + endpoint binding (create / retarget / delete, dangling detection)
 - [x] Stroke storage + smoothing (§4)
 - [x] `DisplayViewport` derivation (culled visible set)
-- [~] `ToileCommand` / `ToileEvent` consolidated enums (§8): Phase-0 lifecycle subset landed in `ambre-toile`; text/frames/groups/clipboard/find/embedded/undo variants + postcard round-trip still open.
+- [~] `ToileCommand` / `ToileEvent` consolidated enums (§8): lifecycle + groups + undo/redo (`GroupElements`/`UngroupElements`/`Undo`/`Redo`, `UndoState` event) landed in `ambre-toile`; text/frames/clipboard/find/embedded variants + postcard round-trip still open.
 - [x] 2-peer CRDT convergence property-test (element / move-LWW / restyle-register / delete / reorder converge). **DoD:** green in `ambre-toile/src/convergence_tests.rs`.
 
 **Phase 1 — Logic Thread Integration**
@@ -976,7 +976,7 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
 - [ ] `apply_remote` accepting both deltas and snapshots (§8)
 - [ ] `export_snapshot` + persist-on-change to IndexedDB + the `RequestSnapshot` / `SnapshotNeeded` / `RemoteSnapshot` paths (§8)
 - [ ] `my_user_id` seeded from `LogicEvent::SessionReady` (§7), keys reactions `toile-features §4.A`
-- [ ] `loro::UndoManager` wired to `Undo` / `Redo`, one `doc.commit()` per mutating command (§8bis)
+- [x] `loro::UndoManager` wired to `Undo` / `Redo`, one `doc.commit()` per mutating command (§8bis). Landed early with the Phase-0 groups slice (`apply_history`, `UndoState` event); **DoD** green in `ambre-toile/src/convergence_tests.rs` (undo reverts create + redo restores; a group undoes as one item). Chrome affordance wiring stays with Phase 1 UI.
 - [ ] `Find` handler (§8 quater) behind the chrome panel
 - [ ] `RequestSelectionStats` -> selection aggregates for the status bar (§8 quinquies)
 - [ ] Presence keyed by canonical `UserId` (§7)
