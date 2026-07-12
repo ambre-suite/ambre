@@ -958,17 +958,17 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
 > No phase ships `[x]` without its test belt green.
 
 **Phase 0 — Core standalone**
-- [ ] `ToileState` + CRDT schema (§2): `elements`, `connectors`, `frames`, `groups`, `drawings`, `media`, unified `layers` z-order, one per-element `ElementStyle` register
-- [ ] Move-invariant `ElementId` minting (`{peer:016x}_{counter:08x}`, §1)
-- [ ] `SpatialIndex` (`rstar` R-tree) with the index-equivalence property test (indexed cull vs brute-force agree)
-- [ ] Element lifecycle commands (create / update / delete / transform) with test belt
+- [~] `ToileState` + CRDT schema (§2): `elements`, `connectors`, `drawings`, unified `layers` z-order, one per-element `ElementStyle` register **landed**; `frames` content / `groups` / `media` maps still open.
+- [x] Move-invariant `ElementId` minting (`{peer:016x}_{counter:08x}`, §1)
+- [x] `SpatialIndex` (`rstar` R-tree) with the index-equivalence property test (indexed cull vs brute-force agree)
+- [x] Element lifecycle commands (create / update / delete / transform / lock / reorder) with test belt
 - [ ] Group / ungroup (§2.F bis) with bounds-union derivation
 - [ ] Clipboard: copy / paste / duplicate (§8 ter) with test belt
-- [ ] Connector routing (§5) + endpoint binding
-- [ ] Stroke storage + smoothing (§4)
-- [ ] `DisplayViewport` derivation (culled visible set)
-- [ ] `ToileCommand` / `ToileEvent` consolidated enums (§8) + postcard round-trip
-- [ ] 2-peer CRDT convergence property-test (concurrent element / connector / layer ops converge by LWW). **DoD:** required for the MVP to be considered tested.
+- [x] Connector routing (§5) + endpoint binding (create / retarget / delete, dangling detection)
+- [x] Stroke storage + smoothing (§4)
+- [x] `DisplayViewport` derivation (culled visible set)
+- [~] `ToileCommand` / `ToileEvent` consolidated enums (§8): Phase-0 lifecycle subset landed in `ambre-toile`; text/frames/groups/clipboard/find/embedded/undo variants + postcard round-trip still open.
+- [x] 2-peer CRDT convergence property-test (element / move-LWW / restyle-register / delete / reorder converge). **DoD:** green in `ambre-toile/src/convergence_tests.rs`.
 
 **Phase 1 — Logic Thread Integration**
 - [ ] Logic-thread dispatch: `handle_command` returning `ToileOutcome` (§8), via typed `DocState` + `match` (`architecture §6`)
