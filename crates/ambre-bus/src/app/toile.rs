@@ -454,6 +454,18 @@ pub enum ToileCommand {
         group: ElementId,
     },
 
+    // -- Frames (§2.F) --
+    /// Set a frame's membership: add / remove children on the frame's `children`
+    /// list. The frame itself is an ordinary element (created via
+    /// `CreateElement { kind: Frame, .. }`); only its content is frame-specific.
+    /// The engine keeps the §2.G invariant (a child paints after its frame).
+    /// One undo item.
+    SetFrameChildren {
+        frame: ElementId,
+        add: Vec<ElementId>,
+        remove: Vec<ElementId>,
+    },
+
     // -- Undo / redo (local-only, §8 bis) --
     Undo,
     Redo,

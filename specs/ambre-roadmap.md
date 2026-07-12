@@ -218,9 +218,10 @@ Stories:
   Includes the 2-peer convergence property-test (**DoD**). *(Phase 0 landed: schema, index, element/connector/
   stroke lifecycle, groups, `UndoManager`, `DisplayViewport`, convergence property-test green. Phase 1 dispatcher/
   Sync/persistence wiring landed (dispatch arm, `SendUpdate`/`SendEphemeral`, `apply_remote`/`apply_remote_batch`,
-  snapshot + local-restore paths). Clipboard (copy/paste/duplicate, §8 ter) landed with its convergence test
-  belt. Open: frames content, Find; `my_user_id` from `SessionReady`, selection-stats plumbing to the status
-  bar, and `UserId` presence.)*
+  snapshot + local-restore paths). Clipboard (copy/paste/duplicate, §8 ter) and frame membership
+  (`SetFrameChildren`, §2.F/§2.G) landed with their convergence test belts, closing Phase 0. Open (Phase 1):
+  `EditText` (blocked on Prose's shared `TextDelta`), Find; `my_user_id` from `SessionReady`, selection-stats
+  plumbing to the status bar, and `UserId` presence.)*
 - `[ ]` `CANVAS P1` — `lyon` / `WgpuSurface` vector pipeline (quad + path), `ViewportTransform`, glyph atlas, and
   PDF export via `KrillaSurface` (krilla). The shared canvas foundation the vector tools and the PDF path need.
 - `[ ]` `toile-ui §13 Phase 0/1` — `ViewportTransform` / batcher / adaptive grid / hit-testing / Select tool, then

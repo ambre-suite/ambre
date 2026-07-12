@@ -6,10 +6,11 @@
 //! thread; it exits only as exported bytes (§1).
 //!
 //! **Phase 0 scope.** Element / connector / stroke lifecycle, z-order, groups
-//! (§2.F bis), local undo/redo (§8 bis), clipboard (§8 ter), selection stats,
-//! viewport-culled `DisplayViewport` derivation, and the remote-apply / snapshot
-//! paths. Frames content, find and nested-doc editing are subsequent slices;
-//! every command handled here is complete.
+//! (§2.F bis), frame membership (§2.F/§2.G), local undo/redo (§8 bis), clipboard
+//! (§8 ter), selection stats, viewport-culled `DisplayViewport` derivation, and
+//! the remote-apply / snapshot paths. Rich text (`EditText`, blocked on Prose's
+//! shared `TextDelta`), find and nested-doc editing are subsequent slices; every
+//! command handled here is complete.
 
 use std::collections::{HashMap, HashSet};
 
@@ -121,6 +122,9 @@ impl ToileState {
             ToileCommand::Reorder { node, to } => self.reorder(node, to),
             ToileCommand::GroupElements { ids } => self.group_elements(&ids),
             ToileCommand::UngroupElements { group } => self.ungroup_elements(&group),
+            ToileCommand::SetFrameChildren { frame, add, remove } => {
+                self.set_frame_children(&frame, &add, &remove)
+            }
             ToileCommand::Undo => self.apply_history(true),
             ToileCommand::Redo => self.apply_history(false),
             ToileCommand::CreateConnector {
@@ -290,6 +294,11 @@ impl ToileState {
             (ElementKind::Sticky | ElementKind::Text, InitContent::None) => {
                 let _ = em.insert("text", "");
             }
+            (ElementKind::Frame, _) => {
+                // Frame content (§2.C): an empty membership list at birth. Notes /
+                // autolayout are seeded by their toile-features commands.
+                let _ = em.insert_container(CHILDREN, LoroMovableList::new());
+            }
             _ => {}
         }
     }
@@ -428,12 +437,15 @@ impl ToileState {
             NodeId::Element(e) => !del.contains(e),
             NodeId::Connector(c) => !orphan_conns.contains(c),
         });
-        self.doc.commit();
-
         for id in &expanded {
             self.bounds.remove(id);
             self.index.remove(id);
         }
+        // A group whose members were all deleted is now empty and meaningless;
+        // prune it so the incremental caches match a full rebuild (§1).
+        self.prune_empty_groups();
+        self.doc.commit();
+
         self.rematerialize_layers();
         self.recompute_groups();
         self.emit_with_update(vec![self.viewport_event()])
@@ -476,9 +488,34 @@ impl ToileState {
                 members.push(id.clone());
             }
         }
+        // Drop any member that is an ancestor of another member: selecting a group
+        // together with one of its own descendants is contradictory. Keep the
+        // descendants (the ancestor would otherwise be emptied by the detach below
+        // and pruned mid-op, leaving a dangling child ref in the new group, §1).
+        members = members
+            .iter()
+            .filter(|m| {
+                let mut sub = HashSet::new();
+                self.collect_subtree(m, &mut sub);
+                sub.remove(*m);
+                !members.iter().any(|o| o != *m && sub.contains(o))
+            })
+            .cloned()
+            .collect();
         if members.len() < 2 {
             return ToileOutcome::display_only(Vec::new());
         }
+        // Detach each member from its current group, then prune any group emptied
+        // by the detach so the incremental caches stay equal to a full rebuild
+        // (§1). Done before computing `insert_at` since pruning shifts `layers`.
+        for m in &members {
+            if let Some(g) = self.enclosing_group(m) {
+                self.remove_child(&g, m);
+            }
+        }
+        self.prune_empty_groups();
+        self.rematerialize_layers();
+
         // Lowest layers index among the members (where the group node will sit).
         let insert_at = members
             .iter()
@@ -489,13 +526,6 @@ impl ToileState {
             })
             .min()
             .unwrap_or(0);
-
-        // Detach each member from its current group, if any.
-        for m in &members {
-            if let Some(g) = self.enclosing_group(m) {
-                self.remove_child(&g, m);
-            }
-        }
 
         let id = self.mint_element_id();
         let elems = self.doc.get_map(ELEMENTS);
@@ -539,10 +569,13 @@ impl ToileState {
         let _ = self.doc.get_map(ELEMENTS).delete(group.as_str());
         self.strip_layers(|node| !matches!(node, NodeId::Element(e) if e == group));
 
-        // Re-parent the children to the enclosing group (board parent is implicit).
+        // Re-parent the children to the enclosing group (board parent is implicit):
+        // drop the ungrouped group from the parent's `children` (else it lingers as
+        // a dangling ref, desyncing recompute_groups from a full rebuild, §1), then
+        // append the surviving children.
         if let Some(p) = &parent {
-            let plist = self.children_list(p);
-            if let Some(list) = plist {
+            self.remove_child(p, group);
+            if let Some(list) = self.children_list(p) {
                 for c in &children {
                     let _ = list.push(c.as_str());
                 }
@@ -555,6 +588,99 @@ impl ToileState {
         self.rematerialize_layers();
         self.recompute_groups();
         self.emit_with_update(vec![self.viewport_event()])
+    }
+
+    // -- frames (§2.F) ---------------------------------------------------------
+
+    /// Set a frame's membership: remove then add ids on the frame's `children`
+    /// list, and enforce the §2.G frame/child z-order invariant. A node belongs
+    /// to at most one container, so an added id is first detached from any group.
+    /// One undo item.
+    fn set_frame_children(
+        &mut self,
+        frame: &ElementId,
+        add: &[ElementId],
+        remove: &[ElementId],
+    ) -> ToileOutcome {
+        let Some(fm) = self.element_map(frame) else {
+            return self.err_no_element(frame);
+        };
+        if str_of(&fm, "type") != "frame" {
+            return ToileOutcome::display_only(Vec::new());
+        }
+        let Some(list) = self.children_list(frame) else {
+            return self.err_no_element(frame);
+        };
+
+        let mut changed = false;
+        // Remove first, so a same-id remove+add re-appends at the end.
+        for id in remove {
+            if let LoroValue::List(items) = list.get_deep_value()
+                && let Some(idx) = items
+                    .iter()
+                    .position(|v| matches!(v, LoroValue::String(s) if s.as_str() == id.as_str()))
+            {
+                let _ = list.delete(idx, 1);
+                changed = true;
+            }
+        }
+        // Add: skip the frame itself, unknown ids, and current members.
+        let existing = self.children_of(frame);
+        for id in add {
+            if id == frame || !self.bounds.contains_key(id) || existing.contains(id) {
+                continue;
+            }
+            if let Some(g) = self.enclosing_group(id) {
+                self.remove_child(&g, id);
+            }
+            let _ = list.push(id.as_str());
+            changed = true;
+        }
+        if !changed {
+            return ToileOutcome::display_only(Vec::new());
+        }
+        // Prune any group emptied by moving its last child into the frame (§1).
+        self.prune_empty_groups();
+        self.doc.commit();
+        self.enforce_frame_zorder(frame);
+        self.rematerialize_layers();
+        self.emit_with_update(vec![self.viewport_event()])
+    }
+
+    /// Clamp every child of `frame` to paint after (above) the frame in `layers`
+    /// (§2.G). A child sitting below the frame is moved to just above it; repeats
+    /// until the invariant holds. Commits the reordering as part of the batch.
+    fn enforce_frame_zorder(&mut self, frame: &ElementId) {
+        let children = self.children_of(frame);
+        if children.is_empty() {
+            return;
+        }
+        let list = self.doc.get_movable_list(LAYERS);
+        let mut moved = false;
+        loop {
+            self.rematerialize_layers();
+            let order = &self.layers;
+            let Some(fidx) = order
+                .iter()
+                .position(|n| matches!(n, NodeId::Element(e) if e == frame))
+            else {
+                break;
+            };
+            let below = children.iter().find_map(|c| {
+                order
+                    .iter()
+                    .position(|n| matches!(n, NodeId::Element(e) if e == c))
+                    .filter(|ci| *ci < fidx)
+            });
+            let Some(ci) = below else { break };
+            // Removing ci (< fidx) shifts the frame down to fidx-1, so moving the
+            // child to fidx lands it just above the frame.
+            let _ = list.mov(ci, fidx);
+            moved = true;
+        }
+        if moved {
+            self.doc.commit();
+        }
     }
 
     // -- undo / redo (§8 bis) --------------------------------------------------
@@ -1199,6 +1325,49 @@ impl ToileState {
             .unwrap_or(false)
     }
 
+    /// Delete every childless group (element + layers node + derived bounds) to a
+    /// fixpoint, so pruning a group that was the last member of its parent
+    /// cascades upward. An empty group is meaningless (created with >=2 members,
+    /// §2.F bis; only shrinks via re-parent or member deletion), and left behind
+    /// it desyncs the incremental caches from a full rebuild, which never
+    /// materializes one (§1): a rebuild's `recompute_groups` skips a childless
+    /// group. Runs inside the caller's single `doc.commit()` so it stays one undo
+    /// item.
+    fn prune_empty_groups(&mut self) {
+        loop {
+            let empties: Vec<ElementId> = {
+                let mut v = Vec::new();
+                if let LoroValue::Map(m) = self.doc.get_map(ELEMENTS).get_deep_value() {
+                    for (key, val) in m.iter() {
+                        if matches!(val, LoroValue::Map(f)
+                            if matches!(f.get("type"), Some(LoroValue::String(t)) if t.as_str() == "group"))
+                        {
+                            let id = ElementId(key.clone());
+                            if self.children_of(&id).is_empty() {
+                                v.push(id);
+                            }
+                        }
+                    }
+                }
+                v
+            };
+            if empties.is_empty() {
+                break;
+            }
+            let removed: HashSet<ElementId> = empties.iter().cloned().collect();
+            let elems = self.doc.get_map(ELEMENTS);
+            for id in &empties {
+                let _ = elems.delete(id.as_str());
+                self.bounds.remove(id);
+                self.index.remove(id);
+                if let Some(g) = self.enclosing_group(id) {
+                    self.remove_child(&g, id);
+                }
+            }
+            self.strip_layers(|node| !matches!(node, NodeId::Element(e) if removed.contains(e)));
+        }
+    }
+
     /// Recompute every group's derived bounds as the union of its members', to a
     /// fixpoint (nested groups resolve bottom-up). Group geometry is derived and
     /// lives only in the `bounds` / R-tree caches, never in the CRDT (§2.F bis).
@@ -1316,6 +1485,27 @@ impl ToileState {
     /// Derived world AABB of an element. Test helper.
     pub fn bounds_of(&self, id: &ElementId) -> Option<Rect> {
         self.bounds.get(id).copied()
+    }
+
+    /// Membership of a frame / group, in `children` order. Test helper.
+    pub fn membership_of(&self, id: &ElementId) -> Vec<ElementId> {
+        self.children_of(id)
+    }
+
+    /// The culled, z-ordered `DisplayViewport` for the current viewport. Test
+    /// helper (the production path returns it inside a `ToileEvent`).
+    pub fn debug_viewport(&self) -> crate::command::DisplayViewport {
+        self.derive_viewport()
+    }
+
+    /// Connector ids currently in the CRDT, sorted. Test helper.
+    pub fn connector_ids(&self) -> Vec<ConnectorId> {
+        let mut ids = Vec::new();
+        if let LoroValue::Map(m) = self.doc.get_map(CONNECTORS).get_deep_value() {
+            ids.extend(m.keys().map(|k| ConnectorId(k.clone())));
+        }
+        ids.sort();
+        ids
     }
 }
 
