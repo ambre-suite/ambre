@@ -1,200 +1,24 @@
 //! Toile IPC contract (§8) and the data-oriented display structures (§9).
 //!
-//! **Scope note (Phase 0).** This covers the element / connector / stroke
-//! lifecycle, the `DisplayViewport` derivation, groups (§2.F bis) and local
-//! undo/redo (§8 bis). Text bodies, frames content, clipboard, find and nested
-//! `doc_embed` editing are later Phase-0 / Phase-1 slices and their commands are
-//! added as they land, keeping every shipped variant fully handled (no `todo!()`
-//! per the project constitution).
+//! The command / event / display types themselves live in `ambre-bus`
+//! (`ambre_bus::app::toile`) so the `ambre-logic` dispatcher can match on
+//! `(DocState, AppCommand::Toile)` without a dependency cycle. This module
+//! re-exports them (keeping the engine's `crate::command::...` paths) and adds
+//! the one engine-local type: [`ToileOutcome`].
 //!
-//! **Outcome shape.** [`ToileOutcome`] mirrors `TrameOutcome` rather than the
-//! spec's literal `sync: Vec<SyncCommand>`: it returns raw CRDT / ephemeral
+//! **Outcome shape.** [`ToileOutcome`] mirrors `TrameOutcome` (which likewise
+//! stays in `ambre-trame`, not `ambre-bus`): it returns raw CRDT / ephemeral
 //! bytes, and the `ambre-logic` dispatcher wraps them into `SyncCommand`s with
 //! the owning `document_id` (which the standalone engine does not hold). Same
 //! division of labour as Trame.
 
-use ambre_core::DocType;
-use ambre_core::uuid::Uuid;
-use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};
-
-use crate::index::Viewport;
-use crate::model::{
-    Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, NodeId, PathType,
-    StrokePoint,
+pub use ambre_bus::app::toile::{
+    DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, End, InitContent,
+    SelectionStats, ToileCommand, ToileError, ToileEvent, ZTarget,
 };
 
 // -----------------------------------------------------------------------------
-// Commands (UI/Logic -> ToileState)
-// -----------------------------------------------------------------------------
-
-/// Type-specific seed passed to `CreateElement`. The variant must match `kind`
-/// (a mismatch is rejected).
-#[derive(Clone, Debug)]
-pub enum InitContent {
-    None,
-    Path(BezPath),
-    Image(String), // blake2b plaintext hash, key into `media`
-    Embed(String), // web url (sandboxed iframe)
-    DocEmbed {
-        document_id: Uuid,
-        doc_type: DocType,
-    }, // nested Ambre document (§2.I)
-    Text(String),  // initial plain body (sticky / text)
-}
-
-/// Z-order target for `Reorder` (§2.G).
-#[derive(Clone, Copy, Debug)]
-pub enum ZTarget {
-    Front,
-    Back,
-    Forward,
-    Backward,
-    Index(usize),
-}
-
-/// Which endpoint of a connector to retarget.
-#[derive(Clone, Copy, Debug)]
-pub enum End {
-    From,
-    To,
-}
-
-/// Command from the UI / Logic thread to [`ToileState`](crate::state::ToileState).
-#[derive(Clone, Debug)]
-pub enum ToileCommand {
-    // -- Element lifecycle --
-    CreateElement {
-        kind: ElementKind,
-        at: Point,
-        size: Size,
-        content: InitContent,
-    },
-    MoveElements {
-        ids: Vec<ElementId>,
-        delta: Vec2,
-    },
-    ResizeElement {
-        id: ElementId,
-        new: Rect,
-    },
-    RotateElement {
-        id: ElementId,
-        radians: f64,
-    },
-    RestyleElements {
-        ids: Vec<ElementId>,
-        style: ElementStyle,
-    },
-    DeleteElements {
-        ids: Vec<ElementId>,
-    },
-    LockElements {
-        ids: Vec<ElementId>,
-        locked: bool,
-    },
-
-    // -- Z-order (over the unified NodeId layer list, §2.G) --
-    Reorder {
-        node: NodeId,
-        to: ZTarget,
-    },
-
-    // -- Groups (§2.F bis) --
-    /// Bind a set of elements into a fresh group element (selects/transforms as
-    /// one). One undo item.
-    GroupElements {
-        ids: Vec<ElementId>,
-    },
-    /// Drop a group's binding, re-parenting its children to the group's own
-    /// parent. The children survive; only the group node is removed. One undo item.
-    UngroupElements {
-        group: ElementId,
-    },
-
-    // -- Undo / redo (local-only, §8 bis) --
-    Undo,
-    Redo,
-
-    // -- Connectors --
-    CreateConnector {
-        from: ElementId,
-        from_anch: Anchor,
-        to: ElementId,
-        to_anch: Anchor,
-        path_type: PathType,
-        arrows: EndCaps,
-    },
-    RetargetConnector {
-        id: ConnectorId,
-        endpoint: End,
-        to: ElementId,
-        anch: Anchor,
-    },
-    DeleteConnector {
-        id: ConnectorId,
-    },
-
-    // -- Freehand --
-    CommitStroke {
-        points: Vec<StrokePoint>,
-        style: ElementStyle,
-    },
-
-    // -- Selection aggregates for the status bar (§8 quinquies) --
-    RequestSelectionStats {
-        ids: Vec<ElementId>,
-    },
-
-    // -- Persistence / compaction (no CRDT mutation) --
-    RequestSnapshot,
-
-    // -- Viewport (drives culling; no CRDT effect) --
-    SetViewport(Viewport),
-}
-
-// -----------------------------------------------------------------------------
-// Errors
-// -----------------------------------------------------------------------------
-
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
-pub enum ToileError {
-    #[error("element {0} not found")]
-    NoSuchElement(String),
-    #[error("connector {0} not found")]
-    NoSuchConnector(String),
-    #[error("{kind} cannot be created via CreateElement")]
-    NotCreatable { kind: &'static str },
-    #[error("InitContent does not match the requested element kind")]
-    ContentKindMismatch,
-}
-
-// -----------------------------------------------------------------------------
-// Events (ToileState -> UI)
-// -----------------------------------------------------------------------------
-
-/// Selection aggregates (§8 quinquies): element tally + union AABB (world).
-#[derive(Clone, Debug, PartialEq)]
-pub struct SelectionStats {
-    pub count: u32,
-    pub bounds: Option<Rect>,
-}
-
-#[derive(Clone, Debug)]
-pub enum ToileEvent {
-    ViewportData(DisplayViewport),
-    ElementCreated(ElementId),
-    SelectionStats(SelectionStats),
-    DanglingConnector(ConnectorId),
-    /// Local undo/redo stack availability, driving the chrome affordances (§8 bis).
-    UndoState {
-        can_undo: bool,
-        can_redo: bool,
-    },
-    Error(ToileError),
-}
-
-// -----------------------------------------------------------------------------
-// Outcome (§8.C)
+// Outcome (§8.C) -- engine-local, like `TrameOutcome`.
 // -----------------------------------------------------------------------------
 
 /// Result of processing a [`ToileCommand`]: display events for the UI plus
@@ -215,65 +39,4 @@ impl ToileOutcome {
             ephemeral: None,
         }
     }
-}
-
-// -----------------------------------------------------------------------------
-// Data-oriented display structures (§9)
-// -----------------------------------------------------------------------------
-
-/// One frame of "what to paint", already culled and z-ordered. The CRDT visible
-/// set only -- presence rides its own event path (§8.B).
-#[derive(Clone, Debug)]
-pub struct DisplayViewport {
-    pub viewport: Viewport,
-    /// Back-to-front sequence mirroring the `layers` walk (§2.G): elements and
-    /// connectors interleaved by z-order, painted in one pass.
-    pub nodes: Vec<DisplayNode>,
-}
-
-#[derive(Clone, Debug)]
-pub enum DisplayNode {
-    Element(DisplayElement),
-    Connector(DisplayConnector),
-}
-
-#[derive(Clone, Debug)]
-pub struct DisplayElement {
-    pub id: ElementId,
-    pub kind: ElementKind,
-    pub transform: Affine, // world transform incl. rotation
-    pub bounds: Rect,
-    pub locked: bool, // top-level element flag (§2.B), NOT from ElementStyle
-    pub style: ElementStyle,
-    pub geom: DisplayGeom,
-}
-
-#[derive(Clone, Debug)]
-pub enum DisplayGeom {
-    Rect,
-    Ellipse,
-    Triangle,
-    Path(BezPath),
-    /// Sticky / text body. Phase 0 carries a plain string (a single LWW field);
-    /// a later slice upgrades it to `LoroText` + `Vec<TextRun>` for char-wise
-    /// convergence (§2.D) and Parley-ready runs.
-    Text(String),
-    Image(String),      // media blob hash (toile-interop resolves the pixels)
-    Stroke(Vec<Point>), // Logic-smoothed polyline (§4)
-    Frame,              // background + border only; children are separate DisplayElements
-    Group,              // paints nothing; carried for group-selection resolution (§2.F bis)
-    Embed(String),      // web url (sandboxed iframe)
-    DocEmbed {
-        document_id: Uuid,
-        doc_type: DocType,
-        focused: bool,
-    }, // nested Ambre doc (§2.I)
-}
-
-#[derive(Clone, Debug)]
-pub struct DisplayConnector {
-    pub id: ConnectorId,
-    pub path: BezPath, // already routed against current bounds (§5)
-    pub style: ElementStyle,
-    pub arrows: EndCaps,
 }

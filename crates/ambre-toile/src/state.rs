@@ -161,6 +161,38 @@ impl ToileState {
         vec![self.viewport_event()]
     }
 
+    /// Apply a batch of remote deltas (a server history replay on open) as one
+    /// `import` sweep + a single cache rebuild, so the UI repaints once instead
+    /// of once per delta. Mirrors [`apply_remote`](Self::apply_remote) but
+    /// amortizes the derived-cache rebuild over the whole batch. A failed import
+    /// on one delta is logged and skipped; the surviving deltas still merge.
+    pub fn apply_remote_batch(&mut self, updates: &[Vec<u8>]) -> Vec<ToileEvent> {
+        if updates.is_empty() {
+            return Vec::new();
+        }
+        let mut any_ok = false;
+        for update in updates {
+            match self.doc.import(update) {
+                Ok(_) => any_ok = true,
+                Err(e) => tracing::warn!("Toile: remote batch import failed: {e}"),
+            }
+        }
+        if !any_ok {
+            return vec![ToileEvent::Error(ToileError::NoSuchElement(String::new()))];
+        }
+        self.rebuild_caches();
+        vec![self.viewport_event()]
+    }
+
+    /// Apply a remote ephemeral (presence) payload and return the presence events
+    /// to surface. Presence overlay is a Phase 1 UI slice (`toile-ui §13`,
+    /// `UserId`-keyed cursors / selections); until the `ToileEvent` presence
+    /// variant lands there is nothing to decode, so this is an accepted no-op that
+    /// keeps the dispatcher wiring complete (§8).
+    pub fn apply_ephemeral(&mut self, _payload: &[u8]) -> Vec<ToileEvent> {
+        Vec::new()
+    }
+
     /// Full CRDT snapshot for local persistence / compaction / SnapshotNeeded.
     pub fn export_snapshot(&self) -> Vec<u8> {
         self.doc.export(ExportMode::Snapshot).unwrap_or_default()

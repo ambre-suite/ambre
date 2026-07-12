@@ -39,6 +39,7 @@ use ambre_bus::{
     AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent, RestCommand, SyncCommand,
     UiEvent,
 };
+use ambre_toile::ToileState;
 use ambre_trame::TrameState;
 
 // -----------------------------------------------------------------------------
@@ -51,8 +52,13 @@ use ambre_trame::TrameState;
 /// the `(DocState, AppCommand)` pair to route a typed command to the right
 /// document model — no trait object, no downcast.
 enum DocState {
-    Trame(TrameState),
-    // Future: Prose(ProseState), Toile(ToileState), Murmure(MurmureState), …
+    // Boxed: the per-document states differ widely in size (a `TrameState` is
+    // several KB, a `ToileState` far smaller), so a bare enum would size every
+    // slot to the largest variant. One heap indirection per open document is
+    // negligible and keeps the registry entry pointer-sized.
+    Trame(Box<TrameState>),
+    Toile(Box<ToileState>),
+    // Future: Prose(ProseState), Murmure(MurmureState), …
 }
 
 impl DocState {
@@ -61,8 +67,9 @@ impl DocState {
     /// Returns `None` for document types whose logic is not yet implemented.
     fn new(doc_type: DocType) -> Option<Self> {
         match doc_type {
-            DocType::Trame => Some(DocState::Trame(TrameState::new())),
-            DocType::Prose | DocType::Toile | DocType::Murmure => {
+            DocType::Trame => Some(DocState::Trame(Box::new(TrameState::new()))),
+            DocType::Toile => Some(DocState::Toile(Box::new(ToileState::new()))),
+            DocType::Prose | DocType::Murmure => {
                 tracing::warn!(
                     "Logic: no state implemented for {:?}, document will not render",
                     doc_type

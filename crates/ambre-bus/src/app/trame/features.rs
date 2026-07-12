@@ -124,9 +124,9 @@ pub enum ValidationKind {
 /// What happens when a [`ValidationKind`] rejects an input (`§5`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValidationOnInvalid {
-    /// Block the local mutation -> [`TrameEvent::ValidationError`](crate::ui::TrameEvent::ValidationError).
+    /// Block the local mutation -> [`TrameEvent::ValidationError`](super::TrameEvent::ValidationError).
     Reject,
-    /// Allow the mutation but warn -> [`TrameEvent::ValidationWarning`](crate::ui::TrameEvent::ValidationWarning).
+    /// Allow the mutation but warn -> [`TrameEvent::ValidationWarning`](super::TrameEvent::ValidationWarning).
     Warn,
     /// Visual indicator only.
     Info,

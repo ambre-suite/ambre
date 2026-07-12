@@ -63,7 +63,7 @@
 | Crate | Role | Rationale |
 |---|---|---|
 | `ambre-core` | `Uuid`, `DocType`, `PeerID` | Shared foundation |
-| `ambre-bus` | `AppCommand`/`AppEvent` (incl. `ToileCommand`/`ToileEvent`), `SyncCommand`, `LogicEvent`, `CommandSink` (test seam) | Typed inter-thread data plane + IPC types |
+| `ambre-bus` | `AppCommand`/`AppEvent` (thin sums) + the per-app content plane `app/toile.rs` (`ToileCommand`/`ToileEvent`/`Display*`/model), `SyncCommand`, `LogicEvent`, `CommandSink` (test seam) | Typed inter-thread data plane + IPC types |
 | `ambre-draw` | `DrawSurface` trait, re-exports `kurbo`/`peniko`/`parley` | Shared rendering screen (WgpuSurface) / PDF (KrillaSurface) — required by architectural convention |
 | `loro` | Single-board CRDT | `LoroMap`, `LoroMovableList` (layer z-order), `LoroText` (text runs) |
 | `rstar` | Element R-tree | O(log N) viewport culling and hit spatial pre-filter |
@@ -971,10 +971,10 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
 - [x] 2-peer CRDT convergence property-test (element / move-LWW / restyle-register / delete / reorder converge). **DoD:** green in `ambre-toile/src/convergence_tests.rs`.
 
 **Phase 1 — Logic Thread Integration**
-- [ ] Logic-thread dispatch: `handle_command` returning `ToileOutcome` (§8), via typed `DocState` + `match` (`architecture §6`)
-- [ ] Sync thread wiring: `SendUpdate` + `SendEphemeral` presence (both in `ambre-bus`); inbound `LogicEvent::RemoteEphemeral` -> `apply_ephemeral` (§8)
-- [ ] `apply_remote` accepting both deltas and snapshots (§8)
-- [ ] `export_snapshot` + persist-on-change to IndexedDB + the `RequestSnapshot` / `SnapshotNeeded` / `RemoteSnapshot` paths (§8)
+- [x] Logic-thread dispatch: `handle_command` returning `ToileOutcome` (§8), via typed `DocState` + `match` (`architecture §6`). Landed: the IPC contract (`ToileCommand`/`ToileEvent`/`Display*`/`Viewport`/model value types) moved into `ambre-bus::app::toile` (one module per app, mirrors the new Trame `app/trame/` layout; `ToileOutcome` stays engine-local like `TrameOutcome`), `AppCommand::Toile` / `AppEvent::Toile` variants, `DocState::Toile(Box<ToileState>)`, and the `(DocState::Toile, AppCommand::Toile)` dispatch arm fanning display/update/ephemeral/snapshot out through the shared `dispatch_outcome`.
+- [x] Sync thread wiring: `SendUpdate` + `SendEphemeral` presence (both in `ambre-bus`); inbound `LogicEvent::RemoteEphemeral` -> `apply_ephemeral` (§8). `SendUpdate`/`SendEphemeral` fan-out wired; `apply_ephemeral` is an accepted no-op until the presence `ToileEvent` variant lands with `toile-ui §13`.
+- [x] `apply_remote` accepting both deltas and snapshots (§8), plus `apply_remote_batch` for the server history replay on open (one import sweep + a single cache rebuild).
+- [x] `export_snapshot` + persist-on-change to IndexedDB + the `RequestSnapshot` / `SnapshotNeeded` / `RemoteSnapshot` paths (§8). `RemoteSnapshot` -> `apply_remote`, `SnapshotNeeded` -> `export_snapshot`, persist-on-change via the dispatcher's `to_persist` leg, and `RestoreLocalSnapshot` restores a Toile board from the local IndexedDB store.
 - [ ] `my_user_id` seeded from `LogicEvent::SessionReady` (§7), keys reactions `toile-features §4.A`
 - [x] `loro::UndoManager` wired to `Undo` / `Redo`, one `doc.commit()` per mutating command (§8bis). Landed early with the Phase-0 groups slice (`apply_history`, `UndoState` event); **DoD** green in `ambre-toile/src/convergence_tests.rs` (undo reverts create + redo restores; a group undoes as one item). Chrome affordance wiring stays with Phase 1 UI.
 - [ ] `Find` handler (§8 quater) behind the chrome panel

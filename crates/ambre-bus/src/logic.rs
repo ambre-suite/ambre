@@ -1,8 +1,10 @@
 //! Logic-bound protocol — messages addressed to the Logic thread from the UI.
 //!
-//! Holds the [`LogicCommand`] envelope (UI Thread → Logic thread) plus the typed
-//! application **command** data plane it carries: [`AppCommand`] (a closed sum
-//! over the document types) and the per-app command enums (`TrameCommand`, …).
+//! Holds the [`LogicCommand`] envelope (UI Thread → Logic thread) plus
+//! [`AppCommand`], the closed sum over the document types it carries. Each
+//! per-app command enum lives with that app's whole data plane under
+//! [`crate::app`] (e.g. `crate::app::trame::TrameCommand`); `AppCommand` is a
+//! thin dispatch enum referencing them.
 //!
 //! Carried over a `flume` channel in shared memory — typed Rust values by move,
 //! no serialization. The symmetric Logic → UI direction (events) lives in
@@ -21,18 +23,10 @@
 
 use crate::{ChannelId, DocType, DocumentId, RequestId, RestCommand};
 
-// The typed application data plane carried by `LogicCommand::App` lives in the
-// sibling submodules; re-globbed so every `crate::logic::*` path (and the crate
-// root re-export) resolves unchanged after the split.
-mod clipboard;
-mod features;
-mod style;
-mod trame_command;
-
-pub use clipboard::*;
-pub use features::*;
-pub use style::*;
-pub use trame_command::*;
+// The typed application data plane carried by `LogicCommand::App` lives per-app
+// under `crate::app` (command + event + value types grouped by document type);
+// this envelope module only holds the `LogicCommand` sum and the `AppCommand`
+// dispatch enum that references those app modules.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LogicCommand — UI Thread → Logic thread
@@ -137,8 +131,10 @@ pub enum LogicCommand {
 #[derive(Debug, Clone)]
 pub enum AppCommand {
     /// Command for a Trame (spreadsheet) document.
-    Trame(TrameCommand),
-    // Future document types: Prose(ProseCommand), Toile(ToileCommand),
-    // Murmure(MurmureCommand), Rendezvous(RendezvousCommand), …
+    Trame(crate::app::trame::TrameCommand),
+    /// Command for a Toile (whiteboard) document.
+    Toile(crate::app::toile::ToileCommand),
+    // Future document types: Prose(ProseCommand), Murmure(MurmureCommand),
+    // Rendezvous(RendezvousCommand), …
     // Future plugin surface: Plugin(Box<dyn Plugin>).
 }

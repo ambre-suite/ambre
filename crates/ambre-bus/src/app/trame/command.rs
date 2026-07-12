@@ -1,7 +1,7 @@
 //! Trame (spreadsheet) command surface (UI Thread -> Logic thread).
 //!
 //! The full `TrameCommand` vocabulary plus its parameter value types, carried by
-//! move inside [`AppCommand::Trame`](super::AppCommand). Value types (styles,
+//! move inside [`AppCommand::Trame`](crate::logic::AppCommand). Value types (styles,
 //! clipboard, feature payloads) live in the sibling modules and arrive via glob.
 
 use super::*;
@@ -18,7 +18,7 @@ pub enum TrameCommand {
     ///
     /// The UI Thread computes the visible range (plus padding) from its scroll
     /// position and grid dimensions; the Logic thread replies with a
-    /// [`TrameEvent::ViewportData`](crate::ui::TrameEvent::ViewportData) covering
+    /// [`TrameEvent::ViewportData`](super::TrameEvent::ViewportData) covering
     /// `[row_start..=row_end] × [col_start..=col_end]`.
     ///
     /// `version` is a monotonic counter: the UI Thread discards any response
@@ -37,7 +37,7 @@ pub enum TrameCommand {
     /// Formatting ([`SetCellStyle`](TrameCommand::SetCellStyle)) targets whatever
     /// selection the Logic thread tracks, so the UI Thread must keep it informed
     /// when the cursor moves. The Logic thread replies with the active cell's
-    /// resolved style ([`TrameEvent::StyleApplied`](crate::ui::TrameEvent::StyleApplied))
+    /// resolved style ([`TrameEvent::StyleApplied`](super::TrameEvent::StyleApplied))
     /// so the formatting toolbar tracks the selection.
     ///
     /// `(anchor_row, anchor_col)` is the selection's other corner (equal to
@@ -88,11 +88,11 @@ pub enum TrameCommand {
     /// merges the patch into each cell's stored style, persists the result in the
     /// per-sheet style containers (a synchronised CRDT mutation, hence undoable),
     /// reformats display text for any number-format change, and replies with a
-    /// [`TrameEvent::StyleApplied`](crate::ui::TrameEvent::StyleApplied) carrying
+    /// [`TrameEvent::StyleApplied`](super::TrameEvent::StyleApplied) carrying
     /// the active cell's resulting style plus a [`DataReset`] so the UI re-fetches
     /// the restyled viewport.
     ///
-    /// [`DataReset`]: crate::ui::TrameEvent::DataReset
+    /// [`DataReset`]: super::TrameEvent::DataReset
     SetCellStyle { patch: StylePatch },
 
     /// Insert a blank row at grid position `at`, shifting existing rows at
@@ -158,8 +158,8 @@ pub enum TrameCommand {
     /// per-column widths). A synchronised CRDT mutation, hence undoable; two peers
     /// resizing the same column converge by LWW, like any cell write.
     ///
-    /// [`DataReset`]: crate::ui::TrameEvent::DataReset
-    /// [`ViewportData`]: crate::ui::TrameEvent::ViewportData
+    /// [`DataReset`]: super::TrameEvent::DataReset
+    /// [`ViewportData`]: super::TrameEvent::ViewportData
     ResizeCol {
         version: u64,
         sheet_id: String,
@@ -206,7 +206,7 @@ pub enum TrameCommand {
     /// active sheet itself. Replies with [`TrameEvent::SortComplete`].
     ///
     /// [`SortRange`]: TrameCommand::SortRange
-    /// [`TrameEvent::SortComplete`]: crate::ui::TrameEvent::SortComplete
+    /// [`TrameEvent::SortComplete`]: super::TrameEvent::SortComplete
     SortSelectionAsc,
     /// Sort the current selection rectangle descending on its first column
     /// (see [`SortSelectionAsc`](TrameCommand::SortSelectionAsc)).
@@ -219,7 +219,7 @@ pub enum TrameCommand {
     /// [`TrameEvent::SortComplete`].
     ///
     /// [`SortRange`]: TrameCommand::SortRange
-    /// [`TrameEvent::SortComplete`]: crate::ui::TrameEvent::SortComplete
+    /// [`TrameEvent::SortComplete`]: super::TrameEvent::SortComplete
     SortSheetAsc,
     /// Sort the whole sheet descending on the active cell's column
     /// (see [`SortSheetAsc`](TrameCommand::SortSheetAsc)).
@@ -230,7 +230,7 @@ pub enum TrameCommand {
     /// the range and the active sheet from the tracked selection, then sorts the
     /// rows lexicographically by `sort_keys` (decreasing priority; each `col` is
     /// an index within the selection, `0` = the selection's left column). Replies
-    /// with [`TrameEvent::SortComplete`](crate::ui::TrameEvent::SortComplete).
+    /// with [`TrameEvent::SortComplete`](super::TrameEvent::SortComplete).
     SortSelectionMulti {
         sort_keys: Vec<SortKey>,
         has_header: bool,
@@ -240,7 +240,7 @@ pub enum TrameCommand {
     /// shared filter popover's "by values" checkbox list (`-ui.md` sec.5.D). The
     /// Logic thread resolves the column and active sheet itself, evaluates every
     /// non-hidden materialized row through the formula cache, and replies with
-    /// [`TrameEvent::ColumnValues`](crate::ui::TrameEvent::ColumnValues)
+    /// [`TrameEvent::ColumnValues`](super::TrameEvent::ColumnValues)
     /// (deduplicated, sorted). A read-only query: no CRDT delta.
     RequestActiveColumnValues,
     /// Request the aggregates (Sum / Average / Count / Min / Max) of the tracked
@@ -250,7 +250,7 @@ pub enum TrameCommand {
     /// the tracked selection rectangle itself -- the same convention as the sort /
     /// filter / [`RequestActiveColumnValues`] siblings (the sec.13bis sketch passed
     /// `sheet_id`/`range`, but this codebase resolves geometry Logic-side). Replies
-    /// with [`TrameEvent::SelectionStats`](crate::ui::TrameEvent::SelectionStats).
+    /// with [`TrameEvent::SelectionStats`](super::TrameEvent::SelectionStats).
     /// A read-only query: no CRDT delta. The UI sends it only on a multi-cell
     /// selection; a lone cell shows no aggregates.
     ///
@@ -260,14 +260,14 @@ pub enum TrameCommand {
     /// parameterless-geometry sibling of [`ApplyFilter`]: the Logic thread
     /// resolves `sheet_id`/`col` from the tracked active cell, so the UI only
     /// supplies the user's chosen [`FilterKind`]. Replies with
-    /// [`TrameEvent::FilterApplied`](crate::ui::TrameEvent::FilterApplied).
+    /// [`TrameEvent::FilterApplied`](super::TrameEvent::FilterApplied).
     ///
     /// [`ApplyFilter`]: TrameCommand::ApplyFilter
     ApplyFilterToActiveColumn { kind: FilterKind },
     /// Clear the shared filter on the active sheet (`-ui.md` sec.5.D). The
     /// parameterless sibling of [`ClearFilter`]: the Logic thread resolves the
     /// active sheet itself. Replies with
-    /// [`TrameEvent::FilterCleared`](crate::ui::TrameEvent::FilterCleared).
+    /// [`TrameEvent::FilterCleared`](super::TrameEvent::FilterCleared).
     ///
     /// [`ClearFilter`]: TrameCommand::ClearFilter
     ClearActiveFilter,
@@ -281,9 +281,9 @@ pub enum TrameCommand {
     /// [`CellStyle`] (plus bold/italic) is written verbatim. The whole paste is a
     /// single undo group. Replies with a [`DataReset`] so the UI re-fetches the
     /// pasted region; a paste blocked by a protected range (Post-MVP) replies
-    /// [`TrameEvent::PasteRejected`](crate::ui::TrameEvent::PasteRejected).
+    /// [`TrameEvent::PasteRejected`](super::TrameEvent::PasteRejected).
     ///
-    /// [`DataReset`]: crate::ui::TrameEvent::DataReset
+    /// [`DataReset`]: super::TrameEvent::DataReset
     PasteRange {
         target_row: u32,
         target_col: u32,
@@ -298,7 +298,7 @@ pub enum TrameCommand {
     /// button -- which reads the OS clipboard asynchronously and has no view
     /// state -- can paste without knowing the cursor. Each field becomes a
     /// literal cell (no relative-formula reindexing, the source is external).
-    /// Replies with a [`DataReset`](crate::ui::TrameEvent::DataReset).
+    /// Replies with a [`DataReset`](super::TrameEvent::DataReset).
     PasteText { text: String },
 
     /// Paste a typed [`ClipboardPayload`] at the tracked active cell (`-ui.md`
@@ -321,7 +321,7 @@ pub enum TrameCommand {
     /// style. The whole fill is a single undo group. With [`FillMode::Auto`] the
     /// thread picks Series when a line's source values form an arithmetic numeric
     /// progression, Copy otherwise. Replies with a
-    /// [`DataReset`](crate::ui::TrameEvent::DataReset). A no-op when `dest == src`.
+    /// [`DataReset`](super::TrameEvent::DataReset). A no-op when `dest == src`.
     FillRange {
         sheet_id: String,
         src: GridRange,
@@ -409,13 +409,13 @@ pub enum TrameCommand {
     /// new sheet's viewport (`ambre-spec-trame-logic.md` §2.D). A no-op if the id
     /// is unknown.
     ///
-    /// [`DataReset`]: crate::ui::TrameEvent::DataReset
+    /// [`DataReset`]: super::TrameEvent::DataReset
     ActivateSheet { sheet_id: String },
 
     /// Add a new sheet named `name`. Mints a peer-scoped stable `sheet_id`
     /// (`{peer:016x}_{counter:08x}`) so concurrent creates on two peers never
     /// collide, registers it in `sheets`, appends it to `sheet_order`, and
-    /// replies with a refreshed [`SheetList`](crate::ui::TrameEvent::SheetList)
+    /// replies with a refreshed [`SheetList`](super::TrameEvent::SheetList)
     /// (`ambre-spec-trame-logic.md` §2.D). Cells are created lazily on first write.
     CreateSheet { name: String },
 
@@ -440,7 +440,7 @@ pub enum TrameCommand {
     /// list resolves concurrent sorts deterministically. A no-op when the range is
     /// empty/virtual. Replies with [`TrameEvent::SortComplete`].
     ///
-    /// [`TrameEvent::SortComplete`]: crate::ui::TrameEvent::SortComplete
+    /// [`TrameEvent::SortComplete`]: super::TrameEvent::SortComplete
     SortRange {
         sheet_id: String,
         row_start: u32,
@@ -455,7 +455,7 @@ pub enum TrameCommand {
     },
 
     /// Delete `sheet_id` and its per-sheet containers (§2.D). Rejected locally
-    /// with [`TrameEvent::Error`](crate::ui::TrameEvent::Error) if it is the last
+    /// with [`TrameEvent::Error`](super::TrameEvent::Error) if it is the last
     /// remaining sheet (a workbook always keeps >= 1). If the active sheet is
     /// deleted, the active sheet falls back to a neighbour. Cross-sheet formulas
     /// targeting the gone id resolve to `#REF!`.
@@ -469,10 +469,10 @@ pub enum TrameCommand {
     /// `filter_hidden_{sheet}` (keyed by `row_uid`, so the hidden set follows the
     /// data across a sort or insert), and broadcasts the resulting delta. Rows
     /// hidden by a filter are excluded from the viewport (flagged
-    /// [`DisplayCell::is_filtered`](crate::ui::DisplayCell::is_filtered)) but stay
+    /// [`DisplayCell::is_filtered`](super::DisplayCell::is_filtered)) but stay
     /// in calculations (`=SUM` still totals them). A filter is a plain CRDT
     /// mutation, hence undoable. Replies with
-    /// [`TrameEvent::FilterApplied`](crate::ui::TrameEvent::FilterApplied). A no-op
+    /// [`TrameEvent::FilterApplied`](super::TrameEvent::FilterApplied). A no-op
     /// for a non-active sheet or a virtual (never-materialized) column.
     ApplyFilter {
         sheet_id: String,
@@ -484,7 +484,7 @@ pub enum TrameCommand {
     /// Clear the shared filter on `sheet_id`: removes every `filter_hidden_{sheet}`
     /// entry and the stored `filters_{sheet}` definition, then broadcasts the
     /// delta (`ambre-spec-trame-features.md` §1.A). Replies with
-    /// [`TrameEvent::FilterCleared`](crate::ui::TrameEvent::FilterCleared). A no-op
+    /// [`TrameEvent::FilterCleared`](super::TrameEvent::FilterCleared). A no-op
     /// when no filter is active.
     ClearFilter { sheet_id: String },
 
@@ -496,8 +496,8 @@ pub enum TrameCommand {
     /// needed. `delimiter` is auto-detected (comma vs semicolon) when `None`.
     /// Each field becomes a literal cell (no formula reindexing -- the source is
     /// external). Replies with
-    /// [`TrameEvent::ImportComplete`](crate::ui::TrameEvent::ImportComplete) plus
-    /// a [`DataReset`](crate::ui::TrameEvent::DataReset); the whole import is a
+    /// [`TrameEvent::ImportComplete`](super::TrameEvent::ImportComplete) plus
+    /// a [`DataReset`](super::TrameEvent::DataReset); the whole import is a
     /// single undo group.
     ImportCsv {
         data: Vec<u8>,
@@ -516,7 +516,7 @@ pub enum TrameCommand {
     /// thread resolves the active sheet itself -- the same convention as the sort
     /// / filter / selection-stats intents -- so a toolbar/menu "Export CSV" button
     /// needs no view state. Comma delimiter, whole used range. Replies with
-    /// [`TrameEvent::ExportComplete`](crate::ui::TrameEvent::ExportComplete).
+    /// [`TrameEvent::ExportComplete`](super::TrameEvent::ExportComplete).
     ExportActiveSheetCsv,
 
     /// Export a sheet (or a sub-range of it) to CSV bytes
@@ -524,7 +524,7 @@ pub enum TrameCommand {
     /// delta. Cells are exported by their *displayed* value (formula results
     /// included). `delimiter` defaults to comma; `range` of `None` exports the
     /// whole materialized used range. Replies with
-    /// [`TrameEvent::ExportComplete`](crate::ui::TrameEvent::ExportComplete)
+    /// [`TrameEvent::ExportComplete`](super::TrameEvent::ExportComplete)
     /// carrying the file bytes for the UI Thread to download.
     ExportCsv {
         sheet_id: String,
@@ -546,7 +546,7 @@ pub enum TrameCommand {
     /// Persist a personal (non-shared) filter view in local storage only
     /// (`ambre-spec-trame-features.md §1.B`). Never touches the `LoroDoc`, so it
     /// emits no CRDT delta. Replies with
-    /// [`TrameEvent::FilterViewSaved`](crate::ui::TrameEvent::FilterViewSaved).
+    /// [`TrameEvent::FilterViewSaved`](super::TrameEvent::FilterViewSaved).
     SaveFilterView {
         name: String,
         sheet_id: String,
@@ -584,7 +584,7 @@ pub enum TrameCommand {
     /// `DisplayCell.style` override (never mutates `styles_{sheet}`). `priority`
     /// orders evaluation (smaller = higher); the first matching rule wins.
     /// Replies with
-    /// [`TrameEvent::CondFormatsUpdated`](crate::ui::TrameEvent::CondFormatsUpdated).
+    /// [`TrameEvent::CondFormatsUpdated`](super::TrameEvent::CondFormatsUpdated).
     AddCondFormat {
         sheet_id: String,
         range: GridRange,
