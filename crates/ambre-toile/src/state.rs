@@ -6,10 +6,10 @@
 //! thread; it exits only as exported bytes (§1).
 //!
 //! **Phase 0 scope.** Element / connector / stroke lifecycle, z-order, groups
-//! (§2.F bis), local undo/redo (§8 bis), selection stats, viewport-culled
-//! `DisplayViewport` derivation, and the remote-apply / snapshot paths. Frames
-//! content, clipboard, find and nested-doc editing are subsequent slices; every
-//! command handled here is complete.
+//! (§2.F bis), local undo/redo (§8 bis), clipboard (§8 ter), selection stats,
+//! viewport-culled `DisplayViewport` derivation, and the remote-apply / snapshot
+//! paths. Frames content, find and nested-doc editing are subsequent slices;
+//! every command handled here is complete.
 
 use std::collections::{HashMap, HashSet};
 
@@ -17,8 +17,9 @@ use kurbo::{Affine, BezPath, Point, Rect, Vec2};
 use loro::{ExportMode, LoroDoc, LoroMap, LoroMovableList, LoroValue, UndoManager, VersionVector};
 
 use crate::command::{
-    DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, End, InitContent,
-    SelectionStats, ToileCommand, ToileError, ToileEvent, ToileOutcome, ZTarget,
+    ClipConnector, ClipElement, ClipMembership, ClipValue, ClipboardPayload, DisplayConnector,
+    DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, End, InitContent, SelectionStats,
+    ToileCommand, ToileError, ToileEvent, ToileOutcome, ZTarget,
 };
 use crate::connector::Connector;
 use crate::index::{ElementBounds, SpatialIndex, Viewport};
@@ -138,6 +139,9 @@ impl ToileState {
             } => self.retarget_connector(id, endpoint, to, anch),
             ToileCommand::DeleteConnector { id } => self.delete_connector(id),
             ToileCommand::CommitStroke { points, style } => self.commit_stroke(points, style),
+            ToileCommand::CopyElements { ids } => self.copy_elements(&ids),
+            ToileCommand::PasteElements { payload, at } => self.paste_elements(&payload, at),
+            ToileCommand::DuplicateElements { ids, delta } => self.duplicate_elements(&ids, delta),
             ToileCommand::RequestSelectionStats { ids } => self.selection_stats(&ids),
             ToileCommand::RequestSnapshot => ToileOutcome::display_only(Vec::new()),
             ToileCommand::SetViewport(vp) => {
@@ -702,6 +706,179 @@ impl ToileState {
         })])
     }
 
+    // -- clipboard (§8 ter) ----------------------------------------------------
+
+    /// Read the selection into a self-contained, id-free payload. Non-mutating:
+    /// the UI stashes the result and may mirror it to the OS clipboard.
+    fn copy_elements(&self, ids: &[ElementId]) -> ToileOutcome {
+        ToileOutcome::display_only(vec![ToileEvent::Clipboard(self.build_clipboard(ids))])
+    }
+
+    /// Insert a clipboard payload offset so `origin` lands at `at`. One undo item.
+    fn paste_elements(&mut self, payload: &ClipboardPayload, at: Point) -> ToileOutcome {
+        let offset = Vec2::new(at.x - payload.origin.x0, at.y - payload.origin.y0);
+        self.insert_clipboard(payload, offset)
+    }
+
+    /// Copy + paste fused into a single undo item, offset by `delta` (§8 ter).
+    fn duplicate_elements(&mut self, ids: &[ElementId], delta: Vec2) -> ToileOutcome {
+        let payload = self.build_clipboard(ids);
+        self.insert_clipboard(&payload, delta)
+    }
+
+    /// Snapshot a selection (its full subtrees) into an id-free [`ClipboardPayload`].
+    /// Elements are captured in z-order and referenced by slot; connectors survive
+    /// only when both endpoints are captured; group / frame membership is remapped
+    /// to slots (§8 ter).
+    fn build_clipboard(&self, ids: &[ElementId]) -> ClipboardPayload {
+        // A copied group carries its members: expand every id to its full subtree.
+        let mut set: HashSet<ElementId> = HashSet::new();
+        for id in ids {
+            self.collect_subtree(id, &mut set);
+        }
+        // Stable slot order = z-order, filtered to the captured set (a captured
+        // node absent from `layers` still gets a trailing slot, defensively).
+        let mut order: Vec<ElementId> = self
+            .layers
+            .iter()
+            .filter_map(|n| match n {
+                NodeId::Element(e) if set.contains(e) => Some(e.clone()),
+                _ => None,
+            })
+            .collect();
+        for id in &set {
+            if !order.contains(id) {
+                order.push(id.clone());
+            }
+        }
+        let slot_of: HashMap<ElementId, usize> = order
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(i, id)| (id, i))
+            .collect();
+
+        let mut elements = Vec::with_capacity(order.len());
+        let mut membership = Vec::new();
+        let mut origin: Option<Rect> = None;
+        for (slot, id) in order.iter().enumerate() {
+            let fields = match self.element_map(id) {
+                Some(em) => match em.get_deep_value() {
+                    LoroValue::Map(f) => capture_scalars(&f, &[]),
+                    _ => Vec::new(),
+                },
+                None => Vec::new(),
+            };
+            elements.push(ClipElement { fields });
+            // Group / frame membership -> child slots (captured children only).
+            let child_slots: Vec<usize> = self
+                .children_of(id)
+                .iter()
+                .filter_map(|c| slot_of.get(c).copied())
+                .collect();
+            if !child_slots.is_empty() {
+                membership.push(ClipMembership {
+                    parent_slot: slot,
+                    child_slots,
+                });
+            }
+            if let Some(r) = self.bounds.get(id) {
+                origin = Some(match origin {
+                    Some(u) => u.union(*r),
+                    None => *r,
+                });
+            }
+        }
+
+        // Connectors whose BOTH endpoints are captured (§8 ter): a half-copied
+        // connector would dangle, so it is dropped.
+        let mut connectors = Vec::new();
+        if let LoroValue::Map(m) = self.doc.get_map(CONNECTORS).get_deep_value() {
+            for (_key, v) in m.iter() {
+                if let LoroValue::Map(f) = v {
+                    let from = ElementId(map_str(f, "from"));
+                    let to = ElementId(map_str(f, "to"));
+                    if let (Some(&from_slot), Some(&to_slot)) =
+                        (slot_of.get(&from), slot_of.get(&to))
+                    {
+                        connectors.push(ClipConnector {
+                            from_slot,
+                            to_slot,
+                            fields: capture_scalars(f, &["from", "to"]),
+                        });
+                    }
+                }
+            }
+        }
+
+        ClipboardPayload {
+            elements,
+            connectors,
+            membership,
+            origin: origin.unwrap_or_default(),
+        }
+    }
+
+    /// Materialize a clipboard payload with fresh ids, offset by `offset`, pushed
+    /// above the current top of the z-order. One `doc.commit()` -> one undo item.
+    fn insert_clipboard(&mut self, payload: &ClipboardPayload, offset: Vec2) -> ToileOutcome {
+        if payload.elements.is_empty() {
+            return ToileOutcome::display_only(Vec::new());
+        }
+        // Mint every fresh id up front so membership / connectors can remap slots
+        // to new ids before anything is written.
+        let new_ids: Vec<ElementId> = (0..payload.elements.len())
+            .map(|_| self.mint_element_id())
+            .collect();
+        let new_conns: Vec<ConnectorId> = (0..payload.connectors.len())
+            .map(|_| self.mint_connector_id())
+            .collect();
+
+        let elems = self.doc.get_map(ELEMENTS);
+        let layers = self.doc.get_movable_list(LAYERS);
+        let mut created = Vec::with_capacity(new_ids.len());
+        for (slot, clip) in payload.elements.iter().enumerate() {
+            let id = &new_ids[slot];
+            let Ok(em) = elems.insert_container(id.as_str(), LoroMap::new()) else {
+                continue;
+            };
+            write_clip_fields(&em, &clip.fields, offset);
+            let _ = layers.push(NodeId::Element(id.clone()).encode().as_str());
+            created.push(id.clone());
+        }
+        // Rebuild each group / frame `children` list with the remapped ids.
+        for m in &payload.membership {
+            if let Some(em) = self.element_map(&new_ids[m.parent_slot])
+                && let Ok(children) = em.insert_container(CHILDREN, LoroMovableList::new())
+            {
+                for &cs in &m.child_slots {
+                    let _ = children.push(new_ids[cs].as_str());
+                }
+            }
+        }
+        // Connectors: remap endpoints, keep anchors / path / arrows.
+        let conns = self.doc.get_map(CONNECTORS);
+        for (i, c) in payload.connectors.iter().enumerate() {
+            let Ok(cm) = conns.insert_container(new_conns[i].as_str(), LoroMap::new()) else {
+                continue;
+            };
+            write_clip_fields(&cm, &c.fields, Vec2::ZERO);
+            let _ = cm.insert("from", new_ids[c.from_slot].as_str());
+            let _ = cm.insert("to", new_ids[c.to_slot].as_str());
+            let _ = layers.push(NodeId::Connector(new_conns[i].clone()).encode().as_str());
+        }
+        self.doc.commit();
+
+        self.rebuild_caches();
+        let mut display: Vec<ToileEvent> = created
+            .into_iter()
+            .map(ToileEvent::ElementCreated)
+            .collect();
+        display.push(self.viewport_event());
+        display.push(self.undo_state_event());
+        self.emit_with_update(display)
+    }
+
     // -- derivation (§9) -------------------------------------------------------
 
     fn viewport_event(&self) -> ToileEvent {
@@ -1207,6 +1384,55 @@ fn em_seed_group(em: &LoroMap) {
         "style",
         LoroValue::Binary(ElementStyle::default().to_bytes().into()),
     );
+}
+
+/// Capture the scalar (non-container) fields of a map deep-value into an id-free
+/// clipboard field list (§8 ter). Container fields (a group's `children` list)
+/// are naturally skipped -- they arrive as `LoroValue::List` / `Map`, which do
+/// not match a leaf kind. `skip` drops named fields the caller remaps itself
+/// (connector endpoints).
+fn capture_scalars(fields: &loro::LoroMapValue, skip: &[&str]) -> Vec<(String, ClipValue)> {
+    let mut out = Vec::new();
+    for (k, v) in fields.iter() {
+        if skip.contains(&k.as_str()) {
+            continue;
+        }
+        let cv = match v {
+            LoroValue::Double(d) => ClipValue::F64(*d),
+            LoroValue::Bool(b) => ClipValue::Bool(*b),
+            LoroValue::String(s) => ClipValue::Str(s.to_string()),
+            LoroValue::Binary(b) => ClipValue::Bin(b.to_vec()),
+            _ => continue,
+        };
+        out.push((k.to_string(), cv));
+    }
+    out
+}
+
+/// Write captured clipboard fields into a fresh element / connector map, adding
+/// `offset` to the `x` / `y` coordinates so the paste lands at the cursor.
+fn write_clip_fields(m: &LoroMap, fields: &[(String, ClipValue)], offset: Vec2) {
+    for (k, v) in fields {
+        match v {
+            ClipValue::F64(d) => {
+                let d = match k.as_str() {
+                    "x" => d + offset.x,
+                    "y" => d + offset.y,
+                    _ => *d,
+                };
+                let _ = m.insert(k.as_str(), d);
+            }
+            ClipValue::Bool(b) => {
+                let _ = m.insert(k.as_str(), *b);
+            }
+            ClipValue::Str(s) => {
+                let _ = m.insert(k.as_str(), s.as_str());
+            }
+            ClipValue::Bin(b) => {
+                let _ = m.insert(k.as_str(), LoroValue::Binary(b.clone().into()));
+            }
+        }
+    }
 }
 
 fn content_matches(kind: ElementKind, content: &InitContent) -> bool {

@@ -963,11 +963,14 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
 - [x] `SpatialIndex` (`rstar` R-tree) with the index-equivalence property test (indexed cull vs brute-force agree)
 - [x] Element lifecycle commands (create / update / delete / transform / lock / reorder) with test belt
 - [x] Group / ungroup (§2.F bis) with bounds-union derivation. **DoD:** green in `ambre-toile/src/convergence_tests.rs` (union bounds + below-members z-order, group move translates members, ungroup keeps children/order, delete cascades).
-- [ ] Clipboard: copy / paste / duplicate (§8 ter) with test belt
+- [x] Clipboard: copy / paste / duplicate (§8 ter) with test belt. **DoD:** green in
+  `ambre-toile/src/convergence_tests.rs` (copy is non-mutating; paste re-mints + offsets; a half-copied
+  connector is dropped while a fully-copied one is reproduced; a duplicated group is one undo item; the
+  payload postcard round-trips; paste reproduces the selection on a separate board).
 - [x] Connector routing (§5) + endpoint binding (create / retarget / delete, dangling detection)
 - [x] Stroke storage + smoothing (§4)
 - [x] `DisplayViewport` derivation (culled visible set)
-- [~] `ToileCommand` / `ToileEvent` consolidated enums (§8): lifecycle + groups + undo/redo (`GroupElements`/`UngroupElements`/`Undo`/`Redo`, `UndoState` event) landed in `ambre-toile`; text/frames/clipboard/find/embedded variants + postcard round-trip still open.
+- [~] `ToileCommand` / `ToileEvent` consolidated enums (§8): lifecycle + groups + undo/redo (`GroupElements`/`UngroupElements`/`Undo`/`Redo`, `UndoState` event) + clipboard (`CopyElements`/`PasteElements`/`DuplicateElements`, `Clipboard` event, `ClipboardPayload` postcard round-trip) landed in `ambre-toile`; text/frames/find/embedded variants still open.
 - [x] 2-peer CRDT convergence property-test (element / move-LWW / restyle-register / delete / reorder converge). **DoD:** green in `ambre-toile/src/convergence_tests.rs`.
 
 **Phase 1 — Logic Thread Integration**

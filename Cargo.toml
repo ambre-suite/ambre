@@ -90,7 +90,7 @@ leptos_icons = { version = "0.7" }
 icondata     = { version = "0.7" }
 wgpu    = { version = "28.0", features = ["webgl"] }
 parley  = "0.7"
-kurbo   = "0.13"
+kurbo   = { version = "0.13", features = ["serde"] }
 peniko  = "0.6"
 bytemuck = { version = "1", features = ["derive"] }
 # Path tessellation (phase 1: fill_path / stroke_path)

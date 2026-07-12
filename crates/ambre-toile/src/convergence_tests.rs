@@ -240,6 +240,164 @@ fn deleting_a_group_cascades_to_members() {
 }
 
 // -----------------------------------------------------------------------------
+// Clipboard: copy / paste / duplicate (§8 ter)
+// -----------------------------------------------------------------------------
+
+fn clip_of(out: &crate::command::ToileOutcome) -> crate::command::ClipboardPayload {
+    out.display
+        .iter()
+        .find_map(|e| match e {
+            ToileEvent::Clipboard(p) => Some(p.clone()),
+            _ => None,
+        })
+        .expect("expected a Clipboard event")
+}
+
+fn created_ids(out: &crate::command::ToileOutcome) -> Vec<ElementId> {
+    out.display
+        .iter()
+        .filter_map(|e| match e {
+            ToileEvent::ElementCreated(id) => Some(id.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn connector_count(st: &ToileState) -> usize {
+    st.layer_order()
+        .iter()
+        .filter(|n| matches!(n, NodeId::Connector(_)))
+        .count()
+}
+
+#[test]
+fn copy_does_not_mutate_and_paste_remints_offset() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::new(10.0, 10.0), Size::new(20.0, 20.0));
+
+    // Copy reads the selection without touching the doc.
+    let copy = st.handle_command(ToileCommand::CopyElements {
+        ids: vec![a.clone()],
+    });
+    assert!(copy.update.is_none(), "copy must not produce a CRDT delta");
+    assert_eq!(st.element_count(), 1);
+    let payload = clip_of(&copy);
+    assert_eq!(payload.origin, Rect::new(10.0, 10.0, 30.0, 30.0));
+
+    // Paste so `origin` (top-left 10,10) lands at (110, 210): +100, +200.
+    let paste = st.handle_command(ToileCommand::PasteElements {
+        payload,
+        at: Point::new(110.0, 210.0),
+    });
+    assert!(paste.update.is_some(), "paste must broadcast a CRDT delta");
+    assert_eq!(st.element_count(), 2);
+    let pasted = created_ids(&paste);
+    assert_eq!(pasted.len(), 1);
+    assert_ne!(pasted[0], a, "pasted element must get a fresh id");
+    assert_eq!(
+        st.bounds_of(&pasted[0]),
+        Some(Rect::new(110.0, 210.0, 130.0, 230.0))
+    );
+}
+
+#[test]
+fn paste_keeps_fully_copied_connector_drops_half_copied() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(100.0, 0.0), Size::new(10.0, 10.0));
+    st.handle_command(ToileCommand::CreateConnector {
+        from: a.clone(),
+        from_anch: Anchor::Right,
+        to: b.clone(),
+        to_anch: Anchor::Left,
+        path_type: PathType::Straight,
+        arrows: EndCaps {
+            start: false,
+            end: true,
+        },
+    });
+    assert_eq!(connector_count(&st), 1);
+
+    // Copying only one endpoint's element drops the connector (it would dangle).
+    let half = clip_of(&st.handle_command(ToileCommand::CopyElements {
+        ids: vec![a.clone()],
+    }));
+    assert!(half.connectors.is_empty());
+    st.handle_command(ToileCommand::PasteElements {
+        payload: half,
+        at: Point::new(0.0, 200.0),
+    });
+    assert_eq!(connector_count(&st), 1, "no new connector from a half copy");
+
+    // Copying both endpoints carries the connector, re-minted onto fresh ids.
+    let both = clip_of(&st.handle_command(ToileCommand::CopyElements { ids: vec![a, b] }));
+    assert_eq!(both.connectors.len(), 1);
+    st.handle_command(ToileCommand::PasteElements {
+        payload: both,
+        at: Point::new(0.0, 400.0),
+    });
+    assert_eq!(
+        connector_count(&st),
+        2,
+        "the copied connector is reproduced"
+    );
+}
+
+#[test]
+fn duplicate_a_group_is_one_undo_item() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(20.0, 0.0), Size::new(10.0, 10.0));
+    let g = created_id(&st.handle_command(ToileCommand::GroupElements { ids: vec![a, b] }));
+    assert_eq!(st.element_count(), 3);
+
+    // Duplicating the group re-mints the group and both members (subtree copy).
+    st.handle_command(ToileCommand::DuplicateElements {
+        ids: vec![g],
+        delta: Vec2::new(200.0, 0.0),
+    });
+    assert_eq!(st.element_count(), 6);
+
+    // The whole duplicate collapses under a single undo.
+    st.handle_command(ToileCommand::Undo);
+    assert_eq!(st.element_count(), 3);
+}
+
+#[test]
+fn clipboard_payload_postcard_roundtrips() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(90.0, 90.0), Size::new(10.0, 10.0));
+    st.handle_command(ToileCommand::GroupElements {
+        ids: vec![a.clone(), b.clone()],
+    });
+    let payload = clip_of(&st.handle_command(ToileCommand::CopyElements { ids: vec![a, b] }));
+
+    let bytes = postcard::to_allocvec(&payload).expect("serialize");
+    let back: crate::command::ClipboardPayload = postcard::from_bytes(&bytes).expect("deserialize");
+    assert_eq!(back, payload, "clipboard payload must round-trip");
+}
+
+#[test]
+fn paste_reproduces_selection_on_a_separate_board() {
+    // Cross-board portability (§8 ter DoD): copy from one board, paste into a
+    // fresh one and the selection is reproduced.
+    let mut src = ToileState::new();
+    let a = create_rect(&mut src, Point::new(5.0, 5.0), Size::new(10.0, 10.0));
+    let b = create_rect(&mut src, Point::new(25.0, 5.0), Size::new(10.0, 10.0));
+    let payload = clip_of(&src.handle_command(ToileCommand::CopyElements { ids: vec![a, b] }));
+
+    let mut dst = ToileState::new();
+    assert_eq!(dst.element_count(), 0);
+    let out = dst.handle_command(ToileCommand::PasteElements {
+        payload,
+        at: Point::new(5.0, 5.0), // origin top-left is (5,5): zero offset
+    });
+    assert_eq!(dst.element_count(), 2);
+    assert_eq!(created_ids(&out).len(), 2);
+}
+
+// -----------------------------------------------------------------------------
 // Undo / redo (§8 bis)
 // -----------------------------------------------------------------------------
 
