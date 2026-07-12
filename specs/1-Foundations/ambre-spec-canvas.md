@@ -263,13 +263,15 @@ pub struct WgpuSurface<'a> {
     clip_stack: Vec<Rect>,  // clip applied CPU-side before push vertex
 }
 
-// ambre-trame (future) -- krilla backend, Logic thread, lazy-loaded
-pub struct KrillaSurface<'a> {
-    page: &'a mut krilla::page::Page,
+// ambre-pdf -- krilla backend, Logic thread, lazy-loaded
+pub struct KrillaSurface<'a, 'b> {
+    surface: &'a mut krilla::surface::Surface<'b>,
 }
 ```
 
 > **Architecture note:** `KrillaSurface` executes in the **Logic thread** (not the UI Thread). The `krilla`, `docx-rs`, `html5ever`, `pulldown-cmark` crates are **lazy-loaded** (WASM bundle splitting), not in the startup bundle.
+
+> **Crate placement (`ambre-pdf`).** `KrillaSurface` lives in its own **`ambre-pdf`** crate (deps: `ambre-draw` + `krilla`, `default-features = false`), not inside an app crate: PDF export is app-agnostic (it only translates `DrawSurface` primitives to krilla calls), so every app renders through the same surface. The drawing API is on `krilla::surface::Surface` (obtained via `page.surface()`), so the wrapper borrows the `Surface`, not the `Page`. krilla's surface is top-left / Y-down like `DrawSurface` -- no coordinate flip. The clip stack and transform stack both map onto krilla's single push/pop instruction stack (`push_clip`/`push_transform` -> a push, `pop_*` -> `Surface::pop`); `DrawSurface`'s balanced-nesting contract keeps them paired. Text runs currently carry no `ToUnicode` mapping (glyph shapes render, but PDF text is not yet selectable) -- threading the cluster source text is a later refinement.
 
 ---
 
@@ -442,7 +444,7 @@ Empirical figures (release build, `opt-level = z` + LTO) validating the `AutoNoV
 
 ### CANVAS P1 — Integration
 
-- [ ] `KrillaSurface`: `DrawSurface` implementation for PDF export (Logic thread, lazy-loaded)
+- [x] `KrillaSurface`: `DrawSurface` implementation for PDF export (Logic thread, lazy-loaded). New **`ambre-pdf`** crate (krilla backend); geometry / glyph / path / clip / transform mapped to krilla, headless PDF-serialization tests. *(ToUnicode text mapping deferred -- glyphs render, text not yet selectable.)*
 - [ ] `push_transform` / `pop_transform` on `WgpuSurface` (Prose margins, Toile pan/zoom)
 - [ ] `fill_path` / `stroke_path` on `WgpuSurface` via lyon (Toile, Trame charts)
 - [ ] Lazy loading CJK/Arabic/Devanagari fonts (trigger on missing codepoint)

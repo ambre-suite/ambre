@@ -1,0 +1,14 @@
+[package]
+name = "ambre-pdf"
+version = "0.1.0"
+edition = "2024"
+description = "KrillaSurface: DrawSurface implementation for PDF export (Logic thread, lazy-loaded)"
+
+[dependencies]
+ambre-draw = { path = "../ambre-draw" }
+kurbo = { workspace = true }
+peniko = { workspace = true }
+# default-features off: we only need the vector/glyph core (no raster-images,
+# no simple-text draw_text helper, no rayon). Keeps the lazy-loaded PDF chunk
+# small on wasm. Raster image embedding (Toile media) is enabled later.
+krilla = { workspace = true }
