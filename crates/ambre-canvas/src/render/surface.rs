@@ -17,6 +17,11 @@ use ambre_draw::{Affine, Brush, Color, DrawSurface, GlyphRun, ParleyBrush, Point
 pub struct WgpuSurface<'r> {
     renderer: &'r mut QuadRenderer,
     clip_stack: Vec<Rect>,
+    // Composed model-to-screen transforms, one entry per live `push_transform`.
+    // The top is the transform currently applied to incoming geometry; empty
+    // means identity. Clip rects are transformed at push time, so the stored
+    // clip stack is always in screen space and needs no transform on read.
+    transform_stack: Vec<Affine>,
 }
 
 impl<'r> WgpuSurface<'r> {
@@ -24,15 +29,25 @@ impl<'r> WgpuSurface<'r> {
         Self {
             renderer,
             clip_stack: Vec::new(),
+            transform_stack: Vec::new(),
         }
     }
 
     /// Switch the surface (and underlying renderer) to a different layer,
-    /// arming it for rebuild this frame. Clears the clip stack since clips
-    /// don't cross layer boundaries.
+    /// arming it for rebuild this frame. Clears the clip and transform stacks
+    /// since neither crosses layer boundaries.
     pub fn begin_layer(&mut self, layer: Layer) {
         self.renderer.begin_layer(layer);
         self.clip_stack.clear();
+        self.transform_stack.clear();
+    }
+
+    /// The active model-to-screen transform (identity when the stack is empty).
+    fn transform(&self) -> Affine {
+        self.transform_stack
+            .last()
+            .copied()
+            .unwrap_or(Affine::IDENTITY)
     }
 
     fn active_clip(&self) -> Option<Rect> {
@@ -49,6 +64,7 @@ impl<'r> WgpuSurface<'r> {
 
 impl DrawSurface for WgpuSurface<'_> {
     fn fill_rect(&mut self, rect: Rect, color: Color) {
+        let rect = self.transform().transform_rect_bbox(rect);
         let r = self.clip_rect(rect);
         self.renderer.push_quad(r, color);
     }
@@ -84,7 +100,10 @@ impl DrawSurface for WgpuSurface<'_> {
     }
 
     fn stroke_line(&mut self, x0: f64, y0: f64, x1: f64, y1: f64, color: Color, width: f64) {
-        let (mut x0, mut y0, mut x1, mut y1) = (x0, y0, x1, y1);
+        let t = self.transform();
+        let p0 = t * Point::new(x0, y0);
+        let p1 = t * Point::new(x1, y1);
+        let (mut x0, mut y0, mut x1, mut y1) = (p0.x, p0.y, p1.x, p1.y);
         if let Some(clip) = self.active_clip() {
             let min_x = x0.min(x1);
             let max_x = x0.max(x1);
@@ -120,6 +139,10 @@ impl DrawSurface for WgpuSurface<'_> {
             Brush::Solid(c) => *c,
             _ => return, // gradients: Phase 3
         };
+
+        // Compose the caller's run transform with the active model-to-screen
+        // transform so glyph origins land in screen space.
+        let transform = self.transform() * transform;
 
         let parley_run = run.run();
         let font_data = parley_run.font();
@@ -188,6 +211,12 @@ impl DrawSurface for WgpuSurface<'_> {
     }
 
     fn push_clip(&mut self, rect: Rect) {
+        // Transform the clip into screen space at push time so the stored clip
+        // stack stays screen-space and the fast axis-aligned trimming in the
+        // draw methods needs no per-call transform. (Toile pan/zoom and Prose
+        // margins are translate+scale, so an axis-aligned rect stays so; a
+        // rotated transform would degrade to the transformed bounding box.)
+        let rect = self.transform().transform_rect_bbox(rect);
         let clipped = match self.active_clip() {
             Some(p) => p.intersect(rect),
             None => rect,
@@ -197,5 +226,15 @@ impl DrawSurface for WgpuSurface<'_> {
 
     fn pop_clip(&mut self) {
         self.clip_stack.pop();
+    }
+
+    fn push_transform(&mut self, transform: Affine) {
+        // Compose onto the current transform so nested pushes accumulate
+        // (e.g. a Toile pan/zoom outer transform with a per-shape inner one).
+        self.transform_stack.push(self.transform() * transform);
+    }
+
+    fn pop_transform(&mut self) {
+        self.transform_stack.pop();
     }
 }
