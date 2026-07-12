@@ -9,7 +9,11 @@
 use kurbo::{Point, Rect, Size, Vec2};
 use proptest::prelude::*;
 
-use crate::logic::command::{DisplayNode, End, InitContent, ToileCommand, ToileEvent, ZTarget};
+use ambre_bus::UserId;
+
+use crate::logic::command::{
+    DisplayNode, End, InitContent, PresencePayload, ToileCommand, ToileEvent, ZTarget,
+};
 use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, NodeId, PathType,
     ShapeKind, StrokePoint,
@@ -277,6 +281,106 @@ fn find_ignores_non_text_elements_and_empty_query() {
     assert!(r.focus.is_none());
     // A real match still resolves.
     assert_eq!(find(&mut st, "findme", opts, None).hits.len(), 1);
+}
+
+// -----------------------------------------------------------------------------
+// Ephemeral presence (§7)
+// -----------------------------------------------------------------------------
+
+fn peer_presence(events: Vec<ToileEvent>) -> crate::logic::command::PresenceUpdate {
+    events
+        .into_iter()
+        .find_map(|e| match e {
+            ToileEvent::PeerPresence(u) => Some(u),
+            _ => None,
+        })
+        .expect("expected a PeerPresence event")
+}
+
+#[test]
+fn identity_is_seeded_and_read_back() {
+    // #1: my_user_id is `None` until SessionReady, then the dispatcher seeds it.
+    let mut st = ToileState::new();
+    assert!(st.user_id().is_none());
+    let me = UserId::new();
+    st.set_user_id(me);
+    assert_eq!(st.user_id(), Some(me));
+}
+
+#[test]
+fn presence_command_broadcasts_ephemeral_only() {
+    // A local presence sample rides the ephemeral leg: no display event, no CRDT
+    // delta (the UI draws its own cursor).
+    let mut st = ToileState::new();
+    let a = create_sticky(&mut st, Point::ZERO, "note");
+    let payload = PresencePayload {
+        cursor: Some(Point::new(12.0, 34.0)),
+        selection: vec![a],
+        live_stroke: None,
+        laser: Some(Point::new(50.0, 60.0)),
+    };
+    let out = st.handle_command(ToileCommand::Presence(payload));
+    assert!(out.display.is_empty(), "presence emits no display event");
+    assert!(out.update.is_none(), "presence is never a CRDT delta");
+    assert!(
+        out.ephemeral.is_some(),
+        "presence must broadcast an ephemeral frame"
+    );
+}
+
+#[test]
+fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
+    // #2 / §13 DoD: an inbound presence frame yields a PeerPresence keyed by the
+    // resolved UserId and mutates neither the doc nor its history.
+    let mut sender = ToileState::new();
+    let payload = PresencePayload {
+        cursor: Some(Point::new(7.0, 8.0)),
+        selection: Vec::new(),
+        live_stroke: Some(vec![StrokePoint {
+            x: 1.0,
+            y: 2.0,
+            pressure: 1.0,
+        }]),
+        laser: None,
+    };
+    let frame = sender
+        .handle_command(ToileCommand::Presence(payload.clone()))
+        .ephemeral
+        .expect("presence frame");
+
+    let mut rx = ToileState::new();
+    let before = rx.export_snapshot();
+    let count_before = rx.element_count();
+
+    let alice = UserId::new();
+    let update = peer_presence(rx.apply_ephemeral(alice, &frame));
+    assert_eq!(update.user_id, alice);
+    assert_eq!(update.presence, payload);
+    assert_eq!(rx.peer_presence(&alice), Some(&payload));
+
+    // Non-mutating: the CRDT snapshot and element set are untouched (§7).
+    assert_eq!(rx.export_snapshot(), before);
+    assert_eq!(rx.element_count(), count_before);
+
+    // A second peer is tracked independently, keyed by its own UserId.
+    let bob = UserId::new();
+    let bob_frame = sender
+        .handle_command(ToileCommand::Presence(PresencePayload::default()))
+        .ephemeral
+        .expect("presence frame");
+    let _ = rx.apply_ephemeral(bob, &bob_frame);
+    assert!(rx.peer_presence(&alice).is_some());
+    assert_eq!(rx.peer_presence(&bob), Some(&PresencePayload::default()));
+}
+
+#[test]
+fn apply_ephemeral_drops_a_malformed_frame() {
+    let mut rx = ToileState::new();
+    let events = rx.apply_ephemeral(UserId::new(), &[0xFF, 0x00, 0x13, 0x37]);
+    assert!(
+        events.is_empty(),
+        "a malformed presence frame yields no event"
+    );
 }
 
 // -----------------------------------------------------------------------------

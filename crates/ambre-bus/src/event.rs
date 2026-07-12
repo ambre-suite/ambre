@@ -54,9 +54,13 @@ pub enum LogicEvent {
         payload: Vec<u8>,
     },
 
-    /// Decrypted ephemeral data (cursor, collaborator presence).
+    /// Decrypted ephemeral data (cursor, collaborator presence). `from_user_id`
+    /// is the sender's canonical `UserId`, resolved from the authenticated
+    /// `pub_key` against the document's member list before delivery, so presence
+    /// is keyed by a spoof-proof per-user identity (§7).
     RemoteEphemeral {
         document_id: DocumentId,
+        from_user_id: UserId,
         payload: Vec<u8>,
     },
 

@@ -13,6 +13,7 @@
 //! characters only.
 
 use ambre_core::DocType;
+use ambre_core::UserId;
 use ambre_core::uuid::Uuid;
 use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};
 use serde::{Deserialize, Serialize};
@@ -240,7 +241,7 @@ impl ElementStyle {
 // =============================================================================
 
 /// One sampled point of a freehand stroke. 12 bytes, fixed layout.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StrokePoint {
     pub x: f32,
     pub y: f32,
@@ -554,6 +555,48 @@ pub enum ToileCommand {
 
     // -- Viewport (drives culling; no CRDT effect) --
     SetViewport(Viewport),
+
+    // -- Ephemeral presence (never persisted, never in history; §7) --
+    /// A local presence sample (cursor move, live-stroke sample, laser point,
+    /// selection) to broadcast to peers. Produces a `SendEphemeral` payload and
+    /// no display event / CRDT delta: the local cursor is drawn by the UI itself.
+    Presence(PresencePayload),
+}
+
+// =============================================================================
+// Presence (ephemeral, §7) -- never persisted, never in Loro history.
+// =============================================================================
+
+/// One ephemeral presence sample the local peer broadcasts (§7): pointer
+/// position, current selection, an in-flight stroke, and/or a laser point. All
+/// fields are optional so a bare cursor move need not resend the selection.
+/// Postcard-encoded into the `SendEphemeral` payload. Identity is deliberately
+/// NOT carried here: the receiver keys presence off the sender's canonical
+/// `UserId`, resolved from the authenticated `pub_key` in `ambre-sync`, so a peer
+/// cannot spoof another user's cursor.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct PresencePayload {
+    /// World-space pointer; `None` means the pointer left the board.
+    pub cursor: Option<Point>,
+    /// The peer's current selection, drawn as halos. Empty = nothing selected.
+    pub selection: Vec<ElementId>,
+    /// In-flight freehand stroke samples (world space), streamed before the
+    /// stroke commits to a `"drawing"` element (§4). `None` = not drawing.
+    pub live_stroke: Option<Vec<StrokePoint>>,
+    /// Laser / highlighter point (a momentary, fading trail on the render side,
+    /// `toile-ui`). `None` = laser off.
+    pub laser: Option<Point>,
+}
+
+/// A remote peer's latest presence, keyed by the canonical `UserId` (§7). The UI
+/// derives the peer color / name label by hashing `user_id` with the shared
+/// cross-app algorithm (`prose-ui::peer_color`), so a collaborator keeps the same
+/// color across Prose, Trame and Toile. Emitted as `ToileEvent::PeerPresence`;
+/// the render side is `toile-ui`'s overlay pass.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PresenceUpdate {
+    pub user_id: UserId,
+    pub presence: PresencePayload,
 }
 
 // =============================================================================
@@ -595,6 +638,9 @@ pub enum ToileEvent {
     /// synced and never an undo item.
     FindResults(FindResults),
     DanglingConnector(ConnectorId),
+    /// A remote peer's cursor / live stroke / laser / selection to render,
+    /// keyed by the canonical `UserId` (§7). Ephemeral, never persisted.
+    PeerPresence(PresenceUpdate),
     /// Local undo/redo stack availability, driving the chrome affordances (§8 bis).
     UndoState {
         can_undo: bool,

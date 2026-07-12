@@ -15,7 +15,8 @@
 pub use ambre_bus::app::toile::{
     ClipConnector, ClipElement, ClipMembership, ClipValue, ClipboardPayload, DisplayConnector,
     DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, End, FindOptions, FindResults,
-    InitContent, SelectionStats, ToileCommand, ToileError, ToileEvent, ZTarget,
+    InitContent, PresencePayload, PresenceUpdate, SelectionStats, ToileCommand, ToileError,
+    ToileEvent, ZTarget,
 };
 
 // -----------------------------------------------------------------------------
@@ -38,6 +39,17 @@ impl ToileOutcome {
             display,
             update: None,
             ephemeral: None,
+        }
+    }
+
+    /// An outcome that only broadcasts an ephemeral (presence) frame: no display
+    /// event and no CRDT delta. The local cursor is drawn by the UI itself, so a
+    /// `Presence` command produces nothing for the local UI to repaint (§7).
+    pub fn ephemeral_only(ephemeral: Vec<u8>) -> Self {
+        Self {
+            display: Vec::new(),
+            update: None,
+            ephemeral: Some(ephemeral),
         }
     }
 }

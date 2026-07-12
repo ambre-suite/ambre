@@ -32,13 +32,18 @@ mod derive;
 mod elements;
 mod find;
 mod groups;
+mod presence;
 
 use std::collections::HashMap;
 
 use kurbo::Rect;
 use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
 
-use crate::logic::command::{SelectionStats, ToileCommand, ToileError, ToileEvent, ToileOutcome};
+use ambre_bus::UserId;
+
+use crate::logic::command::{
+    PresencePayload, SelectionStats, ToileCommand, ToileError, ToileEvent, ToileOutcome,
+};
 use crate::logic::index::{SpatialIndex, Viewport};
 use crate::logic::model::{ConnectorId, ElementId, NodeId};
 
@@ -69,6 +74,18 @@ pub struct ToileState {
     /// Local-only undo/redo (§8 bis): undoes only this peer's operations, one
     /// item per atomic user action (one `doc.commit()` per mutating command).
     undo: UndoManager,
+    /// Canonical per-user identifier, seeded from `LogicEvent::SessionReady`
+    /// (§7) by the dispatcher. `None` until the session is authenticated. A
+    /// stable `UserId`, NOT `peer` (which is per-session/per-device and only
+    /// mints element ids); used to key this peer's own persisted reactions
+    /// (`toile-features §4.A`) and to tag outbound presence with a stable
+    /// identity. Same field as `trame-logic §7`.
+    my_user_id: Option<UserId>,
+    /// Remote peers' latest presence (cursors, live strokes, lasers, selections),
+    /// keyed by canonical `UserId` (§7). Ephemeral: never in Loro, never
+    /// persisted, rebuilt from inbound frames. The local peer's own presence is
+    /// not stored here (the UI draws its own cursor).
+    presence: HashMap<UserId, PresencePayload>,
 }
 
 impl Default for ToileState {
@@ -100,7 +117,24 @@ impl ToileState {
             viewport: Viewport::default(),
             exported_vv: VersionVector::default(),
             undo,
+            my_user_id: None,
+            presence: HashMap::new(),
         }
+    }
+
+    // -- session identity (§7) -------------------------------------------------
+
+    /// Seed the canonical `UserId` from `LogicEvent::SessionReady` (§7). Called
+    /// by the dispatcher once the session is authenticated; idempotent (a
+    /// re-login with the same account is a no-op). Keys this peer's reactions
+    /// (`toile-features §4.A`) and tags outbound presence.
+    pub fn set_user_id(&mut self, user_id: UserId) {
+        self.my_user_id = Some(user_id);
+    }
+
+    /// The canonical `UserId` for this session, if the session is authenticated.
+    pub fn user_id(&self) -> Option<UserId> {
+        self.my_user_id
     }
 
     // -- id minting (§2.A) -----------------------------------------------------
@@ -169,6 +203,7 @@ impl ToileState {
                 self.viewport = vp;
                 ToileOutcome::display_only(vec![self.viewport_event()])
             }
+            ToileCommand::Presence(payload) => self.broadcast_presence(&payload),
         }
     }
 
@@ -207,15 +242,6 @@ impl ToileState {
         }
         self.rebuild_caches();
         vec![self.viewport_event()]
-    }
-
-    /// Apply a remote ephemeral (presence) payload and return the presence events
-    /// to surface. Presence overlay is a Phase 1 UI slice (`toile-ui §13`,
-    /// `UserId`-keyed cursors / selections); until the `ToileEvent` presence
-    /// variant lands there is nothing to decode, so this is an accepted no-op that
-    /// keeps the dispatcher wiring complete (§8).
-    pub fn apply_ephemeral(&mut self, _payload: &[u8]) -> Vec<ToileEvent> {
-        Vec::new()
     }
 
     /// Full CRDT snapshot for local persistence / compaction / SnapshotNeeded.

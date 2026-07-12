@@ -157,18 +157,27 @@ impl LogicState {
     }
 
     /// Apply a remote ephemeral payload to a document and forward presence events.
-    pub(crate) fn apply_ephemeral(&mut self, document_id: DocumentId, payload: &[u8]) {
+    /// `from_user_id` is the sender's canonical `UserId`, resolved from the
+    /// authenticated `pub_key` in `ambre-sync` (§7) so presence cannot be spoofed.
+    pub(crate) fn apply_ephemeral(
+        &mut self,
+        document_id: DocumentId,
+        from_user_id: UserId,
+        payload: &[u8],
+    ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
         };
         let events: Vec<AppEvent> = match doc {
+            // Trame's own `UserId`-keyed presence is a separate slice
+            // (`trame-logic §7`); it ignores the resolved id for now.
             DocState::Trame(state) => state
                 .apply_ephemeral(payload)
                 .into_iter()
                 .map(AppEvent::Trame)
                 .collect(),
             DocState::Toile(state) => state
-                .apply_ephemeral(payload)
+                .apply_ephemeral(from_user_id, payload)
                 .into_iter()
                 .map(AppEvent::Toile)
                 .collect(),

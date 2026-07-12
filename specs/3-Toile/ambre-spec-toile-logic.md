@@ -740,7 +740,7 @@ impl ToileState {
     /// Applies a decrypted remote ephemeral (presence) frame -> PeerPresence events.
     /// The sender's pub_key is already resolved to a canonical UserId in ambre-sync
     /// (§7) before this is called; no CRDT mutation, no sync payload leaves here.
-    pub fn apply_ephemeral(&mut self, payload: &[u8]) -> Vec<ToileEvent> { /* ... */ }
+    pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &[u8]) -> Vec<ToileEvent> { /* ... */ }
 
     /// Exports a full CRDT snapshot for local persistence (IndexedDB), server-side
     /// compaction, or a Sync SnapshotNeeded. Read-only. Mirrors trame-logic §8.
@@ -978,7 +978,10 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
 - [x] Sync thread wiring: `SendUpdate` + `SendEphemeral` presence (both in `ambre-bus`); inbound `LogicEvent::RemoteEphemeral` -> `apply_ephemeral` (§8). `SendUpdate`/`SendEphemeral` fan-out wired; `apply_ephemeral` is an accepted no-op until the presence `ToileEvent` variant lands with `toile-ui §13`.
 - [x] `apply_remote` accepting both deltas and snapshots (§8), plus `apply_remote_batch` for the server history replay on open (one import sweep + a single cache rebuild).
 - [x] `export_snapshot` + persist-on-change to IndexedDB + the `RequestSnapshot` / `SnapshotNeeded` / `RemoteSnapshot` paths (§8). `RemoteSnapshot` -> `apply_remote`, `SnapshotNeeded` -> `export_snapshot`, persist-on-change via the dispatcher's `to_persist` leg, and `RestoreLocalSnapshot` restores a Toile board from the local IndexedDB store.
-- [ ] `my_user_id` seeded from `LogicEvent::SessionReady` (§7), keys reactions `toile-features §4.A`
+- [x] `my_user_id` seeded from `LogicEvent::SessionReady` (§7), keys reactions `toile-features §4.A`.
+  `ToileState::set_user_id` / `user_id` (`Option<UserId>`); the `ambre-logic` dispatcher captures the
+  `RestEvent::SessionReady` id, seeds every open document and any opened afterwards. **DoD** green in
+  `ambre-logic/src/dispatch.rs` (open + future docs seeded) and `ambre-toile/src/convergence_tests.rs`.
 - [x] `loro::UndoManager` wired to `Undo` / `Redo`, one `doc.commit()` per mutating command (§8bis). Landed early with the Phase-0 groups slice (`apply_history`, `UndoState` event); **DoD** green in `ambre-toile/src/convergence_tests.rs` (undo reverts create + redo restores; a group undoes as one item). Chrome affordance wiring stays with Phase 1 UI.
 - [x] `Find` handler (§8 quater): non-mutating text scan over sticky/text bodies + frame titles, hits in
   `layers` z-order (with the §2.H missing-from-layers fallback), `match_case`/`whole_word` honored, wrapping
@@ -986,7 +989,18 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
   `ambre-toile/src/logic/convergence_tests.rs`. Chrome panel wiring stays with Phase 1 UI (`toile-ui §5quater`).
 - [x] `RequestSelectionStats` -> selection aggregates (count + union AABB, world space) for the status bar
   (§8 quinquies), computed Logic-side over the derived `bounds` cache so an off-viewport selection is counted.
-- [ ] Presence keyed by canonical `UserId` (§7)
-- [ ] Feed `DisplayViewport` to `toile-ui`'s `WgpuSurface`
+- [x] Presence keyed by canonical `UserId` (§7): `PresencePayload` / `PresenceUpdate` (`ambre-bus`),
+  `ToileCommand::Presence` -> postcard ephemeral frame (`ToileOutcome.ephemeral`, no display / no CRDT delta),
+  `apply_ephemeral(from_user_id, payload)` -> `PresenceState` keyed by `UserId` -> `ToileEvent::PeerPresence`;
+  `LogicEvent::RemoteEphemeral` now carries the resolved `from_user_id`. **DoD** green in
+  `ambre-toile/src/convergence_tests.rs` (a presence frame yields the expected `PeerPresence` keyed by the
+  resolved `UserId`, mutating neither the doc nor its history; a malformed frame is dropped). The **render**
+  side (cursor / stroke / laser / selection overlay) stays with `toile-ui`. **Blocked downstream:** the
+  `ambre-sync` `pub_key` -> `UserId` resolution (`resolve_ephemeral_author`) returns `None` until the member
+  signing-key directory / trusted-keys store is wired, so inbound frames are dropped end-to-end for now (a
+  sync/identity slice tracked in `ambre-spec-sync.md` "SYNC P4", not Toile logic); the outbound broadcast and
+  the whole Logic path are complete.
+- **Presence render / overlay** (remote cursors, live strokes, laser, selection halos, cross-app `UserId`
+  colors): `ambre-spec-toile-ui.md` Phase 1.
 - **Phase 2 (Optimization):** bulk index update on large remote batches, order-preserving layer diffing,
   connector routing memoization keyed by endpoint bounds, benchmark-gated style dedup dictionary.
