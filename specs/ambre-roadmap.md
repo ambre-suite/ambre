@@ -212,16 +212,21 @@ launcher/sharing UI); what is new is the spatial document model and the GPU vect
 > foundation Story lands here rather than under `E5`.
 
 Stories:
-- `[~]` `toile-logic §13 Phase 0/1` — CRDT schema + `SpatialIndex` + element/connector/group/stroke lifecycle +
+- `[x]` `toile-logic §13 Phase 0/1` — CRDT schema + `SpatialIndex` + element/connector/group/stroke lifecycle +
   clipboard + `DisplayViewport`, then dispatcher/Sync wiring, `apply_ephemeral` / `apply_remote`, snapshot &
   persistence paths, `my_user_id` from `SessionReady`, `UndoManager`, Find + selection stats, `UserId` presence.
   Includes the 2-peer convergence property-test (**DoD**). *(Phase 0 landed: schema, index, element/connector/
   stroke lifecycle, groups, `UndoManager`, `DisplayViewport`, convergence property-test green. Phase 1 dispatcher/
   Sync/persistence wiring landed (dispatch arm, `SendUpdate`/`SendEphemeral`, `apply_remote`/`apply_remote_batch`,
   snapshot + local-restore paths). Clipboard (copy/paste/duplicate, §8 ter) and frame membership
-  (`SetFrameChildren`, §2.F/§2.G) landed with their convergence test belts, closing Phase 0. Open (Phase 1):
-  `EditText` (blocked on Prose's shared `TextDelta`), Find; `my_user_id` from `SessionReady`, selection-stats
-  plumbing to the status bar, and `UserId` presence.)*
+  (`SetFrameChildren`, §2.F/§2.G) landed with their convergence test belts, closing Phase 0. Phase 1 also landed:
+  Find (§8 quater), selection stats (§8 quinquies), `my_user_id` from `SessionReady` (§7), and `UserId`-keyed
+  ephemeral presence (§7, `PresencePayload`/`PresenceUpdate` + `apply_ephemeral(from_user_id, ..)` -> `PeerPresence`;
+  the `pub_key` -> `UserId` resolution that feeds it is a Sync-layer dependency tracked in `ambre-spec-sync.md`
+  "SYNC P4" / `E5`). Every §13 Phase 0/1 checkbox is `[x]`; `EditText` is not a §13 gating item — it is a
+  deferred `ToileCommand` variant that lands with Prose's shared `TextDelta` (`ARCH P2` / `E5`), like the Trame
+  schema deferral did not gate `E3`. Presence **render** and the `DisplayViewport` -> `WgpuSurface` feed are UI
+  work under `toile-ui §13`.)*
 - `[ ]` `CANVAS P1` — `lyon` / `WgpuSurface` vector pipeline (quad + path), `ViewportTransform`, glyph atlas, and
   PDF export via `KrillaSurface` (krilla). The shared canvas foundation the vector tools and the PDF path need.
 - `[ ]` `toile-ui §13 Phase 0/1` — `ViewportTransform` / batcher / adaptive grid / hit-testing / Select tool, then
@@ -248,7 +253,9 @@ Stories:
 Stories:
 - `ARCH P2` — `ambre-prose` (LoroText): the text/CRDT pilot.
 - `ARCH P7` (`ambre-murmure`) — channels.
-- `SYNC P4` + `SRV P1` — channels & meetings (segments managed by Sync, unread, WebRTC signaling).
+- `SYNC P4` + `SRV P1` — channels & meetings (segments managed by Sync, unread, WebRTC signaling); plus the
+  presence identity resolution (`pub_key` -> canonical `UserId` directory) that lets inbound ephemerals be
+  delivered with a spoof-proof `from_user_id`, unblocking the Toile/Trame `UserId`-keyed presence render.
 
 ## E6 — Polish & hardening  `[ ]` (deferred)
 

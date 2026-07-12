@@ -463,6 +463,21 @@ impl SyncDocumentState {
         true
     }
 
+    /// Resolve the canonical `UserId` behind an ephemeral's authoring Ed25519
+    /// key (§7). Presence must be keyed by a per-user identity, not by the
+    /// per-device signing key, and the sender-supplied payload can never be
+    /// trusted for identity; the key must be matched against a directory of
+    /// members' signing keys resolved out of band.
+    ///
+    /// That directory is not wired on the client yet (member records carry no
+    /// signing key today, and the trusted-keys / key-transparency store is a
+    /// later slice), so there is nothing to match against and this returns
+    /// `None`. The caller drops the frame: presence is best-effort, so showing
+    /// nothing is preferable to attributing a cursor to a guessed identity.
+    fn resolve_ephemeral_author(&self, _author_pk: [u8; 32]) -> Option<UserId> {
+        None
+    }
+
     /// Decrypts an update with the active key, falling back to every key in the
     /// [`old_keys`] LRU cache.
     fn open_update_fallback(

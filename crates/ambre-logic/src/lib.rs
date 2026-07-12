@@ -36,8 +36,8 @@ mod data;
 mod dispatch;
 
 use ambre_bus::{
-    AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent, RestCommand, SyncCommand,
-    UiEvent,
+    AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent, RestCommand, RestEvent,
+    SyncCommand, UiEvent, UserId,
 };
 use ambre_toile::ToileState;
 use ambre_trame::TrameState;
@@ -78,6 +78,16 @@ impl DocState {
             }
         }
     }
+
+    /// Seed the canonical `UserId` (§7) into the underlying app state once the
+    /// session is authenticated. Only apps that key per-user state on it react;
+    /// Trame's own `my_user_id` (`trame-logic §7`) is a separate slice.
+    fn set_user_id(&mut self, user_id: UserId) {
+        match self {
+            DocState::Toile(state) => state.set_user_id(user_id),
+            DocState::Trame(_) => {}
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -102,6 +112,12 @@ struct LogicState {
     /// route immediately, before any snapshot/delta arrives. Removed on
     /// `CloseDocument` / `DeleteDocument` / `Logout`.
     docs: HashMap<DocumentId, DocState>,
+    /// Canonical per-user identifier, captured from `LogicEvent::SessionReady`
+    /// (§7). `None` until the session is authenticated. Seeded into every open
+    /// `DocState` on arrival and into any document opened afterwards, so an app
+    /// that keys per-user state (Toile reactions, presence identity) always has
+    /// it before the first edit.
+    my_user_id: Option<UserId>,
 }
 
 impl LogicState {
@@ -115,6 +131,7 @@ impl LogicState {
             to_sync,
             to_persist,
             docs: HashMap::new(),
+            my_user_id: None,
         }
     }
 

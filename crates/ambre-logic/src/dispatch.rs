@@ -38,8 +38,11 @@ impl LogicState {
                 // and reuses it.
                 if let std::collections::hash_map::Entry::Vacant(slot) =
                     self.docs.entry(document_id)
-                    && let Some(state) = DocState::new(doc_type)
+                    && let Some(mut state) = DocState::new(doc_type)
                 {
+                    if let Some(user_id) = self.my_user_id {
+                        state.set_user_id(user_id);
+                    }
                     slot.insert(state);
                 }
                 let Some(doc) = self.docs.get_mut(&document_id) else {
@@ -96,8 +99,13 @@ impl LogicState {
                 // doc). A later RemoteSnapshot reuses the existing state.
                 if let std::collections::hash_map::Entry::Vacant(slot) =
                     self.docs.entry(document_id)
-                    && let Some(state) = DocState::new(doc_type)
+                    && let Some(mut state) = DocState::new(doc_type)
                 {
+                    // Seed the identity if the session is already authenticated;
+                    // otherwise the later `SessionReady` sweep covers this slot.
+                    if let Some(user_id) = self.my_user_id {
+                        state.set_user_id(user_id);
+                    }
                     slot.insert(state);
                 }
                 self.send_to_sync(SyncCommand::OpenDocument {
@@ -137,6 +145,15 @@ impl LogicState {
             // forward to the UI. Documents are materialised on `OpenDocument`
             // (which carries the `doc_type`), so no event here mutates state.
             LogicEvent::Rest { id, evt } => {
+                // `SessionReady` also seeds the canonical `UserId` (§7): capture
+                // it for later opens and push it into every already-open document
+                // before forwarding the event verbatim to the UI.
+                if let RestEvent::SessionReady { user_id, .. } = &evt {
+                    self.my_user_id = Some(*user_id);
+                    for state in self.docs.values_mut() {
+                        state.set_user_id(*user_id);
+                    }
+                }
                 self.send_to_ui(UiEvent::Rest { id, evt });
             }
 
@@ -166,9 +183,10 @@ impl LogicState {
 
             LogicEvent::RemoteEphemeral {
                 document_id,
+                from_user_id,
                 payload,
             } => {
-                self.apply_ephemeral(document_id, &payload);
+                self.apply_ephemeral(document_id, from_user_id, &payload);
             }
 
             LogicEvent::SnapshotNeeded { document_id } => {
@@ -403,6 +421,41 @@ mod tests {
             sync_rx.try_recv(),
             Ok(SyncCommand::CloseDocument { .. })
         ));
+    }
+
+    #[test]
+    fn session_ready_seeds_user_id_into_open_and_future_toile_docs() {
+        // #1 (§7): SessionReady seeds `my_user_id` into every already-open
+        // document and into any opened afterwards.
+        let (mut state, _ui, _sync) = harness();
+        let already_open = DocumentId::new();
+        state
+            .docs
+            .insert(already_open, DocState::Toile(Box::new(ToileState::new())));
+
+        let me = ambre_bus::UserId::new();
+        state.handle_logic_event(LogicEvent::Rest {
+            id: RequestId::next(),
+            evt: RestEvent::SessionReady {
+                user_id: me,
+                display_name: "Ada".into(),
+                email: "ada@example.com".into(),
+            },
+        });
+
+        let toile_user_id = |state: &LogicState, id: &DocumentId| match state.docs.get(id) {
+            Some(DocState::Toile(s)) => s.user_id(),
+            other => panic!("expected an open Toile doc, got {}", other.is_some()),
+        };
+        assert_eq!(toile_user_id(&state, &already_open), Some(me));
+
+        // A document opened after authentication is seeded immediately.
+        let opened_later = DocumentId::new();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id: opened_later,
+            doc_type: DocType::Toile,
+        });
+        assert_eq!(toile_user_id(&state, &opened_later), Some(me));
     }
 
     #[test]
