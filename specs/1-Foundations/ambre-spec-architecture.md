@@ -58,13 +58,16 @@ ambre/
 │   ├── ambre-core/               Fundamental types (Uuid/DocumentId/UserId/..., DocType, PublicKey, Role). Shared client + server.
 │   ├── ambre-crypto/             Crypto primitives. ⚠️ STUB (lib.rs ~6 lines, no real consumer).
 │   ├── ambre-protocol/           Network types (Update/Snapshot/Ephemeral, Ws*Msg, Signaling*, encode/decode). SOURCE OF TRUTH (sync + server).
-│   ├── ambre-bus/                Client IPC contract. Depends on ambre-core ONLY. No serde/postcard/flume/tracing.
-│   │     ├── lib.rs              (re-exports + IPC_TEST_DOC_ID)
-│   │     ├── logic.rs            (LogicCommand + AppCommand + TrameCommand)
-│   │     ├── ui.rs               (UiEvent + AppEvent + TrameEvent + DisplayCell)
+│   ├── ambre-bus/                Client IPC contract. Depends on ambre-core + serde/zeroize (+ kurbo/postcard/thiserror for the app content plane). No flume/tracing/network.
+│   │     ├── lib.rs              (flat re-exports of the per-app content plane + IPC_TEST_DOC_ID)
+│   │     ├── logic.rs            (LogicCommand envelope + AppCommand dispatch sum)
+│   │     ├── ui.rs               (UiEvent envelope + AppEvent dispatch sum)
 │   │     ├── command.rs          (SyncCommand)
 │   │     ├── event.rs            (LogicEvent)
-│   │     └── rest.rs             (RestCommand + RestEvent + RequestId + shared business types)
+│   │     ├── rest.rs             (RestCommand + RestEvent + RequestId + shared business types)
+│   │     └── app/                Per-app content plane (one module per document type):
+│   │           ├── trame/        (TrameCommand + TrameEvent + DisplayCell + style/clipboard/features)
+│   │           └── toile.rs      (ToileCommand + ToileEvent + Display* + model + Viewport)
 │   ├── ambre-draw/               DrawSurface trait + kurbo/peniko/parley re-exports. No GPU dep.
 │   ├── ambre-commands/           Shared command registry (CommandId/Command/CommandState/CommandSource/keybindings). Leaf, zero UI dep.
 │   ├── ambre-canvas/                 Canvas render runtime of the UI thread (NO leptos):
@@ -244,15 +247,18 @@ UiEvent     ::Rest { id, evt: RestEvent }     // Logic → UI
 
 The Logic thread's P3 dispatch reduces to **a single arm** (`Rest { id, cmd } => send_to_sync(Rest{…})`), preceded by a small `match &cmd` for the rare state-affecting ops (`Logout` clears `docs`, `DeleteDocument` removes the entry). Adding an op = one `RestCommand` variant + one `RestEvent` variant, edited in the same place. **`RequestId`** (newtype `u64`) is allocated by the **UI** via `RequestId::next()` (an `AtomicU64` shared between threads — legal thanks to shared memory), **echoed unchanged** by Logic and Sync. Single home = the `Rest` envelope.
 
-**Naming convention** — by **destination + role** (`Command` = request to the downstream worker, `Event` = notification flowing back upwards); endpoints named by direction (`to_ui`/`from_ui`/..., no more `tx`/`rx`). Same suffix at both levels: `Command` travels in `Command`, `Event` in `Event`.
+**Naming convention** — by **destination + role** (`Command` = request to the downstream worker, `Event` = notification flowing back upwards); endpoints named by direction (`to_ui`/`from_ui`/..., no more `tx`/`rx`). Same suffix at both levels: `Command` travels in `Command`, `Event` in `Event`. The direction invariant is carried by the **type name** (`…Command` / `…Event`), which frees the per-app content plane to be grouped by app rather than by direction (see the layout note below).
 
 | Flow | Type | File `ambre-bus/src/` |
 |---|---|---|
-| UI → Logic | `LogicCommand` | `logic.rs` (+ `AppCommand`, `TrameCommand`) |
-| Logic → UI | `UiEvent` | `ui.rs` (+ `AppEvent`, `TrameEvent`, `DisplayCell`) |
+| UI → Logic | `LogicCommand` | `logic.rs` (envelope + `AppCommand` dispatch sum) |
+| Logic → UI | `UiEvent` | `ui.rs` (envelope + `AppEvent` dispatch sum) |
 | Logic → Sync | `SyncCommand` | `command.rs` |
 | Sync → Logic | `LogicEvent` | `event.rs` |
 | (shared) | `RestCommand`/`RestEvent`/`RequestId` + business types | `rest.rs` |
+| (per-app content plane) | `TrameCommand`+`TrameEvent`+`DisplayCell`+value types; `ToileCommand`+`ToileEvent`+`Display*`+model | `app/<name>.rs` (e.g. `app/trame/`, `app/toile.rs`) |
+
+**`ambre-bus` layout — envelopes by direction, content plane by app.** The four transport **envelopes** stay split by direction (each is bound to one channel hop). The typed per-app **content plane** is instead grouped **one module per document type** under `app/`: a document type's command enum, event enum and shared value / display types are co-located (`app/trame/` = `command`/`event`/`style`/`clipboard`/`features`; `app/toile.rs` = the whole Toile data plane). `AppCommand` (`logic.rs`) and `AppEvent` (`ui.rs`) are thin closed sums referencing `crate::app::<name>::…`. All per-app types are re-exported flat at the crate root (`ambre_bus::TrameCommand`, `ambre_bus::ToileEvent`, …), so downstream crates are unaffected by the internal layout. *Rationale:* a per-app command and its event share the app's whole value-type vocabulary (styles, geometry); grouping by app keeps a document type in one place and stops the event side reaching across a direction boundary for shared types. *(Revised 2026-07: previously the content plane was also split by direction — `logic.rs (+ TrameCommand)` / `ui.rs (+ TrameEvent, DisplayCell)` — which scattered each app and forced `ui.rs` to reference `crate::logic::` value types.)*
 
 **`Rest` vs explicit partition:**
 - **In `RestCommand`/`RestEvent`** = **correlatable request/response** operations, **success responses only**: session, document CRUD, sharing, users, media, channels CRUD+sharing, unread, meetings.

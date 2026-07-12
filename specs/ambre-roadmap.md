@@ -214,15 +214,19 @@ launcher/sharing UI); what is new is the spatial document model and the GPU vect
 Stories:
 - `[~]` `ARCH P5` (`ambre-toile`) — new spatial `DocState`: typed `ToileState` behind the `ambre-logic` `match`,
   `rstar` R-tree culling, in-place editable nested embeds (Prose/Trame). *(embeds start at the read-only subset.)*
-  Standalone `ToileState` + `SpatialIndex` landed; `ambre-logic` `match` dispatch wiring still open.
+  Standalone `ToileState` + `SpatialIndex` landed; `ambre-logic` `match` dispatch **landed** (IPC contract moved to
+  `ambre-bus::app::toile`, `AppCommand::Toile`/`AppEvent::Toile`, `DocState::Toile`, remote/snapshot/ephemeral legs).
+  Open: in-place editable nested embeds (`ToileCommand::Embedded`).
 - `[ ]` `CANVAS P1` — `lyon` / `WgpuSurface` vector pipeline (quad + path), `ViewportTransform`, glyph atlas, and
   PDF export via `KrillaSurface` (krilla). The shared canvas foundation the vector tools and the PDF path need.
 - `[~]` `toile-logic §13 Phase 0/1` — CRDT schema + `SpatialIndex` + element/connector/group/stroke lifecycle +
   clipboard + `DisplayViewport`, then dispatcher/Sync wiring, `apply_ephemeral` / `apply_remote`, snapshot &
   persistence paths, `my_user_id` from `SessionReady`, `UndoManager`, Find + selection stats, `UserId` presence.
   Includes the 2-peer convergence property-test (**DoD**). *(Phase 0 landed: schema, index, element/connector/
-  stroke lifecycle, groups, `UndoManager`, `DisplayViewport`, convergence property-test green. Open: clipboard,
-  frames content, Find; and all Phase 1 dispatcher/Sync/persistence/presence wiring.)*
+  stroke lifecycle, groups, `UndoManager`, `DisplayViewport`, convergence property-test green. Phase 1 dispatcher/
+  Sync/persistence wiring landed (dispatch arm, `SendUpdate`/`SendEphemeral`, `apply_remote`/`apply_remote_batch`,
+  snapshot + local-restore paths). Open: clipboard, frames content, Find; `my_user_id` from `SessionReady`,
+  selection-stats plumbing to the status bar, and `UserId` presence.)*
 - `[ ]` `toile-ui §13 Phase 0/1` — `ViewportTransform` / batcher / adaptive grid / hit-testing / Select tool, then
   the full tool set (Pen/Shape/Connector/Draw/Sticky/Text), Parley inline editor, shortcuts + OS-clipboard
   mirror, context menu / find panel / status bar, `PeerPresence` overlay with cross-app `UserId` colors,

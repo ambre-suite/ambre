@@ -16,41 +16,78 @@ impl LogicState {
             return;
         };
 
+        // Each arm produces the same triple -- display events, an optional CRDT
+        // `update`, an optional `ephemeral` payload -- so the fan-out to UI /
+        // Sync / persist is factored into `dispatch_outcome`, keeping the arms to
+        // the single differing line (which `state` and which `AppEvent` wrap).
         match (doc, command) {
             (DocState::Trame(state), AppCommand::Trame(cmd)) => {
                 let outcome = state.handle_command(cmd);
-                // Capture a full snapshot for local persistence whenever the doc
-                // changed (an `update` was produced). Exported here, while the
-                // `state` borrow is live; persisted by the Main thread.
                 let snapshot = outcome.update.is_some().then(|| state.export_snapshot());
-                for event in outcome.display {
-                    self.send_to_ui(UiEvent::Viewport {
-                        document_id,
-                        event: AppEvent::Trame(event),
-                    });
-                }
-                if let Some(ref payload) = outcome.update {
-                    tracing::info!(
-                        "[Logic→Sync] pushing SendUpdate doc={document_id} delta_size={}",
-                        payload.len(),
-                    );
-                    self.send_to_sync(SyncCommand::SendUpdate {
-                        document_id,
-                        payload: payload.clone(),
-                    });
-                }
-                if let Some(snapshot) = snapshot {
-                    self.send_to_persist(document_id, snapshot);
-                }
-                if let Some(payload) = outcome.ephemeral {
-                    self.send_to_sync(SyncCommand::SendEphemeral {
-                        document_id,
-                        payload,
-                    });
-                }
-            } // Once a second document type exists, add its `(DocState::X,
-              // AppCommand::X)` arm plus a `_ => { warn; }` catch-all for
-              // mismatched (state, command) pairs (impossible by routing).
+                self.dispatch_outcome(
+                    document_id,
+                    outcome.display.into_iter().map(AppEvent::Trame).collect(),
+                    outcome.update,
+                    outcome.ephemeral,
+                    snapshot,
+                );
+            }
+            (DocState::Toile(state), AppCommand::Toile(cmd)) => {
+                let outcome = state.handle_command(cmd);
+                let snapshot = outcome.update.is_some().then(|| state.export_snapshot());
+                self.dispatch_outcome(
+                    document_id,
+                    outcome.display.into_iter().map(AppEvent::Toile).collect(),
+                    outcome.update,
+                    outcome.ephemeral,
+                    snapshot,
+                );
+            }
+            // A mismatched (state, command) pair is impossible by routing: the
+            // `document_id` selects a single `DocState`, and the UI only ever
+            // sends the matching `AppCommand` variant for that document.
+            (state, command) => tracing::warn!(
+                "Logic: mismatched (state, command) pair for doc {document_id}: {:?} / {:?}",
+                std::mem::discriminant(state),
+                std::mem::discriminant(&command),
+            ),
+        }
+    }
+
+    /// Fan an already-typed outcome out to the UI Thread (display events), to
+    /// Sync (`SendUpdate` / `SendEphemeral`), and to local persistence (a full
+    /// snapshot, captured while the `state` borrow was live). Shared by every
+    /// `AppCommand` arm; the arm only decides which `AppEvent` variant wraps the
+    /// display events and whether a snapshot was taken.
+    fn dispatch_outcome(
+        &self,
+        document_id: DocumentId,
+        display: Vec<AppEvent>,
+        update: Option<Vec<u8>>,
+        ephemeral: Option<Vec<u8>>,
+        snapshot: Option<Vec<u8>>,
+    ) {
+        for event in display {
+            self.send_to_ui(UiEvent::Viewport { document_id, event });
+        }
+        if let Some(payload) = update {
+            tracing::info!(
+                "[Logic→Sync] pushing SendUpdate doc={document_id} delta_size={}",
+                payload.len(),
+            );
+            self.send_to_sync(SyncCommand::SendUpdate {
+                document_id,
+                payload,
+            });
+        }
+        if let Some(snapshot) = snapshot {
+            self.send_to_persist(document_id, snapshot);
+        }
+        if let Some(payload) = ephemeral {
+            self.send_to_sync(SyncCommand::SendEphemeral {
+                document_id,
+                payload,
+            });
         }
     }
 
@@ -73,6 +110,11 @@ impl LogicState {
                 // and depends entirely on a fresh server replay.
                 let snapshot = (!events.is_empty()).then(|| state.export_snapshot());
                 (events.into_iter().map(AppEvent::Trame).collect(), snapshot)
+            }
+            DocState::Toile(state) => {
+                let events = state.apply_remote(payload);
+                let snapshot = (!events.is_empty()).then(|| state.export_snapshot());
+                (events.into_iter().map(AppEvent::Toile).collect(), snapshot)
             }
         };
         for event in events {
@@ -100,6 +142,11 @@ impl LogicState {
                 let snapshot = (!events.is_empty()).then(|| state.export_snapshot());
                 (events.into_iter().map(AppEvent::Trame).collect(), snapshot)
             }
+            DocState::Toile(state) => {
+                let events = state.apply_remote_batch(payloads);
+                let snapshot = (!events.is_empty()).then(|| state.export_snapshot());
+                (events.into_iter().map(AppEvent::Toile).collect(), snapshot)
+            }
         };
         for event in events {
             self.send_to_ui(UiEvent::Viewport { document_id, event });
@@ -120,6 +167,11 @@ impl LogicState {
                 .into_iter()
                 .map(AppEvent::Trame)
                 .collect(),
+            DocState::Toile(state) => state
+                .apply_ephemeral(payload)
+                .into_iter()
+                .map(AppEvent::Toile)
+                .collect(),
         };
         for event in events {
             self.send_to_ui(UiEvent::Presence { document_id, event });
@@ -130,6 +182,7 @@ impl LogicState {
     pub(crate) fn export_snapshot(&self, document_id: DocumentId) -> Option<Vec<u8>> {
         match self.docs.get(&document_id)? {
             DocState::Trame(state) => Some(state.export_snapshot()),
+            DocState::Toile(state) => Some(state.export_snapshot()),
         }
     }
 }

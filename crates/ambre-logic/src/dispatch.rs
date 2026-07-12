@@ -42,17 +42,27 @@ impl LogicState {
                 {
                     slot.insert(state);
                 }
-                let Some(DocState::Trame(state)) = self.docs.get_mut(&document_id) else {
+                let Some(doc) = self.docs.get_mut(&document_id) else {
                     tracing::warn!(
                         "Logic: no live document {document_id} to restore snapshot into"
                     );
                     return;
                 };
-                let events: Vec<AppEvent> = state
-                    .import_snapshot(&snapshot)
-                    .into_iter()
-                    .map(AppEvent::Trame)
-                    .collect();
+                // A snapshot import is the same operation whichever engine owns
+                // the document; each returns its own display-event family, mapped
+                // to the matching `AppEvent` variant.
+                let events: Vec<AppEvent> = match doc {
+                    DocState::Trame(state) => state
+                        .import_snapshot(&snapshot)
+                        .into_iter()
+                        .map(AppEvent::Trame)
+                        .collect(),
+                    DocState::Toile(state) => state
+                        .apply_remote(&snapshot)
+                        .into_iter()
+                        .map(AppEvent::Toile)
+                        .collect(),
+                };
                 for event in events {
                     self.send_to_ui(UiEvent::Viewport { document_id, event });
                 }
@@ -384,7 +394,7 @@ mod tests {
         let doc_id = DocumentId::new();
         state
             .docs
-            .insert(doc_id, DocState::Trame(TrameState::new()));
+            .insert(doc_id, DocState::Trame(Box::new(TrameState::new())));
         state.handle_logic_command(LogicCommand::CloseDocument {
             document_id: doc_id,
         });
@@ -439,7 +449,7 @@ mod tests {
         let doc_id = DocumentId::new();
         state
             .docs
-            .insert(doc_id, DocState::Trame(TrameState::new()));
+            .insert(doc_id, DocState::Trame(Box::new(TrameState::new())));
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
             command: scroll(1),
@@ -506,7 +516,7 @@ mod tests {
         let doc_id = DocumentId::new();
         state
             .docs
-            .insert(doc_id, DocState::Trame(TrameState::new()));
+            .insert(doc_id, DocState::Trame(Box::new(TrameState::new())));
         state.handle_logic_event(LogicEvent::SnapshotNeeded {
             document_id: doc_id,
         });

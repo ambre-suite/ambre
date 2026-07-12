@@ -13,9 +13,11 @@ serde = { workspace = true }
 # Zeroizing wrappers for the secret-carrying IPC fields (passphrase / recovery
 # words): wiped on drop everywhere along the UI -> Logic -> Sync relay (H5).
 zeroize = { workspace = true }
-
-[dev-dependencies]
-# Used only by the host tests to round-trip the Logic <-> Sync envelopes through
-# the same codec (postcard) they cross the `postMessage` hop with. Not a runtime
-# dependency: the encode/decode itself lives in `ambre-app` / `ambre-sync`.
+# 2D geometry carried by the Toile IPC contract (`toile` module): viewport /
+# bounds math, connector paths, element transforms.
+kurbo = { workspace = true }
+# Compact LWW encoding of the Toile per-element `ElementStyle` register (§2.E),
+# and the host round-trip of the Logic <-> Sync envelopes below.
 postcard = { workspace = true }
+# `ToileError` derives `thiserror::Error`.
+thiserror = { workspace = true }

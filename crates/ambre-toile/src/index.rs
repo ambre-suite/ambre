@@ -6,10 +6,15 @@
 //! rebuild must yield the same visible set as the incremental path -- the
 //! index-equivalence invariant, proven by the property test at the bottom.
 
-use kurbo::{Point, Rect, Size, Vec2};
+use kurbo::{Point, Rect};
 use rstar::{AABB, RTree, RTreeObject};
 
 use crate::model::ElementId;
+
+/// The camera / viewport type lives in the `ambre-bus` IPC contract (it is
+/// carried by `ToileCommand::SetViewport`); re-exported here so the index keeps
+/// its `crate::index::Viewport` path and its culling helpers.
+pub use ambre_bus::app::toile::Viewport;
 
 /// R-tree leaf: an element's world-space, rotation-expanded AABB plus its id.
 #[derive(Clone, Debug, PartialEq)]
@@ -34,34 +39,6 @@ impl RTreeObject for ElementBounds {
     type Envelope = AABB<[f64; 2]>;
     fn envelope(&self) -> Self::Envelope {
         AABB::from_corners(self.min, self.max)
-    }
-}
-
-/// The camera: a world-space center, a zoom factor, and the physical screen
-/// size. Drives culling via [`to_world_rect`](Viewport::to_world_rect).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Viewport {
-    pub center: Point,
-    pub zoom: f64,  // 0.1 ..= 10.0
-    pub size: Size, // screen size in physical pixels
-}
-
-impl Default for Viewport {
-    fn default() -> Self {
-        Self {
-            center: Point::ZERO,
-            zoom: 1.0,
-            size: Size::new(1280.0, 800.0),
-        }
-    }
-}
-
-impl Viewport {
-    /// The world-space rectangle currently visible: the screen box mapped back
-    /// through the inverse view transform.
-    pub fn to_world_rect(&self) -> Rect {
-        let half = Vec2::new(self.size.width, self.size.height) / (2.0 * self.zoom);
-        Rect::from_center_size(self.center, Size::new(2.0 * half.x, 2.0 * half.y))
     }
 }
 
@@ -139,6 +116,9 @@ impl SpatialIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // `Size` only feeds the `Viewport` fixtures below; the production code paths
+    // in this module need just `Point` / `Rect`.
+    use kurbo::Size;
 
     fn bounds(id: &str, x: f64, y: f64, w: f64, h: f64) -> ElementBounds {
         ElementBounds::from_rect(ElementId(id.to_owned()), Rect::new(x, y, x + w, y + h))
@@ -177,6 +157,7 @@ mod tests {
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod prop {
     use super::*;
+    use kurbo::Size;
     use proptest::prelude::*;
     use std::collections::BTreeMap;
 

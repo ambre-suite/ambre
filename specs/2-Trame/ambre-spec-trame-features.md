@@ -633,7 +633,7 @@ fn apply_remote(&mut self, payload: &[u8]) -> Vec<TrameEvent> {
 
 ## 7. ADDITIONAL MESSAGES (TrameEvent)
 
-> **Source of truth:** the `TrameEvent` enum lives in **`ambre-bus`** (`ambre-bus/src/ui.rs`, re-exported by `ambre-trame`) and constitutes the payload of `AppEvent::Trame`. `ambre-spec-trame-logic.md §9` documents the base; the variants below are **additions** for the features of this spec.
+> **Source of truth:** the `TrameEvent` enum lives in **`ambre-bus`** (`ambre-bus/src/app/trame/event.rs`, re-exported flat at the crate root and by `ambre-trame`) and constitutes the payload of `AppEvent::Trame`. `ambre-spec-trame-logic.md §9` documents the base; the variants below are **additions** for the features of this spec.
 >
 > **No `serde`.** `TrameEvent` travel **by move** on `flume` (shared memory) inside `AppEvent::Trame` — no (de)serialization. Derives: `#[derive(Debug, Clone)]`.
 
