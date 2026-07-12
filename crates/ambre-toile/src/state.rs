@@ -5,15 +5,16 @@
 //! (display events + CRDT / ephemeral bytes). The `LoroDoc` never leaves this
 //! thread; it exits only as exported bytes (§1).
 //!
-//! **Phase 0 scope.** Element / connector / stroke lifecycle, z-order, selection
-//! stats, viewport-culled `DisplayViewport` derivation, and the remote-apply /
-//! snapshot paths. Frames content, groups, clipboard, find, nested-doc editing
-//! and undo/redo are subsequent slices; every command handled here is complete.
+//! **Phase 0 scope.** Element / connector / stroke lifecycle, z-order, groups
+//! (§2.F bis), local undo/redo (§8 bis), selection stats, viewport-culled
+//! `DisplayViewport` derivation, and the remote-apply / snapshot paths. Frames
+//! content, clipboard, find and nested-doc editing are subsequent slices; every
+//! command handled here is complete.
 
 use std::collections::{HashMap, HashSet};
 
 use kurbo::{Affine, BezPath, Point, Rect, Vec2};
-use loro::{ExportMode, LoroDoc, LoroMap, LoroValue, VersionVector};
+use loro::{ExportMode, LoroDoc, LoroMap, LoroMovableList, LoroValue, UndoManager, VersionVector};
 
 use crate::command::{
     DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, End, InitContent,
@@ -32,6 +33,8 @@ const ELEMENTS: &str = "elements";
 const CONNECTORS: &str = "connectors";
 const LAYERS: &str = "layers";
 const BOARD: &str = "board";
+/// Per-group / per-frame membership list key inside an element map (§2.F bis).
+const CHILDREN: &str = "children";
 
 /// Per-document Toile engine.
 pub struct ToileState {
@@ -49,6 +52,9 @@ pub struct ToileState {
     viewport: Viewport,
     /// Version vector already exported to Sync; deltas are `export(Updates{from})`.
     exported_vv: VersionVector,
+    /// Local-only undo/redo (§8 bis): undoes only this peer's operations, one
+    /// item per atomic user action (one `doc.commit()` per mutating command).
+    undo: UndoManager,
 }
 
 impl Default for ToileState {
@@ -67,6 +73,9 @@ impl ToileState {
         let _ = board.insert("grid_snap", false);
         doc.commit();
         let peer = doc.peer_id();
+        // Create the undo manager AFTER the initial commit: the board scaffolding
+        // is document setup, not a user edit, so it must not sit on the stack.
+        let undo = UndoManager::new(&doc);
         Self {
             doc,
             index: SpatialIndex::default(),
@@ -76,6 +85,7 @@ impl ToileState {
             peer,
             viewport: Viewport::default(),
             exported_vv: VersionVector::default(),
+            undo,
         }
     }
 
@@ -108,6 +118,10 @@ impl ToileState {
             ToileCommand::DeleteElements { ids } => self.delete_elements(&ids),
             ToileCommand::LockElements { ids, locked } => self.lock_elements(&ids, locked),
             ToileCommand::Reorder { node, to } => self.reorder(node, to),
+            ToileCommand::GroupElements { ids } => self.group_elements(&ids),
+            ToileCommand::UngroupElements { group } => self.ungroup_elements(&group),
+            ToileCommand::Undo => self.apply_history(true),
+            ToileCommand::Redo => self.apply_history(false),
             ToileCommand::CreateConnector {
                 from,
                 from_anch,
@@ -245,8 +259,14 @@ impl ToileState {
     }
 
     fn move_elements(&mut self, ids: &[ElementId], delta: Vec2) -> ToileOutcome {
-        let mut touched = false;
+        // A group transforms as one: expand every selected group to its leaf
+        // descendants so translating a group moves its whole subtree (§2.F bis).
+        let mut leaves = HashSet::new();
         for id in ids {
+            self.collect_leaves(id, &mut leaves);
+        }
+        let mut touched = false;
+        for id in &leaves {
             let Some(em) = self.element_map(id) else {
                 continue;
             };
@@ -263,6 +283,7 @@ impl ToileState {
         if !touched {
             return ToileOutcome::display_only(Vec::new());
         }
+        self.recompute_groups();
         self.doc.commit();
         self.emit_with_update(vec![self.viewport_event()])
     }
@@ -280,6 +301,7 @@ impl ToileState {
         let _ = em.insert("w", r.width());
         let _ = em.insert("h", r.height());
         self.update_bounds(id, &em);
+        self.recompute_groups();
         self.doc.commit();
         self.emit_with_update(vec![self.viewport_event()])
     }
@@ -293,6 +315,7 @@ impl ToileState {
         }
         let _ = em.insert("rot", radians);
         self.update_bounds(id, &em);
+        self.recompute_groups();
         self.doc.commit();
         self.emit_with_update(vec![self.viewport_event()])
     }
@@ -334,10 +357,16 @@ impl ToileState {
     }
 
     fn delete_elements(&mut self, ids: &[ElementId]) -> ToileOutcome {
-        let del: HashSet<&ElementId> = ids.iter().collect();
+        // Deleting a group cascades to its members (§2.F bis): expand the request
+        // to the full subtree of every listed group before removing anything.
+        let mut expanded: HashSet<ElementId> = HashSet::new();
+        for id in ids {
+            self.collect_subtree(id, &mut expanded);
+        }
+        let del: HashSet<&ElementId> = expanded.iter().collect();
         let mut removed_any = false;
         let elems = self.doc.get_map(ELEMENTS);
-        for id in ids {
+        for id in &expanded {
             if elems.get(id.as_str()).is_some() {
                 let _ = elems.delete(id.as_str());
                 removed_any = true;
@@ -345,6 +374,12 @@ impl ToileState {
         }
         if !removed_any {
             return ToileOutcome::display_only(Vec::new());
+        }
+        // Drop any group membership referencing a deleted node (§2.F bis / §2.H).
+        for id in &expanded {
+            if let Some(g) = self.enclosing_group(id) {
+                self.remove_child(&g, id);
+            }
         }
         // Drop locally-owned connectors whose endpoint was deleted (§5.A) and
         // strip both elements and orphaned connectors from `layers` (§2.H).
@@ -359,11 +394,12 @@ impl ToileState {
         });
         self.doc.commit();
 
-        for id in ids {
+        for id in &expanded {
             self.bounds.remove(id);
             self.index.remove(id);
         }
         self.rematerialize_layers();
+        self.recompute_groups();
         self.emit_with_update(vec![self.viewport_event()])
     }
 
@@ -388,6 +424,127 @@ impl ToileState {
         self.doc.commit();
         self.rematerialize_layers();
         self.emit_with_update(vec![self.viewport_event()])
+    }
+
+    // -- groups (§2.F bis) -----------------------------------------------------
+
+    /// Bind `ids` into a fresh group element. Members already in another group
+    /// are first removed from it (a node belongs to at most one group). The group
+    /// `NodeId` is inserted into `layers` just below its lowest member so the
+    /// members keep painting above it in their current relative order.
+    fn group_elements(&mut self, ids: &[ElementId]) -> ToileOutcome {
+        // Keep only existing, distinct members, in the request order.
+        let mut members: Vec<ElementId> = Vec::new();
+        for id in ids {
+            if self.bounds.contains_key(id) && !members.contains(id) {
+                members.push(id.clone());
+            }
+        }
+        if members.len() < 2 {
+            return ToileOutcome::display_only(Vec::new());
+        }
+        // Lowest layers index among the members (where the group node will sit).
+        let insert_at = members
+            .iter()
+            .filter_map(|m| {
+                self.layers
+                    .iter()
+                    .position(|n| n == &NodeId::Element(m.clone()))
+            })
+            .min()
+            .unwrap_or(0);
+
+        // Detach each member from its current group, if any.
+        for m in &members {
+            if let Some(g) = self.enclosing_group(m) {
+                self.remove_child(&g, m);
+            }
+        }
+
+        let id = self.mint_element_id();
+        let elems = self.doc.get_map(ELEMENTS);
+        let Ok(em) = elems.insert_container(id.as_str(), LoroMap::new()) else {
+            return self.err_no_element(&id);
+        };
+        em_seed_group(&em);
+        let Ok(children) = em.insert_container(CHILDREN, LoroMovableList::new()) else {
+            return self.err_no_element(&id);
+        };
+        for m in &members {
+            let _ = children.push(m.as_str());
+        }
+        // Insert the group NodeId just below its lowest member.
+        let _ = self
+            .doc
+            .get_movable_list(LAYERS)
+            .insert(insert_at, NodeId::Element(id.clone()).encode().as_str());
+        self.doc.commit();
+
+        self.rematerialize_layers();
+        // Seed the group's derived bounds from its members, then feed the R-tree.
+        self.recompute_groups();
+        self.emit_with_update(vec![ToileEvent::ElementCreated(id), self.viewport_event()])
+    }
+
+    /// Drop a group's binding: remove the group node and re-parent its children
+    /// to the group's own parent (an enclosing group, or the board). The children
+    /// survive with their `layers` order intact (§2.F bis).
+    fn ungroup_elements(&mut self, group: &ElementId) -> ToileOutcome {
+        let Some(gm) = self.element_map(group) else {
+            return self.err_no_element(group);
+        };
+        if str_of(&gm, "type") != "group" {
+            return ToileOutcome::display_only(Vec::new());
+        }
+        let children = self.children_of(group);
+        let parent = self.enclosing_group(group);
+
+        // Remove the group element and its layers node.
+        let _ = self.doc.get_map(ELEMENTS).delete(group.as_str());
+        self.strip_layers(|node| !matches!(node, NodeId::Element(e) if e == group));
+
+        // Re-parent the children to the enclosing group (board parent is implicit).
+        if let Some(p) = &parent {
+            let plist = self.children_list(p);
+            if let Some(list) = plist {
+                for c in &children {
+                    let _ = list.push(c.as_str());
+                }
+            }
+        }
+        self.doc.commit();
+
+        self.bounds.remove(group);
+        self.index.remove(group);
+        self.rematerialize_layers();
+        self.recompute_groups();
+        self.emit_with_update(vec![self.viewport_event()])
+    }
+
+    // -- undo / redo (§8 bis) --------------------------------------------------
+
+    /// Apply one undo or redo step. The inverse ops are committed by
+    /// `undo()`/`redo()`; reseed the derived caches and broadcast the delta like
+    /// any structural edit. A no-op (empty stack) only reports availability.
+    fn apply_history(&mut self, undo: bool) -> ToileOutcome {
+        let changed = if undo {
+            self.undo.undo()
+        } else {
+            self.undo.redo()
+        }
+        .unwrap_or(false);
+        if !changed {
+            return ToileOutcome::display_only(vec![self.undo_state_event()]);
+        }
+        self.rebuild_caches();
+        self.emit_with_update(vec![self.viewport_event(), self.undo_state_event()])
+    }
+
+    fn undo_state_event(&self) -> ToileEvent {
+        ToileEvent::UndoState {
+            can_undo: self.undo.can_undo(),
+            can_redo: self.undo.can_redo(),
+        }
     }
 
     // -- connectors (§5) -------------------------------------------------------
@@ -546,10 +703,20 @@ impl ToileState {
 
     fn display_element(&self, id: &ElementId) -> Option<DisplayElement> {
         let em = self.element_map(id)?;
-        let x = f64_of(&em, "x");
-        let y = f64_of(&em, "y");
-        let w = f64_of(&em, "w");
-        let h = f64_of(&em, "h");
+        // A group has no stored geometry: its bounds are the derived member union
+        // (§2.F bis). Read them from the derived cache.
+        let is_group = str_of(&em, "type") == "group";
+        let (x, y, w, h) = if is_group {
+            let r = self.bounds.get(id).copied().unwrap_or_default();
+            (r.x0, r.y0, r.width(), r.height())
+        } else {
+            (
+                f64_of(&em, "x"),
+                f64_of(&em, "y"),
+                f64_of(&em, "w"),
+                f64_of(&em, "h"),
+            )
+        };
         let rot = f64_of(&em, "rot");
         let locked = bool_of(&em, "locked");
         let style = ElementStyle::from_bytes(&bin_of(&em, "style"));
@@ -656,6 +823,12 @@ impl ToileState {
         if let LoroValue::Map(m) = elems.get_deep_value() {
             for (key, v) in m.iter() {
                 if let LoroValue::Map(fields) = v {
+                    // Groups carry no stored geometry; their bounds are derived
+                    // from members by `recompute_groups` after this leaf pass.
+                    if matches!(fields.get("type"), Some(LoroValue::String(t)) if t.as_str() == "group")
+                    {
+                        continue;
+                    }
                     let x = map_f64(fields, "x");
                     let y = map_f64(fields, "y");
                     let w = map_f64(fields, "w");
@@ -670,6 +843,7 @@ impl ToileState {
         }
         self.index = SpatialIndex::build(leaves.into_iter());
         self.rematerialize_layers();
+        self.recompute_groups();
     }
 
     /// Re-read the `layers` list into `self.layers`, skipping malformed tags and
@@ -724,6 +898,143 @@ impl ToileState {
             .ok()?
             .into_map()
             .ok()
+    }
+
+    /// The `children` movable-list handle of a group / frame element, if present.
+    fn children_list(&self, id: &ElementId) -> Option<LoroMovableList> {
+        self.element_map(id)?
+            .get(CHILDREN)?
+            .into_container()
+            .ok()?
+            .into_movable_list()
+            .ok()
+    }
+
+    /// Member element ids of a group / frame, in `children` order.
+    fn children_of(&self, id: &ElementId) -> Vec<ElementId> {
+        let mut out = Vec::new();
+        if let Some(list) = self.children_list(id)
+            && let LoroValue::List(items) = list.get_deep_value()
+        {
+            for v in items.iter() {
+                if let LoroValue::String(s) = v {
+                    out.push(ElementId(s.to_string()));
+                }
+            }
+        }
+        out
+    }
+
+    /// The group whose `children` contains `id`, if any (a node belongs to at
+    /// most one group, §2.F bis).
+    fn enclosing_group(&self, id: &ElementId) -> Option<ElementId> {
+        let elems = self.doc.get_map(ELEMENTS);
+        let LoroValue::Map(m) = elems.get_deep_value() else {
+            return None;
+        };
+        for (key, v) in m.iter() {
+            if let LoroValue::Map(fields) = v
+                && matches!(fields.get("type"), Some(LoroValue::String(t)) if t.as_str() == "group")
+                && let Some(LoroValue::List(kids)) = fields.get(CHILDREN)
+                && kids
+                    .iter()
+                    .any(|k| matches!(k, LoroValue::String(s) if s.as_str() == id.as_str()))
+            {
+                return Some(ElementId(key.clone()));
+            }
+        }
+        None
+    }
+
+    /// Remove `child` from `group`'s `children` list (first match).
+    fn remove_child(&self, group: &ElementId, child: &ElementId) {
+        let Some(list) = self.children_list(group) else {
+            return;
+        };
+        if let LoroValue::List(items) = list.get_deep_value()
+            && let Some(idx) = items
+                .iter()
+                .position(|v| matches!(v, LoroValue::String(s) if s.as_str() == child.as_str()))
+        {
+            let _ = list.delete(idx, 1);
+        }
+    }
+
+    /// Append `id`'s subtree leaves (non-group descendants) to `out`. A plain
+    /// element contributes itself; a group recurses into its children.
+    fn collect_leaves(&self, id: &ElementId, out: &mut HashSet<ElementId>) {
+        if self.is_group(id) {
+            for c in self.children_of(id) {
+                self.collect_leaves(&c, out);
+            }
+        } else {
+            out.insert(id.clone());
+        }
+    }
+
+    /// Append `id` and every descendant (groups included) to `out`.
+    fn collect_subtree(&self, id: &ElementId, out: &mut HashSet<ElementId>) {
+        if !out.insert(id.clone()) {
+            return;
+        }
+        if self.is_group(id) {
+            for c in self.children_of(id) {
+                self.collect_subtree(&c, out);
+            }
+        }
+    }
+
+    fn is_group(&self, id: &ElementId) -> bool {
+        self.element_map(id)
+            .map(|em| str_of(&em, "type") == "group")
+            .unwrap_or(false)
+    }
+
+    /// Recompute every group's derived bounds as the union of its members', to a
+    /// fixpoint (nested groups resolve bottom-up). Group geometry is derived and
+    /// lives only in the `bounds` / R-tree caches, never in the CRDT (§2.F bis).
+    fn recompute_groups(&mut self) {
+        let groups: Vec<(ElementId, Vec<ElementId>)> = {
+            let mut v = Vec::new();
+            if let LoroValue::Map(m) = self.doc.get_map(ELEMENTS).get_deep_value() {
+                for (key, val) in m.iter() {
+                    if let LoroValue::Map(fields) = val
+                        && matches!(fields.get("type"), Some(LoroValue::String(t)) if t.as_str() == "group")
+                    {
+                        let id = ElementId(key.clone());
+                        let kids = self.children_of(&id);
+                        v.push((id, kids));
+                    }
+                }
+            }
+            v
+        };
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for (g, kids) in &groups {
+                let mut union: Option<Rect> = None;
+                let mut all = !kids.is_empty();
+                for k in kids {
+                    match self.bounds.get(k) {
+                        Some(r) => {
+                            union = Some(match union {
+                                Some(u) => u.union(*r),
+                                None => *r,
+                            })
+                        }
+                        None => all = false,
+                    }
+                }
+                if let (true, Some(rect)) = (all, union)
+                    && self.bounds.get(g) != Some(&rect)
+                {
+                    self.bounds.insert(g.clone(), rect);
+                    self.index.update(ElementBounds::from_rect(g.clone(), rect));
+                    changed = true;
+                }
+            }
+        }
     }
 
     fn connector_map(&self, id: &ConnectorId) -> Option<LoroMap> {
@@ -850,6 +1161,20 @@ fn stroke_aabb(points: &[StrokePoint]) -> Rect {
         (max.x).max(min.x + 1.0),
         (max.y).max(min.y + 1.0),
     )
+}
+
+/// Seed a group element's scalar fields (§2.F bis). A group paints nothing and
+/// its geometry is a derived union, so it carries no x/y/w/h: only the type flag,
+/// lock state, rotation and default style live in the CRDT; the `children` list
+/// is attached by the caller.
+fn em_seed_group(em: &LoroMap) {
+    let _ = em.insert("type", "group");
+    let _ = em.insert("rot", 0.0);
+    let _ = em.insert("locked", false);
+    let _ = em.insert(
+        "style",
+        LoroValue::Binary(ElementStyle::default().to_bytes().into()),
+    );
 }
 
 fn content_matches(kind: ElementKind, content: &InitContent) -> bool {

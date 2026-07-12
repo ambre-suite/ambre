@@ -200,7 +200,7 @@ Stories:
 - `trame-ui §18` `[x]` — Leptos UI tests (`wasm-bindgen-test`, headless Chrome): reactive headless + real DOM for the Trame chrome. Landed as `ambre-trame/tests/chrome_ui.rs` (reactive belt + DOM `StatusBar`/`FindReplace`), run via `just test-wasm` in the re-enabled CI job.
 - `trame-features §10` / `trame-interop §10` `[x]` — wired the "Tested DoD" belts green in CI: the MVP filter/sort/undo `#[test]`s (added the three Phase-1 undo belts), the concurrent-filter LWW case folded into the 2-peer convergence property-test (`ApplyFilter`/`ClearFilter` ops + `is_filtered` in the converged snapshot), and the CSV roundtrip + malformed/byte-soup fuzz robustness cases. *(Conditional-formatting / validation / protection tests follow their Phase 2 / Post-MVP implementation.)*
 
-## E4 — Toile MVP (infinite whiteboard + presentations)  `[ ]` (deferred) — *next core objective*
+## E4 — Toile MVP (infinite whiteboard + presentations)  `[ ]` (in progress) — *current core objective*
 
 *Second product on the validated stack: an infinite collaborative whiteboard with a presentation mode.
 Mirrors the `E3` model — scope = the consolidated **Phase 0 + Phase 1** of the four Toile specs
@@ -212,22 +212,25 @@ launcher/sharing UI); what is new is the spatial document model and the GPU vect
 > foundation Story lands here rather than under `E5`.
 
 Stories:
-- `ARCH P5` (`ambre-toile`) — new spatial `DocState`: typed `ToileState` behind the `ambre-logic` `match`,
+- `[~]` `ARCH P5` (`ambre-toile`) — new spatial `DocState`: typed `ToileState` behind the `ambre-logic` `match`,
   `rstar` R-tree culling, in-place editable nested embeds (Prose/Trame). *(embeds start at the read-only subset.)*
-- `CANVAS P1` — `lyon` / `WgpuSurface` vector pipeline (quad + path), `ViewportTransform`, glyph atlas, and
+  Standalone `ToileState` + `SpatialIndex` landed; `ambre-logic` `match` dispatch wiring still open.
+- `[ ]` `CANVAS P1` — `lyon` / `WgpuSurface` vector pipeline (quad + path), `ViewportTransform`, glyph atlas, and
   PDF export via `KrillaSurface` (krilla). The shared canvas foundation the vector tools and the PDF path need.
-- `toile-logic §13 Phase 0/1` — CRDT schema + `SpatialIndex` + element/connector/group/stroke lifecycle +
+- `[~]` `toile-logic §13 Phase 0/1` — CRDT schema + `SpatialIndex` + element/connector/group/stroke lifecycle +
   clipboard + `DisplayViewport`, then dispatcher/Sync wiring, `apply_ephemeral` / `apply_remote`, snapshot &
   persistence paths, `my_user_id` from `SessionReady`, `UndoManager`, Find + selection stats, `UserId` presence.
-  Includes the 2-peer convergence property-test (**DoD**).
-- `toile-ui §13 Phase 0/1` — `ViewportTransform` / batcher / adaptive grid / hit-testing / Select tool, then
+  Includes the 2-peer convergence property-test (**DoD**). *(Phase 0 landed: schema, index, element/connector/
+  stroke lifecycle, groups, `UndoManager`, `DisplayViewport`, convergence property-test green. Open: clipboard,
+  frames content, Find; and all Phase 1 dispatcher/Sync/persistence/presence wiring.)*
+- `[ ]` `toile-ui §13 Phase 0/1` — `ViewportTransform` / batcher / adaptive grid / hit-testing / Select tool, then
   the full tool set (Pen/Shape/Connector/Draw/Sticky/Text), Parley inline editor, shortcuts + OS-clipboard
   mirror, context menu / find panel / status bar, `PeerPresence` overlay with cross-app `UserId` colors,
   wasm render/input tests.
-- `toile-features §9 Phase 0/1` — presentation sequence CRDT + playback machine, speaker notes, Smart Animate
+- `[ ]` `toile-features §9 Phase 0/1` — presentation sequence CRDT + playback machine, speaker notes, Smart Animate
   + auto-layout solvers, reactions/votes CRDT keyed by `UserId` + derived tally, boolean ops; then playback
   wired to the camera pass, presenter overlay, reactions render, "follow presenter" ephemeral broadcast.
-- `toile-interop §10 Phase 0/1` — SVG import/export, raster import, safety limits, media hashing + placeholder;
+- `[ ]` `toile-interop §10 Phase 0/1` — SVG import/export, raster import, safety limits, media hashing + placeholder;
   then PDF export (presentation order), Figma/Miro converters, media pipeline on the crypto/Sync layer.
   Golden fixtures + wasm export tests.
 

@@ -174,6 +174,106 @@ fn group_and_drawing_are_not_creatable() {
 }
 
 // -----------------------------------------------------------------------------
+// Groups (§2.F bis)
+// -----------------------------------------------------------------------------
+
+#[test]
+fn group_unions_bounds_and_sits_below_members() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(90.0, 90.0), Size::new(10.0, 10.0));
+    let out = st.handle_command(ToileCommand::GroupElements {
+        ids: vec![a.clone(), b.clone()],
+    });
+    let g = created_id(&out);
+    // Derived bounds span both members.
+    assert_eq!(st.bounds_of(&g), Some(Rect::new(0.0, 0.0, 100.0, 100.0)));
+    // The group node sits below both members in paint order.
+    assert_eq!(
+        st.layer_order(),
+        &[NodeId::Element(g), NodeId::Element(a), NodeId::Element(b),]
+    );
+}
+
+#[test]
+fn moving_a_group_translates_its_members() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(20.0, 0.0), Size::new(10.0, 10.0));
+    let g = created_id(&st.handle_command(ToileCommand::GroupElements {
+        ids: vec![a.clone(), b.clone()],
+    }));
+    st.handle_command(ToileCommand::MoveElements {
+        ids: vec![g.clone()],
+        delta: Vec2::new(5.0, 5.0),
+    });
+    assert_eq!(st.bounds_of(&a), Some(Rect::new(5.0, 5.0, 15.0, 15.0)));
+    assert_eq!(st.bounds_of(&b), Some(Rect::new(25.0, 5.0, 35.0, 15.0)));
+    assert_eq!(st.bounds_of(&g), Some(Rect::new(5.0, 5.0, 35.0, 15.0)));
+}
+
+#[test]
+fn ungroup_keeps_children_and_order() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(20.0, 0.0), Size::new(10.0, 10.0));
+    let g = created_id(&st.handle_command(ToileCommand::GroupElements {
+        ids: vec![a.clone(), b.clone()],
+    }));
+    st.handle_command(ToileCommand::UngroupElements { group: g.clone() });
+    // The group node is gone; both children survive in their prior order.
+    assert!(st.bounds_of(&g).is_none());
+    assert_eq!(st.layer_order(), &[NodeId::Element(a), NodeId::Element(b)]);
+}
+
+#[test]
+fn deleting_a_group_cascades_to_members() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(20.0, 0.0), Size::new(10.0, 10.0));
+    let g = created_id(&st.handle_command(ToileCommand::GroupElements {
+        ids: vec![a.clone(), b.clone()],
+    }));
+    st.handle_command(ToileCommand::DeleteElements { ids: vec![g] });
+    assert_eq!(st.element_count(), 0);
+    assert!(st.layer_order().is_empty());
+}
+
+// -----------------------------------------------------------------------------
+// Undo / redo (§8 bis)
+// -----------------------------------------------------------------------------
+
+#[test]
+fn undo_reverts_create_and_redo_restores() {
+    let mut st = ToileState::new();
+    let id = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    assert_eq!(st.element_count(), 1);
+
+    st.handle_command(ToileCommand::Undo);
+    assert_eq!(st.element_count(), 0);
+    assert!(st.bounds_of(&id).is_none());
+
+    st.handle_command(ToileCommand::Redo);
+    assert_eq!(st.element_count(), 1);
+    assert_eq!(st.bounds_of(&id), Some(Rect::new(0.0, 0.0, 10.0, 10.0)));
+}
+
+#[test]
+fn undo_reverts_group_as_one_item() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(20.0, 0.0), Size::new(10.0, 10.0));
+    st.handle_command(ToileCommand::GroupElements {
+        ids: vec![a.clone(), b.clone()],
+    });
+    assert_eq!(st.element_count(), 3);
+    // A single undo drops the whole group, leaving the two members intact.
+    st.handle_command(ToileCommand::Undo);
+    assert_eq!(st.element_count(), 2);
+    assert_eq!(st.layer_order(), &[NodeId::Element(a), NodeId::Element(b)]);
+}
+
+// -----------------------------------------------------------------------------
 // 2-peer CRDT convergence property test (DoD)
 // -----------------------------------------------------------------------------
 
