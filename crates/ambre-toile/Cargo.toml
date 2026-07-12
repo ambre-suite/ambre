@@ -17,3 +17,18 @@ loro = { workspace = true }
 
 # Spatial indexing
 rstar = { workspace = true }
+
+# 2D geometry: connector routing, stroke smoothing, viewport / bounds math.
+# Re-exported by ambre-draw, but named here directly for the Logic-thread engine.
+kurbo = { workspace = true }
+
+# Compact serialization of the per-element ElementStyle LWW register (§2.E) and
+# the clipboard payload -- consistent with the inter-thread IPC protocol.
+postcard = { workspace = true }
+
+[dev-dependencies]
+# Index-equivalence and 2-peer CRDT convergence property tests (§10, DoD).
+# proptest pulls `wait-timeout`, which does not build on wasm32; the engine is
+# host-testable, so gate it to the host target like ambre-trame does.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+proptest = { workspace = true }
