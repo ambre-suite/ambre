@@ -243,7 +243,7 @@ impl TrameView {
             // bar is read-only: mirror the in-cell editor buffer (live), or the
             // active cell's stored value when idle.
             if formula_input_focused() {
-                let text = self.formula_text.get();
+                let text = self.formula_text.get_untracked();
                 if let Some(ed) = self.editor.as_mut() {
                     if ed.buffer != text {
                         ed.buffer = text;
@@ -263,22 +263,22 @@ impl TrameView {
                 }
             } else if let Some(ed) = self.editor.as_ref() {
                 let buffer = ed.buffer.clone();
-                if self.formula_text.get() != buffer {
+                if self.formula_text.get_untracked() != buffer {
                     self.formula_text.set(buffer);
                 }
             } else {
                 let seed = self.cell_seed(self.state.active_row(), self.state.active_col());
-                if self.formula_text.get() != seed {
+                if self.formula_text.get_untracked() != seed {
                     self.formula_text.set(seed);
                 }
             }
 
             // Handle formula bar commit / cancel actions from the DOM input.
-            if let Some(action) = self.formula_action.get() {
+            if let Some(action) = self.formula_action.get_untracked() {
                 match action {
                     FormulaAction::Commit(dir) => {
                         if let Some(ed) = self.editor.as_mut() {
-                            ed.buffer = self.formula_text.get();
+                            ed.buffer = self.formula_text.get_untracked();
                         }
                         self.commit_edit();
                         match dir {
@@ -304,7 +304,7 @@ impl TrameView {
                     // keep the selection put (no cursor advance).
                     FormulaAction::CommitFill => {
                         if let Some(ed) = self.editor.as_mut() {
-                            ed.buffer = self.formula_text.get();
+                            ed.buffer = self.formula_text.get_untracked();
                         }
                         self.commit_edit_filled();
                         self.text_input.focus();

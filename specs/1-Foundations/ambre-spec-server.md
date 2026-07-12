@@ -576,6 +576,17 @@ Download Snapshot (on open, and on SnapshotAvailable)
 > re-sorted by `seq`: a serial `.await` per object turned an open into N sequential S3
 > round-trips, which dominated cold start on documents with many small deltas.
 
+> **Empty replay MUST still answer.** When the client's downloaded snapshot already
+> covers every delta (the common F5-on-an-existing-document case), its post-open
+> `RequestMissing { after_seq: covered_seq }` matches **no** newer rows in the durable
+> index. The server MUST nonetheless send **one empty `MissingUpdates`** for that first,
+> empty page — it must not return silently. The client gates its hydration-complete
+> signal (`DocumentReady`, which dismisses the loading overlay) on **receiving** a
+> `MissingUpdates`; silence leaves the overlay spinning forever. The rule is scoped to the
+> **first** page only: a later empty page simply ends the paged replay (earlier pages
+> already released the client). The other early returns — not subscribed, replay throttle
+> (`REPLAY_MIN_INTERVAL`), membership recheck failed — are deliberate and send nothing.
+
 #### Async S3 Flush — Global Model
 
 The "one task per active document" model is rejected (see section 8). The flusher is a **single global Tokio task** per Axum instance:
