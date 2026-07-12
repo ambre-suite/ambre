@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 5be5f66eab5f76ef5f762f0041c84323777bcbbd02ccae6b9c00c56738842f67 # shrinks to ops = [Stroke { x: 0.0, y: 0.0 }, Create { x: 0.0, y: 0.0 }, GroupNth { i: 1, j: 0 }, GroupNth { i: 0, j: 1 }]
+cc 511efc66ed53770a3754e60ff0522ec1a7fd1f92fb6944968022dde9b77847d3 # shrinks to ops = [Create { x: 0.0, y: 0.0 }, Create { x: 0.0, y: 0.0 }, Stroke { x: 0.0, y: 0.0 }, Stroke { x: 0.0, y: 0.0 }, GroupNth { i: 0, j: 3 }, GroupNth { i: 1, j: 5 }, DeleteNth { nth: 3 }]
+cc bb6097cc15823f07e57000585a6b37c2841a2e40c5229ec7874007e08382deb4 # shrinks to ops = [Stroke { x: 0.0, y: 0.0 }, Create { x: 0.0, y: 0.0 }, GroupNth { i: 1, j: 0 }, Create { x: 0.0, y: 0.0 }, GroupNth { i: 3, j: 2 }, UngroupNth { nth: 2 }]
+cc 5dda3025622152f6d5843d59e359352382ee47c0667030687a2db93a2aebcbc1 # shrinks to ops = [Create { x: 0.0, y: 0.0 }, Stroke { x: 0.0, y: 0.0 }, Stroke { x: 0.0, y: 0.0 }, Stroke { x: 0.0, y: 0.0 }, DeleteNth { nth: 0 }, DeleteNth { nth: 0 }, GroupNth { i: 1, j: 2 }, GroupNth { i: 0, j: 2 }, DeleteNth { nth: 1 }, GroupNth { i: 1, j: 2 }, ResizeNth { nth: 5, w: 5.0, h: 5.0 }]
