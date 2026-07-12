@@ -296,7 +296,7 @@ async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -
 // Font fetch helper
 // -----------------------------------------------------------------------------
 
-async fn fetch_bytes(url: &str) -> Option<Vec<u8>> {
+pub(crate) async fn fetch_bytes(url: &str) -> Option<Vec<u8>> {
     let window = web_sys::window()?;
     let resp_val = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(url))
         .await

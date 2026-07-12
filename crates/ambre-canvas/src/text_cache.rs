@@ -16,6 +16,8 @@ use parley::style::{FontFamily, FontStack, FontStyle, FontWeight, OverflowWrap, 
 use parley::{Alignment, AlignmentOptions, FontContext, Layout, LayoutContext};
 use rustc_hash::FxHashMap;
 
+use crate::fonts::LazyFontLoader;
+
 // -----------------------------------------------------------------------------
 // Cache key
 // -----------------------------------------------------------------------------
@@ -55,6 +57,10 @@ pub struct TextCache {
     /// rank entries by recency. Wraps only after 2^64 accesses (never in
     /// practice).
     tick: u64,
+    /// On-demand loader for scripts outside the base fonts (CJK, Arabic,
+    /// Devanagari). Fed every string this cache shapes (on a miss); it fetches a
+    /// face the first time it sees a codepoint the base fonts cannot cover.
+    lazy_fonts: LazyFontLoader,
     // Per-frame diagnostics.
     pub frame_hits: usize,
     pub frame_misses: usize,
@@ -67,8 +73,24 @@ impl TextCache {
             layout_cx: LayoutContext::new(),
             scale,
             tick: 0,
+            lazy_fonts: LazyFontLoader::new(),
             frame_hits: 0,
             frame_misses: 0,
+        }
+    }
+
+    /// Register any lazily-fetched font faces that arrived since the last frame
+    /// into `font_cx`, and if any did, clear the layout cache so strings that
+    /// shaped before the face was available (as tofu) re-shape with real glyphs.
+    ///
+    /// Returns `true` when coverage changed: the caller must then force a full
+    /// repaint (the cached GPU layers still hold the tofu pixels).
+    pub fn poll_lazy_fonts(&mut self, font_cx: &mut FontContext) -> bool {
+        if self.lazy_fonts.drain_into(font_cx) {
+            self.layouts.clear();
+            true
+        } else {
+            false
         }
     }
 
@@ -187,6 +209,10 @@ impl TextCache {
             }
             Entry::Vacant(e) => {
                 self.frame_misses += 1;
+                // First shaping of this string: check it for codepoints outside
+                // the base fonts and kick off a lazy fetch if needed. Only on a
+                // miss -- a cache hit means we already scanned this text.
+                self.lazy_fonts.observe(&e.key().text);
                 let family = e.key().font.clone();
                 let layout = Self::build_layout(
                     &mut self.layout_cx,
