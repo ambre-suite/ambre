@@ -9,9 +9,10 @@
 use kurbo::{Point, Rect, Size, Vec2};
 use proptest::prelude::*;
 
-use crate::command::{InitContent, ToileCommand, ToileEvent, ZTarget};
+use crate::command::{DisplayNode, End, InitContent, ToileCommand, ToileEvent, ZTarget};
 use crate::model::{
-    Anchor, ElementId, ElementKind, ElementStyle, EndCaps, NodeId, PathType, ShapeKind,
+    Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, NodeId, PathType,
+    ShapeKind, StrokePoint,
 };
 use crate::state::ToileState;
 
@@ -116,7 +117,6 @@ fn reorder_to_back_moves_node() {
 
 #[test]
 fn commit_stroke_creates_drawing() {
-    use crate::model::StrokePoint;
     let mut st = ToileState::new();
     let out = st.handle_command(ToileCommand::CommitStroke {
         points: vec![
@@ -237,6 +237,104 @@ fn deleting_a_group_cascades_to_members() {
     st.handle_command(ToileCommand::DeleteElements { ids: vec![g] });
     assert_eq!(st.element_count(), 0);
     assert!(st.layer_order().is_empty());
+}
+
+// -----------------------------------------------------------------------------
+// Frames: membership + z-order invariant (§2.F / §2.G)
+// -----------------------------------------------------------------------------
+
+fn create_frame(st: &mut ToileState, at: Point, size: Size) -> ElementId {
+    created_id(&st.handle_command(ToileCommand::CreateElement {
+        kind: ElementKind::Frame,
+        at,
+        size,
+        content: InitContent::None,
+    }))
+}
+
+#[test]
+fn set_frame_children_adds_and_removes_membership() {
+    let mut st = ToileState::new();
+    let f = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let a = create_rect(&mut st, Point::new(10.0, 10.0), Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(30.0, 10.0), Size::new(10.0, 10.0));
+
+    st.handle_command(ToileCommand::SetFrameChildren {
+        frame: f.clone(),
+        add: vec![a.clone(), b.clone()],
+        remove: vec![],
+    });
+    assert_eq!(st.membership_of(&f), vec![a.clone(), b.clone()]);
+
+    st.handle_command(ToileCommand::SetFrameChildren {
+        frame: f.clone(),
+        add: vec![],
+        remove: vec![a.clone()],
+    });
+    assert_eq!(st.membership_of(&f), vec![b]);
+}
+
+#[test]
+fn frame_children_paint_after_their_frame() {
+    let mut st = ToileState::new();
+    // Create the children first so they sit *below* the later-created frame.
+    let a = create_rect(&mut st, Point::new(10.0, 10.0), Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(30.0, 10.0), Size::new(10.0, 10.0));
+    let f = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+
+    st.handle_command(ToileCommand::SetFrameChildren {
+        frame: f.clone(),
+        add: vec![a.clone(), b.clone()],
+        remove: vec![],
+    });
+
+    let order = st.layer_order();
+    let idx = |id: &ElementId| {
+        order
+            .iter()
+            .position(|n| n == &NodeId::Element(id.clone()))
+            .unwrap()
+    };
+    assert!(idx(&f) < idx(&a), "frame must paint before child a");
+    assert!(idx(&f) < idx(&b), "frame must paint before child b");
+}
+
+#[test]
+fn set_frame_children_detaches_from_a_group() {
+    let mut st = ToileState::new();
+    let f = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let a = create_rect(&mut st, Point::new(10.0, 10.0), Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(30.0, 10.0), Size::new(10.0, 10.0));
+    let g = created_id(&st.handle_command(ToileCommand::GroupElements {
+        ids: vec![a.clone(), b.clone()],
+    }));
+
+    st.handle_command(ToileCommand::SetFrameChildren {
+        frame: f.clone(),
+        add: vec![a.clone()],
+        remove: vec![],
+    });
+    assert_eq!(st.membership_of(&f), vec![a.clone()]);
+    // `a` left the group; only `b` remains bound to it.
+    assert_eq!(st.membership_of(&g), vec![b]);
+}
+
+#[test]
+fn set_frame_children_is_one_undo_item() {
+    let mut st = ToileState::new();
+    let f = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let a = create_rect(&mut st, Point::new(10.0, 10.0), Size::new(10.0, 10.0));
+    st.handle_command(ToileCommand::SetFrameChildren {
+        frame: f.clone(),
+        add: vec![a.clone()],
+        remove: vec![],
+    });
+    assert_eq!(st.membership_of(&f), vec![a]);
+    st.handle_command(ToileCommand::Undo);
+    assert!(
+        st.membership_of(&f).is_empty(),
+        "one undo reverts the whole membership change"
+    );
 }
 
 // -----------------------------------------------------------------------------
@@ -432,6 +530,146 @@ fn undo_reverts_group_as_one_item() {
 }
 
 // -----------------------------------------------------------------------------
+// Transforms, connectors, viewport (§3 / §5 / §9)
+// -----------------------------------------------------------------------------
+
+fn connect(st: &mut ToileState, from: ElementId, to: ElementId) -> ConnectorId {
+    st.handle_command(ToileCommand::CreateConnector {
+        from,
+        from_anch: Anchor::Right,
+        to,
+        to_anch: Anchor::Left,
+        path_type: PathType::Straight,
+        arrows: EndCaps {
+            start: false,
+            end: true,
+        },
+    });
+    st.connector_ids()
+        .pop()
+        .expect("a connector must have been created")
+}
+
+fn connector_node_count(st: &ToileState) -> usize {
+    st.debug_viewport()
+        .nodes
+        .iter()
+        .filter(|n| matches!(n, DisplayNode::Connector(_)))
+        .count()
+}
+
+#[test]
+fn rotate_expands_the_aabb() {
+    let mut st = ToileState::new();
+    // A 100x50 rect rotated 90 deg about its center (50,25) spans 50x100, so its
+    // rotation-expanded AABB is (25,-25)..(75,75) -- the §3 invariant.
+    let id = create_rect(&mut st, Point::ZERO, Size::new(100.0, 50.0));
+    st.handle_command(ToileCommand::RotateElement {
+        id: id.clone(),
+        radians: std::f64::consts::FRAC_PI_2,
+    });
+    let b = st.bounds_of(&id).expect("bounds");
+    assert!((b.x0 - 25.0).abs() < 1e-6, "x0 = {}", b.x0);
+    assert!((b.y0 + 25.0).abs() < 1e-6, "y0 = {}", b.y0);
+    assert!((b.x1 - 75.0).abs() < 1e-6, "x1 = {}", b.x1);
+    assert!((b.y1 - 75.0).abs() < 1e-6, "y1 = {}", b.y1);
+}
+
+#[test]
+fn resize_updates_bounds() {
+    let mut st = ToileState::new();
+    let id = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    st.handle_command(ToileCommand::ResizeElement {
+        id: id.clone(),
+        new: Rect::new(5.0, 5.0, 45.0, 25.0),
+    });
+    assert_eq!(st.bounds_of(&id), Some(Rect::new(5.0, 5.0, 45.0, 25.0)));
+}
+
+#[test]
+fn retarget_rebinds_endpoint_without_dangling() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(100.0, 0.0), Size::new(10.0, 10.0));
+    let c = create_rect(&mut st, Point::new(200.0, 0.0), Size::new(10.0, 10.0));
+    let conn = connect(&mut st, a, b);
+    let out = st.handle_command(ToileCommand::RetargetConnector {
+        id: conn,
+        endpoint: End::To,
+        to: c,
+        anch: Anchor::Left,
+    });
+    assert!(
+        !out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::DanglingConnector(_))),
+        "retarget to a live element must not dangle"
+    );
+    // Still routes (both endpoints present), so it paints.
+    assert_eq!(connector_node_count(&st), 1);
+}
+
+#[test]
+fn retarget_to_missing_element_reports_dangling() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(100.0, 0.0), Size::new(10.0, 10.0));
+    let conn = connect(&mut st, a, b);
+    let out = st.handle_command(ToileCommand::RetargetConnector {
+        id: conn.clone(),
+        endpoint: End::To,
+        to: ElementId("ffff_0000".to_owned()), // never minted
+        anch: Anchor::Left,
+    });
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::DanglingConnector(c) if *c == conn)),
+        "retarget to a missing element must surface DanglingConnector"
+    );
+    // A dangling connector routes to None and is dropped from the paint set (§5.A).
+    assert_eq!(connector_node_count(&st), 0);
+}
+
+#[test]
+fn deleting_an_endpoint_makes_the_connector_dangle() {
+    // §5.A: an endpoint deletion leaves the connector unroutable; it is skipped
+    // at derivation (route -> None), never corrupting state.
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(100.0, 0.0), Size::new(10.0, 10.0));
+    let c = create_rect(&mut st, Point::new(200.0, 0.0), Size::new(10.0, 10.0));
+    // c is not an endpoint, so deleting a does not GC this connector locally.
+    let _conn = connect(&mut st, b.clone(), c);
+    assert_eq!(connector_node_count(&st), 1);
+    // Delete an unrelated element first to keep the connector alive, then delete
+    // one of its endpoints and confirm it drops from the paint set.
+    st.handle_command(ToileCommand::DeleteElements { ids: vec![a] });
+    assert_eq!(connector_node_count(&st), 1);
+    st.handle_command(ToileCommand::DeleteElements { ids: vec![b] });
+    assert_eq!(connector_node_count(&st), 0);
+}
+
+#[test]
+fn viewport_culls_offscreen_nodes() {
+    // §9: derivation only emits the visible set. Default viewport spans
+    // roughly (-640,-400)..(640,400), so a node at (5000,5000) is culled.
+    let mut st = ToileState::new();
+    let near = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let _far = create_rect(&mut st, Point::new(5000.0, 5000.0), Size::new(10.0, 10.0));
+    let painted: Vec<ElementId> = st
+        .debug_viewport()
+        .nodes
+        .iter()
+        .filter_map(|n| match n {
+            DisplayNode::Element(e) => Some(e.id.clone()),
+            DisplayNode::Connector(_) => None,
+        })
+        .collect();
+    assert_eq!(painted, vec![near], "only the on-screen node is painted");
+}
+
+// -----------------------------------------------------------------------------
 // 2-peer CRDT convergence property test (DoD)
 // -----------------------------------------------------------------------------
 
@@ -442,9 +680,17 @@ fn undo_reverts_group_as_one_item() {
 enum PeerOp {
     Create { x: f64, y: f64 },
     MoveNth { nth: usize, dx: f64, dy: f64 },
+    ResizeNth { nth: usize, w: f64, h: f64 },
+    RotateNth { nth: usize, radians: f64 },
     RestyleNth { nth: usize, fill: u32 },
     DeleteNth { nth: usize },
     ReorderNthToBack { nth: usize },
+    // Layers / children-heavy paths -- where concurrent `LoroMovableList`
+    // ordering and derived-cache rebuilds are most likely to diverge.
+    GroupNth { i: usize, j: usize },
+    UngroupNth { nth: usize },
+    ConnectNth { i: usize, j: usize },
+    Stroke { x: f64, y: f64 },
 }
 
 fn op_strategy() -> impl Strategy<Value = PeerOp> {
@@ -455,9 +701,19 @@ fn op_strategy() -> impl Strategy<Value = PeerOp> {
             dx,
             dy
         }),
+        (0usize..6, 5.0f64..80.0, 5.0f64..80.0).prop_map(|(nth, w, h)| PeerOp::ResizeNth {
+            nth,
+            w,
+            h
+        }),
+        (0usize..6, -3.0f64..3.0).prop_map(|(nth, radians)| PeerOp::RotateNth { nth, radians }),
         (0usize..6, any::<u32>()).prop_map(|(nth, fill)| PeerOp::RestyleNth { nth, fill }),
         (0usize..6).prop_map(|nth| PeerOp::DeleteNth { nth }),
         (0usize..6).prop_map(|nth| PeerOp::ReorderNthToBack { nth }),
+        (0usize..6, 0usize..6).prop_map(|(i, j)| PeerOp::GroupNth { i, j }),
+        (0usize..6).prop_map(|nth| PeerOp::UngroupNth { nth }),
+        (0usize..6, 0usize..6).prop_map(|(i, j)| PeerOp::ConnectNth { i, j }),
+        (-200.0f64..200.0, -200.0f64..200.0).prop_map(|(x, y)| PeerOp::Stroke { x, y }),
     ]
 }
 
@@ -518,8 +774,72 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<Vec<u8>> {
             }),
             None => return None,
         },
+        PeerOp::ResizeNth { nth: n, w, h } => match nth(*n) {
+            Some(id) => st.handle_command(ToileCommand::ResizeElement {
+                id,
+                new: Rect::new(0.0, 0.0, *w, *h),
+            }),
+            None => return None,
+        },
+        PeerOp::RotateNth { nth: n, radians } => match nth(*n) {
+            Some(id) => st.handle_command(ToileCommand::RotateElement {
+                id,
+                radians: *radians,
+            }),
+            None => return None,
+        },
+        PeerOp::GroupNth { i, j } => match (nth(*i), nth(*j)) {
+            (Some(a), Some(b)) if a != b => {
+                st.handle_command(ToileCommand::GroupElements { ids: vec![a, b] })
+            }
+            _ => return None,
+        },
+        PeerOp::UngroupNth { nth: n } => match nth(*n) {
+            // A no-op on a non-group returns no delta and is filtered by `out.update`.
+            Some(id) => st.handle_command(ToileCommand::UngroupElements { group: id }),
+            None => return None,
+        },
+        PeerOp::ConnectNth { i, j } => match (nth(*i), nth(*j)) {
+            (Some(a), Some(b)) => st.handle_command(ToileCommand::CreateConnector {
+                from: a,
+                from_anch: Anchor::Right,
+                to: b,
+                to_anch: Anchor::Left,
+                path_type: PathType::Straight,
+                arrows: EndCaps {
+                    start: false,
+                    end: true,
+                },
+            }),
+            _ => return None,
+        },
+        PeerOp::Stroke { x, y } => st.handle_command(ToileCommand::CommitStroke {
+            points: vec![
+                StrokePoint {
+                    x: *x as f32,
+                    y: *y as f32,
+                    pressure: 1.0,
+                },
+                StrokePoint {
+                    x: *x as f32 + 10.0,
+                    y: *y as f32 + 5.0,
+                    pressure: 1.0,
+                },
+            ],
+            style: ElementStyle::default(),
+        }),
     };
     out.update
+}
+
+/// A viewport wide enough that nothing is culled, so `debug_viewport()` returns
+/// the full derived paint set for cross-peer / rebuild comparison.
+fn wide_viewport() -> crate::index::Viewport {
+    crate::index::Viewport {
+        center: Point::ZERO,
+        zoom: 0.01,
+        size: Size::new(2000.0, 2000.0),
+    }
 }
 
 proptest! {
@@ -567,5 +887,42 @@ proptest! {
 
         // Identical z-order.
         prop_assert_eq!(a.layer_order(), b.layer_order(), "layer order diverged");
+
+        // Comprehensive check: the full derived paint set (elements + routed
+        // connectors + group union bounds) must match under an identical, wide
+        // viewport. Debug equality captures every DisplayNode field.
+        a.handle_command(ToileCommand::SetViewport(wide_viewport()));
+        b.handle_command(ToileCommand::SetViewport(wide_viewport()));
+        prop_assert_eq!(
+            format!("{:?}", a.debug_viewport()),
+            format!("{:?}", b.debug_viewport()),
+            "derived paint set diverged"
+        );
+    }
+
+    /// The §1 invariant beyond the isolated `SpatialIndex`: every derived cache
+    /// held by `ToileState` (bounds, layers, group unions, routed connectors)
+    /// must equal what a full rebuild from the CRDT snapshot produces. `b` is
+    /// built purely through `apply_remote` (the `rebuild_caches` path), so this
+    /// asserts incremental == rebuild across the whole command surface.
+    #[test]
+    fn caches_match_a_full_rebuild(ops in proptest::collection::vec(op_strategy(), 0..40)) {
+        let mut a = ToileState::new();
+        for op in &ops {
+            let _ = apply_local(&mut a, op);
+        }
+        let mut b = ToileState::new();
+        b.apply_remote(&a.export_snapshot());
+
+        a.handle_command(ToileCommand::SetViewport(wide_viewport()));
+        b.handle_command(ToileCommand::SetViewport(wide_viewport()));
+
+        prop_assert_eq!(a.element_count(), b.element_count(), "element count diverged from rebuild");
+        prop_assert_eq!(a.layer_order(), b.layer_order(), "layers diverged from rebuild");
+        prop_assert_eq!(
+            format!("{:?}", a.debug_viewport()),
+            format!("{:?}", b.debug_viewport()),
+            "derived caches diverged from a full rebuild"
+        );
     }
 }

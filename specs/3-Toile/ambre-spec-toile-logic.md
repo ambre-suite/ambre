@@ -958,7 +958,7 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
 > No phase ships `[x]` without its test belt green.
 
 **Phase 0 — Core standalone**
-- [~] `ToileState` + CRDT schema (§2): `elements`, `connectors`, `drawings`, unified `layers` z-order, one per-element `ElementStyle` register, and `groups` (per-group `children` list, derived-only bounds) **landed**; `frames` content / `media` maps still open.
+- [x] `ToileState` + CRDT schema (§2): `elements`, `connectors`, `drawings`, unified `layers` z-order, one per-element `ElementStyle` register, `groups` (per-group `children` list, derived-only bounds), and `frames` content (per-frame `children` membership list, §2.F/§2.G z-order invariant) **landed**. The `media` map is populated by `toile-interop` (raster/media pipeline), not the Logic engine.
 - [x] Move-invariant `ElementId` minting (`{peer:016x}_{counter:08x}`, §1)
 - [x] `SpatialIndex` (`rstar` R-tree) with the index-equivalence property test (indexed cull vs brute-force agree)
 - [x] Element lifecycle commands (create / update / delete / transform / lock / reorder) with test belt
@@ -967,11 +967,11 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
   `ambre-toile/src/convergence_tests.rs` (copy is non-mutating; paste re-mints + offsets; a half-copied
   connector is dropped while a fully-copied one is reproduced; a duplicated group is one undo item; the
   payload postcard round-trips; paste reproduces the selection on a separate board).
-- [x] Connector routing (§5) + endpoint binding (create / retarget / delete, dangling detection)
+- [x] Connector routing (§5) + endpoint binding (create / retarget / delete, dangling detection). Belt: retarget rebind, retarget-to-missing surfaces `DanglingConnector`, endpoint delete drops the connector from the paint set.
 - [x] Stroke storage + smoothing (§4)
-- [x] `DisplayViewport` derivation (culled visible set)
-- [~] `ToileCommand` / `ToileEvent` consolidated enums (§8): lifecycle + groups + undo/redo (`GroupElements`/`UngroupElements`/`Undo`/`Redo`, `UndoState` event) + clipboard (`CopyElements`/`PasteElements`/`DuplicateElements`, `Clipboard` event, `ClipboardPayload` postcard round-trip) landed in `ambre-toile`; text/frames/find/embedded variants still open.
-- [x] 2-peer CRDT convergence property-test (element / move-LWW / restyle-register / delete / reorder converge). **DoD:** green in `ambre-toile/src/convergence_tests.rs`.
+- [x] `DisplayViewport` derivation (culled visible set). Belt: rotation-expanded AABB, resize bounds, off-screen culling.
+- [x] `ToileCommand` / `ToileEvent` consolidated enums (§8): lifecycle + groups + undo/redo (`GroupElements`/`UngroupElements`/`Undo`/`Redo`, `UndoState` event) + clipboard (`CopyElements`/`PasteElements`/`DuplicateElements`, `Clipboard` event, `ClipboardPayload` postcard round-trip) + frames (`SetFrameChildren`) landed in `ambre-toile`. `EditText` (Phase 1, blocked on Prose's shared `TextDelta`), find and `Embedded` (nested-doc) variants land with their later slices.
+- [x] 2-peer CRDT convergence property-test. **DoD:** green in `ambre-toile/src/convergence_tests.rs`. Op-set covers create / move-LWW / resize / rotate / restyle-register / delete / reorder / group / ungroup / connect / stroke; the assertion compares the full derived paint set (elements + routed connectors + group union bounds). Complemented by a `ToileState`-level rebuild-equivalence property-test (incremental caches == full rebuild from snapshot, the §1 invariant beyond the isolated `SpatialIndex`) -- which flushed out and fixed four empty-group / dangling-child-ref defects across group / ungroup / delete / frame membership.
 
 **Phase 1 — Logic Thread Integration**
 - [x] Logic-thread dispatch: `handle_command` returning `ToileOutcome` (§8), via typed `DocState` + `match` (`architecture §6`). Landed: the IPC contract (`ToileCommand`/`ToileEvent`/`Display*`/`Viewport`/model value types) moved into `ambre-bus::app::toile` (one module per app, mirrors the new Trame `app/trame/` layout; `ToileOutcome` stays engine-local like `TrameOutcome`), `AppCommand::Toile` / `AppEvent::Toile` variants, `DocState::Toile(Box<ToileState>)`, and the `(DocState::Toile, AppCommand::Toile)` dispatch arm fanning display/update/ephemeral/snapshot out through the shared `dispatch_outcome`.
