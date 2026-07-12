@@ -22,6 +22,7 @@ parley     = { workspace = true }
 rustc-hash = { workspace = true }
 kurbo      = { workspace = true }
 peniko     = { workspace = true }
+lyon       = { workspace = true }
 
 # DOM glue for the transparent <textarea> pipe (text_input.rs). Pure web_sys
 # bindings: they compile on every target, so app crates can name `TextInput`

@@ -250,7 +250,12 @@ pub trait DrawSurface {
 
 > **`ParleyBrush = peniko::Brush`**: unlike `peniko::Color` (= `AlphaColor<Srgb>`), `peniko::Brush` implements `Default` (required by `parley::Brush`). Callers pass the render color explicitly as `&Brush` to `draw_glyphs`.
 
-> **`fill_path` / `stroke_path`**: default no-ops. `WgpuSurface` will implement them via lyon when arbitrary paths are needed (Toile, Trame charts). `KrillaSurface` will implement them with krilla primitives.
+> **`fill_path` / `stroke_path`**: implemented on `WgpuSurface` via lyon and on `KrillaSurface` via krilla primitives. On `WgpuSurface` the `BezPath` is converted to a `lyon::path::Path` and tessellated in model space (Fill = NonZero rule, Stroke maps `kurbo::Stroke` width/cap/join/miter-limit); the flattening tolerance is expressed in screen pixels and divided by the transform's scale (sqrt of the linear-part determinant) so zoomed paths stay smooth. Output vertices are mapped to screen space through the active transform and appended to the solid-color quad batch (`QuadRenderer::push_mesh`) -- no dedicated pipeline.
+>
+> **Known limitations (first implementation):**
+> - **Solid brush only.** `Brush::Solid` is honored; gradients/images are ignored (Phase 3), matching `draw_glyphs`.
+> - **Clip is bounding-box reject, not per-triangle trim.** A path whose (transformed, stroke-padded) bbox misses the active clip is skipped entirely; a path straddling a clip edge is drawn whole. Arbitrary path geometry cannot be trimmed cheaply on the CPU the way axis-aligned rects/lines/glyphs are. True clipping (GPU scissor for axis-aligned clips, or stencil) is deferred until a consumer needs a partially-clipped path.
+> - **Stroke width scales with zoom.** Tessellation is in model units, so the transform scales the stroke -- correct for Toile pan/zoom; a hairline (screen-constant width) would need dividing the width by the transform scale.
 
 > **`push_transform` / `pop_transform`**: default no-ops, required for Toile (infinite pan/zoom) and Prose (page margins). `WgpuSurface` will implement them with a CPU-side transform matrix before GPU submission.
 
@@ -446,7 +451,7 @@ Empirical figures (release build, `opt-level = z` + LTO) validating the `AutoNoV
 
 - [x] `KrillaSurface`: `DrawSurface` implementation for PDF export (Logic thread, lazy-loaded). New **`ambre-pdf`** crate (krilla backend); geometry / glyph / path / clip / transform mapped to krilla, headless PDF-serialization tests. *(ToUnicode text mapping deferred -- glyphs render, text not yet selectable.)*
 - [x] `push_transform` / `pop_transform` on `WgpuSurface` (Prose margins, Toile pan/zoom)
-- [ ] `fill_path` / `stroke_path` on `WgpuSurface` via lyon (Toile, Trame charts)
+- [x] `fill_path` / `stroke_path` on `WgpuSurface` via lyon. `BezPath` -> lyon `Path`, tessellated in model space (Fill/Stroke tessellators, NonZero fill rule, tolerance scaled by the transform's determinant so zoomed paths stay smooth), vertices mapped to screen space and pushed to the solid-color quad batch (`push_mesh`). Solid brush only (gradients Phase 3); clip is bbox-reject, not per-triangle trim (Toile, Trame charts)
 - [ ] Lazy loading CJK/Arabic/Devanagari fonts (trigger on missing codepoint)
 - [x] `ambreFatal` **terminal screen** (panic → canvas terminal render) wired in `host`/`ambre-app`. *(The `panic::set_hook` JS hook itself is done -- see `ambre-spec-architecture.md §7 ARCH P1`; only the canvas-side terminal screen remains. Roadmap Epic `E2`.)*
 
@@ -459,6 +464,7 @@ Empirical figures (release build, `opt-level = z` + LTO) validating the `AutoNoV
 - [ ] `GlyphAtlas`: atlas size tuning and LRU policy based on measured memory profiles
 - [ ] Internationalization of static labels, RTL Toolbar/Breadcrumb support
 - [ ] Non-regression benchmarks: frame budget, TextCache cold cache, icon atlas load
+- [ ] **Path clipping on `WgpuSurface`** (deferred from CANVAS P1). Today `fill_path`/`stroke_path` only bbox-reject against the active clip: a path straddling a clip edge is drawn whole. Implement real clipping when a consumer needs a partially-clipped path -- GPU scissor for axis-aligned clips (the common Toile/Prose case), stencil for the general case. Also expose a hairline (screen-constant stroke width) option, since path strokes currently scale with the transform zoom.
 - [ ] **DEBT -- headless GPU rendering for visual tests.** Headless Chromium
       (SwiftShader/ANGLE) does not composite our offscreen ping-pong Content
       layer: the canvas reads back blank/white, so screenshot-driven verification
