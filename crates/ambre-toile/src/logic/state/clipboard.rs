@@ -8,10 +8,10 @@ use std::collections::{HashMap, HashSet};
 use kurbo::{Point, Rect, Vec2};
 use loro::{LoroMap, LoroMovableList, LoroValue};
 
-use crate::command::{
+use crate::logic::command::{
     ClipConnector, ClipElement, ClipMembership, ClipboardPayload, ToileEvent, ToileOutcome,
 };
-use crate::model::{ConnectorId, ElementId, NodeId};
+use crate::logic::model::{ConnectorId, ElementId, NodeId};
 
 use super::codec::{capture_scalars, map_str, write_clip_fields};
 use super::{CHILDREN, CONNECTORS, ELEMENTS, LAYERS, ToileState};

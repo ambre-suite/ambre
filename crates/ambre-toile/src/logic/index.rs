@@ -9,11 +9,11 @@
 use kurbo::{Point, Rect};
 use rstar::{AABB, RTree, RTreeObject};
 
-use crate::model::ElementId;
+use crate::logic::model::ElementId;
 
 /// The camera / viewport type lives in the `ambre-bus` IPC contract (it is
 /// carried by `ToileCommand::SetViewport`); re-exported here so the index keeps
-/// its `crate::index::Viewport` path and its culling helpers.
+/// its `crate::logic::index::Viewport` path and its culling helpers.
 pub use ambre_bus::app::toile::Viewport;
 
 /// R-tree leaf: an element's world-space, rotation-expanded AABB plus its id.

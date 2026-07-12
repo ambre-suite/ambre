@@ -4,7 +4,7 @@
 //! register, freehand strokes, connector anchoring) live in `ambre-bus` so the
 //! `ambre-logic` dispatcher can carry them inside `AppCommand::Toile` /
 //! `AppEvent::Toile` without a dependency cycle. This module re-exports them so
-//! the engine keeps its `crate::model::...` paths (mirrors how `ambre-trame`
+//! the engine keeps its `crate::logic::model::...` paths (mirrors how `ambre-trame`
 //! consumes its value types from `ambre-bus`).
 
 pub use ambre_bus::app::toile::{

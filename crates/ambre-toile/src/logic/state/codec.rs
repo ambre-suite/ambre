@@ -8,9 +8,9 @@
 use kurbo::{Affine, Point, Rect, Vec2};
 use loro::{LoroMap, LoroValue};
 
-use crate::command::{ClipValue, InitContent};
-use crate::connector::Connector;
-use crate::model::{
+use crate::logic::command::{ClipValue, InitContent};
+use crate::logic::connector::Connector;
+use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, PathType, ShapeKind,
     StrokePoint,
 };

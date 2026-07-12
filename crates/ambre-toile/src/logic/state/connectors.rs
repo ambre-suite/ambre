@@ -6,8 +6,8 @@ use std::collections::HashSet;
 
 use loro::{LoroMap, LoroValue};
 
-use crate::command::{End, ToileEvent, ToileOutcome};
-use crate::model::{Anchor, ConnectorId, ElementId, EndCaps, NodeId, PathType};
+use crate::logic::command::{End, ToileEvent, ToileOutcome};
+use crate::logic::model::{Anchor, ConnectorId, ElementId, EndCaps, NodeId, PathType};
 
 use super::codec::{encode_anchor, map_str, write_connector};
 use super::{CONNECTORS, LAYERS, ToileState};

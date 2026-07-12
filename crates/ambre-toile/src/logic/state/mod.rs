@@ -37,9 +37,9 @@ use std::collections::HashMap;
 use kurbo::Rect;
 use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
 
-use crate::command::{SelectionStats, ToileCommand, ToileError, ToileEvent, ToileOutcome};
-use crate::index::{SpatialIndex, Viewport};
-use crate::model::{ConnectorId, ElementId, NodeId};
+use crate::logic::command::{SelectionStats, ToileCommand, ToileError, ToileEvent, ToileOutcome};
+use crate::logic::index::{SpatialIndex, Viewport};
+use crate::logic::model::{ConnectorId, ElementId, NodeId};
 
 // Root container names (§2.B).
 const ELEMENTS: &str = "elements";
@@ -317,7 +317,7 @@ impl ToileState {
 
     /// The culled, z-ordered `DisplayViewport` for the current viewport. Test
     /// helper (the production path returns it inside a `ToileEvent`).
-    pub fn debug_viewport(&self) -> crate::command::DisplayViewport {
+    pub fn debug_viewport(&self) -> crate::logic::command::DisplayViewport {
         self.derive_viewport()
     }
 

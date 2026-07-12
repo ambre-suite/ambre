@@ -8,9 +8,9 @@ use std::collections::HashSet;
 use kurbo::{Point, Rect, Vec2};
 use loro::{LoroMap, LoroMovableList, LoroValue};
 
-use crate::command::{InitContent, ToileError, ToileEvent, ToileOutcome, ZTarget};
-use crate::index::ElementBounds;
-use crate::model::{ElementId, ElementKind, ElementStyle, NodeId, ShapeKind, StrokePoint};
+use crate::logic::command::{InitContent, ToileError, ToileEvent, ToileOutcome, ZTarget};
+use crate::logic::index::ElementBounds;
+use crate::logic::model::{ElementId, ElementKind, ElementStyle, NodeId, ShapeKind, StrokePoint};
 
 use super::codec::{bool_of, content_matches, expanded_aabb, f64_of, stroke_aabb};
 use super::{CHILDREN, CONNECTORS, ELEMENTS, LAYERS, ToileState};
