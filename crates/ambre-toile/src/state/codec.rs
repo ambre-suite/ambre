@@ -1,0 +1,306 @@
+//! Pure, `self`-free helpers for [`ToileState`](super::ToileState): geometry
+//! (rotation-expanded AABBs), CRDT field (de)serialization, clipboard scalar
+//! capture, and the small `LoroMap` / deep-value field readers. Split out of
+//! `state/mod.rs` so the engine's mutation logic stays readable; everything here
+//! is stateless and shared by both the mutation and derivation impls via
+//! `use super::codec::*`.
+
+use kurbo::{Affine, Point, Rect, Vec2};
+use loro::{LoroMap, LoroValue};
+
+use crate::command::{ClipValue, InitContent};
+use crate::connector::Connector;
+use crate::model::{
+    Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, PathType, ShapeKind,
+    StrokePoint,
+};
+
+/// Rotation-expanded axis-aligned bounds of a rect rotated by `rot` about its
+/// center (§3). For `rot == 0` this is the rect itself.
+pub(super) fn expanded_aabb(x: f64, y: f64, w: f64, h: f64, rot: f64) -> Rect {
+    let r = Rect::new(x, y, x + w, y + h);
+    if rot == 0.0 {
+        return r;
+    }
+    let c = r.center();
+    let a = Affine::rotate_about(rot, c);
+    let corners = [
+        Point::new(r.x0, r.y0),
+        Point::new(r.x1, r.y0),
+        Point::new(r.x1, r.y1),
+        Point::new(r.x0, r.y1),
+    ];
+    let mut min = Point::new(f64::INFINITY, f64::INFINITY);
+    let mut max = Point::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
+    for corner in corners {
+        let p = a * corner;
+        min.x = min.x.min(p.x);
+        min.y = min.y.min(p.y);
+        max.x = max.x.max(p.x);
+        max.y = max.y.max(p.y);
+    }
+    Rect::new(min.x, min.y, max.x, max.y)
+}
+
+/// World AABB spanning a stroke's raw samples (with a small margin so a single
+/// point still has non-zero area for culling).
+pub(super) fn stroke_aabb(points: &[StrokePoint]) -> Rect {
+    if points.is_empty() {
+        return Rect::new(0.0, 0.0, 1.0, 1.0);
+    }
+    let mut min = Point::new(f64::INFINITY, f64::INFINITY);
+    let mut max = Point::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
+    for p in points {
+        min.x = min.x.min(p.x as f64);
+        min.y = min.y.min(p.y as f64);
+        max.x = max.x.max(p.x as f64);
+        max.y = max.y.max(p.y as f64);
+    }
+    Rect::new(
+        min.x,
+        min.y,
+        (max.x).max(min.x + 1.0),
+        (max.y).max(min.y + 1.0),
+    )
+}
+
+/// Seed a group element's scalar fields (§2.F bis). A group paints nothing and
+/// its geometry is a derived union, so it carries no x/y/w/h: only the type flag,
+/// lock state, rotation and default style live in the CRDT; the `children` list
+/// is attached by the caller.
+pub(super) fn em_seed_group(em: &LoroMap) {
+    let _ = em.insert("type", "group");
+    let _ = em.insert("rot", 0.0);
+    let _ = em.insert("locked", false);
+    let _ = em.insert(
+        "style",
+        LoroValue::Binary(ElementStyle::default().to_bytes().into()),
+    );
+}
+
+/// Capture the scalar (non-container) fields of a map deep-value into an id-free
+/// clipboard field list (§8 ter). Container fields (a group's `children` list)
+/// are naturally skipped -- they arrive as `LoroValue::List` / `Map`, which do
+/// not match a leaf kind. `skip` drops named fields the caller remaps itself
+/// (connector endpoints).
+pub(super) fn capture_scalars(
+    fields: &loro::LoroMapValue,
+    skip: &[&str],
+) -> Vec<(String, ClipValue)> {
+    let mut out = Vec::new();
+    for (k, v) in fields.iter() {
+        if skip.contains(&k.as_str()) {
+            continue;
+        }
+        let cv = match v {
+            LoroValue::Double(d) => ClipValue::F64(*d),
+            LoroValue::Bool(b) => ClipValue::Bool(*b),
+            LoroValue::String(s) => ClipValue::Str(s.to_string()),
+            LoroValue::Binary(b) => ClipValue::Bin(b.to_vec()),
+            _ => continue,
+        };
+        out.push((k.to_string(), cv));
+    }
+    out
+}
+
+/// Write captured clipboard fields into a fresh element / connector map, adding
+/// `offset` to the `x` / `y` coordinates so the paste lands at the cursor.
+pub(super) fn write_clip_fields(m: &LoroMap, fields: &[(String, ClipValue)], offset: Vec2) {
+    for (k, v) in fields {
+        match v {
+            ClipValue::F64(d) => {
+                let d = match k.as_str() {
+                    "x" => d + offset.x,
+                    "y" => d + offset.y,
+                    _ => *d,
+                };
+                let _ = m.insert(k.as_str(), d);
+            }
+            ClipValue::Bool(b) => {
+                let _ = m.insert(k.as_str(), *b);
+            }
+            ClipValue::Str(s) => {
+                let _ = m.insert(k.as_str(), s.as_str());
+            }
+            ClipValue::Bin(b) => {
+                let _ = m.insert(k.as_str(), LoroValue::Binary(b.clone().into()));
+            }
+        }
+    }
+}
+
+pub(super) fn content_matches(kind: ElementKind, content: &InitContent) -> bool {
+    matches!(
+        (kind, content),
+        (ElementKind::Shape(ShapeKind::Path), InitContent::Path(_))
+            | (ElementKind::Shape(_), InitContent::None)
+            | (ElementKind::Image, InitContent::Image(_))
+            | (ElementKind::Embed, InitContent::Embed(_))
+            | (ElementKind::DocEmbed, InitContent::DocEmbed { .. })
+            | (
+                ElementKind::Sticky | ElementKind::Text,
+                InitContent::None | InitContent::Text(_)
+            )
+            | (ElementKind::Frame, InitContent::None)
+    )
+}
+
+pub(super) fn kind_from_tags(type_tag: &str, shape: Option<ShapeKind>) -> ElementKind {
+    match type_tag {
+        "shape" => ElementKind::Shape(shape.unwrap_or(ShapeKind::Rect)),
+        "sticky" => ElementKind::Sticky,
+        "text" => ElementKind::Text,
+        "image" => ElementKind::Image,
+        "frame" => ElementKind::Frame,
+        "group" => ElementKind::Group,
+        "drawing" => ElementKind::Drawing,
+        "embed" => ElementKind::Embed,
+        "doc_embed" => ElementKind::DocEmbed,
+        _ => ElementKind::Shape(ShapeKind::Rect),
+    }
+}
+
+pub(super) fn doc_type_from_tag(s: &str) -> Option<ambre_core::DocType> {
+    use ambre_core::DocType;
+    match s {
+        "Trame" => Some(DocType::Trame),
+        "Prose" => Some(DocType::Prose),
+        "Toile" => Some(DocType::Toile),
+        "Murmure" => Some(DocType::Murmure),
+        _ => None,
+    }
+}
+
+// -- connector map (de)serialization ------------------------------------------
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn write_connector(
+    cm: &LoroMap,
+    from: &ElementId,
+    from_anch: Anchor,
+    to: &ElementId,
+    to_anch: Anchor,
+    path_type: PathType,
+    arrows: EndCaps,
+) {
+    let _ = cm.insert("from", from.as_str());
+    let _ = cm.insert("from_anch", encode_anchor(from_anch));
+    let _ = cm.insert("to", to.as_str());
+    let _ = cm.insert("to_anch", encode_anchor(to_anch));
+    let _ = cm.insert("path_type", encode_path_type(path_type));
+    let _ = cm.insert("arrow_start", arrows.start);
+    let _ = cm.insert("arrow_end", arrows.end);
+}
+
+pub(super) fn read_connector(id: ConnectorId, cm: &LoroMap) -> Option<Connector> {
+    Some(Connector {
+        id,
+        from: ElementId(str_of(cm, "from")),
+        from_anch: decode_anchor(&str_of(cm, "from_anch")),
+        to: ElementId(str_of(cm, "to")),
+        to_anch: decode_anchor(&str_of(cm, "to_anch")),
+        path_type: decode_path_type(&str_of(cm, "path_type")),
+        arrows: EndCaps {
+            start: bool_of(cm, "arrow_start"),
+            end: bool_of(cm, "arrow_end"),
+        },
+    })
+}
+
+/// Anchors are encoded as compact strings; `Free` carries its `(u, v)`.
+pub(super) fn encode_anchor(a: Anchor) -> String {
+    match a {
+        Anchor::Top => "t".into(),
+        Anchor::Bottom => "b".into(),
+        Anchor::Left => "l".into(),
+        Anchor::Right => "r".into(),
+        Anchor::Center => "c".into(),
+        Anchor::Free { u, v } => format!("f:{u}:{v}"),
+    }
+}
+
+pub(super) fn decode_anchor(s: &str) -> Anchor {
+    match s {
+        "t" => Anchor::Top,
+        "b" => Anchor::Bottom,
+        "l" => Anchor::Left,
+        "r" => Anchor::Right,
+        "c" => Anchor::Center,
+        _ => {
+            let mut it = s.split(':');
+            if it.next() == Some("f") {
+                let u = it.next().and_then(|x| x.parse().ok()).unwrap_or(0.5);
+                let v = it.next().and_then(|x| x.parse().ok()).unwrap_or(0.5);
+                Anchor::Free { u, v }
+            } else {
+                Anchor::Center
+            }
+        }
+    }
+}
+
+pub(super) fn encode_path_type(p: PathType) -> &'static str {
+    match p {
+        PathType::Straight => "s",
+        PathType::Elbow => "e",
+        PathType::Curved => "c",
+    }
+}
+
+pub(super) fn decode_path_type(s: &str) -> PathType {
+    match s {
+        "e" => PathType::Elbow,
+        "c" => PathType::Curved,
+        _ => PathType::Straight,
+    }
+}
+
+// -- LoroMap handle field readers ---------------------------------------------
+
+pub(super) fn f64_of(m: &LoroMap, k: &str) -> f64 {
+    match m.get(k).map(|v| v.into_value()) {
+        Some(Ok(LoroValue::Double(d))) => d,
+        _ => 0.0,
+    }
+}
+
+pub(super) fn bool_of(m: &LoroMap, k: &str) -> bool {
+    matches!(
+        m.get(k).map(|v| v.into_value()),
+        Some(Ok(LoroValue::Bool(true)))
+    )
+}
+
+pub(super) fn str_of(m: &LoroMap, k: &str) -> String {
+    match m.get(k).map(|v| v.into_value()) {
+        Some(Ok(LoroValue::String(s))) => s.to_string(),
+        _ => String::new(),
+    }
+}
+
+pub(super) fn bin_of(m: &LoroMap, k: &str) -> Vec<u8> {
+    match m.get(k).map(|v| v.into_value()) {
+        Some(Ok(LoroValue::Binary(b))) => b.to_vec(),
+        _ => Vec::new(),
+    }
+}
+
+// -- deep-value (LoroMapValue) field readers ----------------------------------
+//
+// Used on the from-scratch rebuild path (`rebuild_caches`), which reads whole
+// container deep-values rather than per-field handles.
+
+pub(super) fn map_f64(m: &loro::LoroMapValue, k: &str) -> f64 {
+    match m.get(k) {
+        Some(LoroValue::Double(d)) => *d,
+        _ => 0.0,
+    }
+}
+
+pub(super) fn map_str(m: &loro::LoroMapValue, k: &str) -> String {
+    match m.get(k) {
+        Some(LoroValue::String(s)) => s.to_string(),
+        _ => String::new(),
+    }
+}
