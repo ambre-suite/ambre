@@ -3,7 +3,7 @@
 //! The command / event / display types themselves live in `ambre-bus`
 //! (`ambre_bus::app::toile`) so the `ambre-logic` dispatcher can match on
 //! `(DocState, AppCommand::Toile)` without a dependency cycle. This module
-//! re-exports them (keeping the engine's `crate::command::...` paths) and adds
+//! re-exports them (keeping the engine's `crate::logic::command::...` paths) and adds
 //! the one engine-local type: [`ToileOutcome`].
 //!
 //! **Outcome shape.** [`ToileOutcome`] mirrors `TrameOutcome` (which likewise

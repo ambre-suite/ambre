@@ -4,7 +4,7 @@
 
 use kurbo::Point;
 
-use crate::model::StrokePoint;
+use crate::logic::model::StrokePoint;
 
 /// Number of interpolated segments per Catmull-Rom span at derivation time. The
 /// GPU path in `toile-ui` picks its own subdivision from the zoom; the Logic

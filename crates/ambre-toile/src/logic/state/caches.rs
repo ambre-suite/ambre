@@ -8,8 +8,8 @@ use std::collections::HashSet;
 
 use loro::{LoroMap, LoroValue};
 
-use crate::index::{ElementBounds, SpatialIndex};
-use crate::model::{ElementId, NodeId};
+use crate::logic::index::{ElementBounds, SpatialIndex};
+use crate::logic::model::{ElementId, NodeId};
 
 use super::codec::{expanded_aabb, f64_of, map_f64};
 use super::{ELEMENTS, LAYERS, ToileState};

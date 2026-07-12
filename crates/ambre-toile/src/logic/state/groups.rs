@@ -8,9 +8,9 @@ use std::collections::HashSet;
 use kurbo::Rect;
 use loro::{LoroMap, LoroMovableList, LoroValue};
 
-use crate::command::{ToileEvent, ToileOutcome};
-use crate::index::ElementBounds;
-use crate::model::{ElementId, NodeId};
+use crate::logic::command::{ToileEvent, ToileOutcome};
+use crate::logic::index::ElementBounds;
+use crate::logic::model::{ElementId, NodeId};
 
 use super::codec::{em_seed_group, str_of};
 use super::{CHILDREN, ELEMENTS, LAYERS, ToileState};

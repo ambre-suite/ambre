@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use kurbo::{BezPath, Point, Rect};
 
-use crate::model::{Anchor, ConnectorId, ElementId, EndCaps, PathType};
+use crate::logic::model::{Anchor, ConnectorId, ElementId, EndCaps, PathType};
 
 /// A resolved connector, materialized from its CRDT `LoroMap` for routing.
 #[derive(Clone, Debug)]

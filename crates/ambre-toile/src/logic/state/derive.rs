@@ -9,11 +9,13 @@ use std::collections::HashSet;
 use kurbo::{Affine, BezPath, Rect};
 use loro::LoroMap;
 
-use crate::command::{
+use crate::logic::command::{
     DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ToileEvent,
 };
-use crate::model::{ConnectorId, ElementId, ElementKind, ElementStyle, ShapeKind, StrokePoint};
-use crate::stroke::smooth_stroke;
+use crate::logic::model::{
+    ConnectorId, ElementId, ElementKind, ElementStyle, ShapeKind, StrokePoint,
+};
+use crate::logic::stroke::smooth_stroke;
 
 use super::ToileState;
 use super::codec::{
@@ -31,17 +33,17 @@ impl ToileState {
         let mut nodes = Vec::new();
         for node in &self.layers {
             match node {
-                crate::model::NodeId::Element(id) if visible.contains(id) => {
+                crate::logic::model::NodeId::Element(id) if visible.contains(id) => {
                     if let Some(de) = self.display_element(id) {
                         nodes.push(DisplayNode::Element(de));
                     }
                 }
-                crate::model::NodeId::Connector(id) => {
+                crate::logic::model::NodeId::Connector(id) => {
                     if let Some(dc) = self.display_connector(id) {
                         nodes.push(DisplayNode::Connector(dc));
                     }
                 }
-                crate::model::NodeId::Element(_) => {} // culled
+                crate::logic::model::NodeId::Element(_) => {} // culled
             }
         }
         DisplayViewport {

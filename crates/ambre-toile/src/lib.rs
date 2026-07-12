@@ -5,27 +5,19 @@
 //! the element / connector / stroke lifecycle, and derives a culled
 //! [`DisplayViewport`] for the UI thread. See `specs/3-Toile/`.
 //!
-//! Phase 0 (core standalone) lives here; the UI renderer, presentation mode and
-//! interop paths arrive in later crates / slices (Epic `E4`).
+//! Every logic-side module lives under [`logic`]; Phase 0 (core standalone)
+//! lives here, while the UI renderer, presentation mode and interop paths
+//! arrive in later crates / slices (Epic `E4`).
 
-pub mod command;
-pub mod connector;
-pub mod index;
-pub mod model;
-pub mod state;
-pub mod stroke;
+pub mod logic;
 
-pub use command::{
+pub use logic::command::{
     DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, End, InitContent,
     SelectionStats, ToileCommand, ToileError, ToileEvent, ToileOutcome, ZTarget,
 };
-pub use index::{ElementBounds, SpatialIndex, Viewport};
-pub use model::{
+pub use logic::index::{ElementBounds, SpatialIndex, Viewport};
+pub use logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, FontSpec, NodeId, PathType,
     Shadow, ShapeKind, StrokePoint,
 };
-pub use state::ToileState;
-
-/// 2-peer CRDT convergence property test (§10, DoD). Host-only.
-#[cfg(all(test, not(target_arch = "wasm32")))]
-mod convergence_tests;
+pub use logic::state::ToileState;

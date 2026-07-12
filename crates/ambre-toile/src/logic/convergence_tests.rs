@@ -9,18 +9,18 @@
 use kurbo::{Point, Rect, Size, Vec2};
 use proptest::prelude::*;
 
-use crate::command::{DisplayNode, End, InitContent, ToileCommand, ToileEvent, ZTarget};
-use crate::model::{
+use crate::logic::command::{DisplayNode, End, InitContent, ToileCommand, ToileEvent, ZTarget};
+use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, NodeId, PathType,
     ShapeKind, StrokePoint,
 };
-use crate::state::ToileState;
+use crate::logic::state::ToileState;
 
 // -----------------------------------------------------------------------------
 // Lifecycle unit tests
 // -----------------------------------------------------------------------------
 
-fn created_id(out: &crate::command::ToileOutcome) -> ElementId {
+fn created_id(out: &crate::logic::command::ToileOutcome) -> ElementId {
     out.display
         .iter()
         .find_map(|e| match e {
@@ -166,7 +166,7 @@ fn group_and_drawing_are_not_creatable() {
         assert!(matches!(
             out.display.first(),
             Some(ToileEvent::Error(
-                crate::command::ToileError::NotCreatable { .. }
+                crate::logic::command::ToileError::NotCreatable { .. }
             ))
         ));
         assert_eq!(st.element_count(), 0);
@@ -341,7 +341,7 @@ fn set_frame_children_is_one_undo_item() {
 // Clipboard: copy / paste / duplicate (§8 ter)
 // -----------------------------------------------------------------------------
 
-fn clip_of(out: &crate::command::ToileOutcome) -> crate::command::ClipboardPayload {
+fn clip_of(out: &crate::logic::command::ToileOutcome) -> crate::logic::command::ClipboardPayload {
     out.display
         .iter()
         .find_map(|e| match e {
@@ -351,7 +351,7 @@ fn clip_of(out: &crate::command::ToileOutcome) -> crate::command::ClipboardPaylo
         .expect("expected a Clipboard event")
 }
 
-fn created_ids(out: &crate::command::ToileOutcome) -> Vec<ElementId> {
+fn created_ids(out: &crate::logic::command::ToileOutcome) -> Vec<ElementId> {
     out.display
         .iter()
         .filter_map(|e| match e {
@@ -472,7 +472,8 @@ fn clipboard_payload_postcard_roundtrips() {
     let payload = clip_of(&st.handle_command(ToileCommand::CopyElements { ids: vec![a, b] }));
 
     let bytes = postcard::to_allocvec(&payload).expect("serialize");
-    let back: crate::command::ClipboardPayload = postcard::from_bytes(&bytes).expect("deserialize");
+    let back: crate::logic::command::ClipboardPayload =
+        postcard::from_bytes(&bytes).expect("deserialize");
     assert_eq!(back, payload, "clipboard payload must round-trip");
 }
 
@@ -834,8 +835,8 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<Vec<u8>> {
 
 /// A viewport wide enough that nothing is culled, so `debug_viewport()` returns
 /// the full derived paint set for cross-peer / rebuild comparison.
-fn wide_viewport() -> crate::index::Viewport {
-    crate::index::Viewport {
+fn wide_viewport() -> crate::logic::index::Viewport {
+    crate::logic::index::Viewport {
         center: Point::ZERO,
         zoom: 0.01,
         size: Size::new(2000.0, 2000.0),
