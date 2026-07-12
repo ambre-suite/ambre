@@ -279,13 +279,24 @@ pub(crate) fn initials(name: Option<&str>) -> String {
     }
 }
 
-pub(crate) fn spawn_sync_worker(to_logic: flume::Sender<LogicEvent>) -> web_sys::Worker {
+pub(crate) fn spawn_sync_worker(
+    to_logic: flume::Sender<LogicEvent>,
+    sync_ready: Rc<Cell<bool>>,
+) -> web_sys::Worker {
     // Classic worker (the Trunk loader uses `importScripts`); not a module worker.
     let worker = web_sys::Worker::new(SYNC_WORKER_URL).expect("failed to spawn Sync worker");
 
     let onmessage =
         Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |e: web_sys::MessageEvent| {
             let bytes = js_sys::Uint8Array::new(&e.data()).to_vec();
+            // Empty payload = the worker's readiness sentinel (its inbound
+            // onmessage is now installed). Flip the gate so the relay starts
+            // draining buffered commands to it. A real LogicEvent is never
+            // zero-length (postcard always emits at least a discriminant byte).
+            if bytes.is_empty() {
+                sync_ready.set(true);
+                return;
+            }
             match postcard::from_bytes::<LogicEvent>(&bytes) {
                 Ok(event) => {
                     let _ = to_logic.send(event);

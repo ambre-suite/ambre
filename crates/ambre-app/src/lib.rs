@@ -31,7 +31,7 @@
 
 #![cfg(target_arch = "wasm32")]
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use ambre_bus::sync_warning::SyncWarningCode;
@@ -383,7 +383,16 @@ pub fn main() {
     // Spawn the Sync worker: a SEPARATE wasm instance in its own Web Worker.
     // Its onmessage decodes `LogicEvent`s into `sync_to_logic_tx` (-> Logic).
     // Kept alive for the whole session by being captured in the relay closure.
-    let sync_worker = spawn_sync_worker(sync_to_logic_tx);
+    //
+    // `sync_ready` gates the Logic->Sync relay: the worker installs its inbound
+    // onmessage only at the end of its async wasm bootstrap, so any command
+    // posted before then is dropped. The relay buffers commands (they wait in
+    // `logic_to_sync_rx`) until the worker posts its readiness sentinel, which
+    // flips this flag. Without it the boot `DevLogin` -- enqueued above, before
+    // this spawn -- raced the bootstrap and was lost whenever the worker came up
+    // slowly, leaving the session key unset and the document stuck hydrating.
+    let sync_ready = Rc::new(Cell::new(false));
+    let sync_worker = spawn_sync_worker(sync_to_logic_tx, Rc::clone(&sync_ready));
 
     // The canvas document-swap handle is created by `run_with` below (after the
     // chrome mounts the `<canvas>`); the route effect reads it through this slot.
@@ -655,10 +664,15 @@ pub fn main() {
         // Relay Logic -> Sync: drain commands and postMessage them to the Sync
         // worker (postcard, big payloads transferred zero-copy). `sync_worker` is
         // captured here, which is what keeps the worker alive for the session.
-        while let Ok(cmd) = logic_to_sync_rx.try_recv() {
-            match postcard::to_allocvec(&cmd) {
-                Ok(bytes) => post_to_worker(&sync_worker, &bytes),
-                Err(e) => tracing::error!("[UI->Sync] failed to encode SyncCommand: {e}"),
+        // Held back until the worker signals readiness (`sync_ready`): commands
+        // stay buffered in `logic_to_sync_rx` so none is posted into the worker's
+        // bootstrap window where onmessage does not yet exist (order preserved).
+        if sync_ready.get() {
+            while let Ok(cmd) = logic_to_sync_rx.try_recv() {
+                match postcard::to_allocvec(&cmd) {
+                    Ok(bytes) => post_to_worker(&sync_worker, &bytes),
+                    Err(e) => tracing::error!("[UI->Sync] failed to encode SyncCommand: {e}"),
+                }
             }
         }
 

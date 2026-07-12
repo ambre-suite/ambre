@@ -347,6 +347,7 @@ pub(crate) async fn handle_request_missing(
     // full history in order across several messages instead.
     const PAGE_SIZE: i64 = 1000;
     let mut cursor = after_seq.0 as i64;
+    let mut first_page = true;
     loop {
         let updates = match db::get_updates_after(&state.db, &document_id, cursor, PAGE_SIZE).await
         {
@@ -357,8 +358,22 @@ pub(crate) async fn handle_request_missing(
             }
         };
         if updates.is_empty() {
+            // Nothing left to replay. A later page simply stops here, but an
+            // EMPTY first page (the client's snapshot already covers every
+            // delta -- the common F5-on-an-existing-document case) must still
+            // be answered: the client gates its hydration-complete signal on
+            // receiving a `MissingUpdates`, so silence here leaves its loading
+            // overlay spinning forever. Send an empty page to release it.
+            if first_page {
+                let msg = encode_server_msg(&WsServerMsg::MissingUpdates {
+                    document_id,
+                    updates: Vec::new(),
+                });
+                let _ = outbound_tx.send(msg).await;
+            }
             return;
         }
+        first_page = false;
         let page_len = updates.len();
         // Rows are ordered by seq; the last one is this page's high-water mark
         // and the cursor for the next page.
@@ -1196,6 +1211,62 @@ mod delta_size_cap_tests {
         ));
 
         let _ = state.redis.del([&pending_key]).await;
+    }
+
+    /// F5 on an existing document: the client's downloaded snapshot already
+    /// covers every delta, so its post-open `RequestMissing{after_seq: covered}`
+    /// finds no newer rows in the durable index. The server must STILL answer
+    /// with an (empty) `MissingUpdates` -- the client gates its
+    /// hydration-complete signal (dismissing the loading overlay) on receiving
+    /// one. A silent return left the overlay spinning forever.
+    #[sqlx::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs postgres+redis; run with --features db"
+    )]
+    async fn empty_replay_still_sends_missing_updates(pool: sqlx::PgPool) {
+        let Ok(redis) = rustis::client::Client::connect("redis://localhost:6379").await else {
+            return;
+        };
+        let pubsub = crate::ws::PubSubHub::spawn(redis.clone());
+        let s3 = aws_sdk_s3::Client::from_conf(aws_sdk_s3::Config::builder().build());
+        let state = Arc::new(AppState {
+            db: pool,
+            redis,
+            pubsub,
+            s3,
+            s3_bucket: "test-bucket".into(),
+            config: Arc::new(crate::state::Config::default()),
+            jwt: Arc::new(crate::jwt::JwtKeys::from_seed(&[7u8; 32])),
+            oidc_clients: Arc::new(std::collections::HashMap::new()),
+        });
+        let doc_id = DocumentId::new();
+        let session_key = PublicKey::from_array([1u8; 32]);
+
+        // A fresh doc_id with no rows in the durable index: the very first page
+        // of the replay is empty.
+        let mut conn = conn_with(session_key, doc_id);
+        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(8);
+
+        handle_request_missing(
+            &state,
+            &mut conn,
+            doc_id,
+            ambre_protocol::messages::Seq(0),
+            &tx,
+        )
+        .await;
+
+        let reply = rx
+            .try_recv()
+            .expect("an empty replay must still send a MissingUpdates to release the client");
+        let decoded = ambre_protocol::ws::decode_server_msg(&reply).unwrap();
+        match decoded {
+            ambre_protocol::ws::WsServerMsg::MissingUpdates { updates, .. } => {
+                assert!(updates.is_empty(), "no deltas to replay for a fresh doc");
+            }
+            other => panic!("expected an empty MissingUpdates, got {other:?}"),
+        }
     }
 }
 

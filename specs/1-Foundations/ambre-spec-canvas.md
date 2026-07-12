@@ -376,6 +376,18 @@ The rendering layer consists of pure drawing primitives. ZK audit:
 | Icon atlas | < 1 MB | Compiled vector blob |
 | **Total UI Thread** | **< 41 MB** | Within the global budget < 100 MB (see `ambre-spec-architecture.md` §5) |
 
+### D. Measured Throughput and Driver Notes
+
+Empirical figures (release build, `opt-level = z` + LTO) validating the `AutoNoVsync` cadence of §4:
+
+| Setup | Steady-state | Notes |
+|:---|:---|:---|
+| Intel HD + Firefox, WebGL2 (default) | 190-200 Hz, 3-6 ms/frame | Scroll included (~24 Parley cache-misses/frame, ~0.05 ms/miss release) |
+| Nvidia + Firefox, WebGPU (`?webgpu`) | ~240 Hz | Dips to ~100 Hz during scroll, recovers after |
+| Chrome, WebGL2 | ~150 Hz | No 60 Hz warmup |
+
+> **Firefox/Wayland vsync calibration.** Firefox on Wayland starts the rAF source at 60 Hz and only switches to the display's native refresh after the first tab change. This is a browser/compositor behaviour, not observable or fixable from JS/WASM. It compounds with the empty-frame calibration issue that already gates the rAF start until after GPU init (see §1 / §2): both are Firefox vsync-source quirks, distinct from the Mesa/Intel compositor bug that drives the WebGL2-by-default decision (§4).
+
 ---
 
 ## 6. REJECTED ARCHITECTURAL DECISIONS

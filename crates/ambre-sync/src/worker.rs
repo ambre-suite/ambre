@@ -80,5 +80,15 @@ pub fn start() {
     // Leak the closure: it lives for the whole worker lifetime.
     onmessage.forget();
 
+    // Readiness handshake: the inbound `onmessage` is now installed, so every
+    // SyncCommand Main posts from here on is guaranteed to be delivered. Main
+    // buffers all commands until it sees this sentinel, closing the startup race
+    // where a command posted during the worker's async wasm bootstrap (before
+    // `onmessage` existed) was silently dropped -- notably the boot `DevLogin`,
+    // whose loss left the session key unset and every `OpenDocument` queued
+    // forever behind the loading overlay. An empty payload is the sentinel: a
+    // postcard-encoded LogicEvent is never zero-length.
+    post_bytes(&scope, &[]);
+
     wasm_bindgen_futures::spawn_local(run_wasm(cmd_rx, logic_sink, api_base));
 }
