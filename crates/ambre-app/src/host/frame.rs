@@ -170,6 +170,21 @@ impl FrameHost {
         self.view.update();
         let t_after_drain = self.perf.now();
 
+        // Deliver any lazily-fetched font faces (CJK/Arabic/Devanagari) that
+        // arrived since the last frame. If coverage changed, the cached GPU
+        // layers still hold tofu pixels for the affected strings, so force a
+        // full view repaint to re-shape and redraw them. Scoped so the short
+        // GPU borrow ends before we touch `self.view`.
+        let fonts_changed = {
+            let Some(gpu) = self.gpu.as_mut() else { return };
+            gpu.text_cache.poll_lazy_fonts(&mut gpu.font_cx)
+        };
+        if fonts_changed {
+            if let Some((w, h)) = self.gpu.as_ref().map(|g| (g.width, g.height)) {
+                self.view.resize(w, h);
+            }
+        }
+
         // rAF only starts after GPU init, so `self.gpu` is always Some here.
         let Some(gpu) = self.gpu.as_mut() else { return };
 

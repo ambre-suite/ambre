@@ -47,6 +47,9 @@ pub mod perf;
 // -- Design tokens (generated from tokens.ron): Palette + Theme + ThemeControl
 pub mod theme;
 
+// -- Lazy font loading (CJK/Arabic/Devanagari fetched on missing codepoint) --
+pub mod fonts;
+
 // -- P3 request/response correlator for the UI thread -----------------------
 pub mod request_registry;
 
