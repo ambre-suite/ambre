@@ -174,6 +174,112 @@ fn group_and_drawing_are_not_creatable() {
 }
 
 // -----------------------------------------------------------------------------
+// Find (board text search, §8 quater)
+// -----------------------------------------------------------------------------
+
+fn create_sticky(st: &mut ToileState, at: Point, body: &str) -> ElementId {
+    let out = st.handle_command(ToileCommand::CreateElement {
+        kind: ElementKind::Sticky,
+        at,
+        size: Size::new(80.0, 80.0),
+        content: InitContent::Text(body.to_owned()),
+    });
+    created_id(&out)
+}
+
+fn find(
+    st: &mut ToileState,
+    query: &str,
+    options: crate::logic::command::FindOptions,
+    from: Option<ElementId>,
+) -> crate::logic::command::FindResults {
+    let out = st.handle_command(ToileCommand::Find {
+        query: query.to_owned(),
+        options,
+        from,
+    });
+    assert!(out.update.is_none(), "Find must not mutate the CRDT");
+    out.display
+        .into_iter()
+        .find_map(|e| match e {
+            ToileEvent::FindResults(r) => Some(r),
+            _ => None,
+        })
+        .expect("expected a FindResults event")
+}
+
+#[test]
+fn find_matches_in_z_order_and_is_case_insensitive_by_default() {
+    let mut st = ToileState::new();
+    let a = create_sticky(&mut st, Point::ZERO, "Hello world");
+    let _b = create_sticky(&mut st, Point::new(200.0, 0.0), "nothing here");
+    let c = create_sticky(&mut st, Point::new(400.0, 0.0), "another HELLO");
+
+    let opts = crate::logic::command::FindOptions::default();
+    let r = find(&mut st, "hello", opts, None);
+    // Both stickies match (case folded); hits follow the `layers` paint order.
+    assert_eq!(r.hits, vec![a.clone(), c.clone()]);
+    // A fresh search focuses the first hit.
+    assert_eq!(r.focus, Some(a));
+}
+
+#[test]
+fn find_focus_wraps_after_from() {
+    let mut st = ToileState::new();
+    let a = create_sticky(&mut st, Point::ZERO, "match");
+    let b = create_sticky(&mut st, Point::new(200.0, 0.0), "match");
+
+    let opts = crate::logic::command::FindOptions::default();
+    // Resuming from the first hit focuses the second.
+    let r = find(&mut st, "match", opts, Some(a.clone()));
+    assert_eq!(r.focus, Some(b.clone()));
+    // Resuming from the last hit wraps to the first.
+    let r = find(&mut st, "match", opts, Some(b));
+    assert_eq!(r.focus, Some(a));
+}
+
+#[test]
+fn find_honors_match_case_and_whole_word() {
+    let mut st = ToileState::new();
+    let exact = create_sticky(&mut st, Point::ZERO, "Cat");
+    let _lower = create_sticky(&mut st, Point::new(200.0, 0.0), "cat");
+    let _substr = create_sticky(&mut st, Point::new(400.0, 0.0), "Cathedral");
+
+    let case = crate::logic::command::FindOptions {
+        match_case: true,
+        whole_word: false,
+    };
+    let r = find(&mut st, "Cat", case, None);
+    // Case-sensitive: "Cat" and "Cathedral" (substring) match, "cat" does not.
+    assert_eq!(r.hits.len(), 2);
+
+    let whole = crate::logic::command::FindOptions {
+        match_case: true,
+        whole_word: true,
+    };
+    let r = find(&mut st, "Cat", whole, None);
+    // Whole-word + case: only the standalone "Cat" survives.
+    assert_eq!(r.hits, vec![exact]);
+}
+
+#[test]
+fn find_ignores_non_text_elements_and_empty_query() {
+    let mut st = ToileState::new();
+    let _rect = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    create_sticky(&mut st, Point::new(200.0, 0.0), "findme");
+
+    let opts = crate::logic::command::FindOptions::default();
+    // A shape carries no searchable text.
+    assert!(find(&mut st, "rect", opts, None).hits.is_empty());
+    // An empty query clears the result set (the UI's "panel closed" signal).
+    let r = find(&mut st, "", opts, None);
+    assert!(r.hits.is_empty());
+    assert!(r.focus.is_none());
+    // A real match still resolves.
+    assert_eq!(find(&mut st, "findme", opts, None).hits.len(), 1);
+}
+
+// -----------------------------------------------------------------------------
 // Groups (§2.F bis)
 // -----------------------------------------------------------------------------
 

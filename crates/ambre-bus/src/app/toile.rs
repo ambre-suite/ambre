@@ -402,6 +402,25 @@ pub enum End {
     To,
 }
 
+/// Options for a board `Find` (§8 quater). Search runs against each element's
+/// plaintext body (sticky / text) and frame title; `match_case` toggles case
+/// folding, `whole_word` requires a word-boundary match. Replace is out of MVP
+/// scope (§12).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FindOptions {
+    pub match_case: bool,
+    pub whole_word: bool,
+}
+
+/// Result of a board `Find` (§8 quater). `hits` are the matching elements in
+/// stable z-order; `focus` is the element to recenter the camera on (the next
+/// hit after `from`, wrapping around). Purely local view state -- never synced.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FindResults {
+    pub hits: Vec<ElementId>,
+    pub focus: Option<ElementId>,
+}
+
 /// Command from the UI / Logic thread to `ToileState` (in `ambre-toile`).
 #[derive(Clone, Debug)]
 pub enum ToileCommand {
@@ -515,6 +534,16 @@ pub enum ToileCommand {
         delta: Vec2,
     },
 
+    // -- Find (search on board, §8 quater) --
+    /// Non-mutating text search over the text-bearing elements (sticky / text
+    /// bodies, frame titles); answered by `ToileEvent::FindResults`. `from`
+    /// resumes after the current match (wrapping). No CRDT effect.
+    Find {
+        query: String,
+        options: FindOptions,
+        from: Option<ElementId>,
+    },
+
     // -- Selection aggregates for the status bar (§8 quinquies) --
     RequestSelectionStats {
         ids: Vec<ElementId>,
@@ -562,6 +591,9 @@ pub enum ToileEvent {
     /// clipboard for cross-tab paste (§8 ter).
     Clipboard(ClipboardPayload),
     SelectionStats(SelectionStats),
+    /// Text-search hits + recenter target (§8 quater). Local view state, never
+    /// synced and never an undo item.
+    FindResults(FindResults),
     DanglingConnector(ConnectorId),
     /// Local undo/redo stack availability, driving the chrome affordances (§8 bis).
     UndoState {

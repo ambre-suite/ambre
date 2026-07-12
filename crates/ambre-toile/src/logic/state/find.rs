@@ -1,0 +1,137 @@
+//! Board text search for [`ToileState`](super::ToileState) (§8 quater).
+//!
+//! `Find` is **non-mutating** and runs entirely on the Logic thread: the UI only
+//! holds the culled `DisplayViewport`, so a match on an off-screen sticky is
+//! invisible to it. The handler walks the text-bearing elements (sticky / text
+//! bodies, frame titles) in z-order and returns their ids plus the next hit to
+//! recenter on. Matches are local view state, never synced and never an undo
+//! item (§8 quater / §12).
+
+use crate::logic::command::{FindOptions, FindResults, ToileEvent, ToileOutcome};
+use crate::logic::model::{ElementId, NodeId};
+
+use super::ToileState;
+use super::codec::str_of;
+
+impl ToileState {
+    /// Scan the text-bearing elements for `query`, returning the matching ids in
+    /// z-order and the recenter target (§8 quater). Read-only: no CRDT mutation,
+    /// no sync payload. An empty query yields no hits (the UI's "clear" signal).
+    pub(super) fn find(
+        &self,
+        query: &str,
+        options: FindOptions,
+        from: Option<&ElementId>,
+    ) -> ToileOutcome {
+        let hits = if query.is_empty() {
+            Vec::new()
+        } else {
+            self.find_hits(query, options)
+        };
+        let focus = next_focus(&hits, from);
+        ToileOutcome::display_only(vec![ToileEvent::FindResults(FindResults { hits, focus })])
+    }
+
+    /// Text-bearing element ids matching `query`, in paint order (§2.G): the
+    /// `layers` walk first, then any element absent from `layers` appended in
+    /// `ElementId` order (the §2.H well-formedness fallback), so a concurrently
+    /// dropped `layers` entry never hides a hit.
+    fn find_hits(&self, query: &str, options: FindOptions) -> Vec<ElementId> {
+        let mut hits = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for node in &self.layers {
+            if let NodeId::Element(id) = node
+                && seen.insert(id.clone())
+                && self.element_matches(id, query, options)
+            {
+                hits.push(id.clone());
+            }
+        }
+        // Fallback: text-bearing elements missing from `layers`, id-ordered.
+        let mut orphans: Vec<ElementId> = self
+            .bounds
+            .keys()
+            .filter(|id| !seen.contains(*id))
+            .filter(|id| self.element_matches(id, query, options))
+            .cloned()
+            .collect();
+        orphans.sort();
+        hits.extend(orphans);
+        hits
+    }
+
+    /// Whether the element's searchable text (sticky / text body, frame title)
+    /// matches `query` under the given options. Non-text elements never match.
+    fn element_matches(&self, id: &ElementId, query: &str, options: FindOptions) -> bool {
+        let Some(em) = self.element_map(id) else {
+            return false;
+        };
+        let body = match str_of(&em, "type").as_str() {
+            "sticky" | "text" => str_of(&em, "text"),
+            // A frame title lives in its `name` field (empty until named).
+            "frame" => str_of(&em, "name"),
+            _ => return false,
+        };
+        text_matches(&body, query, options)
+    }
+}
+
+/// The hit to recenter on: the first hit for a fresh search, otherwise the hit
+/// following `from` (wrapping). A `from` that is no longer a hit restarts at the
+/// first (§8 quater).
+fn next_focus(hits: &[ElementId], from: Option<&ElementId>) -> Option<ElementId> {
+    let first = hits.first().cloned();
+    let Some(from) = from else {
+        return first;
+    };
+    match hits.iter().position(|h| h == from) {
+        Some(idx) => Some(hits[(idx + 1) % hits.len()].clone()),
+        None => first,
+    }
+}
+
+/// Substring test honoring `match_case` and `whole_word`. Case folding is a
+/// plain lowercase on both sides (adequate for the Latin-script MVP).
+fn text_matches(haystack: &str, needle: &str, options: FindOptions) -> bool {
+    if needle.is_empty() {
+        return false;
+    }
+    if options.match_case {
+        contains_match(haystack, needle, options.whole_word)
+    } else {
+        contains_match(
+            &haystack.to_lowercase(),
+            &needle.to_lowercase(),
+            options.whole_word,
+        )
+    }
+}
+
+/// `haystack.contains(needle)`, refined to word boundaries when `whole_word`.
+fn contains_match(haystack: &str, needle: &str, whole_word: bool) -> bool {
+    if !whole_word {
+        return haystack.contains(needle);
+    }
+    let mut from = 0;
+    while let Some(rel) = haystack[from..].find(needle) {
+        let start = from + rel;
+        let end = start + needle.len();
+        let before_ok = haystack[..start]
+            .chars()
+            .next_back()
+            .is_none_or(|c| !c.is_alphanumeric());
+        let after_ok = haystack[end..]
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_alphanumeric());
+        if before_ok && after_ok {
+            return true;
+        }
+        // Advance one byte past this start to find a later, better-bounded hit.
+        from = start + 1;
+        if from > haystack.len() {
+            break;
+        }
+    }
+    false
+}
