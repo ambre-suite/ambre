@@ -550,6 +550,25 @@ impl QuadRenderer {
             .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
 
+    /// Append a pre-tessellated triangle mesh to the active layer's quad batch.
+    ///
+    /// `vertices` are screen-space positions and `indices` reference them
+    /// locally (0-based); they are rebased onto the current batch. Used by
+    /// `WgpuSurface::{fill_path, stroke_path}` after lyon tessellation -- path
+    /// meshes share the solid-color quad pipeline (same `QuadVertex`, same
+    /// `TriangleList` topology), so they need no pipeline of their own.
+    pub fn push_mesh(&mut self, vertices: &[[f32; 2]], indices: &[u32], color: Color) {
+        if vertices.is_empty() || indices.is_empty() {
+            return;
+        }
+        let c = color_f32(color);
+        let b = self.active_batches_mut();
+        let base = b.quad_vertices.len() as u32;
+        b.quad_vertices
+            .extend(vertices.iter().map(|&pos| QuadVertex { pos, color: c }));
+        b.quad_indices.extend(indices.iter().map(|&i| base + i));
+    }
+
     // -- Glyph geometry -------------------------------------------------------
     #[allow(clippy::too_many_arguments)]
     pub fn push_glyph(

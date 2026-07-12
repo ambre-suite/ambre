@@ -98,11 +98,13 @@ pub trait DrawSurface {
     // Geometry -- arbitrary paths (default no-ops until lyon is wired)
     // -------------------------------------------------------------------------
 
-    /// Fill an arbitrary path. Default no-op -- override when lyon is available.
+    /// Fill an arbitrary path with a solid color. Default no-op; overridden by
+    /// `WgpuSurface` (lyon tessellation) and `KrillaSurface` (PDF paths).
     #[allow(unused_variables)]
     fn fill_path(&mut self, path: &BezPath, brush: &Brush) {}
 
-    /// Stroke an arbitrary path. Default no-op -- override when lyon is available.
+    /// Stroke an arbitrary path. Default no-op; overridden by `WgpuSurface`
+    /// (lyon tessellation) and `KrillaSurface` (PDF paths).
     #[allow(unused_variables)]
     fn stroke_path(&mut self, path: &BezPath, brush: &Brush, stroke: &Stroke) {}
 

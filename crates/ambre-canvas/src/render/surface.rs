@@ -6,7 +6,19 @@
 // ============================================================================
 
 use super::*;
-use ambre_draw::{Affine, Brush, Color, DrawSurface, GlyphRun, ParleyBrush, Point, Rect};
+use ambre_draw::{Affine, Brush, Color, DrawSurface, GlyphRun, ParleyBrush, Point, Rect, Stroke};
+use kurbo::{BezPath, PathEl, Shape};
+use lyon::math::point as lpoint;
+use lyon::path::{LineCap, LineJoin, Path as LyonPath};
+use lyon::tessellation::{
+    BuffersBuilder, FillOptions, FillRule, FillTessellator, FillVertex, StrokeOptions,
+    StrokeTessellator, StrokeVertex, VertexBuffers,
+};
+
+// Flattening tolerance in *screen* pixels. Divided by the active transform's
+// scale before tessellation so a zoomed-in Toile path stays smooth (we
+// tessellate in model space, then map vertices to screen space).
+const PATH_TOLERANCE_PX: f64 = 0.15;
 
 // ============================================================================
 // WgpuSurface
@@ -59,6 +71,26 @@ impl<'r> WgpuSurface<'r> {
             Some(c) => c.intersect(rect),
             None => rect,
         }
+    }
+
+    /// True when the path's screen-space bounding box does not intersect the
+    /// active clip -- a cheap reject that skips tessellation entirely. Path
+    /// meshes are not trimmed to the clip (arbitrary geometry), so this is the
+    /// only clip interaction for `fill_path`/`stroke_path`.
+    fn path_outside_clip(&self, path: &BezPath, t: Affine) -> bool {
+        self.path_outside_clip_padded(path, t, 0.0)
+    }
+
+    /// As `path_outside_clip`, but inflates the path bbox by `pad` model units
+    /// (half the stroke width) before the transform so a thick stroke is not
+    /// culled when its centerline sits just outside the clip.
+    fn path_outside_clip_padded(&self, path: &BezPath, t: Affine, pad: f64) -> bool {
+        let Some(clip) = self.active_clip() else {
+            return false;
+        };
+        let bbox = path.bounding_box().inflate(pad, pad);
+        let hit = clip.intersect(t.transform_rect_bbox(bbox));
+        hit.width() <= 0.0 || hit.height() <= 0.0
     }
 }
 
@@ -210,6 +242,69 @@ impl DrawSurface for WgpuSurface<'_> {
         }
     }
 
+    fn fill_path(&mut self, path: &BezPath, brush: &Brush) {
+        let color = match brush {
+            Brush::Solid(c) => *c,
+            _ => return, // gradients: Phase 3
+        };
+        let t = self.transform();
+        if self.path_outside_clip(path, t) {
+            return;
+        }
+        let tol = (PATH_TOLERANCE_PX / affine_scale(t).max(1e-6)) as f32;
+        let lpath = build_lyon_path(path);
+        let mut mesh: VertexBuffers<[f32; 2], u32> = VertexBuffers::new();
+        let opts = FillOptions::tolerance(tol).with_fill_rule(FillRule::NonZero);
+        let ok = FillTessellator::new()
+            .tessellate_path(
+                &lpath,
+                &opts,
+                &mut BuffersBuilder::new(&mut mesh, |v: FillVertex| screen_vertex(v.position(), t)),
+            )
+            .is_ok();
+        if ok {
+            self.renderer
+                .push_mesh(&mesh.vertices, &mesh.indices, color);
+        }
+    }
+
+    fn stroke_path(&mut self, path: &BezPath, brush: &Brush, stroke: &Stroke) {
+        let color = match brush {
+            Brush::Solid(c) => *c,
+            _ => return, // gradients: Phase 3
+        };
+        let t = self.transform();
+        // The stroke widens the fill bbox by half the line width; grow the test
+        // box so a thick stroke straddling the clip edge is not wrongly culled.
+        if self.path_outside_clip_padded(path, t, stroke.width * 0.5) {
+            return;
+        }
+        let tol = (PATH_TOLERANCE_PX / affine_scale(t).max(1e-6)) as f32;
+        let lpath = build_lyon_path(path);
+        let mut mesh: VertexBuffers<[f32; 2], u32> = VertexBuffers::new();
+        // Tessellate in model space: the line width is in model units and so
+        // scales with the transform when we map vertices to screen space, which
+        // is what a Toile zoom expects.
+        let opts = StrokeOptions::tolerance(tol)
+            .with_line_width(stroke.width as f32)
+            .with_line_cap(line_cap(stroke.start_cap))
+            .with_line_join(line_join(stroke.join))
+            .with_miter_limit(stroke.miter_limit as f32);
+        let ok = StrokeTessellator::new()
+            .tessellate_path(
+                &lpath,
+                &opts,
+                &mut BuffersBuilder::new(&mut mesh, |v: StrokeVertex| {
+                    screen_vertex(v.position(), t)
+                }),
+            )
+            .is_ok();
+        if ok {
+            self.renderer
+                .push_mesh(&mesh.vertices, &mesh.indices, color);
+        }
+    }
+
     fn push_clip(&mut self, rect: Rect) {
         // Transform the clip into screen space at push time so the stored clip
         // stack stays screen-space and the fast axis-aligned trimming in the
@@ -236,5 +331,160 @@ impl DrawSurface for WgpuSurface<'_> {
 
     fn pop_transform(&mut self) {
         self.transform_stack.pop();
+    }
+}
+
+// ============================================================================
+// lyon tessellation helpers
+// ============================================================================
+
+/// Build a lyon `Path` from a kurbo `BezPath`, mapping each element one-to-one.
+/// Subpaths left open (no `ClosePath`) are ended unclosed so their edges are
+/// still filled/stroked as an open contour.
+fn build_lyon_path(path: &BezPath) -> LyonPath {
+    let mut b = LyonPath::builder();
+    let mut open = false;
+    for el in path.elements() {
+        match *el {
+            PathEl::MoveTo(p) => {
+                if open {
+                    b.end(false);
+                }
+                b.begin(lpoint(p.x as f32, p.y as f32));
+                open = true;
+            }
+            // A `line_to`/curve before any `MoveTo` is malformed input; skip it
+            // rather than panic inside the lyon builder.
+            PathEl::LineTo(p) if open => {
+                b.line_to(lpoint(p.x as f32, p.y as f32));
+            }
+            PathEl::QuadTo(c, p) if open => {
+                b.quadratic_bezier_to(
+                    lpoint(c.x as f32, c.y as f32),
+                    lpoint(p.x as f32, p.y as f32),
+                );
+            }
+            PathEl::CurveTo(c1, c2, p) if open => {
+                b.cubic_bezier_to(
+                    lpoint(c1.x as f32, c1.y as f32),
+                    lpoint(c2.x as f32, c2.y as f32),
+                    lpoint(p.x as f32, p.y as f32),
+                );
+            }
+            PathEl::ClosePath if open => {
+                b.end(true);
+                open = false;
+            }
+            _ => {}
+        }
+    }
+    if open {
+        b.end(false);
+    }
+    b.build()
+}
+
+/// Map a lyon model-space vertex through the active transform to a screen-space
+/// `[f32; 2]` position for the quad batch.
+fn screen_vertex(p: lyon::math::Point, t: Affine) -> [f32; 2] {
+    let sp = t * Point::new(p.x as f64, p.y as f64);
+    [sp.x as f32, sp.y as f32]
+}
+
+/// Uniform scale factor of an affine transform (sqrt of the absolute
+/// determinant of its linear part). Used to keep the flattening tolerance
+/// constant in screen pixels regardless of Toile zoom.
+fn affine_scale(t: Affine) -> f64 {
+    let c = t.as_coeffs();
+    (c[0] * c[3] - c[1] * c[2]).abs().sqrt()
+}
+
+fn line_cap(cap: kurbo::Cap) -> LineCap {
+    match cap {
+        kurbo::Cap::Butt => LineCap::Butt,
+        kurbo::Cap::Round => LineCap::Round,
+        kurbo::Cap::Square => LineCap::Square,
+    }
+}
+
+fn line_join(join: kurbo::Join) -> LineJoin {
+    match join {
+        kurbo::Join::Miter => LineJoin::Miter,
+        kurbo::Join::Round => LineJoin::Round,
+        kurbo::Join::Bevel => LineJoin::Bevel,
+    }
+}
+
+// ============================================================================
+// Tests -- tessellation helpers (no GPU: exercise path build + lyon output).
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lyon::tessellation::{
+        BuffersBuilder, FillOptions, FillTessellator, FillVertex, StrokeOptions, StrokeTessellator,
+        StrokeVertex, VertexBuffers,
+    };
+
+    /// A closed triangle fills to a non-empty, index-consistent mesh.
+    #[test]
+    fn fill_triangle_tessellates() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.line_to((10.0, 0.0));
+        path.line_to((5.0, 10.0));
+        path.close_path();
+
+        let lpath = build_lyon_path(&path);
+        let mut mesh: VertexBuffers<[f32; 2], u32> = VertexBuffers::new();
+        FillTessellator::new()
+            .tessellate_path(
+                &lpath,
+                &FillOptions::tolerance(0.1),
+                &mut BuffersBuilder::new(&mut mesh, |v: FillVertex| {
+                    screen_vertex(v.position(), Affine::IDENTITY)
+                }),
+            )
+            .unwrap();
+
+        assert!(!mesh.vertices.is_empty());
+        assert_eq!(mesh.indices.len() % 3, 0);
+        assert!(
+            mesh.indices
+                .iter()
+                .all(|&i| (i as usize) < mesh.vertices.len())
+        );
+    }
+
+    /// An open two-point path strokes to a non-empty mesh (open contour).
+    #[test]
+    fn stroke_open_line_tessellates() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.line_to((20.0, 0.0));
+
+        let lpath = build_lyon_path(&path);
+        let mut mesh: VertexBuffers<[f32; 2], u32> = VertexBuffers::new();
+        StrokeTessellator::new()
+            .tessellate_path(
+                &lpath,
+                &StrokeOptions::tolerance(0.1).with_line_width(2.0),
+                &mut BuffersBuilder::new(&mut mesh, |v: StrokeVertex| {
+                    screen_vertex(v.position(), Affine::IDENTITY)
+                }),
+            )
+            .unwrap();
+
+        assert!(!mesh.vertices.is_empty());
+        assert_eq!(mesh.indices.len() % 3, 0);
+    }
+
+    /// The active transform scales tessellated positions into screen space.
+    #[test]
+    fn transform_maps_vertices_to_screen() {
+        let t = Affine::translate((100.0, 50.0)) * Affine::scale(2.0);
+        let v = screen_vertex(lpoint(3.0, 4.0), t);
+        assert_eq!(v, [106.0, 58.0]);
     }
 }
