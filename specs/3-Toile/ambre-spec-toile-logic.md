@@ -980,8 +980,12 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
 - [x] `export_snapshot` + persist-on-change to IndexedDB + the `RequestSnapshot` / `SnapshotNeeded` / `RemoteSnapshot` paths (§8). `RemoteSnapshot` -> `apply_remote`, `SnapshotNeeded` -> `export_snapshot`, persist-on-change via the dispatcher's `to_persist` leg, and `RestoreLocalSnapshot` restores a Toile board from the local IndexedDB store.
 - [ ] `my_user_id` seeded from `LogicEvent::SessionReady` (§7), keys reactions `toile-features §4.A`
 - [x] `loro::UndoManager` wired to `Undo` / `Redo`, one `doc.commit()` per mutating command (§8bis). Landed early with the Phase-0 groups slice (`apply_history`, `UndoState` event); **DoD** green in `ambre-toile/src/convergence_tests.rs` (undo reverts create + redo restores; a group undoes as one item). Chrome affordance wiring stays with Phase 1 UI.
-- [ ] `Find` handler (§8 quater) behind the chrome panel
-- [ ] `RequestSelectionStats` -> selection aggregates for the status bar (§8 quinquies)
+- [x] `Find` handler (§8 quater): non-mutating text scan over sticky/text bodies + frame titles, hits in
+  `layers` z-order (with the §2.H missing-from-layers fallback), `match_case`/`whole_word` honored, wrapping
+  `focus`; `ToileCommand::Find` + `FindOptions`/`FindResults` (`ambre-bus`) + `ToileEvent::FindResults`. Belt in
+  `ambre-toile/src/logic/convergence_tests.rs`. Chrome panel wiring stays with Phase 1 UI (`toile-ui §5quater`).
+- [x] `RequestSelectionStats` -> selection aggregates (count + union AABB, world space) for the status bar
+  (§8 quinquies), computed Logic-side over the derived `bounds` cache so an off-viewport selection is counted.
 - [ ] Presence keyed by canonical `UserId` (§7)
 - [ ] Feed `DisplayViewport` to `toile-ui`'s `WgpuSurface`
 - **Phase 2 (Optimization):** bulk index update on large remote batches, order-preserving layer diffing,

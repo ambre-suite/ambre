@@ -30,6 +30,7 @@ mod codec;
 mod connectors;
 mod derive;
 mod elements;
+mod find;
 mod groups;
 
 use std::collections::HashMap;
@@ -157,6 +158,11 @@ impl ToileState {
             ToileCommand::CopyElements { ids } => self.copy_elements(&ids),
             ToileCommand::PasteElements { payload, at } => self.paste_elements(&payload, at),
             ToileCommand::DuplicateElements { ids, delta } => self.duplicate_elements(&ids, delta),
+            ToileCommand::Find {
+                query,
+                options,
+                from,
+            } => self.find(&query, options, from.as_ref()),
             ToileCommand::RequestSelectionStats { ids } => self.selection_stats(&ids),
             ToileCommand::RequestSnapshot => ToileOutcome::display_only(Vec::new()),
             ToileCommand::SetViewport(vp) => {
