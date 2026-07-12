@@ -30,9 +30,9 @@ The specs predate this file and use their own phase vocabulary. Mapping:
 | `E0`/`E1` (done) | `ARCH P0`-`P3`, `CANVAS P0`, `CHROME P1`-`P3`, `UI P0`-`P2`, `SYNC P0`-`P3`, `SRV P0`/`P2` | engine Phase 0/1 (logic), virtual scroll + inline editor (ui Phase 1) | -- |
 | `E2` | `CANVAS P0` remaining items, `CHROME P4` (launcher) | -- | -- |
 | `E3` | -- | `trame-logic §14`, `trame-features §10`, `trame-ui §18`, `trame-interop §10` (Phase 1) | -- |
-| `ET` | `ARCH P6` (test infrastructure) | Trame "Tested DoD" debt items (logic/features/ui/interop) | -- |
-| `E4` | `ARCH P5` (`ambre-toile`), `CANVAS P1` (paths/PDF) | -- | `toile-logic §13`, `toile-features §9`, `toile-ui §13`, `toile-interop §10` (Phase 0/1) |
-| `E5` | `ARCH P2`/`P5` (`ambre-prose`, `ambre-murmure`), `SYNC P4`, `SRV P1` | -- | -- |
+| `ET` | `ARCH P5` (test infrastructure) | Trame "Tested DoD" debt items (logic/features/ui/interop) | -- |
+| `E4` | `ARCH P6` (composition / in-place embeds), `CANVAS P1` (paths/PDF) | -- | `toile-logic §13`, `toile-features §9`, `toile-ui §13`, `toile-interop §10` (Phase 0/1) |
+| `E5` | `ARCH P2` (`ambre-prose`), `ARCH P7` (`ambre-murmure`), `SYNC P4`, `SRV P1` | -- | -- |
 | `E6` | `ARCH P4`, `CANVAS P2` | Trame Phase 2+, `trame-logic §14 Phase 4` (scaling debt) | Toile Phase 2 (optimization) |
 
 ---
@@ -194,8 +194,8 @@ Stories:
 *Testability is a non-negotiable pillar (`ambre-context.md §3`, template §4, `ambre-spec-architecture.md §4`). The Trame MVP (`E3`) shipped functional but under-tested: ~20 server DB/redis tests are bare-`#[ignore]`, there is no CI, no measured coverage, no CRDT convergence property-test, and zero Leptos UI test. This Epic makes the existing tests run and closes the gaps before stacking new apps (`E4` onward). Per the tested Definition of Done (template §4), the apps it touches are only truly "done" once this is green.*
 
 Stories:
-- `ARCH P6` `[x]` — CI GitHub Actions (`lint` / `test-host` / `test-db` / `test-wasm` / `coverage`) with postgres/redis/minio services; root `justfile` for local/CI parity.
-- `ARCH P6` `[x]` — feature `db` on `ambre-server`; replace the ~20 bare `#[ignore = "needs postgres/redis"]` with the `cfg_attr(not(feature = "db"), ignore = ...)` gate so the already-written server tests run; `cargo-llvm-cov` host baseline + lcov artifact.
+- `ARCH P5` `[x]` — CI GitHub Actions (`lint` / `test-host` / `test-db` / `test-wasm` / `coverage`) with postgres/redis/minio services; root `justfile` for local/CI parity.
+- `ARCH P5` `[x]` — feature `db` on `ambre-server`; replace the ~20 bare `#[ignore = "needs postgres/redis"]` with the `cfg_attr(not(feature = "db"), ignore = ...)` gate so the already-written server tests run; `cargo-llvm-cov` host baseline + lcov artifact.
 - `trame-logic §14` `[x]` — 2-peer CRDT convergence property-test (`proptest`), targeting references-after-sort and structural-op reconciliation. Landed as `ambre-trame/src/logic/convergence_tests.rs::two_peers_converge_under_interleaved_ops`.
 - `trame-ui §18` `[x]` — Leptos UI tests (`wasm-bindgen-test`, headless Chrome): reactive headless + real DOM for the Trame chrome. Landed as `ambre-trame/tests/chrome_ui.rs` (reactive belt + DOM `StatusBar`/`FindReplace`), run via `just test-wasm` in the re-enabled CI job.
 - `trame-features §10` / `trame-interop §10` `[x]` — wired the "Tested DoD" belts green in CI: the MVP filter/sort/undo `#[test]`s (added the three Phase-1 undo belts), the concurrent-filter LWW case folded into the 2-peer convergence property-test (`ApplyFilter`/`ClearFilter` ops + `is_filtered` in the converged snapshot), and the CSV roundtrip + malformed/byte-soup fuzz robustness cases. *(Conditional-formatting / validation / protection tests follow their Phase 2 / Post-MVP implementation.)*
@@ -212,11 +212,12 @@ launcher/sharing UI); what is new is the spatial document model and the GPU vect
 > foundation Story lands here rather than under `E5`.
 
 Stories:
-- `[~]` `ARCH P5` (`ambre-toile`) — new spatial `DocState`: typed `ToileState` behind the `ambre-logic` `match`,
-  `rstar` R-tree culling, in-place editable nested embeds (Prose/Trame). *(embeds start at the read-only subset.)*
-  Standalone `ToileState` + `SpatialIndex` landed; `ambre-logic` `match` dispatch **landed** (IPC contract moved to
-  `ambre-bus::app::toile`, `AppCommand::Toile`/`AppEvent::Toile`, `DocState::Toile`, remote/snapshot/ephemeral legs).
-  Open: in-place editable nested embeds (`ToileCommand::Embedded`).
+- `[ ]` `ARCH P6` (composition) — in-place editable nested embeds: `AppCommand`/`TrameOutcome` recursion routed by
+  `Uuid` so a `doc_embed` (Prose/Trame) is editable in place, role-gated (`toile-logic §2.I`). *(embeds start at the
+  read-only subset.)* The spatial `DocState` itself -- typed `ToileState` behind the `ambre-logic` `match`, `rstar`
+  R-tree culling, the IPC contract (`ambre-bus::app::toile`, `AppCommand::Toile`/`AppEvent::Toile`, `DocState::Toile`,
+  remote/snapshot/ephemeral legs) -- lands under the `toile-logic §13` story below, not here. Open here: the recursive
+  command routing + input-focus transform (`ToileCommand::Embedded`).
 - `[ ]` `CANVAS P1` — `lyon` / `WgpuSurface` vector pipeline (quad + path), `ViewportTransform`, glyph atlas, and
   PDF export via `KrillaSurface` (krilla). The shared canvas foundation the vector tools and the PDF path need.
 - `[~]` `toile-logic §13 Phase 0/1` — CRDT schema + `SpatialIndex` + element/connector/group/stroke lifecycle +
@@ -245,7 +246,7 @@ Stories:
 
 Stories:
 - `ARCH P2` — `ambre-prose` (LoroText): the text/CRDT pilot.
-- `ARCH P5` (`ambre-murmure`) — channels.
+- `ARCH P7` (`ambre-murmure`) — channels.
 - `SYNC P4` + `SRV P1` — channels & meetings (segments managed by Sync, unread, WebRTC signaling).
 
 ## E6 — Polish & hardening  `[ ]` (deferred)

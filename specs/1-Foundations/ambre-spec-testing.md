@@ -82,4 +82,4 @@ Tracked here so it is a decision, not an omission. None blocks the Trame MVP.
 
 ## 6. CI
 
-`.github/workflows/ci.yml` jobs `lint` / `test-native` / `test-db` / `test-wasm` / `coverage`, each calling the matching `just` recipe for local/CI parity (architecture §4, §7 ARCH P6). `test-wasm` now exercises `ambre-trame`, `ambre-chrome`, and `ambre-app`.
+`.github/workflows/ci.yml` jobs `lint` / `test-native` / `test-db` / `test-wasm` / `coverage`, each calling the matching `just` recipe for local/CI parity (architecture §4, §7 ARCH P5). `test-wasm` now exercises `ambre-trame`, `ambre-chrome`, and `ambre-app`.
