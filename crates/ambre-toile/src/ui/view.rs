@@ -144,6 +144,12 @@ pub struct ToileView {
     /// Logic thread never sees the selection, so the view attaches it). Wasm-only.
     #[cfg(target_arch = "wasm32")]
     menu_cmd: RwSignal<Option<CommandId>>,
+    /// The active tool, shared with the DOM tool palette (§5quinquies.A): the
+    /// palette buttons and the bare-key tool chords both write it, and the view
+    /// applies it each frame in `update`. Tool selection is UI-only, canvas-local
+    /// state (§11bis), never a `ToileCommand`. Leptos signal, so wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    active_tool: RwSignal<Tool>,
 }
 
 impl ToileView {
@@ -159,6 +165,7 @@ impl ToileView {
         theme_ctl: ThemeControl,
         #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<super::menu::CtxScope>,
         #[cfg(target_arch = "wasm32")] menu_cmd: RwSignal<Option<CommandId>>,
+        #[cfg(target_arch = "wasm32")] active_tool: RwSignal<Tool>,
     ) -> Self {
         text_input.focus();
         let theme = theme_ctl.get();
@@ -203,6 +210,8 @@ impl ToileView {
             ctx_scope,
             #[cfg(target_arch = "wasm32")]
             menu_cmd,
+            #[cfg(target_arch = "wasm32")]
+            active_tool,
         }
     }
 
@@ -434,6 +443,20 @@ impl ToileView {
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn drain_menu_cmd(&mut self) {}
+
+    /// Apply the tool the DOM palette / keyboard selected (§5quinquies.A): if the
+    /// shared signal differs from the machine's current tool, switch (which cancels
+    /// any in-flight gesture and marks a full repaint). Wasm-only; a host no-op
+    /// keeps `update` cfg-agnostic.
+    #[cfg(target_arch = "wasm32")]
+    fn apply_active_tool(&mut self) {
+        let tool = self.active_tool.get_untracked();
+        if tool != self.machine.tool() {
+            self.set_tool(tool);
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn apply_active_tool(&mut self) {}
 
     /// Turn a menu `CommandId` into board mutation(s). `Paste` and `Select all` are
     /// UI-only intents serviced here (the same-session clipboard / local selection);
@@ -903,6 +926,9 @@ impl ToileView {
 
         // Apply any context-menu command the shell forwarded this frame (§5ter).
         self.drain_menu_cmd();
+
+        // Apply the tool the DOM palette / keyboard selected this frame (§5quinquies.A).
+        self.apply_active_tool();
 
         // A freshly-created Sticky / Text element: open its editor now that its
         // geometry has landed in `display` (§6).

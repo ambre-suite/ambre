@@ -13,9 +13,19 @@
 
 mod find;
 mod menu;
+mod palette;
 
 pub use find::{FindPanel, FindQuery};
 pub use menu::context_entries_for;
+pub use palette::ToolPalette;
+
+// The tool palette's command surface is pure and host-tested in `ui::palette`
+// (like `ui::find` / `ui::menu`); the launcher consumes it through these
+// re-exports, so it only ever imports from `toile_chrome`.
+pub use crate::ui::palette::{
+    TOOL_COMMANDS, TOOL_CONNECTOR, TOOL_DRAW, TOOL_HAND, TOOL_PEN, TOOL_SELECT, TOOL_SHAPE,
+    TOOL_STICKY, TOOL_TEXT, tool_for_command,
+};
 
 use ambre_bus::DocType;
 use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
@@ -33,9 +43,11 @@ pub fn new_doc_label() -> &'static str {
     "New Toile"
 }
 
-/// Bind the Toile command chords into the launcher keymap. Ctrl+F opens Find;
+/// Bind the Toile command chords into the launcher keymap. Ctrl+F opens Find and
+/// the bare-key tool chords (V/P/R/... -> `SetTool`, §5quinquies.A) switch tools;
 /// the remaining board shortcuts (undo/redo, clipboard, nudge, ...) are decoded
 /// canvas-side in `ToileView::handle_key` (toile-ui §5), not here.
 pub fn bind_keys(keymap: &mut Keymap) {
     keymap.bind(KeyBinding::ctrl('f'), FIND);
+    crate::ui::palette::bind_tool_keys(keymap);
 }

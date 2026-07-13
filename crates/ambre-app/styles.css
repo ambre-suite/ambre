@@ -193,6 +193,41 @@ input[type="radio"] {
     opacity: 1;
 }
 
+/* Toile tool palette / primary toolbar (toile-ui SS5quinquies.A). It carries the
+   `.ambre-commandbar` class too, so every button / hover / active-fill / `.sep` /
+   tooltip rule above applies unchanged -- visually identical to the Trame bar. This
+   modifier only re-docks it as a floating vertical palette (Trame's bar is docked
+   horizontally along the top). */
+.ambre-tool-palette {
+    position: fixed;
+    top: 50%;
+    left: 8px;
+    transform: translateY(-50%);
+    z-index: 60;
+    flex-direction: column;
+    min-height: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+/* The shared `.sep` is a vertical rule in the horizontal bar; here it must run
+   horizontally across the vertical stack. */
+.ambre-tool-palette .sep {
+    width: auto;
+    height: 1px;
+    align-self: stretch;
+    margin: 4px 4px;
+}
+
+/* The shared tooltip sits below the button in the docked bar; on a left-docked
+   vertical palette it reads better to its right. */
+.ambre-tool-palette [aria-label]::after {
+    top: 50%;
+    left: calc(100% + 6px);
+    transform: translateY(-50%);
+}
+
 /* Font family / size dropdowns: borderless and blended into the toolbar, theme
    aware (closed control + native option list via color-scheme), with a discreet
    custom caret (BiDownArrowSolid) on the right and left padding so the value is

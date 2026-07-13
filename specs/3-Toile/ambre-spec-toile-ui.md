@@ -527,7 +527,13 @@ lives in Logic, keyed on change size.
 - [x] Keyboard shortcuts + clipboard round-trip (OS-clipboard mirror). Shared, Logic-authoritative
   clipboard model (`1-Foundations/ambre-spec-ui.md §E`); shortcuts decoded in `handle_key`.
 - [x] Grouping selection-scope resolution (via the `DisplayElement.group` edge, host-tested — §5ter/§7)
-- [ ] Tool palette / primary toolbar wired to `SetTool` + `CommandState.active` (§5quinquies.A)
+- [x] Tool palette / primary toolbar wired to tool selection + active-tool state (§5quinquies.A).
+  Floating vertical `ToolPalette` (`chrome::palette`) sharing the Trame command-bar styling; one
+  button per tool with `aria-pressed` reflecting the current `Tool`; clicking (or the bare-key chords
+  V/P/R/C/D/N/T/H, guarded against inline-editor typing) writes a shared `RwSignal<Tool>` the canvas
+  view applies each frame. The active tool is UI-only, canvas-local state (§11bis), so it is not a
+  `ToileCommand`; the pure command surface (ids, chords, id->Tool map, focus guard) lives in the
+  host-tested `ui::palette`.
 - [ ] Style / property inspector -> debounced `RestyleElements` + z-order / lock (§5quinquies.B)
 - [ ] Color picker popover (ARGB, shared by inspector + text runs) (§5quinquies.C)
 - [ ] Content-anchored floating selection toolbar, transform-synced each frame (§5quinquies.D)
