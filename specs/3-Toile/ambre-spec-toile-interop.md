@@ -270,6 +270,8 @@ budget.
 - [ ] Media pipeline wired to the crypto / Sync layer + mock object store
 - [ ] wasm export tests
 
-**Phase 2 - Optimization** 
-
-streaming/bounded import for very large files (batched-yield apply keeping the Logic thread responsive + `ImportProgress`, §2.E), PNG render-back tiling, Web-Showcase bundle-size trimming, media LRU tuning.
+**Phase 2 - Optimization**
+- [ ] Streaming / bounded import for very large files (batched-yield apply keeping the Logic thread responsive + `ImportProgress`, §2.E)
+- [ ] PNG render-back tiling
+- [ ] Web-Showcase bundle-size trimming
+- [ ] Media LRU tuning
