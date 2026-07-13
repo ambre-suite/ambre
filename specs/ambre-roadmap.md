@@ -248,13 +248,18 @@ Stories:
 - `[ ]` `toile-interop §10 Phase 0/1` — SVG import/export, raster import, safety limits, media hashing + placeholder;
   then PDF export (presentation order), Figma/Miro converters, media pipeline on the crypto/Sync layer.
   Golden fixtures + wasm export tests.
-- `[ ]` **New-document type picker (launcher, `CHROME P4` addendum)** — the `E2` launcher create action was
+- `[x]` **New-document type picker (launcher, `CHROME P4` addendum)** — the `E2` launcher create action was
   hardcoded to Trame (`landing.rs`, `trame_chrome::DOC_TYPE`) while Trame was the only product. Toile is the
-  second creatable type, so the "new document" action becomes an app-agnostic type picker (Prose / Trame /
-  Toile) passing the chosen `DocType` to `doc_path` / `CreateDocument` (`ambre-spec-chrome.md §2.G`).
-  Prerequisite for creating a Toile from the UI (today only reachable by hand-typing `/toile/<uuid>`). Listing
-  and opening Toile documents already work -- the launcher is app-agnostic and `DocType::Toile` is wired
-  through `doc_path` and the card icon.
+  second creatable type, so the "new document" action became an app-agnostic `NewDocPicker` dropdown iterating
+  `DocType::creatable()` and passing the chosen `DocType` to `route::doc_path` (`ambre-spec-chrome.md §2.G`).
+  Opening the new (and existing) documents goes through a shared `open_document`/`route::needs_reload` rule: a
+  same-kind target swaps in place (router pushState, keeps the Sync worker), a cross-kind target hard-navigates
+  (`location.set_href`) to re-boot the right `AppView` (`boot_is_toile` is fixed per page load). This also fixed
+  a latent bug where opening a Toile *card* from a Trame-booted launcher pushState'd into the wrong view.
+  `creatable()` is the single source of truth for the offered types, gated on `ambre_logic::DocState::new`
+  support: Trame / Toile today, Prose joins with its engine (`E5`). Unblocks creating a Toile from the UI
+  (previously only reachable by hand-typing `/toile/<uuid>`). Belt: `landing.rs` wasm/DOM tests +
+  `route::needs_reload` + `DocType::creatable` tests.
 - `[ ]` `ARCH P6` (composition) — in-place editable nested embeds: `AppCommand`/`TrameOutcome` recursion routed by
   `Uuid` so a `doc_embed` (Prose/Trame) is editable in place, role-gated (`toile-logic §2.I`). *(embeds start at the
   read-only subset.)* The spatial `DocState` itself -- typed `ToileState` behind the `ambre-logic` `match`, `rstar`

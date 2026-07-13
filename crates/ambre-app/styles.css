@@ -1103,6 +1103,45 @@ input[type="radio"] {
     filter: brightness(1.1);
 }
 
+/* New-document type picker (chrome 2.G): the trigger anchors a dropdown menu
+   listing one entry per creatable DocType (Prose/Trame/Toile). */
+.ambre-new-doc-picker {
+    position: relative;
+}
+
+.ambre-new-doc-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + var(--space-sm));
+    z-index: 10;
+    min-width: 200px;
+    list-style: none;
+    margin: 0;
+    padding: var(--space-sm);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: var(--shadow, 0 8px 24px rgba(0, 0, 0, 0.2));
+}
+
+.ambre-new-doc-option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius);
+    cursor: pointer;
+}
+
+.ambre-new-doc-option:hover {
+    background: var(--surface-hover);
+}
+
+.ambre-new-doc-option-label {
+    font-size: var(--font-body);
+    color: var(--fg);
+}
+
 .ambre-doc-list {
     /* Keep the horizontal centring + side padding from the shared block above;
        only reset the vertical box (list defaults) here, never the shorthand. */
