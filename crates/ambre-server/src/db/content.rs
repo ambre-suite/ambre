@@ -198,6 +198,46 @@ pub async fn get_updates_after(
         .collect()
 }
 
+/// The durable clock/seq state for a document, read from the `updates` index.
+/// Used to rehydrate Redis (the clock-validation authority) when it is cold --
+/// e.g. after a Redis restart while Postgres kept the delta history. Without this
+/// the per-author clock counter resets to 0 while clients still hold advanced
+/// clocks, and every subsequent update fails `CLOCK_MISMATCH`.
+#[derive(Debug, Default)]
+pub struct ClockState {
+    /// Highest `seq` ever assigned for the document (0 when it has no updates).
+    pub max_seq: i64,
+    /// Per-author `(author_pubkey, max_clock)` high-water marks.
+    pub author_clocks: Vec<(Vec<u8>, i64)>,
+}
+
+/// Reads the durable clock/seq high-water marks for a document from the `updates`
+/// index, so a cold Redis can be reseeded to a state consistent with the history
+/// clients have already replayed (see [`ClockState`]).
+pub async fn get_clock_state(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+) -> Result<ClockState, AppError> {
+    let did = id_to_uuid(*document_id);
+    let rows = sqlx::query(
+        "SELECT author_pubkey, MAX(clock) AS max_clock, MAX(seq) AS max_seq
+         FROM updates WHERE document_id = $1 GROUP BY author_pubkey",
+    )
+    .bind(did)
+    .fetch_all(pool)
+    .await?;
+
+    let mut state = ClockState::default();
+    for r in &rows {
+        let author: Vec<u8> = r.try_get("author_pubkey")?;
+        let max_clock: i64 = r.try_get("max_clock")?;
+        let max_seq: i64 = r.try_get("max_seq")?;
+        state.max_seq = state.max_seq.max(max_seq);
+        state.author_clocks.push((author, max_clock));
+    }
+    Ok(state)
+}
+
 /// Trims the delta index of every `updates` row that all retained snapshots have
 /// already folded in, returning the number of rows deleted.
 ///

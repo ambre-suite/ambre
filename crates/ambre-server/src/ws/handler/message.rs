@@ -21,6 +21,37 @@ pub(crate) async fn handle_subscribe(
             return;
         }
     };
+    // Rehydrate the clock-validation state if Redis is cold but Postgres kept the
+    // delta history (e.g. a Redis restart). Clients replay their persisted deltas
+    // on reconnect and advance their local clock past what a freshly-empty Redis
+    // knows; without reseeding, their next update fails CLOCK_MISMATCH forever.
+    // Done before the client can send any update (subscribe precedes updates), and
+    // idempotent (MAX semantics), so concurrent subscribers cannot lower a value.
+    match redis_ops::clock_state_is_cold(&state.redis, &document_id).await {
+        Ok(true) => match db::get_clock_state(&state.db, &document_id).await {
+            Ok(clock_state) => {
+                let author_clocks: Vec<(String, i64)> = clock_state
+                    .author_clocks
+                    .iter()
+                    .map(|(pk, clock)| (hex::encode(pk), *clock))
+                    .collect();
+                if let Err(e) = redis_ops::seed_clock_state(
+                    &state.redis,
+                    &document_id,
+                    clock_state.max_seq,
+                    &author_clocks,
+                )
+                .await
+                {
+                    tracing::error!(error = %e, "subscribe: clock state rehydrate failed");
+                }
+            }
+            Err(e) => tracing::error!(error = %e, "subscribe: clock state load failed"),
+        },
+        Ok(false) => {}
+        Err(e) => tracing::error!(error = %e, "subscribe: clock state cold check failed"),
+    }
+
     conn.doc_subscriptions.insert(document_id);
     conn.doc_access_verified_at
         .insert(document_id, Instant::now());
