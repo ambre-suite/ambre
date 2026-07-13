@@ -257,18 +257,19 @@ budget.
 
 > Tracked as Stories of Epic **E4** (Toile MVP) in `specs/ambre-roadmap.md`.
 
-**Phase 0 — Core standalone**
+**Phase 0 - Core standalone**
 - [ ] SVG import / export (primitives + paths + text)
 - [ ] Raster image import
 - [ ] Safety limits (size / element caps, decompression bounds)
 - [ ] Media hashing + placeholder state machine
 - [ ] Host tests + golden fixtures
 
-**Phase 1 — Integration**
+**Phase 1 - Integration**
 - [ ] PDF export via `KrillaSurface` honoring presentation order
 - [ ] Figma / Miro converters (MVP: no component instancing — components map to plain elements, §2)
 - [ ] Media pipeline wired to the crypto / Sync layer + mock object store
 - [ ] wasm export tests
-- **Phase 2 (Optimization):** streaming/bounded import for very large files (batched-yield apply keeping the
-  Logic thread responsive + `ImportProgress`, §2.E), PNG render-back tiling, Web-Showcase bundle-size trimming,
-  media LRU tuning.
+
+**Phase 2 - Optimization** 
+
+streaming/bounded import for very large files (batched-yield apply keeping the Logic thread responsive + `ImportProgress`, §2.E), PNG render-back tiling, Web-Showcase bundle-size trimming, media LRU tuning.
