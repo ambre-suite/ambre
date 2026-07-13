@@ -29,6 +29,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
         filter_values,
         find_state,
         find_result,
+        find_state_toile,
+        find_result_toile,
+        boot_is_toile,
         formula_ref,
         formula_text,
         formula_action,
@@ -285,6 +288,26 @@ pub(crate) fn AppRoot() -> impl IntoView {
                         query: q.query,
                         match_case: q.match_case,
                         whole_cell: q.whole_cell,
+                    }),
+                });
+            }
+        }
+    });
+    // Toile Find (`toile-ui §5quater`): the panel emits a `Find` with the query,
+    // options and resume point; Logic scans the whole board (off-screen matches
+    // included) and replies with `FindResults`. Find-only -- no Replace on a
+    // free-form canvas (§12).
+    let on_find_toile = Callback::new({
+        let tx = to_logic.clone();
+        move |q: toile_chrome::FindQuery| {
+            if let Some(document_id) = current_doc.get_untracked() {
+                let _ = tx.try_send(LogicCommand::App {
+                    document_id,
+                    command: AppCommand::Toile(ambre_bus::app::toile::ToileCommand::Find {
+                        query: q.query,
+                        options: q.options,
+                        from: q.from,
+                        backward: q.backward,
                     }),
                 });
             }
@@ -680,14 +703,25 @@ pub(crate) fn AppRoot() -> impl IntoView {
             on_command=on_command
         />
 
-        // Find & Replace panel (sec.5.G), pinned top-right.
-        <trame_chrome::FindReplace
-            state=find_state
-            result=find_result
-            on_find=on_find
-            on_replace=on_replace
-            on_replace_all=on_replace_all
-        />
+        // Find panel, pinned top-right. Trame ships Find & Replace (sec.5.G);
+        // Toile ships a find-only panel (`toile-ui §5quater`). The booted app kind
+        // is fixed per page load, so exactly one is mounted.
+        {(!boot_is_toile).then(|| view! {
+            <trame_chrome::FindReplace
+                state=find_state
+                result=find_result
+                on_find=on_find
+                on_replace=on_replace
+                on_replace_all=on_replace_all
+            />
+        })}
+        {boot_is_toile.then(|| view! {
+            <toile_chrome::FindPanel
+                state=find_state_toile
+                result=find_result_toile
+                on_find=on_find_toile
+            />
+        })}
 
         // Multi-column sort dialog (sec.5.C), opened from "Sort range...".
         <trame_chrome::SortDialog state=sort_dialog on_apply=on_sort_apply />

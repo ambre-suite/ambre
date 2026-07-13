@@ -571,8 +571,10 @@ pub enum ToileCommand {
 
     // Find (search on board, §8 quater). Runs Logic-side over text-bearing elements
     // (sticky/text bodies, frame titles); returns the hits plus the element to
-    // recenter on. Non-mutating, no CRDT effect. `from` resumes after the current match.
-    Find { query: String, options: FindOptions, from: Option<ElementId> },
+    // recenter on. Non-mutating, no CRDT effect. `from` is the current match to
+    // resume from; `backward` steps to the previous hit rather than the next (both
+    // wrapping). A `None` `from` starts a fresh search focusing the first hit.
+    Find { query: String, options: FindOptions, from: Option<ElementId>, backward: bool },
 
     // Selection aggregates for the status bar (§8 quinquies). The selection may fall
     // outside the culled viewport, so the Logic thread (which owns every element's
@@ -685,8 +687,9 @@ cross-tab paste). `PasteElements` / `DuplicateElements` are the mutating half an
 `Find` is **non-mutating** and runs entirely on the Logic thread — the UI holds only the culled
 `DisplayViewport`, so a match on an off-screen sticky is invisible to it. The handler walks the text-bearing
 elements (sticky/text `LoroText` bodies, frame titles) and returns `ToileEvent::FindResults { hits, focus }`:
-`hits` are all matching `ElementId`s in z-order, `focus` is the next hit after `from` (wrapping), which the UI
-recenters the camera on. `match_case` / `whole_word` refine the scan. Matches and the highlight are **local
+`hits` are all matching `ElementId`s in z-order, `focus` is the hit adjacent to `from` in the requested
+direction (`backward` steps to the previous hit, else the next; both wrapping), which the UI recenters the
+camera on. `match_case` / `whole_word` refine the scan. Matches and the highlight are **local
 view state**, never synced and never an undo item; the UI clears them when the panel closes or the query
 changes. Replace is out of MVP scope (§12). The panel itself is DOM chrome (`toile-ui §5quater`), reached over
 the existing command channel exactly like the context menu (§5ter).

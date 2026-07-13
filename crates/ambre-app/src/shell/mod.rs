@@ -36,6 +36,11 @@ pub(crate) fn mount_shell(
     filter_values_slot: Rc<RefCell<Option<RwSignal<Vec<String>>>>>,
     find_state_slot: Rc<RefCell<Option<RwSignal<Option<trame_chrome::FindReplaceState>>>>>,
     find_result_slot: Rc<RefCell<Option<RwSignal<Option<(usize, usize)>>>>>,
+    find_state_toile_slot: Rc<RefCell<Option<RwSignal<bool>>>>,
+    find_result_toile_slot: Rc<
+        RefCell<Option<RwSignal<Option<ambre_bus::app::toile::FindResults>>>>,
+    >,
+    boot_is_toile: bool,
     style_slot: Rc<RefCell<Option<trame_chrome::StyleState>>>,
     chrome_status_slot: Rc<RefCell<Option<RwSignal<ChromeStatus>>>>,
     formula_ref: RwSignal<String>,
@@ -81,6 +86,10 @@ pub(crate) fn mount_shell(
         *find_state_slot.borrow_mut() = Some(find_state);
         let find_result = RwSignal::new(None::<(usize, usize)>);
         *find_result_slot.borrow_mut() = Some(find_result);
+        let find_state_toile = RwSignal::new(false);
+        *find_state_toile_slot.borrow_mut() = Some(find_state_toile);
+        let find_result_toile = RwSignal::new(None::<ambre_bus::app::toile::FindResults>);
+        *find_result_toile_slot.borrow_mut() = Some(find_result_toile);
         let style_state = trame_chrome::StyleState::new();
         *style_slot.borrow_mut() = Some(style_state);
         // Boot directly into a document => start hydrating; the landing route
@@ -115,6 +124,9 @@ pub(crate) fn mount_shell(
             filter_values,
             find_state,
             find_result,
+            find_state_toile,
+            find_result_toile,
+            boot_is_toile,
             formula_ref,
             formula_text,
             formula_action,
