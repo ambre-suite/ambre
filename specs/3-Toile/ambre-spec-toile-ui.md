@@ -307,6 +307,62 @@ canvas — `toile-logic §12`); the panel is find-only.
 
 ---
 
+## 5quinquies. CHROME SURFACES (DOM)
+
+All the persistent app furniture around the `<canvas>` is DOM/Leptos built on `ambre-chrome` (§1bis), never
+canvas-drawn. Each surface is a thin reactive view over `ambre-commands` registry state: a control reads a
+`CommandState` (enabled/active/value) and, on activation, emits the command's `ToileCommand` through the same
+`command_to_app` path as a keybinding (§1bis). No chrome surface owns document state or an undo stack.
+
+### A. Tool palette (primary toolbar)
+A vertical (or floating) `ambre-chrome` `Toolbar` exposing one button per Toile tool — Select, Vector Pen,
+Shape, Connector, Draw (freehand), Sticky, Text (§5) — plus zoom/hand affordances. Each button is a `Command`
+whose `CommandState.active` reflects the current `Tool`, so exactly one tool reads as selected; clicking emits
+`SetTool` (the same signal the keyboard shortcut resolves to). The canvas-side `ToolMachine` stays the sole
+consumer of the active tool (§1bis); the palette only drives the selection. Tool sub-options that are not
+per-element style (e.g. the Shape kind, the connector routing mode) are local palette signals folded into the
+`CreateElement` the tool emits.
+
+### B. Style / property inspector
+A DOM side panel, shown only when the selection is non-empty, that edits the selected elements'
+`ElementStyle` (`toile-logic §2.E`): fill, stroke, `stroke_w`, `opacity`, and the rich-text run attributes
+for sticky/text (bold/size/color, §6). Edits are debounced and emitted as one `RestyleElements { ids, style }`
+over the whole selection (never per-attribute — the register is written whole, matching the single-register
+model of `toile-logic §2.E`); text-run edits route through `RestyleElements` or `EditText` as in §6. The panel
+also surfaces the z-order actions (Bring to Front / Send to Back / Forward / Backward -> `Reorder` with the
+matching `ZTarget`) and Lock / Unlock (`LockElements`), mirroring the context menu (§5ter). Values shown are
+the common value across the selection, or a mixed-state indicator when they differ. The panel is pure view
+state; it holds no authoritative style.
+
+### C. Color picker
+A reusable `ambre-chrome` popover component consumed by the inspector (fill / stroke) and the text-run
+controls. It edits an ARGB `u32` (the `ElementStyle` color encoding, `toile-logic §2.E`) with a swatch grid on
+the app's token palette plus a custom hue/alpha picker. Committing a color folds into the same debounced
+`RestyleElements`; there is no separate color command.
+
+### D. Content-anchored floating selection toolbar
+The compact action bar that follows the selection as the board pans/zooms — the case `ambre-spec-ui.md L31`
+names for Toile (§1bis). It is a DOM element whose screen position is recomputed from `ViewportTransform`
+**every frame** (transform-synced), anchored to the selection's world-space bounds. It offers the highest-
+frequency actions (quick color, duplicate, delete, group/ungroup, lock) as command buttons — a superset-free
+subset of the context menu (§5ter) so the two never diverge. It hides during an active gesture (move/resize/
+rotate) and when the selection is empty.
+
+### E. Top menu bar & zoom control
+A top `ambre-chrome` `Menu` bar for low-frequency actions grouped by menu (File / Edit / View / Object /
+Present), each entry a registry `Command` with its keybinding shown — including the entries that have no
+palette button (Undo/Redo -> `ToileCommand::Undo`/`Redo`, Select All, the presentation entry point that opens
+the sequence panel of `toile-features §9`). A **zoom control** (zoom out / % / zoom in / Fit / Zoom-to-
+selection) lives here and mirrors the `zoom %` the status bar reports (§8bis); zoom changes update
+`ViewportTransform` locally and forward `SetViewport` to Logic (§3), never a round-trip for the transform
+itself.
+
+> **Scope note (MVP).** These surfaces are the editing chrome that Focus Mode hides (`toile-features §1.B`).
+> The share dialog is the app-agnostic chrome already delivered under `E2` (Document sharing UI); the present/
+> playback controls and presenter overlay panel are owned by `toile-features §9`, not duplicated here.
+
+---
+
 ## 6. INLINE TEXT EDITING (PARLEY)
 
 Sticky and text elements edit in place: the UI opens a Parley-backed editor over the element, maps keystrokes to
@@ -470,6 +526,11 @@ lives in Logic, keyed on change size.
 - [x] Keyboard shortcuts + clipboard round-trip (OS-clipboard mirror). Shared, Logic-authoritative
   clipboard model (`1-Foundations/ambre-spec-ui.md §E`); shortcuts decoded in `handle_key`.
 - [x] Grouping selection-scope resolution (via the `DisplayElement.group` edge, host-tested — §5ter/§7)
+- [ ] Tool palette / primary toolbar wired to `SetTool` + `CommandState.active` (§5quinquies.A)
+- [ ] Style / property inspector -> debounced `RestyleElements` + z-order / lock (§5quinquies.B)
+- [ ] Color picker popover (ARGB, shared by inspector + text runs) (§5quinquies.C)
+- [ ] Content-anchored floating selection toolbar, transform-synced each frame (§5quinquies.D)
+- [ ] Top menu bar + zoom control (Fit / Zoom-to-selection) (§5quinquies.E)
 - [ ] `ambre-chrome` context menu (§5ter)
 - [ ] Find panel (§5quater)
 - [ ] Selection status bar (§8bis)
