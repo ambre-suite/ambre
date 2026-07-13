@@ -13,19 +13,22 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{
-    ClipboardPayload as ToileClipboardPayload, DisplayNode, DisplayViewport, ElementId,
-    ToileCommand, ToileEvent, Viewport,
+    ClipboardPayload as ToileClipboardPayload, DisplayElement, DisplayGeom, DisplayNode,
+    DisplayViewport, ElementId, ElementKind, ToileCommand, ToileEvent, Viewport,
 };
 use ambre_bus::{AppCommand, AppEvent, DocumentId, LogicCommand, UiEvent};
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, OverlayRepaint, PerfPublisher, PerfSnapshot,
     RepaintPlan, TextCache, TextInput, Theme, ThemeControl, WgpuSurface,
 };
-use ambre_draw::{FontContext, Point, Rect, Vec2};
+use ambre_draw::{BoundingBox, FontContext, Point, Rect, Vec2};
 
+use super::edit::{EditIntent, InlineEditor};
 use super::hit::hit_topmost;
 use super::render;
-use super::tool::{Preview, Tool, ToolMachine, ToolOutcome, is_group, resolve_group_target};
+use super::tool::{
+    Preview, Tool, ToolMachine, ToolOutcome, is_group, resolve_group_target, world_rect_to_screen,
+};
 use super::viewport::ViewportTransform;
 
 /// One notch of the mouse wheel maps to this zoom factor (ctrl+wheel / pinch).
@@ -60,6 +63,25 @@ pub struct ToileView {
     group_scope: Option<ElementId>,
     /// Live gesture preview (marquee / rubber-band / pen / stroke), world space.
     preview: Option<Preview>,
+
+    /// Active inline text editor (sticky / text body, §6). `None` when not
+    /// editing. Font-free edit intents are queued here at input time and applied
+    /// during paint, when the `FontContext` is available (see `edit.rs`).
+    editor: Option<InlineEditor>,
+    /// A freshly-created element (Sticky / Text tool) whose editor must open once
+    /// the matching `DisplayViewport` has landed (its geometry is only known
+    /// then). Consumed at the end of `update`.
+    edit_pending_open: Option<ElementId>,
+    /// Set when the Sticky / Text tool just emitted a `CreateElement`, so the
+    /// next `ElementCreated` id is captured into `edit_pending_open`.
+    edit_open_on_create: bool,
+    /// Deferred close: the editor commits its buffer as `SetText` and closes on
+    /// the next paint (so any intents typed since the last paint flush first).
+    edit_closing: bool,
+    /// A queued edit intent / open / close marked the editor overlay dirty (§9).
+    edit_dirty: bool,
+    /// Whether a pointer is down inside the editor (text selection drag).
+    edit_pointer_down: bool,
 
     /// Last pointer position in screen (physical) pixels -- the zoom anchor.
     last_pointer: Point,
@@ -119,6 +141,12 @@ impl ToileView {
             selection: Vec::new(),
             group_scope: None,
             preview: None,
+            editor: None,
+            edit_pending_open: None,
+            edit_open_on_create: false,
+            edit_closing: false,
+            edit_dirty: false,
+            edit_pointer_down: false,
             last_pointer: Point::new(canvas_width / 2.0, canvas_height / 2.0),
             panning: None,
             space_down: false,
@@ -211,11 +239,18 @@ impl ToileView {
                 self.last_clip = Some(blob.clone());
                 self.pending_clipboard = Some(blob);
             }
+            // A Sticky / Text tool just created an element: capture its id so the
+            // inline editor opens on it once its `DisplayViewport` lands (§6).
+            ToileEvent::ElementCreated(id) => {
+                if self.edit_open_on_create {
+                    self.edit_open_on_create = false;
+                    self.edit_pending_open = Some(id);
+                }
+            }
             // Phase 0 does not act on these yet (chrome / presence land later);
             // log the errors, ignore the rest.
             ToileEvent::Error(e) => tracing::warn!("Toile rejected: {e}"),
-            ToileEvent::ElementCreated(_)
-            | ToileEvent::SelectionStats(_)
+            ToileEvent::SelectionStats(_)
             | ToileEvent::FindResults(_)
             | ToileEvent::DanglingConnector(_)
             | ToileEvent::PeerPresence(_)
@@ -245,7 +280,18 @@ impl ToileView {
                 self.selection = ids;
                 self.needs_full = true;
             }
-            ToolOutcome::Command(cmd) => self.send_edit(cmd),
+            ToolOutcome::Command(cmd) => {
+                // A Sticky / Text placement opens the inline editor on the new
+                // element once its id comes back via `ElementCreated` (§6).
+                if let ToileCommand::CreateElement {
+                    kind: ElementKind::Sticky | ElementKind::Text,
+                    ..
+                } = &cmd
+                {
+                    self.edit_open_on_create = true;
+                }
+                self.send_edit(cmd);
+            }
         }
         // The overlay preview is derived from live machine state each event.
         self.preview = self.machine.preview();
@@ -312,6 +358,18 @@ impl ToileView {
         let screen = Point::new(x, y);
         self.last_pointer = screen;
         let world = self.cam.screen_to_world() * screen;
+        // Select tool: a double-click on a Sticky / Text element opens the inline
+        // editor on it (§6), taking precedence over group entering.
+        if self.machine.tool() == Tool::Select {
+            let editable = hit_topmost(&self.display.nodes, world).filter(|hit| {
+                self.find_element(hit)
+                    .is_some_and(|e| matches!(e.kind, ElementKind::Sticky | ElementKind::Text))
+            });
+            if let Some(hit) = editable {
+                self.open_editor(hit);
+                return true;
+            }
+        }
         let out = self.machine.double_click(world);
         // Select tool: a double-click on a grouped element enters its scope,
         // peeling one nesting level so the next click selects a member (§2.F bis /
@@ -433,6 +491,239 @@ impl ToileView {
             _ => false,
         }
     }
+
+    // -- Inline text editor (§6) ----------------------------------------------
+
+    /// Find a displayed element by id (linear over the culled set; the set is
+    /// small and this runs only on edit open / paint of the edited element).
+    fn find_element(&self, id: &ElementId) -> Option<&DisplayElement> {
+        self.display.nodes.iter().find_map(|n| match n {
+            DisplayNode::Element(e) if &e.id == id => Some(e),
+            _ => None,
+        })
+    }
+
+    /// The edited element's text origin (top-left screen corner + padding) and
+    /// wrap width in screen pixels, plus its full screen rect (for hit tests).
+    fn edit_geometry(&self, e: &DisplayElement) -> (Point, f32, Rect) {
+        let sb = world_rect_to_screen(e.bounds, &self.cam);
+        let pad = InlineEditor::pad(self.cam.zoom);
+        let origin = Point::new(sb.x0 + pad, sb.y0 + pad);
+        let wrap_w = (sb.width() - 2.0 * pad).max(1.0) as f32;
+        (origin, wrap_w, sb)
+    }
+
+    /// Open the inline editor on a Sticky / Text element (§6). No-op for any
+    /// other kind or an unknown id.
+    fn open_editor(&mut self, id: ElementId) {
+        let editor = {
+            let Some(e) = self.find_element(&id) else {
+                return;
+            };
+            if !matches!(e.kind, ElementKind::Sticky | ElementKind::Text) {
+                return;
+            }
+            let text = match &e.geom {
+                DisplayGeom::Text(t) => t.clone(),
+                _ => String::new(),
+            };
+            InlineEditor::open(e, &text, self.theme.palette())
+        };
+        self.editor = Some(editor);
+        self.edit_closing = false;
+        self.edit_pointer_down = false;
+        self.edit_dirty = true;
+        // Suppress the element's static text in the content pass while editing.
+        self.needs_full = true;
+        self.text_input.clear();
+        self.text_input.focus();
+    }
+
+    /// Request a deferred commit + close: the buffer is written back as `SetText`
+    /// on the next paint (after a final intent flush).
+    fn request_close_editor(&mut self) {
+        if self.editor.is_some() {
+            self.edit_closing = true;
+            self.edit_dirty = true;
+        }
+    }
+
+    /// Map a screen point into the edited element's local editor frame, or `None`
+    /// when the point falls outside the element (a click there closes the edit).
+    fn edit_local_point(&self, screen: Point) -> Option<Point> {
+        let id = self.editor.as_ref()?.id().clone();
+        let e = self.find_element(&id)?;
+        let (origin, _w, sb) = self.edit_geometry(e);
+        sb.contains(screen)
+            .then(|| Point::new(screen.x - origin.x, screen.y - origin.y))
+    }
+
+    /// Route an input event to the active editor. Returns `Some(consumed)` when
+    /// the editor decides the event's fate, or `None` to let normal handling run
+    /// (chords like Ctrl+Z, wheel pan/zoom keep working while editing).
+    fn edit_input(&mut self, ev: &InputEvent) -> Option<bool> {
+        match ev {
+            InputEvent::Text { text } => {
+                self.push_intent(EditIntent::Insert(text.clone()));
+                Some(true)
+            }
+            InputEvent::CompositionUpdate { text } => {
+                self.push_intent(EditIntent::Compose(text.clone()));
+                Some(true)
+            }
+            InputEvent::CompositionEnd { text } => {
+                self.push_intent(EditIntent::ComposeEnd(text.clone()));
+                Some(true)
+            }
+            InputEvent::Key {
+                key,
+                ctrl,
+                alt,
+                shift,
+                meta,
+            } => Some(self.edit_key(key, *ctrl, *alt, *shift, *meta)),
+            InputEvent::PointerDown { x, y, .. } => {
+                self.last_pointer = Point::new(*x, *y);
+                match self.edit_local_point(Point::new(*x, *y)) {
+                    Some(local) => {
+                        self.push_intent(EditIntent::PointerDown {
+                            x: local.x as f32,
+                            y: local.y as f32,
+                        });
+                        self.edit_pointer_down = true;
+                    }
+                    None => self.request_close_editor(),
+                }
+                Some(true)
+            }
+            InputEvent::PointerMove { x, y } => {
+                self.last_pointer = Point::new(*x, *y);
+                if self.edit_pointer_down
+                    && let Some(local) = self.edit_local_point(Point::new(*x, *y))
+                {
+                    self.push_intent(EditIntent::PointerDrag {
+                        x: local.x as f32,
+                        y: local.y as f32,
+                    });
+                    return Some(true);
+                }
+                Some(self.edit_pointer_down)
+            }
+            InputEvent::PointerUp { .. } => {
+                let was = self.edit_pointer_down;
+                self.edit_pointer_down = false;
+                Some(was)
+            }
+            InputEvent::DoubleClick { x, y } => {
+                match self.edit_local_point(Point::new(*x, *y)) {
+                    Some(local) => self.push_intent(EditIntent::WordAt {
+                        x: local.x as f32,
+                        y: local.y as f32,
+                    }),
+                    None => self.request_close_editor(),
+                }
+                Some(true)
+            }
+            // Wheel pans/zooms the board under the editor (it follows the element
+            // each paint); let the normal handler run.
+            InputEvent::Wheel { .. } => None,
+        }
+    }
+
+    /// Editing key map. Returns `true` when consumed (host `preventDefault`).
+    /// Character-producing keys return `false` so the browser still emits the
+    /// `input` event that lands as `InputEvent::Text` (the actual insertion).
+    fn edit_key(&mut self, key: &str, ctrl: bool, alt: bool, shift: bool, meta: bool) -> bool {
+        let cmd = ctrl || meta;
+        // Ctrl/Alt+Arrow jumps by word; Ctrl+A selects all inside the editor.
+        if cmd {
+            match key {
+                "a" | "A" => {
+                    self.push_intent(EditIntent::SelectAll);
+                    return true;
+                }
+                // Other chords (Ctrl+Z/C/X/V...) are not editor actions: let the
+                // board handler / native clipboard have them.
+                _ => return false,
+            }
+        }
+        let word = alt; // Alt+Arrow = word motion (Ctrl is reserved for chords).
+        match key {
+            "Escape" => self.request_close_editor(),
+            "Enter" => self.push_intent(EditIntent::Newline),
+            "Backspace" => self.push_intent(EditIntent::Backspace),
+            "Delete" => self.push_intent(EditIntent::Delete),
+            "ArrowLeft" => self.push_intent(EditIntent::Left {
+                select: shift,
+                word,
+            }),
+            "ArrowRight" => self.push_intent(EditIntent::Right {
+                select: shift,
+                word,
+            }),
+            "ArrowUp" => self.push_intent(EditIntent::Up { select: shift }),
+            "ArrowDown" => self.push_intent(EditIntent::Down { select: shift }),
+            "Home" => self.push_intent(EditIntent::LineStart { select: shift }),
+            "End" => self.push_intent(EditIntent::LineEnd { select: shift }),
+            // A character key: do NOT consume, so the textarea emits `input` and
+            // the char arrives as `InputEvent::Text`. Returning false also skips
+            // the board shortcut handler (guarded by `editor.is_some()`).
+            _ => return false,
+        }
+        true
+    }
+
+    /// Queue an editor intent and mark the overlay dirty.
+    fn push_intent(&mut self, intent: EditIntent) {
+        if let Some(ed) = self.editor.as_mut() {
+            ed.push(intent);
+            self.edit_dirty = true;
+        }
+    }
+
+    /// Flush queued intents, render the editor, and perform a deferred commit +
+    /// close. Runs in the paint pass, where `font_cx` is available. Returns the
+    /// id currently under edit (for content-pass text suppression).
+    fn drive_editor<S: ambre_draw::DrawSurface>(
+        &mut self,
+        surface: &mut S,
+        font_cx: &mut FontContext,
+    ) {
+        if self.editor.is_none() {
+            return;
+        }
+        let id = self.editor.as_ref().unwrap().id().clone();
+        // Resolve the edited element's screen geometry (may have scrolled out).
+        let geom = self.find_element(&id).map(|e| self.edit_geometry(e));
+
+        match geom {
+            Some((origin, wrap_w, _sb)) => {
+                let zoom = self.cam.zoom;
+                let palette = self.theme.palette();
+                let ed = self.editor.as_mut().unwrap();
+                ed.flush(font_cx, wrap_w, zoom);
+                if !self.edit_closing {
+                    ed.render(surface, origin, palette);
+                    if let Some(caret) = ed.caret_local() {
+                        set_caret_pipe(&self.text_input, origin, caret);
+                    }
+                }
+            }
+            // Element gone/culled: commit whatever the last flush produced.
+            None => self.edit_closing = true,
+        }
+
+        if self.edit_closing {
+            if let Some(text) = self.editor.as_ref().unwrap().committed_text() {
+                self.send_edit(ToileCommand::SetText { id, text });
+            }
+            self.editor = None;
+            self.edit_closing = false;
+            self.edit_pointer_down = false;
+            // Repaint content so the element's static text returns.
+            self.needs_full = true;
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -457,6 +748,12 @@ impl ToileView {
                     break;
                 }
             }
+        }
+
+        // A freshly-created Sticky / Text element: open its editor now that its
+        // geometry has landed in `display` (§6).
+        if let Some(id) = self.edit_pending_open.take() {
+            self.open_editor(id);
         }
 
         // First frame: request the initial culled viewport for the boot camera.
@@ -484,6 +781,8 @@ impl ToileView {
             || self.viewport_changed
             || self.data_dirty
             || self.machine.is_active()
+            || self.edit_dirty
+            || self.editor.is_some()
             || hud_tick;
 
         // Phase 0 has no blit-scroll optimization: any content change is a full
@@ -503,6 +802,7 @@ impl ToileView {
         self.needs_full = false;
         self.viewport_changed = false;
         self.data_dirty = false;
+        self.edit_dirty = false;
 
         RepaintPlan {
             content,
@@ -525,13 +825,14 @@ impl ToileView {
             self.theme.palette(),
             font_cx,
             text_cache,
+            self.editor.as_ref().map(|e| e.id()),
         );
     }
 
     pub fn paint_overlay(
         &mut self,
         surface: &mut WgpuSurface<'_>,
-        _font_cx: &mut FontContext,
+        font_cx: &mut FontContext,
         _text_cache: &mut TextCache,
         stats: &FrameStats,
     ) {
@@ -543,6 +844,10 @@ impl ToileView {
             self.theme.palette(),
             self.preview.as_ref(),
         );
+
+        // Inline text editor: flush queued intents, draw caret/selection/glyphs,
+        // and perform a deferred commit + close (§6). Drawn above content.
+        self.drive_editor(surface, font_cx);
 
         self.perf_pub.publish(PerfSnapshot {
             fps: stats.fps,
@@ -561,6 +866,14 @@ impl ToileView {
     }
 
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
+        // While an inline editor is open it gets first refusal on input (§6):
+        // `Some(consumed)` settles the event, `None` falls through to the board
+        // handlers below (chords, wheel pan/zoom keep working mid-edit).
+        if self.editor.is_some()
+            && let Some(consumed) = self.edit_input(ev)
+        {
+            return consumed;
+        }
         match ev {
             InputEvent::Wheel {
                 dx, dy, ctrl_key, ..
@@ -651,6 +964,12 @@ impl ToileView {
         self.selection.clear();
         self.group_scope = None;
         self.preview = None;
+        self.editor = None;
+        self.edit_pending_open = None;
+        self.edit_open_on_create = false;
+        self.edit_closing = false;
+        self.edit_dirty = false;
+        self.edit_pointer_down = false;
         self.machine.cancel();
         self.initial_viewport_sent = false;
         self.pending_viewport = None;
@@ -659,4 +978,30 @@ impl ToileView {
         // freshly-routed board without a click.
         self.text_input.focus();
     }
+}
+
+/// Position the transparent `<textarea>` pipe at the editor caret so the IME
+/// candidate box anchors there (§6). `origin` is the editor's text origin in
+/// physical screen pixels; `caret` is the caret box in the editor's local frame.
+/// The pipe wants CSS pixels, so both are divided by the device pixel ratio.
+fn set_caret_pipe(pipe: &ambre_canvas::TextInput, origin: ambre_draw::Point, caret: BoundingBox) {
+    let dpr = device_pixel_ratio();
+    let css_x = (origin.x + caret.x0) / dpr;
+    let css_y = (origin.y + caret.y0) / dpr;
+    let line_h = ((caret.y1 - caret.y0) / dpr).max(1.0);
+    pipe.set_caret(css_x, css_y, line_h);
+}
+
+/// The browser device pixel ratio (physical px per CSS px), or 1.0 off the web.
+#[cfg(target_arch = "wasm32")]
+fn device_pixel_ratio() -> f64 {
+    web_sys::window()
+        .map(|w| w.device_pixel_ratio())
+        .filter(|dpr| *dpr > 0.0)
+        .unwrap_or(1.0)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn device_pixel_ratio() -> f64 {
+    1.0
 }

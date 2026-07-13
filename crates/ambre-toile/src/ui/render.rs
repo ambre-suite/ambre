@@ -14,8 +14,8 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{
-    DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementStyle,
-    ShapeKind,
+    DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementId,
+    ElementStyle, ShapeKind,
 };
 use ambre_canvas::{Palette, TextCache};
 use ambre_draw::{
@@ -101,6 +101,7 @@ pub fn paint_content<S: DrawSurface>(
     palette: &Palette,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
+    editing: Option<&ElementId>,
 ) {
     // 1. Background + adaptive grid (screen space).
     grid::paint_grid(surface, cam, palette);
@@ -119,6 +120,9 @@ pub fn paint_content<S: DrawSurface>(
     for node in &vp.nodes {
         if let DisplayNode::Element(e) = node
             && let DisplayGeom::Text(text) = &e.geom
+            // Skip the element under inline edit: its live buffer is painted by
+            // the editor overlay instead (§6).
+            && editing != Some(&e.id)
         {
             paint_text(surface, e, text, cam, palette, font_cx, text_cache);
         }
@@ -343,6 +347,7 @@ mod tests {
             &LIGHT_PALETTE,
             &mut font_cx,
             &mut tc,
+            None,
         );
 
         // Transform stack must be balanced.

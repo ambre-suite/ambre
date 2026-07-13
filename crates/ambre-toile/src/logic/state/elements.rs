@@ -111,6 +111,29 @@ impl ToileState {
         }
     }
 
+    /// Overwrite the plaintext body of a sticky / text element (§6). Phase 0
+    /// stores the body as a single LWW string field, so an edit is a full-body
+    /// `insert` on the `"text"` key. Only sticky / text elements carry that field;
+    /// a request against any other kind (or a missing element) is a rejected no-op.
+    pub(super) fn set_text(&mut self, id: &ElementId, text: &str) -> ToileOutcome {
+        let Some(em) = self.element_map(id) else {
+            return self.err_no_element(id);
+        };
+        if bool_of(&em, "locked") {
+            return ToileOutcome::display_only(Vec::new());
+        }
+        // The `"text"` field exists only on sticky / text elements (seeded at
+        // creation). Reject a SetText aimed at any other kind.
+        if em.get("text").is_none() {
+            return ToileOutcome::display_only(vec![ToileEvent::Error(
+                ToileError::ContentKindMismatch,
+            )]);
+        }
+        let _ = em.insert("text", text);
+        self.doc.commit();
+        self.emit_with_update(vec![self.viewport_event()])
+    }
+
     pub(super) fn move_elements(&mut self, ids: &[ElementId], delta: Vec2) -> ToileOutcome {
         // A group transforms as one: expand every selected group to its leaf
         // descendants so translating a group moves its whole subtree (§2.F bis).

@@ -11,6 +11,7 @@
 // (`render`), and the `ToileView` that drives them each frame (`view`).
 // ============================================================================
 
+pub mod edit;
 pub mod grid;
 pub mod hit;
 pub mod render;

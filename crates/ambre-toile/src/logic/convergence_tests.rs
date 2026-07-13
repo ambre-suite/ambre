@@ -54,6 +54,61 @@ fn create_registers_bounds_and_layer() {
     assert_eq!(st.layer_order(), &[NodeId::Element(id)]);
 }
 
+/// Read an element's plaintext body from the derived viewport (Phase 0 stores
+/// it as `DisplayGeom::Text`).
+fn body_of(st: &ToileState, id: &ElementId) -> Option<String> {
+    st.debug_viewport().nodes.iter().find_map(|n| match n {
+        DisplayNode::Element(e) if &e.id == id => match &e.geom {
+            crate::logic::command::DisplayGeom::Text(t) => Some(t.clone()),
+            _ => None,
+        },
+        _ => None,
+    })
+}
+
+#[test]
+fn set_text_overwrites_sticky_body() {
+    let mut st = ToileState::new();
+    let out = st.handle_command(ToileCommand::CreateElement {
+        kind: ElementKind::Sticky,
+        at: Point::new(0.0, 0.0),
+        size: Size::new(120.0, 80.0),
+        content: InitContent::Text("hello".to_owned()),
+    });
+    let id = created_id(&out);
+    assert_eq!(body_of(&st, &id).as_deref(), Some("hello"));
+
+    let out = st.handle_command(ToileCommand::SetText {
+        id: id.clone(),
+        text: "bonjour monde".to_owned(),
+    });
+    assert!(
+        out.update.is_some(),
+        "a text edit must produce a CRDT delta"
+    );
+    assert_eq!(body_of(&st, &id).as_deref(), Some("bonjour monde"));
+}
+
+#[test]
+fn set_text_rejects_a_non_text_element() {
+    let mut st = ToileState::new();
+    let id = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let out = st.handle_command(ToileCommand::SetText {
+        id,
+        text: "nope".to_owned(),
+    });
+    assert!(
+        out.update.is_none(),
+        "rejected edit must not mutate the doc"
+    );
+    assert!(matches!(
+        out.display.first(),
+        Some(ToileEvent::Error(
+            crate::logic::command::ToileError::ContentKindMismatch
+        ))
+    ));
+}
+
 #[test]
 fn move_translates_bounds() {
     let mut st = ToileState::new();
