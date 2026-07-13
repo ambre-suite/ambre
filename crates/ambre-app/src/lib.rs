@@ -151,6 +151,10 @@ struct Wiring {
     /// (`toile-ui §5ter`): the view drains it and resolves it against its selection
     /// (the Logic thread never sees the selection).
     toile_menu_cmd: RwSignal<Option<ambre_chrome::commands::CommandId>>,
+    /// Toile active tool (`toile-ui §5quinquies.A`): the shared source of truth for
+    /// the DOM tool palette and the bare-key tool chords; the canvas view reads it
+    /// each frame and applies it. Tool selection is UI-only, canvas-local state.
+    toile_active_tool: RwSignal<ambre_toile::ui::Tool>,
     /// Status-bar selection aggregates (`-ui.md` sec.13bis); `None` on a single
     /// cell. Set by the per-frame relay on `TrameEvent::SelectionStats`, cleared
     /// by the canvas view on a single-cell selection.
@@ -350,6 +354,10 @@ pub fn main() {
     // shell share the one pair of signals, exactly like Trame's `ctx_scope`.
     let toile_ctx_scope = RwSignal::new(ambre_toile::ui::menu::CtxScope::default());
     let toile_menu_cmd = RwSignal::new(None::<ambre_chrome::commands::CommandId>);
+    // Toile active tool (`toile-ui §5quinquies.A`): shared by the DOM tool palette,
+    // the keyboard tool chords and the canvas view, exactly like the context-menu
+    // pair above. Starts on the default tool (Select).
+    let toile_active_tool = RwSignal::new(ambre_toile::ui::Tool::default());
 
     // Design tokens: inject the generated CSS custom properties (theme.css) and
     // boot the dark theme. `theme_ctl` is the single source of truth for the
@@ -498,6 +506,7 @@ pub fn main() {
         sel_bounds,
         toile_ctx_scope,
         toile_menu_cmd,
+        toile_active_tool,
         sheets,
         active_sheet,
     );
@@ -577,6 +586,7 @@ pub fn main() {
         ui_to_logic_tx.clone(),
         find_state,
         find_state_toile,
+        toile_active_tool,
         boot_is_toile,
     );
 
@@ -1037,6 +1047,7 @@ pub fn main() {
                     theme_ctl,
                     toile_ctx_scope,
                     toile_menu_cmd,
+                    toile_active_tool,
                 ))
             } else {
                 AppView::Trame(TrameView::new(

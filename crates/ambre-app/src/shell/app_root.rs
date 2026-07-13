@@ -43,6 +43,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         sel_bounds,
         toile_ctx_scope,
         toile_menu_cmd,
+        toile_active_tool,
         sort_dialog,
         chrome_status,
         sheets,
@@ -755,6 +756,12 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 result=find_result_toile
                 on_find=on_find_toile
             />
+        })}
+        // Toile tool palette / primary toolbar (toile-ui §5quinquies.A): a floating
+        // vertical bar, mounted only for a Toile board. It writes the shared active-
+        // tool signal the canvas view applies; the keyboard chords write the same one.
+        {boot_is_toile.then(|| view! {
+            <toile_chrome::ToolPalette active=toile_active_tool />
         })}
 
         // Multi-column sort dialog (sec.5.C), opened from "Sort range...".

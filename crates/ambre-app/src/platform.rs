@@ -389,6 +389,26 @@ pub(crate) fn install_canvas_context_menu(ctx_menu: RwSignal<Option<(f64, f64)>>
     });
 }
 
+/// Whether a keyboard event targets an editable element (a text `<input>` /
+/// `<textarea>` or a contenteditable host), in which case a bare tool chord must
+/// not be stolen (`toile-ui §5quinquies.A`). The pure decision lives in
+/// `ambre_toile::ui::palette::is_editable_tag` (host-tested); this only reads the
+/// tag name and contenteditable flag off the event target.
+fn target_is_editable(event: &web_sys::KeyboardEvent) -> bool {
+    use wasm_bindgen::JsCast;
+    let Some(target) = event.target() else {
+        return false;
+    };
+    let tag = target
+        .dyn_ref::<web_sys::Element>()
+        .map(|el| el.tag_name())
+        .unwrap_or_default();
+    let content_editable = target
+        .dyn_ref::<web_sys::HtmlElement>()
+        .is_some_and(|el| el.is_content_editable());
+    ambre_toile::ui::palette::is_editable_tag(&tag, content_editable)
+}
+
 /// Install the global command-keybinding listener (the keymap's DOM half).
 /// A `keydown` whose chord resolves in the keymap is owned: default prevented,
 /// command dispatched to the routed document. Unmatched keys fall through to the
@@ -400,6 +420,7 @@ pub(crate) fn install_command_keys(
     to_logic: flume::Sender<LogicCommand>,
     find_state: RwSignal<Option<trame_chrome::FindReplaceState>>,
     find_state_toile: RwSignal<bool>,
+    active_tool_toile: RwSignal<ambre_toile::ui::Tool>,
     boot_is_toile: bool,
 ) {
     let document = web_sys::window()
@@ -415,15 +436,28 @@ pub(crate) fn install_command_keys(
             let Some(id) = keymap.resolve(chord) else {
                 return;
             };
-            event.prevent_default();
-            // Toile Find (`toile-ui §5quater`) is a UI-only intent: toggle the DOM
-            // panel open rather than dispatching to Logic (the panel emits `Find`).
+            // Toile board: the tool chords (§5quinquies.A) and Find (§5quater) are
+            // UI-only intents handled here; every other Toile id is decoded canvas-
+            // side in `ToileView::handle_key`, so it is left for that listener.
             if boot_is_toile {
+                if let Some(tool) = toile_chrome::tool_for_command(id) {
+                    // Don't steal a bare tool key while the user is typing (the
+                    // Parley editor's hidden input, a chrome text field): let the
+                    // character through untouched.
+                    if target_is_editable(&event) {
+                        return;
+                    }
+                    event.prevent_default();
+                    active_tool_toile.set(tool);
+                    return;
+                }
+                event.prevent_default();
                 if id == toile_chrome::FIND {
                     find_state_toile.set(true);
                 }
                 return;
             }
+            event.prevent_default();
             // Find & Replace (sec.5.G) are UI-only intents: open the DOM panel in
             // the matching mode rather than dispatching to the Logic thread.
             if id == trame_chrome::FIND {

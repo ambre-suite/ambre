@@ -54,6 +54,7 @@ pub(crate) fn mount_shell(
     sel_bounds: RwSignal<Option<(u32, u32, u32, u32)>>,
     toile_ctx_scope: RwSignal<ambre_toile::ui::menu::CtxScope>,
     toile_menu_cmd: RwSignal<Option<ambre_chrome::commands::CommandId>>,
+    toile_active_tool: RwSignal<ambre_toile::ui::Tool>,
     sheets: RwSignal<Vec<(String, String)>>,
     active_sheet: RwSignal<String>,
 ) {
@@ -140,6 +141,7 @@ pub(crate) fn mount_shell(
             sel_bounds,
             toile_ctx_scope,
             toile_menu_cmd,
+            toile_active_tool,
             sort_dialog,
             chrome_status,
             sheets,
