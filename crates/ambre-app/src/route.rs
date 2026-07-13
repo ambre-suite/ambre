@@ -96,6 +96,27 @@ pub fn doc_path(doc_type: DocType, document_id: DocumentId) -> String {
     format!("/{}/{}", type_slug(doc_type), document_id)
 }
 
+/// Whether the render kind of `doc_type` is the Toile canvas view. The booted
+/// `AppView` is a binary split today (`lib.rs`, `boot_is_toile`): the Toile
+/// vector board vs. everything else (the Trame grid). Prose/Murmure have no view
+/// yet, so they fall on the non-Toile side like Trame.
+fn is_toile_kind(doc_type: DocType) -> bool {
+    matches!(doc_type, DocType::Toile)
+}
+
+/// Whether opening `target` from a page booted with `boot_is_toile` requires a
+/// **full page reload** rather than an in-place `AppView::set_document` swap.
+///
+/// The booted canvas view is fixed per page load: `set_document` can swap the
+/// document id **within the same app kind**, but cannot switch kinds
+/// (Trame <-> Toile). So a target whose render kind differs from the booted kind
+/// must hard-navigate (`location.set_href`) to re-boot the right `AppView`;
+/// a same-kind target uses a router pushState that keeps the Sync worker/session
+/// (`ambre-spec-chrome.md 2.G` "Open").
+pub fn needs_reload(target: DocType, boot_is_toile: bool) -> bool {
+    is_toile_kind(target) != boot_is_toile
+}
+
 // ── Tests (wasm tier) ───────────────────────────────────────────────────────
 // The crate is `#![cfg(target_arch = "wasm32")]`, so even this pure path<->Route
 // mapping is only reachable on the wasm target. These run under node via the
@@ -174,5 +195,15 @@ mod tests {
     #[wasm_bindgen_test]
     fn landing_route_has_no_doc() {
         assert_eq!(Route::Landing.doc(), None);
+    }
+
+    #[wasm_bindgen_test]
+    fn cross_kind_open_needs_reload() {
+        // Same render kind as the booted view -> in-place swap, no reload.
+        assert!(!needs_reload(DocType::Trame, false));
+        assert!(!needs_reload(DocType::Toile, true));
+        // Different kind -> must hard-navigate to re-boot the right AppView.
+        assert!(needs_reload(DocType::Toile, false));
+        assert!(needs_reload(DocType::Trame, true));
     }
 }

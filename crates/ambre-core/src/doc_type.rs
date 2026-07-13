@@ -75,6 +75,19 @@ impl DocType {
         }
     }
 
+    /// The document types the launcher "new document" picker can create, in
+    /// display order (`ambre-spec-chrome.md §2.G`). This is the single source of
+    /// truth the app-agnostic type picker iterates -- it never hardcodes a type.
+    ///
+    /// Only types whose Logic state can actually be instantiated
+    /// (`ambre_logic::DocState::new`) are listed: `Prose` and `Murmure` return
+    /// `None` there (no engine yet -- `Prose` lands in Epic `E5`), so creating
+    /// one would yield a document that never renders. `Prose` joins this list the
+    /// moment its Logic state exists -- a one-entry change, no picker rework.
+    pub const fn creatable() -> &'static [DocType] {
+        &[Self::Trame, Self::Toile]
+    }
+
     /// Returns a short description of the document type.
     pub const fn description(self) -> &'static str {
         match self {
@@ -128,6 +141,15 @@ mod tests {
         assert_eq!(DocType::Trame.name(), "Trame");
         assert_eq!(DocType::Toile.name(), "Toile");
         assert_eq!(DocType::Murmure.name(), "Murmure");
+    }
+
+    #[test]
+    fn test_creatable_matches_logic_support() {
+        // The picker offers exactly the launcher-creatable types, in order.
+        // Prose/Murmure are excluded until their Logic state exists.
+        assert_eq!(DocType::creatable(), &[DocType::Trame, DocType::Toile]);
+        assert!(!DocType::creatable().contains(&DocType::Prose));
+        assert!(!DocType::creatable().contains(&DocType::Murmure));
     }
 
     #[test]
