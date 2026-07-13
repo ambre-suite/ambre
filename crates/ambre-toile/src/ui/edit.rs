@@ -45,6 +45,8 @@ pub enum EditIntent {
     Newline,
     Backspace,
     Delete,
+    /// Delete the current selection (cut). No-op when the selection is collapsed.
+    DeleteSelection,
     /// Horizontal caret motion; `select` extends the selection (Shift), `word`
     /// jumps by word (Ctrl/Alt).
     Left {
@@ -160,6 +162,14 @@ impl InlineEditor {
         (text != self.initial).then_some(text)
     }
 
+    /// The currently selected text, or `None` when the selection is collapsed
+    /// (or an IME composition is active). Font-free: reads the buffer over the
+    /// selection byte range, so it can be called synchronously inside a native
+    /// clipboard `copy`/`cut` event (§5ter).
+    pub fn selected_text(&self) -> Option<String> {
+        self.editor.selected_text().map(str::to_owned)
+    }
+
     /// Push the pinned style + geometry onto the editor for this paint, then
     /// apply every queued intent through the driver. Must run before rendering
     /// so the layout reflects the latest edits. `wrap_w` is the wrap width in
@@ -192,6 +202,7 @@ impl InlineEditor {
                 EditIntent::Newline => drv.insert_or_replace_selection("\n"),
                 EditIntent::Backspace => drv.backdelete(),
                 EditIntent::Delete => drv.delete(),
+                EditIntent::DeleteSelection => drv.delete_selection(),
                 EditIntent::Left { select, word } => match (select, word) {
                     (false, false) => drv.move_left(),
                     (true, false) => drv.select_left(),
