@@ -248,6 +248,13 @@ Stories:
 - `[ ]` `toile-interop §10 Phase 0/1` — SVG import/export, raster import, safety limits, media hashing + placeholder;
   then PDF export (presentation order), Figma/Miro converters, media pipeline on the crypto/Sync layer.
   Golden fixtures + wasm export tests.
+- `[ ]` **New-document type picker (launcher, `CHROME P4` addendum)** — the `E2` launcher create action was
+  hardcoded to Trame (`landing.rs`, `trame_chrome::DOC_TYPE`) while Trame was the only product. Toile is the
+  second creatable type, so the "new document" action becomes an app-agnostic type picker (Prose / Trame /
+  Toile) passing the chosen `DocType` to `doc_path` / `CreateDocument` (`ambre-spec-chrome.md §2.G`).
+  Prerequisite for creating a Toile from the UI (today only reachable by hand-typing `/toile/<uuid>`). Listing
+  and opening Toile documents already work -- the launcher is app-agnostic and `DocType::Toile` is wired
+  through `doc_path` and the card icon.
 - `[ ]` `ARCH P6` (composition) — in-place editable nested embeds: `AppCommand`/`TrameOutcome` recursion routed by
   `Uuid` so a `doc_embed` (Prose/Trame) is editable in place, role-gated (`toile-logic §2.I`). *(embeds start at the
   read-only subset.)* The spatial `DocState` itself -- typed `ToileState` behind the `ambre-logic` `match`, `rstar`
