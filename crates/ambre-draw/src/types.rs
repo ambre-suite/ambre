@@ -10,9 +10,10 @@ pub use peniko::{Brush, BrushRef, Color, Fill};
 // Parley types re-exported so that crates implementing or consuming DrawSurface
 // do not need a direct parley dependency for the types shared via DrawSurface.
 pub use parley::layout::GlyphRun;
-pub use parley::style::StyleProperty;
+pub use parley::style::{FontStyle, FontWeight, StyleProperty};
 pub use parley::{
-    Alignment, AlignmentOptions, FontContext, Layout, LayoutContext, PositionedLayoutItem,
+    Alignment, AlignmentOptions, BoundingBox, FontContext, Layout, LayoutContext, PlainEditor,
+    PlainEditorDriver, PositionedLayoutItem,
 };
 
 /// Brush type used inside Parley layouts across Ambre.

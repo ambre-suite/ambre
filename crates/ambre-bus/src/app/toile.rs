@@ -451,6 +451,16 @@ pub enum ToileCommand {
     DeleteElements {
         ids: Vec<ElementId>,
     },
+    /// Replace the plaintext body of a sticky / text element (§6). Phase 0 stores
+    /// the body as a single LWW string field, so a text edit is a full-body
+    /// overwrite -- the inline Parley editor holds the authoritative buffer and
+    /// commits the final string here. The char-wise `LoroText` + `TextDelta`
+    /// upgrade (a `EditText { id, delta }` variant) is a later slice (see the
+    /// `DisplayGeom::Text` note). A non-text element id is rejected.
+    SetText {
+        id: ElementId,
+        text: String,
+    },
     LockElements {
         ids: Vec<ElementId>,
         locked: bool,

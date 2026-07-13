@@ -164,6 +164,7 @@ impl ToileState {
             ToileCommand::RotateElement { id, radians } => self.rotate_element(&id, radians),
             ToileCommand::RestyleElements { ids, style } => self.restyle_elements(&ids, style),
             ToileCommand::DeleteElements { ids } => self.delete_elements(&ids),
+            ToileCommand::SetText { id, text } => self.set_text(&id, &text),
             ToileCommand::LockElements { ids, locked } => self.lock_elements(&ids, locked),
             ToileCommand::Reorder { node, to } => self.reorder(node, to),
             ToileCommand::GroupElements { ids } => self.group_elements(&ids),
