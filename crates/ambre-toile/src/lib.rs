@@ -12,6 +12,13 @@
 pub mod logic;
 pub mod ui;
 
+/// Toile-specific chrome (the Find panel and, later, the tool palette / context
+/// menu / status bar), built on the `ambre-chrome` toolkit. Wasm-only (leptos
+/// CSR + DOM), like `ambre-trame::chrome` -- scoped to wasm32 so host logic /
+/// render tests never build it.
+#[cfg(target_arch = "wasm32")]
+pub mod chrome;
+
 pub use logic::command::{
     DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, End, InitContent,
     SelectionStats, ToileCommand, ToileError, ToileEvent, ToileOutcome, ZTarget,

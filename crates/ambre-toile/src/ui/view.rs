@@ -64,6 +64,19 @@ pub struct ToileView {
     /// Live gesture preview (marquee / rubber-band / pen / stroke), world space.
     preview: Option<Preview>,
 
+    /// Find-on-board highlight state (§5quater), driven by `FindResults` from
+    /// Logic. `find_hits` are all matching ids (only those in the culled set get
+    /// an outline); `find_focus` is the current match. Local view state, never
+    /// synced and never an undo item (§11bis).
+    find_hits: Vec<ElementId>,
+    find_focus: Option<ElementId>,
+    /// The focus id awaiting a `SelectionStats` reply so the camera can recenter
+    /// on it (§5quater). `FindResults` carries no geometry and the focus may be
+    /// off-screen, so the view asks Logic for its bounds via `RequestSelectionStats`
+    /// and recenters when the answer lands. Distinguishes a find-driven stats
+    /// request from a future status-bar one.
+    pending_find_focus: Option<ElementId>,
+
     /// Active inline text editor (sticky / text body, §6). `None` when not
     /// editing. Font-free edit intents are queued here at input time and applied
     /// during paint, when the `FontContext` is available (see `edit.rs`).
@@ -141,6 +154,9 @@ impl ToileView {
             selection: Vec::new(),
             group_scope: None,
             preview: None,
+            find_hits: Vec::new(),
+            find_focus: None,
+            pending_find_focus: None,
             editor: None,
             edit_pending_open: None,
             edit_open_on_create: false,
@@ -247,12 +263,35 @@ impl ToileView {
                     self.edit_pending_open = Some(id);
                 }
             }
-            // Phase 0 does not act on these yet (chrome / presence land later);
+            // Find results (§5quater): stash the highlight set and request the
+            // focus element's geometry so the camera can recenter on it (the
+            // reply may concern an off-screen match absent from `display`).
+            ToileEvent::FindResults(fr) => {
+                self.find_hits = fr.hits;
+                self.find_focus = fr.focus.clone();
+                if let Some(focus) = fr.focus {
+                    self.pending_find_focus = Some(focus.clone());
+                    self.send_edit(ToileCommand::RequestSelectionStats { ids: vec![focus] });
+                }
+                self.needs_full = true;
+            }
+            // A `SelectionStats` reply we asked for to recenter on a find focus
+            // (§5quater). Move the camera center onto the element's bounds center
+            // and re-cull; ignore replies not tied to a pending find focus (a
+            // future status-bar request, §8bis).
+            ToileEvent::SelectionStats(stats) => {
+                if self.pending_find_focus.take().is_some()
+                    && let Some(bounds) = stats.bounds
+                {
+                    self.cam.center = bounds.center();
+                    self.needs_full = true;
+                    self.queue_viewport();
+                }
+            }
+            // Phase 0 does not act on these yet (presence lands later);
             // log the errors, ignore the rest.
             ToileEvent::Error(e) => tracing::warn!("Toile rejected: {e}"),
-            ToileEvent::SelectionStats(_)
-            | ToileEvent::FindResults(_)
-            | ToileEvent::DanglingConnector(_)
+            ToileEvent::DanglingConnector(_)
             | ToileEvent::PeerPresence(_)
             | ToileEvent::UndoState { .. } => {}
         }
@@ -843,6 +882,8 @@ impl ToileView {
             &self.cam,
             self.theme.palette(),
             self.preview.as_ref(),
+            &self.find_hits,
+            self.find_focus.as_ref(),
         );
 
         // Inline text editor: flush queued intents, draw caret/selection/glyphs,
@@ -987,6 +1028,9 @@ impl ToileView {
         self.selection.clear();
         self.group_scope = None;
         self.preview = None;
+        self.find_hits.clear();
+        self.find_focus = None;
+        self.pending_find_focus = None;
         self.editor = None;
         self.edit_pending_open = None;
         self.edit_open_on_create = false;

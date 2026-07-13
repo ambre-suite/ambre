@@ -393,11 +393,14 @@ pub(crate) fn install_canvas_context_menu(ctx_menu: RwSignal<Option<(f64, f64)>>
 /// A `keydown` whose chord resolves in the keymap is owned: default prevented,
 /// command dispatched to the routed document. Unmatched keys fall through to the
 /// canvas listener (content navigation), so this never steals arrow keys.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn install_command_keys(
     keymap: Keymap,
     current_doc: RwSignal<Option<DocumentId>>,
     to_logic: flume::Sender<LogicCommand>,
     find_state: RwSignal<Option<trame_chrome::FindReplaceState>>,
+    find_state_toile: RwSignal<bool>,
+    boot_is_toile: bool,
 ) {
     let document = web_sys::window()
         .expect("no window")
@@ -413,6 +416,14 @@ pub(crate) fn install_command_keys(
                 return;
             };
             event.prevent_default();
+            // Toile Find (`toile-ui §5quater`) is a UI-only intent: toggle the DOM
+            // panel open rather than dispatching to Logic (the panel emits `Find`).
+            if boot_is_toile {
+                if id == toile_chrome::FIND {
+                    find_state_toile.set(true);
+                }
+                return;
+            }
             // Find & Replace (sec.5.G) are UI-only intents: open the DOM panel in
             // the matching mode rather than dispatching to the Logic thread.
             if id == trame_chrome::FIND {

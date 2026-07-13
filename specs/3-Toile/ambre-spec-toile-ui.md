@@ -295,11 +295,12 @@ Paste and Select-All only.
 `Ctrl+F` opens a **DOM chrome panel** (`ambre-chrome` `FindPanel`, a floating panel pinned to a board corner,
 the same plumbing as the context menu §5ter) — never a canvas `DrawSurface` overlay. Because the UI holds only
 the culled `DisplayViewport`, a match on an off-screen sticky is invisible to it, so the search runs in the
-**Logic thread**: the panel emits `Find { query, options, from }` and Logic replies
+**Logic thread**: the panel emits `Find { query, options, from, backward }` and Logic replies
 `ToileEvent::FindResults { hits, focus }` (`toile-logic §8 quater`). The panel highlights the visible `hits`
 and recenters the camera on `focus`; `Enter` / `Shift+Enter` step forward / backward through the hits (each a
-fresh `Find` with `from` = the current match, wrapping). `Escape` or the close button dismisses the panel and
-clears the highlight; the highlight also clears when the query changes.
+fresh `Find` with `from` = the current match and the matching `backward` flag, Logic doing the wrapping).
+`Escape` or the close button dismisses the panel and clears the highlight; the highlight also clears when the
+query changes.
 
 Options are local Leptos signals on the panel: `match_case`, `whole_word`. Matches and the highlight are
 **local view state**, never synced and never an undo item. **Replace is out of MVP** (marginal on a free-form
@@ -532,7 +533,9 @@ lives in Logic, keyed on change size.
 - [ ] Content-anchored floating selection toolbar, transform-synced each frame (§5quinquies.D)
 - [ ] Top menu bar + zoom control (Fit / Zoom-to-selection) (§5quinquies.E)
 - [ ] `ambre-chrome` context menu (§5ter)
-- [ ] Find panel (§5quater)
+- [x] Find panel (§5quater). DOM chrome `FindPanel` (find-only) + `ToileCommand::Find` wiring;
+  canvas-side highlight of visible hits and camera recenter on `focus` (via a `RequestSelectionStats`
+  bounds lookup, since `FindResults` carries no geometry). Host-tested step/index helpers (`ui::find`).
 - [ ] Selection status bar (§8bis)
 - [ ] Presence overlay wired to `PeerPresence` with cross-app `UserId` colors (§8). The render pass (cursors / labels / laser / halos) is built and wasm-tested now against synthetic `PeerPresence` events; the end-to-end multi-user demo is **blocked on SYNC P4** (`pub_key` -> `UserId` resolution), so remote frames are dropped end-to-end until it lands (`toile-logic §9`).
 - [ ] wasm render / input tests

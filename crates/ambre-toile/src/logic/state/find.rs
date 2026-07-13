@@ -22,13 +22,14 @@ impl ToileState {
         query: &str,
         options: FindOptions,
         from: Option<&ElementId>,
+        backward: bool,
     ) -> ToileOutcome {
         let hits = if query.is_empty() {
             Vec::new()
         } else {
             self.find_hits(query, options)
         };
-        let focus = next_focus(&hits, from);
+        let focus = next_focus(&hits, from, backward);
         ToileOutcome::display_only(vec![ToileEvent::FindResults(FindResults { hits, focus })])
     }
 
@@ -77,15 +78,20 @@ impl ToileState {
 }
 
 /// The hit to recenter on: the first hit for a fresh search, otherwise the hit
-/// following `from` (wrapping). A `from` that is no longer a hit restarts at the
-/// first (§8 quater).
-fn next_focus(hits: &[ElementId], from: Option<&ElementId>) -> Option<ElementId> {
+/// adjacent to `from` in the requested direction (`backward` steps to the
+/// previous hit, else the next), wrapping around. A `from` that is no longer a
+/// hit restarts at the first (§8 quater).
+fn next_focus(hits: &[ElementId], from: Option<&ElementId>, backward: bool) -> Option<ElementId> {
     let first = hits.first().cloned();
     let Some(from) = from else {
         return first;
     };
+    let len = hits.len();
     match hits.iter().position(|h| h == from) {
-        Some(idx) => Some(hits[(idx + 1) % hits.len()].clone()),
+        // `+ len` before subtracting keeps the step unsigned and wraps correctly
+        // for the backward case at index 0.
+        Some(idx) if backward => Some(hits[(idx + len - 1) % len].clone()),
+        Some(idx) => Some(hits[(idx + 1) % len].clone()),
         None => first,
     }
 }

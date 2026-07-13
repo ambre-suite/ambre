@@ -197,7 +197,8 @@ impl ToileState {
                 query,
                 options,
                 from,
-            } => self.find(&query, options, from.as_ref()),
+                backward,
+            } => self.find(&query, options, from.as_ref(), backward),
             ToileCommand::RequestSelectionStats { ids } => self.selection_stats(&ids),
             ToileCommand::RequestSnapshot => ToileOutcome::display_only(Vec::new()),
             ToileCommand::SetViewport(vp) => {

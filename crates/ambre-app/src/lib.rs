@@ -47,6 +47,7 @@ use ambre_chrome::{
 // Trame-specific chrome (command wiring + toolbar / selection-toolbar markup +
 // status label). The launcher stays app-agnostic and reaches into this module
 // for every Trame concern -- it names no command, button, or event variant itself.
+use ambre_toile::chrome as toile_chrome;
 use ambre_toile::ui::ToileView;
 use ambre_trame::chrome as trame_chrome;
 use ambre_trame::render::FormulaAction;
@@ -132,6 +133,16 @@ struct Wiring {
     /// Last `FindResult` summarized as `(active_1based, total)` for the panel's
     /// "k/n" counter. Set by the per-frame relay on `TrameEvent::FindResult`.
     find_result: RwSignal<Option<(usize, usize)>>,
+    /// Whether the booted document is a Toile board. The chrome layer is still
+    /// largely Trame-shaped; this gates the Toile-specific panels (the Find panel,
+    /// `toile-ui §5quater`) which replace their Trame equivalents. Cross-type
+    /// in-session navigation reloads the page, so it is fixed per page load.
+    boot_is_toile: bool,
+    /// Toile Find panel open flag (`toile-ui §5quater`); Ctrl+F sets it.
+    find_state_toile: RwSignal<bool>,
+    /// Last Toile `FindResults` (hits + focus), feeding the panel's counter and
+    /// step origin. Set by the per-frame relay on `ToileEvent::FindResults`.
+    find_result_toile: RwSignal<Option<ambre_bus::app::toile::FindResults>>,
     /// Status-bar selection aggregates (`-ui.md` sec.13bis); `None` on a single
     /// cell. Set by the per-frame relay on `TrameEvent::SelectionStats`, cleared
     /// by the canvas view on a single-cell selection.
@@ -265,9 +276,9 @@ pub fn main() {
     let (view_tx, view_rx) = flume::bounded::<UiEvent>(CHANNEL_CAPACITY);
 
     // Command keymap (the keyboard view of the registry). The active app binds
-    // its own chords -- the launcher names none.
+    // its own chords -- the launcher names none. Populated once the boot document
+    // type is resolved below (Toile binds a different, smaller set than Trame).
     let mut keymap = Keymap::new();
-    trame_chrome::bind_keys(&mut keymap);
 
     // Handle to the canvas rAF loop, so a fullscreen modal -- or the landing
     // overlay covering the canvas -- can freeze it.
@@ -339,6 +350,16 @@ pub fn main() {
     // wins the startup race against `OpenDocument`.
     let boot_doc_typed = boot_route.doc();
     let boot_doc = boot_doc_typed.map(|(_, id)| id);
+    // Cross-type in-session navigation reloads the page (the `DocSwitcher` only
+    // swaps the id within one `AppView`), so the booted app kind is fixed here and
+    // gates both the render view (below) and the app-specific chrome (Find panel,
+    // keymap). Toile binds its own, smaller chord set.
+    let boot_is_toile = matches!(boot_doc_typed, Some((ambre_bus::DocType::Toile, _)));
+    if boot_is_toile {
+        toile_chrome::bind_keys(&mut keymap);
+    } else {
+        trame_chrome::bind_keys(&mut keymap);
+    }
     // The canvas needs a document from frame 0. Boot onto the routed one, or a
     // throwaway id on the landing route (the canvas is hidden there; the route
     // effect swaps it to the real document on the first navigation).
@@ -420,6 +441,10 @@ pub fn main() {
         Rc::new(RefCell::new(None));
     let find_result_slot: Rc<RefCell<Option<RwSignal<Option<(usize, usize)>>>>> =
         Rc::new(RefCell::new(None));
+    let find_state_toile_slot: Rc<RefCell<Option<RwSignal<bool>>>> = Rc::new(RefCell::new(None));
+    let find_result_toile_slot: Rc<
+        RefCell<Option<RwSignal<Option<ambre_bus::app::toile::FindResults>>>>,
+    > = Rc::new(RefCell::new(None));
     let style_slot: Rc<RefCell<Option<trame_chrome::StyleState>>> = Rc::new(RefCell::new(None));
     let chrome_status_slot: Rc<RefCell<Option<RwSignal<ChromeStatus>>>> =
         Rc::new(RefCell::new(None));
@@ -441,6 +466,9 @@ pub fn main() {
         Rc::clone(&filter_values_slot),
         Rc::clone(&find_state_slot),
         Rc::clone(&find_result_slot),
+        Rc::clone(&find_state_toile_slot),
+        Rc::clone(&find_result_toile_slot),
+        boot_is_toile,
         Rc::clone(&style_slot),
         Rc::clone(&chrome_status_slot),
         formula_ref,
@@ -497,6 +525,15 @@ pub fn main() {
     let find_result = find_result_slot
         .borrow()
         .expect("find_result signal created during mount");
+    // Toile Find panel signals (`toile-ui §5quater`), read back for the keyboard
+    // listener (Ctrl+F opens the panel) and the per-frame relay (which sets
+    // `find_result_toile` on `ToileEvent::FindResults`).
+    let find_state_toile = find_state_toile_slot
+        .borrow()
+        .expect("find_state_toile signal created during mount");
+    let find_result_toile = find_result_toile_slot
+        .borrow()
+        .expect("find_result_toile signal created during mount");
     // Formatting-toolbar style state (`-ui.md` sec.5bis), read back for the
     // per-frame relay (which updates it on `TrameEvent::StyleApplied`).
     let style_state = style_slot
@@ -516,7 +553,14 @@ pub fn main() {
     });
 
     // Keyboard: resolve registered chords and dispatch to the routed document.
-    install_command_keys(keymap, current_doc, ui_to_logic_tx.clone(), find_state);
+    install_command_keys(
+        keymap,
+        current_doc,
+        ui_to_logic_tx.clone(),
+        find_state,
+        find_state_toile,
+        boot_is_toile,
+    );
 
     // Local persistence: open the IndexedDB store on this (Main) thread, where
     // the event loop is live. On open, restore the BOOT document's snapshot (if
@@ -898,6 +942,13 @@ pub fn main() {
                         _ => Some((0, total)),
                     });
                 }
+                // Toile Find (§5quater): feed the panel's counter and step origin.
+                // The canvas view consumes the same event (forwarded below) to
+                // highlight the hits and recenter the camera on `focus`.
+                UiEvent::Viewport {
+                    event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::FindResults(fr)),
+                    ..
+                } => find_result_toile.set(Some(fr.clone())),
                 _ => {}
             }
             // Content (and everything else) still flows to the view unchanged.
@@ -950,7 +1001,6 @@ pub fn main() {
     let formula_ref_tv = formula_ref;
     let formula_text_tv = formula_text;
     let formula_action_tv = formula_action;
-    let boot_is_toile = matches!(boot_doc_typed, Some((ambre_bus::DocType::Toile, _)));
     let switcher = host::run_with(
         "ambre-canvas",
         move |w, h, text_input| {

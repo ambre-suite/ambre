@@ -214,21 +214,31 @@ fn paint_text<S: DrawSurface>(
     }
 }
 
-/// Paint the transient overlay: the selection bounding box + 8 resize handles +
-/// the rotate handle, in screen space (toile-ui §2 pass 3, §7). Nothing is drawn
-/// for an empty selection.
+/// Paint the transient overlay: find highlights, the selection bounding box + 8
+/// resize handles + the rotate handle, in screen space (toile-ui §2 pass 3, §7,
+/// §5quater). The selection box is skipped for an empty selection, but find
+/// highlights are painted regardless (a search can be active with nothing
+/// selected).
+#[allow(clippy::too_many_arguments)]
 pub fn paint_overlay<S: DrawSurface>(
     surface: &mut S,
-    selection: &[ambre_bus::app::toile::ElementId],
+    selection: &[ElementId],
     vp: &DisplayViewport,
     cam: &ViewportTransform,
     palette: &Palette,
     preview: Option<&Preview>,
+    find_hits: &[ElementId],
+    find_focus: Option<&ElementId>,
 ) {
     // Live gesture preview (world -> screen), a thin outline / trail.
     if let Some(p) = preview {
         paint_preview(surface, p, cam, palette);
     }
+
+    // Find highlights (§5quater): outline every matching element visible in the
+    // culled set, with a heavier outline on the focused hit. Off-screen hits
+    // simply have no box until the camera (recentered on `focus`) brings them in.
+    paint_find_highlights(surface, find_hits, find_focus, vp, cam, palette);
 
     let Some(wb) = selection_bounds(selection, vp) else {
         return;
@@ -294,6 +304,43 @@ fn paint_preview<S: DrawSurface>(
         Preview::Stroke(pts) => surface.stroke_path(&polyline_path(pts), &brush, &px(2.0)),
     }
     surface.pop_transform();
+}
+
+/// The world-space AABB of a displayed element, or `None` when the id is not in
+/// the culled set (an off-screen match).
+fn element_bounds(vp: &DisplayViewport, id: &ElementId) -> Option<Rect> {
+    vp.nodes.iter().find_map(|n| match n {
+        DisplayNode::Element(e) if &e.id == id => Some(e.bounds),
+        _ => None,
+    })
+}
+
+/// Outline the find matches present in the culled set (§5quater). Every hit gets
+/// a light box; the focused hit gets a heavier one in the selection accent so it
+/// stands out as the current match.
+fn paint_find_highlights<S: DrawSurface>(
+    surface: &mut S,
+    hits: &[ElementId],
+    focus: Option<&ElementId>,
+    vp: &DisplayViewport,
+    cam: &ViewportTransform,
+    palette: &Palette,
+) {
+    for id in hits {
+        let Some(wb) = element_bounds(vp, id) else {
+            continue;
+        };
+        let sb = world_rect_to_screen(wb, cam);
+        let is_focus = focus == Some(id);
+        // The focused match reads as "current" in the selection accent; the rest
+        // use the header-active amber as a softer match tint.
+        let (color, width) = if is_focus {
+            (palette.selection, 2.5)
+        } else {
+            (palette.header_active, 1.5)
+        };
+        surface.stroke_rect(sb, color, width);
+    }
 }
 
 /// A small filled square handle centered on `p`.
@@ -387,6 +434,8 @@ mod tests {
             &cam(),
             &LIGHT_PALETTE,
             None,
+            &[],
+            None,
         );
         // 8 resize handles + 1 rotate handle = 9 filled squares.
         let handle_fills = surface
@@ -395,6 +444,36 @@ mod tests {
             .filter(|o| matches!(o, DrawOp::FillRect { .. }))
             .count();
         assert_eq!(handle_fills, 9);
+    }
+
+    #[test]
+    fn overlay_outlines_visible_find_hits() {
+        let vp = DisplayViewport {
+            viewport: Default::default(),
+            nodes: vec![
+                elem("a", DisplayGeom::Rect, Rect::new(0.0, 0.0, 50.0, 50.0)),
+                elem("b", DisplayGeom::Rect, Rect::new(60.0, 0.0, 110.0, 50.0)),
+            ],
+        };
+        let mut surface = RecordingSurface::new();
+        let hits = vec![ElementId("a".into()), ElementId("b".into())];
+        paint_overlay(
+            &mut surface,
+            &[],
+            &vp,
+            &cam(),
+            &LIGHT_PALETTE,
+            None,
+            &hits,
+            Some(&ElementId("b".into())),
+        );
+        // No selection => no handles, only the two hit outlines (one per match).
+        let strokes = surface
+            .ops()
+            .iter()
+            .filter(|o| matches!(o, DrawOp::StrokeRect { .. }))
+            .count();
+        assert_eq!(strokes, 2);
     }
 
     // A minimal palette for host tests (the generated LIGHT lives behind the

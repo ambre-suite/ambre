@@ -252,10 +252,21 @@ fn find(
     options: crate::logic::command::FindOptions,
     from: Option<ElementId>,
 ) -> crate::logic::command::FindResults {
+    find_dir(st, query, options, from, false)
+}
+
+fn find_dir(
+    st: &mut ToileState,
+    query: &str,
+    options: crate::logic::command::FindOptions,
+    from: Option<ElementId>,
+    backward: bool,
+) -> crate::logic::command::FindResults {
     let out = st.handle_command(ToileCommand::Find {
         query: query.to_owned(),
         options,
         from,
+        backward,
     });
     assert!(out.update.is_none(), "Find must not mutate the CRDT");
     out.display
@@ -293,8 +304,23 @@ fn find_focus_wraps_after_from() {
     let r = find(&mut st, "match", opts, Some(a.clone()));
     assert_eq!(r.focus, Some(b.clone()));
     // Resuming from the last hit wraps to the first.
-    let r = find(&mut st, "match", opts, Some(b));
-    assert_eq!(r.focus, Some(a));
+    let r = find(&mut st, "match", opts, Some(b.clone()));
+    assert_eq!(r.focus, Some(a.clone()));
+}
+
+#[test]
+fn find_backward_steps_to_previous_hit_wrapping() {
+    let mut st = ToileState::new();
+    let a = create_sticky(&mut st, Point::ZERO, "match");
+    let b = create_sticky(&mut st, Point::new(200.0, 0.0), "match");
+
+    let opts = crate::logic::command::FindOptions::default();
+    // Backward from the second hit focuses the first.
+    let r = find_dir(&mut st, "match", opts, Some(b.clone()), true);
+    assert_eq!(r.focus, Some(a.clone()));
+    // Backward from the first hit wraps to the last.
+    let r = find_dir(&mut st, "match", opts, Some(a), true);
+    assert_eq!(r.focus, Some(b));
 }
 
 #[test]
