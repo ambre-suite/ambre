@@ -12,7 +12,10 @@
 // the Logic thread (§11bis).
 // ============================================================================
 
-use ambre_bus::app::toile::{DisplayViewport, ElementId, ToileCommand, ToileEvent, Viewport};
+use ambre_bus::app::toile::{
+    ClipboardPayload as ToileClipboardPayload, DisplayNode, DisplayViewport, ElementId,
+    ToileCommand, ToileEvent, Viewport,
+};
 use ambre_bus::{AppCommand, AppEvent, DocumentId, LogicCommand, UiEvent};
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, OverlayRepaint, PerfPublisher, PerfSnapshot,
@@ -20,12 +23,21 @@ use ambre_canvas::{
 };
 use ambre_draw::{FontContext, Point, Rect, Vec2};
 
+use super::hit::hit_topmost;
 use super::render;
-use super::tool::{Preview, Tool, ToolMachine, ToolOutcome};
+use super::tool::{Preview, Tool, ToolMachine, ToolOutcome, is_group, resolve_group_target};
 use super::viewport::ViewportTransform;
 
 /// One notch of the mouse wheel maps to this zoom factor (ctrl+wheel / pinch).
 const ZOOM_PER_WHEEL_PX: f64 = 0.0018;
+
+/// Keyboard-nudge step in world units: a fine 1-unit tap, or a coarse 10-unit
+/// jump with Shift held (`toile-ui §5`).
+const NUDGE_SMALL: f64 = 1.0;
+const NUDGE_LARGE: f64 = 10.0;
+/// Diagonal offset applied to a `Ctrl/Cmd+D` duplicate so the copy is visibly
+/// distinct from its source (§8 ter), matching the alt-drag nudge.
+const DUPLICATE_NUDGE: f64 = 10.0;
 
 pub struct ToileView {
     document_id: DocumentId,
@@ -41,6 +53,11 @@ pub struct ToileView {
     machine: ToolMachine,
     /// Local selection (never persisted; a peer's selection is presence, §7).
     selection: Vec<ElementId>,
+    /// Entered group scope (§2.F bis / §7): while `Some(g)`, a click selects a
+    /// member inside `g` rather than the whole group. Entered by double-clicking a
+    /// grouped element (peels one nesting level per double-click), left by
+    /// `Escape` or a document swap. Pure-UI state, never synced.
+    group_scope: Option<ElementId>,
     /// Live gesture preview (marquee / rubber-band / pen / stroke), world space.
     preview: Option<Preview>,
 
@@ -64,6 +81,15 @@ pub struct ToileView {
     pending_viewport: Option<Viewport>,
     initial_viewport_sent: bool,
     fatal: bool,
+
+    /// A [`ClipboardBlob`] built from a `ToileEvent::Clipboard` reply, awaiting the
+    /// host's per-frame [`poll_clipboard`](ToileView::poll_clipboard) which mirrors
+    /// it to the OS clipboard inside the transient-activation window (§5ter).
+    pending_clipboard: Option<ambre_bus::ClipboardBlob>,
+    /// The last authoritative clipboard blob copied this session, kept in memory
+    /// for a full-fidelity same-tab paste that never depends on the OS custom MIME
+    /// type surviving the round-trip (§5ter).
+    last_clip: Option<ambre_bus::ClipboardBlob>,
 }
 
 impl ToileView {
@@ -91,6 +117,7 @@ impl ToileView {
             },
             machine: ToolMachine::new(),
             selection: Vec::new(),
+            group_scope: None,
             preview: None,
             last_pointer: Point::new(canvas_width / 2.0, canvas_height / 2.0),
             panning: None,
@@ -105,6 +132,8 @@ impl ToileView {
             pending_viewport: None,
             initial_viewport_sent: false,
             fatal: false,
+            pending_clipboard: None,
+            last_clip: None,
         }
     }
 
@@ -168,11 +197,24 @@ impl ToileView {
                 self.display = dv;
                 self.data_dirty = true;
             }
-            // Phase 0 does not act on these yet (chrome / presence / clipboard
-            // land in Phase 1); log the errors, ignore the rest.
+            // Authoritative copy reply (§5ter): the Logic thread built a
+            // self-contained, id-free snapshot of the selection from the whole
+            // board (no viewport limit). Stash it in memory for a full-fidelity
+            // same-tab paste and mark it pending so the host mirrors it to the OS
+            // clipboard next frame. Paste into a foreign app is out of MVP, so the
+            // `text/plain` mirror is empty (the private Ambre bytes carry it all).
+            ToileEvent::Clipboard(payload) => {
+                let blob = ambre_bus::ClipboardBlob {
+                    text: String::new(),
+                    ambre: postcard::to_allocvec(&payload).ok(),
+                };
+                self.last_clip = Some(blob.clone());
+                self.pending_clipboard = Some(blob);
+            }
+            // Phase 0 does not act on these yet (chrome / presence land later);
+            // log the errors, ignore the rest.
             ToileEvent::Error(e) => tracing::warn!("Toile rejected: {e}"),
             ToileEvent::ElementCreated(_)
-            | ToileEvent::Clipboard(_)
             | ToileEvent::SelectionStats(_)
             | ToileEvent::FindResults(_)
             | ToileEvent::DanglingConnector(_)
@@ -218,9 +260,14 @@ impl ToileView {
             return true;
         }
         let world = self.cam.screen_to_world() * screen;
-        let out =
-            self.machine
-                .pointer_down(world, screen, &self.selection, &self.display, &self.cam);
+        let out = self.machine.pointer_down(
+            world,
+            screen,
+            &self.selection,
+            &self.display,
+            &self.cam,
+            self.group_scope.as_ref(),
+        );
         self.apply_outcome(out);
         self.needs_full = true;
         true
@@ -266,6 +313,21 @@ impl ToileView {
         self.last_pointer = screen;
         let world = self.cam.screen_to_world() * screen;
         let out = self.machine.double_click(world);
+        // Select tool: a double-click on a grouped element enters its scope,
+        // peeling one nesting level so the next click selects a member (§2.F bis /
+        // §7). Only when the tool produced nothing of its own (e.g. pen finish).
+        if matches!(out, ToolOutcome::None)
+            && self.machine.tool() == Tool::Select
+            && let Some(hit) = hit_topmost(&self.display.nodes, world)
+        {
+            let target =
+                resolve_group_target(hit.clone(), &self.display, self.group_scope.as_ref());
+            if is_group(&target, &self.display) {
+                self.group_scope = Some(target.clone());
+                // Select the member one level inside the freshly-entered scope.
+                self.selection = vec![resolve_group_target(hit, &self.display, Some(&target))];
+            }
+        }
         self.apply_outcome(out);
         self.needs_full = true;
         true
@@ -278,7 +340,55 @@ impl ToileView {
         self.needs_full = true;
     }
 
-    fn handle_key(&mut self, key: &str) -> bool {
+    /// Keyboard shortcuts (`toile-ui §5`). Modifiers ride the event: `ctrl || meta`
+    /// is the command chord (Ctrl on Windows/Linux, Cmd on macOS). Ctrl+C/X/V are
+    /// intentionally NOT decoded here -- they ride the native clipboard events
+    /// (Phase A). Returns `true` when the key was consumed (host `preventDefault`).
+    fn handle_key(&mut self, key: &str, ctrl: bool, _alt: bool, shift: bool, meta: bool) -> bool {
+        let cmd = ctrl || meta;
+        // Command chords first, so a bare-key fallthrough never shadows them.
+        if cmd {
+            match key {
+                // Undo / redo (§8 bis). Ctrl+Shift+Z and Ctrl+Y both redo.
+                "z" | "Z" if shift => self.send_edit(ToileCommand::Redo),
+                "z" | "Z" => self.send_edit(ToileCommand::Undo),
+                "y" | "Y" => self.send_edit(ToileCommand::Redo),
+                // Duplicate the selection with a small diagonal nudge (§8 ter).
+                "d" | "D" if !self.selection.is_empty() => {
+                    self.send_edit(ToileCommand::DuplicateElements {
+                        ids: self.selection.clone(),
+                        delta: Vec2::new(DUPLICATE_NUDGE, DUPLICATE_NUDGE),
+                    });
+                }
+                // Group / ungroup the selection (§2.F bis).
+                "g" | "G" if shift => {
+                    for id in self.selection.clone() {
+                        self.send_edit(ToileCommand::UngroupElements { group: id });
+                    }
+                }
+                "g" | "G" if !self.selection.is_empty() => {
+                    self.send_edit(ToileCommand::GroupElements {
+                        ids: self.selection.clone(),
+                    });
+                }
+                // Local select-all over every displayed element (connectors are
+                // selected with their endpoints, not directly).
+                "a" | "A" => {
+                    self.selection = self
+                        .display
+                        .nodes
+                        .iter()
+                        .filter_map(|n| match n {
+                            DisplayNode::Element(e) => Some(e.id.clone()),
+                            DisplayNode::Connector(_) => None,
+                        })
+                        .collect();
+                }
+                _ => return false,
+            }
+            self.needs_full = true;
+            return true;
+        }
         match key {
             " " | "Spacebar" => {
                 self.space_down = true;
@@ -290,6 +400,9 @@ impl ToileView {
                 if !self.selection.is_empty() {
                     self.selection.clear();
                 }
+                // Leave any entered group scope (§2.F bis): the next click selects
+                // whole groups again.
+                self.group_scope = None;
                 self.needs_full = true;
                 true
             }
@@ -299,6 +412,22 @@ impl ToileView {
                     self.send_edit(ToileCommand::DeleteElements { ids });
                     self.needs_full = true;
                 }
+                true
+            }
+            // Nudge the selection by 1 world unit (10 with Shift), §5.
+            "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight" if !self.selection.is_empty() => {
+                let step = if shift { NUDGE_LARGE } else { NUDGE_SMALL };
+                let delta = match key {
+                    "ArrowUp" => Vec2::new(0.0, -step),
+                    "ArrowDown" => Vec2::new(0.0, step),
+                    "ArrowLeft" => Vec2::new(-step, 0.0),
+                    _ => Vec2::new(step, 0.0),
+                };
+                self.send_edit(ToileCommand::MoveElements {
+                    ids: self.selection.clone(),
+                    delta,
+                });
+                self.needs_full = true;
                 true
             }
             _ => false,
@@ -441,7 +570,13 @@ impl ToileView {
             }
             InputEvent::PointerMove { x, y } => self.handle_pointer_move(*x, *y),
             InputEvent::PointerUp { x, y, .. } => self.handle_pointer_up(*x, *y),
-            InputEvent::Key { key, .. } => self.handle_key(key),
+            InputEvent::Key {
+                key,
+                ctrl,
+                alt,
+                shift,
+                meta,
+            } => self.handle_key(key, *ctrl, *alt, *shift, *meta),
             InputEvent::DoubleClick { x, y } => self.handle_double_click(*x, *y),
             InputEvent::Text { .. }
             | InputEvent::CompositionUpdate { .. }
@@ -449,23 +584,57 @@ impl ToileView {
         }
     }
 
-    /// Clipboard copy/cut. Phase 0 has no in-canvas clipboard round-trip yet
-    /// (§5ter is Phase 1); let the browser default run.
-    /// The clipboard payload type is the shared `AppView` contract type (the
-    /// same concrete type Trame uses); Toile does not produce one in Phase 0.
-    pub fn clipboard_write(
-        &mut self,
-        _cut: bool,
-    ) -> Option<(String, Option<ambre_bus::ClipboardPayload>)> {
-        None
+    /// Resolve a copy/cut synchronously inside the native clipboard event (§5ter).
+    /// The clipboard is authoritative: with a non-empty selection we emit
+    /// [`ToileCommand::CopyElements`] (Logic builds the id-free payload from the
+    /// whole board and replies with `ToileEvent::Clipboard`) and return
+    /// [`CopyOutcome::Deferred`]; the payload is mirrored to the OS clipboard next
+    /// frame by [`poll_clipboard`](Self::poll_clipboard). A cut appends
+    /// [`ToileCommand::DeleteElements`] on the same selection immediately after --
+    /// channel order guarantees Logic captured the payload before the delete.
+    /// An empty selection returns [`CopyOutcome::Nothing`].
+    pub fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
+        if self.selection.is_empty() {
+            return ambre_bus::CopyOutcome::Nothing;
+        }
+        let ids = self.selection.clone();
+        self.send_edit(ToileCommand::CopyElements { ids: ids.clone() });
+        if cut {
+            self.send_edit(ToileCommand::DeleteElements { ids });
+            self.selection.clear();
+            self.needs_full = true;
+        }
+        ambre_bus::CopyOutcome::Deferred
     }
 
-    /// Clipboard paste. Phase 0 no-op (Phase 1 wires `PasteElements`).
-    pub fn paste_clipboard(
-        &mut self,
-        _payload: Option<ambre_bus::ClipboardPayload>,
-        _text: String,
-    ) {
+    /// Drain the clipboard blob built from the last `ToileEvent::Clipboard` reply,
+    /// so the host can mirror it to the OS clipboard within the transient user
+    /// activation window (§5ter). Yields the blob at most once per copy.
+    pub fn poll_clipboard(&mut self) -> Option<ambre_bus::ClipboardBlob> {
+        self.pending_clipboard.take()
+    }
+
+    /// Service a paste from the shared [`ClipboardBlob`](ambre_bus::ClipboardBlob)
+    /// transport (§5ter). When `own_copy` (the synchronous ownership token was
+    /// still on the clipboard) it prefers the in-memory `last_clip` at full
+    /// fidelity -- immune to the async OS write having failed on Firefox; else it
+    /// decodes the blob's Ambre bytes. Either way, `PasteElements` lands the id-free
+    /// payload at the cursor's world position. A blob with no decodable Ambre
+    /// payload is ignored (plain-text paste into a board is out of MVP).
+    pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
+        let source = match &self.last_clip {
+            Some(clip) if own_copy => clip,
+            _ => &blob,
+        };
+        let Some(payload) = source
+            .ambre
+            .as_ref()
+            .and_then(|bytes| postcard::from_bytes::<ToileClipboardPayload>(bytes).ok())
+        else {
+            return;
+        };
+        let at = self.cam.screen_to_world() * self.last_pointer;
+        self.send_edit(ToileCommand::PasteElements { payload, at });
     }
 
     /// Swap the active document in place (SPA route change): reset document-scoped
@@ -480,6 +649,7 @@ impl ToileView {
             nodes: Vec::new(),
         };
         self.selection.clear();
+        self.group_scope = None;
         self.preview = None;
         self.machine.cancel();
         self.initial_viewport_sent = false;

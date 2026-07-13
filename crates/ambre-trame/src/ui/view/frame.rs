@@ -123,6 +123,20 @@ impl TrameView {
             TrameEvent::ExportComplete { filename, data } => {
                 trigger_download(&filename, &data);
             }
+            // Authoritative copy reply (sec.5.E): the Logic thread serialized the
+            // whole tracked selection from the document (no viewport limit). Build
+            // the transport blob -- TSV for cross-app `text/plain`, postcard of the
+            // typed payload for the private Ambre type -- stash it in memory for a
+            // full-fidelity same-tab paste, and mark it pending so the host mirrors
+            // it to the OS clipboard next frame.
+            TrameEvent::Clipboard(payload) => {
+                let blob = ambre_bus::ClipboardBlob {
+                    text: payload.to_tsv(),
+                    ambre: postcard::to_allocvec(&payload).ok(),
+                };
+                self.last_clip = Some(blob.clone());
+                self.pending_clipboard = Some(blob);
+            }
             // Interop import finished (`-interop.md` §4.A): the accompanying
             // DataReset already re-fetches the populated region, so this is purely
             // informational here (the chrome relay may toast it).

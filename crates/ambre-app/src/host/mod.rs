@@ -58,13 +58,23 @@ pub use run::run_with;
 /// [`ClipboardPayload`](ambre_bus::ClipboardPayload) for an internal round-trip
 /// on the *synchronous* `copy`/`paste` events (Ctrl+C/Ctrl+V). Browsers that
 /// reject it fall back to `text/plain` (`-ui.md` sec.5.E).
-const AMBRE_CLIPBOARD_TYPE: &str = "application/x-ambre-trame";
+const AMBRE_CLIPBOARD_TYPE: &str = "application/x-ambre";
 
 /// The same payload under the `web ` prefix the *asynchronous* Clipboard API
 /// (`navigator.clipboard.read`/`write`) requires for a custom type. This is the
 /// channel the toolbar/menu Paste button uses, since it cannot ride a native
 /// `paste` event (`-ui.md` sec.5.E).
-pub(crate) const AMBRE_CLIPBOARD_WEB_TYPE: &str = "web application/x-ambre-trame";
+pub(crate) const AMBRE_CLIPBOARD_WEB_TYPE: &str = "web application/x-ambre";
+
+/// Synchronous same-tab ownership marker (`-ui.md` sec.5.E). Written into the
+/// clipboard event's `DataTransfer` *synchronously* during `copy`/`cut`, so --
+/// unlike the async payload write, which needs a user-activation context Firefox
+/// denies from the rAF loop -- it always reaches the OS clipboard. On `paste`,
+/// a value here equal to this page's token proves the clipboard still holds THIS
+/// tab's own last copy, so the view pastes its in-memory `last_clip` at full
+/// fidelity. Any foreign copy (another app / tab) overwrites the clipboard and
+/// drops the marker, so its absence correctly means "not ours".
+const AMBRE_CLIPBOARD_TOKEN_TYPE: &str = "application/x-ambre-token";
 
 /// Base64-encode bytes for transport as a clipboard string (UTF-8 safe).
 pub(crate) fn base64_encode(bytes: &[u8]) -> String {
@@ -180,38 +190,38 @@ impl AppView {
         }
     }
 
-    /// Build the clipboard contents for a `copy`/`cut`, or `None` to let the
-    /// browser default run. Returns the OS-interop text plus an optional typed
-    /// [`ClipboardPayload`](ambre_bus::ClipboardPayload) (present only for a grid
-    /// range, carrying styles + relative-formula reindexing for an internal
-    /// round-trip). `cut` deletes the source as a side effect.
-    fn clipboard_write(
-        &mut self,
-        cut: bool,
-    ) -> Option<(String, Option<ambre_bus::ClipboardPayload>)> {
+    /// Resolve a `copy`/`cut` synchronously inside the native clipboard event
+    /// ([`CopyOutcome`](ambre_bus::CopyOutcome)): `Text` for an in-cell/inline
+    /// selection the view holds, `Deferred` when the authoritative payload is
+    /// being built on the Logic thread (drained a frame later by
+    /// [`poll_clipboard`](Self::poll_clipboard)), or `Nothing` to let the browser
+    /// default proceed. Each app applies its own cut policy behind this call.
+    fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
         match self {
             AppView::Trame(v) => v.clipboard_write(cut),
             AppView::Toile(v) => v.clipboard_write(cut),
         }
     }
 
-    /// Service a `paste`: a typed Ambre payload (internal round-trip) when
-    /// present, else the OS plain text.
-    fn paste_clipboard(&mut self, payload: Option<ambre_bus::ClipboardPayload>, text: String) {
+    /// Drain any clipboard blob built since the last frame (from an authoritative
+    /// `Clipboard` reply), so the host can mirror it to the OS clipboard within
+    /// the transient user-activation window. `None` when no copy is pending.
+    fn poll_clipboard(&mut self) -> Option<ambre_bus::ClipboardBlob> {
         match self {
-            AppView::Trame(v) => {
-                if v.is_editing() {
-                    // In-cell edit: route through the same text-insertion path as
-                    // typing, so the paste lands at the caret (the typed payload,
-                    // if any, is meaningless inside a text field).
-                    v.handle_input(&InputEvent::Text { text });
-                } else if let Some(payload) = payload {
-                    v.grid_paste_payload(payload);
-                } else {
-                    v.grid_paste_text(&text);
-                }
-            }
-            AppView::Toile(v) => v.paste_clipboard(payload, text),
+            AppView::Trame(v) => v.poll_clipboard(),
+            AppView::Toile(v) => v.poll_clipboard(),
+        }
+    }
+
+    /// Service a `paste` from the shared [`ClipboardBlob`](ambre_bus::ClipboardBlob)
+    /// transport; each view decodes its own app-specific payload behind the opaque
+    /// bytes. `own_copy` is true when the clipboard still carries this tab's
+    /// synchronous ownership token, so the view pastes its in-memory `last_clip`
+    /// at full fidelity rather than trusting the (possibly failed) OS mirror.
+    fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
+        match self {
+            AppView::Trame(v) => v.paste_clipboard(blob, own_copy),
+            AppView::Toile(v) => v.paste_clipboard(blob, own_copy),
         }
     }
 

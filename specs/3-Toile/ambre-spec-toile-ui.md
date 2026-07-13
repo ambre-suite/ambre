@@ -273,10 +273,13 @@ CRDT itself — it only carries the opaque payload.
 
 **Grouping.** `Ctrl+G` on a multi-selection emits `GroupElements { ids }`; `Ctrl+Shift+G` on a selected group
 emits `UngroupElements { group }`. A `DisplayGeom::Group` node paints nothing (`toile-logic §9`); the UI uses it
-only to resolve selection: a single click on any member selects the **top-most enclosing group** (its union
-bounds get the transform handles), and a **double-click enters the group scope** so the next click selects an
-individual member (`Escape` leaves the scope). Marquee still selects members directly; a transform on a selected
-group is one `MoveElements`/`RotateElement` over the group element, which carries its children for free.
+only to resolve selection, walking the `DisplayElement.group` edge (the immediate enclosing group, carried on
+every member — `toile-logic §9`) upward through the group chain: a single click on any member selects the
+**top-most enclosing group** (its union bounds get the transform handles), and a **double-click enters the group
+scope** (a local, never-synced UI field) so the next click selects the member one level inside it -- peeling one
+nesting level per double-click (`Escape` leaves the scope). Marquee still selects members directly; a transform
+on a selected group is one `MoveElements`/`RotateElement` over the group element, which carries its children for
+free.
 
 **Context menu.** Right-click (or long-press) over the selection opens the `ambre-chrome` `ContextMenu` (DOM,
 not canvas — §1). Entries map one-to-one to existing commands, greyed out when inapplicable:
@@ -464,8 +467,9 @@ lives in Logic, keyed on change size.
 **Phase 1 - Integration**
 - [x] Remaining tools: Pen, Shape, Connector, Draw, Sticky, Text (`ToolMachine`, host-tested)
 - [ ] Parley inline text editor
-- [ ] Keyboard shortcuts + clipboard round-trip (OS-clipboard mirror)
-- [ ] Grouping selection-scope resolution
+- [x] Keyboard shortcuts + clipboard round-trip (OS-clipboard mirror). Shared, Logic-authoritative
+  clipboard model (`1-Foundations/ambre-spec-ui.md §E`); shortcuts decoded in `handle_key`.
+- [x] Grouping selection-scope resolution (via the `DisplayElement.group` edge, host-tested — §5ter/§7)
 - [ ] `ambre-chrome` context menu (§5ter)
 - [ ] Find panel (§5quater)
 - [ ] Selection status bar (§8bis)

@@ -59,20 +59,24 @@ impl FrameHost {
         self.view.handle_input(ev)
     }
 
-    /// Pull the clipboard contents a `copy`/`cut` event should place on the OS
-    /// clipboard (and, for `cut`, remove from the source). `None` means "nothing
-    /// selected -- let the browser default proceed".
-    pub fn clipboard_write(
-        &mut self,
-        cut: bool,
-    ) -> Option<(String, Option<ambre_bus::ClipboardPayload>)> {
+    /// Resolve a `copy`/`cut` synchronously inside the native clipboard event.
+    /// See [`AppView::clipboard_write`]: `Text` writes immediately, `Deferred`
+    /// waits for [`poll_clipboard`](Self::poll_clipboard), `Nothing` lets the
+    /// browser default proceed.
+    pub fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
         self.view.clipboard_write(cut)
     }
 
-    /// Service a `paste` event with the decoded Ambre payload (if any) and the
-    /// plain text fallback.
-    pub fn paste_clipboard(&mut self, payload: Option<ambre_bus::ClipboardPayload>, text: String) {
-        self.view.paste_clipboard(payload, text);
+    /// Drain a pending authoritative clipboard blob for the OS clipboard write.
+    /// Called per frame right after [`update`](Self::update).
+    pub fn poll_clipboard(&mut self) -> Option<ambre_bus::ClipboardBlob> {
+        self.view.poll_clipboard()
+    }
+
+    /// Service a `paste` event with the shared clipboard transport blob.
+    /// `own_copy` signals the clipboard still holds this tab's ownership token.
+    pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
+        self.view.paste_clipboard(blob, own_copy);
     }
 
     /// Switch the active document on the live view, keeping the GPU surface.
@@ -169,6 +173,18 @@ impl FrameHost {
         let t_drain = self.perf.now();
         self.view.update();
         let t_after_drain = self.perf.now();
+
+        // A `Deferred` copy earlier this frame (or the previous one) had its
+        // authoritative payload built on the Logic thread and drained into the
+        // view by `update()` above. Mirror it to the OS clipboard now: this runs
+        // ~one frame (~16ms) after the keypress, still inside the transient
+        // user-activation window `navigator.clipboard.write` requires. `text` is
+        // the cross-app `text/plain` mirror; the private `web ` type carries the
+        // opaque Ambre bytes for a full-fidelity internal round-trip.
+        if let Some(blob) = self.view.poll_clipboard() {
+            let payload_b64 = blob.ambre.as_deref().map(base64_encode);
+            async_write_clipboard(blob.text, payload_b64);
+        }
 
         // Deliver any lazily-fetched font faces (CJK/Arabic/Devanagari) that
         // arrived since the last frame. If coverage changed, the cached GPU

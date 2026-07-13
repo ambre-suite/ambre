@@ -678,6 +678,12 @@ pub struct DisplayElement {
     pub locked: bool, // top-level element flag (§2.B), NOT from ElementStyle
     pub style: ElementStyle,
     pub geom: DisplayGeom,
+    /// The immediate enclosing group node, if this element is a group member
+    /// (§2.F bis / §7). `None` for a top-level element. Group-selection resolution
+    /// is a pure-UI concern (walk this edge upward through the group chain to the
+    /// top-most enclosing group), so the display carries the edge rather than a
+    /// command round-trip; a group node itself carries its own parent group here.
+    pub group: Option<ElementId>,
 }
 
 #[derive(Clone, Debug)]

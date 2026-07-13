@@ -406,6 +406,28 @@ fn group_unions_bounds_and_sits_below_members() {
 }
 
 #[test]
+fn derive_populates_the_group_edge_on_members() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(90.0, 90.0), Size::new(10.0, 10.0));
+    let g = created_id(&st.handle_command(ToileCommand::GroupElements {
+        ids: vec![a.clone(), b.clone()],
+    }));
+    let vp = st.debug_viewport();
+    let group_of = |id: &ElementId| {
+        vp.nodes.iter().find_map(|n| match n {
+            DisplayNode::Element(e) if &e.id == id => Some(e.group.clone()),
+            _ => None,
+        })
+    };
+    // Both members carry the enclosing group edge; the group node itself is
+    // top-level (no parent group).
+    assert_eq!(group_of(&a), Some(Some(g.clone())));
+    assert_eq!(group_of(&b), Some(Some(g.clone())));
+    assert_eq!(group_of(&g), Some(None));
+}
+
+#[test]
 fn moving_a_group_translates_its_members() {
     let mut st = ToileState::new();
     let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));

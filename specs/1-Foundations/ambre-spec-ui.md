@@ -116,6 +116,41 @@ Single source `tokens.ron` → `build.rs` generates `theme.css` (CSS custom prop
 
 > **Consumption** on the canvas side is in `ambre-spec-canvas.md §F`; **adaptive breakpoints** and the per-mode adaptation table (chrome side) are in `ambre-spec-chrome.md`.
 
+### E. Clipboard model (shared across apps)
+
+One clipboard model for **every** editor (Trame, Toile, Prose, ...): the build is
+**Logic-authoritative**, the UI carries only the selection, and there is **no best-effort
+viewport limit**. The transport across the `FrameHost <-> AppView` seam (and, serialized, across
+the OS clipboard) is the app-agnostic `ClipboardBlob { text: String, ambre: Option<Vec<u8>> }`
+(`ambre-bus`): `text` is the `text/plain` mirror for cross-app paste; `ambre` is the opaque,
+app-specific payload (postcard of the active app's typed clipboard payload) under the private
+`application/x-ambre` MIME type. Each app (de)serializes its own payload behind these bytes.
+
+**Copy flow (lazy-authoritative + activation-window write):** a native `copy`/`cut` event calls
+`view.clipboard_write(cut) -> CopyOutcome`:
+
+- `Text(String)` -- a synchronous in-cell / inline text selection: the host `setData`s it now.
+- `Deferred` -- the view emitted the authoritative copy command to Logic and remembers `cut`;
+  the host `prevent_default()`s and does **not** `setData` (so the browser does not clobber the
+  OS clipboard with empty content).
+- `Nothing` -- nothing selected; the browser default proceeds.
+
+Logic builds the full payload from the whole CRDT (never culled) and replies (e.g.
+`ToileEvent::Clipboard` / `TrameEvent::Clipboard`). The view drains it in `update()`, serializes
+a `ClipboardBlob`, keeps it **in memory** for a full-fidelity same-tab paste, and marks it
+pending. Right after `view.update()`, the host calls `view.poll_clipboard()`; a `Some(blob)`
+result is written to the OS clipboard via `navigator.clipboard.write`. This runs ~one frame
+(~16 ms) after the keypress -- still inside the transient user-activation window the async
+Clipboard API requires. Rationale (and the rejected prepare-ahead / prepare-on-modifier /
+promise-in-`ClipboardItem` alternatives) is in the plan; `text/plain` is reliable everywhere,
+the custom type is best-effort (Firefox may drop it), and same-tab paste never depends on it.
+
+**Paste flow:** the host decodes the OS clipboard into a `ClipboardBlob` and calls
+`view.paste_clipboard(blob)`; the view prefers its in-memory blob when the OS `text/plain`
+mirror still matches it (proof the OS clipboard holds our own last copy), else decodes
+`blob.ambre` into its typed payload. **Cut** is each app's own policy (Toile emits
+`DeleteElements` right after the copy command; Trame keeps its marching-ants delete-on-paste).
+
 ---
 
 ## 3. SECURITY & CONFIDENTIALITY (ZERO-KNOWLEDGE)

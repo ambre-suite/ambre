@@ -13,8 +13,8 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{
-    Anchor, DisplayViewport, ElementId, ElementKind, EndCaps, InitContent, PathType, ShapeKind,
-    StrokePoint, ToileCommand,
+    Anchor, DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, EndCaps,
+    InitContent, PathType, ShapeKind, StrokePoint, ToileCommand,
 };
 use ambre_draw::{BezPath, Point, Rect, Size};
 use kurbo::Shape;
@@ -124,6 +124,7 @@ impl SelectTool {
         selection: &[ElementId],
         display: &DisplayViewport,
         cam: &ViewportTransform,
+        scope: Option<&ElementId>,
     ) -> SelectOutcome {
         // A single-element selection exposes transform handles; test them first so
         // a handle press starts a resize/rotate rather than a move.
@@ -155,9 +156,12 @@ impl SelectTool {
             }
         }
 
-        // No handle: hit-test the board.
+        // No handle: hit-test the board, then resolve the raw hit up its group
+        // chain to the selection target (the top-most enclosing group, unless a
+        // scope has been entered), so a grouped element selects as its group.
         match hit_topmost(&display.nodes, world) {
-            Some(id) => {
+            Some(hit) => {
+                let id = resolve_group_target(hit, display, scope);
                 let changed = !selection.contains(&id);
                 let ids = if changed {
                     vec![id]
@@ -406,12 +410,13 @@ impl ToolMachine {
         selection: &[ElementId],
         display: &DisplayViewport,
         cam: &ViewportTransform,
+        scope: Option<&ElementId>,
     ) -> ToolOutcome {
         self.cursor = world;
         match self.tool {
             Tool::Select => map_select(
                 self.select
-                    .pointer_down(world, screen, selection, display, cam),
+                    .pointer_down(world, screen, selection, display, cam, scope),
             ),
             Tool::Hand => ToolOutcome::None,
             Tool::Shape(kind) => {
@@ -675,6 +680,54 @@ fn element_bounds(display: &DisplayViewport, id: &ElementId) -> Option<Rect> {
     selection_bounds(std::slice::from_ref(id), display)
 }
 
+/// The immediate enclosing group of `id` in the current display, if any (the
+/// `DisplayElement.group` edge, §2.F bis / §7). `None` for a top-level element or
+/// an id absent from the culled frame.
+fn enclosing_group_of(id: &ElementId, display: &DisplayViewport) -> Option<ElementId> {
+    display.nodes.iter().find_map(|n| match n {
+        DisplayNode::Element(e) if &e.id == id => e.group.clone(),
+        _ => None,
+    })
+}
+
+/// Whether `id` names a group node in the current display (its geometry is the
+/// derived member union; it paints nothing, §2.F bis).
+pub(crate) fn is_group(id: &ElementId, display: &DisplayViewport) -> bool {
+    display.nodes.iter().any(|n| {
+        matches!(n, DisplayNode::Element(e) if &e.id == id
+            && matches!(e.geom, DisplayGeom::Group))
+    })
+}
+
+/// Resolve a raw hit element to the selection target under the current group
+/// `scope` (§2.F bis / §7). Walk the enclosing-group chain from the hit upward:
+/// - no scope -> the top-most enclosing group (the whole group selects/transforms
+///   as one), or the element itself if it is ungrouped.
+/// - inside a scope `s` -> the chain member one level below `s` (so a scoped click
+///   selects a member or an immediate sub-group); a click outside the scope falls
+///   back to the top-most group.
+pub(crate) fn resolve_group_target(
+    hit: ElementId,
+    display: &DisplayViewport,
+    scope: Option<&ElementId>,
+) -> ElementId {
+    let mut chain = vec![hit.clone()];
+    let mut cur = hit;
+    while let Some(g) = enclosing_group_of(&cur, display) {
+        chain.push(g.clone());
+        cur = g;
+    }
+    match scope {
+        Some(s) => match chain.iter().position(|c| c == s) {
+            Some(0) => chain[0].clone(),
+            Some(pos) => chain[pos - 1].clone(),
+            // Clicked outside the entered scope: select the whole top-most group.
+            None => chain.last().cloned().unwrap_or_else(|| chain[0].clone()),
+        },
+        None => chain.last().cloned().unwrap_or_else(|| chain[0].clone()),
+    }
+}
+
 /// The world point of an anchor on an element's AABB (§5).
 fn anchor_point(b: Rect, a: Anchor) -> Point {
     let c = b.center();
@@ -838,6 +891,30 @@ mod tests {
             locked: false,
             style: ElementStyle::default(),
             geom: DisplayGeom::Rect,
+            group: None,
+        })
+    }
+
+    /// A rectangle that is a member of group `group`.
+    fn member_elem(id: &str, bounds: Rect, group: &str) -> DisplayNode {
+        let DisplayNode::Element(mut e) = rect_elem(id, bounds) else {
+            unreachable!()
+        };
+        e.group = Some(ElementId(group.to_owned()));
+        DisplayNode::Element(e)
+    }
+
+    /// A group node (paints nothing): `parent` is its own enclosing group, if any.
+    fn group_node(id: &str, bounds: Rect, parent: Option<&str>) -> DisplayNode {
+        DisplayNode::Element(DisplayElement {
+            id: ElementId(id.to_owned()),
+            kind: ElementKind::Group,
+            transform: Affine::IDENTITY,
+            bounds,
+            locked: false,
+            style: ElementStyle::default(),
+            geom: DisplayGeom::Group,
+            group: parent.map(|p| ElementId(p.to_owned())),
         })
     }
 
@@ -845,6 +922,62 @@ mod tests {
         DisplayViewport {
             viewport: Default::default(),
             nodes,
+        }
+    }
+
+    #[test]
+    fn click_on_group_member_selects_top_most_group() {
+        // member `m` in group `g`, `g` itself nested in `outer`.
+        let disp = viewport(vec![
+            member_elem("m", Rect::new(0.0, 0.0, 100.0, 100.0), "g"),
+            group_node("g", Rect::new(0.0, 0.0, 100.0, 100.0), Some("outer")),
+            group_node("outer", Rect::new(0.0, 0.0, 100.0, 100.0), None),
+        ]);
+        // No scope: a click resolves to the outermost enclosing group.
+        let target = resolve_group_target(ElementId("m".into()), &disp, None);
+        assert_eq!(target, ElementId("outer".into()));
+    }
+
+    #[test]
+    fn scoped_click_selects_the_member_inside_the_scope() {
+        let disp = viewport(vec![
+            member_elem("m", Rect::new(0.0, 0.0, 100.0, 100.0), "g"),
+            group_node("g", Rect::new(0.0, 0.0, 100.0, 100.0), Some("outer")),
+            group_node("outer", Rect::new(0.0, 0.0, 100.0, 100.0), None),
+        ]);
+        // Scope = outer: the click peels one level and selects the sub-group `g`.
+        let scope = ElementId("outer".into());
+        let target = resolve_group_target(ElementId("m".into()), &disp, Some(&scope));
+        assert_eq!(target, ElementId("g".into()));
+        // Scope = g: the click selects the member itself.
+        let scope = ElementId("g".into());
+        let target = resolve_group_target(ElementId("m".into()), &disp, Some(&scope));
+        assert_eq!(target, ElementId("m".into()));
+    }
+
+    #[test]
+    fn ungrouped_element_resolves_to_itself() {
+        let disp = viewport(vec![rect_elem("a", Rect::new(0.0, 0.0, 100.0, 100.0))]);
+        let target = resolve_group_target(ElementId("a".into()), &disp, None);
+        assert_eq!(target, ElementId("a".into()));
+        assert!(!is_group(&ElementId("a".into()), &disp));
+    }
+
+    #[test]
+    fn pointer_down_on_a_member_selects_the_group() {
+        let disp = viewport(vec![
+            member_elem("m", Rect::new(0.0, 0.0, 100.0, 100.0), "g"),
+            group_node("g", Rect::new(0.0, 0.0, 100.0, 100.0), None),
+        ]);
+        let cam = cam();
+        let mut tool = SelectTool::new();
+        let w = Point::new(50.0, 50.0);
+        let out = tool.pointer_down(w, to_screen(&cam, w), &[], &disp, &cam, None);
+        match out {
+            SelectOutcome::SelectionChanged(ids) => {
+                assert_eq!(ids, vec![ElementId("g".into())]);
+            }
+            other => panic!("expected the group to be selected, got {other:?}"),
         }
     }
 
@@ -868,7 +1001,7 @@ mod tests {
         let cam = cam();
         let mut tool = SelectTool::new();
         let w0 = Point::new(50.0, 50.0);
-        let out = tool.pointer_down(w0, to_screen(&cam, w0), &[], &disp, &cam);
+        let out = tool.pointer_down(w0, to_screen(&cam, w0), &[], &disp, &cam, None);
         assert!(
             matches!(out, SelectOutcome::SelectionChanged(ref ids) if ids == &[ElementId("a".into())])
         );
@@ -889,7 +1022,7 @@ mod tests {
         let cam = cam();
         let mut tool = SelectTool::new();
         let w = Point::new(50.0, 50.0);
-        tool.pointer_down(w, to_screen(&cam, w), &[], &disp, &cam);
+        tool.pointer_down(w, to_screen(&cam, w), &[], &disp, &cam, None);
         assert!(matches!(tool.pointer_up(w, &disp), SelectOutcome::None));
     }
 
@@ -900,7 +1033,7 @@ mod tests {
         let mut tool = SelectTool::new();
         // Press on empty space.
         let w0 = Point::new(-200.0, -200.0);
-        let out = tool.pointer_down(w0, to_screen(&cam, w0), &[], &disp, &cam);
+        let out = tool.pointer_down(w0, to_screen(&cam, w0), &[], &disp, &cam, None);
         assert!(matches!(out, SelectOutcome::None));
         // Drag to enclose element "a".
         let m = tool.pointer_move(Point::new(200.0, 200.0));
@@ -921,7 +1054,7 @@ mod tests {
         // Press the SE handle (world corner 100,100 -> its screen position).
         let se_world = Point::new(100.0, 100.0);
         let se_screen = to_screen(&cam, se_world);
-        let out = tool.pointer_down(se_world, se_screen, &sel, &disp, &cam);
+        let out = tool.pointer_down(se_world, se_screen, &sel, &disp, &cam, None);
         assert!(matches!(out, SelectOutcome::None));
         assert!(tool.is_dragging());
         // Drag it out to (150,140).
@@ -948,7 +1081,7 @@ mod tests {
         let disp = empty_display();
         let cam = cam();
         let start = Point::new(20.0, 30.0);
-        m.pointer_down(start, to_screen(&cam, start), &[], &disp, &cam);
+        m.pointer_down(start, to_screen(&cam, start), &[], &disp, &cam, None);
         m.pointer_move(Point::new(120.0, 130.0));
         // Preview reflects the drag rect as the shape it will become.
         assert!(matches!(
@@ -975,7 +1108,7 @@ mod tests {
         let disp = empty_display();
         let cam = cam();
         let at = Point::new(5.0, 5.0);
-        m.pointer_down(at, to_screen(&cam, at), &[], &disp, &cam);
+        m.pointer_down(at, to_screen(&cam, at), &[], &disp, &cam, None);
         match m.pointer_up(at, &disp) {
             ToolOutcome::Command(ToileCommand::CreateElement { size, .. }) => {
                 assert_eq!(size, CLICK_SHAPE_SIZE);
@@ -991,7 +1124,7 @@ mod tests {
         let disp = empty_display();
         let cam = cam();
         let at = Point::new(40.0, 60.0);
-        m.pointer_down(at, to_screen(&cam, at), &[], &disp, &cam);
+        m.pointer_down(at, to_screen(&cam, at), &[], &disp, &cam, None);
         match m.pointer_up(at, &disp) {
             ToolOutcome::Command(ToileCommand::CreateElement {
                 kind,
@@ -1015,7 +1148,7 @@ mod tests {
         let disp = empty_display();
         let cam = cam();
         let p0 = Point::new(0.0, 0.0);
-        m.pointer_down(p0, to_screen(&cam, p0), &[], &disp, &cam);
+        m.pointer_down(p0, to_screen(&cam, p0), &[], &disp, &cam, None);
         m.pointer_move(Point::new(10.0, 5.0));
         m.pointer_move(Point::new(20.0, 0.0));
         assert!(matches!(m.preview(), Some(Preview::Stroke(_))));
@@ -1038,7 +1171,7 @@ mod tests {
         m.set_tool(Tool::Connector);
         // Press near the right edge of a (nearest anchor = Right), release inside b.
         let down = Point::new(95.0, 50.0);
-        m.pointer_down(down, to_screen(&cam, down), &[], &disp, &cam);
+        m.pointer_down(down, to_screen(&cam, down), &[], &disp, &cam, None);
         assert!(matches!(m.preview(), Some(Preview::Connector { .. })));
         match m.pointer_up(Point::new(350.0, 50.0), &disp) {
             ToolOutcome::Command(ToileCommand::CreateConnector {
@@ -1060,7 +1193,7 @@ mod tests {
         let mut m = ToolMachine::new();
         m.set_tool(Tool::Connector);
         let down = Point::new(50.0, 50.0);
-        m.pointer_down(down, to_screen(&cam, down), &[], &disp, &cam);
+        m.pointer_down(down, to_screen(&cam, down), &[], &disp, &cam, None);
         assert!(matches!(
             m.pointer_up(Point::new(999.0, 999.0), &disp),
             ToolOutcome::None
@@ -1078,7 +1211,7 @@ mod tests {
             Point::new(50.0, 0.0),
             Point::new(50.0, 50.0),
         ] {
-            m.pointer_down(p, to_screen(&cam, p), &[], &disp, &cam);
+            m.pointer_down(p, to_screen(&cam, p), &[], &disp, &cam, None);
             m.pointer_up(p, &disp);
         }
         assert!(m.is_active());
@@ -1099,7 +1232,7 @@ mod tests {
         let disp = empty_display();
         let cam = cam();
         let p = Point::new(10.0, 10.0);
-        m.pointer_down(p, to_screen(&cam, p), &[], &disp, &cam);
+        m.pointer_down(p, to_screen(&cam, p), &[], &disp, &cam, None);
         assert!(m.is_active());
         m.set_tool(Tool::Select);
         assert!(!m.is_active());
@@ -1127,7 +1260,7 @@ mod tests {
         let rot_screen = rotate_handle_point(screen_b);
         // The world point under that screen position (start angle reference).
         let rot_world = cam.screen_to_world() * rot_screen;
-        let out = tool.pointer_down(rot_world, rot_screen, &sel, &disp, &cam);
+        let out = tool.pointer_down(rot_world, rot_screen, &sel, &disp, &cam, None);
         assert!(matches!(out, SelectOutcome::None));
         // Move the pointer to the element's right (world +x from center) -> the
         // vector angle changes from "straight up" to "straight right": +90 deg.

@@ -286,6 +286,9 @@ impl TrameState {
             // cell / active sheet (`-ui.md` sec.5.D), like the sort intents above.
             TrameCommand::RequestActiveColumnValues => self.active_column_values(),
             TrameCommand::RequestSelectionStats => self.selection_stats(),
+            // Authoritative copy: serialize the tracked selection from the
+            // document (never viewport-culled), replied via `Clipboard`.
+            TrameCommand::CopyRange => self.copy_range(),
             TrameCommand::ApplyFilterToActiveColumn { kind } => {
                 let sheet = self.active_sheet.clone();
                 self.apply_filter(&sheet, self.active.1, kind)
