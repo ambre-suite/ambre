@@ -507,6 +507,7 @@ impl TrameView {
     /// then clears the source range.
     pub fn grid_paste_payload(&mut self, payload: ambre_bus::ClipboardPayload) {
         let (row, col) = (self.state.active_row(), self.state.active_col());
+        let (rows, cols) = (payload.rows, payload.cols);
         if let Err(SendError::Full) = self.send_command_lossless(TrameCommand::PasteRange {
             target_row: row,
             target_col: col,
@@ -514,6 +515,9 @@ impl TrameView {
         }) {
             tracing::error!("Trame: UI->Logic channel full, paste dropped");
         }
+        // Select the whole destination rectangle, not just the landing cell, so
+        // the pasted block reads back as a single selection (sec.5.E).
+        self.select_pasted_region(row, col, rows, cols);
         self.finish_paste();
         self.needs_full = true;
     }
@@ -559,7 +563,20 @@ impl TrameView {
         }) {
             tracing::error!("Trame: UI->Logic channel full, paste dropped");
         }
+        // Select the whole destination rectangle (see `grid_paste_payload`).
+        self.select_pasted_region(row, col, rows, cols);
         self.needs_full = true;
+    }
+
+    /// Select the rectangle a paste just landed on: top-left at the target cell,
+    /// extending `rows` x `cols` (the payload's dimensions), clamped to the grid.
+    /// A single-cell paste collapses to a plain single selection. The active
+    /// corner stays on the top-left so subsequent typing overwrites there, while
+    /// the whole pasted block is highlighted (sec.5.E).
+    fn select_pasted_region(&mut self, row: u32, col: u32, rows: u32, cols: u32) {
+        let r2 = (row + rows.saturating_sub(1)).min(crate::TOTAL_ROWS - 1);
+        let c2 = (col + cols.saturating_sub(1)).min(TOTAL_COLS - 1);
+        self.state.select_rect(row, col, r2, c2);
     }
 
     /// After a paste: clear the source range if the clipboard held a cut, then
