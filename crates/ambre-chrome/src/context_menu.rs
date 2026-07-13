@@ -13,10 +13,12 @@
 // "Bold" runs the exact same command, decoupled from the trigger.
 // ============================================================================
 
-use ambre_commands::CommandId;
+use ambre_commands::{CommandId, KeyBinding};
 use leptos::html;
 use leptos::prelude::*;
 use leptos_icons::Icon;
+
+use crate::shortcut::Kbd;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 
@@ -26,11 +28,13 @@ use wasm_bindgen::closure::Closure;
 /// navigation and carries no command.
 #[derive(Clone, PartialEq)]
 pub enum MenuEntry {
-    /// A selectable command, with an optional leading icon.
+    /// A selectable command, with an optional leading icon and an optional
+    /// trailing keybinding chip (shown right-aligned, e.g. a menu-bar accelerator).
     Item {
         command: CommandId,
         label: String,
         icon: Option<icondata::Icon>,
+        shortcut: Option<KeyBinding>,
     },
     /// A horizontal divider between two groups of items.
     Separator,
@@ -43,6 +47,7 @@ impl MenuEntry {
             command,
             label: label.into(),
             icon: None,
+            shortcut: None,
         }
     }
 
@@ -52,7 +57,18 @@ impl MenuEntry {
             command,
             label: label.into(),
             icon: Some(icon),
+            shortcut: None,
         }
+    }
+
+    /// Attach a trailing keybinding chip to an `Item` (no-op on a separator).
+    /// Chainable on `new` / `with_icon`, so a menu-bar row can show its
+    /// accelerator (SS5quinquies.E) while a context-menu row stays chip-less.
+    pub fn shortcut(mut self, binding: KeyBinding) -> Self {
+        if let Self::Item { shortcut, .. } = &mut self {
+            *shortcut = Some(binding);
+        }
+        self
     }
 
     /// A group separator.
@@ -241,6 +257,7 @@ pub fn ContextMenu(
                     command,
                     label,
                     icon,
+                    shortcut,
                 } => {
                     let i = focus_idx;
                     focus_idx += 1;
@@ -258,6 +275,7 @@ pub fn ContextMenu(
                         >
                             {icon.map(|ic| view! { <span class="ambre-ctx-icon"><Icon icon=ic /></span> })}
                             <span class="ambre-ctx-label">{label}</span>
+                            {shortcut.map(|kb| view! { <span class="ambre-ctx-kbd"><Kbd binding=kb /></span> })}
                         </li>
                     }
                     .into_any()

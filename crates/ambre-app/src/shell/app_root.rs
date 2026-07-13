@@ -764,6 +764,14 @@ pub(crate) fn AppRoot() -> impl IntoView {
         {boot_is_toile.then(|| view! {
             <toile_chrome::ToolPalette active=toile_active_tool />
         })}
+        // Toile top menu bar + zoom control (toile-ui §5quinquies.E): the low-
+        // frequency menus (File/Edit/View/Object/Present) and the zoom cluster.
+        // Every entry routes through the shared `on_command` path (the same channel
+        // the context menu uses); the zoom readout mirrors the `zoom` signal the
+        // canvas view publishes each frame.
+        {boot_is_toile.then(|| view! {
+            <toile_chrome::TopMenuBar zoom=zoom on_command=on_command />
+        })}
 
         // Multi-column sort dialog (sec.5.C), opened from "Sort range...".
         <trame_chrome::SortDialog state=sort_dialog on_apply=on_sort_apply />

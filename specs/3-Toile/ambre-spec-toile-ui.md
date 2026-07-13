@@ -537,7 +537,16 @@ lives in Logic, keyed on change size.
 - [ ] Style / property inspector -> debounced `RestyleElements` + z-order / lock (§5quinquies.B)
 - [ ] Color picker popover (ARGB, shared by inspector + text runs) (§5quinquies.C)
 - [ ] Content-anchored floating selection toolbar, transform-synced each frame (§5quinquies.D)
-- [ ] Top menu bar + zoom control (Fit / Zoom-to-selection) (§5quinquies.E)
+- [x] Top menu bar + zoom control (Fit / Zoom-to-selection) (§5quinquies.E). DOM chrome
+  `TopMenuBar` (`chrome::menu_bar`): the File/Edit/View/Object/Present menus render through the
+  shared `ambre-chrome` `ContextMenu` (opened at each title), and the zoom cluster (out / `%`
+  readout / in / Fit / Zoom-to-selection) carries the `.ambre-commandbar` styling of the tool
+  palette. Every entry routes through the same `on_command` -> `toile_menu_cmd` channel as the
+  context menu (§5ter); zoom actions mutate `ViewportTransform` locally (`zoom_by_center` /
+  `reset_zoom` / `fit_bounds`) and forward `SetViewport`. Fit frames the whole board via an
+  empty-ids `RequestSelectionStats` (Logic returns the union of all bounds); Zoom-to-selection
+  frames the selection. The `%` readout mirrors the live `zoom` signal the view publishes each
+  frame. Host-tested pure surface (`ui::menu_bar` layouts + `viewport` zoom/fit geometry).
 - [ ] `ambre-chrome` context menu (§5ter)
 - [x] Find panel (§5quater). DOM chrome `FindPanel` (find-only) + `ToileCommand::Find` wiring;
   canvas-side highlight of visible hits and camera recenter on `focus` (via a `RequestSelectionStats`

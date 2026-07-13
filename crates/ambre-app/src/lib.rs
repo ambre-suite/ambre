@@ -1048,6 +1048,7 @@ pub fn main() {
                     toile_ctx_scope,
                     toile_menu_cmd,
                     toile_active_tool,
+                    zoom,
                 ))
             } else {
                 AppView::Trame(TrameView::new(

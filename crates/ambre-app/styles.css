@@ -228,6 +228,45 @@ input[type="radio"] {
     transform: translateY(-50%);
 }
 
+/* Toile top menu bar (toile-ui SS5quinquies.E). Reuses `.ambre-commandbar` for
+   buttons / hover / active-fill; this modifier only docks it top-center. */
+.ambre-toile-menubar {
+    position: fixed;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 60;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+/* Menu titles are text, not icons: give them horizontal padding and normal
+   text sizing (the shared bar is sized for square icon buttons). */
+.ambre-menu-title {
+    padding: 0 8px;
+    font: 14px Roboto, system-ui, -apple-system, sans-serif;
+}
+
+/* Toile zoom control (toile-ui SS5quinquies.E): docked top-right, same chrome. */
+.ambre-toile-zoom {
+    position: fixed;
+    top: 8px;
+    right: 8px;
+    z-index: 60;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+/* The `%` readout doubles as the reset-to-100% button: a fixed-width numeric
+   label so the bar does not reflow as the zoom changes. */
+.ambre-zoom-readout {
+    min-width: 48px;
+    font: 13px ui-monospace, monospace;
+    color: var(--text);
+}
+
 /* Font family / size dropdowns: borderless and blended into the toolbar, theme
    aware (closed control + native option list via color-scheme), with a discreet
    custom caret (BiDownArrowSolid) on the right and left padding so the value is
@@ -922,6 +961,14 @@ input[type="radio"] {
     height: 1px;
     margin: 4px 8px;
     background: var(--border);
+}
+
+/* Trailing keybinding chip in a menu row (menu-bar accelerators, toile-ui
+   SS5quinquies.E). Pushed to the right edge of the row so labels align left and
+   chords align right. */
+.ambre-ctx-kbd {
+    margin-left: auto;
+    padding-left: 16px;
 }
 
 /* Shared keyboard-chord chip (ambre-chrome::Kbd). */

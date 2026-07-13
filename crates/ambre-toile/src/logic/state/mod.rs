@@ -282,6 +282,24 @@ impl ToileState {
     fn selection_stats(&self, ids: &[ElementId]) -> ToileOutcome {
         let mut union: Option<Rect> = None;
         let mut count = 0u32;
+        // Empty ids = whole-board extent: the union of every element's bounds.
+        // Used by the View -> Fit action (`toile-ui §5quinquies.E`), which needs
+        // the full board rect the UI does not hold (it sees only the culled
+        // viewport). A non-empty selection keeps the per-selection aggregate the
+        // status bar consumes (§8bis).
+        if ids.is_empty() {
+            for r in self.bounds.values() {
+                union = Some(match union {
+                    Some(u) => u.union(*r),
+                    None => *r,
+                });
+                count += 1;
+            }
+            return ToileOutcome::display_only(vec![ToileEvent::SelectionStats(SelectionStats {
+                count,
+                bounds: union,
+            })]);
+        }
         for id in ids {
             if let Some(r) = self.bounds.get(id) {
                 union = Some(match union {

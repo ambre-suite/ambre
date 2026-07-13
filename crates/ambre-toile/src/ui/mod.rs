@@ -16,6 +16,7 @@ pub mod find;
 pub mod grid;
 pub mod hit;
 pub mod menu;
+pub mod menu_bar;
 pub mod palette;
 pub mod render;
 pub mod tool;

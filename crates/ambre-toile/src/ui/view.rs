@@ -150,6 +150,18 @@ pub struct ToileView {
     /// state (§11bis), never a `ToileCommand`. Leptos signal, so wasm-only.
     #[cfg(target_arch = "wasm32")]
     active_tool: RwSignal<Tool>,
+    /// Live zoom factor published to the DOM zoom control / status bar each frame
+    /// (§5quinquies.E / §8bis): `1.0` = 100%. The view owns the camera, so it is
+    /// the source; the chip mirrors it. Written only on change. Wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    zoom: RwSignal<f64>,
+
+    /// Set while a Fit / Zoom-to-selection awaits the `SelectionStats` reply whose
+    /// bounds it will frame (§5quinquies.E). The reply treats both the same way
+    /// (fit the returned bounds), so a flag suffices; it is checked before the
+    /// find-focus recenter that shares the same stats channel. `cfg`-agnostic so
+    /// the dispatch arm stays uniform.
+    pending_fit: bool,
 }
 
 impl ToileView {
@@ -166,6 +178,7 @@ impl ToileView {
         #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<super::menu::CtxScope>,
         #[cfg(target_arch = "wasm32")] menu_cmd: RwSignal<Option<CommandId>>,
         #[cfg(target_arch = "wasm32")] active_tool: RwSignal<Tool>,
+        #[cfg(target_arch = "wasm32")] zoom: RwSignal<f64>,
     ) -> Self {
         text_input.focus();
         let theme = theme_ctl.get();
@@ -212,6 +225,9 @@ impl ToileView {
             menu_cmd,
             #[cfg(target_arch = "wasm32")]
             active_tool,
+            #[cfg(target_arch = "wasm32")]
+            zoom,
+            pending_fit: false,
         }
     }
 
@@ -314,7 +330,15 @@ impl ToileView {
             // and re-cull; ignore replies not tied to a pending find focus (a
             // future status-bar request, §8bis).
             ToileEvent::SelectionStats(stats) => {
-                if self.pending_find_focus.take().is_some()
+                // A pending Fit / Zoom-to-selection consumes the reply first
+                // (§5quinquies.E): frame the returned bounds (center + scale).
+                if std::mem::take(&mut self.pending_fit) {
+                    if let Some(bounds) = stats.bounds {
+                        self.cam.fit_bounds(bounds, super::viewport::FIT_PAD);
+                        self.needs_full = true;
+                        self.queue_viewport();
+                    }
+                } else if self.pending_find_focus.take().is_some()
                     && let Some(bounds) = stats.bounds
                 {
                     self.cam.center = bounds.center();
@@ -458,12 +482,82 @@ impl ToileView {
     #[cfg(not(target_arch = "wasm32"))]
     fn apply_active_tool(&mut self) {}
 
+    /// Publish the camera's current zoom to the shared `zoom` signal so the DOM
+    /// zoom control / status bar readout tracks pan/zoom (§5quinquies.E). Written
+    /// only on change to avoid needless reactive churn. Wasm-only; a host no-op
+    /// keeps `update` cfg-agnostic.
+    #[cfg(target_arch = "wasm32")]
+    fn publish_zoom(&self) {
+        if (self.zoom.get_untracked() - self.cam.zoom).abs() > f64::EPSILON {
+            self.zoom.set(self.cam.zoom);
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn publish_zoom(&self) {}
+
     /// Turn a menu `CommandId` into board mutation(s). `Paste` and `Select all` are
     /// UI-only intents serviced here (the same-session clipboard / local selection);
     /// every other id is resolved against the selection by `menu::resolve_menu_command`
     /// and emitted. Wasm-only (reached only from `drain_menu_cmd`).
     #[cfg(target_arch = "wasm32")]
     fn apply_menu_command(&mut self, id: CommandId) {
+        use super::menu_bar as mb;
+
+        // Top menu bar / zoom control ids (§5quinquies.E). Undo / redo are real
+        // board mutations; the zoom actions are local-transform intents that never
+        // reach Logic (only the resulting `SetViewport` cull request does).
+        match id {
+            mb::UNDO => {
+                self.send_edit(ToileCommand::Undo);
+                return;
+            }
+            mb::REDO => {
+                self.send_edit(ToileCommand::Redo);
+                return;
+            }
+            mb::ZOOM_IN => {
+                self.cam.zoom_by_center(super::viewport::ZOOM_STEP);
+                self.needs_full = true;
+                self.queue_viewport();
+                return;
+            }
+            mb::ZOOM_OUT => {
+                self.cam.zoom_by_center(1.0 / super::viewport::ZOOM_STEP);
+                self.needs_full = true;
+                self.queue_viewport();
+                return;
+            }
+            mb::ZOOM_RESET => {
+                self.cam.reset_zoom();
+                self.needs_full = true;
+                self.queue_viewport();
+                return;
+            }
+            mb::ZOOM_FIT => {
+                // Fit the whole board: ask Logic for the union of every element's
+                // bounds (empty ids = whole-board extent) and frame it on reply.
+                self.pending_fit = true;
+                self.send_edit(ToileCommand::RequestSelectionStats { ids: Vec::new() });
+                return;
+            }
+            mb::ZOOM_TO_SELECTION => {
+                if !self.selection.is_empty() {
+                    self.pending_fit = true;
+                    self.send_edit(ToileCommand::RequestSelectionStats {
+                        ids: self.selection.clone(),
+                    });
+                }
+                return;
+            }
+            mb::PRESENT => {
+                // The presentation sequence panel is owned by toile-features §9;
+                // this surface only carries the entry point. No-op until it lands.
+                tracing::debug!("Toile: presentation entry not yet wired");
+                return;
+            }
+            _ => {}
+        }
+
         if id == super::menu::SELECT_ALL {
             self.select_all();
             return;
@@ -929,6 +1023,9 @@ impl ToileView {
 
         // Apply the tool the DOM palette / keyboard selected this frame (§5quinquies.A).
         self.apply_active_tool();
+
+        // Publish the live zoom % to the DOM zoom control / status bar (§5quinquies.E).
+        self.publish_zoom();
 
         // A freshly-created Sticky / Text element: open its editor now that its
         // geometry has landed in `display` (§6).
