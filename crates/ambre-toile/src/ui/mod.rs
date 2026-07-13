@@ -15,6 +15,7 @@ pub mod edit;
 pub mod find;
 pub mod grid;
 pub mod hit;
+pub mod menu;
 pub mod render;
 pub mod tool;
 pub mod view;

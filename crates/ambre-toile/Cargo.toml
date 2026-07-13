@@ -8,6 +8,10 @@ description = "Whiteboard & presentations application for Ambre — infinite can
 ambre-core = { path = "../ambre-core" }
 ambre-bus = { path = "../ambre-bus" }
 ambre-draw = { path = "../ambre-draw" }
+# Command registry (`CommandId`): the context-menu command surface (toile-ui
+# §5ter) is pure and host-tested in `ui::menu`, so this is a host dependency, not
+# wasm-only like the Leptos chrome that renders it.
+ambre-commands = { path = "../ambre-commands" }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
@@ -40,6 +44,10 @@ wasm-bindgen = { workspace = true }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 ambre-chrome = { path = "../ambre-chrome" }
 leptos = { workspace = true }
+# Context-menu entry icons (toile-ui §5ter): every entry glyph comes from
+# `icondata`, rendered through `leptos-icons` inside `ambre-chrome::ContextMenu`.
+leptos_icons = { workspace = true }
+icondata = { workspace = true }
 
 [dev-dependencies]
 # Headless render tests: RecordingSurface mock DrawSurface + FixedClock.

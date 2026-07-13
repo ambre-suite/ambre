@@ -31,6 +31,14 @@ use super::tool::{
 };
 use super::viewport::ViewportTransform;
 
+// Context-menu bridge (toile-ui §5ter): the DOM `ContextMenu` reads the published
+// selection scope and writes back the chosen `CommandId`; both are leptos signals,
+// so the handles and their access traits are wasm-only.
+#[cfg(target_arch = "wasm32")]
+use ambre_commands::CommandId;
+#[cfg(target_arch = "wasm32")]
+use leptos::prelude::{GetUntracked, RwSignal, Set};
+
 /// One notch of the mouse wheel maps to this zoom factor (ctrl+wheel / pinch).
 const ZOOM_PER_WHEEL_PX: f64 = 0.0018;
 
@@ -125,6 +133,17 @@ pub struct ToileView {
     /// for a full-fidelity same-tab paste that never depends on the OS custom MIME
     /// type surviving the round-trip (§5ter).
     last_clip: Option<ambre_bus::ClipboardBlob>,
+
+    /// Selection scope published to the DOM context menu each right-click (§5ter):
+    /// the view writes it, the chrome's entry `Memo` reads it to omit inapplicable
+    /// rows. Leptos signal, so wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    ctx_scope: RwSignal<super::menu::CtxScope>,
+    /// The context-menu command the shell forwards back into the view (§5ter): the
+    /// menu id is drained in `update` and resolved against the live selection (the
+    /// Logic thread never sees the selection, so the view attaches it). Wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    menu_cmd: RwSignal<Option<CommandId>>,
 }
 
 impl ToileView {
@@ -138,6 +157,8 @@ impl ToileView {
         text_input: TextInput,
         perf_pub: PerfPublisher,
         theme_ctl: ThemeControl,
+        #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<super::menu::CtxScope>,
+        #[cfg(target_arch = "wasm32")] menu_cmd: RwSignal<Option<CommandId>>,
     ) -> Self {
         text_input.focus();
         let theme = theme_ctl.get();
@@ -178,6 +199,10 @@ impl ToileView {
             fatal: false,
             pending_clipboard: None,
             last_clip: None,
+            #[cfg(target_arch = "wasm32")]
+            ctx_scope,
+            #[cfg(target_arch = "wasm32")]
+            menu_cmd,
         }
     }
 
@@ -339,6 +364,13 @@ impl ToileView {
     fn handle_pointer_down(&mut self, x: f64, y: f64, button: i16) -> bool {
         let screen = Point::new(x, y);
         self.last_pointer = screen;
+        // Right button: select under the cursor and publish the menu scope (§5ter).
+        // The DOM `contextmenu` listener opens the menu; pointerdown fires first, so
+        // the scope signal is fresh when the entry `Memo` recomputes.
+        if button == 2 {
+            self.handle_right_click(screen);
+            return true;
+        }
         // Space-drag or Hand tool or middle button: begin a pan.
         if self.space_down || self.machine.tool() == Tool::Hand || button == 1 {
             self.panning = Some(screen);
@@ -356,6 +388,96 @@ impl ToileView {
         self.apply_outcome(out);
         self.needs_full = true;
         true
+    }
+
+    // -- Context menu bridge (§5ter) -------------------------------------------
+
+    /// React to a right-click: resolve the topmost hit to its group-selection
+    /// target (§7) and, unless it is already part of the current selection, select
+    /// just it; an empty hit clears the selection (empty-canvas menu). Then publish
+    /// the selection scope for the DOM menu. Emits no command and starts no gesture.
+    fn handle_right_click(&mut self, screen: Point) {
+        let world = self.cam.screen_to_world() * screen;
+        match hit_topmost(&self.display.nodes, world) {
+            Some(hit) => {
+                let target = resolve_group_target(hit, &self.display, self.group_scope.as_ref());
+                if !self.selection.contains(&target) {
+                    self.selection = vec![target];
+                }
+            }
+            None => self.selection.clear(),
+        }
+        self.needs_full = true;
+        self.publish_ctx_scope();
+    }
+
+    /// Publish the current selection scope to the DOM context menu (§5ter). Wasm-only
+    /// (leptos signal); a host no-op keeps the input path `cfg`-agnostic.
+    #[cfg(target_arch = "wasm32")]
+    fn publish_ctx_scope(&self) {
+        let scope =
+            super::menu::ctx_scope_for(&self.selection, self.group_scope.as_ref(), &self.display);
+        self.ctx_scope.set(scope);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn publish_ctx_scope(&self) {}
+
+    /// Drain a context-menu command the shell forwarded and apply it against the
+    /// live selection (§5ter). Wasm-only; a host no-op keeps `update` cfg-agnostic.
+    #[cfg(target_arch = "wasm32")]
+    fn drain_menu_cmd(&mut self) {
+        let Some(id) = self.menu_cmd.get_untracked() else {
+            return;
+        };
+        self.menu_cmd.set(None);
+        self.apply_menu_command(id);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn drain_menu_cmd(&mut self) {}
+
+    /// Turn a menu `CommandId` into board mutation(s). `Paste` and `Select all` are
+    /// UI-only intents serviced here (the same-session clipboard / local selection);
+    /// every other id is resolved against the selection by `menu::resolve_menu_command`
+    /// and emitted. Wasm-only (reached only from `drain_menu_cmd`).
+    #[cfg(target_arch = "wasm32")]
+    fn apply_menu_command(&mut self, id: CommandId) {
+        if id == super::menu::SELECT_ALL {
+            self.select_all();
+            return;
+        }
+        if id == super::menu::PASTE {
+            // Menu paste uses the in-memory same-session blob; a cross-tab paste
+            // still rides the native Ctrl+V `paste` DOM event (§5ter).
+            if let Some(blob) = self.last_clip.clone() {
+                self.paste_clipboard(blob, true);
+            }
+            return;
+        }
+        let cmds = super::menu::resolve_menu_command(
+            id,
+            &self.selection,
+            self.group_scope.as_ref(),
+            &self.display,
+        );
+        for cmd in cmds {
+            self.send_edit(cmd);
+        }
+        self.needs_full = true;
+    }
+
+    /// Select every displayed element (local, never synced). Shared by `Ctrl+A`
+    /// and the context-menu "Select all" entry (§5).
+    fn select_all(&mut self) {
+        self.selection = self
+            .display
+            .nodes
+            .iter()
+            .filter_map(|n| match n {
+                DisplayNode::Element(e) => Some(e.id.clone()),
+                DisplayNode::Connector(_) => None,
+            })
+            .collect();
+        self.needs_full = true;
     }
 
     fn handle_pointer_move(&mut self, x: f64, y: f64) -> bool {
@@ -470,17 +592,7 @@ impl ToileView {
                 }
                 // Local select-all over every displayed element (connectors are
                 // selected with their endpoints, not directly).
-                "a" | "A" => {
-                    self.selection = self
-                        .display
-                        .nodes
-                        .iter()
-                        .filter_map(|n| match n {
-                            DisplayNode::Element(e) => Some(e.id.clone()),
-                            DisplayNode::Connector(_) => None,
-                        })
-                        .collect();
-                }
+                "a" | "A" => self.select_all(),
                 _ => return false,
             }
             self.needs_full = true;
@@ -788,6 +900,9 @@ impl ToileView {
                 }
             }
         }
+
+        // Apply any context-menu command the shell forwarded this frame (§5ter).
+        self.drain_menu_cmd();
 
         // A freshly-created Sticky / Text element: open its editor now that its
         // geometry has landed in `display` (§6).
