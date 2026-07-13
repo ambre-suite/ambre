@@ -462,7 +462,7 @@ lives in Logic, keyed on change size.
 - [x] The Select tool + tool state machine, host-tested
 
 **Phase 1 - Integration**
-- [ ] Remaining tools: Pen, Shape, Connector, Draw, Sticky, Text
+- [x] Remaining tools: Pen, Shape, Connector, Draw, Sticky, Text (`ToolMachine`, host-tested)
 - [ ] Parley inline text editor
 - [ ] Keyboard shortcuts + clipboard round-trip (OS-clipboard mirror)
 - [ ] Grouping selection-scope resolution
