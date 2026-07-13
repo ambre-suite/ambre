@@ -40,6 +40,7 @@ use ambre_canvas::{
     RepaintPlan, TextCache, TextInput, WgpuSurface, bootstrap_gpu, fatal_message, start_raf_loop,
 };
 use ambre_draw::{Affine, Alignment, Brush, Color, DrawSurface, PositionedLayoutItem, Rect};
+use ambre_toile::ui::ToileView;
 use ambre_trame::ui::TrameView;
 
 use base64::Engine as _;
@@ -114,6 +115,8 @@ pub(crate) fn async_write_clipboard(tsv: String, payload_b64: Option<String>) {
 pub enum AppView {
     /// A Trame (spreadsheet) document.
     Trame(TrameView),
+    /// A Toile (whiteboard) document.
+    Toile(ToileView),
 }
 
 impl AppView {
@@ -121,6 +124,7 @@ impl AppView {
     fn update(&mut self) {
         match self {
             AppView::Trame(v) => v.update(),
+            AppView::Toile(v) => v.update(),
         }
     }
 
@@ -128,6 +132,7 @@ impl AppView {
     fn plan_repaint(&mut self, hud_tick: bool) -> RepaintPlan {
         match self {
             AppView::Trame(v) => v.plan_repaint(hud_tick),
+            AppView::Toile(v) => v.plan_repaint(hud_tick),
         }
     }
 
@@ -141,6 +146,7 @@ impl AppView {
     ) {
         match self {
             AppView::Trame(v) => v.paint_content(surface, font_cx, text_cache, strip),
+            AppView::Toile(v) => v.paint_content(surface, font_cx, text_cache, strip),
         }
     }
 
@@ -154,6 +160,7 @@ impl AppView {
     ) {
         match self {
             AppView::Trame(v) => v.paint_overlay(surface, font_cx, text_cache, stats),
+            AppView::Toile(v) => v.paint_overlay(surface, font_cx, text_cache, stats),
         }
     }
 
@@ -161,6 +168,7 @@ impl AppView {
     fn resize(&mut self, width: u32, height: u32) {
         match self {
             AppView::Trame(v) => v.resize(width, height),
+            AppView::Toile(v) => v.resize(width, height),
         }
     }
 
@@ -168,6 +176,7 @@ impl AppView {
     fn handle_input(&mut self, ev: &InputEvent) -> bool {
         match self {
             AppView::Trame(v) => v.handle_input(ev),
+            AppView::Toile(v) => v.handle_input(ev),
         }
     }
 
@@ -182,6 +191,7 @@ impl AppView {
     ) -> Option<(String, Option<ambre_bus::ClipboardPayload>)> {
         match self {
             AppView::Trame(v) => v.clipboard_write(cut),
+            AppView::Toile(v) => v.clipboard_write(cut),
         }
     }
 
@@ -201,6 +211,7 @@ impl AppView {
                     v.grid_paste_text(&text);
                 }
             }
+            AppView::Toile(v) => v.paste_clipboard(payload, text),
         }
     }
 
@@ -208,6 +219,7 @@ impl AppView {
     fn set_document(&mut self, document_id: DocumentId) {
         match self {
             AppView::Trame(v) => v.set_document(document_id),
+            AppView::Toile(v) => v.set_document(document_id),
         }
     }
 }
