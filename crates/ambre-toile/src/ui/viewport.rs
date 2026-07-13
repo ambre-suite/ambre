@@ -10,11 +10,20 @@
 // ============================================================================
 
 use ambre_bus::app::toile::Viewport;
-use ambre_draw::{Affine, Point, Size, Vec2};
+use ambre_draw::{Affine, Point, Rect, Size, Vec2};
 
 /// Minimum / maximum zoom, matching the Logic-side clamp (`Viewport`, §3).
 pub const MIN_ZOOM: f64 = 0.1;
 pub const MAX_ZOOM: f64 = 10.0;
+
+/// One press of the zoom-in / zoom-out button multiplies (or divides) the zoom
+/// by this factor (§5quinquies.E). A discrete notch, coarser than a wheel tick.
+pub const ZOOM_STEP: f64 = 1.2;
+
+/// Fractional breathing room left around the fitted content on a Fit /
+/// Zoom-to-selection (§5quinquies.E): the content occupies `1 / (1 + FIT_PAD)`
+/// of each axis so it never touches the viewport edge.
+pub const FIT_PAD: f64 = 0.08;
 
 /// The world <-> screen camera. `center` is the world point under the screen
 /// center; `zoom` is world-units-per... no: screen = (world - center) * zoom +
@@ -79,6 +88,38 @@ impl ViewportTransform {
         let offset = (screen_anchor.to_vec2() - half) / new_zoom;
         self.zoom = new_zoom;
         self.center = world_anchor - offset;
+    }
+
+    /// Zoom by `factor` about the viewport center (the zoom-in / zoom-out button
+    /// affordance, §5quinquies.E): unlike `zoom_about` this keeps the world point
+    /// under the screen center fixed, so the board scales in place. Clamped.
+    pub fn zoom_by_center(&mut self, factor: f64) {
+        let center_screen = Point::new(self.size.width / 2.0, self.size.height / 2.0);
+        self.zoom_about(center_screen, factor);
+    }
+
+    /// Reset to 100% (1 screen-pixel per world-unit) keeping the current center
+    /// under the screen center (the `%` chip click, §5quinquies.E).
+    pub fn reset_zoom(&mut self) {
+        self.zoom = 1.0;
+    }
+
+    /// Fit `world` into the viewport with `pad_frac` breathing room on each axis,
+    /// centering the camera on the rect (Fit / Zoom-to-selection, §5quinquies.E).
+    /// A zero-area or non-finite rect is a no-op (nothing to frame); the fit zoom
+    /// is clamped to the supported range so a tiny rect does not blow past
+    /// `MAX_ZOOM`. `pad_frac` grows the target extent so the content occupies
+    /// `1 / (1 + pad_frac)` of the axis.
+    pub fn fit_bounds(&mut self, world: Rect, pad_frac: f64) {
+        let (bw, bh) = (world.width(), world.height());
+        if !(bw.is_finite() && bh.is_finite()) || bw <= 0.0 || bh <= 0.0 {
+            return;
+        }
+        let pad = 1.0 + pad_frac.max(0.0);
+        let fit_x = self.size.width / (bw * pad);
+        let fit_y = self.size.height / (bh * pad);
+        self.zoom = Self::clamp_zoom(fit_x.min(fit_y));
+        self.center = world.center();
     }
 
     /// Pan the camera by a screen-space delta (a drag of `delta` physical pixels
@@ -167,6 +208,62 @@ mod tests {
             vt.zoom_about(Point::new(500.0, 500.0), 0.5);
         }
         assert!((vt.zoom - MIN_ZOOM).abs() < 1e-9);
+    }
+
+    #[test]
+    fn zoom_by_center_keeps_center_world_point_fixed() {
+        let mut vt = ViewportTransform::new(1000.0, 800.0);
+        vt.center = Point::new(42.0, -13.0);
+        let center_before = vt.center;
+        vt.zoom_by_center(ZOOM_STEP);
+        // The world point under the screen center is the camera center itself; it
+        // must not move when zooming about the center.
+        assert!(approx(vt.center, center_before));
+        assert!((vt.zoom - ZOOM_STEP).abs() < 1e-9);
+    }
+
+    #[test]
+    fn reset_zoom_returns_to_100_percent() {
+        let mut vt = ViewportTransform::new(1000.0, 800.0);
+        vt.zoom = 4.7;
+        vt.center = Point::new(10.0, 20.0);
+        vt.reset_zoom();
+        assert!((vt.zoom - 1.0).abs() < 1e-9);
+        // Center is preserved (the chip resets scale, not position).
+        assert!(approx(vt.center, Point::new(10.0, 20.0)));
+    }
+
+    #[test]
+    fn fit_bounds_centers_and_scales_with_padding() {
+        let mut vt = ViewportTransform::new(1000.0, 800.0);
+        // A 200x100 world rect centered at (150, 60).
+        let world = Rect::new(50.0, 10.0, 250.0, 110.0);
+        vt.fit_bounds(world, FIT_PAD);
+        assert!(approx(vt.center, world.center()));
+        // Fit is the tighter axis: height (800 / (100 * 1.08)) vs width
+        // (1000 / (200 * 1.08)); the min governs.
+        let pad = 1.0 + FIT_PAD;
+        let expected = (1000.0 / (200.0 * pad)).min(800.0 / (100.0 * pad));
+        assert!((vt.zoom - expected).abs() < 1e-9);
+        // The padded content fits inside the viewport on both axes.
+        assert!(world.width() * vt.zoom <= vt.size.width + 1e-6);
+        assert!(world.height() * vt.zoom <= vt.size.height + 1e-6);
+    }
+
+    #[test]
+    fn fit_bounds_clamps_tiny_rect_to_max_zoom() {
+        let mut vt = ViewportTransform::new(1000.0, 800.0);
+        // A sub-pixel rect would demand an enormous zoom; it must clamp.
+        vt.fit_bounds(Rect::new(0.0, 0.0, 0.001, 0.001), FIT_PAD);
+        assert!((vt.zoom - MAX_ZOOM).abs() < 1e-9);
+    }
+
+    #[test]
+    fn fit_bounds_ignores_empty_rect() {
+        let mut vt = ViewportTransform::new(1000.0, 800.0);
+        let before = vt;
+        vt.fit_bounds(Rect::new(5.0, 5.0, 5.0, 5.0), FIT_PAD); // zero area
+        assert_eq!(vt, before);
     }
 
     #[test]

@@ -13,10 +13,12 @@
 
 mod find;
 mod menu;
+mod menu_bar;
 mod palette;
 
 pub use find::{FindPanel, FindQuery};
 pub use menu::context_entries_for;
+pub use menu_bar::TopMenuBar;
 pub use palette::ToolPalette;
 
 // The tool palette's command surface is pure and host-tested in `ui::palette`

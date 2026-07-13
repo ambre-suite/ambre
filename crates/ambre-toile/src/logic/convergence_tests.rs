@@ -213,6 +213,36 @@ fn selection_stats_spans_offscreen_elements() {
 }
 
 #[test]
+fn selection_stats_empty_ids_span_whole_board() {
+    // Empty ids = whole-board extent, for View -> Fit (`toile-ui §5quinquies.E`):
+    // the union of every element's bounds, regardless of the (UI-only) selection.
+    let mut st = ToileState::new();
+    let _a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let _b = create_rect(&mut st, Point::new(500.0, 300.0), Size::new(40.0, 20.0));
+    let out = st.handle_command(ToileCommand::RequestSelectionStats { ids: vec![] });
+    match &out.display[0] {
+        ToileEvent::SelectionStats(s) => {
+            assert_eq!(s.count, 2);
+            assert_eq!(s.bounds, Some(Rect::new(0.0, 0.0, 540.0, 320.0)));
+        }
+        other => panic!("expected SelectionStats, got {other:?}"),
+    }
+}
+
+#[test]
+fn selection_stats_empty_ids_on_empty_board_is_none() {
+    let mut st = ToileState::new();
+    let out = st.handle_command(ToileCommand::RequestSelectionStats { ids: vec![] });
+    match &out.display[0] {
+        ToileEvent::SelectionStats(s) => {
+            assert_eq!(s.count, 0);
+            assert_eq!(s.bounds, None);
+        }
+        other => panic!("expected SelectionStats, got {other:?}"),
+    }
+}
+
+#[test]
 fn group_and_drawing_are_not_creatable() {
     let mut st = ToileState::new();
     for kind in [ElementKind::Group, ElementKind::Drawing] {
