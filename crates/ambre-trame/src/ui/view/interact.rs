@@ -414,34 +414,92 @@ impl TrameView {
         self.editor.is_some()
     }
 
-    /// Build the clipboard contents for a copy/cut (`-ui.md` sec.5.E). An open
-    /// in-cell text selection wins (returns `text/plain` only, no Ambre payload);
-    /// otherwise the grid selection is serialised, returning both the TSV text
-    /// (OS interop) and the typed [`ClipboardPayload`](ambre_bus::ClipboardPayload)
-    /// (internal round-trip with styles + formula reindexing). Arms the
-    /// marching-ants anchor and the cut-pending flag. `None` means "nothing to
-    /// copy -- let the browser default proceed".
-    pub fn clipboard_write(
-        &mut self,
-        cut: bool,
-    ) -> Option<(String, Option<ambre_bus::ClipboardPayload>)> {
+    /// Resolve a copy/cut synchronously inside the native clipboard event
+    /// (`-ui.md` sec.5.E). An open in-cell text selection wins and returns its
+    /// text directly ([`CopyOutcome::Text`]); otherwise the grid copy is
+    /// authoritative: the whole selection is built Logic-side (no viewport limit),
+    /// so we only emit [`TrameCommand::CopyRange`], arm the marching-ants anchor
+    /// and the cut-pending flag synchronously, and return [`CopyOutcome::Deferred`]
+    /// -- the payload arrives one frame later via `TrameEvent::Clipboard` and is
+    /// mirrored to the OS clipboard by [`poll_clipboard`](Self::poll_clipboard).
+    /// [`CopyOutcome::Nothing`] means "let the browser default proceed".
+    pub fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
+        use ambre_bus::CopyOutcome;
         // In-cell text selection takes precedence over the grid range.
         if self.editor.is_some() {
             let text = if cut {
                 self.cut_selection()
             } else {
                 self.copy_selection()
-            }?;
-            return Some((text, None));
+            };
+            return match text {
+                Some(t) => CopyOutcome::Text(t),
+                None => CopyOutcome::Nothing,
+            };
         }
-        let payload = self.state.build_clipboard_payload();
-        if payload.cells.is_empty() {
-            return None;
+        // Copy is authoritative (Logic reads the full doc), so we cannot decide
+        // emptiness from the viewport cache without reintroducing the limit. Only
+        // the trivial case -- a single active cell that is empty in cache -- lets
+        // the browser default proceed; any multi-cell selection defers to Logic.
+        let (r1, c1, r2, c2) = self.state.selection.bounds();
+        if (r1, c1) == (r2, c2)
+            && self
+                .state
+                .cell_cache
+                .get(&(r1, c1))
+                .is_none_or(|d| d.raw.is_empty())
+        {
+            return CopyOutcome::Nothing;
+        }
+        // Authoritative build lives on the Logic thread; the UI holds only the
+        // marching-ants anchor and the cut flag (both UI state), set now.
+        if let Err(SendError::Full) = self.send_command_lossless(TrameCommand::CopyRange) {
+            tracing::error!("Trame: UI->Logic channel full, copy dropped");
+            return CopyOutcome::Nothing;
         }
         self.state.clipboard_anchor = Some(self.state.selection.bounds());
         self.cut_pending = cut;
         self.edit_dirty = true; // repaint the marching-ants overlay
-        Some((payload.to_tsv(), Some(payload)))
+        CopyOutcome::Deferred
+    }
+
+    /// Drain the clipboard blob built from the last `TrameEvent::Clipboard` reply,
+    /// so the host can mirror it to the OS clipboard within the transient user
+    /// activation window (`-ui.md` sec.5.E). Yields the blob at most once per copy.
+    pub fn poll_clipboard(&mut self) -> Option<ambre_bus::ClipboardBlob> {
+        self.pending_clipboard.take()
+    }
+
+    /// Service a paste from the shared [`ClipboardBlob`](ambre_bus::ClipboardBlob)
+    /// transport (`-ui.md` sec.5.E). Fidelity order: an open in-cell edit takes
+    /// the plain text to the caret; else, when `own_copy` (the synchronous
+    /// ownership token was still on the clipboard), the in-memory `last_clip` at
+    /// full fidelity -- immune to the async OS write having failed; else the blob's
+    /// decoded Ambre payload (cross-tab/app internal round-trip); else the
+    /// `text/plain` mirror as literal cells.
+    pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
+        if self.is_editing() {
+            // In-cell edit: a typed payload is meaningless inside a text field;
+            // route the text through the same insertion path as typing.
+            self.handle_input(&InputEvent::Text { text: blob.text });
+            return;
+        }
+        // `own_copy` means the clipboard still carries THIS tab's ownership token,
+        // so it holds our own last copy: paste it from memory at full fidelity,
+        // immune to the (Firefox-fragile) async OS payload write. Otherwise a
+        // foreign copy replaced it -- honor the OS blob.
+        let source = match &self.last_clip {
+            Some(clip) if own_copy => clip,
+            _ => &blob,
+        };
+        let payload = source
+            .ambre
+            .as_ref()
+            .and_then(|bytes| postcard::from_bytes::<ambre_bus::ClipboardPayload>(bytes).ok());
+        match payload {
+            Some(payload) => self.grid_paste_payload(payload),
+            None => self.grid_paste_text(&blob.text),
+        }
     }
 
     /// Paste a typed Ambre payload at the active cell (`-ui.md` sec.5.E). The

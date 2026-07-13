@@ -157,34 +157,49 @@ where
     // representations: tab-separated text (`text/plain`, for cross-app paste) and
     // a base64 postcard `ClipboardPayload` under a private type (`-ui.md`
     // sec.5.E), so an internal round-trip preserves styles and reindexes formulas.
+    // Per-page-load token proving a same-tab copy. Written synchronously into the
+    // clipboard on `copy`/`cut` and read back on `paste`; a match means the OS
+    // clipboard still holds this tab's own copy (see `AMBRE_CLIPBOARD_TOKEN_TYPE`).
+    let clip_token: Rc<str> = Rc::from(format!(
+        "ambre-{:x}",
+        (js_sys::Math::random() * 1e18) as u64
+    ));
     {
         let ta = text_input.element().clone();
         let host_c = Rc::clone(&host);
+        let token = Rc::clone(&clip_token);
         for cut in [false, true] {
             let host_e = Rc::clone(&host_c);
+            let token_e = Rc::clone(&token);
             let cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(
                 move |event: web_sys::ClipboardEvent| {
-                    let Some((text, payload)) = host_e.borrow_mut().clipboard_write(cut) else {
-                        return; // nothing to copy -- let the default proceed
-                    };
-                    // Base64 postcard of the typed payload (UTF-8 safe), shared by
-                    // both the synchronous setData (Ctrl+V) and the asynchronous
-                    // write (Paste button). `None` for an in-cell text selection.
-                    let b64 = payload
-                        .as_ref()
-                        .and_then(|p| postcard::to_allocvec(p).ok())
-                        .map(|bytes| base64_encode(&bytes));
-                    if let Some(data) = event.clipboard_data() {
-                        let _ = data.set_data("text/plain", &text);
-                        if let Some(b64) = &b64 {
-                            let _ = data.set_data(AMBRE_CLIPBOARD_TYPE, b64);
+                    match host_e.borrow_mut().clipboard_write(cut) {
+                        // Nothing selected: let the browser default proceed.
+                        ambre_bus::CopyOutcome::Nothing => {}
+                        // Synchronous in-cell / inline text selection: write it
+                        // straight into the event's clipboardData, as before.
+                        ambre_bus::CopyOutcome::Text(text) => {
+                            if let Some(data) = event.clipboard_data() {
+                                let _ = data.set_data("text/plain", &text);
+                                event.prevent_default();
+                            }
                         }
-                        event.prevent_default();
+                        // Authoritative copy: the full payload is built on the Logic
+                        // thread and mirrored to the OS clipboard a frame later
+                        // (`poll_clipboard` -> `async_write_clipboard`). That async
+                        // write needs a user-activation context Firefox denies from
+                        // the rAF loop, so it is best-effort. To make a same-tab
+                        // paste reliable regardless, we ALSO write the ownership
+                        // token synchronously here -- this always reaches the OS
+                        // clipboard. Prevent the default so the browser does not
+                        // clobber the clipboard with the empty textarea.
+                        ambre_bus::CopyOutcome::Deferred => {
+                            if let Some(data) = event.clipboard_data() {
+                                let _ = data.set_data(AMBRE_CLIPBOARD_TOKEN_TYPE, &token_e);
+                            }
+                            event.prevent_default();
+                        }
                     }
-                    // Also publish via the async Clipboard API so the Paste button
-                    // (which cannot ride a native paste event) reads it back with
-                    // full fidelity. Best-effort; ignored where unsupported.
-                    async_write_clipboard(text, b64);
                 },
             );
             ta.add_event_listener_with_callback(
@@ -198,29 +213,37 @@ where
     {
         let ta = text_input.element().clone();
         let host_c = Rc::clone(&host);
+        let token = Rc::clone(&clip_token);
         let cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(
             move |event: web_sys::ClipboardEvent| {
                 let Some(data) = event.clipboard_data() else {
                     return;
                 };
-                // Prefer the private Ambre payload (internal round-trip); fall back
-                // to plain text (external apps, or a browser that dropped the type).
-                let payload = data
+                // Decode the shared transport blob: the opaque Ambre bytes under
+                // the private type (app-specific, internal round-trip) plus the
+                // `text/plain` mirror (cross-app, or a browser that dropped the
+                // custom type). The view decides which to honor.
+                let ambre = data
                     .get_data(AMBRE_CLIPBOARD_TYPE)
                     .ok()
                     .filter(|s| !s.is_empty())
-                    .and_then(|b64| base64_decode(&b64))
-                    .and_then(|bytes| {
-                        postcard::from_bytes::<ambre_bus::ClipboardPayload>(&bytes).ok()
-                    });
+                    .and_then(|b64| base64_decode(&b64));
                 let text = data.get_data("text/plain").unwrap_or_default();
-                if payload.is_none() && text.is_empty() {
+                // Same-tab ownership: the synchronous token survives even when the
+                // async payload write failed (Firefox), so a match means paste our
+                // own in-memory copy at full fidelity.
+                let own_copy = data
+                    .get_data(AMBRE_CLIPBOARD_TOKEN_TYPE)
+                    .is_ok_and(|t| !t.is_empty() && t.as_str() == &*token);
+                if ambre.is_none() && text.is_empty() && !own_copy {
                     return;
                 }
                 // Prevent the native insert (which would also fire `input` and
                 // double-paste); route through the host's paste path.
                 event.prevent_default();
-                host_c.borrow_mut().paste_clipboard(payload, text);
+                host_c
+                    .borrow_mut()
+                    .paste_clipboard(ambre_bus::ClipboardBlob { text, ambre }, own_copy);
             },
         );
         ta.add_event_listener_with_callback("paste", cb.as_ref().unchecked_ref())

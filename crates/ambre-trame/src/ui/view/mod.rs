@@ -366,6 +366,16 @@ pub struct TrameView {
     /// ([`TrameUiState::clipboard_anchor`]) is cleared after the next paste
     /// (`-ui.md` sec.5.E). UI-only view state.
     cut_pending: bool,
+
+    /// A [`ClipboardBlob`] built from a `TrameEvent::Clipboard` reply, awaiting
+    /// the host's per-frame [`poll_clipboard`](TrameView::poll_clipboard) which
+    /// mirrors it to the OS clipboard inside the transient-activation window
+    /// (`-ui.md` sec.5.E). `None` between a drain and the next copy.
+    pending_clipboard: Option<ambre_bus::ClipboardBlob>,
+    /// The last authoritative clipboard blob copied this session, kept in memory
+    /// for a full-fidelity same-tab paste that never depends on the OS custom
+    /// MIME type surviving the round-trip (`-ui.md` sec.5.E).
+    last_clip: Option<ambre_bus::ClipboardBlob>,
 }
 
 #[allow(clippy::too_many_arguments)]

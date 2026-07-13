@@ -223,6 +223,7 @@ pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
             | TrameEvent::ImportComplete { .. }
             | TrameEvent::ExportComplete { .. }
             | TrameEvent::ProtectionDenied { .. }
+            | TrameEvent::Clipboard(_)
             | TrameEvent::ProtectionViolationWarning { .. } => {}
         }
     }
@@ -326,6 +327,7 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
         | TrameEvent::SelectionStats { .. }
         | TrameEvent::FindResult { .. }
         | TrameEvent::FilterViewSaved { .. }
+        | TrameEvent::Clipboard(_)
         | TrameEvent::CondFormatsUpdated { .. } => {}
     }
 }

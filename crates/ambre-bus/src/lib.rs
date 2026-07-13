@@ -50,6 +50,36 @@ pub use rest::{
 };
 pub use sink::CommandSink;
 pub use ui::{AppEvent, UiEvent};
+
+/// App-agnostic clipboard transport carried across the host <-> view seam and,
+/// serialized, across the OS clipboard. `text` is the `text/plain` mirror for
+/// cross-app paste; `ambre` is the opaque, app-specific payload (postcard of the
+/// active app's typed clipboard payload) under the private `application/x-ambre`
+/// MIME type. Each app (de)serializes its own payload behind these bytes; a
+/// cross-app paste falls back to `text` when the bytes fail to decode.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ClipboardBlob {
+    pub text: String,
+    pub ambre: Option<Vec<u8>>,
+}
+
+/// What a `copy`/`cut` on the focused view resolves to synchronously, inside the
+/// native clipboard event (`-ui.md` clipboard model). The authoritative payload
+/// is built asynchronously on the Logic thread, so the sync event only decides
+/// how the host should treat the browser default:
+/// - `Nothing` -- nothing selected; let the browser default proceed.
+/// - `Text` -- a synchronous in-cell / inline text selection the view already
+///   holds; the host `setData`s it and prevents the default.
+/// - `Deferred` -- the view emitted the authoritative copy command to Logic; the
+///   host prevents the default (so the browser does not clobber the OS clipboard
+///   with empty content) and, one frame later, drains
+///   [`poll_clipboard`](crate::ClipboardBlob) into the async clipboard write.
+#[derive(Clone, Debug, PartialEq)]
+pub enum CopyOutcome {
+    Nothing,
+    Text(String),
+    Deferred,
+}
 // Re‑export core types so that users don't need to depend on ambre‑core directly.
 pub use ambre_core::{
     ChannelId, DocType, DocumentId, MeetingId, PublicKey, Role, SnapshotId, UserId, Uuid,

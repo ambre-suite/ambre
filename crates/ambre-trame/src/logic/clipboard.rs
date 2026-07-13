@@ -103,6 +103,46 @@ impl TrameState {
         self.paste_range(row, col, payload)
     }
 
+    /// Build the [`ClipboardPayload`] for the tracked selection from the document
+    /// (`-ui.md` sec.5.E), replied via [`TrameEvent::Clipboard`]. This is the
+    /// authoritative, Logic-side counterpart of the old UI viewport-cache builder
+    /// (`ui/grid/geometry.rs`): the whole selection is read from the CRDT, never
+    /// culled to a viewport, so a copy after `Ctrl+A` or a scroll-extend is
+    /// complete. Blank cells are omitted (they leave their paste destination
+    /// untouched). The per-cell [`CellStyle`] is taken verbatim from the tracked
+    /// style register, so number format / decimals -- which the viewport did not
+    /// surface -- survive the round-trip. Non-mutating: emits a display-only
+    /// outcome with the single clipboard event.
+    pub(super) fn copy_range(&self) -> TrameOutcome {
+        let (r1, c1, r2, c2) = self.selection;
+        let mut cells = Vec::new();
+        for row in r1..=r2 {
+            for col in c1..=c2 {
+                let raw = self.cell_raw(row, col);
+                if raw.is_empty() {
+                    continue;
+                }
+                let pos = (row, col);
+                cells.push(ClipboardCell {
+                    dr: row - r1,
+                    dc: col - c1,
+                    raw,
+                    bold: self.bold.contains(&pos),
+                    italic: self.italic.contains(&pos),
+                    style: self.styles.get(&pos).cloned().unwrap_or_default(),
+                });
+            }
+        }
+        let payload = ClipboardPayload {
+            src_row: r1,
+            src_col: c1,
+            rows: r2 - r1 + 1,
+            cols: c2 - c1 + 1,
+            cells,
+        };
+        TrameOutcome::display_only(vec![TrameEvent::Clipboard(payload)])
+    }
+
     /// Write a pasted cell's formatting into the single `cellstyle_{sheet}`
     /// register, mirroring the per-cell tail of
     /// [`set_cell_style`](Self::set_cell_style): bold/italic go into their own

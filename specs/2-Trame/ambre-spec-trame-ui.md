@@ -809,23 +809,33 @@ kept as a secondary cue.
 
 ### E. Clipboard (Copy / Cut / Paste) -- MVP
 
-Copy/cut read the selected range **locally** from `current_viewport` (UI cache); paste of a
-range goes through the Logic thread, which reindexes relative formulas and applies styles
-(the UI holds no document data beyond the viewport, sec.16).
+Copy is **authoritative**, built on the Logic thread from the whole sheet CRDT -- there is
+**no viewport limit**: `Ctrl+A` then copy, or select-scroll-select then copy, is always
+complete. The UI carries only the tracked selection; it emits `TrameCommand::CopyRange`
+(parameterless, like the other selection-scoped intents), and Logic serialises the selected
+cells (never culled) into a `ClipboardPayload` returned as `TrameEvent::Clipboard`. Paste of a
+range also goes through the Logic thread, which reindexes relative formulas and applies styles.
+This is the shared, cross-app clipboard model (`1-Foundations/ambre-spec-ui.md`): the OS write
+happens lazily, one frame after the keypress, still inside the transient user-activation window.
 
 ```rust
-// Ctrl+C / Ctrl+X -- serialise the selection from the viewport cache.
-fn on_copy(&mut self, cut: bool) {
-    let payload = self.build_clipboard_payload();   // ClipboardPayload: cells (raw + CellStyle), relative coords
-    self.clipboard_anchor = Some(self.ui_state.selection.bounds());  // for marching-ants
+// Ctrl+C / Ctrl+X -- request the authoritative build; nothing is serialised UI-side.
+fn on_copy(&mut self, cut: bool) -> CopyOutcome {
+    // In-cell text selection is synchronous text; a grid range defers to Logic.
+    self.clipboard_anchor = Some(self.ui_state.selection.bounds());  // marching-ants
     self.cut_pending = cut;
-    // web-sys clipboard: postcard payload (internal) + tab-separated text (OS interop).
-    write_clipboard(&payload, &payload.to_tsv());
+    self.logic_tx.send(TrameCommand::CopyRange);
+    CopyOutcome::Deferred            // host prevent_default()s, does not setData yet
 }
 
+// TrameEvent::Clipboard(payload) -- built from the full document; stash a ClipboardBlob
+// (TSV + postcard) in memory (same-tab paste) and mark it pending; the host mirrors it to
+// the OS clipboard next frame (poll_clipboard -> async_write_clipboard).
+
 // Ctrl+V -- paste at the active cell. Reindexing happens in the Logic thread.
-fn on_paste(&mut self) {
-    let payload = read_clipboard();                  // internal payload, else parse OS TSV
+fn on_paste(&mut self, blob: ClipboardBlob) {
+    // Prefer the in-memory blob when the OS text mirror still matches it (full fidelity),
+    // else decode blob.ambre -> PasteRange, else grid_paste_text(blob.text).
     let (row, col) = self.ui_state.selection.active();
     self.logic_tx.send(TrameCommand::PasteRange {
         version: self.next_version(), sheet_id: self.ui_state.active_sheet,
@@ -839,10 +849,10 @@ fn on_paste(&mut self) {
 }
 ```
 
-Keyboard: add Ctrl+C / Ctrl+X / Ctrl+V to `on_key_down` (sec.5.A). Context menu: add
-`Copy`, `Cut`, `Paste` to `ContextMenuItem` (sec.5.C). Render: animated marching-ants
-(dashed `stroke_rect`) around `clipboard_anchor` until Escape or the next copy.
-A `PasteRejected` event (protected range) surfaces a toast.
+Keyboard: Ctrl+C / Ctrl+X / Ctrl+V ride the native clipboard events (they are not decoded in
+`on_key_down`). Context menu: add `Copy`, `Cut`, `Paste` to `ContextMenuItem` (sec.5.C).
+Render: animated marching-ants (dashed `stroke_rect`) around `clipboard_anchor` until Escape or
+the next copy. A `PasteRejected` event (protected range) surfaces a toast.
 
 ### F. Autofill (Fill Handle) -- MVP
 

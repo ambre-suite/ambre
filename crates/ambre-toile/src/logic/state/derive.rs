@@ -89,6 +89,9 @@ impl ToileState {
             locked,
             style,
             geom,
+            // The immediate enclosing group (if any): the UI resolves group-scope
+            // selection by walking this edge upward (§2.F bis / §7).
+            group: self.enclosing_group(id),
         })
     }
 

@@ -842,6 +842,8 @@ pub struct DisplayElement {
     pub locked:    bool,                     // top-level element flag (§2.B), NOT from ElementStyle
     pub style:     ElementStyle,
     pub geom:      DisplayGeom,
+    pub group:     Option<ElementId>,        // immediate enclosing group (§2.F bis); None = top-level.
+                                             // UI resolves group-selection by walking this edge upward (§7).
 }
 
 pub enum DisplayGeom {

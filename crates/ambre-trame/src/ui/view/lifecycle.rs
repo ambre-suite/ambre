@@ -92,6 +92,8 @@ impl TrameView {
             coasting: false,
             last_coast_ms: 0.0,
             cut_pending: false,
+            pending_clipboard: None,
+            last_clip: None,
         }
     }
 

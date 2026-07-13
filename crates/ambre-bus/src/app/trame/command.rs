@@ -256,6 +256,12 @@ pub enum TrameCommand {
     ///
     /// [`RequestActiveColumnValues`]: TrameCommand::RequestActiveColumnValues
     RequestSelectionStats,
+    /// Build the clipboard payload for the tracked selection (`-ui.md` sec.5.E).
+    /// The parameterless-geometry sibling of copy: the Logic thread is the only
+    /// holder of document data, so it serializes the selected cells (never culled
+    /// to a viewport) into a [`ClipboardPayload`] and replies with
+    /// [`TrameEvent::Clipboard`](super::TrameEvent::Clipboard). Non-mutating.
+    CopyRange,
     /// Apply a shared filter to the active cell's column (`-ui.md` sec.5.D). The
     /// parameterless-geometry sibling of [`ApplyFilter`]: the Logic thread
     /// resolves `sheet_id`/`col` from the tracked active cell, so the UI only

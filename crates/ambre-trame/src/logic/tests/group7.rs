@@ -318,3 +318,57 @@ fn concurrent_resize_of_same_col_converges_lww() {
         "converged on one of the writes"
     );
 }
+
+/// `CopyRange` builds the clipboard payload from the whole document, not a
+/// viewport cache (`-ui.md` sec.5.E). The selection spans a range far larger
+/// than any single viewport, with a populated cell near its bottom edge: the
+/// authoritative Logic-side build must include it, proving the old best-effort
+/// out-of-viewport limit is gone.
+#[test]
+fn copy_range_covers_the_full_selection_not_a_viewport() {
+    let mut state = TrameState::new();
+    // Two literals far apart: A1 (0,0) and a cell hundreds of rows down.
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "top".to_owned(),
+    });
+    state.handle_command(TrameCommand::SetCellText {
+        row: 500,
+        col: 3,
+        text: "bottom".to_owned(),
+    });
+    // Select the whole rectangle spanning both (top-left A1 -> row 500, col 3).
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: 0,
+        col: 0,
+        anchor_row: 500,
+        anchor_col: 3,
+    });
+
+    let out = state.handle_command(TrameCommand::CopyRange);
+    let TrameEvent::Clipboard(payload) = &out.display[0] else {
+        panic!("expected a Clipboard event");
+    };
+    assert_eq!(payload.src_row, 0);
+    assert_eq!(payload.src_col, 0);
+    assert_eq!(payload.rows, 501);
+    assert_eq!(payload.cols, 4);
+    // Both non-empty cells are present, including the far one a viewport-based
+    // build would have dropped; blanks in between are omitted.
+    assert_eq!(payload.cells.len(), 2);
+    let top = payload
+        .cells
+        .iter()
+        .find(|c| c.dr == 0 && c.dc == 0)
+        .unwrap();
+    assert_eq!(top.raw, "top");
+    let bottom = payload
+        .cells
+        .iter()
+        .find(|c| c.dr == 500 && c.dc == 3)
+        .unwrap();
+    assert_eq!(bottom.raw, "bottom");
+    // Non-mutating: no CRDT delta emitted.
+    assert!(out.update.is_none(), "copy must not mutate the document");
+}

@@ -181,6 +181,12 @@ pub enum TrameEvent {
     /// mutation occurred; the chrome surfaces `reason` as a toast.
     PasteRejected { reason: String },
 
+    /// The authoritative clipboard payload for a
+    /// [`CopyRange`](super::TrameCommand::CopyRange) (`-ui.md` sec.5.E). Built
+    /// Logic-side from the full document (no viewport limit); the UI stashes it in
+    /// memory and mirrors it to the OS clipboard. Non-mutating, never synced.
+    Clipboard(super::ClipboardPayload),
+
     // ─────────────────────────────────────────────────────────────────────────
     // Deferred feature surface (Phase 2+)
     //
