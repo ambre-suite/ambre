@@ -907,6 +907,20 @@ impl ToileView {
     /// channel order guarantees Logic captured the payload before the delete.
     /// An empty selection returns [`CopyOutcome::Nothing`].
     pub fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
+        // An open inline edit takes precedence over the board selection: copy /
+        // cut act on the text selection, not the elements (§6). `selected_text`
+        // is font-free, so it resolves synchronously here; a cut queues a
+        // font-bound `DeleteSelection` intent applied at the next paint flush.
+        if let Some(ed) = self.editor.as_mut() {
+            let Some(text) = ed.selected_text() else {
+                return ambre_bus::CopyOutcome::Nothing;
+            };
+            if cut {
+                ed.push(EditIntent::DeleteSelection);
+                self.edit_dirty = true;
+            }
+            return ambre_bus::CopyOutcome::Text(text);
+        }
         if self.selection.is_empty() {
             return ambre_bus::CopyOutcome::Nothing;
         }
@@ -935,6 +949,15 @@ impl ToileView {
     /// payload at the cursor's world position. A blob with no decodable Ambre
     /// payload is ignored (plain-text paste into a board is out of MVP).
     pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
+        // An open inline edit consumes the paste as text at the caret (§6): an
+        // Ambre element payload is meaningless inside a text field, so route the
+        // plain-text mirror through the same insertion path as typing.
+        if self.editor.is_some() {
+            if !blob.text.is_empty() {
+                self.push_intent(EditIntent::Insert(blob.text));
+            }
+            return;
+        }
         let source = match &self.last_clip {
             Some(clip) if own_copy => clip,
             _ => &blob,
