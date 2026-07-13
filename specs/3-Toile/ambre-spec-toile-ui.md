@@ -466,7 +466,7 @@ lives in Logic, keyed on change size.
 
 **Phase 1 - Integration**
 - [x] Remaining tools: Pen, Shape, Connector, Draw, Sticky, Text (`ToolMachine`, host-tested)
-- [ ] Parley inline text editor
+- [x] Parley inline text editor
 - [x] Keyboard shortcuts + clipboard round-trip (OS-clipboard mirror). Shared, Logic-authoritative
   clipboard model (`1-Foundations/ambre-spec-ui.md §E`); shortcuts decoded in `handle_key`.
 - [x] Grouping selection-scope resolution (via the `DisplayElement.group` edge, host-tested — §5ter/§7)
