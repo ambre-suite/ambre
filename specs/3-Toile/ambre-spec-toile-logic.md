@@ -1000,9 +1000,10 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
   signing-key directory / trusted-keys store is wired, so inbound frames are dropped end-to-end for now (a
   sync/identity slice tracked in `ambre-spec-sync.md` "SYNC P4", not Toile logic); the outbound broadcast and
   the whole Logic path are complete.
-- [ } Presence render / overlay (remote cursors, live strokes, laser, selection halos, cross-app `UserId`
-  colors): `ambre-spec-toile-ui.md` Phase 1.
+- [ ] Presence render / overlay (remote cursors, live strokes, laser, selection halos, cross-app `UserId` colors): `ambre-spec-toile-ui.md` Phase 1.
 
-**Phase 2 - Optimization** 
-
-bulk index update on large remote batches, order-preserving layer diffing, connector routing memoization keyed by endpoint bounds, benchmark-gated style dedup dictionary.
+**Phase 2 - Optimization**
+- [ ] Bulk index update on large remote batches
+- [ ] Order-preserving layer diffing
+- [ ] Connector routing memoization keyed by endpoint bounds
+- [ ] Benchmark-gated style dedup dictionary

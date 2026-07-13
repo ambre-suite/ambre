@@ -469,9 +469,11 @@ lives in Logic, keyed on change size.
 - [ ] `ambre-chrome` context menu (§5ter)
 - [ ] Find panel (§5quater)
 - [ ] Selection status bar (§8bis)
-- [ ] Presence overlay wired to `PeerPresence` with cross-app `UserId` colors (§8)
+- [ ] Presence overlay wired to `PeerPresence` with cross-app `UserId` colors (§8). The render pass (cursors / labels / laser / halos) is built and wasm-tested now against synthetic `PeerPresence` events; the end-to-end multi-user demo is **blocked on SYNC P4** (`pub_key` -> `UserId` resolution), so remote frames are dropped end-to-end until it lands (`toile-logic §9`).
 - [ ] wasm render / input tests
 
 **Phase 2 - Optimization**
-
-glyph-atlas eviction, tessellation-cache tuning, presence render batching, large-board frame-time profiling.
+- [ ] Glyph-atlas eviction
+- [ ] Tessellation-cache tuning
+- [ ] Presence render batching
+- [ ] Large-board frame-time profiling

@@ -301,5 +301,6 @@ presentation camera reuses the `toile-ui` pipeline.
 - [ ] "Follow presenter" ephemeral broadcast
 
 **Phase 2 - Optimization**
-
-auto-layout incremental reflow (only affected children), Smart Animate snapshot caching, large-deck sequence-panel virtualization.
+- [ ] Auto-layout incremental reflow (only affected children)
+- [ ] Smart Animate snapshot caching
+- [ ] Large-deck sequence-panel virtualization
