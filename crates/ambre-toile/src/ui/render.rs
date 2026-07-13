@@ -15,6 +15,7 @@
 
 use ambre_bus::app::toile::{
     DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementStyle,
+    ShapeKind,
 };
 use ambre_canvas::{Palette, TextCache};
 use ambre_draw::{
@@ -25,7 +26,7 @@ use ambre_draw::{
 use super::grid;
 use super::hit::triangle_path;
 use super::tool::{
-    HANDLE_SIZE_PX, resize_handle_points, rotate_handle_point, selection_bounds,
+    HANDLE_SIZE_PX, Preview, resize_handle_points, rotate_handle_point, selection_bounds,
     world_rect_to_screen,
 };
 use super::viewport::ViewportTransform;
@@ -218,12 +219,11 @@ pub fn paint_overlay<S: DrawSurface>(
     vp: &DisplayViewport,
     cam: &ViewportTransform,
     palette: &Palette,
-    marquee: Option<Rect>,
+    preview: Option<&Preview>,
 ) {
-    // Live marquee rectangle (world -> screen), a thin outline.
-    if let Some(m) = marquee {
-        let s = world_rect_to_screen(m, cam);
-        surface.stroke_rect(s, palette.selection, 1.0);
+    // Live gesture preview (world -> screen), a thin outline / trail.
+    if let Some(p) = preview {
+        paint_preview(surface, p, cam, palette);
     }
 
     let Some(wb) = selection_bounds(selection, vp) else {
@@ -245,6 +245,51 @@ pub fn paint_overlay<S: DrawSurface>(
             draw_handle(surface, p, palette);
         }
     }
+}
+
+/// Paint an in-flight gesture preview (§5). Marquee is a thin screen-space
+/// outline; the shape / connector / pen / stroke previews are drawn in world
+/// space under the camera transform with a zoom-compensated 1.5 px line so they
+/// track the geometry they will commit to.
+fn paint_preview<S: DrawSurface>(
+    surface: &mut S,
+    preview: &Preview,
+    cam: &ViewportTransform,
+    palette: &Palette,
+) {
+    if let Preview::Marquee(m) = preview {
+        let s = world_rect_to_screen(*m, cam);
+        surface.stroke_rect(s, palette.selection, 1.0);
+        return;
+    }
+
+    let brush = Brush::Solid(palette.selection);
+    let px = |n: f64| Stroke::new(n / cam.zoom.max(1e-3));
+    surface.push_transform(cam.world_to_screen());
+    match preview {
+        Preview::Marquee(_) => {} // handled above
+        Preview::Shape { kind, rect } => match kind {
+            ShapeKind::Rect => surface.stroke_path(&rect_path(*rect), &brush, &px(1.5)),
+            ShapeKind::Ellipse => surface.stroke_path(&ellipse_path(*rect), &brush, &px(1.5)),
+            ShapeKind::Triangle => surface.stroke_path(&triangle_path(*rect), &brush, &px(1.5)),
+            ShapeKind::Line => {
+                let mut p = BezPath::new();
+                p.move_to((rect.x0, rect.y0));
+                p.line_to((rect.x1, rect.y1));
+                surface.stroke_path(&p, &brush, &px(1.5));
+            }
+            ShapeKind::Path => {}
+        },
+        Preview::Connector { from, to } => {
+            let mut p = BezPath::new();
+            p.move_to(*from);
+            p.line_to(*to);
+            surface.stroke_path(&p, &brush, &px(1.5));
+        }
+        Preview::Pen(path) => surface.stroke_path(path, &brush, &px(1.5)),
+        Preview::Stroke(pts) => surface.stroke_path(&polyline_path(pts), &brush, &px(2.0)),
+    }
+    surface.pop_transform();
 }
 
 /// A small filled square handle centered on `p`.

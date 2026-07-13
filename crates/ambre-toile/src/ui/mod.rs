@@ -18,5 +18,6 @@ pub mod tool;
 pub mod view;
 pub mod viewport;
 
+pub use tool::Tool;
 pub use view::ToileView;
 pub use viewport::ViewportTransform;

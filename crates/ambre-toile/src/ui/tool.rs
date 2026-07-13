@@ -1,25 +1,30 @@
 // ambre-toile/src/ui/tool.rs
 // ============================================================================
-// Tool state machine (toile-ui §5). Phase 0 implements the Select tool fully:
-// move / resize / rotate / marquee. Each gesture consumes pointer events and, on
-// release, emits exactly one `ToileCommand` (or a local selection change for a
-// marquee). The other tools are declared here as `Tool` variants but their
-// gesture handlers arrive in Phase 1.
+// Tool state machine (toile-ui §5). `SelectTool` implements the Select tool
+// fully (move / resize / rotate / marquee); `ToolMachine` wraps it and the
+// creation tools (Shape / Connector / Draw / Pen / Sticky / Text), dispatching
+// each pointer event to the active tool and emitting exactly one `ToileCommand`
+// on gesture end (or a local selection change for a marquee).
 //
 // The machine is pure: it maps (pointer event, current selection, DisplayViewport,
-// ViewportTransform) to an outcome, holding only in-flight drag state. Selection
+// ViewportTransform) to an outcome, holding only in-flight draft state. Selection
 // itself is local UI state owned by the view (§7). Host-tested with synthetic
 // pointer sequences.
 // ============================================================================
 
-use ambre_bus::app::toile::{DisplayViewport, ElementId, ShapeKind, ToileCommand};
-use ambre_draw::{Point, Rect};
+use ambre_bus::app::toile::{
+    Anchor, DisplayViewport, ElementId, ElementKind, EndCaps, InitContent, PathType, ShapeKind,
+    StrokePoint, ToileCommand,
+};
+use ambre_draw::{BezPath, Point, Rect, Size};
+use kurbo::Shape;
 
 use super::hit::{hit_topmost, marquee_hits};
 use super::viewport::ViewportTransform;
 
-/// The active tool. Phase 0 drives `Select`; the rest are placeholders whose
-/// gestures land in Phase 1 (Pen, Shape, Connector, Draw, Sticky, Text).
+/// The active tool. `Select` is the Phase-0 default; the creation tools (Pen,
+/// Shape, Connector, Draw, Sticky, Text) and `Hand` (pan-only) are driven by
+/// `ToolMachine`.
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub enum Tool {
     #[default]
@@ -235,6 +240,485 @@ impl SelectTool {
     pub fn cancel(&mut self) {
         self.drag = None;
     }
+
+    /// The live marquee rectangle (world space) if a rubber-band drag is in
+    /// flight, so the machine can surface it as an overlay preview without an
+    /// outcome round-trip.
+    pub fn marquee(&self) -> Option<Rect> {
+        match &self.drag {
+            Some(Drag::Marquee { start, current }) => Some(Rect::from_points(*start, *current)),
+            _ => None,
+        }
+    }
+}
+
+// =============================================================================
+// Tool machine (§5): the canvas-side consumer of the active tool. Owns the
+// Select gesture machine plus the in-flight state of the creation tools (Shape /
+// Connector / Draw / Pen / Sticky / Text) and maps a pointer sequence to exactly
+// one `ToileCommand` on gesture end. Pure: it holds only in-flight draft state,
+// never document data. Host-tested with synthetic pointer sequences.
+// =============================================================================
+
+/// Default sizes for click-placed (not drag-sized) elements, world units.
+const STICKY_SIZE: Size = Size::new(160.0, 120.0);
+const TEXT_SIZE: Size = Size::new(200.0, 40.0);
+const CLICK_SHAPE_SIZE: Size = Size::new(120.0, 80.0);
+/// Below this drag extent (world units) a shape gesture counts as a click.
+const MIN_DRAG: f64 = 3.0;
+/// Trailing pen nodes closer than this (world units) are the closing
+/// double-click's duplicate press; dropped before the path commits.
+const PEN_DEDUP: f64 = 2.0;
+
+/// What a pointer / keyboard event produced across all tools. Overlay previews
+/// (marquee, rubber-band, pen path, live stroke) are queried separately via
+/// [`ToolMachine::preview`], so this enum carries only observable results.
+#[derive(Debug)]
+pub enum ToolOutcome {
+    /// Nothing to act on (idle move, or a draft step the view just repaints).
+    None,
+    /// Local selection changed to this set (never a command, never synced, §7).
+    SelectionChanged(Vec<ElementId>),
+    /// A committed document mutation to forward to Logic.
+    Command(ToileCommand),
+}
+
+/// A local, unsynced overlay to paint while a gesture is in flight (§5).
+#[derive(Clone, Debug)]
+pub enum Preview {
+    /// Select rubber-band on empty canvas (world space).
+    Marquee(Rect),
+    /// Shape drag-rect, previewed as the shape it will become.
+    Shape { kind: ShapeKind, rect: Rect },
+    /// Connector rubber-band from the source anchor to the cursor.
+    Connector { from: Point, to: Point },
+    /// Vector pen: the committed nodes plus a live segment to the cursor.
+    Pen(BezPath),
+    /// In-flight freehand stroke (world-space samples).
+    Stroke(Vec<Point>),
+}
+
+/// One vertex of the vector pen path: an on-curve point and its optional outgoing
+/// control handle. The incoming handle is the reflection of `out` about `pt`
+/// (smooth node), or `pt` itself when there is no handle (a corner / line node).
+#[derive(Clone, Copy, Debug)]
+struct PenNode {
+    pt: Point,
+    out: Option<Point>,
+}
+
+impl PenNode {
+    fn in_handle(&self) -> Point {
+        match self.out {
+            Some(o) => Point::new(2.0 * self.pt.x - o.x, 2.0 * self.pt.y - o.y),
+            None => self.pt,
+        }
+    }
+}
+
+/// In-flight gesture for the single-commit creation tools (Pen builds across
+/// clicks and lives outside this enum).
+#[derive(Clone, Debug)]
+enum Draft {
+    /// Shape drag-rect (rect / ellipse / triangle / line).
+    Shape {
+        kind: ShapeKind,
+        start: Point,
+        current: Point,
+    },
+    /// Connector drag from a source element anchor toward the cursor.
+    Connector {
+        from: ElementId,
+        from_anch: Anchor,
+        origin: Point,
+        current: Point,
+    },
+    /// Freehand stroke samples accumulated between press and release.
+    Draw { points: Vec<StrokePoint> },
+    /// A click-placed sticky / text element, committed on release.
+    Place { kind: ElementKind, at: Point },
+}
+
+/// The active-tool state machine. Replaces the bare `SelectTool` the view drove
+/// in Phase 0: it dispatches each pointer event to the active tool and exposes a
+/// single `ToolOutcome` plus a queryable `preview`.
+pub struct ToolMachine {
+    tool: Tool,
+    select: SelectTool,
+    /// Single-commit creation gesture in flight (Shape / Connector / Draw / Place).
+    draft: Option<Draft>,
+    /// Vector pen nodes committed so far (built across clicks; §5bis).
+    pen: Vec<PenNode>,
+    /// True while a pen node's control handle is being dragged.
+    pen_dragging: bool,
+    /// Last world cursor, for the pen's live segment preview.
+    cursor: Point,
+}
+
+impl Default for ToolMachine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ToolMachine {
+    pub fn new() -> Self {
+        Self {
+            tool: Tool::Select,
+            select: SelectTool::new(),
+            draft: None,
+            pen: Vec::new(),
+            pen_dragging: false,
+            cursor: Point::ZERO,
+        }
+    }
+
+    pub fn tool(&self) -> Tool {
+        self.tool
+    }
+
+    /// Switch tools, abandoning any in-flight gesture on the previous tool.
+    pub fn set_tool(&mut self, tool: Tool) {
+        if tool != self.tool {
+            self.cancel();
+            self.tool = tool;
+        }
+    }
+
+    /// True while a gesture is in flight (drag, stroke, or a pen path being
+    /// built): the view keeps repainting and routes moves here.
+    pub fn is_active(&self) -> bool {
+        self.select.is_dragging() || self.draft.is_some() || !self.pen.is_empty()
+    }
+
+    /// Abort any in-flight gesture (Escape / focus loss / tool switch).
+    pub fn cancel(&mut self) {
+        self.select.cancel();
+        self.draft = None;
+        self.pen.clear();
+        self.pen_dragging = false;
+    }
+
+    pub fn pointer_down(
+        &mut self,
+        world: Point,
+        screen: Point,
+        selection: &[ElementId],
+        display: &DisplayViewport,
+        cam: &ViewportTransform,
+    ) -> ToolOutcome {
+        self.cursor = world;
+        match self.tool {
+            Tool::Select => map_select(
+                self.select
+                    .pointer_down(world, screen, selection, display, cam),
+            ),
+            Tool::Hand => ToolOutcome::None,
+            Tool::Shape(kind) => {
+                self.draft = Some(Draft::Shape {
+                    kind,
+                    start: world,
+                    current: world,
+                });
+                ToolOutcome::None
+            }
+            Tool::Draw => {
+                self.draft = Some(Draft::Draw {
+                    points: vec![stroke_point(world)],
+                });
+                ToolOutcome::None
+            }
+            Tool::Sticky => {
+                self.draft = Some(Draft::Place {
+                    kind: ElementKind::Sticky,
+                    at: world,
+                });
+                ToolOutcome::None
+            }
+            Tool::Text => {
+                self.draft = Some(Draft::Place {
+                    kind: ElementKind::Text,
+                    at: world,
+                });
+                ToolOutcome::None
+            }
+            Tool::Connector => {
+                if let Some(id) = hit_topmost(&display.nodes, world) {
+                    let b = element_bounds(display, &id).unwrap_or_default();
+                    let anch = nearest_anchor(b, world);
+                    self.draft = Some(Draft::Connector {
+                        from: id,
+                        from_anch: anch,
+                        origin: anchor_point(b, anch),
+                        current: world,
+                    });
+                }
+                ToolOutcome::None
+            }
+            Tool::Pen => {
+                self.pen_dragging = true;
+                self.pen.push(PenNode {
+                    pt: world,
+                    out: None,
+                });
+                ToolOutcome::None
+            }
+        }
+    }
+
+    pub fn pointer_move(&mut self, world: Point) -> ToolOutcome {
+        self.cursor = world;
+        match self.draft.as_mut() {
+            Some(Draft::Shape { current, .. }) | Some(Draft::Connector { current, .. }) => {
+                *current = world;
+                ToolOutcome::None
+            }
+            Some(Draft::Draw { points }) => {
+                points.push(stroke_point(world));
+                ToolOutcome::None
+            }
+            Some(Draft::Place { .. }) => ToolOutcome::None,
+            None => {
+                if self.tool == Tool::Pen {
+                    if self.pen_dragging
+                        && let Some(node) = self.pen.last_mut()
+                    {
+                        node.out = Some(world);
+                    }
+                    ToolOutcome::None
+                } else {
+                    map_select(self.select.pointer_move(world))
+                }
+            }
+        }
+    }
+
+    pub fn pointer_up(&mut self, world: Point, display: &DisplayViewport) -> ToolOutcome {
+        if let Some(draft) = self.draft.take() {
+            return match draft {
+                Draft::Shape {
+                    kind,
+                    start,
+                    current,
+                } => {
+                    let mut rect = Rect::from_points(start, current).abs();
+                    if rect.width() < MIN_DRAG || rect.height() < MIN_DRAG {
+                        rect = Rect::from_origin_size(start, CLICK_SHAPE_SIZE);
+                    }
+                    ToolOutcome::Command(ToileCommand::CreateElement {
+                        kind: ElementKind::Shape(kind),
+                        at: Point::new(rect.x0, rect.y0),
+                        size: rect.size(),
+                        content: InitContent::None,
+                    })
+                }
+                Draft::Connector {
+                    from, from_anch, ..
+                } => match hit_topmost(&display.nodes, world) {
+                    Some(to) if to != from => {
+                        let tb = element_bounds(display, &to).unwrap_or_default();
+                        let to_anch = nearest_anchor(tb, world);
+                        ToolOutcome::Command(ToileCommand::CreateConnector {
+                            from,
+                            from_anch,
+                            to,
+                            to_anch,
+                            path_type: PathType::Straight,
+                            arrows: EndCaps {
+                                start: false,
+                                end: true,
+                            },
+                        })
+                    }
+                    _ => ToolOutcome::None,
+                },
+                Draft::Draw { mut points } => {
+                    points.push(stroke_point(world));
+                    if points.len() < 2 {
+                        ToolOutcome::None
+                    } else {
+                        ToolOutcome::Command(ToileCommand::CommitStroke {
+                            points,
+                            style: draw_style(),
+                        })
+                    }
+                }
+                Draft::Place { kind, at } => {
+                    let size = if kind == ElementKind::Sticky {
+                        STICKY_SIZE
+                    } else {
+                        TEXT_SIZE
+                    };
+                    ToolOutcome::Command(ToileCommand::CreateElement {
+                        kind,
+                        at,
+                        size,
+                        content: InitContent::Text(String::new()),
+                    })
+                }
+            };
+        }
+        if self.tool == Tool::Pen {
+            self.pen_dragging = false;
+            return ToolOutcome::None;
+        }
+        map_select(self.select.pointer_up(world, display))
+    }
+
+    /// Double-click. Finishes the vector pen path (§5bis); a no-op otherwise.
+    pub fn double_click(&mut self, _world: Point) -> ToolOutcome {
+        if self.tool == Tool::Pen {
+            self.finish_pen()
+        } else {
+            ToolOutcome::None
+        }
+    }
+
+    /// Build the pen path and emit it as a single `CreateElement` (§5bis).
+    fn finish_pen(&mut self) -> ToolOutcome {
+        self.pen_dragging = false;
+        let mut nodes = std::mem::take(&mut self.pen);
+        // The finishing double-click lands a duplicate press on the last node;
+        // drop trailing near-duplicates so the path is not degenerate.
+        while nodes.len() >= 2
+            && nodes[nodes.len() - 1]
+                .pt
+                .distance(nodes[nodes.len() - 2].pt)
+                < PEN_DEDUP
+        {
+            nodes.pop();
+        }
+        if nodes.len() < 2 {
+            return ToolOutcome::None;
+        }
+        let path = pen_bezpath(&nodes);
+        let bb = path.bounding_box();
+        ToolOutcome::Command(ToileCommand::CreateElement {
+            kind: ElementKind::Shape(ShapeKind::Path),
+            at: Point::new(bb.x0, bb.y0),
+            size: bb.size(),
+            content: InitContent::Path(path),
+        })
+    }
+
+    /// The current overlay preview, derived from in-flight state (§5).
+    pub fn preview(&self) -> Option<Preview> {
+        if let Some(d) = &self.draft {
+            return match d {
+                Draft::Shape {
+                    kind,
+                    start,
+                    current,
+                } => Some(Preview::Shape {
+                    kind: *kind,
+                    rect: Rect::from_points(*start, *current).abs(),
+                }),
+                Draft::Connector {
+                    origin, current, ..
+                } => Some(Preview::Connector {
+                    from: *origin,
+                    to: *current,
+                }),
+                Draft::Draw { points } => Some(Preview::Stroke(
+                    points
+                        .iter()
+                        .map(|p| Point::new(p.x as f64, p.y as f64))
+                        .collect(),
+                )),
+                Draft::Place { .. } => None,
+            };
+        }
+        if !self.pen.is_empty() {
+            // Committed nodes plus a rubber segment to the live cursor.
+            let mut nodes = self.pen.clone();
+            nodes.push(PenNode {
+                pt: self.cursor,
+                out: None,
+            });
+            return Some(Preview::Pen(pen_bezpath(&nodes)));
+        }
+        self.select.marquee().map(Preview::Marquee)
+    }
+}
+
+/// Map a `SelectOutcome` into the unified `ToolOutcome`. The marquee rectangle is
+/// surfaced through [`ToolMachine::preview`], not as an outcome.
+fn map_select(out: SelectOutcome) -> ToolOutcome {
+    match out {
+        SelectOutcome::None | SelectOutcome::Marquee(_) => ToolOutcome::None,
+        SelectOutcome::SelectionChanged(ids) => ToolOutcome::SelectionChanged(ids),
+        SelectOutcome::Command(cmd) => ToolOutcome::Command(cmd),
+    }
+}
+
+/// A world point as a full-pressure stroke sample.
+fn stroke_point(world: Point) -> StrokePoint {
+    StrokePoint {
+        x: world.x as f32,
+        y: world.y as f32,
+        pressure: 1.0,
+    }
+}
+
+/// Default freehand style: a solid stroke, no fill (§4).
+fn draw_style() -> ambre_bus::app::toile::ElementStyle {
+    ambre_bus::app::toile::ElementStyle {
+        fill: None,
+        stroke: Some(0xFF33_3333),
+        stroke_w: 2.0,
+        ..Default::default()
+    }
+}
+
+/// World AABB of a single element (`None` if not in the current viewport).
+fn element_bounds(display: &DisplayViewport, id: &ElementId) -> Option<Rect> {
+    selection_bounds(std::slice::from_ref(id), display)
+}
+
+/// The world point of an anchor on an element's AABB (§5).
+fn anchor_point(b: Rect, a: Anchor) -> Point {
+    let c = b.center();
+    match a {
+        Anchor::Top => Point::new(c.x, b.y0),
+        Anchor::Bottom => Point::new(c.x, b.y1),
+        Anchor::Left => Point::new(b.x0, c.y),
+        Anchor::Right => Point::new(b.x1, c.y),
+        Anchor::Center => c,
+        Anchor::Free { u, v } => {
+            Point::new(b.x0 + u as f64 * b.width(), b.y0 + v as f64 * b.height())
+        }
+    }
+}
+
+/// The cardinal anchor of `b` closest to world point `p`.
+fn nearest_anchor(b: Rect, p: Point) -> Anchor {
+    [Anchor::Top, Anchor::Bottom, Anchor::Left, Anchor::Right]
+        .into_iter()
+        .min_by(|a1, a2| {
+            anchor_point(b, *a1)
+                .distance(p)
+                .total_cmp(&anchor_point(b, *a2).distance(p))
+        })
+        .unwrap_or(Anchor::Center)
+}
+
+/// Build a `BezPath` from pen nodes: a cubic segment when either endpoint has a
+/// control handle, a straight line otherwise (§5bis).
+fn pen_bezpath(nodes: &[PenNode]) -> BezPath {
+    let mut p = BezPath::new();
+    let Some(first) = nodes.first() else {
+        return p;
+    };
+    p.move_to(first.pt);
+    for w in nodes.windows(2) {
+        let (a, b) = (&w[0], &w[1]);
+        if a.out.is_none() && b.out.is_none() {
+            p.line_to(b.pt);
+        } else {
+            p.curve_to(a.out.unwrap_or(a.pt), b.in_handle(), b.pt);
+        }
+    }
+    p
 }
 
 /// World union AABB of the selected elements (`None` if empty / unresolved).
@@ -449,6 +933,186 @@ mod tests {
             }
             other => panic!("expected ResizeElement, got {other:?}"),
         }
+    }
+
+    // -- ToolMachine: creation tools -----------------------------------------
+
+    fn empty_display() -> DisplayViewport {
+        viewport(Vec::new())
+    }
+
+    #[test]
+    fn shape_drag_emits_create_at_drag_rect() {
+        let mut m = ToolMachine::new();
+        m.set_tool(Tool::Shape(ShapeKind::Ellipse));
+        let disp = empty_display();
+        let cam = cam();
+        let start = Point::new(20.0, 30.0);
+        m.pointer_down(start, to_screen(&cam, start), &[], &disp, &cam);
+        m.pointer_move(Point::new(120.0, 130.0));
+        // Preview reflects the drag rect as the shape it will become.
+        assert!(matches!(
+            m.preview(),
+            Some(Preview::Shape {
+                kind: ShapeKind::Ellipse,
+                ..
+            })
+        ));
+        match m.pointer_up(Point::new(120.0, 130.0), &disp) {
+            ToolOutcome::Command(ToileCommand::CreateElement { kind, at, size, .. }) => {
+                assert_eq!(kind, ElementKind::Shape(ShapeKind::Ellipse));
+                assert_eq!(at, Point::new(20.0, 30.0));
+                assert_eq!(size, ambre_draw::Size::new(100.0, 100.0));
+            }
+            other => panic!("expected CreateElement, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn shape_click_uses_default_size() {
+        let mut m = ToolMachine::new();
+        m.set_tool(Tool::Shape(ShapeKind::Rect));
+        let disp = empty_display();
+        let cam = cam();
+        let at = Point::new(5.0, 5.0);
+        m.pointer_down(at, to_screen(&cam, at), &[], &disp, &cam);
+        match m.pointer_up(at, &disp) {
+            ToolOutcome::Command(ToileCommand::CreateElement { size, .. }) => {
+                assert_eq!(size, CLICK_SHAPE_SIZE);
+            }
+            other => panic!("expected CreateElement, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn sticky_click_creates_sticky_with_empty_text() {
+        let mut m = ToolMachine::new();
+        m.set_tool(Tool::Sticky);
+        let disp = empty_display();
+        let cam = cam();
+        let at = Point::new(40.0, 60.0);
+        m.pointer_down(at, to_screen(&cam, at), &[], &disp, &cam);
+        match m.pointer_up(at, &disp) {
+            ToolOutcome::Command(ToileCommand::CreateElement {
+                kind,
+                at: a,
+                size,
+                content,
+            }) => {
+                assert_eq!(kind, ElementKind::Sticky);
+                assert_eq!(a, at);
+                assert_eq!(size, STICKY_SIZE);
+                assert!(matches!(content, InitContent::Text(t) if t.is_empty()));
+            }
+            other => panic!("expected CreateElement, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn draw_stream_emits_commit_stroke() {
+        let mut m = ToolMachine::new();
+        m.set_tool(Tool::Draw);
+        let disp = empty_display();
+        let cam = cam();
+        let p0 = Point::new(0.0, 0.0);
+        m.pointer_down(p0, to_screen(&cam, p0), &[], &disp, &cam);
+        m.pointer_move(Point::new(10.0, 5.0));
+        m.pointer_move(Point::new(20.0, 0.0));
+        assert!(matches!(m.preview(), Some(Preview::Stroke(_))));
+        match m.pointer_up(Point::new(30.0, 5.0), &disp) {
+            ToolOutcome::Command(ToileCommand::CommitStroke { points, style }) => {
+                assert!(points.len() >= 4);
+                assert!(style.fill.is_none());
+            }
+            other => panic!("expected CommitStroke, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn connector_anchor_to_anchor_emits_create_connector() {
+        let a = rect_elem("a", Rect::new(0.0, 0.0, 100.0, 100.0));
+        let b = rect_elem("b", Rect::new(300.0, 0.0, 400.0, 100.0));
+        let disp = viewport(vec![a, b]);
+        let cam = cam();
+        let mut m = ToolMachine::new();
+        m.set_tool(Tool::Connector);
+        // Press near the right edge of a (nearest anchor = Right), release inside b.
+        let down = Point::new(95.0, 50.0);
+        m.pointer_down(down, to_screen(&cam, down), &[], &disp, &cam);
+        assert!(matches!(m.preview(), Some(Preview::Connector { .. })));
+        match m.pointer_up(Point::new(350.0, 50.0), &disp) {
+            ToolOutcome::Command(ToileCommand::CreateConnector {
+                from, to, arrows, ..
+            }) => {
+                assert_eq!(from, ElementId("a".into()));
+                assert_eq!(to, ElementId("b".into()));
+                assert!(arrows.end && !arrows.start);
+            }
+            other => panic!("expected CreateConnector, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn connector_release_on_empty_emits_nothing() {
+        let a = rect_elem("a", Rect::new(0.0, 0.0, 100.0, 100.0));
+        let disp = viewport(vec![a]);
+        let cam = cam();
+        let mut m = ToolMachine::new();
+        m.set_tool(Tool::Connector);
+        let down = Point::new(50.0, 50.0);
+        m.pointer_down(down, to_screen(&cam, down), &[], &disp, &cam);
+        assert!(matches!(
+            m.pointer_up(Point::new(999.0, 999.0), &disp),
+            ToolOutcome::None
+        ));
+    }
+
+    #[test]
+    fn pen_clicks_then_double_click_emits_path() {
+        let mut m = ToolMachine::new();
+        m.set_tool(Tool::Pen);
+        let disp = empty_display();
+        let cam = cam();
+        for p in [
+            Point::new(0.0, 0.0),
+            Point::new(50.0, 0.0),
+            Point::new(50.0, 50.0),
+        ] {
+            m.pointer_down(p, to_screen(&cam, p), &[], &disp, &cam);
+            m.pointer_up(p, &disp);
+        }
+        assert!(m.is_active());
+        match m.double_click(Point::new(50.0, 50.0)) {
+            ToolOutcome::Command(ToileCommand::CreateElement { kind, content, .. }) => {
+                assert_eq!(kind, ElementKind::Shape(ShapeKind::Path));
+                assert!(matches!(content, InitContent::Path(_)));
+            }
+            other => panic!("expected CreateElement(Path), got {other:?}"),
+        }
+        assert!(!m.is_active(), "pen state cleared after finishing");
+    }
+
+    #[test]
+    fn switching_tools_cancels_in_flight_gesture() {
+        let mut m = ToolMachine::new();
+        m.set_tool(Tool::Shape(ShapeKind::Rect));
+        let disp = empty_display();
+        let cam = cam();
+        let p = Point::new(10.0, 10.0);
+        m.pointer_down(p, to_screen(&cam, p), &[], &disp, &cam);
+        assert!(m.is_active());
+        m.set_tool(Tool::Select);
+        assert!(!m.is_active());
+        assert!(m.preview().is_none());
+    }
+
+    #[test]
+    fn nearest_anchor_picks_closest_edge() {
+        let b = Rect::new(0.0, 0.0, 100.0, 100.0);
+        assert_eq!(nearest_anchor(b, Point::new(50.0, 2.0)), Anchor::Top);
+        assert_eq!(nearest_anchor(b, Point::new(98.0, 50.0)), Anchor::Right);
+        assert_eq!(nearest_anchor(b, Point::new(2.0, 50.0)), Anchor::Left);
+        assert_eq!(nearest_anchor(b, Point::new(50.0, 98.0)), Anchor::Bottom);
     }
 
     #[test]

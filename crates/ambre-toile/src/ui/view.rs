@@ -21,7 +21,7 @@ use ambre_canvas::{
 use ambre_draw::{FontContext, Point, Rect, Vec2};
 
 use super::render;
-use super::tool::{SelectOutcome, SelectTool, Tool};
+use super::tool::{Preview, Tool, ToolMachine, ToolOutcome};
 use super::viewport::ViewportTransform;
 
 /// One notch of the mouse wheel maps to this zoom factor (ctrl+wheel / pinch).
@@ -37,13 +37,12 @@ pub struct ToileView {
     /// The last culled frame received from Logic (what to paint).
     display: DisplayViewport,
 
-    /// Active tool + the Select gesture machine.
-    tool: Tool,
-    select: SelectTool,
+    /// Active tool + the gesture state machine (Select + creation tools).
+    machine: ToolMachine,
     /// Local selection (never persisted; a peer's selection is presence, §7).
     selection: Vec<ElementId>,
-    /// Live marquee rectangle (world space) while dragging on empty canvas.
-    marquee: Option<Rect>,
+    /// Live gesture preview (marquee / rubber-band / pen / stroke), world space.
+    preview: Option<Preview>,
 
     /// Last pointer position in screen (physical) pixels -- the zoom anchor.
     last_pointer: Point,
@@ -90,10 +89,9 @@ impl ToileView {
                 viewport: Viewport::default(),
                 nodes: Vec::new(),
             },
-            tool: Tool::Select,
-            select: SelectTool::new(),
+            machine: ToolMachine::new(),
             selection: Vec::new(),
-            marquee: None,
+            preview: None,
             last_pointer: Point::new(canvas_width / 2.0, canvas_height / 2.0),
             panning: None,
             space_down: false,
@@ -198,39 +196,33 @@ impl ToileView {
         true
     }
 
-    fn apply_select_outcome(&mut self, out: SelectOutcome) {
+    fn apply_outcome(&mut self, out: ToolOutcome) {
         match out {
-            SelectOutcome::None => {}
-            SelectOutcome::SelectionChanged(ids) => {
+            ToolOutcome::None => {}
+            ToolOutcome::SelectionChanged(ids) => {
                 self.selection = ids;
-                self.marquee = None;
                 self.needs_full = true;
             }
-            SelectOutcome::Command(cmd) => {
-                self.marquee = None;
-                self.send_edit(cmd);
-            }
-            SelectOutcome::Marquee(rect) => {
-                self.marquee = Some(rect);
-            }
+            ToolOutcome::Command(cmd) => self.send_edit(cmd),
         }
+        // The overlay preview is derived from live machine state each event.
+        self.preview = self.machine.preview();
     }
 
     fn handle_pointer_down(&mut self, x: f64, y: f64, button: i16) -> bool {
         let screen = Point::new(x, y);
         self.last_pointer = screen;
         // Space-drag or Hand tool or middle button: begin a pan.
-        if self.space_down || self.tool == Tool::Hand || button == 1 {
+        if self.space_down || self.machine.tool() == Tool::Hand || button == 1 {
             self.panning = Some(screen);
             return true;
         }
-        if self.tool == Tool::Select {
-            let world = self.cam.screen_to_world() * screen;
-            let out =
-                self.select
-                    .pointer_down(world, screen, &self.selection, &self.display, &self.cam);
-            self.apply_select_outcome(out);
-        }
+        let world = self.cam.screen_to_world() * screen;
+        let out =
+            self.machine
+                .pointer_down(world, screen, &self.selection, &self.display, &self.cam);
+        self.apply_outcome(out);
+        self.needs_full = true;
         true
     }
 
@@ -243,10 +235,10 @@ impl ToileView {
             self.queue_viewport();
             return true;
         }
-        if self.select.is_dragging() {
+        if self.machine.is_active() {
             let world = self.cam.screen_to_world() * screen;
-            let out = self.select.pointer_move(world);
-            self.apply_select_outcome(out);
+            let out = self.machine.pointer_move(world);
+            self.apply_outcome(out);
             self.needs_full = true;
             return true;
         }
@@ -259,14 +251,31 @@ impl ToileView {
         if self.panning.take().is_some() {
             return true;
         }
-        if self.select.is_dragging() {
+        if self.machine.is_active() {
             let world = self.cam.screen_to_world() * screen;
-            let out = self.select.pointer_up(world, &self.display);
-            self.apply_select_outcome(out);
+            let out = self.machine.pointer_up(world, &self.display);
+            self.apply_outcome(out);
             self.needs_full = true;
             return true;
         }
         false
+    }
+
+    fn handle_double_click(&mut self, x: f64, y: f64) -> bool {
+        let screen = Point::new(x, y);
+        self.last_pointer = screen;
+        let world = self.cam.screen_to_world() * screen;
+        let out = self.machine.double_click(world);
+        self.apply_outcome(out);
+        self.needs_full = true;
+        true
+    }
+
+    /// Switch the active tool (driven by the chrome tool palette, §1bis).
+    pub fn set_tool(&mut self, tool: Tool) {
+        self.machine.set_tool(tool);
+        self.preview = None;
+        self.needs_full = true;
     }
 
     fn handle_key(&mut self, key: &str) -> bool {
@@ -276,12 +285,12 @@ impl ToileView {
                 true
             }
             "Escape" => {
-                self.select.cancel();
-                self.marquee = None;
+                self.machine.cancel();
+                self.preview = None;
                 if !self.selection.is_empty() {
                     self.selection.clear();
-                    self.needs_full = true;
                 }
+                self.needs_full = true;
                 true
             }
             "Delete" | "Backspace" => {
@@ -345,7 +354,7 @@ impl ToileView {
         let any_dirty = self.needs_full
             || self.viewport_changed
             || self.data_dirty
-            || self.select.is_dragging()
+            || self.machine.is_active()
             || hud_tick;
 
         // Phase 0 has no blit-scroll optimization: any content change is a full
@@ -403,7 +412,7 @@ impl ToileView {
             &self.display,
             &self.cam,
             self.theme.palette(),
-            self.marquee,
+            self.preview.as_ref(),
         );
 
         self.perf_pub.publish(PerfSnapshot {
@@ -433,8 +442,8 @@ impl ToileView {
             InputEvent::PointerMove { x, y } => self.handle_pointer_move(*x, *y),
             InputEvent::PointerUp { x, y, .. } => self.handle_pointer_up(*x, *y),
             InputEvent::Key { key, .. } => self.handle_key(key),
-            InputEvent::DoubleClick { .. }
-            | InputEvent::Text { .. }
+            InputEvent::DoubleClick { x, y } => self.handle_double_click(*x, *y),
+            InputEvent::Text { .. }
             | InputEvent::CompositionUpdate { .. }
             | InputEvent::CompositionEnd { .. } => false,
         }
@@ -471,8 +480,8 @@ impl ToileView {
             nodes: Vec::new(),
         };
         self.selection.clear();
-        self.marquee = None;
-        self.select.cancel();
+        self.preview = None;
+        self.machine.cancel();
         self.initial_viewport_sent = false;
         self.pending_viewport = None;
         self.needs_full = true;
