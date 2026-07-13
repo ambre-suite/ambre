@@ -229,10 +229,16 @@ Stories:
   work under `toile-ui §13`.)*
 - `[x]` `CANVAS P1` — `lyon` / `WgpuSurface` vector pipeline (quad + path), `ViewportTransform`, glyph atlas, and
   PDF export via `KrillaSurface` (krilla). The shared canvas foundation the vector tools and the PDF path need.
-- `[ ]` `toile-ui §13 Phase 0/1` — `ViewportTransform` / batcher / adaptive grid / hit-testing / Select tool, then
+- `[~]` `toile-ui §13 Phase 0/1` — `ViewportTransform` / batcher / adaptive grid / hit-testing / Select tool, then
   the full tool set (Pen/Shape/Connector/Draw/Sticky/Text), Parley inline editor, shortcuts + OS-clipboard
   mirror, context menu / find panel / status bar, `PeerPresence` overlay with cross-app `UserId` colors,
-  wasm render/input tests.
+  wasm render/input tests. *(Phase 0 landed: `ambre-toile/src/ui/` — `ViewportTransform` (pan/zoom, world<->screen),
+  the `DisplayViewport` content walk through `DrawSurface` (quad + `lyon` path pipeline on `WgpuSurface`), the
+  adaptive magnetic grid, exact geometry hit-testing + marquee, and the Select tool state machine (move/resize/
+  rotate/marquee), all host-tested; wired end-to-end as `AppView::Toile(ToileView)` with the six driver methods
+  and launcher routing by `DocType`. Phase 1 remaining: the rest of the tool set, the Parley inline editor,
+  keyboard shortcuts + clipboard round-trip, grouping selection-scope, chrome context menu / find panel / status
+  bar, presence overlay, and the wasm render/input tests.)*
 - `[ ]` `toile-features §9 Phase 0/1` — presentation sequence CRDT + playback machine, speaker notes, Smart Animate
   + auto-layout solvers, reactions/votes CRDT keyed by `UserId` + derived tally, boolean ops; then playback
   wired to the camera pass, presenter overlay, reactions render, "follow presenter" ephemeral broadcast.

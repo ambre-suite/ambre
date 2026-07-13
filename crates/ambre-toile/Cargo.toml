@@ -26,7 +26,25 @@ kurbo = { workspace = true }
 # the clipboard payload -- consistent with the inter-thread IPC protocol.
 postcard = { workspace = true }
 
+# UI side (UI Thread): the DrawSurface renderer, GPU runtime, frame channels.
+# The heavy render crates (wgpu/lyon/parley/swash) are linked once in
+# ambre-canvas and shared; the view only paints through WgpuSurface (toile-ui §1).
+ambre-canvas = { path = "../ambre-canvas" }
+# UI Thread <-> Logic frame channels (shared memory, Main instance).
+flume = { workspace = true }
+web-sys = { workspace = true }
+wasm-bindgen = { workspace = true }
+
+# Toile-specific chrome (the tool palette / panels) is wasm-only Leptos, like
+# ambre-trame's chrome; scoped to wasm32 so host logic/render tests never build it.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+ambre-chrome = { path = "../ambre-chrome" }
+leptos = { workspace = true }
+
 [dev-dependencies]
+# Headless render tests: RecordingSurface mock DrawSurface + FixedClock.
+ambre-draw = { path = "../ambre-draw", features = ["testing"] }
+
 # Index-equivalence and 2-peer CRDT convergence property tests (§10, DoD).
 # proptest pulls `wait-timeout`, which does not build on wasm32; the engine is
 # host-testable, so gate it to the host target like ambre-trame does.

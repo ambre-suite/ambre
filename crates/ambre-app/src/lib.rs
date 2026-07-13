@@ -47,6 +47,7 @@ use ambre_chrome::{
 // Trame-specific chrome (command wiring + toolbar / selection-toolbar markup +
 // status label). The launcher stays app-agnostic and reaches into this module
 // for every Trame concern -- it names no command, button, or event variant itself.
+use ambre_toile::ui::ToileView;
 use ambre_trame::chrome as trame_chrome;
 use ambre_trame::render::FormulaAction;
 use ambre_trame::ui::TrameView;
@@ -949,28 +950,45 @@ pub fn main() {
     let formula_ref_tv = formula_ref;
     let formula_text_tv = formula_text;
     let formula_action_tv = formula_action;
+    let boot_is_toile = matches!(boot_doc_typed, Some((ambre_bus::DocType::Toile, _)));
     let switcher = host::run_with(
         "ambre-canvas",
         move |w, h, text_input| {
-            AppView::Trame(TrameView::new(
-                initial_doc,
-                view_tx_logic,
-                view_rx,
-                w,
-                h,
-                text_input,
-                anchor_pub,
-                perf_pub,
-                filter_open_pub,
-                theme_ctl,
-                formula_ref_tv,
-                formula_text_tv,
-                formula_action_tv,
-                sel_stats,
-                ctx_scope,
-                sel_bounds,
-                zoom,
-            ))
+            // Pick the view by the booted document's type. Cross-type in-session
+            // navigation is out of Phase 0: the `DocSwitcher` only swaps the id
+            // within one `AppView`, so a Trame<->Toile hop reloads via the route.
+            if boot_is_toile {
+                AppView::Toile(ToileView::new(
+                    initial_doc,
+                    view_tx_logic,
+                    view_rx,
+                    w,
+                    h,
+                    text_input,
+                    perf_pub,
+                    theme_ctl,
+                ))
+            } else {
+                AppView::Trame(TrameView::new(
+                    initial_doc,
+                    view_tx_logic,
+                    view_rx,
+                    w,
+                    h,
+                    text_input,
+                    anchor_pub,
+                    perf_pub,
+                    filter_open_pub,
+                    theme_ctl,
+                    formula_ref_tv,
+                    formula_text_tv,
+                    formula_action_tv,
+                    sel_stats,
+                    ctx_scope,
+                    sel_bounds,
+                    zoom,
+                ))
+            }
         },
         pre_frame,
         raf,

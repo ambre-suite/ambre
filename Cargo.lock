@@ -55,6 +55,7 @@ dependencies = [
  "ambre-chrome",
  "ambre-draw",
  "ambre-logic",
+ "ambre-toile",
  "ambre-trame",
  "base64 0.22.1",
  "console_error_panic_hook",
@@ -311,9 +312,13 @@ name = "ambre-toile"
 version = "0.1.0"
 dependencies = [
  "ambre-bus",
+ "ambre-canvas",
+ "ambre-chrome",
  "ambre-core",
  "ambre-draw",
+ "flume",
  "kurbo",
+ "leptos",
  "loro",
  "postcard",
  "proptest",
@@ -321,6 +326,8 @@ dependencies = [
  "serde",
  "thiserror 2.0.18",
  "tracing",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

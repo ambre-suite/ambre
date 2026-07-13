@@ -455,11 +455,11 @@ lives in Logic, keyed on change size.
 > Tracked as Stories of Epic **E4** (Toile MVP) in `specs/ambre-roadmap.md`.
 
 **Phase 0 - Core standalone**
-- [ ] `ViewportTransform` (pan / zoom, screen <-> world) with host tests
-- [ ] Batcher + quad pipeline + `lyon` path pipeline on `WgpuSurface`
-- [ ] Adaptive grid rendering
-- [ ] Exact hit-testing (geometry-level, host-tested)
-- [ ] The Select tool + tool state machine, host-tested
+- [x] `ViewportTransform` (pan / zoom, screen <-> world) with host tests
+- [x] Batcher + quad pipeline + `lyon` path pipeline on `WgpuSurface`
+- [x] Adaptive grid rendering
+- [x] Exact hit-testing (geometry-level, host-tested)
+- [x] The Select tool + tool state machine, host-tested
 
 **Phase 1 - Integration**
 - [ ] Remaining tools: Pen, Shape, Connector, Draw, Sticky, Text

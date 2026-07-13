@@ -10,6 +10,7 @@
 //! arrive in later crates / slices (Epic `E4`).
 
 pub mod logic;
+pub mod ui;
 
 pub use logic::command::{
     DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, End, InitContent,
