@@ -68,6 +68,74 @@ pub async fn verify_clock_and_assign_seq(
     Ok(result as u64)
 }
 
+/// Reseeds a cold Redis clock/seq state to the durable high-water marks, using
+/// `MAX` semantics so it can never lower a value a concurrent live update already
+/// raised.
+///
+/// - `KEYS[1]` = `doc:{id}:clocks` (hash: pub_key_hex -> last_clock)
+/// - `KEYS[2]` = `doc:{id}:seq`    (counter)
+/// - `ARGV[1]` = durable max seq
+/// - `ARGV[2i], ARGV[2i+1]` = pub_key_hex, durable max clock (pairs)
+const REHYDRATE_CLOCK_LUA: &str = r#"
+local seqmax = tonumber(ARGV[1])
+local cur = tonumber(redis.call('GET', KEYS[2])) or 0
+if seqmax > cur then redis.call('SET', KEYS[2], seqmax) end
+local i = 2
+while i < #ARGV do
+    local existing = tonumber(redis.call('HGET', KEYS[1], ARGV[i])) or 0
+    local incoming = tonumber(ARGV[i + 1])
+    if incoming > existing then redis.call('HSET', KEYS[1], ARGV[i], incoming) end
+    i = i + 2
+end
+return 1
+"#;
+
+/// Whether the document's clock-validation state is absent from Redis. True after
+/// a Redis reset while Postgres kept the history: the per-author clock hash was
+/// the durable authority and is now gone, so it must be rehydrated before any
+/// update is validated (else `CLOCK_MISMATCH`, since clients hold advanced clocks).
+pub async fn clock_state_is_cold(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+) -> Result<bool, AppError> {
+    let clocks_key = format!("doc:{document_id}:clocks");
+    let existing: usize = redis
+        .exists(clocks_key)
+        .await
+        .map_err(|e| AppError::Redis(format!("clock state EXISTS failed: {e}")))?;
+    Ok(existing == 0)
+}
+
+/// Reseeds the Redis clock/seq state from the durable per-author high-water marks
+/// (see [`REHYDRATE_CLOCK_LUA`]). `author_clocks` are `(pub_key_hex, max_clock)`.
+/// A no-op when there is no durable history (a brand-new document).
+pub async fn seed_clock_state(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+    max_seq: i64,
+    author_clocks: &[(String, i64)],
+) -> Result<(), AppError> {
+    if author_clocks.is_empty() {
+        return Ok(());
+    }
+    let clocks_key = format!("doc:{document_id}:clocks");
+    let seq_key = format!("doc:{document_id}:seq");
+    let mut argv = vec![max_seq.to_string()];
+    for (hex, clock) in author_clocks {
+        argv.push(hex.clone());
+        argv.push(clock.to_string());
+    }
+    redis
+        .eval::<i64>(
+            REHYDRATE_CLOCK_LUA,
+            [clocks_key.as_str(), seq_key.as_str()],
+            argv.iter().map(String::as_str).collect::<Vec<_>>(),
+        )
+        .await
+        .map_err(|e| AppError::Redis(format!("clock state rehydrate failed: {e}")))?;
+    Ok(())
+}
+
 /// Appends a delta entry to the pending list for this document.
 ///
 /// The entry is a JSON blob `{ seq, s3_key, update_b64 }` carrying the full
@@ -851,6 +919,44 @@ mod redis_integration_tests {
         );
 
         let _ = redis.del([key.as_str()]).await;
+    }
+
+    // Reproduces the CLOCK_MISMATCH bug after a Redis reset: with a cold clock
+    // state, reseeding it to the durable per-author high-water mark N must let the
+    // author's next update at clock N+1 validate, instead of being rejected against
+    // a phantom current=0.
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn seed_clock_state_unblocks_the_next_update_after_a_redis_reset() {
+        let redis = connect_redis().await;
+        let doc = ambre_core::DocumentId::new();
+        let clocks_key = format!("doc:{doc}:clocks");
+        let seq_key = format!("doc:{doc}:seq");
+        let author = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef0";
+        // Cold Redis (as after a restart): neither key exists.
+        let _ = redis.del([clocks_key.as_str(), seq_key.as_str()]).await;
+        assert!(clock_state_is_cold(&redis, &doc).await.unwrap());
+
+        // The durable index says this author reached clock 5, global seq 5.
+        seed_clock_state(&redis, &doc, 5, &[(author.to_string(), 5)])
+            .await
+            .expect("seed");
+
+        // No longer cold, and the author's next update (clock 6) validates.
+        assert!(!clock_state_is_cold(&redis, &doc).await.unwrap());
+        let seq = verify_clock_and_assign_seq(&redis, &doc, author, 6)
+            .await
+            .expect("clock 6 should validate against a rehydrated current=5");
+        assert_eq!(seq, 6, "seq counter must continue past the durable max");
+
+        // A stale clock (already consumed) is still rejected.
+        assert!(
+            verify_clock_and_assign_seq(&redis, &doc, author, 6)
+                .await
+                .is_err()
+        );
+
+        let _ = redis.del([clocks_key.as_str(), seq_key.as_str()]).await;
     }
 
     async fn seed_refresh(redis: &Client) -> String {
