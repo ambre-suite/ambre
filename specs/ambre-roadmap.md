@@ -239,7 +239,9 @@ Stories:
   and launcher routing by `DocType`. Phase 1 landed so far: the full tool set (Pen/Shape/Connector/Draw/Sticky/Text)
   via `ToolMachine`, host-tested, with live gesture previews and `set_tool` for the chrome palette. Phase 1
   remaining: the Parley inline editor, keyboard shortcuts + clipboard round-trip, grouping selection-scope,
-  chrome context menu / find panel / status bar, presence overlay, and the wasm render/input tests.)*
+  the full editing chrome (tool palette / toolbar, style + property inspector, color picker, content-anchored
+  floating selection toolbar, top menu bar + zoom control -- `toile-ui §5quinquies`), chrome context menu /
+  find panel / status bar, presence overlay, and the wasm render/input tests.)*
 - `[ ]` `toile-features §9 Phase 0/1` — presentation sequence CRDT + playback machine, speaker notes, Smart Animate
   + auto-layout solvers, reactions/votes CRDT keyed by `UserId` + derived tally, boolean ops; then playback
   wired to the camera pass, presenter overlay, reactions render, "follow presenter" ephemeral broadcast.
