@@ -454,14 +454,14 @@ lives in Logic, keyed on change size.
 
 > Tracked as Stories of Epic **E4** (Toile MVP) in `specs/ambre-roadmap.md`.
 
-**Phase 0 — Core standalone**
+**Phase 0 - Core standalone**
 - [ ] `ViewportTransform` (pan / zoom, screen <-> world) with host tests
 - [ ] Batcher + quad pipeline + `lyon` path pipeline on `WgpuSurface`
 - [ ] Adaptive grid rendering
 - [ ] Exact hit-testing (geometry-level, host-tested)
 - [ ] The Select tool + tool state machine, host-tested
 
-**Phase 1 — Integration**
+**Phase 1 - Integration**
 - [ ] Remaining tools: Pen, Shape, Connector, Draw, Sticky, Text
 - [ ] Parley inline text editor
 - [ ] Keyboard shortcuts + clipboard round-trip (OS-clipboard mirror)
@@ -471,5 +471,7 @@ lives in Logic, keyed on change size.
 - [ ] Selection status bar (§8bis)
 - [ ] Presence overlay wired to `PeerPresence` with cross-app `UserId` colors (§8)
 - [ ] wasm render / input tests
-- **Phase 2 (Optimization):** glyph-atlas eviction, tessellation-cache tuning, presence render batching,
-  large-board frame-time profiling.
+
+**Phase 2 - Optimization**
+
+glyph-atlas eviction, tessellation-cache tuning, presence render batching, large-board frame-time profiling.

@@ -957,7 +957,7 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
 > Tracked as Stories of Epic **E4** (Toile MVP) in `specs/ambre-roadmap.md`.
 > No phase ships `[x]` without its test belt green.
 
-**Phase 0 — Core standalone**
+**Phase 0 - Core standalone**
 - [x] `ToileState` + CRDT schema (§2): `elements`, `connectors`, `drawings`, unified `layers` z-order, one per-element `ElementStyle` register, `groups` (per-group `children` list, derived-only bounds), and `frames` content (per-frame `children` membership list, §2.F/§2.G z-order invariant) **landed**. The `media` map is populated by `toile-interop` (raster/media pipeline), not the Logic engine.
 - [x] Move-invariant `ElementId` minting (`{peer:016x}_{counter:08x}`, §1)
 - [x] `SpatialIndex` (`rstar` R-tree) with the index-equivalence property test (indexed cull vs brute-force agree)
@@ -973,7 +973,7 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
 - [x] `ToileCommand` / `ToileEvent` consolidated enums (§8): lifecycle + groups + undo/redo (`GroupElements`/`UngroupElements`/`Undo`/`Redo`, `UndoState` event) + clipboard (`CopyElements`/`PasteElements`/`DuplicateElements`, `Clipboard` event, `ClipboardPayload` postcard round-trip) + frames (`SetFrameChildren`) landed in `ambre-toile`. `EditText` (Phase 1, blocked on Prose's shared `TextDelta`), find and `Embedded` (nested-doc) variants land with their later slices.
 - [x] 2-peer CRDT convergence property-test. **DoD:** green in `ambre-toile/src/convergence_tests.rs`. Op-set covers create / move-LWW / resize / rotate / restyle-register / delete / reorder / group / ungroup / connect / stroke; the assertion compares the full derived paint set (elements + routed connectors + group union bounds). Complemented by a `ToileState`-level rebuild-equivalence property-test (incremental caches == full rebuild from snapshot, the §1 invariant beyond the isolated `SpatialIndex`) -- which flushed out and fixed four empty-group / dangling-child-ref defects across group / ungroup / delete / frame membership.
 
-**Phase 1 — Logic Thread Integration**
+**Phase 1 - Logic Thread Integration**
 - [x] Logic-thread dispatch: `handle_command` returning `ToileOutcome` (§8), via typed `DocState` + `match` (`architecture §6`). Landed: the IPC contract (`ToileCommand`/`ToileEvent`/`Display*`/`Viewport`/model value types) moved into `ambre-bus::app::toile` (one module per app, mirrors the new Trame `app/trame/` layout; `ToileOutcome` stays engine-local like `TrameOutcome`), `AppCommand::Toile` / `AppEvent::Toile` variants, `DocState::Toile(Box<ToileState>)`, and the `(DocState::Toile, AppCommand::Toile)` dispatch arm fanning display/update/ephemeral/snapshot out through the shared `dispatch_outcome`.
 - [x] Sync thread wiring: `SendUpdate` + `SendEphemeral` presence (both in `ambre-bus`); inbound `LogicEvent::RemoteEphemeral` -> `apply_ephemeral` (§8). `SendUpdate`/`SendEphemeral` fan-out wired; `apply_ephemeral` is an accepted no-op until the presence `ToileEvent` variant lands with `toile-ui §13`.
 - [x] `apply_remote` accepting both deltas and snapshots (§8), plus `apply_remote_batch` for the server history replay on open (one import sweep + a single cache rebuild).
@@ -1000,7 +1000,9 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
   signing-key directory / trusted-keys store is wired, so inbound frames are dropped end-to-end for now (a
   sync/identity slice tracked in `ambre-spec-sync.md` "SYNC P4", not Toile logic); the outbound broadcast and
   the whole Logic path are complete.
-- **Presence render / overlay** (remote cursors, live strokes, laser, selection halos, cross-app `UserId`
+- [ } Presence render / overlay (remote cursors, live strokes, laser, selection halos, cross-app `UserId`
   colors): `ambre-spec-toile-ui.md` Phase 1.
-- **Phase 2 (Optimization):** bulk index update on large remote batches, order-preserving layer diffing,
-  connector routing memoization keyed by endpoint bounds, benchmark-gated style dedup dictionary.
+
+**Phase 2 - Optimization** 
+
+bulk index update on large remote batches, order-preserving layer diffing, connector routing memoization keyed by endpoint bounds, benchmark-gated style dedup dictionary.
