@@ -41,6 +41,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
         ctx_scope,
         filter_active,
         sel_bounds,
+        toile_ctx_scope,
+        toile_menu_cmd,
         sort_dialog,
         chrome_status,
         sheets,
@@ -108,6 +110,17 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let on_command = Callback::new({
         let tx = to_logic.clone();
         move |id: CommandId| {
+            // Toile board: every context-menu id is forwarded into the canvas view,
+            // which resolves it against its (UI-only) selection (`toile-ui §5ter`).
+            // The Toile Find command still opens the Toile panel, handled below.
+            if boot_is_toile {
+                if id == toile_chrome::FIND {
+                    find_state_toile.set(true);
+                } else {
+                    toile_menu_cmd.set(Some(id));
+                }
+                return;
+            }
             // `FILTER_COLUMN` is a UI-only intent: open the popover anchored under
             // the active cell and ask the Logic thread for the column's distinct
             // values (it resolves the active column itself). Everything else flows
@@ -415,8 +428,17 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // The menu layout follows the right-click scope the view published (`-ui.md`
     // sec.5.C): a cell right-click gets the full menu, a header right-click the
     // header-scoped one (no clipboard / merge).
-    let ctx_entries =
-        Memo::new(move |_| trame_chrome::context_entries_for(ctx_scope.get(), filter_active.get()));
+    // A Toile board builds its menu from the selection scope the canvas view
+    // publishes (`toile-ui §5ter`); a Trame sheet from the cell/header scope
+    // (`-ui.md` sec.5.C). Both return `ambre_chrome::MenuEntry` rows, so the one
+    // `<ContextMenu>` renders either.
+    let ctx_entries = Memo::new(move |_| {
+        if boot_is_toile {
+            toile_chrome::context_entries_for(&toile_ctx_scope.get())
+        } else {
+            trame_chrome::context_entries_for(ctx_scope.get(), filter_active.get())
+        }
+    });
 
     // Per-slot sender clones. Each slot's children is a `Fn` (re-runnable), so it
     // captures its own clone and re-clones inside the handler rather than moving
@@ -499,35 +521,47 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     {move || initials(username.get().as_deref())}
                 </span>
             </Header>
+            // The toolbar / formula bar / sheet tabs / status bar are Trame chrome
+            // (`-ui.md`); a Toile board renders none of them -- its own tool palette,
+            // status bar and panels are separate roadmap items (`toile-ui §5quinquies
+            // / §8bis`). Gated on the booted app kind, fixed per page load.
             <Toolbar slot>
-                <trame_chrome::FormatBar
-                    toggles=toggles
-                    style=style_state
-                    theme=theme_sig
-                    on_command=on_command
-                    on_style=on_style
-                />
+                {(!boot_is_toile).then(|| view! {
+                    <trame_chrome::FormatBar
+                        toggles=toggles
+                        style=style_state
+                        theme=theme_sig
+                        on_command=on_command
+                        on_style=on_style
+                    />
+                })}
             </Toolbar>
             <FormulaBar slot>
-                <trame_chrome::FormulaBar
-                    cell_ref=formula_ref
-                    content=formula_text
-                    on_action=Callback::new(move |action| formula_action.set(Some(action)))
-                />
+                {(!boot_is_toile).then(|| view! {
+                    <trame_chrome::FormulaBar
+                        cell_ref=formula_ref
+                        content=formula_text
+                        on_action=Callback::new(move |action| formula_action.set(Some(action)))
+                    />
+                })}
             </FormulaBar>
             <Tabs slot>
-                <trame_chrome::SheetTabs
-                    sheets=sheets
-                    active=active_sheet
-                    on_activate=on_sheet_activate
-                    on_create=on_sheet_create
-                    on_rename=on_sheet_rename
-                    on_delete=on_sheet_delete
-                    on_reorder=on_sheet_reorder
-                />
+                {(!boot_is_toile).then(|| view! {
+                    <trame_chrome::SheetTabs
+                        sheets=sheets
+                        active=active_sheet
+                        on_activate=on_sheet_activate
+                        on_create=on_sheet_create
+                        on_rename=on_sheet_rename
+                        on_delete=on_sheet_delete
+                        on_reorder=on_sheet_reorder
+                    />
+                })}
             </Tabs>
             <StatusBar slot>
-                <trame_chrome::StatusBar stats=sel_stats perf=perf_snap zoom=zoom />
+                {(!boot_is_toile).then(|| view! {
+                    <trame_chrome::StatusBar stats=sel_stats perf=perf_snap zoom=zoom />
+                })}
             </StatusBar>
         </AppShell>
 

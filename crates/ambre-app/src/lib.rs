@@ -143,6 +143,14 @@ struct Wiring {
     /// Last Toile `FindResults` (hits + focus), feeding the panel's counter and
     /// step origin. Set by the per-frame relay on `ToileEvent::FindResults`.
     find_result_toile: RwSignal<Option<ambre_bus::app::toile::FindResults>>,
+    /// Toile right-click context-menu scope (`toile-ui §5ter`): the canvas view
+    /// publishes it on each right-click; the shell's entry `Memo` reads it to build
+    /// the menu, omitting inapplicable rows.
+    toile_ctx_scope: RwSignal<ambre_toile::ui::menu::CtxScope>,
+    /// The Toile context-menu command the shell forwards back into the canvas view
+    /// (`toile-ui §5ter`): the view drains it and resolves it against its selection
+    /// (the Logic thread never sees the selection).
+    toile_menu_cmd: RwSignal<Option<ambre_chrome::commands::CommandId>>,
     /// Status-bar selection aggregates (`-ui.md` sec.13bis); `None` on a single
     /// cell. Set by the per-frame relay on `TrameEvent::SelectionStats`, cleared
     /// by the canvas view on a single-cell selection.
@@ -335,6 +343,14 @@ pub fn main() {
     // so the view and the Leptos shell share the one signal.
     let sel_bounds = RwSignal::new(None::<(u32, u32, u32, u32)>);
 
+    // Toile context-menu bridge (`toile-ui §5ter`): the canvas view publishes the
+    // selection scope on each right-click; the DOM menu reads it to build its
+    // entries and writes the chosen `CommandId` back for the view to resolve
+    // against its (UI-only) selection. Created here so the view and the Leptos
+    // shell share the one pair of signals, exactly like Trame's `ctx_scope`.
+    let toile_ctx_scope = RwSignal::new(ambre_toile::ui::menu::CtxScope::default());
+    let toile_menu_cmd = RwSignal::new(None::<ambre_chrome::commands::CommandId>);
+
     // Design tokens: inject the generated CSS custom properties (theme.css) and
     // boot the dark theme. `theme_ctl` is the single source of truth for the
     // active scheme, shared with the chrome toggle and the canvas view.
@@ -480,6 +496,8 @@ pub fn main() {
         ctx_scope,
         filter_active,
         sel_bounds,
+        toile_ctx_scope,
+        toile_menu_cmd,
         sheets,
         active_sheet,
     );
@@ -1017,6 +1035,8 @@ pub fn main() {
                     text_input,
                     perf_pub,
                     theme_ctl,
+                    toile_ctx_scope,
+                    toile_menu_cmd,
                 ))
             } else {
                 AppView::Trame(TrameView::new(
