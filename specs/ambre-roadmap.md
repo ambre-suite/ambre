@@ -272,7 +272,10 @@ Stories:
 *Deploy the remaining building blocks on the validated foundation.*
 
 Stories:
-- `ARCH P2` — `ambre-prose` (LoroText): the text/CRDT pilot.
+- `ARCH P2` — `ambre-prose` (LoroText): the text/CRDT pilot. Also lands Toile's `EditText`/`TextDelta`
+  path and the §6 rich-text runs it carries — including the per-run colour binding of the shared
+  `ColorPopover` (`toile-ui §5quinquies.C`) and the new `FontSpec` colour field. *(The element-fill
+  side of that picker is MVP-complete under `E4`; only the text-run consumer waits here.)*
 - `ARCH P7` (`ambre-murmure`) — channels.
 - `SYNC P4` + `SRV P1` — channels & meetings (segments managed by Sync, unread, WebRTC signaling); plus the
   presence identity resolution (`pub_key` -> canonical `UserId` directory) that lets inbound ephemerals be
