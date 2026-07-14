@@ -155,6 +155,13 @@ pub struct ToileView {
     /// the source; the chip mirrors it. Written only on change. Wasm-only.
     #[cfg(target_arch = "wasm32")]
     zoom: RwSignal<f64>,
+    /// Status-bar selection aggregates (§8bis), shared with the DOM band. The
+    /// view clears it to `None` on an empty selection (an empty-ids stats request
+    /// would mean "whole board" to Logic, so it must not go through the round
+    /// trip); a non-empty selection is filled by the shell from the
+    /// `SelectionStats` reply. Leptos signal, so wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    sel_stats: RwSignal<Option<super::status::SelStats>>,
 
     /// Set while a Fit / Zoom-to-selection awaits the `SelectionStats` reply whose
     /// bounds it will frame (§5quinquies.E). The reply treats both the same way
@@ -162,6 +169,12 @@ pub struct ToileView {
     /// find-focus recenter that shares the same stats channel. `cfg`-agnostic so
     /// the dispatch arm stays uniform.
     pending_fit: bool,
+
+    /// The selection last reported to the status bar (§8bis). `plan_repaint`
+    /// re-requests `SelectionStats` whenever the live selection differs, so the
+    /// band's count/bounds track every selection change (marquee, click, nudge)
+    /// without threading a request through each mutation site.
+    last_stats_sel: Vec<ElementId>,
 }
 
 impl ToileView {
@@ -179,6 +192,7 @@ impl ToileView {
         #[cfg(target_arch = "wasm32")] menu_cmd: RwSignal<Option<CommandId>>,
         #[cfg(target_arch = "wasm32")] active_tool: RwSignal<Tool>,
         #[cfg(target_arch = "wasm32")] zoom: RwSignal<f64>,
+        #[cfg(target_arch = "wasm32")] sel_stats: RwSignal<Option<super::status::SelStats>>,
     ) -> Self {
         text_input.focus();
         let theme = theme_ctl.get();
@@ -227,7 +241,10 @@ impl ToileView {
             active_tool,
             #[cfg(target_arch = "wasm32")]
             zoom,
+            #[cfg(target_arch = "wasm32")]
+            sel_stats,
             pending_fit: false,
+            last_stats_sel: Vec::new(),
         }
     }
 
@@ -454,6 +471,15 @@ impl ToileView {
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn publish_ctx_scope(&self) {}
+
+    /// Clear the status-bar aggregates (§8bis) on an empty selection. Wasm-only
+    /// (leptos signal); a host no-op keeps `plan_repaint` cfg-agnostic.
+    #[cfg(target_arch = "wasm32")]
+    fn clear_sel_stats(&self) {
+        self.sel_stats.set(None);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn clear_sel_stats(&self) {}
 
     /// Drain a context-menu command the shell forwarded and apply it against the
     /// live selection (§5ter). Wasm-only; a host no-op keeps `update` cfg-agnostic.
@@ -1054,6 +1080,23 @@ impl ToileView {
     }
 
     pub fn plan_repaint(&mut self, hud_tick: bool) -> RepaintPlan {
+        // Keep the status-bar aggregates (§8bis) in step with the selection: on a
+        // change, ask Logic for the fresh count/bounds (the reply is mirrored into
+        // the band's signal by the shell; this view ignores it unless a Fit /
+        // find-focus is pending). Cheap -- fires only when the selection differs.
+        if self.selection != self.last_stats_sel {
+            self.last_stats_sel = self.selection.clone();
+            if self.selection.is_empty() {
+                // Empty selection: clear the band directly. An empty-ids request
+                // means "whole board" to Logic (used by Fit), never "nothing".
+                self.clear_sel_stats();
+            } else {
+                self.send_edit(ToileCommand::RequestSelectionStats {
+                    ids: self.selection.clone(),
+                });
+            }
+        }
+
         let any_dirty = self.needs_full
             || self.viewport_changed
             || self.data_dirty

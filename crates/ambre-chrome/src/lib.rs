@@ -30,6 +30,7 @@ mod command;
 mod context_menu;
 mod dialog;
 mod shortcut;
+mod status;
 mod toast;
 
 pub use app_shell::{AppShell, FormulaBar, Header, StatusBar, Tabs, Toolbar};
@@ -37,4 +38,5 @@ pub use command::{CommandStates, keybinding_from_event};
 pub use context_menu::{ContextMenu, MenuEntry};
 pub use dialog::Dialog;
 pub use shortcut::Kbd;
+pub use status::{PerfChip, PerfDetail, StatusLabel, ZOOM_PRESETS, ZoomChip};
 pub use toast::{ToastHost, ToastKind, Toasts};

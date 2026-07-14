@@ -36,6 +36,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         formula_text,
         formula_action,
         sel_stats,
+        sel_stats_toile,
         perf_snap,
         zoom,
         ctx_scope,
@@ -561,9 +562,23 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 })}
             </Tabs>
             <StatusBar slot>
-                {(!boot_is_toile).then(|| view! {
-                    <trame_chrome::StatusBar stats=sel_stats perf=perf_snap zoom=zoom />
-                })}
+                {if boot_is_toile {
+                    // Toile selection status bar (§8bis): count/bounds + shared
+                    // zoom & fps chips, styled identically to Trame's band.
+                    view! {
+                        <toile_chrome::StatusBar
+                            stats=sel_stats_toile
+                            perf=perf_snap
+                            zoom=zoom
+                        />
+                    }
+                    .into_any()
+                } else {
+                    view! {
+                        <trame_chrome::StatusBar stats=sel_stats perf=perf_snap zoom=zoom />
+                    }
+                    .into_any()
+                }}
             </StatusBar>
         </AppShell>
 
