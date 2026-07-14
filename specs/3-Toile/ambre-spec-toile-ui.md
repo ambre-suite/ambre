@@ -543,11 +543,12 @@ lives in Logic, keyed on change size.
   reuse the existing menu `CommandId`s through the shared `on_command` channel, mirroring the context
   menu (§5ter). The selection's common style + per-field "mixed" mask is a pure, host-tested surface
   (`ui::style::style_scope_for`) the view publishes alongside the context-menu scope.
-- [~] Color picker popover (ARGB, shared by inspector + text runs) (§5quinquies.C). The shared control
+- [x] Color picker popover (ARGB, shared by inspector + element fills) (§5quinquies.C). The shared control
   is delivered: `ambre_chrome::ColorPopover` (promoted from Trame's cell fg/bg picker) now takes an
   `alpha` flag and, in ARGB mode, adds an opacity slider; Trame's `FormatBar` and the Toile inspector
-  both consume it. The **text-run** consumer is still pending: rich text runs (§6) are unimplemented and
-  `FontSpec` carries no colour field yet, so there is no run colour to bind. Re-tick fully with §6.
+  both consume it. This closes the MVP scope. *(The **text-run** colour consumer is intentionally out of
+  the MVP: rich text runs (§6) ride `EditText`/`TextDelta`, deferred to `E5` with Prose's shared text CRDT
+  — see the `E5` story below. `FontSpec` gains its colour field there.)*
 - [x] Content-anchored floating selection toolbar, transform-synced each frame (§5quinquies.D).
   DOM chrome `SelectionToolbar` (`chrome::floatbar`): a `position: fixed` bar the canvas view
   republishes every frame from the live selection x camera (`ui::floatbar::build_floatbar`), so its
@@ -568,7 +569,14 @@ lives in Logic, keyed on change size.
   empty-ids `RequestSelectionStats` (Logic returns the union of all bounds); Zoom-to-selection
   frames the selection. The `%` readout mirrors the live `zoom` signal the view publishes each
   frame. Host-tested pure surface (`ui::menu_bar` layouts + `viewport` zoom/fit geometry).
-- [ ] `ambre-chrome` context menu (§5ter)
+- [x] `ambre-chrome` context menu (§5ter). Right-click on the canvas selects the topmost hit (group-
+  resolved, §7) or clears to the empty-canvas scope, then publishes a pure `CtxScope` the DOM menu reads;
+  the shared `ambre-chrome` `ContextMenu` renders the iconed entries `chrome::context_entries_for` builds
+  from that scope (inapplicable rows omitted -- Group only for multi, Ungroup only with a group selected,
+  Lock/Unlock by state, frame entries only inside a frame), and each row forwards its bare `CommandId`
+  through the shared `on_command` sink into the view, which resolves it against its UI-only selection via
+  `ui::menu::resolve_menu_command` (`drain_menu_cmd`/`apply_menu_command`). Paste + Select-all are UI-only
+  intents serviced in the view. Pure surface host-tested in `ui::menu`; DOM/input covered by the wasm belt.
 - [x] Find panel (§5quater). DOM chrome `FindPanel` (find-only) + `ToileCommand::Find` wiring;
   canvas-side highlight of visible hits and camera recenter on `focus` (via a `RequestSelectionStats`
   bounds lookup, since `FindResults` carries no geometry). Host-tested step/index helpers (`ui::find`).
@@ -578,7 +586,12 @@ lives in Logic, keyed on change size.
   `StatusLabel`), reused by both apps. The canvas view re-requests `SelectionStats` on each selection
   change and clears the band on an empty selection. Host-tested count/bounds formatting (`ui::status`).
 - [ ] Presence overlay wired to `PeerPresence` with cross-app `UserId` colors (§8). The render pass (cursors / labels / laser / halos) is built and wasm-tested now against synthetic `PeerPresence` events; the end-to-end multi-user demo is **blocked on SYNC P4** (`pub_key` -> `UserId` resolution), so remote frames are dropped end-to-end until it lands (`toile-logic §9`).
-- [ ] wasm render / input tests
+- [x] wasm render / input tests. `crates/ambre-toile/tests/chrome_ui.rs` (headless Chrome via
+  `just test-wasm`) mounts the real DOM chrome and asserts render + input: the selection status band
+  (§8bis), the context menu (§5ter) end-to-end (the rows each `CtxScope` renders + a row click firing its
+  `CommandId`), the tool palette switching the shared active tool (§5quinquies.A), the top-menu zoom
+  cluster (§5quinquies.E) and the floating selection toolbar (§5quinquies.D) firing on the shared sink.
+  The pure models stay host-tested in `ui::{status,menu,menu_bar,palette}`.
 
 **Phase 2 - Optimization**
 - [ ] Glyph-atlas eviction
