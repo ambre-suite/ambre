@@ -16,6 +16,7 @@
 // ============================================================================
 
 use ambre_canvas::PerfSnapshot;
+use ambre_chrome::{PerfChip, PerfDetail, StatusLabel, ZoomChip};
 use leptos::prelude::*;
 
 use crate::chrome::commands::status_label;
@@ -54,13 +55,6 @@ pub fn StatusBar(
     perf: RwSignal<PerfSnapshot>,
     zoom: RwSignal<f64>,
 ) -> impl IntoView {
-    // Whether the full perf panel is expanded (collapsed by default: only the
-    // fps chip shows).
-    let show_perf = RwSignal::new(false);
-
-    // Whether the grid-zoom preset menu is open (collapsed by default).
-    let show_zoom = RwSignal::new(false);
-
     // The aggregates line, recomputed whenever the selection stats change.
     let aggregates = move || {
         stats.get().map(|s| {
@@ -80,81 +74,38 @@ pub fn StatusBar(
         })
     };
 
-    let fps_label = move || format!("{:.0} fps", perf.get().fps);
-
-    let perf_panel = move || {
-        let p = perf.get();
-        view! {
-            <div class="statusbar-perf-panel">
-                <div>"frame " {format!("{:.1}", p.frame_ms)} " ms"</div>
-                <div>"drain " {format!("{:.1}", p.drain_ms)}
-                    "  draw " {format!("{:.1}", p.draw_ms)}
-                    "  gpu " {format!("{:.1}", p.gpu_ms)}</div>
-                <div>"bg " {format!("{:.2}", p.bg_ms)}
-                    "  cells " {format!("{:.2}", p.cells_ms)}
-                    "  hdrs " {format!("{:.2}", p.hdrs_ms)}</div>
-                <div>"drawn " {p.cells_drawn.to_string()}
-                    "  miss " {p.glyph_misses.to_string()}
-                    "  inlat " {format!("{:.1}", p.input_lat_ms)} " ms"</div>
-            </div>
-        }
-    };
-
     view! {
-        <span class="statusbar-label">{status_label()}</span>
+        <StatusLabel label=status_label() />
         <span class="statusbar-stats">{aggregates}</span>
         <span class="spacer"></span>
-        <div class="statusbar-zoom">
-            <button
-                class="statusbar-zoom-btn"
-                title="Grid zoom (scales the sheet only, not the toolbar)"
-                aria-haspopup="menu"
-                aria-expanded=move || show_zoom.get().then_some("true")
-                on:click=move |_| show_zoom.update(|v| *v = !*v)
-            >
-                {move || format!("{:.0} %", zoom.get() * 100.0)}
-            </button>
-            <Show when=move || show_zoom.get() fallback=|| ()>
-                <ul class="statusbar-zoom-menu" role="menu">
-                    {crate::ui::grid::TrameUiState::ZOOM_PRESETS
-                        .iter()
-                        .rev()
-                        .map(|&z| {
-                            let pct = format!("{:.0} %", z * 100.0);
-                            // `selected` highlights the row matching the live zoom.
-                            let selected = move || (zoom.get() - z).abs() < f64::EPSILON;
-                            view! {
-                                <li role="none">
-                                    <button
-                                        role="menuitemradio"
-                                        class="statusbar-zoom-item"
-                                        class:selected=selected
-                                        aria-checked=move || selected().then_some("true")
-                                        on:click=move |_| {
-                                            zoom.set(z);
-                                            show_zoom.set(false);
-                                        }
-                                    >
-                                        {pct}
-                                    </button>
-                                </li>
-                            }
-                        })
-                        .collect_view()}
-                </ul>
-            </Show>
-        </div>
-        <div class="statusbar-perf">
-            <button
-                class="statusbar-fps"
-                title="Toggle render diagnostics"
-                on:click=move |_| show_perf.update(|v| *v = !*v)
-            >
-                {fps_label}
-            </button>
-            <Show when=move || show_perf.get() fallback=|| ()>
-                {perf_panel}
-            </Show>
-        </div>
+        // Shared interactive zoom + fps chips (identical to Toile, §8bis). The
+        // grid-zoom ladder stays Trame's own so it never diverges from the
+        // sheet's virtual-scroll steps; the perf panel shows Trame's grid detail.
+        <ZoomChip
+            zoom=zoom
+            presets=crate::ui::grid::TrameUiState::ZOOM_PRESETS.to_vec()
+            title="Grid zoom (scales the sheet only, not the toolbar)"
+        />
+        <PerfChip fps=Signal::derive(move || perf.get().fps)>
+            <PerfDetail slot>
+                {move || {
+                    let p = perf.get();
+                    view! {
+                        <div class="statusbar-perf-panel">
+                            <div>"frame " {format!("{:.1}", p.frame_ms)} " ms"</div>
+                            <div>"drain " {format!("{:.1}", p.drain_ms)}
+                                "  draw " {format!("{:.1}", p.draw_ms)}
+                                "  gpu " {format!("{:.1}", p.gpu_ms)}</div>
+                            <div>"bg " {format!("{:.2}", p.bg_ms)}
+                                "  cells " {format!("{:.2}", p.cells_ms)}
+                                "  hdrs " {format!("{:.2}", p.hdrs_ms)}</div>
+                            <div>"drawn " {p.cells_drawn.to_string()}
+                                "  miss " {p.glyph_misses.to_string()}
+                                "  inlat " {format!("{:.1}", p.input_lat_ms)} " ms"</div>
+                        </div>
+                    }
+                }}
+            </PerfDetail>
+        </PerfChip>
     }
 }

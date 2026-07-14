@@ -159,6 +159,10 @@ struct Wiring {
     /// cell. Set by the per-frame relay on `TrameEvent::SelectionStats`, cleared
     /// by the canvas view on a single-cell selection.
     sel_stats: RwSignal<Option<trame_chrome::SelStats>>,
+    /// Toile status-bar selection aggregates (toile-ui §8bis): element tally +
+    /// combined world bounds; `None` on an empty selection. Set by the per-frame
+    /// relay on `ToileEvent::SelectionStats`.
+    sel_stats_toile: RwSignal<Option<toile_chrome::SelStats>>,
     /// Status-bar perf snapshot (fps + frame timings), pumped from the canvas
     /// view's `PerfPublisher` by the per-frame relay (~2 Hz).
     perf_snap: RwSignal<ambre_canvas::PerfSnapshot>,
@@ -324,6 +328,10 @@ pub fn main() {
     // `SelectionStats` event / cleared by the view on a single cell) and the live
     // perf snapshot pumped from `perf_pub` below.
     let sel_stats = RwSignal::new(None::<trame_chrome::SelStats>);
+    // Toile selection aggregates (toile-ui §8bis): element tally + world bounds,
+    // mirrored from `ToileEvent::SelectionStats`. Cleared to `None` on an empty
+    // selection so the band shows only the zoom chip.
+    let sel_stats_toile = RwSignal::new(None::<toile_chrome::SelStats>);
     let perf_snap = RwSignal::new(ambre_canvas::PerfSnapshot::default());
 
     // Sheet-tab strip model (`-ui.md` sec.13): mirrored from `TrameEvent::SheetList`
@@ -499,6 +507,7 @@ pub fn main() {
         formula_text,
         formula_action,
         sel_stats,
+        sel_stats_toile,
         perf_snap,
         zoom,
         ctx_scope,
@@ -977,6 +986,17 @@ pub fn main() {
                     event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::FindResults(fr)),
                     ..
                 } => find_result_toile.set(Some(fr.clone())),
+                // Toile status bar (§8bis): selection aggregates for the band.
+                // The canvas view requests them on each selection change and also
+                // receives this event (forwarded below), consuming it only for a
+                // pending Fit / find-focus recenter; here we mirror count/bounds
+                // into the status-bar signal.
+                UiEvent::Viewport {
+                    event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::SelectionStats(s)),
+                    ..
+                } => {
+                    sel_stats_toile.set(Some(toile_chrome::SelStats::from_reply(s.count, s.bounds)))
+                }
                 _ => {}
             }
             // Content (and everything else) still flows to the view unchanged.
@@ -1049,6 +1069,7 @@ pub fn main() {
                     toile_menu_cmd,
                     toile_active_tool,
                     zoom,
+                    sel_stats_toile,
                 ))
             } else {
                 AppView::Trame(TrameView::new(

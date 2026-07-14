@@ -15,11 +15,17 @@ mod find;
 mod menu;
 mod menu_bar;
 mod palette;
+mod status;
 
 pub use find::{FindPanel, FindQuery};
 pub use menu::context_entries_for;
 pub use menu_bar::TopMenuBar;
 pub use palette::ToolPalette;
+pub use status::StatusBar;
+
+// The status-bar aggregates model is pure and host-tested in `ui::status`
+// (like `ui::find`); re-export it so the launcher names it through `toile_chrome`.
+pub use crate::ui::status::SelStats;
 
 // The tool palette's command surface is pure and host-tested in `ui::palette`
 // (like `ui::find` / `ui::menu`); the launcher consumes it through these

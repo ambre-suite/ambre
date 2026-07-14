@@ -17,7 +17,8 @@
 #![cfg(target_arch = "wasm32")]
 
 use ambre_chrome::{
-    AppShell, CommandStates, Header, StatusBar, ToastHost, ToastKind, Toasts, Toolbar,
+    AppShell, CommandStates, Header, PerfChip, PerfDetail, StatusBar, ToastHost, ToastKind, Toasts,
+    Toolbar, ZoomChip,
 };
 use ambre_commands::CommandId;
 use leptos::mount::mount_to;
@@ -146,6 +147,55 @@ fn app_shell_owns_the_named_canvas_cell() {
     let canvas = root.query_selector("#ambre-canvas").unwrap().unwrap();
     assert_eq!(canvas.tag_name(), "CANVAS");
     assert!(root.query_selector(".ambre-statusbar").unwrap().is_some());
+
+    root.remove();
+}
+
+// ── Shared status-bar chips (status.rs) ─────────────────────────────────────
+
+#[wasm_bindgen_test]
+fn zoom_chip_renders_readout_from_signal_and_starts_collapsed() {
+    let owner = Owner::new();
+    owner.set();
+    // The readout mirrors the live factor (1.25 -> "125 %") and the preset menu
+    // is collapsed on mount (only the button shows). Reactive re-render on click
+    // flushes on a later microtask, so a straight-line post-click DOM query would
+    // race; we assert the synchronous initial render only.
+    let zoom = RwSignal::new(1.25_f64);
+    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
+
+    let btn = root.query_selector(".statusbar-zoom-btn").unwrap().unwrap();
+    assert_eq!(btn.text_content().as_deref(), Some("125 %"));
+    assert_eq!(btn.get_attribute("aria-haspopup").as_deref(), Some("menu"));
+    assert!(
+        root.query_selector(".statusbar-zoom-menu")
+            .unwrap()
+            .is_none()
+    );
+
+    root.remove();
+}
+
+#[wasm_bindgen_test]
+fn perf_chip_renders_fps_from_signal_and_starts_collapsed() {
+    let owner = Owner::new();
+    owner.set();
+    // The chip shows the live fps ("58 fps") and the app-supplied detail panel is
+    // collapsed on mount (toggled open on click, an async re-render).
+    let fps = RwSignal::new(58.0_f32);
+    let root = mount_in_container(move || {
+        view! {
+            <PerfChip fps=Signal::derive(move || fps.get())>
+                <PerfDetail slot>
+                    <div class="test-perf-detail">"detail"</div>
+                </PerfDetail>
+            </PerfChip>
+        }
+    });
+
+    let btn = root.query_selector(".statusbar-fps").unwrap().unwrap();
+    assert_eq!(btn.text_content().as_deref(), Some("58 fps"));
+    assert!(root.query_selector(".test-perf-detail").unwrap().is_none());
 
     root.remove();
 }

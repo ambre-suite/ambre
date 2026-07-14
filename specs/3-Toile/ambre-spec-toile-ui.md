@@ -551,7 +551,11 @@ lives in Logic, keyed on change size.
 - [x] Find panel (§5quater). DOM chrome `FindPanel` (find-only) + `ToileCommand::Find` wiring;
   canvas-side highlight of visible hits and camera recenter on `focus` (via a `RequestSelectionStats`
   bounds lookup, since `FindResults` carries no geometry). Host-tested step/index helpers (`ui::find`).
-- [ ] Selection status bar (§8bis)
+- [x] Selection status bar (§8bis). DOM chrome `StatusBar`: selection count + combined world bounds on
+  the left, shared interactive zoom + fps chips on the right, styled identically to Trame's band. The
+  zoom/fps chips and app label are the shared `ambre-chrome` status toolkit (`ZoomChip`/`PerfChip`/
+  `StatusLabel`), reused by both apps. The canvas view re-requests `SelectionStats` on each selection
+  change and clears the band on an empty selection. Host-tested count/bounds formatting (`ui::status`).
 - [ ] Presence overlay wired to `PeerPresence` with cross-app `UserId` colors (§8). The render pass (cursors / labels / laser / halos) is built and wasm-tested now against synthetic `PeerPresence` events; the end-to-end multi-user demo is **blocked on SYNC P4** (`pub_key` -> `UserId` resolution), so remote frames are dropped end-to-end until it lands (`toile-logic §9`).
 - [ ] wasm render / input tests
 
