@@ -147,10 +147,16 @@ rest. The solver is deterministic so all peers derive identical positions from i
 
 ## 3. VECTOR BOOLEAN OPERATIONS
 
-Union / Subtract / Intersect / Exclude over selected `shape:path` (and shape) elements, computed client-side with
-`kurbo` path booleans, producing a **new/edited** `BezPath` element (one `RestyleElements`/geometry command). The
-source elements are deleted or kept per the user's choice. This is a pure geometry transform — no special CRDT
-state; the result is an ordinary element (`toile-logic §2.C`).
+Union / Subtract / Intersect / Exclude over selected `shape:path` (and shape) elements, computed client-side,
+producing a **new** `shape:path` `BezPath` element (one `BooleanOp` command). The source elements are deleted or
+kept per the user's choice (`keep_sources`); when deleted, the whole op is one commit / one undo item. This is a
+pure geometry transform — no special CRDT state; the result is an ordinary element (`toile-logic §2.C`).
+
+`kurbo` (0.13) has **no** path-vs-path boolean ops, so the combinators run on `i_overlay` (pure Rust,
+WASM-friendly): each source outline is flattened to polygon contours, combined with the matching `OverlayRule`
+under the non-zero fill rule, and the result is rebuilt as a line-segment `BezPath`. Trade-off: curves are
+flattened to polylines (acceptable for a whiteboard). `Subtract` treats the first selected element as the subject
+and removes the union of the rest; the other rules fold left to right over the selection.
 
 > Node-level Bezier editing (add/remove/convert nodes, handle drag) is the `toile-ui` Pen tool (`ui §5bis`);
 > this section is only the boolean combinators.
@@ -278,8 +284,8 @@ ReactionsUpdated(TargetId),               // UI re-reads the derived tally
 | Reaction tally derivation | O(board reactions), < 0.1 ms typical | Prefix-scan of the flat `reactions` map on read, never stored (§4.A). Reaction counts are small, so a full-map scan is well within budget. |
 | Boolean op (typical two paths) | < 5 ms, off the render frame | User-initiated, one-shot; may show a brief spinner for huge paths. |
 
-**WASM impact:** feature logic is small (no new heavy crates — reuses `kurbo` booleans, `loro`, `postcard`); the
-presentation camera reuses the `toile-ui` pipeline.
+**WASM impact:** feature logic is small; the only new dependency is `i_overlay` (§3, a light pure-Rust polygon
+boolean crate), on top of `kurbo`, `loro`, `postcard`. The presentation camera reuses the `toile-ui` pipeline.
 
 ---
 
@@ -308,7 +314,7 @@ presentation camera reuses the `toile-ui` pipeline.
 - [x] `smart_animate` pure solver (stable-`ElementId` matching, §1.C) with host tests
 - [x] `solve_layout` pure auto-layout solver with host tests
 - [x] Reactions / votes CRDT keyed by `UserId` (§4.A) + derived read-time tally
-- [ ] Boolean ops (union / subtract / intersect)
+- [x] Boolean ops (union / subtract / intersect)
 - [x] Convergence belt green (concurrent reactions -> one vote per `UserId`, convergent tally, §6)
 
 **Phase 1 - Integration**

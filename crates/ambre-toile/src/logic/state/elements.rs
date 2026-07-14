@@ -244,6 +244,23 @@ impl ToileState {
     }
 
     pub(super) fn delete_elements(&mut self, ids: &[ElementId]) -> ToileOutcome {
+        if !self.delete_from_doc(ids) {
+            return ToileOutcome::display_only(Vec::new());
+        }
+        self.doc.commit();
+
+        self.rematerialize_layers();
+        self.recompute_groups();
+        self.emit_with_update(vec![self.viewport_event()])
+    }
+
+    /// Remove `ids` (and, for groups, their whole subtree) from the CRDT and the
+    /// incremental caches, without committing. Drops group membership, orphaned
+    /// connectors and layer entries, and prunes emptied groups (§2.F bis / §2.H /
+    /// §5.A). Returns whether anything was removed. The caller owns the
+    /// `doc.commit()` so a deletion can share one commit / one undo item with a
+    /// sibling mutation (e.g. a boolean op consuming its sources, §3).
+    pub(super) fn delete_from_doc(&mut self, ids: &[ElementId]) -> bool {
         // Deleting a group cascades to its members (§2.F bis): expand the request
         // to the full subtree of every listed group before removing anything.
         let mut expanded: HashSet<ElementId> = HashSet::new();
@@ -260,7 +277,7 @@ impl ToileState {
             }
         }
         if !removed_any {
-            return ToileOutcome::display_only(Vec::new());
+            return false;
         }
         // Drop any group membership referencing a deleted node (§2.F bis / §2.H).
         for id in &expanded {
@@ -286,11 +303,7 @@ impl ToileState {
         // A group whose members were all deleted is now empty and meaningless;
         // prune it so the incremental caches match a full rebuild (§1).
         self.prune_empty_groups();
-        self.doc.commit();
-
-        self.rematerialize_layers();
-        self.recompute_groups();
-        self.emit_with_update(vec![self.viewport_event()])
+        true
     }
 
     // -- z-order (§2.G) --------------------------------------------------------
