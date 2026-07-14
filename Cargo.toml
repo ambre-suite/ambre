@@ -97,6 +97,10 @@ peniko  = "0.6"
 bytemuck = { version = "1", features = ["derive"] }
 # Path tessellation (phase 1: fill_path / stroke_path)
 lyon = "1"
+# 2D polygon boolean ops (union / subtract / intersect / exclude) for the
+# Toile vector boolean feature (toile-features §3). Pure Rust, WASM-friendly;
+# kurbo has no path-vs-path booleans, so shapes are flattened to polygons here.
+i_overlay = "7.0"
 # Glyph rasterization (phase 2: GlyphAtlas) -- match parley's transitive dep
 swash = "0.2"
 

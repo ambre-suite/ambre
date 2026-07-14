@@ -26,6 +26,11 @@ rstar = { workspace = true }
 # Re-exported by ambre-draw, but named here directly for the Logic-thread engine.
 kurbo = { workspace = true }
 
+# 2D polygon boolean ops (union / subtract / intersect / exclude, toile-features
+# §3). kurbo has no path-vs-path booleans, so shapes are flattened to polygon
+# contours and combined here. Pure Rust, WASM-friendly.
+i_overlay = { workspace = true }
+
 # Compact serialization of the per-element ElementStyle LWW register (§2.E) and
 # the clipboard payload -- consistent with the inter-thread IPC protocol.
 postcard = { workspace = true }

@@ -127,6 +127,18 @@ pub enum ShapeKind {
     Path,
 }
 
+/// Vector boolean rule for [`ToileCommand::BooleanOp`] (toile-features §3), run
+/// over the selected shape / path elements. `Subtract` treats the first element
+/// as the subject and removes the union of the rest; the others fold left to
+/// right over all selected elements.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub enum BoolOp {
+    Union,
+    Subtract,
+    Intersect,
+    Exclude,
+}
+
 impl ElementKind {
     /// The persisted `"type"` tag (§2.B). A shape stores its `ShapeKind`
     /// separately in the payload, so every shape maps to `"shape"` here.
@@ -664,6 +676,20 @@ pub enum ToileCommand {
         reaction: Option<Reaction>,
     },
 
+    // -- Vector boolean ops (§3) --
+    /// Combine the selected shape / path elements with a boolean rule (§3),
+    /// producing one new `shape:path` element whose geometry is the result. The
+    /// inputs are flattened to polygon contours and combined client-side (kurbo
+    /// has no path booleans; see toile-features §3). Needs at least two eligible
+    /// (shape or path) elements; other kinds are ignored. If `keep_sources` is
+    /// false the inputs are deleted in the same commit, so the whole operation is
+    /// one undo item. An empty result (fully cancelled geometry) is a no-op.
+    BooleanOp {
+        op: BoolOp,
+        ids: Vec<ElementId>,
+        keep_sources: bool,
+    },
+
     // -- Undo / redo (local-only, §8 bis) --
     Undo,
     Redo,
@@ -794,6 +820,10 @@ pub enum ToileError {
     NotCreatable { kind: &'static str },
     #[error("InitContent does not match the requested element kind")]
     ContentKindMismatch,
+    #[error("boolean op needs at least two eligible shape / path elements")]
+    BooleanNeedsTwo,
+    #[error("boolean op produced an empty result")]
+    BooleanEmpty,
 }
 
 // =============================================================================

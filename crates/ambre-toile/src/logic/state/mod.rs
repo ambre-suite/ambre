@@ -26,6 +26,7 @@
 //! - [`codec`] -- pure geometry / (de)serialization helpers
 
 mod autolayout;
+mod boolean;
 mod caches;
 mod clipboard;
 mod codec;
@@ -206,6 +207,11 @@ impl ToileState {
             ToileCommand::EditNotes { frame, delta } => self.edit_notes(&frame, &delta),
             ToileCommand::SetAutoLayout { frame, layout } => self.set_auto_layout(&frame, layout),
             ToileCommand::React { target, reaction } => self.react(&target, reaction),
+            ToileCommand::BooleanOp {
+                op,
+                ids,
+                keep_sources,
+            } => self.boolean_op(op, &ids, keep_sources),
             ToileCommand::Undo => self.apply_history(true),
             ToileCommand::Redo => self.apply_history(false),
             ToileCommand::CreateConnector {
