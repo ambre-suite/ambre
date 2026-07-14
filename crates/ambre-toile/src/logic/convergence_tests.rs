@@ -1014,6 +1014,156 @@ fn viewport_culls_offscreen_nodes() {
 }
 
 // -----------------------------------------------------------------------------
+// Presentation: slide sequence CRDT + playback (`toile-features` §1)
+// -----------------------------------------------------------------------------
+
+fn slide_changed(out: &crate::logic::command::ToileOutcome) -> Option<usize> {
+    out.display.iter().find_map(|e| match e {
+        ToileEvent::SlideChanged(i) => Some(*i),
+        _ => None,
+    })
+}
+
+#[test]
+fn set_slide_order_produces_delta_and_is_undoable() {
+    let mut st = ToileState::new();
+    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+
+    let out = st.handle_command(ToileCommand::SetSlideOrder {
+        order: vec![b.clone(), a.clone()],
+    });
+    assert!(
+        out.update.is_some(),
+        "the slide sequence is CRDT and must broadcast a delta"
+    );
+    assert_eq!(st.slide_order(), vec![b.clone(), a.clone()]);
+
+    // The whole reorder collapses under a single undo (§8 bis).
+    st.handle_command(ToileCommand::Undo);
+    assert!(
+        st.slide_order().is_empty(),
+        "one undo reverts the whole slide order"
+    );
+}
+
+#[test]
+fn slide_order_dedups_repeated_frames() {
+    let mut st = ToileState::new();
+    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    st.handle_command(ToileCommand::SetSlideOrder {
+        order: vec![a.clone(), b.clone(), a.clone()],
+    });
+    // The repeated first frame is dropped, keeping first occurrence (§1.A).
+    assert_eq!(st.slide_order(), vec![a, b]);
+}
+
+#[test]
+fn playback_bounds() {
+    let mut st = ToileState::new();
+    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    let c = create_frame(&mut st, Point::new(600.0, 0.0), Size::new(200.0, 200.0));
+    st.handle_command(ToileCommand::SetSlideOrder {
+        order: vec![a, b, c],
+    });
+
+    // Next saturates at the last slide.
+    assert_eq!(
+        slide_changed(&st.handle_command(ToileCommand::NextSlide)),
+        Some(1)
+    );
+    assert_eq!(
+        slide_changed(&st.handle_command(ToileCommand::NextSlide)),
+        Some(2)
+    );
+    assert_eq!(
+        slide_changed(&st.handle_command(ToileCommand::NextSlide)),
+        Some(2),
+        "Next past the last slide stays put"
+    );
+    // Prev saturates at the first slide.
+    st.handle_command(ToileCommand::PrevSlide);
+    st.handle_command(ToileCommand::PrevSlide);
+    assert_eq!(
+        slide_changed(&st.handle_command(ToileCommand::PrevSlide)),
+        Some(0),
+        "Prev before the first slide stays put"
+    );
+    // Goto clamps to the deck length.
+    assert_eq!(
+        slide_changed(&st.handle_command(ToileCommand::GotoSlide(99))),
+        Some(2)
+    );
+}
+
+#[test]
+fn present_mode_toggle_is_local() {
+    let mut st = ToileState::new();
+    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    st.handle_command(ToileCommand::SetSlideOrder { order: vec![a] });
+    st.handle_command(ToileCommand::NextSlide); // cursor is not at 0
+
+    let out = st.handle_command(ToileCommand::EnterPresent { focus: true });
+    assert!(
+        out.update.is_none(),
+        "present mode is local, never a CRDT delta"
+    );
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::PresentModeChanged(true))),
+        "EnterPresent announces present mode"
+    );
+    assert_eq!(
+        slide_changed(&out),
+        Some(0),
+        "EnterPresent resets to slide 0"
+    );
+    assert_eq!(st.playback(), (true, 0, true));
+
+    let out = st.handle_command(ToileCommand::ExitPresent);
+    assert!(out.update.is_none());
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::PresentModeChanged(false)))
+    );
+    assert!(!st.playback().0, "ExitPresent leaves present mode");
+}
+
+#[test]
+fn playback_is_not_synced() {
+    // Two peers sharing a deck: A drives its own playback; B never sees it, since
+    // playback carries no CRDT delta (§1.B).
+    let mut a = ToileState::new();
+    let mut b = ToileState::new();
+    let f0 = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+    let f1 = create_frame(&mut a, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    a.handle_command(ToileCommand::SetSlideOrder {
+        order: vec![f0, f1],
+    });
+    // Bring B fully up to date (frames + sequence) so it shares the deck.
+    b.apply_remote(&a.export_snapshot());
+    assert_eq!(a.slide_order(), b.slide_order(), "the sequence is shared");
+
+    // A enters present mode and steps forward; neither produces a delta to relay.
+    assert!(
+        a.handle_command(ToileCommand::EnterPresent { focus: false })
+            .update
+            .is_none()
+    );
+    assert!(a.handle_command(ToileCommand::NextSlide).update.is_none());
+    assert_eq!(a.playback(), (true, 1, false));
+    assert_eq!(
+        b.playback(),
+        (false, 0, false),
+        "B's playback is untouched by A's presentation"
+    );
+}
+
+// -----------------------------------------------------------------------------
 // 2-peer CRDT convergence property test (DoD)
 // -----------------------------------------------------------------------------
 
@@ -1035,6 +1185,9 @@ enum PeerOp {
     UngroupNth { nth: usize },
     ConnectNth { i: usize, j: usize },
     Stroke { x: f64, y: f64 },
+    // Presentation sequence -- concurrent `LoroMovableList<FrameId>` reorders.
+    CreateFrame { x: f64, y: f64 },
+    SetSlideOrderRot { by: usize },
 }
 
 fn op_strategy() -> impl Strategy<Value = PeerOp> {
@@ -1058,6 +1211,8 @@ fn op_strategy() -> impl Strategy<Value = PeerOp> {
         (0usize..6).prop_map(|nth| PeerOp::UngroupNth { nth }),
         (0usize..6, 0usize..6).prop_map(|(i, j)| PeerOp::ConnectNth { i, j }),
         (-200.0f64..200.0, -200.0f64..200.0).prop_map(|(x, y)| PeerOp::Stroke { x, y }),
+        (-200.0f64..200.0, -200.0f64..200.0).prop_map(|(x, y)| PeerOp::CreateFrame { x, y }),
+        (0usize..6).prop_map(|by| PeerOp::SetSlideOrderRot { by }),
     ]
 }
 
@@ -1157,6 +1312,23 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<Vec<u8>> {
             }),
             _ => return None,
         },
+        PeerOp::CreateFrame { x, y } => st.handle_command(ToileCommand::CreateElement {
+            kind: ElementKind::Frame,
+            at: Point::new(*x, *y),
+            size: Size::new(200.0, 200.0),
+            content: InitContent::None,
+        }),
+        PeerOp::SetSlideOrderRot { by } => {
+            // Rotate the current live-id set to build a permutation, so concurrent
+            // peers set overlapping-but-different slide orders (§1.A convergence).
+            if ids.is_empty() {
+                return None;
+            }
+            let k = by % ids.len();
+            let mut order = ids.clone();
+            order.rotate_left(k);
+            st.handle_command(ToileCommand::SetSlideOrder { order })
+        }
         PeerOp::Stroke { x, y } => st.handle_command(ToileCommand::CommitStroke {
             points: vec![
                 StrokePoint {
@@ -1231,6 +1403,10 @@ proptest! {
 
         // Identical z-order.
         prop_assert_eq!(a.layer_order(), b.layer_order(), "layer order diverged");
+
+        // Identical slide sequence: concurrent `SetSlideOrder` reorders must
+        // converge on the shared `LoroMovableList<FrameId>` (§1.A).
+        prop_assert_eq!(a.slide_order(), b.slide_order(), "slide order diverged");
 
         // Comprehensive check: the full derived paint set (elements + routed
         // connectors + group union bounds) must match under an identical, wide

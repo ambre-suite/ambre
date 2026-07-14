@@ -8,6 +8,6 @@
 //! consumes its value types from `ambre-bus`).
 
 pub use ambre_bus::app::toile::{
-    Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, FontSpec, NodeId, PathType,
-    Shadow, ShapeKind, StrokePoint,
+    Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, FontSpec, FrameId, NodeId,
+    PathType, PlaybackState, Shadow, ShapeKind, StrokePoint, TargetId,
 };
