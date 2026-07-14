@@ -25,6 +25,7 @@ use ambre_draw::{BoundingBox, FontContext, Point, Rect, Vec2};
 
 use super::edit::{EditIntent, InlineEditor};
 use super::hit::hit_topmost;
+use super::presence::PeerCursors;
 use super::render;
 use super::tool::{
     Preview, Tool, ToolMachine, ToolOutcome, is_group, resolve_group_target, world_rect_to_screen,
@@ -199,6 +200,13 @@ pub struct ToileView {
     /// band's count/bounds track every selection change (marquee, click, nudge)
     /// without threading a request through each mutation site.
     last_stats_sel: Vec<ElementId>,
+
+    /// The render-thread mirror of remote peer presence (§8): cursors, selection
+    /// ghosts, live strokes and laser trails, keyed by canonical `UserId`. Fed by
+    /// `ToileEvent::PeerPresence` and painted in the overlay pass. End-to-end
+    /// multi-user is gated on SYNC P4 (the `pub_key` -> `UserId` resolution that
+    /// keys inbound frames); the render pass is exercised against synthetic events.
+    presence: PeerCursors,
 }
 
 impl ToileView {
@@ -283,6 +291,7 @@ impl ToileView {
             quick_fill,
             pending_fit: false,
             last_stats_sel: Vec::new(),
+            presence: PeerCursors::default(),
         }
     }
 
@@ -401,12 +410,15 @@ impl ToileView {
                     self.queue_viewport();
                 }
             }
-            // Phase 0 does not act on these yet (presence lands later);
-            // log the errors, ignore the rest.
+            // Remote presence (§8): fold the peer's latest sample into the render
+            // mirror and mark the overlay dirty so the cursor / ghosts / laser
+            // repaint. Keyed by the sender's canonical `UserId` (spoof-proof, §7).
+            ToileEvent::PeerPresence(update) => {
+                self.presence.update(update.user_id, update.presence);
+                self.data_dirty = true;
+            }
             ToileEvent::Error(e) => tracing::warn!("Toile rejected: {e}"),
-            ToileEvent::DanglingConnector(_)
-            | ToileEvent::PeerPresence(_)
-            | ToileEvent::UndoState { .. } => {}
+            ToileEvent::DanglingConnector(_) | ToileEvent::UndoState { .. } => {}
         }
     }
 
@@ -1285,7 +1297,7 @@ impl ToileView {
         &mut self,
         surface: &mut WgpuSurface<'_>,
         font_cx: &mut FontContext,
-        _text_cache: &mut TextCache,
+        text_cache: &mut TextCache,
         stats: &FrameStats,
     ) {
         render::paint_overlay(
@@ -1298,6 +1310,13 @@ impl ToileView {
             &self.find_hits,
             self.find_focus.as_ref(),
         );
+
+        // Remote presence overlay (§8): cursors, selection ghosts, live strokes
+        // and laser trails, above content, in each peer's cross-app colour.
+        if !self.presence.is_empty() {
+            self.presence
+                .paint(surface, &self.display, &self.cam, font_cx, text_cache);
+        }
 
         // Inline text editor: flush queued intents, draw caret/selection/glyphs,
         // and perform a deferred commit + close (§6). Drawn above content.
@@ -1451,6 +1470,7 @@ impl ToileView {
         self.edit_dirty = false;
         self.edit_pointer_down = false;
         self.machine.cancel();
+        self.presence.clear();
         self.initial_viewport_sent = false;
         self.pending_viewport = None;
         self.needs_full = true;
