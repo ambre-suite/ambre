@@ -309,7 +309,7 @@ presentation camera reuses the `toile-ui` pipeline.
 - [x] `solve_layout` pure auto-layout solver with host tests
 - [x] Reactions / votes CRDT keyed by `UserId` (§4.A) + derived read-time tally
 - [ ] Boolean ops (union / subtract / intersect)
-- [ ] Convergence belt green (concurrent reactions -> one vote per `UserId`, convergent tally, §6)
+- [x] Convergence belt green (concurrent reactions -> one vote per `UserId`, convergent tally, §6)
 
 **Phase 1 - Integration**
 - [ ] Wire playback to the `toile-ui` camera pass
