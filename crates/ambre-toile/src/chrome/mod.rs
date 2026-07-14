@@ -12,6 +12,7 @@
 // ============================================================================
 
 mod find;
+mod floatbar;
 mod menu;
 mod menu_bar;
 mod palette;
@@ -19,6 +20,7 @@ mod status;
 mod style;
 
 pub use find::{FindPanel, FindQuery};
+pub use floatbar::SelectionToolbar;
 pub use menu::context_entries_for;
 pub use menu_bar::TopMenuBar;
 pub use palette::ToolPalette;
@@ -32,6 +34,11 @@ pub use crate::ui::style::StyleModel;
 // The status-bar aggregates model is pure and host-tested in `ui::status`
 // (like `ui::find`); re-export it so the launcher names it through `toile_chrome`.
 pub use crate::ui::status::SelStats;
+
+// The floating selection toolbar's model + quick-fill payload are pure and
+// host-tested in `ui::floatbar` (like `ui::status` / `ui::style`); the launcher
+// names them through `toile_chrome`.
+pub use crate::ui::floatbar::{FloatBar, QuickFill};
 
 // The tool palette's command surface is pure and host-tested in `ui::palette`
 // (like `ui::find` / `ui::menu`); the launcher consumes it through these

@@ -162,6 +162,14 @@ struct Wiring {
     /// Whole-style edit the inspector emits back (`toile-ui §5quinquies.B`): the
     /// canvas view drains it into one `RestyleElements` over the live selection.
     toile_restyle: RwSignal<Option<ambre_bus::app::toile::ElementStyle>>,
+    /// Floating selection toolbar placement + flags (`toile-ui §5quinquies.D`),
+    /// republished every frame by the canvas view so the bar tracks pan/zoom;
+    /// `None` hides it.
+    toile_float_bar: RwSignal<Option<toile_chrome::FloatBar>>,
+    /// Quick-colour pick the floating bar emits back (`toile-ui §5quinquies.D`):
+    /// the canvas view folds it into a fill-only `RestyleElements` over the live
+    /// selection.
+    toile_quick_fill: RwSignal<Option<toile_chrome::QuickFill>>,
     /// Status-bar selection aggregates (`-ui.md` sec.13bis); `None` on a single
     /// cell. Set by the per-frame relay on `TrameEvent::SelectionStats`, cleared
     /// by the canvas view on a single-cell selection.
@@ -378,6 +386,11 @@ pub fn main() {
     // edit from `toile_restyle`, exactly like the context-menu pair above.
     let toile_style_model = RwSignal::new(None::<toile_chrome::StyleModel>);
     let toile_restyle = RwSignal::new(None::<ambre_bus::app::toile::ElementStyle>);
+    // Floating selection toolbar (`toile-ui §5quinquies.D`): the view republishes
+    // its placement into `toile_float_bar` each frame and drains a quick-colour
+    // pick from `toile_quick_fill`, mirroring the inspector's model / restyle pair.
+    let toile_float_bar = RwSignal::new(None::<toile_chrome::FloatBar>);
+    let toile_quick_fill = RwSignal::new(None::<toile_chrome::QuickFill>);
 
     // Design tokens: inject the generated CSS custom properties (theme.css) and
     // boot the dark theme. `theme_ctl` is the single source of truth for the
@@ -530,6 +543,8 @@ pub fn main() {
         toile_active_tool,
         toile_style_model,
         toile_restyle,
+        toile_float_bar,
+        toile_quick_fill,
         sheets,
         active_sheet,
     );
@@ -1086,6 +1101,8 @@ pub fn main() {
                     sel_stats_toile,
                     toile_style_model,
                     toile_restyle,
+                    toile_float_bar,
+                    toile_quick_fill,
                 ))
             } else {
                 AppView::Trame(TrameView::new(
