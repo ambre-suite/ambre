@@ -11,6 +11,7 @@ use proptest::prelude::*;
 
 use ambre_bus::UserId;
 
+use crate::logic::autolayout::{Align, AutoLayout, Direction, Sizing};
 use crate::logic::command::{
     DisplayNode, End, InitContent, PresencePayload, Reaction, ReactionKind, TextDelta,
     ToileCommand, ToileError, ToileEvent, ZTarget,
@@ -1374,6 +1375,139 @@ fn concurrent_notes_edits_converge() {
 }
 
 // -----------------------------------------------------------------------------
+// Auto-layout spec register (toile-features §2 / §5)
+// -----------------------------------------------------------------------------
+
+fn a_layout(direction: Direction, gap: f64) -> AutoLayout {
+    AutoLayout {
+        direction,
+        gap,
+        padding: [4.0, 4.0, 4.0, 4.0],
+        align: Align::Start,
+        sizing: Sizing::Hug,
+    }
+}
+
+#[test]
+fn set_auto_layout_add_change_clear() {
+    let mut st = ToileState::new();
+    let f = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    assert_eq!(st.auto_layout(&f), None, "a fresh frame has no layout spec");
+
+    // Add a spec.
+    let out = st.handle_command(ToileCommand::SetAutoLayout {
+        frame: f.clone(),
+        layout: Some(a_layout(Direction::Horizontal, 8.0)),
+    });
+    assert!(
+        out.update.is_some(),
+        "an auto-layout spec is CRDT and must broadcast"
+    );
+    assert_eq!(
+        st.auto_layout(&f),
+        Some(a_layout(Direction::Horizontal, 8.0))
+    );
+
+    // Change it (LWW register).
+    st.handle_command(ToileCommand::SetAutoLayout {
+        frame: f.clone(),
+        layout: Some(a_layout(Direction::Vertical, 12.0)),
+    });
+    assert_eq!(
+        st.auto_layout(&f),
+        Some(a_layout(Direction::Vertical, 12.0))
+    );
+
+    // One SetAutoLayout is one undo item (§8 bis): undo reverts to the prior spec.
+    st.handle_command(ToileCommand::Undo);
+    assert_eq!(
+        st.auto_layout(&f),
+        Some(a_layout(Direction::Horizontal, 8.0))
+    );
+
+    // Clear it.
+    st.handle_command(ToileCommand::SetAutoLayout {
+        frame: f.clone(),
+        layout: None,
+    });
+    assert_eq!(st.auto_layout(&f), None, "clearing removes the spec");
+
+    // A no-op clear (already absent) broadcasts nothing.
+    let out = st.handle_command(ToileCommand::SetAutoLayout {
+        frame: f.clone(),
+        layout: None,
+    });
+    assert!(out.update.is_none(), "a no-op clear broadcasts nothing");
+}
+
+#[test]
+fn set_auto_layout_rejects_non_frame() {
+    let mut st = ToileState::new();
+    let sticky = create_sticky(&mut st, Point::ZERO, "note");
+    let out = st.handle_command(ToileCommand::SetAutoLayout {
+        frame: sticky.clone(),
+        layout: Some(a_layout(Direction::Horizontal, 8.0)),
+    });
+    assert!(
+        out.update.is_none(),
+        "a rejected SetAutoLayout emits no delta"
+    );
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::Error(ToileError::ContentKindMismatch))),
+        "auto-layout on a non-frame reports a ContentKindMismatch"
+    );
+    assert_eq!(st.auto_layout(&sticky), None);
+
+    // A missing element is likewise a rejected no-op.
+    let out = st.handle_command(ToileCommand::SetAutoLayout {
+        frame: ElementId("ghost".to_owned()),
+        layout: Some(a_layout(Direction::Horizontal, 8.0)),
+    });
+    assert!(out.update.is_none());
+}
+
+#[test]
+fn concurrent_auto_layout_edits_converge() {
+    // Two peers share a frame, then set different auto-layout specs concurrently.
+    // The LWW register must converge: both peers agree on one surviving spec.
+    let mut a = ToileState::new();
+    let mut b = ToileState::new();
+    let f = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+    b.apply_remote(&a.export_snapshot());
+
+    let da = a
+        .handle_command(ToileCommand::SetAutoLayout {
+            frame: f.clone(),
+            layout: Some(a_layout(Direction::Horizontal, 8.0)),
+        })
+        .update
+        .expect("A's layout edit broadcasts a delta");
+    let db = b
+        .handle_command(ToileCommand::SetAutoLayout {
+            frame: f.clone(),
+            layout: Some(a_layout(Direction::Wrap, 16.0)),
+        })
+        .update
+        .expect("B's layout edit broadcasts a delta");
+
+    b.apply_remote(&da);
+    a.apply_remote(&db);
+
+    // LWW convergence: identical surviving spec on both peers.
+    assert_eq!(
+        a.auto_layout(&f),
+        b.auto_layout(&f),
+        "concurrent auto-layout specs diverged"
+    );
+    assert!(
+        a.auto_layout(&f).is_some(),
+        "one spec must survive the merge"
+    );
+}
+
+// -----------------------------------------------------------------------------
 // Reactions / votes (toile-features §4.A / §5)
 // -----------------------------------------------------------------------------
 
@@ -1654,6 +1788,12 @@ enum PeerOp {
     SetSlideOrderRot {
         by: usize,
     },
+    // Auto-layout spec -- concurrent LWW register edits on a shared frame (§2).
+    SetAutoLayoutNth {
+        nth: usize,
+        dir: u8,
+        gap: f64,
+    },
     // Reactions -- concurrent per-user entries on a shared target (§4.A). Each
     // peer holds a distinct `UserId`, so two reactions on one target must both
     // survive and the derived tally must converge.
@@ -1687,6 +1827,11 @@ fn op_strategy() -> impl Strategy<Value = PeerOp> {
         (-200.0f64..200.0, -200.0f64..200.0).prop_map(|(x, y)| PeerOp::Stroke { x, y }),
         (-200.0f64..200.0, -200.0f64..200.0).prop_map(|(x, y)| PeerOp::CreateFrame { x, y }),
         (0usize..6).prop_map(|by| PeerOp::SetSlideOrderRot { by }),
+        (0usize..6, 0u8..3, 0.0f64..24.0).prop_map(|(nth, dir, gap)| PeerOp::SetAutoLayoutNth {
+            nth,
+            dir,
+            gap
+        }),
         (0usize..6, any::<bool>(), -2i32..3).prop_map(|(nth, emoji, weight)| PeerOp::ReactNth {
             nth,
             emoji,
@@ -1808,6 +1953,19 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<Vec<u8>> {
             order.rotate_left(k);
             st.handle_command(ToileCommand::SetSlideOrder { order })
         }
+        PeerOp::SetAutoLayoutNth { nth: n, dir, gap } => match nth(*n) {
+            // A non-frame target is a rejected no-op (filtered by `out.update`),
+            // so this only exercises the register on real frames.
+            Some(id) => {
+                let direction = [Direction::Horizontal, Direction::Vertical, Direction::Wrap]
+                    [(*dir % 3) as usize];
+                st.handle_command(ToileCommand::SetAutoLayout {
+                    frame: id,
+                    layout: Some(a_layout(direction, *gap)),
+                })
+            }
+            None => return None,
+        },
         PeerOp::ReactNth {
             nth: n,
             emoji: is_emoji,
@@ -1912,6 +2070,15 @@ proptest! {
         // Identical slide sequence: concurrent `SetSlideOrder` reorders must
         // converge on the shared `LoroMovableList<FrameId>` (§1.A).
         prop_assert_eq!(a.slide_order(), b.slide_order(), "slide order diverged");
+
+        // Identical auto-layout spec on every surviving element: concurrent
+        // `SetAutoLayout` edits converge on the shared LWW register (§2 / §6).
+        for id in &la {
+            prop_assert_eq!(
+                a.auto_layout(id), b.auto_layout(id),
+                "auto-layout spec diverged for {:?}", id
+            );
+        }
 
         // Identical derived reaction tally on every surviving target: concurrent
         // per-user reactions converge and no vote is double-counted (§4.A / §6).

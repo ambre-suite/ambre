@@ -25,6 +25,7 @@
 //! - [`derive`] -- read-only `DisplayViewport` derivation (§9)
 //! - [`codec`] -- pure geometry / (de)serialization helpers
 
+mod autolayout;
 mod caches;
 mod clipboard;
 mod codec;
@@ -59,6 +60,8 @@ const BOARD: &str = "board";
 const CHILDREN: &str = "children";
 /// Collaborative speaker-notes LoroText key inside a frame element map (§1.D).
 const NOTES: &str = "notes";
+/// Auto-layout spec LWW register key inside a frame element map (§2).
+const AUTOLAYOUT: &str = "autolayout";
 /// Presentation root map key (`toile-features` §1.A).
 const PRESENTATION: &str = "presentation";
 /// Slide sequence movable-list key inside the `presentation` map (§1.A).
@@ -201,6 +204,7 @@ impl ToileState {
             ToileCommand::EnterPresent { focus } => self.enter_present(focus),
             ToileCommand::ExitPresent => self.exit_present(),
             ToileCommand::EditNotes { frame, delta } => self.edit_notes(&frame, &delta),
+            ToileCommand::SetAutoLayout { frame, layout } => self.set_auto_layout(&frame, layout),
             ToileCommand::React { target, reaction } => self.react(&target, reaction),
             ToileCommand::Undo => self.apply_history(true),
             ToileCommand::Redo => self.apply_history(false),

@@ -2,8 +2,9 @@
 //!
 //! A **frame** can carry an [`AutoLayout`] spec so its children are positioned by
 //! this solver rather than by absolute coordinates (the Figma model). The **spec
-//! is CRDT** (shared design intent, stored `payload/"autolayout"`); the **solved
-//! positions are derived, never persisted** -- like connector geometry
+//! is CRDT** (shared design intent, a single LWW register under the frame element
+//! map's `autolayout` key -- see `state::autolayout`); the **solved positions are
+//! derived, never persisted** -- like connector geometry
 //! (`toile-logic §5`). Persisting solved positions is the rejected alternative
 //! (§8): redundant derived state that could desync from the spec.
 //!
@@ -41,50 +42,11 @@
 
 use kurbo::{Rect, Size};
 
-/// Main-axis flow of an [`AutoLayout`] (§2). `Wrap` is a horizontal flow that
-/// breaks into rows when a child would overflow the content box width.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum Direction {
-    Horizontal,
-    Vertical,
-    Wrap,
-}
-
-/// Distribution of children along the main axis within the free space (§2).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum Align {
-    Start,
-    Center,
-    End,
-    SpaceBetween,
-}
-
-/// How a child is sized on the main axis (§2). `Hug` and `Fill` are the Figma
-/// resize modes; from the pure solver's view `Hug` == `Fixed` (the frame rect is
-/// an input, so "hug content" changes nothing about the children).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum Sizing {
-    Hug,
-    Fill,
-    Fixed,
-}
-
-/// Auto-layout spec carried by a frame (§2). Serialized with `postcard` into the
-/// frame element's `payload/"autolayout"` CRDT register (absent = free
-/// positioning).
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct AutoLayout {
-    /// Main-axis flow.
-    pub direction: Direction,
-    /// Space between consecutive children on the main axis.
-    pub gap: f64,
-    /// `[top, right, bottom, left]` inset of the content box inside the frame.
-    pub padding: [f64; 4],
-    /// Main-axis distribution of children in the free space.
-    pub align: Align,
-    /// Main-axis child sizing.
-    pub sizing: Sizing,
-}
+// The auto-layout spec value types (`AutoLayout`, `Direction`, `Align`,
+// `Sizing`) live in `ambre-bus` so `ToileCommand::SetAutoLayout` can carry them
+// across `AppCommand::Toile` without a dependency cycle (mirrors `model.rs`).
+// This module owns the pure `solve_layout` solver over them.
+pub use ambre_bus::app::toile::{Align, AutoLayout, Direction, Sizing};
 
 /// Solve the auto-layout of `frame` for the given `children` sizes (in
 /// `children` order), returning one world-space [`Rect`] per child (§2).

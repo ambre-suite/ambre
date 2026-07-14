@@ -474,6 +474,59 @@ pub struct ReactionTally {
     pub vote_count: u32,
 }
 
+// -----------------------------------------------------------------------------
+// Auto-layout spec (§2) -- the CRDT design intent carried by a frame. The pure
+// `solve_layout` solver that turns this spec + child sizes into positions lives
+// in the engine (`ambre_toile::logic::autolayout`); only the shared value types
+// live here so `SetAutoLayout` can carry them across `AppCommand::Toile`.
+// -----------------------------------------------------------------------------
+
+/// Main-axis flow of an [`AutoLayout`] (§2). `Wrap` is a horizontal flow that
+/// breaks into rows when a child would overflow the content box width.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Direction {
+    Horizontal,
+    Vertical,
+    Wrap,
+}
+
+/// Distribution of children along the main axis within the free space (§2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Align {
+    Start,
+    Center,
+    End,
+    SpaceBetween,
+}
+
+/// How a child is sized on the main axis (§2). `Hug` and `Fill` are the Figma
+/// resize modes; from the pure solver's view `Hug` == `Fixed` (the frame rect is
+/// an input, so "hug content" changes nothing about the children).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Sizing {
+    Hug,
+    Fill,
+    Fixed,
+}
+
+/// Auto-layout spec carried by a frame (§2). Serialized with `postcard` into the
+/// frame element's `autolayout` CRDT register (absent = free positioning). The
+/// spec is shared design intent; the solved positions are derived, never
+/// persisted (§8).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AutoLayout {
+    /// Main-axis flow.
+    pub direction: Direction,
+    /// Space between consecutive children on the main axis.
+    pub gap: f64,
+    /// `[top, right, bottom, left]` inset of the content box inside the frame.
+    pub padding: [f64; 4],
+    /// Main-axis distribution of children in the free space.
+    pub align: Align,
+    /// Main-axis child sizing.
+    pub sizing: Sizing,
+}
+
 /// Per-viewer presentation playback (§1.B). Purely local, momentary-gesture
 /// state: which slide this viewer is on and whether focus (present) mode hides
 /// the chrome. Never a CRDT value and never synced -- only the slide *sequence*
@@ -590,6 +643,14 @@ pub enum ToileCommand {
     EditNotes {
         frame: FrameId,
         delta: TextDelta,
+    },
+    /// Set (or clear, with `None`) a frame's auto-layout spec (§2). The spec is a
+    /// single LWW CRDT register on the frame element; the solved child positions
+    /// are derived on render, never persisted (§8). Convergent and undoable; a
+    /// missing / non-frame id is a rejected no-op.
+    SetAutoLayout {
+        frame: FrameId,
+        layout: Option<AutoLayout>,
     },
 
     // -- Reactions / votes (§4.A) --
