@@ -16,9 +16,13 @@ use leptos::prelude::*;
 use leptos_icons::Icon;
 use wasm_bindgen::JsCast;
 
-use super::color::{color_hex, parse_hex_color};
 use super::commands::CLEAR_FILTER;
 use super::style::StyleState;
+
+// The colour popover now lives in the shared `ambre-chrome` toolkit (promoted so
+// Toile's style inspector reuses the identical control, `toile-ui sec.5quinquies.C`);
+// re-export it here so the `FormatBar` and the borders popover mount it unchanged.
+pub use ambre_chrome::ColorPopover;
 
 // Popover components split by concern; re-globbed so `popovers::*` paths hold.
 mod filter;

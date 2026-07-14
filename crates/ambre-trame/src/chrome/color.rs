@@ -1,25 +1,11 @@
 // ambre-trame/src/chrome/color.rs
 // ============================================================================
-// Shared colour helpers for the formatting controls: conversions between the
-// packed `0xRRGGBB` model and the native `<input type="color">` `"#rrggbb"`
-// string, and the themed "Automatic" / "Transparent" defaults the pickers fall
-// back to so an unset colour shows its real on-screen value. Module-private.
+// Themed colour defaults for the formatting controls: the "Automatic" /
+// "Transparent" fallbacks the shared `ambre_chrome::ColorPopover` shows so an
+// unset colour renders its real on-screen value (theme-aware). The hex <-> packed
+// conversions and the popover itself now live in `ambre-chrome`; only these
+// canvas-themed defaults stay app-side. Module-private.
 // ============================================================================
-
-/// Parse an `<input type="color">` value (`"#rrggbb"`) into a packed `0xRRGGBB`.
-pub(super) fn parse_hex_color(s: &str) -> Option<u32> {
-    let hex = s.strip_prefix('#')?;
-    u32::from_str_radix(hex, 16).ok()
-}
-
-/// Format a packed `0xRRGGBB` colour into an `<input type="color">` value, using
-/// `default` when the cell has no explicit colour (`<input type=color>` cannot be
-/// empty). The default is the themed text / fill colour, so an "Automatic" /
-/// "Transparent" cell shows its real on-screen colour rather than a misleading
-/// black/white -- the picker tracks the active light/dark theme.
-pub(super) fn color_hex(c: Option<u32>, default: u32) -> String {
-    format!("#{:06x}", c.unwrap_or(default))
-}
 
 /// The themed default text colour (matches the canvas `cell_text` token), so the
 /// fg picker, when on "Automatic", shows the colour the glyphs actually render in.

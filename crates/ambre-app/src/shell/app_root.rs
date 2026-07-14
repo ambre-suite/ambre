@@ -45,6 +45,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
         toile_ctx_scope,
         toile_menu_cmd,
         toile_active_tool,
+        toile_style_model,
+        toile_restyle,
         sort_dialog,
         chrome_status,
         sheets,
@@ -786,6 +788,19 @@ pub(crate) fn AppRoot() -> impl IntoView {
         // canvas view publishes each frame.
         {boot_is_toile.then(|| view! {
             <toile_chrome::TopMenuBar zoom=zoom on_command=on_command />
+        })}
+        // Toile style / property inspector (toile-ui §5quinquies.B): a side panel
+        // shown only for a non-empty selection. It reads the common style the canvas
+        // view publishes, reuses `toile_ctx_scope` for the lock buttons and the shared
+        // `on_command` path for z-order / lock, and writes debounced whole-style edits
+        // into `toile_restyle` the view turns into `RestyleElements`.
+        {boot_is_toile.then(|| view! {
+            <toile_chrome::StyleInspector
+                model=toile_style_model
+                scope=toile_ctx_scope
+                on_command=on_command
+                restyle=toile_restyle
+            />
         })}
 
         // Multi-column sort dialog (sec.5.C), opened from "Sort range...".

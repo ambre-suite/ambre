@@ -20,6 +20,7 @@ pub mod menu_bar;
 pub mod palette;
 pub mod render;
 pub mod status;
+pub mod style;
 pub mod tool;
 pub mod view;
 pub mod viewport;

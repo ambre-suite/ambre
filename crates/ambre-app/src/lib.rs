@@ -155,6 +155,13 @@ struct Wiring {
     /// the DOM tool palette and the bare-key tool chords; the canvas view reads it
     /// each frame and applies it. Tool selection is UI-only, canvas-local state.
     toile_active_tool: RwSignal<ambre_toile::ui::Tool>,
+    /// Toile style-inspector model (`toile-ui §5quinquies.B`): the selection's
+    /// common `ElementStyle` + mixed-field mask, published by the canvas view; the
+    /// DOM inspector reads it to render values and mixed-state. `None` hides it.
+    toile_style_model: RwSignal<Option<toile_chrome::StyleModel>>,
+    /// Whole-style edit the inspector emits back (`toile-ui §5quinquies.B`): the
+    /// canvas view drains it into one `RestyleElements` over the live selection.
+    toile_restyle: RwSignal<Option<ambre_bus::app::toile::ElementStyle>>,
     /// Status-bar selection aggregates (`-ui.md` sec.13bis); `None` on a single
     /// cell. Set by the per-frame relay on `TrameEvent::SelectionStats`, cleared
     /// by the canvas view on a single-cell selection.
@@ -366,6 +373,11 @@ pub fn main() {
     // the keyboard tool chords and the canvas view, exactly like the context-menu
     // pair above. Starts on the default tool (Select).
     let toile_active_tool = RwSignal::new(ambre_toile::ui::Tool::default());
+    // Toile style inspector (`toile-ui §5quinquies.B`): the view publishes the
+    // selection's common style into `toile_style_model` and drains a whole-style
+    // edit from `toile_restyle`, exactly like the context-menu pair above.
+    let toile_style_model = RwSignal::new(None::<toile_chrome::StyleModel>);
+    let toile_restyle = RwSignal::new(None::<ambre_bus::app::toile::ElementStyle>);
 
     // Design tokens: inject the generated CSS custom properties (theme.css) and
     // boot the dark theme. `theme_ctl` is the single source of truth for the
@@ -516,6 +528,8 @@ pub fn main() {
         toile_ctx_scope,
         toile_menu_cmd,
         toile_active_tool,
+        toile_style_model,
+        toile_restyle,
         sheets,
         active_sheet,
     );
@@ -1070,6 +1084,8 @@ pub fn main() {
                     toile_active_tool,
                     zoom,
                     sel_stats_toile,
+                    toile_style_model,
+                    toile_restyle,
                 ))
             } else {
                 AppView::Trame(TrameView::new(

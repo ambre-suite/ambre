@@ -26,16 +26,20 @@
 pub use ambre_commands as commands;
 
 mod app_shell;
+mod color;
 mod command;
 mod context_menu;
+mod debounce;
 mod dialog;
 mod shortcut;
 mod status;
 mod toast;
 
 pub use app_shell::{AppShell, FormulaBar, Header, StatusBar, Tabs, Toolbar};
+pub use color::{ColorPopover, color_hex, parse_hex_color};
 pub use command::{CommandStates, keybinding_from_event};
 pub use context_menu::{ContextMenu, MenuEntry};
+pub use debounce::Debouncer;
 pub use dialog::Dialog;
 pub use shortcut::Kbd;
 pub use status::{PerfChip, PerfDetail, StatusLabel, ZOOM_PRESETS, ZoomChip};
