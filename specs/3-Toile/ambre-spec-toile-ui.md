@@ -391,8 +391,10 @@ pass, above all content, never culled out:
 
 - **Cursors:** each peer's pointer with a name label and a stable color. The color and label key off the
   peer's canonical **`UserId`** (resolved from its `pub_key` in `ambre-sync`, `toile-logic §7`), **not**
-  `PeerID`, hashed with the shared cross-app algorithm (`prose-ui::peer_color`) so the same collaborator keeps
-  one color across Prose, Trame and Toile — and a single color even when signed in from two devices.
+  `PeerID`, hashed with the shared cross-app algorithm (`ambre_draw::peer_color`, the render-primitives crate
+  every app's canvas already depends on -- the eventual `prose-ui` home the spec named does not exist yet, and
+  the algorithm belongs in the shared draw layer) so the same collaborator keeps one color across Prose, Trame
+  and Toile — and a single color even when signed in from two devices.
 - **Live strokes:** an in-flight freehand stroke from a remote peer, rendered incrementally from streamed
   `StrokePoint` samples until the peer's `CommitStroke` turns it into a real `"drawing"` element.
 - **Laser pointer / highlighter:** a temporary, fading trail (the brainstorming tool from Toile Todo §2.C) —
@@ -585,7 +587,17 @@ lives in Logic, keyed on change size.
   zoom/fps chips and app label are the shared `ambre-chrome` status toolkit (`ZoomChip`/`PerfChip`/
   `StatusLabel`), reused by both apps. The canvas view re-requests `SelectionStats` on each selection
   change and clears the band on an empty selection. Host-tested count/bounds formatting (`ui::status`).
-- [ ] Presence overlay wired to `PeerPresence` with cross-app `UserId` colors (§8). The render pass (cursors / labels / laser / halos) is built and wasm-tested now against synthetic `PeerPresence` events; the end-to-end multi-user demo is **blocked on SYNC P4** (`pub_key` -> `UserId` resolution), so remote frames are dropped end-to-end until it lands (`toile-logic §9`).
+- [x] Presence overlay wired to `PeerPresence` with cross-app `UserId` colors (§8). `ui::presence::PeerCursors`
+  is the render-thread mirror of every peer's latest presence, fed by `ToileEvent::PeerPresence` (keyed by the
+  spoof-proof canonical `UserId`, §7) and painted in the overlay pass above content: selection ghosts, in-flight
+  live stroke, a recency-faded laser trail (a per-peer ring buffer, decayed by sample age so it needs no wall
+  clock), and the pointer arrow + name chip. Every peer colour comes from the shared cross-app
+  `ambre_draw::peer_color` (a pure hash over the `UserId` seed bytes, so a collaborator keeps one colour across
+  Prose / Trame / Toile). The paint entry point is pure over `DrawSurface`, host-tested against
+  `RecordingSurface` with synthetic `PeerPresence` events (arrow/chip, ghosts of visible ids only, live-stroke
+  polyline, laser accumulate/clear, distinct per-peer colours). The **end-to-end multi-user demo** is still
+  **blocked on SYNC P4** (`pub_key` -> `UserId` resolution): until it lands, no remote frame reaches this thread,
+  so the pass runs against synthetic events only (`toile-logic §9`).
 - [x] wasm render / input tests. `crates/ambre-toile/tests/chrome_ui.rs` (headless Chrome via
   `just test-wasm`) mounts the real DOM chrome and asserts render + input: the selection status band
   (§8bis), the context menu (§5ter) end-to-end (the rows each `CtxScope` renders + a row click firing its

@@ -19,6 +19,7 @@ pub mod hit;
 pub mod menu;
 pub mod menu_bar;
 pub mod palette;
+pub mod presence;
 pub mod render;
 pub mod status;
 pub mod style;

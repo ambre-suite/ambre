@@ -229,19 +229,22 @@ Stories:
   work under `toile-ui §13`.)*
 - `[x]` `CANVAS P1` — `lyon` / `WgpuSurface` vector pipeline (quad + path), `ViewportTransform`, glyph atlas, and
   PDF export via `KrillaSurface` (krilla). The shared canvas foundation the vector tools and the PDF path need.
-- `[~]` `toile-ui §13 Phase 0/1` — `ViewportTransform` / batcher / adaptive grid / hit-testing / Select tool, then
+- `[x]` `toile-ui §13 Phase 0/1` — `ViewportTransform` / batcher / adaptive grid / hit-testing / Select tool, then
   the full tool set (Pen/Shape/Connector/Draw/Sticky/Text), Parley inline editor, shortcuts + OS-clipboard
   mirror, context menu / find panel / status bar, `PeerPresence` overlay with cross-app `UserId` colors,
   wasm render/input tests. *(Phase 0 landed: `ambre-toile/src/ui/` — `ViewportTransform` (pan/zoom, world<->screen),
   the `DisplayViewport` content walk through `DrawSurface` (quad + `lyon` path pipeline on `WgpuSurface`), the
   adaptive magnetic grid, exact geometry hit-testing + marquee, and the Select tool state machine (move/resize/
   rotate/marquee), all host-tested; wired end-to-end as `AppView::Toile(ToileView)` with the six driver methods
-  and launcher routing by `DocType`. Phase 1 landed so far: the full tool set (Pen/Shape/Connector/Draw/Sticky/Text)
-  via `ToolMachine`, host-tested, with live gesture previews and `set_tool` for the chrome palette. Phase 1
-  remaining: the Parley inline editor, keyboard shortcuts + clipboard round-trip, grouping selection-scope,
-  the full editing chrome (tool palette / toolbar, style + property inspector, color picker, content-anchored
-  floating selection toolbar, top menu bar + zoom control -- `toile-ui §5quinquies`), chrome context menu /
-  find panel / status bar, presence overlay, and the wasm render/input tests.)*
+  and launcher routing by `DocType`. Phase 1 landed: the full tool set (Pen/Shape/Connector/Draw/Sticky/Text)
+  via `ToolMachine`, the Parley inline editor, keyboard shortcuts + OS-clipboard round-trip, grouping
+  selection-scope, the full editing chrome (tool palette / toolbar, style + property inspector, shared ARGB
+  color picker, content-anchored floating selection toolbar, top menu bar + zoom control -- `toile-ui
+  §5quinquies`), the chrome context menu / find panel / selection status bar, the `PeerPresence` overlay
+  (`ui::presence::PeerCursors` — cursors / name chips / selection ghosts / live strokes / faded laser trails in
+  the shared cross-app `ambre_draw::peer_color`), and the wasm render/input belt. The end-to-end multi-user
+  presence demo stays gated on SYNC P4 (`pub_key` -> `UserId` resolution), so the overlay runs against synthetic
+  events until it lands.)*
 - `[ ]` `toile-features §9 Phase 0/1` — presentation sequence CRDT + playback machine, speaker notes, Smart Animate
   + auto-layout solvers, reactions/votes CRDT keyed by `UserId` + derived tally, boolean ops; then playback
   wired to the camera pass, presenter overlay, reactions render, "follow presenter" ephemeral broadcast.
