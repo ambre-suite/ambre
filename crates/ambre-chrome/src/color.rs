@@ -239,8 +239,8 @@ mod tests {
 
     #[test]
     fn pack_builds_argb_only_in_alpha_mode() {
-        assert_eq!(pack(0x00ff_00, 0x80, true), 0x8000_ff00);
-        assert_eq!(pack(0x00ff_00, 0x80, false), 0x0000_ff00);
+        assert_eq!(pack(0x00_ff00, 0x80, true), 0x8000_ff00);
+        assert_eq!(pack(0x00_ff00, 0x80, false), 0x0000_ff00);
         // A leaking alpha in the rgb argument is masked off.
         assert_eq!(pack(0xffab_cdef, 0x11, true), 0x11ab_cdef);
     }
