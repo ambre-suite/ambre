@@ -267,6 +267,81 @@ input[type="radio"] {
     color: var(--text);
 }
 
+/* Toile style / property inspector (toile-ui SS5quinquies.B): a floating side
+   panel docked right, shown only for a non-empty selection. Sections stack
+   vertically; the z-order / lock rows reuse `.ambre-commandbar` for their icon
+   buttons, so only the panel frame and the appearance rows are styled here. */
+.ambre-inspector {
+    position: fixed;
+    top: 56px;
+    right: 8px;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 220px;
+    padding: 8px;
+    background: var(--surface, var(--content-bg));
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+    font: 13px Roboto, system-ui, -apple-system, sans-serif;
+    color: var(--text);
+}
+
+.ambre-inspector-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* The z-order / lock sections are command bars, laid out as a horizontal row of
+   icon buttons rather than a stacked column. */
+.ambre-inspector-section.ambre-commandbar {
+    flex-direction: row;
+}
+
+.ambre-inspector-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ambre-inspector-row > label {
+    min-width: 56px;
+    color: var(--text-muted, var(--text));
+}
+
+.ambre-inspector-row input[type="number"] {
+    width: 64px;
+}
+
+.ambre-inspector-row input[type="range"] {
+    flex: 1;
+}
+
+/* The "Mixed" hint shown when a field differs across the selection. */
+.ambre-inspector-mixed {
+    font-size: 11px;
+    font-style: italic;
+    color: var(--text-muted, var(--text));
+    opacity: 0.75;
+}
+
+/* The opacity slider inside the ARGB colour popover (Toile fill / stroke). */
+.ambre-color-popover .opacity {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: var(--text);
+}
+
+.ambre-color-popover .opacity input[type="range"] {
+    flex: 1;
+}
+
 /* Font family / size dropdowns: borderless and blended into the toolbar, theme
    aware (closed control + native option list via color-scheme), with a discreet
    custom caret (BiDownArrowSolid) on the right and left padding so the value is

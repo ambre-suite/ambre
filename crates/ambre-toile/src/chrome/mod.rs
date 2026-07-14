@@ -16,12 +16,18 @@ mod menu;
 mod menu_bar;
 mod palette;
 mod status;
+mod style;
 
 pub use find::{FindPanel, FindQuery};
 pub use menu::context_entries_for;
 pub use menu_bar::TopMenuBar;
 pub use palette::ToolPalette;
 pub use status::StatusBar;
+pub use style::StyleInspector;
+
+// The inspector's pure model is host-tested in `ui::style` (like `ui::status` /
+// `ui::palette`); re-export it so the launcher names it through `toile_chrome`.
+pub use crate::ui::style::StyleModel;
 
 // The status-bar aggregates model is pure and host-tested in `ui::status`
 // (like `ui::find`); re-export it so the launcher names it through `toile_chrome`.

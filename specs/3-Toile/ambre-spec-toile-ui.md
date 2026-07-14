@@ -534,8 +534,20 @@ lives in Logic, keyed on change size.
   view applies each frame. The active tool is UI-only, canvas-local state (§11bis), so it is not a
   `ToileCommand`; the pure command surface (ids, chords, id->Tool map, focus guard) lives in the
   host-tested `ui::palette`.
-- [ ] Style / property inspector -> debounced `RestyleElements` + z-order / lock (§5quinquies.B)
-- [ ] Color picker popover (ARGB, shared by inspector + text runs) (§5quinquies.C)
+- [x] Style / property inspector -> debounced `RestyleElements` + z-order / lock (§5quinquies.B).
+  DOM side panel `StyleInspector` (`chrome::style`), shown only for a non-empty selection. It edits
+  fill / stroke / stroke width / opacity of the selected elements' `ElementStyle`; edits are coalesced
+  by a shared `ambre_chrome::Debouncer` and written whole (§2.E) into a `RwSignal<Option<ElementStyle>>`
+  the canvas view drains into one `RestyleElements { ids: selection, style }` (the view attaches the
+  UI-only selection). Z-order (Bring to Front / Forward / Backward / Send to Back) and Lock / Unlock
+  reuse the existing menu `CommandId`s through the shared `on_command` channel, mirroring the context
+  menu (§5ter). The selection's common style + per-field "mixed" mask is a pure, host-tested surface
+  (`ui::style::style_scope_for`) the view publishes alongside the context-menu scope.
+- [~] Color picker popover (ARGB, shared by inspector + text runs) (§5quinquies.C). The shared control
+  is delivered: `ambre_chrome::ColorPopover` (promoted from Trame's cell fg/bg picker) now takes an
+  `alpha` flag and, in ARGB mode, adds an opacity slider; Trame's `FormatBar` and the Toile inspector
+  both consume it. The **text-run** consumer is still pending: rich text runs (§6) are unimplemented and
+  `FontSpec` carries no colour field yet, so there is no run colour to bind. Re-tick fully with §6.
 - [ ] Content-anchored floating selection toolbar, transform-synced each frame (§5quinquies.D)
 - [x] Top menu bar + zoom control (Fit / Zoom-to-selection) (§5quinquies.E). DOM chrome
   `TopMenuBar` (`chrome::menu_bar`): the File/Edit/View/Object/Present menus render through the

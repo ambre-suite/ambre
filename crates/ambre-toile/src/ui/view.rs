@@ -162,6 +162,18 @@ pub struct ToileView {
     /// `SelectionStats` reply. Leptos signal, so wasm-only.
     #[cfg(target_arch = "wasm32")]
     sel_stats: RwSignal<Option<super::status::SelStats>>,
+    /// The selection's common style published to the DOM style inspector
+    /// (§5quinquies.B): the view derives it from its selection x last display and
+    /// writes it (alongside `ctx_scope`); the inspector reads it to show values and
+    /// mixed-state. `None` hides the panel. Leptos signal, so wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    style_model: RwSignal<Option<super::style::StyleModel>>,
+    /// A whole `ElementStyle` the inspector emits back (§5quinquies.B): drained in
+    /// `update` and turned into one `RestyleElements` over the live selection (the
+    /// register is written whole, §2.E; the view attaches the ids the DOM lacks).
+    /// Wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    restyle: RwSignal<Option<ambre_bus::app::toile::ElementStyle>>,
 
     /// Set while a Fit / Zoom-to-selection awaits the `SelectionStats` reply whose
     /// bounds it will frame (§5quinquies.E). The reply treats both the same way
@@ -193,6 +205,10 @@ impl ToileView {
         #[cfg(target_arch = "wasm32")] active_tool: RwSignal<Tool>,
         #[cfg(target_arch = "wasm32")] zoom: RwSignal<f64>,
         #[cfg(target_arch = "wasm32")] sel_stats: RwSignal<Option<super::status::SelStats>>,
+        #[cfg(target_arch = "wasm32")] style_model: RwSignal<Option<super::style::StyleModel>>,
+        #[cfg(target_arch = "wasm32")] restyle: RwSignal<
+            Option<ambre_bus::app::toile::ElementStyle>,
+        >,
     ) -> Self {
         text_input.focus();
         let theme = theme_ctl.get();
@@ -243,6 +259,10 @@ impl ToileView {
             zoom,
             #[cfg(target_arch = "wasm32")]
             sel_stats,
+            #[cfg(target_arch = "wasm32")]
+            style_model,
+            #[cfg(target_arch = "wasm32")]
+            restyle,
             pending_fit: false,
             last_stats_sel: Vec::new(),
         }
@@ -468,6 +488,12 @@ impl ToileView {
         let scope =
             super::menu::ctx_scope_for(&self.selection, self.group_scope.as_ref(), &self.display);
         self.ctx_scope.set(scope);
+        // The style inspector shares the same publish point (§5quinquies.B): both
+        // are pure functions of the selection x the current display.
+        self.style_model.set(super::style::style_scope_for(
+            &self.selection,
+            &self.display,
+        ));
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn publish_ctx_scope(&self) {}
@@ -493,6 +519,28 @@ impl ToileView {
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn drain_menu_cmd(&mut self) {}
+
+    /// Drain a whole-style edit the inspector emitted and apply it to the live
+    /// selection as one `RestyleElements` (§5quinquies.B / §2.E). The DOM inspector
+    /// cannot name the selection, so the view attaches it here. Wasm-only; a host
+    /// no-op keeps `update` cfg-agnostic.
+    #[cfg(target_arch = "wasm32")]
+    fn drain_restyle(&mut self) {
+        let Some(style) = self.restyle.get_untracked() else {
+            return;
+        };
+        self.restyle.set(None);
+        if self.selection.is_empty() {
+            return;
+        }
+        self.send_edit(ToileCommand::RestyleElements {
+            ids: self.selection.clone(),
+            style,
+        });
+        self.needs_full = true;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn drain_restyle(&mut self) {}
 
     /// Apply the tool the DOM palette / keyboard selected (§5quinquies.A): if the
     /// shared signal differs from the machine's current tool, switch (which cancels
@@ -1046,6 +1094,9 @@ impl ToileView {
 
         // Apply any context-menu command the shell forwarded this frame (§5ter).
         self.drain_menu_cmd();
+
+        // Apply any style edit the inspector emitted this frame (§5quinquies.B).
+        self.drain_restyle();
 
         // Apply the tool the DOM palette / keyboard selected this frame (§5quinquies.A).
         self.apply_active_tool();

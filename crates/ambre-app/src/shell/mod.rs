@@ -56,6 +56,8 @@ pub(crate) fn mount_shell(
     toile_ctx_scope: RwSignal<ambre_toile::ui::menu::CtxScope>,
     toile_menu_cmd: RwSignal<Option<ambre_chrome::commands::CommandId>>,
     toile_active_tool: RwSignal<ambre_toile::ui::Tool>,
+    toile_style_model: RwSignal<Option<toile_chrome::StyleModel>>,
+    toile_restyle: RwSignal<Option<ambre_bus::app::toile::ElementStyle>>,
     sheets: RwSignal<Vec<(String, String)>>,
     active_sheet: RwSignal<String>,
 ) {
@@ -144,6 +146,8 @@ pub(crate) fn mount_shell(
             toile_ctx_scope,
             toile_menu_cmd,
             toile_active_tool,
+            toile_style_model,
+            toile_restyle,
             sort_dialog,
             chrome_status,
             sheets,
