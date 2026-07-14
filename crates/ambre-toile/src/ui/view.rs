@@ -418,6 +418,10 @@ impl ToileView {
                 self.data_dirty = true;
             }
             ToileEvent::Error(e) => tracing::warn!("Toile rejected: {e}"),
+            // Presentation playback (`toile-features` §5): the camera-pass wiring
+            // that fits the active frame / toggles chrome is Phase 1, so the view
+            // has nothing to do with these yet.
+            ToileEvent::SlideChanged(_) | ToileEvent::PresentModeChanged(_) => {}
             ToileEvent::DanglingConnector(_) | ToileEvent::UndoState { .. } => {}
         }
     }

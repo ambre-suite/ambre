@@ -18,6 +18,7 @@
 //! `super::`):
 //! - [`elements`] -- element / stroke lifecycle and z-order (§8, §4, §2.G)
 //! - [`groups`] -- grouping, frame membership, the group/frame tree (§2.F)
+//! - [`presentation`] -- slide sequence CRDT + local playback (`toile-features` §1)
 //! - [`connectors`] -- connector lifecycle and queries (§5)
 //! - [`clipboard`] -- copy / paste / duplicate (§8 ter)
 //! - [`caches`] -- derived `bounds` / index / `layers` maintenance (§1)
@@ -33,6 +34,7 @@ mod elements;
 mod find;
 mod groups;
 mod presence;
+mod presentation;
 
 use std::collections::HashMap;
 
@@ -45,7 +47,7 @@ use crate::logic::command::{
     PresencePayload, SelectionStats, ToileCommand, ToileError, ToileEvent, ToileOutcome,
 };
 use crate::logic::index::{SpatialIndex, Viewport};
-use crate::logic::model::{ConnectorId, ElementId, NodeId};
+use crate::logic::model::{ConnectorId, ElementId, NodeId, PlaybackState};
 
 // Root container names (§2.B).
 const ELEMENTS: &str = "elements";
@@ -54,6 +56,12 @@ const LAYERS: &str = "layers";
 const BOARD: &str = "board";
 /// Per-group / per-frame membership list key inside an element map (§2.F bis).
 const CHILDREN: &str = "children";
+/// Presentation root map key (`toile-features` §1.A).
+const PRESENTATION: &str = "presentation";
+/// Slide sequence movable-list key inside the `presentation` map (§1.A).
+const ORDER: &str = "order";
+/// Presentation config map key inside the `presentation` map (§1.A).
+const CONFIG: &str = "config";
 
 /// Per-document Toile engine.
 pub struct ToileState {
@@ -86,6 +94,13 @@ pub struct ToileState {
     /// persisted, rebuilt from inbound frames. The local peer's own presence is
     /// not stored here (the UI draws its own cursor).
     presence: HashMap<UserId, PresencePayload>,
+    /// Presentation (focus) mode toggle (`toile-features` §1.B). Local/per-viewer,
+    /// never in Loro and never synced -- only the slide sequence is shared.
+    present: bool,
+    /// Local playback cursor + focus flag (§1.B). Momentary-gesture state, like
+    /// [`present`](Self::present); reset on `EnterPresent`, clamped by
+    /// `SetSlideOrder`.
+    playback: PlaybackState,
 }
 
 impl Default for ToileState {
@@ -119,6 +134,8 @@ impl ToileState {
             undo,
             my_user_id: None,
             presence: HashMap::new(),
+            present: false,
+            playback: PlaybackState::default(),
         }
     }
 
@@ -172,6 +189,12 @@ impl ToileState {
             ToileCommand::SetFrameChildren { frame, add, remove } => {
                 self.set_frame_children(&frame, &add, &remove)
             }
+            ToileCommand::SetSlideOrder { order } => self.set_slide_order(&order),
+            ToileCommand::NextSlide => self.next_slide(),
+            ToileCommand::PrevSlide => self.prev_slide(),
+            ToileCommand::GotoSlide(idx) => self.goto_slide(idx),
+            ToileCommand::EnterPresent { focus } => self.enter_present(focus),
+            ToileCommand::ExitPresent => self.exit_present(),
             ToileCommand::Undo => self.apply_history(true),
             ToileCommand::Redo => self.apply_history(false),
             ToileCommand::CreateConnector {

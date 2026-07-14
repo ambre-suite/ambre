@@ -36,6 +36,15 @@ pub struct ElementId(pub String);
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct ConnectorId(pub String);
 
+/// A frame's identity in a presentation sequence (§5). A frame is an ordinary
+/// element (`type = "frame"`), so this is a plain [`ElementId`] alias -- a
+/// naming aid at call sites, not a distinct type.
+pub type FrameId = ElementId;
+
+/// The element an auto-layout / boolean / reaction command targets (§5). Aliased
+/// to [`ElementId`] for the same reason as [`FrameId`].
+pub type TargetId = ElementId;
+
 impl ElementId {
     /// Mint from the document `PeerID` and a per-session monotonic counter.
     pub fn mint(peer: u64, counter: u32) -> Self {
@@ -422,6 +431,19 @@ pub struct FindResults {
     pub focus: Option<ElementId>,
 }
 
+/// Per-viewer presentation playback (§1.B). Purely local, momentary-gesture
+/// state: which slide this viewer is on and whether focus (present) mode hides
+/// the chrome. Never a CRDT value and never synced -- only the slide *sequence*
+/// (which frames, in what order) is shared (§0/§1). Mirrors the durable-intent
+/// vs momentary-gesture split already used for presence (`toile-logic §7`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PlaybackState {
+    /// Index into the shared slide `order`; clamped to the deck length.
+    pub active: usize,
+    /// Focus (present) mode: the UI hides its chrome and fits the active frame.
+    pub focus: bool,
+}
+
 /// Command from the UI / Logic thread to `ToileState` (in `ambre-toile`).
 #[derive(Clone, Debug)]
 pub enum ToileCommand {
@@ -495,6 +517,29 @@ pub enum ToileCommand {
         add: Vec<ElementId>,
         remove: Vec<ElementId>,
     },
+
+    // -- Presentation (§1 / §5) --
+    /// Set the shared slide sequence: the frames, in playback order (§1.A). CRDT
+    /// (a `LoroMovableList<FrameId>`), convergent and undoable (§8 bis). Repeated
+    /// ids are de-duplicated; a dangling FrameId is skipped at derivation like a
+    /// dangling connector (§5.A), so no frame-existence check happens here.
+    SetSlideOrder {
+        order: Vec<FrameId>,
+    },
+    /// Step the local playback cursor to the next / previous slide, saturating at
+    /// the deck bounds (§1.B). Local only -- no CRDT delta, not an undo item.
+    NextSlide,
+    PrevSlide,
+    /// Jump the local playback cursor to `0`-based slide index, clamped to the
+    /// deck length (§1.B). Local only.
+    GotoSlide(usize),
+    /// Enter presentation (focus) mode, resetting the cursor to the first slide;
+    /// `focus` drives whether the UI hides its chrome (§1.B). Local only.
+    EnterPresent {
+        focus: bool,
+    },
+    /// Leave presentation mode (§1.B). Local only.
+    ExitPresent,
 
     // -- Undo / redo (local-only, §8 bis) --
     Undo,
@@ -659,6 +704,12 @@ pub enum ToileEvent {
         can_undo: bool,
         can_redo: bool,
     },
+    /// The local playback cursor moved to this `0`-based slide index (§5). Local
+    /// view state: emitted by the playback commands, never crosses the wire.
+    SlideChanged(usize),
+    /// Presentation (focus) mode was entered (`true`) or left (`false`) (§5).
+    /// Local view state, like [`SlideChanged`](Self::SlideChanged).
+    PresentModeChanged(bool),
     Error(ToileError),
 }
 
