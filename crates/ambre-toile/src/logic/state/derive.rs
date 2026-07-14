@@ -9,6 +9,7 @@ use std::collections::HashSet;
 use kurbo::{Affine, BezPath, Rect};
 use loro::LoroMap;
 
+use crate::logic::animate::{FrameSnapshot, SnapElement};
 use crate::logic::command::{
     DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ToileEvent,
 };
@@ -50,6 +51,47 @@ impl ToileState {
             viewport: self.viewport,
             nodes,
         }
+    }
+
+    /// Capture a frame's animatable set as a [`FrameSnapshot`] for Smart Animate
+    /// (`toile-features` §1.C). The elements are the frame's **declared**
+    /// `children` (membership is explicit, not spatial), each carrying the
+    /// unrotated element rect, its rotation and style opacity / fill the solver
+    /// interpolates. The rect is the raw `x/y/w/h` (not the rotation-expanded
+    /// `bounds` cache) with rotation kept separate, mirroring
+    /// [`display_element`](Self::display_element) so the tween matches what the
+    /// renderer paints. A child whose element map is gone is skipped. Read-only:
+    /// this derives the two snapshots the camera pass feeds to `smart_animate`.
+    pub fn frame_snapshot(&self, frame: &ElementId) -> FrameSnapshot {
+        let elements = self
+            .children_of(frame)
+            .into_iter()
+            .filter_map(|id| {
+                let em = self.element_map(&id)?;
+                let style = ElementStyle::from_bytes(&bin_of(&em, "style"));
+                // A group carries no stored geometry: its rect is the derived
+                // member-union AABB (§2.F bis), read from the bounds cache.
+                let bounds = if str_of(&em, "type") == "group" {
+                    self.bounds.get(&id).copied().unwrap_or_default()
+                } else {
+                    let (x, y, w, h) = (
+                        f64_of(&em, "x"),
+                        f64_of(&em, "y"),
+                        f64_of(&em, "w"),
+                        f64_of(&em, "h"),
+                    );
+                    Rect::new(x, y, x + w, y + h)
+                };
+                Some(SnapElement {
+                    id,
+                    bounds,
+                    rotation: f64_of(&em, "rot"),
+                    opacity: style.opacity,
+                    fill: style.fill,
+                })
+            })
+            .collect();
+        FrameSnapshot { elements }
     }
 
     fn display_element(&self, id: &ElementId) -> Option<DisplayElement> {

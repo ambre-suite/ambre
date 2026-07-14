@@ -682,6 +682,67 @@ fn set_frame_children_is_one_undo_item() {
 }
 
 // -----------------------------------------------------------------------------
+// Smart Animate snapshot derivation (`toile-features` §1.C)
+// -----------------------------------------------------------------------------
+
+#[test]
+fn frame_snapshot_captures_declared_children_props() {
+    use crate::logic::animate::smart_animate;
+
+    let mut st = ToileState::new();
+    let f = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let a = create_rect(&mut st, Point::new(10.0, 20.0), Size::new(30.0, 40.0));
+    let b = create_rect(&mut st, Point::new(60.0, 10.0), Size::new(10.0, 10.0));
+
+    // Give `a` a distinctive style + rotation so the snapshot picks them up.
+    let style = ElementStyle {
+        fill: Some(0xFF12_3456),
+        opacity: 0.5,
+        ..ElementStyle::default()
+    };
+    st.handle_command(ToileCommand::RestyleElements {
+        ids: vec![a.clone()],
+        style,
+    });
+    st.handle_command(ToileCommand::RotateElement {
+        id: a.clone(),
+        radians: 1.0,
+    });
+
+    st.handle_command(ToileCommand::SetFrameChildren {
+        frame: f.clone(),
+        add: vec![a.clone(), b.clone()],
+        remove: vec![],
+    });
+
+    let snap = st.frame_snapshot(&f);
+    // Membership is the declared `children`, in order.
+    assert_eq!(
+        snap.elements
+            .iter()
+            .map(|e| e.id.clone())
+            .collect::<Vec<_>>(),
+        vec![a.clone(), b.clone()]
+    );
+    let sa = snap.by_id(&a).expect("a captured");
+    assert_eq!(sa.bounds, Rect::new(10.0, 20.0, 40.0, 60.0));
+    assert_eq!(sa.rotation, 1.0);
+    assert_eq!(sa.opacity, 0.5);
+    assert_eq!(sa.fill, Some(0xFF12_3456));
+
+    // A frame with no children yields an empty snapshot; a transition between an
+    // empty and the populated frame fades every child in (endpoint sanity).
+    let empty = st.frame_snapshot(&b); // b is a plain rect, no children
+    assert!(empty.elements.is_empty());
+    let anim = smart_animate(&empty, &snap, 1.0);
+    assert_eq!(anim.len(), 2);
+    assert!(
+        anim.iter()
+            .any(|e| e.id == a && (e.opacity - 0.5).abs() < 1e-6)
+    );
+}
+
+// -----------------------------------------------------------------------------
 // Clipboard: copy / paste / duplicate (§8 ter)
 // -----------------------------------------------------------------------------
 
