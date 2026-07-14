@@ -12,6 +12,8 @@
 // the Logic thread (§11bis).
 // ============================================================================
 
+use std::collections::HashMap;
+
 use ambre_bus::app::toile::{
     ClipboardPayload as ToileClipboardPayload, DisplayElement, DisplayGeom, DisplayNode,
     DisplayViewport, ElementId, ElementKind, ToileCommand, ToileEvent, Viewport,
@@ -23,9 +25,12 @@ use ambre_canvas::{
 };
 use ambre_draw::{BoundingBox, FontContext, Point, Rect, Vec2};
 
+use crate::logic::animate::AnimatedElement;
+
 use super::edit::{EditIntent, InlineEditor};
 use super::hit::hit_topmost;
 use super::presence::PeerCursors;
+use super::present::{DEFAULT_TRANSITION_MS, Transition};
 use super::render;
 use super::tool::{
     Preview, Tool, ToolMachine, ToolOutcome, is_group, resolve_group_target, world_rect_to_screen,
@@ -207,6 +212,21 @@ pub struct ToileView {
     /// multi-user is gated on SYNC P4 (the `pub_key` -> `UserId` resolution that
     /// keys inbound frames); the render pass is exercised against synthetic events.
     presence: PeerCursors,
+
+    /// Presentation focus mode (`toile-features` §1.D): driven by
+    /// `PresentModeChanged`, it makes the content pass hide the board grid so the
+    /// audience sees only the slide. Pure-UI, never synced.
+    present: bool,
+    /// The in-flight slide transition (§1.C / §1.D), built on a `SlideChanged`
+    /// event and advanced each `plan_repaint` until done: it glides the camera to
+    /// the active frame and drives the Smart Animate content overrides. `None`
+    /// when the deck is idle.
+    transition: Option<Transition>,
+    /// Smart Animate overrides to paint this frame, keyed by element id, rebuilt
+    /// from the active `transition` each frame and cleared when it completes. The
+    /// content pass looks each element up here before falling back to its static
+    /// display (§1.C).
+    anim_overrides: HashMap<ElementId, AnimatedElement>,
 }
 
 impl ToileView {
@@ -292,6 +312,9 @@ impl ToileView {
             pending_fit: false,
             last_stats_sel: Vec::new(),
             presence: PeerCursors::default(),
+            present: false,
+            transition: None,
+            anim_overrides: HashMap::new(),
         }
     }
 
@@ -418,10 +441,38 @@ impl ToileView {
                 self.data_dirty = true;
             }
             ToileEvent::Error(e) => tracing::warn!("Toile rejected: {e}"),
-            // Presentation playback (`toile-features` §5): the camera-pass wiring
-            // that fits the active frame / toggles chrome is Phase 1, so the view
-            // has nothing to do with these yet.
-            ToileEvent::SlideChanged(_) | ToileEvent::PresentModeChanged(_) => {}
+            // A slide change (§1.C / §1.D): start a transition that glides the
+            // camera to the active frame and Smart Animates its content. The
+            // camera target is the fitted frame rect; a slide with no resolvable
+            // frame keeps the camera where it is (index-only move). Advanced each
+            // `plan_repaint` against the frame clock.
+            ToileEvent::SlideChanged(change) => {
+                let cam_from = self.cam;
+                let (to_center, to_zoom) = change
+                    .to_rect
+                    .and_then(|r| self.cam.fit_target(r, super::viewport::FIT_PAD))
+                    .unwrap_or((self.cam.center, self.cam.zoom));
+                self.transition = Some(Transition::new(
+                    cam_from,
+                    to_center,
+                    to_zoom,
+                    change.from,
+                    change.to,
+                    DEFAULT_TRANSITION_MS,
+                ));
+                self.needs_full = true;
+            }
+            // Present (focus) mode toggled (§1.D): the content pass hides the grid
+            // while `present`. Leaving it drops any in-flight transition so the
+            // board returns to its plain camera + full-opacity content.
+            ToileEvent::PresentModeChanged(present) => {
+                self.present = present;
+                if !present {
+                    self.transition = None;
+                    self.anim_overrides.clear();
+                }
+                self.needs_full = true;
+            }
             // Reaction rendering (the tally badge overlay) is Phase 1
             // ("Reactions render"); the derived tally is read on repaint, so the
             // view has nothing to do with this notification yet (§4.A).
@@ -1231,7 +1282,28 @@ impl ToileView {
         }
     }
 
-    pub fn plan_repaint(&mut self, hud_tick: bool) -> RepaintPlan {
+    pub fn plan_repaint(&mut self, now_ms: f64, hud_tick: bool) -> RepaintPlan {
+        // Advance an in-flight presentation transition (§1.C / §1.D): glide the
+        // camera and rebuild the Smart Animate overrides from the frame clock,
+        // until it completes. Each active frame is a full repaint (the camera and
+        // content both change) and re-culls (`queue_viewport`) so elements entering
+        // the fitted frame are painted.
+        if self.transition.is_some() {
+            let frame = self.transition.as_mut().unwrap().advance(now_ms);
+            self.cam = frame.cam;
+            self.anim_overrides = frame
+                .overrides
+                .into_iter()
+                .map(|a| (a.id.clone(), a))
+                .collect();
+            self.needs_full = true;
+            self.queue_viewport();
+            if frame.done {
+                self.transition = None;
+                self.anim_overrides.clear();
+            }
+        }
+
         // Keep the status-bar aggregates (§8bis) in step with the selection: on a
         // change, ask Logic for the fresh count/bounds (the reply is mirrored into
         // the band's signal by the shell; this view ignores it unless a Fit /
@@ -1298,6 +1370,8 @@ impl ToileView {
             font_cx,
             text_cache,
             self.editor.as_ref().map(|e| e.id()),
+            &self.anim_overrides,
+            self.present,
         );
     }
 
@@ -1479,6 +1553,9 @@ impl ToileView {
         self.edit_pointer_down = false;
         self.machine.cancel();
         self.presence.clear();
+        self.present = false;
+        self.transition = None;
+        self.anim_overrides.clear();
         self.initial_viewport_sent = false;
         self.pending_viewport = None;
         self.needs_full = true;

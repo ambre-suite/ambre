@@ -111,15 +111,45 @@ impl ViewportTransform {
     /// `MAX_ZOOM`. `pad_frac` grows the target extent so the content occupies
     /// `1 / (1 + pad_frac)` of the axis.
     pub fn fit_bounds(&mut self, world: Rect, pad_frac: f64) {
+        if let Some((center, zoom)) = self.fit_target(world, pad_frac) {
+            self.center = center;
+            self.zoom = zoom;
+        }
+    }
+
+    /// The `(center, zoom)` a [`fit_bounds`](Self::fit_bounds) would settle on,
+    /// without mutating the camera: the pure fit solver. `None` for a zero-area
+    /// or non-finite rect (nothing to frame). Shared by the instant Fit and by
+    /// the presentation camera glide, which lerps toward this target (§1.D).
+    pub fn fit_target(&self, world: Rect, pad_frac: f64) -> Option<(Point, f64)> {
         let (bw, bh) = (world.width(), world.height());
         if !(bw.is_finite() && bh.is_finite()) || bw <= 0.0 || bh <= 0.0 {
-            return;
+            return None;
         }
         let pad = 1.0 + pad_frac.max(0.0);
         let fit_x = self.size.width / (bw * pad);
         let fit_y = self.size.height / (bh * pad);
-        self.zoom = Self::clamp_zoom(fit_x.min(fit_y));
-        self.center = world.center();
+        Some((world.center(), Self::clamp_zoom(fit_x.min(fit_y))))
+    }
+
+    /// Interpolate the camera from `from` toward a target center + zoom at phase
+    /// `t` (already eased), keeping the current `size` (the presentation glide,
+    /// §1.D). `t = 0` reproduces `from`, `t = 1` lands exactly on the target.
+    /// Pure -- host-tested; the caller assigns the result to `self`.
+    pub fn glide(
+        from: ViewportTransform,
+        to_center: Point,
+        to_zoom: f64,
+        t: f64,
+    ) -> ViewportTransform {
+        ViewportTransform {
+            center: Point::new(
+                from.center.x + (to_center.x - from.center.x) * t,
+                from.center.y + (to_center.y - from.center.y) * t,
+            ),
+            zoom: from.zoom + (to_zoom - from.zoom) * t,
+            size: from.size,
+        }
     }
 
     /// Pan the camera by a screen-space delta (a drag of `delta` physical pixels
@@ -264,6 +294,48 @@ mod tests {
         let before = vt;
         vt.fit_bounds(Rect::new(5.0, 5.0, 5.0, 5.0), FIT_PAD); // zero area
         assert_eq!(vt, before);
+    }
+
+    #[test]
+    fn fit_target_matches_fit_bounds() {
+        let vt = ViewportTransform::new(1000.0, 800.0);
+        let world = Rect::new(50.0, 10.0, 250.0, 110.0);
+        let (center, zoom) = vt.fit_target(world, FIT_PAD).unwrap();
+        // The pure solver returns exactly what the in-place fit settles on.
+        let mut moved = vt;
+        moved.fit_bounds(world, FIT_PAD);
+        assert!(approx(center, moved.center));
+        assert!((zoom - moved.zoom).abs() < 1e-9);
+        // A zero-area rect yields no target.
+        assert!(
+            vt.fit_target(Rect::new(5.0, 5.0, 5.0, 5.0), FIT_PAD)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn glide_interpolates_center_and_zoom() {
+        let from = ViewportTransform {
+            center: Point::new(0.0, 0.0),
+            zoom: 1.0,
+            size: Size::new(1000.0, 800.0),
+        };
+        let to_center = Point::new(100.0, 200.0);
+        let to_zoom = 3.0;
+        // t = 0 reproduces the source exactly.
+        let g0 = ViewportTransform::glide(from, to_center, to_zoom, 0.0);
+        assert!(approx(g0.center, from.center));
+        assert!((g0.zoom - from.zoom).abs() < 1e-9);
+        // t = 1 lands exactly on the target.
+        let g1 = ViewportTransform::glide(from, to_center, to_zoom, 1.0);
+        assert!(approx(g1.center, to_center));
+        assert!((g1.zoom - to_zoom).abs() < 1e-9);
+        // Midpoint is the linear halfway (easing is applied by the caller).
+        let gm = ViewportTransform::glide(from, to_center, to_zoom, 0.5);
+        assert!(approx(gm.center, Point::new(50.0, 100.0)));
+        assert!((gm.zoom - 2.0).abs() < 1e-9);
+        // Size is carried through unchanged.
+        assert_eq!(gm.size, from.size);
     }
 
     #[test]

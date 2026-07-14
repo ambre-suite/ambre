@@ -23,36 +23,10 @@ use kurbo::Rect;
 
 use crate::logic::model::ElementId;
 
-/// Animatable properties of one element captured for a slide (§1.C). A frame's
-/// snapshot holds one of these per declared child, in `children` order.
-#[derive(Clone, Debug, PartialEq)]
-pub struct SnapElement {
-    pub id: ElementId,
-    /// Position + size, world space (the element AABB).
-    pub bounds: Rect,
-    /// Rotation in radians (the element `rot` field).
-    pub rotation: f64,
-    /// Opacity `0.0 ..= 1.0` (from [`ElementStyle::opacity`]).
-    pub opacity: f32,
-    /// Fill color as ARGB, `None` = no fill (from [`ElementStyle::fill`]).
-    pub fill: Option<u32>,
-}
-
-/// The animatable set of a frame for a transition: its declared children as
-/// [`SnapElement`]s. Derived by the engine, fed to [`smart_animate`].
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct FrameSnapshot {
-    pub elements: Vec<SnapElement>,
-}
-
-impl FrameSnapshot {
-    /// The captured element with `id`, if this frame contains it. Linear scan --
-    /// the test-facing accessor mirroring the §1.C pseudo-code; [`smart_animate`]
-    /// itself indexes once for the transition-frame budget (§7).
-    pub fn by_id(&self, id: &ElementId) -> Option<&SnapElement> {
-        self.elements.iter().find(|e| &e.id == id)
-    }
-}
+// The `SnapElement` / `FrameSnapshot` capture DTOs live in `ambre-bus` so the
+// enriched `SlideChanged` event can carry them to the render thread (which owns
+// no board state); this solver stays here as the sole consumer (§1.C).
+pub use ambre_bus::app::toile::{FrameSnapshot, SnapElement};
 
 /// The interpolated presentation of one element for a single transition frame.
 /// Same shape as [`SnapElement`]; produced by [`lerp`](AnimatedElement::lerp) /

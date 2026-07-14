@@ -11,7 +11,7 @@
 
 use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 
-use crate::logic::command::{TextDelta, ToileError, ToileEvent, ToileOutcome};
+use crate::logic::command::{SlideChange, TextDelta, ToileError, ToileEvent, ToileOutcome};
 use crate::logic::model::{ElementId, FrameId};
 
 use super::{CHILDREN, CONFIG, NOTES, ORDER, PRESENTATION, ToileState};
@@ -75,24 +75,30 @@ impl ToileState {
 
     /// Step to the next slide, saturating at the last (§1.B). Local only.
     pub(super) fn next_slide(&mut self) -> ToileOutcome {
+        let old = self.playback.active;
         let len = self.slide_len();
         if len > 0 && self.playback.active + 1 < len {
             self.playback.active += 1;
         }
-        ToileOutcome::display_only(vec![ToileEvent::SlideChanged(self.playback.active)])
+        let change = self.slide_change(Some(old), self.playback.active);
+        ToileOutcome::display_only(vec![ToileEvent::SlideChanged(change)])
     }
 
     /// Step to the previous slide, saturating at the first (§1.B). Local only.
     pub(super) fn prev_slide(&mut self) -> ToileOutcome {
+        let old = self.playback.active;
         self.playback.active = self.playback.active.saturating_sub(1);
-        ToileOutcome::display_only(vec![ToileEvent::SlideChanged(self.playback.active)])
+        let change = self.slide_change(Some(old), self.playback.active);
+        ToileOutcome::display_only(vec![ToileEvent::SlideChanged(change)])
     }
 
     /// Jump to `idx`, clamped to the deck length (§1.B). Local only.
     pub(super) fn goto_slide(&mut self, idx: usize) -> ToileOutcome {
+        let old = self.playback.active;
         let len = self.slide_len();
         self.playback.active = if len == 0 { 0 } else { idx.min(len - 1) };
-        ToileOutcome::display_only(vec![ToileEvent::SlideChanged(self.playback.active)])
+        let change = self.slide_change(Some(old), self.playback.active);
+        ToileOutcome::display_only(vec![ToileEvent::SlideChanged(change)])
     }
 
     /// Enter presentation (focus) mode, resetting to the first slide (§1.B).
@@ -101,10 +107,33 @@ impl ToileState {
         self.present = true;
         self.playback.focus = focus;
         self.playback.active = 0;
+        // No source frame on entry: `from` is empty so slide 0's content fades in.
+        let change = self.slide_change(None, 0);
         ToileOutcome::display_only(vec![
             ToileEvent::PresentModeChanged(true),
-            ToileEvent::SlideChanged(0),
+            ToileEvent::SlideChanged(change),
         ])
+    }
+
+    /// Build the [`SlideChange`] payload for a transition from `from_idx` (absent
+    /// on `EnterPresent`) to `to_idx` (§1.C / §1.D): the two frame snapshots the
+    /// Smart Animate solver tweens plus the target frame's world rect the camera
+    /// fits. An out-of-range or dangling index yields an empty snapshot / `None`
+    /// rect, so a missing frame degrades to a plain fade rather than a panic.
+    fn slide_change(&self, from_idx: Option<usize>, to_idx: usize) -> SlideChange {
+        let order = self.slide_order();
+        let snap = |i: usize| {
+            order
+                .get(i)
+                .map(|f| self.frame_snapshot(f))
+                .unwrap_or_default()
+        };
+        SlideChange {
+            index: to_idx,
+            from: from_idx.map(snap).unwrap_or_default(),
+            to: snap(to_idx),
+            to_rect: order.get(to_idx).and_then(|f| self.element_rect(f)),
+        }
     }
 
     /// Leave presentation mode (§1.B). Local only.
