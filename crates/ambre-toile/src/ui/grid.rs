@@ -48,12 +48,23 @@ pub fn snap_world(p: Point, step: f64) -> Point {
 /// Paint the board background and the adaptive grid lines for `cam`. Lines are
 /// emitted in screen space (the surface transform stack is left untouched here so
 /// the hairline width does not scale with zoom).
-pub fn paint_grid<S: DrawSurface>(surface: &mut S, cam: &ViewportTransform, palette: &Palette) {
-    // Board background fills the whole canvas.
+/// Fill the board background only, without grid lines. Used by presentation
+/// focus mode (`toile-features` §1.D), which hides the grid so the audience sees
+/// a clean slide.
+pub fn paint_background<S: DrawSurface>(
+    surface: &mut S,
+    cam: &ViewportTransform,
+    palette: &Palette,
+) {
     surface.fill_rect(
         ambre_draw::Rect::new(0.0, 0.0, cam.size.width, cam.size.height),
         palette.content_bg,
     );
+}
+
+pub fn paint_grid<S: DrawSurface>(surface: &mut S, cam: &ViewportTransform, palette: &Palette) {
+    // Board background fills the whole canvas.
+    paint_background(surface, cam, palette);
 
     let step = grid_step(cam.zoom, BASE_GRID);
     let s2w = cam.screen_to_world();

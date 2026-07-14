@@ -1082,7 +1082,7 @@ fn viewport_culls_offscreen_nodes() {
 
 fn slide_changed(out: &crate::logic::command::ToileOutcome) -> Option<usize> {
     out.display.iter().find_map(|e| match e {
-        ToileEvent::SlideChanged(i) => Some(*i),
+        ToileEvent::SlideChanged(c) => Some(c.index),
         _ => None,
     })
 }
@@ -1159,6 +1159,57 @@ fn playback_bounds() {
         slide_changed(&st.handle_command(ToileCommand::GotoSlide(99))),
         Some(2)
     );
+}
+
+fn slide_change(out: &crate::logic::command::ToileOutcome) -> crate::logic::command::SlideChange {
+    out.display
+        .iter()
+        .find_map(|e| match e {
+            ToileEvent::SlideChanged(c) => Some(c.clone()),
+            _ => None,
+        })
+        .expect("a playback command emits a SlideChanged")
+}
+
+#[test]
+fn slide_change_carries_snapshots_and_fit_rect() {
+    // The camera pass needs both frame snapshots + the target rect in one shot,
+    // since the UI holds no board state (toile-features §1.C / §1.D).
+    let mut st = ToileState::new();
+    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    st.handle_command(ToileCommand::SetSlideOrder {
+        order: vec![a.clone(), b.clone()],
+    });
+
+    let change = slide_change(&st.handle_command(ToileCommand::NextSlide));
+    assert_eq!(change.index, 1);
+    // `from` is slide 0, `to` is slide 1, each the engine's own frame snapshot.
+    assert_eq!(change.from, st.frame_snapshot(&a));
+    assert_eq!(change.to, st.frame_snapshot(&b));
+    // The fit target is the new active frame's world rect.
+    assert_eq!(change.to_rect, st.element_rect(&b));
+    assert_eq!(
+        change.to_rect,
+        Some(kurbo::Rect::new(300.0, 0.0, 500.0, 200.0))
+    );
+}
+
+#[test]
+fn enter_present_starts_from_empty_snapshot() {
+    // Entering present mode has no source frame: `from` is empty so slide 0 fades
+    // in rather than tweening from a stale frame (§1.C).
+    let mut st = ToileState::new();
+    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    st.handle_command(ToileCommand::SetSlideOrder {
+        order: vec![a.clone()],
+    });
+
+    let change = slide_change(&st.handle_command(ToileCommand::EnterPresent { focus: true }));
+    assert_eq!(change.index, 0);
+    assert!(change.from.elements.is_empty(), "no source frame on entry");
+    assert_eq!(change.to, st.frame_snapshot(&a));
+    assert_eq!(change.to_rect, st.element_rect(&a));
 }
 
 #[test]

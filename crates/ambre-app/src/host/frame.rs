@@ -212,7 +212,7 @@ impl FrameHost {
             hud_tick = true;
         }
 
-        let plan = self.view.plan_repaint(hud_tick);
+        let plan = self.view.plan_repaint(raf_timestamp, hud_tick);
         let content_active = !matches!(plan.content, ContentRepaint::Reuse);
         let overlay_redraw = matches!(plan.overlay, OverlayRepaint::Redraw);
         let any_dirty = content_active || overlay_redraw;

@@ -13,6 +13,8 @@
 //   paint_overlay -- selection bounding box + transform handles (screen space).
 // ============================================================================
 
+use std::collections::HashMap;
+
 use ambre_bus::app::toile::{
     DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementId,
     ElementStyle, ShapeKind,
@@ -22,6 +24,8 @@ use ambre_draw::{
     Affine, Alignment, BezPath, Brush, Color, DrawSurface, FontContext, Point,
     PositionedLayoutItem, Rect, Stroke,
 };
+
+use crate::logic::animate::AnimatedElement;
 
 use super::grid;
 use super::hit::triangle_path;
@@ -94,6 +98,7 @@ fn fill_and_stroke<S: DrawSurface>(surface: &mut S, path: &BezPath, style: &Elem
 
 /// Paint the persistent content layer: board background + adaptive grid, then the
 /// z-ordered node walk under the camera transform, then a screen-space text pass.
+#[allow(clippy::too_many_arguments)]
 pub fn paint_content<S: DrawSurface>(
     surface: &mut S,
     vp: &DisplayViewport,
@@ -102,15 +107,27 @@ pub fn paint_content<S: DrawSurface>(
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
     editing: Option<&ElementId>,
+    // Smart Animate overrides for an in-flight slide transition (§1.C): keyed by
+    // element id, each replaces the element's transform / bounds / opacity / fill
+    // for this frame. Empty when no transition is active. Fade-only ids (a new /
+    // gone element) still appear here so their opacity ramp is honored.
+    anim: &HashMap<ElementId, AnimatedElement>,
+    // Presentation focus mode (§1.D): the UI hides the board grid so the audience
+    // sees only the slide content.
+    present: bool,
 ) {
-    // 1. Background + adaptive grid (screen space).
-    grid::paint_grid(surface, cam, palette);
+    // 1. Background + adaptive grid (screen space). Focus mode drops the grid.
+    if present {
+        grid::paint_background(surface, cam, palette);
+    } else {
+        grid::paint_grid(surface, cam, palette);
+    }
 
     // 2. Shapes / paths / strokes / connectors, in world space under the camera.
     surface.push_transform(cam.world_to_screen());
     for node in &vp.nodes {
         match node {
-            DisplayNode::Element(e) => paint_element(surface, e),
+            DisplayNode::Element(e) => paint_element(surface, e, anim.get(&e.id)),
             DisplayNode::Connector(c) => paint_connector(surface, c),
         }
     }
@@ -124,37 +141,77 @@ pub fn paint_content<S: DrawSurface>(
             // the editor overlay instead (§6).
             && editing != Some(&e.id)
         {
-            paint_text(surface, e, text, cam, palette, font_cx, text_cache);
+            paint_text(
+                surface,
+                e,
+                text,
+                cam,
+                palette,
+                font_cx,
+                text_cache,
+                anim.get(&e.id),
+            );
         }
+    }
+}
+
+/// The world transform of an element whose geometry an animation override
+/// replaces: rotation about the (interpolated) AABB center, mirroring
+/// [`display_element`](crate::logic::state) so the tween matches the static pass.
+fn anim_transform(a: &AnimatedElement) -> Affine {
+    let c = a.bounds.center();
+    Affine::translate(c.to_vec2()) * Affine::rotate(a.rotation) * Affine::translate(-c.to_vec2())
+}
+
+/// The style an element paints with this frame: its own, or the base overlaid
+/// with the animation override's opacity / fill (§1.C interpolates only those
+/// visual attributes; the rest of the register is held).
+fn anim_style(base: &ElementStyle, a: Option<&AnimatedElement>) -> ElementStyle {
+    match a {
+        None => base.clone(),
+        Some(a) => ElementStyle {
+            opacity: a.opacity,
+            fill: a.fill,
+            ..base.clone()
+        },
     }
 }
 
 /// Paint one element under the (already pushed) camera transform. Rotation is
 /// applied by pushing the element's own transform, so geometry is expressed in
-/// the unrotated world frame (matching hit-testing, `hit.rs`).
-fn paint_element<S: DrawSurface>(surface: &mut S, e: &DisplayElement) {
-    surface.push_transform(e.transform);
+/// the unrotated world frame (matching hit-testing, `hit.rs`). When `anim` is
+/// `Some`, the element is mid-transition: its transform, bounds and opacity /
+/// fill come from the Smart Animate override instead of the static display (§1.C).
+fn paint_element<S: DrawSurface>(
+    surface: &mut S,
+    e: &DisplayElement,
+    anim: Option<&AnimatedElement>,
+) {
+    let transform = anim.map(anim_transform).unwrap_or(e.transform);
+    let bounds = anim.map(|a| a.bounds).unwrap_or(e.bounds);
+    let style = anim_style(&e.style, anim);
+    surface.push_transform(transform);
     match &e.geom {
         DisplayGeom::Rect | DisplayGeom::Frame => {
-            fill_and_stroke(surface, &rect_path(e.bounds), &e.style);
+            fill_and_stroke(surface, &rect_path(bounds), &style);
         }
-        DisplayGeom::Ellipse => fill_and_stroke(surface, &ellipse_path(e.bounds), &e.style),
-        DisplayGeom::Triangle => fill_and_stroke(surface, &triangle_path(e.bounds), &e.style),
-        DisplayGeom::Path(p) => fill_and_stroke(surface, p, &e.style),
+        DisplayGeom::Ellipse => fill_and_stroke(surface, &ellipse_path(bounds), &style),
+        DisplayGeom::Triangle => fill_and_stroke(surface, &triangle_path(bounds), &style),
+        DisplayGeom::Path(p) => fill_and_stroke(surface, p, &style),
         DisplayGeom::Stroke(pts) => {
             // A stroke has no fill; paint the smoothed polyline outline only.
-            if let Some(stroke) = e.style.stroke {
+            if let Some(stroke) = style.stroke {
                 surface.stroke_path(
                     &polyline_path(pts),
-                    &Brush::Solid(argb(stroke, e.style.opacity)),
-                    &Stroke::new(e.style.stroke_w.max(1.0) as f64),
+                    &Brush::Solid(argb(stroke, style.opacity)),
+                    &Stroke::new(style.stroke_w.max(1.0) as f64),
                 );
             }
         }
         // Media / embeds paint a placeholder box in Phase 0 (pixels + iframe land
         // in toile-interop). Text is handled in the screen-space pass.
         DisplayGeom::Image(_) | DisplayGeom::Embed(_) | DisplayGeom::DocEmbed { .. } => {
-            fill_and_stroke(surface, &rect_path(e.bounds), &e.style);
+            fill_and_stroke(surface, &rect_path(bounds), &style);
         }
         DisplayGeom::Text(_) => {}
         DisplayGeom::Group => {} // paints nothing (§2.F bis)
@@ -173,6 +230,7 @@ fn paint_connector<S: DrawSurface>(surface: &mut S, c: &DisplayConnector) {
 
 /// Draw a sticky / text body in screen space, laid out within the element's
 /// screen rectangle at a zoom-scaled font size.
+#[allow(clippy::too_many_arguments)]
 fn paint_text<S: DrawSurface>(
     surface: &mut S,
     e: &DisplayElement,
@@ -181,17 +239,19 @@ fn paint_text<S: DrawSurface>(
     palette: &Palette,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
+    anim: Option<&AnimatedElement>,
 ) {
     if text.is_empty() {
         return;
     }
-    let sb = world_rect_to_screen(e.bounds, cam);
+    // Mid-transition, the body follows the tweened bounds and opacity (§1.C); the
+    // font attributes and (when unset) color are held from the static style.
+    let bounds = anim.map(|a| a.bounds).unwrap_or(e.bounds);
+    let opacity = anim.map(|a| a.opacity).unwrap_or(e.style.opacity);
+    let fill = anim.map(|a| a.fill).unwrap_or(e.style.fill);
+    let sb = world_rect_to_screen(bounds, cam);
     let font_size = (e.style.font.size as f64 * cam.zoom) as f32;
-    let color = e
-        .style
-        .fill
-        .map(|f| argb(f, e.style.opacity))
-        .unwrap_or(palette.cell_text);
+    let color = fill.map(|f| argb(f, opacity)).unwrap_or(palette.cell_text);
     let layout = text_cache.get_or_build(
         font_cx,
         text,
@@ -395,6 +455,8 @@ mod tests {
             &mut font_cx,
             &mut tc,
             None,
+            &HashMap::new(),
+            false,
         );
 
         // Transform stack must be balanced.
@@ -414,6 +476,59 @@ mod tests {
             .filter(|o| matches!(o, DrawOp::FillPath { .. }))
             .count();
         assert_eq!(fills, 2);
+    }
+
+    // The §6 "camera pass" test, host-run against the mock surface: with a Smart
+    // Animate override in the map, the animated element paints with the tweened
+    // opacity / fill instead of its static style, while an un-overridden element
+    // keeps its own. Exercises the render side of the playback -> camera wiring.
+    #[test]
+    fn content_walk_applies_animation_override() {
+        let vp = DisplayViewport {
+            viewport: Default::default(),
+            nodes: vec![
+                elem("a", DisplayGeom::Rect, Rect::new(0.0, 0.0, 50.0, 50.0)),
+                elem("b", DisplayGeom::Rect, Rect::new(60.0, 0.0, 110.0, 50.0)),
+            ],
+        };
+        // Override "a" with a half-opacity blue fill at a tweened rect; leave "b".
+        let mut anim = HashMap::new();
+        anim.insert(
+            ElementId("a".into()),
+            AnimatedElement {
+                id: ElementId("a".into()),
+                bounds: Rect::new(20.0, 20.0, 70.0, 70.0),
+                rotation: 0.0,
+                opacity: 0.5,
+                fill: Some(0xFF00_00FF),
+            },
+        );
+        let mut surface = RecordingSurface::new();
+        let mut font_cx = FontContext::new();
+        let mut tc = TextCache::new(1.0);
+        paint_content(
+            &mut surface,
+            &vp,
+            &cam(),
+            &LIGHT_PALETTE,
+            &mut font_cx,
+            &mut tc,
+            None,
+            &anim,
+            true, // focus mode: grid suppressed
+        );
+
+        // The overridden element fills with the tweened blue at half alpha
+        // (0.5 * 0xFF -> ~128); a color the default white style never produces.
+        let tweened = Color::from_rgba8(0, 0, 255, 128);
+        let has_tweened = surface
+            .ops()
+            .iter()
+            .any(|op| matches!(op, DrawOp::FillPath { color: Some(c) } if *c == tweened));
+        assert!(
+            has_tweened,
+            "animated element must paint its interpolated fill/opacity"
+        );
     }
 
     #[test]

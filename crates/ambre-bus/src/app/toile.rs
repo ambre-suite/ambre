@@ -552,6 +552,65 @@ pub struct PlaybackState {
     pub focus: bool,
 }
 
+// =============================================================================
+// Smart Animate snapshots (toile-features §1.C)
+// =============================================================================
+
+/// Animatable properties of one element captured for a slide (§1.C). A frame's
+/// snapshot holds one of these per declared child, in `children` order. Pure
+/// data: it lives here so the enriched [`SlideChange`] event can carry both
+/// frame snapshots across `AppEvent::Toile` to the render thread, which owns no
+/// board state. The `smart_animate` solver that consumes these stays in the
+/// engine (`ambre_toile::logic::animate`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SnapElement {
+    pub id: ElementId,
+    /// Position + size, world space (the element AABB).
+    pub bounds: Rect,
+    /// Rotation in radians (the element `rot` field).
+    pub rotation: f64,
+    /// Opacity `0.0 ..= 1.0` (from [`ElementStyle::opacity`]).
+    pub opacity: f32,
+    /// Fill color as ARGB, `None` = no fill (from [`ElementStyle::fill`]).
+    pub fill: Option<u32>,
+}
+
+/// The animatable set of a frame for a transition: its declared children as
+/// [`SnapElement`]s. Derived by the engine (`ToileState::frame_snapshot`), fed
+/// to the Smart Animate solver.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct FrameSnapshot {
+    pub elements: Vec<SnapElement>,
+}
+
+impl FrameSnapshot {
+    /// The captured element with `id`, if this frame contains it. Linear scan --
+    /// the test-facing accessor mirroring the §1.C pseudo-code.
+    pub fn by_id(&self, id: &ElementId) -> Option<&SnapElement> {
+        self.elements.iter().find(|e| &e.id == id)
+    }
+}
+
+/// Payload of a [`ToileEvent::SlideChanged`]: everything the `toile-ui` camera
+/// pass needs to glide to the new slide and Smart Animate its content (§1.C /
+/// §1.D). The Logic thread owns the board, so it captures the two frame
+/// snapshots and the target frame rect here in one shot; the UI holds no board
+/// state and cannot derive them itself. Local view state, never crosses the wire.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SlideChange {
+    /// The new `0`-based active slide index.
+    pub index: usize,
+    /// The previously active frame's children (empty on `EnterPresent`, or when
+    /// the source frame is absent / dangling).
+    pub from: FrameSnapshot,
+    /// The new active frame's children.
+    pub to: FrameSnapshot,
+    /// The new active frame element's world rect: the camera fit target. `None`
+    /// when the slide has no resolvable frame (dangling id), leaving the camera
+    /// where it is.
+    pub to_rect: Option<Rect>,
+}
+
 /// Command from the UI / Logic thread to `ToileState` (in `ambre-toile`).
 #[derive(Clone, Debug)]
 pub enum ToileCommand {
@@ -857,9 +916,11 @@ pub enum ToileEvent {
         can_undo: bool,
         can_redo: bool,
     },
-    /// The local playback cursor moved to this `0`-based slide index (§5). Local
-    /// view state: emitted by the playback commands, never crosses the wire.
-    SlideChanged(usize),
+    /// The local playback cursor moved to a new slide (§5). Carries the enriched
+    /// [`SlideChange`] the `toile-ui` camera pass consumes to glide + Smart
+    /// Animate. Local view state: emitted by the playback commands, never crosses
+    /// the wire.
+    SlideChanged(SlideChange),
     /// Presentation (focus) mode was entered (`true`) or left (`false`) (§5).
     /// Local view state, like [`SlideChanged`](Self::SlideChanged).
     PresentModeChanged(bool),

@@ -1,0 +1,231 @@
+// ambre-toile/src/ui/present.rs
+// ============================================================================
+// Presentation transition core (toile-features §1.C Smart Animate + §1.D Focus
+// Mode). Pure and host-testable: given the endpoints of a slide change and a
+// wall-clock timestamp, it produces the camera transform (an eased glide toward
+// the fitted target frame) and the per-element content overrides (the Smart
+// Animate tween / fade set) for the current frame. It owns no GPU state and
+// reads no board data -- the enriched `SlideChanged` event carries the two
+// `FrameSnapshot`s and the camera fit target into the view, which builds a
+// `Transition` and advances it each `plan_repaint` until it is `done`.
+// ============================================================================
+
+use ambre_bus::app::toile::FrameSnapshot;
+use ambre_draw::Point;
+
+use crate::logic::animate::{AnimatedElement, ease_in_out_cubic, smart_animate};
+
+use super::viewport::ViewportTransform;
+
+/// Default slide transition length in milliseconds (§1.A `transition_ms`). The
+/// deck config carries an editable value; Phase 1 uses this constant until the
+/// config is threaded through the event.
+pub const DEFAULT_TRANSITION_MS: f64 = 300.0;
+
+/// One in-flight slide transition. Built by the view on a `SlideChanged` event
+/// and advanced each frame. The camera glides from `cam_from` to `(cam_to_center,
+/// cam_to_zoom)`; the content tweens from `from` to `to` (§1.C). `start_ms` is
+/// stamped lazily on the first `advance` so the transition is measured from the
+/// first frame it is actually shown, not from event dispatch.
+pub struct Transition {
+    start_ms: Option<f64>,
+    dur_ms: f64,
+    cam_from: ViewportTransform,
+    cam_to_center: Point,
+    cam_to_zoom: f64,
+    from: FrameSnapshot,
+    to: FrameSnapshot,
+}
+
+/// The camera + content state for one transition frame, returned by
+/// [`Transition::advance`]. `overrides` are the Smart Animate elements to paint
+/// this frame; `done` is set once the eased phase reaches its end.
+pub struct TransitionFrame {
+    pub cam: ViewportTransform,
+    pub overrides: Vec<AnimatedElement>,
+    pub done: bool,
+}
+
+impl Transition {
+    /// Build a transition. `cam_to_center` / `cam_to_zoom` are the fit target for
+    /// the new slide (the view resolves them from the frame rect, falling back to
+    /// the current camera when the slide has no resolvable frame). `dur_ms <= 0`
+    /// makes the transition resolve in a single `advance` (an instant snap).
+    pub fn new(
+        cam_from: ViewportTransform,
+        cam_to_center: Point,
+        cam_to_zoom: f64,
+        from: FrameSnapshot,
+        to: FrameSnapshot,
+        dur_ms: f64,
+    ) -> Self {
+        Self {
+            start_ms: None,
+            dur_ms,
+            cam_from,
+            cam_to_center,
+            cam_to_zoom,
+            from,
+            to,
+        }
+    }
+
+    /// Advance to wall-clock `now_ms`, stamping the start on the first call. The
+    /// raw phase `t` is `(now - start) / dur` clamped to `0..=1`; it is eased
+    /// before both the camera glide and the content solve, so the whole
+    /// transition shares one easing curve (§1.C). `done` uses the raw (un-eased)
+    /// phase so the end is reached exactly at `dur`.
+    pub fn advance(&mut self, now_ms: f64) -> TransitionFrame {
+        let start = *self.start_ms.get_or_insert(now_ms);
+        let raw = if self.dur_ms <= 0.0 {
+            1.0
+        } else {
+            ((now_ms - start) / self.dur_ms).clamp(0.0, 1.0)
+        };
+        let eased = ease_in_out_cubic(raw);
+        TransitionFrame {
+            cam: ViewportTransform::glide(
+                self.cam_from,
+                self.cam_to_center,
+                self.cam_to_zoom,
+                eased,
+            ),
+            overrides: smart_animate(&self.from, &self.to, eased),
+            done: raw >= 1.0,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ambre_bus::app::toile::{ElementId, SnapElement};
+    use ambre_draw::{Rect, Size};
+
+    fn snap(id: &str, bounds: Rect) -> SnapElement {
+        SnapElement {
+            id: ElementId(id.to_owned()),
+            bounds,
+            rotation: 0.0,
+            opacity: 1.0,
+            fill: Some(0xFF00_0000),
+        }
+    }
+
+    fn cam(cx: f64, cy: f64, zoom: f64) -> ViewportTransform {
+        ViewportTransform {
+            center: Point::new(cx, cy),
+            zoom,
+            size: Size::new(1000.0, 800.0),
+        }
+    }
+
+    fn transition() -> Transition {
+        let from = FrameSnapshot {
+            elements: vec![snap("shared", Rect::new(0.0, 0.0, 10.0, 10.0))],
+        };
+        let to = FrameSnapshot {
+            elements: vec![
+                snap("shared", Rect::new(100.0, 100.0, 110.0, 110.0)),
+                snap("new", Rect::new(200.0, 200.0, 210.0, 210.0)),
+            ],
+        };
+        Transition::new(
+            cam(0.0, 0.0, 1.0),
+            Point::new(105.0, 105.0),
+            2.0,
+            from,
+            to,
+            300.0,
+        )
+    }
+
+    #[test]
+    fn start_frame_holds_source_camera_and_content() {
+        let mut t = transition();
+        let f = t.advance(1000.0);
+        // t = 0: camera is exactly the source, no progress yet.
+        assert_eq!(f.cam.center, Point::new(0.0, 0.0));
+        assert_eq!(f.cam.zoom, 1.0);
+        assert!(!f.done);
+        // The shared element sits at its source bounds; the new element is fully
+        // transparent (fade-in at t=0).
+        let shared = f
+            .overrides
+            .iter()
+            .find(|a| a.id == ElementId("shared".into()))
+            .unwrap();
+        assert_eq!(shared.bounds, Rect::new(0.0, 0.0, 10.0, 10.0));
+        let new = f
+            .overrides
+            .iter()
+            .find(|a| a.id == ElementId("new".into()))
+            .unwrap();
+        assert_eq!(new.opacity, 0.0);
+    }
+
+    #[test]
+    fn end_frame_lands_on_target_camera_and_content() {
+        let mut t = transition();
+        t.advance(1000.0); // stamp start
+        let f = t.advance(1000.0 + 300.0);
+        assert!(f.done, "the transition is done at its full duration");
+        // Camera reached the fit target exactly.
+        assert_eq!(f.cam.center, Point::new(105.0, 105.0));
+        assert!((f.cam.zoom - 2.0).abs() < 1e-9);
+        // The shared element reached its target bounds; the new element is fully
+        // opaque.
+        let shared = f
+            .overrides
+            .iter()
+            .find(|a| a.id == ElementId("shared".into()))
+            .unwrap();
+        assert_eq!(shared.bounds, Rect::new(100.0, 100.0, 110.0, 110.0));
+        let new = f
+            .overrides
+            .iter()
+            .find(|a| a.id == ElementId("new".into()))
+            .unwrap();
+        assert!((new.opacity - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn midpoint_tweens_between_endpoints() {
+        let mut t = transition();
+        t.advance(0.0); // start at 0
+        let f = t.advance(150.0); // half of 300 ms
+        assert!(!f.done);
+        // Eased 0.5 == 0.5, so the shared element sits at the geometric midpoint
+        // and the camera is halfway to the target.
+        let shared = f
+            .overrides
+            .iter()
+            .find(|a| a.id == ElementId("shared".into()))
+            .unwrap();
+        assert_eq!(shared.bounds, Rect::new(50.0, 50.0, 60.0, 60.0));
+        assert_eq!(f.cam.center, Point::new(52.5, 52.5));
+        assert!((f.cam.zoom - 1.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn zero_duration_snaps_immediately() {
+        let from = FrameSnapshot::default();
+        let to = FrameSnapshot {
+            elements: vec![snap("x", Rect::new(0.0, 0.0, 5.0, 5.0))],
+        };
+        let mut t = Transition::new(
+            cam(0.0, 0.0, 1.0),
+            Point::new(10.0, 10.0),
+            3.0,
+            from,
+            to,
+            0.0,
+        );
+        let f = t.advance(42.0);
+        assert!(
+            f.done,
+            "a zero-duration transition is done on first advance"
+        );
+        assert_eq!(f.cam.center, Point::new(10.0, 10.0));
+    }
+}

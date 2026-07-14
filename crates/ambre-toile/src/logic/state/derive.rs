@@ -94,6 +94,25 @@ impl ToileState {
         FrameSnapshot { elements }
     }
 
+    /// The unrotated world rect (`x/y/w/h`, or the derived member union for a
+    /// group) of `id`, or `None` if the element map is gone. Mirrors the geometry
+    /// branch of [`display_element`](Self::display_element); used by the
+    /// presentation camera pass as the fit target for a slide (§1.D).
+    pub(crate) fn element_rect(&self, id: &ElementId) -> Option<Rect> {
+        let em = self.element_map(id)?;
+        if str_of(&em, "type") == "group" {
+            Some(self.bounds.get(id).copied().unwrap_or_default())
+        } else {
+            let (x, y, w, h) = (
+                f64_of(&em, "x"),
+                f64_of(&em, "y"),
+                f64_of(&em, "w"),
+                f64_of(&em, "h"),
+            );
+            Some(Rect::new(x, y, x + w, y + h))
+        }
+    }
+
     fn display_element(&self, id: &ElementId) -> Option<DisplayElement> {
         let em = self.element_map(id)?;
         // A group has no stored geometry: its bounds are the derived member union
