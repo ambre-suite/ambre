@@ -35,6 +35,7 @@ mod find;
 mod groups;
 mod presence;
 mod presentation;
+mod reactions;
 
 use std::collections::HashMap;
 
@@ -64,6 +65,8 @@ const PRESENTATION: &str = "presentation";
 const ORDER: &str = "order";
 /// Presentation config map key inside the `presentation` map (§1.A).
 const CONFIG: &str = "config";
+/// Reactions root map key: `reactions[target_id][user_id]` (§4.A).
+const REACTIONS: &str = "reactions";
 
 /// Per-document Toile engine.
 pub struct ToileState {
@@ -198,6 +201,7 @@ impl ToileState {
             ToileCommand::EnterPresent { focus } => self.enter_present(focus),
             ToileCommand::ExitPresent => self.exit_present(),
             ToileCommand::EditNotes { frame, delta } => self.edit_notes(&frame, &delta),
+            ToileCommand::React { target, reaction } => self.react(&target, reaction),
             ToileCommand::Undo => self.apply_history(true),
             ToileCommand::Redo => self.apply_history(false),
             ToileCommand::CreateConnector {

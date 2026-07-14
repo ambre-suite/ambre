@@ -422,6 +422,10 @@ impl ToileView {
             // that fits the active frame / toggles chrome is Phase 1, so the view
             // has nothing to do with these yet.
             ToileEvent::SlideChanged(_) | ToileEvent::PresentModeChanged(_) => {}
+            // Reaction rendering (the tally badge overlay) is Phase 1
+            // ("Reactions render"); the derived tally is read on repaint, so the
+            // view has nothing to do with this notification yet (§4.A).
+            ToileEvent::ReactionsUpdated(_) => {}
             ToileEvent::DanglingConnector(_) | ToileEvent::UndoState { .. } => {}
         }
     }

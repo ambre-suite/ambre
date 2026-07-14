@@ -162,15 +162,24 @@ state; the result is an ordinary element (`toile-logic §2.C`).
 ### A. Votes & reactions (CRDT — shared, persisted)
 
 Placing an emoji reaction or a vote on an element or frame is shared state that must survive reload, so it is a
-CRDT sub-map keyed by target + **canonical `UserId`** (one entry per user per target → a user's re-vote is LWW on
+CRDT map keyed by target + **canonical `UserId`** (one entry per user per target → a user's re-vote is LWW on
 their own key, and tallies are convergent):
 
 ```
 LoroDoc
 └── "reactions" (LoroMap)
-    └── "{target_id}" (LoroMap)
-        └── "{user_id}" : Binary(postcard(Reaction))   // {emoji | vote_weight, ts}
+    └── "{target_id}/{user_id}" : Binary(postcard(Reaction))   // {emoji | vote_weight, ts}
 ```
+
+> **Flat composite key, not a nested sub-map per target.** The entries live directly in the single `reactions`
+> root map under a composite `"{target_id}/{user_id}"` key, **not** in a per-target nested `LoroMap`. A per-target
+> sub-map would be **created lazily on the first reaction to that target**, so two peers reacting on the same
+> fresh target would concurrently create two rival containers; Loro's map register keeps only one, silently
+> dropping the loser's reactions. The `reactions` root is a deterministic root container that always exists, so
+> concurrent inserts under distinct composite keys all converge. `ElementId`s are hex + `_` and `UserId`s are
+> hyphenated UUIDs, so neither contains `/`: the composite key is unambiguous and `target_id` is recovered by
+> splitting on the first `/`. (Speaker notes avoid this race differently — their `LoroText` is seeded at frame
+> birth §1.D, so it is a shared container, never a concurrent lazy creation.)
 
 > **Keyed by `UserId`, never `PeerID`.** A reaction/vote is a per-**user** decision that must survive reload, key
 > rotation and multi-device use — the same identity argument as presence (`toile-logic §7`) and Trame's range
@@ -181,13 +190,14 @@ LoroDoc
 > writes the local user's own key from `my_user_id` (the `Uuid` received via `LogicEvent::SessionReady`, threaded
 > into `ToileState` exactly as in `trame-logic §7`); remote entries are already `UserId`-resolved in `ambre-sync`.
 
-A tally (count per emoji, vote totals) is **derived** at read time from the sub-map — never stored — so it is
-always consistent with the set of per-user entries. Removing a reaction deletes the user's own key.
+A tally (count per emoji, vote totals) is **derived** at read time by scanning the `reactions` map for the
+target's `"{target_id}/"` key prefix — never stored — so it is always consistent with the set of per-user
+entries. Removing a reaction deletes the user's own composite key.
 
 **Reactions on a deleted target.** If the `target_id` element/frame is gone (deleted concurrently), its
-reaction sub-map is **skipped at tally derivation** — never rendered, never destroyed (data-never-destroyed,
-like a dangling connector `toile-logic §5.A`). The orphan sub-map is reclaimed by ordinary document
-compaction; no active GC is required.
+reaction entries are **skipped at tally derivation** (the deriver first checks the target still exists) — never
+rendered, never destroyed (data-never-destroyed, like a dangling connector `toile-logic §5.A`). The orphan
+entries are reclaimed by ordinary document compaction; no active GC is required.
 
 ### B. Highlighter / laser pointer (ephemeral)
 
@@ -265,7 +275,7 @@ ReactionsUpdated(TargetId),               // UI re-reads the derived tally
 |---|---|---|
 | `smart_animate` per transition frame (500 elements) | < 4 ms | Leaves room for paint within 16 ms during the transition. |
 | `solve_layout` (200 children) | < 1 ms | Runs at derivation on every child edit. |
-| Reaction tally derivation | O(entries), < 0.1 ms typical | Recomputed on read, never stored. |
+| Reaction tally derivation | O(board reactions), < 0.1 ms typical | Prefix-scan of the flat `reactions` map on read, never stored (§4.A). Reaction counts are small, so a full-map scan is well within budget. |
 | Boolean op (typical two paths) | < 5 ms, off the render frame | User-initiated, one-shot; may show a brief spinner for huge paths. |
 
 **WASM impact:** feature logic is small (no new heavy crates — reuses `kurbo` booleans, `loro`, `postcard`); the
@@ -282,6 +292,7 @@ presentation camera reuses the `toile-ui` pipeline.
 | **Persisting laser/highlighter as elements** | Momentary gestures must not enter history; ephemeral presence only (§4.B/C). |
 | **Storing reaction tallies** | Would drift from the per-user entry set; tallies are derived on read (§4.A). |
 | **Reactions/votes keyed by `PeerID`** | `PeerID` is per-session/per-device, so one user on two devices would double-vote and a re-opened session could not remove its own reaction. Keyed by canonical `UserId` (§4.A), the same decision as presence (`toile-logic §7`) and Trame protection (`trame-features §6`). |
+| **A nested `LoroMap` per reaction target** | The sub-map would be created lazily on the first reaction, so two peers reacting on the same fresh target concurrently create rival containers and Loro's register keeps only one, silently dropping reactions. A flat `reactions` root map with a composite `"{target_id}/{user_id}"` key (§4.A) has no lazy container creation, so all concurrent entries converge. |
 | **Broadcasting playback position as CRDT** | Per-viewer navigation is local; "follow presenter" is ephemeral presence, not history (§1.B). |
 | **Matching Smart Animate by geometry/heuristics** | Fragile; stable-`ElementId` matching is exact and free (§1.C). |
 
@@ -296,7 +307,7 @@ presentation camera reuses the `toile-ui` pipeline.
 - [x] Speaker notes
 - [x] `smart_animate` pure solver (stable-`ElementId` matching, §1.C) with host tests
 - [x] `solve_layout` pure auto-layout solver with host tests
-- [ ] Reactions / votes CRDT keyed by `UserId` (§4.A) + derived read-time tally
+- [x] Reactions / votes CRDT keyed by `UserId` (§4.A) + derived read-time tally
 - [ ] Boolean ops (union / subtract / intersect)
 - [ ] Convergence belt green (concurrent reactions -> one vote per `UserId`, convergent tally, §6)
 
