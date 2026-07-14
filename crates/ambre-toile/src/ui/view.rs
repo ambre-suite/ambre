@@ -174,6 +174,18 @@ pub struct ToileView {
     /// Wasm-only.
     #[cfg(target_arch = "wasm32")]
     restyle: RwSignal<Option<ambre_bus::app::toile::ElementStyle>>,
+    /// The content-anchored floating selection toolbar's placement + flags
+    /// (§5quinquies.D), republished every frame so the bar follows the selection
+    /// as the board pans / zooms (transform-synced). `None` hides it: an empty
+    /// selection, an active gesture (move/resize/rotate), a pan, or an open inline
+    /// editor. Leptos signal, so wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    float_bar: RwSignal<Option<super::floatbar::FloatBar>>,
+    /// A quick-colour pick the floating bar emits back (§5quinquies.D): drained in
+    /// `update` and folded into one `RestyleElements` (fill only) over the live
+    /// selection, the same seam as `restyle`. Wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    quick_fill: RwSignal<Option<super::floatbar::QuickFill>>,
 
     /// Set while a Fit / Zoom-to-selection awaits the `SelectionStats` reply whose
     /// bounds it will frame (§5quinquies.E). The reply treats both the same way
@@ -209,6 +221,8 @@ impl ToileView {
         #[cfg(target_arch = "wasm32")] restyle: RwSignal<
             Option<ambre_bus::app::toile::ElementStyle>,
         >,
+        #[cfg(target_arch = "wasm32")] float_bar: RwSignal<Option<super::floatbar::FloatBar>>,
+        #[cfg(target_arch = "wasm32")] quick_fill: RwSignal<Option<super::floatbar::QuickFill>>,
     ) -> Self {
         text_input.focus();
         let theme = theme_ctl.get();
@@ -263,6 +277,10 @@ impl ToileView {
             style_model,
             #[cfg(target_arch = "wasm32")]
             restyle,
+            #[cfg(target_arch = "wasm32")]
+            float_bar,
+            #[cfg(target_arch = "wasm32")]
+            quick_fill,
             pending_fit: false,
             last_stats_sel: Vec::new(),
         }
@@ -541,6 +559,63 @@ impl ToileView {
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn drain_restyle(&mut self) {}
+
+    /// Republish the floating selection toolbar's placement + flags (§5quinquies.D).
+    /// Transform-synced: recomputed every frame from the live selection x camera so
+    /// the bar tracks pan/zoom. Hidden (`None`) on an empty selection, an active
+    /// gesture (move/resize/rotate), a pan, or an open inline editor. Written only on
+    /// change to avoid needless reactive churn while idle. Wasm-only; a host no-op
+    /// keeps `update` cfg-agnostic.
+    #[cfg(target_arch = "wasm32")]
+    fn publish_float_bar(&self) {
+        let next = if self.selection.is_empty()
+            || self.machine.is_active()
+            || self.panning.is_some()
+            || self.editor.is_some()
+        {
+            None
+        } else {
+            super::floatbar::build_floatbar(
+                &self.selection,
+                &self.display,
+                &self.cam,
+                device_pixel_ratio(),
+                canvas_client_offset(),
+            )
+        };
+        if self.float_bar.get_untracked() != next {
+            self.float_bar.set(next);
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn publish_float_bar(&self) {}
+
+    /// Drain a quick-colour pick the floating bar emitted (§5quinquies.D) and apply
+    /// it to the live selection as one whole-register `RestyleElements` (fill only,
+    /// §2.E). The base is the selection's common style so the other attributes are
+    /// preserved; the view attaches the ids the DOM bar cannot name. Wasm-only; a
+    /// host no-op keeps `update` cfg-agnostic.
+    #[cfg(target_arch = "wasm32")]
+    fn drain_quick_fill(&mut self) {
+        let Some(super::floatbar::QuickFill(color)) = self.quick_fill.get_untracked() else {
+            return;
+        };
+        self.quick_fill.set(None);
+        if self.selection.is_empty() {
+            return;
+        }
+        let mut style = super::style::style_scope_for(&self.selection, &self.display)
+            .map(|m| m.base)
+            .unwrap_or_default();
+        style.fill = color;
+        self.send_edit(ToileCommand::RestyleElements {
+            ids: self.selection.clone(),
+            style,
+        });
+        self.needs_full = true;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn drain_quick_fill(&mut self) {}
 
     /// Apply the tool the DOM palette / keyboard selected (§5quinquies.A): if the
     /// shared signal differs from the machine's current tool, switch (which cancels
@@ -1098,11 +1173,17 @@ impl ToileView {
         // Apply any style edit the inspector emitted this frame (§5quinquies.B).
         self.drain_restyle();
 
+        // Apply any quick-colour pick the floating bar emitted (§5quinquies.D).
+        self.drain_quick_fill();
+
         // Apply the tool the DOM palette / keyboard selected this frame (§5quinquies.A).
         self.apply_active_tool();
 
         // Publish the live zoom % to the DOM zoom control / status bar (§5quinquies.E).
         self.publish_zoom();
+
+        // Republish the floating selection toolbar, transform-synced (§5quinquies.D).
+        self.publish_float_bar();
 
         // A freshly-created Sticky / Text element: open its editor now that its
         // geometry has landed in `display` (§6).
@@ -1403,4 +1484,20 @@ fn device_pixel_ratio() -> f64 {
 #[cfg(not(target_arch = "wasm32"))]
 fn device_pixel_ratio() -> f64 {
     1.0
+}
+
+/// The canvas element's top-left client offset (CSS px), so a canvas-local anchor
+/// maps into viewport coordinates for a `position: fixed` overlay (§5quinquies.D).
+/// The canvas sits below the header / toolbar chrome, so this offset is non-zero.
+/// Off the web, or before the canvas mounts, it is `(0, 0)`.
+#[cfg(target_arch = "wasm32")]
+fn canvas_client_offset() -> (f64, f64) {
+    web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.query_selector(".ambre-canvas").ok().flatten())
+        .map(|el| {
+            let r = el.get_bounding_client_rect();
+            (r.left(), r.top())
+        })
+        .unwrap_or((0.0, 0.0))
 }

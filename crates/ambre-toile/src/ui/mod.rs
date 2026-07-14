@@ -13,6 +13,7 @@
 
 pub mod edit;
 pub mod find;
+pub mod floatbar;
 pub mod grid;
 pub mod hit;
 pub mod menu;

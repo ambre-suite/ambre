@@ -328,6 +328,29 @@ input[type="radio"] {
     opacity: 0.75;
 }
 
+/* Toile content-anchored floating selection toolbar (toile-ui SS5quinquies.D): a
+   compact action bar that follows the selection as the board pans / zooms. The
+   canvas view republishes its client anchor (`left` / `top`) every frame; the
+   `transform` centres the bar over the selection and lifts it above with a gap
+   ("air", like Miro). It reuses `.ambre-commandbar` for the icon buttons, so only
+   the floating frame and placement are styled here. */
+.ambre-selbar {
+    position: fixed;
+    z-index: 60;
+    /* Centre horizontally on the anchor, sit above the selection's top edge with
+       a 36px gap. `left`/`top` are the selection's top-edge midpoint. */
+    transform: translate(-50%, calc(-100% - 36px));
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    padding: 4px;
+    background: var(--surface, var(--content-bg));
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
 /* The opacity slider inside the ARGB colour popover (Toile fill / stroke). */
 .ambre-color-popover .opacity {
     display: flex;

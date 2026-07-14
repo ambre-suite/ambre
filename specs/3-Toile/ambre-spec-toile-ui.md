@@ -548,7 +548,16 @@ lives in Logic, keyed on change size.
   `alpha` flag and, in ARGB mode, adds an opacity slider; Trame's `FormatBar` and the Toile inspector
   both consume it. The **text-run** consumer is still pending: rich text runs (§6) are unimplemented and
   `FontSpec` carries no colour field yet, so there is no run colour to bind. Re-tick fully with §6.
-- [ ] Content-anchored floating selection toolbar, transform-synced each frame (§5quinquies.D)
+- [x] Content-anchored floating selection toolbar, transform-synced each frame (§5quinquies.D).
+  DOM chrome `SelectionToolbar` (`chrome::floatbar`): a `position: fixed` bar the canvas view
+  republishes every frame from the live selection x camera (`ui::floatbar::build_floatbar`), so its
+  client anchor (selection top-edge midpoint, lifted with a CSS gap) follows pan/zoom. It hides on an
+  empty selection, an active gesture (move/resize/rotate), a pan, or an open inline editor. Actions are
+  quick colour (shared `ambre_chrome::ColorPopover`, ARGB) plus Duplicate / Delete / Group / Ungroup /
+  Lock / Unlock -- every button but the swatch is a `ui::menu` `CommandId` on the shared `on_command`
+  path, a strict subset of the context menu (§5ter) so the two never diverge. The colour pick rides a
+  `QuickFill` the view folds into one fill-only, whole-register `RestyleElements` (§2.E). The pure
+  placement + flags + common-fill fold live in the host-tested `ui::floatbar`.
 - [x] Top menu bar + zoom control (Fit / Zoom-to-selection) (§5quinquies.E). DOM chrome
   `TopMenuBar` (`chrome::menu_bar`): the File/Edit/View/Object/Present menus render through the
   shared `ambre-chrome` `ContextMenu` (opened at each title), and the zoom cluster (out / `%`
