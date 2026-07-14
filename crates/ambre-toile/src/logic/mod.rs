@@ -6,6 +6,7 @@
 //! [`stroke`] smoothing. The UI renderer, presentation mode and interop paths
 //! arrive in later crates / slices (Epic `E4`).
 
+pub mod animate;
 pub mod command;
 pub mod connector;
 pub mod index;
@@ -13,6 +14,7 @@ pub mod model;
 pub mod state;
 pub mod stroke;
 
+pub use animate::{AnimatedElement, FrameSnapshot, SnapElement, ease_in_out_cubic, smart_animate};
 pub use command::{
     DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, End, InitContent,
     SelectionStats, ToileCommand, ToileError, ToileEvent, ToileOutcome, ZTarget,
