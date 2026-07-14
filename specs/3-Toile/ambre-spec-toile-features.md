@@ -286,7 +286,7 @@ presentation camera reuses the `toile-ui` pipeline.
 > Tracked as Stories of Epic **E4** (Toile MVP) in `specs/ambre-roadmap.md`.
 
 **Phase 0 - Core standalone**
-- [ ] Presentation sequence CRDT + playback state machine
+- [x] Presentation sequence CRDT + playback state machine
 - [ ] Speaker notes
 - [ ] `smart_animate` pure solver (stable-`ElementId` matching, §1.C) with host tests
 - [ ] `solve_layout` pure auto-layout solver with host tests
