@@ -6,14 +6,14 @@
 use std::collections::HashSet;
 
 use kurbo::{Point, Rect, Vec2};
-use loro::{LoroMap, LoroMovableList, LoroValue};
+use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 
 use crate::logic::command::{InitContent, ToileError, ToileEvent, ToileOutcome, ZTarget};
 use crate::logic::index::ElementBounds;
 use crate::logic::model::{ElementId, ElementKind, ElementStyle, NodeId, ShapeKind, StrokePoint};
 
 use super::codec::{bool_of, content_matches, expanded_aabb, f64_of, stroke_aabb};
-use super::{CHILDREN, CONNECTORS, ELEMENTS, LAYERS, ToileState};
+use super::{CHILDREN, CONNECTORS, ELEMENTS, LAYERS, NOTES, ToileState};
 
 impl ToileState {
     pub(super) fn create_element(
@@ -103,9 +103,16 @@ impl ToileState {
                 let _ = em.insert("text", "");
             }
             (ElementKind::Frame, _) => {
-                // Frame content (§2.C): an empty membership list at birth. Notes /
-                // autolayout are seeded by their toile-features commands.
+                // Frame content (§2.C): an empty membership list plus an empty
+                // speaker-notes text at birth. Notes MUST be seeded here, not
+                // lazily on first edit: seeding at creation gives every peer the
+                // same shared LoroText container (broadcast in the creation delta)
+                // before any edit, so concurrent notes edits converge (§1.D / §6).
+                // A lazy first edit on each peer would mint two rival containers
+                // under the same map key -> LWW collision, one side's notes lost.
+                // Autolayout stays lazy (absent = free positioning, §2).
                 let _ = em.insert_container(CHILDREN, LoroMovableList::new());
+                let _ = em.insert_container(NOTES, LoroText::new());
             }
             _ => {}
         }

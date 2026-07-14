@@ -15,8 +15,8 @@
 pub use ambre_bus::app::toile::{
     ClipConnector, ClipElement, ClipMembership, ClipValue, ClipboardPayload, DisplayConnector,
     DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, End, FindOptions, FindResults,
-    InitContent, PresencePayload, PresenceUpdate, SelectionStats, ToileCommand, ToileError,
-    ToileEvent, ZTarget,
+    InitContent, PresencePayload, PresenceUpdate, SelectionStats, TextDelta, ToileCommand,
+    ToileError, ToileEvent, ZTarget,
 };
 
 // -----------------------------------------------------------------------------

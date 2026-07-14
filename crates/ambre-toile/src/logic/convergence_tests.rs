@@ -12,7 +12,8 @@ use proptest::prelude::*;
 use ambre_bus::UserId;
 
 use crate::logic::command::{
-    DisplayNode, End, InitContent, PresencePayload, ToileCommand, ToileEvent, ZTarget,
+    DisplayNode, End, InitContent, PresencePayload, TextDelta, ToileCommand, ToileError,
+    ToileEvent, ZTarget,
 };
 use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, NodeId, PathType,
@@ -1160,6 +1161,154 @@ fn playback_is_not_synced() {
         b.playback(),
         (false, 0, false),
         "B's playback is untouched by A's presentation"
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Speaker notes (toile-features §1.D / §5)
+// -----------------------------------------------------------------------------
+
+/// A single-splice insertion at `at` (no deletion), the common editor edit.
+fn insert_notes(at: usize, s: &str) -> TextDelta {
+    TextDelta {
+        at,
+        delete: 0,
+        insert: s.to_owned(),
+    }
+}
+
+#[test]
+fn edit_notes_produces_delta_and_is_undoable() {
+    let mut st = ToileState::new();
+    let f = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+
+    let out = st.handle_command(ToileCommand::EditNotes {
+        frame: f.clone(),
+        delta: insert_notes(0, "Intro slide"),
+    });
+    assert!(
+        out.update.is_some(),
+        "speaker notes are CRDT and must broadcast a delta"
+    );
+    assert_eq!(st.notes(&f), "Intro slide");
+
+    // A second splice appends " -- talk track" after the existing text.
+    st.handle_command(ToileCommand::EditNotes {
+        frame: f.clone(),
+        delta: insert_notes(11, " -- talk track"),
+    });
+    assert_eq!(st.notes(&f), "Intro slide -- talk track");
+
+    // Each EditNotes is one undo item (§8 bis): undo drops the last splice only.
+    st.handle_command(ToileCommand::Undo);
+    assert_eq!(st.notes(&f), "Intro slide", "one undo reverts one splice");
+    st.handle_command(ToileCommand::Redo);
+    assert_eq!(
+        st.notes(&f),
+        "Intro slide -- talk track",
+        "redo re-applies it"
+    );
+}
+
+#[test]
+fn edit_notes_clamps_out_of_range_splice() {
+    let mut st = ToileState::new();
+    let f = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    st.handle_command(ToileCommand::EditNotes {
+        frame: f.clone(),
+        delta: insert_notes(0, "abc"),
+    });
+    // An `at` past the end is clamped to the length: the insert lands at the tail
+    // rather than being rejected.
+    st.handle_command(ToileCommand::EditNotes {
+        frame: f.clone(),
+        delta: insert_notes(999, "Z"),
+    });
+    assert_eq!(st.notes(&f), "abcZ");
+    // An oversized deletion span is clamped to what remains.
+    st.handle_command(ToileCommand::EditNotes {
+        frame: f.clone(),
+        delta: TextDelta {
+            at: 0,
+            delete: 999,
+            insert: String::new(),
+        },
+    });
+    assert_eq!(st.notes(&f), "");
+}
+
+#[test]
+fn edit_notes_rejects_non_frame() {
+    let mut st = ToileState::new();
+    let sticky = create_sticky(&mut st, Point::ZERO, "body");
+
+    // A sticky carries no `children` field, so it is not a frame: rejected no-op.
+    let out = st.handle_command(ToileCommand::EditNotes {
+        frame: sticky.clone(),
+        delta: insert_notes(0, "nope"),
+    });
+    assert!(out.update.is_none(), "a rejected EditNotes emits no delta");
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::Error(ToileError::ContentKindMismatch))),
+        "notes on a non-frame report a ContentKindMismatch"
+    );
+    assert_eq!(st.notes(&sticky), "", "no notes were written to the sticky");
+
+    // A missing element reports NoSuchElement.
+    let out = st.handle_command(ToileCommand::EditNotes {
+        frame: ElementId("ghost".to_owned()),
+        delta: insert_notes(0, "nope"),
+    });
+    assert!(out.update.is_none());
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::Error(ToileError::NoSuchElement(_)))),
+    );
+}
+
+#[test]
+fn concurrent_notes_edits_converge() {
+    // Two peers share a frame (and thus its seeded notes LoroText, §1.D), then
+    // edit the notes concurrently at different positions. The char-CRDT must
+    // converge: both peers reach the same notes string after a sync round.
+    let mut a = ToileState::new();
+    let mut b = ToileState::new();
+    let f = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+    // Bring B up to date so both share the same frame + notes container.
+    b.apply_remote(&a.export_snapshot());
+    assert_eq!(a.notes(&f), "");
+    assert_eq!(b.notes(&f), "");
+
+    // Concurrent, non-overlapping edits, each unaware of the other.
+    let da = a
+        .handle_command(ToileCommand::EditNotes {
+            frame: f.clone(),
+            delta: insert_notes(0, "AAA"),
+        })
+        .update
+        .expect("A's notes edit broadcasts a delta");
+    let db = b
+        .handle_command(ToileCommand::EditNotes {
+            frame: f.clone(),
+            delta: insert_notes(0, "BBB"),
+        })
+        .update
+        .expect("B's notes edit broadcasts a delta");
+
+    // Relay each peer's delta to the other.
+    b.apply_remote(&da);
+    a.apply_remote(&db);
+
+    // Char-CRDT convergence: identical final notes on both peers, and both edits
+    // survived (no LWW loss of a rival container).
+    assert_eq!(a.notes(&f), b.notes(&f), "concurrent notes edits diverged");
+    let merged = a.notes(&f);
+    assert!(
+        merged.contains("AAA") && merged.contains("BBB"),
+        "both concurrent insertions must survive, got {merged:?}"
     );
 }
 
