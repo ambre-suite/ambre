@@ -624,7 +624,9 @@ pub enum End { From, To } // which endpoint of a connector to retarget
 ///   Shape(other) -> None (geometry comes from `size`)
 ///   Image        -> Image (blob hash into `media`, interop §2.B/§5)
 ///   Embed        -> Embed (sandboxed url)
-///   Frame        -> None (children/notes/autolayout seeded by later commands)
+///   Frame        -> None (empty children + notes containers seeded at birth so
+///                  concurrent notes edits share one LoroText and converge,
+///                  features §1.D/§6; autolayout stays lazy, absent = free)
 pub enum InitContent {
     None,
     Path(kurbo::BezPath),

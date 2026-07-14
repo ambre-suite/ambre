@@ -431,6 +431,19 @@ pub struct FindResults {
     pub focus: Option<ElementId>,
 }
 
+/// A single char-CRDT splice on a `LoroText` (§1.D speaker notes). Encodes any
+/// editor edit as "at codepoint `at`, remove `delete` codepoints, then insert
+/// `insert`". Indices are loro unicode-codepoint positions; the engine clamps
+/// them to the current length. This is the `TextDelta` the specs defer for
+/// element text -- introduced here for notes only, where char-CRDT convergence
+/// is required (§6).
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct TextDelta {
+    pub at: usize,
+    pub delete: usize,
+    pub insert: String,
+}
+
 /// Per-viewer presentation playback (§1.B). Purely local, momentary-gesture
 /// state: which slide this viewer is on and whether focus (present) mode hides
 /// the chrome. Never a CRDT value and never synced -- only the slide *sequence*
@@ -540,6 +553,14 @@ pub enum ToileCommand {
     },
     /// Leave presentation mode (§1.B). Local only.
     ExitPresent,
+    /// Apply a char-CRDT edit to a frame's collaborative speaker notes (§1.D).
+    /// Notes live in the frame element's payload as a LoroText, seeded on first
+    /// edit. CRDT, convergent, one commit = one undo item. A missing / non-frame
+    /// id is a rejected no-op.
+    EditNotes {
+        frame: FrameId,
+        delta: TextDelta,
+    },
 
     // -- Undo / redo (local-only, §8 bis) --
     Undo,

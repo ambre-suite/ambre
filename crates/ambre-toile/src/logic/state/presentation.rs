@@ -9,12 +9,12 @@
 //! Loro and never synced. This mirrors the durable-intent vs momentary-gesture
 //! split already used for presence (`toile-logic §7`).
 
-use loro::{LoroMap, LoroMovableList, LoroValue};
+use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 
-use crate::logic::command::{ToileEvent, ToileOutcome};
+use crate::logic::command::{TextDelta, ToileError, ToileEvent, ToileOutcome};
 use crate::logic::model::{ElementId, FrameId};
 
-use super::{CONFIG, ORDER, PRESENTATION, ToileState};
+use super::{CHILDREN, CONFIG, NOTES, ORDER, PRESENTATION, ToileState};
 
 impl ToileState {
     // -- sequence (CRDT, §1.A) -------------------------------------------------
@@ -128,6 +128,57 @@ impl ToileState {
         (self.present, self.playback.active, self.playback.focus)
     }
 
+    // -- speaker notes (CRDT, §1.D) --------------------------------------------
+
+    /// Apply a char-CRDT splice to a frame's collaborative speaker notes (§1.D).
+    /// Notes are a `LoroText` in the frame element's payload, seeded lazily on the
+    /// first edit (like the deck's `order` list). The splice indices are clamped
+    /// to the current length, so an out-of-range editor edit is bounded rather
+    /// than rejected. CRDT and undoable: one `doc.commit()` is one undo item
+    /// (§8 bis). A missing element or a non-frame element (no `children` field) is
+    /// a rejected no-op, mirroring `set_text`'s kind guard (§6).
+    pub(super) fn edit_notes(&mut self, frame: &FrameId, delta: &TextDelta) -> ToileOutcome {
+        let Some(em) = self.element_map(frame) else {
+            return self.err_no_element(frame);
+        };
+        // Only a frame carries notes; `children` is seeded at frame birth (§2.C).
+        if em.get(CHILDREN).is_none() {
+            return ToileOutcome::display_only(vec![ToileEvent::Error(
+                ToileError::ContentKindMismatch,
+            )]);
+        }
+        // Skip a pure no-op so an empty delta produces neither a commit nor an
+        // undo item.
+        if delta.delete == 0 && delta.insert.is_empty() {
+            return ToileOutcome::display_only(Vec::new());
+        }
+        let text = notes_text_or_seed(&em);
+        // Clamp to the current length: `at` and the deletion span never run past
+        // the end of the buffer.
+        let len = text.len_unicode();
+        let at = delta.at.min(len);
+        let del = delta.delete.min(len - at);
+        if del > 0 {
+            let _ = text.delete(at, del);
+        }
+        if !delta.insert.is_empty() {
+            let _ = text.insert(at, &delta.insert);
+        }
+        self.doc.commit();
+        self.emit_with_update(Vec::new())
+    }
+
+    /// The current speaker notes of `frame` as a plain string (empty if the frame
+    /// has no notes yet or does not exist). Test / integration accessor.
+    pub fn notes(&self, frame: &FrameId) -> String {
+        self.element_map(frame)
+            .and_then(|em| em.get(NOTES))
+            .and_then(|v| v.into_container().ok())
+            .and_then(|c| c.into_text().ok())
+            .map(|t| t.to_string())
+            .unwrap_or_default()
+    }
+
     // -- container helpers -----------------------------------------------------
 
     /// The `presentation.order` movable list, if the deck has been seeded.
@@ -159,6 +210,20 @@ impl ToileState {
         pres.insert_container(ORDER, LoroMovableList::new())
             .expect("seed presentation order list")
     }
+}
+
+/// The frame's `notes` LoroText, seeding an empty one on first use (§1.D). The
+/// `em` map is already known to be a frame (checked by the caller).
+fn notes_text_or_seed(em: &LoroMap) -> LoroText {
+    if let Some(text) = em
+        .get(NOTES)
+        .and_then(|v| v.into_container().ok())
+        .and_then(|c| c.into_text().ok())
+    {
+        return text;
+    }
+    em.insert_container(NOTES, LoroText::new())
+        .expect("seed frame notes text")
 }
 
 /// Read a movable list's string entries in order.

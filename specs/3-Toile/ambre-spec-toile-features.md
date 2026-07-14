@@ -104,6 +104,12 @@ Because matching is by **stable id**, an element the author moved/resized betwee
 "elements" / "{frame_id}" / payload / "notes" : LoroText   // collaborative speaker notes
 ```
 
+The `notes` LoroText is seeded empty **at frame creation** (`toile-logic §2.C`), not on the first `EditNotes`:
+a shared container broadcast in the creation delta lets concurrent first edits from two peers target the same
+LoroText and converge (§6). A lazy per-peer seed would mint two rival containers under the same map key -- an
+LWW collision that drops one side's notes. `EditNotes { frame, delta: TextDelta }` applies a single char-CRDT
+splice `{ at, delete, insert }` (loro codepoint indices, clamped to length); one splice = one undo item.
+
 ---
 
 ## 2. AUTO-LAYOUT (CONSTRAINT SYSTEM)
@@ -287,7 +293,7 @@ presentation camera reuses the `toile-ui` pipeline.
 
 **Phase 0 - Core standalone**
 - [x] Presentation sequence CRDT + playback state machine
-- [ ] Speaker notes
+- [x] Speaker notes
 - [ ] `smart_animate` pure solver (stable-`ElementId` matching, §1.C) with host tests
 - [ ] `solve_layout` pure auto-layout solver with host tests
 - [ ] Reactions / votes CRDT keyed by `UserId` (§4.A) + derived read-time tally

@@ -56,6 +56,8 @@ const LAYERS: &str = "layers";
 const BOARD: &str = "board";
 /// Per-group / per-frame membership list key inside an element map (§2.F bis).
 const CHILDREN: &str = "children";
+/// Collaborative speaker-notes LoroText key inside a frame element map (§1.D).
+const NOTES: &str = "notes";
 /// Presentation root map key (`toile-features` §1.A).
 const PRESENTATION: &str = "presentation";
 /// Slide sequence movable-list key inside the `presentation` map (§1.A).
@@ -195,6 +197,7 @@ impl ToileState {
             ToileCommand::GotoSlide(idx) => self.goto_slide(idx),
             ToileCommand::EnterPresent { focus } => self.enter_present(focus),
             ToileCommand::ExitPresent => self.exit_present(),
+            ToileCommand::EditNotes { frame, delta } => self.edit_notes(&frame, &delta),
             ToileCommand::Undo => self.apply_history(true),
             ToileCommand::Redo => self.apply_history(false),
             ToileCommand::CreateConnector {
