@@ -12,8 +12,8 @@ use proptest::prelude::*;
 use ambre_bus::UserId;
 
 use crate::logic::command::{
-    DisplayNode, End, InitContent, PresencePayload, TextDelta, ToileCommand, ToileError,
-    ToileEvent, ZTarget,
+    DisplayNode, End, InitContent, PresencePayload, Reaction, ReactionKind, TextDelta,
+    ToileCommand, ToileError, ToileEvent, ZTarget,
 };
 use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, NodeId, PathType,
@@ -1374,6 +1374,225 @@ fn concurrent_notes_edits_converge() {
 }
 
 // -----------------------------------------------------------------------------
+// Reactions / votes (toile-features §4.A / §5)
+// -----------------------------------------------------------------------------
+
+fn emoji(s: &str) -> Reaction {
+    Reaction {
+        kind: ReactionKind::Emoji(s.to_owned()),
+        ts: 0,
+    }
+}
+
+fn vote(w: i32) -> Reaction {
+    Reaction {
+        kind: ReactionKind::Vote(w),
+        ts: 0,
+    }
+}
+
+/// Seed a state with a canonical `UserId` (as the dispatcher does on
+/// `SessionReady`) and a target element to react on. Returns the target id.
+fn state_with_user(user: UserId) -> (ToileState, ElementId) {
+    let mut st = ToileState::new();
+    st.set_user_id(user);
+    let target = create_sticky(&mut st, Point::ZERO, "target");
+    (st, target)
+}
+
+#[test]
+fn react_add_change_remove_updates_tally() {
+    let (mut st, t) = state_with_user(UserId::new());
+
+    // Add an emoji reaction.
+    st.handle_command(ToileCommand::React {
+        target: t.clone(),
+        reaction: Some(emoji("thumbsup")),
+    });
+    let tally = st.reaction_tally(&t);
+    assert_eq!(tally.emoji, vec![("thumbsup".to_owned(), 1)]);
+    assert_eq!(tally.vote_count, 0);
+
+    // Change the same user's reaction: one entry per user, so it replaces (LWW on
+    // the own key), never accumulates.
+    st.handle_command(ToileCommand::React {
+        target: t.clone(),
+        reaction: Some(vote(1)),
+    });
+    let tally = st.reaction_tally(&t);
+    assert!(
+        tally.emoji.is_empty(),
+        "the emoji entry was replaced, not kept"
+    );
+    assert_eq!((tally.vote_total, tally.vote_count), (1, 1));
+    assert_eq!(st.my_reaction(&t), Some(vote(1)));
+
+    // Remove the user's own entry.
+    st.handle_command(ToileCommand::React {
+        target: t.clone(),
+        reaction: None,
+    });
+    assert_eq!(st.reaction_tally(&t), Default::default());
+    assert_eq!(st.my_reaction(&t), None);
+}
+
+#[test]
+fn react_broadcasts_delta_and_is_undoable() {
+    let (mut st, t) = state_with_user(UserId::new());
+
+    let out = st.handle_command(ToileCommand::React {
+        target: t.clone(),
+        reaction: Some(emoji("heart")),
+    });
+    assert!(
+        out.update.is_some(),
+        "a reaction is CRDT and must broadcast a delta"
+    );
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::ReactionsUpdated(id) if id == &t)),
+        "a reaction emits ReactionsUpdated for its target"
+    );
+
+    // One React is one undo item (§8 bis): undo drops the reaction.
+    st.handle_command(ToileCommand::Undo);
+    assert_eq!(
+        st.reaction_tally(&t),
+        Default::default(),
+        "undo reverts the reaction"
+    );
+
+    // A no-op remove (nothing to remove) emits no delta and no commit.
+    let out = st.handle_command(ToileCommand::React {
+        target: t.clone(),
+        reaction: None,
+    });
+    assert!(out.update.is_none(), "a no-op remove broadcasts nothing");
+}
+
+#[test]
+fn react_before_session_ready_is_a_noop() {
+    // Without a canonical UserId there is no per-user key to write under.
+    let mut st = ToileState::new();
+    let t = create_sticky(&mut st, Point::ZERO, "target");
+    assert!(st.user_id().is_none());
+
+    let out = st.handle_command(ToileCommand::React {
+        target: t.clone(),
+        reaction: Some(emoji("thumbsup")),
+    });
+    assert!(out.update.is_none(), "no identity means nothing is written");
+    assert_eq!(st.reaction_tally(&t), Default::default());
+}
+
+#[test]
+fn tally_skips_a_deleted_target() {
+    let (mut st, t) = state_with_user(UserId::new());
+    st.handle_command(ToileCommand::React {
+        target: t.clone(),
+        reaction: Some(emoji("thumbsup")),
+    });
+    assert_eq!(st.reaction_tally(&t).emoji.len(), 1);
+
+    // Deleting the target skips its reaction sub-map at derivation (§4.A): the
+    // orphan bytes are never destroyed, only not rendered.
+    st.handle_command(ToileCommand::DeleteElements {
+        ids: vec![t.clone()],
+    });
+    assert_eq!(
+        st.reaction_tally(&t),
+        Default::default(),
+        "a deleted target's reactions are skipped at derivation"
+    );
+}
+
+#[test]
+fn concurrent_reactions_distinct_users_converge() {
+    // Two different users react on the same target concurrently. Per-user keys
+    // mean both entries survive; the tally counts both, with no double-count.
+    let alice = UserId::new();
+    let bob = UserId::new();
+    let mut a = ToileState::new();
+    a.set_user_id(alice);
+    let t = create_sticky(&mut a, Point::ZERO, "target");
+
+    let mut b = ToileState::new();
+    b.set_user_id(bob);
+    b.apply_remote(&a.export_snapshot());
+
+    let da = a
+        .handle_command(ToileCommand::React {
+            target: t.clone(),
+            reaction: Some(emoji("thumbsup")),
+        })
+        .update
+        .expect("A's reaction broadcasts a delta");
+    let db = b
+        .handle_command(ToileCommand::React {
+            target: t.clone(),
+            reaction: Some(emoji("thumbsup")),
+        })
+        .update
+        .expect("B's reaction broadcasts a delta");
+
+    b.apply_remote(&da);
+    a.apply_remote(&db);
+
+    let ta = a.reaction_tally(&t);
+    assert_eq!(ta, b.reaction_tally(&t), "concurrent reactions diverged");
+    assert_eq!(
+        ta.emoji,
+        vec![("thumbsup".to_owned(), 2)],
+        "two distinct users must both count, no double-count"
+    );
+}
+
+#[test]
+fn same_user_two_devices_is_one_entry() {
+    // The same account reacting from two devices (two sessions / PeerIDs) must
+    // collapse to a single entry keyed by the canonical UserId (§4.A) -- never a
+    // double-count.
+    let me = UserId::new();
+    let mut a = ToileState::new();
+    a.set_user_id(me);
+    let t = create_sticky(&mut a, Point::ZERO, "target");
+
+    let mut b = ToileState::new();
+    b.set_user_id(me);
+    b.apply_remote(&a.export_snapshot());
+
+    let da = a
+        .handle_command(ToileCommand::React {
+            target: t.clone(),
+            reaction: Some(vote(1)),
+        })
+        .update
+        .expect("device A's reaction broadcasts a delta");
+    let db = b
+        .handle_command(ToileCommand::React {
+            target: t.clone(),
+            reaction: Some(vote(1)),
+        })
+        .update
+        .expect("device B's reaction broadcasts a delta");
+
+    b.apply_remote(&da);
+    a.apply_remote(&db);
+
+    let ta = a.reaction_tally(&t);
+    assert_eq!(
+        ta,
+        b.reaction_tally(&t),
+        "same-user two-device tally diverged"
+    );
+    assert_eq!(
+        ta.vote_count, 1,
+        "two devices of one user is a single entry, not two votes"
+    );
+}
+
+// -----------------------------------------------------------------------------
 // 2-peer CRDT convergence property test (DoD)
 // -----------------------------------------------------------------------------
 
@@ -1382,22 +1601,67 @@ fn concurrent_notes_edits_converge() {
 /// a sync round).
 #[derive(Clone, Debug)]
 enum PeerOp {
-    Create { x: f64, y: f64 },
-    MoveNth { nth: usize, dx: f64, dy: f64 },
-    ResizeNth { nth: usize, w: f64, h: f64 },
-    RotateNth { nth: usize, radians: f64 },
-    RestyleNth { nth: usize, fill: u32 },
-    DeleteNth { nth: usize },
-    ReorderNthToBack { nth: usize },
+    Create {
+        x: f64,
+        y: f64,
+    },
+    MoveNth {
+        nth: usize,
+        dx: f64,
+        dy: f64,
+    },
+    ResizeNth {
+        nth: usize,
+        w: f64,
+        h: f64,
+    },
+    RotateNth {
+        nth: usize,
+        radians: f64,
+    },
+    RestyleNth {
+        nth: usize,
+        fill: u32,
+    },
+    DeleteNth {
+        nth: usize,
+    },
+    ReorderNthToBack {
+        nth: usize,
+    },
     // Layers / children-heavy paths -- where concurrent `LoroMovableList`
     // ordering and derived-cache rebuilds are most likely to diverge.
-    GroupNth { i: usize, j: usize },
-    UngroupNth { nth: usize },
-    ConnectNth { i: usize, j: usize },
-    Stroke { x: f64, y: f64 },
+    GroupNth {
+        i: usize,
+        j: usize,
+    },
+    UngroupNth {
+        nth: usize,
+    },
+    ConnectNth {
+        i: usize,
+        j: usize,
+    },
+    Stroke {
+        x: f64,
+        y: f64,
+    },
     // Presentation sequence -- concurrent `LoroMovableList<FrameId>` reorders.
-    CreateFrame { x: f64, y: f64 },
-    SetSlideOrderRot { by: usize },
+    CreateFrame {
+        x: f64,
+        y: f64,
+    },
+    SetSlideOrderRot {
+        by: usize,
+    },
+    // Reactions -- concurrent per-user entries on a shared target (§4.A). Each
+    // peer holds a distinct `UserId`, so two reactions on one target must both
+    // survive and the derived tally must converge.
+    ReactNth {
+        nth: usize,
+        emoji: bool,
+        weight: i32,
+    },
 }
 
 fn op_strategy() -> impl Strategy<Value = PeerOp> {
@@ -1423,6 +1687,11 @@ fn op_strategy() -> impl Strategy<Value = PeerOp> {
         (-200.0f64..200.0, -200.0f64..200.0).prop_map(|(x, y)| PeerOp::Stroke { x, y }),
         (-200.0f64..200.0, -200.0f64..200.0).prop_map(|(x, y)| PeerOp::CreateFrame { x, y }),
         (0usize..6).prop_map(|by| PeerOp::SetSlideOrderRot { by }),
+        (0usize..6, any::<bool>(), -2i32..3).prop_map(|(nth, emoji, weight)| PeerOp::ReactNth {
+            nth,
+            emoji,
+            weight
+        }),
     ]
 }
 
@@ -1539,6 +1808,27 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<Vec<u8>> {
             order.rotate_left(k);
             st.handle_command(ToileCommand::SetSlideOrder { order })
         }
+        PeerOp::ReactNth {
+            nth: n,
+            emoji: is_emoji,
+            weight,
+        } => match nth(*n) {
+            Some(id) => {
+                let reaction = if *is_emoji {
+                    // A tiny emoji alphabet so distinct peers sometimes agree
+                    // (merged count) and sometimes differ (distinct rows).
+                    let set = ["up", "down", "heart"];
+                    emoji(set[(*weight).rem_euclid(3) as usize])
+                } else {
+                    vote(*weight)
+                };
+                st.handle_command(ToileCommand::React {
+                    target: id,
+                    reaction: Some(reaction),
+                })
+            }
+            None => return None,
+        },
         PeerOp::Stroke { x, y } => st.handle_command(ToileCommand::CommitStroke {
             points: vec![
                 StrokePoint {
@@ -1576,6 +1866,11 @@ proptest! {
                           ops_b in proptest::collection::vec(op_strategy(), 0..20)) {
         let mut a = ToileState::new();
         let mut b = ToileState::new();
+        // Distinct canonical identities (as `SessionReady` would seed), so a
+        // `ReactNth` on each peer writes under its own key: concurrent reactions
+        // on one target must both survive (§4.A).
+        a.set_user_id(UserId::new());
+        b.set_user_id(UserId::new());
 
         // Interleave: each peer applies its op locally, then both pending deltas
         // are exchanged, so operations concurrently target a partly-shared state.
@@ -1618,6 +1913,15 @@ proptest! {
         // converge on the shared `LoroMovableList<FrameId>` (§1.A).
         prop_assert_eq!(a.slide_order(), b.slide_order(), "slide order diverged");
 
+        // Identical derived reaction tally on every surviving target: concurrent
+        // per-user reactions converge and no vote is double-counted (§4.A / §6).
+        for id in &la {
+            prop_assert_eq!(
+                a.reaction_tally(id), b.reaction_tally(id),
+                "reaction tally diverged for {:?}", id
+            );
+        }
+
         // Comprehensive check: the full derived paint set (elements + routed
         // connectors + group union bounds) must match under an identical, wide
         // viewport. Debug equality captures every DisplayNode field.
@@ -1638,6 +1942,9 @@ proptest! {
     #[test]
     fn caches_match_a_full_rebuild(ops in proptest::collection::vec(op_strategy(), 0..40)) {
         let mut a = ToileState::new();
+        // Seed an identity so `ReactNth` ops actually write (else a no-op), so the
+        // rebuilt peer `b` exercises the reactions map on the snapshot path too.
+        a.set_user_id(UserId::new());
         for op in &ops {
             let _ = apply_local(&mut a, op);
         }

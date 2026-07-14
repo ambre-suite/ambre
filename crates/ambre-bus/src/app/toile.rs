@@ -444,6 +444,36 @@ pub struct TextDelta {
     pub insert: String,
 }
 
+/// One user's persisted reaction on a target (`toile-features` §4.A): an emoji
+/// OR a signed vote weight, plus a wall-clock `ts` kept only as a display
+/// tiebreak. The LWW on a user's own key is handled by Loro (the map key is the
+/// canonical `UserId`), not by this `ts`. Postcard-encoded into the reactions
+/// sub-map value (§4.A).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Reaction {
+    pub kind: ReactionKind,
+    pub ts: i64,
+}
+
+/// The two reaction flavours (§4.A): a free-form emoji or a signed vote weight
+/// (e.g. `+1` / `-1` / a weighted ballot).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReactionKind {
+    Emoji(String),
+    Vote(i32),
+}
+
+/// Read-time tally derived from a target's reaction sub-map (§4.A). Never stored
+/// -- recomputed on read so it can never drift from the per-user entry set.
+/// `emoji` is sorted for a stable render order; `vote_total` / `vote_count`
+/// aggregate the `Vote` entries.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ReactionTally {
+    pub emoji: Vec<(String, u32)>,
+    pub vote_total: i64,
+    pub vote_count: u32,
+}
+
 /// Per-viewer presentation playback (§1.B). Purely local, momentary-gesture
 /// state: which slide this viewer is on and whether focus (present) mode hides
 /// the chrome. Never a CRDT value and never synced -- only the slide *sequence*
@@ -560,6 +590,17 @@ pub enum ToileCommand {
     EditNotes {
         frame: FrameId,
         delta: TextDelta,
+    },
+
+    // -- Reactions / votes (§4.A) --
+    /// Place, change or remove the local user's reaction on a target (element or
+    /// frame). Shared, persisted CRDT: a sub-map keyed by target + canonical
+    /// `UserId`, so one user has exactly one entry per target (a re-vote is LWW on
+    /// their own key). `reaction: None` removes the user's own entry. Tallies are
+    /// derived on read, never stored. One commit = one undo item.
+    React {
+        target: TargetId,
+        reaction: Option<Reaction>,
     },
 
     // -- Undo / redo (local-only, §8 bis) --
@@ -731,6 +772,10 @@ pub enum ToileEvent {
     /// Presentation (focus) mode was entered (`true`) or left (`false`) (§5).
     /// Local view state, like [`SlideChanged`](Self::SlideChanged).
     PresentModeChanged(bool),
+    /// A target's reaction set changed (§4.A): the UI re-reads the derived tally
+    /// for this target. Emitted on a local `React`; the derived tally is never
+    /// carried in the CRDT, only recomputed on read.
+    ReactionsUpdated(TargetId),
     Error(ToileError),
 }
 
