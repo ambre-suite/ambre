@@ -295,7 +295,7 @@ presentation camera reuses the `toile-ui` pipeline.
 - [x] Presentation sequence CRDT + playback state machine
 - [x] Speaker notes
 - [x] `smart_animate` pure solver (stable-`ElementId` matching, §1.C) with host tests
-- [ ] `solve_layout` pure auto-layout solver with host tests
+- [x] `solve_layout` pure auto-layout solver with host tests
 - [ ] Reactions / votes CRDT keyed by `UserId` (§4.A) + derived read-time tally
 - [ ] Boolean ops (union / subtract / intersect)
 - [ ] Convergence belt green (concurrent reactions -> one vote per `UserId`, convergent tally, §6)

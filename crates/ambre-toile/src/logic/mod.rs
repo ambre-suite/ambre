@@ -7,6 +7,7 @@
 //! arrive in later crates / slices (Epic `E4`).
 
 pub mod animate;
+pub mod autolayout;
 pub mod command;
 pub mod connector;
 pub mod index;
@@ -15,6 +16,7 @@ pub mod state;
 pub mod stroke;
 
 pub use animate::{AnimatedElement, FrameSnapshot, SnapElement, ease_in_out_cubic, smart_animate};
+pub use autolayout::{Align, AutoLayout, Direction, Sizing, solve_layout};
 pub use command::{
     DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, End, InitContent,
     SelectionStats, ToileCommand, ToileError, ToileEvent, ToileOutcome, ZTarget,
