@@ -12,6 +12,7 @@ pub mod boolean;
 pub mod command;
 pub mod connector;
 pub mod index;
+pub mod interop;
 pub mod model;
 pub mod state;
 pub mod stroke;

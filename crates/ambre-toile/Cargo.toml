@@ -35,6 +35,14 @@ i_overlay = { workspace = true }
 # the clipboard payload -- consistent with the inter-thread IPC protocol.
 postcard = { workspace = true }
 
+# Interop Phase 0 (toile-interop §2): pure-Rust SVG parse and raster codecs on
+# the Logic-thread import path. No plaintext ever leaves the client (§1/§6).
+# usvg handles vector shapes/paths/images; `<text>` is read via roxmltree and
+# kept editable (Toile owns text via Parley, not usvg glyph flattening).
+usvg = { workspace = true }
+roxmltree = { workspace = true }
+image = { workspace = true }
+
 # UI side (UI Thread): the DrawSurface renderer, GPU runtime, frame channels.
 # The heavy render crates (wgpu/lyon/parley/swash) are linked once in
 # ambre-canvas and shared; the view only paints through WgpuSurface (toile-ui §1).
