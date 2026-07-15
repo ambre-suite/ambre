@@ -4,10 +4,12 @@
 //
 // No compute shaders -- every draw call maps to plain triangles + textured quads.
 //
-// Three pipelines, flushed in order each frame:
-//   1. Quad pipeline  -- solid-color filled/stroked rectangles and lines.
-//   2. Glyph pipeline -- alpha-mask glyphs from the GlyphAtlas (R8Unorm).
-//   3. Blit pipeline  -- samples the persistent cells offscreen onto swapchain.
+// Four pipelines, flushed in order each frame:
+//   1. Quad pipeline        -- solid-color filled/stroked rectangles and lines.
+//   2. Glyph pipeline       -- alpha-mask glyphs from the GlyphAtlas (R8Unorm).
+//   3. Color glyph pipeline -- full-color glyphs (emoji) from the RGBA color
+//                              atlas (Rgba8Unorm), sampled untinted.
+//   4. Blit pipeline        -- samples the persistent cells offscreen onto swapchain.
 //
 // Dirty-rect rendering:
 //   The persistent CELLS layer (scrollable cell area + grid lines + cell text)
@@ -89,14 +91,21 @@ struct LayerBatches {
     quad_indices: Vec<u32>,
     glyph_vertices: Vec<GlyphVertex>,
     glyph_indices: Vec<u32>,
+    /// Color-glyph batch (color emoji): same `GlyphVertex` layout, drawn by the
+    /// color pipeline against the RGBA color atlas.
+    color_glyph_vertices: Vec<GlyphVertex>,
+    color_glyph_indices: Vec<u32>,
     quad_vb: wgpu::Buffer,
     quad_ib: wgpu::Buffer,
     glyph_vb: wgpu::Buffer,
     glyph_ib: wgpu::Buffer,
+    color_glyph_vb: wgpu::Buffer,
+    color_glyph_ib: wgpu::Buffer,
     /// Number of quad indices in the last upload. Used as the draw_indexed
     /// upper bound on any subsequent frame that reuses the GPU buffer.
     drawn_quad_indices: u32,
     drawn_glyph_indices: u32,
+    drawn_color_glyph_indices: u32,
     /// Set to `true` by `begin_rebuild()`. When set, `upload_if_rebuilding()`
     /// transfers the CPU vecs to the GPU and refreshes `drawn_*`. Otherwise
     /// the GPU buffer state is preserved across frames.
@@ -129,17 +138,35 @@ impl LayerBatches {
             usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        // Color glyphs are rare (emoji): start small, grow on demand.
+        let color_glyph_vb = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(&format!("{label_prefix}_color_glyph_vb")),
+            size: (256 * 4 * GLYPH_VERTEX_SIZE) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let color_glyph_ib = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(&format!("{label_prefix}_color_glyph_ib")),
+            size: (256 * 6 * 4) as u64,
+            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         Self {
             quad_vertices: Vec::with_capacity(INITIAL_QUADS * 4),
             quad_indices: Vec::with_capacity(INITIAL_QUADS * 6),
             glyph_vertices: Vec::with_capacity(INITIAL_GLYPHS * 4),
             glyph_indices: Vec::with_capacity(INITIAL_GLYPHS * 6),
+            color_glyph_vertices: Vec::new(),
+            color_glyph_indices: Vec::new(),
             quad_vb,
             quad_ib,
             glyph_vb,
             glyph_ib,
+            color_glyph_vb,
+            color_glyph_ib,
             drawn_quad_indices: 0,
             drawn_glyph_indices: 0,
+            drawn_color_glyph_indices: 0,
             rebuilding: false,
         }
     }
@@ -151,6 +178,8 @@ impl LayerBatches {
         self.quad_indices.clear();
         self.glyph_vertices.clear();
         self.glyph_indices.clear();
+        self.color_glyph_vertices.clear();
+        self.color_glyph_indices.clear();
         self.rebuilding = true;
     }
 
@@ -211,9 +240,38 @@ impl LayerBatches {
             );
             queue.write_buffer(&self.glyph_ib, 0, bytemuck::cast_slice(&self.glyph_indices));
         }
+        if !self.color_glyph_indices.is_empty() {
+            grow_buffer_if_needed(
+                device,
+                &mut self.color_glyph_vb,
+                self.color_glyph_vertices.len() * GLYPH_VERTEX_SIZE,
+                wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                "color_glyph_vb",
+                label_prefix,
+            );
+            grow_buffer_if_needed(
+                device,
+                &mut self.color_glyph_ib,
+                self.color_glyph_indices.len() * 4,
+                wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+                "color_glyph_ib",
+                label_prefix,
+            );
+            queue.write_buffer(
+                &self.color_glyph_vb,
+                0,
+                bytemuck::cast_slice(&self.color_glyph_vertices),
+            );
+            queue.write_buffer(
+                &self.color_glyph_ib,
+                0,
+                bytemuck::cast_slice(&self.color_glyph_indices),
+            );
+        }
         // Refresh the drawn counts for subsequent encode passes.
         self.drawn_quad_indices = self.quad_indices.len() as u32;
         self.drawn_glyph_indices = self.glyph_indices.len() as u32;
+        self.drawn_color_glyph_indices = self.color_glyph_indices.len() as u32;
     }
 }
 // ============================================================================

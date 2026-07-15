@@ -315,6 +315,7 @@ mod tests {
 
     fn vp_with(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
+            reactions: Default::default(),
             viewport: Default::default(),
             nodes,
         }

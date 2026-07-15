@@ -229,6 +229,9 @@ Stories:
   work under `toile-ui §13`.)*
 - `[x]` `CANVAS P1` — `lyon` / `WgpuSurface` vector pipeline (quad + path), `ViewportTransform`, glyph atlas, and
   PDF export via `KrillaSurface` (krilla). The shared canvas foundation the vector tools and the PDF path need.
+  *(Addendum: a parallel **RGBA color-glyph atlas** + pipeline renders full-color emoji, lazily allocated on the
+  first color glyph; `LazyFont::Emoji` fetches Noto Color Emoji (CBDT) on demand. Shared cross-app capability --
+  Toile reaction badges, Murmure message reactions, inline emoji -- through the single `draw_glyphs` chokepoint.)*
 - `[x]` `toile-ui §13 Phase 0/1` — `ViewportTransform` / batcher / adaptive grid / hit-testing / Select tool, then
   the full tool set (Pen/Shape/Connector/Draw/Sticky/Text), Parley inline editor, shortcuts + OS-clipboard
   mirror, context menu / find panel / status bar, `PeerPresence` overlay with cross-app `UserId` colors,
@@ -245,9 +248,18 @@ Stories:
   the shared cross-app `ambre_draw::peer_color`), and the wasm render/input belt. The end-to-end multi-user
   presence demo stays gated on SYNC P4 (`pub_key` -> `UserId` resolution), so the overlay runs against synthetic
   events until it lands.)*
-- `[ ]` `toile-features §9 Phase 0/1` — presentation sequence CRDT + playback machine, speaker notes, Smart Animate
+- `[x]` `toile-features §9 Phase 0/1` — presentation sequence CRDT + playback machine, speaker notes, Smart Animate
   + auto-layout solvers, reactions/votes CRDT keyed by `UserId` + derived tally, boolean ops; then playback
   wired to the camera pass, presenter overlay, reactions render, "follow presenter" ephemeral broadcast.
+  *(Every §9 Phase 0 and Phase 1 checkbox is `[x]`. Phase 0: presentation CRDT + playback machine + speaker
+  notes, `smart_animate` + `solve_layout` solvers, reactions/votes CRDT + derived tally, boolean ops
+  (`i_overlay`), convergence belt. Phase 1: playback wired to the camera pass, top-menu Present entry, presenter
+  overlay panel, "follow presenter" ephemeral broadcast, and **reactions render** — a screen-space badge row
+  (`ui::reactions`) painted under each element with a derived tally, always visible, plus a minimal context-menu
+  emoji picker (`REACT_*` -> `React`). Reactions render rides a new **shared color-glyph atlas** in `ambre-canvas`
+  (see `CANVAS P1` addendum) so full-color emoji works cross-app. The three remaining `§9` items are Phase 2
+  optimizations — incremental reflow, Smart Animate snapshot caching, sequence-panel virtualization — out of the
+  Phase 0/1 scope.)*
 - `[ ]` `toile-interop §10 Phase 0/1` — SVG import/export, raster import, safety limits, media hashing + placeholder;
   then PDF export (presentation order), Figma/Miro converters, media pipeline on the crypto/Sync layer.
   Golden fixtures + wasm export tests.

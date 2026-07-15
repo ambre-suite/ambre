@@ -233,8 +233,31 @@ impl DrawSurface for WgpuSurface<'_> {
                 let u1 = lerp(slot.uv_min[0], slot.uv_max[0], (nx1 - x0) / sw);
                 let v0 = lerp(slot.uv_min[1], slot.uv_max[1], (ny0 - y0) / sh);
                 let v1 = lerp(slot.uv_min[1], slot.uv_max[1], (ny1 - y0) / sh);
+                // Color emoji route to the RGBA color atlas/pipeline (untinted);
+                // regular glyphs stay on the tinted coverage-mask path.
+                if slot.is_color {
+                    self.renderer.push_color_glyph(
+                        nx0,
+                        ny0,
+                        nx1 - nx0,
+                        ny1 - ny0,
+                        [u0, v0],
+                        [u1, v1],
+                    );
+                } else {
+                    self.renderer.push_glyph(
+                        nx0,
+                        ny0,
+                        nx1 - nx0,
+                        ny1 - ny0,
+                        [u0, v0],
+                        [u1, v1],
+                        color,
+                    );
+                }
+            } else if slot.is_color {
                 self.renderer
-                    .push_glyph(nx0, ny0, nx1 - nx0, ny1 - ny0, [u0, v0], [u1, v1], color);
+                    .push_color_glyph(sx, sy, sw, sh, slot.uv_min, slot.uv_max);
             } else {
                 self.renderer
                     .push_glyph(sx, sy, sw, sh, slot.uv_min, slot.uv_max, color);

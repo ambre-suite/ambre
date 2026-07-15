@@ -22,6 +22,7 @@ pub mod palette;
 pub mod presence;
 pub mod present;
 pub mod presenter;
+pub mod reactions;
 pub mod render;
 pub mod status;
 pub mod style;

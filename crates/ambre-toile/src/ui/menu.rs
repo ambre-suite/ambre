@@ -23,8 +23,8 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{
-    DisplayElement, DisplayNode, DisplayViewport, ElementId, ElementKind, NodeId, ToileCommand,
-    ZTarget,
+    DisplayElement, DisplayNode, DisplayViewport, ElementId, ElementKind, NodeId, Reaction,
+    ReactionKind, ToileCommand, ZTarget,
 };
 use ambre_commands::CommandId;
 use kurbo::{Rect, Vec2};
@@ -71,6 +71,26 @@ pub const REMOVE_FROM_FRAME: CommandId = CommandId("toile.frame.remove");
 /// Select every element on the board (local, never synced).
 pub const SELECT_ALL: CommandId = CommandId("toile.selection.all");
 
+// -- Reactions (§4.A) ----------------------------------------------------------
+// A minimal, fixed emoji set for the reaction affordance: each id sets the local
+// user's reaction on every selected element (one `React` per target, LWW on the
+// user's own key). `REACT_CLEAR` removes it. The picker is intentionally small
+// and hardcoded for the MVP; a full emoji browser is a later concern.
+pub const REACT_THUMBSUP: CommandId = CommandId("toile.react.thumbsup");
+pub const REACT_HEART: CommandId = CommandId("toile.react.heart");
+pub const REACT_CHECK: CommandId = CommandId("toile.react.check");
+pub const REACT_PARTY: CommandId = CommandId("toile.react.party");
+/// Remove the local user's own reaction from the selection.
+pub const REACT_CLEAR: CommandId = CommandId("toile.react.clear");
+
+/// The fixed emoji entries of the reaction picker, id + glyph, in display order.
+pub const REACTION_EMOJI: &[(CommandId, &str)] = &[
+    (REACT_THUMBSUP, "\u{1F44D}"),     // thumbs up
+    (REACT_HEART, "\u{2764}\u{FE0F}"), // red heart
+    (REACT_CHECK, "\u{2705}"),         // check mark button
+    (REACT_PARTY, "\u{1F389}"),        // party popper
+];
+
 /// Every command the Toile context menu contributes to the registry.
 pub const COMMANDS: &[CommandId] = &[
     CUT,
@@ -89,6 +109,11 @@ pub const COMMANDS: &[CommandId] = &[
     ADD_TO_FRAME,
     REMOVE_FROM_FRAME,
     SELECT_ALL,
+    REACT_THUMBSUP,
+    REACT_HEART,
+    REACT_CHECK,
+    REACT_PARTY,
+    REACT_CLEAR,
 ];
 
 /// Pure descriptor of the current selection, published by the canvas view on a
@@ -251,10 +276,42 @@ pub fn resolve_menu_command(
         // parent-frame edge), so Remove is a best-effort against that container.
         ADD_TO_FRAME => frame_children(selection, display, true),
         REMOVE_FROM_FRAME => frame_children(selection, display, false),
+        // Reactions (§4.A): set / clear the local user's reaction on each
+        // selected target. One `React` per element; the emoji glyph is looked up
+        // from the fixed picker set.
+        REACT_CLEAR => react_each(selection, None),
+        REACT_THUMBSUP | REACT_HEART | REACT_CHECK | REACT_PARTY => {
+            let emoji = REACTION_EMOJI
+                .iter()
+                .find(|(cid, _)| *cid == id)
+                .map(|(_, e)| (*e).to_string())
+                .unwrap_or_default();
+            react_each(
+                selection,
+                Some(Reaction {
+                    kind: ReactionKind::Emoji(emoji),
+                    ts: 0,
+                }),
+            )
+        }
         // UI-only intents handled in the view.
         PASTE | SELECT_ALL => Vec::new(),
         _ => Vec::new(),
     }
+}
+
+/// One `React` command per selected element, setting (`Some`) or clearing
+/// (`None`) the local user's reaction. The `Reaction` is cloned per target;
+/// `ts` is left at 0 for the MVP (the derived tally ignores it -- ordering by
+/// time is a later concern once a UI time source feeds the picker).
+fn react_each(selection: &[ElementId], reaction: Option<Reaction>) -> Vec<ToileCommand> {
+    selection
+        .iter()
+        .map(|id| ToileCommand::React {
+            target: id.clone(),
+            reaction: reaction.clone(),
+        })
+        .collect()
 }
 
 /// One `Reorder` command per selected element, targeting `to`.
@@ -328,6 +385,7 @@ mod tests {
 
     fn viewport(nodes: Vec<DisplayElement>) -> DisplayViewport {
         DisplayViewport {
+            reactions: Default::default(),
             viewport: Viewport::default(),
             nodes: nodes.into_iter().map(DisplayNode::Element).collect(),
         }
@@ -335,6 +393,44 @@ mod tests {
 
     fn r(x0: f64, y0: f64, x1: f64, y1: f64) -> Rect {
         Rect::new(x0, y0, x1, y1)
+    }
+
+    #[test]
+    fn react_emoji_resolves_to_one_react_per_target() {
+        let dv = viewport(vec![
+            elem("a", ElementKind::Sticky, r(0.0, 0.0, 10.0, 10.0), false),
+            elem("b", ElementKind::Sticky, r(0.0, 0.0, 10.0, 10.0), false),
+        ]);
+        let cmds = resolve_menu_command(REACT_THUMBSUP, &[eid("a"), eid("b")], None, &dv);
+        assert_eq!(cmds.len(), 2);
+        for (cmd, want) in cmds.iter().zip(["a", "b"]) {
+            match cmd {
+                ToileCommand::React {
+                    target,
+                    reaction: Some(Reaction { kind, .. }),
+                } => {
+                    assert_eq!(target.as_str(), want);
+                    assert_eq!(*kind, ReactionKind::Emoji("\u{1F44D}".to_string()));
+                }
+                other => panic!("expected React Some, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn react_clear_resolves_to_none_reaction() {
+        let dv = viewport(vec![elem(
+            "a",
+            ElementKind::Sticky,
+            r(0.0, 0.0, 10.0, 10.0),
+            false,
+        )]);
+        let cmds = resolve_menu_command(REACT_CLEAR, &[eid("a")], None, &dv);
+        assert_eq!(cmds.len(), 1);
+        assert!(matches!(
+            &cmds[0],
+            ToileCommand::React { reaction: None, .. }
+        ));
     }
 
     #[test]

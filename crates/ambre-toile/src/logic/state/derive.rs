@@ -49,6 +49,7 @@ impl ToileState {
         }
         DisplayViewport {
             viewport: self.viewport,
+            reactions: self.reaction_tallies(&visible),
             nodes,
         }
     }

@@ -29,20 +29,34 @@
 //! never drift from the entry set. A reaction on a concurrently-deleted target is
 //! skipped at derivation, never destroyed (data-never-destroyed).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use loro::LoroValue;
 
 use ambre_bus::UserId;
 
 use crate::logic::command::{Reaction, ReactionKind, ReactionTally, ToileEvent, ToileOutcome};
-use crate::logic::model::TargetId;
+use crate::logic::model::{ElementId, TargetId};
 
 use super::{REACTIONS, ToileState};
 
 /// The composite reactions key for a `(target, user)` pair (see module docs).
 fn reaction_key(target: &TargetId, user: &UserId) -> String {
     format!("{}/{}", target.as_str(), user)
+}
+
+/// Fold one decoded reaction into a per-target accumulator: emoji counts (a
+/// `BTreeMap` for stable, sorted rendering order) and the running vote total /
+/// count. Shared by the single-target [`ToileState::reaction_tally`] and the
+/// whole-viewport [`ToileState::reaction_tallies`] so both derive identically.
+fn accumulate(kind: ReactionKind, emoji: &mut BTreeMap<String, u32>, tally: &mut ReactionTally) {
+    match kind {
+        ReactionKind::Emoji(e) => *emoji.entry(e).or_default() += 1,
+        ReactionKind::Vote(w) => {
+            tally.vote_total += i64::from(w);
+            tally.vote_count += 1;
+        }
+    }
 }
 
 impl ToileState {
@@ -117,17 +131,55 @@ impl ToileState {
                 let Ok(Reaction { kind, .. }) = postcard::from_bytes::<Reaction>(bytes) else {
                     continue;
                 };
-                match kind {
-                    ReactionKind::Emoji(e) => *emoji.entry(e).or_default() += 1,
-                    ReactionKind::Vote(w) => {
-                        tally.vote_total += i64::from(w);
-                        tally.vote_count += 1;
-                    }
-                }
+                accumulate(kind, &mut emoji, &mut tally);
             }
         }
         tally.emoji = emoji.into_iter().collect();
         tally
+    }
+
+    /// Derive the reaction tallies of every `visible`, still-existing target in
+    /// one scan of the `reactions` map (§4.A), for the display viewport. Keyed
+    /// only by targets that carry at least one reaction; a target absent from
+    /// `visible` (culled or deleted) is skipped, so its orphan entries never
+    /// render. This is O(reactions), not O(elements x reactions): the whole map
+    /// is walked once, each entry routed to its target by splitting the composite
+    /// key on the first `/`.
+    pub(super) fn reaction_tallies(
+        &self,
+        visible: &HashSet<ElementId>,
+    ) -> BTreeMap<TargetId, ReactionTally> {
+        let mut emoji: BTreeMap<TargetId, BTreeMap<String, u32>> = BTreeMap::new();
+        let mut tallies: BTreeMap<TargetId, ReactionTally> = BTreeMap::new();
+        if let LoroValue::Map(entries) = self.doc.get_map(REACTIONS).get_deep_value() {
+            for (k, value) in entries.iter() {
+                let Some((target, _)) = k.split_once('/') else {
+                    continue;
+                };
+                let target = ElementId(target.to_string());
+                if !visible.contains(&target) {
+                    continue;
+                }
+                let LoroValue::Binary(bytes) = value else {
+                    continue;
+                };
+                let Ok(Reaction { kind, .. }) = postcard::from_bytes::<Reaction>(bytes) else {
+                    continue;
+                };
+                accumulate(
+                    kind,
+                    emoji.entry(target.clone()).or_default(),
+                    tallies.entry(target).or_default(),
+                );
+            }
+        }
+        // Flush the per-target sorted emoji maps into their tally vectors.
+        for (target, e) in emoji {
+            if let Some(tally) = tallies.get_mut(&target) {
+                tally.emoji = e.into_iter().collect();
+            }
+        }
+        tallies
     }
 
     /// The local user's own reaction on `target`, if any (§4.A). UI toggle / test

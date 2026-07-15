@@ -13,7 +13,8 @@
 
 use crate::ui::menu::{
     ADD_TO_FRAME, BACKWARD, BRING_FRONT, COPY, CUT, CtxScope, DELETE, DUPLICATE, FORWARD, GROUP,
-    LOCK, PASTE, REMOVE_FROM_FRAME, SELECT_ALL, SEND_BACK, UNGROUP, UNLOCK,
+    LOCK, PASTE, REACT_CHECK, REACT_CLEAR, REACT_HEART, REACT_PARTY, REACT_THUMBSUP,
+    REMOVE_FROM_FRAME, SELECT_ALL, SEND_BACK, UNGROUP, UNLOCK,
 };
 use ambre_chrome::MenuEntry;
 
@@ -55,6 +56,35 @@ pub fn context_entries_for(scope: &CtxScope) -> Vec<MenuEntry> {
         icondata::MdiContentDuplicate,
     ));
     entries.push(MenuEntry::with_icon(DELETE, "Delete", icondata::MdiDelete));
+
+    // Reactions (§4.A): a minimal fixed emoji set plus a clear entry. The badge
+    // renders the color emoji glyph itself; these menu icons are just cues.
+    entries.push(MenuEntry::separator());
+    entries.push(MenuEntry::with_icon(
+        REACT_THUMBSUP,
+        "React: thumbs up",
+        icondata::MdiThumbUp,
+    ));
+    entries.push(MenuEntry::with_icon(
+        REACT_HEART,
+        "React: heart",
+        icondata::MdiHeart,
+    ));
+    entries.push(MenuEntry::with_icon(
+        REACT_CHECK,
+        "React: check",
+        icondata::MdiCheck,
+    ));
+    entries.push(MenuEntry::with_icon(
+        REACT_PARTY,
+        "React: celebrate",
+        icondata::MdiPartyPopper,
+    ));
+    entries.push(MenuEntry::with_icon(
+        REACT_CLEAR,
+        "Clear my reaction",
+        icondata::MdiClose,
+    ));
 
     // Grouping (only the applicable side).
     if scope.multi || scope.has_group {

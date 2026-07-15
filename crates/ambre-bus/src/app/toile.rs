@@ -12,6 +12,8 @@
 //! and the command / event enums. No `LoroDoc` handle, no `unsafe`, US-keyboard
 //! characters only.
 
+use std::collections::BTreeMap;
+
 use ambre_core::DocType;
 use ambre_core::UserId;
 use ambre_core::uuid::Uuid;
@@ -977,6 +979,13 @@ pub struct DisplayViewport {
     /// Back-to-front sequence mirroring the `layers` walk (§2.G): elements and
     /// connectors interleaved by z-order, painted in one pass.
     pub nodes: Vec<DisplayNode>,
+    /// Derived reaction tallies (§4.A), keyed by target, for the visible,
+    /// still-existing targets that carry at least one reaction. Derived on read
+    /// (never stored in the CRDT); a deleted target's orphan entries are skipped.
+    /// The reaction badge pass paints one chip row per entry. A `BTreeMap` (not
+    /// `HashMap`) so iteration order is deterministic -- the derived viewport
+    /// must equal a full rebuild byte-for-byte (convergence tests).
+    pub reactions: BTreeMap<TargetId, ReactionTally>,
 }
 
 #[derive(Clone, Debug)]

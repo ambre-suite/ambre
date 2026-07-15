@@ -37,6 +37,10 @@ pub enum LazyFont {
     Arabic,
     /// Devanagari.
     Devanagari,
+    /// Full-color emoji (Noto Color Emoji, CBDT bitmap build). Cross-app
+    /// capability: reaction badges (Toile), message reactions (Murmure), and
+    /// any inline emoji. Rasterized into the RGBA color atlas (see `atlas.rs`).
+    Emoji,
 }
 
 impl LazyFont {
@@ -69,6 +73,17 @@ impl LazyFont {
             | 0xAC00..=0xD7AF
             | 0xF900..=0xFAFF
             | 0xFF00..=0xFFEF => Some(LazyFont::Cjk),
+            // Emoji: the supplementary-plane pictograph blocks (symbols &
+            // pictographs, supplemental, extended-A), the enclosed/symbol
+            // blocks incl. regional indicators (0x1F000..=0x1F2FF), plus the
+            // BMP Miscellaneous Symbols + Dingbats (0x2600..=0x27BF) and the
+            // Misc Symbols and Arrows subset that is emoji (0x2B00..=0x2BFF).
+            // The BMP text-arrows block (0x2190..=0x21FF) is deliberately left
+            // to the base fonts: those glyphs render as monochrome symbols, not
+            // color emoji, so claiming them here would fetch the emoji face and
+            // still tofu. ZWJ sequences and skin-tone modifiers are handled by
+            // font shaping once the face is loaded.
+            0x1F000..=0x1FAFF | 0x2600..=0x27BF | 0x2B00..=0x2BFF => Some(LazyFont::Emoji),
             _ => None,
         }
     }
@@ -81,6 +96,7 @@ impl LazyFont {
             LazyFont::Cjk => "/fonts/NotoSansSC-Regular.otf",
             LazyFont::Arabic => "/fonts/NotoSansArabic-Regular.ttf",
             LazyFont::Devanagari => "/fonts/NotoSansDevanagari-Regular.ttf",
+            LazyFont::Emoji => "/fonts/NotoColorEmoji.ttf",
         }
     }
 }
@@ -199,6 +215,11 @@ mod tests {
         assert_eq!(LazyFont::for_char('한'), Some(LazyFont::Cjk)); // Hangul
         assert_eq!(LazyFont::for_char('س'), Some(LazyFont::Arabic));
         assert_eq!(LazyFont::for_char('अ'), Some(LazyFont::Devanagari));
+        assert_eq!(LazyFont::for_char('\u{1F44D}'), Some(LazyFont::Emoji)); // thumbs up
+        assert_eq!(LazyFont::for_char('\u{2764}'), Some(LazyFont::Emoji)); // heavy heart
+        assert_eq!(LazyFont::for_char('\u{1F1EB}'), Some(LazyFont::Emoji)); // regional F
+        // Text arrows stay with the base fonts (monochrome), not the emoji face.
+        assert_eq!(LazyFont::for_char('\u{2190}'), None); // leftwards arrow
     }
 
     #[test]

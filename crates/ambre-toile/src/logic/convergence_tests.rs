@@ -1903,6 +1903,34 @@ fn react_add_change_remove_updates_tally() {
 }
 
 #[test]
+fn derive_viewport_carries_tally_and_skips_deleted_target() {
+    let (mut st, t) = state_with_user(UserId::new());
+    st.handle_command(ToileCommand::React {
+        target: t.clone(),
+        reaction: Some(emoji("thumbsup")),
+    });
+
+    // The derived viewport attaches the per-target tally (§4.A), keyed by target.
+    let dv = st.debug_viewport();
+    let tally = dv
+        .reactions
+        .get(&t)
+        .expect("tally present for reacted target");
+    assert_eq!(tally.emoji, vec![("thumbsup".to_owned(), 1)]);
+
+    // Deleting the target drops it from the derived map: its orphan reaction
+    // entries survive in the CRDT but are skipped at derivation (never rendered).
+    st.handle_command(ToileCommand::DeleteElements {
+        ids: vec![t.clone()],
+    });
+    let dv = st.debug_viewport();
+    assert!(
+        !dv.reactions.contains_key(&t),
+        "a deleted target must not appear in the derived reaction map"
+    );
+}
+
+#[test]
 fn react_broadcasts_delta_and_is_undoable() {
     let (mut st, t) = state_with_user(UserId::new());
 
