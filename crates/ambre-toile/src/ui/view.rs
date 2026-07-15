@@ -723,18 +723,16 @@ impl ToileView {
     fn apply_menu_command(&mut self, id: CommandId) {
         use super::menu_bar as mb;
 
-        // Top menu bar / zoom control ids (§5quinquies.E). Undo / redo are real
-        // board mutations; the zoom actions are local-transform intents that never
-        // reach Logic (only the resulting `SetViewport` cull request does).
+        // Top menu bar / zoom control ids (§5quinquies.E). Undo / redo and the
+        // presentation entry point resolve to a direct board command via the
+        // host-tested `menu_bar_edit`; the zoom actions below are local-transform
+        // intents that never reach Logic (only the resulting `SetViewport` cull
+        // request does).
+        if let Some(cmd) = mb::menu_bar_edit(id) {
+            self.send_edit(cmd);
+            return;
+        }
         match id {
-            mb::UNDO => {
-                self.send_edit(ToileCommand::Undo);
-                return;
-            }
-            mb::REDO => {
-                self.send_edit(ToileCommand::Redo);
-                return;
-            }
             mb::ZOOM_IN => {
                 self.cam.zoom_by_center(super::viewport::ZOOM_STEP);
                 self.needs_full = true;
@@ -767,12 +765,6 @@ impl ToileView {
                         ids: self.selection.clone(),
                     });
                 }
-                return;
-            }
-            mb::PRESENT => {
-                // The presentation sequence panel is owned by toile-features §9;
-                // this surface only carries the entry point. No-op until it lands.
-                tracing::debug!("Toile: presentation entry not yet wired");
                 return;
             }
             _ => {}

@@ -319,7 +319,7 @@ boolean crate), on top of `kurbo`, `loro`, `postcard`. The presentation camera r
 
 **Phase 1 - Integration**
 - [x] Wire playback to the `toile-ui` camera pass
-- [ ] Wire the top menu bar Present entry point (`toile-ui §5quinquies.E`, `chrome::menu_bar`)
+- [x] Wire the top menu bar Present entry point (`toile-ui §5quinquies.E`, `chrome::menu_bar`)
   to `EnterPresent` / open the sequence panel. The `PRESENT` command id and its menu rows exist
   and route through `on_command`, but `ToileView::apply_menu_command` currently no-ops on it.
 - [ ] Presenter overlay panel
