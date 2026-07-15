@@ -318,7 +318,7 @@ boolean crate), on top of `kurbo`, `loro`, `postcard`. The presentation camera r
 - [x] Convergence belt green (concurrent reactions -> one vote per `UserId`, convergent tally, §6)
 
 **Phase 1 - Integration**
-- [ ] Wire playback to the `toile-ui` camera pass
+- [x] Wire playback to the `toile-ui` camera pass
 - [ ] Wire the top menu bar Present entry point (`toile-ui §5quinquies.E`, `chrome::menu_bar`)
   to `EnterPresent` / open the sequence panel. The `PRESENT` command id and its menu rows exist
   and route through `on_command`, but `ToileView::apply_menu_command` currently no-ops on it.
