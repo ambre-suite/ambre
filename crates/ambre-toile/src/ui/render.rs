@@ -438,6 +438,7 @@ mod tests {
     #[test]
     fn content_walk_balances_transform_and_paints_each_node() {
         let vp = DisplayViewport {
+            reactions: Default::default(),
             viewport: Default::default(),
             nodes: vec![
                 elem("r", DisplayGeom::Rect, Rect::new(0.0, 0.0, 50.0, 50.0)),
@@ -485,6 +486,7 @@ mod tests {
     #[test]
     fn content_walk_applies_animation_override() {
         let vp = DisplayViewport {
+            reactions: Default::default(),
             viewport: Default::default(),
             nodes: vec![
                 elem("a", DisplayGeom::Rect, Rect::new(0.0, 0.0, 50.0, 50.0)),
@@ -534,6 +536,7 @@ mod tests {
     #[test]
     fn overlay_draws_box_and_handles_for_single_selection() {
         let vp = DisplayViewport {
+            reactions: Default::default(),
             viewport: Default::default(),
             nodes: vec![elem(
                 "r",
@@ -564,6 +567,7 @@ mod tests {
     #[test]
     fn overlay_outlines_visible_find_hits() {
         let vp = DisplayViewport {
+            reactions: Default::default(),
             viewport: Default::default(),
             nodes: vec![
                 elem("a", DisplayGeom::Rect, Rect::new(0.0, 0.0, 50.0, 50.0)),

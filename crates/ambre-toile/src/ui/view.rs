@@ -31,6 +31,7 @@ use super::edit::{EditIntent, InlineEditor};
 use super::hit::hit_topmost;
 use super::presence::PeerCursors;
 use super::present::{DEFAULT_TRANSITION_MS, Transition};
+use super::reactions;
 use super::render;
 use super::tool::{
     Preview, Tool, ToolMachine, ToolOutcome, is_group, resolve_group_target, world_rect_to_screen,
@@ -260,6 +261,7 @@ impl ToileView {
             from_logic,
             cam: ViewportTransform::new(canvas_width, canvas_height),
             display: DisplayViewport {
+                reactions: Default::default(),
                 viewport: Viewport::default(),
                 nodes: Vec::new(),
             },
@@ -473,10 +475,12 @@ impl ToileView {
                 }
                 self.needs_full = true;
             }
-            // Reaction rendering (the tally badge overlay) is Phase 1
-            // ("Reactions render"); the derived tally is read on repaint, so the
-            // view has nothing to do with this notification yet (§4.A).
-            ToileEvent::ReactionsUpdated(_) => {}
+            // A local reaction changed the tally (§4.A). The tally rides in
+            // `DisplayViewport.reactions`, derived on the Logic thread, so we
+            // request a fresh viewport for the current camera: the resulting
+            // `ViewportData` carries the updated badges. (Remote reactions
+            // already push a fresh `ViewportData` via `apply_remote`.)
+            ToileEvent::ReactionsUpdated(_) => self.queue_viewport(),
             // "Follow presenter" role changes (§1.B) are chrome-panel state, not
             // camera-pass state: the presenter panel reflects them via its own
             // signals. The WebGPU view has nothing to repaint for these.
@@ -1396,6 +1400,17 @@ impl ToileView {
                 .paint(surface, &self.display, &self.cam, font_cx, text_cache);
         }
 
+        // Reaction badges (§4.A): a chip row under each element carrying a tally.
+        // Always visible (edit + present), above content and presence.
+        reactions::paint_reactions(
+            surface,
+            &self.display,
+            &self.cam,
+            font_cx,
+            text_cache,
+            self.theme.palette(),
+        );
+
         // Inline text editor: flush queued intents, draw caret/selection/glyphs,
         // and perform a deferred commit + close (§6). Drawn above content.
         self.drive_editor(surface, font_cx);
@@ -1532,6 +1547,7 @@ impl ToileView {
         }
         self.document_id = document_id;
         self.display = DisplayViewport {
+            reactions: Default::default(),
             viewport: Viewport::default(),
             nodes: Vec::new(),
         };

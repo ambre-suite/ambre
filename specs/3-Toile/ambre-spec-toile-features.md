@@ -327,7 +327,14 @@ boolean crate), on top of `kurbo`, `loro`, `postcard`. The presentation camera r
   the active slide's speaker notes (editable via `EditNotes`), a `k / n` counter and Prev / Next /
   Exit controls. Fed by the enriched `SlideChanged` payload; the pure model lives in
   `ui::presenter` (host-tested).
-- [ ] Reactions render
+- [x] Reactions render (§4.A): a screen-space badge row painted under each element carrying a
+  derived tally, always visible (edit + present). The tally rides in `DisplayViewport.reactions`
+  (derived on the Logic thread in one scan, keyed by visible target; deleted targets skipped),
+  repainted on `ReactionsUpdated` (local) or fresh `ViewportData` (remote). The pass
+  (`ui::reactions::paint_reactions`, host-tested) draws one rounded chip per emoji -- the color
+  emoji glyph + count via the shared color-glyph atlas (`ambre-canvas`) -- plus a vote badge.
+  Minimal input: a fixed emoji picker in the context menu (`REACT_*` `CommandId`s resolving to
+  one `React` per selected target; `REACT_CLEAR` removes the user's own reaction).
 - [x] "Follow presenter" ephemeral broadcast (§1.B): a presenter broadcasts its active slide as an
   ephemeral presence frame (`PresencePayload::present_slide`, never CRDT); followers
   (`FollowPresenter`) adopt it and glide via the existing camera pass. Manual navigation takes

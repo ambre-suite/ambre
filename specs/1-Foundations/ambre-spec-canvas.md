@@ -36,7 +36,7 @@
   | `wgpu` | GPU abstraction | WebGL2 by default (Mesa/Intel Firefox compositor bug), WebGPU opt-in via `?webgpu`. Single cross-platform backend. |
   | `lyon` | Path tessellation | Beziers/rects → triangles. Vertex/fragment shaders only, zero compute overhead. |
   | `parley` | Text Layout | Advanced typographic layout, shaping (HarfRust/Skrifa), bidi, line breaking. UI Thread (screen rendering) + Logic thread (document pagination). |
-  | `swash` | Glyph rasterization | Rasterizes Parley glyphs → alpha bitmap → GPU GlyphAtlas (R8Unorm, 2048x2048, LRU eviction). |
+  | `swash` | Glyph rasterization | Rasterizes Parley glyphs → alpha bitmap → GPU GlyphAtlas (R8Unorm, 2048x2048, LRU eviction). Color emoji (CBDT bitmap) rasterize to RGBA → parallel color atlas (Rgba8Unorm). |
   | `peniko` | Color/brush types | `Color`, `Brush`. Shared `ambre-draw` dependency. |
   | `kurbo` | Geometric types | `Rect`, `Point`, `Affine`, `BezPath`, `Stroke`. Shared `ambre-draw` dependency. |
   | `accesskit` | Accessibility | A11y tree exposed to OS screen readers. Direct integration, no Masonry. |
@@ -185,7 +185,7 @@ Font loading and management go through Parley (via its HarfRust/Skrifa backend):
 pub struct FontConfig {
     /// Base fonts loaded via fetch() from the Ambre server (same origin)
     pub base: Vec<FontData>,
-    /// Additional fonts loaded on demand (CJK, Arabic, Devanagari...)
+    /// Additional fonts loaded on demand (CJK, Arabic, Devanagari, color emoji...)
     pub lazy: Vec<FontData>,
     /// System fonts detected (native only -- not available on WASM)
     pub system: Vec<FontData>,
@@ -193,7 +193,7 @@ pub struct FontConfig {
 ```
 
 - **Base fonts (required):** a sans-serif font (Noto Sans) and a monospace font (Noto Sans Mono) are served as static assets from the Ambre server (same origin — no privacy leak). The UI thread and the Logic thread do an independent `fetch()` at startup — the browser's HTTP cache deduplicates: single physical download, two `FontContext` in shared memory. Coverage: Latin/Latin-Extended, Cyrillic, Greek. Weight: ~600 KB for both (Regular + Bold). **Local dev (Trunk):** TTF files are in `crates/ambre-app/fonts/` and copied to `dist/fonts/` via `<link data-trunk rel="copy-dir" href="fonts" />`.
-- **Additional fonts (lazy):** for CJK, Arabic, Devanagari, etc. scripts, fonts are loaded on demand via `fetch()` from the static server. Loading triggers when Parley encounters a codepoint absent from base fonts (fallback chain).
+- **Additional fonts (lazy):** for CJK, Arabic, Devanagari, color emoji, etc. scripts, fonts are loaded on demand via `fetch()` from the static server. Loading triggers when Parley encounters a codepoint absent from base fonts (fallback chain). Color emoji uses **Noto Color Emoji** (CBDT bitmap build); all bundled faces are OFL 1.1 / permissive (see `crates/ambre-app/fonts/LICENSES.md`).
 - **System fonts (native desktop — post-MVP):** Parley can query system fonts via `fontdb`. Not available on WASM.
 
 > **`include_bytes!` ruled out:** Fonts are not embedded in the WASM binary via `include_bytes!`. This lightens it by ~600 KB raw and enables deduplication via the browser's HTTP cache. Both the UI thread and the Logic thread need the fonts — `fetch()` from the Ambre server (same origin) creates no privacy leak.
@@ -209,6 +209,7 @@ pub struct FontConfig {
 - Parley produces `Layout<ParleyBrush>` containing positioned `GlyphRun`s (glyphs + coordinates).
 - Layouts are cached in `TextCache` (key = text + font_size + max_width + alignment). Cache-miss → Parley shape; cache-hit → zero-cost.
 - Swash rasterizes each glyph (glyph_id + size) into an R8 alpha bitmap, uploaded to `GlyphAtlas` (wgpu::Texture R8Unorm 2048x2048, LRU eviction). The glyph pipeline draws glyphs as textured quads.
+- **Color glyphs (color emoji).** `GlyphAtlas` also owns a parallel **RGBA color atlas** (`Rgba8Unorm` 2048x2048, its own shelf packer + LRU compaction). `get_or_rasterize` branches on Swash's `image.content`: `Content::Color` (straight-alpha RGBA) packs into the color atlas with `AtlasSlot::is_color = true`; `Content::Mask` stays on the R8 path. A second pipeline (`color_glyph.wgsl`, shared `GlyphVertex` layout, same `ALPHA_BLENDING`) samples the RGBA atlas and outputs the texel directly, ignoring the vertex tint. `draw_glyphs` routes each glyph by `slot.is_color`, so a single layout mixing text and emoji paints digits (tinted mask) and emoji (color) correctly. Keeping two atlases (rather than one RGBA atlas for all glyphs) avoids paying 4x texture memory for text, which dominates the working set. The emoji face is **Noto Color Emoji, CBDT embedded-bitmap build** (COLRv1 is not rasterized by swash 0.2.7); it is lazy-loaded (`LazyFont::Emoji`), never in the startup bundle. This is shared infrastructure: color emoji works for every app through `draw_glyphs` (Toile reaction badges, Murmure message reactions, inline emoji) with no per-app work.
 - `DrawSurface::draw_glyphs(&run, &brush, transform)` is the unified screen/PDF interface.
 
 ---
@@ -355,7 +356,7 @@ The rendering layer consists of pure drawing primitives. ZK audit:
 | Text layout (Parley, dirty paragraph) | < 2 ms | Worst case: full Prose document layout. Typical < 0.5 ms |
 | Content accessibility diff (AccessKit) | < 0.2 ms | OS notifications on delta only |
 | Build vertex batch (dirty only) | < 1 ms | `QuadRenderer::begin_frame` + draw scene. Zero allocation in steady state |
-| GPU upload + render pass | < 1 ms | `write_buffer` + 2 draw calls (quads, glyphs). Typical 0.3–0.5 ms |
+| GPU upload + render pass | < 1 ms | `write_buffer` + up to 3 draw calls per layer (quads, mask glyphs, color glyphs). Typical 0.3–0.5 ms |
 | **Total target** | **< 5 ms typical** | 11 ms margin for complex cases |
 
 > **Architecture alignment:** the P1 scroll round-trip (UI → Logic → UI) is budgeted at < 15 ms in `ambre-spec-architecture.md` §5. UI rendering consumes < 5 ms; `flume` transport (move in shared memory) is negligible (< 1 µs/hop, no serialization or boundary memcpy), leaving most of the budget for Logic thread processing.
@@ -377,7 +378,7 @@ The rendering layer consists of pure drawing primitives. ZK audit:
 | Component | Budget | Notes |
 |:---|:---|:---|
 | CPU vertex buffers (QuadRenderer) | < 5 MB | Proportional to visible draw calls count |
-| wgpu textures + buffers | < 20 MB | Swap chain, staging buffers, GlyphAtlas (2048x2048 R8 = 4 MB) |
+| wgpu textures + buffers | < 20 MB | Swap chain, staging buffers, GlyphAtlas (2048x2048 R8 = 4 MB). The RGBA color atlas (2048x2048 = 16 MB) is **allocated lazily** on the first color glyph -- a 1x1 placeholder otherwise -- so emoji-free documents pay nothing. |
 | View state (content) | < 5 MB | Proportional to visible content (cells, text runs) |
 | Fonts in memory | < 10 MB | Base fonts (fetch) + lazy-loaded fonts |
 | Icon atlas | < 1 MB | Compiled vector blob |

@@ -1,7 +1,7 @@
 // ambre-canvas/src/render/renderer.rs
 // ============================================================================
-// QuadRenderer: owns the three wgpu pipelines (quad, glyph, blit), the
-// GlyphAtlas, the ping-pong offscreen pair for the persistent cells layer, and
+// QuadRenderer: owns the four wgpu pipelines (quad, glyph, color glyph, blit),
+// the GlyphAtlas, the ping-pong offscreen pair for the persistent cells layer, and
 // the per-frame dirty-rect flush. Also the offscreen target and the repaint
 // plan enums. The `include_str!("*.wgsl")` calls resolve against this dir.
 // ============================================================================
@@ -88,14 +88,22 @@ pub struct QuadRenderer {
     // -- Pipelines --
     quad_pipeline: wgpu::RenderPipeline,
     glyph_pipeline: wgpu::RenderPipeline,
+    /// Full-color glyph pipeline (color emoji): samples the RGBA color atlas
+    /// and outputs the texel directly, ignoring the vertex tint.
+    color_glyph_pipeline: wgpu::RenderPipeline,
     blit_pipeline: wgpu::RenderPipeline,
 
     // -- Shared uniform (viewport size) --
     uniform_buf: wgpu::Buffer,
     uniform_bg: wgpu::BindGroup,
 
-    // -- Glyph atlas + its bind group --
+    // -- Glyph atlas + its bind groups (mask + color) --
     atlas_bind_group: wgpu::BindGroup,
+    color_atlas_bind_group: wgpu::BindGroup,
+    /// Kept so the color bind group can be rebuilt when the lazily-allocated
+    /// color atlas texture grows from its placeholder to full size.
+    atlas_bgl: wgpu::BindGroupLayout,
+    atlas_sampler: wgpu::Sampler,
     pub atlas: GlyphAtlas,
 
     // -- Per-layer batches --
@@ -265,6 +273,51 @@ impl QuadRenderer {
             cache: None,
         });
 
+        // -- Color glyph pipeline (color emoji) --
+        // Same pipeline layout (uniform + atlas bind groups) and vertex layout
+        // as the mask glyph pipeline; only the shader differs (outputs the
+        // sampled RGBA texel directly instead of tinting a coverage mask).
+        let color_glyph_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("color_glyph"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("color_glyph.wgsl").into()),
+        });
+        let color_glyph_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("color_glyph"),
+            layout: Some(&glyph_pl_layout),
+            vertex: wgpu::VertexState {
+                module: &color_glyph_shader,
+                entry_point: Some("vs_main"),
+                compilation_options: Default::default(),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: GLYPH_VERTEX_SIZE as u64,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![
+                        0 => Float32x2,
+                        1 => Float32x2,
+                        2 => Float32x4
+                    ],
+                }],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &color_glyph_shader,
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+
         // -- Blit pipeline (samples persistent cells offscreen onto swapchain) --
         let blit_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("blit"),
@@ -350,6 +403,21 @@ impl QuadRenderer {
                 },
             ],
         });
+        // Second bind group over the RGBA color atlas, same layout + sampler.
+        let color_atlas_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("color_atlas_bg"),
+            layout: &atlas_bgl,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&atlas.color_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&atlas_sampler),
+                },
+            ],
+        });
 
         // -- Blit sampler --
         // NonFiltering nearest-neighbour: the offscreen is 1:1 with the
@@ -392,10 +460,14 @@ impl QuadRenderer {
         Self {
             quad_pipeline,
             glyph_pipeline,
+            color_glyph_pipeline,
             blit_pipeline,
             uniform_buf,
             uniform_bg,
             atlas_bind_group,
+            color_atlas_bind_group,
+            atlas_bgl,
+            atlas_sampler,
             atlas,
             cells,
             overlay,
@@ -613,6 +685,57 @@ impl QuadRenderer {
             .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
 
+    /// Append a color-glyph quad (color emoji) to the active layer's color
+    /// batch. Same geometry as `push_glyph`; the color pipeline samples the
+    /// RGBA atlas and ignores the tint, so `color` is a placeholder here.
+    #[allow(clippy::too_many_arguments)]
+    pub fn push_color_glyph(
+        &mut self,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        uv_min: [f32; 2],
+        uv_max: [f32; 2],
+    ) {
+        if w <= 0.0 || h <= 0.0 {
+            return;
+        }
+        let c = [0.0, 0.0, 0.0, 1.0];
+        let b = self.active_batches_mut();
+        let base = b.color_glyph_vertices.len() as u32;
+        b.color_glyph_vertices.extend_from_slice(&[
+            GlyphVertex {
+                pos: [x, y],
+                uv: [uv_min[0], uv_min[1]],
+                color: c,
+            },
+            GlyphVertex {
+                pos: [x + w, y],
+                uv: [uv_max[0], uv_min[1]],
+                color: c,
+            },
+            GlyphVertex {
+                pos: [x + w, y + h],
+                uv: [uv_max[0], uv_max[1]],
+                color: c,
+            },
+            GlyphVertex {
+                pos: [x, y + h],
+                uv: [uv_min[0], uv_max[1]],
+                color: c,
+            },
+        ]);
+        b.color_glyph_indices.extend_from_slice(&[
+            base,
+            base + 1,
+            base + 2,
+            base,
+            base + 2,
+            base + 3,
+        ]);
+    }
+
     // -- Frame flush ----------------------------------------------------------
 
     /// Encode the three-pass dirty-rect rendering for this frame.
@@ -646,6 +769,24 @@ impl QuadRenderer {
         // -- 0. Uniform + atlas + conditional batch uploads. ------------------
         let vp: [f32; 4] = [self.width, self.height, 0.0, 0.0];
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::cast_slice(&vp));
+        // Grow the lazily-allocated color atlas on the first color glyph and
+        // rebuild its bind group over the new texture view.
+        if self.atlas.ensure_color_atlas(device) {
+            self.color_atlas_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("color_atlas_bg"),
+                layout: &self.atlas_bgl,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&self.atlas.color_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.atlas_sampler),
+                    },
+                ],
+            });
+        }
         self.atlas.flush_uploads(queue);
         // Only uploads if the matching `begin_rebuild` was called this frame.
         self.cells.upload_if_rebuilding(device, queue, "cells");
@@ -696,7 +837,8 @@ impl QuadRenderer {
             });
             let q_count = self.cells.drawn_quad_indices;
             let g_count = self.cells.drawn_glyph_indices;
-            if q_count > 0 || g_count > 0 {
+            let cg_count = self.cells.drawn_color_glyph_indices;
+            if q_count > 0 || g_count > 0 || cg_count > 0 {
                 pass.set_bind_group(0, &self.uniform_bg, &[]);
                 if q_count > 0 {
                     pass.set_pipeline(&self.quad_pipeline);
@@ -710,6 +852,16 @@ impl QuadRenderer {
                     pass.set_vertex_buffer(0, self.cells.glyph_vb.slice(..));
                     pass.set_index_buffer(self.cells.glyph_ib.slice(..), wgpu::IndexFormat::Uint32);
                     pass.draw_indexed(0..g_count, 0, 0..1);
+                }
+                if cg_count > 0 {
+                    pass.set_pipeline(&self.color_glyph_pipeline);
+                    pass.set_bind_group(1, &self.color_atlas_bind_group, &[]);
+                    pass.set_vertex_buffer(0, self.cells.color_glyph_vb.slice(..));
+                    pass.set_index_buffer(
+                        self.cells.color_glyph_ib.slice(..),
+                        wgpu::IndexFormat::Uint32,
+                    );
+                    pass.draw_indexed(0..cg_count, 0, 0..1);
                 }
             }
             self.current_offscreen_idx = dst_idx;
@@ -738,7 +890,8 @@ impl QuadRenderer {
         // -- 3. Overlay layer: render on top of the swapchain. ----------------
         let overlay_q = self.overlay.drawn_quad_indices;
         let overlay_g = self.overlay.drawn_glyph_indices;
-        if overlay_q > 0 || overlay_g > 0 {
+        let overlay_cg = self.overlay.drawn_color_glyph_indices;
+        if overlay_q > 0 || overlay_g > 0 || overlay_cg > 0 {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("overlay_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -765,6 +918,16 @@ impl QuadRenderer {
                 pass.set_vertex_buffer(0, self.overlay.glyph_vb.slice(..));
                 pass.set_index_buffer(self.overlay.glyph_ib.slice(..), wgpu::IndexFormat::Uint32);
                 pass.draw_indexed(0..overlay_g, 0, 0..1);
+            }
+            if overlay_cg > 0 {
+                pass.set_pipeline(&self.color_glyph_pipeline);
+                pass.set_bind_group(1, &self.color_atlas_bind_group, &[]);
+                pass.set_vertex_buffer(0, self.overlay.color_glyph_vb.slice(..));
+                pass.set_index_buffer(
+                    self.overlay.color_glyph_ib.slice(..),
+                    wgpu::IndexFormat::Uint32,
+                );
+                pass.draw_indexed(0..overlay_cg, 0, 0..1);
             }
         }
     }

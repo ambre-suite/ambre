@@ -1,8 +1,17 @@
 // ambre-canvas/src/render/atlas.rs
 // ============================================================================
-// GlyphAtlas: Swash rasterization into a 2048x2048 R8Unorm GPU texture, a shelf
-// packer, and the per-glyph UV/bearing cache. Batched CPU->GPU uploads once per
-// frame.
+// GlyphAtlas: Swash rasterization into two 2048x2048 GPU textures -- an R8Unorm
+// coverage-mask atlas for regular text glyphs and a parallel Rgba8Unorm atlas
+// for full-color glyphs (color emoji), plus a shelf packer and the per-glyph
+// UV/bearing cache. Batched CPU->GPU uploads once per frame.
+//
+// Color glyphs (e.g. the CBDT bitmap Noto Color Emoji) come back from Swash as
+// `Content::Color` (straight-alpha RGBA) and are packed into the color atlas;
+// everything else stays on the alpha-mask path with no extra memory cost. Which
+// atlas a glyph lives in is recorded on its `AtlasSlot::is_color`, so the draw
+// path can route it to the matching pipeline. Keeping two atlases (rather than
+// one RGBA atlas for all glyphs) avoids paying 4x texture memory for text, which
+// dominates the working set.
 // ============================================================================
 
 use rustc_hash::FxHashMap;
@@ -22,9 +31,11 @@ struct GlyphKey {
     size_x100: u32, // font_size * 100 to avoid floats in hash key
 }
 
-/// Retained alpha bitmap for a packed glyph, kept so the atlas can repack its
-/// working set on overflow (LRU compaction) without re-rasterizing through
-/// Swash. Invisible glyphs (space) have no bitmap.
+/// Retained bitmap for a packed glyph, kept so the atlas can repack its working
+/// set on overflow (LRU compaction) without re-rasterizing through Swash.
+/// Invisible glyphs (space) have no bitmap. Whether the bytes are R8 coverage
+/// or RGBA color is carried by the owning slot's `is_color`, which the
+/// compaction path reads to re-queue into the matching atlas.
 struct GlyphBitmap {
     w: u32,
     h: u32,
@@ -51,6 +62,9 @@ pub struct AtlasSlot {
     /// Vertical offset from the glyph origin (baseline) to the bitmap top (px).
     /// Positive = above baseline. Apply as: `screen_y = origin_y - bearing_top`.
     pub bearing_top: i32,
+    /// `true` if this glyph lives in the RGBA color atlas (color emoji) rather
+    /// than the R8 coverage-mask atlas. Routes the draw to the color pipeline.
+    pub is_color: bool,
 }
 
 struct ShelfPacker {
@@ -105,11 +119,25 @@ impl ShelfPacker {
 pub struct GlyphAtlas {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
+    /// Parallel RGBA color atlas for `Content::Color` glyphs (color emoji).
+    pub color_texture: wgpu::Texture,
+    pub color_view: wgpu::TextureView,
     cache: FxHashMap<GlyphKey, CachedGlyph>,
     packer: ShelfPacker,
+    /// Independent shelf packer for the color atlas.
+    color_packer: ShelfPacker,
     scale_cx: swash::scale::ScaleContext,
-    /// Queued texture uploads: (x, y, w, h, alpha_data).
+    /// Queued R8 texture uploads: (x, y, w, h, alpha_data).
     pending: Vec<(u32, u32, u32, u32, Vec<u8>)>,
+    /// Queued RGBA color texture uploads: (x, y, w, h, rgba_data).
+    color_pending: Vec<(u32, u32, u32, u32, Vec<u8>)>,
+    /// The color atlas is allocated lazily: a full 2048x2048 RGBA texture is 16
+    /// MB, wasted on the many documents with no color emoji. Until the first
+    /// color glyph appears the texture is a 1x1 placeholder; `color_ready` gates
+    /// packing, `color_wanted` latches the first sighting so the renderer can
+    /// grow the texture (and rebuild its bind group) on the next frame.
+    color_ready: bool,
+    color_wanted: bool,
     /// Monotonic frame counter, bumped in `begin_frame`. A glyph drawn this
     /// frame has `last_used == frame`; compaction keeps that working set.
     frame: u64,
@@ -137,16 +165,58 @@ impl GlyphAtlas {
         });
         let view = texture.create_view(&Default::default());
 
+        // Lazy: a 1x1 placeholder until the first color glyph (see `color_ready`).
+        let color_texture = Self::new_color_texture(device, 1);
+        let color_view = color_texture.create_view(&Default::default());
+
         Self {
             texture,
             view,
+            color_texture,
+            color_view,
             cache: FxHashMap::default(),
             packer: ShelfPacker::new(ATLAS_SIZE),
+            color_packer: ShelfPacker::new(ATLAS_SIZE),
             scale_cx: swash::scale::ScaleContext::new(),
             pending: Vec::new(),
+            color_pending: Vec::new(),
+            color_ready: false,
+            color_wanted: false,
             frame: 0,
             needs_compact: false,
         }
+    }
+
+    /// Create an `Rgba8Unorm` color-atlas texture of `size` x `size`.
+    fn new_color_texture(device: &wgpu::Device, size: u32) -> wgpu::Texture {
+        device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("glyph_color_atlas"),
+            size: wgpu::Extent3d {
+                width: size,
+                height: size,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        })
+    }
+
+    /// Grow the color atlas to its full size the first time a color glyph is
+    /// wanted. Returns `true` when it (re)allocated the texture, so the renderer
+    /// knows to rebuild the color bind group over the new `color_view`. A no-op
+    /// (returning `false`) once allocated or while no color glyph has appeared.
+    pub fn ensure_color_atlas(&mut self, device: &wgpu::Device) -> bool {
+        if self.color_ready || !self.color_wanted {
+            return false;
+        }
+        self.color_texture = Self::new_color_texture(device, ATLAS_SIZE);
+        self.color_view = self.color_texture.create_view(&Default::default());
+        self.color_ready = true;
+        true
     }
 
     /// Called at the start of each frame. Advances the frame clock used to age
@@ -174,7 +244,9 @@ impl GlyphAtlas {
         let cutoff = self.frame.saturating_sub(KEEP_FRAMES);
 
         self.packer.reset();
+        self.color_packer.reset();
         self.pending.clear();
+        self.color_pending.clear();
 
         let mut survivors: FxHashMap<GlyphKey, CachedGlyph> = FxHashMap::default();
         // Re-pack in descending recency so the hottest glyphs are placed first
@@ -194,13 +266,19 @@ impl GlyphAtlas {
                     survivors.insert(key, cached);
                 }
                 Some(bmp) => {
-                    let Some((ax, ay)) = self.packer.allocate(bmp.w, bmp.h) else {
+                    // Re-pack into the atlas matching the glyph's format.
+                    let (packer, pending) = if cached.slot.is_color {
+                        (&mut self.color_packer, &mut self.color_pending)
+                    } else {
+                        (&mut self.packer, &mut self.pending)
+                    };
+                    let Some((ax, ay)) = packer.allocate(bmp.w, bmp.h) else {
                         // Working set itself overflows: drop the rest.
                         continue;
                     };
                     cached.slot.uv_min = [ax as f32 * inv, ay as f32 * inv];
                     cached.slot.uv_max = [(ax + bmp.w) as f32 * inv, (ay + bmp.h) as f32 * inv];
-                    self.pending.push((ax, ay, bmp.w, bmp.h, bmp.data.clone()));
+                    pending.push((ax, ay, bmp.w, bmp.h, bmp.data.clone()));
                     survivors.insert(key, cached);
                 }
             }
@@ -233,7 +311,14 @@ impl GlyphAtlas {
         let font_ref =
             swash::FontRef::from_index(font_data.data.as_ref(), font_data.index as usize)?;
 
+        // Source order: prefer an embedded color bitmap (CBDT color emoji),
+        // then a color outline (COLR), then the plain outline. swash returns
+        // `Content::Color` (RGBA) for the bitmap case and `Content::Mask` for
+        // the outline case; we branch on `image.content` below. `Format::Alpha`
+        // only governs how outlines are rasterized -- it does not flatten an
+        // embedded color bitmap to a mask (verified with Noto Color Emoji).
         let image = swash::scale::Render::new(&[
+            swash::scale::Source::ColorBitmap(swash::scale::StrikeWith::BestFit),
             swash::scale::Source::ColorOutline(0),
             swash::scale::Source::Outline,
         ])
@@ -250,6 +335,10 @@ impl GlyphAtlas {
 
         let w = image.placement.width;
         let h = image.placement.height;
+        // A color glyph (color emoji) comes back as straight-alpha RGBA and is
+        // packed into the parallel color atlas; everything else is a coverage
+        // mask on the R8 atlas.
+        let is_color = matches!(image.content, swash::scale::image::Content::Color);
 
         // Invisible glyph (e.g. space): cache a zero-size slot, no upload.
         if w == 0 || h == 0 || image.data.is_empty() {
@@ -260,6 +349,7 @@ impl GlyphAtlas {
                 pixel_height: 0,
                 bearing_left: image.placement.left,
                 bearing_top: image.placement.top,
+                is_color,
             };
             self.cache.insert(
                 key,
@@ -272,10 +362,23 @@ impl GlyphAtlas {
             return Some(slot);
         }
 
-        // Pack into atlas. On overflow, flag a compaction for the next frame
-        // (deferred to avoid rewriting UVs already baked into this frame) and
-        // drop the glyph for now, exactly as the previous full-clear path did.
-        let (ax, ay) = match self.packer.allocate(w, h) {
+        // First color glyph ever: the color atlas is still a 1x1 placeholder.
+        // Latch the request and drop the glyph for this frame; the renderer grows
+        // the texture before the next frame, when this re-rasterizes and packs.
+        if is_color && !self.color_ready {
+            self.color_wanted = true;
+            return None;
+        }
+
+        // Pack into the matching atlas. On overflow, flag a compaction for the
+        // next frame (deferred to avoid rewriting UVs already baked into this
+        // frame) and drop the glyph for now, as the previous path did.
+        let (packer, pending) = if is_color {
+            (&mut self.color_packer, &mut self.color_pending)
+        } else {
+            (&mut self.packer, &mut self.pending)
+        };
+        let (ax, ay) = match packer.allocate(w, h) {
             Some(pos) => pos,
             None => {
                 self.needs_compact = true;
@@ -291,9 +394,10 @@ impl GlyphAtlas {
             pixel_height: h,
             bearing_left: image.placement.left,
             bearing_top: image.placement.top,
+            is_color,
         };
 
-        self.pending.push((ax, ay, w, h, image.data.clone()));
+        pending.push((ax, ay, w, h, image.data.clone()));
         self.cache.insert(
             key,
             CachedGlyph {
@@ -309,43 +413,68 @@ impl GlyphAtlas {
         Some(slot)
     }
 
-    /// Upload all pending rasterized glyphs to the GPU texture.
+    /// Upload all pending rasterized glyphs to the two GPU textures.
     pub fn flush_uploads(&mut self, queue: &wgpu::Queue) {
-        for (x, y, w, h, data) in self.pending.drain(..) {
-            // WebGL2 (via wgpu GL backend) requires bytes_per_row to be a
-            // multiple of 4 for texSubImage2D. Pad each row to alignment.
-            // Atlas is R8Unorm so bytes_per_pixel = 1.
-            let aligned_bpr = (w + 3) & !3;
-            let upload_data: Vec<u8> = if aligned_bpr == w {
-                // Already aligned -- use data as-is without copying.
-                data
-            } else {
-                let mut padded = Vec::with_capacity((aligned_bpr * h) as usize);
-                for row in data.chunks_exact(w as usize) {
-                    padded.extend_from_slice(row);
-                    padded.resize(padded.len() + (aligned_bpr - w) as usize, 0);
-                }
-                padded
-            };
-            queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &self.texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d { x, y, z: 0 },
-                    aspect: wgpu::TextureAspect::All,
-                },
-                &upload_data,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(aligned_bpr),
-                    rows_per_image: None,
-                },
-                wgpu::Extent3d {
-                    width: w,
-                    height: h,
-                    depth_or_array_layers: 1,
-                },
-            );
+        // R8 mask atlas: 1 byte/px.
+        let pending = std::mem::take(&mut self.pending);
+        for (x, y, w, h, data) in pending {
+            upload_glyph(queue, &self.texture, x, y, w, h, 1, data);
+        }
+        // RGBA color atlas: 4 bytes/px.
+        let color_pending = std::mem::take(&mut self.color_pending);
+        for (x, y, w, h, data) in color_pending {
+            upload_glyph(queue, &self.color_texture, x, y, w, h, 4, data);
         }
     }
+}
+
+/// Upload one rasterized glyph bitmap to `texture` at `(x, y)`.
+///
+/// `bpp` is 1 (R8 coverage mask) or 4 (RGBA color). WebGL2 (via the wgpu GL
+/// backend) requires `bytes_per_row` to be a multiple of 4 for
+/// `texSubImage2D`; the R8 path pads each row up to that alignment, while the
+/// RGBA path is already a multiple of 4 (`w * 4`) so it uploads as-is.
+#[allow(clippy::too_many_arguments)]
+fn upload_glyph(
+    queue: &wgpu::Queue,
+    texture: &wgpu::Texture,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    bpp: u32,
+    data: Vec<u8>,
+) {
+    let row_bytes = w * bpp;
+    let aligned_bpr = (row_bytes + 3) & !3;
+    let upload_data: Vec<u8> = if aligned_bpr == row_bytes {
+        // Already aligned -- use data as-is without copying.
+        data
+    } else {
+        let mut padded = Vec::with_capacity((aligned_bpr * h) as usize);
+        for row in data.chunks_exact(row_bytes as usize) {
+            padded.extend_from_slice(row);
+            padded.resize(padded.len() + (aligned_bpr - row_bytes) as usize, 0);
+        }
+        padded
+    };
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d { x, y, z: 0 },
+            aspect: wgpu::TextureAspect::All,
+        },
+        &upload_data,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(aligned_bpr),
+            rows_per_image: None,
+        },
+        wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
+    );
 }

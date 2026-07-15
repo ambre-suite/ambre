@@ -185,6 +185,7 @@ mod tests {
 
     fn viewport(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
+            reactions: Default::default(),
             nodes,
             viewport: Viewport::default(),
         }
