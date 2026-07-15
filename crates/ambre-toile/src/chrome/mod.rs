@@ -16,6 +16,7 @@ mod floatbar;
 mod menu;
 mod menu_bar;
 mod palette;
+mod presenter;
 mod status;
 mod style;
 
@@ -24,7 +25,13 @@ pub use floatbar::SelectionToolbar;
 pub use menu::context_entries_for;
 pub use menu_bar::TopMenuBar;
 pub use palette::ToolPalette;
+pub use presenter::{PresenterIntent, PresenterPanel};
 pub use status::StatusBar;
+
+// The presenter panel's pure model (counter + notes diff) is host-tested in
+// `ui::presenter` (like `ui::find`); re-export it so the launcher and tests
+// name it through `toile_chrome`.
+pub use crate::ui::presenter::{notes_delta, slide_counter_label};
 pub use style::StyleInspector;
 
 // The inspector's pure model is host-tested in `ui::style` (like `ui::status` /

@@ -320,9 +320,13 @@ boolean crate), on top of `kurbo`, `loro`, `postcard`. The presentation camera r
 **Phase 1 - Integration**
 - [x] Wire playback to the `toile-ui` camera pass
 - [x] Wire the top menu bar Present entry point (`toile-ui §5quinquies.E`, `chrome::menu_bar`)
-  to `EnterPresent` / open the sequence panel. The `PRESENT` command id and its menu rows exist
-  and route through `on_command`, but `ToileView::apply_menu_command` currently no-ops on it.
-- [ ] Presenter overlay panel
+  to `EnterPresent`. `menu_bar_edit(PRESENT)` resolves to `EnterPresent { focus: true }` and
+  `ToileView::apply_menu_command` dispatches it; the resulting `PresentModeChanged` opens the
+  presenter overlay panel.
+- [x] Presenter overlay panel (§1.D): a Leptos chrome panel (`chrome::PresenterPanel`) showing
+  the active slide's speaker notes (editable via `EditNotes`), a `k / n` counter and Prev / Next /
+  Exit controls. Fed by the enriched `SlideChanged` payload; the pure model lives in
+  `ui::presenter` (host-tested).
 - [ ] Reactions render
 - [ ] "Follow presenter" ephemeral broadcast
 

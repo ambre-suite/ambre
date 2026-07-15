@@ -19,11 +19,13 @@
 //! native tier (`just test-native`) skips it cleanly.
 #![cfg(target_arch = "wasm32")]
 
+use ambre_bus::app::toile::TextDelta;
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::ContextMenu;
 use ambre_commands::CommandId;
 use ambre_toile::chrome::{
-    FloatBar, SelStats, SelectionToolbar, StatusBar, ToolPalette, TopMenuBar,
+    FloatBar, PresenterIntent, PresenterPanel, SelStats, SelectionToolbar, StatusBar, ToolPalette,
+    TopMenuBar,
 };
 use ambre_toile::ui::Tool;
 use ambre_toile::ui::menu::{self, CtxScope};
@@ -379,3 +381,117 @@ fn selection_toolbar_delete_fires_command() {
 
     root.remove();
 }
+
+// -- Presenter overlay panel (toile-features §1.D), input ---------------------
+
+/// Mount a `PresenterPanel` with the given initial state, returning the container
+/// and the signal that captures emitted intents. The input signals are created
+/// here and moved into the view, so they stay alive for the panel's lifetime.
+fn mount_presenter(
+    open: bool,
+    index: usize,
+    count: usize,
+    notes: &str,
+) -> (web_sys::Element, RwSignal<Option<PresenterIntent>>) {
+    let open = RwSignal::new(open);
+    let index = RwSignal::new(index);
+    let count = RwSignal::new(count);
+    let notes = RwSignal::new(notes.to_owned());
+    let fired = RwSignal::new(None::<PresenterIntent>);
+    let on_intent = Callback::new(move |i: PresenterIntent| fired.set(Some(i)));
+    let root = mount_in_container(move || {
+        view! {
+            <PresenterPanel
+                open=open
+                index=index
+                count=count
+                notes=notes
+                on_intent=on_intent
+            />
+        }
+    });
+    (root, fired)
+}
+
+/// Set a textarea's value and dispatch a bubbling `input` event, the shape leptos
+/// `on:input` reads through `event_target_value`.
+fn type_into(root: &web_sys::Element, aria: &str, value: &str) {
+    let el = root
+        .query_selector(&format!("[aria-label=\"{aria}\"]"))
+        .unwrap()
+        .expect("textarea present");
+    let area: web_sys::HtmlTextAreaElement = el.dyn_into().unwrap();
+    area.set_value(value);
+    let ev = web_sys::Event::new("input").unwrap();
+    area.dispatch_event(&ev).unwrap();
+}
+
+#[wasm_bindgen_test]
+fn presenter_panel_hidden_when_closed() {
+    let owner = Owner::new();
+    owner.set();
+    let (root, _fired) = mount_presenter(false, 0, 3, "");
+    // Closed: the panel renders nothing, so the notes editor is absent.
+    assert!(
+        root.query_selector("[aria-label=\"Speaker notes\"]")
+            .unwrap()
+            .is_none()
+    );
+    root.remove();
+}
+
+#[wasm_bindgen_test]
+fn presenter_panel_counter_is_one_based() {
+    let owner = Owner::new();
+    owner.set();
+    let (root, _fired) = mount_presenter(true, 2, 10, "");
+    let count = root
+        .query_selector(".ambre-presenter-count")
+        .unwrap()
+        .unwrap();
+    assert_eq!(count.text_content().as_deref(), Some("3 / 10"));
+    root.remove();
+}
+
+#[wasm_bindgen_test]
+fn presenter_nav_buttons_fire_intents() {
+    let owner = Owner::new();
+    owner.set();
+    let (root, fired) = mount_presenter(true, 1, 3, "");
+
+    assert!(click_by_aria(&root, "Next slide"));
+    assert_eq!(fired.get_untracked(), Some(PresenterIntent::Next));
+
+    assert!(click_by_aria(&root, "Previous slide"));
+    assert_eq!(fired.get_untracked(), Some(PresenterIntent::Prev));
+
+    assert!(click_by_aria(&root, "Exit presentation"));
+    assert_eq!(fired.get_untracked(), Some(PresenterIntent::Exit));
+
+    root.remove();
+}
+
+#[wasm_bindgen_test]
+fn presenter_notes_edit_fires_minimal_delta() {
+    let owner = Owner::new();
+    owner.set();
+    // Seeded with "abc"; appending "d" must emit the single-splice insert, not a
+    // full-text replace (toile-features §1.D char-CRDT).
+    let (root, fired) = mount_presenter(true, 0, 1, "abc");
+    type_into(&root, "Speaker notes", "abcd");
+    assert_eq!(
+        fired.get_untracked(),
+        Some(PresenterIntent::EditNotes(TextDelta {
+            at: 3,
+            delete: 0,
+            insert: "d".to_owned(),
+        }))
+    );
+    root.remove();
+}
+
+// Note: the "slide change re-seeds the textarea" path is a deferred `Effect` in
+// `PresenterPanel`. Asserting it needs the reactive executor to flush a post-mount
+// signal update, which the bare wasm-bindgen-test harness does not drive (no async
+// spawner installed by `mount_to`), so it is covered by the pure `notes_delta`
+// model + the app-level wiring rather than a flaky async DOM assertion here.

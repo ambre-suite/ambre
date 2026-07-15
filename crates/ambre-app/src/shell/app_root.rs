@@ -37,6 +37,11 @@ pub(crate) fn AppRoot() -> impl IntoView {
         formula_action,
         sel_stats,
         sel_stats_toile,
+        present_toile,
+        presenter_index,
+        presenter_count,
+        presenter_notes,
+        presenter_frame,
         perf_snap,
         zoom,
         ctx_scope,
@@ -330,6 +335,33 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     }),
                 });
             }
+        }
+    });
+    // Presenter overlay panel intents (toile-features §1.D): navigation maps to
+    // the local playback commands; note edits target the active slide's frame
+    // (captured from the last SlideChanged into `presenter_frame`).
+    let on_present_intent = Callback::new({
+        let tx = to_logic.clone();
+        move |intent: toile_chrome::PresenterIntent| {
+            let Some(document_id) = current_doc.get_untracked() else {
+                return;
+            };
+            use ambre_bus::app::toile::ToileCommand;
+            let command = match intent {
+                toile_chrome::PresenterIntent::Prev => ToileCommand::PrevSlide,
+                toile_chrome::PresenterIntent::Next => ToileCommand::NextSlide,
+                toile_chrome::PresenterIntent::Exit => ToileCommand::ExitPresent,
+                toile_chrome::PresenterIntent::EditNotes(delta) => {
+                    let Some(frame) = presenter_frame.get_untracked() else {
+                        return;
+                    };
+                    ToileCommand::EditNotes { frame, delta }
+                }
+            };
+            let _ = tx.try_send(LogicCommand::App {
+                document_id,
+                command: AppCommand::Toile(command),
+            });
         }
     });
     let on_replace = Callback::new({
@@ -775,6 +807,19 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 state=find_state_toile
                 result=find_result_toile
                 on_find=on_find_toile
+            />
+        })}
+        // Toile presenter overlay panel (toile-features §1.D): speaker notes +
+        // navigation, shown while presentation mode is active. Visibility is
+        // driven by the `present_toile` signal (mirrored from PresentModeChanged);
+        // the slide payload feeds the counter + notes editor.
+        {boot_is_toile.then(|| view! {
+            <toile_chrome::PresenterPanel
+                open=present_toile
+                index=presenter_index
+                count=presenter_count
+                notes=presenter_notes
+                on_intent=on_present_intent
             />
         })}
         // Toile tool palette / primary toolbar (toile-ui §5quinquies.A): a floating

@@ -1196,6 +1196,42 @@ fn slide_change_carries_snapshots_and_fit_rect() {
 }
 
 #[test]
+fn slide_change_carries_count_frame_and_notes() {
+    // The presenter overlay panel (toile-features §1.D) reads the deck length, the
+    // active frame id and its speaker notes straight off the enriched SlideChanged,
+    // since the chrome holds no board state.
+    let mut st = ToileState::new();
+    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    st.handle_command(ToileCommand::SetSlideOrder {
+        order: vec![a.clone(), b.clone()],
+    });
+    st.handle_command(ToileCommand::EditNotes {
+        frame: b.clone(),
+        delta: insert_notes(0, "Talk track for slide two"),
+    });
+
+    let change = slide_change(&st.handle_command(ToileCommand::NextSlide));
+    assert_eq!(
+        change.count, 2,
+        "the whole deck length drives the k / n counter"
+    );
+    assert_eq!(change.frame, Some(b.clone()), "the active slide's frame id");
+    assert_eq!(
+        change.notes, "Talk track for slide two",
+        "the active slide's speaker notes seed the editor"
+    );
+
+    // Stepping back to a note-less slide reports empty notes, not the stale ones.
+    let change = slide_change(&st.handle_command(ToileCommand::PrevSlide));
+    assert_eq!(change.frame, Some(a));
+    assert!(
+        change.notes.is_empty(),
+        "a note-less slide carries empty notes"
+    );
+}
+
+#[test]
 fn enter_present_starts_from_empty_snapshot() {
     // Entering present mode has no source frame: `from` is empty so slide 0 fades
     // in rather than tweening from a stale frame (§1.C).
