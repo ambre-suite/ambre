@@ -31,7 +31,8 @@
 | `ambre-bus` | `ToileCommand`/`ToileEvent`, media messages | Import lands as commands; media status as events |
 | `ambre-draw` | `DrawSurface`, `KrillaSurface`, re-exports `kurbo`/`peniko` | PDF and vector export via the shared surface — architectural convention |
 | `krilla` | PDF generation | Pure-Rust PDF writer behind `KrillaSurface` (already used by Trame/Prose export) |
-| `usvg` / `resvg` | SVG parse → tree | Pure-Rust SVG import; `usvg` normalizes to a render tree we map to elements |
+| `usvg` / `resvg` | SVG parse → tree | Pure-Rust SVG import; `usvg` normalizes to a render tree we map to elements. Built with `default-features = false` (no font stack): the browser has no system fonts and Toile keeps text editable (§2.A) |
+| `roxmltree` | SVG `<text>` extraction | Reads editable `<text>` bodies/positions from the SVG source (usvg would flatten them to glyph paths, §2.A) |
 | `image` | PNG/JPG decode/encode | Pure-Rust raster codecs for image import + PNG export |
 | `serde_json` | Figma / Miro document parse | Their exchange formats are JSON |
 | `lyon` | Raster rasterization of vector export (PNG) | Via `ambre-canvas` tessellation for high-res raster |
@@ -64,6 +65,30 @@
 | `<text>` | `text` element (Parley runs) |
 | `<image>` | `image` element → blob into the media pipeline (§5) |
 | `<g>` | `group` (logical grouping, `toile-logic §2.F bis`) with the children as its `children` list — not a `frame` (frames carry chrome/notes an SVG group does not) |
+
+> **usvg normalizes primitives to paths.** `usvg` flattens every primitive
+> (`<rect>`, `<circle>`, `<line>`, ...) into a `Path`, so a vector node arrives as
+> `shape:path`; an axis-aligned rectangle contour is recognized back into
+> `shape:rect` (the common, safe case), everything else keeps its exact
+> `BezPath`.
+>
+> **Text is read from source, not from usvg.** usvg only exposes `<text>` by
+> flattening it to glyph *paths*, which needs a font database — impossible in the
+> browser (no system fonts) and destructive (it drops the editable string). So the
+> usvg font stack is **disabled** (`default-features = false`, which also trims the
+> WASM binary, §8) and `<text>` is read directly from the SVG source with
+> `roxmltree`: the raw body plus its `x`/`y`/`font-size` become an editable `text`
+> element rendered through Toile's own Parley stack. Phase 0 reads top-level
+> `x`/`y` only (no transform / `tspan` offset resolution).
+>
+> **Groups: flattened in Phase 0.** A Toile `group` is born only via
+> `GroupElements { ids }` (`toile-logic §2.F bis`), whose `ElementId`s are minted
+> by the engine *after* `CreateElement` is applied — ids the offline converter
+> cannot know. Phase 0 therefore **flattens** `<g>`: it recurses and imports the
+> children as top-level elements with the group transform baked into their
+> coordinates (`abs_transform`), so flattening is visually lossless, and lists each
+> flattened group in the import report. Re-grouping lands with the Phase 1
+> dispatcher wiring (post-apply ids exist there).
 
 Gradients/filters not representable in `ElementStyle` are rasterized to an `image` fallback (lossy but faithful),
 flagged in the import report.
@@ -257,12 +282,12 @@ budget.
 
 > Tracked as Stories of Epic **E4** (Toile MVP) in `specs/ambre-roadmap.md`.
 
-**Phase 0 - Core standalone**
-- [ ] SVG import / export (primitives + paths + text)
-- [ ] Raster image import
-- [ ] Safety limits (size / element caps, decompression bounds)
-- [ ] Media hashing + placeholder state machine
-- [ ] Host tests + golden fixtures
+**Phase 0 - Core standalone** — landed as the pure, host-tested `ambre-toile::logic::interop` module (converters return an `ImportBatch { commands, media, report }`; no dispatcher/Sync wiring yet, that is Phase 1).
+- [x] SVG import / export (primitives + paths + text) — `svg_import` (usvg + `roxmltree` text pass, §2.A) / `svg_export` (deterministic, byte-stable)
+- [x] Raster image import — `raster` (PNG/JPG decode + placeholder thumbnail, §2.B)
+- [x] Safety limits (size / element caps, decompression bounds) — `limits` (element/depth caps, coordinate clamp, image-dimension bound; every breach aborts atomically, §2.D)
+- [x] Media hashing + placeholder state machine — `media` (`Loading→Ready/Failed` + LRU cache + content-addressed dedup, keyed by an injected `ContentHash`; real blake2b stays Sync-side per §5)
+- [x] Host tests + golden fixtures — node-type mapping, round-trip stability, every reject path, media state machine
 
 **Phase 1 - Integration**
 - [ ] PDF export via `KrillaSurface` honoring presentation order

@@ -104,6 +104,22 @@ i_overlay = "7.0"
 # Glyph rasterization (phase 2: GlyphAtlas) -- match parley's transitive dep
 swash = "0.2"
 
+# Toile interop (toile-interop §2). Pure-Rust SVG parse -> normalized tree that
+# the SVG importer walks into ToileCommands; pure-Rust raster codecs for PNG/JPG
+# image import + thumbnail encoding. Both are WASM-compatible and loaded only on
+# the interop path (toile-interop §8). `image` keeps a tight codec set (png/jpeg)
+# to limit the WASM binary contribution.
+#
+# usvg drops its default font stack (`text`, `system-fonts`, `memmap-fonts`): the
+# browser has no system fonts, so usvg's text-to-glyph-path flattening cannot run
+# in WASM and would also destroy editable text. Toile keeps `<text>` editable by
+# extracting the raw string/position via `roxmltree` and rendering it through its
+# own Parley text stack (toile-interop §2.A). Dropping the font stack also trims
+# the WASM binary contribution (§8).
+usvg = { version = "0.47", default-features = false }
+roxmltree = "0.20"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
 # WASM
 gloo-net = { version = "0.7", features = ["http", "websocket"] }
 web-sys = { version = "0.3.85", features = [

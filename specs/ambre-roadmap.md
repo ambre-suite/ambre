@@ -262,7 +262,12 @@ Stories:
   Phase 0/1 scope.)*
 - `[ ]` `toile-interop §10 Phase 0/1` — SVG import/export, raster import, safety limits, media hashing + placeholder;
   then PDF export (presentation order), Figma/Miro converters, media pipeline on the crypto/Sync layer.
-  Golden fixtures + wasm export tests.
+  Golden fixtures + wasm export tests. *(Phase 0 landed: pure, host-tested `ambre-toile/src/logic/interop/` —
+  `svg_import` (usvg + `roxmltree` editable-text pass) / `svg_export` (deterministic), `raster` (PNG/JPG +
+  thumbnail), `limits` (atomic caps/clamp), `media` (Loading→Ready/Failed LRU cache + content-addressed dedup,
+  hash injected — real blake2b stays Sync-side). Converters return an `ImportBatch { commands, media, report }`;
+  golden fixtures + reject-path + round-trip tests green. Groups flattened and `<text>` read from source — see
+  `toile-interop §2.A`. Phase 1 remains: dispatcher/Sync wiring, PDF/`KrillaSurface`, Figma/Miro, wasm export tests.)*
 - `[x]` **New-document type picker (launcher, `CHROME P4` addendum)** — the `E2` launcher create action was
   hardcoded to Trame (`landing.rs`, `trame_chrome::DOC_TYPE`) while Trame was the only product. Toile is the
   second creatable type, so the "new document" action became an app-agnostic `NewDocPicker` dropdown iterating

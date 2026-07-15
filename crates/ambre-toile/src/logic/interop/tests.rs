@@ -1,0 +1,323 @@
+//! Integration tests for the interop converters against golden fixtures
+//! (`toile-interop` §7 DoD). Host tier only: pure functions, no network / MinIO.
+//!
+//! Covers each mapped SVG node type -> expected command batch, an SVG round-trip
+//! (import -> export -> import stability), every safety-limit reject path aborting
+//! atomically, embedded raster import, and the report of dropped constructs.
+
+use std::io::Cursor;
+
+use image::ImageFormat;
+use kurbo::{Rect, Shape, Size};
+
+use super::*;
+use crate::logic::command::{InitContent, ToileCommand};
+use crate::logic::model::{ElementKind, ShapeKind};
+
+const RECT_SVG: &str = include_str!("fixtures/rect.svg");
+const ELLIPSE_SVG: &str = include_str!("fixtures/ellipse.svg");
+const PATH_SVG: &str = include_str!("fixtures/path.svg");
+const TEXT_SVG: &str = include_str!("fixtures/text.svg");
+const GROUP_SVG: &str = include_str!("fixtures/group_nested.svg");
+
+/// Convenience: the single command of a one-element import.
+fn only_cmd(batch: &ImportBatch) -> &ToileCommand {
+    assert_eq!(batch.commands.len(), 1, "expected exactly one command");
+    &batch.commands[0]
+}
+
+// -----------------------------------------------------------------------------
+// Node-type mapping (§2.A)
+// -----------------------------------------------------------------------------
+
+#[test]
+fn rect_maps_to_shape_rect() {
+    let batch = import_svg(RECT_SVG.as_bytes(), &Limits::default()).unwrap();
+    match only_cmd(&batch) {
+        ToileCommand::CreateElement {
+            kind: ElementKind::Shape(ShapeKind::Rect),
+            at,
+            size,
+            content: InitContent::None,
+        } => {
+            assert_eq!(*at, kurbo::Point::new(10.0, 20.0));
+            assert_eq!(*size, Size::new(100.0, 50.0));
+        }
+        other => panic!("expected Shape(Rect), got {other:?}"),
+    }
+    assert_eq!(batch.report.imported, 1);
+}
+
+#[test]
+fn ellipse_maps_to_shape_path() {
+    // usvg flattens an ellipse to cubic bezier segments -> not an axis-aligned
+    // rect, so it keeps exact geometry as Shape(Path).
+    let batch = import_svg(ELLIPSE_SVG.as_bytes(), &Limits::default()).unwrap();
+    assert!(matches!(
+        only_cmd(&batch),
+        ToileCommand::CreateElement {
+            kind: ElementKind::Shape(ShapeKind::Path),
+            content: InitContent::Path(_),
+            ..
+        }
+    ));
+}
+
+#[test]
+fn path_maps_to_shape_path_with_geometry() {
+    let batch = import_svg(PATH_SVG.as_bytes(), &Limits::default()).unwrap();
+    match only_cmd(&batch) {
+        ToileCommand::CreateElement {
+            kind: ElementKind::Shape(ShapeKind::Path),
+            content: InitContent::Path(bez),
+            ..
+        } => assert!(!bez.elements().is_empty(), "path carries geometry"),
+        other => panic!("expected Shape(Path), got {other:?}"),
+    }
+}
+
+#[test]
+fn text_maps_to_text_element_preserving_body() {
+    let batch = import_svg(TEXT_SVG.as_bytes(), &Limits::default()).unwrap();
+    match only_cmd(&batch) {
+        ToileCommand::CreateElement {
+            kind: ElementKind::Text,
+            content: InitContent::Text(body),
+            ..
+        } => assert_eq!(body, "Hello Toile"),
+        other => panic!("expected Text, got {other:?}"),
+    }
+}
+
+#[test]
+fn nested_groups_are_flattened_with_children_preserved() {
+    let batch = import_svg(GROUP_SVG.as_bytes(), &Limits::default()).unwrap();
+    // Two rects survive (flattened); the groups themselves are not emitted.
+    assert_eq!(batch.commands.len(), 2);
+    assert!(batch.commands.iter().all(|c| matches!(
+        c,
+        ToileCommand::CreateElement {
+            kind: ElementKind::Shape(ShapeKind::Rect),
+            ..
+        }
+    )));
+    // Both flattened groups are reported.
+    assert_eq!(
+        batch
+            .report
+            .skipped
+            .iter()
+            .filter(|s| s.contains("flattened"))
+            .count(),
+        2
+    );
+    // Transforms are baked in: the inner rect sits at (5+50, 5+50) = (55, 55).
+    let ats: Vec<_> = batch
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            ToileCommand::CreateElement { at, .. } => Some((at.x, at.y)),
+            _ => None,
+        })
+        .collect();
+    assert!(ats.contains(&(5.0, 5.0)), "outer rect at (5,5): {ats:?}");
+    assert!(
+        ats.contains(&(55.0, 55.0)),
+        "inner rect at (55,55): {ats:?}"
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Safety limits (§2.D) -- each reject path aborts atomically (no commands)
+// -----------------------------------------------------------------------------
+
+#[test]
+fn too_many_elements_aborts_atomically() {
+    let mut svg = String::from("<svg xmlns=\"http://www.w3.org/2000/svg\">");
+    for i in 0..10 {
+        svg.push_str(&format!(
+            "<rect x=\"{i}\" y=\"0\" width=\"5\" height=\"5\"/>"
+        ));
+    }
+    svg.push_str("</svg>");
+    let limits = Limits {
+        max_elements: 4,
+        ..Limits::default()
+    };
+    let err = import_svg(svg.as_bytes(), &limits).unwrap_err();
+    assert_eq!(err, ImportError::TooManyElements { limit: 4 });
+}
+
+#[test]
+fn too_deep_nesting_aborts_atomically() {
+    // Six nested groups, each with a rect; a depth cap of 3 rejects the file.
+    let mut svg = String::from("<svg xmlns=\"http://www.w3.org/2000/svg\">");
+    for _ in 0..6 {
+        svg.push_str("<g>");
+    }
+    svg.push_str("<rect x=\"0\" y=\"0\" width=\"5\" height=\"5\"/>");
+    for _ in 0..6 {
+        svg.push_str("</g>");
+    }
+    svg.push_str("</svg>");
+    let limits = Limits {
+        max_depth: 3,
+        ..Limits::default()
+    };
+    let err = import_svg(svg.as_bytes(), &limits).unwrap_err();
+    assert_eq!(err, ImportError::TooDeep { limit: 3 });
+}
+
+#[test]
+fn coordinates_are_clamped_to_the_world_bound() {
+    let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\">\
+        <rect x=\"0\" y=\"0\" width=\"100000\" height=\"100000\"/></svg>";
+    let limits = Limits {
+        coord_clamp: 500.0,
+        ..Limits::default()
+    };
+    let batch = import_svg(svg.as_bytes(), &limits).unwrap();
+    match only_cmd(&batch) {
+        ToileCommand::CreateElement { at, size, .. } => {
+            assert!(at.x.abs() <= 500.0 && at.y.abs() <= 500.0);
+            assert!(size.width <= 1000.0 && size.height <= 1000.0);
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn empty_svg_reports_empty() {
+    let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>";
+    assert_eq!(
+        import_svg(svg.as_bytes(), &Limits::default()).unwrap_err(),
+        ImportError::Empty
+    );
+}
+
+#[test]
+fn malformed_svg_fails_to_parse() {
+    let err = import_svg(b"not an svg at all", &Limits::default()).unwrap_err();
+    assert!(matches!(err, ImportError::Parse(_)));
+}
+
+// -----------------------------------------------------------------------------
+// Embedded raster in SVG (§2.B) -> Image element + MediaBlob
+// -----------------------------------------------------------------------------
+
+#[test]
+fn embedded_png_maps_to_image_and_media_blob() {
+    let svg = svg_with_embedded_png(32, 24);
+    let batch = import_svg(svg.as_bytes(), &Limits::default()).unwrap();
+    assert_eq!(batch.media.len(), 1, "one media blob produced");
+    assert_eq!((batch.media[0].width, batch.media[0].height), (32, 24));
+    assert!(!batch.media[0].thumb.is_empty());
+    assert!(batch.commands.iter().any(|c| matches!(
+        c,
+        ToileCommand::CreateElement {
+            kind: ElementKind::Image,
+            content: InitContent::Image(_),
+            ..
+        }
+    )));
+}
+
+// -----------------------------------------------------------------------------
+// SVG round-trip stability (§1 "deterministic export")
+// -----------------------------------------------------------------------------
+
+#[test]
+fn round_trip_rect_is_stable() {
+    // Build an export model, serialize, re-import, and assert the kind + geometry
+    // survive the round-trip.
+    let mut el = ExportElement::new(
+        ElementKind::Shape(ShapeKind::Rect),
+        Rect::new(10.0, 20.0, 110.0, 70.0),
+    );
+    el.style.fill = Some(0xFF33_66CC);
+
+    let svg1 = export_svg(std::slice::from_ref(&el));
+    let batch = import_svg(svg1.as_bytes(), &Limits::default()).unwrap();
+    match only_cmd(&batch) {
+        ToileCommand::CreateElement {
+            kind: ElementKind::Shape(ShapeKind::Rect),
+            at,
+            size,
+            ..
+        } => {
+            assert_eq!(*at, kurbo::Point::new(10.0, 20.0));
+            assert_eq!(*size, Size::new(100.0, 50.0));
+        }
+        other => panic!("rect did not round-trip: {other:?}"),
+    }
+
+    // Export is byte-stable across runs.
+    let svg2 = export_svg(std::slice::from_ref(&el));
+    assert_eq!(svg1, svg2);
+}
+
+#[test]
+fn round_trip_path_geometry_survives() {
+    let mut bez = kurbo::BezPath::new();
+    bez.move_to((0.0, 0.0));
+    bez.curve_to((10.0, 30.0), (40.0, 30.0), (50.0, 0.0));
+    let mut el = ExportElement::new(ElementKind::Shape(ShapeKind::Path), bez.bounding_box());
+    el.path = Some(bez);
+
+    let svg = export_svg(std::slice::from_ref(&el));
+    let batch = import_svg(svg.as_bytes(), &Limits::default()).unwrap();
+    assert!(matches!(
+        only_cmd(&batch),
+        ToileCommand::CreateElement {
+            kind: ElementKind::Shape(ShapeKind::Path),
+            content: InitContent::Path(_),
+            ..
+        }
+    ));
+}
+
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
+
+/// Build an SVG string embedding a solid PNG as a base64 data URI.
+fn svg_with_embedded_png(w: u32, h: u32) -> String {
+    let img = image::RgbaImage::from_pixel(w, h, image::Rgba([200, 100, 50, 255]));
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgba8(img)
+        .write_to(&mut Cursor::new(&mut png), ImageFormat::Png)
+        .unwrap();
+    let b64 = base64_encode(&png);
+    format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\">\
+         <image x=\"0\" y=\"0\" width=\"{w}\" height=\"{h}\" \
+         href=\"data:image/png;base64,{b64}\"/></svg>"
+    )
+}
+
+/// Minimal standard base64 encoder (no external dep in the test).
+fn base64_encode(data: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    for chunk in data.chunks(3) {
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        out.push(T[((n >> 18) & 63) as usize] as char);
+        out.push(T[((n >> 12) & 63) as usize] as char);
+        out.push(if chunk.len() > 1 {
+            T[((n >> 6) & 63) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            T[(n & 63) as usize] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
