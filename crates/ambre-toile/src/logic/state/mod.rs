@@ -110,6 +110,15 @@ pub struct ToileState {
     /// [`present`](Self::present); reset on `EnterPresent`, clamped by
     /// `SetSlideOrder`.
     playback: PlaybackState,
+    /// "Follow presenter" broadcast toggle (§1.B): when set, the playback commands
+    /// additionally emit an ephemeral frame carrying the active slide index so
+    /// followers glide along. Local role, never in Loro and never synced.
+    broadcasting: bool,
+    /// The presenter this viewer is following (§1.B), or `None`. When `Some(u)`,
+    /// an inbound presence frame from `u` that carries a `present_slide` moves this
+    /// viewer's active slide; a manual navigation clears it ("take control").
+    /// Local role, never in Loro and never synced.
+    following: Option<UserId>,
 }
 
 impl Default for ToileState {
@@ -145,6 +154,8 @@ impl ToileState {
             presence: HashMap::new(),
             present: false,
             playback: PlaybackState::default(),
+            broadcasting: false,
+            following: None,
         }
     }
 
@@ -161,6 +172,18 @@ impl ToileState {
     /// The canonical `UserId` for this session, if the session is authenticated.
     pub fn user_id(&self) -> Option<UserId> {
         self.my_user_id
+    }
+
+    /// Whether this viewer is broadcasting its playback position (§1.B). Test /
+    /// integration accessor.
+    pub fn is_broadcasting(&self) -> bool {
+        self.broadcasting
+    }
+
+    /// The presenter this viewer is currently following, if any (§1.B). Test /
+    /// integration accessor.
+    pub fn following(&self) -> Option<UserId> {
+        self.following
     }
 
     // -- id minting (§2.A) -----------------------------------------------------
@@ -204,6 +227,8 @@ impl ToileState {
             ToileCommand::GotoSlide(idx) => self.goto_slide(idx),
             ToileCommand::EnterPresent { focus } => self.enter_present(focus),
             ToileCommand::ExitPresent => self.exit_present(),
+            ToileCommand::SetPresentBroadcast(on) => self.set_present_broadcast(on),
+            ToileCommand::FollowPresenter(who) => self.follow_presenter(who),
             ToileCommand::EditNotes { frame, delta } => self.edit_notes(&frame, &delta),
             ToileCommand::SetAutoLayout { frame, layout } => self.set_auto_layout(&frame, layout),
             ToileCommand::React { target, reaction } => self.react(&target, reaction),

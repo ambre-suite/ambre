@@ -157,6 +157,13 @@ struct Wiring {
     /// Active slide's frame id: the target of the panel's `EditNotes` intent.
     /// `None` when the deck is empty or the slide is dangling (edits skipped).
     presenter_frame: RwSignal<Option<ambre_bus::app::toile::ElementId>>,
+    /// "Follow presenter" role signals (`toile-features` §1.B). `broadcasting`
+    /// mirrors the local broadcast toggle, `following` the active follow target,
+    /// and `presenter_peer` the latest peer seen broadcasting (drives the panel's
+    /// Follow affordance).
+    broadcasting_toile: RwSignal<bool>,
+    following_toile: RwSignal<Option<ambre_bus::UserId>>,
+    presenter_peer_toile: RwSignal<Option<ambre_bus::UserId>>,
     /// Toile right-click context-menu scope (`toile-ui §5ter`): the canvas view
     /// publishes it on each right-click; the shell's entry `Memo` reads it to build
     /// the menu, omitting inapplicable rows.
@@ -369,6 +376,13 @@ pub fn main() {
     let presenter_count = RwSignal::new(0usize);
     let presenter_notes = RwSignal::new(String::new());
     let presenter_frame = RwSignal::new(None::<ambre_bus::app::toile::ElementId>);
+    // "Follow presenter" role signals (toile-features §1.B), mirrored from the
+    // `PresentBroadcastChanged` / `FollowingChanged` events and from a peer's
+    // broadcasting presence. `presenter_peer_toile` is the latest peer seen
+    // broadcasting a slide; it drives the panel's Follow affordance.
+    let broadcasting_toile = RwSignal::new(false);
+    let following_toile = RwSignal::new(None::<ambre_bus::UserId>);
+    let presenter_peer_toile = RwSignal::new(None::<ambre_bus::UserId>);
     let perf_snap = RwSignal::new(ambre_canvas::PerfSnapshot::default());
 
     // Sheet-tab strip model (`-ui.md` sec.13): mirrored from `TrameEvent::SheetList`
@@ -560,6 +574,9 @@ pub fn main() {
         presenter_count,
         presenter_notes,
         presenter_frame,
+        broadcasting_toile,
+        following_toile,
+        presenter_peer_toile,
         perf_snap,
         zoom,
         ctx_scope,
@@ -1070,6 +1087,28 @@ pub fn main() {
                     presenter_count.set(c.count);
                     presenter_notes.set(c.notes.clone());
                     presenter_frame.set(c.frame.clone());
+                }
+                // "Follow presenter" role changes (§1.B): reflect the local
+                // broadcast toggle and follow target in the panel signals.
+                UiEvent::Viewport {
+                    event:
+                        AppEvent::Toile(ambre_bus::app::toile::ToileEvent::PresentBroadcastChanged(on)),
+                    ..
+                } => broadcasting_toile.set(*on),
+                UiEvent::Viewport {
+                    event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::FollowingChanged(who)),
+                    ..
+                } => following_toile.set(*who),
+                // A peer broadcasting its playback position (§1.B): remember it as
+                // the current presenter so the Follow affordance appears. The event
+                // still flows to the view below for the overlay pass.
+                UiEvent::Viewport {
+                    event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::PeerPresence(u)),
+                    ..
+                } => {
+                    if u.presence.present_slide.is_some() {
+                        presenter_peer_toile.set(Some(u.user_id));
+                    }
                 }
                 _ => {}
             }

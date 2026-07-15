@@ -431,6 +431,7 @@ fn presence_command_broadcasts_ephemeral_only() {
         selection: vec![a],
         live_stroke: None,
         laser: Some(Point::new(50.0, 60.0)),
+        present_slide: None,
     };
     let out = st.handle_command(ToileCommand::Presence(payload));
     assert!(out.display.is_empty(), "presence emits no display event");
@@ -455,6 +456,7 @@ fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
             pressure: 1.0,
         }]),
         laser: None,
+        present_slide: None,
     };
     let frame = sender
         .handle_command(ToileCommand::Presence(payload.clone()))
@@ -1310,6 +1312,249 @@ fn playback_is_not_synced() {
         b.playback(),
         (false, 0, false),
         "B's playback is untouched by A's presentation"
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Follow presenter: ephemeral slide broadcast (`toile-features` §1.B)
+// -----------------------------------------------------------------------------
+
+/// Decode a broadcast slide index out of an outcome's ephemeral frame, if any.
+fn broadcast_slide(out: &crate::logic::command::ToileOutcome) -> Option<usize> {
+    let bytes = out.ephemeral.as_ref()?;
+    let p: PresencePayload = postcard::from_bytes(bytes).expect("decodable presence frame");
+    p.present_slide
+}
+
+/// A three-frame deck shared by the follow-presenter tests.
+fn deck_of_three(st: &mut ToileState) {
+    let a = create_frame(st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_frame(st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    let c = create_frame(st, Point::new(600.0, 0.0), Size::new(200.0, 200.0));
+    st.handle_command(ToileCommand::SetSlideOrder {
+        order: vec![a, b, c],
+    });
+}
+
+#[test]
+fn broadcast_frame_carries_active_slide() {
+    // While broadcasting, a navigation additionally emits an ephemeral frame
+    // carrying the new active index -- and never a CRDT delta.
+    let mut st = ToileState::new();
+    deck_of_three(&mut st);
+    st.handle_command(ToileCommand::SetPresentBroadcast(true));
+
+    let out = st.handle_command(ToileCommand::NextSlide);
+    assert_eq!(slide_changed(&out), Some(1), "the local view still glides");
+    assert_eq!(
+        broadcast_slide(&out),
+        Some(1),
+        "the ephemeral frame carries the new active index"
+    );
+    assert!(out.update.is_none(), "playback is never a CRDT delta");
+}
+
+#[test]
+fn no_broadcast_frame_when_not_broadcasting() {
+    // With broadcasting off, navigation stays purely local: no ephemeral frame.
+    let mut st = ToileState::new();
+    deck_of_three(&mut st);
+    let out = st.handle_command(ToileCommand::NextSlide);
+    assert_eq!(slide_changed(&out), Some(1));
+    assert!(
+        out.ephemeral.is_none(),
+        "no broadcast frame while broadcasting is off"
+    );
+}
+
+#[test]
+fn follower_adopts_presenter_slide() {
+    // A follower adopts the presenter's broadcast slide (gliding via SlideChanged)
+    // without touching the CRDT or its history.
+    let mut presenter = ToileState::new();
+    deck_of_three(&mut presenter);
+    presenter.handle_command(ToileCommand::SetPresentBroadcast(true));
+    let frame = presenter
+        .handle_command(ToileCommand::GotoSlide(2))
+        .ephemeral
+        .expect("broadcast frame");
+
+    let mut rx = ToileState::new();
+    rx.apply_remote(&presenter.export_snapshot());
+    let alice = UserId::new();
+    rx.handle_command(ToileCommand::FollowPresenter(Some(alice)));
+
+    let before = rx.export_snapshot();
+    let events = rx.apply_ephemeral(alice, &frame);
+    assert_eq!(rx.playback().1, 2, "the follower adopted slide 2");
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, ToileEvent::SlideChanged(c) if c.index == 2)),
+        "adoption emits a SlideChanged so the camera glides"
+    );
+    assert_eq!(
+        rx.export_snapshot(),
+        before,
+        "adoption never mutates history"
+    );
+}
+
+#[test]
+fn non_follower_ignores_broadcast() {
+    // Not following anyone: a broadcast frame updates presence but never moves us.
+    let mut presenter = ToileState::new();
+    deck_of_three(&mut presenter);
+    presenter.handle_command(ToileCommand::SetPresentBroadcast(true));
+    let frame = presenter
+        .handle_command(ToileCommand::GotoSlide(2))
+        .ephemeral
+        .expect("broadcast frame");
+
+    let mut rx = ToileState::new();
+    rx.apply_remote(&presenter.export_snapshot());
+    let events = rx.apply_ephemeral(UserId::new(), &frame);
+    assert_eq!(rx.playback().1, 0, "a non-follower does not move");
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, ToileEvent::SlideChanged(_))),
+        "no glide when not following"
+    );
+}
+
+#[test]
+fn following_other_peer_ignores_broadcast() {
+    // Following B, a frame from A is ignored (identity is the canonical UserId).
+    let mut presenter = ToileState::new();
+    deck_of_three(&mut presenter);
+    presenter.handle_command(ToileCommand::SetPresentBroadcast(true));
+    let frame = presenter
+        .handle_command(ToileCommand::GotoSlide(2))
+        .ephemeral
+        .expect("broadcast frame");
+
+    let mut rx = ToileState::new();
+    rx.apply_remote(&presenter.export_snapshot());
+    let bob = UserId::new();
+    rx.handle_command(ToileCommand::FollowPresenter(Some(bob)));
+    let alice = UserId::new();
+    rx.apply_ephemeral(alice, &frame);
+    assert_eq!(
+        rx.playback().1,
+        0,
+        "a frame from a non-followed peer never moves us"
+    );
+}
+
+#[test]
+fn adopted_slide_is_clamped_to_deck() {
+    // A broadcast index past the deck end clamps to the last slide.
+    let mut rx = ToileState::new();
+    deck_of_three(&mut rx); // three slides -> last index 2
+    let alice = UserId::new();
+    rx.handle_command(ToileCommand::FollowPresenter(Some(alice)));
+    let frame = postcard::to_allocvec(&PresencePayload {
+        present_slide: Some(99),
+        ..Default::default()
+    })
+    .unwrap();
+    rx.apply_ephemeral(alice, &frame);
+    assert_eq!(
+        rx.playback().1,
+        2,
+        "an out-of-range index clamps to len - 1"
+    );
+}
+
+#[test]
+fn manual_nav_breaks_follow() {
+    // A manual navigation takes control: the follow is cleared and announced.
+    let mut st = ToileState::new();
+    deck_of_three(&mut st);
+    let alice = UserId::new();
+    st.handle_command(ToileCommand::FollowPresenter(Some(alice)));
+    assert_eq!(st.following(), Some(alice));
+
+    let out = st.handle_command(ToileCommand::NextSlide);
+    assert!(st.following().is_none(), "manual nav takes control");
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::FollowingChanged(None))),
+        "clearing the follow is announced to the UI"
+    );
+    assert_eq!(slide_changed(&out), Some(1), "the navigation still happens");
+}
+
+#[test]
+fn follow_snaps_to_last_known_slide() {
+    // Following a peer whose broadcast slide is already known snaps at once.
+    let mut rx = ToileState::new();
+    deck_of_three(&mut rx);
+    let alice = UserId::new();
+    // Store a broadcast frame from alice before following her.
+    let frame = postcard::to_allocvec(&PresencePayload {
+        present_slide: Some(2),
+        ..Default::default()
+    })
+    .unwrap();
+    rx.apply_ephemeral(alice, &frame);
+    assert_eq!(rx.playback().1, 0, "no adoption before following");
+
+    let out = rx.handle_command(ToileCommand::FollowPresenter(Some(alice)));
+    assert_eq!(
+        rx.playback().1,
+        2,
+        "following snaps to the last known slide"
+    );
+    assert_eq!(
+        slide_changed(&out),
+        Some(2),
+        "the snap glides via SlideChanged"
+    );
+}
+
+#[test]
+fn present_broadcast_toggle_is_local() {
+    // Toggling broadcast is a local role: a CRDT delta is never produced.
+    let mut st = ToileState::new();
+    deck_of_three(&mut st);
+    let out = st.handle_command(ToileCommand::SetPresentBroadcast(true));
+    assert!(out.update.is_none(), "the broadcast toggle is never CRDT");
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::PresentBroadcastChanged(true))),
+        "the toggle is announced to the UI"
+    );
+    assert!(st.is_broadcasting());
+}
+
+#[test]
+fn follow_state_is_not_synced() {
+    // Follow / broadcast toggles never produce a CRDT delta, and one peer's
+    // toggles never touch another peer's playback (mirrors playback_is_not_synced).
+    let mut a = ToileState::new();
+    let mut b = ToileState::new();
+    deck_of_three(&mut a);
+    b.apply_remote(&a.export_snapshot());
+
+    let alice = UserId::new();
+    assert!(
+        a.handle_command(ToileCommand::FollowPresenter(Some(alice)))
+            .update
+            .is_none()
+    );
+    assert!(
+        a.handle_command(ToileCommand::SetPresentBroadcast(true))
+            .update
+            .is_none()
+    );
+    assert_eq!(
+        b.playback(),
+        (false, 0, false),
+        "B's playback is untouched by A's follow / broadcast toggles"
     );
 }
 

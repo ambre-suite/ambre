@@ -717,6 +717,17 @@ pub enum ToileCommand {
     },
     /// Leave presentation mode (§1.B). Local only.
     ExitPresent,
+    /// Toggle whether this viewer broadcasts its active slide index to peers
+    /// (§1.B "Follow presenter"). Local role only -- no CRDT delta. When on, the
+    /// playback commands additionally emit an ephemeral presence frame carrying
+    /// `present_slide`.
+    SetPresentBroadcast(bool),
+    /// Follow the given presenter's broadcast playback position, or stop following
+    /// with `None` (§1.B "Follow presenter"). Local role only -- no CRDT delta.
+    /// While following, an inbound presence frame from that `UserId` moves this
+    /// viewer's active slide; a manual navigation clears the follow ("take
+    /// control").
+    FollowPresenter(Option<UserId>),
     /// Apply a char-CRDT edit to a frame's collaborative speaker notes (§1.D).
     /// Notes live in the frame element's payload as a LoroText, seeded on first
     /// edit. CRDT, convergent, one commit = one undo item. A missing / non-frame
@@ -862,6 +873,12 @@ pub struct PresencePayload {
     /// Laser / highlighter point (a momentary, fading trail on the render side,
     /// `toile-ui`). `None` = laser off.
     pub laser: Option<Point>,
+    /// The sender's broadcast active slide index while presenting (§1.B "Follow
+    /// presenter"). `Some(idx)` means the sender is broadcasting this position; a
+    /// viewer following the sender adopts it. `None` = not broadcasting. Purely
+    /// ephemeral, like every other field here (the playback position is never
+    /// CRDT -- see the rejected-decisions table).
+    pub present_slide: Option<usize>,
 }
 
 /// A remote peer's latest presence, keyed by the canonical `UserId` (§7). The UI
@@ -934,6 +951,13 @@ pub enum ToileEvent {
     /// Presentation (focus) mode was entered (`true`) or left (`false`) (§5).
     /// Local view state, like [`SlideChanged`](Self::SlideChanged).
     PresentModeChanged(bool),
+    /// This viewer's slide-position broadcast toggle changed (§1.B "Follow
+    /// presenter"): the presenter panel reflects it. Local view state.
+    PresentBroadcastChanged(bool),
+    /// This viewer's follow target changed (§1.B "Follow presenter"): `Some(u)`
+    /// = now following `u`, `None` = stopped following (e.g. after taking control
+    /// with a manual navigation). Local view state.
+    FollowingChanged(Option<UserId>),
     /// A target's reaction set changed (§4.A): the UI re-reads the derived tally
     /// for this target. Emitted on a local `React`; the derived tally is never
     /// carried in the CRDT, only recomputed on read.

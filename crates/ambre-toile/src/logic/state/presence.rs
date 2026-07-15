@@ -42,11 +42,30 @@ impl ToileState {
                 return Vec::new();
             }
         };
+        let present_slide = presence.present_slide;
         self.presence.insert(from_user_id, presence.clone());
-        vec![ToileEvent::PeerPresence(PresenceUpdate {
+        let mut events = vec![ToileEvent::PeerPresence(PresenceUpdate {
             user_id: from_user_id,
             presence,
-        })]
+        })];
+        // "Follow presenter" (§1.B): if we follow this sender and the frame carries
+        // a broadcast slide, adopt it -- clamp to the deck and glide via
+        // `SlideChanged`. A frame from anyone else, or without `present_slide`,
+        // never moves us. Purely local: no CRDT / history mutation.
+        if self.following == Some(from_user_id)
+            && let Some(idx) = present_slide
+        {
+            let old = self.playback.active;
+            let len = self.slide_len();
+            let clamped = if len == 0 { 0 } else { idx.min(len - 1) };
+            if clamped != old {
+                self.playback.active = clamped;
+                events.push(ToileEvent::SlideChanged(
+                    self.slide_change(Some(old), clamped),
+                ));
+            }
+        }
+        events
     }
 
     /// A remote peer's latest known presence, if any. Overlay / test accessor.
