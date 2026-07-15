@@ -17,6 +17,7 @@
 // entries with no other home (Undo/Redo, the zoom actions, Present) are new here.
 // ============================================================================
 
+use ambre_bus::app::toile::ToileCommand;
 use ambre_commands::{CommandId, Key, KeyBinding, Modifiers};
 
 use super::menu;
@@ -156,6 +157,22 @@ pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
     }
 }
 
+/// The direct board command a menu-bar id emits, if any. Undo / Redo and the
+/// presentation entry point resolve to a `ToileCommand` independent of the
+/// selection or local transform; the zoom ids are local-transform intents and
+/// return `None` (serviced by the view). Pure, so the wiring is host-tested.
+pub fn menu_bar_edit(id: CommandId) -> Option<ToileCommand> {
+    match id {
+        UNDO => Some(ToileCommand::Undo),
+        REDO => Some(ToileCommand::Redo),
+        // Enter presentation (focus) mode; the presenter overlay / playback
+        // controls of toile-features §9 will layer on the resulting
+        // PresentModeChanged signal later.
+        PRESENT => Some(ToileCommand::EnterPresent { focus: true }),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -217,6 +234,28 @@ mod tests {
             _ => None,
         });
         assert_eq!(undo.map(|k| k.to_string()).as_deref(), Some("Ctrl+Z"));
+    }
+
+    #[test]
+    fn present_entry_emits_enter_present() {
+        // `ToileCommand` is not `PartialEq`, so match on the shape instead.
+        assert!(matches!(
+            menu_bar_edit(PRESENT),
+            Some(ToileCommand::EnterPresent { focus: true })
+        ));
+    }
+
+    #[test]
+    fn undo_redo_map_to_edits() {
+        assert!(matches!(menu_bar_edit(UNDO), Some(ToileCommand::Undo)));
+        assert!(matches!(menu_bar_edit(REDO), Some(ToileCommand::Redo)));
+    }
+
+    #[test]
+    fn zoom_ids_are_view_local() {
+        for id in [ZOOM_IN, ZOOM_OUT, ZOOM_RESET, ZOOM_FIT, ZOOM_TO_SELECTION] {
+            assert!(menu_bar_edit(id).is_none(), "{id:?} should be view-local");
+        }
     }
 
     #[test]
