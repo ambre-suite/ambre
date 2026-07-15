@@ -328,7 +328,11 @@ boolean crate), on top of `kurbo`, `loro`, `postcard`. The presentation camera r
   Exit controls. Fed by the enriched `SlideChanged` payload; the pure model lives in
   `ui::presenter` (host-tested).
 - [ ] Reactions render
-- [ ] "Follow presenter" ephemeral broadcast
+- [x] "Follow presenter" ephemeral broadcast (§1.B): a presenter broadcasts its active slide as an
+  ephemeral presence frame (`PresencePayload::present_slide`, never CRDT); followers
+  (`FollowPresenter`) adopt it and glide via the existing camera pass. Manual navigation takes
+  control (clears the follow). Local roles `SetPresentBroadcast` / `FollowPresenter`; the presenter
+  panel gains Broadcast / Follow toggles.
 
 **Phase 2 - Optimization**
 - [ ] Auto-layout incremental reflow (only affected children)

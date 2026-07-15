@@ -9,9 +9,12 @@
 //! Loro and never synced. This mirrors the durable-intent vs momentary-gesture
 //! split already used for presence (`toile-logic §7`).
 
+use ambre_bus::UserId;
 use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 
-use crate::logic::command::{SlideChange, TextDelta, ToileError, ToileEvent, ToileOutcome};
+use crate::logic::command::{
+    PresencePayload, SlideChange, TextDelta, ToileError, ToileEvent, ToileOutcome,
+};
 use crate::logic::model::{ElementId, FrameId};
 
 use super::{CHILDREN, CONFIG, NOTES, ORDER, PRESENTATION, ToileState};
@@ -73,46 +76,127 @@ impl ToileState {
 
     // -- playback (local, §1.B) ------------------------------------------------
 
-    /// Step to the next slide, saturating at the last (§1.B). Local only.
+    /// Step to the next slide, saturating at the last (§1.B). Local only. A
+    /// manual navigation takes control: any active follow is cleared first
+    /// (§1.B "Follow presenter"). Broadcasts the new position when broadcasting.
     pub(super) fn next_slide(&mut self) -> ToileOutcome {
         let old = self.playback.active;
         let len = self.slide_len();
         if len > 0 && self.playback.active + 1 < len {
             self.playback.active += 1;
         }
-        let change = self.slide_change(Some(old), self.playback.active);
-        ToileOutcome::display_only(vec![ToileEvent::SlideChanged(change)])
+        self.manual_nav_outcome(old)
     }
 
     /// Step to the previous slide, saturating at the first (§1.B). Local only.
+    /// Takes control (clears any follow) and broadcasts, like [`next_slide`].
     pub(super) fn prev_slide(&mut self) -> ToileOutcome {
         let old = self.playback.active;
         self.playback.active = self.playback.active.saturating_sub(1);
-        let change = self.slide_change(Some(old), self.playback.active);
-        ToileOutcome::display_only(vec![ToileEvent::SlideChanged(change)])
+        self.manual_nav_outcome(old)
     }
 
-    /// Jump to `idx`, clamped to the deck length (§1.B). Local only.
+    /// Jump to `idx`, clamped to the deck length (§1.B). Local only. Takes
+    /// control (clears any follow) and broadcasts, like [`next_slide`].
     pub(super) fn goto_slide(&mut self, idx: usize) -> ToileOutcome {
         let old = self.playback.active;
         let len = self.slide_len();
         self.playback.active = if len == 0 { 0 } else { idx.min(len - 1) };
+        self.manual_nav_outcome(old)
+    }
+
+    /// Build the outcome for a manual navigation from `old` to the just-updated
+    /// `playback.active` (§1.B): emit the `SlideChanged` glide, clear any active
+    /// follow first ("take control", prepending `FollowingChanged(None)`), and
+    /// attach a broadcast frame when broadcasting.
+    fn manual_nav_outcome(&mut self, old: usize) -> ToileOutcome {
+        let mut display = Vec::new();
+        if self.following.is_some() {
+            self.following = None;
+            display.push(ToileEvent::FollowingChanged(None));
+        }
         let change = self.slide_change(Some(old), self.playback.active);
-        ToileOutcome::display_only(vec![ToileEvent::SlideChanged(change)])
+        display.push(ToileEvent::SlideChanged(change));
+        ToileOutcome::display_and_ephemeral(display, self.slide_broadcast_frame())
     }
 
     /// Enter presentation (focus) mode, resetting to the first slide (§1.B).
-    /// Local only.
+    /// Local only. Broadcasts slide 0 when already broadcasting.
     pub(super) fn enter_present(&mut self, focus: bool) -> ToileOutcome {
         self.present = true;
         self.playback.focus = focus;
         self.playback.active = 0;
         // No source frame on entry: `from` is empty so slide 0's content fades in.
         let change = self.slide_change(None, 0);
-        ToileOutcome::display_only(vec![
-            ToileEvent::PresentModeChanged(true),
-            ToileEvent::SlideChanged(change),
-        ])
+        ToileOutcome::display_and_ephemeral(
+            vec![
+                ToileEvent::PresentModeChanged(true),
+                ToileEvent::SlideChanged(change),
+            ],
+            self.slide_broadcast_frame(),
+        )
+    }
+
+    /// Postcard-encode an ephemeral presence frame carrying the current active
+    /// slide index, but only when broadcasting is on (§1.B "Follow presenter").
+    /// The frame carries `present_slide: Some(active)` and no cursor / selection:
+    /// it transiently clears this presenter's cursor halo on followers until the
+    /// next cursor sample, which is acceptable (presenters emit cursor / laser
+    /// continuously). `None` when not broadcasting or on an encode failure.
+    fn slide_broadcast_frame(&self) -> Option<Vec<u8>> {
+        if !self.broadcasting {
+            return None;
+        }
+        let payload = PresencePayload {
+            present_slide: Some(self.playback.active),
+            ..Default::default()
+        };
+        match postcard::to_allocvec(&payload) {
+            Ok(bytes) => Some(bytes),
+            Err(e) => {
+                tracing::warn!("Toile: slide broadcast encode failed: {e}");
+                None
+            }
+        }
+    }
+
+    /// Toggle whether this viewer broadcasts its playback position (§1.B). Local
+    /// role only, no CRDT delta. When turning on while in present mode, the
+    /// current slide is broadcast immediately so followers snap without waiting
+    /// for the next navigation.
+    pub(super) fn set_present_broadcast(&mut self, on: bool) -> ToileOutcome {
+        self.broadcasting = on;
+        let ephemeral = if on {
+            self.slide_broadcast_frame()
+        } else {
+            None
+        };
+        ToileOutcome::display_and_ephemeral(
+            vec![ToileEvent::PresentBroadcastChanged(on)],
+            ephemeral,
+        )
+    }
+
+    /// Follow the presenter `who` (or stop with `None`), a local role only (§1.B).
+    /// No CRDT delta. If `Some(u)` and a broadcast slide from `u` is already known,
+    /// snap to it at once (glide via `SlideChanged`); otherwise the follower snaps
+    /// on the next inbound frame.
+    pub(super) fn follow_presenter(&mut self, who: Option<UserId>) -> ToileOutcome {
+        self.following = who;
+        let mut display = vec![ToileEvent::FollowingChanged(who)];
+        if let Some(u) = who
+            && let Some(idx) = self.peer_presence(&u).and_then(|p| p.present_slide)
+        {
+            let old = self.playback.active;
+            let len = self.slide_len();
+            let clamped = if len == 0 { 0 } else { idx.min(len - 1) };
+            if clamped != old {
+                self.playback.active = clamped;
+                let change = self.slide_change(Some(old), clamped);
+                display.push(ToileEvent::SlideChanged(change));
+            }
+        }
+        ToileOutcome::display_only(display)
     }
 
     /// Build the [`SlideChange`] payload for a transition from `from_idx` (absent
@@ -120,7 +204,7 @@ impl ToileState {
     /// Smart Animate solver tweens plus the target frame's world rect the camera
     /// fits. An out-of-range or dangling index yields an empty snapshot / `None`
     /// rect, so a missing frame degrades to a plain fade rather than a panic.
-    fn slide_change(&self, from_idx: Option<usize>, to_idx: usize) -> SlideChange {
+    pub(super) fn slide_change(&self, from_idx: Option<usize>, to_idx: usize) -> SlideChange {
         let order = self.slide_order();
         let snap = |i: usize| {
             order
@@ -140,10 +224,17 @@ impl ToileState {
         }
     }
 
-    /// Leave presentation mode (§1.B). Local only.
+    /// Leave presentation mode (§1.B). Local only. Broadcasting is turned off on
+    /// exit (a viewer no longer presenting has no position to share); `following`
+    /// is independent of present mode and left untouched.
     pub(super) fn exit_present(&mut self) -> ToileOutcome {
         self.present = false;
-        ToileOutcome::display_only(vec![ToileEvent::PresentModeChanged(false)])
+        let mut display = vec![ToileEvent::PresentModeChanged(false)];
+        if self.broadcasting {
+            self.broadcasting = false;
+            display.push(ToileEvent::PresentBroadcastChanged(false));
+        }
+        ToileOutcome::display_only(display)
     }
 
     /// Number of slides in the shared deck (`0` if absent). Local read.

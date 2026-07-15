@@ -19,6 +19,7 @@
 //! native tier (`just test-native`) skips it cleanly.
 #![cfg(target_arch = "wasm32")]
 
+use ambre_bus::UserId;
 use ambre_bus::app::toile::TextDelta;
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::ContextMenu;
@@ -393,10 +394,28 @@ fn mount_presenter(
     count: usize,
     notes: &str,
 ) -> (web_sys::Element, RwSignal<Option<PresenterIntent>>) {
+    mount_presenter_follow(open, index, count, notes, false, None, None)
+}
+
+/// Mount a `PresenterPanel` with full "Follow presenter" state (§1.B): the
+/// broadcast toggle, the active follow target, and the latest broadcasting peer
+/// (which drives whether the Follow button renders).
+fn mount_presenter_follow(
+    open: bool,
+    index: usize,
+    count: usize,
+    notes: &str,
+    broadcasting: bool,
+    following: Option<UserId>,
+    presenter_peer: Option<UserId>,
+) -> (web_sys::Element, RwSignal<Option<PresenterIntent>>) {
     let open = RwSignal::new(open);
     let index = RwSignal::new(index);
     let count = RwSignal::new(count);
     let notes = RwSignal::new(notes.to_owned());
+    let broadcasting = RwSignal::new(broadcasting);
+    let following = RwSignal::new(following);
+    let presenter_peer = RwSignal::new(presenter_peer);
     let fired = RwSignal::new(None::<PresenterIntent>);
     let on_intent = Callback::new(move |i: PresenterIntent| fired.set(Some(i)));
     let root = mount_in_container(move || {
@@ -406,6 +425,9 @@ fn mount_presenter(
                 index=index
                 count=count
                 notes=notes
+                broadcasting=broadcasting
+                following=following
+                presenter_peer=presenter_peer
                 on_intent=on_intent
             />
         }
@@ -487,6 +509,57 @@ fn presenter_notes_edit_fires_minimal_delta() {
             insert: "d".to_owned(),
         }))
     );
+    root.remove();
+}
+
+#[wasm_bindgen_test]
+fn presenter_broadcast_button_fires_toggle() {
+    let owner = Owner::new();
+    owner.set();
+    // Broadcasting off: clicking the button requests turning it on (§1.B).
+    let (root, fired) = mount_presenter_follow(true, 0, 3, "", false, None, None);
+    assert!(click_by_aria(&root, "Broadcast position"));
+    assert_eq!(
+        fired.get_untracked(),
+        Some(PresenterIntent::ToggleBroadcast(true))
+    );
+    root.remove();
+}
+
+#[wasm_bindgen_test]
+fn presenter_follow_button_hidden_without_presenter() {
+    let owner = Owner::new();
+    owner.set();
+    // No peer is broadcasting -> the Follow affordance is absent (§1.B).
+    let (root, _fired) = mount_presenter_follow(true, 0, 3, "", false, None, None);
+    assert!(
+        root.query_selector("[aria-label=\"Follow presenter\"]")
+            .unwrap()
+            .is_none()
+    );
+    root.remove();
+}
+
+#[wasm_bindgen_test]
+fn presenter_follow_button_fires_with_peer() {
+    let owner = Owner::new();
+    owner.set();
+    let peer = UserId::new();
+    // A peer is broadcasting and we are not following: clicking follows it (§1.B).
+    let (root, fired) = mount_presenter_follow(true, 0, 3, "", false, None, Some(peer));
+    assert!(click_by_aria(&root, "Follow presenter"));
+    assert_eq!(
+        fired.get_untracked(),
+        Some(PresenterIntent::Follow(Some(peer)))
+    );
+    root.remove();
+
+    // Already following the peer: clicking stops following (emits `Follow(None)`).
+    let owner = Owner::new();
+    owner.set();
+    let (root, fired) = mount_presenter_follow(true, 0, 3, "", false, Some(peer), Some(peer));
+    assert!(click_by_aria(&root, "Follow presenter"));
+    assert_eq!(fired.get_untracked(), Some(PresenterIntent::Follow(None)));
     root.remove();
 }
 

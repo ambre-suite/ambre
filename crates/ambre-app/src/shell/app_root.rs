@@ -42,6 +42,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
         presenter_count,
         presenter_notes,
         presenter_frame,
+        broadcasting_toile,
+        following_toile,
+        presenter_peer_toile,
         perf_snap,
         zoom,
         ctx_scope,
@@ -357,6 +360,10 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     };
                     ToileCommand::EditNotes { frame, delta }
                 }
+                toile_chrome::PresenterIntent::ToggleBroadcast(on) => {
+                    ToileCommand::SetPresentBroadcast(on)
+                }
+                toile_chrome::PresenterIntent::Follow(who) => ToileCommand::FollowPresenter(who),
             };
             let _ = tx.try_send(LogicCommand::App {
                 document_id,
@@ -819,6 +826,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 index=presenter_index
                 count=presenter_count
                 notes=presenter_notes
+                broadcasting=broadcasting_toile
+                following=following_toile
+                presenter_peer=presenter_peer_toile
                 on_intent=on_present_intent
             />
         })}

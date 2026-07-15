@@ -477,6 +477,10 @@ impl ToileView {
             // ("Reactions render"); the derived tally is read on repaint, so the
             // view has nothing to do with this notification yet (§4.A).
             ToileEvent::ReactionsUpdated(_) => {}
+            // "Follow presenter" role changes (§1.B) are chrome-panel state, not
+            // camera-pass state: the presenter panel reflects them via its own
+            // signals. The WebGPU view has nothing to repaint for these.
+            ToileEvent::PresentBroadcastChanged(_) | ToileEvent::FollowingChanged(_) => {}
             ToileEvent::DanglingConnector(_) | ToileEvent::UndoState { .. } => {}
         }
     }
