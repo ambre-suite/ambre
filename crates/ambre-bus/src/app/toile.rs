@@ -609,6 +609,16 @@ pub struct SlideChange {
     /// when the slide has no resolvable frame (dangling id), leaving the camera
     /// where it is.
     pub to_rect: Option<Rect>,
+    /// Total number of slides in the deck: drives the presenter panel's `k / n`
+    /// counter (§1.D).
+    pub count: usize,
+    /// The new active frame's element id, or `None` when the slide has no
+    /// resolvable frame (dangling id / empty deck). The presenter panel uses it
+    /// as the target of `EditNotes`.
+    pub frame: Option<ElementId>,
+    /// The new active frame's speaker notes as plain text, seeding the presenter
+    /// panel's editor (§1.D). Empty when the frame has no notes yet or is absent.
+    pub notes: String,
 }
 
 /// Command from the UI / Logic thread to `ToileState` (in `ambre-toile`).

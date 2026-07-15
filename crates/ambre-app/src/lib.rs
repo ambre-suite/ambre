@@ -143,6 +143,20 @@ struct Wiring {
     /// Last Toile `FindResults` (hits + focus), feeding the panel's counter and
     /// step origin. Set by the per-frame relay on `ToileEvent::FindResults`.
     find_result_toile: RwSignal<Option<ambre_bus::app::toile::FindResults>>,
+    /// Presenter overlay panel open flag (`toile-features` §1.D). Driven by the
+    /// relay on `ToileEvent::PresentModeChanged`; the panel is chrome, so its
+    /// visibility lives here rather than canvas-side.
+    present_toile: RwSignal<bool>,
+    /// Active slide index / deck length feeding the presenter panel's `k / n`
+    /// counter. Set by the relay on the enriched `ToileEvent::SlideChanged`.
+    presenter_index: RwSignal<usize>,
+    presenter_count: RwSignal<usize>,
+    /// Active slide's speaker notes, re-seeded on each slide change; the panel
+    /// editor diffs against it and emits `EditNotes`.
+    presenter_notes: RwSignal<String>,
+    /// Active slide's frame id: the target of the panel's `EditNotes` intent.
+    /// `None` when the deck is empty or the slide is dangling (edits skipped).
+    presenter_frame: RwSignal<Option<ambre_bus::app::toile::ElementId>>,
     /// Toile right-click context-menu scope (`toile-ui §5ter`): the canvas view
     /// publishes it on each right-click; the shell's entry `Memo` reads it to build
     /// the menu, omitting inapplicable rows.
@@ -347,6 +361,14 @@ pub fn main() {
     // mirrored from `ToileEvent::SelectionStats`. Cleared to `None` on an empty
     // selection so the band shows only the zoom chip.
     let sel_stats_toile = RwSignal::new(None::<toile_chrome::SelStats>);
+    // Presenter overlay panel signals (toile-features §1.D), mirrored from the
+    // enriched `SlideChanged` + `PresentModeChanged` events by the per-frame
+    // relay. Created here (like `sel_stats_toile`) and passed to the shell.
+    let present_toile = RwSignal::new(false);
+    let presenter_index = RwSignal::new(0usize);
+    let presenter_count = RwSignal::new(0usize);
+    let presenter_notes = RwSignal::new(String::new());
+    let presenter_frame = RwSignal::new(None::<ambre_bus::app::toile::ElementId>);
     let perf_snap = RwSignal::new(ambre_canvas::PerfSnapshot::default());
 
     // Sheet-tab strip model (`-ui.md` sec.13): mirrored from `TrameEvent::SheetList`
@@ -533,6 +555,11 @@ pub fn main() {
         formula_action,
         sel_stats,
         sel_stats_toile,
+        present_toile,
+        presenter_index,
+        presenter_count,
+        presenter_notes,
+        presenter_frame,
         perf_snap,
         zoom,
         ctx_scope,
@@ -1025,6 +1052,24 @@ pub fn main() {
                     ..
                 } => {
                     sel_stats_toile.set(Some(toile_chrome::SelStats::from_reply(s.count, s.bounds)))
+                }
+                // Presenter overlay panel (§1.D): show / hide it with focus mode,
+                // and mirror the enriched slide payload into the panel signals.
+                // The canvas view consumes the same events (forwarded below) for
+                // the camera glide + Smart Animate pass.
+                UiEvent::Viewport {
+                    event:
+                        AppEvent::Toile(ambre_bus::app::toile::ToileEvent::PresentModeChanged(on)),
+                    ..
+                } => present_toile.set(*on),
+                UiEvent::Viewport {
+                    event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::SlideChanged(c)),
+                    ..
+                } => {
+                    presenter_index.set(c.index);
+                    presenter_count.set(c.count);
+                    presenter_notes.set(c.notes.clone());
+                    presenter_frame.set(c.frame.clone());
                 }
                 _ => {}
             }

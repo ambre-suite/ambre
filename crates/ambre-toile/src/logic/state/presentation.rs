@@ -128,11 +128,15 @@ impl ToileState {
                 .map(|f| self.frame_snapshot(f))
                 .unwrap_or_default()
         };
+        let frame = order.get(to_idx).cloned();
         SlideChange {
             index: to_idx,
             from: from_idx.map(snap).unwrap_or_default(),
             to: snap(to_idx),
             to_rect: order.get(to_idx).and_then(|f| self.element_rect(f)),
+            count: order.len(),
+            notes: frame.as_ref().map(|f| self.notes(f)).unwrap_or_default(),
+            frame,
         }
     }
 
