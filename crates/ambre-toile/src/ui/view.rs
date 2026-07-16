@@ -28,6 +28,7 @@ use ambre_draw::{BoundingBox, FontContext, Point, Rect, Vec2};
 use crate::logic::animate::AnimatedElement;
 
 use super::edit::{EditIntent, InlineEditor};
+use super::embed;
 use super::hit::hit_topmost;
 use super::presence::PeerCursors;
 use super::present::{DEFAULT_TRANSITION_MS, Transition};
@@ -228,6 +229,16 @@ pub struct ToileView {
     /// content pass looks each element up here before falling back to its static
     /// display (§1.C).
     anim_overrides: HashMap<ElementId, AnimatedElement>,
+
+    /// Which `doc_embed` holds input focus, and the click-vs-drag arbitration
+    /// that decides it (§2.I "Input focus"). View-local, never CRDT. While an
+    /// embed is focused, `FrameHost` maps canvas input into that child and calls
+    /// the child view's own `handle_input`; this view forwards nothing itself,
+    /// because it cannot name the child's command type (§2.I "Command routing").
+    embed_focus: embed::EmbedFocus,
+    /// The child sync sessions behind the visible `doc_embed`s, with the close
+    /// debounce that keeps a pan from thrashing them (§2.I "Opening the child").
+    embed_sessions: embed::EmbedSessions,
 }
 
 impl ToileView {
@@ -317,6 +328,8 @@ impl ToileView {
             present: false,
             transition: None,
             anim_overrides: HashMap::new(),
+            embed_focus: embed::EmbedFocus::default(),
+            embed_sessions: embed::EmbedSessions::default(),
         }
     }
 
@@ -528,6 +541,110 @@ impl ToileView {
         self.preview = self.machine.preview();
     }
 
+    // -- Nested document embeds (§2.I) -----------------------------------------
+
+    /// The visible `doc_embed`s in screen space, for `FrameHost` (§2.I "Render").
+    /// It owns the child `AppView`s: it paints each one clipped to `screen_rect`
+    /// over this view's content pass, and -- for the focused one -- maps canvas
+    /// input into the child and calls the child's own `handle_input`. This view
+    /// can do neither: both need `AppView`, which it cannot name (ARCH P2).
+    pub fn visible_embeds(&self) -> Vec<embed::VisibleEmbed> {
+        embed::visible_embeds(&self.display, &self.cam, self.embed_focus.current())
+    }
+
+    /// Map a screen point into the focused embed's child pixel space, if the
+    /// focused element is still in the culled frame. `FrameHost` calls this to
+    /// rewrite pointer coordinates before handing an event to the child.
+    pub fn embed_to_child_space(&self, screen: Point) -> Option<Point> {
+        let id = self.embed_focus.current()?;
+        let elem = self.find_element(id)?;
+        Some(embed::to_child_space(elem, &self.cam, screen))
+    }
+
+    /// A press landed at `world` / `screen`: arm a possible focus grant if it is
+    /// over an unfocused `doc_embed`. Consumes nothing -- the board's own gesture
+    /// proceeds regardless, and the grant is settled on release.
+    fn arm_embed_press(&mut self, world: Point, screen: Point) {
+        let hit = embed::embed_at(&self.display, world).map(|e| &e.id);
+        self.embed_focus.on_press(hit, screen);
+    }
+
+    /// A release landed at `screen`: settle the armed press (a click focuses the
+    /// embed, a release elsewhere returns focus to the board). The click that
+    /// focuses does not reach the child (§2.I "Input focus"), so entering a
+    /// document never lands a stray edit on the first cell it happens to hit.
+    fn settle_embed_press(&mut self, screen: Point) {
+        if self.embed_focus.on_release(screen) {
+            self.needs_full = true;
+        }
+    }
+
+    /// Return focus to the board (`Escape`, a document swap). Reports whether
+    /// anything was focused.
+    fn blur_embed(&mut self) -> bool {
+        let had = self.embed_focus.blur();
+        if had {
+            self.needs_full = true;
+        }
+        had
+    }
+
+    /// Open every `doc_embed` that entered the culled set and close those that
+    /// have stayed out past the debounce (§2.I "Opening the child"). Driven from
+    /// `plan_repaint`, the one per-frame hook carrying the frame clock.
+    fn drive_embed_lifecycle(&mut self, now_ms: f64) {
+        for cmd in self.embed_sessions.sync(&self.display, now_ms) {
+            self.send_open(cmd);
+        }
+        // Focus cannot outlive the element that held it: an embed deleted by a
+        // peer, or scrolled far enough away to be closed, leaves the board with
+        // nothing to route input into.
+        let present: Vec<ElementId> = self
+            .display
+            .nodes
+            .iter()
+            .filter_map(|n| match n {
+                DisplayNode::Element(e) => Some(e.id.clone()),
+                _ => None,
+            })
+            .collect();
+        if self.embed_focus.retain_if(|id| present.contains(id)) {
+            self.needs_full = true;
+        }
+    }
+
+    /// Send a document-session control command (child open / close, §2.I). Unlike
+    /// `send_edit` this is not addressed to a document via `LogicCommand::App`:
+    /// it manages the child's session itself.
+    fn send_open(&self, cmd: LogicCommand) {
+        if self.fatal {
+            return;
+        }
+        match self.to_logic.try_send(cmd) {
+            Ok(()) => {}
+            Err(flume::TrySendError::Full(_)) => {
+                // Dropping an open would leave a blank embed and dropping a close
+                // would leak a session, so both are worth a warning; neither is
+                // worth blocking the UI thread. The next frame retries the open
+                // (the embed is still in the cull set); a lost close is reclaimed
+                // when the board closes.
+                tracing::warn!("Toile: UI->Logic channel full, embed session command dropped");
+            }
+            Err(flume::TrySendError::Disconnected(_)) => {
+                tracing::error!("Toile: UI->Logic channel disconnected");
+            }
+        }
+    }
+
+    /// Close every child session this view opened (§2.I: "Closing the Toile
+    /// closes every child immediately, no debounce").
+    fn close_all_embeds(&mut self) {
+        for cmd in self.embed_sessions.close_all() {
+            self.send_open(cmd);
+        }
+        self.embed_focus.blur();
+    }
+
     fn handle_pointer_down(&mut self, x: f64, y: f64, button: i16) -> bool {
         let screen = Point::new(x, y);
         self.last_pointer = screen;
@@ -544,6 +661,10 @@ impl ToileView {
             return true;
         }
         let world = self.cam.screen_to_world() * screen;
+        // Arm a possible embed focus (§2.I). Consumes nothing: the board's own
+        // gesture runs below either way, and the grant is settled on release --
+        // a drag from here moves the embed instead of entering it.
+        self.arm_embed_press(world, screen);
         let out = self.machine.pointer_down(
             world,
             screen,
@@ -842,6 +963,11 @@ impl ToileView {
         if self.panning.take().is_some() {
             return true;
         }
+        // Settle the embed focus armed at press time (§2.I): a click on an embed
+        // enters it, a release anywhere else returns focus to the board. Runs
+        // before the gesture end below so a click that only focuses still lets
+        // the Select tool finish its selection normally.
+        self.settle_embed_press(screen);
         if self.machine.is_active() {
             let world = self.cam.screen_to_world() * screen;
             let out = self.machine.pointer_up(world, &self.display);
@@ -941,6 +1067,17 @@ impl ToileView {
                 true
             }
             "Escape" => {
+                // Leaving a focused embed is the whole action: the board's
+                // selection survives, so Escape steps out one level at a time
+                // rather than also clearing what was selected (§2.I).
+                //
+                // This arm is reachable while an embed holds focus because
+                // `FrameHost` routes every input into the focused child EXCEPT
+                // `Escape`, which it hands to this view -- otherwise the key that
+                // exits the child would be swallowed by it.
+                if self.blur_embed() {
+                    return true;
+                }
                 self.machine.cancel();
                 self.preview = None;
                 if !self.selection.is_empty() {
@@ -1283,6 +1420,11 @@ impl ToileView {
     }
 
     pub fn plan_repaint(&mut self, now_ms: f64, hud_tick: bool) -> RepaintPlan {
+        // Open / close the nested documents behind the visible `doc_embed`s
+        // (§2.I). Driven here rather than in `update` because this is the one
+        // per-frame hook carrying the frame clock the close debounce needs.
+        self.drive_embed_lifecycle(now_ms);
+
         // Advance an in-flight presentation transition (§1.C / §1.D): glide the
         // camera and rebuild the Smart Animate overrides from the frame clock,
         // until it completes. Each active frame is a full repaint (the camera and
@@ -1545,6 +1687,10 @@ impl ToileView {
         if self.document_id == document_id {
             return;
         }
+        // Closing the board closes every child immediately, no debounce (§2.I):
+        // the embeds belong to the board we are leaving, and holding their
+        // sessions open for 5 s past a route change would leak them.
+        self.close_all_embeds();
         self.document_id = document_id;
         self.display = DisplayViewport {
             reactions: Default::default(),

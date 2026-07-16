@@ -12,6 +12,7 @@
 // ============================================================================
 
 pub mod edit;
+pub mod embed;
 pub mod find;
 pub mod floatbar;
 pub mod grid;
