@@ -83,6 +83,31 @@ pub(crate) fn rotate_entries_for(
         .collect()
 }
 
+/// Builds the presence directory (Ed25519 signing key -> canonical `UserId`)
+/// from any members response, given each entry's `(user_id, signing_pub_key)`
+/// as raw strings (`ambre-spec-sync.md` § "Presence identity"). Both the open
+/// path and the member-list path feed it, hence the string-pair input rather
+/// than one of the two entry structs.
+///
+/// An entry whose id or key does not parse is skipped rather than failing the
+/// whole response: a member we cannot key on costs that one peer's cursor, while
+/// refusing everything would cost the document its presence entirely. Unlike
+/// [`map_members`], nothing is invented for a bad row -- a fabricated id here
+/// would attribute a cursor to the wrong person, which is exactly what keying
+/// presence on the canonical `UserId` exists to prevent.
+pub(crate) fn presence_directory<'a>(
+    entries: impl IntoIterator<Item = (&'a str, &'a str)>,
+) -> Vec<([u8; 32], UserId)> {
+    entries
+        .into_iter()
+        .filter_map(|(user_id, signing_pub_key)| {
+            let user_id = UserId::parse_str(user_id).ok()?;
+            let key: [u8; 32] = hex::decode(signing_pub_key).ok()?.try_into().ok()?;
+            Some((key, user_id))
+        })
+        .collect()
+}
+
 /// Maps server member entries into bus `MemberInfo` (plaintext name/email,
 /// parsed role). Unknown roles fall back to viewer, unparsable ids to a fresh
 /// id -- the list is display-only, so it degrades instead of dropping rows.
@@ -328,11 +353,21 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
     );
     match http.get_json::<http::DocumentMembersResponse>(&url).await {
         Ok(resp) => {
+            // Refresh the presence directory off the same response (§ "Presence
+            // identity"): membership just changed often enough for the UI to ask
+            // for the list, so this is where a new member becomes resolvable and
+            // a revoked one stops resolving -- no extra round-trip.
+            let signing_keys = presence_directory(
+                resp.members
+                    .iter()
+                    .map(|m| (m.user_id.as_str(), m.signing_pub_key.as_str())),
+            );
             let members = map_members(resp.members);
             let _ = event_tx.send(SyncEvent::DocumentMembersReady {
                 id: p.id,
                 document_id: p.document_id,
                 members,
+                signing_keys,
             });
         }
         Err(e) => {
@@ -741,5 +776,61 @@ mod tests {
             erx.try_recv().expect("HttpError"),
             SyncEvent::HttpError { .. }
         ));
+    }
+
+    // -- Presence directory (spec § "Presence identity") ----------------------
+
+    #[test]
+    fn presence_directory_maps_valid_entries() {
+        let uid = "11111111-1111-1111-1111-111111111111";
+        let key_hex = "aa".repeat(32);
+        let dir = presence_directory([(uid, key_hex.as_str())]);
+
+        assert_eq!(dir, vec![([0xaa; 32], UserId::parse_str(uid).unwrap())]);
+    }
+
+    #[test]
+    fn presence_directory_skips_unparsable_rows_without_inventing_ids() {
+        // Unlike `map_members` (display-only, degrades with a fresh id), a bad row
+        // here must vanish: a fabricated id would attribute a cursor to the wrong
+        // person, which is what keying presence on the canonical UserId prevents.
+        let good_uid = "11111111-1111-1111-1111-111111111111";
+        let good_key = "bb".repeat(32);
+        let short_key = "bb".repeat(31); // 31 bytes: not a valid Ed25519 key
+        let dir = presence_directory([
+            ("not-a-uuid", good_key.as_str()),
+            (good_uid, "zz-not-hex"),
+            (good_uid, short_key.as_str()),
+            (good_uid, good_key.as_str()),
+        ]);
+
+        assert_eq!(
+            dir,
+            vec![([0xbb; 32], UserId::parse_str(good_uid).unwrap())]
+        );
+    }
+
+    #[tokio::test]
+    async fn list_members_refreshes_the_presence_directory() {
+        let uid = "11111111-1111-1111-1111-111111111111";
+        let key_hex = "cc".repeat(32);
+        let http = FakeHttp::new(vec![Ok(serde_json::json!({ "members": [ {
+            "user_id": uid,
+            "display_name": "A", "email": "a@test.local",
+            "signing_pub_key": key_hex, "exchange_pub_key": "ab",
+            "doc_key_enc": "", "role": "viewer",
+        } ] }))]);
+        let (etx, erx, _sink, _lrx) = channels();
+        list_members_task(&http, list_params(), &etx).await;
+
+        match erx.try_recv().expect("DocumentMembersReady") {
+            SyncEvent::DocumentMembersReady { signing_keys, .. } => {
+                assert_eq!(
+                    signing_keys,
+                    vec![([0xcc; 32], UserId::parse_str(uid).unwrap())]
+                );
+            }
+            _ => panic!("unexpected event (want DocumentMembersReady)"),
+        }
     }
 }

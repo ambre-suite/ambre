@@ -364,12 +364,14 @@ impl SyncState {
                 covered_seq,
                 doc_type,
                 server_created,
+                signing_keys,
             } => {
                 self.documents.insert(
                     document_id,
                     SyncDocumentState::new(document_id, doc_key, doc_type, server_created),
                 );
                 let doc_state = self.documents.get_mut(&document_id).expect("just inserted");
+                doc_state.set_signing_keys(signing_keys);
                 doc_state.current_snapshot_id = snapshot_id;
                 doc_state.known_snapshots.insert(snapshot_id);
                 // Advance the replay cursor past the history folded into the
@@ -502,7 +504,14 @@ impl SyncState {
                 id,
                 document_id,
                 members,
+                signing_keys,
             } => {
+                // Keep presence resolvable as membership evolves. A document that
+                // is not open locally has no session to refresh -- the next open
+                // rebuilds the directory from scratch.
+                if let Some(doc_state) = self.documents.get_mut(&document_id) {
+                    doc_state.set_signing_keys(signing_keys);
+                }
                 self.reply(
                     id,
                     RestEvent::DocumentMembers {
