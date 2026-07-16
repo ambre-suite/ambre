@@ -140,6 +140,61 @@ It has two faces, switched on the session state (`username: Option<String>` fill
 
 ---
 
+### H. TOFU key verification (the share dialog)
+
+Inviting someone means **ECDH-wrapping the Document Key to a public key the server handed us**
+(`ambre-spec-sync.md §3`). A malicious server can substitute that key and read everything shared afterwards.
+The MVP countermeasure is TOFU with an out-of-band fingerprint (`ambre-spec-server.md` "Public Key Trust
+Model (TOFU)", `ambre-spec-architecture.md §3`); this section is its **UI surface**. It extends the share
+dialog (§2.B `Dialog`), which is the only place an invite is issued.
+
+**Fingerprint (normative).** `BLAKE2b-256(domain || exchange_pubkey)` truncated to its **first 20 bytes**,
+base32-encoded (RFC 4648, no padding), rendered **grouped in 4-char blocks** so it can be read aloud over the
+phone. 20 bytes = 160 bits: far beyond collision reach, and it fits one line. Computed in the **Sync thread**
+(the sole crypto consumer, §3) and carried up as an already-formatted `String` — the chrome never hashes
+anything.
+
+**Trust states.** Keyed by `UserId` in the `trusted_keys` IndexedDB store, owned by the **Main thread**
+(which already owns the persistence store; `ambre-spec-architecture.md §2.B`):
+
+| State | Condition | UI |
+|:---|:---|:---|
+| **New** | no entry for this `UserId` | Fingerprint confirmation step; the invite does **not** proceed until the user confirms. |
+| **Trusted** | entry == fetched key | No interruption; the invite proceeds. The fingerprint stays available, not in the way. |
+| **Changed** | entry != fetched key | **Blocking alert.** The invite is refused by default. |
+
+**Flow (normative).** The invite is **two-phase** — a key is never wrapped to before the trust decision:
+1. UI → `RestCommand::FetchInviteeKey { document_id, invitee_email }`. Sync resolves the user, fetches their
+   pubkeys, computes the fingerprint, answers `RestEvent::InviteeKey { user_id, display_name, email,
+   exchange_pub_key, fingerprint }`. **No wrapping, no `POST /share` yet.**
+2. Main compares `exchange_pub_key` against `trusted_keys[user_id]` (a byte comparison, not crypto) and
+   renders the state above. On confirmation it writes `trusted_keys[user_id] = exchange_pub_key`, then
+   dispatches `RestCommand::InviteToDocument { …, expect_exchange_pub_key }`.
+
+**The pin is normative.** `InviteToDocument` carries `expect_exchange_pub_key`; Sync re-fetches the key (it
+holds no cache) and **wraps only if it still matches**, else fails the invite with an explicit error. Without
+this the server could serve an honest key to phase 1 and a substituted one to phase 2 — the confirmation
+would be theatre (a TOCTOU hole).
+
+**The displayed limit is normative** (`ambre-spec-server.md` requires it): the confirmation step states, in
+plain words, that **without out-of-band verification the protection reduces to trusting the server**. It is
+not a footnote and not a tooltip. Verifying means comparing the fingerprint over a channel the server does not
+control (in person, phone, SMS) — the dialog says so and offers a copy action.
+
+**A key change is a `Dialog`, never a toast.** Toasts auto-dismiss (§2.B, 7 s for errors) and are only
+`aria-live="polite"` — a user who blinks misses a possible server MITM. The alert is modal, focus-trapped,
+and names the user; proceeding requires re-confirming the **new** fingerprint out of band. A legitimate cause
+exists (the peer reinstalled, losing their keys), so the flow allows re-pinning — it must not, however, be
+the path of least resistance: the default action is **Cancel**.
+
+**Scope.** MVP pins the **X25519 `exchange_pubkey`** — the key that actually receives wrapped Document Keys,
+i.e. the one whose substitution breaks confidentiality. The Ed25519 `signing_pub_key` (which authenticates
+ephemeral frames, `ambre-spec-sync.md` "Presence identity") is **not** pinned in the MVP: presence is
+best-effort and spoofing it forges a cursor, not a key. **Deferred (§6):** a key-transparency log (V2),
+pinning the signing key, and a standalone contact/key manager outside the share dialog.
+
+---
+
 ## 3. SECURITY & CONFIDENTIALITY (ZERO-KNOWLEDGE)
 
 Pure presentation layer:
@@ -232,3 +287,22 @@ Pure presentation layer:
 - [x] Re-theme the launcher on the generated design tokens (removed the ad-hoc `--color-*` fallbacks that matched nothing; now `--bg`/`--surface`/`--accent`/...); soigné empty state; sign-in panel with Ambre wordmark + tagline
 - [x] Generic localized type labels (`DocType::generic_label`, distinct from the brand `DocType::name()`) for icon-less contexts (wired into the browser tab title; available for share invitations)
 - [x] **New-document type picker** *(E4 addendum — the P4 create action was hardcoded to Trame while it was the only product; the second product reopens the choice)*: replaced the single hardcoded-Trame "new document" button (`landing.rs`, `trame_chrome::DOC_TYPE`) with an app-agnostic `NewDocPicker` dropdown that iterates `DocType::creatable()` (icon monogram + `generic_label` per entry) and hands the chosen `DocType` to `route::doc_path`. Opening the new document goes through the shared `open_document`/`route::needs_reload` path (same as the document cards): a same-kind create swaps in place, a cross-kind create hard-navigates (`location.set_href`) to re-boot the right `AppView` (`boot_is_toile` is fixed per page load). Fixing the cards' open path to the same rule closed a latent cross-kind bug (a Toile card opened from a Trame-booted launcher used to pushState into the wrong view). `DocType::creatable()` is the single source of truth for the offered types and lists only what `ambre_logic::DocState::new` can instantiate — **Trame / Toile today**; **Prose** joins the moment its Logic state exists (Epic `E5`), a one-line change with no picker rework (`Murmure` is never launcher-created). Belt: `landing.rs` wasm/DOM tests (menu lists one entry per creatable type, pick reports the type and closes), `route::needs_reload` wasm test (same-kind swap vs cross-kind reload), and the `DocType::creatable` unit test.
+
+### CHROME P5 — TOFU key verification (§2.H)
+*Scheduled under `ARCH P6` in `ambre-spec-architecture.md §7`. The share dialog wraps the Document Key to a
+public key the server hands us, with no trust check whatsoever today: a substituted key is invisible and
+silently readable. `ambre-spec-server.md` has required a displayed fingerprint since the MVP; this is the
+Story that ships it.*
+- [ ] `ambre_crypto::fingerprint(pub_key) -> String`: BLAKE2b-256 truncated to 20 bytes, base32 (RFC 4648, no
+  padding), grouped in 4-char blocks. Follows the crate's house style (BLAKE2b-256 = truncated `Blake2b512`,
+  own domain tag). Needs a base32 encoder (`data-encoding`, already transitive in `Cargo.lock`).
+- [ ] `trusted_keys` IndexedDB store (`UserId -> [u8; 32]`), owned by the **Main** thread beside the snapshot
+  store. `DB_VERSION` 1 -> 2 — the current `onupgradeneeded` creates the snapshot store **unconditionally**,
+  so the upgrade must guard on `object_store_names()` or it throws `ConstraintError` for every existing user.
+- [ ] Two-phase invite (§2.H): `RestCommand::FetchInviteeKey` -> `RestEvent::InviteeKey { .., fingerprint }`,
+  Main resolves the trust state, then `InviteToDocument { .., expect_exchange_pub_key }`. Sync wraps **only**
+  if the re-fetched key still matches the pin (TOCTOU guard).
+- [ ] Share-dialog UI: fingerprint confirmation step (copy action + the normative "trusting the server" limit),
+  Trusted fast path, and the **modal** key-changed alert (default action Cancel; a toast is not acceptable).
+- [ ] Belt: `ambre-crypto` fingerprint vector + grouping tests; `ambre-sync` `FakeHttp` tests (pin match wraps,
+  pin mismatch refuses and never wraps); `ambre-app` wasm/DOM tests for the three trust states.

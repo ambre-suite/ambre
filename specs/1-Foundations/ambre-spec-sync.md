@@ -538,15 +538,32 @@ put another user's id in the payload.
 Consequently `LogicEvent::RemoteEphemeral` carries a resolved
 `from_user_id: UserId` (not just the opaque `payload`); the Logic thread keys peer
 presence on it. Resolution needs a **directory of members' signing keys**
-(`pub_key` -> `UserId`) for the document. That directory does not exist yet: the
-`GET /members` response and `MemberInfo` expose only the X25519 `exchange_pub_key`
-(for key wrapping), not the Ed25519 verifying key that authors ephemerals, and
-there is no key-transparency / trusted-keys store on the client (TOFU, V2). Until
-it lands, `SyncDocumentState::resolve_ephemeral_author` returns `None` and an
-inbound ephemeral is **dropped** (presence is best-effort; a cursor is never shown
-under a guessed identity). Tracked in "SYNC P4" below. The anti-replay counter
-(sec. above) stays keyed by `pub_key`: it is a per-device replay guard, orthogonal
-to the per-user presence identity.
+(`pub_key` -> `UserId`) for the document.
+
+**Source of the directory: the members response, already on the wire.**
+`GET /api/documents/{id}/members` returns, per member, the Ed25519
+`signing_pub_key` **and** the X25519 `exchange_pub_key` (server `MemberInfoJson`),
+and `handle_open_document` already fetches that response to unwrap the Document
+Key. So the directory needs no server change and no new round-trip: the Sync
+thread builds `signing_keys: HashMap<[u8; 32], UserId>` on
+`SyncDocumentState` from the members list at open, and
+`resolve_ephemeral_author` is a lookup in it. The map is rebuilt when membership
+changes (invite / revoke / role change). An author key absent from the directory
+is **not** resolved and the frame is **dropped** — presence is best-effort, and a
+cursor is never shown under a guessed identity.
+
+This directory is a *membership* directory, not a *trust* store: it answers "which
+member authored this frame", trusting the server's key mapping. Detecting a server
+that substitutes a member's keys is the TOFU trusted-keys store's job
+(architecture §3, server "Public Key Trust Model"), a separate and orthogonal
+concern — presence resolution does not wait on it.
+
+The `MemberInfo` bus type deliberately stays key-free (`user_id`, `display_name`,
+`email`, `role`): the directory lives in the Sync thread, which is the only side
+that verifies ephemeral signatures. Key material does not cross to Logic/UI.
+
+The anti-replay counter (sec. above) stays keyed by `pub_key`: it is a per-device
+replay guard, orthogonal to the per-user presence identity.
 
 ### Document Sharing — Key Wrapping
 
@@ -849,7 +866,8 @@ All tests compile in native mode (`#[cfg(not(target_arch = "wasm32"))]`) with `t
 
 ### SYNC P4 — Channels, Meetings & Optimization
 
-- [ ] Presence identity resolution: a per-document `pub_key` -> `UserId` directory (members' Ed25519 signing keys, exposed by `GET /members` / `MemberInfo`, or a trusted-keys store) so `SyncDocumentState::resolve_ephemeral_author` returns the canonical `UserId` and inbound `RemoteEphemeral` is delivered with a spoof-proof `from_user_id` (§ "Presence identity"; consumed by `toile-logic §7` / `trame-logic §7`). Until then inbound ephemerals are dropped; the contract (`RemoteEphemeral.from_user_id`) and the Logic-side handling already exist.
+- [ ] Presence identity resolution: a per-document `pub_key` -> `UserId` directory built from the members response already fetched at open (members' Ed25519 `signing_pub_key`, § "Presence identity"), stored on `SyncDocumentState`, so `resolve_ephemeral_author` returns the canonical `UserId` and inbound `RemoteEphemeral` is delivered with a spoof-proof `from_user_id` (consumed by `toile-logic §7` / `trame-logic §7`). Until then inbound ephemerals are dropped; the contract (`RemoteEphemeral.from_user_id`) and the Logic-side handling already exist. *(Scheduled under `ARCH P6`: no server change is needed — the earlier "`GET /members` exposes only the exchange key" premise was wrong.)*
+- [ ] Own-`Role` resolution at open: `handle_open_document` already receives every member's role in the same members response; resolve this client's own entry and carry it on `SyncEvent::OpenDocumentReady` -> `LogicEvent::DocumentReady` so the Logic thread can gate edits as UX (architecture §2.D). A 404 local-only document is `Role::Owner`. The server stays authoritative (it already rejects a read-only write on the WS `Update` path). *(Scheduled under `ARCH P6`.)*
 - [ ] Murmure channels: `OpenChannel`, `SendChannelUpdate`, `SendChannelEphemeral`, internal segment management (creation, sealing, routing — the Logic thread does not see segment_ids)
 - [ ] Meetings: WebRTC signaling (`SignalingClientMsg` / `SignalingServerMsg`)
 - [ ] Compression threshold tuning (default 256 bytes — adjust if benchmarks justify)

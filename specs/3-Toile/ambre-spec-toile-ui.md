@@ -194,11 +194,19 @@ Marquee (rubber-band) selection intersects the drag rect against the candidate A
 geometry only for partially covered elements.
 
 **Nested document embeds (`toile-logic §2.I`).** A `doc_embed` is hit-tested like any element for board-level
-gestures (select/move/resize). But when it holds **focus** (`DisplayGeom::DocEmbed { focused: true }`), pointer
-and keyboard events inside its rect are **forwarded to the child**: the UI maps the event into the child's
-coordinate space and emits `ToileCommand::Embedded { child, command }` (in-place editing, MVP). A single click
-inside an unfocused embed focuses it; a click outside returns focus to the board. Only one embed is focused at a
-time; focus is local UI state.
+gestures (select/move/resize). But when it holds **focus**, pointer and keyboard events inside its rect are
+**forwarded to the child**: the UI maps the event into the child's coordinate space and emits
+`ToileCommand::Embedded { child, command }` (in-place editing, MVP). A single click inside an unfocused embed
+focuses it; a click outside returns focus to the board. Only one embed is focused at a time.
+
+Focus is **local UI state owned by `ToileView`**, never CRDT and never derived: `derive.rs` builds
+`DisplayGeom::DocEmbed` from the `LoroDoc` alone, so it always emits `focused: false` and the view overlays its
+own focus on top. A remote peer's focus is not our focus.
+
+`ToileView` does **not** paint the child — it cannot name `AppView` without a dependency cycle
+(`toile-logic §2.I` "Render"). It paints the embed's placeholder frame and **publishes** the visible embeds
+(id, type, screen-space rect, focused) for `FrameHost`, which owns the child `AppView`s and paints them clipped
+over the parent's content pass.
 
 ---
 

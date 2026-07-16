@@ -279,10 +279,22 @@ feature of `ambre-spec-architecture.md §2.B/§2.D`, distinct from the sandboxed
   `OpenDocument { document_id }` for the child so the Sync worker adds a session on the single multiplexed
   WebSocket (N parallel sessions, already supported — architecture §2.B, sync §2.A); `CloseDocument` when it
   scrolls out or the Toile closes.
+  **Hysteresis is mandatory.** Visibility comes from the §3 R-tree cull set, which flips on every pan; binding
+  session lifecycle directly to it would thrash the WebSocket (open/close storm on a scroll oscillation, and a
+  re-open costs a members fetch + key unwrap + snapshot hydration). So: open as soon as the embed enters the
+  cull set, but close only after it has stayed out for a debounce window (`EMBED_CLOSE_DEBOUNCE_MS`, 5 s), and
+  cancel the pending close if it re-enters. Closing the Toile closes every child immediately, no debounce.
 - **MVP = in-place editable.** The Logic thread opens a **full** `DocState` for the child (not a read-only
   viewer): it applies the child's `RemoteUpdate`s **and** emits `SendUpdate` for the child when it is edited,
   subject to the caller's `Role` on that document. Input is routed to the focused embed (§below); an embed the
   user only has viewer rights on stays read-only, enforced by the child app exactly as when opened standalone.
+  **Where the `Role` comes from.** A child is opened by the ordinary `OpenDocument` path, so it carries its own
+  `Role` exactly like a standalone document: Sync resolves this client's own member entry at open and hands the
+  role to Logic on `DocumentReady` (architecture §2.D, sync § "Presence identity" neighbourhood). Nesting adds
+  nothing here — the parent Toile's role does **not** propagate to the child, and a user may well be `Editor` on
+  a board while only `Viewer` on a Trame embedded in it. The client-side gate is **UX only** (do not let the user
+  type into a document the server will refuse); the server remains authoritative and already rejects a
+  read-only write on the WS `Update` path.
 - **Command routing = recursion.** Edits destined to a nested document are carried by the closed-enum recursion
   of architecture §2.D, surfaced here as `ToileCommand::Embedded { child: DocumentId, command: Box<AppCommand> }`
   (§8), routed by `DocumentId` to the child `DocState` in the Logic thread — no Toile CRDT mutation. The child's
@@ -292,9 +304,21 @@ feature of `ambre-spec-architecture.md §2.B/§2.D`, distinct from the sandboxed
   events that fall inside its rect are translated into the child's coordinate space and dispatched as
   `Embedded { child, command }`; clicking outside returns focus to the board. Focus is **local UI state**, never
   CRDT.
-- **Render.** `toile-ui` paints the child through the child app's own `AppView` content pass, clipped and
-  transformed to the `doc_embed` element's rect. When focused, the child also receives `handle_input`; when not,
-  it paints but does not consume input.
+- **Render = driven by the launcher, not by `toile-ui`.** The child is painted through its own `AppView` content
+  pass, clipped to the `doc_embed` rect — but **`ambre-toile` cannot do that itself**: `AppView` is the closed
+  enum that lives in `ambre-app`, *downstream* of every app crate (architecture §6, §7 ARCH P2). A view naming
+  `AppView` from inside `ambre-toile` is the exact cycle that moved `AppView`/`FrameHost` into the launcher in
+  the first place, and no trait object may reintroduce it (§2.D; the `DocView` trait was deliberately removed).
+  So the composition inverts: `ToileView` **publishes** its visible embeds (`document_id`, `doc_type`,
+  screen-space rect, `focused`) and paints only their background/frame placeholder; `FrameHost` owns the child
+  `AppView`s (`HashMap<DocumentId, AppView>`, built through the same construction path as a top-level view) and
+  paints each one after the parent's content pass, inside a `push_clip(rect)` / `pop_clip` pair. The nesting is
+  a launcher concern because the launcher is the only layer allowed to know every app type.
+  **Clip limitation (accepted).** `DrawSurface::push_clip` is rectangular and is resolved against the transform
+  live at push time, so a **rotated** `doc_embed` clips to its axis-aligned bounding box, not to its rotated
+  quad: a rotated embed can bleed into its AABB corners. Accepted for the MVP — rotating a nested document is a
+  degenerate gesture — and revisited only if a clip-path op lands in `ambre-draw`.
+  When focused, the child also receives `handle_input`; when not, it paints but does not consume input.
 
 ---
 
@@ -1004,10 +1028,18 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
   resolved `UserId`, mutating neither the doc nor its history; a malformed frame is dropped). The **render**
   side (cursor / stroke / laser / selection overlay) stays with `toile-ui`. **Blocked downstream:** the
   `ambre-sync` `pub_key` -> `UserId` resolution (`resolve_ephemeral_author`) returns `None` until the member
-  signing-key directory / trusted-keys store is wired, so inbound frames are dropped end-to-end for now (a
-  sync/identity slice tracked in `ambre-spec-sync.md` "SYNC P4", not Toile logic); the outbound broadcast and
-  the whole Logic path are complete.
+  signing-key directory is wired, so inbound frames are dropped end-to-end for now (a sync/identity slice
+  tracked in `ambre-spec-sync.md` "SYNC P4" and scheduled under `ARCH P6`, not Toile logic); the outbound
+  broadcast and the whole Logic path are complete. *(The directory needs no server change: `GET /members`
+  already returns each member's Ed25519 `signing_pub_key`.)*
 - [ ] Presence render / overlay (remote cursors, live strokes, laser, selection halos, cross-app `UserId` colors): `ambre-spec-toile-ui.md` Phase 1.
+- [ ] Nested documents (`doc_embed`, §2.I) — the Toile half of `ARCH P6`. The element kind, its
+  `{document_id, doc_type}` payload, the codec/derive legs and board-level hit-testing **already landed** with
+  Phase 0's element model; open here: the `ToileCommand::Embedded { child, command }` variant (§8), focus as
+  view-local state, the pointer transform into child space, child `OpenDocument`/`CloseDocument` with close
+  hysteresis, and publishing the visible embed rects for `FrameHost` (which owns the child `AppView`s and
+  paints them — `toile-ui` cannot, see §2.I "Render"). The recursive dispatch itself and the child's `Role`
+  live in `ambre-logic` (`ambre-spec-architecture.md §2.D, §7 ARCH P6`).
 
 **Phase 2 - Optimization**
 - [ ] Bulk index update on large remote batches
