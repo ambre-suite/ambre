@@ -232,6 +232,11 @@ enum SyncEvent {
         /// inbound ephemerals resolve to a spoof-proof author. Empty for a
         /// local-only open (no members response, hence no peers to resolve).
         signing_keys: Vec<([u8; 32], UserId)>,
+        /// This client's own role on this document, read from its entry in the
+        /// same members response (architecture §2.D). `Role::Owner` for a
+        /// local-only open. Gates mutating commands in Logic as a UX measure;
+        /// the server remains the sole authority.
+        role: Role,
     },
     /// Opening a server-side document failed because its wrapped DocumentKey
     /// could not be unwrapped (wrong exchange key, tampered server row, or a
@@ -382,6 +387,16 @@ struct SyncDocumentState {
     /// server's key mapping. Detecting a server that substitutes a member's keys
     /// is the TOFU trusted-keys store's job (architecture §3) and is orthogonal.
     signing_keys: HashMap<[u8; 32], UserId>,
+    /// This client's own role on this document, resolved from the members
+    /// response at open. Carried here rather than emitted straight through
+    /// because `DocumentReady` fires from two places (immediately for a
+    /// local-only / offline open, or after the initial replay), and both must
+    /// report the same role.
+    ///
+    /// Defaults to `Role::Owner`: a document with no members response is
+    /// local-only, and its creator owns it. The server stays authoritative
+    /// either way (architecture §2.D) -- this drives UX only.
+    role: Role,
     /// True between sending the post-open `RequestMissing` and receiving its
     /// `MissingUpdates` reply. The initial catch-up replay is the point at which
     /// the document is fully hydrated (snapshot + every delta the server already
@@ -421,6 +436,7 @@ impl SyncDocumentState {
             old_keys: Vec::new(),
             ephemeral_remote_counters: HashMap::new(),
             signing_keys: HashMap::new(),
+            role: Role::Owner,
             awaiting_initial_hydration: false,
         }
     }

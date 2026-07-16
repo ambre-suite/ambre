@@ -43,9 +43,9 @@ impl LogicState {
                     if let Some(user_id) = self.my_user_id {
                         state.set_user_id(user_id);
                     }
-                    slot.insert(state);
+                    slot.insert(LiveDoc::new(state));
                 }
-                let Some(doc) = self.docs.get_mut(&document_id) else {
+                let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
                     tracing::warn!(
                         "Logic: no live document {document_id} to restore snapshot into"
                     );
@@ -106,7 +106,7 @@ impl LogicState {
                     if let Some(user_id) = self.my_user_id {
                         state.set_user_id(user_id);
                     }
-                    slot.insert(state);
+                    slot.insert(LiveDoc::new(state));
                 }
                 self.send_to_sync(SyncCommand::OpenDocument {
                     document_id,
@@ -150,8 +150,8 @@ impl LogicState {
                 // before forwarding the event verbatim to the UI.
                 if let RestEvent::SessionReady { user_id, .. } = &evt {
                     self.my_user_id = Some(*user_id);
-                    for state in self.docs.values_mut() {
-                        state.set_user_id(*user_id);
+                    for doc in self.docs.values_mut() {
+                        doc.state.set_user_id(*user_id);
                     }
                 }
                 self.send_to_ui(UiEvent::Rest { id, evt });
@@ -211,8 +211,15 @@ impl LogicState {
             // Initial hydration complete: any snapshot was applied by the
             // preceding RemoteSnapshot arm (channel order is preserved), so the
             // UI can dismiss its loading overlay.
-            LogicEvent::DocumentReady { document_id } => {
-                self.send_to_ui(UiEvent::DocumentReady { document_id });
+            LogicEvent::DocumentReady { document_id, role } => {
+                // Sync has now resolved our real role from the members response;
+                // it supersedes the optimistic `Owner` the slot was opened with
+                // (architecture §2.D). A ready for a document already closed is
+                // simply nothing to record.
+                if let Some(doc) = self.docs.get_mut(&document_id) {
+                    doc.role = role;
+                }
+                self.send_to_ui(UiEvent::DocumentReady { document_id, role });
             }
 
             LogicEvent::SyncWarning {
@@ -410,9 +417,10 @@ mod tests {
     fn close_document_drops_state_and_forwards() {
         let (mut state, _ui, sync_rx) = harness();
         let doc_id = DocumentId::new();
-        state
-            .docs
-            .insert(doc_id, DocState::Trame(Box::new(TrameState::new())));
+        state.docs.insert(
+            doc_id,
+            LiveDoc::new(DocState::Trame(Box::new(TrameState::new()))),
+        );
         state.handle_logic_command(LogicCommand::CloseDocument {
             document_id: doc_id,
         });
@@ -429,9 +437,10 @@ mod tests {
         // document and into any opened afterwards.
         let (mut state, _ui, _sync) = harness();
         let already_open = DocumentId::new();
-        state
-            .docs
-            .insert(already_open, DocState::Toile(Box::new(ToileState::new())));
+        state.docs.insert(
+            already_open,
+            LiveDoc::new(DocState::Toile(Box::new(ToileState::new()))),
+        );
 
         let me = ambre_bus::UserId::new();
         state.handle_logic_event(LogicEvent::Rest {
@@ -444,7 +453,10 @@ mod tests {
         });
 
         let toile_user_id = |state: &LogicState, id: &DocumentId| match state.docs.get(id) {
-            Some(DocState::Toile(s)) => s.user_id(),
+            Some(LiveDoc {
+                state: DocState::Toile(s),
+                ..
+            }) => s.user_id(),
             other => panic!("expected an open Toile doc, got {}", other.is_some()),
         };
         assert_eq!(toile_user_id(&state, &already_open), Some(me));
@@ -500,9 +512,10 @@ mod tests {
     fn app_command_on_live_doc_yields_viewport() {
         let (mut state, ui_rx, _sync) = harness();
         let doc_id = DocumentId::new();
-        state
-            .docs
-            .insert(doc_id, DocState::Trame(Box::new(TrameState::new())));
+        state.docs.insert(
+            doc_id,
+            LiveDoc::new(DocState::Trame(Box::new(TrameState::new()))),
+        );
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
             command: scroll(1),
@@ -563,13 +576,114 @@ mod tests {
         assert!(matches!(ui_rx.try_recv(), Ok(UiEvent::Viewport { .. })));
     }
 
+    /// A mutating Trame command (writes a cell, hence a CRDT delta).
+    fn set_cell(text: &str) -> AppCommand {
+        AppCommand::Trame(TrameCommand::SetCellText {
+            row: 0,
+            col: 0,
+            text: text.into(),
+        })
+    }
+
+    /// Seed a live document already carrying `role`, skipping the open handshake.
+    fn live_trame(state: &mut LogicState, role: Role) -> DocumentId {
+        let doc_id = DocumentId::new();
+        let mut doc = LiveDoc::new(DocState::Trame(Box::new(TrameState::new())));
+        doc.role = role;
+        state.docs.insert(doc_id, doc);
+        doc_id
+    }
+
+    #[test]
+    fn viewer_edit_is_dropped_and_emits_no_update() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        let doc_id = live_trame(&mut state, Role::Viewer);
+
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: set_cell("nope"),
+        });
+
+        // The engine is never reached: no display event, and above all no CRDT
+        // delta on its way to the server (architecture §2.D).
+        assert!(ui_rx.try_recv().is_err(), "viewer edit produced a UI event");
+        assert!(
+            sync_rx.try_recv().is_err(),
+            "viewer edit produced an outbound update"
+        );
+    }
+
+    #[test]
+    fn viewer_read_only_command_still_passes() {
+        let (mut state, ui_rx, _sync) = harness();
+        let doc_id = live_trame(&mut state, Role::Viewer);
+
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: scroll(1),
+        });
+
+        // Scrolling is local view state: the gate must not touch it, or a viewer
+        // could not read the document it is allowed to read.
+        assert!(matches!(ui_rx.try_recv(), Ok(UiEvent::Viewport { .. })));
+    }
+
+    #[test]
+    fn editor_edit_passes_through() {
+        let (mut state, _ui, sync_rx) = harness();
+        let doc_id = live_trame(&mut state, Role::Editor);
+
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: set_cell("42"),
+        });
+
+        assert!(matches!(
+            sync_rx.try_recv(),
+            Ok(SyncCommand::SendUpdate { .. })
+        ));
+    }
+
+    #[test]
+    fn document_ready_supersedes_the_optimistic_owner_role() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        let doc_id = DocumentId::from_bytes([3; 16]);
+
+        // A freshly opened slot is optimistically writable, before Sync has
+        // resolved our real role.
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id: doc_id,
+            doc_type: DocType::Trame,
+        });
+        assert_eq!(state.docs[&doc_id].role, Role::Owner);
+
+        // The members response says otherwise: the gate closes.
+        state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: doc_id,
+            role: Role::Viewer,
+        });
+        assert_eq!(state.docs[&doc_id].role, Role::Viewer);
+
+        let _ = sync_rx.drain();
+        let _ = ui_rx.drain();
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: set_cell("nope"),
+        });
+        assert!(
+            sync_rx.try_recv().is_err(),
+            "edit passed after the role was downgraded to viewer"
+        );
+    }
+
     #[test]
     fn snapshot_required_triggers_send_snapshot() {
         let (mut state, _ui, sync_rx) = harness();
         let doc_id = DocumentId::new();
-        state
-            .docs
-            .insert(doc_id, DocState::Trame(Box::new(TrameState::new())));
+        state.docs.insert(
+            doc_id,
+            LiveDoc::new(DocState::Trame(Box::new(TrameState::new()))),
+        );
         state.handle_logic_event(LogicEvent::SnapshotNeeded {
             document_id: doc_id,
         });

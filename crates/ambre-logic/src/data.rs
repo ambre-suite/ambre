@@ -16,6 +16,20 @@ impl LogicState {
             return;
         };
 
+        // Role gate (architecture §2.D): a read-only caller never reaches the
+        // engine with a mutating command, so we do not offer an edit the server
+        // would reject. UX only -- the server re-checks every write and stays the
+        // sole authority. Read-only and ephemeral commands still pass, so a
+        // viewer keeps scrolling, selecting, copying and showing a cursor.
+        if command.is_mutating() && !doc.role.can_write_document() {
+            tracing::warn!(
+                "Logic: dropping mutating command on doc {document_id}: role {:?} is not writable",
+                doc.role,
+            );
+            return;
+        }
+        let doc = &mut doc.state;
+
         // Each arm produces the same triple -- display events, an optional CRDT
         // `update`, an optional `ephemeral` payload -- so the fan-out to UI /
         // Sync / persist is factored into `dispatch_outcome`, keeping the arms to
@@ -93,7 +107,7 @@ impl LogicState {
 
     /// Apply a remote CRDT delta to a document and forward viewport events.
     pub(crate) fn apply_remote(&mut self, document_id: DocumentId, payload: &[u8]) {
-        let Some(doc) = self.docs.get_mut(&document_id) else {
+        let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
             tracing::warn!(
                 "Logic: apply_remote for unopened doc {document_id} ({} bytes), dropping",
                 payload.len()
@@ -129,7 +143,7 @@ impl LogicState {
     /// merge+reseed, so the UI repaints once instead of once per delta. Mirrors
     /// [`apply_remote`] for the local-persist and viewport-forward tail.
     pub(crate) fn apply_remote_batch(&mut self, document_id: DocumentId, payloads: &[Vec<u8>]) {
-        let Some(doc) = self.docs.get_mut(&document_id) else {
+        let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
             tracing::warn!(
                 "Logic: apply_remote_batch for unopened doc {document_id} ({} delta(s)), dropping",
                 payloads.len()
@@ -165,7 +179,7 @@ impl LogicState {
         from_user_id: UserId,
         payload: &[u8],
     ) {
-        let Some(doc) = self.docs.get_mut(&document_id) else {
+        let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
             return;
         };
         let events: Vec<AppEvent> = match doc {
@@ -189,7 +203,7 @@ impl LogicState {
 
     /// Export a document's CRDT snapshot for compaction.
     pub(crate) fn export_snapshot(&self, document_id: DocumentId) -> Option<Vec<u8>> {
-        match self.docs.get(&document_id)? {
+        match &self.docs.get(&document_id)?.state {
             DocState::Trame(state) => Some(state.export_snapshot()),
             DocState::Toile(state) => Some(state.export_snapshot()),
         }

@@ -648,3 +648,34 @@ pub enum TrameCommand {
     /// none is set there.
     RemoveProtection { sheet_id: String, range: GridRange },
 }
+
+impl TrameCommand {
+    /// Whether this command can change the sheet's shared CRDT state
+    /// (architecture §2.D).
+    ///
+    /// Only the commands documented above as local-only or read-only are listed
+    /// here; everything else is treated as mutating. That is the safe direction
+    /// for a UX gate -- a new variant left unclassified is withheld from a
+    /// viewer rather than wrongly offered, and the server rejects the write
+    /// regardless.
+    pub fn is_mutating(&self) -> bool {
+        !matches!(
+            self,
+            // Local view state: selection and scrolling are never persisted
+            // (`trame-ui §16`), and switching sheet or personal filter view only
+            // rebuilds derived caches.
+            Self::ScrollViewport { .. }
+                | Self::SetActiveCell { .. }
+                | Self::ActivateSheet { .. }
+                | Self::SaveFilterView { .. }
+                | Self::ActivateFilterView { .. }
+                // Read-only queries: they reply with data, emit no CRDT delta.
+                | Self::RequestActiveColumnValues
+                | Self::RequestSelectionStats
+                | Self::CopyRange
+                | Self::FindNext { .. }
+                | Self::ExportActiveSheetCsv
+                | Self::ExportCsv { .. }
+        )
+    }
+}

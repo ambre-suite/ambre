@@ -365,6 +365,7 @@ impl SyncState {
                 doc_type,
                 server_created,
                 signing_keys,
+                role,
             } => {
                 self.documents.insert(
                     document_id,
@@ -372,6 +373,7 @@ impl SyncState {
                 );
                 let doc_state = self.documents.get_mut(&document_id).expect("just inserted");
                 doc_state.set_signing_keys(signing_keys);
+                doc_state.role = role;
                 doc_state.current_snapshot_id = snapshot_id;
                 doc_state.known_snapshots.insert(snapshot_id);
                 // Advance the replay cursor past the history folded into the
@@ -422,7 +424,7 @@ impl SyncState {
                         doc_state.awaiting_initial_hydration = true;
                     }
                 } else {
-                    self.send_to_logic(LogicEvent::DocumentReady { document_id });
+                    self.send_to_logic(LogicEvent::DocumentReady { document_id, role });
                 }
                 // A local-only doc issues no RequestMissing (nothing to replay),
                 // so flush any buffered pre-session updates here -- they will take
@@ -703,7 +705,8 @@ impl SyncState {
                     && doc_state.awaiting_initial_hydration
                 {
                     doc_state.awaiting_initial_hydration = false;
-                    self.send_to_logic(LogicEvent::DocumentReady { document_id });
+                    let role = doc_state.role;
+                    self.send_to_logic(LogicEvent::DocumentReady { document_id, role });
                 }
             }
 

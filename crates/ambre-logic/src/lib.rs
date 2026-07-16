@@ -37,7 +37,7 @@ mod dispatch;
 
 use ambre_bus::{
     AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent, RestCommand, RestEvent,
-    SyncCommand, UiEvent, UserId,
+    Role, SyncCommand, UiEvent, UserId,
 };
 use ambre_toile::ToileState;
 use ambre_trame::TrameState;
@@ -91,6 +91,35 @@ impl DocState {
 }
 
 // -----------------------------------------------------------------------------
+// LiveDoc — an open document and the caller's role on it
+// -----------------------------------------------------------------------------
+
+/// One open document: its typed state plus this client's role on **that**
+/// document (architecture §2.D).
+///
+/// The role gates mutating `AppCommand`s in [`LogicState::handle_app_command`].
+/// This is a **UX gate only** -- it avoids offering edits the server would
+/// reject; the server remains the sole authority and re-checks every write.
+struct LiveDoc {
+    state: DocState,
+    /// Starts `Role::Owner` because a document is materialised optimistically at
+    /// `OpenDocument`, before Sync has fetched the members response: edits route
+    /// immediately, exactly as they did before this gate existed. The real role
+    /// arrives on `DocumentReady` and supersedes it. A downgrade landing a beat
+    /// late is harmless -- the server rejects any write we should not have made.
+    role: Role,
+}
+
+impl LiveDoc {
+    fn new(state: DocState) -> Self {
+        Self {
+            state,
+            role: Role::Owner,
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
 // LogicState
 // -----------------------------------------------------------------------------
 
@@ -111,7 +140,7 @@ struct LogicState {
     /// Pre-seeded on `OpenDocument` (which carries the `doc_type`) so UI edits
     /// route immediately, before any snapshot/delta arrives. Removed on
     /// `CloseDocument` / `DeleteDocument` / `Logout`.
-    docs: HashMap<DocumentId, DocState>,
+    docs: HashMap<DocumentId, LiveDoc>,
     /// Canonical per-user identifier, captured from `LogicEvent::SessionReady`
     /// (§7). `None` until the session is authenticated. Seeded into every open
     /// `DocState` on arrival and into any document opened afterwards, so an app

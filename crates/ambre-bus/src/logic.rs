@@ -138,3 +138,17 @@ pub enum AppCommand {
     // Rendezvous(RendezvousCommand), …
     // Future plugin surface: Plugin(Box<dyn Plugin>).
 }
+
+impl AppCommand {
+    /// Whether this command can change the document's shared CRDT state.
+    ///
+    /// Used by the Logic dispatcher to gate a read-only caller (architecture
+    /// §2.D). Ephemeral presence and local view state are *not* mutating: a
+    /// viewer still scrolls, selects, copies and broadcasts a cursor.
+    pub fn is_mutating(&self) -> bool {
+        match self {
+            Self::Trame(cmd) => cmd.is_mutating(),
+            Self::Toile(cmd) => cmd.is_mutating(),
+        }
+    }
+}

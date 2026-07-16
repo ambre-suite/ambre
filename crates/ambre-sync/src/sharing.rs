@@ -108,6 +108,29 @@ pub(crate) fn presence_directory<'a>(
         .collect()
 }
 
+/// Picks this client's own role out of a members response, given `(user_id,
+/// role)` pairs and our canonical `UserId` (architecture §2.D).
+///
+/// Every failure path -- no session id, no row for us, an unparsable id, an
+/// unknown role string -- yields `Role::Viewer`. That is the safe direction for
+/// a UX gate: it hides affordances we may in fact have, whereas guessing
+/// `Owner` would offer edits the server then rejects. A document we genuinely
+/// own always has a well-formed row saying so.
+pub(crate) fn own_role<'a>(
+    entries: impl IntoIterator<Item = (&'a str, &'a str)>,
+    my_user_id: Option<UserId>,
+) -> Role {
+    let Some(me) = my_user_id else {
+        return Role::Viewer;
+    };
+    entries
+        .into_iter()
+        .find(|(user_id, _)| UserId::parse_str(user_id).is_ok_and(|id| id == me))
+        .and_then(|(_, role)| role.parse().ok())
+        .filter(|role: &Role| role.is_valid_for_document())
+        .unwrap_or(Role::Viewer)
+}
+
 /// Maps server member entries into bus `MemberInfo` (plaintext name/email,
 /// parsed role). Unknown roles fall back to viewer, unparsable ids to a fresh
 /// id -- the list is display-only, so it degrades instead of dropping rows.
@@ -808,6 +831,53 @@ mod tests {
             dir,
             vec![([0xbb; 32], UserId::parse_str(good_uid).unwrap())]
         );
+    }
+
+    // -- Own role (architecture §2.D) -----------------------------------------
+
+    #[test]
+    fn own_role_reads_our_own_row() {
+        let me = "11111111-1111-1111-1111-111111111111";
+        let other = "22222222-2222-2222-2222-222222222222";
+        let role = own_role(
+            [(other, "owner"), (me, "viewer")],
+            Some(UserId::parse_str(me).unwrap()),
+        );
+
+        // Our own row wins: a peer being owner says nothing about our access.
+        assert_eq!(role, Role::Viewer);
+    }
+
+    #[test]
+    fn own_role_falls_back_to_viewer_when_unresolvable() {
+        let me = UserId::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
+        let me_str = me.to_string();
+        let other = "22222222-2222-2222-2222-222222222222";
+
+        // No session id yet.
+        assert_eq!(own_role([(other, "owner")], None), Role::Viewer);
+        // No row for us in the response.
+        assert_eq!(own_role([(other, "owner")], Some(me)), Role::Viewer);
+        // Our row carries a role string this client does not know.
+        assert_eq!(
+            own_role([(me_str.as_str(), "wizard")], Some(me)),
+            Role::Viewer
+        );
+        // A valid role that is not a document role (channel / org side).
+        assert_eq!(
+            own_role([(me_str.as_str(), "admin")], Some(me)),
+            Role::Viewer
+        );
+    }
+
+    #[test]
+    fn own_role_reads_writable_roles() {
+        let me = UserId::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
+        let me_str = me.to_string();
+        for (wire, expected) in [("owner", Role::Owner), ("editor", Role::Editor)] {
+            assert_eq!(own_role([(me_str.as_str(), wire)], Some(me)), expected);
+            assert!(expected.can_write_document());
+        }
     }
 
     #[tokio::test]

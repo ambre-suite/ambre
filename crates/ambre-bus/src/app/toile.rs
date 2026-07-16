@@ -852,6 +852,38 @@ pub enum ToileCommand {
     Presence(PresencePayload),
 }
 
+impl ToileCommand {
+    /// Whether this command can change the board's shared CRDT state
+    /// (architecture §2.D).
+    ///
+    /// Only the commands documented above as local-only or read-only are listed
+    /// here; everything else is treated as mutating. That is the safe direction
+    /// for a UX gate -- a new variant left unclassified is withheld from a
+    /// viewer rather than wrongly offered, and the server rejects the write
+    /// regardless.
+    pub fn is_mutating(&self) -> bool {
+        !matches!(
+            self,
+            // Local playback / presentation state (§1.B): no CRDT delta.
+            Self::NextSlide
+                | Self::PrevSlide
+                | Self::GotoSlide(_)
+                | Self::EnterPresent { .. }
+                | Self::ExitPresent
+                | Self::SetPresentBroadcast(_)
+                | Self::FollowPresenter(_)
+                // Local view state and read-only queries.
+                | Self::SetViewport(_)
+                | Self::Find { .. }
+                | Self::RequestSelectionStats { .. }
+                | Self::RequestSnapshot
+                | Self::CopyElements { .. }
+                // Ephemeral only: a viewer still shows a cursor (§7).
+                | Self::Presence(_)
+        )
+    }
+}
+
 // =============================================================================
 // Presence (ephemeral, §7) -- never persisted, never in Loro history.
 // =============================================================================
