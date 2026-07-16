@@ -280,12 +280,17 @@ Stories:
   support: Trame / Toile today, Prose joins with its engine (`E5`). Unblocks creating a Toile from the UI
   (previously only reachable by hand-typing `/toile/<uuid>`). Belt: `landing.rs` wasm/DOM tests +
   `route::needs_reload` + `DocType::creatable` tests.
-- `[ ]` `ARCH P6` (composition) — in-place editable nested embeds: `AppCommand`/`TrameOutcome` recursion routed by
-  `Uuid` so a `doc_embed` (Prose/Trame) is editable in place, role-gated (`toile-logic §2.I`). *(embeds start at the
-  read-only subset.)* The spatial `DocState` itself -- typed `ToileState` behind the `ambre-logic` `match`, `rstar`
-  R-tree culling, the IPC contract (`ambre-bus::app::toile`, `AppCommand::Toile`/`AppEvent::Toile`, `DocState::Toile`,
-  remote/snapshot/ephemeral legs) -- lands under the `toile-logic §13` story above, not here. Open here: the recursive
-  command routing + input-focus transform (`ToileCommand::Embedded`). Sits on top of the logic/canvas/ui stack.
+- `[ ]` `ARCH P6` (composition & cross-app plane) — four slices, detailed in `ambre-spec-architecture.md §7`:
+  **(1) presence identity** (the `signing_pub_key` -> `UserId` directory, unblocking the already-complete Logic
+  presence path), **(2) `Role` on `DocState`** (UX gate; the server stays authoritative), **(3) composition**
+  (`ToileCommand::Embedded` recursion routed by `Uuid` so a `doc_embed` is **editable in place** per
+  `toile-logic §2.I`, + the input-focus transform, + `FrameHost`-driven child rendering), **(4) TOFU UI**
+  (`chrome §2.H` / `CHROME P5`). Slices 1 and 2 need **no server change**: `GET /members` already returns the
+  signing keys and the roles, and the open path already fetches it. The spatial `DocState` itself -- typed
+  `ToileState` behind the `ambre-logic` `match`, `rstar` R-tree culling, the IPC contract
+  (`ambre-bus::app::toile`, `AppCommand::Toile`/`AppEvent::Toile`, `DocState::Toile`, remote/snapshot/ephemeral
+  legs) -- and the `doc_embed` element kind land under the `toile-logic §13` story above, not here. Sits on top
+  of the logic/canvas/ui stack.
 
 ## E5 — Application expansion  `[ ]` (deferred)
 
