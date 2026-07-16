@@ -205,46 +205,57 @@ impl SyncState {
                     format!("{url_scheme}://{api_base}/api/documents/{doc_id}/members");
                 // 404 -> the doc does not exist server-side yet (local-only):
                 // generate a fresh key and defer creation to the first update.
-                let (doc_key, server_created) =
-                    match http::get_json_opt_auth::<http::MembersResponse>(
-                        &members_url,
-                        auth.clone(),
-                    )
-                    .await
-                    {
-                        Ok(Some(resp)) => {
-                            // The document exists server-side: our wrapped
-                            // DocumentKey MUST unwrap cleanly. A failure here is a
-                            // genuine auth error (wrong exchange key, tampered row,
-                            // or a real attack) -- never substitute a random key,
-                            // which would "open" the document and then fail every
-                            // subsequent decrypt with a confusing commitment
-                            // mismatch instead of a clear auth error (H3).
-                            match &exchange_key {
-                                Some(ek) => match Self::unwrap_document_key(ek, &resp.members) {
-                                    Ok(key) => (key, true),
-                                    Err(_) => {
-                                        let _ = tx.send(SyncEvent::OpenDocumentFailed {
-                                            document_id: doc_id,
-                                            message: "cannot unwrap document key".into(),
-                                        });
-                                        return;
-                                    }
-                                },
-                                None => {
+                let (doc_key, server_created, signing_keys) = match http::get_json_opt_auth::<
+                    http::MembersResponse,
+                >(
+                    &members_url, auth.clone()
+                )
+                .await
+                {
+                    Ok(Some(resp)) => {
+                        // Harvest the presence directory from the same response
+                        // that carries our wrapped key: every member's Ed25519
+                        // signing key is already here, so resolving an ephemeral
+                        // author needs no extra round-trip (§ "Presence identity").
+                        let signing_keys = crate::sharing::presence_directory(
+                            resp.members
+                                .iter()
+                                .map(|m| (m.user_id.as_str(), m.signing_pub_key.as_str())),
+                        );
+                        // The document exists server-side: our wrapped
+                        // DocumentKey MUST unwrap cleanly. A failure here is a
+                        // genuine auth error (wrong exchange key, tampered row,
+                        // or a real attack) -- never substitute a random key,
+                        // which would "open" the document and then fail every
+                        // subsequent decrypt with a confusing commitment
+                        // mismatch instead of a clear auth error (H3).
+                        match &exchange_key {
+                            Some(ek) => match Self::unwrap_document_key(ek, &resp.members) {
+                                Ok(key) => (key, true, signing_keys),
+                                Err(_) => {
                                     let _ = tx.send(SyncEvent::OpenDocumentFailed {
                                         document_id: doc_id,
-                                        message: "session not ready".into(),
+                                        message: "cannot unwrap document key".into(),
                                     });
                                     return;
                                 }
+                            },
+                            None => {
+                                let _ = tx.send(SyncEvent::OpenDocumentFailed {
+                                    document_id: doc_id,
+                                    message: "session not ready".into(),
+                                });
+                                return;
                             }
                         }
-                        // Not found, or a transient error: treat as local-only.
-                        // A transient error simply means no remote history this
-                        // open; the doc still works locally and reconciles later.
-                        Ok(None) | Err(_) => (DocumentKey::generate(), false),
-                    };
+                    }
+                    // Not found, or a transient error: treat as local-only.
+                    // A transient error simply means no remote history this
+                    // open; the doc still works locally and reconciles later.
+                    // No members response means no directory: a local-only doc
+                    // has no peers to resolve presence for anyway.
+                    Ok(None) | Err(_) => (DocumentKey::generate(), false, Vec::new()),
+                };
                 // Download the latest snapshot (when one exists) so the open
                 // seeds from compacted state instead of replaying every delta
                 // since genesis. Two server round-trips: `GET /snapshot` for the
@@ -308,6 +319,7 @@ impl SyncState {
                     covered_seq: Seq(covered_seq as u64),
                     doc_type,
                     server_created,
+                    signing_keys,
                 });
             });
         } else {
@@ -848,6 +860,7 @@ mod tests {
             covered_seq: Seq(1500),
             doc_type: DocType::Trame,
             server_created: true,
+            signing_keys: Vec::new(),
         });
 
         // The replay cursor advanced to the snapshot's covered seq.
@@ -883,6 +896,7 @@ mod tests {
             covered_seq: Seq(0),
             doc_type: DocType::Trame,
             server_created: true,
+            signing_keys: Vec::new(),
         });
 
         assert_eq!(state.documents[&doc].last_seq, Seq(0));
@@ -925,6 +939,7 @@ mod tests {
             covered_seq: Seq(0),
             doc_type: DocType::Trame,
             server_created: true,
+            signing_keys: Vec::new(),
         });
         let at_open = drain(&rx);
         assert!(
@@ -980,6 +995,7 @@ mod tests {
             covered_seq: Seq(0),
             doc_type: DocType::Trame,
             server_created: true,
+            signing_keys: Vec::new(),
         });
         assert_eq!(
             ready_count(&drain(&rx), doc),

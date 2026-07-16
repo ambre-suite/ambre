@@ -533,7 +533,7 @@ pub(crate) struct DocumentMemberEntry {
     pub user_id: String,
     pub display_name: String,
     pub email: String,
-    #[allow(dead_code)]
+    /// Ed25519 verifying key: feeds the presence directory (`presence_directory`).
     pub signing_pub_key: String,
     pub exchange_pub_key: String,
     #[allow(dead_code)]

@@ -226,6 +226,12 @@ enum SyncEvent {
         /// local-only doc (server returned 404 for its members): no WebSocket
         /// subscription yet, and the first update triggers lazy creation.
         server_created: bool,
+        /// Members' Ed25519 signing keys -> canonical `UserId`, harvested from
+        /// the same members response that carried the wrapped DocumentKey
+        /// (§ "Presence identity"). Seeds `SyncDocumentState::signing_keys` so
+        /// inbound ephemerals resolve to a spoof-proof author. Empty for a
+        /// local-only open (no members response, hence no peers to resolve).
+        signing_keys: Vec<([u8; 32], UserId)>,
     },
     /// Opening a server-side document failed because its wrapped DocumentKey
     /// could not be unwrapped (wrong exchange key, tampered server row, or a
@@ -271,6 +277,11 @@ enum SyncEvent {
         id: RequestId,
         document_id: DocumentId,
         members: Vec<MemberInfo>,
+        /// Refreshed presence directory (§ "Presence identity"), harvested from
+        /// the same response. Membership just changed often enough for someone to
+        /// ask for the list, so this is where a new member becomes resolvable and
+        /// a revoked one stops. Ignored when the document is not open locally.
+        signing_keys: Vec<([u8; 32], UserId)>,
     },
     /// User search results from the server (decoded, plaintext).
     UserSearchReady {
@@ -361,6 +372,16 @@ struct SyncDocumentState {
     /// verifying key bytes. An inbound ephemeral whose counter is ≤ the stored
     /// value is silently dropped.
     ephemeral_remote_counters: HashMap<[u8; 32], u64>,
+    /// Directory of this document's members' Ed25519 signing keys, mapping an
+    /// ephemeral author's verifying key to their canonical `UserId` (§ "Presence
+    /// identity"). Built from the members response already fetched at open and
+    /// rebuilt when membership changes. A key absent here is not resolved, so the
+    /// frame is dropped rather than attributed to a guessed identity.
+    ///
+    /// This is a *membership* directory, not a *trust* store: it trusts the
+    /// server's key mapping. Detecting a server that substitutes a member's keys
+    /// is the TOFU trusted-keys store's job (architecture §3) and is orthogonal.
+    signing_keys: HashMap<[u8; 32], UserId>,
     /// True between sending the post-open `RequestMissing` and receiving its
     /// `MissingUpdates` reply. The initial catch-up replay is the point at which
     /// the document is fully hydrated (snapshot + every delta the server already
@@ -399,6 +420,7 @@ impl SyncDocumentState {
             quarantine: HashMap::new(),
             old_keys: Vec::new(),
             ephemeral_remote_counters: HashMap::new(),
+            signing_keys: HashMap::new(),
             awaiting_initial_hydration: false,
         }
     }
@@ -463,19 +485,29 @@ impl SyncDocumentState {
         true
     }
 
-    /// Resolve the canonical `UserId` behind an ephemeral's authoring Ed25519
-    /// key (§7). Presence must be keyed by a per-user identity, not by the
-    /// per-device signing key, and the sender-supplied payload can never be
-    /// trusted for identity; the key must be matched against a directory of
-    /// members' signing keys resolved out of band.
+    /// Replace the members' signing-key directory (§ "Presence identity").
+    /// Called with the members response fetched at open, and again whenever
+    /// membership changes, so a revoked member stops resolving.
     ///
-    /// That directory is not wired on the client yet (member records carry no
-    /// signing key today, and the trusted-keys / key-transparency store is a
-    /// later slice), so there is nothing to match against and this returns
-    /// `None`. The caller drops the frame: presence is best-effort, so showing
-    /// nothing is preferable to attributing a cursor to a guessed identity.
-    fn resolve_ephemeral_author(&self, _author_pk: [u8; 32]) -> Option<UserId> {
-        None
+    /// Entries whose key is not valid hex or not 32 bytes are skipped: a member
+    /// we cannot key on simply never resolves, which costs that peer's cursor
+    /// rather than the whole document's presence.
+    fn set_signing_keys(&mut self, entries: impl IntoIterator<Item = ([u8; 32], UserId)>) {
+        self.signing_keys = entries.into_iter().collect();
+    }
+
+    /// Resolve the canonical `UserId` behind an ephemeral's authoring Ed25519
+    /// key (§ "Presence identity"). Presence must be keyed by a per-user
+    /// identity, not by the per-device signing key, and the sender-supplied
+    /// payload can never be trusted for identity -- so the key is matched
+    /// against the members directory, on this trusted side.
+    ///
+    /// `None` means the author is not a known member of this document (or the
+    /// directory has not been filled yet). The caller drops the frame: presence
+    /// is best-effort, so showing nothing is preferable to attributing a cursor
+    /// to a guessed identity.
+    fn resolve_ephemeral_author(&self, author_pk: [u8; 32]) -> Option<UserId> {
+        self.signing_keys.get(&author_pk).copied()
     }
 
     /// Decrypts an update with the active key, falling back to every key in the
@@ -1014,7 +1046,7 @@ pub async fn run_wasm(
 }
 
 #[cfg(test)]
-mod ephemeral_counter_tests {
+mod ephemeral_tests {
     use super::*;
 
     fn doc_state() -> SyncDocumentState {
@@ -1049,5 +1081,43 @@ mod ephemeral_counter_tests {
             assert!(d.accept_ephemeral_counter(author, 1));
         }
         assert!(d.ephemeral_remote_counters.len() <= MAX_EPHEMERAL_REMOTE_AUTHORS);
+    }
+
+    // -- Presence identity resolution (spec § "Presence identity") ------------
+
+    #[test]
+    fn author_resolves_to_the_member_behind_the_signing_key() {
+        let mut d = doc_state();
+        let alice = UserId::new();
+        d.set_signing_keys([([7u8; 32], alice)]);
+
+        assert_eq!(d.resolve_ephemeral_author([7u8; 32]), Some(alice));
+    }
+
+    #[test]
+    fn unknown_author_key_is_not_resolved() {
+        let mut d = doc_state();
+        d.set_signing_keys([([7u8; 32], UserId::new())]);
+
+        // A non-member (or a document whose directory is not filled yet) must not
+        // be attributed to anyone: the caller drops the frame rather than showing
+        // a cursor under a guessed identity.
+        assert_eq!(d.resolve_ephemeral_author([9u8; 32]), None);
+        assert_eq!(doc_state().resolve_ephemeral_author([7u8; 32]), None);
+    }
+
+    #[test]
+    fn refreshing_the_directory_drops_revoked_members() {
+        let mut d = doc_state();
+        let revoked = UserId::new();
+        let kept = UserId::new();
+        d.set_signing_keys([([1u8; 32], revoked), ([2u8; 32], kept)]);
+        assert_eq!(d.resolve_ephemeral_author([1u8; 32]), Some(revoked));
+
+        // A membership change replaces the directory wholesale, so a revoked
+        // member stops resolving instead of lingering.
+        d.set_signing_keys([([2u8; 32], kept)]);
+        assert_eq!(d.resolve_ephemeral_author([1u8; 32]), None);
+        assert_eq!(d.resolve_ephemeral_author([2u8; 32]), Some(kept));
     }
 }
