@@ -202,17 +202,6 @@ impl ToileState {
 
     pub fn handle_command(&mut self, cmd: ToileCommand) -> ToileOutcome {
         match cmd {
-            // Addressed to an embedded document, not to this board (§2.I). The
-            // Logic dispatcher unwraps it and re-enters on the child, so it only
-            // arrives here if that routing was skipped: report it rather than
-            // apply anything to this board's CRDT.
-            ToileCommand::Embedded { child, .. } => {
-                tracing::warn!(
-                    "Toile: Embedded command for child {child} reached ToileState; \
-                     it should have been unwrapped by the Logic dispatcher"
-                );
-                ToileOutcome::display_only(Vec::new())
-            }
             ToileCommand::CreateElement {
                 kind,
                 at,

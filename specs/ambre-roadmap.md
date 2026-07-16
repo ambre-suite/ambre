@@ -283,8 +283,9 @@ Stories:
 - `[ ]` `ARCH P6` (composition & cross-app plane) — four slices, detailed in `ambre-spec-architecture.md §7`:
   **(1) presence identity** (the `signing_pub_key` -> `UserId` directory, unblocking the already-complete Logic
   presence path), **(2) `Role` on `DocState`** (UX gate; the server stays authoritative), **(3) composition**
-  (`ToileCommand::Embedded` recursion routed by `Uuid` so a `doc_embed` is **editable in place** per
-  `toile-logic §2.I`, + the input-focus transform, + `FrameHost`-driven child rendering), **(4) TOFU UI**
+  (a `doc_embed` **editable in place** per `toile-logic §2.I`; the Logic registry is flat so the child is
+  addressed by its own id and no bus variant is needed — the work is the input-focus transform and
+  `FrameHost`-driven child input + rendering), **(4) TOFU UI**
   (`chrome §2.H` / `CHROME P5`). Slices 1 and 2 need **no server change**: `GET /members` already returns the
   signing keys and the roles, and the open path already fetches it. The spatial `DocState` itself -- typed
   `ToileState` behind the `ambre-logic` `match`, `rstar` R-tree culling, the IPC contract

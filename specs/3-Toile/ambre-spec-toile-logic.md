@@ -31,13 +31,13 @@
 > other wiring changes — the outbound channels, the `flume::Selector` loop and the persistence path are
 > document-type agnostic.
 >
-> **Embedded routing = a second registry lookup.** `doc_embed` edits (§2.D, §8) are the *only* Toile path
-> that leaves the single-document `(DocState, AppCommand)` couple: `ToileCommand::Embedded { child, command }`
-> carries no Toile CRDT mutation. The dispatcher unwraps it and re-enters the **same** `docs` registry with
-> `child`, dispatching the inner `AppCommand` against the child's own `DocState` (which may itself be a
-> `Toile`, hence recursion). The child's own outcome (`display` + `sync`) is fanned out normally, so the
-> parent Toile's `LoroDoc` is untouched. A missing or not-yet-opened `child` is dropped with a warning, never
-> synthesised.
+> **Embedded routing = no routing at all.** The `docs` registry is **flat**: it is keyed by `DocumentId`, and
+> a `doc_embed` child (§2.I) is an ordinary entry in it, opened by the ordinary `OpenDocument` path. A command
+> for the child is addressed straight to the child -- `LogicCommand::App { document_id: child, .. }` -- because
+> the child's own view holds the child's id and emits on the same channel. Nesting therefore adds **no**
+> dispatch step, no recursion and no depth bound: the parent Toile's `LoroDoc` is untouched simply because no
+> command for the child ever reaches it. A command for a document absent from the registry is dropped with a
+> warning, never synthesised.
 >
 > `LoroDoc` is instantiated in the Logic thread and never leaves it.
 
@@ -295,15 +295,27 @@ feature of `ambre-spec-architecture.md §2.B/§2.D`, distinct from the sandboxed
   a board while only `Viewer` on a Trame embedded in it. The client-side gate is **UX only** (do not let the user
   type into a document the server will refuse); the server remains authoritative and already rejects a
   read-only write on the WS `Update` path.
-- **Command routing = recursion.** Edits destined to a nested document are carried by the closed-enum recursion
-  of architecture §2.D, surfaced here as `ToileCommand::Embedded { child: DocumentId, command: Box<AppCommand> }`
-  (§8), routed by `DocumentId` to the child `DocState` in the Logic thread — no Toile CRDT mutation. The child's
-  own `ToileOutcome`/`TrameOutcome`-equivalent (`display` + `sync`) is fanned out normally, so the child's edits
-  reach its own Sync session.
-- **Input focus.** At most one `doc_embed` holds keyboard/pointer focus at a time. While focused, canvas input
-  events that fall inside its rect are translated into the child's coordinate space and dispatched as
-  `Embedded { child, command }`; clicking outside returns focus to the board. Focus is **local UI state**, never
-  CRDT.
+- **Command routing = direct, by the child's own id.** The Logic `docs` registry is flat and keyed by
+  `DocumentId` (§1), so the child needs no envelope and no recursion: `FrameHost` owns the child's `AppView`,
+  that view holds the child's `DocumentId`, and it emits `LogicCommand::App { document_id: child, .. }` on the
+  same UI->Logic channel as any top-level view. The command reaches the child's `DocState` in one lookup and its
+  outcome (`display` + `sync`) is fanned out normally, so the child's edits reach the child's own Sync session.
+  The parent Toile's `LoroDoc` is untouched because no command for the child ever reaches it.
+  **Why there is no `Embedded` variant.** An earlier draft of this section specified
+  `ToileCommand::Embedded { child, command: Box<AppCommand> }`. It cannot work and is not needed. It cannot
+  work because `ToileView` is unable to *build* the inner `AppCommand`: turning a pointer event into (say) a
+  `TrameCommand` requires the child `TrameView`'s selection and edit state, and `ambre-toile` may not name
+  `TrameView` or `TrameCommand` — that is the ARCH P2 cycle. What crosses into the child is therefore the raw
+  `InputEvent`, not a command; the child view translates it and addresses the result itself. And it is not
+  needed because the registry is flat, so there is nothing for the envelope to route around.
+- **Input focus.** At most one `doc_embed` holds keyboard/pointer focus at a time. Focus is **local UI state**
+  owned by `ToileView`, never CRDT. A single click inside an unfocused embed focuses it (and selects it on the
+  board) without reaching the child; a click outside, or `Escape`, returns focus to the board. While an embed is
+  focused, `FrameHost` maps each canvas `InputEvent` into the child's coordinate space and hands it to the child
+  `AppView`'s own `handle_input` — the child then emits its own commands (above). The mapping is
+  `child_px = ((elem.transform.inverse() * (camera.screen_to_world() * screen_pt)) - bounds.origin) * zoom`,
+  which handles a rotated embed correctly. Screen-space *deltas* (wheel) need no scaling: a child pixel is a
+  screen pixel by construction, since the same `zoom` scales both.
 - **Render = driven by the launcher, not by `toile-ui`.** The child is painted through its own `AppView` content
   pass, clipped to the `doc_embed` rect — but **`ambre-toile` cannot do that itself**: `AppView` is the closed
   enum that lives in `ambre-app`, *downstream* of every app crate (architecture §6, §7 ARCH P2). A view naming
@@ -605,11 +617,9 @@ pub enum ToileCommand {
     // geometry) computes the count + union bounds; the UI holds only ids.
     RequestSelectionStats { ids: Vec<ElementId> },
 
-    // Nested Ambre documents (§2.I). Composition by closed-enum recursion
-    // (architecture §2.D), routed to the child DocState by DocumentId. MVP is
-    // in-place EDITABLE: `command` carries the focused child's edit (subject to
-    // the user's Role on that child document).
-    Embedded { child: DocumentId, command: Box<AppCommand> },
+    // Nested Ambre documents (§2.I) need NO variant here. The child's edits are
+    // addressed to the child's own DocumentId by the child's own view; they never
+    // travel through the board. See §2.I "Command routing".
 
     // Undo / redo (local-only, §8 bis)
     Undo, Redo,
@@ -1001,7 +1011,7 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
 - [x] Connector routing (§5) + endpoint binding (create / retarget / delete, dangling detection). Belt: retarget rebind, retarget-to-missing surfaces `DanglingConnector`, endpoint delete drops the connector from the paint set.
 - [x] Stroke storage + smoothing (§4)
 - [x] `DisplayViewport` derivation (culled visible set). Belt: rotation-expanded AABB, resize bounds, off-screen culling.
-- [x] `ToileCommand` / `ToileEvent` consolidated enums (§8): lifecycle + groups + undo/redo (`GroupElements`/`UngroupElements`/`Undo`/`Redo`, `UndoState` event) + clipboard (`CopyElements`/`PasteElements`/`DuplicateElements`, `Clipboard` event, `ClipboardPayload` postcard round-trip) + frames (`SetFrameChildren`) landed in `ambre-toile`. `EditText` (Phase 1, blocked on Prose's shared `TextDelta`), find and `Embedded` (nested-doc) variants land with their later slices.
+- [x] `ToileCommand` / `ToileEvent` consolidated enums (§8): lifecycle + groups + undo/redo (`GroupElements`/`UngroupElements`/`Undo`/`Redo`, `UndoState` event) + clipboard (`CopyElements`/`PasteElements`/`DuplicateElements`, `Clipboard` event, `ClipboardPayload` postcard round-trip) + frames (`SetFrameChildren`) landed in `ambre-toile`. `EditText` (Phase 1, blocked on Prose's shared `TextDelta`) and find land with their later slices. Nested documents need no variant at all (§2.I "Command routing").
 - [x] 2-peer CRDT convergence property-test. **DoD:** green in `ambre-toile/src/convergence_tests.rs`. Op-set covers create / move-LWW / resize / rotate / restyle-register / delete / reorder / group / ungroup / connect / stroke; the assertion compares the full derived paint set (elements + routed connectors + group union bounds). Complemented by a `ToileState`-level rebuild-equivalence property-test (incremental caches == full rebuild from snapshot, the §1 invariant beyond the isolated `SpatialIndex`) -- which flushed out and fixed four empty-group / dangling-child-ref defects across group / ungroup / delete / frame membership.
 
 **Phase 1 - Logic Thread Integration**
@@ -1035,11 +1045,12 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
 - [ ] Presence render / overlay (remote cursors, live strokes, laser, selection halos, cross-app `UserId` colors): `ambre-spec-toile-ui.md` Phase 1.
 - [ ] Nested documents (`doc_embed`, §2.I) — the Toile half of `ARCH P6`. The element kind, its
   `{document_id, doc_type}` payload, the codec/derive legs and board-level hit-testing **already landed** with
-  Phase 0's element model; open here: the `ToileCommand::Embedded { child, command }` variant (§8), focus as
-  view-local state, the pointer transform into child space, child `OpenDocument`/`CloseDocument` with close
-  hysteresis, and publishing the visible embed rects for `FrameHost` (which owns the child `AppView`s and
-  paints them — `toile-ui` cannot, see §2.I "Render"). The recursive dispatch itself and the child's `Role`
-  live in `ambre-logic` (`ambre-spec-architecture.md §2.D, §7 ARCH P6`).
+  Phase 0's element model; open here: focus as view-local state, the pointer transform into child space, child
+  `OpenDocument`/`CloseDocument` with close hysteresis, and publishing the visible embed rects for `FrameHost`
+  (which owns the child `AppView`s and both paints them and routes input into them — `toile-ui` cannot, see
+  §2.I "Render" / "Input focus"). No bus variant is needed: the registry is flat and the child's view addresses
+  the child directly (§2.I "Command routing"). The child's `Role` lives in `ambre-logic`
+  (`ambre-spec-architecture.md §2.D, §7 ARCH P6`).
 
 **Phase 2 - Optimization**
 - [ ] Bulk index update on large remote batches

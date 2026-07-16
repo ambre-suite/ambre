@@ -35,20 +35,11 @@ pub mod persistence;
 mod data;
 mod dispatch;
 
-use ambre_bus::app::toile::ToileCommand;
 use ambre_bus::{
     AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent, RestCommand, RestEvent,
     Role, SyncCommand, UiEvent, UserId,
 };
 
-/// How many `doc_embed` levels a single command may descend (§2.I).
-///
-/// A Toile can embed a Toile, so `AppCommand` nesting is unbounded by the type.
-/// Eight is far past any legible board (an embed is a rectangle on a canvas; by
-/// level four it is a few pixels) and stops both a pathological document and a
-/// reference cycle -- two boards embedding each other -- from recursing until
-/// the Logic thread's stack gives out.
-const MAX_EMBED_DEPTH: u8 = 8;
 use ambre_toile::ToileState;
 use ambre_trame::TrameState;
 

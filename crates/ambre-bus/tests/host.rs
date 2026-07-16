@@ -271,15 +271,6 @@ fn read_only_and_local_commands_are_not_mutating() {
         AppCommand::Toile(ToileCommand::RequestSnapshot),
         // Toile: ephemeral only -- a viewer still shows a cursor (sec.7).
         AppCommand::Toile(ToileCommand::Presence(PresencePayload::default())),
-        // Toile: addressed to an embedded document (sec.2.I), so it writes
-        // nothing to *this* board. The dispatcher unwraps it before the gate
-        // runs, but calling it mutating would be wrong in substance: the child
-        // carries its own role, and a board's viewer may well own the document
-        // embedded in it.
-        AppCommand::Toile(ToileCommand::Embedded {
-            child: DocumentId::new(),
-            command: Box::new(AppCommand::Toile(ToileCommand::Undo)),
-        }),
     ];
     for cmd in cases {
         assert!(

@@ -195,9 +195,13 @@ geometry only for partially covered elements.
 
 **Nested document embeds (`toile-logic §2.I`).** A `doc_embed` is hit-tested like any element for board-level
 gestures (select/move/resize). But when it holds **focus**, pointer and keyboard events inside its rect are
-**forwarded to the child**: the UI maps the event into the child's coordinate space and emits
-`ToileCommand::Embedded { child, command }` (in-place editing, MVP). A single click inside an unfocused embed
-focuses it; a click outside returns focus to the board. Only one embed is focused at a time.
+**forwarded to the child** (in-place editing, MVP). What is forwarded is the raw `InputEvent`, mapped into the
+child's coordinate space — not a command: `ToileView` cannot build the child's `AppCommand` without naming the
+child's view type, which is the ARCH P2 cycle. So `ToileView` publishes the focused embed and `FrameHost`, which
+owns the child `AppView`, performs the mapping and calls the child's own `handle_input`; the child emits its own
+commands against its own `DocumentId`. A single click inside an unfocused embed focuses it (the click itself
+does not reach the child); a click outside, or `Escape`, returns focus to the board. Only one embed is focused
+at a time.
 
 Focus is **local UI state owned by `ToileView`**, never CRDT and never derived: `derive.rs` builds
 `DisplayGeom::DocEmbed` from the `LoroDoc` alone, so it always emits `focused: false` and the view overlays its

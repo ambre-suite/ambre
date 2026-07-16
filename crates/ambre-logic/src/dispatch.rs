@@ -676,13 +676,18 @@ mod tests {
         );
     }
 
-    // -- Composition: ToileCommand::Embedded routing (§2.I) -------------------
+    // -- Composition: the registry is flat (§2.I) ------------------------------
+    //
+    // A `doc_embed` child is an ordinary entry in `docs`, keyed by its own id, so
+    // a command for it is addressed straight to it and never travels through the
+    // parent board. What that buys is the property below: role is resolved per
+    // document. These tests seed a parent and a child side by side and pin that
+    // the parent's role has no say over the child's -- both directions.
 
     /// Seed a live Toile already carrying `role`, skipping the open handshake.
     fn live_toile(state: &mut LogicState, role: Role) -> DocumentId {
         let doc_id = DocumentId::new();
         let mut toile = ToileState::new();
-        // `React` writes a per-user CRDT entry, so it needs an identity (§4.A).
         toile.set_user_id(UserId::new());
         let mut doc = LiveDoc::new(DocState::Toile(Box::new(toile)));
         doc.role = role;
@@ -690,31 +695,8 @@ mod tests {
         doc_id
     }
 
-    /// A mutating Toile command. `React` is the one that needs no geometry:
-    /// `ambre-logic` routes documents and deliberately links no kurbo.
-    fn react() -> AppCommand {
-        use ambre_bus::app::toile::{ElementId, Reaction, ReactionKind};
-        AppCommand::Toile(ToileCommand::React {
-            target: ElementId::mint(1, 1),
-            reaction: Some(Reaction {
-                kind: ReactionKind::Emoji("+1".into()),
-                ts: 0,
-            }),
-        })
-    }
-
-    /// Wrap `inner` in `n` nested `Embedded` hops, all addressed to `child`.
-    fn nest(n: usize, child: DocumentId, inner: AppCommand) -> AppCommand {
-        (0..n).fold(inner, |acc, _| {
-            AppCommand::Toile(ToileCommand::Embedded {
-                child,
-                command: Box::new(acc),
-            })
-        })
-    }
-
-    /// Drain every `SendUpdate` and report which documents produced one. The
-    /// whole point of the recursion is *which* document the delta belongs to.
+    /// Drain every `SendUpdate` and report which documents produced one -- which
+    /// document a delta belongs to is exactly what these tests are about.
     fn updated_docs(sync_rx: &flume::Receiver<SyncCommand>) -> Vec<DocumentId> {
         sync_rx
             .drain()
@@ -726,125 +708,51 @@ mod tests {
     }
 
     #[test]
-    fn embedded_command_reaches_the_child_and_leaves_the_parent_untouched() {
+    fn an_embedded_child_is_gated_by_its_own_role_not_the_boards() {
         let (mut state, _ui, sync_rx) = harness();
-        let parent = live_toile(&mut state, Role::Owner);
+        // We may only read the board, but we own the document sitting on it.
+        let _board = live_toile(&mut state, Role::Viewer);
         let child = live_trame(&mut state, Role::Owner);
 
         state.handle_logic_command(LogicCommand::App {
-            document_id: parent,
-            command: AppCommand::Toile(ToileCommand::Embedded {
-                child,
-                command: Box::new(set_cell("42")),
-            }),
+            document_id: child,
+            command: set_cell("42"),
         });
 
-        // Exactly one delta, keyed on the child. A delta keyed on the parent
-        // would mean the board's own CRDT absorbed an edit meant for the
-        // embedded document -- the failure this routing exists to prevent.
+        // Exactly one delta, keyed on the child. Gating this on the board's role
+        // would deny a viewer an edit to a document they own inside it (§2.D).
         assert_eq!(updated_docs(&sync_rx), vec![child]);
     }
 
     #[test]
-    fn embedded_child_is_gated_by_its_own_role_not_the_parents() {
+    fn owning_the_board_grants_nothing_on_a_document_embedded_in_it() {
         let (mut state, _ui, sync_rx) = harness();
-        // We may only read the board, but we own the document sitting on it.
-        let parent = live_toile(&mut state, Role::Viewer);
-        let child = live_trame(&mut state, Role::Owner);
-
-        state.handle_logic_command(LogicCommand::App {
-            document_id: parent,
-            command: AppCommand::Toile(ToileCommand::Embedded {
-                child,
-                command: Box::new(set_cell("42")),
-            }),
-        });
-
-        assert_eq!(
-            updated_docs(&sync_rx),
-            vec![child],
-            "the parent's viewer role must not gate a child we own (§2.D)"
-        );
-    }
-
-    #[test]
-    fn embedded_command_is_dropped_when_the_child_role_forbids_it() {
-        let (mut state, _ui, sync_rx) = harness();
-        let parent = live_toile(&mut state, Role::Owner);
+        let _board = live_toile(&mut state, Role::Owner);
         let child = live_trame(&mut state, Role::Viewer);
 
         state.handle_logic_command(LogicCommand::App {
-            document_id: parent,
-            command: AppCommand::Toile(ToileCommand::Embedded {
-                child,
-                command: Box::new(set_cell("nope")),
-            }),
+            document_id: child,
+            command: set_cell("nope"),
         });
 
-        // The converse of the test above: owning the board grants nothing on a
-        // document embedded in it.
+        // The converse of the test above.
         assert!(updated_docs(&sync_rx).is_empty());
     }
 
     #[test]
-    fn embedded_command_for_an_unopened_child_is_dropped() {
+    fn a_command_for_an_unopened_document_is_dropped() {
         let (mut state, ui_rx, sync_rx) = harness();
-        let parent = live_toile(&mut state, Role::Owner);
 
         state.handle_logic_command(LogicCommand::App {
-            document_id: parent,
-            command: AppCommand::Toile(ToileCommand::Embedded {
-                child: DocumentId::new(),
-                command: Box::new(set_cell("42")),
-            }),
+            document_id: DocumentId::new(),
+            command: set_cell("42"),
         });
 
-        // Never synthesise the child: the embed may point at a document this
-        // client cannot open at all, and an empty state would paint as if it
-        // were the real one.
+        // Never synthesise the document: an embed may point at one this client
+        // cannot open at all, and an empty state would paint as if it were the
+        // real one.
         assert!(updated_docs(&sync_rx).is_empty());
         assert!(ui_rx.try_recv().is_err());
-    }
-
-    #[test]
-    fn a_toile_embedded_in_a_toile_routes_through() {
-        let (mut state, _ui, sync_rx) = harness();
-        let outer = live_toile(&mut state, Role::Owner);
-        let inner = live_toile(&mut state, Role::Owner);
-
-        state.handle_logic_command(LogicCommand::App {
-            document_id: outer,
-            command: nest(1, inner, react()),
-        });
-
-        assert_eq!(updated_docs(&sync_rx), vec![inner]);
-    }
-
-    #[test]
-    fn embed_depth_guard_trips_one_hop_past_the_limit() {
-        let (mut state, _ui, sync_rx) = harness();
-        // A board embedding itself: the cycle the guard exists for. Without it
-        // this recurses until the Logic thread's stack gives out.
-        let doc = live_toile(&mut state, Role::Owner);
-        let max = usize::from(MAX_EMBED_DEPTH);
-
-        // Exactly at the limit the command still lands.
-        state.handle_logic_command(LogicCommand::App {
-            document_id: doc,
-            command: nest(max, doc, react()),
-        });
-        assert_eq!(updated_docs(&sync_rx), vec![doc], "depth {max} was refused");
-
-        // One hop further and it is dropped whole -- never partially applied.
-        state.handle_logic_command(LogicCommand::App {
-            document_id: doc,
-            command: nest(max + 1, doc, react()),
-        });
-        assert!(
-            updated_docs(&sync_rx).is_empty(),
-            "depth {} passed the guard",
-            max + 1
-        );
     }
 
     #[test]
