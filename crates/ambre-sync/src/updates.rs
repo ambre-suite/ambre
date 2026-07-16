@@ -200,19 +200,36 @@ impl SyncState {
             let doc_id = document_id;
             let exchange_key = self.exchange_key.clone();
             let auth = self.auth_context();
+            // Needed inside the task to pick our own row out of the members
+            // response. `None` only before the session is ready, which the guard
+            // above already excluded on the wasm path.
+            let my_user_id = self.user_id;
             wasm_bindgen_futures::spawn_local(async move {
                 let members_url =
                     format!("{url_scheme}://{api_base}/api/documents/{doc_id}/members");
                 // 404 -> the doc does not exist server-side yet (local-only):
                 // generate a fresh key and defer creation to the first update.
-                let (doc_key, server_created, signing_keys) = match http::get_json_opt_auth::<
+                let (doc_key, server_created, signing_keys, role) = match http::get_json_opt_auth::<
                     http::MembersResponse,
                 >(
-                    &members_url, auth.clone()
+                    &members_url,
+                    auth.clone(),
                 )
                 .await
                 {
                     Ok(Some(resp)) => {
+                        // Our own role rides the same response (architecture
+                        // §2.D). An absent or unparseable row means we cannot
+                        // establish write access, so fall back to the safest
+                        // client-side assumption rather than the most permissive
+                        // one: `Viewer` merely hides affordances, whereas a wrong
+                        // `Owner` would offer edits the server then rejects.
+                        let role = crate::sharing::own_role(
+                            resp.members
+                                .iter()
+                                .map(|m| (m.user_id.as_str(), m.role.as_str())),
+                            my_user_id,
+                        );
                         // Harvest the presence directory from the same response
                         // that carries our wrapped key: every member's Ed25519
                         // signing key is already here, so resolving an ephemeral
@@ -231,7 +248,7 @@ impl SyncState {
                         // mismatch instead of a clear auth error (H3).
                         match &exchange_key {
                             Some(ek) => match Self::unwrap_document_key(ek, &resp.members) {
-                                Ok(key) => (key, true, signing_keys),
+                                Ok(key) => (key, true, signing_keys, role),
                                 Err(_) => {
                                     let _ = tx.send(SyncEvent::OpenDocumentFailed {
                                         document_id: doc_id,
@@ -253,8 +270,9 @@ impl SyncState {
                     // A transient error simply means no remote history this
                     // open; the doc still works locally and reconciles later.
                     // No members response means no directory: a local-only doc
-                    // has no peers to resolve presence for anyway.
-                    Ok(None) | Err(_) => (DocumentKey::generate(), false, Vec::new()),
+                    // has no peers to resolve presence for anyway, and its creator
+                    // owns it.
+                    Ok(None) | Err(_) => (DocumentKey::generate(), false, Vec::new(), Role::Owner),
                 };
                 // Download the latest snapshot (when one exists) so the open
                 // seeds from compacted state instead of replaying every delta
@@ -320,6 +338,7 @@ impl SyncState {
                     doc_type,
                     server_created,
                     signing_keys,
+                    role,
                 });
             });
         } else {
@@ -861,6 +880,7 @@ mod tests {
             doc_type: DocType::Trame,
             server_created: true,
             signing_keys: Vec::new(),
+            role: Role::Owner,
         });
 
         // The replay cursor advanced to the snapshot's covered seq.
@@ -897,6 +917,7 @@ mod tests {
             doc_type: DocType::Trame,
             server_created: true,
             signing_keys: Vec::new(),
+            role: Role::Owner,
         });
 
         assert_eq!(state.documents[&doc].last_seq, Seq(0));
@@ -913,7 +934,7 @@ mod tests {
         events
             .iter()
             .filter(
-                |e| matches!(e, LogicEvent::DocumentReady { document_id } if *document_id == doc),
+                |e| matches!(e, LogicEvent::DocumentReady { document_id, .. } if *document_id == doc),
             )
             .count()
     }
@@ -940,6 +961,7 @@ mod tests {
             doc_type: DocType::Trame,
             server_created: true,
             signing_keys: Vec::new(),
+            role: Role::Owner,
         });
         let at_open = drain(&rx);
         assert!(
@@ -996,12 +1018,69 @@ mod tests {
             doc_type: DocType::Trame,
             server_created: true,
             signing_keys: Vec::new(),
+            role: Role::Owner,
         });
         assert_eq!(
             ready_count(&drain(&rx), doc),
             1,
             "offline open signals readiness immediately (no replay to await)"
         );
+    }
+
+    /// Extract the role carried by the single `DocumentReady` for `doc`.
+    fn ready_role(events: &[LogicEvent], doc: DocumentId) -> Option<Role> {
+        events.iter().find_map(|e| match e {
+            LogicEvent::DocumentReady { document_id, role } if *document_id == doc => Some(*role),
+            _ => None,
+        })
+    }
+
+    /// The role resolved at open must reach Logic on `DocumentReady` (architecture
+    /// §2.D) -- on BOTH emission paths. The deferred one is the fragile case: the
+    /// event fires from the replay handler, long after the open, so the role has to
+    /// survive on `SyncDocumentState` rather than ride the call stack.
+    #[test]
+    fn document_ready_carries_the_role_on_both_paths() {
+        // Deferred path: server document over a live WS, ready only after replay.
+        let (mut state, rx, doc, key, _sk, _snap) = setup();
+        let (ws_tx, _ws_rx) = flume::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.handle_sync_event(SyncEvent::OpenDocumentReady {
+            document_id: doc,
+            doc_key: key,
+            snapshot_payload: None,
+            snapshot_id: SnapshotId::genesis(doc),
+            covered_seq: Seq(0),
+            doc_type: DocType::Trame,
+            server_created: true,
+            signing_keys: Vec::new(),
+            role: Role::Viewer,
+        });
+        let _ = drain(&rx);
+        state.handle_ws_message(WsServerMsg::MissingUpdates {
+            document_id: doc,
+            updates: Vec::new(),
+        });
+        assert_eq!(
+            ready_role(&drain(&rx), doc),
+            Some(Role::Viewer),
+            "the role resolved at open must survive to the deferred ready"
+        );
+
+        // Immediate path: offline open, ready fires at open.
+        let (mut state, rx, doc, key, _sk, _snap) = setup();
+        state.handle_sync_event(SyncEvent::OpenDocumentReady {
+            document_id: doc,
+            doc_key: key,
+            snapshot_payload: None,
+            snapshot_id: SnapshotId::genesis(doc),
+            covered_seq: Seq(0),
+            doc_type: DocType::Trame,
+            server_created: true,
+            signing_keys: Vec::new(),
+            role: Role::Editor,
+        });
+        assert_eq!(ready_role(&drain(&rx), doc), Some(Role::Editor));
     }
 
     /// A completed snapshot upload adopts the server-assigned snapshot id as the

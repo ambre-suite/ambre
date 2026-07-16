@@ -14,7 +14,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::sync_warning::SyncWarningCode;
-use crate::{ChannelId, DocType, DocumentId, RequestId, RestEvent, UserId};
+use crate::{ChannelId, DocType, DocumentId, RequestId, RestEvent, Role, UserId};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LogicEvent
@@ -72,6 +72,11 @@ pub enum LogicEvent {
     /// so the overlay cannot key off `RemoteSnapshot`).
     DocumentReady {
         document_id: DocumentId,
+        /// This client's own role on the document, resolved by Sync from the
+        /// members response (architecture §2.D). Logic keeps it beside the live
+        /// `DocState` and drops mutating commands when it is not writable. The
+        /// gate is UX only; the server remains the sole authority.
+        role: Role,
     },
 
     /// WebSocket connection status for a document.

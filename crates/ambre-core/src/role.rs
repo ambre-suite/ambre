@@ -66,6 +66,16 @@ impl Role {
         matches!(self, Self::Owner | Self::Editor | Self::Viewer)
     }
 
+    /// Returns `true` if this role may write to a document.
+    ///
+    /// `Viewer` is a legitimate document role but read-only, and the channel /
+    /// organization roles carry no document write access at all. The client uses
+    /// this to gate its own UI (architecture §2.D); the server checks write
+    /// access independently and remains the authority.
+    pub const fn can_write_document(self) -> bool {
+        matches!(self, Self::Owner | Self::Editor)
+    }
+
     /// Returns `true` if this role is allowed for channels.
     pub const fn is_valid_for_channel(self) -> bool {
         matches!(self, Self::Owner | Self::Admin | Self::Member)

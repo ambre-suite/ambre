@@ -19,7 +19,7 @@
 //!   channel/meeting push, `AuthError`, `ApiError`, `FatalError`): unsolicited.
 
 use crate::sync_warning::SyncWarningCode;
-use crate::{ChannelId, DocType, DocumentId, MeetingId, RequestId, RestEvent, UserId};
+use crate::{ChannelId, DocType, DocumentId, MeetingId, RequestId, RestEvent, Role, UserId};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // UiEvent — Logic thread → UI Thread
@@ -59,7 +59,9 @@ pub enum UiEvent {
     /// Initial hydration of a freshly opened document is complete (snapshot, if
     /// any, already applied). The UI dismisses its document-loading overlay.
     /// Fires once per open, including for empty/brand-new documents.
-    DocumentReady { document_id: DocumentId },
+    /// Carries this client's own role so the UI can withhold editing
+    /// affordances on a read-only document (architecture §2.D).
+    DocumentReady { document_id: DocumentId, role: Role },
 
     /// Non-fatal sync warning (quarantine overflow, decrypt failure, …).
     SyncWarning {

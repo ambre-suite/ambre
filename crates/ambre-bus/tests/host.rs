@@ -11,9 +11,10 @@
 // move and intentionally carries no `Serialize` derive).
 // ============================================================================
 
+use ambre_bus::app::toile::{ElementId, PresencePayload, ToileCommand, Viewport as ToileViewport};
 use ambre_bus::{
-    CellFormat, ChannelId, ClipboardCell, ClipboardPayload, DocType, DocumentId, LogicEvent,
-    RequestId, RestCommand, RestEvent, Role, SyncCommand, UserId,
+    AppCommand, CellFormat, ChannelId, ClipboardCell, ClipboardPayload, DocType, DocumentId,
+    LogicEvent, RequestId, RestCommand, RestEvent, Role, SyncCommand, TrameCommand, UserId,
 };
 
 // ── Content plane: ClipboardPayload::to_tsv ─────────────────────────────────
@@ -230,4 +231,79 @@ fn request_id_echo_is_preserved_across_the_hop() {
         panic!("variant changed");
     };
     assert_eq!(id.0, back.0);
+}
+
+// ── Role gate: AppCommand::is_mutating (architecture sec.2.D) ───────────────
+//
+// The classification decides what a viewer may still do. Getting it wrong is
+// silent in both directions -- a misclassified read-only command costs a viewer
+// its navigation, a misclassified write slips past the client gate -- so the
+// two ends of each family are pinned here rather than trusted to review.
+
+#[test]
+fn read_only_and_local_commands_are_not_mutating() {
+    let cases: Vec<AppCommand> = vec![
+        // Trame: local view state.
+        AppCommand::Trame(TrameCommand::ScrollViewport {
+            version: 1,
+            row_start: 0,
+            row_end: 4,
+            col_start: 0,
+            col_end: 4,
+        }),
+        AppCommand::Trame(TrameCommand::SetActiveCell {
+            row: 0,
+            col: 0,
+            anchor_row: 0,
+            anchor_col: 0,
+        }),
+        AppCommand::Trame(TrameCommand::ActivateSheet {
+            sheet_id: "s1".into(),
+        }),
+        // Trame: read-only queries.
+        AppCommand::Trame(TrameCommand::RequestSelectionStats),
+        AppCommand::Trame(TrameCommand::CopyRange),
+        AppCommand::Trame(TrameCommand::ExportActiveSheetCsv),
+        // Toile: local playback and view state.
+        AppCommand::Toile(ToileCommand::NextSlide),
+        AppCommand::Toile(ToileCommand::ExitPresent),
+        AppCommand::Toile(ToileCommand::SetViewport(ToileViewport::default())),
+        AppCommand::Toile(ToileCommand::RequestSnapshot),
+        // Toile: ephemeral only -- a viewer still shows a cursor (sec.7).
+        AppCommand::Toile(ToileCommand::Presence(PresencePayload::default())),
+    ];
+    for cmd in cases {
+        assert!(
+            !cmd.is_mutating(),
+            "a viewer must keep this command: {cmd:?}"
+        );
+    }
+}
+
+#[test]
+fn writing_commands_are_mutating() {
+    let cases: Vec<AppCommand> = vec![
+        AppCommand::Trame(TrameCommand::SetCellText {
+            row: 0,
+            col: 0,
+            text: "x".into(),
+        }),
+        AppCommand::Trame(TrameCommand::InsertRowAbove),
+        AppCommand::Trame(TrameCommand::PasteText { text: "x".into() }),
+        AppCommand::Trame(TrameCommand::Undo),
+        AppCommand::Toile(ToileCommand::DeleteElements { ids: Vec::new() }),
+        AppCommand::Toile(ToileCommand::DuplicateElements {
+            ids: Vec::new(),
+            delta: Default::default(),
+        }),
+        AppCommand::Toile(ToileCommand::Undo),
+        // Reacting writes a per-user CRDT entry (sec.4.A): not presence.
+        AppCommand::Toile(ToileCommand::React {
+            target: ElementId::mint(1, 1),
+            reaction: None,
+        }),
+    ];
+    for cmd in cases {
+        assert!(cmd.is_mutating(), "this command writes the CRDT: {cmd:?}");
+    }
 }
