@@ -14,9 +14,10 @@
 
 use std::collections::BTreeMap;
 
+use crate::logic::AppCommand;
 use ambre_core::DocType;
+use ambre_core::DocumentId;
 use ambre_core::UserId;
-use ambre_core::uuid::Uuid;
 use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};
 use serde::{Deserialize, Serialize};
 
@@ -403,7 +404,7 @@ pub enum InitContent {
     Image(String), // blake2b plaintext hash, key into `media`
     Embed(String), // web url (sandboxed iframe)
     DocEmbed {
-        document_id: Uuid,
+        document_id: DocumentId,
         doc_type: DocType,
     }, // nested Ambre document (§2.I)
     Text(String),  // initial plain body (sticky / text)
@@ -626,6 +627,24 @@ pub struct SlideChange {
 /// Command from the UI / Logic thread to `ToileState` (in `ambre-toile`).
 #[derive(Clone, Debug)]
 pub enum ToileCommand {
+    // -- Composition (§2.I) --
+    /// A command addressed to a document embedded in this one via a `doc_embed`
+    /// element. Emitted by the Toile view while an embed holds input focus, with
+    /// pointer coordinates already mapped into the child's own space.
+    ///
+    /// The Logic dispatcher unwraps this **before** it resolves the parent Toile,
+    /// so it never reaches `ToileState`: the parent's CRDT is untouched, and the
+    /// child is gated by its **own** `Role` rather than the parent's (§2.D). A
+    /// viewer of a board may therefore still edit a document they own inside it.
+    ///
+    /// `Box` breaks the `ToileCommand -> AppCommand -> ToileCommand` type cycle
+    /// that a Toile embedding a Toile creates; the depth of an actual chain is
+    /// bounded at dispatch, not by the type.
+    Embedded {
+        child: DocumentId,
+        command: Box<AppCommand>,
+    },
+
     // -- Element lifecycle --
     CreateElement {
         kind: ElementKind,
@@ -880,6 +899,12 @@ impl ToileCommand {
                 | Self::CopyElements { .. }
                 // Ephemeral only: a viewer still shows a cursor (§7).
                 | Self::Presence(_)
+                // Addressed to a child document, so it writes nothing here (§2.I).
+                // The dispatcher unwraps it before this gate ever runs, but the
+                // classification must still be correct: the child carries its own
+                // role, and calling this "mutating" would let a board's viewer be
+                // refused an edit to a document they own inside it.
+                | Self::Embedded { .. }
         )
     }
 }
@@ -1059,7 +1084,7 @@ pub enum DisplayGeom {
     Group,              // paints nothing; carried for group-selection resolution (§2.F bis)
     Embed(String),      // web url (sandboxed iframe)
     DocEmbed {
-        document_id: Uuid,
+        document_id: DocumentId,
         doc_type: DocType,
         focused: bool,
     }, // nested Ambre doc (§2.I)
