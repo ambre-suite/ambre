@@ -11,6 +11,47 @@ impl LogicState {
     /// Route a typed application command to its document's state, send display
     /// events to the UI Thread, and forward CRDT/ephemeral payloads to Sync.
     pub(crate) fn handle_app_command(&mut self, document_id: DocumentId, command: AppCommand) {
+        self.handle_app_command_at(document_id, command, 0);
+    }
+
+    /// [`handle_app_command`](Self::handle_app_command) plus the embedding depth
+    /// reached so far. A `doc_embed` (§2.I) may itself be a Toile holding another
+    /// `doc_embed`, so the chain a command walks is bounded here rather than by
+    /// the type -- `ToileCommand::Embedded` boxes an `AppCommand`, which is
+    /// recursive by construction.
+    fn handle_app_command_at(&mut self, document_id: DocumentId, command: AppCommand, depth: u8) {
+        // Unwrap an embedded command *before* resolving the parent, for two
+        // independent reasons:
+        //   - the `docs.get_mut` borrow below stays live across the whole match
+        //     while `dispatch_outcome` needs `&self`, so re-entering from inside
+        //     the arm cannot borrow-check;
+        //   - the child owns its own role (§2.D). Gating it on the parent's would
+        //     deny a board's viewer an edit to a document they own inside it.
+        // The parent's `LoroDoc` is never touched: the child's outcome fans out
+        // through `dispatch_outcome` keyed on the child's own `document_id`.
+        if let AppCommand::Toile(ToileCommand::Embedded { child, command }) = command {
+            if depth >= MAX_EMBED_DEPTH {
+                tracing::warn!(
+                    "Logic: embed depth {MAX_EMBED_DEPTH} exceeded routing to child {child}, \
+                     dropping (cycle or pathological nesting in doc {document_id})"
+                );
+                return;
+            }
+            // A child that is not open yet is dropped, never synthesised: the
+            // embed's target may be a document this client cannot open at all
+            // (`toile-logic` §2.I), and materialising an empty state here would
+            // present a blank document as if it were the real one.
+            if !self.docs.contains_key(&child) {
+                tracing::warn!(
+                    "Logic: embedded command for child {child} of doc {document_id}: \
+                     child is not open, dropping"
+                );
+                return;
+            }
+            self.handle_app_command_at(child, *command, depth + 1);
+            return;
+        }
+
         let Some(doc) = self.docs.get_mut(&document_id) else {
             tracing::warn!("Logic: no live document {document_id} for app command");
             return;

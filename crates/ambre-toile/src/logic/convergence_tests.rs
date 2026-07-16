@@ -13,7 +13,7 @@ use ambre_bus::UserId;
 
 use crate::logic::autolayout::{Align, AutoLayout, Direction, Sizing};
 use crate::logic::command::{
-    DisplayNode, End, InitContent, PresencePayload, Reaction, ReactionKind, TextDelta,
+    DisplayGeom, DisplayNode, End, InitContent, PresencePayload, Reaction, ReactionKind, TextDelta,
     ToileCommand, ToileError, ToileEvent, ZTarget,
 };
 use crate::logic::model::{
@@ -1927,6 +1927,93 @@ fn derive_viewport_carries_tally_and_skips_deleted_target() {
     assert!(
         !dv.reactions.contains_key(&t),
         "a deleted target must not appear in the derived reaction map"
+    );
+}
+
+// -----------------------------------------------------------------------------
+// doc_embed: the spatial reference to a nested document (§2.I)
+// -----------------------------------------------------------------------------
+
+/// Pull the single `DocEmbed` geometry out of the derived viewport.
+fn only_doc_embed(st: &ToileState) -> Option<DisplayGeom> {
+    st.debug_viewport().nodes.into_iter().find_map(|n| match n {
+        DisplayNode::Element(e) if matches!(e.geom, DisplayGeom::DocEmbed { .. }) => Some(e.geom),
+        _ => None,
+    })
+}
+
+#[test]
+fn doc_embed_reference_survives_the_crdt_round_trip() {
+    // The embed's whole purpose is to name another document. That reference goes
+    // into the CRDT as a string and comes back out through `derive`, so this
+    // asserts the pair survives verbatim: a `document_id` that does not round-trip
+    // points the child session at the wrong document (or nowhere).
+    let mut st = ToileState::new();
+    let child = ambre_core::DocumentId::new();
+
+    st.handle_command(ToileCommand::CreateElement {
+        kind: ElementKind::DocEmbed,
+        at: Point::new(10.0, 10.0),
+        size: Size::new(400.0, 300.0),
+        content: InitContent::DocEmbed {
+            document_id: child,
+            doc_type: ambre_core::DocType::Trame,
+        },
+    });
+
+    let geom = only_doc_embed(&st).expect("the embed must derive as DocEmbed");
+    let DisplayGeom::DocEmbed {
+        document_id,
+        doc_type,
+        focused,
+    } = geom
+    else {
+        unreachable!("filtered above")
+    };
+    assert_eq!(document_id, child, "the child reference did not round-trip");
+    assert_eq!(doc_type, ambre_core::DocType::Trame);
+    // Focus is view-local state, never CRDT (§2.I): derive always says false.
+    assert!(!focused, "focus must not be derived from the document");
+}
+
+#[test]
+fn doc_embed_with_an_unreadable_reference_falls_back_to_a_frame() {
+    // A document written by a newer/broken peer must still paint something. The
+    // element degrades to a plain frame rather than vanishing from the board.
+    let mut st = ToileState::new();
+    st.handle_command(ToileCommand::CreateElement {
+        kind: ElementKind::DocEmbed,
+        at: Point::ZERO,
+        size: Size::new(100.0, 100.0),
+        content: InitContent::DocEmbed {
+            document_id: ambre_core::DocumentId::new(),
+            doc_type: ambre_core::DocType::Toile,
+        },
+    });
+    let id = st
+        .debug_viewport()
+        .nodes
+        .into_iter()
+        .find_map(|n| match n {
+            DisplayNode::Element(e) => Some(e.id),
+            _ => None,
+        })
+        .expect("element present");
+
+    // Corrupt the stored reference behind the engine's back.
+    st.debug_set_element_field(&id, "doc_id", "not-a-uuid");
+
+    assert!(
+        only_doc_embed(&st).is_none(),
+        "an unparsable reference must not derive as a live embed"
+    );
+    let geom = st.debug_viewport().nodes.into_iter().find_map(|n| match n {
+        DisplayNode::Element(e) => Some(e.geom),
+        _ => None,
+    });
+    assert!(
+        matches!(geom, Some(DisplayGeom::Frame)),
+        "expected a Frame placeholder, got {geom:?}"
     );
 }
 

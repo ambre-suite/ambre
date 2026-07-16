@@ -202,6 +202,17 @@ impl ToileState {
 
     pub fn handle_command(&mut self, cmd: ToileCommand) -> ToileOutcome {
         match cmd {
+            // Addressed to an embedded document, not to this board (§2.I). The
+            // Logic dispatcher unwraps it and re-enters on the child, so it only
+            // arrives here if that routing was skipped: report it rather than
+            // apply anything to this board's CRDT.
+            ToileCommand::Embedded { child, .. } => {
+                tracing::warn!(
+                    "Toile: Embedded command for child {child} reached ToileState; \
+                     it should have been unwrapped by the Logic dispatcher"
+                );
+                ToileOutcome::display_only(Vec::new())
+            }
             ToileCommand::CreateElement {
                 kind,
                 at,
@@ -436,6 +447,16 @@ impl ToileState {
     /// helper (the production path returns it inside a `ToileEvent`).
     pub fn debug_viewport(&self) -> crate::logic::command::DisplayViewport {
         self.derive_viewport()
+    }
+
+    /// Overwrite one raw string field of an element's map, behind the engine's
+    /// back. Test helper: it exists to forge the state a newer or broken peer
+    /// could merge into us, which no command of ours can produce.
+    pub fn debug_set_element_field(&mut self, id: &ElementId, key: &str, value: &str) {
+        if let Some(em) = self.element_map(id) {
+            let _ = em.insert(key, value);
+        }
+        self.doc.commit();
     }
 
     /// Connector ids currently in the CRDT, sorted. Test helper.

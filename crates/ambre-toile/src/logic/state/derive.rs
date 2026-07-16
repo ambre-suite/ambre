@@ -177,7 +177,7 @@ impl ToileState {
                 // Parse back the reference; on any parse failure fall to Frame so
                 // the node still paints a placeholder rather than vanishing.
                 match (
-                    ambre_core::Uuid::parse_str(&str_of(em, "doc_id")),
+                    ambre_core::DocumentId::parse_str(&str_of(em, "doc_id")),
                     doc_type_from_tag(&str_of(em, "doc_type")),
                 ) {
                     (Ok(document_id), Some(doc_type)) => DisplayGeom::DocEmbed {
