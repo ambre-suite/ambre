@@ -477,6 +477,27 @@ impl SyncState {
                     message,
                 });
             }
+            SyncEvent::InviteeKeyReady {
+                id,
+                document_id,
+                user_id,
+                display_name,
+                email,
+                exchange_pub_key,
+                fingerprint,
+            } => {
+                self.reply(
+                    id,
+                    RestEvent::InviteeKey {
+                        document_id,
+                        user_id,
+                        display_name,
+                        email,
+                        exchange_pub_key,
+                        fingerprint,
+                    },
+                );
+            }
             SyncEvent::InviteSent {
                 id,
                 document_id,

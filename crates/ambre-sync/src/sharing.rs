@@ -214,11 +214,20 @@ pub(crate) struct InviteParams {
     pub role: Role,
     pub exchange_key: StaticSecret,
     pub doc_key: DocumentKey,
+    /// The exchange key the user pinned in TOFU phase 1 (`ambre-spec-chrome.md
+    /// §2.H`). Sync re-fetched key must still equal it, or the wrap is refused.
+    pub expect_exchange_pub_key: [u8; 32],
 }
 
 /// Invite orchestration: search the invitee by email, ECDH-wrap the document key
 /// for them, POST the share. Success -> `SyncEvent::InviteSent`; every failure ->
 /// `LogicEvent::ApiError` with the leg-specific code.
+///
+/// The re-fetched exchange key is compared against `expect_exchange_pub_key`
+/// (the value pinned in phase 1) **before** wrapping: this closes the TOCTOU
+/// hole where a compromised server serves an honest key to the fingerprint
+/// check and a substituted one to the wrap. A mismatch fails the invite; nothing
+/// is ever wrapped to an unconfirmed key.
 pub(crate) async fn invite_task<H: ShareHttp>(
     http: &H,
     p: InviteParams,
@@ -245,6 +254,19 @@ pub(crate) async fn invite_task<H: ShareHttp>(
     let Some(invitee) = users.iter().find(|u| u.email == p.invitee_email) else {
         return api_error(logic_tx, "InviteToDocument", 404, "User not found".into());
     };
+    // TOFU pin: the re-fetched key must match the one confirmed in phase 1.
+    match decode_exchange_pubkey(&invitee.exchange_pubkey) {
+        Ok(fetched) if fetched == p.expect_exchange_pub_key => {}
+        Ok(_) => {
+            return api_error(
+                logic_tx,
+                "InviteToDocument",
+                409,
+                "Invitee key changed since confirmation; invite refused".into(),
+            );
+        }
+        Err(e) => return api_error(logic_tx, "InviteToDocument", 500, e),
+    }
     let body = match build_invite_request(
         &p.exchange_key,
         &invitee.exchange_pubkey,
@@ -274,6 +296,63 @@ pub(crate) async fn invite_task<H: ShareHttp>(
         }
         Err(e) => api_error(logic_tx, "InviteToDocument", 500, e),
     }
+}
+
+/// Inputs for [`fetch_invitee_key_task`] (TOFU phase 1).
+pub(crate) struct FetchInviteeKeyParams {
+    pub id: RequestId,
+    pub document_id: DocumentId,
+    pub url_scheme: &'static str,
+    pub api_base: String,
+    pub invitee_email: String,
+}
+
+/// TOFU phase 1 (`ambre-spec-chrome.md §2.H`): resolve the invitee by email and
+/// fetch their exchange key, compute its fingerprint, and answer with
+/// `SyncEvent::InviteeKeyReady`. **No key is wrapped and nothing is shared** --
+/// the Main thread makes the trust decision before phase 2 (`invite_task`).
+/// Every failure maps to `LogicEvent::ApiError`.
+pub(crate) async fn fetch_invitee_key_task<H: ShareHttp>(
+    http: &H,
+    p: FetchInviteeKeyParams,
+    event_tx: &flume::Sender<SyncEvent>,
+    logic_tx: &LogicSink,
+) {
+    let search_url = format!(
+        "{}://{}/api/users/search?query={}",
+        p.url_scheme,
+        p.api_base,
+        p.invitee_email.replace('@', "%40")
+    );
+    let users = match http.get_json::<http::UserSearchResult>(&search_url).await {
+        Ok(resp) => resp.users,
+        Err(e) => {
+            return api_error(
+                logic_tx,
+                "FetchInviteeKey",
+                500,
+                format!("User search failed: {e}"),
+            );
+        }
+    };
+    let Some(invitee) = users.iter().find(|u| u.email == p.invitee_email) else {
+        return api_error(logic_tx, "FetchInviteeKey", 404, "User not found".into());
+    };
+    let exchange_pub_key = match decode_exchange_pubkey(&invitee.exchange_pubkey) {
+        Ok(key) => key,
+        Err(e) => return api_error(logic_tx, "FetchInviteeKey", 500, e),
+    };
+    let fingerprint = ambre_crypto::fingerprint(&exchange_pub_key);
+    let user_id = UserId::parse_str(&invitee.id).unwrap_or_else(|_| UserId::new());
+    let _ = event_tx.send(SyncEvent::InviteeKeyReady {
+        id: p.id,
+        document_id: p.document_id,
+        user_id,
+        display_name: invitee.display_name.clone(),
+        email: invitee.email.clone(),
+        exchange_pub_key,
+        fingerprint,
+    });
 }
 
 /// Inputs for [`revoke_task`], gathered from `SyncState` before spawning.
@@ -614,7 +693,7 @@ mod tests {
         } ] })
     }
 
-    fn invite_params(my_xk: &StaticSecret) -> InviteParams {
+    fn invite_params(my_xk: &StaticSecret, expect: [u8; 32]) -> InviteParams {
         InviteParams {
             id: RequestId::next(),
             document_id: DocumentId::new(),
@@ -624,6 +703,7 @@ mod tests {
             role: Role::Editor,
             exchange_key: my_xk.clone(),
             doc_key: DocumentKey::generate(),
+            expect_exchange_pub_key: expect,
         }
     }
 
@@ -632,6 +712,7 @@ mod tests {
         let (my_xk, my_pub_hex) = keypair(1);
         let my_pub = decode_exchange_pubkey(&my_pub_hex).unwrap();
         let (invitee_xk, invitee_pub_hex) = keypair(2);
+        let invitee_pub = decode_exchange_pubkey(&invitee_pub_hex).unwrap();
 
         let http = FakeHttp::new(vec![
             Ok(user_search_json("invitee@test.local", &invitee_pub_hex)),
@@ -641,7 +722,7 @@ mod tests {
             })),
         ]);
         let (etx, erx, sink, lrx) = channels();
-        invite_task(&http, invite_params(&my_xk), &etx, &sink).await;
+        invite_task(&http, invite_params(&my_xk, invitee_pub), &etx, &sink).await;
 
         // Success event, no error.
         match erx.try_recv().expect("InviteSent emitted") {
@@ -669,7 +750,7 @@ mod tests {
         let (my_xk, _) = keypair(1);
         let http = FakeHttp::new(vec![Ok(serde_json::json!({ "users": [] }))]);
         let (etx, erx, sink, lrx) = channels();
-        invite_task(&http, invite_params(&my_xk), &etx, &sink).await;
+        invite_task(&http, invite_params(&my_xk, [0u8; 32]), &etx, &sink).await;
 
         match lrx.try_recv().expect("ApiError emitted") {
             LogicEvent::ApiError { code, .. } => assert_eq!(code, 404),
@@ -685,7 +766,7 @@ mod tests {
         let (my_xk, _) = keypair(1);
         let http = FakeHttp::new(vec![Err("network down".into())]);
         let (etx, _erx, sink, lrx) = channels();
-        invite_task(&http, invite_params(&my_xk), &etx, &sink).await;
+        invite_task(&http, invite_params(&my_xk, [0u8; 32]), &etx, &sink).await;
 
         match lrx.try_recv().expect("ApiError emitted") {
             LogicEvent::ApiError { code, message, .. } => {
@@ -694,6 +775,90 @@ mod tests {
             }
             other => panic!("unexpected: {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn invite_pin_mismatch_refuses_and_never_wraps() {
+        // The server serves a DIFFERENT key at phase 2 than the one pinned at
+        // phase 1 (the TOCTOU attack). The pin must refuse before any wrap.
+        let (my_xk, _) = keypair(1);
+        let (_confirmed_xk, confirmed_hex) = keypair(2);
+        let confirmed = decode_exchange_pubkey(&confirmed_hex).unwrap();
+        let (_substituted_xk, substituted_hex) = keypair(9);
+
+        let http = FakeHttp::new(vec![Ok(user_search_json(
+            "invitee@test.local",
+            &substituted_hex, // server returns the substituted key
+        ))]);
+        let (etx, erx, sink, lrx) = channels();
+        // We confirmed `confirmed`, not the substituted key the server now serves.
+        invite_task(&http, invite_params(&my_xk, confirmed), &etx, &sink).await;
+
+        match lrx.try_recv().expect("ApiError emitted") {
+            LogicEvent::ApiError { code, message, .. } => {
+                assert_eq!(code, 409);
+                assert!(message.contains("key changed"), "got: {message}");
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
+        assert!(erx.try_recv().is_err(), "no InviteSent on mismatch");
+        // Only the search ran: nothing was wrapped, no share POST fired.
+        assert_eq!(http.calls().len(), 1);
+    }
+
+    fn fetch_key_params() -> FetchInviteeKeyParams {
+        FetchInviteeKeyParams {
+            id: RequestId::next(),
+            document_id: DocumentId::new(),
+            url_scheme: "https",
+            api_base: "api.test".into(),
+            invitee_email: "invitee@test.local".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn fetch_invitee_key_emits_key_and_matching_fingerprint() {
+        let (_invitee_xk, invitee_pub_hex) = keypair(2);
+        let invitee_pub = decode_exchange_pubkey(&invitee_pub_hex).unwrap();
+
+        let http = FakeHttp::new(vec![Ok(user_search_json(
+            "invitee@test.local",
+            &invitee_pub_hex,
+        ))]);
+        let (etx, erx, sink, lrx) = channels();
+        fetch_invitee_key_task(&http, fetch_key_params(), &etx, &sink).await;
+
+        match erx.try_recv().expect("InviteeKeyReady emitted") {
+            SyncEvent::InviteeKeyReady {
+                exchange_pub_key,
+                fingerprint,
+                email,
+                ..
+            } => {
+                assert_eq!(exchange_pub_key, invitee_pub);
+                assert_eq!(email, "invitee@test.local");
+                // The fingerprint is the one the chrome will display: it matches
+                // an independent recomputation over the same key.
+                assert_eq!(fingerprint, ambre_crypto::fingerprint(&invitee_pub));
+            }
+            _ => panic!("unexpected event (want InviteeKeyReady)"),
+        }
+        assert!(lrx.try_recv().is_err(), "no ApiError on success");
+        // Phase 1 only searches: no wrapping, no share POST.
+        assert_eq!(http.calls().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn fetch_invitee_key_unknown_user_emits_404() {
+        let http = FakeHttp::new(vec![Ok(serde_json::json!({ "users": [] }))]);
+        let (etx, erx, sink, lrx) = channels();
+        fetch_invitee_key_task(&http, fetch_key_params(), &etx, &sink).await;
+
+        match lrx.try_recv().expect("ApiError emitted") {
+            LogicEvent::ApiError { code, .. } => assert_eq!(code, 404),
+            other => panic!("unexpected: {other:?}"),
+        }
+        assert!(erx.try_recv().is_err(), "no key event for unknown user");
     }
 
     fn revoke_params(my_xk: &StaticSecret) -> RevokeParams {

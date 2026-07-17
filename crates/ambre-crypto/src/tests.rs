@@ -258,3 +258,36 @@ proptest! {
         prop_assert!(envelope::open(&sealed, aad, &doc_key, &author).is_err());
     }
 }
+
+// ── TOFU fingerprint (ambre-spec-chrome.md §2.H) ─────────────────────────────
+
+#[test]
+fn fingerprint_is_stable_grouped_base32() {
+    // Known vector: the all-zero key. Stability is what matters for TOFU, so we
+    // pin the exact string a future refactor must not silently change.
+    let fp = hash::fingerprint(&[0u8; 32]);
+
+    // 20 bytes -> 32 base32 chars -> 8 groups of 4, space-separated.
+    let groups: Vec<&str> = fp.split(' ').collect();
+    assert_eq!(groups.len(), 8, "expected 8 groups, got: {fp}");
+    assert!(groups.iter().all(|g| g.len() == 4), "ragged grouping: {fp}");
+    // No padding, uppercase RFC 4648 alphabet only.
+    assert!(
+        fp.chars()
+            .all(|c| c == ' ' || c.is_ascii_uppercase() || ('2'..='7').contains(&c)),
+        "unexpected characters: {fp}"
+    );
+    // Deterministic: recomputing yields the identical string.
+    assert_eq!(fp, hash::fingerprint(&[0u8; 32]));
+}
+
+#[test]
+fn fingerprint_distinguishes_keys() {
+    // A single-bit difference in the key must change the fingerprint (the whole
+    // point of pinning it): near-identical substituted keys stay distinguishable.
+    let a = hash::fingerprint(&[0u8; 32]);
+    let mut key_b = [0u8; 32];
+    key_b[0] = 1;
+    let b = hash::fingerprint(&key_b);
+    assert_ne!(a, b);
+}

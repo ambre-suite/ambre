@@ -35,6 +35,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
         formula_ref,
         formula_text,
         formula_action,
+        tofu_prompt,
+        tofu_confirm,
+        invite_role,
         sel_stats,
         sel_stats_toile,
         present_toile,
@@ -108,10 +111,31 @@ pub(crate) fn AppRoot() -> impl IntoView {
         let raf = raf.clone();
         move |()| raf.resume()
     });
+
+    // TOFU verification modal (`ambre-spec-chrome.md §2.H`). `tofu_open` mirrors
+    // `tofu_prompt` (Some => open): the relay sets the prompt on a New/Changed
+    // key, and this effect drives the native `<dialog>` accordingly. Same rAF
+    // suspend/resume as the other modals.
+    let tofu_open = RwSignal::new(false);
+    Effect::new(move |_| tofu_open.set(tofu_prompt.get().is_some()));
+    let tofu_on_open = Callback::new({
+        let raf = raf.clone();
+        move |()| raf.pause()
+    });
+    let tofu_on_close = Callback::new({
+        let raf = raf.clone();
+        // A native close (Escape / backdrop / Cancel) is a refusal: clear the
+        // pending prompt so nothing is pinned and phase 2 never fires.
+        move |()| {
+            raf.resume();
+            tofu_prompt.set(None);
+        }
+    });
+
     // Invite form state: the typed invitee (email, or a bare username in dev
-    // mode) and the role to grant.
+    // mode). The role to grant lives in `invite_role` (shared via `Wiring`, since
+    // the two-phase TOFU invite dispatches phase 2 outside this component).
     let invitee_input = RwSignal::new(String::new());
-    let invite_role = RwSignal::new(Role::Editor);
 
     // Canvas right-click -> context menu (the launcher owns the listener since
     // the canvas is created by the AppShell).
@@ -740,12 +764,15 @@ pub(crate) fn AppRoot() -> impl IntoView {
                             } else {
                                 raw.to_owned()
                             };
+                            // TOFU phase 1 (`ambre-spec-chrome.md §2.H`): fetch the
+                            // invitee's key + fingerprint without wrapping. The role
+                            // is kept in `invite_role`; the relay dispatches phase 2
+                            // (the actual share) once the trust decision is made.
                             let _ = tx.try_send(LogicCommand::Rest {
                                 id: RequestId::next(),
-                                cmd: RestCommand::InviteToDocument {
+                                cmd: RestCommand::FetchInviteeKey {
                                     document_id,
                                     invitee_email,
-                                    role: invite_role.get_untracked(),
                                 },
                             });
                             invitee_input.set(String::new());
@@ -785,6 +812,93 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     <button on:click=move |_| share_open.set(false)>"Close"</button>
                 </div>
             </div>
+        </Dialog>
+
+        // TOFU key verification (`ambre-spec-chrome.md §2.H`). A modal `Dialog`,
+        // never a toast: a possible server MITM must not auto-dismiss. Shown only
+        // for a New key (confirm before the first share) or a Changed key (a
+        // blocking alert whose default action is Cancel).
+        <Dialog
+            open=tofu_open
+            on_open=tofu_on_open
+            on_close=tofu_on_close
+            class="ambre-tofu"
+        >
+            {move || {
+                tofu_prompt
+                    .get()
+                    .map(|p| {
+                        let changed = p.changed;
+                        let fp_copy = p.fingerprint.clone();
+                        let confirm_p = p.clone();
+                        view! {
+                            <div class="ambre-tofu-panel">
+                                <h2>
+                                    {if changed {
+                                        "Recipient key changed"
+                                    } else {
+                                        "Verify recipient key"
+                                    }}
+                                </h2>
+                                <p class="ambre-tofu-who">
+                                    <span class="ambre-tofu-name">{p.display_name.clone()}</span>
+                                    <span class="ambre-tofu-email">{p.email.clone()}</span>
+                                </p>
+                                {changed
+                                    .then(|| {
+                                        view! {
+                                            <p class="ambre-tofu-warning" role="alert">
+                                                "This user's key differs from the one you trusted before. \
+                                                 A legitimate cause exists (they reinstalled and lost their \
+                                                 keys), but a compromised server can also substitute keys. \
+                                                 Re-verify out of band before proceeding."
+                                            </p>
+                                        }
+                                    })}
+                                <p class="ambre-tofu-fingerprint">{p.fingerprint.clone()}</p>
+                                <button
+                                    r#type="button"
+                                    class="ambre-tofu-copy"
+                                    on:click=move |_| {
+                                        if let Some(win) = web_sys::window() {
+                                            let _ = win.navigator().clipboard().write_text(&fp_copy);
+                                        }
+                                    }
+                                >
+                                    "Copy fingerprint"
+                                </button>
+                                <p class="ambre-tofu-limit">
+                                    "Without out-of-band verification (in person, phone, SMS), this \
+                                     protection reduces to trusting the server. Compare this fingerprint \
+                                     with the recipient over a channel the server does not control."
+                                </p>
+                                <div class="ambre-dialog-actions">
+                                    // Cancel is the default action (§2.H): closing
+                                    // the modal pins nothing and sends no key.
+                                    <button
+                                        r#type="button"
+                                        class="ambre-tofu-cancel"
+                                        on:click=move |_| tofu_prompt.set(None)
+                                    >
+                                        "Cancel"
+                                    </button>
+                                    <button
+                                        r#type="button"
+                                        class="ambre-tofu-confirm"
+                                        on:click=move |_| {
+                                            // Hand the pin + phase-2 dispatch to the
+                                            // relay (it owns the trusted_keys store).
+                                            tofu_confirm.set(Some(confirm_p.clone()));
+                                            tofu_prompt.set(None);
+                                        }
+                                    >
+                                        {if changed { "Re-pin and invite" } else { "Confirm and invite" }}
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    })
+            }}
         </Dialog>
 
         <ContextMenu pos=ctx_menu entries=ctx_entries on_command=on_command />

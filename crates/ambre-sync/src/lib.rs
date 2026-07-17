@@ -76,7 +76,10 @@ pub struct LogicSink(std::rc::Rc<dyn Fn(LogicEvent)>);
 /// Returned by [`LogicSink::send`]. The send is infallible in practice (the
 /// closure always accepts the event); the type mirrors a channel `SendError` so
 /// existing call sites are unchanged.
-pub struct SendError(pub LogicEvent);
+/// The failed event is boxed so the `Err` variant stays small (the `LogicEvent`
+/// payload is large): `send` is in practice infallible, so this never allocates
+/// on the hot path.
+pub struct SendError(pub Box<LogicEvent>);
 
 impl LogicSink {
     /// Wrap an arbitrary emit closure.
@@ -260,6 +263,18 @@ enum SyncEvent {
     HttpError {
         id: RequestId,
         message: String,
+    },
+    /// TOFU phase 1 (`ambre-spec-chrome.md §2.H`): the invitee was resolved and
+    /// their exchange key fetched, with a formatted fingerprint. No key wrapped
+    /// yet -- the Main thread decides trust before phase 2 wraps.
+    InviteeKeyReady {
+        id: RequestId,
+        document_id: DocumentId,
+        user_id: UserId,
+        display_name: String,
+        email: String,
+        exchange_pub_key: [u8; 32],
+        fingerprint: String,
     },
     /// Invite completed: the invitee's DocumentKey was wrapped via ECDH and the
     /// server accepted the share request.
@@ -718,7 +733,7 @@ impl SyncState {
         if let Err(SendError(ev)) = self.logic_tx.send(event) {
             tracing::warn!(
                 "Sync: Logic receiver dropped, discarding {:?}",
-                std::mem::discriminant(&ev),
+                std::mem::discriminant(&*ev),
             );
         }
     }
@@ -920,12 +935,25 @@ impl SyncState {
             }
 
             // -- Sharing -------------------------------------------------------
+            RestCommand::FetchInviteeKey {
+                document_id,
+                invitee_email,
+            } => {
+                self.handle_fetch_invitee_key(id, document_id, invitee_email);
+            }
             RestCommand::InviteToDocument {
                 document_id,
                 invitee_email,
                 role,
+                expect_exchange_pub_key,
             } => {
-                self.handle_invite_to_document(id, document_id, invitee_email, role);
+                self.handle_invite_to_document(
+                    id,
+                    document_id,
+                    invitee_email,
+                    role,
+                    expect_exchange_pub_key,
+                );
             }
             RestCommand::RevokeFromDocument {
                 document_id,

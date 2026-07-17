@@ -10,12 +10,52 @@ impl SyncState {
     ///
     /// On the WASM path, the async HTTP work is spawned via `spawn_local` and
     /// the result flows back as [`SyncEvent::InviteSent`].
+    /// TOFU phase 1 (`ambre-spec-chrome.md §2.H`): resolve the invitee and fetch
+    /// their exchange key + fingerprint, without wrapping anything. Delegates to
+    /// [`sharing::fetch_invitee_key_task`], generic over the transport so it is
+    /// unit-tested natively.
+    pub(crate) fn handle_fetch_invitee_key(
+        &self,
+        id: RequestId,
+        document_id: DocumentId,
+        invitee_email: String,
+    ) {
+        let event_tx = self.event_tx.clone();
+        let logic_tx = self.logic_tx.clone();
+        let api_base = self.api_base.clone();
+        let url_scheme = self.url_scheme;
+        let auth = self.auth_context();
+
+        let Some(tx) = event_tx else {
+            // No transport (test/headless): nothing to fetch, no reply possible.
+            let _ = logic_tx.send(LogicEvent::ApiError {
+                request: "FetchInviteeKey".into(),
+                code: 503,
+                message: "Sync transport unavailable".into(),
+            });
+            return;
+        };
+
+        let params = sharing::FetchInviteeKeyParams {
+            id,
+            document_id,
+            url_scheme,
+            api_base,
+            invitee_email,
+        };
+        let http = sharing::GlooHttp { auth };
+        wasm_bindgen_futures::spawn_local(async move {
+            sharing::fetch_invitee_key_task(&http, params, &tx, &logic_tx).await;
+        });
+    }
+
     pub(crate) fn handle_invite_to_document(
         &self,
         id: RequestId,
         document_id: DocumentId,
         invitee_email: String,
         role: Role,
+        expect_exchange_pub_key: [u8; 32],
     ) {
         let event_tx = self.event_tx.clone();
         let logic_tx = self.logic_tx.clone();
@@ -68,6 +108,7 @@ impl SyncState {
             role,
             exchange_key,
             doc_key,
+            expect_exchange_pub_key,
         };
         let http = sharing::GlooHttp { auth };
         wasm_bindgen_futures::spawn_local(async move {
