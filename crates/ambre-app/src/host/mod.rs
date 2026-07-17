@@ -25,7 +25,7 @@
 // ============================================================================
 
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::rc::Rc;
 
 use parley::FontContext;
@@ -33,14 +33,17 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
-use ambre_bus::DocumentId;
+use ambre_bus::{DocType, DocumentId};
 use ambre_canvas::theme::{FONT_BODY, FONT_HEADING};
 use ambre_canvas::{
     ContentRepaint, FrameStats, GpuState, InputEvent, Layer, OverlayRepaint, RafControl,
     RepaintPlan, TextCache, TextInput, WgpuSurface, bootstrap_gpu, fatal_message, start_raf_loop,
 };
-use ambre_draw::{Affine, Alignment, Brush, Color, DrawSurface, PositionedLayoutItem, Rect};
+use ambre_draw::{
+    Affine, Alignment, Brush, Color, DrawSurface, Point, PositionedLayoutItem, Rect, Size,
+};
 use ambre_toile::ui::ToileView;
+use ambre_toile::ui::embed::VisibleEmbed;
 use ambre_trame::ui::TrameView;
 
 use base64::Engine as _;
@@ -51,7 +54,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 mod frame;
 mod run;
 
-pub use frame::FrameHost;
+pub use frame::{FrameHost, MakeChild};
 pub use run::run_with;
 
 /// Private clipboard MIME type carrying the base64 postcard
@@ -230,6 +233,35 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.set_document(document_id),
             AppView::Toile(v) => v.set_document(document_id),
+        }
+    }
+
+    /// The nested `doc_embed`s this view wants painted, projected to screen space
+    /// (§2.I "Render"). Only a Toile embeds documents; every other app returns
+    /// an empty set, so `FrameHost` owns no children for it.
+    fn visible_embeds(&self) -> Vec<VisibleEmbed> {
+        match self {
+            AppView::Toile(v) => v.visible_embeds(),
+            AppView::Trame(_) => Vec::new(),
+        }
+    }
+
+    /// The child document the last input event was routed into (§2.I "Input
+    /// focus"), for `FrameHost` to forward the remapped event to. `None` off a
+    /// Toile, or when the board itself consumed the event.
+    fn child_route(&self) -> Option<DocumentId> {
+        match self {
+            AppView::Toile(v) => v.child_route(),
+            AppView::Trame(_) => None,
+        }
+    }
+
+    /// Map a physical screen point into the focused embed's child pixel space
+    /// (§2.I). `None` off a Toile or when nothing is focused.
+    fn embed_to_child_space(&self, screen: Point) -> Option<Point> {
+        match self {
+            AppView::Toile(v) => v.embed_to_child_space(screen),
+            AppView::Trame(_) => None,
         }
     }
 }

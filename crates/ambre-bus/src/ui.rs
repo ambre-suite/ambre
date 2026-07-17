@@ -145,6 +145,27 @@ pub enum UiEvent {
     FatalError { message: String },
 }
 
+impl UiEvent {
+    /// The `DocumentId` this event is addressed to, for the per-document fan-out
+    /// a nested `doc_embed` needs (architecture §2.D / toile-logic §2.I): a Toile
+    /// embedding another document owns a child view whose Logic->UI stream must be
+    /// demultiplexed out of the single shared channel. Only the variants a *view*
+    /// consumes carry a routing id; service-plane and app-global events
+    /// (`Rest`, `DocumentShared`, channel/meeting push, errors, `FatalError`)
+    /// return `None` and stay on the top-level path.
+    pub fn routed_document_id(&self) -> Option<DocumentId> {
+        match self {
+            UiEvent::Viewport { document_id, .. }
+            | UiEvent::Presence { document_id, .. }
+            | UiEvent::ConnectionStatus { document_id, .. }
+            | UiEvent::DocumentReady { document_id, .. }
+            | UiEvent::SyncWarning { document_id, .. }
+            | UiEvent::MemberRevoked { document_id, .. } => Some(*document_id),
+            _ => None,
+        }
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // AppEvent — typed application event family (content plane)
 // ─────────────────────────────────────────────────────────────────────────────

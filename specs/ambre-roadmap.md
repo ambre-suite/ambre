@@ -280,12 +280,14 @@ Stories:
   support: Trame / Toile today, Prose joins with its engine (`E5`). Unblocks creating a Toile from the UI
   (previously only reachable by hand-typing `/toile/<uuid>`). Belt: `landing.rs` wasm/DOM tests +
   `route::needs_reload` + `DocType::creatable` tests.
-- `[ ]` `ARCH P6` (composition & cross-app plane) — four slices, detailed in `ambre-spec-architecture.md §7`:
-  **(1) presence identity** (the `signing_pub_key` -> `UserId` directory, unblocking the already-complete Logic
-  presence path), **(2) `Role` on `DocState`** (UX gate; the server stays authoritative), **(3) composition**
-  (a `doc_embed` **editable in place** per `toile-logic §2.I`; the Logic registry is flat so the child is
-  addressed by its own id and no bus variant is needed — the work is the input-focus transform and
-  `FrameHost`-driven child input + rendering), **(4) TOFU UI**
+- `[ ]` `ARCH P6` (composition & cross-app plane) — four slices, detailed in `ambre-spec-architecture.md §7`.
+  **Slices 1-3 delivered; slice 4 (TOFU) remains.**
+  **(1) presence identity** `[x]` (the `signing_pub_key` -> `UserId` directory, unblocking the already-complete
+  Logic presence path), **(2) `Role` on `DocState`** `[x]` (UX gate; the server stays authoritative),
+  **(3) composition** `[x]` (a `doc_embed` **editable in place** per `toile-logic §2.I`; the Logic registry is
+  flat so the child is addressed by its own id and no bus variant is needed — the input-focus transform and
+  session lifecycle in `ambre-toile/src/ui/embed.rs`, the `FrameHost`-driven child input + rendering and the
+  per-document Logic->UI fan-out in `ambre-app/src/host/`), **(4) TOFU UI** `[ ]`
   (`chrome §2.H` / `CHROME P5`). Slices 1 and 2 need **no server change**: `GET /members` already returns the
   signing keys and the roles, and the open path already fetches it. The spatial `DocState` itself -- typed
   `ToileState` behind the `ambre-logic` `match`, `rstar` R-tree culling, the IPC contract
