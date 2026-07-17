@@ -12,6 +12,14 @@
 use ambre_bus::UserId;
 use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 
+#[cfg(feature = "pdf")]
+use kurbo::Rect;
+
+#[cfg(feature = "pdf")]
+use crate::logic::interop::{PageSize, PdfPage};
+#[cfg(feature = "pdf")]
+use crate::ui::viewport::{FIT_PAD, ViewportTransform};
+
 use crate::logic::command::{
     PresencePayload, SlideChange, TextDelta, ToileError, ToileEvent, ToileOutcome,
 };
@@ -303,6 +311,72 @@ impl ToileState {
             .unwrap_or_default()
     }
 
+    // -- PDF export pages (toile-interop §3.A / §7) ----------------------------
+
+    /// Build one [`PdfPage`] per presentation slide for an export at `page` size
+    /// (`toile-interop §3.A` / §7). Each page's camera fits the frame's world
+    /// rect into the page with the same `FIT_PAD` the on-screen present glide
+    /// uses (`ui::view`), and the page is clipped to that frame rect, so the PDF
+    /// matches what the audience sees. A dangling `FrameId` (present in the deck
+    /// but with no element) is skipped like a dangling connector (§5.A). An empty
+    /// deck falls back to a single, unclipped page fitted to the whole board
+    /// content; a board with no content at all yields no pages, and the caller's
+    /// [`export_pdf`](crate::logic::interop::export_pdf) reports
+    /// [`Empty`](crate::logic::interop::PdfExportError::Empty). Read-only: every
+    /// page is derived through [`derive_viewport_at`](Self::derive_viewport_at)
+    /// without touching `self.viewport`.
+    #[cfg(feature = "pdf")]
+    pub fn pdf_pages(&self, page: PageSize) -> Vec<PdfPage> {
+        // The camera that frames `rect` into the page, padded like the live
+        // present glide so the slide never touches the page edge.
+        let fit = |rect: Rect| {
+            let mut cam = ViewportTransform::new(page.width, page.height);
+            cam.fit_bounds(rect, FIT_PAD);
+            cam
+        };
+
+        let slides: Vec<(FrameId, Rect)> = self
+            .slide_order()
+            .into_iter()
+            .filter_map(|f| self.element_rect(&f).map(|r| (f, r)))
+            .collect();
+
+        if slides.is_empty() {
+            // Empty deck: one page framing the whole board (unclipped). No
+            // content at all yields no page, so the export reports `Empty`.
+            return match self.content_bounds() {
+                Some(bounds) => {
+                    let camera = fit(bounds);
+                    vec![PdfPage {
+                        viewport: self.derive_viewport_at(camera.to_bus_viewport()),
+                        camera,
+                        clip: None,
+                    }]
+                }
+                None => Vec::new(),
+            };
+        }
+
+        slides
+            .into_iter()
+            .map(|(_frame, rect)| {
+                let camera = fit(rect);
+                PdfPage {
+                    viewport: self.derive_viewport_at(camera.to_bus_viewport()),
+                    camera,
+                    clip: Some(rect),
+                }
+            })
+            .collect()
+    }
+
+    /// The union AABB of every element's world bounds, or `None` if the board
+    /// holds no element. Frames the empty-deck PDF fallback page.
+    #[cfg(feature = "pdf")]
+    fn content_bounds(&self) -> Option<Rect> {
+        self.bounds.values().copied().reduce(|acc, r| acc.union(r))
+    }
+
     // -- container helpers -----------------------------------------------------
 
     /// The `presentation.order` movable list, if the deck has been seeded.
@@ -361,4 +435,83 @@ fn slide_order_of(list: &LoroMovableList) -> Vec<String> {
         }
     }
     out
+}
+
+#[cfg(all(test, feature = "pdf"))]
+mod pdf_tests {
+    use kurbo::{Point, Size};
+
+    use crate::logic::command::{InitContent, ToileCommand, ToileEvent};
+    use crate::logic::interop::PageSize;
+    use crate::logic::model::{ElementId, ElementKind, FrameId};
+    use crate::logic::state::ToileState;
+
+    /// Create a frame at `(x, y)` sized `w x h` and return its minted id.
+    fn frame_at(st: &mut ToileState, x: f64, y: f64, w: f64, h: f64) -> FrameId {
+        let out = st.handle_command(ToileCommand::CreateElement {
+            kind: ElementKind::Frame,
+            at: Point::new(x, y),
+            size: Size::new(w, h),
+            content: InitContent::None,
+        });
+        out.display
+            .into_iter()
+            .find_map(|e| match e {
+                ToileEvent::ElementCreated(id) => Some(id),
+                _ => None,
+            })
+            .expect("frame creation yields an id")
+    }
+
+    /// One page is produced per slide in the deck, in playback order, each
+    /// clipped to its frame rect (§7).
+    #[test]
+    fn one_page_per_slide() {
+        let mut st = ToileState::new();
+        let a = frame_at(&mut st, 0.0, 0.0, 200.0, 100.0);
+        let b = frame_at(&mut st, 500.0, 0.0, 200.0, 100.0);
+        st.handle_command(ToileCommand::SetSlideOrder { order: vec![a, b] });
+
+        let pages = st.pdf_pages(PageSize::default());
+        assert_eq!(pages.len(), 2, "one page per slide");
+        assert!(
+            pages.iter().all(|p| p.clip.is_some()),
+            "every slide page is clipped to its frame rect"
+        );
+    }
+
+    /// A dangling `FrameId` in the deck (no such element) is skipped at
+    /// derivation, so it produces no page (§5.A).
+    #[test]
+    fn dangling_frame_is_skipped() {
+        let mut st = ToileState::new();
+        let a = frame_at(&mut st, 0.0, 0.0, 200.0, 100.0);
+        st.handle_command(ToileCommand::SetSlideOrder {
+            order: vec![a, ElementId("ghost".to_owned())],
+        });
+
+        let pages = st.pdf_pages(PageSize::default());
+        assert_eq!(pages.len(), 1, "the dangling frame yields no page");
+        assert!(pages[0].clip.is_some());
+    }
+
+    /// An empty deck with board content falls back to a single, unclipped page
+    /// fitted to the whole board.
+    #[test]
+    fn empty_deck_falls_back_to_one_page() {
+        let mut st = ToileState::new();
+        frame_at(&mut st, 0.0, 0.0, 200.0, 100.0);
+        // No SetSlideOrder: the deck is empty.
+        let pages = st.pdf_pages(PageSize::default());
+        assert_eq!(pages.len(), 1, "empty deck -> one whole-content page");
+        assert!(pages[0].clip.is_none(), "the fallback page is unclipped");
+    }
+
+    /// A board with no content at all yields no pages (the export then reports
+    /// `Empty`).
+    #[test]
+    fn empty_board_yields_no_pages() {
+        let st = ToileState::new();
+        assert!(st.pdf_pages(PageSize::default()).is_empty());
+    }
 }
