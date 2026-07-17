@@ -360,7 +360,7 @@ The rendering layer consists of pure drawing primitives. ZK audit:
 | `AppView::update` (drain flume `UiEvent`) | < 0.1 ms | Inbound IPC, dirty flag mutations |
 | Content hit-test + input dispatch (in view) | < 0.2 ms | `AppView::handle_input` (pointer/keyboard on canvas area) |
 | View state update | < 0.5 ms | Internal state mutations, transition logic |
-| Text layout (Parley, dirty paragraph) | < 2 ms | Worst case: full Prose document layout. Typical < 0.5 ms |
+| Text layout (Parley, dirty paragraph) | < 2 ms | UI-thread shaping for the single-line editor case (Trame cells). **Prose does NOT shape on the UI thread** — pagination shapes in the Logic thread and ships pre-shaped `ParleyRunData`, so this row is ~0 for Prose (`ambre-spec-prose-logic.md §2.B`, `ambre-spec-prose-ui.md §B`). Typical < 0.5 ms |
 | Content accessibility diff (AccessKit) | < 0.2 ms | OS notifications on delta only |
 | Build vertex batch (dirty only) | < 1 ms | `QuadRenderer::begin_frame` + draw scene. Zero allocation in steady state |
 | GPU upload + render pass | < 1 ms | `write_buffer` + up to 3 draw calls per layer (quads, mask glyphs, color glyphs). Typical 0.3–0.5 ms |

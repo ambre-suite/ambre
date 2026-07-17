@@ -358,13 +358,13 @@ pub enum LogicEvent {
     Rest { id: RequestId, evt: RestEvent },
     RemoteUpdate   { document_id: DocumentId, payload: Vec<u8> },  // decrypted/decompressed -> LoroDoc::import
     RemoteSnapshot { document_id: DocumentId, payload: Vec<u8> },
-    RemoteEphemeral{ document_id: DocumentId, payload: Vec<u8> },
+    RemoteEphemeral{ document_id: DocumentId, from_user_id: UserId, payload: Vec<u8> }, // author resolved by Sync (spoof-proof, ambre-spec-sync.md §3); payload = PresencePayload (no user_id)
     ConnectionStatus { document_id: DocumentId, connected: bool },
     SyncWarning { document_id: DocumentId, code: u16, message: String },
     SnapshotNeeded { document_id: DocumentId },                   // -> export_snapshot -> SendSnapshot
     MemberRevoked { document_id: DocumentId, revoked_user_id: UserId },
     ChannelRemoteUpdate { channel_id: ChannelId, payload: Vec<u8> },
-    ChannelRemoteEphemeral { channel_id: ChannelId, payload: Vec<u8> },
+    ChannelRemoteEphemeral { channel_id: ChannelId, from_user_id: UserId, payload: Vec<u8> }, // same spoof-proof rule as RemoteEphemeral
     ChannelConnectionStatus { channel_id: ChannelId, connected: bool },
     ChannelSnapshotNeeded { channel_id: ChannelId },
     MeetingParticipantJoined { meeting_id: MeetingId, user_id: UserId },

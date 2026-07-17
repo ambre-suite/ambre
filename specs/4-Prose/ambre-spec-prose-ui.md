@@ -2,15 +2,21 @@
 **Type:** Vertical (Feature/Widget)
 **Status:** Draft
 
-> Prose presentation layer: wgpu/Parley rendering (DrawSurface), interactive rich editor
-> (cursor, selection, IME), page-based virtual scroll, floating toolbar, slash command,
-> collaborative cursors, comment display, and track changes. Everything runs in the UI
-> thread — no CRDT mutation is performed directly here.
+> Prose presentation layer: wgpu/Parley **content** rendering (DrawSurface) of the page
+> column, caret, selections, collaborative cursors, and inline comment/track-change
+> highlights; page-based virtual scroll; input via the shared transparent `<textarea>`
+> (keyboard/IME/clipboard). The application **chrome** (contextual toolbar, slash menu,
+> ruler, comment side panel, accept/reject) is **DOM/Leptos** (`ambre-chrome`), not canvas.
+> No CRDT mutation is performed here — every mutation is a `ProseCommand` to the Logic thread.
 
-> **Architecture note.** **3-thread shared-memory architecture** (`flume` channels, single WASM binary) — see `ambre-spec-architecture.md`. For this spec:
-> - **Typed `flume` transport, no `postMessage`/postcard.** The UI sends `LogicCommand::App { document_id, command: AppCommand::Prose(ProseCommand) }` and receives `UiEvent::Viewport/Presence { event: AppEvent::Prose(ProseEvent) }` — Rust values **by move** on `flume`, no serialization on the UI side.
+> **Architecture note.** The client uses the **two-instance model** — a **Main** WASM
+> instance (UI thread + Logic thread sharing one linear memory via `wasm_thread`, typed
+> `flume` values) and a **separate Sync worker** — see `ambre-spec-architecture.md §2.B`.
+> For this spec:
+> - **Typed `flume` transport, no `postMessage`/postcard on the UI ↔ Logic path.** The UI sends `LogicCommand::App { document_id, command: AppCommand::Prose(ProseCommand) }` and receives `UiEvent::Viewport { event: AppEvent::Prose(ProseEvent) }` — Rust values **by move** on `flume`, no serialization on the UI side. (`postMessage`/postcard is only the Main ↔ Sync hop, invisible to this layer.)
 > - **The Prose view is an `AppView` variant.** Like `TrameView`, the Prose presentation exposes the inherent driver methods (`update`/`plan_repaint`/`paint_content`/`paint_overlay`/`resize`/`handle_input`) that the `FrameHost` `match`es over — adding Prose is a new `AppView::Prose(ProseView)` arm in `ambre-app` (see `ambre-spec-canvas.md §A`). The GPU pipeline (`QuadRenderer`, `WgpuSurface`) lives in `ambre-canvas`; the `FrameHost` driver lives in `ambre-app`.
-> - Memory is **shared** (single heap): there is no longer "memory isolation per Worker". The `ProseCommand` is **not copied** between threads — it is moved.
+> - **Canvas / DOM boundary (`ambre-spec-ui.md §2.A`).** The canvas owns **content** (page column, caret, selections, content hit-testing, remote cursors, inline highlights). The DOM (Leptos, `ambre-chrome` + a specific `prose_chrome`) owns **all chrome** (contextual toolbar, slash menu, ruler, comment panel, dialogs, menus). Input is captured by DOM listeners and the transparent `<textarea>` — **winit is not used** (`ambre-spec-ui.md §6`).
+> - Memory is **shared** across UI ↔ Logic (single heap): the `ProseCommand` is **moved**, not copied.
 
 ---
 
@@ -18,16 +24,13 @@
 
 **Scope:**
 
-This component handles:
+This component handles (**canvas content** unless noted):
 - wgpu/Parley rendering (DrawSurface) of visible pages in the viewport (display list).
 - Virtual scroll: culling of pages outside the viewport, smooth scrolling management.
-- Text cursor, selection (mouse, keyboard, touch), and IME management.
-- Contextual floating toolbar (selection → inline formatting).
-- Slash command (`/`) for block insertion.
-- Interactive ruler for margins and indents.
-- Display of remote collaborative cursors.
-- Display of comments (highlights + side panel) and track changes.
-- Clipboard management (copy/paste text and HTML).
+- Text caret, selection (mouse, keyboard, touch); keyboard/IME input via the shared transparent `<textarea>` (`ambre-chrome`).
+- Remote collaborative cursors; inline comment and track-change highlights.
+- **DOM chrome** (Leptos, `ambre-chrome`/`prose_chrome`): contextual toolbar, slash menu, interactive ruler, comment side panel, accept/reject affordances.
+- Clipboard: the host-driven, Logic-authoritative `ClipboardBlob` flow (`clipboard_write`/`poll_clipboard`/`paste_clipboard`, `ambre-spec-ui.md §2.E`).
 
 This component delegates:
 - All CRDT mutations → Logic thread via `flume`: `LogicCommand::App { document_id, command: AppCommand::Prose(ProseCommand) }`.
@@ -43,11 +46,17 @@ This component delegates:
 | `lyon` | Path tessellation (shadows, highlights, wavy underlines) |
 | `parley` | Typographic layout: line breaking, shaping, glyph metrics |
 | `swash` | Glyph rasterization → GlyphAtlas GPU |
-| `web_sys` | `Clipboard API`, `navigator.clipboard`, `InputEvent` (IME), `onresize` |
 | `flume` | Inter-thread channels: send `LogicCommand`, receive `UiEvent` (typed values by move) |
-| `ambre-bus` | Typed IPC types: `LogicCommand`/`UiEvent`, `ProseCommand`/`ProseEvent`, `AppCommand`/`AppEvent` |
-| `ambre-canvas` | GPU pipeline (`QuadRenderer`, `WgpuSurface`), GPU bootstrap + rAF loop (the `FrameHost` driver + `AppView` enum live in `ambre-app`) |
+| `ambre-bus` | Typed IPC types: `LogicCommand`/`UiEvent`, `ProseCommand`/`ProseEvent`, `AppCommand`/`AppEvent`, `ClipboardBlob` |
+| `ambre-canvas` | GPU pipeline (`QuadRenderer`, `WgpuSurface`), GPU bootstrap + rAF loop, per-frame value types (`RepaintPlan`, `InputEvent`). The `FrameHost` driver + `AppView` enum live in `ambre-app` |
 | `ambre-draw` | `DrawSurface` trait (parameterized screen/PDF rendering) |
+| `ambre-chrome` + `leptos` | DOM chrome toolkit: the transparent `<textarea>` (keyboard/IME/clipboard pipe), and the base components the specific `prose_chrome` (toolbar, slash menu, ruler, comment panel) builds on |
+| `ambre-commands` | Command registry / keybindings shared with the chrome (`CommandId` → `LogicCommand`) |
+
+Input events reach the view as `InputEvent` (from `ambre-canvas`) via `AppView::handle_input`;
+DOM listeners and the transparent `<textarea>` are wired by `ambre-app`/`ambre-chrome`.
+**No `winit`** (`ambre-spec-ui.md §6`). `navigator.clipboard` is driven by the **host**, not
+by this crate (`ambre-spec-ui.md §2.E`).
 
 All `web_sys::*` resources (`HTMLCanvasElement`, `GPUDevice`, `GPUQueue`) are `!Send`
 and confined to the UI thread. They never travel through a `flume` channel.
@@ -168,8 +177,8 @@ nor rasterized — their `ParleyRun`s are cached but not sent to `wgpu`.
 // ambre-prose/src/ui/run_cache.rs
 
 /// Per-block Parley run cache. Runs are pre-shaped in the Logic thread
-/// (type `ParleyRunData`, postcard-serializable) and converted to `ParleyRun`
-/// (UI type, with Parley layout cache) on receipt.
+/// (type `ParleyRunData`, moved by value on `flume` — no serialization) and
+/// converted to `ParleyRun` (UI type, with Parley layout cache) on receipt.
 pub struct RunCache {
     inner: HashMap<TreeID, CachedRuns>,
     /// Maximum capacity: 500 blocks (~50 pages). LRU eviction beyond.
@@ -182,10 +191,10 @@ pub struct CachedRuns {
     pub dirty:     bool,  // true if a CRDT delta touched this block since the last shape
 }
 
-/// UI-side Parley run type. Converted from `ParleyRunData` (wire type)
+/// UI-side Parley run type. Converted from `ParleyRunData` (typed, moved by value)
 /// on receipt of `ProseEvent::RunsUpdated`.
 pub struct ParleyRun {
-    pub data:   ParleyRunData,            // serialized data (glyphs, positions, metrics)
+    pub data:   ParleyRunData,            // typed run data (glyphs, positions, metrics)
     pub layout: Option<parley::Layout<peniko::Brush>>,  // layout cache, built on first paint
 }
 
@@ -411,96 +420,100 @@ pub fn build_display_list<S: DrawSurface>(
 
 #### Keyboard
 
+Keyboard input reaches the view as `InputEvent` through `AppView::handle_input` (there is
+**no `winit`** — `ambre-spec-ui.md §6`). The physical source is the shared transparent
+`<textarea>` overlay (`ambre-spec-chrome.md §2.C`): it owns editing focus (a click in the
+canvas calls `textarea.focus()`), and DOM `keydown`/`beforeinput` are normalized by
+`ambre-app`/`ambre-chrome` into `InputEvent` before dispatch. `handle_input` returns `true`
+when the host must `preventDefault()`.
+
 ```rust
 // ambre-prose/src/ui/input/keyboard.rs
 
-pub fn handle_key_event(
-    event: &winit::event::KeyEvent,
+/// Dispatched by FrameHost via AppView::Prose(view).handle_input(ev).
+/// Returns true if the event was consumed (host calls preventDefault()).
+pub fn handle_key(
+    ev: &InputEvent,                          // from ambre-canvas (normalized DOM event)
     state: &mut ProseUiState,
     to_logic: &flume::Sender<LogicCommand>,   // channel to the Logic thread (try_send)
-) {
-    use winit::keyboard::{Key, NamedKey, ModifiersState};
-
-    match (&event.logical_key, event.state) {
-        // Cursor navigation
-        (Key::Named(NamedKey::ArrowLeft),  Pressed) => move_cursor(state, Direction::Left,  event.modifiers),
-        (Key::Named(NamedKey::ArrowRight), Pressed) => move_cursor(state, Direction::Right, event.modifiers),
-        (Key::Named(NamedKey::ArrowUp),    Pressed) => move_cursor(state, Direction::Up,    event.modifiers),
-        (Key::Named(NamedKey::ArrowDown),  Pressed) => move_cursor(state, Direction::Down,  event.modifiers),
-        (Key::Named(NamedKey::Home),       Pressed) => move_cursor(state, Direction::LineStart, event.modifiers),
-        (Key::Named(NamedKey::End),        Pressed) => move_cursor(state, Direction::LineEnd,   event.modifiers),
+) -> bool {
+    let InputEvent::KeyDown { key, ctrl, shift, .. } = ev else { return false };
+    match key.as_str() {
+        // Cursor navigation (view-local, no CRDT mutation)
+        "ArrowLeft"  => { move_cursor(state, Direction::Left,  shift); true }
+        "ArrowRight" => { move_cursor(state, Direction::Right, shift); true }
+        "ArrowUp"    => { move_cursor(state, Direction::Up,    shift); true }
+        "ArrowDown"  => { move_cursor(state, Direction::Down,  shift); true }
+        "Home"       => { move_cursor(state, Direction::LineStart, shift); true }
+        "End"        => { move_cursor(state, Direction::LineEnd,   shift); true }
 
         // Editing
-        (Key::Named(NamedKey::Backspace),  Pressed) => send_cmd(cmd_tx, delete_backward(state)),
-        (Key::Named(NamedKey::Delete),     Pressed) => send_cmd(cmd_tx, delete_forward(state)),
-        (Key::Named(NamedKey::Enter),      Pressed) => send_cmd(cmd_tx, split_block(state)),
-        (Key::Named(NamedKey::Tab),        Pressed) => send_cmd(cmd_tx, indent_or_next_cell(state)),
+        "Backspace"  => { send_cmd(to_logic, delete_backward(state)); true }
+        "Delete"     => { send_cmd(to_logic, delete_forward(state));  true }
+        "Enter"      => { send_cmd(to_logic, split_block(state));     true }
+        "Tab"        => { send_cmd(to_logic, indent_or_next_cell(state)); true }
 
-        // Formatting shortcuts
-        (Key::Character("b"), Pressed) if ctrl(event) => send_cmd(cmd_tx, toggle_mark(state, MARK_BOLD)),
-        (Key::Character("i"), Pressed) if ctrl(event) => send_cmd(cmd_tx, toggle_mark(state, MARK_ITALIC)),
-        (Key::Character("u"), Pressed) if ctrl(event) => send_cmd(cmd_tx, toggle_mark(state, MARK_UNDERLINE)),
-        (Key::Character("z"), Pressed) if ctrl(event) && !shift(event) => send_cmd(cmd_tx, ProseCommand::Undo),
-        (Key::Character("z"), Pressed) if ctrl(event) && shift(event)  => send_cmd(cmd_tx, ProseCommand::Redo),
-        (Key::Character("y"), Pressed) if ctrl(event) => send_cmd(cmd_tx, ProseCommand::Redo),
+        // Formatting shortcuts (also surfaced via the DOM chrome command registry)
+        "b" if ctrl => { send_cmd(to_logic, toggle_mark(state, MARK_BOLD));      true }
+        "i" if ctrl => { send_cmd(to_logic, toggle_mark(state, MARK_ITALIC));    true }
+        "u" if ctrl => { send_cmd(to_logic, toggle_mark(state, MARK_UNDERLINE)); true }
+        "z" if ctrl && !shift => { send_cmd(to_logic, ProseCommand::Undo); true }
+        "z" if ctrl &&  shift => { send_cmd(to_logic, ProseCommand::Redo); true }
+        "y" if ctrl => { send_cmd(to_logic, ProseCommand::Redo); true }
 
-        // Slash command
-        (Key::Character("/"), Pressed) if state.cursor_at_block_start() => {
-            state.slash_menu = Some(SlashMenuState::open(state.cursor_position()));
+        // Slash menu: opening `/` at block start raises a Leptos signal (DOM chrome menu),
+        // it is NOT a canvas overlay (see section G).
+        "/" if state.cursor_at_block_start() => {
+            state.open_slash_menu(state.cursor_position());  // -> Leptos signal
+            false // the `/` still flows to beforeinput so the model records it
         }
-
-        // Printable character -> draft buffer + ProseCommand
-        (Key::Character(c), Pressed) if !ctrl(event) => {
-            let c = c.chars().next().unwrap();
-            state.draft_buffer.push_char(c, &cursor_block(state), cursor_offset(state));
-            send_cmd(cmd_tx, ProseCommand::InsertText {
-                block_id: cursor_block(state),
-                pos:      cursor_offset(state),
-                text:     c.to_string(),
-            });
-            advance_cursor(state, 1);
-        }
-
-        _ => {}
+        _ => false, // printable text is handled by beforeinput / composition below
     }
+}
+```
+
+Printable Latin text is **not** matched key-by-key here: it flows through the textarea's
+`beforeinput` event, which `ambre-app` turns into `InputEvent::TextInput { text }`. The view
+then pushes it to the draft buffer and emits `ProseCommand::InsertText`, and the host clears
+the textarea (`ambre-spec-chrome.md §2.C`).
+
+```rust
+// InputEvent::TextInput { text } branch (committed, non-composition input)
+pub fn handle_text_input(text: &str, state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>) {
+    let (block_id, pos) = (cursor_block(state), cursor_offset(state));
+    state.draft_buffer.push_str(text, &block_id, pos);
+    send_cmd(to_logic, ProseCommand::InsertText { block_id, pos, text: text.to_string() });
+    advance_cursor(state, text.chars().count() as u32);
 }
 ```
 
 #### IME (Input Method Editor)
 
-IME (Japanese, Korean, Chinese, Arabic…) is handled via the `compositionstart`,
-`compositionupdate`, `compositionend` events of `web_sys`. During composition, the
-intermediate text is displayed in the draft buffer with a composition underline (style
-distinct from mark underlines). `ProseCommand::InsertText` is only sent on
-`compositionend`.
+IME (Japanese, Korean, Chinese, Vietnamese…) is **not owned by `prose-ui`**: it is handled by
+the shared transparent `<textarea>` pipe in `ambre-chrome` (`ambre-spec-chrome.md §2.C`). The
+textarea captures `compositionstart → compositionupdate* → compositionend`; `ambre-app`
+forwards them to the view as `InputEvent::Composition { phase, text }`. During composition the
+view renders the intermediate text in the draft buffer with a **composition style** (dotted
+underline, distinct from mark underlines) so the caret and preview appear on the canvas while
+the textarea stays invisible; the IME popup is positioned by the textarea (`transform:
+translate` under the caret). `ProseCommand::InsertText` is emitted only on `compositionend`.
 
 ```rust
-// ambre-prose/src/ui/input/ime.rs
-
-pub struct ImeState {
-    pub composing:      bool,
-    pub composition:    String,   // intermediate composition text
-    pub comp_start_pos: u32,
-}
-
-impl ImeState {
-    pub fn on_composition_start(&mut self) {
-        self.composing = true;
-        self.composition.clear();
-    }
-
-    pub fn on_composition_update(&mut self, data: &str) {
-        self.composition = data.to_string();
-        // Display in draft buffer with composition style
-    }
-
-    pub fn on_composition_end(&mut self, data: &str) -> ProseCommand {
-        self.composing = false;
-        // Send the confirmed final text
-        ProseCommand::InsertText {
-            block_id: todo!(),
-            pos:      self.comp_start_pos,
-            text:     data.to_string(),
+// ambre-prose/src/ui/input/ime.rs -- pure view-side composition state
+// (no web_sys here: composition DOM events are captured by the ambre-chrome textarea
+//  and delivered as InputEvent::Composition).
+pub fn handle_composition(
+    phase: CompositionPhase,   // Start | Update | End (from InputEvent::Composition)
+    text: &str,
+    state: &mut ProseUiState,
+    to_logic: &flume::Sender<LogicCommand>,
+) {
+    match phase {
+        CompositionPhase::Start  => state.draft_buffer.begin_composition(cursor_block(state), cursor_offset(state)),
+        CompositionPhase::Update => state.draft_buffer.set_composition(text),   // canvas preview only
+        CompositionPhase::End    => {
+            let (block_id, pos) = state.draft_buffer.end_composition();
+            send_cmd(to_logic, ProseCommand::InsertText { block_id, pos, text: text.to_string() });
         }
     }
 }
@@ -564,18 +577,27 @@ It uses `BlockLayout` to find the target block (O(log n) by bisection on
 
 ---
 
-### F. Floating Toolbar
+### F. Contextual Toolbar (DOM chrome)
 
-The floating toolbar appears above the selection on `PointerUp` with a non-empty
-selection. It disappears as soon as the selection is canceled.
+The contextual toolbar is a **DOM Leptos component** (`prose_chrome::FormatBar`, built on
+`ambre-chrome`), like Trame's `FormatBar` — **not** a canvas `DrawSurface` overlay
+(`ambre-spec-ui.md §2.A`, `ambre-spec-chrome.md §2.B`). It appears anchored above the
+selection on `PointerUp` with a non-empty selection and hides when the selection is canceled.
+The canvas view computes the anchor rectangle and raises a Leptos signal (Canvas → DOM via
+signals, `ambre-spec-ui.md §2.C`); the toolbar element is **transform-synced** to that anchor
+each frame so it tracks scroll. Its buttons invoke `CommandId`s from `ambre-commands`, which
+map to `ProseCommand`s.
+
+The view publishes the current mark state (`ActiveMarks`) for the chrome to render button
+toggles; it holds no canvas-drawn toolbar geometry.
 
 ```rust
-// ambre-prose/src/ui/toolbar.rs
+// ambre-prose/src/ui/toolbar.rs -- state PUBLISHED to the Leptos FormatBar (not drawn on canvas)
 
 #[derive(Debug, Clone, Default)]
 pub struct ToolbarState {
     pub visible:  bool,
-    pub position: Vec2,        // screen coordinates of the selection's bottom-center
+    pub anchor:   Vec2,        // canvas-space anchor (selection bottom-center); chrome transform-syncs to it
     pub active:   ActiveMarks, // current mark state on the selection
 }
 
@@ -598,26 +620,31 @@ pub enum TriState { #[default] Off, On, Mixed }
 `B` `I` `U` `S` `<>` (inline code) | `🔗` (link) | `H1` `H2` `H3` (change block type)
 | `"` (blockquote) | `···` (more → color picker, font size)
 
-Each button sends a `ProseCommand` to the Logic thread:
+Each button invokes a `CommandId` (`ambre-commands`) resolved to a `ProseCommand`:
 - Toggle mark → `ProseCommand::ApplyMark` or `ProseCommand::RemoveMark`.
 - Change block type → `ProseCommand::SetBlockStyle`.
 
-The toolbar is rendered via `DrawSurface` (not DOM/HTML) — overlay in screen coordinates,
-z-order above pages.
+The toolbar is a DOM Leptos element (`prose_chrome::FormatBar`), transform-synced to the
+selection anchor — no canvas z-order concern, the browser compositor layers DOM over canvas.
+Overflow (`⋯`) and mobile bottom-sheet behavior follow `ambre-spec-chrome.md §2.B`.
 
 ---
 
 ### G. Slash Command (`/`)
 
 The slash command opens when `/` is typed at the beginning of a block (empty block or
-position 0). It displays a filterable menu of block types and templates.
+position 0). It is a **DOM Leptos menu** (`prose_chrome`, on `ambre-chrome`'s menu
+primitives — roving tabindex, flip-on-overflow), anchored under the caret via a Leptos signal
+the canvas view raises (Canvas → DOM). It is **not** a canvas overlay. It displays a
+filterable list of block types and templates; the view holds the query/selection state it
+publishes to the menu.
 
 ```rust
-// ambre-prose/src/ui/slash_menu.rs
+// ambre-prose/src/ui/slash_menu.rs -- state PUBLISHED to the Leptos slash menu
 
 #[derive(Debug, Clone)]
 pub struct SlashMenuState {
-    pub position:  Vec2,        // cursor position at open
+    pub anchor:    Vec2,        // caret position at open (canvas space); the DOM menu anchors under it
     pub query:     String,      // text typed after `/`
     pub items:     Vec<SlashItem>,
     pub selected:  usize,
@@ -694,8 +721,9 @@ pub enum RulerHandle {
 }
 ```
 
-The ruler is rendered via `DrawSurface` in screen coordinates (fixed position at the
-top, independent of vertical scroll).
+The ruler is a **DOM Leptos component** (`prose_chrome`), fixed at the top of the editor
+chrome (independent of vertical canvas scroll) — not a canvas `DrawSurface` band. Its drag
+handles emit `ProseCommand::SetParagraphStyle` on `on_pointer_up`.
 
 ---
 
@@ -736,8 +764,8 @@ Remote cursors animate with a CSS-like transition (linear position interpolation
 #### Comments
 
 Comments are displayed in two places:
-1. **Inline highlight:** semi-transparent yellow rectangle under the annotated range (mark `"cm"`).
-2. **Side panel:** list of comment threads, vertically aligned with their anchor in the text.
+1. **Inline highlight (canvas content):** semi-transparent yellow rectangle under the annotated range (mark `"cm"`), drawn by the view.
+2. **Side panel (DOM chrome):** a Leptos `prose_chrome` panel listing comment threads, vertically aligned with their anchor. The view publishes each thread's `anchor_y`; the panel is a DOM element, not a canvas overlay.
 
 ```rust
 // ambre-prose/src/ui/comments.rs
@@ -758,47 +786,73 @@ pub struct UiReply {
 }
 ```
 
-The side panel is a `DrawSurface` overlay to the right of the page, independently
-scrollable. A click on a comment in the panel positions the document scroll on the
-corresponding anchor.
+The side panel is a DOM Leptos element to the right of the page, independently scrollable
+(the browser handles its scroll). A click on a comment in the panel raises a signal that
+scrolls the canvas document to the corresponding anchor.
 
 #### Track Changes
 
-Suggestions are displayed inline in the text:
+Suggestion **highlights are canvas content** (drawn inline by the view):
 - **Suggested insertion:** green underlined text, very light green background.
 - **Suggested deletion:** red strikethrough text, very light red background.
 
-A floating banner appears on hover over the suggestion with `✓ Accept` /
-`✗ Reject` buttons, which send `ProseCommand::AcceptSuggestion` or
-`ProseCommand::RejectSuggestion`.
+The `✓ Accept` / `✗ Reject` affordance is a **DOM Leptos popover** (`prose_chrome`),
+anchored (transform-synced) to the hovered suggestion via a Leptos signal the view raises;
+its buttons invoke `ProseCommand::AcceptSuggestion` / `RejectSuggestion`. It is not a canvas
+overlay.
 
 ---
 
 ### K. Clipboard
 
-```rust
-// ambre-prose/src/ui/clipboard.rs
+Prose uses the shared, **Logic-authoritative, host-driven** clipboard model
+(`ambre-spec-ui.md §2.E`). `prose-ui` **never** calls `navigator.clipboard` — the host
+(`ambre-app`) performs the OS clipboard I/O inside the user-activation window. The transport
+type is the app-agnostic `ClipboardBlob { text: String, ambre: Option<Vec<u8>> }` (`ambre-bus`):
+`text` is the `text/plain` mirror; `ambre` is Prose's opaque payload (postcard of a typed
+Prose clipboard payload — rich runs + block structure) under the private `application/x-ambre`
+MIME type. There is **no `text/html`** on the OS clipboard and **no viewport culling** — the
+full-fidelity payload is built by the Logic thread from the whole CRDT.
 
-/// Copy: produce text/plain and text/html from the current selection.
-pub async fn copy_selection(state: &ProseUiState) {
-    let (text, html) = render_selection_to_clipboard(state);
-    let clipboard = web_sys::window().unwrap().navigator().clipboard();
-    // ClipboardItem with both formats
-    let item = web_sys::ClipboardItem::new_with_record_from_str(&[
-        ("text/plain", &text),
-        ("text/html",  &html),
-    ]);
-    clipboard.write(&item.into()).await.ok();
+```rust
+// ambre-prose/src/ui/clipboard.rs -- driver methods called by FrameHost (no web_sys here)
+
+/// Native copy/cut: request the authoritative build from Logic; nothing serialized UI-side.
+pub fn clipboard_write(&mut self, cut: bool) -> CopyOutcome {
+    match &self.selection {
+        None => CopyOutcome::Nothing,                    // browser default proceeds
+        Some(sel) => {
+            self.cut_pending = cut;
+            self.send_cmd(ProseCommand::CopySelection { anchor: sel.anchor.clone(), focus: sel.focus.clone() });
+            CopyOutcome::Deferred                         // host prevent_default()s, no setData yet
+        }
+    }
 }
 
-/// Paste: prefer text/html (richer), fallback text/plain.
-pub async fn paste(state: &ProseUiState, cmd_tx: &JsValue) {
-    let clipboard = web_sys::window().unwrap().navigator().clipboard();
-    let items = clipboard.read().await.ok();
-    // Attempt text/html -> ProseCommand::ImportDocument { format: Html, data }
-    // Fallback text/plain -> ProseCommand::InsertText { text }
+/// Called by the host right after update(): if Logic replied (ProseEvent::Clipboard),
+/// return the ClipboardBlob to mirror to the OS clipboard next frame (poll_clipboard).
+pub fn poll_clipboard(&mut self) -> Option<ClipboardBlob> {
+    self.pending_clipboard.take()   // set in update() from ProseEvent::Clipboard { text, ambre }
+}
+
+/// Native paste: prefer the in-memory blob when the OS text mirror still matches it
+/// (full fidelity), else decode blob.ambre; for a foreign text/html source the host passes
+/// its bytes and the view routes them through import_html.
+pub fn paste_clipboard(&mut self, blob: ClipboardBlob) {
+    let (block_id, pos) = self.cursor_target();
+    match self.decode_ambre(&blob) {
+        Some(payload) => self.send_cmd(ProseCommand::PasteRich { block_id, pos, payload }),
+        None if blob.is_html() =>
+            self.send_cmd(ProseCommand::ImportDocument { format: ImportFormat::Html, data: blob.html_bytes() }),
+        None => self.send_cmd(ProseCommand::InsertText { block_id, pos, text: blob.text }),
+    }
 }
 ```
+
+The Logic thread builds `ProseEvent::Clipboard { text, ambre }` from the CRDT selection
+(`prose-logic`); the view stashes it in memory (same-tab full-fidelity paste) and hands it to
+the host via `poll_clipboard`. **Cut** clears the source range after the copy command, Prose's
+own policy.
 
 ---
 
@@ -807,8 +861,8 @@ pub async fn paste(state: &ProseUiState, cmd_tx: &JsValue) {
 | Flow | Data | Risk | Mitigation |
 |------|---------|--------|------------|
 | `flume` UI → Logic thread | Typed `ProseCommand` (in `LogicCommand::App`) | Plaintext data in the **shared** WASM heap of the threads | Normal: the heap is only accessible from inside the user's browser process (sandbox). The value is **moved** between threads — no serialization, no boundary copy, no external exposure. |
-| Clipboard `navigator.clipboard.write()` | Text and HTML of the selection | The browser may expose the clipboard to other tabs | Browser standard — outside AMBRE's control |
-| Clipboard `navigator.clipboard.read()` | HTML pasted from an external source | Malicious HTML | Systematic passage through `import_html` (html5ever sanitizes) |
+| Clipboard write (host `navigator.clipboard.write`, `ClipboardBlob`) | `text/plain` mirror + opaque `x-ambre` payload of the selection | The browser may expose the clipboard to other tabs | Browser standard — outside AMBRE's control; `prose-ui` never touches `navigator.clipboard` (host-driven, `ambre-spec-ui.md §2.E`) |
+| Clipboard paste (foreign `text/html` source) | HTML pasted from an external source | Malicious HTML | Routed through `import_html` (html5ever sanitizes) |
 | Remote cursors | `display_name` received via `ProseEvent::RemoteCursors` | Already decrypted in the Logic thread | No additional exposure |
 
 The UI thread never has access to cryptographic keys or the `LoroDoc`. It only displays
@@ -837,7 +891,7 @@ already-decrypted data transmitted by the Logic thread.
 |-----|---------|
 | wgpu rendering: page rendered without panic on 800×600 canvas | `wasm-bindgen-test` with headless canvas |
 | `flume` UI → Logic thread: `LogicCommand::App` emitted and routed to `ProseState` | Mock `flume` channels (host test) |
-| Clipboard paste: HTML → `ImportDocument { format: Html }` | Mock `navigator.clipboard` |
+| `paste_clipboard`: `ClipboardBlob` with `ambre` → `PasteRich`; foreign `text/html` → `ImportDocument { format: Html }`; plain text → `InsertText` | Host-driven, `ClipboardBlob` fixtures (no `navigator.clipboard` in `prose-ui`) |
 
 **Visual tests (snapshots):**
 
@@ -921,15 +975,17 @@ source of truth.
 
 | Alternative | Rejected because |
 |-------------|-------------|
-| **Parley shaping in the UI thread** | Shaping is O(n_glyphs) and can exceed 16ms on a long block. Moving it to the Logic thread frees the UI thread for pure rendering, guaranteeing 60 FPS even on mobile. |
+| **Parley shaping in the UI thread** | Shaping is O(n_glyphs) and can exceed 16 ms on a long block. Crucially, **pagination already shapes every block in the Logic thread** (`prose-logic §2.B`) to measure page breaks — so shaping in the UI would *duplicate* that work and risk blocking the render thread (violating the "render thread never blocked by computation" pillar). The UI receives pre-shaped `ParleyRunData` and only draws glyphs. This is a deliberate Prose-specific departure from the generic UI-thread `TextCache` shaping path (`ambre-spec-canvas.md §D`, used for Trame single-line cells); the Foundation Prose-frame budgets are annotated accordingly (`ambre-spec-chrome.md §5.A`, `ambre-spec-canvas.md §5.A`). |
 | **DOM/HTML for editor rendering** | Rejected. Unpredictable layout, impossible to control pagination, JS/WASM interop cost. |
 | **`contentEditable`** | Non-deterministic behavior across browsers, inconsistent IME handling, impossible to control for pagination and virtual scroll. |
 | **Full-page rendering each frame** | 100 pages × full rendering = blown budget. Virtual scroll with culling of non-visible pages is mandatory. |
-| **Floating DOM/HTML toolbar** | Would require leaving WASM context for a single widget. `DrawSurface` toolbar maintains rendering consistency. |
+| **Chrome (toolbar, slash menu, ruler, comment panel) drawn on the canvas via `DrawSurface`** | Rejected per the Foundation canvas/DOM boundary (`ambre-spec-ui.md §2.A`): chrome is DOM/Leptos (`ambre-chrome`/`prose_chrome`), transform-synced to canvas anchors. Static DOM over a canvas is one layout pass then zero-cost compositor recomposition, and inherits ARIA a11y, focus trap, and IME for free — none of which a canvas widget gets. Only **content** (caret, selections, highlights, remote cursors) stays on the canvas. |
+| **`winit` for input** | Web-only target: winit is indirection without benefit and conflicts with DOM event ownership. Events are captured directly via `web-sys` (DOM listeners + the transparent `<textarea>`) and delivered as `InputEvent` (`ambre-spec-ui.md §6`, `ambre-spec-chrome.md §2.C`). |
+| **`prose-ui` owning `navigator.clipboard` + a `text/html` clipboard payload** | Clipboard is host-driven and Logic-authoritative (`ambre-spec-ui.md §2.E`): the host performs OS clipboard I/O in the activation window; the payload is `ClipboardBlob { text, ambre }` (opaque `x-ambre`), built from the full CRDT — not `text/html`, not viewport-culled. |
 | **Canvas 2D (non-WebGL)** | Insufficient performance for high-quality typographic rendering. wgpu (WebGL2/WebGPU) is AMBRE's foundational choice. |
 | **Synchronous CRDT confirmation before display** | Logic thread round-trip ~1–3ms perceptible at high typing cadence. The draft buffer absorbs this latency without compromising consistency. |
 | **Selection via `window.getSelection()` DOM** | Outside WASM context. Selection is managed entirely via Parley metrics and pointer events. |
-| **`requestIdleCallback` for shaping** | Not available in WASM Workers. The P1–P4 priority scheduler of `ambre-app` replaces `requestIdleCallback` in the Logic thread. |
+| **`requestIdleCallback` in the Logic thread** | Not available in a `wasm_thread` worker (the Logic thread). Deferred/low-priority work there uses the P1–P4 priority scheduler of `ambre-logic`, not `requestIdleCallback`. (On the UI thread, where it *is* available, the host may use it for opportunistic layout — `ambre-spec-chrome.md §5.B`.) |
 | **Layouts without versioning** | Without `version: u64` on `LayoutUpdated`, two pagination recalculations arriving out of order would produce stale display. The UI thread silently drops any `LayoutUpdated` whose version is lower than the last applied layout. |
 
 ---
@@ -955,21 +1011,21 @@ source of truth.
 - [ ] Unit tests keyboard, hit_test, draft buffer.
 
 **Phase 2 — Toolbar, Slash, IME (Week 3)**
-- [ ] Floating toolbar: display on selection, toggle marks, change block type.
-- [ ] Slash command: menu, filtering, selection, block insertion.
-- [ ] IME: `compositionstart`/`update`/`end`, composition draft.
+- [ ] Contextual toolbar: DOM Leptos `prose_chrome::FormatBar`, transform-synced to the selection anchor; toggle marks, change block type via `ambre-commands`.
+- [ ] Slash command: DOM Leptos menu anchored under the caret, filtering, selection, block insertion.
+- [ ] IME: consume `InputEvent::Composition` from the shared transparent `<textarea>` (`ambre-chrome`); canvas composition preview; `InsertText` on `compositionend`.
 - [ ] Double-click → word selection.
-- [ ] Unit tests slash menu, IME, toolbar.
+- [ ] Unit tests slash menu, IME, toolbar-state derivation.
 
 **Phase 3 — Collaboration & Annotations (Week 4)**
-- [ ] Remote cursors: `RemoteCursors` receipt, bar + label + selection rendering, animation.
-- [ ] Comment highlights + side panel (thread list).
-- [ ] Track changes highlights (green/red) + accept/reject banner on hover.
+- [ ] Remote cursors: `RemoteCursors` receipt, bar + label + selection rendering, animation (canvas content).
+- [ ] Comment inline highlights (canvas) + DOM Leptos side panel (thread list).
+- [ ] Track changes highlights (green/red, canvas) + DOM accept/reject popover on hover.
 - [ ] Unit tests `user_color()`, highlight rendering.
 
 **Phase 4 — Ruler, Clipboard, Inertial Scroll (Week 5)**
-- [ ] Interactive ruler: `DrawSurface` rendering, drag handles, `SetParagraphStyle` on pointer up.
-- [ ] Clipboard: copy (text/plain + text/html), paste (HTML preference → import_html).
+- [ ] Interactive ruler: DOM Leptos `prose_chrome` component, drag handles, `SetParagraphStyle` on pointer up.
+- [ ] Clipboard: host-driven `ClipboardBlob` flow (`clipboard_write`/`poll_clipboard`/`paste_clipboard`); `ProseEvent::Clipboard` build in Logic; foreign `text/html` paste → `import_html`.
 - [ ] Inertial scroll: `scroll_velocity`, physical deceleration (linear friction).
 - [ ] Optimizations: frame budget profiling, reducing allocations on `build_display_list()` hot path.
 

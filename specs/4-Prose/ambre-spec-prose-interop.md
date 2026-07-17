@@ -21,9 +21,9 @@ This component handles:
 
 This component delegates:
 - Actual CRDT mutations → `ProseState::handle_command()` via `ProseCommand`.
-- Native format encryption/decryption → `ambre-sync`.
+- Native format compression + encryption/decryption → `ambre-sync`.
 - Live wgpu + Parley/Swash rendering (display list, virtual scroll) → `prose-ui`.
-- Binary asset (image) management → `ambre-server` (presigned S3 URLs).
+- Binary asset (image) fetch/decrypt → `ambre-sync` (media flow: `RestCommand::UploadMedia`/`DownloadMedia` → `RestEvent::MediaUploaded`/`MediaDownloaded`, addressed by `content_hash`). The Logic thread never touches the network or S3.
 
 **Dependencies:**
 
@@ -37,11 +37,12 @@ This component delegates:
 | `markup5ever_rcdom` | In-memory DOM produced by `html5ever`, traversed for import | Import |
 | `ambre-core` | `Uuid`, `DocType` | Both |
 | `ambre-draw` | `DrawSurface` trait — `KrillaSurface` implemented here for PDF export | Export |
-| `postcard` / `serde` | Serialization of conversion reports (`ConversionReport`) | Both |
-| `ruzstd` | Compression/decompression of the native `.ambre` format | Both |
+| `postcard` / `serde` | Serialization of conversion reports (`ConversionReport`) and fixtures | Both |
 
-No dependency on `ambre-sync` or `ambre-crypto` — the encryption layer of the native format
-is applied by `ambre-sync` downstream, not in `ambre-prose/interop`.
+No dependency on `ambre-sync`, `ambre-crypto`, or `ruzstd` — the native format's **compression
+(zstd) and encryption (XChaCha20-Poly1305)** are applied by `ambre-sync` downstream (sole
+compression/crypto consumer, per `ambre-spec-architecture.md §1`), not in `ambre-prose/interop`.
+The Logic thread carries **zero compression, zero crypto, zero network**.
 
 **Invariants:**
 
@@ -49,7 +50,7 @@ is applied by `ambre-sync` downstream, not in `ambre-prose/interop`.
 - An import exclusively produces typed `ProseCommand`s — it never mutates the `LoroDoc` directly. This guarantees all mutations pass through the controller invariants.
 - Each export is **idempotent**: exporting the same document twice produces byte-identical files (up to metadata timestamp).
 - Any fidelity loss is **explicitly reported** via `ConversionReport::warnings` — never silent.
-- Images are exported as references (`blob_id`) in the CRDT and resolved at export via S3 presigned URL. An offline export without network access produces a document with missing images, reported in `ConversionReport`.
+- Images are stored in the CRDT as references (`content_hash`) and resolved at export from the Logic thread's `media_cache`, populated by `ambre-sync` via `RestCommand::DownloadMedia` → `RestEvent::MediaDownloaded`. An export whose images are not yet cached (offline, or download pending) produces a document with placeholder images, reported in `ConversionReport`.
 
 ---
 
@@ -114,7 +115,7 @@ pub enum IrBlock {
     ListItem   { depth: u8, style: IrListStyle, runs: Vec<IrRun>, children: Vec<IrBlock> },
     Table      { col_widths: Vec<f32>, rows: Vec<IrTableRow> },
     CodeBlock  { lang: Option<String>, text: String },
-    Image      { blob_id: Option<Uuid>, src_url: Option<String>, alt: String,
+    Image      { content_hash: Option<String>, src_url: Option<String>, alt: String,
                  width_px: Option<u32>, height_px: Option<u32>,
                  align: Option<IrImageAlign>, caption: Option<String> },
     PageBreak,
@@ -210,7 +211,7 @@ pub enum ConversionFormat { Docx, Markdown, Pdf, Html, Ambre }
 pub enum ConversionWarning {
     StyleNotMapped   { style_name: String, fallback: String },
     FormattingLost   { description: String },
-    ImageNotResolved { blob_id: Uuid },
+    ImageNotResolved { content_hash: String },
     FeatureNotSupported { feature: String, format: ConversionFormat },
 }
 
@@ -290,7 +291,7 @@ pub fn import_ambre_plaintext(
 | `ListItem` | `<w:p><w:pStyle w:val="ListParagraph">` + `<w:numPr>` | `numId` managed by `docx-rs` |
 | `Table` | `<w:tbl>` + `<w:tr>` + `<w:tc>` | `col_widths` → `<w:tblGrid>` |
 | `CodeBlock` | `<w:p><w:pStyle w:val="Code">` | Custom style injected if absent |
-| `Image` | `<w:drawing>` + relationship `image/png` | Blob resolved from S3 at export time |
+| `Image` | `<w:drawing>` + relationship `image/png` | Bytes read from the Logic `media_cache` (`content_hash`), populated by `ambre-sync` |
 | `PageBreak` | `<w:p><w:r><w:br w:type="page">` | |
 | `HRule` | `<w:p><w:pBdr><w:bottom>` | |
 | `Toc` | `<w:sdt>` standard Word TOC field | `TOC \o "1-3"` field instruction |
@@ -374,7 +375,7 @@ import is faithful for supported features.
 | `ListItem { Todo(checked) }` | `- [x] text` / `- [ ] text` (GFM) |
 | `Table` | GFM table `\| col \| col \|` |
 | `CodeBlock { lang }` | ` ```lang ``` ` |
-| `Image` | `![alt](url)` — resolved S3 presigned URL |
+| `Image` | `![alt](url)` — data URI from the Logic `media_cache`, or `src_url` if external |
 | `PageBreak` | `---` (horizontal rule, approximation) |
 | `HRule` | `---` |
 | `Toc` | `<!-- TOC -->` (HTML comment, non-standard) |
@@ -654,24 +655,34 @@ transfer to the server during conversion.
 | Flow | Data | Risk | Mitigation |
 |------|---------|--------|------------|
 | Import docx/md/html | `Vec<u8>` received from UI thread via `UiEnvelope` | The imported file may contain macros or scripts | `docx-rs` does not execute macros. `html5ever` sanitizes HTML (no JS execution). |
-| PDF export with images | Image resolution via S3 presigned URL | The presigned URL temporarily exposes the S3 blob | Presigned URLs have a 5-minute TTL. PDF export is done in a single pass — no re-fetch. |
-| Native `.ambre` format | Plaintext Loro snapshot in the Logic thread | Isolated WASM memory of the Logic thread | The Sync thread does not read the `LoroDoc` directly — it receives opaque `Vec<u8>` via `postMessage` (postcard serialized). Plaintext never leaves the Logic thread unencrypted. |
+| PDF export with images | Image bytes read from the Logic `media_cache` | Presigned-URL fetch + decrypt happen entirely in `ambre-sync` | The Logic thread never sees the presigned URL nor the network: it only receives already-decrypted bytes via `RestEvent::MediaDownloaded`. Presigned URLs (5-minute TTL) are handled inside Sync. |
+| Native `.ambre` format | Plaintext Loro snapshot in the Logic thread | Isolated WASM memory of the Main instance (Logic thread) | Logic hands the plaintext snapshot to Sync as a typed `SyncCommand` payload over `flume`; the Main thread relays it to the separate Sync worker (`postMessage` + `postcard`), which alone compresses (zstd) and encrypts (XChaCha20). Plaintext never reaches the network. |
 | Import HTML clipboard | HTML from `navigator.clipboard.read()` | Malicious HTML (injection) | `html5ever` sanitizes, `markup5ever_rcdom` does not preserve `on*` attributes or `<script>`. |
 
 **Image resolution on export:**
 
+Images are resolved ahead of export through the Foundation media flow — the Logic thread
+issues **no network call** and holds **no crypto** (`ambre-spec-architecture.md §1`,
+`§2.D RestCommand`). All fetch + decrypt work happens in the Sync worker:
+
 ```
-Logic thread
-  → ProseCommand::ExportDocument { format: Pdf }
-  → for each IrBlock::Image { blob_id }:
-      → SyncCommand::RequestPresignedUrl { blob_id }  [new variant, post-MVP]
-      → LogicEvent::PresignedUrl { blob_id, url, ttl }
-      → fetch(url) in the Logic thread (not the Sync thread — no crypto required)
-      → image bytes included in the PDF
+UI / Logic thread                          Sync worker (ambre-sync)
+  RestCommand::DownloadMedia { document_id, content_hash }
+      ──(LogicCommand::Rest → SyncCommand::Rest, relayed by Main)──►
+                                             presigned S3 GET → decrypt
+      ◄──(RestEvent::MediaDownloaded { document_id, content_hash, data })──
+  ProseState::on_media_downloaded(content_hash, data)
+      → media_cache.insert(content_hash, data)
+
+  ProseCommand::ExportDocument { format: Pdf }
+      → for each IrBlock::Image { content_hash }:
+          → bytes read from media_cache (already decrypted, no I/O)
+          → image bytes included in the PDF
 ```
 
-In V1 MVP, PDF exports with unresolved images produce a placeholder and an
-`ImageNotResolved` warning — S3 resolution is post-MVP.
+In V1 MVP, an export whose images are not yet in `media_cache` produces a placeholder and
+an `ImageNotResolved` warning; eager pre-fetch of all document media before export is
+post-MVP.
 
 ---
 
@@ -737,10 +748,12 @@ Fixtures are static versioned files, never generated on the fly in tests.
 > ⚠️ Interop crates represent a significant binary cost. If the total WASM budget is
 > exceeded, use **lazy loading** (WASM bundle splitting): `docx-rs`, `krilla`,
 > `html5ever`, and `pulldown-cmark` are excluded from the startup binary and dynamically
-> loaded in the Logic thread on the first import/export operation. No additional Worker —
-> the 3-Worker architecture remains unchanged. During import/export, the Logic thread is
-> intentionally blocked (waiting screen on the UI side, incoming `postMessage` messages from
-> the Sync thread accumulate in the Logic thread's JS event loop without being lost).
+> loaded in the Logic thread on the first import/export operation. No additional worker —
+> the two-instance model (Main = UI + Logic, separate Sync worker) is unchanged. During
+> import/export, the Logic thread is intentionally blocked (waiting screen on the UI side);
+> the Logic thread has **no JS event loop**, so Sync → Logic events queue in the bounded
+> `flume` relay drained by the Main thread and are delivered once the Logic thread unblocks
+> — none are lost (backpressure via `CHANNEL_CAPACITY`, see `ambre-spec-architecture.md §2.B`).
 
 ---
 
@@ -797,6 +810,6 @@ Fixtures are static versioned files, never generated on the fly in tests.
 - [ ] Benchmarks export 100 pages.
 
 **Phase 5 — Images & Lazy Loading (post-MVP)**
-- [ ] S3 image resolution via `SyncCommand::RequestPresignedUrl`.
+- [ ] Image resolution via the Foundation media flow (`RestCommand::DownloadMedia` → `RestEvent::MediaDownloaded` → `media_cache`); eager pre-fetch of document media before export.
 - [ ] Lazy loading (WASM bundle splitting) of interop crates in the Logic thread if WASM budget exceeded.
 - [ ] PDF/UA (accessibility).
