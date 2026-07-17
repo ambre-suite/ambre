@@ -80,9 +80,13 @@ impl LogicState {
                 match &cmd {
                     // Drop all document state before logging out so no in-flight
                     // handler can emit further commands against it.
-                    RestCommand::Logout => self.docs.clear(),
+                    RestCommand::Logout => {
+                        self.docs.clear();
+                        self.rest_routes.clear();
+                    }
                     RestCommand::DeleteDocument { document_id } => {
                         self.docs.remove(document_id);
+                        self.rest_routes.retain(|_, d| d != document_id);
                     }
                     _ => {}
                 }
@@ -115,6 +119,10 @@ impl LogicState {
             }
             LogicCommand::CloseDocument { document_id } => {
                 self.docs.remove(&document_id);
+                // Drop any in-flight service routes for this document: a response
+                // arriving after close has no engine to feed and must not forward
+                // to the UI as a stray API event (`toile-interop §5`).
+                self.rest_routes.retain(|_, d| *d != document_id);
                 self.send_to_sync(SyncCommand::CloseDocument { document_id });
             }
             LogicCommand::OpenChannel { channel_id } => {
@@ -145,6 +153,14 @@ impl LogicState {
             // forward to the UI. Documents are materialised on `OpenDocument`
             // (which carries the `doc_type`), so no event here mutates state.
             LogicEvent::Rest { id, evt } => {
+                // A response to a request this Logic thread issued on behalf of a
+                // document (`toile-interop §5`) is fed back into the owning engine
+                // instead of forwarded to the UI. UI-issued requests are absent
+                // from `rest_routes` and fall through to the verbatim forward.
+                if let Some(document_id) = self.rest_routes.remove(&id) {
+                    self.route_service_event(document_id, id, evt);
+                    return;
+                }
                 // `SessionReady` also seeds the canonical `UserId` (§7): capture
                 // it for later opens and push it into every already-open document
                 // before forwarding the event verbatim to the UI.
@@ -320,6 +336,16 @@ impl LogicState {
                 code,
                 message,
             } => {
+                // A failure correlated to a document's own request (`toile-interop
+                // §5`) aborts its pending import rather than surfacing a raw API
+                // error to the UI. Uncorrelated errors (id absent, or not routed)
+                // forward verbatim, exactly as before.
+                if let Some(id) = id
+                    && let Some(document_id) = self.rest_routes.remove(&id)
+                {
+                    self.route_service_error(document_id, id, message);
+                    return;
+                }
                 self.send_to_ui(UiEvent::ApiError {
                     id,
                     request,
@@ -341,7 +367,9 @@ impl LogicState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_bus::app::toile::ToileCommand;
     use ambre_bus::{DocumentId, RequestId, RestCommand, RestEvent, TrameCommand};
+    use std::io::Cursor;
 
     /// A `LogicState` wired to two drainable receivers (UI-bound, Sync-bound).
     fn harness() -> (
@@ -772,6 +800,181 @@ mod tests {
             sync_rx.try_recv(),
             Ok(SyncCommand::SendSnapshot { .. })
         ));
+    }
+
+    // -- Service-plane routing: interop media uploads (`toile-interop §5`) ------
+    //
+    // A Toile media import issues `UploadMedia` requests the dispatcher lowers to
+    // `RestCommand`s and whose answering `RestEvent`s it feeds back into the
+    // owning engine instead of forwarding to the UI. These pin that round trip.
+
+    /// A minimal solid-color PNG, decoded by the Toile image converter into one
+    /// media blob (hence one `UploadMedia` request).
+    fn solid_png(w: u32, h: u32) -> Vec<u8> {
+        let buf = image::RgbaImage::from_pixel(w, h, image::Rgba([10, 20, 30, 255]));
+        let mut bytes = Vec::new();
+        image::DynamicImage::ImageRgba8(buf)
+            .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png)
+            .expect("encode png");
+        bytes
+    }
+
+    /// Import a solid PNG into `doc_id` and return the single `RequestId` the
+    /// lowered `UploadMedia` was correlated with.
+    fn import_one_image(state: &mut LogicState, doc_id: DocumentId) -> RequestId {
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Toile(ToileCommand::ImportImage {
+                bytes: solid_png(8, 8),
+                mime: "image/png".into(),
+            }),
+        });
+        assert_eq!(
+            state.rest_routes.len(),
+            1,
+            "the import should record exactly one service route"
+        );
+        *state.rest_routes.keys().next().unwrap()
+    }
+
+    #[test]
+    fn toile_upload_request_lowers_with_doc_id_and_records_route() {
+        let (mut state, _ui, sync_rx) = harness();
+        let doc_id = live_toile(&mut state, Role::Owner);
+        let id = import_one_image(&mut state, doc_id);
+
+        // The route points the correlated response back at the owning document.
+        assert_eq!(state.rest_routes.get(&id), Some(&doc_id));
+
+        // The request was lowered to a `RestCommand::UploadMedia` carrying the
+        // document id the engine never holds, echoing Toile's own id.
+        let uploaded = sync_rx.drain().find_map(|cmd| match cmd {
+            SyncCommand::Rest {
+                id: got,
+                cmd:
+                    RestCommand::UploadMedia {
+                        document_id,
+                        mime_type,
+                        ..
+                    },
+            } => Some((got, document_id, mime_type)),
+            _ => None,
+        });
+        let (got_id, got_doc, mime) = uploaded.expect("an UploadMedia was forwarded to Sync");
+        assert_eq!(got_id, id);
+        assert_eq!(got_doc, doc_id);
+        assert_eq!(mime, "image/png");
+    }
+
+    #[test]
+    fn routed_media_uploaded_lands_in_engine_not_the_ui() {
+        let (mut state, ui_rx, _sync) = harness();
+        let doc_id = live_toile(&mut state, Role::Owner);
+        let id = import_one_image(&mut state, doc_id);
+        let _ = ui_rx.drain();
+
+        // The confirmation is routed into the engine, which applies the import.
+        state.handle_logic_event(LogicEvent::Rest {
+            id,
+            evt: RestEvent::MediaUploaded {
+                document_id: doc_id,
+                content_hash: "blake2b-real".into(),
+            },
+        });
+
+        // The route is consumed and the outcome surfaces as a viewport repaint,
+        // never as a raw `Rest` event to the UI.
+        assert!(state.rest_routes.is_empty());
+        let events: Vec<UiEvent> = ui_rx.drain().collect();
+        assert!(
+            events.iter().any(|e| matches!(e, UiEvent::Viewport { .. })),
+            "the applied import should repaint the board"
+        );
+        assert!(
+            !events.iter().any(|e| matches!(e, UiEvent::Rest { .. })),
+            "a routed response must not reach the UI as a Rest event"
+        );
+    }
+
+    #[test]
+    fn an_unrouted_rest_event_still_forwards_to_the_ui() {
+        // Regression guard: a UI-issued request's response is absent from
+        // `rest_routes` and must forward verbatim exactly as before.
+        let (mut state, ui_rx, _sync) = harness();
+        state.handle_logic_event(LogicEvent::Rest {
+            id: RequestId::next(),
+            evt: RestEvent::DocumentList { documents: vec![] },
+        });
+        assert!(matches!(ui_rx.try_recv(), Ok(UiEvent::Rest { .. })));
+    }
+
+    #[test]
+    fn a_correlated_upload_failure_aborts_the_import_without_a_raw_api_error() {
+        let (mut state, ui_rx, _sync) = harness();
+        let doc_id = live_toile(&mut state, Role::Owner);
+        let id = import_one_image(&mut state, doc_id);
+        let _ = ui_rx.drain();
+
+        state.handle_logic_event(LogicEvent::ApiError {
+            id: Some(id),
+            request: "UploadMedia".into(),
+            code: 500,
+            message: "boom".into(),
+        });
+
+        // The route is dropped and the failure surfaces as an import failure on
+        // the board, not as a stray `ApiError` to the UI.
+        assert!(state.rest_routes.is_empty());
+        let events: Vec<UiEvent> = ui_rx.drain().collect();
+        assert!(
+            !events.iter().any(|e| matches!(e, UiEvent::ApiError { .. })),
+            "a correlated failure must not reach the UI as a raw ApiError"
+        );
+        assert!(
+            events.iter().any(|e| matches!(e, UiEvent::Viewport { .. })),
+            "the abort should emit an ImportFailed viewport event"
+        );
+    }
+
+    #[test]
+    fn an_uncorrelated_api_error_still_forwards_to_the_ui() {
+        let (mut state, ui_rx, _sync) = harness();
+        state.handle_logic_event(LogicEvent::ApiError {
+            id: None,
+            request: "ListDocuments".into(),
+            code: 500,
+            message: "boom".into(),
+        });
+        assert!(matches!(ui_rx.try_recv(), Ok(UiEvent::ApiError { .. })));
+    }
+
+    #[test]
+    fn a_late_response_after_close_is_dropped_without_panic() {
+        let (mut state, ui_rx, _sync) = harness();
+        let doc_id = live_toile(&mut state, Role::Owner);
+        let id = import_one_image(&mut state, doc_id);
+        let _ = ui_rx.drain();
+
+        // Closing the document drops its in-flight route so the response can no
+        // longer reach a (now absent) engine, and cannot repaint the board.
+        state.handle_logic_command(LogicCommand::CloseDocument {
+            document_id: doc_id,
+        });
+        assert!(state.rest_routes.is_empty());
+        assert!(!state.docs.contains_key(&doc_id));
+
+        state.handle_logic_event(LogicEvent::Rest {
+            id,
+            evt: RestEvent::MediaUploaded {
+                document_id: doc_id,
+                content_hash: "blake2b-real".into(),
+            },
+        });
+        // No panic, and above all no viewport for a document that no longer exists.
+        assert!(
+            !ui_rx.drain().any(|e| matches!(e, UiEvent::Viewport { .. })),
+            "a closed document must not repaint"
+        );
     }
 
     #[test]

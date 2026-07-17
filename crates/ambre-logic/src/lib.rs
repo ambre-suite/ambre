@@ -36,11 +36,11 @@ mod data;
 mod dispatch;
 
 use ambre_bus::{
-    AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent, RestCommand, RestEvent,
-    Role, SyncCommand, UiEvent, UserId,
+    AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent, RequestId, RestCommand,
+    RestEvent, Role, SyncCommand, UiEvent, UserId,
 };
 
-use ambre_toile::ToileState;
+use ambre_toile::{ToileRequest, ToileState};
 use ambre_trame::TrameState;
 
 // -----------------------------------------------------------------------------
@@ -148,6 +148,13 @@ struct LogicState {
     /// that keys per-user state (Toile reactions, presence identity) always has
     /// it before the first edit.
     my_user_id: Option<UserId>,
+    /// P3 responses this Logic thread issued on behalf of a document
+    /// (`toile-interop §5`): a `RequestId` present here routes its answering
+    /// `RestEvent` (or correlated `ApiError`) back into the owning engine instead
+    /// of forwarding it to the UI. UI-issued requests are absent from this map
+    /// and forward verbatim, exactly as before. An entry is inserted when a
+    /// `ToileRequest` is lowered and removed when its response arrives.
+    rest_routes: HashMap<RequestId, DocumentId>,
 }
 
 impl LogicState {
@@ -162,6 +169,7 @@ impl LogicState {
             to_persist,
             docs: HashMap::new(),
             my_user_id: None,
+            rest_routes: HashMap::new(),
         }
     }
 

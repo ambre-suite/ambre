@@ -181,6 +181,7 @@ dependencies = [
  "ambre-trame",
  "flume",
  "futures-util",
+ "image",
  "js-sys",
  "tracing",
  "wasm-bindgen",
