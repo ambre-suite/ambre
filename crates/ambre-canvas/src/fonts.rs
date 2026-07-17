@@ -27,6 +27,82 @@ use std::rc::Rc;
 
 use rustc_hash::FxHashSet;
 
+// -----------------------------------------------------------------------------
+// Base fonts (fetched eagerly at boot)
+// -----------------------------------------------------------------------------
+
+/// The base font faces registered at startup: Noto Sans (regular / bold /
+/// italic / bold-italic, real faces selected by `FontWeight` / `FontStyle`) plus
+/// the alternate DejaVu serif and monospace families for the formatting toolbar
+/// picker (`-ui.md` sec.5bis). Together they cover Latin, Latin-Extended,
+/// Cyrillic, and Greek; scripts outside that are fetched on demand by
+/// [`LazyFontLoader`]. Same-origin URLs (no CDN, see spec sec.3); a missing file
+/// logs a warning and leaves that face absent rather than failing boot.
+#[cfg(target_arch = "wasm32")]
+const BASE_FONTS: [(&str, &str); 6] = [
+    ("/fonts/NotoSans-Regular.ttf", "NotoSans-Regular.ttf"),
+    ("/fonts/NotoSans-Bold.ttf", "NotoSans-Bold.ttf"),
+    ("/fonts/NotoSans-Italic.ttf", "NotoSans-Italic.ttf"),
+    ("/fonts/NotoSans-BoldItalic.ttf", "NotoSans-BoldItalic.ttf"),
+    ("/fonts/DejaVuSerif.ttf", "DejaVuSerif.ttf"),
+    ("/fonts/DejaVuSansMono.ttf", "DejaVuSansMono.ttf"),
+];
+
+/// Fetch the [`BASE_FONTS`] same-origin and register every face that resolves
+/// into `font_cx`. Shared by the UI-thread GPU bootstrap and any other consumer
+/// that needs a text-capable `FontContext` (e.g. the PDF export pass, whose
+/// fresh context would otherwise have zero faces and emit no glyphs). Fetch runs
+/// where a browser event loop exists; a face that fails to fetch is skipped.
+#[cfg(target_arch = "wasm32")]
+pub async fn load_base_fonts(font_cx: &mut parley::FontContext) {
+    for (url, label) in BASE_FONTS {
+        match crate::host::fetch_bytes(url).await {
+            Some(bytes) => {
+                font_cx.collection.register_fonts(bytes.into(), None);
+                tracing::info!("{label} loaded");
+            }
+            None => tracing::warn!("Failed to fetch {url}"),
+        }
+    }
+}
+
+/// Fetch the [`BASE_FONTS`] same-origin and return each face's bytes that
+/// resolved. Used by the Main thread to seed the Logic thread's PDF-export
+/// `FontContext` (`LogicCommand::LoadFonts`): the Logic worker cannot fetch, so
+/// the Main thread -- which has a browser event loop -- fetches on its behalf
+/// and ships the bytes across. A face that fails to fetch is simply omitted.
+#[cfg(target_arch = "wasm32")]
+pub async fn fetch_base_font_faces() -> Vec<Vec<u8>> {
+    let mut faces = Vec::new();
+    for (url, _) in BASE_FONTS {
+        if let Some(bytes) = crate::host::fetch_bytes(url).await {
+            faces.push(bytes);
+        }
+    }
+    faces
+}
+
+/// Build a fresh [`parley::FontContext`] with the [`BASE_FONTS`] registered.
+#[cfg(target_arch = "wasm32")]
+pub async fn font_context_from() -> parley::FontContext {
+    let mut font_cx = parley::FontContext::new();
+    load_base_fonts(&mut font_cx).await;
+    font_cx
+}
+
+/// Build a [`parley::FontContext`] by registering each already-fetched face in
+/// `faces`. Cross-platform and fetch-free, unlike [`font_context_from`]: the
+/// Logic thread cannot fetch (it blocks on its inbound selector and has no
+/// browser event loop), so it builds its PDF-export context from the base-font
+/// bytes the Main thread fetched and delivered (`LogicCommand::LoadFonts`).
+pub fn font_context_from_bytes(faces: impl IntoIterator<Item = Vec<u8>>) -> parley::FontContext {
+    let mut font_cx = parley::FontContext::new();
+    for bytes in faces {
+        font_cx.collection.register_fonts(bytes.into(), None);
+    }
+    font_cx
+}
+
 /// A script whose coverage is absent from the base fonts and is fetched on
 /// demand from the Ambre static server.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]

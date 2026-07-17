@@ -155,6 +155,16 @@ struct LogicState {
     /// and forward verbatim, exactly as before. An entry is inserted when a
     /// `ToileRequest` is lowered and removed when its response arrives.
     rest_routes: HashMap<RequestId, DocumentId>,
+    /// Base fonts for PDF export (`toile-interop §3.A`), seeded once by
+    /// [`LogicCommand::LoadFonts`]. `None` until the Main thread's boot-time
+    /// fetch lands; a fresh `FontContext` here would have zero faces and emit no
+    /// glyphs, so export waits on this. Lives on the Logic thread because that is
+    /// where the export pass runs, and the thread cannot fetch it itself.
+    ///
+    /// Read by the PDF-export handler (`ExportPdf`, a later slice); seeded now so
+    /// the fonts are warm before the first export.
+    #[allow(dead_code)]
+    export_cx: Option<parley::FontContext>,
 }
 
 impl LogicState {
@@ -170,6 +180,7 @@ impl LogicState {
             docs: HashMap::new(),
             my_user_id: None,
             rest_routes: HashMap::new(),
+            export_cx: None,
         }
     }
 

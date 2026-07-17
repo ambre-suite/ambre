@@ -117,6 +117,14 @@ pub enum LogicCommand {
         /// Opaque application byte blob (schema owned by `ambre-murmure`).
         payload: Vec<u8>,
     },
+
+    // ── Local — Logic-thread resource seeding (no Sync involvement) ────────────
+    /// Seed the Logic thread's PDF-export `FontContext` with base font faces
+    /// (`toile-interop §3.A`). Fetched by the Main thread at boot and delivered
+    /// here because the Logic worker cannot fetch: it blocks on its inbound
+    /// selector and has no browser event loop. Local-only -- it never reaches
+    /// Sync or the server. Each entry is one already-fetched font file's bytes.
+    LoadFonts { faces: Vec<Vec<u8>> },
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
