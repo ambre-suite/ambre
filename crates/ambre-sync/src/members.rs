@@ -29,6 +29,7 @@ impl SyncState {
         let Some(tx) = event_tx else {
             // No transport (test/headless): nothing to fetch, no reply possible.
             let _ = logic_tx.send(LogicEvent::ApiError {
+                id: None,
                 request: "FetchInviteeKey".into(),
                 code: 503,
                 message: "Sync transport unavailable".into(),
@@ -81,6 +82,7 @@ impl SyncState {
         };
         let Some(exchange_key) = exchange_key else {
             let _ = logic_tx.send(LogicEvent::ApiError {
+                id: None,
                 request: "InviteToDocument".into(),
                 code: 401,
                 message: "Not authenticated".into(),
@@ -89,6 +91,7 @@ impl SyncState {
         };
         let Some(doc_key) = doc_key else {
             let _ = logic_tx.send(LogicEvent::ApiError {
+                id: None,
                 request: "InviteToDocument".into(),
                 code: 404,
                 message: "Document not open".into(),
@@ -146,6 +149,7 @@ impl SyncState {
         };
         let Some(exchange_key) = exchange_key else {
             let _ = logic_tx.send(LogicEvent::ApiError {
+                id: None,
                 request: "RevokeFromDocument".into(),
                 code: 401,
                 message: "Not authenticated".into(),
@@ -234,6 +238,7 @@ impl SyncState {
                     }
                     Err(e) => {
                         let _ = logic_tx.send(LogicEvent::ApiError {
+                            id: None,
                             request: "UpdateDocumentMemberRole".into(),
                             code: 500,
                             message: e,

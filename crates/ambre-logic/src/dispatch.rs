@@ -315,11 +315,13 @@ impl LogicState {
                 self.send_to_ui(UiEvent::AuthError { message });
             }
             LogicEvent::ApiError {
+                id,
                 request,
                 code,
                 message,
             } => {
                 self.send_to_ui(UiEvent::ApiError {
+                    id,
                     request,
                     code,
                     message,

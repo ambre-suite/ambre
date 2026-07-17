@@ -839,6 +839,29 @@ pub enum ToileCommand {
         ids: Vec<ElementId>,
     },
 
+    // -- Interop import (`toile-interop` §1/§5) --
+    /// Import an SVG document dropped onto the board. The bytes are converted to
+    /// an `ImportBatch` and applied as one undo group; any embedded raster media
+    /// is encrypted + uploaded via the Sync media plane before the batch lands
+    /// (§5). Answered by [`ToileEvent::ImportReport`] on success or
+    /// [`ToileEvent::ImportFailed`] if the file never mapped.
+    ImportSvg {
+        bytes: Vec<u8>,
+    },
+    /// Import a raster image (PNG / JPG) dropped onto the board.
+    ImportImage {
+        bytes: Vec<u8>,
+        mime: String,
+    },
+    /// Import a Figma document (a `.fig` JSON export).
+    ImportFigma {
+        bytes: Vec<u8>,
+    },
+    /// Import a Miro board (a JSON export).
+    ImportMiro {
+        bytes: Vec<u8>,
+    },
+
     // -- Persistence / compaction (no CRDT mutation) --
     RequestSnapshot,
 
@@ -996,6 +1019,18 @@ pub enum ToileEvent {
     /// for this target. Emitted on a local `React`; the derived tally is never
     /// carried in the CRDT, only recomputed on read.
     ReactionsUpdated(TargetId),
+    /// A foreign-file import applied successfully (`toile-interop` §2.C). Carries
+    /// the lossy-import summary the UI surfaces: how many elements landed and
+    /// which unsupported constructs were dropped. The whole import is one undo
+    /// item (§1).
+    ImportReport {
+        imported: usize,
+        skipped: Vec<String>,
+    },
+    /// A foreign-file import aborted before touching the board (a parse error, a
+    /// safety-limit breach, or a media upload failure): the board is unchanged
+    /// (`toile-interop` §1 atomicity). Carries a human-facing reason.
+    ImportFailed(String),
     Error(ToileError),
 }
 
