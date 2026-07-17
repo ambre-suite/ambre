@@ -6,7 +6,7 @@ use std::collections::HashSet;
 
 use loro::{LoroMap, LoroValue};
 
-use crate::logic::command::{End, ToileEvent, ToileOutcome};
+use crate::logic::command::{End, ToileError, ToileEvent, ToileOutcome};
 use crate::logic::model::{Anchor, ConnectorId, ElementId, EndCaps, NodeId, PathType};
 
 use super::codec::{encode_anchor, map_str, write_connector};
@@ -23,19 +23,45 @@ impl ToileState {
         path_type: PathType,
         arrows: EndCaps,
     ) -> ToileOutcome {
+        match self.create_connector_inner(from, from_anch, to, to_anch, path_type, arrows) {
+            Some(_) => {
+                self.doc.commit();
+                self.emit_with_update(vec![self.viewport_event()])
+            }
+            // Unreachable in practice: a container insert of a freshly minted,
+            // unique id never collides. Reported defensively, no id to name.
+            None => ToileOutcome::display_only(vec![ToileEvent::Error(
+                ToileError::NoSuchConnector(String::new()),
+            )]),
+        }
+    }
+
+    /// Create one connector and push it onto the incremental layer cache, **without**
+    /// committing. Returns the minted id (or `None` if the container insert failed).
+    /// The caller owns the `doc.commit()` so an import lands its connectors inside
+    /// the one import undo group (`toile-interop §5`).
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn create_connector_inner(
+        &mut self,
+        from: ElementId,
+        from_anch: Anchor,
+        to: ElementId,
+        to_anch: Anchor,
+        path_type: PathType,
+        arrows: EndCaps,
+    ) -> Option<ConnectorId> {
         let id = self.mint_connector_id();
         let conns = self.doc.get_map(CONNECTORS);
         let Ok(cm) = conns.insert_container(id.as_str(), LoroMap::new()) else {
-            return self.err_no_connector(&id);
+            return None;
         };
         write_connector(&cm, &from, from_anch, &to, to_anch, path_type, arrows);
         let _ = self
             .doc
             .get_movable_list(LAYERS)
             .push(NodeId::Connector(id.clone()).encode().as_str());
-        self.doc.commit();
-        self.layers.push(NodeId::Connector(id));
-        self.emit_with_update(vec![self.viewport_event()])
+        self.layers.push(NodeId::Connector(id.clone()));
+        Some(id)
     }
 
     pub(super) fn retarget_connector(

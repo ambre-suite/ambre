@@ -23,25 +23,41 @@ impl ToileState {
         size: kurbo::Size,
         content: InitContent,
     ) -> ToileOutcome {
+        let id = match self.create_element_inner(kind, at, size, content) {
+            Ok(id) => id,
+            Err(e) => return ToileOutcome::display_only(vec![ToileEvent::Error(e)]),
+        };
+        self.doc.commit();
+        self.emit_with_update(vec![ToileEvent::ElementCreated(id), self.viewport_event()])
+    }
+
+    /// Create one element and update the incremental caches, **without**
+    /// committing (§2.E). The caller owns the `doc.commit()`, so an import can
+    /// land N creates in a single undo group (`toile-interop §1`). Returns the
+    /// minted id, or the rejection reason as a plain [`ToileError`] (validation
+    /// is identical to [`create_element`](Self::create_element)).
+    pub(super) fn create_element_inner(
+        &mut self,
+        kind: ElementKind,
+        at: Point,
+        size: kurbo::Size,
+        content: InitContent,
+    ) -> Result<ElementId, ToileError> {
         // Group and Drawing are not creatable here (§8): a group is born via
         // GroupElements, a stroke via CommitStroke.
         if matches!(kind, ElementKind::Group | ElementKind::Drawing) {
-            return ToileOutcome::display_only(vec![ToileEvent::Error(ToileError::NotCreatable {
+            return Err(ToileError::NotCreatable {
                 kind: kind.type_tag(),
-            })]);
+            });
         }
         if !content_matches(kind, &content) {
-            return ToileOutcome::display_only(vec![ToileEvent::Error(
-                ToileError::ContentKindMismatch,
-            )]);
+            return Err(ToileError::ContentKindMismatch);
         }
 
         let id = self.mint_element_id();
         let elems = self.doc.get_map(ELEMENTS);
         let Ok(em) = elems.insert_container(id.as_str(), LoroMap::new()) else {
-            return ToileOutcome::display_only(vec![ToileEvent::Error(ToileError::NoSuchElement(
-                id.0,
-            ))]);
+            return Err(ToileError::NoSuchElement(id.0));
         };
         let _ = em.insert("type", kind.type_tag());
         let _ = em.insert("x", at.x);
@@ -60,15 +76,13 @@ impl ToileState {
             .doc
             .get_movable_list(LAYERS)
             .push(NodeId::Element(id.clone()).encode().as_str());
-        self.doc.commit();
 
         let rect = expanded_aabb(at.x, at.y, size.width, size.height, 0.0);
         self.bounds.insert(id.clone(), rect);
         self.index
             .insert(ElementBounds::from_rect(id.clone(), rect));
         self.layers.push(NodeId::Element(id.clone()));
-
-        self.emit_with_update(vec![ToileEvent::ElementCreated(id), self.viewport_event()])
+        Ok(id)
     }
 
     /// Seed the per-type payload fields (§2.C). Kept minimal for Phase 0.
@@ -208,6 +222,19 @@ impl ToileState {
         ids: &[ElementId],
         style: ElementStyle,
     ) -> ToileOutcome {
+        if !self.restyle_inner(ids, &style) {
+            return ToileOutcome::display_only(Vec::new());
+        }
+        self.doc.commit();
+        self.emit_with_update(vec![self.viewport_event()])
+    }
+
+    /// Overwrite the style register of every unlocked element in `ids`, **without**
+    /// committing. Returns whether anything changed. The caller owns the
+    /// `doc.commit()` so an import can restyle a fresh element inside the same
+    /// undo group as its `CreateElement` (§2.E): style is an independent LWW
+    /// register that cannot ride the create.
+    pub(super) fn restyle_inner(&mut self, ids: &[ElementId], style: &ElementStyle) -> bool {
         let bytes = style.to_bytes();
         let mut touched = false;
         for id in ids {
@@ -220,11 +247,7 @@ impl ToileState {
             let _ = em.insert("style", LoroValue::Binary(bytes.clone().into()));
             touched = true;
         }
-        if !touched {
-            return ToileOutcome::display_only(Vec::new());
-        }
-        self.doc.commit();
-        self.emit_with_update(vec![self.viewport_event()])
+        touched
     }
 
     pub(super) fn lock_elements(&mut self, ids: &[ElementId], locked: bool) -> ToileOutcome {
@@ -366,5 +389,62 @@ impl ToileState {
             .insert(ElementBounds::from_rect(id.clone(), rect));
         self.layers.push(NodeId::Element(id.clone()));
         self.emit_with_update(vec![ToileEvent::ElementCreated(id), self.viewport_event()])
+    }
+}
+
+#[cfg(test)]
+mod inner_tests {
+    //! The commit-free `*_inner` helpers (`toile-interop §2.E`): several creates,
+    //! a restyle and a group must share ONE `doc.commit()` and collapse to ONE
+    //! undo item, the invariant `apply_import` relies on.
+
+    use kurbo::{Point, Size};
+
+    use crate::logic::command::{InitContent, ToileCommand};
+    use crate::logic::model::{ElementKind, ElementStyle, ShapeKind};
+    use crate::logic::state::ToileState;
+
+    fn rect_at(st: &mut ToileState, x: f64) -> crate::logic::model::ElementId {
+        st.create_element_inner(
+            ElementKind::Shape(ShapeKind::Rect),
+            Point::new(x, 0.0),
+            Size::new(10.0, 10.0),
+            InitContent::None,
+        )
+        .expect("create")
+    }
+
+    #[test]
+    fn many_inner_creates_share_one_undo_item() {
+        let mut st = ToileState::new();
+        for i in 0..5 {
+            rect_at(&mut st, i as f64 * 20.0);
+        }
+        st.doc.commit();
+        assert_eq!(st.element_count(), 5);
+        // A single Undo unwinds all five: they landed in one commit.
+        st.handle_command(ToileCommand::Undo);
+        assert_eq!(st.element_count(), 0);
+    }
+
+    #[test]
+    fn create_restyle_and_group_are_one_undo_item() {
+        let mut st = ToileState::new();
+        let a = rect_at(&mut st, 0.0);
+        let b = rect_at(&mut st, 20.0);
+        let style = ElementStyle {
+            fill: Some(0xFF_3366CC),
+            ..ElementStyle::default()
+        };
+        assert!(st.restyle_inner(std::slice::from_ref(&a), &style));
+        assert!(st.group_inner(&[a, b]).is_some());
+        st.doc.commit();
+        st.rematerialize_layers();
+        st.recompute_groups();
+        // Two rects plus the group element.
+        assert_eq!(st.element_count(), 3);
+        // One Undo removes the whole batch (creates + restyle + group).
+        st.handle_command(ToileCommand::Undo);
+        assert_eq!(st.element_count(), 0);
     }
 }
