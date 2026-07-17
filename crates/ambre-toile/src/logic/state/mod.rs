@@ -21,6 +21,7 @@
 //! - [`presentation`] -- slide sequence CRDT + local playback (`toile-features` §1)
 //! - [`connectors`] -- connector lifecycle and queries (§5)
 //! - [`clipboard`] -- copy / paste / duplicate (§8 ter)
+//! - [`import`] -- atomic foreign-file import + media map seeding (`toile-interop`)
 //! - [`caches`] -- derived `bounds` / index / `layers` maintenance (§1)
 //! - [`derive`] -- read-only `DisplayViewport` derivation (§9)
 //! - [`codec`] -- pure geometry / (de)serialization helpers
@@ -35,6 +36,7 @@ mod derive;
 mod elements;
 mod find;
 mod groups;
+mod import;
 mod presence;
 mod presentation;
 mod reactions;
@@ -71,6 +73,11 @@ const ORDER: &str = "order";
 const CONFIG: &str = "config";
 /// Reactions root map key: `reactions[target_id][user_id]` (§4.A).
 const REACTIONS: &str = "reactions";
+/// Media root map key: `media[blake2b(plaintext)]` -> `{w, h, mime, thumb}`
+/// (`toile-logic §2.B`). Created and populated by `toile-interop` (§5); an
+/// `image` element's `hash` field is a key here. Dedup: N elements may share one
+/// entry, so `seed_media` never overwrites an existing key.
+const MEDIA: &str = "media";
 
 /// Per-document Toile engine.
 pub struct ToileState {
