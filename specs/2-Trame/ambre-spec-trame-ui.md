@@ -1273,8 +1273,9 @@ fn draw_selection(&mut self) {
 ```rust
 pub struct RemoteCursor {
     /// Canonical user identifier -- stable, per-user, not per-device.
-    /// The pub_key -> UserId resolution is done in ambre-sync via trusted_keys
-    /// before the Ephemeral payload reaches the Logic thread.
+    /// Set to the Sync-resolved `from_user_id` (pub_key -> UserId resolved in ambre-sync
+    /// via trusted_keys and delivered on LogicEvent::RemoteEphemeral); NEVER read from the
+    /// peer-authored Ephemeral payload (a peer cannot forge another user's id).
     pub user_id:      Uuid,
     pub color:        Color,         // color assigned locally by hashing the user_id
     pub row:          u32,
@@ -1301,8 +1302,9 @@ fn draw_remote_cursors(&mut self) {
 }
 
 // Update from decrypted LogicEvent::RemoteEphemeral.
-// The Logic thread has already resolved pub_key -> UserId via ambre-sync/trusted_keys
-// before emitting TrameEvent::RemoteCursors. The UI thread never manipulates
+// The author identity is the Sync-resolved from_user_id (pub_key -> UserId done in
+// ambre-sync/trusted_keys), assembled Logic-side into TrameEvent::RemoteCursors; the peer
+// payload (PresencePayload) never carries a user_id. The UI thread never manipulates
 // any cryptographic key.
 fn on_remote_presence(&mut self, presence: RemotePresence) {
     // RemotePresence { user_id: Uuid, display_name, sheet_id, row, col }

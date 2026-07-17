@@ -8,11 +8,11 @@
 > `prose-features`, `prose-interop`, and `prose-ui` build. These four modules are internal
 > to the `ambre-prose` crate.
 
-> **Architecture note.** The client uses a **3-thread shared-memory architecture** (`flume` channels, single WASM binary) — see `ambre-spec-architecture.md`. Consequences for this spec:
+> **Architecture note.** The client uses the **two-instance model** — a **Main** WASM instance (UI thread + Logic thread sharing one linear memory via `wasm_thread`, talking over typed `flume` values) and a **separate Sync worker** (its own WASM instance/memory, reached over `postMessage` + `postcard`, relayed by the Main thread) — see `ambre-spec-architecture.md §2.B`. Consequences for this spec:
 > - **State registry.** The state of a Prose document is `ProseState`, a concrete value stored in the Logic thread's typed registry (`enum DocState { Trame(TrameState), Prose(ProseState), … }`) and dispatched via `match` (no trait object, no `Box<dyn Any>`).
-> - **Typed data plane.** `ProseCommand`/`ProseEvent` (+ their payload types: `PageLayout`, `BlockLayout`, …) live in **`ambre-bus`** (re-exported by `ambre-prose`) and travel **by move** on `flume`, inside `AppCommand::Prose(..)` / `AppEvent::Prose(..)`. **No `serde` derivation** on them. `serde`/`postcard` only remain for **network bytes**: Loro CRDT payloads (`export_updates`/`export_snapshot`, already `Vec<u8>`) and `Ephemeral` payloads (`CursorPosition`/`RemoteCursor`, postcard).
+> - **Typed data plane.** `ProseCommand`/`ProseEvent` (+ their payload types: `PageLayout`, `BlockLayout`, …) live in **`ambre-bus`** (re-exported by `ambre-prose`) and travel **by move** on `flume`, inside `AppCommand::Prose(..)` / `AppEvent::Prose(..)`. **No `serde` derivation** on them. `serde`/`postcard` only remain for **network bytes**: Loro CRDT payloads (`export_updates`/`export_snapshot`, already `Vec<u8>`) and the `Ephemeral` presence payload (`PresencePayload`, postcard).
 > - **Typed outcome for editing.** A handler that mutates the CRDT **returns** domain bytes (Loro delta); the Logic dispatcher emits `SyncCommand::SendUpdate { document_id, payload }`. `ProseState` holds no transport handle of its own. See §C and `ambre-spec-architecture.md §7 ARCH P2`.
-> - **Sync→Logic event routing.** `ProseState` does **not** see `LogicEvent`: the generic dispatcher in `ambre-logic` routes incoming events (`RemoteUpdate`/`RemoteSnapshot`/`RemoteEphemeral`/`SnapshotNeeded`/…) to `ProseState`'s content methods (`apply_remote`, `apply_ephemeral`, `export_snapshot`).
+> - **Sync→Logic event routing.** `ProseState` does **not** see `LogicEvent`: the generic dispatcher in `ambre-logic` routes incoming events (`RemoteUpdate`/`RemoteSnapshot`/`RemoteEphemeral`/`SnapshotNeeded`/…) to `ProseState`'s content methods (`apply_remote`, `apply_ephemeral`, `export_snapshot`). `LogicEvent::RemoteEphemeral` carries a **Sync-resolved `from_user_id: UserId`** (spoof-proof — a peer cannot forge another user's id, see `ambre-spec-sync.md §3`); the dispatcher passes it to `apply_ephemeral(from_user_id, payload)`.
 
 ---
 
@@ -43,8 +43,8 @@ This component delegates:
 | `ambre-core` | `Uuid`, `DocType`, common types (via `ambre-bus` re-export). |
 | `ambre-bus` | Typed IPC types: `ProseCommand`/`ProseEvent` (+ payloads), `AppCommand`/`AppEvent`, `SyncCommand`, `RestCommand`/`RestEvent`. |
 | `ambre-draw` | `DrawSurface` trait + kurbo/peniko re-exports. Page rendering functions (`render_block_on`, etc.) are parameterized on this trait — same code for screen (WgpuSurface) and PDF export (KrillaSurface). |
-| `postcard` | Binary serialization **only for network payloads**: `Ephemeral` (`CursorPosition`/`RemoteCursor` cursors). CRDT snapshots/deltas are already `Vec<u8>` produced by Loro. **No postcard on the inter-thread path** (typed values on `flume`). |
-| `serde` | `Serialize`/`Deserialize` **only** on postcard-serialized types bound for the network (`CursorPosition`, `RemoteCursor`). IPC types (`ProseCommand`/`ProseEvent`, `PageLayout`, …) do not carry it (move on `flume`). |
+| `postcard` | Binary serialization **only for network payloads**: the `Ephemeral` presence payload (`PresencePayload`). CRDT snapshots/deltas are already `Vec<u8>` produced by Loro. **No postcard on the inter-thread path** (typed values on `flume`). |
+| `serde` | `Serialize`/`Deserialize` **only** on postcard-serialized types bound for the network (`PresencePayload`, `CursorPosition`). IPC types (`ProseCommand`/`ProseEvent`, `PageLayout`, `RemoteCursor`, …) do not carry it (move on `flume`). |
 | `thiserror` | Typed `ProseError`, mapped to `ProseEvent::Error`. |
 
 No dependency on `ambre-sync` or `ambre-crypto`.
@@ -135,7 +135,7 @@ pub enum BlockType {
     TableCell  = 5,  // a: {"bg": str|null, "bt": f32, "bb": f32, "bl": f32, "br": f32,
                      //      "bc": str, "pad": f32, "va": u8}
     CodeBlock  = 6,  // a: {"lang": str}
-    Image      = 7,  // a: {"blob_id": str, "alt": str, "w": u32, "h": u32}
+    Image      = 7,  // a: {"content_hash": str, "alt": str, "w": u32, "h": u32}
     PageBreak  = 8,  // leaf node without text
     HRule      = 9,  // leaf node without text
     Toc        = 10, // a: {"max_level": u8, "numbered": bool}
@@ -726,7 +726,7 @@ via `match` in the Logic thread (`ambre-logic`). Its public surface mirrors `Tra
 
 - `handle_command(ProseCommand) -> ProseOutcome` — content command (UI → Logic).
 - `apply_remote(&[u8]) -> Vec<ProseEvent>` — remote CRDT delta/snapshot to import.
-- `apply_ephemeral(&[u8]) -> Vec<ProseEvent>` — remote `Ephemeral` (cursor) payload.
+- `apply_ephemeral(from_user_id: UserId, &[u8]) -> Vec<ProseEvent>` — remote `Ephemeral` (cursor) payload; the author identity is the **Sync-resolved `from_user_id`**, never trusted from the payload.
 - `export_snapshot() -> Vec<u8>` — on `SnapshotNeeded`.
 
 The generic dispatcher in `ambre-logic` routes incoming `LogicEvent`s to these
@@ -753,7 +753,7 @@ pub struct ProseState {
 pub struct ProseOutcome {
     pub display:   Vec<ProseEvent>,
     pub update:    Option<Vec<u8>>,   // raw Loro delta (export_updates)
-    pub ephemeral: Option<Vec<u8>>,   // CursorPosition postcard (local presence)
+    pub ephemeral: Option<Vec<u8>>,   // PresencePayload postcard (local presence)
 }
 
 impl ProseState {
@@ -777,12 +777,19 @@ impl ProseState {
         self.produce_layout_events() // -> [DocUpdated, LayoutUpdated, RunsUpdated]
     }
 
-    /// Remote `Ephemeral` payload (already decrypted by `ambre-sync`; the
-    /// `pub_key -> UserId` resolution is done on the Sync side via `trusted_keys`
-    /// BEFORE propagation upward).
-    pub fn apply_ephemeral(&mut self, payload: &[u8]) -> Vec<ProseEvent> {
-        match postcard::from_bytes::<RemoteCursor>(payload) {
-            Ok(cursor) => vec![ProseEvent::RemoteCursors { cursors: vec![cursor] }],
+    /// Remote `Ephemeral` payload (already decrypted by `ambre-sync`). The author
+    /// identity is the **Sync-resolved `from_user_id`** (spoof-proof, `ambre-spec-sync.md §3`):
+    /// the peer-authored payload carries only the cursor position and a self-asserted,
+    /// cosmetic `display_name` -- never a `user_id`. The canonical id and the peer color
+    /// are derived here from `from_user_id`.
+    pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &[u8]) -> Vec<ProseEvent> {
+        match postcard::from_bytes::<PresencePayload>(payload) {
+            Ok(p) => vec![ProseEvent::RemoteCursors { cursors: vec![RemoteCursor {
+                user_id:      from_user_id,
+                display_name: p.display_name,
+                color:        user_color(from_user_id),   // aligned with prose-ui::user_color / Trame color_for_user
+                position:     p.position,
+            }] }],
             Err(_) => vec![], // non-Prose Ephemeral payload (ignored)
         }
     }
@@ -879,7 +886,7 @@ pub enum ProseCommand {
     // -- Images --
     /// Insert an image. Attributes are typed -- no recourse to stringly-typed SetBlockAttr.
     InsertImage      { parent_id: Option<TreeID>, after_id: Option<TreeID>,
-                       blob_id: Uuid, alt: String, width_px: u32, height_px: u32 },
+                       content_hash: String, alt: String, width_px: u32, height_px: u32 },
     ResizeImage      { block_id: TreeID, width_px: u32, height_px: u32 },
     SetImageAlign    { block_id: TreeID, align: ImageAlign },
     SetImageAlt      { block_id: TreeID, alt: String },
@@ -923,11 +930,21 @@ pub enum ProseCommand {
     ReplaceOne { replacement: String },
     ReplaceAll { replacement: String },
 
+    // -- Clipboard (host-driven, Logic-authoritative -- see prose-ui K / ambre-spec-ui.md 2.E) --
+    /// Build the full-fidelity clipboard payload from the CRDT selection.
+    /// The Logic dispatcher replies with ProseEvent::Clipboard { text, ambre }.
+    CopySelection { anchor: (TreeID, u32), focus: (TreeID, u32) },
+    /// Paste an opaque x-ambre payload (postcard of a typed Prose clipboard payload).
+    PasteRich     { block_id: TreeID, pos: u32, payload: Vec<u8> },
+
     // -- Import / Export --
     ImportDocument { format: ImportFormat, data: Vec<u8> },
     ExportDocument { format: ExportFormat, options: ExportOptions },
 
     // -- Collaborative cursor (ephemeral) --
+    /// Local presence. The handler builds the wire `PresencePayload { position: pos,
+    /// display_name: <local session name> }` and returns it as `outcome.ephemeral`
+    /// (postcard) -> SyncCommand::SendEphemeral. No `user_id` is ever put on the wire.
     UpdateCursor { pos: CursorPosition },
 
     // -- Undo / Redo --
@@ -955,6 +972,10 @@ pub enum ProseEvent {
     RunsUpdated   { runs: Vec<(TreeID, Vec<ParleyRunData>)>, version: u64 },
     /// Decrypted remote cursors (from Ephemeral).
     RemoteCursors { cursors: Vec<RemoteCursor> },
+    /// Full-fidelity clipboard payload built from the CRDT selection (reply to CopySelection).
+    /// `text` = text/plain mirror; `ambre` = opaque x-ambre bytes. The UI stashes it and the
+    /// host mirrors it to the OS clipboard (poll_clipboard, ambre-spec-ui.md 2.E).
+    Clipboard { text: String, ambre: Vec<u8> },
 
     // -- Features --
     /// Recalculated TOC (triggered by LayoutUpdated).
@@ -990,9 +1011,9 @@ pub enum ProseEvent {
 > `ExportFormat` are defined in their respective modules (`prose-features`, `prose-interop`)
 > and imported here.
 
-#### `CursorPosition` and `RemoteCursor`
+#### `PresencePayload`, `CursorPosition`, and `RemoteCursor`
 
-> ⚠️ **These two types keep `serde`**: unlike IPC types (move on `flume`), they are **postcard-serialized** in the `Ephemeral` payload that transits over the network (encrypted by `ambre-sync`). These are real network bytes.
+> ⚠️ **`PresencePayload` and `CursorPosition` keep `serde`**: they are the **postcard-serialized** `Ephemeral` payload that transits over the network (encrypted by `ambre-sync`) — real network bytes. **`RemoteCursor` does NOT** carry `serde`: it is a Logic → UI event payload (content plane, moved on `flume`), built from the Sync-resolved `from_user_id`.
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1002,12 +1023,23 @@ pub struct CursorPosition {
     pub anchor:   Option<(TreeID, u32)>, // Some if selection
 }
 
+/// Peer-authored `Ephemeral` wire payload. Carries ONLY position + a self-asserted,
+/// cosmetic display name. It deliberately does NOT carry a `user_id`: the canonical
+/// identity is the Sync-resolved `from_user_id` delivered out-of-band on
+/// `LogicEvent::RemoteEphemeral` (a peer cannot forge another user's id).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PresencePayload {
+    pub position:     CursorPosition,
+    pub display_name: String,   // self-asserted, cosmetic (never trusted for identity)
+}
+
+/// Logic -> UI event payload (NO serde -- moved by value on `flume`).
+/// Assembled in `apply_ephemeral` from the trusted `from_user_id` + the wire payload.
+#[derive(Debug, Clone)]
 pub struct RemoteCursor {
     /// Canonical user identifier -- stable, per-user, not per-device.
-    /// The pub_key -> UserId resolution is done in ambre-sync via trusted_keys
-    /// before the Ephemeral payload propagates to the Logic thread.
-    pub user_id:      Uuid,
+    /// Set to the Sync-resolved `from_user_id`; NEVER read from the peer payload.
+    pub user_id:      UserId,
     pub display_name: String,
     pub color:        u32,   // RGBA -- derived from user_id hash (see prose-ui::user_color)
     pub position:     CursorPosition,
@@ -1077,7 +1109,7 @@ impl ProseState {
 | Flow | Data | Encryption |
 |------|---------|-------------|
 | Logic thread → Sync thread (`SyncCommand::SendUpdate`) | Raw Loro delta plaintext | XChaCha20-Poly1305 + Ed25519 in `ambre-sync` |
-| Logic thread → Sync thread (`SyncCommand::SendEphemeral`) | Serialized `CursorPosition` | Encrypted in `ambre-sync` → `Ephemeral.ciphertext` |
+| Logic thread → Sync thread (`SyncCommand::SendEphemeral`) | Serialized `PresencePayload` (position + self-asserted name; no `user_id`) | Encrypted in `ambre-sync` → `Ephemeral.ciphertext`; author identity added by Sync as `from_user_id` on the inbound path |
 | Logic thread → UI thread (`ProseEvent`) | `PageLayout`, Parley runs, TOC — shared WASM memory | No exposure outside the browser process |
 
 `ambre-prose` never contacts the network, never imports `ambre-crypto`, and never sends
@@ -1119,7 +1151,7 @@ plaintext to `ambre-server`.
 | Pagination: incremental invalidation (changed height) | Add line → recalculate from this block, previous blocks unchanged |
 | Pagination: TOC placeholder estimated height | 10 headings × toc_line_height → correct estimated height |
 | `BlockType::Toc`: allowed at root | Nesting rule |
-| Round-trip postcard `ProseCommand` / `ProseEvent` | `assert_eq!` after double serialization |
+| Round-trip postcard of the Prose **network payload** (`PresencePayload` / `CursorPosition`) | `assert_eq!` after double serialization (these are the only postcard types — `ProseCommand`/`ProseEvent`/`RemoteCursor` move typed on `flume`, nothing to serialize) |
 
 **Prop-tests (proptest):**
 
@@ -1155,7 +1187,7 @@ proptest! {
 | `recalculate_pagination()` — 100 pages, mocked heights | < 20 ms |
 | `recalculate_pagination()` — 100 pages, 20 footnotes, header+footer | < 25 ms |
 | `recalculate_pagination()` — partial invalidation 10 pages | < 3 ms |
-| `postcard::to_allocvec(ProseCommand::InsertText)` | < 10 µs |
+| `postcard::to_allocvec(CursorPosition)` — network `Ephemeral` payload | < 10 µs |
 
 ---
 
@@ -1168,7 +1200,7 @@ proptest! {
 | `recalculate_pagination()` total invalidation 100 pages | < 20 ms | Logic |
 | `recalculate_pagination()` partial invalidation (1 block, 10 pages) | < 3 ms | Logic |
 | `shape_dirty_blocks()` — 10 modified blocks | < 5 ms | Logic |
-| `PageLayout` serialization 100 pages (postcard) | < 1 ms | Logic |
+| `PageLayout` handoff 100 pages (`flume` by move, no serialization) | < 1 ms | Logic |
 | `export_snapshot()` doc 100 pages | < 10 ms | Logic |
 
 **Memory:**
@@ -1215,7 +1247,7 @@ proptest! {
 - [ ] Block operations: `InsertBlock`, `DeleteBlock`, `MoveBlock`, nesting rule.
 - [ ] `compute_depth` for `ListItem`s.
 - [ ] Unit tests CRDT convergence, exhaustive `expand_type_for`, `compute_depth`.
-- [ ] Round-trip postcard of Prose **network payloads** (`CursorPosition`/`RemoteCursor` in `Ephemeral`). (`ProseCommand`/`ProseEvent` travel typed on `flume` — nothing to serialize.)
+- [ ] Round-trip postcard of the Prose **network payload** (`PresencePayload` in `Ephemeral`). (`ProseCommand`/`ProseEvent`/`RemoteCursor` travel typed on `flume` — nothing to serialize.)
 
 **Phase 1 — State & Pagination (Week 2)**
 - [ ] `ProseState`: typed surface `handle_command` / `apply_remote` / `apply_ephemeral` / `export_snapshot` (+ `ProseOutcome`), stored in `DocState::Prose`.

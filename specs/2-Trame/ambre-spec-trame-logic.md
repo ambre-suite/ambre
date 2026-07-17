@@ -958,7 +958,10 @@ impl TrameState {
     pub fn apply_remote(&mut self, payload: &[u8]) -> Vec<TrameEvent> { /* import + recompute */ }
 
     /// Apply a remote ephemeral (presence) payload -> RemoteCursors events.
-    pub fn apply_ephemeral(&mut self, payload: &[u8]) -> Vec<TrameEvent> { /* cursors */ }
+    /// The author identity is the **Sync-resolved `from_user_id`** (spoof-proof,
+    /// `ambre-spec-sync.md §3`): the peer-authored payload carries only the cell position
+    /// and a self-asserted, cosmetic `display_name` -- never a `user_id`.
+    pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &[u8]) -> Vec<TrameEvent> { /* cursors */ }
 
     /// Export a full CRDT snapshot (compaction / local persistence / SnapshotNeeded).
     pub fn export_snapshot(&self) -> Vec<u8> { self.doc.export(ExportMode::Snapshot) }
@@ -1271,6 +1274,9 @@ pub enum TrameCommand {
     Redo,
 
     // -- Collaborative cursor (ephemeral) ---------------------------------
+    /// Local presence. The handler builds the wire `PresencePayload { sheet_id, row, col,
+    /// selection, display_name: <local session name> }` and returns it as
+    /// `outcome.ephemeral` (postcard) -> SyncCommand::SendEphemeral. No `user_id` on the wire.
     UpdateCursor { sheet_id: SheetId, row: u32, col: u32,
                    selection: Option<(u32, u32, u32, u32)> },
 
@@ -1354,11 +1360,26 @@ pub enum TrameEvent {
     Error { code: u16, message: String },
 }
 
-/// Remote cursor -- identified by UserId (stable), not pub_key.
-/// The pub_key -> UserId resolution is done in ambre-sync via trusted_keys.
+/// Peer-authored `Ephemeral` wire payload. Carries ONLY the cell position + a
+/// self-asserted, cosmetic display name. It deliberately does NOT carry a `user_id`:
+/// the canonical identity is the Sync-resolved `from_user_id` delivered out-of-band on
+/// `LogicEvent::RemoteEphemeral` (a peer cannot forge another user's id,
+/// `ambre-spec-sync.md §3`).
 #[derive(Serialize, Deserialize)]
+pub struct PresencePayload {
+    pub sheet_id:     SheetId,
+    pub row:          u32,
+    pub col:          u32,
+    pub selection:    Option<(u32, u32, u32, u32)>,
+    pub display_name: String,   // self-asserted, cosmetic (never trusted for identity)
+}
+
+/// Logic -> UI event payload. Assembled in `apply_ephemeral` from the trusted
+/// `from_user_id` + the wire `PresencePayload`; `user_id` is set to `from_user_id`
+/// and is NEVER read from the peer payload. `color` is derived from `user_id`
+/// (same hash as `trame-ui::color_for_user` / `prose-ui::user_color`).
 pub struct RemoteCursorPayload {
-    pub user_id:      Uuid,
+    pub user_id:      UserId,
     pub display_name: String,
     pub color:        u32,
     pub sheet_id:     SheetId,
@@ -1367,6 +1388,11 @@ pub struct RemoteCursorPayload {
     pub selection:    Option<(u32, u32, u32, u32)>,
 }
 ```
+
+> **Note.** `RemoteCursorPayload` travels inside `TrameEvent::RemoteCursors` on the content
+> plane (by move on `flume`). It keeps a `serde` derive today only because `TrameEvent` still
+> derives `Serialize`/`Deserialize` wholesale; the sole type that genuinely needs `serde` for
+> presence is the wire `PresencePayload` (postcard in the `Ephemeral` bytes).
 
 ### Shared Rendering Module — `ambre-trame/src/render.rs`
 

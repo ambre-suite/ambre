@@ -218,21 +218,29 @@ Pure presentation layer:
 
 ### A. Nominal Prose Frame (target 16.6 ms @ 60 FPS)
 
-| Phase | Budget | Notes |
-|:---|:---|:---|
-| Keypress → beforeinput → dispatch | ~0.1 ms | Negligible |
-| Round-trip to logic (`flume` channels) | low | Typed inter-thread transport |
-| `LoroText::insert` | < 0.1 ms | Sequential insert |
-| Parley layout on **dirty paragraph only** | 0.5–2 ms | Hot spot |
-| Glyph rasterization (Swash) if new glyph | ~0 ms nominal | Atlas hit |
-| Vertex/instance buffer build | 0.2–0.5 ms | |
-| wgpu submit + present | 0.5–1 ms | Textured quads |
-| **Total typical** | **~2–5 ms** | Large margin under 16.6 ms |
+> **Thread attribution.** For Prose, `LoroText::insert` and **Parley shaping/layout run in the
+> Logic thread** (they are already required by pagination, `ambre-spec-prose-logic.md §2.B`);
+> the UI thread receives **pre-shaped `ParleyRunData`** and never shapes. The UI **render
+> frame** below is therefore only raster + vertex + submit on pre-shaped runs; the two
+> Logic-thread rows are shown for end-to-end keystroke latency, not as UI-frame cost. (The
+> generic UI-thread `TextCache` shaping path in `ambre-spec-canvas.md §D` applies to the
+> single-line editor case — Trame cells — not to Prose.)
+
+| Phase | Budget | Thread | Notes |
+|:---|:---|:---|:---|
+| Keypress → beforeinput → dispatch | ~0.1 ms | UI | Negligible |
+| Round-trip to logic (`flume` channels) | low | UI→Logic | Typed inter-thread transport |
+| `LoroText::insert` | < 0.1 ms | Logic | Sequential insert (off the render frame) |
+| Parley shaping/layout on **dirty paragraph only** | 0.5–2 ms | Logic | Hot spot; shipped up as `ParleyRunData` |
+| Glyph rasterization (Swash) if new glyph | ~0 ms nominal | UI | Atlas hit |
+| Vertex/instance buffer build | 0.2–0.5 ms | UI | On pre-shaped runs |
+| wgpu submit + present | 0.5–1 ms | UI | Textured quads |
+| **Total typical** | **~2–5 ms** | — | Large margin under 16.6 ms |
 
 ### B. Threats to 60 FPS (and countermeasures)
-1. **Parley without incremental layout** → atomicity at the **paragraph** (one `Layout` per paragraph); monster paragraph (> N KB) → internal split, layout in `requestIdleCallback`.
-2. **Glyph atlas overflow** → LRU per 256^2/512^2 slot, separate cache per size.
-3. **Long document scroll** → **per-paragraph virtualization** (render visible + buffer, `Layout` cached).
+1. **Parley without incremental layout** → atomicity at the **paragraph** (one `Layout` per paragraph). For Prose this shaping is in the **Logic thread**; a monster paragraph (> N KB) is split internally and deferred via the Logic **P1–P4 priority scheduler** (`ambre-spec-prose-logic.md`) — **not** `requestIdleCallback`, which does not exist in the `wasm_thread` Logic worker. (`requestIdleCallback` remains available for opportunistic work on the UI thread.)
+2. **Glyph atlas overflow** → LRU per 256^2/512^2 slot, separate cache per size. (UI thread.)
+3. **Long document scroll** → **per-paragraph virtualization** (render visible + buffer, pre-shaped runs cached in the UI `RunCache`; Prose additionally culls by page, `ambre-spec-prose-ui.md §B`).
 4. **Multi-paragraph selection** → reuse cached `Layout` to extract rectangles.
 5. **Mid-range mobile** → wgpu quads holds 60 FPS; the risk is CPU (Parley + Loro + dispatch, ~6–8 usable ms).
 

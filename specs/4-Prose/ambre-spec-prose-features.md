@@ -306,7 +306,7 @@ Images are `BlockType::Image` nodes in the `MovableTree`, inserted via
 
 ```
 "a" of the Image node:
-├── "blob_id"   : String   — Uuid of the S3 blob (resolved at display via presigned URL)
+├── "content_hash" : String — content hash addressing the encrypted media blob (resolved via the ambre-sync media flow)
 ├── "alt"       : String   — alt text
 ├── "w"         : u32      — width in px (display dimension, not original dimension)
 ├── "h"         : u32      — height in px
@@ -344,9 +344,13 @@ pub enum ImageAlign {
 
 #### Blob Resolution
 
-The `blob_id` is a `Uuid` referencing an S3 blob. Resolution to a presigned URL is done
-in the Logic thread on demand (5-minute TTL) — identical to the `prose-interop` pipeline.
-In offline mode, the image displays a placeholder (`[image]` + `alt`).
+The `content_hash` addresses an encrypted media blob. Resolution goes through the Foundation
+media flow (`ambre-spec-architecture.md §2.D`): the Logic thread issues
+`RestCommand::DownloadMedia { document_id, content_hash }`; the **Sync worker** performs the
+presigned-URL GET and decryption and replies `RestEvent::MediaDownloaded { content_hash, data }`,
+which `ProseState::on_media_downloaded` caches in `media_cache`. The Logic thread makes **no
+network call and holds no crypto**. Until the blob is cached (offline or download pending), the
+image displays a placeholder (`[image]` + `alt`).
 
 #### Commands
 
