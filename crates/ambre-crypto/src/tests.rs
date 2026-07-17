@@ -263,9 +263,12 @@ proptest! {
 
 #[test]
 fn fingerprint_is_stable_grouped_base32() {
-    // Known vector: the all-zero key. Stability is what matters for TOFU, so we
-    // pin the exact string a future refactor must not silently change.
+    // Golden vector: the all-zero key. This is the string a user reads aloud for
+    // out-of-band verification, so it is frozen -- any change to the domain tag,
+    // truncation length, alphabet or grouping must break this test on purpose,
+    // not silently shift what two people compare over the phone.
     let fp = hash::fingerprint(&[0u8; 32]);
+    assert_eq!(fp, "2HBA RR6Y FDOA EIJF ZZFT YWQZ MKRW N5FK");
 
     // 20 bytes -> 32 base32 chars -> 8 groups of 4, space-separated.
     let groups: Vec<&str> = fp.split(' ').collect();

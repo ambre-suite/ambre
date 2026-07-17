@@ -307,7 +307,9 @@ Story that ships it.*
 - [x] Share-dialog UI: fingerprint confirmation step (copy action + the normative "trusting the server" limit),
   Trusted fast path (relay dispatches phase 2 directly), and the **modal** key-changed alert (default action
   Cancel; reuses `chrome::Dialog`, never a toast).
-- [x] Belt: `ambre-crypto` fingerprint vector + grouping tests; `ambre-sync` `FakeHttp` tests (phase-1 fetch
-  emits the key + matching fingerprint, pin match wraps, pin mismatch refuses and never wraps). The trust
-  classification runs in the Main-thread relay's async IndexedDB path (`ambre-app`, wasm-only); it is covered
-  by the four-tier gate + manual end-to-end rather than a standalone DOM unit test.
+- [x] Belt: `ambre-crypto` frozen fingerprint golden vector + grouping/discrimination tests; `ambre-sync`
+  `FakeHttp` tests (phase-1 fetch emits the key + matching fingerprint, pin match wraps, pin mismatch refuses
+  and never wraps); `ambre-logic` wasm tests (trusted_keys roundtrip, and the `DB_VERSION` 1 -> 2 upgrade
+  adds `trusted_keys` while preserving an existing `snapshots` row). The trust *classification* runs in the
+  Main-thread relay's async IndexedDB path (`ambre-app`, wasm-only glue); it is covered by the four-tier gate
+  + manual end-to-end rather than a standalone DOM unit test.
