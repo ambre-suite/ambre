@@ -281,11 +281,24 @@ pub enum RestCommand {
     },
 
     // ── Sharing ──────────────────────────────────────────────────────────────
-    /// Invite a collaborator. → `InviteSent`.
+    /// Phase 1 of the TOFU two-phase invite (`ambre-spec-chrome.md §2.H`):
+    /// resolve the invitee and fetch their public key **without wrapping**, so
+    /// the user can verify the fingerprint before any Document Key is shared.
+    /// → `InviteeKey`.
+    FetchInviteeKey {
+        document_id: DocumentId,
+        invitee_email: String,
+    },
+    /// Phase 2 of the invite. `expect_exchange_pub_key` is the key the user
+    /// confirmed (pinned) in phase 1: Sync re-fetches the invitee's key and
+    /// wraps the Document Key **only if it still matches**, closing the TOCTOU
+    /// hole a compromised server could exploit between the two phases. On
+    /// mismatch the invite fails with an explicit error. → `InviteSent`.
     InviteToDocument {
         document_id: DocumentId,
         invitee_email: String,
         role: Role,
+        expect_exchange_pub_key: [u8; 32],
     },
     /// Revoke a member (triggers the full key-rotation sequence). → `RevocationComplete`.
     RevokeFromDocument {
@@ -410,6 +423,18 @@ pub enum RestEvent {
     },
 
     // ── Sharing ──────────────────────────────────────────────────────────────
+    /// Phase 1 answer of the TOFU invite (`ambre-spec-chrome.md §2.H`). Carries
+    /// the invitee's raw X25519 `exchange_pub_key` (for the byte comparison
+    /// against the `trusted_keys` store, done on the Main thread) and the
+    /// already-formatted `fingerprint` string (the chrome never hashes).
+    InviteeKey {
+        document_id: DocumentId,
+        user_id: UserId,
+        display_name: String,
+        email: String,
+        exchange_pub_key: [u8; 32],
+        fingerprint: String,
+    },
     InviteSent {
         document_id: DocumentId,
         user_id: UserId,

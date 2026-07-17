@@ -293,16 +293,21 @@ Pure presentation layer:
 public key the server hands us, with no trust check whatsoever today: a substituted key is invisible and
 silently readable. `ambre-spec-server.md` has required a displayed fingerprint since the MVP; this is the
 Story that ships it.*
-- [ ] `ambre_crypto::fingerprint(pub_key) -> String`: BLAKE2b-256 truncated to 20 bytes, base32 (RFC 4648, no
+- [x] `ambre_crypto::fingerprint(pub_key) -> String`: BLAKE2b-256 truncated to 20 bytes, base32 (RFC 4648, no
   padding), grouped in 4-char blocks. Follows the crate's house style (BLAKE2b-256 = truncated `Blake2b512`,
-  own domain tag). Needs a base32 encoder (`data-encoding`, already transitive in `Cargo.lock`).
-- [ ] `trusted_keys` IndexedDB store (`UserId -> [u8; 32]`), owned by the **Main** thread beside the snapshot
-  store. `DB_VERSION` 1 -> 2 — the current `onupgradeneeded` creates the snapshot store **unconditionally**,
-  so the upgrade must guard on `object_store_names()` or it throws `ConstraintError` for every existing user.
-- [ ] Two-phase invite (§2.H): `RestCommand::FetchInviteeKey` -> `RestEvent::InviteeKey { .., fingerprint }`,
-  Main resolves the trust state, then `InviteToDocument { .., expect_exchange_pub_key }`. Sync wraps **only**
-  if the re-fetched key still matches the pin (TOCTOU guard).
-- [ ] Share-dialog UI: fingerprint confirmation step (copy action + the normative "trusting the server" limit),
-  Trusted fast path, and the **modal** key-changed alert (default action Cancel; a toast is not acceptable).
-- [ ] Belt: `ambre-crypto` fingerprint vector + grouping tests; `ambre-sync` `FakeHttp` tests (pin match wraps,
-  pin mismatch refuses and never wraps); `ambre-app` wasm/DOM tests for the three trust states.
+  own domain tag `ambre-fingerprint-v1`). Uses `data-encoding` (`BASE32_NOPAD`), promoted to a workspace dep.
+- [x] `trusted_keys` IndexedDB store (`UserId -> [u8; 32]`), owned by the **Main** thread beside the snapshot
+  store (`ambre_logic::persistence`). `DB_VERSION` 1 -> 2 — the `onupgradeneeded` now guards each
+  `create_object_store` on `object_store_names().contains(..)`, so the v1 -> v2 upgrade adds `trusted_keys`
+  without a `ConstraintError` on the existing `snapshots` store.
+- [x] Two-phase invite (§2.H): `RestCommand::FetchInviteeKey` -> `RestEvent::InviteeKey { .., fingerprint }`,
+  the Main-thread relay resolves the trust state against the pin, then `InviteToDocument { ..,
+  expect_exchange_pub_key }`. Sync re-fetches and wraps **only** if the key still matches the pin (TOCTOU
+  guard); a mismatch fails the invite with an explicit error and never wraps.
+- [x] Share-dialog UI: fingerprint confirmation step (copy action + the normative "trusting the server" limit),
+  Trusted fast path (relay dispatches phase 2 directly), and the **modal** key-changed alert (default action
+  Cancel; reuses `chrome::Dialog`, never a toast).
+- [x] Belt: `ambre-crypto` fingerprint vector + grouping tests; `ambre-sync` `FakeHttp` tests (phase-1 fetch
+  emits the key + matching fingerprint, pin match wraps, pin mismatch refuses and never wraps). The trust
+  classification runs in the Main-thread relay's async IndexedDB path (`ambre-app`, wasm-only); it is covered
+  by the four-tier gate + manual end-to-end rather than a standalone DOM unit test.

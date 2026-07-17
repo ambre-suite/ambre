@@ -38,7 +38,7 @@ use std::rc::Rc;
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
     AppCommand, AppEvent, DocumentId, LogicCommand, LogicEvent, MemberInfo, RequestId, RestCommand,
-    Role, SyncCommand, TrameCommand, UiEvent,
+    Role, SyncCommand, TrameCommand, UiEvent, UserId,
 };
 use ambre_chrome::commands::{CommandId, Keymap};
 use ambre_chrome::{
@@ -90,6 +90,30 @@ const CHANNEL_CAPACITY: usize = 1024;
 /// store is driven by the per-frame relay and the canvas swap by the route poll,
 /// both outside the reactive tree. The shell sees only the toggle signals the
 /// store exposes.
+/// A pending TOFU trust decision for the share dialog (`ambre-spec-chrome.md
+/// §2.H`). Built by the per-frame relay from a `RestEvent::InviteeKey` (phase 1)
+/// once the fetched key has been compared against the `trusted_keys` store, and
+/// consumed by the confirmation / key-changed dialog in `AppRoot`.
+///
+/// Only the states that interrupt the user reach `AppRoot`: a **New** key
+/// (`changed == false`, first invitation) or a **Changed** key
+/// (`changed == true`, a divergence from the pinned value). A **Trusted** key
+/// never becomes a prompt -- the relay proceeds straight to phase 2.
+#[derive(Clone, PartialEq)]
+struct TofuPrompt {
+    document_id: DocumentId,
+    user_id: UserId,
+    display_name: String,
+    email: String,
+    /// Raw X25519 key the server just returned: pinned on confirmation and sent
+    /// as `expect_exchange_pub_key` so Sync wraps only if it still matches.
+    exchange_pub_key: [u8; 32],
+    /// Preformatted fingerprint (`ambre_crypto::fingerprint`); displayed verbatim.
+    fingerprint: String,
+    /// `false` = New (first invitation), `true` = Changed (diverged from the pin).
+    changed: bool,
+}
+
 #[derive(Clone)]
 struct Wiring {
     to_logic: flume::Sender<LogicCommand>,
@@ -113,6 +137,17 @@ struct Wiring {
     /// Members of the active document (share dialog). Populated by the per-frame
     /// relay on `DocumentMembers`; empty until the dialog requests the list.
     members: RwSignal<Vec<MemberInfo>>,
+    /// Pending TOFU trust prompt (`ambre-spec-chrome.md §2.H`), or `None` when no
+    /// invitation is awaiting the user's fingerprint decision. Set by the relay on
+    /// a New/Changed key; the confirmation dialog in `AppRoot` reads it.
+    tofu_prompt: RwSignal<Option<TofuPrompt>>,
+    /// Set by `AppRoot` when the user confirms a TOFU prompt. The relay polls it,
+    /// pins the key in `trusted_keys`, and dispatches phase 2 of the invite.
+    tofu_confirm: RwSignal<Option<TofuPrompt>>,
+    /// Role selected in the invite form, carried across the two-phase invite (the
+    /// phase-1 `FetchInviteeKey` does not carry it, per §2.H) so both the confirm
+    /// path and the auto-proceed (Trusted) path grant the intended role.
+    invite_role: RwSignal<Role>,
     /// Whether the server enables dev login; `None` until `/api/auth/config` answers.
     dev_mode: RwSignal<Option<bool>>,
     /// The currently routed document, or `None` on the landing route. Read by
@@ -371,6 +406,13 @@ pub fn main() {
     let formula_text = RwSignal::new(String::new());
     let formula_action = RwSignal::new(None::<FormulaAction>);
 
+    // TOFU share-dialog signals (`ambre-spec-chrome.md §2.H`), created here in the
+    // launcher owner and shared with both `AppRoot` (dialog) and the per-frame
+    // relay (trust decision + phase-2 dispatch).
+    let tofu_prompt = RwSignal::new(None::<TofuPrompt>);
+    let tofu_confirm = RwSignal::new(None::<TofuPrompt>);
+    let invite_role = RwSignal::new(Role::Editor);
+
     // Status-bar signals (`-ui.md` sec.13bis): selection aggregates (set from the
     // `SelectionStats` event / cleared by the view on a single cell) and the live
     // perf snapshot pumped from `perf_pub` below.
@@ -578,6 +620,9 @@ pub fn main() {
         formula_ref,
         formula_text,
         formula_action,
+        tofu_prompt,
+        tofu_confirm,
+        invite_role,
         sel_stats,
         sel_stats_toile,
         present_toile,
@@ -830,6 +875,26 @@ pub fn main() {
             }
         }
 
+        // TOFU: a confirmed prompt -> pin the fetched key in `trusted_keys` and
+        // fire phase 2 of the invite (`ambre-spec-chrome.md §2.H`). Handled here
+        // rather than in `AppRoot` because the trusted-key store is Main-thread
+        // owned (this relay). Writing the pin before dispatch is normative.
+        if let Some(p) = tofu_confirm.get_untracked() {
+            tofu_confirm.set(None);
+            if let Some(store) = persist_store_frame.borrow().as_ref() {
+                store.save_trusted_key(*p.user_id.as_bytes(), p.exchange_pub_key);
+            }
+            let _ = relay_tx.try_send(LogicCommand::Rest {
+                id: RequestId::next(),
+                cmd: RestCommand::InviteToDocument {
+                    document_id: p.document_id,
+                    invitee_email: p.email.clone(),
+                    role: invite_role.get_untracked(),
+                    expect_exchange_pub_key: p.exchange_pub_key,
+                },
+            });
+        }
+
         // Relay Logic -> Sync: drain commands and postMessage them to the Sync
         // worker (postcard, big payloads transferred zero-copy). `sync_worker` is
         // captured here, which is what keeps the worker alive for the session.
@@ -946,6 +1011,67 @@ pub fn main() {
                         cmd: RestCommand::ListDocumentMembers {
                             document_id: *document_id,
                         },
+                    });
+                }
+                // TOFU phase 1 answer (§2.H): classify the fetched key against the
+                // pinned one. Trusted (same key) -> dispatch phase 2 straight away;
+                // New (no pin) or Changed (divergence) -> raise the modal prompt.
+                UiEvent::Rest {
+                    evt:
+                        ambre_bus::RestEvent::InviteeKey {
+                            document_id,
+                            user_id,
+                            display_name,
+                            email,
+                            exchange_pub_key,
+                            fingerprint,
+                        },
+                    ..
+                } => {
+                    let prompt = TofuPrompt {
+                        document_id: *document_id,
+                        user_id: *user_id,
+                        display_name: display_name.clone(),
+                        email: email.clone(),
+                        exchange_pub_key: *exchange_pub_key,
+                        fingerprint: fingerprint.clone(),
+                        changed: false,
+                    };
+                    // Read the pin off-thread (async IndexedDB); never hold the
+                    // store borrow across the await.
+                    let pin_rx = persist_store_frame
+                        .borrow()
+                        .as_ref()
+                        .map(|s| s.load_trusted_key(*prompt.user_id.as_bytes()));
+                    let relay = relay_tx.clone();
+                    let role_sig = invite_role;
+                    let prompt_sig = tofu_prompt;
+                    wasm_bindgen_futures::spawn_local(async move {
+                        let pinned = match pin_rx {
+                            Some(rx) => rx.recv_async().await.ok().flatten(),
+                            None => None,
+                        };
+                        match pinned {
+                            // Trusted: unchanged key -> proceed without interrupting.
+                            Some(k) if k == prompt.exchange_pub_key => {
+                                let _ = relay.try_send(LogicCommand::Rest {
+                                    id: RequestId::next(),
+                                    cmd: RestCommand::InviteToDocument {
+                                        document_id: prompt.document_id,
+                                        invitee_email: prompt.email.clone(),
+                                        role: role_sig.get_untracked(),
+                                        expect_exchange_pub_key: prompt.exchange_pub_key,
+                                    },
+                                });
+                            }
+                            // Changed: diverged from the pin -> blocking alert.
+                            Some(_) => prompt_sig.set(Some(TofuPrompt {
+                                changed: true,
+                                ..prompt
+                            })),
+                            // New: first invitation -> confirmation step.
+                            None => prompt_sig.set(Some(prompt)),
+                        }
                     });
                 }
                 // Revocation done (key rotation complete): confirm and refresh.

@@ -17,8 +17,14 @@ use wasm_bindgen::prelude::*;
 use web_sys::{IdbDatabase, IdbOpenDbRequest, IdbTransactionMode};
 
 const DB_NAME: &str = "ambre-persistence";
-const DB_VERSION: u32 = 1;
+// v2 adds the `trusted_keys` store (TOFU, ambre-spec-chrome.md §2.H). The
+// upgrade handler creates each store only if absent, so bumping the version on
+// an existing v1 database adds `trusted_keys` without touching `snapshots`.
+const DB_VERSION: u32 = 2;
 const STORE_SNAPSHOTS: &str = "snapshots";
+/// TOFU pinned exchange keys: `UserId` (hex) -> the 32 raw bytes of the X25519
+/// key confirmed on first invitation (`ambre-spec-chrome.md §2.H`).
+const STORE_TRUSTED_KEYS: &str = "trusted_keys";
 
 /// An open IndexedDB handle for persisting document CRDT snapshots.
 ///
@@ -52,11 +58,20 @@ impl PersistenceStore {
             }
         };
 
-        // Create the object store during upgrade (first visit or version bump).
-        // The store does not exist yet when this fires, so create unconditionally.
+        // Create the object stores during upgrade (first visit or version bump).
+        // This fires for a fresh database (v0->2) AND for an existing v1 database
+        // (v1->2), so each store is created only if it does not already exist --
+        // calling `create_object_store` for a store that exists throws
+        // `ConstraintError` and aborts the whole upgrade transaction.
         let on_upgrade = Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
             if let Some(db) = request_database(&event) {
-                let _ = db.create_object_store(STORE_SNAPSHOTS);
+                let existing = db.object_store_names();
+                if !existing.contains(STORE_SNAPSHOTS) {
+                    let _ = db.create_object_store(STORE_SNAPSHOTS);
+                }
+                if !existing.contains(STORE_TRUSTED_KEYS) {
+                    let _ = db.create_object_store(STORE_TRUSTED_KEYS);
+                }
             }
         });
         open_request.set_onupgradeneeded(Some(on_upgrade.as_ref().unchecked_ref()));
@@ -93,7 +108,7 @@ impl PersistenceStore {
     /// transaction auto-commits when the Main thread returns to its event loop.
     /// Errors are logged, not propagated: a lost snapshot is non-fatal.
     pub fn save_snapshot(&self, document_id: [u8; 16], snapshot: Vec<u8>) {
-        let key = document_id_to_hex(&document_id);
+        let key = id_to_hex(&document_id);
         let txn = match self
             .db
             .transaction_with_str_and_mode(STORE_SNAPSHOTS, IdbTransactionMode::Readwrite)
@@ -125,7 +140,7 @@ impl PersistenceStore {
     /// exists, or `None` (no snapshot / read error). Awaited on the Main thread.
     pub fn load_snapshot(&self, document_id: [u8; 16]) -> flume::Receiver<Option<Vec<u8>>> {
         let (tx, rx) = flume::bounded(1);
-        let key = document_id_to_hex(&document_id);
+        let key = id_to_hex(&document_id);
 
         let txn = match self.db.transaction_with_str(STORE_SNAPSHOTS) {
             Ok(t) => t,
@@ -174,9 +189,102 @@ impl PersistenceStore {
         rx
     }
 
+    /// Load the pinned TOFU exchange key for `user_id`, if any.
+    ///
+    /// Returns a `flume::Receiver` resolving to `Some(key)` when this user's key
+    /// has been confirmed before, or `None` (first invitation / read error). The
+    /// Main thread awaits it and compares against the freshly fetched key to
+    /// classify the trust state (`ambre-spec-chrome.md §2.H`).
+    pub fn load_trusted_key(&self, user_id: [u8; 16]) -> flume::Receiver<Option<[u8; 32]>> {
+        let (tx, rx) = flume::bounded(1);
+        let key = id_to_hex(&user_id);
+
+        let txn = match self.db.transaction_with_str(STORE_TRUSTED_KEYS) {
+            Ok(t) => t,
+            Err(_) => {
+                let _ = tx.send(None);
+                return rx;
+            }
+        };
+        let store = match txn.object_store(STORE_TRUSTED_KEYS) {
+            Ok(s) => s,
+            Err(_) => {
+                let _ = tx.send(None);
+                return rx;
+            }
+        };
+        let request = match store.get(&JsValue::from_str(&key)) {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!("Persistence: trusted_key get failed for {key}: {e:?}");
+                let _ = tx.send(None);
+                return rx;
+            }
+        };
+
+        let tx_ok = tx.clone();
+        let req = request.clone();
+        let on_success =
+            Closure::<dyn FnMut(web_sys::Event)>::new(move |_event: web_sys::Event| {
+                // Only a full 32-byte value is a valid pin; anything else is
+                // treated as absent so the caller re-confirms rather than trusting
+                // a truncated row.
+                let data = req
+                    .result()
+                    .ok()
+                    .filter(|v| !v.is_undefined() && !v.is_null())
+                    .and_then(|v| v.dyn_into::<Uint8Array>().ok())
+                    .map(|a| a.to_vec())
+                    .and_then(|v| <[u8; 32]>::try_from(v).ok());
+                let _ = tx_ok.send(data);
+            });
+        request.set_onsuccess(Some(on_success.as_ref().unchecked_ref()));
+        on_success.forget();
+
+        let on_error = Closure::<dyn FnMut(web_sys::Event)>::new(move |_event: web_sys::Event| {
+            let _ = tx.send(None);
+        });
+        request.set_onerror(Some(on_error.as_ref().unchecked_ref()));
+        on_error.forget();
+
+        rx
+    }
+
+    /// Pin `key` as the trusted TOFU exchange key for `user_id` (fire-and-forget).
+    ///
+    /// Called on the user's confirmation in the share dialog, and again when they
+    /// deliberately re-pin after a "key changed" alert. The transaction
+    /// auto-commits when the Main thread returns to its event loop.
+    pub fn save_trusted_key(&self, user_id: [u8; 16], key: [u8; 32]) {
+        let hex = id_to_hex(&user_id);
+        let txn = match self
+            .db
+            .transaction_with_str_and_mode(STORE_TRUSTED_KEYS, IdbTransactionMode::Readwrite)
+        {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::warn!("Persistence: trusted_key save txn failed for {hex}: {e:?}");
+                return;
+            }
+        };
+        let store = match txn.object_store(STORE_TRUSTED_KEYS) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("Persistence: trusted_key object_store failed for {hex}: {e:?}");
+                return;
+            }
+        };
+
+        let array = Uint8Array::new_with_length(key.len() as u32);
+        array.copy_from(&key);
+        if let Err(e) = store.put_with_key(array.as_ref(), &JsValue::from_str(&hex)) {
+            tracing::warn!("Persistence: trusted_key put failed for {hex}: {e:?}");
+        }
+    }
+
     /// Remove a document's snapshot (called on document close / delete).
     pub fn delete_snapshot(&self, document_id: [u8; 16]) {
-        let key = document_id_to_hex(&document_id);
+        let key = id_to_hex(&document_id);
         let txn = match self
             .db
             .transaction_with_str_and_mode(STORE_SNAPSHOTS, IdbTransactionMode::Readwrite)
@@ -203,7 +311,7 @@ fn request_database(event: &web_sys::Event) -> Option<IdbDatabase> {
 }
 
 /// Render a `DocumentId`'s 16 bytes as a 32-char lowercase hex key.
-fn document_id_to_hex(id: &[u8; 16]) -> String {
+fn id_to_hex(id: &[u8; 16]) -> String {
     let mut s = String::with_capacity(32);
     for byte in id {
         s.push_str(&format!("{byte:02x}"));

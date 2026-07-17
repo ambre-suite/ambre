@@ -70,6 +70,9 @@ argon2 = { version = "0.5" }
 hkdf = { version = "0.12" }
 hmac = { version = "0.12" }
 sha2 = { version = "0.10" }
+# Constant-time, allocation-light base32/base64 codecs (pure Rust, WASM-safe).
+# Used for the TOFU public-key fingerprint (BASE32 RFC 4648, no padding).
+data-encoding = "2.11"
 # CSPRNG for nonces and key material. `wasm_js` selects the browser entropy
 # backend (crypto.getRandomValues) on wasm32-unknown-unknown.
 getrandom = { version = "0.3", features = ["wasm_js"] }
