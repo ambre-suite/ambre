@@ -40,6 +40,13 @@ impl PersistenceStore {
     /// Returns a `flume::Receiver` resolving once to the store (or an error
     /// string). The caller awaits it with `recv_async` on the Main thread.
     pub fn open() -> flume::Receiver<Result<Self, String>> {
+        Self::open_named(DB_NAME)
+    }
+
+    /// Open a named database at [`DB_VERSION`], running the shared upgrade path.
+    /// [`open`](Self::open) uses the production [`DB_NAME`]; tests pass a unique
+    /// name so each runs against an isolated database.
+    fn open_named(db_name: &str) -> flume::Receiver<Result<Self, String>> {
         let (tx, rx) = flume::bounded(1);
 
         let factory = match web_sys::window().and_then(|w| w.indexed_db().ok().flatten()) {
@@ -50,7 +57,7 @@ impl PersistenceStore {
             }
         };
 
-        let open_request: IdbOpenDbRequest = match factory.open_with_u32(DB_NAME, DB_VERSION) {
+        let open_request: IdbOpenDbRequest = match factory.open_with_u32(db_name, DB_VERSION) {
             Ok(req) => req,
             Err(e) => {
                 let _ = tx.send(Err(format!("open request failed: {e:?}")));
@@ -317,4 +324,149 @@ fn id_to_hex(id: &[u8; 16]) -> String {
         s.push_str(&format!("{byte:02x}"));
     }
     s
+}
+
+// ============================================================================
+// wasm tests (headless Chrome via `wasm-pack test`). Exercise the two paths the
+// TOFU store adds (ambre-spec-chrome.md 2.H) that a native test cannot reach:
+// the trusted_keys roundtrip, and the DB_VERSION 1 -> 2 upgrade that must add
+// trusted_keys WITHOUT a ConstraintError on the existing snapshots store.
+// ============================================================================
+#[cfg(test)]
+mod wasm_tests {
+    use super::*;
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+    /// The `IdbFactory` for this origin (headless Chrome always has one).
+    fn factory() -> web_sys::IdbFactory {
+        web_sys::window()
+            .and_then(|w| w.indexed_db().ok().flatten())
+            .expect("IndexedDB available in the test browser")
+    }
+
+    /// Delete a database and resolve once the request settles, so each test
+    /// starts from a clean slate regardless of what a prior run left behind.
+    async fn delete_db(name: &str) {
+        let (tx, rx) = flume::bounded::<()>(1);
+        let req = factory().delete_database(name).expect("delete_database");
+        let tx2 = tx.clone();
+        let done = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
+            let _ = tx2.send(());
+        });
+        req.set_onsuccess(Some(done.as_ref().unchecked_ref()));
+        req.set_onerror(Some(done.as_ref().unchecked_ref()));
+        done.forget();
+        let _ = rx.recv_async().await;
+    }
+
+    /// Recreate the pre-TOFU (v1) database shape: version 1 with ONLY the
+    /// `snapshots` store, holding one snapshot row. This is the state every
+    /// existing user's browser is in before this upgrade ships.
+    async fn seed_v1_with_snapshot(name: &str, doc_id: [u8; 16], bytes: &[u8]) {
+        let (tx, rx) = flume::bounded::<()>(1);
+        let req = factory().open_with_u32(name, 1).expect("open v1");
+
+        // v1 upgrade: the old code created `snapshots` unconditionally.
+        let upgrade = Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
+            if let Some(db) = request_database(&event) {
+                let _ = db.create_object_store(STORE_SNAPSHOTS);
+            }
+        });
+        req.set_onupgradeneeded(Some(upgrade.as_ref().unchecked_ref()));
+        upgrade.forget();
+
+        let key = id_to_hex(&doc_id);
+        let payload = bytes.to_vec();
+        let tx2 = tx.clone();
+        let success = Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
+            if let Some(db) = request_database(&event) {
+                if let Ok(txn) =
+                    db.transaction_with_str_and_mode(STORE_SNAPSHOTS, IdbTransactionMode::Readwrite)
+                {
+                    if let Ok(store) = txn.object_store(STORE_SNAPSHOTS) {
+                        let arr = Uint8Array::new_with_length(payload.len() as u32);
+                        arr.copy_from(&payload);
+                        let _ = store.put_with_key(arr.as_ref(), &JsValue::from_str(&key));
+                    }
+                }
+                db.close();
+            }
+            let _ = tx2.send(());
+        });
+        req.set_onsuccess(Some(success.as_ref().unchecked_ref()));
+        success.forget();
+
+        let _ = rx.recv_async().await;
+    }
+
+    #[wasm_bindgen_test]
+    async fn trusted_key_roundtrips_and_absent_is_none() {
+        let name = "ambre-test-trusted-roundtrip";
+        delete_db(name).await;
+        let store = PersistenceStore::open_named(name)
+            .recv_async()
+            .await
+            .expect("channel")
+            .expect("store opens");
+
+        let user = [7u8; 16];
+        // Absent before any write.
+        assert_eq!(
+            store.load_trusted_key(user).recv_async().await.unwrap(),
+            None
+        );
+
+        // Pin, then read it back byte-for-byte.
+        let key = [0xABu8; 32];
+        store.save_trusted_key(user, key);
+        assert_eq!(
+            store.load_trusted_key(user).recv_async().await.unwrap(),
+            Some(key)
+        );
+
+        // A different user is still absent (keys are per-UserId).
+        assert_eq!(
+            store
+                .load_trusted_key([9u8; 16])
+                .recv_async()
+                .await
+                .unwrap(),
+            None
+        );
+    }
+
+    #[wasm_bindgen_test]
+    async fn upgrade_v1_to_v2_adds_trusted_keys_and_keeps_snapshots() {
+        let name = "ambre-test-migration-v1-v2";
+        delete_db(name).await;
+
+        let doc = [3u8; 16];
+        let snapshot = vec![1u8, 2, 3, 4, 5];
+        seed_v1_with_snapshot(name, doc, &snapshot).await;
+
+        // Open with the current (v2) code: the guarded onupgradeneeded must add
+        // `trusted_keys` without throwing ConstraintError on `snapshots`.
+        let store = PersistenceStore::open_named(name)
+            .recv_async()
+            .await
+            .expect("channel")
+            .expect("v1 database upgrades to v2 cleanly");
+
+        // The pre-existing snapshot survived the upgrade untouched.
+        assert_eq!(
+            store.load_snapshot(doc).recv_async().await.unwrap(),
+            Some(snapshot)
+        );
+
+        // The new store is usable after the upgrade.
+        let user = [4u8; 16];
+        let key = [0x5Au8; 32];
+        store.save_trusted_key(user, key);
+        assert_eq!(
+            store.load_trusted_key(user).recv_async().await.unwrap(),
+            Some(key)
+        );
+    }
 }
