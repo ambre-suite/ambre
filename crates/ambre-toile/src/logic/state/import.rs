@@ -6,15 +6,168 @@
 //! (creates -> styles -> groups -> connectors -> media -> one commit ->
 //! `rebuild_caches`) resolves every slot / group reference before it is used.
 
+use std::collections::HashMap;
+
+use ambre_bus::RestEvent;
 use loro::{LoroMap, LoroValue};
 
-use crate::logic::command::{ToileCommand, ToileOutcome};
-use crate::logic::interop::{ImportBatch, ImportRef, ImportReport, MediaBlob};
+use crate::logic::command::{
+    InitContent, RequestId, ToileCommand, ToileEvent, ToileOutcome, ToileRequest,
+};
+use crate::logic::interop::{
+    ContentHash, ImportBatch, ImportError, ImportRef, ImportReport, Limits, MediaBlob,
+    import_raster, import_svg,
+};
 use crate::logic::model::ElementId;
 
 use super::{MEDIA, ToileState};
 
+/// Rewrite the `pending:{slot}` placeholder to the real blake2b `hash` in both
+/// the `media` blob at `slot` and every `image` element that referenced it
+/// (`toile-interop §5`). Called as each upload confirmation lands, so by the time
+/// the batch is applied no placeholder survives.
+fn rewrite_hash(batch: &mut ImportBatch, slot: usize, hash: &str) {
+    let placeholder = format!("pending:{slot}");
+    if let Some(blob) = batch.media.get_mut(slot) {
+        blob.hash = ContentHash(hash.to_owned());
+    }
+    for cmd in &mut batch.commands {
+        if let ToileCommand::CreateElement {
+            content: InitContent::Image(h),
+            ..
+        } = cmd
+            && *h == placeholder
+        {
+            *h = hash.to_owned();
+        }
+    }
+}
+
+/// An import applied only once every embedded media blob has a real content hash
+/// back from Sync (`toile-interop §5`). Holds the fully converted batch and the
+/// set of upload `RequestId`s still outstanding, each mapped to the `media` slot
+/// (and the `pending:{slot}` placeholder) it will resolve.
+pub(super) struct PendingImport {
+    batch: ImportBatch,
+    /// Outstanding `UploadMedia` request -> the `batch.media` index it fills.
+    outstanding: HashMap<RequestId, usize>,
+}
+
 impl ToileState {
+    /// Convert a dropped SVG document and apply it (`toile-interop §1`).
+    pub(super) fn import_svg_bytes(&mut self, bytes: &[u8]) -> ToileOutcome {
+        self.begin_import(import_svg(bytes, &Limits::default()))
+    }
+
+    /// Convert a dropped raster image and apply it (`toile-interop §1`). The mime
+    /// is re-derived from the bytes by the decoder; the parameter is accepted for
+    /// the command surface but not needed here.
+    pub(super) fn import_image_bytes(&mut self, bytes: &[u8]) -> ToileOutcome {
+        self.begin_import(import_raster(bytes, &Limits::default()))
+    }
+
+    /// Route a converted batch: a parse / limit failure aborts with `ImportFailed`
+    /// (nothing applied, §1); a media-free batch takes the FAST PATH and lands
+    /// now in one undo group; a media-bearing batch is stashed as a
+    /// [`PendingImport`] and issues one `UploadMedia` request per blob, applying
+    /// nothing until every real hash returns (`toile-interop §5`).
+    fn begin_import(&mut self, converted: Result<ImportBatch, ImportError>) -> ToileOutcome {
+        let batch = match converted {
+            Ok(b) => b,
+            Err(e) => {
+                return ToileOutcome::display_only(vec![ToileEvent::ImportFailed(e.to_string())]);
+            }
+        };
+        if batch.media.is_empty() {
+            return self.finish_import(batch);
+        }
+        // Async media: one upload per blob, nothing applied yet.
+        let mut outstanding = HashMap::new();
+        let mut requests = Vec::with_capacity(batch.media.len());
+        for (slot, blob) in batch.media.iter().enumerate() {
+            let id = RequestId::next();
+            outstanding.insert(id, slot);
+            requests.push(ToileRequest::UploadMedia {
+                id,
+                data: blob.plaintext.clone(),
+                mime: blob.mime.clone(),
+            });
+        }
+        self.pending_imports
+            .push(PendingImport { batch, outstanding });
+        ToileOutcome {
+            display: Vec::new(),
+            update: None,
+            ephemeral: None,
+            requests,
+        }
+    }
+
+    /// Apply a fully-resolved batch and wrap the [`ImportReport`] into a display
+    /// event alongside the repaint viewport.
+    fn finish_import(&mut self, batch: ImportBatch) -> ToileOutcome {
+        let (report, mut outcome) = self.apply_import(batch);
+        outcome.display.push(ToileEvent::ImportReport {
+            imported: report.imported,
+            skipped: report.skipped,
+        });
+        outcome
+    }
+
+    /// Handle a service-plane response routed back to this document
+    /// (`toile-interop §5`): a `MediaUploaded` fills one outstanding upload of a
+    /// pending import with its real hash. When the last blob resolves, the batch
+    /// lands atomically. An id matching no pending import is a stale response
+    /// (the import was undone / the doc reopened) and is dropped.
+    pub fn handle_service_event(&mut self, id: RequestId, evt: RestEvent) -> ToileOutcome {
+        let RestEvent::MediaUploaded { content_hash, .. } = evt else {
+            // Only upload confirmations concern an import; ignore anything else.
+            return ToileOutcome::display_only(Vec::new());
+        };
+        let Some(pos) = self
+            .pending_imports
+            .iter()
+            .position(|p| p.outstanding.contains_key(&id))
+        else {
+            return ToileOutcome::display_only(Vec::new());
+        };
+        let ready = {
+            let pending = &mut self.pending_imports[pos];
+            let slot = pending.outstanding.remove(&id).expect("id present");
+            rewrite_hash(&mut pending.batch, slot, &content_hash);
+            pending.outstanding.is_empty()
+        };
+        if !ready {
+            // More uploads still in flight; apply nothing yet.
+            return ToileOutcome::display_only(Vec::new());
+        }
+        let pending = self.pending_imports.remove(pos);
+        self.finish_import(pending.batch)
+    }
+
+    /// Handle a service-plane failure routed back to this document
+    /// (`toile-interop §5`): a failed media upload aborts the whole pending import
+    /// (§1 atomicity), leaving the board untouched. An id matching no pending
+    /// import is dropped.
+    pub fn handle_service_error(&mut self, id: RequestId, reason: String) -> ToileOutcome {
+        let Some(pos) = self
+            .pending_imports
+            .iter()
+            .position(|p| p.outstanding.contains_key(&id))
+        else {
+            return ToileOutcome::display_only(Vec::new());
+        };
+        self.pending_imports.remove(pos);
+        ToileOutcome::display_only(vec![ToileEvent::ImportFailed(format!(
+            "media upload failed: {reason}"
+        ))])
+    }
+
+    /// Number of imports awaiting media uploads. Test / integration accessor.
+    pub fn pending_import_count(&self) -> usize {
+        self.pending_imports.len()
+    }
+
     /// Apply a converted [`ImportBatch`] as ONE atomic undo group
     /// (`toile-interop` §1/§2.E). The pass is strictly ordered so every slot /
     /// group reference resolves before it is used:
@@ -33,9 +186,6 @@ impl ToileState {
     /// delta plus the repaint viewport. A create that unexpectedly fails (a
     /// trusted converter should never emit one) is recorded in the report and its
     /// slot left unresolved, so any group / connector referencing it is skipped.
-    // The production caller (the import command handler) lands in step 6/8;
-    // exercised by tests meanwhile.
-    #[allow(dead_code)]
     pub(super) fn apply_import(&mut self, batch: ImportBatch) -> (ImportReport, ToileOutcome) {
         let ImportBatch {
             commands,
@@ -363,5 +513,138 @@ mod tests {
         let n = st.seed_media(&[blob("", 10, 10, "image/png")]);
         assert_eq!(n, 0);
         assert_eq!(st.media_count(), 0);
+    }
+
+    // -- command path (fast / async / failure) --------------------------------
+
+    use ambre_bus::RestEvent;
+    use ambre_core::DocumentId;
+    use std::io::Cursor;
+
+    use crate::logic::command::{RequestId, ToileEvent, ToileOutcome, ToileRequest};
+
+    /// A minimal solid-color PNG produced with the `image` crate (no fixture).
+    fn solid_png(w: u32, h: u32) -> Vec<u8> {
+        let img = image::RgbaImage::from_pixel(w, h, image::Rgba([10, 20, 30, 255]));
+        let mut bytes = Vec::new();
+        image::DynamicImage::ImageRgba8(img)
+            .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png)
+            .unwrap();
+        bytes
+    }
+
+    fn first_upload_id(out: &ToileOutcome) -> RequestId {
+        match out.requests.first().expect("an upload request") {
+            ToileRequest::UploadMedia { id, .. } => *id,
+            _ => panic!("expected UploadMedia"),
+        }
+    }
+
+    fn has_report(out: &ToileOutcome) -> bool {
+        out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::ImportReport { .. }))
+    }
+
+    #[test]
+    fn svg_import_takes_the_fast_path() {
+        let mut st = ToileState::new();
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect x="0" y="0" width="5" height="5" fill="#ff0000"/></svg>"##;
+        let out = st.handle_command(ToileCommand::ImportSvg {
+            bytes: svg.to_vec(),
+        });
+        // No media -> applied synchronously, one CRDT delta, no service request.
+        assert!(out.update.is_some());
+        assert!(out.requests.is_empty());
+        assert!(has_report(&out), "an ImportReport is surfaced");
+        assert_eq!(st.element_count(), 1);
+        assert_eq!(st.pending_import_count(), 0);
+    }
+
+    #[test]
+    fn a_broken_file_fails_without_touching_the_board() {
+        let mut st = ToileState::new();
+        let out = st.handle_command(ToileCommand::ImportSvg {
+            bytes: b"this is not svg".to_vec(),
+        });
+        assert!(
+            out.display
+                .iter()
+                .any(|e| matches!(e, ToileEvent::ImportFailed(_)))
+        );
+        assert!(out.update.is_none());
+        assert_eq!(st.element_count(), 0);
+    }
+
+    #[test]
+    fn image_import_defers_until_media_uploads() {
+        let mut st = ToileState::new();
+        let out = st.handle_command(ToileCommand::ImportImage {
+            bytes: solid_png(8, 8),
+            mime: "image/png".to_owned(),
+        });
+        // Async: one upload issued, nothing applied yet.
+        assert_eq!(out.requests.len(), 1);
+        assert!(out.update.is_none(), "board unchanged until media resolves");
+        assert_eq!(st.element_count(), 0);
+        assert_eq!(st.pending_import_count(), 1);
+
+        // Sync returns the real hash: the batch lands with it, no `pending:` left.
+        let id = first_upload_id(&out);
+        let done = st.handle_service_event(
+            id,
+            RestEvent::MediaUploaded {
+                document_id: DocumentId::new(),
+                content_hash: "realhash".to_owned(),
+            },
+        );
+        assert!(has_report(&done));
+        assert!(
+            done.update.is_some(),
+            "the applied batch broadcasts a delta"
+        );
+        assert_eq!(st.element_count(), 1);
+        assert_eq!(st.media_count(), 1);
+        assert!(st.media_meta("realhash").is_some());
+        assert_eq!(st.pending_import_count(), 0);
+        // One Undo removes the whole (now-resolved) import.
+        st.handle_command(ToileCommand::Undo);
+        assert_eq!(st.element_count(), 0);
+    }
+
+    #[test]
+    fn a_failed_upload_aborts_the_pending_import() {
+        let mut st = ToileState::new();
+        let out = st.handle_command(ToileCommand::ImportImage {
+            bytes: solid_png(8, 8),
+            mime: "image/png".to_owned(),
+        });
+        let id = first_upload_id(&out);
+        let failed = st.handle_service_error(id, "S3 PUT 500".to_owned());
+        assert!(
+            failed
+                .display
+                .iter()
+                .any(|e| matches!(e, ToileEvent::ImportFailed(_)))
+        );
+        assert_eq!(st.element_count(), 0, "board untouched (atomicity)");
+        assert_eq!(st.pending_import_count(), 0, "the registry is drained");
+    }
+
+    #[test]
+    fn a_stale_service_response_is_dropped() {
+        let mut st = ToileState::new();
+        // No pending import: a late MediaUploaded (import undone / doc reopened)
+        // is dropped without panic and changes nothing.
+        let out = st.handle_service_event(
+            RequestId::next(),
+            RestEvent::MediaUploaded {
+                document_id: DocumentId::new(),
+                content_hash: "orphan".to_owned(),
+            },
+        );
+        assert!(out.display.is_empty());
+        assert!(out.update.is_none());
+        assert_eq!(st.element_count(), 0);
     }
 }

@@ -153,7 +153,14 @@ pub enum LogicEvent {
 
     /// Generic error for any REST/WS operation.
     /// `request` identifies the source command (e.g., "ListDocuments").
+    ///
+    /// `id` echoes the originating [`RequestId`] when the failed command carried
+    /// one (a `SyncCommand::Rest`), so the dispatcher can route a correlated
+    /// failure back to the document that issued it (`toile-interop §5`: a failed
+    /// media upload must reach the pending import that is waiting on it). `None`
+    /// for a spontaneous error with no originating request.
     ApiError {
+        id: Option<RequestId>,
         request: String,
         code: u16,
         message: String,

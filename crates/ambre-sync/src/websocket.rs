@@ -472,6 +472,7 @@ impl SyncState {
             }
             SyncEvent::HttpError { id: _id, message } => {
                 self.send_to_logic(LogicEvent::ApiError {
+                    id: None,
                     request: "rest".into(),
                     code: 500,
                     message,
@@ -883,6 +884,7 @@ impl SyncState {
             WsServerMsg::Error { code, message } => {
                 tracing::error!("Sync: server error {code}: {message}");
                 self.send_to_logic(LogicEvent::ApiError {
+                    id: None,
                     request: "websocket".into(),
                     code,
                     message,

@@ -512,6 +512,19 @@ impl ToileView {
             // signals. The WebGPU view has nothing to repaint for these.
             ToileEvent::PresentBroadcastChanged(_) | ToileEvent::FollowingChanged(_) => {}
             ToileEvent::DanglingConnector(_) | ToileEvent::UndoState { .. } => {}
+            // A foreign-file import landed (§2.C). The accompanying `ViewportData`
+            // already triggered the repaint; log the lossy-import summary so a
+            // dropped construct is visible in diagnostics. UI toasts are the app
+            // shell's job.
+            ToileEvent::ImportReport { imported, skipped } => {
+                tracing::info!(
+                    "Toile import: {imported} elements, {} construct(s) dropped",
+                    skipped.len()
+                );
+            }
+            ToileEvent::ImportFailed(reason) => {
+                tracing::warn!("Toile import failed: {reason}");
+            }
         }
     }
 

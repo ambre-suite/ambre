@@ -126,8 +126,11 @@ pub enum UiEvent {
     /// REST or WebSocket operation error.
     ///
     /// `request` identifies the originating command so the UI Thread can
-    /// correlate the error to the triggering action.
+    /// correlate the error to the triggering action. `id` echoes the originating
+    /// [`RequestId`] when the failed command carried one, so a UI-issued request
+    /// can be matched to its failure; `None` for a spontaneous error.
     ApiError {
+        id: Option<RequestId>,
         request: String,
         code: u16,
         message: String,

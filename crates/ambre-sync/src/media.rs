@@ -44,6 +44,7 @@ impl SyncState {
         };
         let Some(doc_key) = doc_key else {
             let _ = logic_tx.send(LogicEvent::ApiError {
+                id: Some(id),
                 request: "UploadMedia".into(),
                 code: 404,
                 message: "Document not open".into(),
@@ -79,6 +80,7 @@ impl SyncState {
                 Ok(resp) => resp.upload_url,
                 Err(e) => {
                     let _ = logic_tx.send(LogicEvent::ApiError {
+                        id: Some(id),
                         request: "UploadMedia".into(),
                         code: 500,
                         message: format!("upload-url: {e}"),
@@ -93,6 +95,7 @@ impl SyncState {
             // no session, no CSRF header.
             if let Err(e) = http::put_bytes(&upload_url, &blob, "application/octet-stream").await {
                 let _ = logic_tx.send(LogicEvent::ApiError {
+                    id: Some(id),
                     request: "UploadMedia".into(),
                     code: 500,
                     message: format!("S3 PUT: {e}"),
@@ -112,6 +115,7 @@ impl SyncState {
                     .await
             {
                 let _ = logic_tx.send(LogicEvent::ApiError {
+                    id: Some(id),
                     request: "UploadMedia".into(),
                     code: 500,
                     message: format!("confirm: {e}"),
@@ -162,6 +166,7 @@ impl SyncState {
         };
         let Some(doc_key) = doc_key else {
             let _ = logic_tx.send(LogicEvent::ApiError {
+                id: Some(id),
                 request: "DownloadMedia".into(),
                 code: 404,
                 message: "Document not open".into(),
@@ -185,6 +190,7 @@ impl SyncState {
                 Ok(resp) => resp.download_url,
                 Err(e) => {
                     let _ = logic_tx.send(LogicEvent::ApiError {
+                        id: Some(id),
                         request: "DownloadMedia".into(),
                         code: 500,
                         message: format!("download-url: {e}"),
@@ -197,6 +203,7 @@ impl SyncState {
                 Ok(b) => b,
                 Err(e) => {
                     let _ = logic_tx.send(LogicEvent::ApiError {
+                        id: Some(id),
                         request: "DownloadMedia".into(),
                         code: 500,
                         message: format!("S3 GET: {e}"),
@@ -207,6 +214,7 @@ impl SyncState {
 
             if blob.len() < ambre_crypto::aead::NONCE_LEN {
                 let _ = logic_tx.send(LogicEvent::ApiError {
+                    id: Some(id),
                     request: "DownloadMedia".into(),
                     code: 500,
                     message: "Blob too short".into(),
@@ -222,6 +230,7 @@ impl SyncState {
                 Ok(d) => d,
                 Err(e) => {
                     let _ = logic_tx.send(LogicEvent::ApiError {
+                        id: Some(id),
                         request: "DownloadMedia".into(),
                         code: 500,
                         message: format!("Decrypt: {e}"),

@@ -198,6 +198,7 @@ impl ShareHttp for GlooHttp {
 /// Sends a `LogicEvent::ApiError` (the error channel for the sharing tasks).
 fn api_error(logic_tx: &LogicSink, request: &str, code: u16, message: String) {
     let _ = logic_tx.send(LogicEvent::ApiError {
+        id: None,
         request: request.into(),
         code,
         message,

@@ -126,6 +126,11 @@ pub struct ToileState {
     /// viewer's active slide; a manual navigation clears it ("take control").
     /// Local role, never in Loro and never synced.
     following: Option<UserId>,
+    /// Imports awaiting media-upload confirmations (`toile-interop §5`). An
+    /// import that carries raster media is NOT applied until every blob's real
+    /// blake2b returns from Sync, so the whole import stays one atomic undo group
+    /// (§1). Rare and short-lived; dies with the `DocState`. See `state::import`.
+    pending_imports: Vec<import::PendingImport>,
 }
 
 impl Default for ToileState {
@@ -163,6 +168,7 @@ impl ToileState {
             playback: PlaybackState::default(),
             broadcasting: false,
             following: None,
+            pending_imports: Vec::new(),
         }
     }
 
@@ -272,6 +278,15 @@ impl ToileState {
                 backward,
             } => self.find(&query, options, from.as_ref(), backward),
             ToileCommand::RequestSelectionStats { ids } => self.selection_stats(&ids),
+            ToileCommand::ImportSvg { bytes } => self.import_svg_bytes(&bytes),
+            ToileCommand::ImportImage { bytes, mime: _ } => self.import_image_bytes(&bytes),
+            ToileCommand::ImportFigma { .. } | ToileCommand::ImportMiro { .. } => {
+                // Figma / Miro converters land in a later interop slice; the board
+                // is untouched until then (§1 atomicity).
+                ToileOutcome::display_only(vec![ToileEvent::ImportFailed(
+                    "Figma / Miro import is not yet available".to_owned(),
+                )])
+            }
             ToileCommand::RequestSnapshot => ToileOutcome::display_only(Vec::new()),
             ToileCommand::SetViewport(vp) => {
                 self.viewport = vp;
