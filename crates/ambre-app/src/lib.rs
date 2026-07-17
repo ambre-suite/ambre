@@ -528,6 +528,20 @@ pub fn main() {
         })
         .expect("spawn Logic thread");
 
+    // Eagerly fetch the base fonts and seed the Logic thread's PDF-export
+    // FontContext (`toile-interop §3.A`). The Logic worker cannot fetch -- it
+    // blocks on its inbound selector and has no browser event loop -- so the
+    // Main thread, which has both, fetches on its behalf and ships the raw bytes
+    // across as `LogicCommand::LoadFonts`. Fire-and-forget on a `spawn_local`:
+    // export happens far later, and a slow fetch must not stall boot.
+    {
+        let fonts_tx = ui_to_logic_tx.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            let faces = ambre_canvas::fonts::fetch_base_font_faces().await;
+            let _ = fonts_tx.try_send(LogicCommand::LoadFonts { faces });
+        });
+    }
+
     // Dev-only multi-user testing: `?user=<name>` in the page URL authenticates
     // as that user (created on the fly server-side, keys derived deterministically
     // from the name). Lets several browser profiles collaborate on one machine

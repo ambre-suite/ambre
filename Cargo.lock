@@ -183,6 +183,7 @@ dependencies = [
  "futures-util",
  "image",
  "js-sys",
+ "parley",
  "tracing",
  "wasm-bindgen",
  "wasm-bindgen-futures",

@@ -15,6 +15,10 @@ flume           = { workspace = true }
 
 tracing       = { workspace = true }
 futures-util  = { workspace = true }
+# The PDF-export FontContext lives on this thread (`toile-interop §3.A`), seeded
+# by `LogicCommand::LoadFonts`. Only parley -- not the whole GPU canvas crate --
+# so the Logic worker's wasm stays lean.
+parley        = { workspace = true }
 
 wasm-bindgen        = { workspace = true }
 wasm-bindgen-futures = { workspace = true }

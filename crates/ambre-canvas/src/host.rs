@@ -242,35 +242,9 @@ async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -
     // initialize them before the first render otherwise.
     quad_renderer.resize_offscreens(&device, width, height);
 
-    let mut font_cx = parley::FontContext::new();
-    match fetch_bytes("/fonts/NotoSans-Regular.ttf").await {
-        Some(bytes) => {
-            font_cx.collection.register_fonts(bytes.into(), None);
-            tracing::info!("NotoSans-Regular.ttf loaded");
-        }
-        None => tracing::warn!("Failed to fetch /fonts/NotoSans-Regular.ttf -- text disabled"),
-    }
-    // Bold / italic / bold-italic faces of the same "Noto Sans" family --
-    // selected by FontWeight / FontStyle (real faces, not faux bold/oblique),
-    // covering every combination of the bold and italic toggles.
-    for (file, label) in [
-        ("/fonts/NotoSans-Bold.ttf", "NotoSans-Bold.ttf"),
-        ("/fonts/NotoSans-Italic.ttf", "NotoSans-Italic.ttf"),
-        ("/fonts/NotoSans-BoldItalic.ttf", "NotoSans-BoldItalic.ttf"),
-        // Alternate families for the formatting toolbar's font picker
-        // (`-ui.md` sec.5bis): a serif ("DejaVu Serif") and a monospace
-        // ("DejaVu Sans Mono"), selectable by family name.
-        ("/fonts/DejaVuSerif.ttf", "DejaVuSerif.ttf"),
-        ("/fonts/DejaVuSansMono.ttf", "DejaVuSansMono.ttf"),
-    ] {
-        match fetch_bytes(file).await {
-            Some(bytes) => {
-                font_cx.collection.register_fonts(bytes.into(), None);
-                tracing::info!("{label} loaded");
-            }
-            None => tracing::warn!("Failed to fetch {file}"),
-        }
-    }
+    // The base faces (Noto Sans + DejaVu) shared with every other text-capable
+    // FontContext consumer; lazy scripts are fetched on demand at shape time.
+    let font_cx = crate::fonts::font_context_from().await;
 
     let info = adapter.get_info();
     tracing::info!(
@@ -296,7 +270,7 @@ async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -
 // Font fetch helper
 // -----------------------------------------------------------------------------
 
-pub(crate) async fn fetch_bytes(url: &str) -> Option<Vec<u8>> {
+pub async fn fetch_bytes(url: &str) -> Option<Vec<u8>> {
     let window = web_sys::window()?;
     let resp_val = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(url))
         .await

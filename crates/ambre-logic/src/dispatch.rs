@@ -140,6 +140,23 @@ impl LogicState {
                     payload,
                 });
             }
+            LogicCommand::LoadFonts { faces } => {
+                // Seed the PDF-export FontContext once with the base faces the
+                // Main thread fetched (`toile-interop §3.A`). Local-only: nothing
+                // is sent to Sync. A second seeding is ignored -- the faces are
+                // already registered and export needs them exactly once.
+                if self.export_cx.is_none() {
+                    tracing::info!(
+                        "Logic: seeding export FontContext with {} faces",
+                        faces.len()
+                    );
+                    let mut font_cx = parley::FontContext::new();
+                    for bytes in faces {
+                        font_cx.collection.register_fonts(bytes.into(), None);
+                    }
+                    self.export_cx = Some(font_cx);
+                }
+            }
         }
     }
 
@@ -989,5 +1006,25 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    /// `LoadFonts` seeds the export `FontContext` once and is local-only: it
+    /// touches neither the UI nor the Sync plane, and a second seeding is a
+    /// no-op (`toile-interop §3.A`).
+    #[test]
+    fn load_fonts_seeds_export_context_once() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        assert!(state.export_cx.is_none());
+
+        // Empty faces still build a context: the seed happens even when the
+        // fetch delivered nothing (a missing face degrades text, not boot).
+        state.handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
+        assert!(state.export_cx.is_some(), "export context is seeded");
+        assert!(ui_rx.drain().next().is_none(), "no UI event");
+        assert!(sync_rx.try_recv().is_err(), "nothing forwarded to Sync");
+
+        // A second delivery is ignored -- the guard keeps the first context.
+        state.handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
+        assert!(state.export_cx.is_some());
     }
 }
