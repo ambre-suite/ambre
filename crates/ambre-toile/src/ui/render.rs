@@ -21,7 +21,7 @@ use ambre_bus::app::toile::{
 };
 use ambre_canvas::{Palette, TextCache};
 use ambre_draw::{
-    Affine, Alignment, BezPath, Brush, Color, DrawSurface, FontContext, Point,
+    Affine, Alignment, BezPath, Brush, Color, DrawSurface, FontContext, ImageSource, Point,
     PositionedLayoutItem, Rect, Stroke,
 };
 
@@ -34,6 +34,24 @@ use super::tool::{
     world_rect_to_screen,
 };
 use super::viewport::ViewportTransform;
+
+/// A decoded raster image ready to paint: non-premultiplied RGBA8 pixels
+/// (row-major, `width * height * 4` bytes) plus native dimensions.
+///
+/// Keyed by the element's blake2b media hash (`DisplayGeom::Image`). The
+/// screen renderer fills this from its media cache and the PDF export path
+/// decodes it from the `media` LoroMap (`toile-interop §5.B`); a hash absent
+/// from the map means the pixels have not arrived yet, so the element paints a
+/// placeholder box instead (§5.B) until a later frame carries them.
+pub struct DecodedImage {
+    pub pixels: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Resolved image pixels for this frame, keyed by media hash. Empty when no
+/// image element is present (or its media has not been decoded yet).
+pub type ImageStore = HashMap<String, DecodedImage>;
 
 /// Convert an ARGB `u32` (Toile style register, §2.E) to a `peniko::Color`,
 /// pre-multiplying the element `opacity` into the alpha channel.
@@ -107,6 +125,11 @@ pub fn paint_content<S: DrawSurface>(
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
     editing: Option<&ElementId>,
+    // Decoded image pixels for this frame, keyed by media hash. An `Image`
+    // element whose hash is present paints real pixels via `draw_image`; one
+    // absent paints a placeholder box (`toile-interop §5.B`). Empty on a board
+    // with no images or whose media has not yet been decoded.
+    images: &ImageStore,
     // Smart Animate overrides for an in-flight slide transition (§1.C): keyed by
     // element id, each replaces the element's transform / bounds / opacity / fill
     // for this frame. Empty when no transition is active. Fade-only ids (a new /
@@ -127,7 +150,7 @@ pub fn paint_content<S: DrawSurface>(
     surface.push_transform(cam.world_to_screen());
     for node in &vp.nodes {
         match node {
-            DisplayNode::Element(e) => paint_element(surface, e, anim.get(&e.id)),
+            DisplayNode::Element(e) => paint_element(surface, e, images, anim.get(&e.id)),
             DisplayNode::Connector(c) => paint_connector(surface, c),
         }
     }
@@ -185,6 +208,7 @@ fn anim_style(base: &ElementStyle, a: Option<&AnimatedElement>) -> ElementStyle 
 fn paint_element<S: DrawSurface>(
     surface: &mut S,
     e: &DisplayElement,
+    images: &ImageStore,
     anim: Option<&AnimatedElement>,
 ) {
     let transform = anim.map(anim_transform).unwrap_or(e.transform);
@@ -208,9 +232,25 @@ fn paint_element<S: DrawSurface>(
                 );
             }
         }
-        // Media / embeds paint a placeholder box in Phase 0 (pixels + iframe land
-        // in toile-interop). Text is handled in the screen-space pass.
-        DisplayGeom::Image(_) | DisplayGeom::Embed(_) | DisplayGeom::DocEmbed { .. } => {
+        // An image paints its decoded pixels when they have arrived, scaled to
+        // the element AABB (the rect is stored at the imported aspect, §5.B); a
+        // hash not yet in the store paints a placeholder box until a later frame
+        // carries the media. `draw_image` maps through the active element
+        // transform, so a rotated image rotates with its box.
+        DisplayGeom::Image(hash) => match images.get(hash) {
+            Some(img) => surface.draw_image(
+                &ImageSource {
+                    pixels: &img.pixels,
+                    width: img.width,
+                    height: img.height,
+                },
+                bounds,
+            ),
+            None => fill_and_stroke(surface, &rect_path(bounds), &style),
+        },
+        // Embeds (iframe) and doc-embeds paint a placeholder box; their content
+        // is composited outside the canvas walk.
+        DisplayGeom::Embed(_) | DisplayGeom::DocEmbed { .. } => {
             fill_and_stroke(surface, &rect_path(bounds), &style);
         }
         DisplayGeom::Text(_) => {}
@@ -456,6 +496,7 @@ mod tests {
             &mut font_cx,
             &mut tc,
             None,
+            &ImageStore::new(),
             &HashMap::new(),
             false,
         );
@@ -516,6 +557,7 @@ mod tests {
             &mut font_cx,
             &mut tc,
             None,
+            &ImageStore::new(),
             &anim,
             true, // focus mode: grid suppressed
         );
@@ -531,6 +573,67 @@ mod tests {
             has_tweened,
             "animated element must paint its interpolated fill/opacity"
         );
+    }
+
+    // An `Image` element whose hash is in the store paints real pixels
+    // (`DrawImage`), scaled to its AABB; one whose hash is absent falls back to
+    // a placeholder box (a path fill), per toile-interop §5.B.
+    #[test]
+    fn image_paints_pixels_when_resolved_else_placeholder() {
+        let bounds = Rect::new(0.0, 0.0, 40.0, 20.0);
+        let vp = DisplayViewport {
+            reactions: Default::default(),
+            viewport: Default::default(),
+            nodes: vec![
+                elem("has", DisplayGeom::Image("h1".into()), bounds),
+                elem("missing", DisplayGeom::Image("h2".into()), bounds),
+            ],
+        };
+        // Only "h1" is decoded; "h2" is still pending.
+        let mut images = ImageStore::new();
+        images.insert(
+            "h1".into(),
+            DecodedImage {
+                pixels: vec![255u8; 2 * 2 * 4],
+                width: 2,
+                height: 2,
+            },
+        );
+        let mut surface = RecordingSurface::new();
+        let mut font_cx = FontContext::new();
+        let mut tc = TextCache::new(1.0);
+        paint_content(
+            &mut surface,
+            &vp,
+            &cam(),
+            &LIGHT_PALETTE,
+            &mut font_cx,
+            &mut tc,
+            None,
+            &images,
+            &HashMap::new(),
+            false,
+        );
+
+        // Exactly one real image paint, sized to the element AABB.
+        let draws: Vec<_> = surface
+            .ops()
+            .iter()
+            .filter_map(|o| match o {
+                DrawOp::DrawImage {
+                    width,
+                    height,
+                    dest,
+                } => Some((*width, *height, *dest)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(draws.len(), 1, "one resolved image paints pixels");
+        assert_eq!(draws[0], (2, 2, bounds));
+        // The unresolved image falls back to a placeholder path fill.
+        let fills = surface.count(|o| matches!(o, DrawOp::FillPath { .. }));
+        assert_eq!(fills, 1, "the pending image paints a placeholder box");
+        assert_eq!(surface.transform_depth(), 0);
     }
 
     #[test]
