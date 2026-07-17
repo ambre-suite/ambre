@@ -81,14 +81,17 @@
 > element rendered through Toile's own Parley stack. Phase 0 reads top-level
 > `x`/`y` only (no transform / `tspan` offset resolution).
 >
-> **Groups: flattened in Phase 0.** A Toile `group` is born only via
+> **Groups: rebuilt after apply (Phase 1).** A Toile `group` is born only via
 > `GroupElements { ids }` (`toile-logic §2.F bis`), whose `ElementId`s are minted
 > by the engine *after* `CreateElement` is applied — ids the offline converter
-> cannot know. Phase 0 therefore **flattens** `<g>`: it recurses and imports the
-> children as top-level elements with the group transform baked into their
-> coordinates (`abs_transform`), so flattening is visually lossless, and lists each
-> flattened group in the import report. Re-grouping lands with the Phase 1
-> dispatcher wiring (post-apply ids exist there).
+> cannot know. The converter therefore speaks in **slots**: it emits the children
+> as elements (group transform baked into their coordinates via `abs_transform`, so
+> geometry stays world-space) plus an `ImportGroup { members }` list whose members
+> reference slots or earlier groups. Groups are emitted **innermost-first**
+> (post-order) so a nested member always refers to an already-resolved entry. The
+> apply pass mints the ids, then issues `GroupElements` inside the same undo group,
+> reconstructing the `<g>` hierarchy exactly. No group is flattened and none is
+> listed in the import report as lost.
 
 Gradients/filters not representable in `ElementStyle` are rasterized to an `image` fallback (lossy but faithful),
 flagged in the import report.
@@ -103,8 +106,16 @@ images are downscaled to a screen-reasonable placeholder for immediate display, 
 A dedicated converter maps the foreign document model to ours:
 
 - **Figma:** frames→frames, rectangles/ellipses/vectors→shapes (vector networks flattened to `BezPath`), text→
-  text, auto-layout→`AutoLayout` (`toile-features §2`), components→plain elements (MVP: no component instancing).
+  text, components→plain elements (MVP: no component instancing).
 - **Miro:** sticky notes→sticky, shapes→shapes, connectors/lines→connectors (`toile-logic §5`), frames→frames.
+
+> **Auto-layout deferred (MVP).** Figma auto-layout would map to `AutoLayout`
+> (`toile-features §2`), but `SetAutoLayout` targets an `ElementId` minted only
+> after apply — the same post-apply problem as groups and connectors, and it would
+> add another slot-resolved field to `ImportBatch`. For the MVP an auto-layout
+> frame imports as a plain frame with its children at their resolved absolute
+> positions, and the drop is listed in the import report. It lands with a later
+> slice.
 
 Unmapped constructs are dropped and listed in the import report (`ToileEvent::ImportReport { imported, skipped }`).
 
@@ -141,6 +152,15 @@ Each presentation frame (`toile-features §1`, in `presentation.order`) becomes 
 **same** `DrawSurface` code as the screen but targeting `KrillaSurface` — so vector fidelity is preserved (text
 stays text, paths stay paths). Whole-board export (no presentation) emits a single page sized to the content
 bounds. Images are embedded from the media cache at full resolution.
+
+> **Page = frame spatial rect, clipped.** A page shows exactly what the audience
+> sees in present mode: the walk is culled to the frame's **spatial** rect (world
+> AABB), not to the frame's declared child list, and the surface pushes a clip on
+> that rect for the whole page. The clip is load-bearing, not cosmetic. The present
+> camera fits a frame by the tighter of the two axes (`fit_target` takes the `min`
+> of the x/y fit), which leaves slack on the other axis; without the clip that
+> slack would pull neighbouring board content onto the page. One page per frame,
+> one content walk, byte-stable output (§1 determinism).
 
 > **Thread & loading.** `KrillaSurface` runs in the **Logic thread**, not the UI thread, and `krilla` is
 > **lazy-loaded** (WASM bundle splitting), consistent with `ambre-spec-canvas.md §D`. Only the offscreen **PNG**
@@ -232,9 +252,12 @@ posture.
 > See the transverse test architecture in `ambre-spec-architecture.md §4`.
 
 - **Test tiers:** **host** for every converter (SVG/Figma/Miro→commands, and export serializers), the safety
-  limits, and the media hashing/placeholder state machine — all pure and host-testable. **wasm** for PNG
-  offscreen render-back and the Web-Showcase viewer boot. No **db** tier here; MinIO/upload paths are exercised
+  limits, and the media hashing/placeholder state machine — all pure and host-testable. **wasm** for the PDF
+  export path (proving `krilla` + Parley + swash link and run under `wasm32-unknown-unknown`), the browser
+  download path, and off-UI-thread font loading. No **db** tier here; MinIO/upload paths are exercised
   against the crypto/Sync seam with a mock object store (server-side MinIO integration belongs to the Sync spec).
+  The §3.C PNG offscreen render-back needs a real GPU adapter in headless Chrome and lands with §3.C, not with
+  this phase (a flaky GPU test is worse than none).
 - **Unit tests:** round-trip SVG import→export→import stability for each primitive; Figma/Miro fixture files →
   expected command batch (golden); every safety-limit branch aborts atomically with `ImportFailed`; PDF page
   count == presentation frame count; media state machine (Loading→Ready, Loading→Failed, cache hit skips fetch);
@@ -263,6 +286,13 @@ posture.
 the interop path and shared with Prose/Trame export where possible to stay within the total < 2 MB gzipped
 budget.
 
+> **Lazy-loading not yet delivered.** Phase 1 gates `krilla` behind a `pdf` cargo
+> feature, which controls **compilation**, not runtime loading: the code still
+> links into the main wasm module. True lazy-loading (a second wasm-bindgen entry
+> point plus a dynamic `import()`) is a build-system slice deferred to a later
+> phase; until then the interop path does not claim the §8 bundle-splitting budget
+> for `krilla`.
+
 ---
 
 ## 9. REJECTED ARCHITECTURAL DECISIONS
@@ -290,10 +320,17 @@ budget.
 - [x] Host tests + golden fixtures — node-type mapping, round-trip stability, every reject path, media state machine
 
 **Phase 1 - Integration**
-- [ ] PDF export via `KrillaSurface` honoring presentation order
-- [ ] Figma / Miro converters (MVP: no component instancing — components map to plain elements, §2)
-- [ ] Media pipeline wired to the crypto / Sync layer + mock object store
-- [ ] wasm export tests
+- [x] PDF export via `KrillaSurface` honoring presentation order — one page per presentation frame, culled and
+  clipped to the frame's spatial rect (§3.A); `draw_image` added to `DrawSurface` (`ambre-spec-canvas.md §D`) so
+  images embed; fonts eager-fetched at Logic-worker boot so text stays vector. `krilla` behind a `pdf` feature;
+  runtime lazy-loading deferred (§8).
+- [x] Figma / Miro converters (MVP: no component instancing — components map to plain elements, §2). Figma
+  auto-layout deferred and reported (§2.C).
+- [x] Media pipeline wired to the crypto / Sync layer + mock object store — import routes plaintext through the
+  existing `UploadMedia`/`DownloadMedia` service plane (§5); the atomic import applies only once every content
+  hash has returned. Creates the `media` CRDT map (`toile-logic §2.B`).
+- [x] wasm export tests — PDF export, browser download, and off-thread font loading under
+  `wasm32-unknown-unknown`.
 
 **Phase 2 - Optimization**
 - [ ] Streaming / bounded import for very large files (batched-yield apply keeping the Logic thread responsive + `ImportProgress`, §2.E)
