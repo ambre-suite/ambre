@@ -1009,7 +1009,7 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
 > No phase ships `[x]` without its test belt green.
 
 **Phase 0 - Core standalone**
-- [x] `ToileState` + CRDT schema (§2): `elements`, `connectors`, `drawings`, unified `layers` z-order, one per-element `ElementStyle` register, `groups` (per-group `children` list, derived-only bounds), and `frames` content (per-frame `children` membership list, §2.F/§2.G z-order invariant) **landed**. The `media` map is populated by `toile-interop` (raster/media pipeline), not the Logic engine.
+- [x] `ToileState` + CRDT schema (§2): `elements`, `connectors`, `drawings`, unified `layers` z-order, one per-element `ElementStyle` register, `groups` (per-group `children` list, derived-only bounds), and `frames` content (per-frame `children` membership list, §2.F/§2.G z-order invariant) **landed**. The `media` map is created and populated by `toile-interop` in Phase 1 (raster/media pipeline), not the Logic engine.
 - [x] Move-invariant `ElementId` minting (`{peer:016x}_{counter:08x}`, §1)
 - [x] `SpatialIndex` (`rstar` R-tree) with the index-equivalence property test (indexed cull vs brute-force agree)
 - [x] Element lifecycle commands (create / update / delete / transform / lock / reorder) with test belt

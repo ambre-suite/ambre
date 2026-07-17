@@ -243,6 +243,9 @@ pub trait DrawSurface {
     fn fill_path(&mut self, path: &BezPath, brush: &Brush) {}
     fn stroke_path(&mut self, path: &BezPath, brush: &Brush, stroke: &Stroke) {}
 
+    // -- Raster images: default no-op (implement for WgpuSurface / KrillaSurface)
+    fn draw_image(&mut self, image: &ImageSource<'_>, dest: Rect) {}
+
     // -- Transform stack: default no-op (implement for Toile pan/zoom, Prose margins)
     fn push_transform(&mut self, transform: Affine) {}
     fn pop_transform(&mut self) {}
@@ -254,9 +257,13 @@ pub trait DrawSurface {
 > **`fill_path` / `stroke_path`**: implemented on `WgpuSurface` via lyon and on `KrillaSurface` via krilla primitives. On `WgpuSurface` the `BezPath` is converted to a `lyon::path::Path` and tessellated in model space (Fill = NonZero rule, Stroke maps `kurbo::Stroke` width/cap/join/miter-limit); the flattening tolerance is expressed in screen pixels and divided by the transform's scale (sqrt of the linear-part determinant) so zoomed paths stay smooth. Output vertices are mapped to screen space through the active transform and appended to the solid-color quad batch (`QuadRenderer::push_mesh`) -- no dedicated pipeline.
 >
 > **Known limitations (first implementation):**
-> - **Solid brush only.** `Brush::Solid` is honored; gradients/images are ignored (Phase 3), matching `draw_glyphs`.
+> - **Solid brush only.** In `fill_path` / `stroke_path` only `Brush::Solid` is honored; gradient brushes are ignored (Phase 3), matching `draw_glyphs`. Raster images are painted through the dedicated `draw_image` method, not through a brush.
 > - **Clip is bounding-box reject, not per-triangle trim.** A path whose (transformed, stroke-padded) bbox misses the active clip is skipped entirely; a path straddling a clip edge is drawn whole. Arbitrary path geometry cannot be trimmed cheaply on the CPU the way axis-aligned rects/lines/glyphs are. True clipping (GPU scissor for axis-aligned clips, or stencil) is deferred until a consumer needs a partially-clipped path.
 > - **Stroke width scales with zoom.** Tessellation is in model units, so the transform scales the stroke -- correct for Toile pan/zoom; a hairline (screen-constant width) would need dividing the width by the transform scale.
+
+> **`draw_image`**: paints a decoded raster image into the world-space `dest` rect (the element AABB after the active transform). `ImageSource<'_>` is a borrowed view over already-decoded RGBA8 pixels plus their native `width`/`height` -- decoding is the caller's job (Toile interop decodes on import; the screen renderer decodes from the media cache), so `ambre-draw` stays codec-free (`kurbo`/`peniko`/`parley` only). The image is scaled to fill `dest`; aspect ratio is the caller's responsibility (Toile stores the element rect at the imported aspect). Implementations: `WgpuSurface` uploads the pixels to a `wgpu::Texture` and draws a textured quad through the active transform; `KrillaSurface` hands the pixels to krilla as a raster image (the `ambre-pdf` crate enables krilla's `raster-images` feature). A surface without raster support keeps the default no-op, so text/vector export still succeeds. Per §5.B, a Toile image whose pixels have not yet arrived from the media cache paints a placeholder rect via `fill_rect` and is repainted once `draw_image` has pixels; the trait itself carries no placeholder logic.
+>
+> **`ImageSource`**: a lightweight borrow, `struct ImageSource<'a> { pixels: &'a [u8], width: u32, height: u32 }` (RGBA8, row-major, no stride padding), defined in `ambre-draw` alongside the trait. It never owns or decodes pixels.
 
 > **`push_transform` / `pop_transform`**: default no-ops, required for Toile (infinite pan/zoom) and Prose (page margins). `WgpuSurface` will implement them with a CPU-side transform matrix before GPU submission.
 
