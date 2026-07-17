@@ -21,7 +21,7 @@ pub mod chrome;
 
 pub use logic::command::{
     DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, End, InitContent,
-    SelectionStats, ToileCommand, ToileError, ToileEvent, ToileOutcome, ZTarget,
+    SelectionStats, ToileCommand, ToileError, ToileEvent, ToileOutcome, ToileRequest, ZTarget,
 };
 pub use logic::index::{ElementBounds, SpatialIndex, Viewport};
 pub use logic::model::{

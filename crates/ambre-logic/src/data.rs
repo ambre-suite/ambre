@@ -50,6 +50,8 @@ impl LogicState {
                     outcome.update,
                     outcome.ephemeral,
                     snapshot,
+                    // Trame issues no service-plane requests (no interop plane).
+                    Vec::new(),
                 );
             }
             (DocState::Toile(state), AppCommand::Toile(cmd)) => {
@@ -61,6 +63,7 @@ impl LogicState {
                     outcome.update,
                     outcome.ephemeral,
                     snapshot,
+                    outcome.requests,
                 );
             }
             // A mismatched (state, command) pair is impossible by routing: the
@@ -80,12 +83,13 @@ impl LogicState {
     /// `AppCommand` arm; the arm only decides which `AppEvent` variant wraps the
     /// display events and whether a snapshot was taken.
     fn dispatch_outcome(
-        &self,
+        &mut self,
         document_id: DocumentId,
         display: Vec<AppEvent>,
         update: Option<Vec<u8>>,
         ephemeral: Option<Vec<u8>>,
         snapshot: Option<Vec<u8>>,
+        requests: Vec<ToileRequest>,
     ) {
         for event in display {
             self.send_to_ui(UiEvent::Viewport { document_id, event });
@@ -109,6 +113,101 @@ impl LogicState {
                 payload,
             });
         }
+        // Lower each Toile-level service request to a `RestCommand`, supplying
+        // the owning `document_id` (which the engine does not hold) and recording
+        // the route so the answering `RestEvent` / `ApiError` is fed back into the
+        // engine instead of forwarded to the UI (`toile-interop §5`).
+        for request in requests {
+            let (id, cmd) = self.lower_request(document_id, request);
+            self.rest_routes.insert(id, document_id);
+            self.send_to_sync(SyncCommand::Rest { id, cmd });
+        }
+    }
+
+    /// Lower one [`ToileRequest`] into the `(RequestId, RestCommand)` pair the
+    /// Sync plane expects, filling in the `document_id` the engine cannot name.
+    /// The `RequestId` is the one Toile allocated -- it owns the correlation.
+    fn lower_request(
+        &self,
+        document_id: DocumentId,
+        request: ToileRequest,
+    ) -> (RequestId, RestCommand) {
+        match request {
+            ToileRequest::UploadMedia { id, data, mime } => (
+                id,
+                RestCommand::UploadMedia {
+                    document_id,
+                    data,
+                    mime_type: mime,
+                },
+            ),
+            ToileRequest::DownloadMedia { id, content_hash } => (
+                id,
+                RestCommand::DownloadMedia {
+                    document_id,
+                    content_hash,
+                },
+            ),
+        }
+    }
+
+    /// Feed a service-plane response routed back to a document
+    /// (`toile-interop §5`) into its engine and fan the resulting outcome out.
+    /// Only a Toile document issues service requests, so a route pointing at any
+    /// other state is a bug; we log and drop rather than panic. The engine
+    /// silently ignores an id it no longer tracks (import undone / doc reopened).
+    pub(crate) fn route_service_event(
+        &mut self,
+        document_id: DocumentId,
+        id: RequestId,
+        evt: RestEvent,
+    ) {
+        let Some(doc) = self.docs.get_mut(&document_id) else {
+            tracing::warn!("Logic: routed RestEvent for closed doc {document_id}, dropping");
+            return;
+        };
+        let DocState::Toile(state) = &mut doc.state else {
+            tracing::warn!("Logic: routed RestEvent for non-Toile doc {document_id}, dropping");
+            return;
+        };
+        let outcome = state.handle_service_event(id, evt);
+        let snapshot = outcome.update.is_some().then(|| state.export_snapshot());
+        self.dispatch_outcome(
+            document_id,
+            outcome.display.into_iter().map(AppEvent::Toile).collect(),
+            outcome.update,
+            outcome.ephemeral,
+            snapshot,
+            outcome.requests,
+        );
+    }
+
+    /// Feed a correlated service-plane failure back into a document's engine
+    /// (`toile-interop §5`): a failed media upload aborts its pending import.
+    pub(crate) fn route_service_error(
+        &mut self,
+        document_id: DocumentId,
+        id: RequestId,
+        reason: String,
+    ) {
+        let Some(doc) = self.docs.get_mut(&document_id) else {
+            tracing::warn!("Logic: routed ApiError for closed doc {document_id}, dropping");
+            return;
+        };
+        let DocState::Toile(state) = &mut doc.state else {
+            tracing::warn!("Logic: routed ApiError for non-Toile doc {document_id}, dropping");
+            return;
+        };
+        let outcome = state.handle_service_error(id, reason);
+        let snapshot = outcome.update.is_some().then(|| state.export_snapshot());
+        self.dispatch_outcome(
+            document_id,
+            outcome.display.into_iter().map(AppEvent::Toile).collect(),
+            outcome.update,
+            outcome.ephemeral,
+            snapshot,
+            outcome.requests,
+        );
     }
 
     /// Apply a remote CRDT delta to a document and forward viewport events.
