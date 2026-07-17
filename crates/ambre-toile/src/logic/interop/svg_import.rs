@@ -5,8 +5,8 @@
 //! (`<rect>`, `<circle>`, `<line>`, ...) into a `Path`, so vector nodes map to
 //! `Shape(Path)` carrying a `kurbo::BezPath`; an axis-aligned rectangle contour
 //! is recognized back into `Shape(Rect)` (the common, safe case). `<image>` maps
-//! to an `Image` element plus a plaintext [`MediaBlob`] (§5), and `<g>` is
-//! **flattened** -- see the note on groups below.
+//! to an `Image` element plus a plaintext [`MediaBlob`] (§5), and `<g>` becomes
+//! an [`ImportGroup`] rebuilt after apply -- see the note on groups below.
 //!
 //! **Text (why not usvg).** usvg only exposes `<text>` by flattening it to glyph
 //! *paths*, which needs a font database -- impossible in the browser (no system
@@ -16,15 +16,16 @@
 //! renders through its own Parley stack. Phase 0 reads top-level `x`/`y` only (no
 //! transform / `tspan` offset resolution), noted where it matters.
 //!
-//! **Groups (Phase 0 deviation).** The spec maps `<g>` to a Toile `group`
-//! (§2.A). A group is created only via `GroupElements { ids }`, which needs the
-//! `ElementId`s the engine mints *after* `CreateElement` is applied -- ids an
-//! offline converter cannot know. So Phase 0 **flattens** groups: it recurses
-//! into them and imports the children as top-level elements with the group's
-//! transform baked in (every geometry read uses `abs_transform` / abs bounds, so
-//! flattening is visually lossless). The re-grouping belongs to the Phase 1
-//! dispatcher wiring, where post-apply ids exist. Each flattened group is noted
-//! in the import report.
+//! **Groups (§2.A).** The spec maps `<g>` to a Toile `group`. A group is created
+//! only via `GroupElements { ids }`, which needs the `ElementId`s the engine mints
+//! *after* `CreateElement` is applied -- ids an offline converter cannot know. So
+//! the converter speaks in slots: it imports the children as elements (the group's
+//! transform baked into their geometry via `abs_transform` / abs bounds, so
+//! geometry stays world-space) and records an [`ImportGroup`] whose members are the
+//! slots (and nested groups) it contains. Groups are pushed **innermost-first**
+//! (post-order) so a nested member `Group(i)` always refers to an already-resolved
+//! entry. The apply pass mints the ids and issues `GroupElements` in the same undo
+//! group, reconstructing the hierarchy. No group is flattened or reported as lost.
 //!
 //! All geometry is clamped to the world bound and the element/depth counts are
 //! enforced while walking (§2.D); any breach aborts the whole import atomically
@@ -34,7 +35,7 @@ use kurbo::{BezPath, PathEl, Point, Rect, Shape, Size};
 use usvg::tiny_skia_path::PathSegment;
 
 use super::raster::{decode_media, pending_hash};
-use super::{ImportBatch, ImportError, Limits};
+use super::{ImportBatch, ImportError, ImportGroup, ImportRef, Limits};
 use crate::logic::command::{InitContent, ToileCommand};
 use crate::logic::model::{ElementKind, ElementStyle, ShapeKind};
 
@@ -47,6 +48,8 @@ pub fn import_svg(bytes: &[u8], limits: &Limits) -> Result<ImportBatch, ImportEr
 
     let mut batch = ImportBatch::default();
     let mut media_counter = 0usize;
+    // The document root is not itself a `<g>`; its direct-member refs are discarded
+    // (only nested `<g>` become groups). Nested groups are pushed during the walk.
     walk_group(tree.root(), 0, limits, &mut batch, &mut media_counter)?;
 
     // Text is read from the source (see the module note), not the usvg tree.
@@ -110,40 +113,52 @@ fn import_text_nodes(
             ElementKind::Text,
             rect,
             InitContent::Text(body),
-            ElementStyle::default(),
+            None,
         );
     }
     Ok(())
 }
 
-/// Recursively walk a usvg group, appending commands. `depth` guards nesting;
-/// `media_counter` mints the placeholder token for each `<image>`.
+/// Recursively walk a usvg group, appending commands, and return the
+/// [`ImportRef`]s of the elements/subgroups that are this group's direct members
+/// (in child order). `depth` guards nesting; `media_counter` mints the placeholder
+/// token for each `<image>`. A nested `<g>` recurses first, then pushes its
+/// [`ImportGroup`] (post-order = innermost-first, so a `Group(i)` member always
+/// refers to an already-pushed entry) and contributes a `Group` ref here.
 fn walk_group(
     group: &usvg::Group,
     depth: usize,
     limits: &Limits,
     batch: &mut ImportBatch,
     media_counter: &mut usize,
-) -> Result<(), ImportError> {
+) -> Result<Vec<ImportRef>, ImportError> {
     limits.check_depth(depth)?;
+    let mut members = Vec::new();
     for node in group.children() {
         match node {
             usvg::Node::Group(g) => {
-                // Flattened, transforms baked in via abs bounds (see module note).
-                batch.report.skip(format!(
-                    "group '{}': flattened (grouping deferred to a later phase)",
-                    g.id()
-                ));
-                walk_group(g, depth + 1, limits, batch, media_counter)?;
+                let child_members = walk_group(g, depth + 1, limits, batch, media_counter)?;
+                // An empty `<g>` (all children skipped) produces no group.
+                if !child_members.is_empty() {
+                    let group_idx = batch.groups.len();
+                    batch.groups.push(ImportGroup {
+                        members: child_members,
+                    });
+                    members.push(ImportRef::Group(group_idx));
+                }
             }
-            usvg::Node::Path(p) => import_path(p, limits, batch)?,
+            usvg::Node::Path(p) => members.push(import_path(p, limits, batch)?),
             // Text is handled by the roxmltree pass (see module note); the font
             // stack is disabled so usvg never yields a Text node here.
             usvg::Node::Text(_) => {}
-            usvg::Node::Image(img) => import_image(img, limits, batch, media_counter)?,
+            usvg::Node::Image(img) => {
+                if let Some(r) = import_image(img, limits, batch, media_counter)? {
+                    members.push(r);
+                }
+            }
         }
     }
-    Ok(())
+    Ok(members)
 }
 
 /// Map a usvg path to a `Shape` element. Axis-aligned rectangles become
@@ -152,7 +167,7 @@ fn import_path(
     path: &usvg::Path,
     limits: &Limits,
     batch: &mut ImportBatch,
-) -> Result<(), ImportError> {
+) -> Result<ImportRef, ImportError> {
     limits.check_element_count(batch.commands.len())?;
 
     let bez = to_bezpath(path.data(), &path.abs_transform(), limits);
@@ -165,8 +180,13 @@ fn import_path(
         None => (ElementKind::Shape(ShapeKind::Path), InitContent::Path(bez)),
     };
 
-    push_element(batch, kind, rect, content, style);
-    Ok(())
+    Ok(ImportRef::Slot(push_element(
+        batch,
+        kind,
+        rect,
+        content,
+        Some(style),
+    )))
 }
 
 /// Map a usvg `<image>` to an `Image` element plus a plaintext [`MediaBlob`].
@@ -177,20 +197,20 @@ fn import_image(
     limits: &Limits,
     batch: &mut ImportBatch,
     media_counter: &mut usize,
-) -> Result<(), ImportError> {
+) -> Result<Option<ImportRef>, ImportError> {
     limits.check_element_count(batch.commands.len())?;
 
     let raw: &[u8] = match image.kind() {
         usvg::ImageKind::PNG(d) | usvg::ImageKind::JPEG(d) => d.as_slice(),
         usvg::ImageKind::GIF(_) | usvg::ImageKind::WEBP(_) => {
             batch.report.skip("image: GIF/WebP not decoded in Phase 0");
-            return Ok(());
+            return Ok(None);
         }
         usvg::ImageKind::SVG(_) => {
             batch
                 .report
                 .skip("image: nested SVG not inlined in Phase 0");
-            return Ok(());
+            return Ok(None);
         }
     };
 
@@ -199,36 +219,41 @@ fn import_image(
     *media_counter += 1;
 
     let rect = limits.clamp_rect(rect_from_usvg(image.abs_bounding_box()));
-    push_element(
+    let slot = push_element(
         batch,
         ElementKind::Image,
         rect,
         InitContent::Image(hash.0),
-        ElementStyle::default(),
+        None,
     );
     batch.media.push(blob);
-    Ok(())
+    Ok(Some(ImportRef::Slot(slot)))
 }
 
-/// Append one `CreateElement` for an element occupying `rect`.
+/// Append one `CreateElement` for an element occupying `rect`, plus its imported
+/// style (index-aligned into `batch.styles`), and return the slot index the apply
+/// pass will resolve to a freshly minted `ElementId`.
+///
+/// Style rides a separate `styles` slot rather than `CreateElement` because the
+/// CRDT stores `ElementStyle` as an independent LWW register (§2.E): the apply
+/// pass creates the element, then restyles it inside the same undo group. `None`
+/// keeps the engine default (used for text/image, which import unstyled).
 fn push_element(
     batch: &mut ImportBatch,
     kind: ElementKind,
     rect: Rect,
     content: InitContent,
-    _style: ElementStyle,
-) {
-    // NOTE: ElementStyle is carried by a separate RestyleElements command in the
-    // full pipeline (the CRDT stores it as an independent LWW register, §2.E).
-    // Phase 0 emits the geometry-creating command; the imported style rides in the
-    // batch's per-element style once the dispatcher wiring lands (Phase 1). Keeping
-    // the parameter documents the mapping without inventing a command variant.
+    style: Option<ElementStyle>,
+) -> usize {
+    let slot = batch.commands.len();
     batch.commands.push(ToileCommand::CreateElement {
         kind,
         at: rect.origin(),
         size: Size::new(rect.width(), rect.height()),
         content,
     });
+    batch.styles.push(style);
+    slot
 }
 
 // -----------------------------------------------------------------------------

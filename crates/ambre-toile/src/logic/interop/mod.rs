@@ -18,7 +18,7 @@
 use kurbo::{BezPath, Rect};
 
 use crate::logic::command::ToileCommand;
-use crate::logic::model::{ElementKind, ElementStyle};
+use crate::logic::model::{Anchor, ElementKind, ElementStyle, EndCaps, PathType};
 
 pub mod limits;
 pub mod media;
@@ -35,6 +35,38 @@ pub use raster::import_raster;
 pub use svg_export::export_svg;
 pub use svg_import::import_svg;
 
+/// A reference to something the apply pass mints, used by converters that cannot
+/// name `ElementId`s (those are minted only when `CreateElement` is applied,
+/// §2.A): either a `CreateElement` slot (an index into
+/// [`ImportBatch::commands`]) or a group produced by an earlier
+/// [`ImportGroup`] (an index into [`ImportBatch::groups`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportRef {
+    Slot(usize),
+    Group(usize),
+}
+
+/// A `<g>` (or a Figma/Miro group) to rebuild via `GroupElements` after the
+/// creates land (§2.A). Emitted innermost-first (post-order) so a member
+/// `Group(i)` always refers to an already-resolved entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportGroup {
+    pub members: Vec<ImportRef>,
+}
+
+/// A connector to create after the elements land, endpoints named by slot
+/// (`toile-logic §5`). A Miro connector whose endpoint did not map to an imported
+/// element is dropped before this is emitted (recorded in the report).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImportConnector {
+    pub from: ImportRef,
+    pub from_anch: Anchor,
+    pub to: ImportRef,
+    pub to_anch: Anchor,
+    pub path_type: PathType,
+    pub arrows: EndCaps,
+}
+
 /// Everything one import produced: the CRDT commands to apply atomically, the
 /// media plaintext blobs the Sync layer will encrypt/upload (§5.A), and the
 /// human-facing report of what was and was not mapped (§2.C import report).
@@ -44,6 +76,15 @@ pub struct ImportBatch {
     /// (§2.E). Parent-before-child order so a group/frame is created before its
     /// members (the §2.G z-order / membership invariant).
     pub commands: Vec<ToileCommand>,
+    /// Index-aligned with `commands`: the imported style for that slot, or `None`
+    /// to keep the default. Style is an independent LWW register, so it cannot
+    /// ride `CreateElement`; the apply pass restyles inside the same undo group
+    /// (§2.E).
+    pub styles: Vec<Option<ElementStyle>>,
+    /// Groups to rebuild after the creates land, innermost-first (§2.A).
+    pub groups: Vec<ImportGroup>,
+    /// Connectors to create after the elements land (`toile-logic §5`).
+    pub connectors: Vec<ImportConnector>,
     /// Plaintext media referenced by the commands (an `image` element's hash is a
     /// key here). Handed to Sync for encrypt-then-upload; interop holds no keys.
     pub media: Vec<MediaBlob>,
@@ -89,6 +130,8 @@ pub struct MediaBlob {
 pub enum ImportError {
     #[error("failed to parse SVG: {0}")]
     Parse(String),
+    #[error("failed to parse {format}: {msg}")]
+    Json { format: &'static str, msg: String },
     #[error("failed to decode image: {0}")]
     Decode(String),
     #[error("import exceeds the element limit ({limit})")]
