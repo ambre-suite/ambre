@@ -12,6 +12,7 @@ use loro::LoroMap;
 use crate::logic::animate::{FrameSnapshot, SnapElement};
 use crate::logic::command::{
     DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ToileEvent,
+    Viewport,
 };
 use crate::logic::model::{
     ConnectorId, ElementId, ElementKind, ElementStyle, ShapeKind, StrokePoint,
@@ -30,7 +31,17 @@ impl ToileState {
 
     /// Build the culled, z-ordered `DisplayViewport` for the current viewport.
     pub(super) fn derive_viewport(&self) -> DisplayViewport {
-        let visible: HashSet<ElementId> = self.index.query_visible(&self.viewport).collect();
+        self.derive_viewport_at(self.viewport)
+    }
+
+    /// Build the culled, z-ordered `DisplayViewport` for an **arbitrary** camera
+    /// `vp`, without touching `self.viewport`. The presentation / PDF-export
+    /// passes drive one board through a sequence of slide cameras (§1.D / §3.A):
+    /// they must not mutate-then-restore `self.viewport`, which would race a
+    /// concurrent `SetViewport` from the live UI thread. Read-only, so the same
+    /// `ToileState` can be walked from any camera.
+    pub(super) fn derive_viewport_at(&self, vp: Viewport) -> DisplayViewport {
+        let visible: HashSet<ElementId> = self.index.query_visible(&vp).collect();
         let mut nodes = Vec::new();
         for node in &self.layers {
             match node {
@@ -48,7 +59,7 @@ impl ToileState {
             }
         }
         DisplayViewport {
-            viewport: self.viewport,
+            viewport: vp,
             reactions: self.reaction_tallies(&visible),
             nodes,
         }
@@ -211,5 +222,51 @@ impl ToileState {
             style: ElementStyle::default(),
             arrows: conn.arrows,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use kurbo::{Point, Size};
+
+    use crate::logic::command::{InitContent, ToileCommand, Viewport};
+    use crate::logic::model::{ElementKind, ShapeKind};
+    use crate::logic::state::ToileState;
+
+    fn rect_at(x: f64, y: f64) -> ToileCommand {
+        ToileCommand::CreateElement {
+            kind: ElementKind::Shape(ShapeKind::Rect),
+            at: Point::new(x, y),
+            size: Size::new(10.0, 10.0),
+            content: InitContent::None,
+        }
+    }
+
+    /// `derive_viewport_at` culls against the camera it is handed, not
+    /// `self.viewport`, and leaves `self.viewport` untouched (§1.D / §3.A).
+    #[test]
+    fn derive_viewport_at_uses_the_given_camera() {
+        let mut st = ToileState::new();
+        st.handle_command(rect_at(0.0, 0.0)); // near origin
+        st.handle_command(rect_at(5000.0, 0.0)); // far away
+
+        // The live camera sits at the origin: only the near rect is visible.
+        let here = st.derive_viewport();
+        assert_eq!(here.nodes.len(), 1, "origin camera sees the near rect only");
+
+        // Borrow a far camera without disturbing the live one.
+        let far = Viewport {
+            center: Point::new(5000.0, 0.0),
+            ..Viewport::default()
+        };
+        let there = st.derive_viewport_at(far);
+        assert_eq!(there.nodes.len(), 1, "far camera sees the far rect only");
+        assert_eq!(
+            there.viewport, far,
+            "the returned viewport is the borrowed one"
+        );
+
+        // The live viewport is unchanged: no mutate-then-restore.
+        assert_eq!(st.derive_viewport().viewport, here.viewport);
     }
 }

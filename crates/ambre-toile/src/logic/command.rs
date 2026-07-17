@@ -17,7 +17,7 @@ pub use ambre_bus::app::toile::{
     DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, End, FindOptions,
     FindResults, InitContent, PresencePayload, PresenceUpdate, Reaction, ReactionKind,
     ReactionTally, SelectionStats, SlideChange, TextDelta, ToileCommand, ToileError, ToileEvent,
-    ZTarget,
+    Viewport, ZTarget,
 };
 pub use ambre_bus::rest::RequestId;
 
