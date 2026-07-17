@@ -23,6 +23,23 @@ impl ToileState {
     /// `NodeId` is inserted into `layers` just below its lowest member so the
     /// members keep painting above it in their current relative order.
     pub(super) fn group_elements(&mut self, ids: &[ElementId]) -> ToileOutcome {
+        let Some(id) = self.group_inner(ids) else {
+            return ToileOutcome::display_only(Vec::new());
+        };
+        self.doc.commit();
+        self.rematerialize_layers();
+        // Seed the group's derived bounds from its members, then feed the R-tree.
+        self.recompute_groups();
+        self.emit_with_update(vec![ToileEvent::ElementCreated(id), self.viewport_event()])
+    }
+
+    /// Bind `ids` into a fresh group element **without** committing, returning the
+    /// group id (or `None` when fewer than two distinct members survive filtering).
+    /// The caller owns the `doc.commit()` so an import rebuilds each `<g>` inside
+    /// the one import undo group (`toile-interop §2.A`). Intermediate cache reads
+    /// (`prune_empty_groups`, `rematerialize_layers`) are pure and stay here so the
+    /// `insert_at` computation sees the detached state.
+    pub(super) fn group_inner(&mut self, ids: &[ElementId]) -> Option<ElementId> {
         // Keep only existing, distinct members, in the request order.
         let mut members: Vec<ElementId> = Vec::new();
         for id in ids {
@@ -45,7 +62,7 @@ impl ToileState {
             .cloned()
             .collect();
         if members.len() < 2 {
-            return ToileOutcome::display_only(Vec::new());
+            return None;
         }
         // Detach each member from its current group, then prune any group emptied
         // by the detach so the incremental caches stay equal to a full rebuild
@@ -72,11 +89,11 @@ impl ToileState {
         let id = self.mint_element_id();
         let elems = self.doc.get_map(ELEMENTS);
         let Ok(em) = elems.insert_container(id.as_str(), LoroMap::new()) else {
-            return self.err_no_element(&id);
+            return None;
         };
         em_seed_group(&em);
         let Ok(children) = em.insert_container(CHILDREN, LoroMovableList::new()) else {
-            return self.err_no_element(&id);
+            return None;
         };
         for m in &members {
             let _ = children.push(m.as_str());
@@ -86,12 +103,7 @@ impl ToileState {
             .doc
             .get_movable_list(LAYERS)
             .insert(insert_at, NodeId::Element(id.clone()).encode().as_str());
-        self.doc.commit();
-
-        self.rematerialize_layers();
-        // Seed the group's derived bounds from its members, then feed the R-tree.
-        self.recompute_groups();
-        self.emit_with_update(vec![ToileEvent::ElementCreated(id), self.viewport_event()])
+        Some(id)
     }
 
     /// Drop a group's binding: remove the group node and re-parent its children
