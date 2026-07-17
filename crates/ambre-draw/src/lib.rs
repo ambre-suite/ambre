@@ -23,6 +23,23 @@ pub use peer::peer_color;
 #[cfg(feature = "testing")]
 pub mod testing;
 
+/// A borrowed view over already-decoded raster pixels, passed to
+/// [`DrawSurface::draw_image`]. RGBA8, row-major, no stride padding: `pixels`
+/// is exactly `width * height * 4` bytes.
+///
+/// It never owns or decodes pixels -- decoding is the caller's job (Toile
+/// interop decodes on import; the screen renderer decodes from its media cache),
+/// which keeps `ambre-draw` codec-free (kurbo / peniko / parley only).
+#[derive(Clone, Copy, Debug)]
+pub struct ImageSource<'a> {
+    /// Non-premultiplied RGBA8 samples, row-major, `width * height * 4` bytes.
+    pub pixels: &'a [u8],
+    /// Native pixel width of the image.
+    pub width: u32,
+    /// Native pixel height of the image.
+    pub height: u32,
+}
+
 /// Monotonic millisecond clock, abstracted so rendering code can measure its
 /// sub-phase timings without depending on `web_sys::Performance` directly.
 ///
@@ -110,6 +127,27 @@ pub trait DrawSurface {
     /// (lyon tessellation) and `KrillaSurface` (PDF paths).
     #[allow(unused_variables)]
     fn stroke_path(&mut self, path: &BezPath, brush: &Brush, stroke: &Stroke) {}
+
+    // -------------------------------------------------------------------------
+    // Raster images (default no-op until a surface supports raster)
+    // -------------------------------------------------------------------------
+
+    /// Paint a decoded raster image into the world-space `dest` rect (the
+    /// element AABB after the active transform). The image is scaled to fill
+    /// `dest`; preserving aspect ratio is the caller's responsibility (Toile
+    /// stores the element rect at the imported aspect).
+    ///
+    /// Default no-op: a surface without raster support (e.g. a base
+    /// `KrillaSurface` built without the raster feature) still renders text and
+    /// vector geometry. `WgpuSurface` uploads the pixels to a texture and draws
+    /// a textured quad; `KrillaSurface` hands them to krilla as a raster image.
+    ///
+    /// Per `toile-interop §5.B`, a Toile image whose pixels have not yet arrived
+    /// from the media cache is painted as a placeholder rect by the caller (via
+    /// `fill_rect`) and repainted through this method once the pixels are known;
+    /// the trait carries no placeholder logic itself.
+    #[allow(unused_variables)]
+    fn draw_image(&mut self, image: &ImageSource<'_>, dest: Rect) {}
 
     // -------------------------------------------------------------------------
     // Transform stack (default no-ops until Toile needs it)

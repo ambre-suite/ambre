@@ -8,7 +8,7 @@ description = "KrillaSurface: DrawSurface implementation for PDF export (Logic t
 ambre-draw = { path = "../ambre-draw" }
 kurbo = { workspace = true }
 peniko = { workspace = true }
-# default-features off: we only need the vector/glyph core (no raster-images,
-# no simple-text draw_text helper, no rayon). Keeps the lazy-loaded PDF chunk
-# small on wasm. Raster image embedding (Toile media) is enabled later.
-krilla = { workspace = true }
+# default-features off: we skip the simple-text draw_text helper and rayon to
+# keep the lazy-loaded PDF chunk small on wasm. `raster-images` is enabled so
+# `KrillaSurface::draw_image` can embed Toile media (toile-interop §3.A / §5.B).
+krilla = { workspace = true, features = ["raster-images"] }

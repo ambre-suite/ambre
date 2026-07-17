@@ -14,7 +14,8 @@
 // ============================================================================
 
 use crate::{
-    Affine, BezPath, Brush, Clock, Color, DrawSurface, GlyphRun, ParleyBrush, Rect, Stroke,
+    Affine, BezPath, Brush, Clock, Color, DrawSurface, GlyphRun, ImageSource, ParleyBrush, Rect,
+    Stroke,
 };
 
 /// One recorded drawing operation. Glyph runs are summarised by their glyph
@@ -48,6 +49,14 @@ pub enum DrawOp {
     },
     FillPath {
         color: Option<Color>,
+    },
+    /// A raster image paint: its native pixel dimensions and the destination
+    /// rect it was scaled into. The pixels themselves are not captured -- tests
+    /// assert on placement and that a real image (not a placeholder) was drawn.
+    DrawImage {
+        width: u32,
+        height: u32,
+        dest: Rect,
     },
     StrokePath {
         color: Option<Color>,
@@ -176,6 +185,14 @@ impl DrawSurface for RecordingSurface {
     fn stroke_path(&mut self, _path: &BezPath, brush: &Brush, _stroke: &Stroke) {
         self.ops.push(DrawOp::StrokePath {
             color: brush_color(brush),
+        });
+    }
+
+    fn draw_image(&mut self, image: &ImageSource<'_>, dest: Rect) {
+        self.ops.push(DrawOp::DrawImage {
+            width: image.width,
+            height: image.height,
+            dest,
         });
     }
 

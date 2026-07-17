@@ -18,12 +18,15 @@
 // bottom-left Y-up flip internally, so no coordinate mapping is needed here.
 // ============================================================================
 
-use ambre_draw::{Affine, Brush, Color, DrawSurface, GlyphRun, ParleyBrush, Rect, Stroke};
+use ambre_draw::{
+    Affine, Brush, Color, DrawSurface, GlyphRun, ImageSource, ParleyBrush, Rect, Stroke,
+};
 use kurbo::{BezPath, PathEl};
 
 use krilla::Data;
 use krilla::color::rgb;
-use krilla::geom::{PathBuilder, Point, Rect as KRect, Transform};
+use krilla::geom::{PathBuilder, Point, Rect as KRect, Size as KSize, Transform};
+use krilla::image::Image;
 use krilla::num::NormalizedF32;
 use krilla::paint::{Fill, FillRule, LineCap, LineJoin, Paint, Stroke as KStroke};
 use krilla::surface::Surface;
@@ -219,6 +222,27 @@ impl DrawSurface for KrillaSurface<'_, '_> {
         }
     }
 
+    fn draw_image(&mut self, image: &ImageSource<'_>, dest: Rect) {
+        // krilla wants owned RGBA8 bytes; the source is a borrowed view, so copy
+        // once into an image object krilla holds for the page's lifetime.
+        let expected = image.width as usize * image.height as usize * 4;
+        if image.pixels.len() != expected || expected == 0 {
+            return; // malformed source: skip rather than embed garbage
+        }
+        let img = Image::from_rgba8(image.pixels.to_vec(), image.width, image.height);
+        // krilla draws the image occupying (0,0)..(size) in the current space, so
+        // translate to the destination origin and size it to the rect. Balanced
+        // push/pop, matching the transform-stack contract.
+        let (w, h) = (dest.width() as f32, dest.height() as f32);
+        let Some(size) = KSize::from_wh(w, h) else {
+            return; // degenerate destination: nothing to paint
+        };
+        self.surface
+            .push_transform(&affine_to_transform(Affine::translate((dest.x0, dest.y0))));
+        self.surface.draw_image(img, size);
+        self.surface.pop();
+    }
+
     fn push_transform(&mut self, transform: Affine) {
         self.surface.push_transform(&affine_to_transform(transform));
     }
@@ -384,6 +408,42 @@ mod tests {
         let bytes = doc.finish().expect("PDF serialization must succeed");
         assert!(bytes.starts_with(b"%PDF"), "output must be a PDF");
         assert!(bytes.len() > 400, "content stream should be non-trivial");
+    }
+
+    /// A raster image embeds into the page and enlarges the content stream. A
+    /// tiny 2x2 RGBA source is enough to prove the `raster-images` path links and
+    /// runs; a degenerate destination is skipped without panic.
+    #[test]
+    fn draws_a_raster_image() {
+        let mut doc = Document::new();
+        let mut page = doc.start_page_with(PageSettings::from_wh(100.0, 100.0).unwrap());
+        {
+            let mut surface = page.surface();
+            let mut s = KrillaSurface::new(&mut surface);
+            // 2x2 opaque RGBA checkerboard.
+            let pixels = [
+                255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255,
+            ];
+            let src = ImageSource {
+                pixels: &pixels,
+                width: 2,
+                height: 2,
+            };
+            s.draw_image(&src, Rect::new(10.0, 10.0, 90.0, 90.0));
+            // Degenerate destination: no-op, no panic.
+            s.draw_image(&src, Rect::new(50.0, 50.0, 50.0, 50.0));
+            // Malformed source (wrong length): skipped.
+            let bad = ImageSource {
+                pixels: &[0, 1, 2],
+                width: 2,
+                height: 2,
+            };
+            s.draw_image(&bad, Rect::new(0.0, 0.0, 10.0, 10.0));
+        }
+        page.finish();
+        let bytes = doc.finish().expect("PDF serialization must succeed");
+        assert!(bytes.starts_with(b"%PDF"));
+        assert!(bytes.len() > 400, "an embedded image should grow the PDF");
     }
 
     /// A degenerate (inverted) rect produces no geometry but must not panic and

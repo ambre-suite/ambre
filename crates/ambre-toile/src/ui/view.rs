@@ -230,6 +230,13 @@ pub struct ToileView {
     /// display (§1.C).
     anim_overrides: HashMap<ElementId, AnimatedElement>,
 
+    /// Decoded image pixels keyed by media hash, passed to the content walk so
+    /// `Image` elements paint real pixels (`toile-interop §5.B`). Empty until the
+    /// media cache resolves a hash: an unresolved image paints a placeholder box.
+    /// The screen-side population (from `MediaDownloaded`) lands with the media
+    /// cache slice; the field is here so the walk has a stable source today.
+    images: render::ImageStore,
+
     /// Which `doc_embed` holds input focus, and the click-vs-drag arbitration
     /// that decides it (§2.I "Input focus"). View-local, never CRDT. While an
     /// embed is focused, `FrameHost` maps canvas input into that child and calls
@@ -340,6 +347,7 @@ impl ToileView {
             present: false,
             transition: None,
             anim_overrides: HashMap::new(),
+            images: render::ImageStore::new(),
             embed_focus: embed::EmbedFocus::default(),
             embed_sessions: embed::EmbedSessions::default(),
             child_route: None,
@@ -1588,6 +1596,7 @@ impl ToileView {
             font_cx,
             text_cache,
             self.editor.as_ref().map(|e| e.id()),
+            &self.images,
             &self.anim_overrides,
             self.present,
         );
