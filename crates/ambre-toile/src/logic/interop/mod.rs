@@ -22,6 +22,8 @@ use crate::logic::model::{Anchor, ElementKind, ElementStyle, EndCaps, PathType};
 
 pub mod limits;
 pub mod media;
+#[cfg(feature = "pdf")]
+mod pdf_export;
 mod raster;
 mod svg_export;
 mod svg_import;
@@ -31,6 +33,8 @@ mod tests;
 
 pub use limits::Limits;
 pub use media::{ContentHash, MediaCache, MediaState, RequestOutcome};
+#[cfg(feature = "pdf")]
+pub use pdf_export::{PageSize, PdfExportError, PdfPage, export_pdf};
 pub use raster::import_raster;
 pub use svg_export::export_svg;
 pub use svg_import::import_svg;
