@@ -90,9 +90,9 @@ fn text_maps_to_text_element_preserving_body() {
 }
 
 #[test]
-fn nested_groups_are_flattened_with_children_preserved() {
+fn nested_groups_are_rebuilt_innermost_first() {
     let batch = import_svg(GROUP_SVG.as_bytes(), &Limits::default()).unwrap();
-    // Two rects survive (flattened); the groups themselves are not emitted.
+    // Two rects are created; groups are rebuilt post-apply, not flattened.
     assert_eq!(batch.commands.len(), 2);
     assert!(batch.commands.iter().all(|c| matches!(
         c,
@@ -101,17 +101,22 @@ fn nested_groups_are_flattened_with_children_preserved() {
             ..
         }
     )));
-    // Both flattened groups are reported.
-    assert_eq!(
-        batch
-            .report
-            .skipped
-            .iter()
-            .filter(|s| s.contains("flattened"))
-            .count(),
-        2
+    // No group is reported as lost.
+    assert!(
+        !batch.report.skipped.iter().any(|s| s.contains("flatten")),
+        "no group should be flattened: {:?}",
+        batch.report.skipped
     );
-    // Transforms are baked in: the inner rect sits at (5+50, 5+50) = (55, 55).
+    // Two groups: the inner group first (post-order), the outer group second.
+    assert_eq!(batch.groups.len(), 2, "one ImportGroup per <g>");
+    // groups[0] is the innermost <g> (a single rect slot).
+    assert_eq!(batch.groups[0].members, vec![ImportRef::Slot(1)]);
+    // groups[1] is the outer <g>: a rect slot plus the already-resolved inner group.
+    assert_eq!(
+        batch.groups[1].members,
+        vec![ImportRef::Slot(0), ImportRef::Group(0)]
+    );
+    // Transforms are still baked into geometry: inner rect at (5+50, 5+50)=(55,55).
     let ats: Vec<_> = batch
         .commands
         .iter()
@@ -125,6 +130,28 @@ fn nested_groups_are_flattened_with_children_preserved() {
         ats.contains(&(55.0, 55.0)),
         "inner rect at (55,55): {ats:?}"
     );
+}
+
+#[test]
+fn rect_import_preserves_fill_and_stroke_style() {
+    let batch = import_svg(RECT_SVG.as_bytes(), &Limits::default()).unwrap();
+    // Style rides an index-aligned `styles` slot, not the CreateElement command.
+    assert_eq!(batch.styles.len(), batch.commands.len());
+    let style = batch.styles[0]
+        .as_ref()
+        .expect("rect carries an imported style");
+    // fill="#3366cc" -> opaque ARGB; stroke="#000000" width 2.
+    assert_eq!(style.fill, Some(0xFF_3366CC));
+    assert_eq!(style.stroke, Some(0xFF_000000));
+    assert_eq!(style.stroke_w, 2.0);
+}
+
+#[test]
+fn unstyled_kinds_keep_the_default_style() {
+    // Text imports with no style slot (None keeps the engine default).
+    let batch = import_svg(TEXT_SVG.as_bytes(), &Limits::default()).unwrap();
+    assert_eq!(batch.styles.len(), batch.commands.len());
+    assert!(batch.styles.iter().all(|s| s.is_none()));
 }
 
 // -----------------------------------------------------------------------------

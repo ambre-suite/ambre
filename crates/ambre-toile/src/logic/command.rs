@@ -19,10 +19,31 @@ pub use ambre_bus::app::toile::{
     ReactionTally, SelectionStats, SlideChange, TextDelta, ToileCommand, ToileError, ToileEvent,
     ZTarget,
 };
+pub use ambre_bus::rest::RequestId;
 
 // -----------------------------------------------------------------------------
 // Outcome (§8.C) -- engine-local, like `TrameOutcome`.
 // -----------------------------------------------------------------------------
+
+/// A Logic->Sync service-plane request a Toile command needs to make
+/// (`toile-interop §5`). Toile allocates the [`RequestId`] (it owns the
+/// correlation, so it can match the answering `RestEvent` back to a pending
+/// import); the `ambre-logic` dispatcher supplies the `document_id` and lowers
+/// this to a `RestCommand`. Toile never constructs a `RestCommand` nor knows its
+/// own `DocumentId`, the same division of labour as the CRDT delta in
+/// [`ToileOutcome::update`].
+#[derive(Debug)]
+pub enum ToileRequest {
+    UploadMedia {
+        id: RequestId,
+        data: Vec<u8>,
+        mime: String,
+    },
+    DownloadMedia {
+        id: RequestId,
+        content_hash: String,
+    },
+}
 
 /// Result of processing a [`ToileCommand`]: display events for the UI plus
 /// optional CRDT / ephemeral byte payloads the dispatcher forwards to Sync.
@@ -32,6 +53,9 @@ pub struct ToileOutcome {
     pub update: Option<Vec<u8>>,
     /// Ephemeral (presence) payload to encrypt and broadcast.
     pub ephemeral: Option<Vec<u8>>,
+    /// Service-plane requests to lower into `RestCommand`s (`toile-interop §5`).
+    /// Empty for every command except an import that carries media.
+    pub requests: Vec<ToileRequest>,
 }
 
 impl ToileOutcome {
@@ -40,6 +64,7 @@ impl ToileOutcome {
             display,
             update: None,
             ephemeral: None,
+            requests: Vec::new(),
         }
     }
 
@@ -51,6 +76,7 @@ impl ToileOutcome {
             display: Vec::new(),
             update: None,
             ephemeral: Some(ephemeral),
+            requests: Vec::new(),
         }
     }
 
@@ -63,6 +89,7 @@ impl ToileOutcome {
             display,
             update: None,
             ephemeral,
+            requests: Vec::new(),
         }
     }
 }

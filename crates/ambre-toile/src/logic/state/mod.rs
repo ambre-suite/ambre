@@ -395,6 +395,7 @@ impl ToileState {
             display,
             update,
             ephemeral: None,
+            requests: Vec::new(),
         }
     }
 
