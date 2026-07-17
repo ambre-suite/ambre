@@ -8,10 +8,79 @@
 
 use super::*;
 
+/// Builds a child `AppView` for a nested `doc_embed` (§2.I). Supplied by the
+/// launcher, which alone can name the concrete app views and holds the leptos
+/// owner their (throwaway) chrome signals need. Given the embedded document's id,
+/// type and child canvas size, it wires a demultiplexed Logic->UI channel and
+/// returns the view. `FrameHost` stays app-agnostic: it only calls this.
+pub type MakeChild = Rc<dyn Fn(DocumentId, DocType, Size) -> AppView>;
+
+/// Rewrite an input event for the focused child (§2.I "Input focus"). Pointer
+/// coordinates are mapped from the canvas into the child's pixel space through
+/// the camera and the embed's transform; every other event forwards unchanged
+/// (a wheel delta and a keystroke are frame-agnostic -- a child pixel is a screen
+/// pixel at the same zoom). If the focused embed has scrolled out (no mapping),
+/// the event forwards verbatim rather than being dropped.
+fn remap_for_child(view: &AppView, ev: &InputEvent) -> InputEvent {
+    let map = |x: f64, y: f64| {
+        view.embed_to_child_space(Point::new(x, y))
+            .map_or((x, y), |p| (p.x, p.y))
+    };
+    match ev {
+        InputEvent::PointerDown {
+            x,
+            y,
+            button,
+            shift,
+            ctrl,
+        } => {
+            let (x, y) = map(*x, *y);
+            InputEvent::PointerDown {
+                x,
+                y,
+                button: *button,
+                shift: *shift,
+                ctrl: *ctrl,
+            }
+        }
+        InputEvent::PointerMove { x, y } => {
+            let (x, y) = map(*x, *y);
+            InputEvent::PointerMove { x, y }
+        }
+        InputEvent::PointerUp { x, y, button, ctrl } => {
+            let (x, y) = map(*x, *y);
+            InputEvent::PointerUp {
+                x,
+                y,
+                button: *button,
+                ctrl: *ctrl,
+            }
+        }
+        InputEvent::DoubleClick { x, y } => {
+            let (x, y) = map(*x, *y);
+            InputEvent::DoubleClick { x, y }
+        }
+        // Non-positional events carry no coordinates to rewrite.
+        other => other.clone(),
+    }
+}
+
 pub struct FrameHost {
     gpu: Option<GpuState>,
     view: AppView,
     perf: web_sys::Performance,
+
+    /// The live child views behind the top-level document's visible `doc_embed`s
+    /// (§2.I), keyed by the embedded `DocumentId`. Reconciled every frame against
+    /// [`AppView::visible_embeds`]: a child appears when its embed enters the cull
+    /// set and is dropped when it leaves. Empty unless the top-level view embeds.
+    children: HashMap<DocumentId, AppView>,
+    /// The last physical canvas size each child was resized to, so a moved /
+    /// zoomed embed only triggers a child `resize` when its box actually changes.
+    child_sizes: HashMap<DocumentId, (u32, u32)>,
+    /// The launcher's child-view factory (see [`MakeChild`]). `None` for a host
+    /// that never embeds (or before the launcher installs it).
+    make_child: Option<MakeChild>,
 
     render_times: VecDeque<f64>,
     render_fps: f32,
@@ -32,11 +101,14 @@ impl FrameHost {
     /// [`install_gpu`] once async bootstrap completes.
     ///
     /// [`install_gpu`]: FrameHost::install_gpu
-    pub fn new(view: AppView, perf: web_sys::Performance) -> Self {
+    pub fn new(view: AppView, perf: web_sys::Performance, make_child: Option<MakeChild>) -> Self {
         Self {
             gpu: None,
             view,
             perf,
+            children: HashMap::new(),
+            child_sizes: HashMap::new(),
+            make_child,
             render_times: VecDeque::with_capacity(120),
             render_fps: 0.0,
             last_frame_ms: 0.0,
@@ -56,7 +128,70 @@ impl FrameHost {
     /// Forward an input event to the view. Returns `true` if the caller should
     /// `preventDefault()` on the originating DOM event.
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
-        self.view.handle_input(ev)
+        // The top-level view runs first: it settles embed focus and decides
+        // whether this event belongs to a focused child (§2.I "Input focus").
+        let consumed = self.view.handle_input(ev);
+        // If it does, forward the event into that child's own view, with pointer
+        // coordinates remapped into the child's pixel space (a wheel/keystroke
+        // forwards verbatim -- a child pixel is a screen pixel at the same zoom).
+        if let Some(child_id) = self.view.child_route()
+            && let Some(child) = self.children.get_mut(&child_id)
+        {
+            let remapped = remap_for_child(&self.view, ev);
+            child.handle_input(&remapped);
+        }
+        consumed
+    }
+
+    /// Reconcile the child views against the top-level view's visible `doc_embed`s
+    /// (§2.I) and pump each one. Creates a child when its embed enters the cull
+    /// set, resizes it when its box changes, and drops it when it leaves (dropping
+    /// the child also drops its demultiplexed Logic->UI channel, so the relay
+    /// reclaims the route on its next send). Returns whether any child needs the
+    /// board recomposited this frame (a fresh child, a resize, or a self-driven
+    /// content change). A no-op when the launcher installed no child factory.
+    fn sync_children(&mut self, now_ms: f64) -> bool {
+        let Some(make_child) = self.make_child.clone() else {
+            return false;
+        };
+        let embeds = self.view.visible_embeds();
+        let live: HashSet<DocumentId> = embeds.iter().map(|e| e.document_id).collect();
+        self.children.retain(|id, _| live.contains(id));
+        self.child_sizes.retain(|id, _| live.contains(id));
+
+        let mut dirty = false;
+        for e in &embeds {
+            let w = e.child_size.width.round().max(0.0) as u32;
+            let h = e.child_size.height.round().max(0.0) as u32;
+            if w == 0 || h == 0 {
+                continue;
+            }
+            if !self.children.contains_key(&e.document_id) {
+                let mut child = make_child(e.document_id, e.doc_type, e.child_size);
+                child.resize(w, h);
+                self.children.insert(e.document_id, child);
+                self.child_sizes.insert(e.document_id, (w, h));
+                dirty = true;
+            } else if self.child_sizes.get(&e.document_id) != Some(&(w, h)) {
+                if let Some(child) = self.children.get_mut(&e.document_id) {
+                    child.resize(w, h);
+                }
+                self.child_sizes.insert(e.document_id, (w, h));
+                dirty = true;
+            }
+        }
+
+        // Pump every live child: drain its Logic->UI events, run its per-frame
+        // planning. A non-`Reuse` content plan means it changed on its own (a
+        // remote edit), so the board must recomposite even if otherwise idle.
+        for child in self.children.values_mut() {
+            child.update();
+            let plan = child.plan_repaint(now_ms, false);
+            if !matches!(plan.content, ContentRepaint::Reuse) {
+                dirty = true;
+            }
+        }
+        dirty
     }
 
     /// Resolve a `copy`/`cut` synchronously inside the native clipboard event.
@@ -201,9 +336,6 @@ impl FrameHost {
             }
         }
 
-        // rAF only starts after GPU init, so `self.gpu` is always Some here.
-        let Some(gpu) = self.gpu.as_mut() else { return };
-
         Self::tick_fps(&mut self.render_times, &mut self.render_fps, raf_timestamp);
 
         let mut hud_tick = false;
@@ -212,7 +344,19 @@ impl FrameHost {
             hud_tick = true;
         }
 
-        let plan = self.view.plan_repaint(raf_timestamp, hud_tick);
+        let mut plan = self.view.plan_repaint(raf_timestamp, hud_tick);
+        // Reconcile + pump the nested child views AFTER the parent's plan_repaint
+        // has issued `OpenDocument` for any newly visible embed (§2.I), so a
+        // child's first viewport request never reaches Logic before its document
+        // is open. A dirty child forces the content layer: children paint over the
+        // board, so the board must recomposite even when otherwise idle.
+        if self.sync_children(raf_timestamp) {
+            plan.content = ContentRepaint::Full;
+        }
+
+        // rAF only starts after GPU init, so `self.gpu` is always Some here.
+        let Some(gpu) = self.gpu.as_mut() else { return };
+
         let content_active = !matches!(plan.content, ContentRepaint::Reuse);
         let overlay_redraw = matches!(plan.overlay, OverlayRepaint::Redraw);
         let any_dirty = content_active || overlay_redraw;
@@ -243,6 +387,30 @@ impl FrameHost {
                         &mut gpu.text_cache,
                         plan.content_strip,
                     );
+                    // Paint each visible child over the board's placeholder,
+                    // clipped to its embed rect (§2.I "Render"). The child draws in
+                    // its own pixel space (origin at the rect's top-left, one child
+                    // pixel per screen pixel at the current zoom). A rotated embed
+                    // clips to its AABB -- accepted (§2.I "Clip limitation").
+                    for e in self.view.visible_embeds() {
+                        let Some(child) = self.children.get_mut(&e.document_id) else {
+                            continue;
+                        };
+                        let r = e.screen_rect;
+                        if r.width() < 1.0 || r.height() < 1.0 {
+                            continue;
+                        }
+                        surface.push_clip(r);
+                        surface.push_transform(Affine::translate((r.x0, r.y0)));
+                        child.paint_content(
+                            &mut surface,
+                            &mut gpu.font_cx,
+                            &mut gpu.text_cache,
+                            None,
+                        );
+                        surface.pop_transform();
+                        surface.pop_clip();
+                    }
                 }
                 if overlay_redraw {
                     surface.begin_layer(Layer::Overlay);

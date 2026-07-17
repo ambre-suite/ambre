@@ -239,6 +239,11 @@ pub struct ToileView {
     /// The child sync sessions behind the visible `doc_embed`s, with the close
     /// debounce that keeps a pan from thrashing them (§2.I "Opening the child").
     embed_sessions: embed::EmbedSessions,
+    /// The child document the last input event was routed into (§2.I "Input
+    /// focus"), or `None` when the board consumed it. Set by `handle_input`,
+    /// read once by `FrameHost` right after, which forwards the (coordinate-
+    /// remapped) event to that child's own view. View-local, never CRDT.
+    child_route: Option<DocumentId>,
 }
 
 impl ToileView {
@@ -250,6 +255,11 @@ impl ToileView {
         canvas_width: f64,
         canvas_height: f64,
         text_input: TextInput,
+        // When embedded as a `doc_embed` child (§2.I), the child view must not
+        // grab the shared text pipe on construction: the top-level document owns
+        // the caret until the user clicks into the embed. A top-level view passes
+        // `false` and focuses immediately, as before.
+        embedded: bool,
         perf_pub: PerfPublisher,
         theme_ctl: ThemeControl,
         #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<super::menu::CtxScope>,
@@ -264,7 +274,9 @@ impl ToileView {
         #[cfg(target_arch = "wasm32")] float_bar: RwSignal<Option<super::floatbar::FloatBar>>,
         #[cfg(target_arch = "wasm32")] quick_fill: RwSignal<Option<super::floatbar::QuickFill>>,
     ) -> Self {
-        text_input.focus();
+        if !embedded {
+            text_input.focus();
+        }
         let theme = theme_ctl.get();
         Self {
             document_id,
@@ -330,6 +342,7 @@ impl ToileView {
             anim_overrides: HashMap::new(),
             embed_focus: embed::EmbedFocus::default(),
             embed_sessions: embed::EmbedSessions::default(),
+            child_route: None,
         }
     }
 
@@ -559,6 +572,56 @@ impl ToileView {
         let id = self.embed_focus.current()?;
         let elem = self.find_element(id)?;
         Some(embed::to_child_space(elem, &self.cam, screen))
+    }
+
+    /// The nested document currently holding input focus (§2.I), resolved from
+    /// the focused board element to its embedded `DocumentId` -- the key into
+    /// `FrameHost`'s child views. `None` when the board itself has focus.
+    pub fn focused_child(&self) -> Option<DocumentId> {
+        let id = self.embed_focus.current()?;
+        match &self.find_element(id)?.geom {
+            DisplayGeom::DocEmbed { document_id, .. } => Some(*document_id),
+            _ => None,
+        }
+    }
+
+    /// The child the last `handle_input` routed into, for `FrameHost` to forward
+    /// the (coordinate-remapped) event to (§2.I "Input focus"). Cleared at the
+    /// start of every `handle_input`, so it reflects only the latest event.
+    pub fn child_route(&self) -> Option<DocumentId> {
+        self.child_route
+    }
+
+    /// Whether `screen` lands inside the focused embed's (rotated) quad. Used to
+    /// decide that a pointer event belongs to the child rather than the board.
+    fn screen_in_focused_embed(&self, screen: Point, id: &ElementId) -> bool {
+        let Some(e) = self.find_element(id) else {
+            return false;
+        };
+        let world = self.cam.screen_to_world() * screen;
+        e.bounds.contains(e.transform.inverse() * world)
+    }
+
+    /// Decide whether the just-arrived event belongs to the focused embed `id`
+    /// and so must be handed to the child instead of the board (§2.I "Input
+    /// focus"). Keystrokes / text / composition / wheel go to the child while it
+    /// holds focus; a pointer event goes to it only while the cursor is inside
+    /// its quad, so a click that lands outside still returns focus to the board.
+    /// `Escape` is never captured -- the board needs it to blur (see `handle_key`).
+    fn route_to_child(&self, ev: &InputEvent, id: &ElementId) -> bool {
+        match ev {
+            InputEvent::Key { key, .. } => key != "Escape",
+            InputEvent::Text { .. }
+            | InputEvent::CompositionUpdate { .. }
+            | InputEvent::CompositionEnd { .. }
+            | InputEvent::Wheel { .. } => true,
+            InputEvent::PointerDown { x, y, .. }
+            | InputEvent::PointerUp { x, y, .. }
+            | InputEvent::PointerMove { x, y }
+            | InputEvent::DoubleClick { x, y } => {
+                self.screen_in_focused_embed(Point::new(*x, *y), id)
+            }
+        }
     }
 
     /// A press landed at `world` / `screen`: arm a possible focus grant if it is
@@ -1574,6 +1637,10 @@ impl ToileView {
     }
 
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
+        // Clear the child route first, so a stale value never survives an event
+        // the board consumes early (e.g. an open inline editor below): `FrameHost`
+        // reads `child_route()` after every `handle_input`.
+        self.child_route = None;
         // While an inline editor is open it gets first refusal on input (§6):
         // `Some(consumed)` settles the event, `None` falls through to the board
         // handlers below (chords, wheel pan/zoom keep working mid-edit).
@@ -1581,6 +1648,25 @@ impl ToileView {
             && let Some(consumed) = self.edit_input(ev)
         {
             return consumed;
+        }
+        // Nested-document capture (§2.I "Input focus"): while an embed holds
+        // focus, input aimed at it belongs to the child, not the board. We record
+        // the route and consume the event without running any board handler;
+        // `FrameHost` reads `child_route()` and forwards the remapped event into
+        // the child's own view. The focusing click itself is NOT captured (focus
+        // is still on the board at that point) and `Escape` never is.
+        if let Some(focused) = self.embed_focus.current().cloned()
+            && self.route_to_child(ev, &focused)
+        {
+            if let InputEvent::PointerDown { x, y, .. }
+            | InputEvent::PointerUp { x, y, .. }
+            | InputEvent::PointerMove { x, y }
+            | InputEvent::DoubleClick { x, y } = ev
+            {
+                self.last_pointer = Point::new(*x, *y);
+            }
+            self.child_route = self.focused_child();
+            return true;
         }
         match ev {
             InputEvent::Wheel {

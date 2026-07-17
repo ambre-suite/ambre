@@ -326,6 +326,16 @@ feature of `ambre-spec-architecture.md §2.B/§2.D`, distinct from the sandboxed
   `AppView`s (`HashMap<DocumentId, AppView>`, built through the same construction path as a top-level view) and
   paints each one after the parent's content pass, inside a `push_clip(rect)` / `pop_clip` pair. The nesting is
   a launcher concern because the launcher is the only layer allowed to know every app type.
+  **Per-document fan-out.** The Logic->UI channel is a single shared stream, and a view ignores the
+  `document_id` on the events it drains (it assumes every event on its channel is its own). That holds only while
+  one view reads one channel, so a child cannot share the top-level stream. The relay therefore **demultiplexes**:
+  each child registers a private `UiEvent` sender keyed by its `document_id`, and the relay routes every
+  doc-tagged event (`UiEvent::routed_document_id`) whose id is a live child to that channel instead of the
+  top-level view's. Dropping the child (its embed left the cull set) drops the receiver, and the relay reclaims
+  the slot on its next send. A child is also built in **embedded mode**: it reuses the one transparent text pipe
+  but must not `focus()` it on construction (the top-level document owns the caret until the user clicks in), and
+  its chrome signals (formula bar, zoom chip, status band, float bar) are throwaway — those are DOM singletons of
+  the top-level document, so a child writes into dead signals no chrome reads.
   **Clip limitation (accepted).** `DrawSurface::push_clip` is rectangular and is resolved against the transform
   live at push time, so a **rotated** `doc_embed` clips to its axis-aligned bounding box, not to its rotated
   quad: a rotated embed can bleed into its AABB corners. Accepted for the MVP — rotating a nested document is a
@@ -1043,14 +1053,14 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
   broadcast and the whole Logic path are complete. *(The directory needs no server change: `GET /members`
   already returns each member's Ed25519 `signing_pub_key`.)*
 - [ ] Presence render / overlay (remote cursors, live strokes, laser, selection halos, cross-app `UserId` colors): `ambre-spec-toile-ui.md` Phase 1.
-- [ ] Nested documents (`doc_embed`, §2.I) — the Toile half of `ARCH P6`. The element kind, its
-  `{document_id, doc_type}` payload, the codec/derive legs and board-level hit-testing **already landed** with
-  Phase 0's element model; open here: focus as view-local state, the pointer transform into child space, child
-  `OpenDocument`/`CloseDocument` with close hysteresis, and publishing the visible embed rects for `FrameHost`
-  (which owns the child `AppView`s and both paints them and routes input into them — `toile-ui` cannot, see
-  §2.I "Render" / "Input focus"). No bus variant is needed: the registry is flat and the child's view addresses
-  the child directly (§2.I "Command routing"). The child's `Role` lives in `ambre-logic`
-  (`ambre-spec-architecture.md §2.D, §7 ARCH P6`).
+- [x] Nested documents (`doc_embed`, §2.I) — the Toile half of `ARCH P6`. The element kind, its
+  `{document_id, doc_type}` payload, the codec/derive legs and board-level hit-testing landed with Phase 0's
+  element model; focus as view-local state, the pointer transform into child space, and child
+  `OpenDocument`/`CloseDocument` with close hysteresis landed in slice 3.c (`ambre-toile/src/ui/embed.rs`); the
+  launcher half — `FrameHost` owning the child `AppView`s, the per-document Logic->UI fan-out, embedded-mode
+  construction, clipped painting and input routing — landed in slice 3.d (`ambre-app/src/host/`). No bus variant
+  is needed: the registry is flat and the child's view addresses the child directly (§2.I "Command routing"). The
+  child's `Role` lives in `ambre-logic` (`ambre-spec-architecture.md §2.D, §7 ARCH P6`).
 
 **Phase 2 - Optimization**
 - [ ] Bulk index update on large remote batches

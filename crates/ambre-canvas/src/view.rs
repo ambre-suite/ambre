@@ -61,6 +61,7 @@ pub struct RepaintPlan {
 }
 
 /// A raw input event forwarded from the DOM by the host's event listeners.
+#[derive(Clone)]
 pub enum InputEvent {
     Key {
         key: String,

@@ -32,6 +32,7 @@
 #![cfg(target_arch = "wasm32")]
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use ambre_bus::sync_warning::SyncWarningCode;
@@ -326,6 +327,16 @@ pub fn main() {
     // Dispatcher -> canvas view: the content event stream, forwarded after the
     // dispatcher has mirrored command-state events into the chrome.
     let (view_tx, view_rx) = flume::bounded::<UiEvent>(CHANNEL_CAPACITY);
+
+    // Per-document Logic->UI fan-out for nested `doc_embed` children (§2.I). A
+    // child view built by `make_child` (below) registers a demultiplexed sender
+    // here; the relay routes every doc-tagged event whose `document_id` is a live
+    // child to that channel instead of the shared top-level `view_tx`, so a
+    // child's stream never reaches the parent view (which ignores `document_id`).
+    // Dropping the child drops its receiver, so the relay reclaims the slot on its
+    // next send to it.
+    let child_routes: Rc<RefCell<HashMap<DocumentId, flume::Sender<UiEvent>>>> =
+        Rc::new(RefCell::new(HashMap::new()));
 
     // Command keymap (the keyboard view of the registry). The active app binds
     // its own chords -- the launcher names none. Populated once the boot document
@@ -725,6 +736,9 @@ pub fn main() {
     let mut last_perf_push_ms: f64 = 0.0;
     let mut list_requested = false;
     let relay_tx = ui_to_logic_tx.clone();
+    // The relay's view of the child fan-out registry (§2.I): read to route a
+    // nested document's events, pruned when a child receiver has been dropped.
+    let child_routes_relay = Rc::clone(&child_routes);
 
     // SPA route binding, polled each frame on the main thread (where the `!Send`
     // canvas handle lives, so it stays OUT of the Leptos tree). The client URL is
@@ -832,6 +846,22 @@ pub fn main() {
         }
 
         while let Ok(ev) = logic_to_ui_rx.try_recv() {
+            // Fan a nested child's stream out to its own view channel (§2.I) and
+            // skip every top-level chrome mirror below: a child's events must not
+            // drive the parent's formula bar, zoom chip or status band. Only a
+            // document that is a LIVE child is diverted; the top-level document's
+            // events (and untagged service events) fall through unchanged.
+            if let Some(id) = ev.routed_document_id() {
+                let mut routes = child_routes_relay.borrow_mut();
+                if let Some(child_tx) = routes.get(&id) {
+                    if let Err(flume::TrySendError::Disconnected(_)) = child_tx.try_send(ev) {
+                        // The child view was dropped; reclaim its slot. The event
+                        // is for a document no longer shown, so dropping it is fine.
+                        routes.remove(&id);
+                    }
+                    continue;
+                }
+            }
             // Mirror authoritative command-toggle state into the chrome store.
             // The active app owns the event->toggle mapping; the launcher names
             // no content event variant.
@@ -955,7 +985,7 @@ pub fn main() {
                 // Initial hydration finished: dismiss the loading overlay. Guarded
                 // on the active document so a late ready for a doc we already left
                 // does not clear the new doc's overlay.
-                UiEvent::DocumentReady { document_id }
+                UiEvent::DocumentReady { document_id, .. }
                     if current_doc.get_untracked() == Some(*document_id) =>
                 {
                     chrome_status.update(|s| s.hydrating = false);
@@ -1162,6 +1192,90 @@ pub fn main() {
     let formula_ref_tv = formula_ref;
     let formula_text_tv = formula_text;
     let formula_action_tv = formula_action;
+
+    // Child-view factory for nested `doc_embed`s (§2.I). `FrameHost` cannot build
+    // an `AppView` (it is app-agnostic, and the chrome signals need a reactive
+    // owner it does not have), so the launcher supplies this. Each call registers
+    // a demultiplexed Logic->UI channel and returns a view in embedded mode (it
+    // does not grab the text pipe). The chrome signals below are throwaway: no DOM
+    // reads them, so every child shares one dead set -- created here, in the
+    // launcher's leptos owner, where `RwSignal::new` is valid.
+    let child_to_logic = ui_to_logic_tx.clone();
+    let child_routes_factory = Rc::clone(&child_routes);
+    let child_theme_ctl = theme_ctl.clone();
+    let ch_toile_ctx_scope = RwSignal::new(ambre_toile::ui::menu::CtxScope::default());
+    let ch_toile_menu_cmd = RwSignal::new(None::<CommandId>);
+    let ch_toile_active_tool = RwSignal::new(ambre_toile::ui::Tool::default());
+    let ch_toile_zoom = RwSignal::new(1.0_f64);
+    let ch_toile_sel_stats = RwSignal::new(None::<toile_chrome::SelStats>);
+    let ch_toile_style_model = RwSignal::new(None::<toile_chrome::StyleModel>);
+    let ch_toile_restyle = RwSignal::new(None::<ambre_bus::app::toile::ElementStyle>);
+    let ch_toile_float_bar = RwSignal::new(None::<toile_chrome::FloatBar>);
+    let ch_toile_quick_fill = RwSignal::new(None::<toile_chrome::QuickFill>);
+    let ch_formula_ref = RwSignal::new(String::new());
+    let ch_formula_text = RwSignal::new(String::new());
+    let ch_formula_action = RwSignal::new(None::<FormulaAction>);
+    let ch_tr_sel_stats = RwSignal::new(None::<trame_chrome::SelStats>);
+    let ch_tr_ctx_scope = RwSignal::new(trame_chrome::CtxScope::Cell);
+    let ch_tr_sel_bounds = RwSignal::new(None::<(u32, u32, u32, u32)>);
+    let ch_tr_zoom = RwSignal::new(1.0_f64);
+    let make_child_fn = move |document_id: DocumentId,
+                              doc_type: ambre_bus::DocType,
+                              size: ambre_draw::Size,
+                              text_input: ambre_canvas::TextInput|
+          -> AppView {
+        // Demultiplexed Logic->UI channel for this child (registered for the relay
+        // fan-out; dropped with the child when its embed leaves the cull set).
+        let (child_tx, child_rx) = flume::bounded::<UiEvent>(CHANNEL_CAPACITY);
+        child_routes_factory
+            .borrow_mut()
+            .insert(document_id, child_tx);
+        match doc_type {
+            ambre_bus::DocType::Toile => AppView::Toile(ToileView::new(
+                document_id,
+                child_to_logic.clone(),
+                child_rx,
+                size.width,
+                size.height,
+                text_input,
+                true,
+                ambre_canvas::PerfPublisher::new(),
+                child_theme_ctl.clone(),
+                ch_toile_ctx_scope,
+                ch_toile_menu_cmd,
+                ch_toile_active_tool,
+                ch_toile_zoom,
+                ch_toile_sel_stats,
+                ch_toile_style_model,
+                ch_toile_restyle,
+                ch_toile_float_bar,
+                ch_toile_quick_fill,
+            )),
+            // Trame, or any non-Toile embed (only Trame/Toile are paintable views;
+            // a stray type falls back to Trame rather than crash the frame).
+            _ => AppView::Trame(TrameView::new(
+                document_id,
+                child_to_logic.clone(),
+                child_rx,
+                size.width,
+                size.height,
+                text_input,
+                true,
+                ambre_canvas::AnchorPublisher::new(),
+                ambre_canvas::PerfPublisher::new(),
+                ambre_canvas::FilterOpenPublisher::new(),
+                child_theme_ctl.clone(),
+                ch_formula_ref,
+                ch_formula_text,
+                ch_formula_action,
+                ch_tr_sel_stats,
+                ch_tr_ctx_scope,
+                ch_tr_sel_bounds,
+                ch_tr_zoom,
+            )),
+        }
+    };
+
     let switcher = host::run_with(
         "ambre-canvas",
         move |w, h, text_input| {
@@ -1176,6 +1290,7 @@ pub fn main() {
                     w,
                     h,
                     text_input,
+                    false,
                     perf_pub,
                     theme_ctl,
                     toile_ctx_scope,
@@ -1196,6 +1311,7 @@ pub fn main() {
                     w,
                     h,
                     text_input,
+                    false,
                     anchor_pub,
                     perf_pub,
                     filter_open_pub,
@@ -1210,6 +1326,7 @@ pub fn main() {
                 ))
             }
         },
+        make_child_fn,
         pre_frame,
         raf,
     );

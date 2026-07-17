@@ -12,6 +12,11 @@ impl TrameView {
         canvas_width: f64,
         canvas_height: f64,
         text_input: TextInput,
+        // When embedded as a `doc_embed` child (§2.I), the child view must not
+        // grab the shared text pipe on construction: the top-level document owns
+        // the caret until the user clicks into the embed. A top-level view passes
+        // `false` and focuses immediately, as before.
+        embedded: bool,
         anchor: AnchorPublisher,
         perf_pub: PerfPublisher,
         filter_open: FilterOpenPublisher,
@@ -30,8 +35,11 @@ impl TrameView {
         let theme = theme_ctl.get();
 
         // Focus the pipe up front so the keyboard works without a click; park it
-        // on the active cell so a first keystroke or IME opens there.
-        text_input.focus();
+        // on the active cell so a first keystroke or IME opens there. Skipped for
+        // an embedded child, which must not steal the caret from its host board.
+        if !embedded {
+            text_input.focus();
+        }
 
         Self {
             document_id,

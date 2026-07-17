@@ -8,14 +8,17 @@
 
 use super::*;
 
-pub fn run_with<F, P>(
+#[allow(clippy::too_many_arguments)]
+pub fn run_with<F, C, P>(
     canvas_id: &str,
     make_view: F,
+    make_child_fn: C,
     mut pre_frame: P,
     raf: RafControl,
 ) -> DocSwitcher
 where
     F: FnOnce(f64, f64, TextInput) -> AppView,
+    C: Fn(DocumentId, DocType, Size, TextInput) -> AppView + 'static,
     P: FnMut() + 'static,
 {
     tracing::info!("Ambre UI thread starting");
@@ -57,7 +60,15 @@ where
         canvas.height() as f64,
         text_input.clone(),
     );
-    let host = Rc::new(RefCell::new(FrameHost::new(view, perf)));
+    // Wrap the launcher's child factory with the shared text pipe, so `FrameHost`
+    // can build a child view (§2.I) knowing nothing about the pipe: the child
+    // reuses the one transparent textarea, but is constructed in embedded mode so
+    // it does not steal focus from the top-level document.
+    let make_child: MakeChild = {
+        let child_pipe = text_input.clone();
+        Rc::new(move |id, doc_type, size| make_child_fn(id, doc_type, size, child_pipe.clone()))
+    };
+    let host = Rc::new(RefCell::new(FrameHost::new(view, perf, Some(make_child))));
 
     // -- Async GPU init, then start the rAF loop. -----------------------------
     {
