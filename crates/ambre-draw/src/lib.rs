@@ -17,7 +17,7 @@
 pub mod types;
 pub use types::*;
 
-mod peer;
+pub mod peer;
 pub use peer::peer_color;
 
 #[cfg(feature = "testing")]

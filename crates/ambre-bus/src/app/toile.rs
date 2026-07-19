@@ -940,7 +940,7 @@ pub struct PresencePayload {
 
 /// A remote peer's latest presence, keyed by the canonical `UserId` (§7). The UI
 /// derives the peer color / name label by hashing `user_id` with the shared
-/// cross-app algorithm (`prose-ui::peer_color`), so a collaborator keeps the same
+/// cross-app algorithm (`ambre_draw::peer::peer_color`), so a collaborator keeps the same
 /// color across Prose, Trame and Toile. Emitted as `ToileEvent::PeerPresence`;
 /// the render side is `toile-ui`'s overlay pass.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

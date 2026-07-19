@@ -167,6 +167,7 @@ dependencies = [
 name = "ambre-draw"
 version = "0.1.0"
 dependencies = [
+ "ambre-core",
  "kurbo",
  "parley",
  "peniko",

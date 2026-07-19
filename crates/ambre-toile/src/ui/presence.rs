@@ -115,7 +115,7 @@ impl PeerCursors {
         let mut peers: Vec<(&UserId, &PeerState)> = self.peers.iter().collect();
         peers.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
         for (user_id, state) in peers {
-            let color = peer_color(user_id.as_bytes());
+            let color = peer_color(user_id);
             paint_peer(
                 surface, user_id, state, &color, vp, &w2s, font_cx, text_cache,
             );

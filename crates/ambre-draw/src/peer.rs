@@ -6,26 +6,28 @@
 // seed bytes of their canonical `UserId`. Because the mapping is a pure
 // function of those 16 bytes -- no per-app state, no random salt -- the same
 // user keeps one colour across Prose, Trame and Toile, and a single colour
-// even when signed in from two devices (`ambre-spec-toile-ui.md` §8). The spec
-// attributes the algorithm to `prose-ui::peer_color`; its home is `ambre-draw`
-// because that is the render-primitives crate every app's canvas already
-// depends on, and it must stay free of any `ambre-core` id types (dependency
-// rule), so it takes the raw seed bytes rather than a `UserId`.
+// even when signed in from two devices (`ambre-spec-toile-ui.md` §8). Its home
+// is `ambre-draw` because that is the render-primitives crate every app's
+// canvas already depends on. It is seeded on the canonical `UserId` (not a raw
+// `Uuid`) so the newtype is preserved end-to-end through presence; this is the
+// sole reason `ambre-draw` takes a scoped `ambre-core` dependency (types only).
 // ============================================================================
+
+use ambre_core::UserId;
 
 use crate::Color;
 
-/// A stable, well-separated presence colour for the peer whose canonical
-/// `UserId` has the given 16-byte seed (pass `user_id.as_bytes()`).
+/// A stable, well-separated presence colour for the given peer, seeded on their
+/// canonical [`UserId`].
 ///
-/// The seed is folded into a hue with FNV-1a and mapped through HSL at a fixed
-/// saturation / lightness, so every peer colour is vivid and legible against
-/// both the light and dark board backgrounds while staying visually distinct
-/// from its neighbours around the wheel.
-pub fn peer_color(seed: &[u8; 16]) -> Color {
-    // FNV-1a over the seed -> a well-mixed 32-bit hash.
+/// The id bytes are folded into a hue with FNV-1a and mapped through HSL at a
+/// fixed saturation / lightness, so every peer colour is vivid and legible
+/// against both the light and dark board backgrounds while staying visually
+/// distinct from its neighbours around the wheel.
+pub fn peer_color(user_id: &UserId) -> Color {
+    // FNV-1a over the id seed bytes -> a well-mixed 32-bit hash.
     let mut hash: u32 = 0x811c_9dc5;
-    for &b in seed {
+    for &b in user_id.as_bytes() {
         hash ^= b as u32;
         hash = hash.wrapping_mul(0x0100_0193);
     }
@@ -59,16 +61,16 @@ mod tests {
 
     #[test]
     fn stable_and_pure() {
-        let seed = [7u8; 16];
-        assert_eq!(peer_color(&seed), peer_color(&seed));
+        let user = UserId::from_bytes([7u8; 16]);
+        assert_eq!(peer_color(&user), peer_color(&user));
     }
 
     #[test]
     fn distinct_seeds_usually_differ() {
         // Not a guarantee for every pair, but two arbitrary users should not
         // collapse to the same colour in the common case.
-        let a = peer_color(&[1u8; 16]);
-        let b = peer_color(&[2u8; 16]);
+        let a = peer_color(&UserId::from_bytes([1u8; 16]));
+        let b = peer_color(&UserId::from_bytes([2u8; 16]));
         assert_ne!(a, b);
     }
 
@@ -76,7 +78,7 @@ mod tests {
     fn opaque() {
         // Presence colours are always fully opaque; alpha is applied by the
         // caller per overlay element (halo vs cursor vs laser trail).
-        let c = peer_color(&[42u8; 16]);
+        let c = peer_color(&UserId::from_bytes([42u8; 16]));
         assert_eq!(c.components[3], 1.0);
     }
 }
