@@ -142,6 +142,20 @@ carry freshly minted `ElementId`s, so they never collide with a collaborator's e
 > above a duration threshold the dispatcher emits `ToileEvent::ImportProgress { percent }` so the UI can show a
 > progress affordance; short imports skip straight to `ImportReport`.
 
+### F. Templates (DEFERRED — post-MVP)
+
+Templates are Miro's adoption backbone: a new board (or a region of one) seeded from a preset — mind map,
+retrospective, kanban, flowchart, brainstorm. Architecturally a template is **just a saved `ImportBatch`**: a
+self-contained, id-free bundle of elements/connectors/frames (the same `ClipboardPayload`-shaped structure as
+copy/paste, `toile-logic §8 ter`) that instantiates through the **exact same path as an import** — a
+`Vec<ToileCommand>` applied in one undo group with freshly minted ids (§2.E). No new engine concept is required:
+a template is authored by copying a selection, and applied by pasting/importing it at a drop point.
+
+MVP ships **no template gallery** (it is content + curation work, not architecture). When built, the store is a
+bundle of these payloads (shipped as static assets, or user-saved to their own space); nothing about it touches
+the Zero-Knowledge model, since a template carries only element data and is applied client-side like any paste.
+See the roadmap.
+
 ---
 
 ## 3. EXPORT
@@ -337,3 +351,7 @@ budget.
 - [ ] PNG render-back tiling
 - [ ] Web-Showcase bundle-size trimming
 - [ ] Media LRU tuning
+
+**Deferred - post-MVP**
+- [ ] Template gallery (§2.F): built-in preset boards (mind map / retro / kanban / flowchart) applied through
+      the existing import path as an id-free `ImportBatch`; content + curation work, no new engine concept

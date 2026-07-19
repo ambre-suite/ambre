@@ -8,7 +8,7 @@ Collaborative office suite, 100% Rust, E2EE Encrypted (Zero-Knowledge), Open Sou
 **Applications:**
 1. **Prose:** Collaborative word processor.
 2. **Trame:** Collaborative spreadsheet (calculation engine, formulas, dependency DAG).
-3. **Toile:** Infinite whiteboard + Presentations.
+3. **Toile:** Collaborative infinite whiteboard + Presentations. **A Miro, not a Figma** — team visual thinking/alignment/delivery, not vector-fabrication for designers. Auto-layout & boolean ops are experimental (out of MVP).
 4. **Murmure:** Secure messaging (E2EE encrypted channels).
 5. **Rendez-Vous:** E2EE video conferencing (WebRTC/SFrame). Not a document type — meetings are ephemeral.
 

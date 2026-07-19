@@ -114,6 +114,10 @@ splice `{ at, delete, insert }` (loro codepoint indices, clamped to length); one
 
 ## 2. AUTO-LAYOUT (CONSTRAINT SYSTEM)
 
+> **EXPERIMENTAL — out of MVP (frozen).** This is the Figma vector-fabrication metier, not the whiteboard job
+> (`toile-logic §0`). It is implemented (`logic/autolayout.rs`) but receives **no MVP stabilization budget** and
+> carries no UI/quality promise; it is a V2-or-removal candidate. Kept in the tree; not in the definition of done.
+
 A **frame** can carry an auto-layout spec so its children are positioned by a solver rather than by absolute
 coordinates (the Figma model). Auto-layout is a frame-only feature: a plain **group** (`toile-logic §2.F bis`)
 is a transform-binding container with no solver — promote it to a frame to get auto-layout. The **spec** is CRDT (shared design intent); the **solved positions** are
@@ -146,6 +150,10 @@ rest. The solver is deterministic so all peers derive identical positions from i
 ---
 
 ## 3. VECTOR BOOLEAN OPERATIONS
+
+> **EXPERIMENTAL — out of MVP (frozen).** Vector-fabrication metier, not the whiteboard job (`toile-logic §0`).
+> Implemented (`logic/boolean.rs`) but receives **no MVP stabilization budget** and carries no UI/quality
+> promise; V2-or-removal candidate. Kept in the tree; not in the definition of done.
 
 Union / Subtract / Intersect / Exclude over selected `shape:path` (and shape) elements, computed client-side,
 producing a **new** `shape:path` `BezPath` element (one `BooleanOp` command). The source elements are deleted or
@@ -218,6 +226,78 @@ Votes/reactions are **decisions** — they must survive reload and reconcile acr
 **gestures** — momentary, per-viewer, meaningless after the moment → ephemeral. This is the same durable-intent
 vs momentary-gesture split as §1 (sequence vs playback).
 
+### D. Comments (CRDT — anchored threads)
+
+Comments are Toile's **asynchronous** collaboration surface (the synchronous ones are cursors/laser and
+reactions): a pinned discussion a teammate can leave on the board and another can answer later. They must survive
+reload and converge, so they are CRDT. The *anchoring* rule is fixed in `toile-logic §2.J`
+(`CommentAnchor = Element(ElementId) | Point{x,y}`); the thread schema and semantics live here, next to
+reactions.
+
+```
+LoroDoc
+└── "comments" (LoroMap)                        → key = CommentThreadId (minted stable id, toile-logic §2.A)
+    └── "{thread_id}" (LoroMap)
+        ├── "anchor"   : Binary                 → postcard(CommentAnchor) — element id or free world point
+        ├── "resolved" : bool                   → LWW flag; a resolved thread renders collapsed/muted, never deleted
+        └── "messages" (LoroMovableList<LoroMap>)→ ordered messages, append-mostly. Each message LoroMap:
+            ├── "author" : String               → canonical UserId (hyphenated UUID)
+            ├── "ts"     : i64                   → author-local wall clock, DISPLAY ONLY
+            └── "body"   (LoroText)              → nested char-CRDT container (self-edit converges char-wise)
+```
+
+Each message is a `LoroMap` inside the `messages` `LoroMovableList`, holding an `author` register, a `ts`
+register, and a **nested `LoroText`** body container — so a user editing *their own* message converges
+character-wise (the sticky-body pattern, `toile-logic §2.D`) rather than LWW-on-the-whole-string. `author` is the
+canonical `UserId` (resolved in `ambre-sync`, never `PeerID` — the same identity argument as reactions §4.A and
+presence `toile-logic §7`); `ts` is display-only — **message order is the `LoroMovableList` order, never `ts`**
+(clocks are untrusted, matching the spoof-proof-presence stance). The `messages` list and each message's `body`
+`LoroText` are seeded when the message is appended, so there is no lazy-container race (each thread is already its
+own top-level entry under the deterministic `comments` root).
+
+- **Thread identity is a minted `CommentThreadId`** (`toile-logic §2.A` id scheme), so two peers dropping a
+  comment on the same spot mint **distinct** threads — both survive, neither overwrites the other (the reactions
+  lazy-creation race §4.A does not apply: each thread is its own top-level entry under a deterministic root
+  `comments` map).
+- **Message order** is the `LoroMovableList` order, convergent under concurrent replies; message bodies are
+  `LoroText` so a self-edit converges char-wise.
+- **Resolution** is an LWW `bool` — resolving/reopening is idempotent and convergent; the thread and its messages
+  are **never destroyed** by resolving (data-never-destroyed, like a dangling connector `toile-logic §5.A`).
+- **Anchored to a deleted element:** the thread stays valid; its pin is simply not rendered while the anchor
+  element is missing (skipped at derivation, exactly like a reaction on a deleted target §4.A), reclaimed by
+  ordinary compaction. It is never auto-deleted.
+- **Not in the undo stack.** Posting, replying to, editing or resolving a comment is a **collaboration act**, not
+  a canvas edit — `Ctrl+Z` on the board must not retract a teammate-visible message. Comment commands therefore
+  commit to the CRDT but are excluded from the `loro::UndoManager` scope (`toile-logic §8 bis`), the same stance
+  as ephemeral presence being non-undoable.
+- **@mentions & notifications are deferred (post-MVP).** A mention would need a notification channel; that is
+  **Murmure**'s domain (`ambre-context §1`), so mentions land only once Toile↔Murmure notification routing
+  exists. MVP comments are plain-text threads with resolution. See the roadmap.
+
+Rendering (anchored pins with an unread/resolved state, the thread panel) is `toile-ui §5sexies` / `§8ter`; the
+Logic thread surfaces pins in `DisplayViewport.comments` (`toile-logic §9`).
+
+### E. Facilitation tools (DEFERRED — post-MVP)
+
+Miro's workshop layer — a **shared countdown timer** and a **structured voting session** — layers on top of the
+primitives above but is **out of MVP** (the core is a whiteboard that presents; facilitation is the next tier).
+Specified here so its shape is fixed:
+
+- **Shared timer.** A board-global countdown every participant sees synchronized, for timeboxing an exercise. It
+  is **shared intent**, so a small CRDT map `"timer" -> {ends_at: i64, running: bool}` (LWW) — not ephemeral
+  presence, because a late joiner must see the running timer. The countdown itself is derived locally from
+  `ends_at`; only start/stop/reset mutate the CRDT. (Clocks are untrusted for ordering, but a timer is a display
+  convenience, not a security-sensitive value, so a wall-clock `ends_at` is acceptable here.)
+- **Voting session.** A facilitated round over the existing `reactions` map (§4.A): the facilitator opens a
+  session with a **per-user dot budget**, participants spend votes on targets, and the session closes to a
+  ranked tally. Session state is CRDT (`"vote_session" -> {open: bool, budget: u8}`); the votes reuse the
+  per-`UserId` reaction keys (no new convergence model), with the budget enforced **locally/soft** (blind relay,
+  advisory like `locked` — a modified client could overspend, matching §toile-logic §6). Closing derives the
+  ranked result from the same prefix scan as the tally.
+
+Both are collaboration CRDT state (durable intent, not gesture — the §4.C split), so they sit here, not in
+presence. Commands/events land under §5 when built. See the roadmap.
+
 ---
 
 ## 5. NEW COMMANDS & EVENTS
@@ -242,10 +322,19 @@ SetAutoLayout { frame: FrameId, layout: Option<AutoLayout> },
 BooleanOp { op: BoolOp, ids: Vec<ElementId>, keep_sources: bool },
 React { target: TargetId, reaction: Option<Reaction> },  // None = remove
 
+// Comments (§4.D). Not undoable (a collaboration act, not a canvas edit -- §4.D).
+CreateComment { anchor: CommentAnchor, body: String },      // mints a thread + first message -> ToileEvent::CommentThreadOpened
+ReplyComment  { thread: CommentThreadId, body: String },    // appends a CommentMsg
+EditComment   { thread: CommentThreadId, msg: usize, delta: TextDelta }, // edit own message body (LoroText)
+ResolveThread { thread: CommentThreadId, resolved: bool },  // LWW resolve/reopen
+DeleteComment { thread: CommentThreadId, msg: Option<usize> }, // None = delete whole thread (author/moderation)
+
 // added to ToileEvent
 SlideChanged(usize),
 PresentModeChanged(bool),
 ReactionsUpdated(TargetId),               // UI re-reads the derived tally
+CommentsUpdated(CommentThreadId),         // a thread changed; UI re-reads the panel + pin badge
+CommentThreadOpened(CommentThreadId),     // echo of CreateComment so the UI can open the composer on the new pin
 ```
 
 ---
@@ -261,11 +350,13 @@ ReactionsUpdated(TargetId),               // UI re-reads the derived tally
   overlapping/disjoint/nested paths; tally derivation with add/change/remove; playback bounds (`Next` past last,
   `Prev` before first). Target: every predicate branch of the solver and animate matcher.
 - **CRDT convergence (mandatory):** the collaborative state here is the **presentation sequence**, **speaker
-  notes**, **auto-layout spec**, and **reactions** — a 2-peer convergence property test via `MockSyncHandle` +
-  `apply_remote` must show identical final `LoroDoc` for: concurrent slide reorders (`LoroMovableList`),
-  concurrent notes edits (`LoroText` char-CRDT), concurrent auto-layout spec edits (LWW register), and
-  concurrent reactions (per-**user** keys — one vote per `UserId`, no double-count across devices — convergent
-  tally). Derived playback state is excluded (local). Assert a two-device same-user re-vote is one entry (§4.A).
+  notes**, **auto-layout spec**, **reactions**, and **comments** — a 2-peer convergence property test via
+  `MockSyncHandle` + `apply_remote` must show identical final `LoroDoc` for: concurrent slide reorders
+  (`LoroMovableList`), concurrent notes edits (`LoroText` char-CRDT), concurrent auto-layout spec edits (LWW
+  register), concurrent reactions (per-**user** keys — one vote per `UserId`, no double-count across devices —
+  convergent tally), and concurrent comments (distinct threads from a same-spot drop both survive, concurrent
+  replies converge in `LoroMovableList` order, resolve/reopen is LWW-convergent). Derived playback state is
+  excluded (local). Assert a two-device same-user re-vote is one entry (§4.A).
 - **Mocks & Environment:** `CommandSink`/`MockSyncHandle`; fake `FrameSnapshot`s to drive `smart_animate`;
   headless wasm for the camera pass. No live network.
 - **Benchmarks:** `criterion` on `smart_animate` for a 500-element frame pair (must fit the transition frame
@@ -341,7 +432,18 @@ boolean crate), on top of `kurbo`, `loro`, `postcard`. The presentation camera r
   control (clears the follow). Local roles `SetPresentBroadcast` / `FollowPresenter`; the presenter
   panel gains Broadcast / Follow toggles.
 
+**Phase 1b - Comments (MVP collaboration gap, §4.D)**
+- [ ] `comments` CRDT (anchored threads, replies, resolve) + commands (`CreateComment`/`ReplyComment`/
+      `EditComment`/`ResolveThread`/`DeleteComment`), excluded from undo
+- [ ] Comment pins in `DisplayViewport.comments` (derive + skip-on-deleted-anchor) and the `toile-ui` panel
+      (`§5sexies`) + pin render/hit-test
+- [ ] Convergence belt: distinct threads survive a same-spot drop, concurrent replies converge, resolve is LWW
+
 **Phase 2 - Optimization**
 - [ ] Auto-layout incremental reflow (only affected children)
 - [ ] Smart Animate snapshot caching
 - [ ] Large-deck sequence-panel virtualization
+
+**Deferred - Facilitation layer (§4.E, post-MVP)**
+- [ ] Shared countdown timer (`timer` CRDT, LWW start/stop/reset; countdown derived locally)
+- [ ] Voting session over `reactions` (per-user dot budget, open/close, ranked tally)

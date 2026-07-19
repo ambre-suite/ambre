@@ -43,6 +43,38 @@
 
 ---
 
+## 0. PRODUCT IDENTITY & POSITIONING
+
+**Toile is a collaborative infinite whiteboard with a presentation mode — a Miro, not a Figma.**
+
+Its job is *visual thinking, alignment, and delivery for teams*: brainstorming, workshops, diagramming,
+sticky-note synthesis, then turning that board into a deck. The canvas is a **shared workspace**, optimized for
+real-time co-presence and fluidity, not a **vector-fabrication tool** optimized for pixel-perfect production.
+
+This positioning is deliberate and follows from the suite's identity: Ambre targets privacy-conscious European
+teams and organizations (the Miro audience), not professional UI/UX designers (the Figma audience — who choose
+Figma for its ecosystem, dev-handoff and design tokens, none of which are Ambre's value). Real-time CRDT
+co-presence is our pillar and is the heart of the whiteboard job; competing with Figma on vector-fabrication
+depth is out of scope and out of audience.
+
+**In scope (the core job, held to MVP quality):**
+freehand drawing, shapes, smart connectors, sticky notes, frames, text; real-time collaboration overlays
+(live cursors, in-flight strokes, laser, votes, reactions); **presentation mode** (frames as slides, Smart
+Animate) — the differentiator versus a plain whiteboard and Ambre's answer to slide decks; import of
+PDF / image / SVG.
+
+**Experimental (implemented, but *not* in the MVP definition of done):**
+the constraint-based **auto-layout solver** (`toile-features §2`, `logic/autolayout.rs`) and **vector boolean
+operations** (`toile-features`, `logic/boolean.rs`). These belong to the Figma fabrication metier, not the
+whiteboard job. They exist in the tree and stay there, but receive **no MVP stabilization budget** and carry no
+UI/quality promise; they are candidates for V2 or removal (see `ambre-roadmap.md`). Figma / Miro import is a
+**one-shot migration** convenience, not a central feature.
+
+> **Rule of thumb for scope decisions:** if a capability serves *a team thinking together or presenting*, it is
+> core. If it serves *a designer fabricating a precise artifact*, it is experimental or out of scope.
+
+---
+
 ## 1. OBJECTIVES & CONSTRAINTS
 
 **Scope of this module:**
@@ -125,12 +157,16 @@ LoroDoc
 │       ├── "w","h"   : f64           → world size
 │       ├── "rot"     : f64           → radians, about the AABB center
 │       ├── "locked"  : bool          → top-level field, NOT part of ElementStyle
+│       ├── "link"    : Binary?       → optional postcard(LinkTarget) — hyperlink / go-to-frame (§2.K).
+│       │                               Absent = no link. Top-level, NOT part of ElementStyle (a link is
+│       │                               navigation behavior, not a visual attribute — same reasoning as `locked`).
 │       ├── "style"   : Binary        → postcard(ElementStyle) — one LWW register per element (see §2.E)
 │       └── "payload" : (per type)    → see §2.C
 │
 ├── "connectors" (LoroMap)           → key = ConnectorId
 │   └── "{conn_id}" (LoroMap)        → {from_elem, from_anchor, to_elem, to_anchor, path_type,
-│                                        arrows: {start: bool, end: bool}, style: Binary}
+│                                        arrows: {start: bool, end: bool}, style: Binary,
+│                                        label: LoroText}   // edge caption, char-CRDT (§5.B); empty = no label
 │
 ├── "layers" (LoroMovableList<NodeId>) → global z-order, back-to-front paint order.
 │                                        NodeId = Element(ElementId) | Connector(ConnectorId) — frames and
@@ -170,6 +206,13 @@ pub enum NodeId { Element(ElementId), Connector(ConnectorId) }
 | `drawing` | `Binary` `Vec<StrokePoint>` | See §4. Single-author, never mutated after creation. |
 | `embed` | `String` url | Sandboxed **web** iframe render in `toile-ui`. Not an Ambre document. |
 | `doc_embed` | `LoroMap` `{document_id: Uuid, doc_type: DocType}` | A **nested Ambre document** (Prose/Trame). MVP in-place editable, role-gated (§2.I). Distinct from `embed` (a web url). |
+| `card` *(DEFERRED, post-MVP)* | `LoroMap` `{title: LoroText, tags: LoroMovableList<TagId>, assignee: Option<UserId>, due: Option<i64>}` | Agile-team card (kanban/backlog). A richer sticky with structured fields; renders like a sticky with a tag row + assignee chip. Out of MVP; see roadmap. |
+
+> **Tags (DEFERRED, post-MVP).** A board-level tag palette (`"tags"` top-level `LoroMap`: `TagId ->
+> {label: String, color: u32}`) shared across the board, referenced by `card.tags` (and, later, addable to
+> `sticky`). Tags enable grouping/filtering ("show only #blocked"). Kept out of MVP with `card` — both belong to
+> the agile-team workflow layer, not the core whiteboard. When added, tag filtering is a **local view** (like
+> Find §8 quater), never a CRDT mutation.
 
 ```rust
 /// One sampled point of a freehand stroke. 12 bytes, fixed layout.
@@ -342,6 +385,39 @@ feature of `ambre-spec-architecture.md §2.B/§2.D`, distinct from the sandboxed
   degenerate gesture — and revisited only if a clip-path op lands in `ambre-draw`.
   When focused, the child also receives `handle_input`; when not, it paints but does not consume input.
 
+### J. Comment anchoring (model reference)
+
+Comments are a **shared, persisted collaboration primitive** and, following the same placement as reactions
+(their CRDT schema lives in `toile-features §4.A`, not here), the comment-thread CRDT schema, thread/reply
+semantics and resolution are specified in `toile-features §4.D`. Only the *anchoring* rule is a core-model
+concern and is fixed here: a comment thread is anchored **either** to an element (a stable `ElementId`, §2.A —
+the pin tracks the element as it moves, and goes dangling like a connector §5.A if that element is deleted) **or**
+to a free world-space point (`x`,`y`) when dropped on empty canvas. The anchor is therefore
+`CommentAnchor = Element(ElementId) | Point { x: f64, y: f64 }`. Anchored pins are surfaced in the
+`DisplayViewport` (§9) so `toile-ui` can paint and hit-test them; the thread bodies themselves are fetched by the
+comment panel on demand, never streamed with every viewport.
+
+### K. Hyperlinks & go-to-frame (`LinkTarget`)
+
+Any element may carry an optional `link` (the top-level `Binary?` field, §2.B) turning it into a navigable
+target — a whiteboard affordance (clickable legend, table-of-contents frame, external reference) that is also
+useful in presentation mode. It is a per-element LWW register (postcard), never part of `ElementStyle` (it is
+navigation behavior, not a visual attribute — same reasoning as `locked`).
+
+```rust
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub enum LinkTarget {
+    Url(String),              // external web URL, opened sandboxed by the shell
+    Frame(ElementId),         // recenter/zoom the camera to a frame on THIS board (a frame is an element, §2.F)
+    Document(uuid::Uuid),     // open another Ambre document (e.g. a Prose doc or a sibling board)
+}
+```
+
+Following a link is a **local, non-mutating** action driven by `toile-ui` (§click behavior): `Frame` runs a
+camera fly-to, `Url`/`Document` are handed to the shell. A `Frame` link whose target was deleted is inert
+(surfaced like a dangling reference, never auto-cleared — data is never destroyed). Setting/clearing the link is
+one CRDT register write (`SetLink`, §8) and one undo item.
+
 ---
 
 ## 3. SPATIAL INDEX (CULLING)
@@ -473,6 +549,8 @@ pub struct Connector {
     pub to_anch:   Anchor,
     pub path_type: PathType,
     pub arrows:    EndCaps,
+    // `label` is the connector's own `LoroText` (§5.B), not mirrored into this
+    // routing struct; the deriver reads it straight from the CRDT for the DisplayConnector.
 }
 
 impl Connector {
@@ -490,6 +568,16 @@ impl Connector {
     }
 }
 ```
+
+### B. Connector labels (edge captions)
+
+A connector carries an optional **label** — the text placed on the edge ("depends on", "yes/no", a flow
+condition) that makes a diagram readable. It is stored as the connector's own `LoroText` (§2.B `connectors`
+map), **char-CRDT** so two authors captioning the same edge converge exactly like a sticky body (§2.D), never
+LWW-on-the-whole-string. An empty `LoroText` = no label (nothing painted). The label has no geometry of its own:
+`toile-ui` lays it out at the routed path's midpoint (a `Free`-anchored offset is a post-MVP refinement), so it
+follows the edge as endpoints move — no CRDT mutation on element drag, consistent with connector routing. Editing
+it is `EditConnectorLabel` (§8), one undo item per editor-exit run (same granularity as `EditText`).
 
 ### A. Dangling connectors
 
@@ -585,6 +673,13 @@ pub enum ToileCommand {
     RestyleElements { ids: Vec<ElementId>, style: ElementStyle },
     DeleteElements { ids: Vec<ElementId> },
     LockElements  { ids: Vec<ElementId>, locked: bool },
+    SetLink       { id: ElementId, link: Option<LinkTarget> }, // hyperlink / go-to-frame (§2.K); None clears
+
+    // Arrange: align a selection to a shared edge/center, or distribute it evenly.
+    // One convergent batch of x/y register writes (like MoveElements), one undo item.
+    // Align uses the selection's union bounds as the reference; distribute needs >= 3
+    // elements and spaces their centers evenly along the axis. Locked members are skipped.
+    ArrangeElements { ids: Vec<ElementId>, op: ArrangeOp },
 
     // Z-order (over the unified NodeId layer list, §2.G)
     Reorder { node: NodeId, to: ZTarget },
@@ -595,6 +690,7 @@ pub enum ToileCommand {
     // Connectors
     CreateConnector { from: ElementId, from_anch: Anchor, to: ElementId, to_anch: Anchor, path_type: PathType, arrows: EndCaps },
     RetargetConnector { id: ConnectorId, endpoint: End, to: ElementId, anch: Anchor },
+    EditConnectorLabel { id: ConnectorId, delta: TextDelta }, // edge caption LoroText (§5.B)
     DeleteConnector { id: ConnectorId },
 
     // Freehand
@@ -660,6 +756,16 @@ pub enum ZTarget { Front, Back, Forward, Backward, Index(usize) }
 pub enum ElementKind { Sticky, Shape(ShapeKind), Text, Image, Frame, Group, Drawing, Embed, DocEmbed }
 pub enum ShapeKind { Rect, Ellipse, Triangle, Line, Path }
 pub enum End { From, To } // which endpoint of a connector to retarget
+
+/// Arrange operation for `ArrangeElements` (§8.A). Align snaps every selected
+/// element to a shared edge/center of the selection's union bounds; Distribute
+/// equalizes the gaps between element centers along one axis (needs >= 3 elements).
+pub enum ArrangeOp {
+    Align(AlignEdge),        // Left/HCenter/Right/Top/VCenter/Bottom
+    Distribute(Axis),        // Horizontal | Vertical
+}
+pub enum AlignEdge { Left, HCenter, Right, Top, VCenter, Bottom }
+pub enum Axis { Horizontal, Vertical }
 
 /// Type-specific seed passed to `CreateElement`. The variant must match `kind`
 /// (a mismatch, e.g. `Path` content on a `Sticky`, is rejected):
@@ -825,7 +931,8 @@ let undo = loro::UndoManager::new(&doc);
 
 **Granularity — one undo item per atomic user action:** a create, a move/resize/rotate drag (committed on
 release), a restyle, a delete, a `CommitStroke`, a connector create/retarget, a `SetFrameChildren`, an
-`EditText`/`EditNotes` run (committed on editor exit), an `AutoLayout` change, and — per `toile-interop §2.E` —
+`ArrangeElements` (align/distribute batch), a `SetLink`, an `EditConnectorLabel` run (committed on editor exit),
+an `EditText`/`EditNotes` run (committed on editor exit), an `AutoLayout` change, and — per `toile-interop §2.E` —
 **a whole import batch as a single item**, a `GroupElements`/`UngroupElements`, and a `PasteElements`/
 `DuplicateElements` (each one item, §8 ter). The `toile-features` commands that mutate the CRDT are undoable on
 the same one-item-per-action rule: `SetSlideOrder`, `BooleanOp`, `React`, `EditNotes`, `SetAutoLayout`.
@@ -876,6 +983,9 @@ pub struct DisplayViewport {
     /// Single back-to-front sequence mirroring the `layers` walk (§2.G): elements
     /// and connectors interleaved by z-order. The UI paints it in one pass.
     pub nodes:    Vec<DisplayNode>,
+    /// Anchored comment pins intersecting the viewport (§2.J, features §4.D). Not
+    /// z-ordered with `nodes`: pins float above content and are painted last.
+    pub comments: Vec<DisplayComment>,
 }
 
 pub enum DisplayNode {
@@ -889,6 +999,8 @@ pub struct DisplayElement {
     pub transform: kurbo::Affine,           // world transform incl. rotation
     pub bounds:    kurbo::Rect,
     pub locked:    bool,                     // top-level element flag (§2.B), NOT from ElementStyle
+    pub linked:    bool,                      // has a LinkTarget (§2.K) -> UI shows a link affordance / follows on click.
+                                             // The target itself is fetched on demand (SetLink echo / hit), not per-frame.
     pub style:     ElementStyle,
     pub geom:      DisplayGeom,
     pub group:     Option<ElementId>,        // immediate enclosing group (§2.F bis); None = top-level.
@@ -914,10 +1026,23 @@ pub struct DisplayConnector {
     pub path:  kurbo::BezPath,               // already routed against current bounds (§5)
     pub style: ElementStyle,
     pub arrows: EndCaps,                      // arrowheads per end, from the connector CRDT (§5)
+    pub label: Option<Vec<TextRun>>,          // edge caption (§5.B), laid out at the path midpoint; None = empty
+}
+
+/// Anchored comment pins in the visible set (§2.J, toile-features §4.D). Carried
+/// alongside `nodes` so the UI can paint/hit-test markers without a LoroDoc read;
+/// thread bodies are fetched on demand by the comment panel, never streamed here.
+pub struct DisplayComment {
+    pub thread:   CommentThreadId,
+    pub at:       kurbo::Point,               // resolved world position (element anchor -> its current AABB, or free point)
+    pub resolved: bool,                        // resolved threads render collapsed / muted
+    pub count:    u32,                         // message count, for the pin badge
 }
 ```
 
-`DisplayViewport` is the single Logic→UI contract; it is rebuilt only for the visible set on each relevant
+Comment pins ride in a sibling `DisplayViewport.comments: Vec<DisplayComment>` field (kept off `nodes` because a
+pin is not z-ordered with board content and must never be occluded by it). `DisplayViewport` is the single
+Logic→UI contract; it is rebuilt only for the visible set on each relevant
 command, keeping the render thread free of business logic (the Trame `DisplayViewport` pattern, `logic §9`).
 
 ---
@@ -1062,8 +1187,20 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
   is needed: the registry is flat and the child's view addresses the child directly (§2.I "Command routing"). The
   child's `Role` lives in `ambre-logic` (`ambre-spec-architecture.md §2.D, §7 ARCH P6`).
 
+**Phase 1c - Miro-parity engine gaps (MVP)**
+- [ ] Connector labels (§5.B): `label` `LoroText` on the connector + `EditConnectorLabel` command; surfaced on
+      `DisplayConnector.label`; convergence belt (concurrent captions merge char-wise)
+- [ ] Hyperlinks / go-to-frame (§2.K): `link` element register + `LinkTarget` + `SetLink` command; `linked`
+      flag on `DisplayElement` (navigation itself is `toile-ui`)
+- [ ] Arrange (§8): `ArrangeElements { ids, op }` align/distribute, one convergent batch + one undo item
+- [ ] Comment anchoring (§2.J): `DisplayComment` pins in `DisplayViewport.comments` (derive + skip on deleted
+      anchor). Thread CRDT + commands are owned by `toile-features §4.D`
+
 **Phase 2 - Optimization**
 - [ ] Bulk index update on large remote batches
 - [ ] Order-preserving layer diffing
 - [ ] Connector routing memoization keyed by endpoint bounds
 - [ ] Benchmark-gated style dedup dictionary
+
+**Deferred - post-MVP element model**
+- [ ] `card` element type + board-level `tags` palette (§2.C) — agile-team workflow layer
