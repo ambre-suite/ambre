@@ -428,34 +428,32 @@ and XMP metadata.
 crate (source of truth: `ambre-spec-architecture.md` §2.D). It depends on `kurbo`,
 `peniko`, `parley` (types only — no direct dependency on the final rendering engine).
 
-Page rendering functions (`render_block_on`, `render_page_on`, etc.) are parameterized
-on this trait — rendering code is not duplicated between live rendering (wgpu +
-Parley/Swash, UI thread) and export (Krilla, Logic thread):
+Prose does **not** define its own surface types. Both `DrawSurface` implementations are
+owned by Foundation and reused as-is:
+
+- **Screen:** `ambre_canvas::render::WgpuSurface` (UI thread) — `ambre-spec-canvas.md §D`.
+- **PDF:** `ambre_pdf::KrillaSurface` (Logic thread, lazy-loaded), living in the shared
+  **`ambre-pdf`** crate (deps `ambre-draw` + `krilla`) — *not* in an app crate, since PDF
+  export only translates `DrawSurface` primitives to krilla and is app-agnostic
+  (`ambre-spec-canvas.md §D`). Its signature is Foundation's:
+  `KrillaSurface<'a, 'b> { surface: &'a mut krilla::surface::Surface<'b> }` — the surface
+  carries **no** `FontContext`; fonts are threaded to the render layer separately, exactly
+  as `paint_content(.., fc: &mut FontContext, ..)` does on screen.
 
 ```rust
-// ambre-draw/src/lib.rs  -- SOURCE OF TRUTH (see ambre-spec-architecture.md sec.2.D)
-use ambre_draw::DrawSurface;
-
-// wgpu implementation -- UI thread (in ambre-canvas::render)
-pub struct WgpuSurface<'a> {
-    pub device: &'a wgpu::Device,
-    pub queue:  &'a wgpu::Queue,
-}
-impl DrawSurface for WgpuSurface<'_> {
-    // Delegates to the wgpu + Parley/Swash rendering pipeline.
-    // Zero-cost wrapper -- no type conversion needed (pipeline uses kurbo/peniko).
-}
-
-// Krilla implementation -- Logic thread (in ambre-prose/interop, lazy-loaded)
-pub struct KrillaSurface<'a> {
-    pub surface: &'a mut krilla::Surface,
-    pub fonts:   &'a parley::FontContext,
-}
-impl DrawSurface for KrillaSurface<'_> {
-    // Converts kurbo/peniko types to krilla primitives (PDF paths, glyphs, images).
-    // krilla is designed to integrate with Parley -- conversion is direct.
-}
+// ambre-prose/src/interop/pdf.rs
+use ambre_pdf::KrillaSurface;   // Foundation-owned, not redefined here
 ```
+
+**What is actually shared, and what is not.** The reuse is at the **primitive** level: the
+`DrawSurface` trait methods (`draw_glyphs`, `fill_rect`, `draw_image`, path/clip/transform)
+and the per-run/per-block draw helpers are identical whether the target is the screen or a
+PDF. The **top-level entry point is not** a single shared function: the screen renderer
+draws from live `ProseUiState` one visible block at a time (`render_block_on`, `prose-ui §D`)
+for partial repaint + glyph caching, while the export renderer draws from the immutable
+`ProseIr` + `PageLayout` a whole page at a time (`render_page_on`, below). Their input models
+differ by design (live editable state vs frozen export IR), so they are distinct callers
+over the same `DrawSurface` primitives — there is no claim of one function serving both.
 
 **Execution in the Logic thread:** Parley is already available there for pagination.
 The PDF is produced in memory (`Vec<u8>`) and transmitted to the UI thread via
@@ -469,7 +467,7 @@ time would freeze the interface.
 pub fn export_pdf(
     ir: &ProseIr,
     layout: &PageLayout,
-    fonts: &FontContext,
+    fonts: &mut FontContext,   // shaping needs &mut; threaded to render_page_on, not to the surface
 ) -> Result<(Vec<u8>, ConversionReport), InteropError> {
     let mut report = ConversionReport::new(ConversionFormat::Pdf);
     let mut doc = krilla::Document::new();
@@ -485,10 +483,10 @@ pub fn export_pdf(
     for page_idx in 0..layout.page_count {
         let mut page = doc.add_page(page_size);
         let mut krilla_surface = page.surface();
-        let mut surface = KrillaSurface { surface: &mut krilla_surface, fonts };
+        let mut surface = KrillaSurface { surface: &mut krilla_surface };
 
-        // Exact reuse of rendering code -- no duplication with prose-ui
-        render_page_on(&mut surface, page_idx, ir, layout, &mut report);
+        // Shared DrawSurface primitives -- fonts threaded separately (surface holds none).
+        render_page_on(&mut surface, fonts, page_idx, ir, layout, &mut report);
 
         krilla_surface.finish();
         page.finish();

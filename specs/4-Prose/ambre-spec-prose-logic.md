@@ -130,7 +130,7 @@ pub enum BlockType {
     Paragraph  = 0,
     Heading    = 1,  // a: {"level": u8}  -- 1..=6
     ListItem   = 2,  // a: {"ls": u8, "lo": u8|null}  -- see ListStyle below
-    Table      = 3,  // a: {"col_widths": [f32], "merged": [[row,col,rs,cs]]}
+    Table      = 3,  // a: {"col_widths": [f32], "merged": {anchor_TreeID: extent_TreeID}}
     TableRow   = 4,  // no attributes
     TableCell  = 5,  // a: {"bg": str|null, "bt": f32, "bb": f32, "bl": f32, "br": f32,
                      //      "bc": str, "pad": f32, "va": u8}
@@ -689,9 +689,13 @@ extension of Parley).
 Each sub-item is an independent block for pagination — a parent `ListItem` has no
 implicit keep_together on all its children (identical to Google Docs).
 
-**Merged tables:** merged cells (`merged`) are attributed to the first row of the
-merge. The row height is the max between normal cells and the visible portion of
-the merged cell for that row.
+**Merged tables:** each `merged` entry (`anchor_TreeID -> extent_TreeID`) is resolved to a
+grid rectangle by locating both corners in the current row/column order; rowspan/colspan are
+**derived here, never stored** (so a concurrent row/col insert between the corners simply
+widens the derived rectangle -- no stale coordinate, see `prose-features D`). The merged cell
+is attributed to the first row of its rectangle; the row height is the max between normal
+cells and the visible portion of the merged cell for that row. A `merged` entry whose anchor
+or extent no longer resolves to a live cell is skipped (it is dropped at import validation).
 
 #### Incremental Invalidation
 
@@ -846,12 +850,29 @@ pub enum ProseCommand {
     // -- Text editing --
     InsertText    { block_id: TreeID, pos: u32, text: String },
     DeleteText    { block_id: TreeID, range: (u32, u32) },
+    /// Delete an arbitrary, possibly cross-block, selection in one command.
+    /// `anchor`/`focus` are the selection endpoints in document order-agnostic form
+    /// (the dispatcher normalizes so start <= end). Semantics:
+    ///  - same block  -> equivalent to DeleteText { block_id, range }.
+    ///  - across N blocks -> the head block keeps its TreeID + paragraph style, the tail
+    ///    block's surviving suffix is appended to the head, every fully covered block in
+    ///    between is removed, and the (now empty) tail block is removed. This is the single
+    ///    block-merge/join primitive: a zero-width range spanning the boundary between the
+    ///    previous block's end and the current block's start (Backspace at offset 0) merges
+    ///    the two. Inline content marks whose span is fully covered are removed with the
+    ///    text (same as DeleteText); annotation-orphan handling for partially covered
+    ///    comments/suggestions/footnotes follows the same rule as DeleteText.
+    DeleteRange   { anchor: (TreeID, u32), focus: (TreeID, u32) },
     ApplyMark     { block_id: TreeID, range: (u32, u32), key: String, value: Option<String> },
     RemoveMark    { block_id: TreeID, range: (u32, u32), key: String },
 
     // -- Block structure --
     InsertBlock   { parent_id: Option<TreeID>, after_id: Option<TreeID>,
                     block_type: BlockType, style_id: Option<String> },
+    /// Split a block at `pos` (Enter): the suffix from `pos` to end moves into a new sibling
+    /// block inserted right after, inheriting the source block's type/paragraph style; the
+    /// caret lands at offset 0 of the new block. Inverse of the DeleteRange block-merge case.
+    SplitBlock    { block_id: TreeID, pos: u32 },
     DeleteBlock   { block_id: TreeID },
     MoveBlock     { block_id: TreeID, new_parent: Option<TreeID>, after_id: Option<TreeID> },
     SetBlockStyle { block_id: TreeID, style_id: String },
@@ -988,6 +1009,10 @@ pub enum ProseEvent {
     FindUpdated   { current: usize },
     /// Spelling errors for a block (post-MVP).
     SpellErrors   { block_id: TreeID, errors: Vec<SpellError> },
+    /// A concurrent edit left a cell covered by a merge while it still holds content
+    /// (masked, not destroyed). Non-blocking UI hint; resolution is deterministic
+    /// (LWW on `merged` + masking, see prose-features D). Mirrors Trame's MergeConflictDetected.
+    MergeConflictDetected { cell_id: TreeID },
 
     // -- Interop --
     /// Import completed (success or with warnings).
@@ -1243,7 +1268,7 @@ proptest! {
 - [ ] Definition of `BlockType` (with `Toc`), `ProseCommand`, `ProseEvent` (complete enum), `CursorPosition`.
 - [ ] `LoroDoc` initialization with the four root containers and complete `meta` schema.
 - [ ] `expand_type_for` covering all marks.
-- [ ] Text operations: `InsertText`, `DeleteText`, `ApplyMark`, `RemoveMark`.
+- [ ] Text operations: `InsertText`, `DeleteText`, `DeleteRange` (cross-block delete + block-merge primitive), `ApplyMark`, `RemoveMark`.
 - [ ] Block operations: `InsertBlock`, `DeleteBlock`, `MoveBlock`, nesting rule.
 - [ ] `compute_depth` for `ListItem`s.
 - [ ] Unit tests CRDT convergence, exhaustive `expand_type_for`, `compute_depth`.
