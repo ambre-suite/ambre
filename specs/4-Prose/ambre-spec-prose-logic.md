@@ -95,8 +95,8 @@ meta
 │   └── "line_height"     : f32        — Multiple, e.g. 1.15
 ├── "header"              : LoroMap    — header (prose-features)
 │   ├── "enabled"         : bool
-│   ├── "block_id"        : String     — stable TreeID of the header LoroText
-│   ├── "text"            : LoroText   — inline marks supported + MARK_FIELD_*
+│   ├── "block_id"        : String     — stable TreeID of the header LoroText node
+│   │                                    (in "blocks"; holds inline marks + MARK_FIELD_*)
 │   ├── "align"           : String     — "left"|"center"|"right"
 │   └── "different_first_page" : bool
 ├── "header_first"        : LoroMap    — first page header (if different_first_page)
@@ -135,7 +135,7 @@ pub enum BlockType {
     TableCell  = 5,  // a: {"bg": str|null, "bt": f32, "bb": f32, "bl": f32, "br": f32,
                      //      "bc": str, "pad": f32, "va": u8}
     CodeBlock  = 6,  // a: {"lang": str}
-    Image      = 7,  // a: {"content_hash": str, "alt": str, "w": u32, "h": u32}
+    Image      = 7,  // a: {"content_hash": str, "alt": str, "w": u32, "h": u32, "align": u8, "caption": str}
     PageBreak  = 8,  // leaf node without text
     HRule      = 9,  // leaf node without text
     Toc        = 10, // a: {"max_level": u8, "numbered": bool}
@@ -787,7 +787,7 @@ impl ProseState {
             Ok(p) => vec![ProseEvent::RemoteCursors { cursors: vec![RemoteCursor {
                 user_id:      from_user_id,
                 display_name: p.display_name,
-                color:        user_color(from_user_id),   // aligned with prose-ui::user_color / Trame color_for_user
+                color:        ambre_draw::peer::peer_color(&from_user_id), // shared cross-app helper (canvas §D)
                 position:     p.position,
             }] }],
             Err(_) => vec![], // non-Prose Ephemeral payload (ignored)
@@ -1041,7 +1041,7 @@ pub struct RemoteCursor {
     /// Set to the Sync-resolved `from_user_id`; NEVER read from the peer payload.
     pub user_id:      UserId,
     pub display_name: String,
-    pub color:        u32,   // RGBA -- derived from user_id hash (see prose-ui::user_color)
+    pub color:        peniko::Color, // shared cross-app peer color (ambre_draw::peer::peer_color)
     pub position:     CursorPosition,
 }
 ```

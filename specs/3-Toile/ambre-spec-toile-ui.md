@@ -479,7 +479,7 @@ pass, above all content, never culled out:
 
 - **Cursors:** each peer's pointer with a name label and a stable color. The color and label key off the
   peer's canonical **`UserId`** (resolved from its `pub_key` in `ambre-sync`, `toile-logic §7`), **not**
-  `PeerID`, hashed with the shared cross-app algorithm (`ambre_draw::peer_color`, the render-primitives crate
+  `PeerID`, hashed with the shared cross-app algorithm (`ambre_draw::peer::peer_color`, the render-primitives crate
   every app's canvas already depends on -- the eventual `prose-ui` home the spec named does not exist yet, and
   the algorithm belongs in the shared draw layer) so the same collaborator keeps one color across Prose, Trame
   and Toile — and a single color even when signed in from two devices.
@@ -689,7 +689,7 @@ lives in Logic, keyed on change size.
   spoof-proof canonical `UserId`, §7) and painted in the overlay pass above content: selection ghosts, in-flight
   live stroke, a recency-faded laser trail (a per-peer ring buffer, decayed by sample age so it needs no wall
   clock), and the pointer arrow + name chip. Every peer colour comes from the shared cross-app
-  `ambre_draw::peer_color` (a pure hash over the `UserId` seed bytes, so a collaborator keeps one colour across
+  `ambre_draw::peer::peer_color` (a pure hash over the `UserId` seed bytes, so a collaborator keeps one colour across
   Prose / Trame / Toile). The paint entry point is pure over `DrawSurface`, host-tested against
   `RecordingSurface` with synthetic `PeerPresence` events (arrow/chip, ghosts of visible ids only, live-stroke
   polyline, laser accumulate/clear, distinct per-peer colours). The **end-to-end multi-user demo** is still

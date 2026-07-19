@@ -245,7 +245,7 @@ Stories:
   color picker, content-anchored floating selection toolbar, top menu bar + zoom control -- `toile-ui
   §5quinquies`), the chrome context menu / find panel / selection status bar, the `PeerPresence` overlay
   (`ui::presence::PeerCursors` — cursors / name chips / selection ghosts / live strokes / faded laser trails in
-  the shared cross-app `ambre_draw::peer_color`), and the wasm render/input belt. The end-to-end multi-user
+  the shared cross-app `ambre_draw::peer::peer_color`), and the wasm render/input belt. The end-to-end multi-user
   presence demo stays gated on SYNC P4 (`pub_key` -> `UserId` resolution), so the overlay runs against synthetic
   events until it lands.)*
 - `[x]` `toile-features §9 Phase 0/1` — presentation sequence CRDT + playback machine, speaker notes, Smart Animate

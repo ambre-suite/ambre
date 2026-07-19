@@ -729,23 +729,22 @@ handles emit `ProseCommand::SetParagraphStyle` on `on_pointer_up`.
 
 ### I. Collaborative Cursors
 
-Remote cursors are received via `ProseEvent::RemoteCursors` from the Logic thread
-(which decrypts them from `Ephemeral` messages and resolves `pub_key → UserId` via
-`ambre-sync/trusted_keys`). Each peer is assigned a color derived from their `UserId`
-(hash → HSL palette) — identical to Trame's algorithm so the same collaborator has
-the same color across all apps in the suite.
+Remote cursors are received via `ProseEvent::RemoteCursors` from the Logic thread.
+The author identity is the **Sync-resolved `from_user_id`** (spoof-proof,
+`ambre-spec-sync.md §3`): `ambre-sync` decrypts the `Ephemeral` message and resolves
+the canonical `UserId` before delivery, so the Logic thread never resolves identity
+itself. The peer-authored payload carries only the cursor position and a self-asserted,
+cosmetic `display_name` — never a `user_id`. Each peer is assigned a color derived from
+that `UserId` via the **shared cross-app helper** `ambre_draw::peer::peer_color` — the
+same function Trame and Toile call, so a given collaborator has the same color across
+all apps in the suite. Prose does not reimplement the hash (see `ambre-spec-canvas.md §D`).
 
 ```rust
 // ambre-prose/src/ui/remote_cursor.rs
 
-fn user_color(user_id: &Uuid) -> u32 {
-    // Deterministic: hash of UserId -> hue in HSL (saturation 70%, lightness 55%)
-    // Returns RGBA u32. Aligned with color_for_user() from ambre-spec-trame-ui.
-    let bytes = user_id.as_bytes();
-    let hue = (u64::from_le_bytes(bytes[..8].try_into().unwrap())
-        .wrapping_mul(2654435761) >> 32) as f32
-        / u32::MAX as f32 * 360.0;
-    hsla_to_rgba(hue, 0.70, 0.55, 1.0)
+fn user_color(user_id: &UserId) -> peniko::Color {
+    // Canonical cross-app peer color -- seeded on the spoof-proof UserId.
+    ambre_draw::peer::peer_color(user_id)
 }
 ```
 
@@ -879,7 +878,7 @@ already-decrypted data transmitted by the Logic thread.
 | `visible_pages()`: viewport overlaps pages 2 and 3 | `PageColumn::visible_pages()` with fixed values |
 | `hit_test()`: click at known coordinate → expected `(block_id, offset)` | Mock `BlockLayout` + mocked Parley metrics |
 | `DraftBuffer`: push 5 chars → clear → empty | Direct assertions |
-| `user_color()`: two distinct user_ids → distinct colors | Hash collision check on 1000 ids |
+| `ambre_draw::peer::peer_color`: two distinct user_ids → distinct colors | Hash collision check on 1000 ids (owned by `ambre-draw`; Prose only delegates) |
 | `compute_selection_bounds()`: single-block and multi-block selection | Mocked Parley geometry |
 | Keyboard shortcuts: Ctrl+B → `ApplyMark(bold)`, Ctrl+Z → `Undo` | `KeyEvent` simulation on `handle_key_event()` |
 | Slash menu: filtering by query "tab" → items containing "tab" | `SlashMenuState::filter()` |

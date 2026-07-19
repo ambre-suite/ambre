@@ -535,8 +535,8 @@ This model is documented in the protection invitation UI: *"Protection prevents 
 ```
 "protections_{sheet_id}" (LoroMap)
   └── "{row_uid}:{col_uid}:{row_uid_end}:{col_uid_end}" (LoroMap)
-      ├── "owner_user_id"    : String     → creator's Uuid hex (stable, per-user)
-      ├── "allowed_user_ids" : LoroList   → [uuid_hex, ...] — empty = owner only
+      ├── "owner_user_id"    : String     → creator's UserId as Uuid hex (stable, per-user)
+      ├── "allowed_user_ids" : LoroList   → [UserId as uuid_hex, ...] — empty = owner only
       └── "description"      : String     → optional
 ```
 
@@ -551,14 +551,14 @@ This model is documented in the protection invitation UI: *"Protection prevents 
 
 ```rust
 fn check_protection(&self, sheet: SheetId, cell: CellRef) -> ProtectionResult {
-    // my_user_id is a Uuid received via LogicEvent::SessionReady.
+    // my_user_id is a UserId received via LogicEvent::SessionReady.
     // No crypto types in the Logic thread -- UserId stable per-user.
     let my_user_id = self.my_user_id;
 
     for (range_key, protection) in self.load_protections(sheet) {
         if !self.cell_in_protection_range(cell, &range_key, sheet) { continue; }
 
-        let allowed: Vec<Uuid> = self.load_allowed_user_ids(&protection);
+        let allowed: Vec<UserId> = self.load_allowed_user_ids(&protection);
         let owner = self.load_owner_user_id(&protection);
 
         if my_user_id == owner || allowed.contains(&my_user_id) {

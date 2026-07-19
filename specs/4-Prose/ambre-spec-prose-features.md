@@ -406,23 +406,27 @@ UpdateTocConfig { block_id: TreeID, max_level: u8, numbered: bool },
 
 ### G. Headers and Footers
 
-Headers and footers are `LoroText` independent from the document body, repeated on each
-page. They are stored in `"meta"` of the `LoroDoc`.
+Headers and footers are `LoroText` nodes in the `"blocks"` tree, independent from the
+document body and repeated on each page. `"meta"` of the `LoroDoc` holds only their
+configuration plus the stable `block_id` (`TreeID`) that points at the text node — the
+text is never duplicated inline (see `prose-logic §2.A`). Editing commands (`InsertText`,
+`ApplyMark`, ...) target the header/footer via this `block_id` like any other block.
 
 ```
 "meta"
 ├── "header" : LoroMap
 │   ├── "enabled"              : bool
-│   ├── "text"                 : LoroText   — inline marks supported
+│   ├── "block_id"             : String   — stable TreeID of the header LoroText node
 │   ├── "align"                : "left"|"center"|"right"
 │   └── "different_first_page" : bool
 ├── "header_first" : LoroMap   — if different_first_page = true
-│   └── (same structure as "header")
+│   └── "block_id" : String    — (same config shape as "header")
 ├── "footer" : LoroMap
-│   ├── "enabled" : bool
-│   ├── "text"    : LoroText
-│   └── "align"   : "left"|"center"|"right"
+│   ├── "enabled"  : bool
+│   ├── "block_id" : String
+│   └── "align"    : "left"|"center"|"right"
 └── "footer_first" : LoroMap
+    └── "block_id" : String
 ```
 
 Headers/footers content supports **dynamic fields** inserted as special marks. Their
@@ -896,7 +900,7 @@ direct path to the network.
 - `display_name` in comments and suggestions travels in the encrypted CRDT.
 - Collaborative cursors are encrypted in `ambre-sync` → `Ephemeral.ciphertext`.
 - `zspell` is local — no network call for the spell checker.
-- Protected zones (N.12) are an application-level rule — their security limitation is documented.
+- Protected zones (O.12) are an application-level rule — their security limitation is documented.
 
 ---
 

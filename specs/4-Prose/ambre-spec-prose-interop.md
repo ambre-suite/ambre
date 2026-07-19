@@ -436,12 +436,12 @@ Parley/Swash, UI thread) and export (Krilla, Logic thread):
 // ambre-draw/src/lib.rs  -- SOURCE OF TRUTH (see ambre-spec-architecture.md sec.2.D)
 use ambre_draw::DrawSurface;
 
-// wgpu implementation -- UI thread (in ambre-app)
-pub struct GpuSurface<'a> {
+// wgpu implementation -- UI thread (in ambre-canvas::render)
+pub struct WgpuSurface<'a> {
     pub device: &'a wgpu::Device,
     pub queue:  &'a wgpu::Queue,
 }
-impl DrawSurface for GpuSurface<'_> {
+impl DrawSurface for WgpuSurface<'_> {
     // Delegates to the wgpu + Parley/Swash rendering pipeline.
     // Zero-cost wrapper -- no type conversion needed (pipeline uses kurbo/peniko).
 }
@@ -449,7 +449,7 @@ impl DrawSurface for GpuSurface<'_> {
 // Krilla implementation -- Logic thread (in ambre-prose/interop, lazy-loaded)
 pub struct KrillaSurface<'a> {
     pub surface: &'a mut krilla::Surface,
-    pub fonts:   &'a parley::FontCollection,
+    pub fonts:   &'a parley::FontContext,
 }
 impl DrawSurface for KrillaSurface<'_> {
     // Converts kurbo/peniko types to krilla primitives (PDF paths, glyphs, images).
@@ -469,7 +469,7 @@ time would freeze the interface.
 pub fn export_pdf(
     ir: &ProseIr,
     layout: &PageLayout,
-    fonts: &FontCollection,
+    fonts: &FontContext,
 ) -> Result<(Vec<u8>, ConversionReport), InteropError> {
     let mut report = ConversionReport::new(ConversionFormat::Pdf);
     let mut doc = krilla::Document::new();

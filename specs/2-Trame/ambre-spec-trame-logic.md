@@ -895,9 +895,10 @@ pub struct TrameState {
     masked_cells:  HashSet<String>,
     /// Undo/Redo local -- scope = session document ouverte
     undo_manager:  loro::UndoManager,
-    /// Canonical identifier for the current user (received via LogicEvent::SessionReady).
-    /// Uuid stable per-user -- not pub_key which changes on key rotation.
-    my_user_id:    Uuid,
+    /// Canonical identifier for the current user (received via LogicEvent::SessionReady,
+    /// which carries `user_id: UserId`). Stable per-user -- not pub_key, which changes
+    /// on key rotation.
+    my_user_id:    UserId,
 }
 
 // Engine-side, uid-anchored cell identity (the compiled form of a positional

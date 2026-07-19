@@ -163,7 +163,7 @@ pub struct GridUiState {
     editing: Option<InlineEditor>,
 
     /// Remote cursors -- key = UserId (resolved by ambre-sync before reaching here)
-    remote_cursors: HashMap<Uuid, RemoteCursor>,
+    remote_cursors: HashMap<UserId, RemoteCursor>,
 
     /// Undo/Redo state
     can_undo: bool,
@@ -1275,8 +1275,8 @@ pub struct RemoteCursor {
     /// Set to the Sync-resolved `from_user_id` (pub_key -> UserId resolved in ambre-sync
     /// via trusted_keys and delivered on LogicEvent::RemoteEphemeral); NEVER read from the
     /// peer-authored Ephemeral payload (a peer cannot forge another user's id).
-    pub user_id:      Uuid,
-    pub color:        Color,         // color assigned locally by hashing the user_id
+    pub user_id:      UserId,
+    pub color:        Color,         // shared cross-app peer color (ambre_draw::peer::peer_color)
     pub row:          u32,
     pub col:          u32,
     pub display_name: Option<String>,
@@ -1305,7 +1305,7 @@ fn draw_remote_cursors(&mut self) {
 // payload (PresencePayload) never carries a user_id. The UI thread never manipulates
 // any cryptographic key.
 fn on_remote_presence(&mut self, presence: RemotePresence) {
-    // RemotePresence { user_id: Uuid, display_name, sheet_id, row, col }
+    // RemotePresence { user_id: UserId, display_name, sheet_id, row, col }
     // emitted by the Logic thread in TrameEvent::RemoteCursors
     let color = self.color_for_user(&presence.user_id);
     self.ui_state.remote_cursors.insert(presence.user_id, RemoteCursor {
@@ -1317,12 +1317,12 @@ fn on_remote_presence(&mut self, presence: RemotePresence) {
     });
 }
 
-fn color_for_user(&self, user_id: &Uuid) -> Color {
-    // Deterministic: hash of UserId -> HSL hue, via the shared cross-app helper
-    // `ambre_draw::peer::peer_color` (same algorithm in Prose and Trame, so a given
-    // collaborator gets the same colour everywhere). peniko `Color` has no
-    // `from_hsl`, so the shared helper converts through its own `hsl_to_rgb`
-    // (`ambre-draw/src/peer.rs`) and returns a `Color::from_rgb8`.
+fn color_for_user(&self, user_id: &UserId) -> Color {
+    // Deterministic per-user color via the shared cross-app helper
+    // `ambre_draw::peer::peer_color` (same algorithm in Prose, Trame, and Toile, so a
+    // given collaborator gets the same colour everywhere). Seeded on the canonical
+    // `UserId`; the helper converts through its own `hsl_to_rgb` (`ambre-draw/src/peer.rs`)
+    // and returns a peniko `Color::from_rgb8`.
     ambre_draw::peer::peer_color(user_id)
 }
 ```
