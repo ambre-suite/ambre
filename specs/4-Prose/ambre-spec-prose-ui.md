@@ -448,15 +448,20 @@ pub fn build_display_list<S: DrawSurface>(
         // 2. Header
         //    Parley runs are pre-shaped in the Logic thread (pagination Phase 3.B)
         //    with dynamic fields already resolved (f:pn = page number, etc.).
-        //    The UI thread does not shape -- it assembles runs from layout.header_runs[page_idx].
-        //    If different_first_page and page_idx == 0: header_first runs are in header_runs[0].
+        //    The UI thread does not shape -- it assembles runs via layout.header_runs_for(page_idx).
+        //    Logic stores headers as PageRuns (Static | PerPage): a Static header shares one
+        //    pre-shaped run set across every page, PerPage carries a distinct set per page
+        //    (dynamic fields resolved). header_runs_for resolves that enum, so the UI never
+        //    indexes a raw Vec. If different_first_page and page_idx == 0, the first-page runs
+        //    are what header_runs_for(0) returns.
         let header_height = if page_idx == 0 {
             state.layout.header_first_height_px
         } else {
             state.layout.header_height_px
         };
         if header_height > 0.0 {
-            if let Some(runs) = state.layout.header_runs.get(page_idx as usize) {
+            let runs = state.layout.header_runs_for(page_idx);
+            if !runs.is_empty() {
                 let header_origin = page_origin + Vec2::new(
                     state.layout.margin_left_px,
                     state.layout.margin_top_px,
@@ -469,6 +474,10 @@ pub fn build_display_list<S: DrawSurface>(
         //    y_in_page in BlockLayout is relative to the start of the content area
         //    (after margin_top + header_height). The vertical offset is:
         //    page_origin.y + margin_top + header_height + block.y_in_page
+        //    blocks_on_page indexes a per-page slot Logic guarantees is populated for every
+        //    page (an empty Vec when the page holds no block), so this never surprises. For a
+        //    block split across a page boundary it yields the continuation BlockLayout that
+        //    falls on this page.
         let content_top = state.layout.margin_top_px + header_height;
         for block_layout in state.layout.blocks_on_page(page_idx) {
             let block_origin = page_origin + Vec2::new(
@@ -483,6 +492,8 @@ pub fn build_display_list<S: DrawSurface>(
         //    A horizontal separator (line 1/3 width) separates them from the body.
         //    Each footnote's Parley runs are pre-shaped (FootnoteLayout.runs,
         //    from pagination Phase 0) -- the UI thread directly assembles.
+        //    Logic populates one footnotes_per_page slot per page (empty Vec when none), so
+        //    .get(page_idx) never surprises -- every visible page index is in range.
         if let Some(footnotes) = state.layout.footnotes_per_page.get(page_idx as usize) {
             if !footnotes.is_empty() {
                 let footer_height = if page_idx == 0 {
@@ -512,14 +523,16 @@ pub fn build_display_list<S: DrawSurface>(
         }
 
         // 5. Footer
-        //    Pre-shaped runs in layout.footer_runs[page_idx] (Phase 3.B).
+        //    Pre-shaped runs resolved via layout.footer_runs_for(page_idx) (Phase 3.B),
+        //    the PageRuns (Static | PerPage) counterpart of header_runs_for.
         let footer_height = if page_idx == 0 {
             state.layout.footer_first_height_px
         } else {
             state.layout.footer_height_px
         };
         if footer_height > 0.0 {
-            if let Some(runs) = state.layout.footer_runs.get(page_idx as usize) {
+            let runs = state.layout.footer_runs_for(page_idx);
+            if !runs.is_empty() {
                 let footer_origin = page_origin + Vec2::new(
                     state.layout.margin_left_px,
                     state.layout.page_height_px - state.layout.margin_bottom_px - footer_height,
@@ -545,12 +558,17 @@ pub fn build_display_list<S: DrawSurface>(
     }
 
     // 9. Comment highlights
-    render_comment_highlights_on(surface, &state.comments, state);
+    //    Scoped to the visible page range: the helper skips any comment whose anchor block
+    //    is outside `visible`, mirroring the body loop's blocks_on_page(page_idx) gate.
+    let visible = state.page_column.visible_pages(&state.viewport);
+    render_comment_highlights_on(surface, &state.comments, visible.clone(), state);
 
     // 10. Track changes highlights
-    render_suggestion_highlights_on(surface, &state.suggestions, state);
+    //    Same page-range scoping as comments: suggestions anchored off-screen are skipped.
+    render_suggestion_highlights_on(surface, &state.suggestions, visible, state);
 
     // 11. Draft buffer (optimistic keystrokes)
+    //    Early-returns when draft_buffer is empty (the common case), touching no page.
     render_draft_on(surface, &state.draft_buffer, state);
 
     // 12. Spell check underlines (post-MVP)
@@ -1392,6 +1410,11 @@ Tolerance: pixel diff ≤ 2% (anti-aliasing varies by GPU).
 | Build vertex batch + GPU upload | < 4 ms | QuadRenderer + wgpu |
 | Submit GPU + present frame | < 6 ms | GPU-bound, varies by hardware |
 | **Total frame budget** | **< 14 ms** | 2ms margin for interleaved input events |
+
+Steps 9-11 (comment / suggestion highlights + draft buffer) are **O(visible)**, not
+O(total annotations): the highlight helpers skip any annotation anchored outside the
+visible page range and the draft helper early-returns on an empty buffer, so the
+`build_display_list()` < 4 ms budget holds at any comment / suggestion count.
 
 **Input latency (P2 -- high priority):**
 

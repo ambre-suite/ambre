@@ -156,6 +156,10 @@ The frame driver `host::run_with` and the closed `AppView` registry live in `amb
 
 **Backpressure.** The `flume` UI <-> Logic channels are `bounded(CHANNEL_CAPACITY = 1024)` (created in `ambre_app::main`). **The Logic thread may block** on a full channel (intended backpressure); **the UI thread never blocks** — `TrameView::send_command` uses `try_send` and **drops on `Full`** (a viewport request is superseded by the next via `version`), and `ScrollViewport` is **coalesced to ≤ 1 send per frame**. The Logic <-> Sync relay drains the Logic->Sync `flume` once per frame and `postMessage`s each command.
 
+`ProseView` splits the **same two traffic classes** over the same bounded channels:
+- **LOSSY** — `ScrollViewport` and hit-test / viewport requests: `try_send`, **drop on `Full`**, coalesced to **≤ 1 send per frame**, and superseded by the next via `version`. A dropped viewport request costs nothing: the following frame resends the current state.
+- **LOSSLESS** — editing commands (`InsertText`, `DeleteRange`, `ApplyMark`, `SplitBlock`, …): these **must NEVER be silently dropped**, since a lost keystroke is unrecoverable data loss. A `Full` edit channel (capacity 1024) means the Logic thread is **stalled**, and the correct response is to **apply backpressure to input** — surface a synchronous busy signal / stop accepting keystrokes — rather than lose an edit. Dropping is a lossy-class-only policy; the lossless class fails at the call-site instead.
+
 > ✅ **Resolved — Sync no longer freezes.** Earlier the Sync thread froze: as a `wasm_thread` worker it returned from its closure (an async `spawn_local` loop does so immediately), so the Main thread dropped its `Worker` handle and the GC terminated it after the first poll. Sync is now a **separate WASM instance** in its own Web Worker with a normal, never-terminated event loop: its `#[wasm_bindgen(start)]` (`worker.rs`) sets `onmessage` (decode `SyncCommand` -> `flume` cmd channel) and `spawn_local`s a `flume`-`select!` loop over the command channel and the internal WS/HTTP `SyncEvent` channel. Both channels' producer and consumer live in **this** worker, so flume's async waker fires correctly (the old failure was strictly cross-worker, which no longer occurs). See §6 and §7 ARCH P1.
 
 **"Thread failure" model.** Two paths:
@@ -634,6 +638,8 @@ impl MasterSeed {
 - [x] Non-blocking Sync loop (`recv_async`/`select!` + WS via `JsFuture`/`spawn_local`) in a **separate Sync worker instance** (resolved the `wasm_thread` run-to-completion freeze; see §6).
 - [x] Anti-deadlock Logic <-> Sync: Logic -> Sync blocking (lossless), Sync -> Logic via `try_send` (on `Full`: stop reading WS -> TCP backpressure + `RequestMissing`).
 - [x] Separate UI -> Logic traffic classes: lossy viewport (drop + coalescing) vs lossless edit/service (synchronous failure at call-site on `Full`).
+  - Trame: `TrameView::send_command` -- lossy `ScrollViewport` (`try_send`, drop-on-`Full`, coalesced), lossless cell edits.
+  - Prose (`ProseView`, same split): LOSSY = `ScrollViewport` + hit-test/viewport (`try_send`, drop-on-`Full`, coalesced <= 1/frame, superseded by `version`); LOSSLESS = editing commands (`InsertText`, `DeleteRange`, `ApplyMark`, `SplitBlock`, ...) which are **never** silently dropped -- a `Full` edit channel means Logic is stalled, so backpressure input (busy signal / stop accepting keystrokes) rather than lose an edit.
 - [x] Consume `RequestId` on the UI side: `RequestRegistry<Tag>` generic in `ambre-canvas` (routes `UiEvent::Rest`, timeout/retry; `RequestId::next()` sole allocator).
 - [x] `ambreFatal(message)` hook in `panic::set_hook` (before abort): UI surface for non-graceful panic.
 - [x] `SnapshotRequired` -> `SnapshotNeeded` -> `SendSnapshot`. `MockBlindRelay`.

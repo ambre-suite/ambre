@@ -341,17 +341,43 @@ pub struct PageLayout {
     /// Footnotes anchored per page.
     /// Key = page index, value = ordered list of footnotes on that page.
     pub footnotes_per_page: Vec<Vec<FootnoteLayout>>,
-    /// Shaped runs of the header for each page. Index = page index.
-    /// Shaped in the Logic thread with dynamic field resolution:
-    ///   f:pn -> page number (varies per page -- reason for per-page shaping)
+    /// Shaped runs of the header. Shaped in the Logic thread with dynamic field
+    /// resolution:
+    ///   f:pn -> page number (varies per page -- the only reason for per-page shaping)
     ///   f:pc -> page_count (constant)
     ///   f:dt -> last modified date (constant)
     ///   f:ti -> document title (constant)
-    /// pages[0] uses header_first if different_first_page.
-    /// Empty if header disabled.
-    pub header_runs:  Vec<Vec<ParleyRunData>>,
-    /// Shaped runs of the footer for each page. Same logic as header_runs.
-    pub footer_runs:  Vec<Vec<ParleyRunData>>,
+    /// PerPage[0] uses header_first if different_first_page.
+    /// Empty (Static with no runs) if header disabled.
+    pub header_runs:  PageRuns,
+    /// Shaped runs of the footer. Same logic as header_runs.
+    pub footer_runs:  PageRuns,
+}
+
+/// Header/footer runs. Static when the band contains no `f:pn` field (shape once,
+/// reuse on every page); PerPage only when `f:pn` forces per-page page numbers.
+pub enum PageRuns {
+    Static(Vec<ParleyRunData>),
+    PerPage(Vec<Vec<ParleyRunData>>), // index = page index
+}
+
+impl PageLayout {
+    /// Header runs for a given page: the static slice (shared by every page) or the
+    /// per-page slice. Empty slice when `page` is out of range.
+    pub fn header_runs_for(&self, page: usize) -> &[ParleyRunData] {
+        match &self.header_runs {
+            PageRuns::Static(runs) => runs,
+            PageRuns::PerPage(pages) => pages.get(page).map(Vec::as_slice).unwrap_or(&[]),
+        }
+    }
+
+    /// Footer runs for a given page. Same rule as `header_runs_for`.
+    pub fn footer_runs_for(&self, page: usize) -> &[ParleyRunData] {
+        match &self.footer_runs {
+            PageRuns::Static(runs) => runs,
+            PageRuns::PerPage(pages) => pages.get(page).map(Vec::as_slice).unwrap_or(&[]),
+        }
+    }
 }
 
 /// Layout of a footnote placed at the bottom of a page.
@@ -375,6 +401,14 @@ struct PageBudget {
     footnotes_px: f32,
 }
 ```
+
+**Per-page indexing invariants (P-51):**
+- Every page slot in `footnotes_per_page` is populated: a page with no footnotes holds
+  an empty `Vec`, never a missing entry, so a UI `.get(page_idx)` never surprises
+  (in-range pages always resolve).
+- `blocks_on_page(page)` returns the `BlockLayout`s visible on `page`, including the
+  continuation slices of split blocks, filtered by `page_start` (a block split across
+  pages contributes to every page from `page_start` through its last continuation).
 
 #### Algorithm Inputs
 
@@ -442,8 +476,11 @@ For each block in DFS pre-order traversal of the MovableTree:
          -> Layout with N lines, each line has a height.
          block_content_height = sum of line heights.
          total_height = space_before + block_content_height + space_after.
-         Keep the full Parley Layout (individual lines needed for
-         widow/orphan splitting and shaping).
+         Keep the full Parley Layout only TRANSIENTLY, for this block, during
+         measurement. Extract a compact LineMetrics (per-line y + height -- all that
+         widow/orphan splitting needs) and then drop the Layout. Retain the full
+         Parley Layout past measurement ONLY for blocks that actually split across a
+         page boundary (Phase 2 Step 2.6b); non-splitting blocks keep only LineMetrics.
 
        Image (BlockType::Image, align == Block | Center):
          total_height = space_before + image_height_px + caption_height + space_after.
@@ -472,8 +509,14 @@ For each block in DFS pre-order traversal of the MovableTree:
          total_height = 0. Treated as a signal, not a sized block.
 
        Toc (placeholder):
-         Count qualified heading entries (level <= max_level).
-         total_height = n_entries × toc_line_height + space_before + space_after.
+         Collect qualified heading entries (level <= max_level).
+         A long title wraps onto several TOC lines, so one line per entry
+         underestimates the height (P-94). Estimate each entry's wrapped line count
+         from its rendered width against the TOC content width (leader + page-number
+         column excluded): lines_i = max(1, ceil(entry_text_width_i / toc_text_width)).
+         total_lines = sum(lines_i).
+         total_height = total_lines × toc_line_height + space_before + space_after.
+         (This tighter estimate also reduces the stabilization iterations of P-23.)
 
   1.4  Store: (block_id, block_type, total_height, line_count, line_heights[],
        space_before, space_after, keep_together, keep_with_next,
@@ -550,7 +593,10 @@ For each measured block B (in DFS order):
 
   ── Step 2.4: Simple overflow test ────────────────────────────────────────
 
-  needed = effective_space_before + B.total_height_without_spaces + B.space_after
+  // Trailing margin is dropped at a page bottom (symmetric with Step 2.3 dropping
+  // space_before at a page top), so it is excluded from the overflow test. B.space_after
+  // still positions the next block when it lands on the SAME page (Step 2.3 collapse).
+  needed = effective_space_before + B.total_height_without_spaces
   remaining = available_on_page(current_page) - cursor_y
 
   If needed <= remaining:
@@ -622,7 +668,11 @@ For each measured block B (in DFS order):
        MIN_WIDOW_LINES  = 2   (minimum lines AFTER the split, on the next page)
 
      Find the optimal split line:
-       max_lines_on_current = number of lines that fit in `remaining`.
+       // `remaining` still includes the fragment's leading margin; the block CONTENT
+       // only gets what is left after effective_space_before, so deduct it here (P-95).
+       // At a page top effective_space_before == 0 (Step 2.3), so nothing is lost there.
+       content_space_on_current = remaining - effective_space_before
+       max_lines_on_current = number of lines that fit in `content_space_on_current`.
 
        // Degenerate-page guard (prevents the P-89 unbounded new_page loop):
        // compute how many lines a fresh, empty page can hold at all.
@@ -738,10 +788,13 @@ For each page P (0..page_count):
        f:dt -> format_date(meta.updated_at)  (resolved once, constant)
        f:ti -> meta.title                    (resolved once, constant)
   3. Shape the resolved text via Parley(content_width_px) -> Vec<ParleyRunData>.
-  4. Store in header_runs[P] and footer_runs[P].
+  4. Store into the PageRuns of header_runs / footer_runs (see below).
 
 Optimization: if the header/footer does not contain f:pn (the only per-page
-variable field), shaping is done once and the result is cloned for all pages.
+variable field), shaping is done once and the result stored as PageRuns::Static
+(one Vec, reused on every page -- no per-page clone). If f:pn is present, each page
+is shaped and stored as PageRuns::PerPage (index = page index). The UI reads either
+variant uniformly through header_runs_for(page) / footer_runs_for(page).
 Total cost: ~10 µs × page_count if f:pn present, ~10 µs if absent.
 Negligible within the 20 ms budget for 100 pages.
 ```
@@ -770,10 +823,11 @@ once in Phase 0 and subtracted from each page's budget. Header/footer rendering
 is handled by `prose-ui` directly from `"meta.header/footer"` data.
 
 **TOC (placeholder):** the `Toc` block is a placeholder whose height is estimated
-from the number of qualified headings × `toc_line_height`. After placement, if the
-page count changes (which modifies page numbers in the TOC), a second stabilization
-pass is triggered (max 3 iterations for convergence -- beyond that, accept the
-approximation).
+from the qualified headings, summing each entry's wrapped line count (a long title
+spans several TOC lines, so one line per entry underestimates -- see Phase 1.3, P-94)
+× `toc_line_height`. After placement, if the page count changes (which modifies page
+numbers in the TOC), a second stabilization pass is triggered (max 3 iterations for
+convergence -- beyond that, accept the approximation).
 
 **Floating images (Left/Right) -- MVP:** treated as block images. Text wrapping is
 deferred post-MVP (requires a line-breaking algorithm with exclusion zones,
@@ -803,10 +857,20 @@ invalidation optimizes frequent cases (keystroke, insertion, deletion):
    footnote mark ("fn") (see the full-recompute trigger list below):
      -> No placement recalculation needed. Emit RunsUpdated only.
 4. If the height changed:
-     -> Recalculate Phase 2 from this block to the end of the document.
+     -> Recalculate Phase 2 from this block toward the end of the document.
      -> Blocks preceding the modification keep their BlockLayout unchanged.
+     -> Reflow convergence early-exit: stop Phase-2 re-placement at the first
+        subsequent block whose new placement equals its cached placement
+        (same page + same page-relative y). From that block onward every downstream
+        placement is unchanged, so the tail is left untouched.
 5. Emit LayoutUpdated with first_dirty_page = page of the modified block.
 ```
+
+**Partial vs full scope (P-98):** the partial path above is the fast case for an
+edit whose reflow touches <= 10 pages (the early-exit converges quickly). A
+height-changing edit near the START of the document, whose reflow does not converge
+before propagating across the whole document, is not a partial reflow -- it is a full
+recompute charged to the <20 ms / 100-page budget, not the partial budget.
 
 **Cases forcing a full recomputation (Phase 0 + 1 + 2):**
 - Page dimension change (`meta.page`).
@@ -819,6 +883,14 @@ invalidation optimizes frequent cases (keystroke, insertion, deletion):
   reservation is a Phase 2 concern; an incremental pass runs neither, so it would
   leave ordinals and per-page budgets stale (P-91/P-92). Re-running the full
   pipeline is the only way to keep ordinals sequential and reservations correct.
+
+**TOC stabilization is deferred, never inline (P-23):** the 3-pass TOC stabilization
+(Special Cases, above) NEVER runs inline in the incremental path. When an incremental
+recompute changes the page number of a qualified heading, the TOC is marked dirty and
+exactly ONE deferred stabilization pass is scheduled -- debounced off the keystroke
+path and coalesced at idle / the next frame -- reusing the same 3-iteration convergence
+cap. TOC churn is therefore a deferred trigger, excluded from the < 3 ms partial budget;
+when the deferred pass runs it is charged to the < 20 ms full-recompute class.
 
 ---
 
@@ -1045,6 +1117,13 @@ pub enum ProseCommand {
     SetCodeLang     { block_id: TreeID, lang: String },
 
     // -- Paragraph styles --
+    /// Set the paragraph style of a block. The style is stored as a `LoroMap` keyed
+    /// per property (one key per `ParagraphStyle` field: space_before, space_after,
+    /// line_height, indent_*, keep_together, keep_with_next, ...). The handler diffs
+    /// `style` against the current stored value and writes ONLY the changed keys, so
+    /// two peers editing different properties concurrently merge via Loro per-key LWW
+    /// (no clobber); concurrent edits to the SAME property remain LWW. The command
+    /// stays coarse (a whole `ParagraphStyle`) -- only the storage granularity is per-key.
     SetParagraphStyle { block_id: TreeID, style: ParagraphStyle },
     ClearInlineMarks  { block_id: TreeID, range: (u32, u32) },
 
@@ -1249,6 +1328,15 @@ pub struct CursorPosition {
     pub offset:   u32,
     pub anchor:   Option<(TreeID, u32)>, // Some if selection
 }
+// A `loro::TreeID` is `(PeerID, Counter)` -- globally unique and portable across
+// peers, so a `block_id` / `anchor` carries the same meaning on every replica with
+// no remapping. The plain serde derive above is sufficient: TreeID is a plain
+// serializable tuple, so postcard round-trips CursorPosition with no custom logic.
+//
+// Best-effort presence rule (P-26): if a remote `CursorPosition.block_id` (or its
+// anchor) resolves to no live node -- the referenced node's delta has not been
+// applied yet, or the node was tombstoned -- the remote cursor is silently dropped
+// (no error). It reappears on its own once the delta lands and the node resolves.
 
 /// Peer-authored `Ephemeral` wire payload. Carries ONLY position + a self-asserted,
 /// cosmetic display name. It deliberately does NOT carry a `user_id`: the canonical
@@ -1413,7 +1501,7 @@ proptest! {
 | `LoroDoc::import()` -- delta 1 KB | < 2 ms |
 | `recalculate_pagination()` -- 100 pages, mocked heights | < 20 ms |
 | `recalculate_pagination()` -- 100 pages, 20 footnotes, header+footer | < 25 ms |
-| `recalculate_pagination()` -- partial invalidation 10 pages | < 3 ms |
+| `recalculate_pagination()` -- partial: edit whose reflow touches <= 10 pages | < 3 ms |
 | `postcard::to_allocvec(CursorPosition)` -- network `Ephemeral` payload | < 10 µs |
 
 ---
@@ -1425,14 +1513,25 @@ proptest! {
 | `InsertText` local: Loro txn + export delta | < 2 ms | Logic |
 | `import()` remote delta 1 KB | < 2 ms | Logic |
 | `recalculate_pagination()` total invalidation 100 pages | < 20 ms | Logic |
-| `recalculate_pagination()` partial invalidation (1 block, 10 pages) | < 3 ms | Logic |
-| `shape_dirty_blocks()` -- 10 modified blocks | < 5 ms | Logic |
+| `recalculate_pagination()` partial: edit whose reflow touches <= 10 pages | < 3 ms | Logic |
+| `shape_dirty_blocks()` -- 10 modified blocks (cold Parley shape) | < 5 ms | Logic |
+| Full cold shape at document open (~300 blocks, one-time, off interactive path) | < 150 ms | Logic |
 | `PageLayout` handoff 100 pages (`flume` by move, no serialization) | < 1 ms | Logic |
 | `export_snapshot()` doc 100 pages | < 10 ms | Logic |
+
+> **Shaping vs placement budgets (P-97):** `recalculate_pagination()` is
+> placement-dominated and ASSUMES shaped runs are already cached in the RunCache -- it
+> re-places blocks (page assignment + y), it does NOT re-shape them, which is why its
+> 100-page budget is < 20 ms. `shape_dirty_blocks()` is a cold Parley shape (glyph
+> layout) and is charged separately. A full cold shape of a freshly opened document
+> (~300 blocks) is a one-time cost off the interactive path (< 150 ms), never folded
+> into the < 20 ms pagination budget.
 
 **Memory:**
 - `LoroDoc` Prose: < 10 MB for a typical document (~100 pages, ~50,000 words).
 - `PageLayout` (100 pages, ~300 blocks, ~20 footnotes, header/footer runs): < 200 KB.
+- Phase 1 transient shaped layouts: peak < ~5 MB, released after Phase 2 (only
+  splitting blocks retain their full Parley Layout; the rest keep compact LineMetrics).
 
 **WASM size (`ambre-prose` excluding `loro` and `parley`):**
 
