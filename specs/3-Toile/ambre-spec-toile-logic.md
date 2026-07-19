@@ -650,7 +650,7 @@ payloads over the Sync thread, never as CRDT deltas — it must not enter histor
 > frame reaches the Logic thread — the UI never touches a cryptographic key. `PeerID` mints element ids (§2.A,
 > per-session/per-device) and is the wrong key for presence: the same user on two devices would otherwise
 > appear as two collaborators in two colors. The peer **color** and name label therefore hash the `UserId`
-> with the shared cross-app algorithm (`prose-ui::peer_color`), so a given collaborator is the **same color**
+> with the shared cross-app algorithm (`ambre_draw::peer::peer_color`), so a given collaborator is the **same color**
 > in Prose, Trame and Toile (`trame-ui §9`).
 
 ---

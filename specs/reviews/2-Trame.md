@@ -25,6 +25,15 @@ All findings were re-verified against the current `ambre-trame` / `ambre-bus` co
 
 ---
 
+## Corrections applied (2026-07-19, cross-app presence follow-up)
+
+Surfaced while pinning the canonical peer-color helper for the Prose review (`specs/reviews/4-Prose.md`, P-04/P-49).
+
+- **`UserId` newtype erased to raw `Uuid` in the presence + protection paths (NEW, extends T-62).** `trame-ui` declared `remote_cursors: HashMap<Uuid, RemoteCursor>` and `RemoteCursor.user_id: Uuid`, and `color_for_user(&Uuid)` — directly contradicting `trame-logic §9` (`RemoteCursor.user_id: UserId`, `apply_ephemeral(from_user_id: UserId)`) and the spec's own "`UserId` not `pub_key`" rationale. Also `trame-logic` `my_user_id: Uuid` and the range-protection enforcement (`allowed: Vec<Uuid>`, features §) used raw `Uuid`. Fixed: all in-memory user identity is now `UserId` end-to-end (CRDT still serializes `owner_user_id`/`allowed_user_ids` as Uuid-hex strings). `SessionReady` already emits `user_id: UserId`, so `my_user_id: UserId` also removes a latent mismatch.
+- **Canonical `peer_color` (finalizes T-62).** The shared helper is now defined in Foundation: `ambre_draw::peer::peer_color(user_id: &UserId) -> peniko::Color` (`ambre-spec-canvas.md §D`), seeded on the canonical `UserId`; `ambre-draw` takes a scoped `ambre-core` dep (`architecture.md §2` invariant updated). Trame's `color_for_user` is now a `&UserId` delegate to it.
+
+---
+
 ## Pass 1
 
 - Entry point: anchor `trame-logic`, all six taxonomy categories.

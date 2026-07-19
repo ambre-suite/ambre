@@ -529,9 +529,11 @@ An `Ephemeral` frame authenticates its author by the Ed25519 `public_data.pub_ke
 (verified at reception, sec.2.F). That key is **per-session/per-device**, so it is
 the wrong key for presence: the same user on two devices would otherwise show up as
 two collaborators in two colors, and it cannot be reconciled with the cross-app
-peer color/name (`prose-ui::peer_color`, hashed on `UserId`). The app engines
+peer color/name (`ambre_draw::peer::peer_color`, hashed on the canonical `UserId`;
+see `ambre-spec-canvas.md §D`). The app engines
 therefore require presence keyed by the **canonical `UserId`** (`toile-logic §7`,
-`trame-logic §7`): the Sync thread must resolve the author `pub_key` to a `UserId`
+`trame-logic §7`, `prose-logic §2` `apply_ephemeral`): the Sync thread must resolve
+the author `pub_key` to a `UserId`
 **before** delivering the frame, and it does so on the trusted side — a peer cannot
 put another user's id in the payload.
 

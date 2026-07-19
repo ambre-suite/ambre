@@ -286,6 +286,39 @@ pub struct KrillaSurface<'a, 'b> {
 
 > **Crate placement (`ambre-pdf`).** `KrillaSurface` lives in its own **`ambre-pdf`** crate (deps: `ambre-draw` + `krilla`, `default-features = false`), not inside an app crate: PDF export is app-agnostic (it only translates `DrawSurface` primitives to krilla calls), so every app renders through the same surface. The drawing API is on `krilla::surface::Surface` (obtained via `page.surface()`), so the wrapper borrows the `Surface`, not the `Page`. krilla's surface is top-left / Y-down like `DrawSurface` -- no coordinate flip. The clip stack and transform stack both map onto krilla's single push/pop instruction stack (`push_clip`/`push_transform` -> a push, `pop_*` -> `Surface::pop`); `DrawSurface`'s balanced-nesting contract keeps them paired. Text runs currently carry no `ToUnicode` mapping (glyph shapes render, but PDF text is not yet selectable) -- threading the cluster source text is a later refinement.
 
+#### Peer color -- `ambre_draw::peer::peer_color` (canonical, cross-app)
+
+Every application paints remote collaborators (cursors, selections, presence badges)
+in a **stable per-user color**. To guarantee that the same collaborator gets the same
+color in Prose, Trame, and Toile, the color function is defined **once** in `ambre-draw`
+and every app calls it -- no app reimplements the hash.
+
+```rust
+// ambre-draw/src/peer.rs
+use ambre_core::UserId;
+use peniko::Color;
+
+/// Deterministic per-user color, identical across all apps in the suite.
+/// Seeded on the **canonical `UserId`** (spoof-proof, resolved by `ambre-sync`,
+/// see `ambre-spec-sync.md` "Presence identity") -- never on the per-device
+/// `pub_key`, which changes on key rotation. peniko `Color` has no `from_hsl`,
+/// so we convert through a local `hsl_to_rgb` and return `Color::from_rgb8`.
+pub fn peer_color(user_id: &UserId) -> Color {
+    let bytes = user_id.as_uuid().as_bytes();
+    let hue = (u64::from_le_bytes(bytes[..8].try_into().unwrap())
+        .wrapping_mul(2654435761) >> 32) as f32
+        / u32::MAX as f32 * 360.0;
+    hsl_to_rgb(hue, 0.70, 0.55) // saturation 70%, lightness 55%
+}
+```
+
+> **Dependency note.** Seeding on the canonical `UserId` (not raw `Uuid`) keeps the
+> newtype end-to-end through every presence path, so `ambre-draw` takes a light
+> dependency on **`ambre-core`** (types only -- no GPU, no crypto). This is the sole
+> exception to the "`kurbo`/`peniko`/`parley` only" rule (see `ambre-spec-architecture.md`).
+> Consumers: `prose` (`prose-ui` remote cursors), `trame` (`color_for_user`),
+> `toile` (peer presence) -- all call `ambre_draw::peer::peer_color`, none reimplement it.
+
 ---
 
 ### E. High DPI / Scaling
