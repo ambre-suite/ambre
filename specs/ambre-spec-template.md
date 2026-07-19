@@ -5,6 +5,17 @@
 > Concise description of the component's single responsibility. Definition of the technical or functional problem being solved.
 > **Note:** This template is modular. Ignore or remove irrelevant sections for your scope (e.g., no CRDT for a pure calculation engine).
 
+---
+
+## 0. CODE IN SPECS (CONVENTION)
+> A spec states **what** and **why**; the source states **how**. Duplicating implementation here creates a second, uncompiled copy that silently drifts from the code. Follow this rule in every section below.
+
+* **Allowed (this is the contract):** type and data-model definitions -- `struct`, `enum`, trait signatures, public API signatures, IPC / event / message shapes, `#[derive(...)]`. These define the shape others must respect and belong in the spec.
+* **Allowed (declarative):** invariants, pre/post-conditions, and algorithms described as numbered steps or pseudo-code. Describe the algorithm, not its Rust transcription.
+* **Forbidden:** complete function bodies (`fn foo(&mut self, ...) { ... }` with real logic). Replace them with (a) a one-line description of the algorithm, (b) the invariant it upholds, and (c) a pointer to the real code (`// ambre-crate/src/module.rs`).
+* **Illustrative only:** a short example test or snippet is fine to clarify intent; the authoritative test suite lives in the repo, never mirrored here.
+* **Decision test:** if a block can be copy-pasted into a `.rs` file and compiled as behavior, it is implementation and does not belong in a spec. If it is a shape declaration or a described algorithm, it does.
+
 ## 1. OBJECTIVES & CONSTRAINTS
 * **Scope:** Strict definition of the component's boundaries. What it handles vs. what it delegates.
 * **Dependencies:** List of internal or external crates. Systematic justification for any new dependency.
