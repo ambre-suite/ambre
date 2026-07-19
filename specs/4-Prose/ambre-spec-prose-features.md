@@ -99,8 +99,13 @@ pub const MARK_CROSS_REF:     &str = "ref";  // value = "{target_block_id}:{kind
 | `a` (link) | `None` | An adjacent insertion to a link should not become part of it. |
 | `cm`, `si`, `sd`, `fn`, `ref` | `None` | Annotations do not auto-extend. |
 
-**Note:** `superscript` and `subscript` are mutually exclusive -- `resolve_style` ignores
-`subscript` if `superscript` is active on the same range, and vice versa.
+**Note (P-81):** `superscript` and `subscript` are two INDEPENDENT boolean marks. Both may
+legally COEXIST on the same range in the CRDT -- neither write clears the other, so no ordering
+rule is required. "Superscript wins" is a STATIC render-time priority applied by `resolve_style`
+(fixed priority `superscript` > `subscript`): when both are active it renders as superscript and
+ignores subscript. Because the priority is fixed and evaluated at read time -- not a write-order
+tie-break -- the resolved style is deterministic and CRDT-stable regardless of the order in which
+concurrent `superscript`/`subscript` marks arrive.
 
 #### Style Cascade
 
@@ -153,6 +158,12 @@ pub enum TextAlign { #[default] Left, Center, Right, Justify }
 #[derive(Debug, Clone, Copy)]
 pub enum LineHeight { Multiple(f32), Exact(f32), AtLeast(f32) }
 ```
+
+**Note (P-83):** paragraph style is stored as a per-property `LoroMap` (one key per
+`ParagraphStyle` field), not a single opaque blob -- canonical storage lives in Logic §C.
+`SetParagraphStyle` writes only the keys that changed, so two concurrent edits to DIFFERENT
+properties (e.g. `align` vs `space_after`) merge cleanly via Loro per-key LWW; concurrent edits
+to the SAME property remain LWW.
 
 Commands (aligned with `ProseCommand` -- source of truth in `prose-engine`):
 
@@ -1392,6 +1403,12 @@ SetSpellCheckLang     { lang: String },
 AcceptSpellSuggestion { block_id: TreeID, range: (u32, u32), replacement: String },
 AddToDictionary       { word: String },
 ```
+
+**Note (P-84):** the custom dictionary written by `AddToDictionary` is PER-USER, not per-doc.
+It lives in the encrypted user-settings store (under the user's OWN key), NEVER in the document
+`LoroDoc` -- this preserves the zero-knowledge boundary: nothing new crosses the relay. For MVP it
+is local-only (browser persistent storage), with no cross-device sync; cross-device sync via the
+user-settings channel is post-MVP.
 
 ---
 

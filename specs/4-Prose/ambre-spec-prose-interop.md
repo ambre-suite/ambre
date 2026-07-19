@@ -261,6 +261,24 @@ pub struct IrParaStyle {
     pub keep_with_next: bool,          // logic ParagraphStyle.keep_with_next (§C)
 }
 
+/// Character-formatting defaults carried by a named style (P-118). Purpose-built like
+/// `IrParaStyle`: only optional formatting fields, and NONE of the content-bearing fields of
+/// `IrRun` (text, comment_id, footnote_ref, field, cross_ref). Maps cleanly to a docx
+/// `w:style/rPr`.
+#[derive(Debug, Clone, Default)]
+pub struct IrRunStyle {
+    pub bold:          Option<bool>,
+    pub italic:        Option<bool>,
+    pub underline:     Option<bool>,
+    pub strikethrough: Option<bool>,
+    pub superscript:   Option<bool>,
+    pub subscript:     Option<bool>,
+    pub font_family:   Option<String>,
+    pub font_size:     Option<f32>,
+    pub color:         Option<u32>,   // 0x00RRGGBB, same byte order as IrRun.color
+    pub background:    Option<u32>,   // 0x00RRGGBB, same byte order as IrRun.background
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum IrTextAlign { Left, Center, Right, Justify }
 
@@ -281,7 +299,7 @@ pub struct IrStyle {
     pub id:         String,
     pub name:       String,
     pub para_style: IrParaStyle,
-    pub run_style:  IrRun,  // default values
+    pub run_style:  IrRunStyle,  // default character formatting -> docx w:style/rPr (P-118)
 }
 ```
 
