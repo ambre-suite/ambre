@@ -260,6 +260,11 @@ Stories:
   (see `CANVAS P1` addendum) so full-color emoji works cross-app. The three remaining `§9` items are Phase 2
   optimizations — incremental reflow, Smart Animate snapshot caching, sequence-panel virtualization — out of the
   Phase 0/1 scope.)*
+  > **Scope note — auto-layout & boolean ops are EXPERIMENTAL, out of MVP (frozen).** Per the Toile identity
+  > (`toile-logic §0`: a Miro, not a Figma), the `solve_layout` constraint solver and the `i_overlay` boolean
+  > ops are the Figma vector-fabrication metier, not the whiteboard job. They are implemented and stay in the
+  > tree, but receive **no MVP stabilization budget**, carry no UI/quality promise, and are V2-or-removal
+  > candidates. MVP bug-fixing goes to the core whiteboard + presentation path only.
 - `[x]` `toile-interop §10 Phase 0/1` — SVG import/export, raster import, safety limits, media hashing + placeholder;
   then PDF export (presentation order), Figma/Miro converters, media pipeline on the crypto/Sync layer.
   Golden fixtures + wasm export tests. *(Phase 0 landed: pure, host-tested `ambre-toile/src/logic/interop/` —
@@ -273,6 +278,17 @@ Stories:
   presentation frame clipped to its spatial rect (§3.A), Figma/Miro converters (components -> plain elements,
   auto-layout deferred + reported), eager font fetch at Logic-worker boot, browser download path, host + wasm
   export tests. `krilla` behind a `pdf` feature; runtime lazy-loading deferred (§8).)*
+- `[ ]` **Toile Miro-parity (MVP gaps)** — features present in Miro but missing from the as-built MVP, now
+  specced across the four Toile docs. **Comments** (anchored CRDT threads with replies + resolve —
+  `toile-features §4.D`, `toile-logic §2.J/§9`, `toile-ui §4/§5sexies`); **connector labels** (edge captions,
+  `toile-logic §5.B`); **hyperlinks / go-to-frame** (`LinkTarget`, `toile-logic §2.K`, followed in `toile-ui §4`);
+  **align / distribute** (`ArrangeElements`, `toile-logic §8`, `toile-ui §5quinquies.B`). Per-spec Phase-1b/1c
+  checkboxes track it. Comments are the structuring one (new CRDT object + panel + pins); the other three are
+  small. Belongs to Epic **E4** (Toile MVP).
+- `[ ]` **Toile facilitation & workflow layer (deferred, post-MVP)** — Miro's next tier, out of MVP:
+  **templates** (preset boards via the import path, `toile-interop §2.F`), **cards + tags** (agile element model,
+  `toile-logic §2.C`), **shared timer + voting session** (`toile-features §4.E`), **minimap** (`toile-ui §3`).
+  Tracked under Epic **E6** (Toile Phase 2 / deferred).
 - `[x]` **New-document type picker (launcher, `CHROME P4` addendum)** — the `E2` launcher create action was
   hardcoded to Trame (`landing.rs`, `trame_chrome::DOC_TYPE`) while Trame was the only product. Toile is the
   second creatable type, so the "new document" action became an app-agnostic `NewDocPicker` dropdown iterating

@@ -191,6 +191,13 @@ model). The preference is view-local (§11bis); MVP keeps it in-memory (not pers
 `zoom` changes (powers of the board `grid_size`); snapping (when `board.grid_snap`) quantizes drag/resize
 results to the current step before the command is emitted.
 
+> **Minimap (DEFERRED — post-MVP).** A large infinite board is hard to navigate by pan/zoom alone, so Miro shows
+> a corner **minimap**: a scaled-down overview of the whole board's content extent with a draggable viewport
+> rectangle for instant jump-to. In Toile this is a pure UI concern — a second small viewport painted last in the
+> render loop (§9), fed by the board content bounds (a cheap union already available from the R-tree root AABB,
+> `toile-logic §3`), with a drag on the rectangle emitting a local camera move. No CRDT, no Logic change beyond
+> exposing the content extent. Toggled from the View menu (§5quinquies.E). Out of MVP scope; see the roadmap.
+
 ---
 
 ## 4. HIT-TESTING
@@ -235,6 +242,18 @@ own focus on top. A remote peer's focus is not our focus.
 (id, type, screen-space rect, focused) for `FrameHost`, which owns the child `AppView`s and paints them clipped
 over the parent's content pass.
 
+**Comment pins.** `DisplayViewport.comments` (`toile-logic §9`) is hit-tested **before** the element pass — a pin
+floats above content (screen-space fixed radius, so it is not scaled by zoom). A click on a pin opens the thread
+panel (§5sexies) on that thread; the Comment tool (§5) clicks elsewhere to drop a new one. Pins are painted last,
+after the node pass and presence overlay, in the §9 render loop.
+
+**Following a link (`LinkTarget`, `toile-logic §2.K`).** A `DisplayElement.linked` element shows a link
+affordance (a small glyph on hover). Activation is modal: with the **Select** tool, `Ctrl/Cmd`-click (or a click
+on the affordance glyph) follows the link; in **presentation mode** (`toile-features §1`) a plain click follows
+it, since editing is off. Following is entirely local — `Frame` runs a camera fly-to the target frame's bounds,
+`Url` is handed to the shell (sandboxed new tab), `Document` asks the shell to open that Ambre document. A plain
+Select click still just selects, so linking never blocks editing.
+
 ---
 
 ## 5. TOOLS (INPUT STATE MACHINE)
@@ -252,6 +271,7 @@ pub enum Tool {
     Connector,                      // drag from element anchor to element anchor
     Draw,                           // freehand: sample points, stream, CommitStroke on release
     Text,                           // click to place a text element, enter inline edit
+    Comment,                        // click an element or empty canvas to drop a comment thread (§4.D, features §4.D)
     Hand,                           // pan-only (space-drag also pans in any tool)
 }
 ```
@@ -266,6 +286,7 @@ pub enum Tool {
 | Shape | drag-rect | `CreateElement` | rubber-band |
 | Connector | anchor→anchor | `CreateConnector` | rubber-band from source anchor |
 | Draw | press-move-release | `CommitStroke` | per-sample live stroke frame |
+| Comment | click element / empty | `CreateComment { anchor, body }` (features §5) then open composer | — |
 
 **Snapping & alignment.** During Select drags the UI computes local snap guides (element edges/centers,
 frame bounds, grid) and quantizes before emitting — a pure UI concern, never persisted.
@@ -320,8 +341,10 @@ free.
 not canvas — §1). Entries map one-to-one to existing commands, greyed out when inapplicable:
 Cut / Copy / Paste / Duplicate (§5ter), Delete (`DeleteElements`), Group / Ungroup (`GroupElements` /
 `UngroupElements`), Bring to Front / Send to Back / Forward / Backward (`Reorder` with the matching `ZTarget`),
-Lock / Unlock (`LockElements`), Add to / Remove from frame (`SetFrameChildren`). On empty canvas the menu offers
-Paste and Select-All only.
+Lock / Unlock (`LockElements`), Add to / Remove from frame (`SetFrameChildren`), Align / Distribute
+(`ArrangeElements`, enabled on a multi-selection), Add / Edit / Remove link (`SetLink`, single selection), and
+Comment (`CreateComment` anchored to the element). On empty canvas the menu offers Paste, Select-All, and Comment
+here (a `Point`-anchored thread).
 
 ---
 
@@ -352,7 +375,7 @@ canvas-drawn. Each surface is a thin reactive view over `ambre-commands` registr
 
 ### A. Tool palette (primary toolbar)
 A vertical (or floating) `ambre-chrome` `Toolbar` exposing one button per Toile tool — Select, Vector Pen,
-Shape, Connector, Draw (freehand), Sticky, Text (§5) — plus zoom/hand affordances. Each button is a `Command`
+Shape, Connector, Draw (freehand), Sticky, Text, Comment (§5) — plus zoom/hand affordances. Each button is a `Command`
 whose `CommandState.active` reflects the current `Tool`, so exactly one tool reads as selected; clicking emits
 `SetTool` (the same signal the keyboard shortcut resolves to). The canvas-side `ToolMachine` stays the sole
 consumer of the active tool (§1bis); the palette only drives the selection. Tool sub-options that are not
@@ -369,6 +392,13 @@ also surfaces the z-order actions (Bring to Front / Send to Back / Forward / Bac
 matching `ZTarget`) and Lock / Unlock (`LockElements`), mirroring the context menu (§5ter). Values shown are
 the common value across the selection, or a mixed-state indicator when they differ. The panel is pure view
 state; it holds no authoritative style.
+
+On a **multi-selection** the inspector also shows an **Arrange** row — align Left/HCenter/Right/Top/VCenter/
+Bottom and distribute Horizontal/Vertical — each button emitting one `ArrangeElements { ids, op }`
+(`toile-logic §8`); the distribute buttons enable only at >= 3 elements. On a **single** selection it shows a
+**Link** control (`toile-logic §2.K`): a small popover to set/clear a `LinkTarget` (URL, a frame on this board
+picked from a list, or another document), emitting `SetLink { id, link }`. Both mirror entries also present in
+the Object menu and context menu (§5ter/§E) so the surfaces never diverge.
 
 ### C. Color picker
 A reusable `ambre-chrome` popover component consumed by the inspector (fill / stroke) and the text-run
@@ -388,7 +418,9 @@ rotate) and when the selection is empty.
 A top `ambre-chrome` `Menu` bar for low-frequency actions grouped by menu (File / Edit / View / Object /
 Present), each entry a registry `Command` with its keybinding shown — including the entries that have no
 palette button (Undo/Redo -> `ToileCommand::Undo`/`Redo`, Select All, the presentation entry point that opens
-the sequence panel of `toile-features §9`). A **zoom control** (zoom out / % / zoom in / Fit / Zoom-to-
+the sequence panel of `toile-features §9`). The **Object** menu carries Align / Distribute (`ArrangeElements`)
+and Add / Edit / Remove link (`SetLink`); the **View** menu toggles the comments panel (§5sexies) and the
+minimap (§3, deferred). A **zoom control** (zoom out / % / zoom in / Fit / Zoom-to-
 selection) lives here and mirrors the `zoom %` the status bar reports (§8bis); zoom changes update
 `ViewportTransform` locally and forward `SetViewport` to Logic (§3), never a round-trip for the transform
 itself.
@@ -396,6 +428,18 @@ itself.
 > **Scope note (MVP).** These surfaces are the editing chrome that Focus Mode hides (`toile-features §1.B`).
 > The share dialog is the app-agnostic chrome already delivered under `E2` (Document sharing UI); the present/
 > playback controls and presenter overlay panel are owned by `toile-features §9`, not duplicated here.
+
+## 5sexies. COMMENTS PANEL (DOM)
+
+A `ambre-chrome` side panel for the anchored comment threads (`toile-features §4.D`), same plumbing as the Find
+panel (§5quater) — DOM/Leptos over the command channel, never a canvas overlay. It opens when a comment **pin**
+is clicked (§4), when the Comment tool drops a new thread, or from the View menu (§E, board-wide list). It shows
+the selected thread's messages (author, relative time from the display-only `ts`, body) with a composer, and a
+Resolve/Reopen toggle (`ResolveThread`); the board-wide mode lists all threads filterable by open/resolved and
+recenters the camera on a thread's anchor when picked. Posting/replying/editing emit `CreateComment` /
+`ReplyComment` / `EditComment`; the panel re-reads a thread on `ToileEvent::CommentsUpdated` and opens the
+composer on `CommentThreadOpened`. Pin badges (message count, resolved state) come from `DisplayViewport.comments`
+and need no panel read. The panel holds no authoritative state.
 
 ---
 
@@ -406,6 +450,15 @@ Sticky and text elements edit in place: the UI opens a Parley-backed editor over
 CRDT, `toile-logic §2.D`). Layout — line breaking, run styling, cursor/selection geometry — is Parley; glyphs
 are rasterized by Swash into the shared atlas. The formula-bar/toolbar equivalents for rich text (bold, size,
 color) mutate `ElementStyle`/runs and emit `RestyleElements` or `EditText`.
+
+**Connector labels (`toile-logic §5.B`).** `DisplayConnector.label` is painted as text centered on the routed
+path midpoint (a small opaque pill behind it for legibility over crossing edges). Double-clicking a connector
+opens the **same** Parley inline editor over that midpoint and emits `EditConnectorLabel { id, delta }` — the
+connector's own `LoroText`, so two authors captioning one edge converge char-wise. An empty label paints nothing.
+
+**Comment composer & messages.** The comment panel (§5sexies) reuses the same Parley editor for composing and
+editing a message body; posting emits `CreateComment`/`ReplyComment` and self-edits emit `EditComment` (features
+§5). A message body is a `LoroText`, so a self-edit converges like any other rich text.
 
 ---
 
@@ -461,6 +514,11 @@ transform change (pan/zoom), an in-flight gesture, or a live presence update all
 zero GPU work. (This mirrors the renderer-stack discipline already validated on the project: WebGL2 fallback
 concerns are handled at the `WgpuSurface` layer, not here.)
 
+**Paint order per frame:** (1) the culled `nodes` pass (elements + connectors, incl. connector labels §6),
+back-to-front by z-order; (2) the presence overlay (§8); (3) the **comment pins** from
+`DisplayViewport.comments`, screen-space fixed size, always on top so a pin is never occluded by board content
+(`toile-logic §9`). The optional minimap (§3, deferred) paints last, in its own corner viewport.
+
 ---
 
 ## 10. QUALITY & TESTABILITY
@@ -476,7 +534,11 @@ concerns are handled at the `WgpuSurface` layer, not here.)
   keyboard shortcut and context-menu entry emits the expected command (§5, §5ter); group-selection resolution
   (click selects the enclosing group, double-click enters, `Escape` leaves); the find panel emits `Find` with
   the right options and steps `focus` on `Enter`/`Shift+Enter` (§5quater); a non-trivial selection change emits
-  `RequestSelectionStats` and the band renders `count`/`bounds`/zoom (§8bis). Target: every predicate branch of
+  `RequestSelectionStats` and the band renders `count`/`bounds`/zoom (§8bis); a comment-pin click opens the
+  thread panel and the Comment tool emits `CreateComment` with the right anchor (§4/§5sexies); `Ctrl`-click on a
+  linked element (and a plain click in present mode) follows the `LinkTarget` (§4); a double-click on a connector
+  emits `EditConnectorLabel` (§6); the Arrange row emits `ArrangeElements` with distribute disabled below 3
+  elements (§5quinquies.B). Target: every predicate branch of
   hit-testing, the tool machine, and the selection-scope resolver.
 - **CRDT convergence:** N/A (no CRDT state in this module — it renders `DisplayViewport` and emits commands).
 - **Mocks & Environment:** `CommandSink` to assert emitted commands; a fake `DisplayViewport` feed to drive
@@ -640,8 +702,15 @@ lives in Logic, keyed on change size.
   cluster (§5quinquies.E) and the floating selection toolbar (§5quinquies.D) firing on the shared sink.
   The pure models stay host-tested in `ui::{status,menu,menu_bar,palette}`.
 
+**Phase 1c - Miro-parity UI gaps (MVP)**
+- [ ] Comment tool + pin render/hit-test + comments panel (`§4`/`§5sexies`) driven by `DisplayViewport.comments`
+- [ ] Connector-label render at path midpoint + double-click inline edit -> `EditConnectorLabel` (`§6`)
+- [ ] Link affordance + follow (`Ctrl`-click / present-mode click): camera fly-to frame, shell open url/doc (`§4`)
+- [ ] Arrange row in the inspector + Object menu -> `ArrangeElements` (`§5quinquies.B`)
+
 **Phase 2 - Optimization**
 - [ ] Glyph-atlas eviction
 - [ ] Tessellation-cache tuning
 - [ ] Presence render batching
 - [ ] Large-board frame-time profiling
+- [ ] Minimap overview + jump-to (`§3`, deferred)
