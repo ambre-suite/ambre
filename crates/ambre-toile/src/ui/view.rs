@@ -47,8 +47,49 @@ use ambre_commands::CommandId;
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::{GetUntracked, RwSignal, Set};
 
-/// One notch of the mouse wheel maps to this zoom factor (ctrl+wheel / pinch).
+/// One notch of the mouse wheel maps to this zoom factor (wheel / pinch).
 const ZOOM_PER_WHEEL_PX: f64 = 0.0018;
+
+/// A wheel `|dy|` at or above this (physical px, `delta_mode == pixel`) reads as a
+/// discrete mouse notch rather than a fine trackpad glide -- the auto heuristic's
+/// mouse threshold (`toile-ui §3`).
+const WHEEL_MOUSE_NOTCH_PX: f64 = 40.0;
+
+/// Pure device classifier for one wheel event in `Auto` mode (`toile-ui §3`).
+/// `Some(true)` = mouse, `Some(false)` = trackpad, `None` = signal too weak to
+/// change the latched guess. Signals, strongest first: a non-pixel `delta_mode`
+/// is a classic line/page wheel; a non-zero `dx` is a two-axis trackpad glide; a
+/// large `|dy|` with no `dx` is a discrete mouse notch.
+fn wheel_device(dx: f64, dy: f64, delta_mode: u32) -> Option<bool> {
+    if delta_mode != 0 {
+        Some(true)
+    } else if dx != 0.0 {
+        Some(false)
+    } else if dy.abs() >= WHEEL_MOUSE_NOTCH_PX {
+        Some(true)
+    } else {
+        None
+    }
+}
+
+/// How the wheel navigates the board (`toile-ui §3`). A whiteboard is a 2D
+/// infinite plane, so the natural gestures differ by device: on a mouse the wheel
+/// should zoom (map-like), on a trackpad two-finger scroll should pan and pinch
+/// should zoom. `Auto` classifies the device per event from the `WheelEvent`
+/// signature; `Mouse` / `Trackpad` force a mode and freeze that detection (the
+/// user chose in the View menu, we obey). Pan is always also available by
+/// dragging (Hand tool / Space-drag).
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum PointerMode {
+    /// Detect the device per event; fall back to trackpad behaviour until a
+    /// confident mouse signature latches (the gentler wrong default).
+    #[default]
+    Auto,
+    /// The wheel always zooms about the cursor, with or without Ctrl.
+    Mouse,
+    /// The wheel pans; only Ctrl+wheel / pinch zooms.
+    Trackpad,
+}
 
 /// Keyboard-nudge step in world units: a fine 1-unit tap, or a coarse 10-unit
 /// jump with Shift held (`toile-ui §5`).
@@ -118,6 +159,14 @@ pub struct ToileView {
     panning: Option<Point>,
     /// Space held: a drag pans in any tool (§5).
     space_down: bool,
+
+    /// Wheel navigation preference (§3): `Auto` (default), or a forced `Mouse` /
+    /// `Trackpad` set from the View menu.
+    pointer_mode: PointerMode,
+    /// Latched device guess while `pointer_mode == Auto`. Starts `false` (trackpad,
+    /// the gentler wrong default, §3) and flips to `true` on a confident mouse-wheel
+    /// signature, back on a two-axis trackpad glide.
+    detected_mouse: bool,
 
     text_input: TextInput,
     perf_pub: PerfPublisher,
@@ -311,6 +360,8 @@ impl ToileView {
             last_pointer: Point::new(canvas_width / 2.0, canvas_height / 2.0),
             panning: None,
             space_down: false,
+            pointer_mode: PointerMode::default(),
+            detected_mouse: false,
             text_input,
             perf_pub,
             theme_ctl,
@@ -538,17 +589,39 @@ impl ToileView {
 
     // -- Input handling --------------------------------------------------------
 
-    fn handle_wheel(&mut self, dx: f64, dy: f64, ctrl_key: bool) -> bool {
-        if ctrl_key {
-            // Pinch / ctrl-wheel zoom about the cursor.
+    fn handle_wheel(&mut self, dx: f64, dy: f64, delta_mode: u32, ctrl_key: bool) -> bool {
+        // Zoom vs pan is decided by the pointer mode (§3). Ctrl (or a trackpad
+        // pinch, which the browser reports as a ctrl-wheel) always zooms.
+        let zoom = match self.pointer_mode {
+            PointerMode::Mouse => true,
+            PointerMode::Trackpad => ctrl_key,
+            PointerMode::Auto => {
+                self.classify_wheel(dx, dy, delta_mode);
+                ctrl_key || self.detected_mouse
+            }
+        };
+        if zoom {
+            // Zoom about the cursor. A trackpad pinch and a mouse notch both land
+            // here; only `dy` drives the factor.
             let factor = (-dy * ZOOM_PER_WHEEL_PX).exp();
             self.cam.zoom_about(self.last_pointer, factor);
         } else {
-            // Two-finger / wheel scroll pans.
+            // Two-finger scroll pans the 2D plane in both axes.
             self.cam.pan_by_screen(Vec2::new(dx, dy));
         }
         self.queue_viewport();
         true
+    }
+
+    /// Classify the device behind a wheel event while in `Auto` mode and update the
+    /// latched guess (`detected_mouse`). Signals, strongest first: a non-pixel
+    /// `delta_mode` is a classic line/page wheel (mouse); a non-zero `dx` is a
+    /// two-axis trackpad glide; a large `|dy|` with no `dx` is a discrete mouse
+    /// notch. Ambiguous fine glides leave the latch unchanged (§3).
+    fn classify_wheel(&mut self, dx: f64, dy: f64, delta_mode: u32) {
+        if let Some(mouse) = wheel_device(dx, dy, delta_mode) {
+            self.detected_mouse = mouse;
+        }
     }
 
     fn apply_outcome(&mut self, out: ToolOutcome) {
@@ -978,6 +1051,20 @@ impl ToileView {
                         ids: self.selection.clone(),
                     });
                 }
+                return;
+            }
+            // Wheel navigation preference (§3): pure view-local state, no viewport
+            // change and no Logic round-trip. A forced mode overrides auto-detect.
+            mb::POINTER_AUTO => {
+                self.pointer_mode = PointerMode::Auto;
+                return;
+            }
+            mb::POINTER_MOUSE => {
+                self.pointer_mode = PointerMode::Mouse;
+                return;
+            }
+            mb::POINTER_TRACKPAD => {
+                self.pointer_mode = PointerMode::Trackpad;
                 return;
             }
             _ => {}
@@ -1692,8 +1779,11 @@ impl ToileView {
         }
         match ev {
             InputEvent::Wheel {
-                dx, dy, ctrl_key, ..
-            } => self.handle_wheel(*dx, *dy, *ctrl_key),
+                dx,
+                dy,
+                delta_mode,
+                ctrl_key,
+            } => self.handle_wheel(*dx, *dy, *delta_mode, *ctrl_key),
             InputEvent::PointerDown { x, y, button, .. } => {
                 self.handle_pointer_down(*x, *y, *button)
             }
@@ -1871,4 +1961,33 @@ fn canvas_client_offset() -> (f64, f64) {
             (r.left(), r.top())
         })
         .unwrap_or((0.0, 0.0))
+}
+
+#[cfg(test)]
+mod wheel_tests {
+    use super::{WHEEL_MOUSE_NOTCH_PX, wheel_device};
+
+    #[test]
+    fn line_or_page_delta_mode_is_a_mouse() {
+        // A classic wheel reports line (1) or page (2) units.
+        assert_eq!(wheel_device(0.0, 3.0, 1), Some(true));
+        assert_eq!(wheel_device(0.0, 1.0, 2), Some(true));
+    }
+
+    #[test]
+    fn horizontal_component_is_a_trackpad() {
+        // Mice have no horizontal wheel axis; a non-zero dx means two fingers.
+        assert_eq!(wheel_device(4.0, 12.0, 0), Some(false));
+    }
+
+    #[test]
+    fn large_vertical_notch_is_a_mouse() {
+        assert_eq!(wheel_device(0.0, WHEEL_MOUSE_NOTCH_PX, 0), Some(true));
+    }
+
+    #[test]
+    fn fine_vertical_glide_is_ambiguous() {
+        // A small pixel-mode dy with no dx could be either; keep the latch.
+        assert_eq!(wheel_device(0.0, 6.0, 0), None);
+    }
 }

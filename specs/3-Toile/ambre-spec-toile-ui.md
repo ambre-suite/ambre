@@ -164,6 +164,29 @@ impl ViewportTransform {
 > input. The UI forwards each change as `SetViewport(Viewport)` so Logic re-culls, but never waits on it to
 > paint. The two are kept in phase by that one-way `SetViewport` flow; Logic never pushes a transform back.
 
+**Navigation gestures.** The board is a 2D infinite plane, not a vertical document, so the natural wheel
+gesture differs by device: on a **mouse** the wheel should *zoom* about the cursor (map-like); on a
+**trackpad** two-finger scroll should *pan* both axes and pinch should zoom. There is no single correct
+default, so the view carries a `PointerMode` preference (View menu, §5quinquies.E):
+
+| `PointerMode` | Wheel | Ctrl+wheel / pinch |
+|---|---|---|
+| `Auto` (default) | zoom or pan, per detected device | zoom |
+| `Mouse` | zoom about cursor | zoom |
+| `Trackpad` | pan (both axes) | zoom |
+
+`Ctrl`+wheel (and a trackpad pinch, which the browser reports as a `ctrl_key` wheel event) **always** zooms,
+in every mode. Panning is *also* always available by dragging -- the Hand tool or `Space`-drag in any tool
+(§5) -- independent of the wheel mode.
+
+**Auto-detection.** In `Auto`, each `WheelEvent` is classified from its signature, strongest signal first:
+a non-pixel `delta_mode` (line/page) is a classic wheel -> **mouse**; a non-zero `dx` is a two-axis glide ->
+**trackpad**; a large `|dy|` with no `dx` is a discrete notch -> **mouse**. Fine ambiguous glides leave the
+latched guess unchanged, which **starts at `Trackpad`** -- the gentler wrong default (a mouse user's wheel
+merely pans instead of zooming, versus a trackpad user's two-finger scroll zooming abruptly). Choosing `Mouse`
+or `Trackpad` in the View menu **forces** the mode and freezes detection (the user chose, we obey -- Miro's
+model). The preference is view-local (§11bis); MVP keeps it in-memory (not persisted across sessions).
+
 **Adaptive magnetic grid.** The grid step is chosen so the on-screen spacing stays in a comfortable band as
 `zoom` changes (powers of the board `grid_size`); snapping (when `board.grid_snap`) quantizes drag/resize
 results to the current step before the command is emitted.
