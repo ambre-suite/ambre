@@ -40,6 +40,12 @@ pub const ZOOM_RESET: CommandId = CommandId("toile.view.zoom_reset");
 pub const ZOOM_FIT: CommandId = CommandId("toile.view.zoom_fit");
 /// Fit the current selection into the viewport (Zoom-to-selection).
 pub const ZOOM_TO_SELECTION: CommandId = CommandId("toile.view.zoom_to_selection");
+/// Wheel navigation preference (§3), all view-local: `Auto` detects the device
+/// per event, `Mouse` makes the wheel zoom, `Trackpad` makes it pan (Ctrl/pinch
+/// still zooms).
+pub const POINTER_AUTO: CommandId = CommandId("toile.view.pointer_auto");
+pub const POINTER_MOUSE: CommandId = CommandId("toile.view.pointer_mouse");
+pub const POINTER_TRACKPAD: CommandId = CommandId("toile.view.pointer_trackpad");
 /// Enter presentation mode (the sequence panel of `toile-features SS9`). A stub
 /// here: the panel is owned by that feature, not this surface.
 pub const PRESENT: CommandId = CommandId("toile.present.start");
@@ -54,6 +60,9 @@ pub const MENU_BAR_COMMANDS: &[CommandId] = &[
     ZOOM_RESET,
     ZOOM_FIT,
     ZOOM_TO_SELECTION,
+    POINTER_AUTO,
+    POINTER_MOUSE,
+    POINTER_TRACKPAD,
     PRESENT,
 ];
 
@@ -140,6 +149,10 @@ pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
             MenuRow::Separator,
             MenuRow::bare(ZOOM_FIT, "Fit to content"),
             MenuRow::bare(ZOOM_TO_SELECTION, "Zoom to selection"),
+            MenuRow::Separator,
+            MenuRow::bare(POINTER_AUTO, "Pointer: automatic"),
+            MenuRow::bare(POINTER_MOUSE, "Pointer: mouse (wheel zooms)"),
+            MenuRow::bare(POINTER_TRACKPAD, "Pointer: trackpad (wheel pans)"),
         ],
         MenuId::Object => vec![
             MenuRow::item(menu::GROUP, "Group", KeyBinding::ctrl('g')),
