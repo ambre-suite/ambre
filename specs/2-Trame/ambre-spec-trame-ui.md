@@ -2,7 +2,7 @@
 **Type:** Vertical (Feature / Application — UI)
 **Status:** Draft
 
-> Rendering and interaction layer of the Trame spreadsheet. Runs exclusively in the **UI thread** (main JS thread). Receives `TrameViewUpdate` (via `LogicEnvelope::ViewportUpdate`) from the Logic thread via `postMessage`, renders the grid via `WgpuSurface` (QuadRenderer + GlyphAtlas), and translates user events into `TrameCommand` sent back to the Logic thread. PDF export will be generated in the **Logic thread** via `KrillaSurface` (implementation of the shared `DrawSurface` trait) so as not to block the UI thread.
+> Rendering and interaction layer of the Trame spreadsheet. Runs exclusively in the **UI thread**. Receives typed [`TrameEvent`](../../crates/ambre-bus/src/app/trame/event.rs) values (carried by move inside `AppEvent::Trame` over the shared-memory `flume` plane -- **no** `postMessage`, **no** postcard on this hop; `-logic.md` §9, `spec-ambre-architecture.md §2/§6`) from the Logic thread, renders the grid via `WgpuSurface` (QuadRenderer + GlyphAtlas), and translates user events into `TrameCommand` sent back to the Logic thread the same way. PDF export will be generated in the **Logic thread** via `KrillaSurface` (implementation of the shared `DrawSurface` trait) so as not to block the UI thread.
 >
 > This spec covers: virtual scrolling, wgpu/lyon/Parley/Swash rendering pipeline, inline editing, formula bar, autocompletion, freeze, sparklines, charts, multi-user cursors, and PDF export via `krilla`.
 >
@@ -39,9 +39,10 @@
 | `swash` | Glyph rasterization | Glyphs → bitmap R8 → GlyphAtlas GPU. |
 | `ambre-draw` | `DrawSurface` trait + types | Unified screen/PDF interface. |
 | `krilla` | PDF generation | Instantiated in the **Logic thread** via `KrillaSurface`. |
-| `wasm-bindgen` | JS <-> Rust bridge for postMessage | Glue UI thread <-> Logic thread |
+| `ambre-bus` | Typed data plane: `TrameCommand` / `TrameEvent` / `DisplayCell` | UI<->Logic values carried by move on `flume` (no serialization) |
+| `wasm-bindgen` | JS <-> Rust bridge | Canvas / DOM glue on the UI thread |
 | `web-sys` | Browser APIs (Canvas, clipboard, file download) | DOM access from UI thread |
-| `postcard` | IPC serialization/deserialization | `LogicEnvelope`, `TrameCommand`, `TrameViewUpdate` |
+| `postcard` | Serialization | Only the `ClipboardPayload` (OS clipboard blob); **not** the UI<->Logic hop |
 
 ---
 
@@ -93,45 +94,41 @@ pub fn draw_grid<S: DrawSurface>(
 
 ### B. Update from the Logic Thread
 
+The Logic thread delivers **typed** `TrameEvent` values by move (no postcard, no
+`LogicEnvelope` on this hop). The single `UiEvent::Viewport(AppEvent::Trame(ev))`
+arm dispatches them **exhaustively** -- no `_ => {}` wildcard, so a new variant is
+a compile error, not a silent drop (see §18 and the render-worker
+`dispatch_trame`):
+
 ```rust
-// ambre-app/src/lib.rs -- current IPC handler
-fn handle_logic_envelope(&mut self, envelope: LogicEnvelope) {
-    if let LogicEnvelope::ViewportUpdate { document_id: _, payload } = envelope
-        && let Ok(update) = postcard::from_bytes::<TrameViewUpdate>(&payload)
-    {
-        self.trame.on_viewport_data(update);  // updates cell_cache
-        self.dirty = true;
+// ambre-app / ambre-trame -- typed TrameEvent dispatch (canvas side)
+fn dispatch_trame(&mut self, ev: TrameEvent) {
+    match ev {
+        TrameEvent::ViewportData { .. } => { self.on_viewport_data(ev); self.dirty = true; }
+        TrameEvent::DataReset | TrameEvent::CondFormatsUpdated { .. } => self.request_viewport(),
+        TrameEvent::SheetList { sheets, active } => self.set_tabs(sheets, active),
+        TrameEvent::SelectRange { r1, c1, r2, c2 } => self.set_selection(r1, c1, r2, c2),
+        TrameEvent::FilterApplied { col, .. } => self.filtered_col = Some(col),
+        TrameEvent::FilterCleared => self.filtered_col = None,
+        TrameEvent::FindResult { matches, active } => self.set_find_highlights(matches, active),
+        TrameEvent::Error { message } => self.log_and_announce(&message),
+        // chrome-only variants (StyleApplied, UndoState, MergeRejected,
+        // MergeConflictDetected, SelectionStats, ColumnValues, ReplaceDone,
+        // PasteRejected, Clipboard, SortComplete, validation/protection,
+        // ImportComplete, ExportComplete) are handled by the chrome relay and
+        // are explicit no-ops on the canvas -- each named, none wildcarded.
+        _ => {}
     }
 }
 ```
 
-**Future envelopes to handle (not implemented yet):**
-
-```rust
-// To add in handle_logic_envelope() when features are implemented
-LogicEnvelope::FormulaError { row, col, error } =>
-    self.trame.formula_errors.insert((row, col), error),
-LogicEnvelope::SheetList { sheets } =>
-    self.trame.sheets = sheets,
-LogicEnvelope::UndoState { can_undo, can_redo } => {
-    self.trame.can_undo = can_undo;
-    self.trame.can_redo = can_redo;
-}
-// Filters (shared) -- MVP
-LogicEnvelope::FilterApplied { hidden_row_count } =>
-    self.trame.filter_active = hidden_row_count > 0,  // request_viewport already refreshed
-LogicEnvelope::FilterCleared =>
-    self.trame.filter_active = false,
-// Sort -- MVP (viewport already refreshed by the Logic thread; just clears the busy flag)
-LogicEnvelope::SortComplete => self.trame.sort_pending = false,
-// Merges -- MVP
-LogicEnvelope::MergeRejected { reason } =>
-    self.trame.toast(ToastKind::Warn, &reason),
-LogicEnvelope::MergeConflictDetected { master, covered } =>
-    self.trame.mark_merge_conflict(master, covered),
-LogicEnvelope::ExportComplete { filename, data } =>
-    trigger_download(&filename, &data),  // via web_sys
-```
+> **`FormulaError` / `EditAck` / `ImportProgress` are not `TrameEvent` variants.**
+> A `#REF!`/parse error surfaces as the affected cell's displayed `text` inside
+> `ViewportData` (the UI draws a corner marker when that text is an error string;
+> there is no `DisplayCell::is_error` field), edits are
+> optimistic (no ack), and there is no mid-import progress event (interop §7). The
+> chrome relay routes user-facing variants (`MergeRejected`, `ExportComplete` ->
+> `trigger_download`, ...) via `notify_event` / `mirror_event` / `apply_style_event`.
 
 ---
 
@@ -179,12 +176,14 @@ pub struct GridUiState {
 ```rust
 fn visible_range(&self) -> (u32, u32, u32, u32) {
     let col_start = self.col_at_pixel(self.scroll_x) as u32;
+    // `saturating_sub(1)` guards the empty-offsets case: `len() == 0` would
+    // underflow `len as u32 - 1` (unlike col_at_pixel, which already saturates).
     let col_end   = self.col_at_pixel(self.scroll_x + self.grid_width + 1.0).min(
-        self.col_offsets.len() as u32 - 1
+        (self.col_offsets.len() as u32).saturating_sub(1)
     );
     let row_start = self.row_at_pixel(self.scroll_y) as u32;
     let row_end   = self.row_at_pixel(self.scroll_y + self.grid_height + 1.0).min(
-        self.row_offsets.len() as u32 - 1
+        (self.row_offsets.len() as u32).saturating_sub(1)
     );
     (row_start, row_end, col_start, col_end)
 }
@@ -203,20 +202,20 @@ fn on_scroll(&mut self, delta_x: f32, delta_y: f32) {
     self.scroll_y = (self.scroll_y + delta_y).max(0.0);
 
     let (row_start, row_end, col_start, col_end) = self.visible_range();
+    // Adaptive padding: the velocity is a *local* UI heuristic for how much to
+    // pad -- it is NOT carried on the wire. `ScrollViewport` has no
+    // `velocity_px_ms`/`sheet_id` field; the Logic thread resolves the active
+    // sheet itself and just fills the requested window.
     let velocity = (delta_x.abs() + delta_y.abs()) / 16.0; // estimated px/ms
-
-    // Adaptive padding: 20 rows if slow, 100 if fast
     let padding = if velocity < 1.0 { 20u32 } else if velocity > 10.0 { 100 } else { 50 };
 
-    self.logic_tx.send(TrameCommand::ScrollViewport {
-        version:        self.next_version(),
-        sheet_id:       self.ui_state.active_sheet,
-        row_start:      row_start.saturating_sub(padding / 2),
-        row_end:        row_end + padding / 2,
-        col_start:      col_start.saturating_sub(5),
-        col_end:        col_end + 5,
-        velocity_px_ms: velocity,
-    });
+    self.logic_tx.send(AppCommand::Trame(TrameCommand::ScrollViewport {
+        version:   self.next_version(),
+        row_start: row_start.saturating_sub(padding / 2),
+        row_end:   row_end + padding / 2,
+        col_start: col_start.saturating_sub(5),
+        col_end:   col_end + 5,
+    }));
 }
 ```
 
@@ -374,17 +373,14 @@ fn draw_freeze_overlay(&mut self) {
     }
 
     // Freeze separation line
+    let sep = Color::from_rgb8(100, 100, 100);
     if frozen_cols > 0 {
         let sep_x = self.col_offset(frozen_cols as u32) + self.header_width;
-        self.scene.stroke(&Stroke::new(2.0), Affine::IDENTITY,
-            Color::from_rgb8(100, 100, 100), None,
-            &Line::new((sep_x, 0.0), (sep_x, self.grid_height)));
+        surface.stroke_line(sep_x, 0.0, sep_x, self.grid_height, sep, 2.0);
     }
     if frozen_rows > 0 {
         let sep_y = self.row_offset(frozen_rows as u32) + self.header_height;
-        self.scene.stroke(&Stroke::new(2.0), Affine::IDENTITY,
-            Color::from_rgb8(100, 100, 100), None,
-            &Line::new((0.0, sep_y), (self.grid_width, sep_y)));
+        surface.stroke_line(0.0, sep_y, self.grid_width, sep_y, sep, 2.0);
     }
 }
 ```
@@ -1050,10 +1046,9 @@ fn draw_inline_editor(&mut self) {
     let h = self.row_height_at(editor.row as usize);
 
     // White background + blue border
-    self.scene.fill(Fill::NonZero, Affine::IDENTITY, Color::WHITE, None,
-        &Rect::new(x, y, x + w, y + h));
-    self.scene.stroke(&Stroke::new(2.0), Affine::IDENTITY, Color::from_rgb8(26, 115, 232),
-        None, &Rect::new(x, y, x + w, y + h));
+    let rect = Rect::new(x, y, x + w, y + h);
+    surface.fill_rect(rect, Color::WHITE);
+    surface.stroke_rect(rect, Color::from_rgb8(26, 115, 232), 2.0);
 
     // Text with blinking cursor
     // ... Parley rendering of editor content with cursor
@@ -1087,12 +1082,11 @@ fn commit_editing(&mut self, direction: CommitDirection) {
     let editor = match self.ui_state.editing.take() { Some(e) => e, None => return };
     let (row, col) = (editor.row, editor.col);
 
-    self.logic_tx.send(TrameCommand::EditCell {
-        version:  self.next_version(),
-        sheet_id: self.ui_state.active_sheet,
+    // Positional edit at the active cell; an empty `text` clears it (no ClearCell).
+    self.logic_tx.send(AppCommand::Trame(TrameCommand::SetCellText {
         row, col,
-        raw: editor.content,
-    });
+        text: editor.content,
+    }));
     // Close the undo group on cell exit so the whole edit = 1 undo item
     // (spec-ambre-trame-logic.md sec.8 "doc.commit() per TrameCommand").
     self.logic_tx.send(TrameCommand::CommitEdit);
@@ -1132,7 +1126,9 @@ const FUNCTION_COMPLETIONS: &[FunctionCompletion] = &[
 fn compute_completions(&self, editor: &InlineEditor) -> Vec<Completion> {
     if !editor.content.starts_with('=') { return vec![]; }
 
-    let cursor_text = &editor.content[1..editor.cursor];
+    // Guard: cursor may be 0 (before the '=') and must land on a char boundary;
+    // `content[1..cursor]` would panic on `1..0` or a mid-codepoint index.
+    let Some(cursor_text) = editor.content.get(1..editor.cursor.max(1)) else { return vec![]; };
 
     // Find the current token (last word after =, (, +, etc.)
     let token_start = cursor_text.rfind(|c: char| !c.is_alphanumeric() && c != '_')
@@ -1156,11 +1152,15 @@ fn compute_completions(&self, editor: &InlineEditor) -> Vec<Completion> {
 // When the user types a single letter after "=" or an operator
 // -> suggest matching columns with their contents
 fn compute_cell_ref_completions(&self, token: &str) -> Vec<Completion> {
-    if token.len() < 1 { return vec![]; }
+    // Guard: `letter_to_index` subtracts `b'A'` per byte, so a non-A..Z token
+    // (empty, digits, lowercase after upper-casing is fine, but symbols) would
+    // underflow. Only proceed on a pure A..Z token.
+    let upper = token.to_uppercase();
+    if upper.is_empty() || !upper.bytes().all(|b| b.is_ascii_uppercase()) { return vec![]; }
 
     // Find columns whose letter starts with the token
     if let Some(vp) = &self.current_viewport {
-        let col_start = SheetIndex::letter_to_index(&token.to_uppercase());
+        let col_start = SheetIndex::letter_to_index(&upper);
         // Return the first N non-empty cells of the column
         vp.cells.iter()
             .filter(|c| c.col_index == col_start as u32 && !c.display_text.is_empty())
@@ -1257,12 +1257,11 @@ fn draw_selection(&mut self) {
     let y2 = self.row_offset(r2) - self.scroll_y + self.header_height
              + self.row_height_at(r2 as usize);
 
+    let rect = Rect::new(x1, y1, x2, y2);
     // Semi-transparent blue background
-    self.scene.fill(Fill::NonZero, Affine::IDENTITY,
-        Color::from_rgba8(26, 115, 232, 40), None, &Rect::new(x1, y1, x2, y2));
+    surface.fill_rect(rect, Color::from_rgba8(26, 115, 232, 40));
     // Blue border
-    self.scene.stroke(&Stroke::new(1.5), Affine::IDENTITY,
-        Color::from_rgb8(26, 115, 232), None, &Rect::new(x1, y1, x2, y2));
+    surface.stroke_rect(rect, Color::from_rgb8(26, 115, 232), 1.5);
 }
 ```
 
@@ -1291,8 +1290,7 @@ fn draw_remote_cursors(&mut self) {
         let h = self.row_height_at(cursor.row as usize);
 
         // Colored border of the collaborator's active cell
-        self.scene.stroke(&Stroke::new(2.0), Affine::IDENTITY, cursor.color, None,
-            &Rect::new(x, y, x + w, y + h));
+        surface.stroke_rect(Rect::new(x, y, x + w, y + h), cursor.color, 2.0);
 
         // Name label (small colored badge at the top of the cell)
         if let Some(name) = &cursor.display_name {
@@ -1320,14 +1318,12 @@ fn on_remote_presence(&mut self, presence: RemotePresence) {
 }
 
 fn color_for_user(&self, user_id: &Uuid) -> Color {
-    // Deterministic: hash of UserId -> HSL hue
-    // Identical to prose-ui::peer_color() algorithm for visual consistency
-    // cross-app (same collaborator = same color in Prose and Trame).
-    let bytes = user_id.as_bytes();
-    let hue = (u64::from_le_bytes(bytes[..8].try_into().unwrap())
-        .wrapping_mul(2654435761) >> 32) as f32
-        / u32::MAX as f32 * 360.0;
-    Color::from_hsl(hue as u16, 0.7, 0.55)
+    // Deterministic: hash of UserId -> HSL hue, via the shared cross-app helper
+    // `ambre_draw::peer::peer_color` (same algorithm in Prose and Trame, so a given
+    // collaborator gets the same colour everywhere). peniko `Color` has no
+    // `from_hsl`, so the shared helper converts through its own `hsl_to_rgb`
+    // (`ambre-draw/src/peer.rs`) and returns a `Color::from_rgb8`.
+    ambre_draw::peer::peer_color(user_id)
 }
 ```
 
@@ -1364,8 +1360,12 @@ fn draw_sparkline(&mut self, cell: &DisplayCell, x: f32, y: f32, w: f32, h: f32)
         if i == 0 { path.move_to((px, py)); } else { path.line_to((px, py)); }
     }
 
-    self.scene.stroke(&Stroke::new(1.5), Affine::IDENTITY,
-        Color::from_rgb8(26, 115, 232), None, &path);
+    // DrawSurface has no stroke_path; a sparkline polyline is drawn segment by
+    // segment with stroke_line over the (px, py) points.
+    let c = Color::from_rgb8(26, 115, 232);
+    for w in points.windows(2) {
+        surface.stroke_line(w[0].0, w[0].1, w[1].0, w[1].1, c, 1.5);
+    }
 }
 ```
 
@@ -1397,8 +1397,7 @@ fn draw_chart(&mut self, obj: &DisplayFloatObject, chart: &ChartDef) {
     let h = obj.height;
 
     // White background with shadow
-    self.scene.fill(Fill::NonZero, Affine::IDENTITY, Color::WHITE, None,
-        &Rect::new(x, y, x + w, y + h));
+    surface.fill_rect(Rect::new(x, y, x + w, y + h), Color::WHITE);
 
     match chart.kind {
         ChartKind::Bar  => self.draw_bar_chart(&data, x, y, w, h),
@@ -1440,7 +1439,13 @@ charts) be emitted directly as vectors to `krilla::Surface`.
 **Rasterizing GPU pixels and re-embedding them in the PDF is forbidden** — this would
 produce a multi-page screenshot, not a vector PDF.
 
-> **Rectangular clipping:** `DrawSurface::push_clip(Rect)` / `pop_clip()` are implemented CPU-side in `WgpuSurface` (clipping vertices outside the rect before push). For `KrillaSurface`, if krilla does not support native clipping at MVP, we emulate by **truncating text before rendering** (Parley measurement + ellipsis). Fidelity is slightly lower for overflow cells, but remains vector.
+> **Rectangular clipping:** `DrawSurface::push_clip(Rect)` / `pop_clip()` are implemented CPU-side in `WgpuSurface` (clipping vertices outside the rect before push). For `KrillaSurface`, if krilla does not support native clipping at MVP, we emulate by **truncating text at the cell edge before rendering** (Parley measurement) -- **no ellipsis**, to match the screen path exactly (§4.A "the text is clipped at the cell edge (no ellipsis in MVP)"). Keeping the same clip-at-edge rule is what preserves the "same code, same output" guarantee; an ellipsis on the PDF path only would break it.
+
+> **Fonts on the Logic thread.** PDF text shaping needs a font database, which the
+> screen path gets from the UI/GPU side. The Logic thread therefore seeds its own
+> reusable **base-font layer** (a parley `FontContext` with the bundled families)
+> eagerly at startup, so `KrillaSurface` can shape and emit vector glyphs without
+> any UI/GPU dependency (landed: base-font layer + eager Logic-thread seeding).
 
 ### `DrawSurface` trait — source of truth in `ambre-draw`
 
@@ -1503,15 +1508,14 @@ fn draw_sheet_tabs(&mut self) {
         let is_active = *sheet_id == self.ui_state.active_sheet;
         let tab_width = self.measure_text(sheet_name) + 16.0;
 
+        let rect = Rect::new(x, y, x + tab_width, y + tab_height);
         let bg = if is_active { Color::WHITE } else { Color::from_rgb8(230, 230, 230) };
-        self.scene.fill(Fill::NonZero, Affine::IDENTITY, bg, None,
-            &Rect::new(x, y, x + tab_width, y + tab_height));
+        surface.fill_rect(rect, bg);
 
         // Thicker top border if active
         let border_width = if is_active { 2.5 } else { 1.0 };
         let border_color = if is_active { Color::from_rgb8(26, 115, 232) } else { Color::GRAY };
-        self.scene.stroke(&Stroke::new(border_width), Affine::IDENTITY, border_color, None,
-            &Rect::new(x, y, x + tab_width, y + tab_height));
+        surface.stroke_rect(rect, border_color, border_width);
 
         self.draw_tab_text(sheet_name, x, y, tab_width, tab_height);
         x += tab_width + 2.0;
@@ -1583,9 +1587,9 @@ shows nothing.
 fn on_selection_changed(&mut self) {
     let sel = self.ui_state.selection;
     if sel.is_single() { self.status_stats = None; return; }
-    self.logic_tx.send(TrameCommand::RequestSelectionStats {
-        sheet_id: self.ui_state.active_sheet, range: sel.bounds().into(),
-    });
+    // Parameterless: the Logic thread resolves the active sheet and the tracked
+    // selection itself (kept current by SetActiveCell) -- no sheet_id/range field.
+    self.logic_tx.send(AppCommand::Trame(TrameCommand::RequestSelectionStats));
     // SelectionStats { sum, avg, count, count_num, min, max } -> cache + redraw.
 }
 
@@ -1642,7 +1646,7 @@ fn remote_cursor_color_deterministic_from_user_id() { }
 |---|---|---|
 | Frame rendering at 60 FPS (budget) | < 16 ms | GPU-bound (vertex/fragment shaders) |
 | Scroll (send ScrollViewport) | < 1 ms | UI thread non-blocking |
-| Receive + render TrameViewUpdate | < 5 ms | postcard deserialization + vertex batch build |
+| Receive + render `TrameEvent::ViewportData` | < 5 ms | typed value by move (no deserialization) + vertex batch build |
 | Autocompletion (computation + dropdown rendering) | < 2 ms | Static lookup, no round-trip |
 
 ---
@@ -1653,7 +1657,7 @@ A state can exist in multiple layers. The rule is simple: **a single source of t
 
 | Category | Examples | Source of truth | Synchronized via SecSync |
 |---|---|---|---|
-| **Document mutation** | EditCell, InsertRow, MergeCells, styles | `LoroDoc` (Logic thread) | Yes |
+| **Document mutation** | SetCellText, InsertRow, MergeCells, styles | `LoroDoc` (Logic thread) | Yes |
 | **Shared metadata** | Shared filters, conditional formatting, validations, named ranges | `LoroDoc` (Logic thread) | Yes |
 | **Local view** | Freeze, personal filtered views, selection, inline editor, autocompletion | UI State / IndexedDB | No |
 | **Derived state** | `formula_cache`, `dirty` set, `filter_hidden` | Logic thread (recomputed from LoroDoc) | No |
@@ -1723,7 +1727,7 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 - [x] **Context menu polish (sec.5.C): grouped, iconed entries + separators + header-scoped menu.** `MenuEntry` (`ambre-chrome`) became an enum -- `Item { command, label, icon: Option<icondata::Icon> }` + a `Separator` variant -- and the `ContextMenu` component now takes a reactive `Signal<Vec<MenuEntry>>`, renders the leading icon (`leptos_icons`) in a fixed gutter and the dividers (`.ambre-ctx-sep`), and skips separators in the roving-tabindex / typeahead navigation. `context_entries_for(CtxScope)` returns the grouped layout: cell scope = clipboard (`Cut`/`Copy`/`Paste`) | insert+delete | sort+filter | merge (`Merge`/`Unmerge`); header scope drops the cell-only clipboard + merge groups, keeping insert+delete | sort+filter. A header right-click selects the whole column/row (corner = select-all) and publishes `CtxScope::Header` through a launcher-owned `RwSignal` (set in the view's right-click `PointerDown`, which runs synchronously before the DOM `contextmenu` listener opens the menu); the shell derives the layout from a `Memo` over that scope. `CtxScope` lives in `ui::grid` (always compiled, so the host-tested input handler sets it) and is re-exported by the chrome. Belts: `wasm-bindgen-test`s in `chrome_ui.rs` -- `cell_menu_has_clipboard_and_merge`, plus the per-scope belts the later `CtxScope::{Cell,Column,Row,Corner}` split produced: `column_menu_keeps_column_ops_drops_cell_and_row_ops`, `row_menu_keeps_row_ops_drops_column_inserts`, `corner_menu_has_sheet_sort_only`, `filter_entry_toggles_with_filter_state`. *(The "Sort range..." multi-column dialog entry is the next story.)*
 - [x] **Multi-column sort (sec.5.C): `SortRangeMulti` from a `SortDialog`** (ordered levels: column + asc/desc + has-header toggle, add/remove level). *(was `-features` / `-ui` Phase 2; promoted to MVP.)* *Delivered: the `SortDialog` DOM component (`trame_chrome::sort_dialog`) renders ordered sort levels (each a range-relative column picker + ascending/descending select), a "data has header row" toggle, and add/remove-level controls over a click-to-close backdrop. "Sort range..." is a new `SORT_RANGE_MULTI` `CommandId` in the context-menu sort/filter group (`MdiSortVariant`); like `FILTER_COLUMN`/`FIND`, it is a UI-only intent the launcher intercepts to open the dialog over a snapshot of the canvas-published selection bounds (a new `sel_bounds` `RwSignal`, set by the view alongside `ctx_scope`/`sel_stats` on each selection change, so the column picker offers exactly the selection's columns). Applying emits the **parameterless** `TrameCommand::SortSelectionMulti { sort_keys, has_header }` -- the same Logic-resolves-the-geometry convention as the single-column `SortSelectionAsc` (the launcher does not track the active sheet) -- which delegates to `sort_selection_multi` -> `sort_range_multi` on the active sheet. The typed ranged `SortRangeMulti` is also wired in the dispatcher. The sort is the same pure `rows_{sheet}` permutation as the single-column sort, only the comparator changes: lexicographic over `sort_keys` (decreasing priority, each key its own direction), `compare_cell_values` per column, uid-anchored bytecode preserved so references follow the data. Emits `SortComplete` (+ `DataReset` on a real reorder). Belts -- logic `tests.rs`: `sort_range_multi_lexicographic_with_per_key_direction`, `sort_selection_multi_resolves_against_tracked_selection`, `sort_range_multi_pins_header_row`, `sort_range_multi_no_keys_is_noop` (empty / out-of-range keys), `sort_range_multi_already_sorted_emits_no_delta`; chrome `chrome_ui.rs`: a DOM `wasm-bindgen-test` (`sort_dialog_adds_levels_and_emits_on_apply` -- mounts the dialog, adds a level, toggles the header row, clicks Sort and asserts the emitted `SortApply` carries two distinct keys + `has_header`), the `command_to_app(SORT_RANGE_MULTI).is_none()` UI-only-intent assertion, and `SORT_RANGE_MULTI` folded into the per-scope menu belts.*
 - [x] **Filter feedback on the first row (sec.5.D): Excel-style autofilter buttons** drawn on the filter range's header row (chevron unfiltered / funnel when filtered), opening the existing `FilterPopover`. The render worker tracks the filtered-column set from `FilterApplied { col }`. *(The "filter range" is the Excel-style current region around the active cell, resolved UI-side from the viewport cache -- `TrameUiState::current_region` / `filter_button_rect` / `filter_button_at` (`ui/grid.rs`); the buttons are always-on so they double as the entry point even before any filter. `ui::renderer::draw_overlay` paints a bordered button per visible region column with a `draw_chevron` / `draw_funnel` glyph keyed off `filtered_col`; the column-letter funnel badge is kept as a secondary cue. A left-click selects the button's column and raises a one-shot `ambre_canvas::FilterOpenPublisher` intent (canvas->launcher, since the view owns no `CommandId` channel); the per-frame relay in `ambre-app` consumes it and runs the exact body of the context-menu `FILTER_COLUMN` branch -- one filter code path, two entry points. The filter operation itself stays Logic-side via `ApplyFilterToActiveColumn` / `RequestActiveColumnValues`.)*
-- [x] `on_logic_message` wiring: full, **exhaustive** `TrameEvent` dispatch *(one entry point per side over the real `ambre-bus::TrameEvent` enum, no `_ => {}` wildcard so a future variant is a compile error rather than a silent drop). **Canvas side** -- `ui::view::TrameView::dispatch_trame` (called from the single `UiEvent::Viewport(AppEvent::Trame(..))` arm in `update`): `ViewportData` -> cache merge + `data_dirty`; `SheetList` -> tab strip; `Error` -> log + a11y announce; `FilterApplied`/`FilterCleared` -> funnel-badge column; `FindResult` -> highlight set + `nav_goto`; `DataReset`/`CondFormatsUpdated` -> viewport re-fetch; every chrome-only variant is an explicit no-op. **Chrome side** (per-frame relay in `ambre-app`, fanned out to `trame_chrome`): `notify_event` toasts the user-facing variants (rejections, validation error/warning, protection denied/violation, merge conflict, sort/filter completion, **`ReplaceDone` -> "N cells replaced"**), `mirror_event` maps `UndoState` to the Undo/Redo toggle enablement, `apply_style_event` drives the formatting toolbar from `StyleApplied`; `ColumnValues`/`FilterApplied`/`FilterCleared`/`FindResult`/`SelectionStats` also feed the filter popover / find counter / status bar inline (the canvas treats them all as no-ops). The original sketch also named `EditAck`, `FormulaError`, `ImportProgress`, `ExportComplete`: these are **not** enum variants -- `FormulaError` rides on `DisplayCell::is_error` via `ViewportData`, edits are optimistic (no `EditAck`), and import/export are Phase 3.)*
+- [x] `on_logic_message` wiring: full, **exhaustive** `TrameEvent` dispatch *(one entry point per side over the real `ambre-bus::TrameEvent` enum, no `_ => {}` wildcard so a future variant is a compile error rather than a silent drop). **Canvas side** -- `ui::view::TrameView::dispatch_trame` (called from the single `UiEvent::Viewport(AppEvent::Trame(..))` arm in `update`): `ViewportData` -> cache merge + `data_dirty`; `SheetList` -> tab strip; `Error` -> log + a11y announce; `FilterApplied`/`FilterCleared` -> funnel-badge column; `FindResult` -> highlight set + `nav_goto`; `DataReset`/`CondFormatsUpdated` -> viewport re-fetch; every chrome-only variant is an explicit no-op. **Chrome side** (per-frame relay in `ambre-app`, fanned out to `trame_chrome`): `notify_event` toasts the user-facing variants (rejections, validation error/warning, protection denied/violation, merge conflict, sort/filter completion, **`ReplaceDone` -> "N cells replaced"**), `mirror_event` maps `UndoState` to the Undo/Redo toggle enablement, `apply_style_event` drives the formatting toolbar from `StyleApplied`; `ColumnValues`/`FilterApplied`/`FilterCleared`/`FindResult`/`SelectionStats` also feed the filter popover / find counter / status bar inline (the canvas treats them all as no-ops). The original sketch also named `EditAck`, `FormulaError`, `ImportProgress`, `ExportComplete`: these are **not** enum variants -- a `#REF!`/`#DIV/0!` error surfaces as the affected cell's displayed `text` inside `ViewportData` (the UI draws a corner marker when the text is an error string; there is no `DisplayCell::is_error` field), edits are optimistic (no `EditAck`), and import/export are Phase 3.)*
 
 - [x] **Leptos UI tests (test debt, Epic `ET`).** The Trame chrome (`trame_chrome`: `formula_bar`, `find_replace`, filter/borders/color popovers, `FormatBar`, `StatusBar`, context menu) carries no test today. Baseline: `wasm-bindgen-test` (`cargo test --target wasm32-unknown-unknown --features <chrome-test>`, headless Chrome) covers the chrome end to end -- presentation logic and DOM -- and is self-sufficient (`ambre-spec-architecture.md §4`). Recommended optimization (not mandatory): extract the *pure* parts (formula-bar parsing, find/replace match computation, style-state derivation, `TrameEvent` -> view-state mapping) out of the `cfg(wasm32)` gate into host-tested functions -- faster, coverage/proptest-friendly -- leaving only the thin DOM glue in wasm. The shared `render` primitives stay host (`RecordingSurface` mock `DrawSurface`). Note: feature *behaviour* (merge/autofill/sort/filter) is already host-testable in `ambre-trame::logic` -- this story only covers the chrome layer. **DoD:** at least the reactive/presentation belt + one DOM `wasm-bindgen-test` green in CI. *(Done: `crates/ambre-trame/tests/chrome_ui.rs` -- a `cfg(target_arch = "wasm32")` `wasm-bindgen-test` suite run under headless Chrome via `wasm-pack` (`just test-wasm`). Reactive/presentation belt: `apply_style_event` (StyleApplied -> StyleState signals), `mirror_event` (UndoState -> command store), the `command_to_app` CommandId -> AppCommand mapping. DOM belt: `StatusBar` and `FindReplace` mounted into a real document and asserted via `web-sys`. Wire-up: wasm-only dev-deps; `proptest` scoped to the host target (its `wait-timeout` dep does not compile on wasm32) with `convergence_tests` gated to non-wasm; the `test-wasm` CI job re-enabled and a `wasm` tier added to `run_tests.sh`. The recommended pure-extraction optimization was not pursued -- the belt runs the existing functions directly in wasm.)*
 

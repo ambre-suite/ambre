@@ -297,10 +297,15 @@ sheets.delete(sheet_id)
   patching. Deleting a sheet marks every dependent formula dirty (full reseed,
   since the `u16` remap shifts indices) and recomputes them to `#REF!`.
 - **A workbook always keeps >= 1 sheet.** Deleting the last sheet is **rejected
-  locally** (`TrameEvent::Error`). Under concurrency, if two peers delete
-  different sheets and the deletes converge to an empty `sheet_order`, the sheet
-  whose `sheet_id` sorts first is **re-inserted** (deterministic on all peers) so
-  the workbook is never sheet-less.
+  locally** (`TrameEvent::Error`) -- this is the **as-built** guarantee. For the
+  concurrent case (two peers delete different sheets and the deletes converge to an
+  empty `sheet_order`), the **decided rule** is **deterministic re-insertion**: the
+  sheet whose `sheet_id` sorts first is re-inserted, identically on every peer, so
+  the workbook is never sheet-less. This preserves the CRDT convergence + intent
+  invariant of §12 (no peer sees a sheet-less state, and all converge to the same
+  surviving sheet) rather than momentarily emptying the workbook. **Not yet
+  implemented:** the local guard ships today; the concurrent rule must land with a
+  2-peer convergence regression test (§14, roadmap) before it is relied on.
 - **Active sheet deleted** (locally or by a remote delete): the active sheet
   switches to the previous tab, or the first remaining sheet if it was first.
 
@@ -538,8 +543,10 @@ pub enum Op {
     // Appel de fonction : n_args valeurs sur la pile
     CallFn { name: String, n_args: u8 },
 
-    // Short-circuit: if top = Error -> immediate return
-    PropagateError,
+    // Push a compile-time error (parse failure, unknown name, unresolved
+    // cross-sheet `#REF!`) so evaluation yields it directly. Emitted by
+    // `compile()` (see `formula/compile.rs`).
+    PushError(FormulaError),
 }
 
 pub struct CellBytecode {
@@ -572,8 +579,16 @@ fn compile(expr: &Expr) -> Vec<Op> {
             ops.push(Op::CallFn { name: name.clone(), n_args: args.len() as u8 });
             ops
         }
-        Expr::SheetRef(_, inner) => compile(inner), // resolved at parse time
-        Expr::NamedRange(_)      => vec![],          // resolved at parse time -> CellRef or Range
+        // `SheetRef` and `Name` (named range) are eliminated by the
+        // `parser::resolve_refs` pass BEFORE compile() runs -- rewritten into a
+        // `CellRef`/`Range`, or into an `Op::PushError` for an undefined name /
+        // deleted target. Reaching this arm means resolution was skipped, so it is
+        // guarded by a `debug_assert!(false)` and degrades to `PushEmpty` (a blank
+        // value, never a panic) rather than silently succeeding.
+        Expr::SheetRef { .. } | Expr::Name(_) => {
+            debug_assert!(false, "unresolved SheetRef/Name reached compile()");
+            vec![Op::PushEmpty]
+        }
     }
 }
 ```
@@ -715,11 +730,7 @@ impl<'a> EvalContext<'a> {
                     stack.push(call_builtin(name, args));
                 }
 
-                Op::PropagateError => {
-                    if matches!(stack.last(), Some(CellValue::Error(_))) {
-                        return stack.pop().unwrap();
-                    }
-                }
+                Op::PushError(e) => stack.push(CellValue::Error(e.clone())),
             }
         }
 
@@ -769,15 +780,17 @@ row or column has been deleted. (A `Virtual` axis is never broken: it reads
 
 **Propagation after delete_row/delete_col:**
 
-```rust
-fn on_delete_row(&mut self, sheet: SheetId, deleted_id: Uid) {
-    // All formulas depending on this Uid will be detected as broken
-    // on the next evaluation via SheetIndex.contains_*
-    // Mark them simply dirty to force recomputation
-    let affected = self.deps.collect_dirty_for_deleted(sheet, deleted_id, &self.sheet_indices);
-    self.dirty.extend(affected);
-}
-```
+A row/column delete shifts every following position, so the MVP takes the
+structural-reseed path (`logic/structural.rs`): the removed line's cells and
+formatting are purged, the `SheetIndex` is rebuilt, and the positional formula
+engine is reseeded (`reseed_engine`) -- every formula is re-bound against the new
+order and recomputed. A formula that referenced the deleted `Uid` finds no
+position in the rebuilt `SheetIndex` and evaluates to `BrokenRef`.
+
+> **Incremental path (Phase 4, §11 bis.A).** The reseed is the current
+> implementation; the target is to drive deletion from the Loro list diff and mark
+> only the dependents of the deleted `Uid` dirty (via `collect_dirty`), avoiding the
+> O(document) reseed.
 
 No bytecode patching — the `AxisId::Bound(uid)` values in `CellId` and `RangeId` remain, absence in `SheetIndex` triggers `BrokenRef` at evaluation.
 
@@ -803,7 +816,7 @@ LWW Loro resolves overlapping merge conflicts deterministically. Validation afte
 
 ### Concurrent Conflict Strategy: Data is Never Destroyed
 
-**Scenario:** Alice sends `MergeCells(R3C2:R4C2)` when `R3C2` is empty on her side. Bob simultaneously sends `EditCell(R3C2, "=SUM(...)")`. Both deltas converge — result: `R3C2` is both a merge master AND non-empty in `LoroDoc`.
+**Scenario:** Alice sends `MergeCells(R3C2:R4C2)` when `R3C2` is empty on her side. Bob simultaneously sends `SetCellText(R3C2, "=SUM(...)")`. Both deltas converge — result: `R3C2` is both a merge master AND non-empty in `LoroDoc`.
 
 This conflict is unavoidable in collaborative CRDT. Rejecting Bob's delta would break convergence. **Strategy: the merge masks covered values without destroying them.**
 
@@ -946,8 +959,8 @@ impl TrameState {
     ///   - `display`   : Vec<TrameEvent>  -> UI Thread (UiEvent::Viewport)
     ///   - `update`    : Option<Vec<u8>>  -> Sync (SyncCommand::SendUpdate)
     ///   - `ephemeral` : Option<Vec<u8>>  -> Sync (SyncCommand::SendEphemeral)
-    /// A single command can yield several display events (e.g. EditAck +
-    /// ViewportData). Loro mutation + dirty propagation + compute_all_dirty()
+    /// A single command can yield several display events (e.g. ViewportData +
+    /// DataReset). Loro mutation + dirty propagation + compute_all_dirty()
     /// all run synchronously here before the outcome is returned.
     pub fn handle_command(&mut self, cmd: TrameCommand) -> TrameOutcome { /* §8 dispatch */ }
 
@@ -1004,29 +1017,29 @@ for event in events { self.send_to_ui(UiEvent::Viewport { document_id, event: Ap
 impl TrameState {
     pub fn handle_command(&mut self, cmd: TrameCommand) -> TrameOutcome {
         match cmd {
-            TrameCommand::Noop => TrameOutcome::display_only(vec![]),
-
-            TrameCommand::ScrollViewport { version, sheet_id, .. } => {
+            TrameCommand::ScrollViewport { version, row_start, row_end, col_start, col_end } => {
                 // P1 -- immediate viewport response, no sync payload
                 self.viewport = /* ... */;
                 self.compute_all_dirty(); // recompute dirty in viewport
-                TrameOutcome::display_only(vec![TrameEvent::ViewportData(self.build_viewport(version))])
+                TrameOutcome::display_only(vec![self.build_viewport(version)])
             }
 
-            TrameCommand::EditCell { version, sheet_id, row, col, raw } => {
+            TrameCommand::SetCellText { row, col, text } => {
                 // P2 -- Loro mutation + dirty propagation + synchronous recomputation
-                let cell_ref = self.resolve_cell(sheet_id, row, col);
-                self.apply_edit_cell(cell_ref, &raw);
+                let cell_ref = self.resolve_cell(self.active_sheet, row, col);
+                self.apply_edit_cell(cell_ref, &text);
                 self.bytecode.invalidate(cell_ref);
                 let dirty = self.deps.collect_dirty(cell_ref, &self.sheet_indices);
                 self.dirty.extend(dirty);
                 self.compute_all_dirty();
                 // The incremental delta becomes TrameOutcome.update; the
                 // ambre-logic dispatcher turns it into SyncCommand::SendUpdate.
+                // The UI updates its cache optimistically, so no edit-ack is sent;
+                // only a fresh viewport when the recompute touched it.
                 let update = Some(self.export_incremental_delta());
-                let mut display = vec![TrameEvent::EditAck { version }];
+                let mut display = vec![];
                 if self.viewport_intersects_dirty() {
-                    display.push(TrameEvent::ViewportData(self.build_viewport(version)));
+                    display.push(self.build_viewport(self.tx_version));
                 }
                 TrameOutcome { display, update, ephemeral: None }
             }
@@ -1065,15 +1078,15 @@ impl TrameState {
 }
 ```
 
-> **Invariant `doc.commit()` per `TrameCommand`:** each `TrameCommand` handler that mutates `LoroDoc` must end with `self.doc.commit()`. Loro groups all mutations since the last commit into a single `UndoManager` item. Without an explicit commit, multiple successive `TrameCommand` values could be grouped into a single undo item — which would break the expected granularity (1 command = 1 undo item). `EditCell` commits on cell exit (via `TrameCommand::CommitEdit` or a delay), not on each keystroke, so that an entire cell edit forms 1 undo item.
+> **Invariant `doc.commit()` per `TrameCommand`:** each `TrameCommand` handler that mutates `LoroDoc` must end with `self.doc.commit()`. Loro groups all mutations since the last commit into a single `UndoManager` item. Without an explicit commit, multiple successive `TrameCommand` values could be grouped into a single undo item — which would break the expected granularity (1 command = 1 undo item). A cell edit (`SetCellText`) commits on cell exit (via `TrameCommand::CommitEdit` or a delay), not on each keystroke, so that an entire cell edit forms 1 undo item.
 
 ### Priorities and Budgets
 
 | Priority | Task | Trigger | Behavior |
 |:---|:---|:---|:---|
 | **P1** | Scroll | `ScrollViewport` | `compute_all_dirty()` synchronous. Padding 20–100 rows depending on velocity. `DisplayViewport` immediate with `is_dirty=true` on pending cells if recomputation is not finished (theoretical case Phase 2). |
-| **P2** | Input / Structure | `EditCell`, `InsertRow`, etc. | Loro mutation → dirty propagation → `compute_all_dirty()` synchronous → `EditAck` + `ViewportData`. |
-| **P3** | Remote import | `LogicEvent::RemoteUpdate` | `doc.import()` → diff → dirty → `compute_all_dirty()` synchronous → `ViewportData`. |
+| **P2** | Input / Structure | `SetCellText`, `SetCellsBatch`, `InsertRow`, etc. | Loro mutation → dirty propagation → `compute_all_dirty()` synchronous → `ViewportData` (+ `DataReset` when the region changed). |
+| **P3** | Remote import | `LogicEvent::RemoteUpdate` | `doc.import()` → diff → dirty → `compute_all_dirty()` synchronous → `ViewportData`. **As-built:** the MVP routes every remote batch through a full engine reseed (O(document)), a known divergence from this diff-driven target that breaks the ≤50 ms budget at 100k cells — tracked as Phase 4 debt (§11 bis.A). |
 
 **Anti-flickering:** `tx_version` incremented on each `DisplayViewport`. UI thread drops `version < last_processed`.
 
@@ -1096,29 +1109,44 @@ This mechanism is **additive** — it does not change `TrameState`'s method sign
 
 > **Typed data plane (no postcard on the UI<->Logic hop):** `TrameCommand` (UI→Logic) and `TrameEvent` (Logic→UI) travel as **Rust values** inside `AppCommand::Trame` / `AppEvent::Trame` over the `flume` channels between the UI and Logic threads of the single WASM binary — they are **not** serialized (shared memory; see `spec-ambre-architecture.md §2/§6`). postcard is reserved for the Logic<->Sync `postMessage` hop (`SyncCommand`/`LogicEvent`) and for real network bytes. The UI thread sends a `LogicCommand::App { document_id, command: AppCommand::Trame(cmd) }`; the Logic thread `match`es it to the right `DocState` and dispatches.
 
-```rust
-#[derive(Serialize, Deserialize)]
-pub struct DisplayViewport {
-    pub version:       u64,
-    pub sheet_id:      SheetId,
-    pub row_start:     u32,
-    pub col_start:     u32,
-    pub cells:         Vec<DisplayCell>,
-    pub col_widths:    Vec<f32>,
-    pub row_heights:   Vec<f32>,
-    pub float_objects: Vec<DisplayFloatObject>,
-}
+> **Canonical definitions live in `ambre-bus::app::trame`.** `TrameCommand`,
+> `TrameEvent` and `DisplayCell` are defined in `crates/ambre-bus/src/app/trame/`
+> ({`command`, `event`}`.rs`); the shared value types (`CellStyle`, `StylePatch`,
+> `NumberFormat`, `ClipboardPayload`, `FilterKind`, ...) live in the sibling
+> `style`/`clipboard`/`features` modules. This section mirrors that surface for
+> reference; the code is authoritative. `TrameCommand`/`TrameEvent`/`DisplayCell`
+> derive only `Debug, Clone` -- **no `serde`** (they never cross the wire, only
+> the shared-memory `flume` plane, `trame-features §7`). The value types they carry
+> *do* derive `Serialize`/`Deserialize` because they are postcard-encoded into the
+> clipboard payload and the CRDT style register.
 
-#[derive(Serialize, Deserialize)]
+The viewport reply is the `TrameEvent::ViewportData` struct-variant (below); there
+is no separate `DisplayViewport` type on the bus -- the Logic thread builds the
+variant's fields (`cells` / `col_widths` / `row_heights`) directly. `DisplayCell`
+is flat and data-oriented:
+
+```rust
+#[derive(Debug, Clone, Default)]
 pub struct DisplayCell {
-    pub row_index:    u32,
-    pub col_index:    u32,
-    pub display_text: String,
-    pub raw:          String,           // barre de formule si cellule active
-    pub is_dirty:     bool,             // UI displays as grayed out
-    pub is_merged:    bool,
-    pub merge_span:   Option<(u32, u32)>,
-    pub style:        CellStyle,
+    pub row: u32,
+    pub col: u32,
+    pub text: String,                    // formula result or raw string
+    pub raw: String,                     // raw CRDT text (formula bar); == text for plain cells
+    pub bold: bool,
+    pub italic: bool,
+    pub underline: bool,
+    pub strikethrough: bool,
+    pub h_align: HAlign,
+    pub v_align: VAlign,
+    pub wrap: bool,
+    pub fg: Option<u32>,                 // 0xRRGGBB, None = theme default
+    pub bg: Option<u32>,                 // 0xRRGGBB, None = transparent
+    pub font: Option<String>,
+    pub size: Option<u16>,
+    pub borders: Borders,
+    pub is_merged: bool,                 // master or covered cell (§6)
+    pub merge_span: Option<(u32, u32)>,  // Some((col_span,row_span)) on the master only
+    pub is_filtered: bool,               // row hidden by the active shared filter (features §1.A)
 }
 
 /// Resolved cell style sent to the UI thread (projection of the "styles" LoroMap).
@@ -1181,184 +1209,171 @@ pub struct StylePatch {
 // are defined in `ambre-trame/src/style.rs` and implement Serialize/Deserialize so
 // they travel in `DisplayCell` / `TrameCommand` via postcard.
 
-/// Single source of truth -- UI thread -> Logic thread.
-/// All feature and interop variants are consolidated here.
-/// The `trame-features` and `trame-interop` specs document the behavior
-/// of each variant but do not redefine the enum.
-#[derive(Serialize, Deserialize)]
+/// UI thread -> Logic thread. Canonical definition in
+/// `ambre-bus::app::trame::command`. Positions are **grid positions** (`u32`); the
+/// Logic thread resolves them against the tracked selection / active sheet and the
+/// per-sheet `SheetIndex`. Parameterless "intent" variants carry no geometry -- the
+/// Logic thread resolves it from the selection kept current by `SetActiveCell`.
+#[derive(Debug, Clone)]
 pub enum TrameCommand {
-    Noop,
+    // -- Grid & navigation (local view state) ----------------------------
+    ScrollViewport { version: u64, row_start: u32, row_end: u32, col_start: u32, col_end: u32 },
+    SetActiveCell  { row: u32, col: u32, anchor_row: u32, anchor_col: u32 },
+    ActivateSheet  { sheet_id: String },
 
-    // -- Grille & Navigation ---------------------------------------------
-    ScrollViewport { version: u64, sheet_id: SheetId,
-                     row_start: u32, row_end: u32, col_start: u32, col_end: u32,
-                     velocity_px_ms: f32 },
-    ActivateSheet { sheet_id: SheetId },
+    // -- Cell input & edit grouping --------------------------------------
+    SetCellText  { row: u32, col: u32, text: String },   // empty text clears the cell
+    SetCellsBatch { cells: Vec<(u32, u32, String)> },    // one undo group (fill / range clear)
+    CommitEdit,                                          // seal the open edit's undo group
 
-    // -- Saisie & Structure ----------------------------------------------
-    EditCell    { version: u64, sheet_id: SheetId, row: u32, col: u32, raw: String },
-    CommitEdit,
-    ClearCell   { version: u64, sheet_id: SheetId, row: u32, col: u32 },
-    InsertRow   { version: u64, sheet_id: SheetId, before_row: u32 },
-    InsertCol   { version: u64, sheet_id: SheetId, before_col: u32 },
-    DeleteRow   { version: u64, sheet_id: SheetId, row: u32 },
-    DeleteCol   { version: u64, sheet_id: SheetId, col: u32 },
-    ResizeCol   { version: u64, sheet_id: SheetId, col: u32, width_px: f32 },
-    ResizeRow   { version: u64, sheet_id: SheetId, row: u32, height_px: f32 },
+    // -- Structure (grid positions) --------------------------------------
+    InsertRow { at: u32 }, DeleteRow { at: u32 },
+    InsertColumn { at: u32 }, DeleteColumn { at: u32 },
+    MoveRow { from: u32, to: u32 }, MoveColumn { from: u32, to: u32 },
+    ResizeCol { version: u64, sheet_id: String, col: u32, width_px: f32 },
+    ResizeRow { version: u64, sheet_id: String, row: u32, height_px: f32 },
 
-    // -- Fusions ---------------------------------------------------------
-    MergeCells   { version: u64, sheet_id: SheetId,
-                   row: u32, col: u32, row_span: u32, col_span: u32 },
-    UnmergeCells { version: u64, sheet_id: SheetId, row: u32, col: u32 },
+    // -- Merges ----------------------------------------------------------
+    MergeCells { row: u32, col: u32, row_end: u32, col_end: u32 },
+    UnmergeCells { row: u32, col: u32 },
 
-    // -- Format & Clipboard (trame-ui sec.5bis/6bis) ----------------------
-    // Manual cell styling. Partial patch: only Some(..) fields applied.
-    SetCellStyle { version: u64, sheet_id: SheetId, range: CellRange, patch: StylePatch },
-    // Paste a range: relative-formula reindexing + styles done in the Logic thread
-    // (the UI cache is viewport-only, sec.16).
-    PasteRange   { version: u64, sheet_id: SheetId, target_row: u32, target_col: u32,
-                   payload: ClipboardPayload },
-    // Fill handle (autofill). mode = Copy (replicate) | Series (increment detected pattern).
-    FillRange    { version: u64, sheet_id: SheetId, src: CellRange, dest: CellRange,
-                   mode: FillMode },
+    // -- Parameterless structural intents (context menu / toolbar) --------
+    InsertRowAbove, InsertRowBelow, InsertColLeft, InsertColRight,
+    DeleteSelectedRows, DeleteSelectedCols,
+    MergeSelection, UnmergeActive,
+    SortSelectionAsc, SortSelectionDesc, SortSheetAsc, SortSheetDesc,
+    SortSelectionMulti { sort_keys: Vec<SortKey>, has_header: bool },
+    RequestActiveColumnValues, RequestSelectionStats, CopyRange,
+    ApplyFilterToActiveColumn { kind: FilterKind }, ClearActiveFilter,
 
-    // -- Find & Replace (trame-ui sec.5ter) -------------------------------
-    // Whole-document scope: the UI sees only the viewport, so the Logic thread scans.
-    ReplaceAll   { version: u64, scope: Scope, find: String, replace: String,
-                   match_case: bool, whole_cell: bool, in_formulas: bool },
-    FindNext     { sheet_id: SheetId, from: CellRef, find: String,
-                   match_case: bool, whole_cell: bool },
+    // -- Formatting ------------------------------------------------------
+    SetCellStyle { patch: StylePatch },   // applied to the tracked selection
 
-    // -- Selection stats (status bar) -------------------------------------
-    // Selection may exceed the viewport -> aggregates computed in the Logic thread.
-    RequestSelectionStats { sheet_id: SheetId, range: CellRange },
+    // -- Clipboard / autofill --------------------------------------------
+    PasteRange { target_row: u32, target_col: u32, payload: ClipboardPayload },
+    PasteText  { text: String },                          // literal, at active cell
+    PasteClipboardAtActive { payload: ClipboardPayload }, // styled, reindexed, at active cell
+    FillRange  { sheet_id: String, src: GridRange, dest: GridRange, mode: FillMode },
 
-    // -- Sheets (lifecycle, see §2.D) -------------------------------------
-    CreateSheet  { name: String },
-    DeleteSheet  { sheet_id: SheetId },
-    RenameSheet  { sheet_id: SheetId, name: String },
-    MoveSheet    { sheet_id: SheetId, to_index: u32 },
+    // -- Find & replace (whole-document scan, Logic-side) ----------------
+    FindNext   { query: String, match_case: bool, whole_cell: bool },
+    ReplaceAll { query: String, replacement: String, match_case: bool,
+                 whole_cell: bool, in_formulas: bool, all_sheets: bool },
+    ReplaceOne { query: String, replacement: String, match_case: bool,
+                 whole_cell: bool, in_formulas: bool },
 
-    // -- Filtres (trame-features sec.1) -------------------------------------
-    ApplyFilter         { sheet_id: SheetId, col: u32, kind: FilterKind,
-                          values: Option<Vec<String>>, condition: Option<FilterCondition> },
-    ClearFilter         { sheet_id: SheetId },
-    ActivateFilterView  { view_id: String },
-    DeactivateFilterView,
-    SaveFilterView      { name: String, filter_def: FilterDef },
+    // -- Undo / Redo -----------------------------------------------------
+    Undo, Redo,
 
-    // -- Tri (trame-features sec.2) -----------------------------------------
-    SortRange      { sheet_id: SheetId, row_start: u32, row_end: u32,
-                     col_start: u32, col_end: u32, sort_col: u32,
-                     ascending: bool, has_header: bool },
-    SortRangeMulti { sheet_id: SheetId, row_start: u32, row_end: u32,
-                     col_start: u32, col_end: u32,
-                     sort_keys: Vec<SortKey>, has_header: bool },
+    // -- Named ranges ----------------------------------------------------
+    DefineName { name: String, reference: String },
+    DeleteName { name: String },
 
-    // -- Formatage conditionnel (trame-features sec.3) ----------------------
-    AddCondFormat    { sheet_id: SheetId, rule: CondFormatRule },
-    RemoveCondFormat { sheet_id: SheetId, rule_id: String },
-    UpdateCondFormat { sheet_id: SheetId, rule_id: String, rule: CondFormatRule },
+    // -- Sheets (lifecycle, §2.D) ----------------------------------------
+    CreateSheet { name: String },
+    RenameSheet { sheet_id: String, name: String },
+    MoveSheet   { sheet_id: String, to_index: u32 },
+    DeleteSheet { sheet_id: String },
 
-    // -- Validation (trame-features sec.5) ----------------------------------
-    AddValidation    { sheet_id: SheetId, range: String, validation: ValidationRule },
-    RemoveValidation { sheet_id: SheetId, range: String },
+    // -- Sort (ranged) ---------------------------------------------------
+    SortRange { sheet_id: String, row_start: u32, row_end: u32, col_start: u32,
+                col_end: u32, sort_col: u32, ascending: bool, has_header: bool },
 
-    // -- Protection (trame-features sec.6, Post-MVP) ------------------------
-    SetProtection    { sheet_id: SheetId, range: String, owner_user_id: Uuid,
-                       allowed_user_ids: Vec<Uuid>, description: String },
-    RemoveProtection { sheet_id: SheetId, range: String },
+    // -- Shared filter ---------------------------------------------------
+    ApplyFilter { sheet_id: String, col: u32, kind: FilterKind },
+    ClearFilter { sheet_id: String },
 
-    // -- Undo / Redo (trame-features sec.4) ---------------------------------
-    Undo,
-    Redo,
+    // -- CSV interop (interop MVP) ---------------------------------------
+    ImportCsv { data: Vec<u8>, delimiter: Option<u8>, has_header: bool,
+                target_sheet_id: Option<String>, start_row: u32, start_col: u32 },
+    ExportActiveSheetCsv,
+    ExportCsv { sheet_id: String, delimiter: Option<u8>, range: Option<GridRange> },
 
-    // -- Collaborative cursor (ephemeral) ---------------------------------
-    /// Local presence. The handler builds the wire `PresencePayload { sheet_id, row, col,
-    /// selection, display_name: <local session name> }` and returns it as
-    /// `outcome.ephemeral` (postcard) -> SyncCommand::SendEphemeral. No `user_id` on the wire.
-    UpdateCursor { sheet_id: SheetId, row: u32, col: u32,
-                   selection: Option<(u32, u32, u32, u32)> },
-
-    // -- Import / Export (trame-interop) ----------------------------------
-    ImportXlsx   { data: Vec<u8> },
-    ImportCsv    { data: Vec<u8>, delimiter: Option<u8>, has_header: bool,
-                   target_sheet_id: Option<SheetId>, start_row: u32, start_col: u32 },
-    ExportXlsx   { sheet_ids: Option<Vec<SheetId>> },
-    ExportCsv    { sheet_id: SheetId, delimiter: Option<u8>,
-                   range: Option<CsvRange> },
-    ExportPdf    { sheet_id: SheetId, page_setup: PdfPageSetup },
-
-    // -- Snapshot (sync) -------------------------------------------------
-    RequestSnapshot,
+    // -- Deferred feature surface (present in the enum, handlers stubbed) --
+    // personal filter views / multi-col sort -> Phase 2; cond. formatting &
+    // validation -> Phase 2/3; range protection -> Post-MVP.
+    SaveFilterView { name: String, sheet_id: String, filter_col: u32, kind: FilterKind },
+    ActivateFilterView { view_id: String },
+    SortRangeMulti { sheet_id: String, row_start: u32, row_end: u32, col_start: u32,
+                     col_end: u32, sort_keys: Vec<SortKey>, has_header: bool },
+    AddCondFormat    { sheet_id: String, range: GridRange, rule: CondFormatKind,
+                       style: CondStyle, priority: i64 },
+    UpdateCondFormat { sheet_id: String, id: String, range: GridRange,
+                       rule: CondFormatKind, style: CondStyle, priority: i64 },
+    RemoveCondFormat { sheet_id: String, id: String },
+    AddValidation    { sheet_id: String, range: GridRange, kind: ValidationKind,
+                       on_invalid: ValidationOnInvalid, message: String },
+    RemoveValidation { sheet_id: String, range: GridRange },
+    SetProtection    { sheet_id: String, range: GridRange,
+                       allowed_user_ids: Vec<UserId>, description: String },
+    RemoveProtection { sheet_id: String, range: GridRange },
 }
 
-/// **Note:** `FilterKind`, `FilterCondition`, `FilterDef`, `CondFormatRule`,
-/// `ValidationRule` types are defined in the corresponding `ambre-trame/src/features/` modules
-/// (filters, conditional formatting, data validation). `CsvRange`, `PdfPageSetup`,
-/// `ImportWarning` types are defined in `ambre-trame/src/interop/`. `SortKey` is defined in
-/// `ambre-trame/src/features/sort.rs`. `StylePatch`, `NumberFormat`, `CellRange`, `ClipboardPayload`,
-/// `FillMode`, `Scope` are defined in `ambre-trame/src/style.rs` / `ambre-trame/src/clipboard.rs`.
-/// All these types implement `Serialize`/`Deserialize` to travel in `TrameCommand` via postcard.
+/// **Not yet on the bus (planned surface).** xlsx import/export
+/// (`ImportXlsx`/`ExportXlsx`), PDF export (`ExportPdf`), collaborative-cursor
+/// presence (`UpdateCursor` + `TrameEvent::RemoteCursors`, ephemeral plane), and
+/// the sync `RequestSnapshot` are described by `trame-interop` / §7-§8 as design
+/// targets but are **not** in the `ambre-bus` `TrameCommand` today. They join the
+/// enum when their handlers land.
 
-/// Single source of truth -- Logic thread -> UI thread.
-/// All feature and interop variants are consolidated here.
-#[derive(Serialize, Deserialize)]
+/// **Note:** `FilterKind`, `SortKey`, `CondFormatKind`, `CondStyle`,
+/// `ValidationKind`, `ValidationOnInvalid`, `GridRange`, `StylePatch`,
+/// `NumberFormat`, `ClipboardPayload`, `FillMode`, `HAlign`, `VAlign`, `Borders`
+/// are defined in `ambre-bus::app::trame::{style,clipboard,features}` and derive
+/// `Serialize`/`Deserialize` (postcard for the clipboard payload and the CRDT
+/// style register). `UserId` comes from `ambre-core`. The `TrameCommand` /
+/// `TrameEvent` enums themselves derive only `Debug, Clone`.
+
+/// Logic thread -> UI thread. Canonical definition in
+/// `ambre-bus::app::trame::event`. Grid positions (`u32`) throughout; a mutating
+/// command that changes the visible region rides alongside a `DataReset` so the UI
+/// re-fetches. `#REF!`/parse errors are not a distinct event -- they surface as the
+/// affected cell's displayed text inside `ViewportData`.
+#[derive(Debug, Clone)]
 pub enum TrameEvent {
-    // -- Engine ----------------------------------------------------------
-    ViewportData(DisplayViewport),
-    EditAck      { version: u64 },
-    FormulaError { row: u32, col: u32, error: FormulaError, version: u64 },
-    SheetList    { sheets: Vec<(SheetId, String)> },
-    MergeRejected { version: u64, reason: String },
-    MergeConflictDetected { master_cell: CellRef, covered_cell: CellRef },
+    // -- Engine / viewport -----------------------------------------------
+    ViewportData { version: u64, row_start: u32, col_start: u32,
+                   cells: Vec<DisplayCell>, col_widths: Vec<f32>, row_heights: Vec<f32> },
+    DataReset,                                           // re-fetch the visible region
+    SelectRange { r1: u32, c1: u32, r2: u32, c2: u32 }, // e.g. after unmerge
+    StyleApplied { style: CellStyle, bold: bool, italic: bool, merged: bool, numeric: bool },
+    SheetList { sheets: Vec<(String, String)>, active: String },
+    MergeRejected { reason: String },
+    MergeConflictDetected { master_row: u32, master_col: u32, covered_row: u32, covered_col: u32 },
+    UndoState { can_undo: bool, can_redo: bool },
+    Error { message: String },
 
-    // -- Curseurs distants -----------------------------------------------
-    RemoteCursors { cursors: Vec<RemoteCursorPayload> },
+    // -- Sort / filter / stats -------------------------------------------
+    SortComplete,
+    FilterApplied { hidden_row_count: u32, col: u32 },
+    FilterCleared,
+    ColumnValues { col: u32, values: Vec<String> },
+    SelectionStats { sum: f64, avg: f64, count: u64, count_num: u64, min: f64, max: f64 },
 
-    // -- Filtres (trame-features) ----------------------------------------
-    FilterApplied    { version: u64, hidden_row_count: u32 },
-    FilterCleared    { version: u64 },
-    FilterViewSaved  { view_id: String },
+    // -- Find & replace / clipboard --------------------------------------
+    FindResult { matches: Vec<(u32, u32)>, active: Option<usize> },
+    ReplaceDone { replaced: u32 },
+    PasteRejected { reason: String },
+    Clipboard(ClipboardPayload),
 
-    // -- Tri (trame-features) --------------------------------------------
-    SortComplete     { version: u64 },
-
-    // -- Formatage conditionnel (trame-features) -------------------------
+    // -- Deferred feature surface (emitted once handlers land) ------------
+    FilterViewSaved { view_id: String },
     CondFormatsUpdated { version: u64 },
-
-    // -- Format manuel / clipboard / autofill (trame-ui) -----------------
-    // The viewport is refreshed alongside; these just unblock UI busy flags / toasts.
-    StyleApplied     { version: u64 },
-    PasteRejected    { version: u64, reason: String },   // e.g. paste over a protected range
-
-    // -- Find & Replace (trame-ui) ---------------------------------------
-    FindResult       { matches: Vec<CellRef>, active: Option<CellRef> },
-    ReplaceDone      { version: u64, replaced: u32 },
-
-    // -- Selection stats (status bar) ------------------------------------
-    SelectionStats   { sum: f64, avg: f64, count: u32, count_num: u32,
-                       min: f64, max: f64 },
-
-    // -- Undo / Redo (trame-features) ------------------------------------
-    UndoState        { can_undo: bool, can_redo: bool },
-
-    // -- Validation (trame-features) -------------------------------------
     ValidationError   { version: u64, row: u32, col: u32, message: String },
     ValidationWarning { version: u64, row: u32, col: u32, message: String },
-
-    // -- Protection (trame-features, Post-MVP) ---------------------------
     ProtectionDenied  { version: u64, row: u32, col: u32, description: String },
-    ProtectionViolationWarning { row: u32, col: u32, from_user_id: Uuid, description: String },
+    ProtectionViolationWarning { row: u32, col: u32, from_user_id: UserId, description: String },
 
-    // -- Import / Export (trame-interop) ----------------------------------
-    ImportComplete   { version: u64, sheets_count: u32, warnings: Vec<ImportWarning> },
-    ImportProgress   { percent: u8, current_sheet: String },
-    ExportComplete   { version: u64, filename: String, data: Vec<u8> },
-
-    // -- Erreur ----------------------------------------------------------
-    Error { code: u16, message: String },
+    // -- Interop (CSV MVP) -----------------------------------------------
+    ImportComplete { sheet_id: String, rows: u32, cols: u32 },
+    ExportComplete { filename: String, data: Vec<u8> },
 }
+
+> **Planned presence surface (not yet on the bus).** The collaborative-cursor
+> types below and the `UpdateCursor` command / `RemoteCursors` event that carry
+> them are the design target for ephemeral presence; they are **not** in the
+> `ambre-bus` `TrameEvent`/`TrameCommand` today (§9 "planned surface" note). They
+> land with `apply_ephemeral`.
 
 /// Peer-authored `Ephemeral` wire payload. Carries ONLY the cell position + a
 /// self-asserted, cosmetic display name. It deliberately does NOT carry a `user_id`:
@@ -1389,10 +1404,10 @@ pub struct RemoteCursorPayload {
 }
 ```
 
-> **Note.** `RemoteCursorPayload` travels inside `TrameEvent::RemoteCursors` on the content
-> plane (by move on `flume`). It keeps a `serde` derive today only because `TrameEvent` still
-> derives `Serialize`/`Deserialize` wholesale; the sole type that genuinely needs `serde` for
-> presence is the wire `PresencePayload` (postcard in the `Ephemeral` bytes).
+> **Note.** `RemoteCursorPayload` would travel inside `TrameEvent::RemoteCursors` on the content
+> plane (by move on `flume`), so it needs no `serde` of its own -- `TrameEvent` derives only
+> `Debug, Clone`. The sole presence type that genuinely needs `serde` is the wire
+> `PresencePayload` (postcard in the `Ephemeral` bytes).
 
 ### Shared Rendering Module — `ambre-trame/src/render.rs`
 
@@ -1466,7 +1481,9 @@ UI Thread — re-render viewport
 #[test] fn broken_ref_cell_after_delete_row()        { /* =A1 -> delete row -> #REF! */ }
 #[test] fn broken_ref_range_endpoint_after_delete()  { /* =SUM(A1:A10) -> delete row 10 -> #REF! */ }
 #[test] fn range_includes_inserted_row()             { /* insert dans A1:A100 -> inclus dans SUM */ }
-#[test] fn entire_axis_range()                       { /* SUM(A:A) -> inclut toute la colonne */ }
+// `RangeEndpoint::EntireAxis` (A:A / 1:1) is reserved but the MVP parser never
+// emits it (§3.A), so there is no `SUM(A:A)` test yet -- it lands with unbounded-range
+// parsing (Phase 3).
 #[test] fn bytecode_only_stale_cells_recompiled()    { }
 #[test] fn merge_overlap_resolved_by_lww()           { }
 #[test] fn split_merge_restores_empty_cells()        { }
@@ -1500,7 +1517,7 @@ proptest! {
 | Operation | Target | Note |
 |---|---|---|
 | P1 response (scroll → `DisplayViewport`) | < 15 ms | |
-| P2 response (EditCell → ack) | < 5 ms | Recompile bytecode + update DAG |
+| P2 response (`SetCellText` → viewport) | < 5 ms | Recompile bytecode + update DAG |
 | P3 import (`doc.import` 1 KB) | < 2 ms | |
 | P4 batch (50 cells) | < 1 ms | |
 | 10k-cell DAG recomputation | < 50 ms | |
@@ -1739,7 +1756,7 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
   + `"s"` indirection (a *dedup* optimization) and the `{v,t,s}` sub-map are **deferred behind a
   benchmark** and are not a prerequisite for anything.*
 - [x] Bidirectional `SheetIndex` (`model::SheetIndex`, dense over used range) + `sheet_name_to_id`
-- [x] `nom` parser: arithmetic, `CellRef`, `Range` (bounded + `EntireAxis`), basic functions, cross-sheet references (`Sheet2!A1` via `sheet_name_to_id`)
+- [x] `nom` parser: arithmetic, `CellRef`, bounded `Range` (`A1:B10`), basic functions, cross-sheet references (`Sheet2!A1` via `sheet_name_to_id`). `RangeEndpoint::EntireAxis` (A:A / 1:1) is reserved in the type but not parsed yet -- Phase 3.
 - [x] Bytecode VM: full `Op` set, `compile()`, `execute()`, `EvalContext`
 - [x] Two-level `DependencyGraph` + `collect_dirty`
 - [x] Cycles: static Kosaraju + dynamic `eval_stack` (cell-to-cell, ranges, cross-sheet)
@@ -1783,13 +1800,15 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
   - Date/time: TIME, HOUR, MINUTE, SECOND, WEEKDAY, EDATE, EOMONTH
   - Lookup/reference: HLOOKUP, CHOOSE, ROWS, COLUMNS, ROW, COLUMN. **Context note:** `ROW()`/`COLUMN()` need the evaluating cell's position, threaded into `call_builtin` via `FnCtx` (`EvalContext::current_pos`, set in `eval_cell` from the cell's `SheetIndex` position -- same pattern as `now_serial`). Only the **no-argument** form is supported; the reference form (`ROW(A1)`) and `OFFSET`/`INDIRECT` need reference-preserving compilation (args are pre-evaluated to values, losing the reference identity) and are **deferred to Phase 3**.
 - [x] Named ranges, cross-sheet references *(Epic `E3`: `CellRef`/`RangeDep` carry a local `sheet: u16`; the parser emits `Expr::SheetRef`/`Expr::Name`, resolved by a context-aware `resolve_refs` pass against a `FormulaCtx` (sheet display name -> index, defined name -> target). Named ranges fully wired e2e: `named_ranges` LWW CRDT map, `TrameCommand::DefineName`/`DeleteName`, positional resolution on reseed. `reseed_engine` is multi-sheet (active sheet pinned to index 0; cross-sheet `Sheet2!A1` evaluates in the engine, unit-tested). **Gap:** the end-to-end cross-sheet path needs a sheet-creation command (`CreateSheet`/`ActivateSheet`), which lands with the sheet-tabs UI (see Phase 0) -- the engine is ready, only the entry point is missing)*
-- [x] Sheet lifecycle commands `CreateSheet` / `RenameSheet` / `MoveSheet` / `DeleteSheet` + `ActivateSheet` (§2.D): peer-scoped `sheet_id` minting (`{peer:016x}_{counter:08x}`), `sheet_order` `LoroMovableList` ops (default sheet implicit-first, never eagerly pushed), last-sheet-deletion guard (`TrameEvent::Error`), active-sheet fallback on delete, delete-driven reseed (drops per-sheet containers) + full engine remap. `TrameEvent::SheetList { sheets, active }` refreshes the tab strip (also on load). Unlocks the end-to-end cross-sheet path (unit-tested `cross_sheet_formula_evaluates_end_to_end`). *(Epic `E3`. The sheet-tabs UI has since landed as the DOM `SheetTabs` component. **Still open:** the last-sheet-deletion guard is enforced **locally** only; its behaviour under concurrent deletion by two peers is unspecified and untested. Post-MVP, no Story yet -- needs a 2-peer convergence case before any fix is designed.)*
+- [x] Sheet lifecycle commands `CreateSheet` / `RenameSheet` / `MoveSheet` / `DeleteSheet` + `ActivateSheet` (§2.D): peer-scoped `sheet_id` minting (`{peer:016x}_{counter:08x}`), `sheet_order` `LoroMovableList` ops (default sheet implicit-first, never eagerly pushed), last-sheet-deletion guard (`TrameEvent::Error`), active-sheet fallback on delete, delete-driven reseed (drops per-sheet containers) + full engine remap. `TrameEvent::SheetList { sheets, active }` refreshes the tab strip (also on load). Unlocks the end-to-end cross-sheet path (unit-tested `cross_sheet_formula_evaluates_end_to_end`). *(Epic `E3`. The sheet-tabs UI has since landed as the DOM `SheetTabs` component. **Still open:** the last-sheet-deletion guard is enforced **locally** only. The concurrent-deletion rule is now **decided** -- deterministic re-insertion of the first-sorting `sheet_id` (§2.D) -- but not yet implemented; it needs a 2-peer convergence regression test before it ships.)*
 - [x] Cross-sheet references bound to `sheet_id` (not display name): the CRDT `v` text is canonicalized to an id-qualified form (`#s0!A1` via the `#` sigil) at edit time, and the formula-bar text is reconstructed through `sheet_id -> name`, so rename/reorder preserve references and delete yields cross-sheet `#REF!` (§2.D rename note, §12). *(Epic `E3`: `formula::SheetQualifier` on `Expr::SheetRef`, parser `#id` token + `FormulaCtx::resolve_sheet_id`, `FormulaError::BrokenRef`/`Op::PushError`, `formula::render` AST printer with `canonicalize`/`to_display_form`, `TrameState::canonicalize_input`/`formula_display` + `sheet_id_to_u16`/`sheet_id_to_name` maps. Tests: parser `#id`/`#REF!`, render round-trips, `cross_sheet_reference_survives_rename_and_breaks_on_delete`, `cross_sheet_reference_converges_across_peers_on_rename`)* **Interop note (deferred):** xlsx/CSV export must map `#id -> name` and import `name -> #id` (tracked in the interop spec). Pre-existing display-name formulas are canonicalized on next edit (no bulk rewrite).
 
 **Phase 3 — Optimization & Completion**
 - [ ] `SheetRangeIndex` interval tree 2D if benchmarks justify it
 - [ ] Floating objects R-tree
 - [ ] `compute_all_dirty` benchmarks on mobile hardware — if > 50ms P95, implement the asynchronous P4 yield (`ContinueDirtyCompute` / `ComputePending`, see §8 optional Phase 2)
+- [ ] **Concurrent last-sheet-deletion convergence (§2.D):** implement the decided deterministic re-insertion rule (the first-sorting `sheet_id` is re-inserted identically on every peer when converging deletes empty `sheet_order`), gated by a 2-peer convergence regression test. Today only the **local** last-sheet guard ships.
+- [ ] **`RangeEndpoint::EntireAxis` (`A:A` / `1:1`) parsing:** the type variant is reserved but the MVP parser never emits it; wire whole-column/row range parsing + evaluation (§4.B, §9).
 - [ ] Advanced functions: XLOOKUP, LAMBDA, dynamic arrays
 - [ ] Reference-preserving functions: `ROW(reference)`/`COLUMN(reference)`, OFFSET, INDIRECT *(require the compiler/VM to pass reference identity, not the pre-evaluated value, into the call; the no-arg `ROW()`/`COLUMN()` already ship in Phase 2)*
 - [ ] Rayon for independent DAG branches

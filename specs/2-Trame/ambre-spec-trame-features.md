@@ -161,45 +161,49 @@ TrameCommand::SortRange {
 **Implementation:**
 
 ```rust
-fn sort_range(&mut self, cmd: SortRangeCmd) {
-    let sheet_idx = &self.sheet_indices[&cmd.sheet_id];
+// As-built: `TrameState::sort_range` (`logic/sort.rs`). Sorting only ever targets
+// the ACTIVE sheet (the UI activates it first): the formula cache the keys read
+// from is pinned to engine index 0. The header (if any) is pinned by starting the
+// sortable region one row down; rows after `row_end` are simply never moved -- there
+// is no "rows after the range" chain to append (that was a bug: `rows` only spans
+// the range, so `skip(row_end + 1)` was always empty).
+fn sort_range(
+    &mut self, sheet_id: &str, row_start: u32, row_end: u32, col_start: u32,
+    col_end: u32, sort_col: u32, ascending: bool, has_header: bool,
+) -> TrameOutcome {
+    if sheet_id != self.active_sheet { return TrameOutcome::display_only(vec![]); }
+    // Clamp to materialized rows; virtual rows carry no data to reorder.
+    let last = self.index.row_len().saturating_sub(1) as u32;
+    let row_end = row_end.min(last);
+    if col_start + sort_col > col_end || row_start > row_end {
+        return TrameOutcome::display_only(vec![]);
+    }
+    let sort_col_abs = col_start + sort_col;
+    let sort_start = if has_header { row_start + 1 } else { row_start };
+    if sort_start >= row_end { return TrameOutcome::display_only(vec![]); } // <= 1 sortable row
 
-    // Resolve the Uid of the rows in the range
-    let rows: Vec<Uid> = (cmd.row_start..=cmd.row_end)
-        .filter_map(|r| sheet_idx.row_by_pos.get(r as usize).copied())
-        .collect();
-    let header = if cmd.has_header { rows.first().copied() } else { None };
-    let sort_rows: Vec<Uid> = rows.iter()
-        .skip(if cmd.has_header { 1 } else { 0 })
-        .copied()
-        .collect();
-
-    let sort_col_id = sheet_idx.col_by_pos[cmd.col_start as usize + cmd.sort_col as usize];
-
-    // Fetch values and sort -- stable sort
-    let mut keyed: Vec<(Uid, CellValue)> = sort_rows.iter()
-        .map(|&row_id| {
-            let cell = CellId::bound(cmd.sheet_idx, row_id, sort_col_id);
-            let val = self.formula_cache.get(&cell).cloned().unwrap_or(CellValue::Empty);
-            (row_id, val)
+    // Key each sortable row by its uid and the evaluated value of its sort column
+    // (`active_cell_id` builds the CellId with the engine u16 index -- not the
+    // String sheet_id). Whole rows travel by uid; no cell content is read/rewritten.
+    let mut keyed: Vec<(Uid, CellValue)> = (sort_start..=row_end)
+        .filter_map(|pos| {
+            let row_uid = self.index.row_id(pos as usize)?;
+            let value = self.engine
+                .evaluated_value(self.active_cell_id(pos, sort_col_abs))
+                .unwrap_or(CellValue::Empty);
+            Some((row_uid, value))
         })
         .collect();
 
+    let before: Vec<Uid> = keyed.iter().map(|(uid, _)| *uid).collect();
     keyed.sort_by(|(_, a), (_, b)| {
-        let ord = compare_cell_values(a, b); // Empty last, Errors after Empty
-        if cmd.ascending { ord } else { ord.reverse() }
+        let ord = compare_cell_values(a, b); // Number < Text < Boolean < Error < Empty
+        if ascending { ord } else { ord.reverse() }
     });
-
-    // Reorder LoroMovableList("rows_{sheet}") according to the new order
-    // Each move = 1 CRDT operation; cells keyed by uid follow for free.
-    let new_order: Vec<Uid> = header.into_iter()
-        .chain(keyed.into_iter().map(|(id, _)| id))
-        .chain(rows.iter().skip(cmd.row_end as usize + 1).copied())
-        .collect();
-
-    self.apply_row_order(cmd.sheet_id, &new_order);
-    // The Loro mutation produces a delta: passed back via outcome.update, the
-    // Logic dispatcher emits SyncCommand::SendUpdate { document_id, payload }.
+    let target: Vec<Uid> = keyed.into_iter().map(|(uid, _)| uid).collect();
+    // realize_sort replays the permutation as `mov` ops on rows_{sheet} (a no-op +
+    // SortComplete when already ordered); the delta rides outcome.update.
+    self.realize_sort(sort_start, &before, target)
 }
 
 fn compare_cell_values(a: &CellValue, b: &CellValue) -> std::cmp::Ordering {
@@ -232,8 +236,14 @@ fn compare_cell_values(a: &CellValue, b: &CellValue) -> std::cmp::Ordering {
 > (bound to a row/column `Uid`, `trame-logic §3`) resolve to the new positions, so they
 > **follow the data** -- the §8 / `trame-logic §12` guarantee. A *range* is a positional block
 > (its endpoints stay positional), so an internal sort leaves the block and its total intact.
-> `compare_cell_values` uses an explicit type-rank (`Number < Text < Boolean < Error < Empty`).
+> `compare_cell_values` uses an explicit type-rank (`Number < Text < Boolean < Error < Empty`);
+> `Error` ranks **before** `Empty` (errors are not last -- blanks are).
 > Emits `TrameEvent::SortComplete` + `DataReset`.
+>
+> **Assumed difference from Excel (descending).** Descending reverses the *whole*
+> comparator, blank cells included, so blanks sort to the **top** on a descending
+> sort. Excel keeps blanks last regardless of direction. This falls out of the
+> single `ord.reverse()` and is accepted as-is (a blank has no value to anchor last).
 
 ### Multi-Column Sort (MVP)
 
@@ -382,7 +392,7 @@ impl TrameState {
 **Undo commit granularity:**
 
 Each atomic user operation constitutes an undo item. Granularity follows Google Sheets:
-- `EditCell` + confirmation (Enter or click elsewhere) → 1 undo item
+- `SetCellText` + confirmation (Enter or click elsewhere) → 1 undo item
 - Rapid succession of keystrokes in the same cell → 1 undo item (commit on cell exit)
 - `InsertRow` → 1 undo item
 - `SortRange` → 1 undo item (undoes the entire reordering)
@@ -396,54 +406,32 @@ Each atomic user operation constitutes an undo item. Granularity follows Google 
 
 **Implementation:**
 
+A cell edit (`SetCellText`) writes the raw string into `cells_{sheet}`; Loro's
+`UndoManager` observes the mutation through its internal subscription (nothing to
+register manually), and the undo item is sealed on cell exit by `CommitEdit` (1
+edit = 1 undo item).
+
+As-built, undo and redo share one path, `apply_history(undo: bool)`
+(`logic/commands.rs`): call `undo_manager.undo()`/`redo()`, then rebuild **all**
+derived caches through the same `after_structural()` used by structural ops and
+broadcast the inverse ops as a fresh delta. There is **no** `doc.diff` against a
+stored previous version (the state keeps none) and **no** partial "touched cells"
+rebuild -- the reseed is total, which is why the filter hidden-set is never stale
+after an undo.
+
 ```rust
-// TrameCommand::EditCell flow
-fn handle_edit_cell(&mut self, cmd: EditCellCmd) {
-    // Loro mutations are automatically tracked by UndoManager
-    let cells = self.doc.get_map("cells_{}", &cmd.sheet_id);
-    cells.insert(&cell_key, "v", cmd.raw);
-    // UndoManager observes via internal subscription -- nothing to do manually here
-    // The undo commit is triggered by TrameCommand::CommitEdit or timeout
-    self.bytecode.invalidate(cell_ref);
-    // ...
-}
-
-// TrameCommand::Undo
-fn handle_undo(&mut self) {
-    match self.undo_manager.undo() {
-        Ok(_) => {
-            // Loro reapplied the previous state in doc
-            // Must rebuild: SheetIndex if structure changed,
-            // bytecode.invalidate() for all touched cells,
-            // dirty for dependents
-            self.rebuild_after_undo_redo();
-        }
-        Err(loro::UndoError::NothingToUndo) => { /* no item in stack */ }
-        Err(e) => { /* log */ }
+fn apply_history(&mut self, undo: bool) -> TrameOutcome {
+    let changed = if undo { self.undo_manager.undo() } else { self.undo_manager.redo() };
+    match changed {
+        Ok(true) => {}                                   // something was un/redone
+        _ => return TrameOutcome::display_only(vec![self.undo_state_event()]),
     }
-}
-
-// TrameCommand::Redo
-fn handle_redo(&mut self) {
-    match self.undo_manager.redo() {
-        Ok(_)  => self.rebuild_after_undo_redo(),
-        Err(_) => {}
-    }
-}
-
-fn rebuild_after_undo_redo(&mut self) {
-    // Diff between previous state and current doc state
-    // -> touched cells -> invalidate bytecode -> mark dirty -> send viewport
-    let diff = self.doc.diff(/* prev_version */, /* cur_version */);
-    for changed_cell in self.extract_changed_cells(diff) {
-        self.bytecode.invalidate(changed_cell);
-        let dirty = self.deps.collect_dirty(changed_cell, &self.sheet_indices);
-        self.dirty.extend(dirty);
-    }
-    // If structure (rows/columns) changed -> rebuild SheetIndex
-    self.rebuild_sheet_indices_if_needed(diff);
-    // Send viewport immediately
-    self.send_viewport_response();
+    // Full derived-cache reseed + delta broadcast, exactly like after_structural:
+    // rebuild_index -> reseed_engine -> rebuild_merges -> reseed_styles ->
+    // rebuild_filter (so filter_hidden is recomputed, never stale) -> flush_delta.
+    let mut outcome = self.after_structural();
+    outcome.display.push(self.undo_state_event());       // { can_undo, can_redo }
+    outcome
 }
 ```
 
@@ -486,30 +474,32 @@ pub enum ValidationOnInvalid {
 ### Evaluation on Input
 
 ```rust
-fn handle_edit_cell(&mut self, cmd: EditCellCmd) -> Vec<TrameEvent> {
-    let cell_ref = self.resolve_cell(cmd.sheet_id, cmd.row, cmd.col);
+fn handle_set_cell_text(&mut self, row: u32, col: u32, text: String) -> Vec<TrameEvent> {
+    // Positional edit on the active sheet (SetCellText carries no sheet_id).
+    let cell_ref = self.resolve_cell(self.active_sheet, row, col);
 
     // Check validation before Loro mutation
-    if let Some(validation) = self.find_validation(cmd.sheet_id, cell_ref) {
-        let result = self.eval_validation(&validation, &cmd.raw, cmd.sheet_id);
+    if let Some(validation) = self.find_validation(self.active_sheet, cell_ref) {
+        let result = self.eval_validation(&validation, &text, self.active_sheet);
+        // ValidationError/Warning still carry a `version` field; SetCellText is
+        // optimistic and version-less, so it is 0 here (Post-MVP: thread an edit
+        // sequence if echo-matching is ever needed).
         match (result, &validation.on_invalid) {
             (false, ValidationOnInvalid::Reject) => {
                 // Mutation blocked -- no CRDT delta emitted
                 return vec![TrameEvent::ValidationError {
-                    version: cmd.version,
-                    row: cmd.row, col: cmd.col,
+                    version: 0, row, col,
                     message: validation.message.clone(),
                 }];
             }
             (false, ValidationOnInvalid::Warn) => {
                 // Mutation allowed but warning added to returned events
-                let mut events = vec![TrameEvent::ValidationWarning {
-                    version: cmd.version,
-                    row: cmd.row, col: cmd.col,
+                let events = vec![TrameEvent::ValidationWarning {
+                    version: 0, row, col,
                     message: validation.message.clone(),
                 }];
                 // Continue to mutation -- additional events added below
-                self.apply_edit_cell(cell_ref, &cmd.raw);
+                self.apply_edit_cell(cell_ref, &text);
                 // ... compute_all_dirty, build_viewport, etc.
                 return events;
             }
@@ -518,7 +508,7 @@ fn handle_edit_cell(&mut self, cmd: EditCellCmd) -> Vec<TrameEvent> {
     }
 
     // Loro mutation
-    self.apply_edit_cell(cell_ref, &cmd.raw);
+    self.apply_edit_cell(cell_ref, &text);
     // ... compute_all_dirty, build_viewport, etc.
     vec![] // events added by the caller (dispatch)
 }
@@ -580,14 +570,13 @@ fn check_protection(&self, sheet: SheetId, cell: CellRef) -> ProtectionResult {
     ProtectionResult::Allowed
 }
 
-fn handle_edit_cell(&mut self, cmd: EditCellCmd) -> Vec<TrameEvent> {
-    let cell_ref = self.resolve_cell(cmd.sheet_id, cmd.row, cmd.col);
+fn handle_set_cell_text(&mut self, row: u32, col: u32, text: String) -> Vec<TrameEvent> {
+    let cell_ref = self.resolve_cell(self.active_sheet, row, col);
 
-    match self.check_protection(cmd.sheet_id, cell_ref) {
+    match self.check_protection(self.active_sheet, cell_ref) {
         ProtectionResult::Denied { description } => {
             return vec![TrameEvent::ProtectionDenied {
-                version: cmd.version,
-                row: cmd.row, col: cmd.col,
+                version: 0, row, col,
                 description,
             }];
             // No Loro mutation, no CRDT delta
@@ -601,12 +590,22 @@ fn handle_edit_cell(&mut self, cmd: EditCellCmd) -> Vec<TrameEvent> {
 
 **On receiving a remote update:**
 
+Post-hoc protection enforcement needs the delta's **author**, which the MVP
+`apply_remote(&mut self, payload: &[u8]) -> Vec<TrameEvent>` (`-logic.md` §8) does
+**not** receive. Enforcing it (Post-MVP) therefore requires threading the
+Sync-resolved `from_user_id` into `apply_remote` -- the same trusted,
+spoof-proof identity `apply_ephemeral` already gets (`-logic.md` §8, `-sync.md §3`),
+never an id read from the payload. The signature below shows that Post-MVP
+extension:
+
 ```rust
 /// Applies a remote delta (forwarded by the Logic dispatcher from
 /// LogicEvent::RemoteUpdate) and returns display TrameEvent + violation
-/// TrameEvent. The Logic dispatcher wraps them in AppEvent::Trame -> UiEvent::Viewport.
-fn apply_remote(&mut self, payload: &[u8]) -> Vec<TrameEvent> {
-    self.doc.import(payload).unwrap();
+/// TrameEvent. `from_user_id` is the Sync-resolved author (Post-MVP param, only
+/// needed for range-protection enforcement). Import errors are surfaced, not
+/// unwrapped.
+fn apply_remote(&mut self, payload: &[u8], from_user_id: UserId) -> Vec<TrameEvent> {
+    if self.doc.import(payload).is_err() { return vec![]; }
     let diff = /* ... */;
     let mut events = Vec::new();
 
@@ -647,7 +646,7 @@ pub enum TrameEvent {
     // Filters -- shared filter implemented field-light (the accompanying
     // DataReset prompts the viewport re-fetch; hidden rows arrive flagged via
     // DisplayCell::is_filtered). Matches the implemented ambre_bus::TrameEvent.
-    FilterApplied   { hidden_row_count: u32 },
+    FilterApplied   { hidden_row_count: u32, col: u32 }, // `col` -> funnel badge on the header
     FilterCleared,
     FilterViewSaved { view_id: String }, // Phase 2 (personal views)
 
@@ -668,7 +667,7 @@ pub enum TrameEvent {
 
     // Protection (Post-MVP)
     ProtectionDenied  { version: u64, row: u32, col: u32, description: String },
-    ProtectionViolationWarning { row: u32, col: u32, from_user_id: Uuid, description: String },
+    ProtectionViolationWarning { row: u32, col: u32, from_user_id: UserId, description: String },
 }
 ```
 
@@ -757,7 +756,7 @@ pub enum TrameEvent {
 > Tracked as Stories of Epic **E3** (Trame MVP) in `specs/ambre-roadmap.md`.
 
 **Phase 1 — MVP (with the engine)**
-- [x] Shared filter: `TrameCommand::ApplyFilter` / `ClearFilter`, `filter_hidden_{sheet}` Loro *(Epic `E3`: `FilterKind::Values` / `Condition { op, value }` typed in `ambre-bus`; the failing rows' `row_uid`s are written into `filter_hidden_{sheet}` and broadcast, the definition persisted flat in `filters_{sheet}` (LWW). Hidden rows ride the viewport flagged `DisplayCell::is_filtered` (still counted by `=SUM`); the uid-keyed hidden set follows the data across a sort/insert, and `SetCellText` recomputes the active filter. Undoable (plain CRDT mutation). Emits `TrameEvent::FilterApplied { hidden_row_count }` / `FilterCleared` + `DataReset`. Tests: by-values, condition, sum-unaffected, clear, follows-sort, recompute-on-edit, remote-import, LWW convergence, undoable, no-op guards, full predicate coverage.)*
+- [x] Shared filter: `TrameCommand::ApplyFilter` / `ClearFilter`, `filter_hidden_{sheet}` Loro *(Epic `E3`: `FilterKind::Values` / `Condition { op, value }` typed in `ambre-bus`; the failing rows' `row_uid`s are written into `filter_hidden_{sheet}` and broadcast, the definition persisted flat in `filters_{sheet}` (LWW). Hidden rows ride the viewport flagged `DisplayCell::is_filtered` (still counted by `=SUM`); the uid-keyed hidden set follows the data across a sort/insert, and `SetCellText` recomputes the active filter. Undoable (plain CRDT mutation). Emits `TrameEvent::FilterApplied { hidden_row_count, col }` / `FilterCleared` + `DataReset`. Tests: by-values, condition, sum-unaffected, clear, follows-sort, recompute-on-edit, remote-import, LWW convergence, undoable, no-op guards, full predicate coverage.)*
 - [x] Simple sort: `TrameCommand::SortRange` (single column) *(Epic `E3`: typed sort keys via `engine.evaluated_value` + `compare_cell_values` precedence `Number < Text < Boolean < Error < Empty`; `has_header` pin, ascending/descending. Realized as a **pure `rows_{sheet}` order permutation** (`MovableList::mov`): cells keyed by their move-invariant `Uid` follow for free, references follow the data (`trame-logic §2.A`, §12). Emits `TrameEvent::SortComplete` + `DataReset`. Tests: ascending whole-row move, descending+header, formulas follow data, no-op guards.)* **Depends on the own-uid cell model (`trame-logic §14`).**
 - [x] **Multi-column sort: `TrameCommand::SortRangeMulti`** *(promoted from Phase 2 to MVP; same pure permutation as single-column sort, lexicographic comparator over `sort_keys`. UI: `SortDialog`, `-ui` §5.C.)* *(Epic `E3`: `sort_range_multi` keys each sortable row by the evaluated value in every sort column and `sort_by`s lexicographically over the keys -- first non-equal column decides, each key applying its own ascending/descending direction via `compare_cell_values`. Out-of-range keys are dropped; the permutation is realized through the shared `realize_sort` helper (`mov` ops on `rows_{sheet}`, uid-anchored bytecode preserved). Both the typed ranged `SortRangeMulti` and the parameterless `SortSelectionMulti` (Logic resolves the range from the tracked selection, driven by the `SortDialog`) are wired. Emits `SortComplete` + `DataReset`.)*
 - [x] **Filter feedback on the first row** (UI story, `-ui` §5.D): Excel-style autofilter dropdown buttons on the filter range's header row, fed by `FilterApplied { col }`. *(Logic side unchanged -- the existing shared filter; this is the UX surface the funnel-only badge lacked. Delivered: always-on buttons on the active cell's current region (resolved UI-side from the viewport cache), chevron/funnel keyed off `filtered_col`, a click selects the column and opens the existing `FilterPopover` via a one-shot `FilterOpenPublisher` canvas->launcher intent that re-runs the context-menu `FILTER_COLUMN` path -- one filter code path, two entry points. See `-ui` §5.D.)*
