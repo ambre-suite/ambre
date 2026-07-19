@@ -301,14 +301,20 @@ use peniko::Color;
 /// Deterministic per-user color, identical across all apps in the suite.
 /// Seeded on the **canonical `UserId`** (spoof-proof, resolved by `ambre-sync`,
 /// see `ambre-spec-sync.md` "Presence identity") -- never on the per-device
-/// `pub_key`, which changes on key rotation. peniko `Color` has no `from_hsl`,
-/// so we convert through a local `hsl_to_rgb` and return `Color::from_rgb8`.
+/// `pub_key`, which changes on key rotation. The id bytes are folded into a hue
+/// with FNV-1a and mapped through HSL at a fixed saturation/lightness, so every
+/// peer color is vivid, legible on light and dark backgrounds, and distinct from
+/// its neighbours; the result is always fully opaque (callers apply per-element
+/// alpha themselves).
 pub fn peer_color(user_id: &UserId) -> Color {
-    let bytes = user_id.as_uuid().as_bytes();
-    let hue = (u64::from_le_bytes(bytes[..8].try_into().unwrap())
-        .wrapping_mul(2654435761) >> 32) as f32
-        / u32::MAX as f32 * 360.0;
-    hsl_to_rgb(hue, 0.70, 0.55) // saturation 70%, lightness 55%
+    let mut hash: u32 = 0x811c_9dc5; // FNV-1a offset basis
+    for &b in user_id.as_bytes() {
+        hash ^= b as u32;
+        hash = hash.wrapping_mul(0x0100_0193); // FNV prime
+    }
+    let hue = (hash % 360) as f32;
+    let (r, g, b) = hsl_to_rgb(hue, 0.62, 0.55); // fixed S/L keeps peers legible
+    Color::from_rgba8(r, g, b, 255)
 }
 ```
 

@@ -10,6 +10,10 @@ description = "Abstraction trait for shared rendering (screen & PDF) in Ambre"
 testing = []
 
 [dependencies]
+# Scoped exception to the "kurbo/peniko/parley only" rule: `peer::peer_color`
+# is seeded on the canonical `UserId` so the newtype is preserved end-to-end
+# through every presence path. Types only -- no GPU, no crypto.
+ambre-core = { path = "../ambre-core" }
 kurbo = { workspace = true }
 peniko = { workspace = true }
 parley = { workspace = true }
