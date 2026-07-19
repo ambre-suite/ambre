@@ -242,7 +242,16 @@ Style attributes are stored in each node's `LoroMap` `"a"`:
 // "a" of the Table node:
 {
   "col_widths":    [f32, ...]         — column widths in pt
-  "merged":        [[row,col,rowspan,colspan], ...]
+  "merged":        { "<anchor_cell_TreeID>": "<extent_cell_TreeID>", ... }
+                                      -- each entry is one merged region, keyed by the
+                                        top-left (anchor) cell's stable TreeID, valued by
+                                        the bottom-right (extent) cell's stable TreeID.
+                                        NEVER numeric [row,col,rowspan,colspan] (those are
+                                        positions, not identities: a concurrent
+                                        InsertTableRow/Col would silently corrupt them --
+                                        see the CRDT note below). rowspan/colspan are DERIVED
+                                        at layout by locating the two corners in the current
+                                        grid; nothing positional is stored.
 }
 
 // "a" of the TableCell node:
@@ -294,6 +303,33 @@ SetCellStyle     { cell_id: TreeID, bg: Option<u32>, valign: Option<VAlign>,
                    border: Option<CellBorder>, padding_pt: Option<f32> },
 SetTableStyle    { table_id: TreeID, style: TableStyle },
 ```
+
+`MergeTableCells.start`/`end` are the selection corners **at command time** (u32 grid
+positions from the current view); the dispatcher resolves them to the anchor and extent
+**TreeIDs** and writes one `merged` entry keyed on those stable ids. The command input is
+positional; the *stored* merge is never positional.
+
+**Concurrent-edit semantics (CRDT).** This mirrors the resolved Trame merge model
+(`trame-logic §12` / §6) so both apps behave identically:
+
+- **Insert inside a merge.** A concurrent `InsertTableRow`/`InsertTableCol` whose new line
+  falls between the anchor and extent corners is **absorbed**: the derived rowspan/colspan
+  grow because layout recomputes them from the current position of the two stable corners
+  (Excel behavior, fully deterministic -- no stored count to go stale).
+- **Corner deleted.** If a concurrent `DeleteTableRow`/`DeleteTableCol` tombstones the
+  anchor **or** extent cell, the merge is **dropped** at post-import validation (the corner
+  TreeID no longer resolves): the region unmerges and the surviving covered cells reappear
+  as normal cells. Same philosophy as Trame's `#REF!` on a deleted bound id.
+- **Overlapping merges.** Two concurrent merges covering a shared cell are resolved by
+  **LWW** on the `merged` map (the entry with the most recent Loro `ListItemID` wins; the
+  loser is removed at validation). Covered cells are **masked, not destroyed** -- their
+  `LoroText` content survives and reappears verbatim on unmerge. A cell found covered while
+  still holding content raises `ProseEvent::MergeConflictDetected { cell_id }` for a UI hint
+  (non-blocking), exactly like Trame.
+
+Post-import validation runs `detect_and_handle_merge_conflicts(table_id)` after every remote
+delta (drop dangling-corner merges, LWW-resolve overlaps, refresh the masked-cell set); it is
+deterministic in `merged` + node liveness alone, so all peers converge.
 
 ---
 

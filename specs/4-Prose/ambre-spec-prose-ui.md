@@ -447,10 +447,10 @@ pub fn handle_key(
         "Home"       => { move_cursor(state, Direction::LineStart, shift); true }
         "End"        => { move_cursor(state, Direction::LineEnd,   shift); true }
 
-        // Editing
-        "Backspace"  => { send_cmd(to_logic, delete_backward(state)); true }
-        "Delete"     => { send_cmd(to_logic, delete_forward(state));  true }
-        "Enter"      => { send_cmd(to_logic, split_block(state));     true }
+        // Editing (selection-aware; each helper deletes an active selection first, see below)
+        "Backspace"  => { delete_backward(state, to_logic); true }
+        "Delete"     => { delete_forward(state, to_logic);  true }
+        "Enter"      => { split_block(state, to_logic);     true }
         "Tab"        => { send_cmd(to_logic, indent_or_next_cell(state)); true }
 
         // Formatting shortcuts (also surfaced via the DOM chrome command registry)
@@ -480,12 +480,97 @@ the textarea (`ambre-spec-chrome.md §2.C`).
 ```rust
 // InputEvent::TextInput { text } branch (committed, non-composition input)
 pub fn handle_text_input(text: &str, state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>) {
+    // Type-to-replace: an active selection is deleted first, then the text is inserted at
+    // the collapsed caret. take_selection() normalizes the range, emits DeleteRange, and
+    // repositions the cursor to the range start (see "Selection-aware editing" below).
+    take_selection(state, to_logic);
     let (block_id, pos) = (cursor_block(state), cursor_offset(state));
     state.draft_buffer.push_str(text, &block_id, pos);
     send_cmd(to_logic, ProseCommand::InsertText { block_id, pos, text: text.to_string() });
     advance_cursor(state, text.chars().count() as u32);
 }
 ```
+
+#### Selection-aware editing
+
+Every content-mutating edit (typing, Backspace, Delete, Enter, rich paste) first deletes
+the active selection, so the two most common editing operations — type-to-replace and
+delete-selection — have a single, shared path. The primitive is `take_selection`: it
+normalizes the current selection to document order, emits one `ProseCommand::DeleteRange`
+(the cross-block delete + block-merge primitive, `prose-logic §C`), collapses the caret to
+the range start, and clears `state.selection`. It is a no-op (returns `false`) when there is
+no selection, so the caret-only paths below are unchanged when nothing is selected.
+
+```rust
+// ambre-prose/src/ui/input/edit.rs
+
+/// If a selection is active, delete it (DeleteRange) and collapse the caret to its start.
+/// Returns true iff a selection was consumed. Callers that then insert/split act at the
+/// collapsed caret. No selection -> no command, returns false.
+fn take_selection(state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>) -> bool {
+    let Some(sel) = state.selection.take() else { return false };
+    let (start, end) = sel.normalized();                 // document order, start <= end
+    if start == end {                                    // zero-width: nothing to delete
+        state.cursor = Some(TextCursor::at(start.0, start.1));
+        return false;
+    }
+    send_cmd(to_logic, ProseCommand::DeleteRange { anchor: start.clone(), focus: end });
+    state.cursor = Some(TextCursor::at(start.0, start.1));
+    true
+}
+
+/// Backspace: delete the selection if any, else the grapheme before the caret. At offset 0
+/// with no selection, merge with the previous block via a zero-width cross-block DeleteRange
+/// (the block-merge case of prose-logic §C).
+fn delete_backward(state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>) {
+    if take_selection(state, to_logic) { return; }
+    let (block_id, pos) = (cursor_block(state), cursor_offset(state));
+    if pos == 0 {
+        if let Some((prev_id, prev_len)) = block_before(state, &block_id) {
+            // zero-width range across the boundary -> merge current block into the previous
+            send_cmd(to_logic, ProseCommand::DeleteRange {
+                anchor: (prev_id.clone(), prev_len),
+                focus:  (block_id, 0),
+            });
+            state.cursor = Some(TextCursor::at(prev_id, prev_len));
+        }
+        return;                                          // first block, offset 0 -> no-op
+    }
+    let prev = prev_grapheme_boundary(state, &block_id, pos);
+    send_cmd(to_logic, ProseCommand::DeleteText { block_id: block_id.clone(), range: (prev, pos) });
+    state.cursor = Some(TextCursor::at(block_id, prev));
+}
+
+/// Delete (forward): selection if any, else the grapheme after the caret; at block end,
+/// pull the next block up (merge) via a zero-width cross-block DeleteRange.
+fn delete_forward(state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>) {
+    if take_selection(state, to_logic) { return; }
+    let (block_id, pos) = (cursor_block(state), cursor_offset(state));
+    let len = block_text_len(state, &block_id);
+    if pos == len {
+        if let Some(next_id) = block_after(state, &block_id) {
+            send_cmd(to_logic, ProseCommand::DeleteRange {
+                anchor: (block_id.clone(), pos),
+                focus:  (next_id, 0),
+            });
+        }
+        return;
+    }
+    let next = next_grapheme_boundary(state, &block_id, pos);
+    send_cmd(to_logic, ProseCommand::DeleteText { block_id, range: (pos, next) });
+}
+
+/// Enter: delete the selection first, then split the (now collapsed) block at the caret.
+fn split_block(state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>) {
+    take_selection(state, to_logic);
+    let (block_id, pos) = (cursor_block(state), cursor_offset(state));
+    send_cmd(to_logic, ProseCommand::SplitBlock { block_id, pos });
+}
+```
+
+Ordering on the `flume` channel is preserved, so the `DeleteRange` always applies before the
+following `InsertText`/`SplitBlock`; grouping both under one undo step is Logic's concern
+(undo granularity, `prose-features §I`).
 
 #### IME (Input Method Editor)
 
@@ -509,7 +594,10 @@ pub fn handle_composition(
     to_logic: &flume::Sender<LogicCommand>,
 ) {
     match phase {
-        CompositionPhase::Start  => state.draft_buffer.begin_composition(cursor_block(state), cursor_offset(state)),
+        CompositionPhase::Start  => {
+            take_selection(state, to_logic);   // composed text replaces an active selection
+            state.draft_buffer.begin_composition(cursor_block(state), cursor_offset(state));
+        }
         CompositionPhase::Update => state.draft_buffer.set_composition(text),   // canvas preview only
         CompositionPhase::End    => {
             let (block_id, pos) = state.draft_buffer.end_composition();
@@ -835,14 +923,15 @@ pub fn poll_clipboard(&mut self) -> Option<ClipboardBlob> {
 }
 
 /// Native paste: prefer the in-memory blob when the OS text mirror still matches it
-/// (full fidelity), else decode blob.ambre; for a foreign text/html source the host passes
-/// its bytes and the view routes them through import_html.
+/// (full fidelity), else decode blob.ambre; otherwise fall back to the plain-text mirror.
+/// The `ClipboardBlob` carries only { text, ambre } -- there is NO text/html on the OS
+/// clipboard (Foundation clipboard model, `ambre-spec-ui.md §2.E`), so paste has exactly
+/// two outcomes. Importing a foreign HTML/docx/md *document* is a separate flow (file open
+/// or drag-drop -> ProseCommand::ImportDocument), not a clipboard paste.
 pub fn paste_clipboard(&mut self, blob: ClipboardBlob) {
     let (block_id, pos) = self.cursor_target();
     match self.decode_ambre(&blob) {
         Some(payload) => self.send_cmd(ProseCommand::PasteRich { block_id, pos, payload }),
-        None if blob.is_html() =>
-            self.send_cmd(ProseCommand::ImportDocument { format: ImportFormat::Html, data: blob.html_bytes() }),
         None => self.send_cmd(ProseCommand::InsertText { block_id, pos, text: blob.text }),
     }
 }
@@ -861,7 +950,7 @@ own policy.
 |------|---------|--------|------------|
 | `flume` UI → Logic thread | Typed `ProseCommand` (in `LogicCommand::App`) | Plaintext data in the **shared** WASM heap of the threads | Normal: the heap is only accessible from inside the user's browser process (sandbox). The value is **moved** between threads — no serialization, no boundary copy, no external exposure. |
 | Clipboard write (host `navigator.clipboard.write`, `ClipboardBlob`) | `text/plain` mirror + opaque `x-ambre` payload of the selection | The browser may expose the clipboard to other tabs | Browser standard — outside AMBRE's control; `prose-ui` never touches `navigator.clipboard` (host-driven, `ambre-spec-ui.md §2.E`) |
-| Clipboard paste (foreign `text/html` source) | HTML pasted from an external source | Malicious HTML | Routed through `import_html` (html5ever sanitizes) |
+| Document import (foreign HTML/docx via file open or drag-drop, `ProseCommand::ImportDocument`) | Untrusted external document bytes | Malicious HTML | Routed through `import_html` (html5ever sanitizes) in the Logic thread — *not* a clipboard-paste path |
 | Remote cursors | `display_name` received via `ProseEvent::RemoteCursors` | Already decrypted in the Logic thread | No additional exposure |
 
 The UI thread never has access to cryptographic keys or the `LoroDoc`. It only displays
@@ -890,7 +979,7 @@ already-decrypted data transmitted by the Logic thread.
 |-----|---------|
 | wgpu rendering: page rendered without panic on 800×600 canvas | `wasm-bindgen-test` with headless canvas |
 | `flume` UI → Logic thread: `LogicCommand::App` emitted and routed to `ProseState` | Mock `flume` channels (host test) |
-| `paste_clipboard`: `ClipboardBlob` with `ambre` → `PasteRich`; foreign `text/html` → `ImportDocument { format: Html }`; plain text → `InsertText` | Host-driven, `ClipboardBlob` fixtures (no `navigator.clipboard` in `prose-ui`) |
+| `paste_clipboard`: `ClipboardBlob` with `ambre` → `PasteRich`; blob without `ambre` → plain-text `InsertText` (two outcomes only, no HTML branch) | Host-driven, `ClipboardBlob` fixtures (no `navigator.clipboard` in `prose-ui`) |
 
 **Visual tests (snapshots):**
 
@@ -1024,7 +1113,8 @@ source of truth.
 
 **Phase 4 — Ruler, Clipboard, Inertial Scroll (Week 5)**
 - [ ] Interactive ruler: DOM Leptos `prose_chrome` component, drag handles, `SetParagraphStyle` on pointer up.
-- [ ] Clipboard: host-driven `ClipboardBlob` flow (`clipboard_write`/`poll_clipboard`/`paste_clipboard`); `ProseEvent::Clipboard` build in Logic; foreign `text/html` paste → `import_html`.
+- [ ] Clipboard: host-driven `ClipboardBlob` flow (`clipboard_write`/`poll_clipboard`/`paste_clipboard`); `ProseEvent::Clipboard` build in Logic; paste has two outcomes only (`PasteRich` / plain-text `InsertText`, no HTML branch).
+- [ ] Selection-aware editing: `take_selection` (emit `DeleteRange`, collapse caret); type/Backspace/Delete/Enter/IME/paste delete an active selection first.
 - [ ] Inertial scroll: `scroll_velocity`, physical deceleration (linear friction).
 - [ ] Optimizations: frame budget profiling, reducing allocations on `build_display_list()` hot path.
 
