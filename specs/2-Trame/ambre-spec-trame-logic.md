@@ -116,7 +116,9 @@ speeds the position query; it does not remove the shared-counter hazard.
 > value = the whole style of the cell (bold/italic plus the full `CellStyle`: alignments, wrap,
 > colours, borders, font, number format, decimals, size) postcard-encoded into a single binary LWW
 > register. This is one register **per cell**, not one **per attribute**: it is the convergence
-> invariant (§11 bis.F). It replaced an earlier fan-out over up to 11 per-sheet maps, which had two
+> invariant (§11 bis.F), and the cross-app "style as one LWW register" pattern
+> (`ambre-spec-architecture.md §2.D`, normative) that Toile's element `"style"` register also follows.
+> It replaced an earlier fan-out over up to 11 per-sheet maps, which had two
 > real defects (a border-colour tear and a colour/font reseed data-loss, §11 bis.F). The shared
 > `styles` dictionary and the `"s"` indirection -- a *deduplication* optimization, orthogonal to the
 > consolidation just landed -- stay deferred behind a benchmark (§11 bis.F, "out of scope"). See §14
