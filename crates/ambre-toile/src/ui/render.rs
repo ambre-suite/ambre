@@ -407,6 +407,8 @@ fn paint_text<S: DrawSurface>(
         false,
     );
     let brush = Brush::Solid(color);
+    let underline = e.style.font.underline;
+    let strikethrough = e.style.font.strikethrough;
     for line in layout.lines() {
         for item in line.items() {
             let PositionedLayoutItem::GlyphRun(run) = item else {
@@ -415,6 +417,19 @@ fn paint_text<S: DrawSurface>(
             let tx = sb.x0 + run.offset() as f64;
             let ty = sb.y0 + run.baseline() as f64;
             surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+            // Per-run text decorations, drawn in the glyph ink (matches Trame's
+            // cell decorations): a 1px underline just below the baseline and a 1px
+            // strikethrough through the x-height (~0.3em above the baseline).
+            if underline || strikethrough {
+                let adv = run.advance() as f64;
+                if underline {
+                    surface.stroke_line(tx, ty + 2.0, tx + adv, ty + 2.0, color, 1.0);
+                }
+                if strikethrough {
+                    let sy = ty - (font_size as f64) * 0.3;
+                    surface.stroke_line(tx, sy, tx + adv, sy, color, 1.0);
+                }
+            }
         }
     }
 }

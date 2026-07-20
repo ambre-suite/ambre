@@ -1000,7 +1000,11 @@ toolbar button (`NumberFormatPopover`, `BordersPopover`, `ColorPopover`, `H/VAli
 palettes). `FontPopover` is a thin adapter over the **shared** `ambre_chrome::FontPicker`
 (the same control Toile's element inspector uses, `ambre-spec-toile-ui.md sec.5quinquies.B`),
 so a family label resolves to the same registered face across apps
-(`ambre_canvas::registered_family_name`). The borders control is a composed popover: a "pen" (line style + colour) over a
+(`ambre_canvas::registered_family_name`). The Bold / Italic / Underline / Strikethrough toggles
+and the font-size dropdown are likewise the **shared** `ambre_chrome::FormatToggle` /
+`FontSizeSelect` (the very controls Toile's inspector and selection bar reuse, in the same
+order), so the text-format cluster is one implementation across both apps; the size dropdown's
+"Default" entry maps to the cell body default. The borders control is a composed popover: a "pen" (line style + colour) over a
 grid of preset icon buttons; a preset click applies the current pen to its edges. Borders are
 stored per edge (each of top/right/bottom/left carries its own style + colour), so a cell can
 mix edges, and the selection-level preset is resolved to concrete edges per cell

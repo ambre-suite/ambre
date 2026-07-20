@@ -59,7 +59,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         toile_style_model,
         toile_restyle,
         toile_float_bar,
-        toile_quick_fill,
+        toile_quick_style,
         sort_dialog,
         chrome_status,
         sheets,
@@ -994,14 +994,16 @@ pub(crate) fn AppRoot() -> impl IntoView {
         // follows the selection as the board pans/zooms (the canvas view republishes
         // its client anchor into `toile_float_bar` each frame). Its command buttons
         // reuse the shared `on_command` path (a strict subset of the context menu);
-        // the quick-colour swatch writes a `QuickFill` the view turns into a fill-only
-        // `RestyleElements` over the live selection.
+        // the style controls (fill, text colour, font, size, bold, italic) seed from
+        // the inspector `toile_style_model` and write single-field `StyleEdit` edits
+        // the view turns into a live-based `RestyleElements` over the selection.
         {boot_is_toile.then(|| view! {
             <toile_chrome::SelectionToolbar
                 bar=toile_float_bar
+                model=toile_style_model
                 on_command=on_command
-                on_fill=Callback::new(move |c: Option<u32>| {
-                    toile_quick_fill.set(Some(toile_chrome::QuickFill(c)))
+                on_style=Callback::new(move |s: toile_chrome::StyleEdit| {
+                    toile_quick_style.set(Some(s))
                 })
             />
         })}

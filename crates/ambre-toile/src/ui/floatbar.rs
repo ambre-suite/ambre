@@ -19,7 +19,9 @@
 // visible selection into an anchored [`FloatBar`].
 // ============================================================================
 
-use ambre_bus::app::toile::{DisplayElement, DisplayNode, DisplayViewport, ElementId, ElementKind};
+use ambre_bus::app::toile::{
+    DisplayElement, DisplayNode, DisplayViewport, ElementId, ElementKind, ElementStyle,
+};
 use ambre_draw::{Point, Rect};
 
 use super::viewport::ViewportTransform;
@@ -50,12 +52,56 @@ pub struct FloatBar {
     pub fill: Option<u32>,
 }
 
-/// A quick-colour pick the floating bar emits back (toile-ui SS5quinquies.D):
-/// the chosen fill (`None` == "no fill"). The view drains it and folds it into a
-/// whole-register `RestyleElements` over the live selection (SS2.E), attaching the
-/// ids the DOM bar cannot name -- the same seam as the inspector's `restyle`.
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub struct QuickFill(pub Option<u32>);
+/// A single-field style edit the floating bar emits back (toile-ui SS5quinquies.D).
+/// Unlike the inspector's `restyle` (which carries a whole `ElementStyle` built on
+/// an accumulating working copy), each bar control emits exactly ONE changed field;
+/// the view re-derives the selection's common style LIVE at apply time and sets
+/// only that field, so successive quick edits never clobber one another (a stale
+/// working copy hazard). The view folds the result into a whole-register
+/// `RestyleElements` over the live selection (SS2.E), attaching the ids the DOM bar
+/// cannot name. Colours are packed ARGB `Option<u32>` (`None` == unset / no fill);
+/// the font family is the picker label (`None` == the "Default" reset).
+#[derive(Clone, PartialEq, Debug)]
+pub enum StyleEdit {
+    /// Fill colour (`None` == no fill).
+    Fill(Option<u32>),
+    /// Text (foreground ink) colour (`None` == the kind default ink).
+    TextColor(Option<u32>),
+    /// Font family label (`None` == the "Default" reset -> the app default face).
+    Font(Option<String>),
+    /// Font size in world px (`0.0` == the auto sentinel: size to the card).
+    Size(f32),
+    /// Bold toggle (maps to `font.weight` 700 / 400).
+    Bold(bool),
+    /// Italic toggle.
+    Italic(bool),
+    /// Underline toggle.
+    Underline(bool),
+    /// Strikethrough toggle.
+    Strikethrough(bool),
+}
+
+impl StyleEdit {
+    /// Overwrite exactly the one field this edit carries, leaving every other
+    /// attribute of `style` untouched. The view calls this on the selection's
+    /// freshly-derived common style so back-to-back bar edits never clobber one
+    /// another. Kept in the always-compiled `ui` module so it is host-tested (the
+    /// `drain_quick_style` seam that calls it is wasm-only). A `None` family maps to
+    /// the default sans label so the renderer resolves it to the bundled sans face
+    /// (mirrors the inspector).
+    pub fn apply_to(self, style: &mut ElementStyle) {
+        match self {
+            StyleEdit::Fill(c) => style.fill = c,
+            StyleEdit::TextColor(c) => style.text_color = c,
+            StyleEdit::Font(f) => style.font.family = f.unwrap_or_else(|| "Sans".to_owned()),
+            StyleEdit::Size(s) => style.font.size = s.max(0.0),
+            StyleEdit::Bold(b) => style.font.weight = if b { 700 } else { 400 },
+            StyleEdit::Italic(i) => style.font.italic = i,
+            StyleEdit::Underline(u) => style.font.underline = u,
+            StyleEdit::Strikethrough(s) => style.font.strikethrough = s,
+        }
+    }
+}
 
 /// The client CSS-pixel anchor for the bar: the selection's top-edge midpoint,
 /// mapped through the camera (physical screen px), converted to CSS px by the
@@ -357,5 +403,64 @@ mod tests {
         ]);
         let bar = build_floatbar(&[eid("a"), eid("b")], &dv, &cam(), 1.0, (0.0, 0.0)).expect("bar");
         assert_eq!(bar.fill, Some(0xff11_2233));
+    }
+
+    // A `StyleEdit` overwrites exactly its own field and nothing else -- the
+    // no-clobber property the floating bar relies on (each control emits one field,
+    // applied on the live common style).
+    #[test]
+    fn style_edit_touches_only_its_field() {
+        let base = ElementStyle {
+            fill: Some(0xff11_2233),
+            text_color: Some(0xff44_5566),
+            font: ambre_bus::app::toile::FontSpec {
+                size: 18.0,
+                weight: 700,
+                italic: true,
+                underline: false,
+                strikethrough: true,
+                ..Default::default()
+            },
+            ..ElementStyle::default()
+        };
+
+        // Toggling underline leaves every other attribute (incl. the other three
+        // decorations, the fill and the text colour) exactly as it was.
+        let mut s = base.clone();
+        StyleEdit::Underline(true).apply_to(&mut s);
+        assert!(s.font.underline);
+        assert_eq!(s.fill, base.fill);
+        assert_eq!(s.text_color, base.text_color);
+        assert_eq!(s.font.weight, base.font.weight);
+        assert_eq!(s.font.italic, base.font.italic);
+        assert_eq!(s.font.strikethrough, base.font.strikethrough);
+        assert_eq!(s.font.size, base.font.size);
+
+        // Fill edit preserves the whole text style.
+        let mut s = base.clone();
+        StyleEdit::Fill(None).apply_to(&mut s);
+        assert_eq!(s.fill, None);
+        assert_eq!(s.font, base.font);
+        assert_eq!(s.text_color, base.text_color);
+    }
+
+    // Bold / size map onto the underlying representation (weight 700/400, size
+    // sentinel clamped to >= 0); a `None` family resets to the default sans label.
+    #[test]
+    fn style_edit_field_mappings() {
+        let mut s = ElementStyle::default();
+        StyleEdit::Bold(false).apply_to(&mut s);
+        assert_eq!(s.font.weight, 400);
+        StyleEdit::Bold(true).apply_to(&mut s);
+        assert_eq!(s.font.weight, 700);
+        StyleEdit::Size(-3.0).apply_to(&mut s);
+        assert_eq!(
+            s.font.size, 0.0,
+            "negative size clamps to the auto sentinel"
+        );
+        StyleEdit::Font(None).apply_to(&mut s);
+        assert_eq!(s.font.family, "Sans");
+        StyleEdit::Font(Some("Serif".to_owned())).apply_to(&mut s);
+        assert_eq!(s.font.family, "Serif");
     }
 }

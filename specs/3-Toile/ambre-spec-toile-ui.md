@@ -409,10 +409,12 @@ the canvas element by the chrome — it never touches the canvas render pass.
 ### B. Style / property inspector
 A DOM side panel, shown only when the selection is non-empty, that edits the selected elements'
 `ElementStyle` (`toile-logic §2.E`): fill (background), stroke, `stroke_w`, `opacity`, plus a **Text** section —
-text (foreground) colour (`text_color`), font family, size, and bold / italic. The font-family control is the
-shared `ambre_chrome::FontPicker` (the same one Trame's cell formatting uses, so a family label resolves to the
-same face; `ambre_canvas::registered_family_name`). The size field is blank ("Auto") for a sticky using the
-auto-size sentinel and sets a positive override when typed (`toile-logic §2.E` / §6). Edits are debounced and
+text (foreground) colour (`text_color`), font family, size, and the four decorations bold / italic / underline /
+strikethrough. The whole text cluster is built from the shared `ambre_chrome` controls the floating bar
+(§5quinquies.D) and Trame's cell toolbar reuse: `FontPicker` (family; a label resolves to the same face via
+`ambre_canvas::registered_family_name`), `FontSizeSelect` (size), and `FormatToggle` (each decoration). The size
+dropdown's "Auto" entry maps to the sticky auto-size sentinel and a chosen size sets a positive override
+(`toile-logic §2.E` / §6). Edits are debounced and
 emitted as one `RestyleElements { ids, style }`
 over the whole selection (never per-attribute — the register is written whole, matching the single-register
 model of `toile-logic §2.E`); text-run edits route through `RestyleElements` or `EditText` as in §6. The panel
@@ -438,9 +440,15 @@ the app's token palette plus a custom hue/alpha picker. Committing a color folds
 The compact action bar that follows the selection as the board pans/zooms — the case `ambre-spec-ui.md L31`
 names for Toile (§1bis). It is a DOM element whose screen position is recomputed from `ViewportTransform`
 **every frame** (transform-synced), anchored to the selection's world-space bounds. It offers the highest-
-frequency actions (quick color, duplicate, delete, group/ungroup, lock) as command buttons — a superset-free
-subset of the context menu (§5ter) so the two never diverge. It hides during an active gesture (move/resize/
-rotate) and when the selection is empty.
+frequency actions: a **text-format cluster** in the same order as Trame's toolbar — bold / italic / underline /
+strikethrough (shared `ambre_chrome::FormatToggle`), font family (shared `FontPicker`), size (shared
+`FontSizeSelect`), text colour and fill (shared `ColorPopover`, ARGB) — seeded from the same common-style
+`StyleModel` the side inspector reads (§5quinquies.B), followed by command buttons (duplicate, delete,
+group/ungroup, lock) — a superset-free subset of the context menu (§5ter) so the two never diverge. Each style
+control emits ONE changed field (`ui::floatbar::StyleEdit`); the view re-derives the selection's common style
+**live** and overwrites only that field, so back-to-back bar edits never clobber one another (unlike the
+inspector's accumulating working copy), folding the result into one whole-register `RestyleElements` (§2.E). It
+hides during an active gesture (move/resize/rotate) and when the selection is empty.
 
 ### E. Top menu bar & zoom control
 A top `ambre-chrome` `Menu` bar for low-frequency actions grouped by menu (File / Edit / View / Object /
@@ -694,12 +702,16 @@ lives in Logic, keyed on change size.
   DOM chrome `SelectionToolbar` (`chrome::floatbar`): a `position: fixed` bar the canvas view
   republishes every frame from the live selection x camera (`ui::floatbar::build_floatbar`), so its
   client anchor (selection top-edge midpoint, lifted with a CSS gap) follows pan/zoom. It hides on an
-  empty selection, an active gesture (move/resize/rotate), a pan, or an open inline editor. Actions are
-  quick colour (shared `ambre_chrome::ColorPopover`, ARGB) plus Duplicate / Delete / Group / Ungroup /
-  Lock / Unlock -- every button but the swatch is a `ui::menu` `CommandId` on the shared `on_command`
-  path, a strict subset of the context menu (§5ter) so the two never diverge. The colour pick rides a
-  `QuickFill` the view folds into one fill-only, whole-register `RestyleElements` (§2.E). The pure
-  placement + flags + common-fill fold live in the host-tested `ui::floatbar`.
+  empty selection, an active gesture (move/resize/rotate), a pan, or an open inline editor. Actions are the
+  text-format cluster in Trame's toolbar order -- Bold / Italic / Underline / Strikethrough (shared
+  `ambre_chrome::FormatToggle`), font family (shared `FontPicker`), size (shared `FontSizeSelect`), text colour
+  and fill (shared `ColorPopover`, ARGB), seeded from the inspector `StyleModel` (§5quinquies.B) -- plus
+  Duplicate / Delete / Group / Ungroup / Lock / Unlock, the latter each a `ui::menu` `CommandId` on the shared
+  `on_command` path, a strict subset of the context menu (§5ter) so the two never diverge. Each style control
+  emits ONE changed field (`ui::floatbar::StyleEdit`); the view re-derives the selection's common style live
+  (`style_scope_for`) and overwrites only that field, folding it into one whole-register `RestyleElements`
+  (§2.E) -- so successive bar edits never clobber one another. The pure placement + flags + common-fill fold
+  live in the host-tested `ui::floatbar`.
 - [x] Top menu bar + zoom control (Fit / Zoom-to-selection) (§5quinquies.E). DOM chrome
   `TopMenuBar` (`chrome::menu_bar`): the File/Edit/View/Object/Present menus render through the
   shared `ambre-chrome` `ContextMenu` (opened at each title), and the zoom cluster (out / `%`
