@@ -156,6 +156,7 @@ mod tests {
             at: Point::new(x, y),
             size: Size::new(w, h),
             content: InitContent::None,
+            fill: None,
         });
         match out.display.into_iter().find_map(|e| match e {
             ToileEvent::ElementCreated(id) => Some(id),

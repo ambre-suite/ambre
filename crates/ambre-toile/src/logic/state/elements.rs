@@ -22,8 +22,9 @@ impl ToileState {
         at: Point,
         size: kurbo::Size,
         content: InitContent,
+        fill: Option<u32>,
     ) -> ToileOutcome {
-        let id = match self.create_element_inner(kind, at, size, content) {
+        let id = match self.create_element_inner(kind, at, size, content, fill) {
             Ok(id) => id,
             Err(e) => return ToileOutcome::display_only(vec![ToileEvent::Error(e)]),
         };
@@ -42,6 +43,7 @@ impl ToileState {
         at: Point,
         size: kurbo::Size,
         content: InitContent,
+        fill: Option<u32>,
     ) -> Result<ElementId, ToileError> {
         // Group and Drawing are not creatable here (§8): a group is born via
         // GroupElements, a stroke via CommitStroke.
@@ -66,10 +68,13 @@ impl ToileState {
         let _ = em.insert("h", size.height);
         let _ = em.insert("rot", 0.0);
         let _ = em.insert("locked", false);
-        let _ = em.insert(
-            "style",
-            LoroValue::Binary(ElementStyle::default().to_bytes().into()),
-        );
+        // Seed a per-kind default style (sticky = yellow card, others = white),
+        // then apply an optional creation-time fill override (§2.C / §2.E).
+        let mut style = ElementStyle::for_kind(kind);
+        if let Some(f) = fill {
+            style.fill = Some(f);
+        }
+        let _ = em.insert("style", LoroValue::Binary(style.to_bytes().into()));
         self.seed_payload(&em, kind, &content);
         // Push onto the top of the z-order.
         let _ = self
@@ -410,6 +415,7 @@ mod inner_tests {
             Point::new(x, 0.0),
             Size::new(10.0, 10.0),
             InitContent::None,
+            None,
         )
         .expect("create")
     }

@@ -51,7 +51,9 @@ ambre-canvas/     Canvas render runtime: WgpuSurface/QuadRenderer/GlyphAtlas,
                   (FrameHost + AppView enum live in ambre-app, downstream of apps.)
 ambre-chrome/     Shared, app-agnostic Leptos chrome toolkit: AppShell,
                   CommandPalette, Dialog/Menu/Toolbar/Toast/ContextMenu/Sidebar/
-                  StatusBar, keybinding manager. Depends on leptos + ambre-commands.
+                  StatusBar, shared value controls (ColorPopover, FontPicker,
+                  Debouncer) reused across apps' formatting UIs, keybinding
+                  manager. Depends on leptos + ambre-commands.
 
 # Application crates (monolith: logic + ui + chrome)
 ambre-trame/      logic   : *State + handlers (Logic thread)

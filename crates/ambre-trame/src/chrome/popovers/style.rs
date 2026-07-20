@@ -180,99 +180,19 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
     }
 }
 
-/// The font families offered by the font popover: the abstract family name shown
-/// in the toolbar (the renderer falls back to its default for any it lacks),
-/// paired with the CSS `font-family` used to render that entry in its own
-/// typeface (a live preview). "Default" maps to no explicit font (`None`).
-const FONT_FAMILIES: &[(&str, &str)] = &[
-    ("Default", "inherit"),
-    ("Sans", "'Roboto', system-ui, sans-serif"),
-    ("Serif", "Georgia, 'Times New Roman', serif"),
-    ("Monospace", "'Roboto Mono', ui-monospace, monospace"),
-];
-
-/// The composed font control: a single toolbar trigger (current family name +
-/// caret) toggling a context-menu popover that lists the families, each rendered
-/// in its own typeface so the user previews the font before picking it. A
-/// `<select>` cannot reliably style its `<option>`s per-font across browsers,
-/// hence this custom popover (mirrors [`NumberFormatPopover`]). Picking emits a
-/// [`StylePatch`] through `on_style` ("Default" -> `Some(None)`, a reset).
+/// The composed font control: a thin adapter over the shared
+/// [`ambre_chrome::FontPicker`] (the control now lives in `ambre-chrome` so Trame
+/// cells and Toile elements share it). It maps the picker's `Option<String>`
+/// family pick onto a [`StylePatch`] (`None` = the "Default" reset).
 #[component]
 pub(crate) fn FontPopover(style: StyleState, on_style: Callback<StylePatch>) -> impl IntoView {
-    let open = RwSignal::new(false);
-    // The wrapper node, so a global pointer-down can tell clicks inside the menu
-    // apart from clicks elsewhere (another cell, the canvas, a sibling control).
-    let root_ref = NodeRef::<html::Span>::new();
-    let handle = window_event_listener(leptos::ev::pointerdown, move |ev| {
-        if !open.get_untracked() {
-            return;
-        }
-        let inside = root_ref
-            .get_untracked()
-            .zip(ev.target())
-            .and_then(|(root, target)| target.dyn_into::<web_sys::Node>().ok().map(|n| (root, n)))
-            .is_some_and(|(root, node)| root.contains(Some(&node)));
-        if !inside {
-            open.set(false);
-        }
+    let on_pick = Callback::new(move |family: Option<String>| {
+        on_style.run(StylePatch {
+            font: Some(family),
+            ..Default::default()
+        });
     });
-    on_cleanup(move || handle.remove());
-    // The active family label ("Default" when the cell carries no explicit font).
-    let current_label = move || style.font.get().unwrap_or_else(|| "Default".to_owned());
-    // CSS font-family for the active family, so the trigger previews it too.
-    let current_css = move || {
-        let label = current_label();
-        FONT_FAMILIES
-            .iter()
-            .find(|(name, _)| *name == label)
-            .map_or("inherit", |(_, css)| css)
-    };
-    view! {
-        <span class="ambre-font" node_ref=root_ref>
-            <button
-                class="font-trigger"
-                aria-label="Font"
-                aria-haspopup="true"
-                aria-expanded=move || open.get().then_some("true")
-                style:font-family=current_css
-                on:click=move |_| open.update(|o| *o = !*o)
-            >
-                <span class="label">{current_label}</span>
-                <Icon icon=icondata::BiDownArrowSolid />
-            </button>
-            <Show when=move || open.get() fallback=|| ()>
-                <div class="ambre-font-popover">
-                    {FONT_FAMILIES
-                        .iter()
-                        .map(|&(name, css)| {
-                            view! {
-                                <button
-                                    class="font-item"
-                                    style:font-family=css
-                                    on:click=move |_| {
-                                        // "Default" clears the explicit font (None).
-                                        let font = (name != "Default").then(|| name.to_owned());
-                                        on_style.run(StylePatch {
-                                            font: Some(font),
-                                            ..Default::default()
-                                        });
-                                        open.set(false);
-                                    }
-                                >
-                                    <span class="check">
-                                        <Show when=move || current_label() == name fallback=|| ()>
-                                            <Icon icon=icondata::BsCheck />
-                                        </Show>
-                                    </span>
-                                    <span class="label">{name}</span>
-                                </button>
-                            }
-                        })
-                        .collect_view()}
-                </div>
-            </Show>
-        </span>
-    }
+    view! { <ambre_chrome::FontPicker current=style.font.into() on_pick=on_pick /> }
 }
 
 /// The number-format families offered by the format popover, paired with their

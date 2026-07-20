@@ -39,6 +39,7 @@ fn rect_maps_to_shape_rect() {
             at,
             size,
             content: InitContent::None,
+            ..
         } => {
             assert_eq!(*at, kurbo::Point::new(10.0, 20.0));
             assert_eq!(*size, Size::new(100.0, 50.0));

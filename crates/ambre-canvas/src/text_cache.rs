@@ -18,6 +18,23 @@ use rustc_hash::FxHashMap;
 
 use crate::fonts::LazyFontLoader;
 
+/// Map a toolbar font-family label (`"Sans"`/`"Serif"`/`"Monospace"`/`"Default"`)
+/// to the actually-registered face (`host.rs` loads Noto Sans + DejaVu Serif +
+/// DejaVu Sans Mono). Shared so the canvas renderers and the inline editors (grid
+/// / whiteboard) resolve the same face for the same label. An unknown label falls
+/// back to the default sans.
+pub fn registered_family_name(label: Option<&str>) -> &'static str {
+    match label {
+        // Toolbar labels AND the already-loaded serif / mono face names both map
+        // to their face, so routing every family through here is idempotent.
+        Some("Serif" | "DejaVu Serif") => "DejaVu Serif",
+        Some("Monospace" | "DejaVu Sans Mono") => "DejaVu Sans Mono",
+        // Sans / Default / None, the CSS generic "sans-serif", and any unknown
+        // label fall back to the bundled sans.
+        _ => "Noto Sans",
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Cache key
 // -----------------------------------------------------------------------------
@@ -251,15 +268,15 @@ impl TextCache {
         scale: f32,
     ) -> Layout<Brush> {
         let mut builder = layout_cx.ranged_builder(font_cx, text, scale, true);
-        // Map the toolbar's family choices to the actually-registered faces
-        // (host.rs loads Noto Sans + DejaVu Serif + DejaVu Sans Mono). The
-        // generic fallback covers any other named family.
-        let font_family = match family {
-            Some("Serif") => FontFamily::Named("DejaVu Serif".into()),
-            Some("Monospace") => FontFamily::Named("DejaVu Sans Mono".into()),
-            Some(name) if name != "Sans" && name != "Default" => FontFamily::Named(name.into()),
-            _ => FontFamily::Named("Noto Sans".into()),
-        };
+        // Resolve every requested family -- a toolbar label ("Sans"/"Serif"/...),
+        // the CSS-generic default ("sans-serif"), or an unknown name -- to an
+        // actually-loaded face through the single family authority (host.rs loads
+        // Noto Sans + DejaVu Serif + DejaVu Sans Mono). Passing a non-label name
+        // straight to `Named` (the old behaviour) matched no loaded face and shaped
+        // zero glyphs, so a sticky whose family was the generic default rendered
+        // invisible text while edit mode -- which already routed through here --
+        // showed it fine.
+        let font_family = FontFamily::Named(registered_family_name(family).into());
         builder.push_default(StyleProperty::FontStack(FontStack::Single(font_family)));
         builder.push_default(StyleProperty::FontSize(font_size));
         if bold {
@@ -278,5 +295,41 @@ impl TextCache {
         layout.break_all_lines(Some(max_width));
         layout.align(Some(max_width), align, AlignmentOptions::default());
         layout
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::registered_family_name;
+
+    #[test]
+    fn family_labels_map_to_registered_faces() {
+        assert_eq!(registered_family_name(Some("Serif")), "DejaVu Serif");
+        assert_eq!(
+            registered_family_name(Some("Monospace")),
+            "DejaVu Sans Mono"
+        );
+        // Sans / Default / None / any unknown label fall back to the bundled sans.
+        assert_eq!(registered_family_name(Some("Sans")), "Noto Sans");
+        assert_eq!(registered_family_name(Some("Default")), "Noto Sans");
+        assert_eq!(registered_family_name(None), "Noto Sans");
+        assert_eq!(registered_family_name(Some("Comic Sans")), "Noto Sans");
+        // The CSS-generic `FontSpec` default MUST resolve to a loaded face, not be
+        // passed through raw -- otherwise a sticky whose family is the default
+        // shapes zero glyphs and renders invisible text (edit mode, which already
+        // routed through here, showed it fine; the static render bypassed it).
+        assert_eq!(registered_family_name(Some("sans-serif")), "Noto Sans");
+    }
+
+    #[test]
+    fn registered_face_names_pass_through() {
+        // A request that already names a loaded face resolves to itself, so
+        // routing every family through this single authority never demotes a
+        // genuine serif/mono face to the sans fallback.
+        assert_eq!(registered_family_name(Some("DejaVu Serif")), "DejaVu Serif");
+        assert_eq!(
+            registered_family_name(Some("DejaVu Sans Mono")),
+            "DejaVu Sans Mono"
+        );
     }
 }

@@ -24,8 +24,9 @@
 use ambre_bus::app::toile::{DisplayElement, ElementId};
 use ambre_canvas::Palette;
 use ambre_draw::{
-    Affine, Alignment, BoundingBox, Brush, Color, DrawSurface, FontContext, FontStyle, FontWeight,
-    LayoutContext, PlainEditor, Point, PositionedLayoutItem, Rect, StyleProperty,
+    Affine, Alignment, BoundingBox, Brush, Color, DrawSurface, FontContext, FontFamily, FontStack,
+    FontStyle, FontWeight, LayoutContext, PlainEditor, Point, PositionedLayoutItem, Rect,
+    StyleProperty,
 };
 
 /// Caret bar width in screen pixels.
@@ -113,17 +114,30 @@ pub struct InlineEditor {
     // the edit looks like the committed result.
     weight: u16,
     italic: bool,
+    /// Font family label (matches the render family map, `text_cache`).
+    family: String,
     /// Font size in world units (zoom is applied per paint).
     base_size: f32,
     color: Color,
 }
 
 impl InlineEditor {
-    /// Open an editor on `elem`, seeded with its current body `text`.
-    pub fn open(elem: &DisplayElement, text: &str, palette: &Palette) -> Self {
+    /// Open an editor on `elem`, seeded with its current body `text`. `is_sticky`
+    /// switches to the sticky presentation: the body uses the fixed readable ink
+    /// (its `fill` is the card colour, not the text) and the font size tracks the
+    /// note size, matching the static render (`render.rs`).
+    pub fn open(elem: &DisplayElement, text: &str, palette: &Palette, is_sticky: bool) -> Self {
         let font = &elem.style.font;
-        let color = elem.style.fill.map(argb_text).unwrap_or(palette.cell_text);
-        let mut editor = PlainEditor::<Brush>::new(font.size.max(1.0));
+        // Text colour: same precedence as the static render (§2.E) so the in-edit
+        // body matches its committed look.
+        let color =
+            super::render::resolved_text_ink(is_sticky, elem.style.text_color, elem.style.fill)
+                .map(argb_text)
+                .unwrap_or(palette.cell_text);
+        // Size: sticky auto-sizes from bounds unless overridden (§6).
+        let base_size =
+            super::render::sticky_or_style_font_size(is_sticky, &elem.style, elem.bounds).max(1.0);
+        let mut editor = PlainEditor::<Brush>::new(base_size);
         editor.set_text(text);
         editor.set_alignment(Alignment::Start);
         Self {
@@ -135,7 +149,8 @@ impl InlineEditor {
             seeded: false,
             weight: font.weight,
             italic: font.italic,
-            base_size: font.size.max(1.0),
+            family: font.family.clone(),
+            base_size,
             color,
         }
     }
@@ -187,82 +202,101 @@ impl InlineEditor {
         } else {
             FontStyle::Normal
         }));
+        // Resolve the family to the same registered face the static render uses, so
+        // the in-edit body matches its committed look (§6).
+        let face = ambre_canvas::registered_family_name(Some(self.family.as_str()));
+        styles.insert(StyleProperty::FontStack(FontStack::Single(
+            FontFamily::Named(face.into()),
+        )));
         styles.insert(StyleProperty::Brush(Brush::Solid(self.color)));
         self.editor.set_width(Some(wrap_w.max(1.0)));
 
-        let mut drv = self.editor.driver(font_cx, &mut self.layout_cx);
-        if !self.seeded {
-            // Open with the caret at the end of the seeded body (Trame parity).
-            drv.move_to_text_end();
-            self.seeded = true;
-        }
-        for intent in self.intents.drain(..) {
-            match intent {
-                EditIntent::Insert(s) => drv.insert_or_replace_selection(&s),
-                EditIntent::Newline => drv.insert_or_replace_selection("\n"),
-                EditIntent::Backspace => drv.backdelete(),
-                EditIntent::Delete => drv.delete(),
-                EditIntent::DeleteSelection => drv.delete_selection(),
-                EditIntent::Left { select, word } => match (select, word) {
-                    (false, false) => drv.move_left(),
-                    (true, false) => drv.select_left(),
-                    (false, true) => drv.move_word_left(),
-                    (true, true) => drv.select_word_left(),
-                },
-                EditIntent::Right { select, word } => match (select, word) {
-                    (false, false) => drv.move_right(),
-                    (true, false) => drv.select_right(),
-                    (false, true) => drv.move_word_right(),
-                    (true, true) => drv.select_word_right(),
-                },
-                EditIntent::Up { select } => {
-                    if select {
-                        drv.select_up()
-                    } else {
-                        drv.move_up()
+        // Scope the driver so its borrow of `font_cx` / `layout_cx` ends before the
+        // layout refresh below.
+        {
+            let intents = std::mem::take(&mut self.intents);
+            let mut drv = self.editor.driver(font_cx, &mut self.layout_cx);
+            if !self.seeded {
+                // Open with the caret at the end of the seeded body (Trame parity).
+                drv.move_to_text_end();
+                self.seeded = true;
+            }
+            for intent in intents {
+                match intent {
+                    EditIntent::Insert(s) => drv.insert_or_replace_selection(&s),
+                    EditIntent::Newline => drv.insert_or_replace_selection("\n"),
+                    EditIntent::Backspace => drv.backdelete(),
+                    EditIntent::Delete => drv.delete(),
+                    EditIntent::DeleteSelection => drv.delete_selection(),
+                    EditIntent::Left { select, word } => match (select, word) {
+                        (false, false) => drv.move_left(),
+                        (true, false) => drv.select_left(),
+                        (false, true) => drv.move_word_left(),
+                        (true, true) => drv.select_word_left(),
+                    },
+                    EditIntent::Right { select, word } => match (select, word) {
+                        (false, false) => drv.move_right(),
+                        (true, false) => drv.select_right(),
+                        (false, true) => drv.move_word_right(),
+                        (true, true) => drv.select_word_right(),
+                    },
+                    EditIntent::Up { select } => {
+                        if select {
+                            drv.select_up()
+                        } else {
+                            drv.move_up()
+                        }
                     }
-                }
-                EditIntent::Down { select } => {
-                    if select {
-                        drv.select_down()
-                    } else {
-                        drv.move_down()
+                    EditIntent::Down { select } => {
+                        if select {
+                            drv.select_down()
+                        } else {
+                            drv.move_down()
+                        }
                     }
-                }
-                EditIntent::LineStart { select } => {
-                    if select {
-                        drv.select_to_line_start()
-                    } else {
-                        drv.move_to_line_start()
+                    EditIntent::LineStart { select } => {
+                        if select {
+                            drv.select_to_line_start()
+                        } else {
+                            drv.move_to_line_start()
+                        }
                     }
-                }
-                EditIntent::LineEnd { select } => {
-                    if select {
-                        drv.select_to_line_end()
-                    } else {
-                        drv.move_to_line_end()
+                    EditIntent::LineEnd { select } => {
+                        if select {
+                            drv.select_to_line_end()
+                        } else {
+                            drv.move_to_line_end()
+                        }
                     }
-                }
-                EditIntent::SelectAll => drv.select_all(),
-                EditIntent::PointerDown { x, y } => drv.move_to_point(x, y),
-                EditIntent::PointerDrag { x, y } => drv.extend_selection_to_point(x, y),
-                EditIntent::WordAt { x, y } => drv.select_word_at_point(x, y),
-                EditIntent::Compose(s) => {
-                    if s.is_empty() {
+                    EditIntent::SelectAll => drv.select_all(),
+                    EditIntent::PointerDown { x, y } => drv.move_to_point(x, y),
+                    EditIntent::PointerDrag { x, y } => drv.extend_selection_to_point(x, y),
+                    EditIntent::WordAt { x, y } => drv.select_word_at_point(x, y),
+                    EditIntent::Compose(s) => {
+                        if s.is_empty() {
+                            drv.clear_compose();
+                        } else {
+                            drv.set_compose(&s, None);
+                        }
+                    }
+                    EditIntent::ComposeEnd(s) => {
+                        // Finalize: drop the preedit, then insert the committed text.
                         drv.clear_compose();
-                    } else {
-                        drv.set_compose(&s, None);
-                    }
-                }
-                EditIntent::ComposeEnd(s) => {
-                    // Finalize: drop the preedit, then insert the committed text.
-                    drv.clear_compose();
-                    if !s.is_empty() {
-                        drv.insert_or_replace_selection(&s);
+                        if !s.is_empty() {
+                            drv.insert_or_replace_selection(&s);
+                        }
                     }
                 }
             }
         }
+
+        // Rebuild the layout before the caller renders. `edit_styles()` and
+        // `set_width()` above mark the layout dirty every frame, but only a driver
+        // operation refreshes it -- so on a frame with no intents (the common
+        // steady-caret case) the layout would stay dirty and `try_layout()` /
+        // `cursor_geometry()` would return `None`, painting neither glyphs nor
+        // caret. Refreshing here keeps both live every frame (§6).
+        self.editor.refresh_layout(font_cx, &mut self.layout_cx);
     }
 
     /// The caret rectangle in local editor coordinates, for the transparent
@@ -273,8 +307,15 @@ impl InlineEditor {
 
     /// Draw the selection band, glyphs and caret over the element (screen space).
     /// `origin` is the element's top-left screen corner + padding; the editor's
-    /// local coordinates are offset by it. Call after [`flush`](Self::flush).
-    pub fn render<S: DrawSurface>(&mut self, surface: &mut S, origin: Point, palette: &Palette) {
+    /// local coordinates are offset by it. `show_caret` gates the blinking caret
+    /// bar (the caller toggles it on a timer, §6). Call after [`flush`](Self::flush).
+    pub fn render<S: DrawSurface>(
+        &mut self,
+        surface: &mut S,
+        origin: Point,
+        palette: &Palette,
+        show_caret: bool,
+    ) {
         let dx = origin.x;
         let dy = origin.y;
 
@@ -300,9 +341,13 @@ impl InlineEditor {
             }
         }
 
-        // Caret bar.
-        if let Some(bb) = self.editor.cursor_geometry(CARET_WIDTH) {
-            surface.fill_rect(offset_box(bb, dx, dy), palette.caret);
+        // Caret bar (blinking: only on the "on" half of the cycle). It takes the
+        // text colour, not the theme caret: the body ink is fixed (a sticky's dark
+        // ink on a light card), so the theme caret -- near-white in a light theme --
+        // would be invisible against the card. Matching the glyph colour keeps the
+        // caret legible whatever the card / text colour.
+        if show_caret && let Some(bb) = self.editor.cursor_geometry(CARET_WIDTH) {
+            surface.fill_rect(offset_box(bb, dx, dy), self.color);
         }
     }
 }

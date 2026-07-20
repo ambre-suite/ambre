@@ -197,7 +197,7 @@ pub enum NodeId { Element(ElementId), Connector(ConnectorId) }
 
 | `type` | `payload` shape | Notes |
 |---|---|---|
-| `sticky` | `LoroText` (body) | Rich text delegated to §2.D; color/size in `style`. |
+| `sticky` | `LoroText` (body) | Rich text delegated to §2.D. A sticky is a **filled, square card** (Miro-style: a plain rectangle, `style.corner = 0`, born square) with a small bottom-right drop shadow. Its `style.fill` is the card background (a pastel from the palette, ui §5quinquies.A), never `None`; the body is drawn on top in a fixed readable ink independent of `fill`, at a **font size that tracks the card size** (bigger note -> bigger text). This is the one kind whose per-kind default fill is not white (§2.E). Rendered as `DisplayGeom::Sticky`, distinct from `text`. |
 | `shape` | `String` kind (`rect`/`ellipse`/`triangle`/`line`/`path`) + `Binary` `BezPath` for `path` | Vector nodes edited via §toile-features boolean ops. |
 | `text` | `LoroText` (rich runs) | Parley layout in `toile-ui`. |
 | `image` | `String` blob hash (into `media`) | Async load in `toile-interop`. Element `w`/`h` are the display size and are authoritative; the media entry's `w`/`h` are the native resolution (load info). |
@@ -243,6 +243,9 @@ pub struct ElementStyle {
     pub corner:      f32,           // corner radius for rect/sticky
     pub font:        FontSpec,      // family, size, weight, italic — for sticky/text
     pub shadow:      Option<Shadow>,
+    pub text_color:  Option<u32>,   // text/foreground ARGB; None = kind default ink
+                                    // (sticky ink, or theme colour for a text element).
+                                    // Distinct from `fill` (card/shape background).
     // extended fields append-only; postcard tolerates trailing additions on read
 }
 ```
@@ -251,6 +254,17 @@ Storing the whole style as **one register** avoids the multi-register tear (e.g.
 stroke update leaving an inconsistent half-applied style) that a per-attribute fan-out suffers — the exact
 defect enumerated in Trame `logic §11 bis.F`. Concurrent restyles resolve by LWW on the single register: all
 peers converge to one style, deterministically.
+
+**Per-kind defaults.** Element birth seeds the style register with a per-kind default, not a bare
+`ElementStyle::default()`. Every kind uses the base default (white fill, no stroke) **except `sticky`**, whose
+default is the sticky yellow fill with **no border and `corner = 0`** (a plain rectangular card, Miro-style), so
+a freshly placed, still-empty note is immediately visible as a card (a `Text` element, by contrast, has no card
+and is invisible until the user types — that is intended). The Sticky tool overrides the fill per placement via
+`CreateElement.fill` (the palette colour, ui §5quinquies.A). The sticky card is painted with a small bottom-
+right drop shadow. A sticky also seeds `font.size = 0` (the `STICKY_AUTO_FONT_SIZE` sentinel): its body font
+tracks the card size unless the style inspector sets a positive size, which overrides the auto-sizing (ui §6).
+Its body ink defaults to a fixed readable colour (never `style.fill`, which is the card background); the style
+inspector can set an explicit `text_color` that wins over that default for both sticky and text elements.
 
 ### F. Frames are ordinary elements
 
@@ -666,7 +680,7 @@ pub enum ToileCommand {
     // hash, an embed url, initial text). `Sticky`/`Text` typically pass `None` and
     // fill the LoroText afterwards via `EditText`. `Drawing` is NOT creatable here
     // (a stroke is born only through `CommitStroke`); such a `kind` is rejected.
-    CreateElement { kind: ElementKind, at: kurbo::Point, size: kurbo::Size, content: InitContent },
+    CreateElement { kind: ElementKind, at: kurbo::Point, size: kurbo::Size, content: InitContent, fill: Option<u32> },
     MoveElements  { ids: Vec<ElementId>, delta: kurbo::Vec2 },
     ResizeElement { id: ElementId, new: kurbo::Rect },
     RotateElement { id: ElementId, radians: f64 },
@@ -770,6 +784,14 @@ pub enum Axis { Horizontal, Vertical }
 /// Type-specific seed passed to `CreateElement`. The variant must match `kind`
 /// (a mismatch, e.g. `Path` content on a `Sticky`, is rejected):
 ///   Sticky/Text  -> None (or `Text` for a pre-filled body)
+///
+/// `CreateElement.fill` is an optional creation-time override of the seeded
+/// `style.fill`. Element birth seeds a per-kind default style (§2.E "Per-kind
+/// defaults"); a `Some(argb)` fill overwrites the fill of that default (the rest
+/// of the style is unchanged). The Sticky tool uses it to place a note in the
+/// colour the user picked from the palette (ui §5quinquies.A), atomically — one
+/// element, one undo item — rather than a create followed by a restyle. `None`
+/// keeps the per-kind default (e.g. the sticky yellow).
 ///   Shape(Path)  -> Path (the Pen tool's postcard BezPath, ui §5bis)
 ///   Shape(other) -> None (geometry comes from `size`)
 ///   Image        -> Image (blob hash into `media`, interop §2.B/§5)
@@ -1012,7 +1034,8 @@ pub enum DisplayGeom {
     Ellipse,
     Triangle,
     Path(kurbo::BezPath),
-    Text(Vec<TextRun>),                     // Parley-ready rich runs
+    Sticky(Vec<TextRun>),                   // sticky note: a filled, rounded card (style.fill) with a body drawn on top
+    Text(Vec<TextRun>),                     // free text: Parley-ready rich runs, no card background
     Image(String),                          // media blob hash (toile-interop resolves the pixels)
     Stroke(Vec<kurbo::Point>),              // Logic-smoothed polyline (§4)
     Frame,                                  // background+border only; children are separate DisplayElements

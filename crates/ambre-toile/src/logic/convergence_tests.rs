@@ -42,6 +42,7 @@ fn create_rect(st: &mut ToileState, at: Point, size: Size) -> ElementId {
         at,
         size,
         content: InitContent::None,
+        fill: None,
     });
     assert!(out.update.is_some(), "a create must produce a CRDT delta");
     created_id(&out)
@@ -56,12 +57,13 @@ fn create_registers_bounds_and_layer() {
     assert_eq!(st.layer_order(), &[NodeId::Element(id)]);
 }
 
-/// Read an element's plaintext body from the derived viewport (Phase 0 stores
-/// it as `DisplayGeom::Text`).
+/// Read an element's plaintext body from the derived viewport (Phase 0 stores it
+/// as `DisplayGeom::Sticky` for a sticky, `DisplayGeom::Text` for a text element).
 fn body_of(st: &ToileState, id: &ElementId) -> Option<String> {
+    use crate::logic::command::DisplayGeom;
     st.debug_viewport().nodes.iter().find_map(|n| match n {
         DisplayNode::Element(e) if &e.id == id => match &e.geom {
-            crate::logic::command::DisplayGeom::Text(t) => Some(t.clone()),
+            DisplayGeom::Sticky(t) | DisplayGeom::Text(t) => Some(t.clone()),
             _ => None,
         },
         _ => None,
@@ -76,6 +78,7 @@ fn set_text_overwrites_sticky_body() {
         at: Point::new(0.0, 0.0),
         size: Size::new(120.0, 80.0),
         content: InitContent::Text("hello".to_owned()),
+        fill: None,
     });
     let id = created_id(&out);
     assert_eq!(body_of(&st, &id).as_deref(), Some("hello"));
@@ -253,6 +256,7 @@ fn group_and_drawing_are_not_creatable() {
             at: Point::ZERO,
             size: Size::new(10.0, 10.0),
             content: InitContent::None,
+            fill: None,
         });
         assert!(matches!(
             out.display.first(),
@@ -274,6 +278,7 @@ fn create_sticky(st: &mut ToileState, at: Point, body: &str) -> ElementId {
         at,
         size: Size::new(80.0, 80.0),
         content: InitContent::Text(body.to_owned()),
+        fill: None,
     });
     created_id(&out)
 }
@@ -596,6 +601,7 @@ fn create_frame(st: &mut ToileState, at: Point, size: Size) -> ElementId {
         at,
         size,
         content: InitContent::None,
+        fill: None,
     }))
 }
 
@@ -1959,6 +1965,7 @@ fn doc_embed_reference_survives_the_crdt_round_trip() {
             document_id: child,
             doc_type: ambre_core::DocType::Trame,
         },
+        fill: None,
     });
 
     let geom = only_doc_embed(&st).expect("the embed must derive as DocEmbed");
@@ -1985,6 +1992,7 @@ fn doc_embed_with_an_unreadable_reference_falls_back_to_a_frame() {
         kind: ElementKind::DocEmbed,
         at: Point::ZERO,
         size: Size::new(100.0, 100.0),
+        fill: None,
         content: InitContent::DocEmbed {
             document_id: ambre_core::DocumentId::new(),
             doc_type: ambre_core::DocType::Toile,
@@ -2312,6 +2320,7 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<Vec<u8>> {
             at: Point::new(*x, *y),
             size: Size::new(20.0, 20.0),
             content: InitContent::None,
+            fill: None,
         }),
         PeerOp::MoveNth { nth: n, dx, dy } => match nth(*n) {
             Some(id) => st.handle_command(ToileCommand::MoveElements {
@@ -2388,6 +2397,7 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<Vec<u8>> {
             at: Point::new(*x, *y),
             size: Size::new(200.0, 200.0),
             content: InitContent::None,
+            fill: None,
         }),
         PeerOp::SetSlideOrderRot { by } => {
             // Rotate the current live-id set to build a permutation, so concurrent

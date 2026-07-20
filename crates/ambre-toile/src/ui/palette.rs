@@ -15,7 +15,7 @@
 // palette (and the keyboard) write a shared `RwSignal<Tool>` the view applies.
 // ============================================================================
 
-use ambre_bus::app::toile::ShapeKind;
+use ambre_bus::app::toile::{STICKY_DEFAULT_FILL, ShapeKind};
 use ambre_commands::{CommandId, Key, KeyBinding, Keymap, Modifiers};
 
 use super::tool::Tool;
@@ -66,12 +66,29 @@ pub fn tool_for_command(id: CommandId) -> Option<Tool> {
         TOOL_SHAPE => Some(Tool::Shape(ShapeKind::Rect)),
         TOOL_CONNECTOR => Some(Tool::Connector),
         TOOL_DRAW => Some(Tool::Draw),
-        TOOL_STICKY => Some(Tool::Sticky),
+        // The bare command / keyboard chord arms the default sticky yellow; the
+        // palette's colour picker arms Sticky(colour) directly (§5quinquies.A).
+        TOOL_STICKY => Some(Tool::Sticky(STICKY_DEFAULT_FILL)),
         TOOL_TEXT => Some(Tool::Text),
         TOOL_HAND => Some(Tool::Hand),
         _ => None,
     }
 }
+
+/// The sticky-note colour swatches offered by the palette's colour picker
+/// (`toile-ui §5quinquies.A`), ARGB. The first entry is [`STICKY_DEFAULT_FILL`]
+/// (the bare-key / default colour); the rest are the standard whiteboard pastels
+/// (blue, green, pink, orange, purple, grey). Shared with the chrome popover so
+/// the offered set is host-tested here rather than buried in wasm-only code.
+pub const STICKY_SWATCHES: &[u32] = &[
+    STICKY_DEFAULT_FILL, // yellow (default)
+    0xFFA5_D8FF,         // blue
+    0xFFB2_F2BB,         // green
+    0xFFFF_C9C9,         // pink
+    0xFFFF_D8A8,         // orange
+    0xFFD0_BFFF,         // purple
+    0xFFDE_E2E6,         // grey
+];
 
 /// Bind the bare-key tool chords into the launcher keymap. These are the de-facto
 /// whiteboard letters (V/P/R/C/D/N/T/H); SS5quinquies.A promises the palette click
@@ -95,6 +112,27 @@ pub fn bind_tool_keys(keymap: &mut Keymap) {
     );
     keymap.bind(KeyBinding::new(Modifiers::NONE, Key::char('t')), TOOL_TEXT);
     keymap.bind(KeyBinding::new(Modifiers::NONE, Key::char('h')), TOOL_HAND);
+}
+
+/// A note-shaped CSS cursor (inlined SVG data URI) shown while the Sticky tool is
+/// armed, so it is obvious a click will drop a note (`toile-ui §5quinquies.A`,
+/// feedback). `%23` encodes `#` inside the URI; the hotspot is the note's
+/// top-left corner. Falls back to `crosshair` if the data URI is unsupported.
+pub const STICKY_CURSOR: &str = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'><rect x='4' y='4' width='18' height='18' fill='%23FEF08A' stroke='%23333333' stroke-width='1'/><path d='M17 22 L22 22 L22 17 Z' fill='%23E4CE5C'/></svg>\") 4 4, crosshair";
+
+/// The CSS `cursor` value for the canvas while `tool` is active (`toile-ui
+/// §5quinquies.A` "Cursor feedback"): a note-shaped cursor while the Sticky tool
+/// is armed, a crosshair for the other creation tools (so a click visibly means
+/// "place here"), a grab hand for the pan-only Hand tool, and the default arrow
+/// for Select. Pure so the chrome can bind it to the active-tool signal without
+/// any canvas round-trip, and host-tested.
+pub fn cursor_css(tool: Tool) -> &'static str {
+    match tool {
+        Tool::Select => "default",
+        Tool::Hand => "grab",
+        Tool::Sticky(_) => STICKY_CURSOR,
+        Tool::Text | Tool::Shape(_) | Tool::Pen | Tool::Connector | Tool::Draw => "crosshair",
+    }
 }
 
 /// Whether a keyboard event targeting an element with this tag / contenteditable
@@ -125,7 +163,10 @@ mod tests {
         );
         assert_eq!(tool_for_command(TOOL_CONNECTOR), Some(Tool::Connector));
         assert_eq!(tool_for_command(TOOL_DRAW), Some(Tool::Draw));
-        assert_eq!(tool_for_command(TOOL_STICKY), Some(Tool::Sticky));
+        assert_eq!(
+            tool_for_command(TOOL_STICKY),
+            Some(Tool::Sticky(STICKY_DEFAULT_FILL))
+        );
         assert_eq!(tool_for_command(TOOL_TEXT), Some(Tool::Text));
         assert_eq!(tool_for_command(TOOL_HAND), Some(Tool::Hand));
     }
@@ -150,7 +191,7 @@ mod tests {
             ('r', TOOL_SHAPE, Tool::Shape(ShapeKind::Rect)),
             ('c', TOOL_CONNECTOR, Tool::Connector),
             ('d', TOOL_DRAW, Tool::Draw),
-            ('n', TOOL_STICKY, Tool::Sticky),
+            ('n', TOOL_STICKY, Tool::Sticky(STICKY_DEFAULT_FILL)),
             ('t', TOOL_TEXT, Tool::Text),
             ('h', TOOL_HAND, Tool::Hand),
         ];
@@ -175,6 +216,31 @@ mod tests {
         ids.sort_by_key(|id| id.0);
         ids.dedup();
         assert_eq!(ids.len(), TOOL_COMMANDS.len(), "tool chords collide");
+    }
+
+    #[test]
+    fn cursor_reflects_the_active_tool() {
+        assert_eq!(cursor_css(Tool::Select), "default");
+        assert_eq!(cursor_css(Tool::Hand), "grab");
+        assert_eq!(cursor_css(Tool::Sticky(STICKY_DEFAULT_FILL)), STICKY_CURSOR);
+        assert!(STICKY_CURSOR.starts_with("url("));
+        assert_eq!(cursor_css(Tool::Text), "crosshair");
+        assert_eq!(cursor_css(Tool::Shape(ShapeKind::Rect)), "crosshair");
+        assert_eq!(cursor_css(Tool::Pen), "crosshair");
+        assert_eq!(cursor_css(Tool::Connector), "crosshair");
+        assert_eq!(cursor_css(Tool::Draw), "crosshair");
+    }
+
+    #[test]
+    fn sticky_swatches_lead_with_the_default_and_are_distinct() {
+        assert_eq!(STICKY_SWATCHES.first(), Some(&STICKY_DEFAULT_FILL));
+        let mut seen = STICKY_SWATCHES.to_vec();
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(seen.len(), STICKY_SWATCHES.len(), "swatch colours collide");
+        // Every swatch is fully opaque (alpha = 0xFF), so a note is never
+        // accidentally transparent.
+        assert!(STICKY_SWATCHES.iter().all(|c| c >> 24 == 0xFF));
     }
 
     #[test]

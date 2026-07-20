@@ -53,6 +53,61 @@ pub struct DecodedImage {
 /// image element is present (or its media has not been decoded yet).
 pub type ImageStore = HashMap<String, DecodedImage>;
 
+/// Fixed ink (ARGB) for a sticky-note body: a near-black that stays readable on
+/// any pastel card colour, so the body is legible regardless of the card fill
+/// (`toile-logic §2.C`). Independent of the theme (the card is not). Shared with
+/// the inline editor so an in-edit sticky uses the same ink (`edit.rs`).
+pub(crate) const STICKY_INK: u32 = 0xFF1A_1A1A;
+
+/// Sticky drop-shadow colour (ARGB): a soft translucent black offset to the
+/// bottom-right so the note reads as a physical card (§2.C, feedback).
+const STICKY_SHADOW: u32 = 0x3300_0000;
+/// Drop-shadow offset in world units (bottom-right).
+const STICKY_SHADOW_OFFSET: f64 = 4.0;
+
+/// The body font size (world units) for a sticky of the given bounds: it scales
+/// with the note so the text "adapts to the size of the note" (feedback). A
+/// fraction of the shorter side, clamped to a legible range. Shared with the
+/// inline editor so the in-edit size matches the committed one (`edit.rs`).
+pub(crate) fn sticky_font_size(bounds: Rect) -> f32 {
+    let shorter = bounds.width().min(bounds.height()) as f32;
+    (shorter * 0.16).clamp(8.0, 48.0)
+}
+
+/// The effective body font size (world units) for a sticky / text element: a
+/// sticky auto-sizes from its bounds while `style.font.size` is the auto sentinel
+/// (`STICKY_AUTO_FONT_SIZE`, i.e. not positive), but a positive size set from the
+/// style inspector overrides it; a text element always uses its style size (§6).
+pub(crate) fn sticky_or_style_font_size(
+    is_sticky: bool,
+    style: &ElementStyle,
+    bounds: Rect,
+) -> f32 {
+    if is_sticky && style.font.size <= 0.0 {
+        sticky_font_size(bounds)
+    } else {
+        style.font.size
+    }
+}
+
+/// Resolve a sticky / text body's ink (ARGB), or `None` to fall back to the theme
+/// text colour (§2.E). An explicit `text_color` always wins; otherwise a sticky
+/// uses its fixed ink (its `fill` is the card background, not the text), and a free
+/// text element falls back to its `fill` (legacy: a text element's fill was its
+/// glyph colour) then, if unset, the theme colour. Pure and host-tested; shared
+/// with the inline editor via the same precedence in `edit.rs`.
+pub(crate) fn resolved_text_ink(
+    is_sticky: bool,
+    text_color: Option<u32>,
+    fill: Option<u32>,
+) -> Option<u32> {
+    match (text_color, is_sticky) {
+        (Some(tc), _) => Some(tc),
+        (None, true) => Some(STICKY_INK),
+        (None, false) => fill,
+    }
+}
+
 /// Convert an ARGB `u32` (Toile style register, §2.E) to a `peniko::Color`,
 /// pre-multiplying the element `opacity` into the alpha channel.
 fn argb(v: u32, opacity: f32) -> Color {
@@ -82,6 +137,18 @@ fn ellipse_path(b: Rect) -> BezPath {
     let ell = kurbo::Ellipse::new(c, (b.width() / 2.0, b.height() / 2.0), 0.0);
     let mut p = BezPath::new();
     p.extend(kurbo::Shape::path_elements(&ell, 0.1));
+    p
+}
+
+/// A rounded rectangle inscribed in `b`, as a flattened path. Used for the
+/// sticky-note card and its shadow; with `radius = 0` (the sticky default) it is
+/// a plain rectangle. The radius is clamped to half the shorter side so a tiny
+/// card stays a valid shape.
+fn roundrect_path(b: Rect, radius: f64) -> BezPath {
+    let r = radius.min(b.width() / 2.0).min(b.height() / 2.0).max(0.0);
+    let rr = kurbo::RoundedRect::from_rect(b, r);
+    let mut p = BezPath::new();
+    p.extend(kurbo::Shape::path_elements(&rr, 0.1));
     p
 }
 
@@ -157,24 +224,34 @@ pub fn paint_content<S: DrawSurface>(
     surface.pop_transform();
 
     // 3. Text pass in screen space (crisp glyphs; font size scales with zoom).
+    // Both sticky notes and free text carry a body string here; a sticky draws
+    // its body in a fixed readable ink (its `fill` is the card colour), a text
+    // element draws in its `fill` (§2.C).
     for node in &vp.nodes {
-        if let DisplayNode::Element(e) = node
-            && let DisplayGeom::Text(text) = &e.geom
-            // Skip the element under inline edit: its live buffer is painted by
-            // the editor overlay instead (§6).
-            && editing != Some(&e.id)
-        {
-            paint_text(
-                surface,
-                e,
-                text,
-                cam,
-                palette,
-                font_cx,
-                text_cache,
-                anim.get(&e.id),
-            );
+        let DisplayNode::Element(e) = node else {
+            continue;
+        };
+        let (text, is_sticky) = match &e.geom {
+            DisplayGeom::Sticky(t) => (t, true),
+            DisplayGeom::Text(t) => (t, false),
+            _ => continue,
+        };
+        // Skip the element under inline edit: its live buffer is painted by the
+        // editor overlay instead (§6).
+        if editing == Some(&e.id) {
+            continue;
         }
+        paint_text(
+            surface,
+            e,
+            text,
+            is_sticky,
+            cam,
+            palette,
+            font_cx,
+            text_cache,
+            anim.get(&e.id),
+        );
     }
 }
 
@@ -253,6 +330,23 @@ fn paint_element<S: DrawSurface>(
         DisplayGeom::Embed(_) | DisplayGeom::DocEmbed { .. } => {
             fill_and_stroke(surface, &rect_path(bounds), &style);
         }
+        // A sticky note paints a small drop shadow, then its coloured card here;
+        // the body string is drawn on top in the screen-space text pass (§2.C). A
+        // free `Text` element has no card, so it paints nothing in the geometry
+        // pass. `style.corner` is 0 (Miro-style rectangle), so `roundrect_path`
+        // degenerates to a plain rectangle.
+        DisplayGeom::Sticky(_) => {
+            let shadow = bounds + ambre_draw::Vec2::new(STICKY_SHADOW_OFFSET, STICKY_SHADOW_OFFSET);
+            surface.fill_path(
+                &roundrect_path(shadow, style.corner as f64),
+                &Brush::Solid(argb(STICKY_SHADOW, style.opacity)),
+            );
+            fill_and_stroke(
+                surface,
+                &roundrect_path(bounds, style.corner as f64),
+                &style,
+            );
+        }
         DisplayGeom::Text(_) => {}
         DisplayGeom::Group => {} // paints nothing (§2.F bis)
     }
@@ -275,6 +369,7 @@ fn paint_text<S: DrawSurface>(
     surface: &mut S,
     e: &DisplayElement,
     text: &str,
+    is_sticky: bool,
     cam: &ViewportTransform,
     palette: &Palette,
     font_cx: &mut FontContext,
@@ -290,9 +385,17 @@ fn paint_text<S: DrawSurface>(
     let opacity = anim.map(|a| a.opacity).unwrap_or(e.style.opacity);
     let fill = anim.map(|a| a.fill).unwrap_or(e.style.fill);
     let sb = world_rect_to_screen(bounds, cam);
-    let font_size = (e.style.font.size as f64 * cam.zoom) as f32;
-    let color = fill.map(|f| argb(f, opacity)).unwrap_or(palette.cell_text);
-    let layout = text_cache.get_or_build(
+    // A sticky's font tracks the note size unless the style carries an explicit
+    // override (size > 0); a text element uses its own style size. Zoom is applied
+    // on top for crisp glyphs (§6).
+    let base_size = sticky_or_style_font_size(is_sticky, &e.style, bounds);
+    let font_size = (base_size as f64 * cam.zoom) as f32;
+    // Text (foreground) colour, §2.E (see `resolved_text_ink`): `None` means "use
+    // the theme text colour" (only a text element with neither text_color nor fill).
+    let color = resolved_text_ink(is_sticky, e.style.text_color, fill)
+        .map(|c| argb(c, opacity))
+        .unwrap_or(palette.cell_text);
+    let layout = text_cache.get_or_build_font(
         font_cx,
         text,
         font_size,
@@ -300,6 +403,8 @@ fn paint_text<S: DrawSurface>(
         Alignment::Start,
         e.style.font.weight >= 700,
         e.style.font.italic,
+        Some(e.style.font.family.as_str()),
+        false,
     );
     let brush = Brush::Solid(color);
     for line in layout.lines() {
@@ -573,6 +678,182 @@ mod tests {
             has_tweened,
             "animated element must paint its interpolated fill/opacity"
         );
+    }
+
+    /// Build an element with an explicit kind + geom + fill, for the sticky/text
+    /// card tests (the render path keys the card off the geom, the ink off the
+    /// `is_sticky` flag derived from it).
+    fn styled_elem(
+        id: &str,
+        kind: ElementKind,
+        geom: DisplayGeom,
+        fill: Option<u32>,
+    ) -> DisplayNode {
+        let style = ElementStyle {
+            fill,
+            stroke: None,
+            ..ElementStyle::default()
+        };
+        DisplayNode::Element(DisplayElement {
+            id: ElementId(id.to_owned()),
+            kind,
+            transform: Affine::IDENTITY,
+            bounds: Rect::new(0.0, 0.0, 100.0, 80.0),
+            locked: false,
+            style,
+            geom,
+            group: None,
+        })
+    }
+
+    fn paint(vp: &DisplayViewport) -> RecordingSurface {
+        let mut surface = RecordingSurface::new();
+        let mut font_cx = FontContext::new();
+        let mut tc = TextCache::new(1.0);
+        paint_content(
+            &mut surface,
+            vp,
+            &cam(),
+            &LIGHT_PALETTE,
+            &mut font_cx,
+            &mut tc,
+            None,
+            &ImageStore::new(),
+            &HashMap::new(),
+            false,
+        );
+        surface
+    }
+
+    // A sticky note paints a coloured card in the geometry pass: exactly the bug
+    // behind "clicking Sticky does nothing" -- an empty sticky used to derive as
+    // Text and paint no background, so it was invisible (toile-logic §2.C).
+    #[test]
+    fn sticky_paints_a_colored_card() {
+        let fill = 0xFFFE_F08A; // sticky yellow
+        let vp = DisplayViewport {
+            reactions: Default::default(),
+            viewport: Default::default(),
+            nodes: vec![styled_elem(
+                "s",
+                ElementKind::Sticky,
+                DisplayGeom::Sticky("hi".into()),
+                Some(fill),
+            )],
+        };
+        let surface = paint(&vp);
+        // The card is a FillPath in the sticky's own colour.
+        let card = surface
+            .ops()
+            .iter()
+            .any(|op| matches!(op, DrawOp::FillPath { color: Some(c) } if *c == argb(fill, 1.0)));
+        assert!(
+            card,
+            "a sticky must paint a coloured card in the geometry pass"
+        );
+        // A drop shadow is painted behind the card, in the translucent shadow colour.
+        let shadow = surface.ops().iter().any(
+            |op| matches!(op, DrawOp::FillPath { color: Some(c) } if *c == argb(STICKY_SHADOW, 1.0)),
+        );
+        assert!(shadow, "a sticky must paint a drop shadow behind its card");
+        // Any glyphs the body produces use the fixed ink, never the card colour
+        // (the ink is independent of `fill`, §2.C). Font-availability agnostic:
+        // if no glyphs are shaped this simply holds vacuously.
+        let card_color = argb(fill, 1.0);
+        let ink = argb(STICKY_INK, 1.0);
+        for op in surface.ops() {
+            if let DrawOp::Glyphs { color: Some(c), .. } = op {
+                assert_eq!(*c, ink, "sticky body must use the ink, not the card colour");
+                assert_ne!(*c, card_color);
+            }
+        }
+    }
+
+    #[test]
+    fn sticky_font_size_auto_unless_overridden() {
+        let bounds = Rect::new(0.0, 0.0, 120.0, 120.0);
+        let auto = ElementStyle {
+            font: ambre_bus::app::toile::FontSpec {
+                size: 0.0,
+                ..Default::default()
+            },
+            ..ElementStyle::default()
+        };
+        // Sticky with the auto sentinel -> size derived from the card.
+        assert_eq!(
+            sticky_or_style_font_size(true, &auto, bounds),
+            sticky_font_size(bounds)
+        );
+        // A positive size overrides the auto-sizing.
+        let manual = ElementStyle {
+            font: ambre_bus::app::toile::FontSpec {
+                size: 30.0,
+                ..Default::default()
+            },
+            ..ElementStyle::default()
+        };
+        assert_eq!(sticky_or_style_font_size(true, &manual, bounds), 30.0);
+        // A text element always uses its style size, never auto.
+        assert_eq!(sticky_or_style_font_size(false, &auto, bounds), 0.0);
+    }
+
+    #[test]
+    fn text_ink_precedence() {
+        // Explicit text_color always wins, for sticky and text alike.
+        assert_eq!(
+            resolved_text_ink(true, Some(0x1234), Some(0x9999)),
+            Some(0x1234)
+        );
+        assert_eq!(
+            resolved_text_ink(false, Some(0x1234), Some(0x9999)),
+            Some(0x1234)
+        );
+        // No text_color: a sticky uses its ink; a text element uses its fill.
+        assert_eq!(
+            resolved_text_ink(true, None, Some(0x9999)),
+            Some(STICKY_INK)
+        );
+        assert_eq!(resolved_text_ink(false, None, Some(0x9999)), Some(0x9999));
+        // A text element with neither falls back to the theme (None).
+        assert_eq!(resolved_text_ink(false, None, None), None);
+    }
+
+    #[test]
+    fn sticky_font_size_tracks_the_card_and_is_clamped() {
+        // Bigger card -> bigger font.
+        let small = sticky_font_size(Rect::new(0.0, 0.0, 60.0, 60.0));
+        let big = sticky_font_size(Rect::new(0.0, 0.0, 240.0, 240.0));
+        assert!(big > small, "font must grow with the note");
+        // Clamped to a legible range at the extremes.
+        assert_eq!(sticky_font_size(Rect::new(0.0, 0.0, 4.0, 4.0)), 8.0);
+        assert_eq!(sticky_font_size(Rect::new(0.0, 0.0, 4000.0, 4000.0)), 48.0);
+        // A square 120x120 (the default) sits in-range.
+        let default = sticky_font_size(Rect::new(0.0, 0.0, 120.0, 120.0));
+        assert!((8.0..=48.0).contains(&default));
+    }
+
+    // A free `Text` element has no card: the geometry pass paints nothing for it,
+    // so it emits no FillPath (only its glyphs, in the text pass). This is what
+    // keeps Sticky and Text visually distinct (toile-logic §2.C).
+    #[test]
+    fn text_element_paints_no_card() {
+        let vp = DisplayViewport {
+            reactions: Default::default(),
+            viewport: Default::default(),
+            nodes: vec![styled_elem(
+                "t",
+                ElementKind::Text,
+                DisplayGeom::Text("hi".into()),
+                Some(0xFF00_00FF),
+            )],
+        };
+        let surface = paint(&vp);
+        let fills = surface
+            .ops()
+            .iter()
+            .filter(|op| matches!(op, DrawOp::FillPath { .. }))
+            .count();
+        assert_eq!(fills, 0, "a text element must not paint a card background");
     }
 
     // An `Image` element whose hash is in the store paints real pixels

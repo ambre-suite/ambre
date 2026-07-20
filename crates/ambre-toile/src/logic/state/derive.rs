@@ -201,7 +201,8 @@ impl ToileState {
             }
             ElementKind::Frame => DisplayGeom::Frame,
             ElementKind::Group => DisplayGeom::Group,
-            ElementKind::Sticky | ElementKind::Text => DisplayGeom::Text(str_of(em, "text")),
+            ElementKind::Sticky => DisplayGeom::Sticky(str_of(em, "text")),
+            ElementKind::Text => DisplayGeom::Text(str_of(em, "text")),
             ElementKind::Drawing => {
                 let pts: Vec<StrokePoint> =
                     postcard::from_bytes(&bin_of(em, "points")).unwrap_or_default();
@@ -239,6 +240,7 @@ mod tests {
             at: Point::new(x, y),
             size: Size::new(10.0, 10.0),
             content: InitContent::None,
+            fill: None,
         }
     }
 
