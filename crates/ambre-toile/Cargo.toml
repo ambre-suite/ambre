@@ -63,6 +63,10 @@ ambre-canvas = { path = "../ambre-canvas" }
 flume = { workspace = true }
 web-sys = { workspace = true }
 wasm-bindgen = { workspace = true }
+# Shared SVG icon data (pure static strings, no Leptos): used host-side to build
+# the rotate-handle cursor from `LuRotateCw` (§5quinquies.A) and wasm-side by the
+# context-menu glyphs via `leptos_icons`.
+icondata = { workspace = true }
 
 # Toile-specific chrome (the tool palette / panels) is wasm-only Leptos, like
 # ambre-trame's chrome; scoped to wasm32 so host logic/render tests never build it.
@@ -72,7 +76,6 @@ leptos = { workspace = true }
 # Context-menu entry icons (toile-ui §5ter): every entry glyph comes from
 # `icondata`, rendered through `leptos-icons` inside `ambre-chrome::ContextMenu`.
 leptos_icons = { workspace = true }
-icondata = { workspace = true }
 
 [dev-dependencies]
 # Headless render tests: RecordingSurface mock DrawSurface + FixedClock.

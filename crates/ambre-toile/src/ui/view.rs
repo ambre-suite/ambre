@@ -35,7 +35,8 @@ use super::present::{DEFAULT_TRANSITION_MS, Transition};
 use super::reactions;
 use super::render;
 use super::tool::{
-    Preview, Tool, ToolMachine, ToolOutcome, is_group, resolve_group_target, world_rect_to_screen,
+    GestureCursor, Preview, Tool, ToolMachine, ToolOutcome, is_group, resolve_group_target,
+    world_rect_to_screen,
 };
 use super::viewport::ViewportTransform;
 
@@ -211,6 +212,14 @@ pub struct ToileView {
     /// state (§11bis), never a `ToileCommand`. Leptos signal, so wasm-only.
     #[cfg(target_arch = "wasm32")]
     active_tool: RwSignal<Tool>,
+    /// Position-dependent canvas cursor, shared with the chrome (§5quinquies.A).
+    /// The base cursor is a pure function of the active tool (`cursor_css`), but a
+    /// resting hover over a selection edge / corner -- and any resize / rotate /
+    /// move in flight -- overrides it with a directional resize / grab cursor. The
+    /// view writes it (`publish_cursor`); the chrome's cursor `Effect` prefers it
+    /// over `cursor_css` when `Some`. Leptos signal, so wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    cursor: RwSignal<Option<&'static str>>,
     /// Live zoom factor published to the DOM zoom control / status bar each frame
     /// (§5quinquies.E / §8bis): `1.0` = 100%. The view owns the camera, so it is
     /// the source; the chip mirrors it. Written only on change. Wasm-only.
@@ -284,6 +293,24 @@ pub struct ToileView {
     /// display (§1.C).
     anim_overrides: HashMap<ElementId, AnimatedElement>,
 
+    /// Live transform overrides for the in-flight Select gesture (§5): the resized
+    /// / rotated / moved element(s) painted at their preview transform before the
+    /// command commits on release. Rebuilt each pointer event from
+    /// `machine.gesture_overrides`, cleared on release / cancel / tool switch. It
+    /// is 100% local (no `send_edit` during the drag), so the preview is instant
+    /// and never touches the CRDT; the single command still commits on `pointer_up`.
+    /// Mutually exclusive with `anim_overrides` (a slide transition and a manual
+    /// gesture never run together).
+    gesture_overrides: HashMap<ElementId, AnimatedElement>,
+
+    /// True between committing a transform gesture on release and the arrival of
+    /// the recomputed `ViewportData` that carries the new geometry (§5). While set,
+    /// `gesture_overrides` is held as an *optimistic* preview so the object keeps
+    /// its released position/size instead of snapping back to the pre-commit
+    /// geometry for the frames the Logic round-trip takes -- which read as a
+    /// flicker. Cleared (with the overrides) on the next display update.
+    gesture_commit_pending: bool,
+
     /// Decoded image pixels keyed by media hash, passed to the content walk so
     /// `Image` elements paint real pixels (`toile-interop §5.B`). Empty until the
     /// media cache resolves a hash: an unresolved image paints a placeholder box.
@@ -331,6 +358,7 @@ impl ToileView {
         #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<super::menu::CtxScope>,
         #[cfg(target_arch = "wasm32")] menu_cmd: RwSignal<Option<CommandId>>,
         #[cfg(target_arch = "wasm32")] active_tool: RwSignal<Tool>,
+        #[cfg(target_arch = "wasm32")] cursor: RwSignal<Option<&'static str>>,
         #[cfg(target_arch = "wasm32")] zoom: RwSignal<f64>,
         #[cfg(target_arch = "wasm32")] sel_stats: RwSignal<Option<super::status::SelStats>>,
         #[cfg(target_arch = "wasm32")] style_model: RwSignal<Option<super::style::StyleModel>>,
@@ -391,6 +419,8 @@ impl ToileView {
             #[cfg(target_arch = "wasm32")]
             active_tool,
             #[cfg(target_arch = "wasm32")]
+            cursor,
+            #[cfg(target_arch = "wasm32")]
             zoom,
             #[cfg(target_arch = "wasm32")]
             sel_stats,
@@ -408,6 +438,8 @@ impl ToileView {
             present: false,
             transition: None,
             anim_overrides: HashMap::new(),
+            gesture_overrides: HashMap::new(),
+            gesture_commit_pending: false,
             images: render::ImageStore::new(),
             embed_focus: embed::EmbedFocus::default(),
             embed_sessions: embed::EmbedSessions::default(),
@@ -475,6 +507,14 @@ impl ToileView {
             ToileEvent::ViewportData(dv) => {
                 self.display = dv;
                 self.data_dirty = true;
+                // The recomputed frame now carries the committed transform, so drop
+                // the optimistic post-release preview (§5): the real geometry takes
+                // over seamlessly, with no snap-back flicker.
+                if self.gesture_commit_pending && !self.machine.is_active() {
+                    self.gesture_overrides.clear();
+                    self.gesture_commit_pending = false;
+                    self.needs_full = true;
+                }
             }
             // Authoritative copy reply (§5ter): the Logic thread built a
             // self-contained, id-free snapshot of the selection from the whole
@@ -538,7 +578,16 @@ impl ToileView {
                 self.presence.update(update.user_id, update.presence);
                 self.data_dirty = true;
             }
-            ToileEvent::Error(e) => tracing::warn!("Toile rejected: {e}"),
+            ToileEvent::Error(e) => {
+                tracing::warn!("Toile rejected: {e}");
+                // A rejected transform never yields a new frame; drop the optimistic
+                // preview so the object reverts to its real (unchanged) geometry.
+                if self.gesture_commit_pending {
+                    self.gesture_overrides.clear();
+                    self.gesture_commit_pending = false;
+                    self.needs_full = true;
+                }
+            }
             // A slide change (§1.C / §1.D): start a transition that glides the
             // camera to the active frame and Smart Animates its content. The
             // camera target is the fitted frame rect; a slide with no resolvable
@@ -657,11 +706,58 @@ impl ToileView {
                     // editor opens on the new id when `ElementCreated` lands.
                     self.set_tool(Tool::Select);
                 }
+                // A transform commit (release of a move / resize / rotate) keeps its
+                // optimistic preview until the recomputed frame lands, so the object
+                // holds its released geometry instead of snapping back for a frame.
+                if matches!(
+                    &cmd,
+                    ToileCommand::MoveElements { .. }
+                        | ToileCommand::ResizeElement { .. }
+                        | ToileCommand::RotateElement { .. }
+                ) {
+                    self.gesture_commit_pending = true;
+                }
                 self.send_edit(cmd);
             }
         }
         // The overlay preview is derived from live machine state each event.
         self.preview = self.machine.preview();
+        self.rebuild_gesture_overrides();
+    }
+
+    /// Rebuild the live gesture overrides from the machine's in-flight transform
+    /// (§5): the resized / rotated / moved element(s) painted at their preview
+    /// bounds / rotation, keeping each one's committed opacity / fill. Empty when
+    /// no gesture is in flight (after release / cancel), which clears the preview.
+    fn rebuild_gesture_overrides(&mut self) {
+        let live = self.machine.gesture_overrides(&self.display);
+        // No live gesture: clear -- unless a commit is pending, where the overrides
+        // are the optimistic post-release preview held until the new frame lands.
+        if live.is_empty() {
+            if !self.gesture_commit_pending {
+                self.gesture_overrides.clear();
+            }
+            return;
+        }
+        // A fresh gesture supersedes any optimistic post-commit hold.
+        self.gesture_commit_pending = false;
+        self.gesture_overrides.clear();
+        for (id, bounds, rotation) in live {
+            let (opacity, fill) = self
+                .find_element(&id)
+                .map(|e| (e.style.opacity, e.style.fill))
+                .unwrap_or((1.0, None));
+            self.gesture_overrides.insert(
+                id.clone(),
+                AnimatedElement {
+                    id,
+                    bounds,
+                    rotation,
+                    opacity,
+                    fill,
+                },
+            );
+        }
     }
 
     // -- Nested document embeds (§2.I) -----------------------------------------
@@ -854,6 +950,7 @@ impl ToileView {
             self.group_scope.as_ref(),
         );
         self.apply_outcome(out);
+        self.publish_cursor(screen);
         self.needs_full = true;
         true
     }
@@ -1148,9 +1245,13 @@ impl ToileView {
             let world = self.cam.screen_to_world() * screen;
             let out = self.machine.pointer_move(world);
             self.apply_outcome(out);
+            self.publish_cursor(screen);
             self.needs_full = true;
             return true;
         }
+        // At rest: refresh the directional resize cursor from the hovered edge /
+        // corner (§5quinquies.A). No repaint -- only the DOM cursor changes.
+        self.publish_cursor(screen);
         false
     }
 
@@ -1169,6 +1270,7 @@ impl ToileView {
             let world = self.cam.screen_to_world() * screen;
             let out = self.machine.pointer_up(world, &self.display);
             self.apply_outcome(out);
+            self.publish_cursor(screen);
             self.needs_full = true;
             return true;
         }
@@ -1220,6 +1322,8 @@ impl ToileView {
     pub fn set_tool(&mut self, tool: Tool) {
         self.machine.set_tool(tool);
         self.preview = None;
+        self.gesture_overrides.clear();
+        self.gesture_commit_pending = false;
         self.publish_active_tool();
         self.needs_full = true;
     }
@@ -1234,6 +1338,37 @@ impl ToileView {
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn publish_active_tool(&self) {}
+
+    /// Publish the position-dependent canvas cursor (§5quinquies.A). An in-flight
+    /// resize / rotate / move shows its stable directional / grab cursor; at rest,
+    /// a hover over a single selection's edge / corner shows the matching resize
+    /// cursor; otherwise `None` lets the chrome fall back to the tool's base
+    /// cursor. Wasm-only (leptos signal); a host no-op keeps callers cfg-agnostic.
+    #[cfg(target_arch = "wasm32")]
+    fn publish_cursor(&self, screen: Point) {
+        let cursor = self.cursor_at(screen);
+        if self.cursor.get_untracked() != cursor {
+            self.cursor.set(cursor);
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn publish_cursor(&self, _screen: Point) {}
+
+    /// The cursor for the pointer at `screen`. Pure over the machine + selection +
+    /// camera. Only `publish_cursor` (wasm) consumes it; kept compiled on the host
+    /// so the mapping type-checks there too.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    fn cursor_at(&self, screen: Point) -> Option<&'static str> {
+        if let Some(g) = self.machine.gesture_cursor() {
+            return Some(match g {
+                GestureCursor::Handle(h) => super::palette::resize_cursor(h),
+                GestureCursor::Move => "grabbing",
+            });
+        }
+        self.machine
+            .hover_handle(&self.selection, &self.display, &self.cam, screen)
+            .map(super::palette::resize_cursor)
+    }
 
     /// Keyboard shortcuts (`toile-ui §5`). Modifiers ride the event: `ctrl || meta`
     /// is the command chord (Ctrl on Windows/Linux, Cmd on macOS). Ctrl+C/X/V are
@@ -1312,6 +1447,8 @@ impl ToileView {
                     self.publish_active_tool();
                 }
                 self.preview = None;
+                self.gesture_overrides.clear();
+                self.gesture_commit_pending = false;
                 if !self.selection.is_empty() {
                     self.selection.clear();
                 }
@@ -1767,7 +1904,13 @@ impl ToileView {
             text_cache,
             self.editor.as_ref().map(|e| e.id()),
             &self.images,
-            &self.anim_overrides,
+            // A manual gesture preview and a slide transition are mutually
+            // exclusive (§5); prefer the gesture override while one is in flight.
+            if self.gesture_overrides.is_empty() {
+                &self.anim_overrides
+            } else {
+                &self.gesture_overrides
+            },
             self.present,
         );
     }
@@ -1788,6 +1931,7 @@ impl ToileView {
             self.preview.as_ref(),
             &self.find_hits,
             self.find_focus.as_ref(),
+            &self.gesture_overrides,
         );
 
         // Remote presence overlay (§8): cursors, selection ghosts, live strokes
@@ -1995,6 +2139,8 @@ impl ToileView {
         self.present = false;
         self.transition = None;
         self.anim_overrides.clear();
+        self.gesture_overrides.clear();
+        self.gesture_commit_pending = false;
         self.initial_viewport_sent = false;
         self.pending_viewport = None;
         self.needs_full = true;

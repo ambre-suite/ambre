@@ -25,8 +25,8 @@ use ambre_canvas::PerfSnapshot;
 use ambre_chrome::ContextMenu;
 use ambre_commands::CommandId;
 use ambre_toile::chrome::{
-    FloatBar, PresenterIntent, PresenterPanel, SelStats, SelectionToolbar, StatusBar, ToolPalette,
-    TopMenuBar,
+    FloatBar, PresenterIntent, PresenterPanel, SelStats, SelectionToolbar, StatusBar, StyleEdit,
+    StyleModel, ToolPalette, TopMenuBar,
 };
 use ambre_toile::ui::Tool;
 use ambre_toile::ui::menu::{self, CtxScope};
@@ -372,9 +372,10 @@ fn selection_toolbar_delete_fires_command() {
     }));
     let fired = RwSignal::new(None::<CommandId>);
     let on_command = Callback::new(move |id: CommandId| fired.set(Some(id)));
-    let on_fill = Callback::new(move |_c: Option<u32>| {});
+    let model = RwSignal::new(None::<StyleModel>);
+    let on_style = Callback::new(move |_e: StyleEdit| {});
     let root = mount_in_container(move || {
-        view! { <SelectionToolbar bar=bar on_command=on_command on_fill=on_fill /> }
+        view! { <SelectionToolbar bar=bar model=model on_command=on_command on_style=on_style /> }
     });
 
     assert!(click_by_aria(&root, "Delete"));

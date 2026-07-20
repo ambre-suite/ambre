@@ -18,7 +18,7 @@
 use ambre_bus::app::toile::{STICKY_DEFAULT_FILL, ShapeKind};
 use ambre_commands::{CommandId, Key, KeyBinding, Keymap, Modifiers};
 
-use super::tool::Tool;
+use super::tool::{Handle, Tool};
 
 // -- Command identities --------------------------------------------------------
 // String-keyed ids (`ambre-commands`), one per tool. The identity is the string,
@@ -135,6 +135,51 @@ pub fn cursor_css(tool: Tool) -> &'static str {
     }
 }
 
+/// A rotation cursor (inlined SVG data URI) shown on the rotate handle so it is
+/// obvious the drag will rotate rather than resize (`toile-ui §5quinquies.A`).
+/// Built from the shared `icondata::LuRotateCw` glyph (Lucide "rotate-cw", a
+/// clockwise circular arrow): its paths are wrapped in a full `<svg>` and painted
+/// twice -- a white under-stroke then a dark top-stroke -- so it stays legible on
+/// any board colour. The glyph's `"` are swapped for `'` so the markup survives
+/// inside the CSS `url("…")`, and `#` is percent-encoded. Hotspot at the icon
+/// centre; falls back to `grab` if the data URI is unsupported. Lazily built once.
+pub static ROTATE_CURSOR: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+    // Swap `"` for `'` (so the markup survives inside `url("…")`) and collapse all
+    // whitespace to single spaces -- the glyph data spans two lines, and a raw
+    // newline is a control char that invalidates the whole data URI / cursor.
+    let paths = icondata::LuRotateCw
+        .data
+        .replace('"', "'")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let view_box = icondata::LuRotateCw.view_box.unwrap_or("0 0 24 24");
+    format!(
+        "url(\"data:image/svg+xml;utf8,\
+         <svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='{view_box}' \
+         fill='none' stroke-linecap='round' stroke-linejoin='round'>\
+         <g stroke='%23FFFFFF' stroke-width='4'>{paths}</g>\
+         <g stroke='%23222222' stroke-width='2'>{paths}</g>\
+         </svg>\") 14 14, grab"
+    )
+});
+
+/// The CSS `cursor` value for hovering / dragging a selection transform handle
+/// (`toile-ui §5quinquies.A`, "Cursor feedback"): a directional double-arrow that
+/// matches the axis a corner or side resizes along, and a rotation cursor on the
+/// rotate handle. The selection box is the axis-aligned AABB (`world_rect_to_screen`
+/// keeps it axis-aligned), so the cursors stay axis-aligned even for a rotated
+/// element — no cursor rotation in the MVP. Pure and host-tested.
+pub fn resize_cursor(h: Handle) -> &'static str {
+    match h {
+        Handle::Nw | Handle::Se => "nwse-resize",
+        Handle::Ne | Handle::Sw => "nesw-resize",
+        Handle::N | Handle::S => "ns-resize",
+        Handle::E | Handle::W => "ew-resize",
+        Handle::Rotate => ROTATE_CURSOR.as_str(),
+    }
+}
+
 /// Whether a keyboard event targeting an element with this tag / contenteditable
 /// flag should be treated as "typing", so a bare tool chord must NOT be stolen.
 /// True for form text fields (`INPUT`, `TEXTAREA`) and any contenteditable host.
@@ -229,6 +274,25 @@ mod tests {
         assert_eq!(cursor_css(Tool::Pen), "crosshair");
         assert_eq!(cursor_css(Tool::Connector), "crosshair");
         assert_eq!(cursor_css(Tool::Draw), "crosshair");
+    }
+
+    #[test]
+    fn resize_cursor_maps_every_handle_to_its_css_keyword() {
+        assert_eq!(resize_cursor(Handle::Nw), "nwse-resize");
+        assert_eq!(resize_cursor(Handle::Se), "nwse-resize");
+        assert_eq!(resize_cursor(Handle::Ne), "nesw-resize");
+        assert_eq!(resize_cursor(Handle::Sw), "nesw-resize");
+        assert_eq!(resize_cursor(Handle::N), "ns-resize");
+        assert_eq!(resize_cursor(Handle::S), "ns-resize");
+        assert_eq!(resize_cursor(Handle::E), "ew-resize");
+        assert_eq!(resize_cursor(Handle::W), "ew-resize");
+        assert_eq!(resize_cursor(Handle::Rotate), ROTATE_CURSOR.as_str());
+        assert!(ROTATE_CURSOR.starts_with("url(\""));
+        assert!(ROTATE_CURSOR.ends_with("grab"));
+        // The Lucide glyph made it in, and its `"` were swapped for `'` so the only
+        // double quotes left are the two wrapping the `url(...)` value.
+        assert!(ROTATE_CURSOR.contains("<path"));
+        assert_eq!(ROTATE_CURSOR.matches('"').count(), 2);
     }
 
     #[test]

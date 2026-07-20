@@ -293,6 +293,14 @@ pub enum Tool {
 | Draw | press-move-release | `CommitStroke` | per-sample live stroke frame |
 | Comment | click element / empty | `CreateComment { anchor, body }` (features §5) then open composer | — |
 
+**Live transform preview.** During a Select move / resize / rotate the UI shows the real object transforming
+in place, not just the selection box (Miro parity). The view feeds the in-flight transform into the same
+per-element override the Smart-Animate slide pass uses (`AnimatedElement`: bounds + rotation, holding
+opacity/fill), so the fill and reflowed text follow the drag every frame. This preview is **100% local** — no
+`send_edit` while the pointer is down, so it is instant (<15 ms) and never churns the CRDT. Exactly **one**
+`MoveElements` / `ResizeElement` / `RotateElement` still commits on release, preserving one undo item per
+gesture (`toile-logic §949/§961`). The selection box + handles follow the preview bounds.
+
 **Snapping & alignment.** During Select drags the UI computes local snap guides (element edges/centers,
 frame bounds, grid) and quantizes before emitting — a pure UI concern, never persisted.
 
@@ -406,6 +414,16 @@ creation tools (Text/Shape/Pen/Connector/Draw), a grab hand for the Hand tool, a
 The cursor is a pure function of the active-tool signal (`cursor_css`, host-tested), applied as a CSS cursor on
 the canvas element by the chrome — it never touches the canvas render pass.
 
+On the Select tool the cursor is additionally a function of the **pointer position** over a single selection
+(Miro parity): hovering a side shows the directional resize cursor for that axis (`ns-resize` / `ew-resize`),
+a corner shows the diagonal (`nwse-resize` / `nesw-resize`), and the rotate handle shows a **rotation cursor**
+(an inlined SVG: a nearly-closed circle with an arrow head) — the
+whole edge is grabbable even though only the corners draw a square (§7); a resize / rotate / move in flight
+holds the matching cursor (`grabbing` for a move) for the whole gesture. The view publishes this
+position-dependent cursor into a shared `Option<&'static str>` signal (`resize_cursor`, host-tested); the
+chrome's cursor effect prefers it and falls back to `cursor_css` when it is `None`. The box is the axis-aligned
+AABB, so the cursors are axis-aligned even for a rotated element (no cursor rotation, MVP).
+
 ### B. Style / property inspector
 A DOM side panel, shown only when the selection is non-empty, that edits the selected elements'
 `ElementStyle` (`toile-logic §2.E`): fill (background), stroke, `stroke_w`, `opacity`, plus a **Text** section —
@@ -515,7 +533,11 @@ editing a message body; posting emits `CreateComment`/`ReplyComment` and self-ed
 ## 7. SELECTION & TRANSFORM HANDLES
 
 Selection is **local UI state** (never persisted; a peer's selection travels as presence). A selected set draws
-a bounding box with 8 resize handles + a rotate handle; multi-select transforms apply proportionally. Locked
+a bounding box with a rotate handle and **4 corner resize squares**; multi-select transforms apply
+proportionally. Only the corners draw a visual square — kept deliberately light — but the **whole edge** is
+grabbable (Miro): a press anywhere along a side starts an axis resize, a corner a diagonal one. The band-based
+hit-test (`edge_handle_at`, host-tested) does the picking and also drives the hover cursor (§5quinquies.A), so
+horizontal / vertical resize stays available without cluttering the box with mid-side squares. Locked
 elements (`DisplayElement.locked`, the top-level flag — `toile-logic §2.B`, not an `ElementStyle` member) are
 skipped by hit-test and show no handles. A click that hits a grouped element selects the whole group (its union
 bounds carry the handles); double-click enters the group to reach a member — the resolution rule of §5ter.
