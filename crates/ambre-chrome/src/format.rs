@@ -1,0 +1,83 @@
+// ambre-chrome/src/format.rs
+// ============================================================================
+// Shared, app-agnostic text-format controls (ambre-spec-chrome.md 2.B), the rest
+// of the text-format cluster promoted out of Trame's cell toolbar so Trame cells
+// and Toile elements drive the SAME controls (mirrors `FontPicker` / `ColorPopover`):
+//
+//   FontSizeSelect -- the point-size dropdown (a curated preset list + an "unset"
+//                     entry), value-agnostic (`Option<u16>`, `None` = the unset /
+//                     auto entry). The caller maps `None` to its own meaning
+//                     (Trame: the body default; Toile: auto-size to the card).
+//   FormatToggle   -- a single pressed-state toolbar button (bold / italic /
+//                     underline / strikethrough), reflecting a `pressed` signal
+//                     and reporting clicks through `on_toggle`. The caller owns
+//                     what a toggle means to its model (a `CommandId`, a style
+//                     patch, ...): the control never reaches past the DOM.
+//
+// Both do `on:mousedown prevent_default` so a click never steals focus from the
+// host's text pipe (the palette / grid-focus hazard both apps guard against).
+// ============================================================================
+
+use leptos::prelude::*;
+use leptos_icons::Icon;
+
+/// The point sizes offered by [`FontSizeSelect`], shared by both apps so the cell
+/// and element size pickers list the very same steps.
+pub const FONT_SIZES: &[u16] = &[8, 9, 10, 11, 12, 14, 16, 18, 24, 36];
+
+/// The shared font-size dropdown. `current` is the active explicit size (`None` =
+/// unset -> the `auto_label` entry is selected); `on_pick` receives the chosen
+/// size (`None` when the unset entry is picked). `auto_label` names the unset entry
+/// ("Auto" for Toile's card auto-size, "Default" for Trame's body default).
+#[component]
+pub fn FontSizeSelect(
+    current: Signal<Option<u16>>,
+    on_pick: Callback<Option<u16>>,
+    #[prop(default = "Auto")] auto_label: &'static str,
+) -> impl IntoView {
+    view! {
+        <select
+            class="ambre-font-size"
+            aria-label="Font size"
+            // The unset entry has an empty value, so `None` selects it.
+            prop:value=move || current.get().map(|s| s.to_string()).unwrap_or_default()
+            // Keep the host's focus: a control steals it on mousedown, which would
+            // clear the active cell / selection before on:change can apply.
+            on:mousedown=move |ev| ev.prevent_default()
+            on:change=move |ev| {
+                // An empty value (the unset entry) parses to `None`.
+                on_pick.run(event_target_value(&ev).parse::<u16>().ok());
+            }
+        >
+            <option value="">{auto_label}</option>
+            {FONT_SIZES
+                .iter()
+                .map(|&s| view! { <option value=s.to_string()>{s.to_string()}</option> })
+                .collect_view()}
+        </select>
+    }
+}
+
+/// A single pressed-state format toggle button (bold / italic / underline /
+/// strikethrough). `pressed` drives the `aria-pressed` state (and the CSS active
+/// look); `on_toggle` fires on click. The caller decides what the toggle does --
+/// the control only reflects state and reports intent.
+#[component]
+pub fn FormatToggle(
+    label: &'static str,
+    icon: icondata::Icon,
+    pressed: Signal<bool>,
+    on_toggle: Callback<()>,
+) -> impl IntoView {
+    view! {
+        <button
+            aria-label=label
+            title=label
+            aria-pressed=move || pressed.get().then_some("true")
+            on:mousedown=move |ev| ev.prevent_default()
+            on:click=move |_| on_toggle.run(())
+        >
+            <Icon icon=icon />
+        </button>
+    }
+}

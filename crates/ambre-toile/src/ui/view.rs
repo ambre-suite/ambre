@@ -242,11 +242,12 @@ pub struct ToileView {
     /// editor. Leptos signal, so wasm-only.
     #[cfg(target_arch = "wasm32")]
     float_bar: RwSignal<Option<super::floatbar::FloatBar>>,
-    /// A quick-colour pick the floating bar emits back (§5quinquies.D): drained in
-    /// `update` and folded into one `RestyleElements` (fill only) over the live
-    /// selection, the same seam as `restyle`. Wasm-only.
+    /// A single-field style edit the floating bar emits back (§5quinquies.D):
+    /// drained in `update` and folded into one `RestyleElements` over the live
+    /// selection (the changed field applied on top of the freshly-derived common
+    /// style), the same seam as `restyle`. Wasm-only.
     #[cfg(target_arch = "wasm32")]
-    quick_fill: RwSignal<Option<super::floatbar::QuickFill>>,
+    quick_style: RwSignal<Option<super::floatbar::StyleEdit>>,
 
     /// Set while a Fit / Zoom-to-selection awaits the `SelectionStats` reply whose
     /// bounds it will frame (§5quinquies.E). The reply treats both the same way
@@ -337,7 +338,7 @@ impl ToileView {
             Option<ambre_bus::app::toile::ElementStyle>,
         >,
         #[cfg(target_arch = "wasm32")] float_bar: RwSignal<Option<super::floatbar::FloatBar>>,
-        #[cfg(target_arch = "wasm32")] quick_fill: RwSignal<Option<super::floatbar::QuickFill>>,
+        #[cfg(target_arch = "wasm32")] quick_style: RwSignal<Option<super::floatbar::StyleEdit>>,
     ) -> Self {
         if !embedded {
             text_input.focus();
@@ -400,7 +401,7 @@ impl ToileView {
             #[cfg(target_arch = "wasm32")]
             float_bar,
             #[cfg(target_arch = "wasm32")]
-            quick_fill,
+            quick_style,
             pending_fit: false,
             last_stats_sel: Vec::new(),
             presence: PeerCursors::default(),
@@ -969,24 +970,27 @@ impl ToileView {
     #[cfg(not(target_arch = "wasm32"))]
     fn publish_float_bar(&self) {}
 
-    /// Drain a quick-colour pick the floating bar emitted (§5quinquies.D) and apply
-    /// it to the live selection as one whole-register `RestyleElements` (fill only,
-    /// §2.E). The base is the selection's common style so the other attributes are
-    /// preserved; the view attaches the ids the DOM bar cannot name. Wasm-only; a
-    /// host no-op keeps `update` cfg-agnostic.
+    /// Drain a single-field style edit the floating bar emitted (§5quinquies.D) and
+    /// apply it to the live selection as one whole-register `RestyleElements` (§2.E).
+    /// The base is the selection's freshly-derived common style so the untouched
+    /// attributes are preserved; only the emitted field is overwritten, so back-to-
+    /// back bar edits never clobber one another. The view attaches the ids the DOM
+    /// bar cannot name. Wasm-only; a host no-op keeps `update` cfg-agnostic.
     #[cfg(target_arch = "wasm32")]
-    fn drain_quick_fill(&mut self) {
-        let Some(super::floatbar::QuickFill(color)) = self.quick_fill.get_untracked() else {
+    fn drain_quick_style(&mut self) {
+        let Some(edit) = self.quick_style.get_untracked() else {
             return;
         };
-        self.quick_fill.set(None);
+        self.quick_style.set(None);
         if self.selection.is_empty() {
             return;
         }
         let mut style = super::style::style_scope_for(&self.selection, &self.display)
             .map(|m| m.base)
             .unwrap_or_default();
-        style.fill = color;
+        // Overwrite only the one field the bar changed, on the freshly-derived
+        // common style -- host-tested in `ui::floatbar` (no-clobber property).
+        edit.apply_to(&mut style);
         self.send_edit(ToileCommand::RestyleElements {
             ids: self.selection.clone(),
             style,
@@ -994,7 +998,7 @@ impl ToileView {
         self.needs_full = true;
     }
     #[cfg(not(target_arch = "wasm32"))]
-    fn drain_quick_fill(&mut self) {}
+    fn drain_quick_style(&mut self) {}
 
     /// Apply the tool the DOM palette / keyboard selected (§5quinquies.A): if the
     /// shared signal differs from the machine's current tool, switch (which cancels
@@ -1630,7 +1634,7 @@ impl ToileView {
         self.drain_restyle();
 
         // Apply any quick-colour pick the floating bar emitted (§5quinquies.D).
-        self.drain_quick_fill();
+        self.drain_quick_style();
 
         // Apply the tool the DOM palette / keyboard selected this frame (§5quinquies.A).
         self.apply_active_tool();

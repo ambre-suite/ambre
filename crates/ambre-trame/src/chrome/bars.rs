@@ -7,6 +7,7 @@
 
 use ambre_bus::StylePatch;
 use ambre_chrome::commands::CommandId;
+use ambre_chrome::{FontSizeSelect, FormatToggle};
 use leptos::prelude::*;
 use leptos_icons::Icon;
 
@@ -18,13 +19,6 @@ use super::popovers::{
     BordersPopover, ColorPopover, FontPopover, HAlignPopover, NumberFormatPopover, VAlignPopover,
 };
 use super::style::{StyleState, Toggles};
-
-/// The font sizes offered by the toolbar `<select>` (points).
-const SIZES: &[u16] = &[8, 9, 10, 11, 12, 14, 16, 18, 24, 36];
-
-/// The grid's default body size (matches `render::BODY_SIZE`), shown in the size
-/// picker when a cell has no explicit size.
-const DEFAULT_SIZE: u16 = 12;
 
 /// The Trame format toolbar (the launcher mounts it inside the chrome `Toolbar`
 /// slot). Bold/Italic/Undo/Redo invoke their `CommandId` through `on_command`
@@ -104,64 +98,53 @@ pub fn FormatBar(
         </button>
         <span class="sep"></span>
 
-        <button
-            aria-label="Bold"
-            aria-pressed=move || style.bold.get().then_some("true")
-            on:mousedown=move |ev| ev.prevent_default()
-            on:click=move |_| on_command.run(BOLD)
-        >
-            <Icon icon=icondata::BsTypeBold />
-        </button>
-        <button
-            aria-label="Italic"
-            aria-pressed=move || style.italic.get().then_some("true")
-            on:mousedown=move |ev| ev.prevent_default()
-            on:click=move |_| on_command.run(ITALIC)
-        >
-            <Icon icon=icondata::BsTypeItalic />
-        </button>
-        <button
-            aria-label="Underline"
-            aria-pressed=move || style.underline.get().then_some("true")
-            on:mousedown=move |ev| ev.prevent_default()
-            on:click=move |_| on_style.run(StylePatch {
+        // Bold / Italic / Underline / Strikethrough -- shared toggles
+        // (`ambre_chrome::FormatToggle`), same cluster Toile's inspector / selection
+        // bar use. Bold/Italic route through the shared command path; underline /
+        // strikethrough emit a `StylePatch` (they have no `CommandId`).
+        <FormatToggle
+            label="Bold"
+            icon=icondata::BsTypeBold
+            pressed=style.bold.into()
+            on_toggle=Callback::new(move |()| on_command.run(BOLD))
+        />
+        <FormatToggle
+            label="Italic"
+            icon=icondata::BsTypeItalic
+            pressed=style.italic.into()
+            on_toggle=Callback::new(move |()| on_command.run(ITALIC))
+        />
+        <FormatToggle
+            label="Underline"
+            icon=icondata::BsTypeUnderline
+            pressed=style.underline.into()
+            on_toggle=Callback::new(move |()| on_style.run(StylePatch {
                 underline: Some(!style.underline.get_untracked()),
                 ..Default::default()
-            })
-        >
-            <Icon icon=icondata::BsTypeUnderline />
-        </button>
-        <button
-            aria-label="Strikethrough"
-            aria-pressed=move || style.strikethrough.get().then_some("true")
-            on:mousedown=move |ev| ev.prevent_default()
-            on:click=move |_| on_style.run(StylePatch {
+            }))
+        />
+        <FormatToggle
+            label="Strikethrough"
+            icon=icondata::BsTypeStrikethrough
+            pressed=style.strikethrough.into()
+            on_toggle=Callback::new(move |()| on_style.run(StylePatch {
                 strikethrough: Some(!style.strikethrough.get_untracked()),
                 ..Default::default()
-            })
-        >
-            <Icon icon=icondata::BsTypeStrikethrough />
-        </button>
+            }))
+        />
         <span class="sep"></span>
 
         // Font family (custom popover: each family previewed in its own
-        // typeface) + size.
+        // typeface) + size (shared `ambre_chrome::FontSizeSelect`; "Default" =
+        // the body default the cell follows when it carries no explicit size).
         <FontPopover style=style on_style=on_style />
-        <select
-            aria-label="Font size"
-            prop:value=move || {
-                style.size.get().map(|s| s.to_string()).unwrap_or_else(|| DEFAULT_SIZE.to_string())
-            }
-            on:change=move |ev| {
-                let sz = event_target_value(&ev).parse::<u16>().ok();
-                on_style.run(StylePatch { size: Some(sz), ..Default::default() });
-            }
-        >
-            {SIZES
-                .iter()
-                .map(|&s| view! { <option value=s.to_string()>{s.to_string()}</option> })
-                .collect_view()}
-        </select>
+        <FontSizeSelect
+            current=style.size.into()
+            on_pick=Callback::new(move |p: Option<u16>| {
+                on_style.run(StylePatch { size: Some(p), ..Default::default() });
+            })
+            auto_label="Default"
+        />
         <span class="sep"></span>
 
         // Text colour: composed picker (palette + "Automatic" reset + custom).

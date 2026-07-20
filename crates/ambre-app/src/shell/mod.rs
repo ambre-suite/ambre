@@ -70,7 +70,7 @@ pub(crate) fn mount_shell(
     toile_style_model: RwSignal<Option<toile_chrome::StyleModel>>,
     toile_restyle: RwSignal<Option<ambre_bus::app::toile::ElementStyle>>,
     toile_float_bar: RwSignal<Option<toile_chrome::FloatBar>>,
-    toile_quick_fill: RwSignal<Option<toile_chrome::QuickFill>>,
+    toile_quick_style: RwSignal<Option<toile_chrome::StyleEdit>>,
     sheets: RwSignal<Vec<(String, String)>>,
     active_sheet: RwSignal<String>,
 ) {
@@ -173,7 +173,7 @@ pub(crate) fn mount_shell(
             toile_style_model,
             toile_restyle,
             toile_float_bar,
-            toile_quick_fill,
+            toile_quick_style,
             sort_dialog,
             chrome_status,
             sheets,

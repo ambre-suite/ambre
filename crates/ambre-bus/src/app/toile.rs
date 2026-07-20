@@ -186,13 +186,17 @@ impl ShapeKind {
 // Style register -- one LWW binary per element (§2.E)
 // =============================================================================
 
-/// Font attributes for sticky / text bodies.
+/// Font attributes for sticky / text bodies. `underline` / `strikethrough` are the
+/// text decorations, matching Trame's cell font attributes so the shared format
+/// controls (`ambre_chrome`) drive the same field set in both apps.
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct FontSpec {
     pub family: String,
     pub size: f32,
     pub weight: u16, // CSS weight scale, 400 = regular, 700 = bold
     pub italic: bool,
+    pub underline: bool,
+    pub strikethrough: bool,
 }
 
 impl Default for FontSpec {
@@ -202,6 +206,8 @@ impl Default for FontSpec {
             size: 16.0,
             weight: 400,
             italic: false,
+            underline: false,
+            strikethrough: false,
         }
     }
 }
@@ -217,8 +223,11 @@ pub struct Shadow {
 
 /// The whole visual style of an element, stored as **one** postcard-encoded LWW
 /// register (§2.E) so a fill update racing a stroke update cannot leave a
-/// half-applied tear. Extended fields are append-only: postcard tolerates
-/// trailing additions on read.
+/// half-applied tear. Schema note: postcard decodes the blob whole and does NOT
+/// tolerate a missing or extra field, so ANY layout change (a new field here or in
+/// `FontSpec`) makes a blob written by an older binary fall back to `default()`
+/// (`from_bytes` -> `unwrap_or_default`). Acceptable pre-1.0 (no persisted-format
+/// guarantee yet); a versioned register is owed before GA.
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct ElementStyle {
     pub fill: Option<u32>, // ARGB, None = no fill
@@ -230,8 +239,7 @@ pub struct ElementStyle {
     pub shadow: Option<Shadow>,
     /// Text (foreground) colour, ARGB. `None` = the kind's default ink (a sticky's
     /// fixed readable ink, or the theme text colour for a free text element).
-    /// Distinct from `fill`, which is the card / shape background. Appended last so
-    /// postcard still decodes older registers written before this field existed.
+    /// Distinct from `fill`, which is the card / shape background.
     pub text_color: Option<u32>,
 }
 

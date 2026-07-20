@@ -42,10 +42,10 @@ pub use crate::ui::style::StyleModel;
 // (like `ui::find`); re-export it so the launcher names it through `toile_chrome`.
 pub use crate::ui::status::SelStats;
 
-// The floating selection toolbar's model + quick-fill payload are pure and
-// host-tested in `ui::floatbar` (like `ui::status` / `ui::style`); the launcher
-// names them through `toile_chrome`.
-pub use crate::ui::floatbar::{FloatBar, QuickFill};
+// The floating selection toolbar's model + single-field style payload are pure
+// and host-tested in `ui::floatbar` (like `ui::status` / `ui::style`); the
+// launcher names them through `toile_chrome`.
+pub use crate::ui::floatbar::{FloatBar, StyleEdit};
 
 // The tool palette's command surface is pure and host-tested in `ui::palette`
 // (like `ui::find` / `ui::menu`); the launcher consumes it through these

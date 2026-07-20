@@ -34,6 +34,8 @@ pub struct MixedFlags {
     pub font_size: bool,
     pub bold: bool,
     pub italic: bool,
+    pub underline: bool,
+    pub strikethrough: bool,
 }
 
 impl MixedFlags {
@@ -48,6 +50,8 @@ impl MixedFlags {
             || self.font_size
             || self.bold
             || self.italic
+            || self.underline
+            || self.strikethrough
     }
 }
 
@@ -91,6 +95,8 @@ pub fn style_scope_for(selection: &[ElementId], display: &DisplayViewport) -> Op
         mixed.font_size |= s.font.size != base.font.size;
         mixed.bold |= (s.font.weight >= 700) != (base.font.weight >= 700);
         mixed.italic |= s.font.italic != base.font.italic;
+        mixed.underline |= s.font.underline != base.font.underline;
+        mixed.strikethrough |= s.font.strikethrough != base.font.strikethrough;
     }
 
     Some(StyleModel { base, mixed })
@@ -205,5 +211,32 @@ mod tests {
         assert!(model.mixed.opacity);
         assert!(!model.mixed.fill);
         assert!(!model.mixed.stroke);
+    }
+
+    #[test]
+    fn differing_text_decorations_flag_underline_and_strikethrough() {
+        let font_with = |underline, strikethrough| ambre_bus::app::toile::FontSpec {
+            underline,
+            strikethrough,
+            ..Default::default()
+        };
+        let a = ElementStyle {
+            font: font_with(false, false),
+            ..ElementStyle::default()
+        };
+        let b = ElementStyle {
+            font: font_with(true, true),
+            ..ElementStyle::default()
+        };
+        let dv = viewport(vec![elem("a", a), elem("b", b)]);
+        let model = style_scope_for(&[eid("a"), eid("b")], &dv).expect("model");
+        assert!(model.mixed.underline);
+        assert!(model.mixed.strikethrough);
+        // The base is the first element; its decorations are off.
+        assert!(!model.base.font.underline);
+        assert!(!model.base.font.strikethrough);
+        // Weight / italic agree, so they are not flagged.
+        assert!(!model.mixed.bold);
+        assert!(!model.mixed.italic);
     }
 }

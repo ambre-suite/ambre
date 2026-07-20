@@ -27,7 +27,7 @@ use std::time::Duration;
 
 use ambre_bus::app::toile::ElementStyle;
 use ambre_chrome::commands::CommandId;
-use ambre_chrome::{ColorPopover, Debouncer, FontPicker};
+use ambre_chrome::{ColorPopover, Debouncer, FontPicker, FontSizeSelect, FormatToggle};
 use leptos::prelude::*;
 
 /// Map a stored `FontSpec.family` string to the picker's family label (`None` =
@@ -71,6 +71,8 @@ pub fn StyleInspector(
     let font_size = RwSignal::new(0.0_f32);
     let bold = RwSignal::new(false);
     let italic = RwSignal::new(false);
+    let underline = RwSignal::new(false);
+    let strikethrough = RwSignal::new(false);
 
     // Re-seed the local controls whenever the view publishes a new common style
     // (selection change / external restyle). This only reads `model`, so pushing
@@ -87,6 +89,8 @@ pub fn StyleInspector(
             font_size.set(m.base.font.size);
             bold.set(m.base.font.weight >= 700);
             italic.set(m.base.font.italic);
+            underline.set(m.base.font.underline);
+            strikethrough.set(m.base.font.strikethrough);
         }
     });
 
@@ -109,6 +113,8 @@ pub fn StyleInspector(
             s.font.size = font_size.get_untracked().max(0.0);
             s.font.weight = if bold.get_untracked() { 700 } else { 400 };
             s.font.italic = italic.get_untracked();
+            s.font.underline = underline.get_untracked();
+            s.font.strikethrough = strikethrough.get_untracked();
         });
         let style = working.get_untracked();
         debouncer.call(RESTYLE_DEBOUNCE, move || restyle.set(Some(style)));
@@ -129,6 +135,33 @@ pub fn StyleInspector(
     });
     let on_font = Callback::new(move |f: Option<String>| {
         font_family.set(f);
+        commit();
+    });
+    // Size: the shared dropdown speaks points (`Option<u16>`, `None` = auto); the
+    // working copy stores world px as `f32` with `0.0` = the auto sentinel.
+    let size_current = Signal::derive(move || {
+        let s = font_size.get();
+        (s > 0.0).then_some(s.round() as u16)
+    });
+    let on_size = Callback::new(move |p: Option<u16>| {
+        font_size.set(p.map(f32::from).unwrap_or(0.0));
+        commit();
+    });
+    // The four format toggles flip their signal and commit.
+    let on_bold = Callback::new(move |()| {
+        bold.update(|b| *b = !*b);
+        commit();
+    });
+    let on_italic = Callback::new(move |()| {
+        italic.update(|i| *i = !*i);
+        commit();
+    });
+    let on_underline = Callback::new(move |()| {
+        underline.update(|u| *u = !*u);
+        commit();
+    });
+    let on_strike = Callback::new(move |()| {
+        strikethrough.update(|s| *s = !*s);
         commit();
     });
 
@@ -239,55 +272,44 @@ pub fn StyleInspector(
                     </div>
                     <div class="ambre-inspector-row">
                         <label>"Size"</label>
-                        <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            placeholder="Auto"
-                            prop:value=move || {
-                                let s = font_size.get();
-                                if s > 0.0 { format!("{s:.0}") } else { String::new() }
-                            }
-                            on:mousedown=move |ev| ev.prevent_default()
-                            on:input=move |ev| {
-                                // Empty clears to the auto sentinel (0); a positive
-                                // value overrides (a sticky then stops auto-sizing).
-                                let raw = event_target_value(&ev);
-                                let v = raw.trim().parse::<f32>().unwrap_or(0.0);
-                                font_size.set(v.max(0.0));
-                                commit();
-                            }
-                        />
+                        <FontSizeSelect current=size_current on_pick=on_size auto_label="Auto" />
                         {move || mixed_hint(mixed().font_size)}
                     </div>
+                    // Bold / Italic / Underline / Strikethrough -- shared toggles, same
+                    // order as Trame's toolbar (`ambre_chrome::FormatToggle`).
                     <div
                         class="ambre-inspector-section ambre-commandbar"
                         role="toolbar"
                         aria-label="Text style"
                     >
-                        <button
-                            aria-label="Bold"
-                            aria-pressed=move || bold.get().then_some("true")
-                            on:mousedown=move |ev| ev.prevent_default()
-                            on:click=move |_| {
-                                bold.update(|b| *b = !*b);
-                                commit();
-                            }
-                        >
-                            <leptos_icons::Icon icon=icondata::MdiFormatBold />
-                        </button>
-                        <button
-                            aria-label="Italic"
-                            aria-pressed=move || italic.get().then_some("true")
-                            on:mousedown=move |ev| ev.prevent_default()
-                            on:click=move |_| {
-                                italic.update(|i| *i = !*i);
-                                commit();
-                            }
-                        >
-                            <leptos_icons::Icon icon=icondata::MdiFormatItalic />
-                        </button>
-                        {move || mixed_hint(mixed().bold || mixed().italic)}
+                        <FormatToggle
+                            label="Bold"
+                            icon=icondata::BsTypeBold
+                            pressed=bold.into()
+                            on_toggle=on_bold
+                        />
+                        <FormatToggle
+                            label="Italic"
+                            icon=icondata::BsTypeItalic
+                            pressed=italic.into()
+                            on_toggle=on_italic
+                        />
+                        <FormatToggle
+                            label="Underline"
+                            icon=icondata::BsTypeUnderline
+                            pressed=underline.into()
+                            on_toggle=on_underline
+                        />
+                        <FormatToggle
+                            label="Strikethrough"
+                            icon=icondata::BsTypeStrikethrough
+                            pressed=strikethrough.into()
+                            on_toggle=on_strike
+                        />
+                        {move || mixed_hint(
+                            mixed().bold || mixed().italic || mixed().underline
+                                || mixed().strikethrough,
+                        )}
                     </div>
                 </div>
 

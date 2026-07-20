@@ -241,12 +241,18 @@ pub struct ElementStyle {
     pub stroke_w:    f32,
     pub opacity:     f32,           // 0.0 ..= 1.0
     pub corner:      f32,           // corner radius for rect/sticky
-    pub font:        FontSpec,      // family, size, weight, italic — for sticky/text
+    pub font:        FontSpec,      // family, size, weight, italic, underline,
+                                    // strikethrough — for sticky/text. The decoration
+                                    // set matches Trame cells (shared format controls).
     pub shadow:      Option<Shadow>,
     pub text_color:  Option<u32>,   // text/foreground ARGB; None = kind default ink
                                     // (sticky ink, or theme colour for a text element).
                                     // Distinct from `fill` (card/shape background).
-    // extended fields append-only; postcard tolerates trailing additions on read
+    // Schema note: the register is one postcard blob decoded whole; postcard does
+    // NOT tolerate a missing/extra field, so any layout change makes a blob written
+    // by an older binary fall back to `ElementStyle::default()` (`from_bytes` ->
+    // `unwrap_or_default`). Acceptable pre-1.0 (no persisted-format guarantee yet);
+    // a real migration path (versioned register) is owed before GA.
 }
 ```
 

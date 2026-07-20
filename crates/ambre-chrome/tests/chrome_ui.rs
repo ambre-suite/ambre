@@ -17,8 +17,8 @@
 #![cfg(target_arch = "wasm32")]
 
 use ambre_chrome::{
-    AppShell, CommandStates, Header, PerfChip, PerfDetail, StatusBar, ToastHost, ToastKind, Toasts,
-    Toolbar, ZoomChip,
+    AppShell, CommandStates, FONT_SIZES, FontSizeSelect, FormatToggle, Header, PerfChip,
+    PerfDetail, StatusBar, ToastHost, ToastKind, Toasts, Toolbar, ZoomChip,
 };
 use ambre_commands::CommandId;
 use leptos::mount::mount_to;
@@ -196,6 +196,67 @@ fn perf_chip_renders_fps_from_signal_and_starts_collapsed() {
     let btn = root.query_selector(".statusbar-fps").unwrap().unwrap();
     assert_eq!(btn.text_content().as_deref(), Some("58 fps"));
     assert!(root.query_selector(".test-perf-detail").unwrap().is_none());
+
+    root.remove();
+}
+
+// ── Shared text-format controls (format.rs) ─────────────────────────────────
+
+#[wasm_bindgen_test]
+fn format_toggle_reflects_pressed_and_reports_clicks() {
+    let owner = Owner::new();
+    owner.set();
+    let pressed = RwSignal::new(false);
+    let clicks = RwSignal::new(0u32);
+    let root = mount_in_container(move || {
+        view! {
+            <FormatToggle
+                label="Bold"
+                icon=icondata::BsTypeBold
+                pressed=pressed.into()
+                on_toggle=Callback::new(move |()| clicks.update(|c| *c += 1))
+            />
+        }
+    });
+
+    let btn = root.query_selector("button").unwrap().unwrap();
+    assert_eq!(btn.get_attribute("aria-label").as_deref(), Some("Bold"));
+    // Unpressed: no aria-pressed attribute.
+    assert!(btn.get_attribute("aria-pressed").is_none());
+    // The signal drives the pressed state (a later microtask re-renders it).
+    pressed.set(true);
+
+    // A click reports the intent through the callback (the control is stateless).
+    let ev = web_sys::MouseEvent::new("click").unwrap();
+    btn.dispatch_event(&ev).unwrap();
+    assert_eq!(clicks.get_untracked(), 1);
+
+    root.remove();
+}
+
+#[wasm_bindgen_test]
+fn font_size_select_lists_presets_plus_auto_entry() {
+    let owner = Owner::new();
+    owner.set();
+    let picked = RwSignal::new(Some(999u16));
+    let root = mount_in_container(move || {
+        view! {
+            <FontSizeSelect
+                current=Signal::derive(|| Some(12u16))
+                on_pick=Callback::new(move |p: Option<u16>| picked.set(p))
+                auto_label="Auto"
+            />
+        }
+    });
+
+    let select = root.query_selector("select").unwrap().unwrap();
+    // The unset ("Auto") entry plus every preset size.
+    let options = select.get_elements_by_tag_name("option");
+    assert_eq!(options.length() as usize, FONT_SIZES.len() + 1);
+    assert_eq!(
+        select.get_attribute("aria-label").as_deref(),
+        Some("Font size")
+    );
 
     root.remove();
 }

@@ -223,10 +223,10 @@ struct Wiring {
     /// republished every frame by the canvas view so the bar tracks pan/zoom;
     /// `None` hides it.
     toile_float_bar: RwSignal<Option<toile_chrome::FloatBar>>,
-    /// Quick-colour pick the floating bar emits back (`toile-ui §5quinquies.D`):
-    /// the canvas view folds it into a fill-only `RestyleElements` over the live
-    /// selection.
-    toile_quick_fill: RwSignal<Option<toile_chrome::QuickFill>>,
+    /// Single-field style edit the floating bar emits back (`toile-ui §5quinquies.D`):
+    /// the canvas view applies it on top of the live common style as one
+    /// `RestyleElements` over the selection.
+    toile_quick_style: RwSignal<Option<toile_chrome::StyleEdit>>,
     /// Status-bar selection aggregates (`-ui.md` sec.13bis); `None` on a single
     /// cell. Set by the per-frame relay on `TrameEvent::SelectionStats`, cleared
     /// by the canvas view on a single-cell selection.
@@ -476,10 +476,10 @@ pub fn main() {
     let toile_style_model = RwSignal::new(None::<toile_chrome::StyleModel>);
     let toile_restyle = RwSignal::new(None::<ambre_bus::app::toile::ElementStyle>);
     // Floating selection toolbar (`toile-ui §5quinquies.D`): the view republishes
-    // its placement into `toile_float_bar` each frame and drains a quick-colour
-    // pick from `toile_quick_fill`, mirroring the inspector's model / restyle pair.
+    // its placement into `toile_float_bar` each frame and drains single-field style
+    // edits from `toile_quick_style`, mirroring the inspector's model / restyle pair.
     let toile_float_bar = RwSignal::new(None::<toile_chrome::FloatBar>);
-    let toile_quick_fill = RwSignal::new(None::<toile_chrome::QuickFill>);
+    let toile_quick_style = RwSignal::new(None::<toile_chrome::StyleEdit>);
 
     // Design tokens: inject the generated CSS custom properties (theme.css) and
     // boot the dark theme. `theme_ctl` is the single source of truth for the
@@ -658,7 +658,7 @@ pub fn main() {
         toile_style_model,
         toile_restyle,
         toile_float_bar,
-        toile_quick_fill,
+        toile_quick_style,
         sheets,
         active_sheet,
     );
@@ -1351,7 +1351,7 @@ pub fn main() {
     let ch_toile_style_model = RwSignal::new(None::<toile_chrome::StyleModel>);
     let ch_toile_restyle = RwSignal::new(None::<ambre_bus::app::toile::ElementStyle>);
     let ch_toile_float_bar = RwSignal::new(None::<toile_chrome::FloatBar>);
-    let ch_toile_quick_fill = RwSignal::new(None::<toile_chrome::QuickFill>);
+    let ch_toile_quick_style = RwSignal::new(None::<toile_chrome::StyleEdit>);
     let ch_formula_ref = RwSignal::new(String::new());
     let ch_formula_text = RwSignal::new(String::new());
     let ch_formula_action = RwSignal::new(None::<FormulaAction>);
@@ -1389,7 +1389,7 @@ pub fn main() {
                 ch_toile_style_model,
                 ch_toile_restyle,
                 ch_toile_float_bar,
-                ch_toile_quick_fill,
+                ch_toile_quick_style,
             )),
             // Trame, or any non-Toile embed (only Trame/Toile are paintable views;
             // a stray type falls back to Trame rather than crash the frame).
@@ -1441,7 +1441,7 @@ pub fn main() {
                     toile_style_model,
                     toile_restyle,
                     toile_float_bar,
-                    toile_quick_fill,
+                    toile_quick_style,
                 ))
             } else {
                 AppView::Trame(TrameView::new(
