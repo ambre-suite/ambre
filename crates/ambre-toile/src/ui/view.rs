@@ -99,6 +99,10 @@ const NUDGE_LARGE: f64 = 10.0;
 /// distinct from its source (§8 ter), matching the alt-drag nudge.
 const DUPLICATE_NUDGE: f64 = 10.0;
 
+/// Inline-edit caret blink half-period (ms): the caret shows for one interval,
+/// hides for the next (§6). ~530 ms is the familiar desktop cadence.
+const CARET_BLINK_MS: f64 = 530.0;
+
 pub struct ToileView {
     document_id: DocumentId,
     to_logic: flume::Sender<LogicCommand>,
@@ -300,6 +304,11 @@ pub struct ToileView {
     /// read once by `FrameHost` right after, which forwards the (coordinate-
     /// remapped) event to that child's own view. View-local, never CRDT.
     child_route: Option<DocumentId>,
+
+    /// The latest frame timestamp (ms), captured in `plan_repaint`, used to blink
+    /// the inline-edit caret (§6). Paint has no clock of its own, so the per-frame
+    /// hook stashes it here.
+    frame_now_ms: f64,
 }
 
 impl ToileView {
@@ -402,6 +411,7 @@ impl ToileView {
             embed_focus: embed::EmbedFocus::default(),
             embed_sessions: embed::EmbedSessions::default(),
             child_route: None,
+            frame_now_ms: 0.0,
         }
     }
 
@@ -640,6 +650,11 @@ impl ToileView {
                 } = &cmd
                 {
                     self.edit_open_on_create = true;
+                    // A placement is a one-shot action: revert to Select so the
+                    // just-created note is selected and ready to edit, rather than
+                    // the next click dropping another note (§5 / feedback). The
+                    // editor opens on the new id when `ElementCreated` lands.
+                    self.set_tool(Tool::Select);
                 }
                 self.send_edit(cmd);
             }
@@ -805,6 +820,13 @@ impl ToileView {
     fn handle_pointer_down(&mut self, x: f64, y: f64, button: i16) -> bool {
         let screen = Point::new(x, y);
         self.last_pointer = screen;
+        // A press in the canvas returns keyboard focus to the transparent text
+        // pipe (Trame parity, `trame-ui`). After interacting with the DOM chrome
+        // (e.g. picking a sticky colour in the palette), focus sits on a chrome
+        // button; without this, the board would feel one click behind -- the first
+        // canvas click only refocusing, the second acting. The gesture still runs
+        // in this same call, so a single click both refocuses and places.
+        self.text_input.focus();
         // Right button: select under the cursor and publish the menu scope (§5ter).
         // The DOM `contextmenu` listener opens the menu; pointerdown fires first, so
         // the scope signal is fresh when the entry `Memo` recomputes.
@@ -1186,12 +1208,28 @@ impl ToileView {
         true
     }
 
-    /// Switch the active tool (driven by the chrome tool palette, §1bis).
+    /// Switch the active tool (driven by the chrome tool palette, §1bis, or by the
+    /// view itself, e.g. Escape reverting to Select, §5). Publishes the shared
+    /// active-tool signal so the palette's pressed state follows a view-initiated
+    /// switch; without this, `apply_active_tool` would read the stale signal next
+    /// frame and re-arm the old tool.
     pub fn set_tool(&mut self, tool: Tool) {
         self.machine.set_tool(tool);
         self.preview = None;
+        self.publish_active_tool();
         self.needs_full = true;
     }
+
+    /// Mirror the machine's active tool back into the shared signal (§5quinquies.A).
+    /// Wasm-only (leptos signal); a host no-op keeps `set_tool` cfg-agnostic.
+    #[cfg(target_arch = "wasm32")]
+    fn publish_active_tool(&self) {
+        if self.active_tool.get_untracked() != self.machine.tool() {
+            self.active_tool.set(self.machine.tool());
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn publish_active_tool(&self) {}
 
     /// Keyboard shortcuts (`toile-ui §5`). Modifiers ride the event: `ctrl || meta`
     /// is the command chord (Ctrl on Windows/Linux, Cmd on macOS). Ctrl+C/X/V are
@@ -1232,6 +1270,20 @@ impl ToileView {
             self.needs_full = true;
             return true;
         }
+        // Type-to-edit: with a single sticky/text selected and no editor open, a
+        // printable character enters edit and REPLACES the body (Trame-cell
+        // parity, feedback). Double-click edits the existing body instead. Space
+        // is excluded (it pans). The character is NOT consumed, so the textarea
+        // still emits the `input` event that inserts it over the selected-all
+        // body in the now-open editor.
+        if key.chars().count() == 1
+            && key != " "
+            && let Some(id) = self.single_editable_selection()
+        {
+            self.open_editor(id);
+            self.push_intent(EditIntent::SelectAll);
+            return false;
+        }
         match key {
             " " | "Spacebar" => {
                 self.space_down = true;
@@ -1249,7 +1301,12 @@ impl ToileView {
                 if self.blur_embed() {
                     return true;
                 }
-                self.machine.cancel();
+                // Cancel any in-flight gesture and revert an armed creation tool to
+                // Select so it stops silently placing elements (§5). Republish the
+                // shared signal when the tool changed, so the palette follows.
+                if self.machine.escape() {
+                    self.publish_active_tool();
+                }
                 self.preview = None;
                 if !self.selection.is_empty() {
                     self.selection.clear();
@@ -1309,6 +1366,18 @@ impl ToileView {
         (origin, wrap_w, sb)
     }
 
+    /// The single selected Sticky / Text element, if the selection is exactly one
+    /// such element (the target of type-to-edit, §6). `None` for an empty, multi,
+    /// or non-text selection.
+    fn single_editable_selection(&self) -> Option<ElementId> {
+        let [id] = self.selection.as_slice() else {
+            return None;
+        };
+        self.find_element(id)
+            .filter(|e| matches!(e.kind, ElementKind::Sticky | ElementKind::Text))
+            .map(|_| id.clone())
+    }
+
     /// Open the inline editor on a Sticky / Text element (§6). No-op for any
     /// other kind or an unknown id.
     fn open_editor(&mut self, id: ElementId) {
@@ -1319,13 +1388,17 @@ impl ToileView {
             if !matches!(e.kind, ElementKind::Sticky | ElementKind::Text) {
                 return;
             }
+            let is_sticky = matches!(e.kind, ElementKind::Sticky);
             let text = match &e.geom {
-                DisplayGeom::Text(t) => t.clone(),
+                DisplayGeom::Sticky(t) | DisplayGeom::Text(t) => t.clone(),
                 _ => String::new(),
             };
-            InlineEditor::open(e, &text, self.theme.palette())
+            InlineEditor::open(e, &text, self.theme.palette(), is_sticky)
         };
         self.editor = Some(editor);
+        // The edited element is the selection, so leaving edit (Escape) leaves it
+        // selected (§6, feedback) and the style/float chrome tracks it.
+        self.selection = vec![id];
         self.edit_closing = false;
         self.edit_pointer_down = false;
         self.edit_dirty = true;
@@ -1496,10 +1569,14 @@ impl ToileView {
             Some((origin, wrap_w, _sb)) => {
                 let zoom = self.cam.zoom;
                 let palette = self.theme.palette();
+                // Blink the caret on a ~1s cycle so it visibly signals "you can
+                // type here" (§6). `editor.is_some()` keeps the overlay redrawing
+                // every frame, so the toggle animates.
+                let caret_on = (self.frame_now_ms / CARET_BLINK_MS) as i64 % 2 == 0;
                 let ed = self.editor.as_mut().unwrap();
                 ed.flush(font_cx, wrap_w, zoom);
                 if !self.edit_closing {
-                    ed.render(surface, origin, palette);
+                    ed.render(surface, origin, palette, caret_on);
                     if let Some(caret) = ed.caret_local() {
                         set_caret_pipe(&self.text_input, origin, caret);
                     }
@@ -1591,6 +1668,8 @@ impl ToileView {
     }
 
     pub fn plan_repaint(&mut self, now_ms: f64, hud_tick: bool) -> RepaintPlan {
+        // Stash the frame clock for paint-time use (inline-edit caret blink, §6).
+        self.frame_now_ms = now_ms;
         // Open / close the nested documents behind the visible `doc_embed`s
         // (§2.I). Driven here rather than in `update` because this is the one
         // per-frame hook carrying the frame clock the close debounce needs.

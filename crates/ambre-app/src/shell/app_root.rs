@@ -142,6 +142,23 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let ctx_menu = RwSignal::new(None::<(f64, f64)>);
     install_canvas_context_menu(ctx_menu);
 
+    // Toile cursor feedback (toile-ui §5quinquies.A): reflect the active tool on
+    // the canvas element as a CSS cursor (crosshair while a creation tool is
+    // armed, grab for Hand, arrow for Select). A pure function of the shared
+    // active-tool signal, applied here in the chrome -- it never touches the
+    // canvas render pass. Mounted only for a Toile board.
+    if boot_is_toile {
+        Effect::new(move |_| {
+            let cursor = ambre_toile::ui::palette::cursor_css(toile_active_tool.get());
+            if let Some(doc) = web_sys::window().and_then(|w| w.document())
+                && let Some(el) = doc.get_element_by_id("ambre-canvas")
+                && let Some(html) = el.dyn_ref::<web_sys::HtmlElement>()
+            {
+                let _ = html.style().set_property("cursor", cursor);
+            }
+        });
+    }
+
     // The single command path shared by every trigger (toolbar, selection bar,
     // context menu): a `CommandId` -> the routed document. `Callback` is `Copy`,
     // so it is handed to each app-chrome component below.

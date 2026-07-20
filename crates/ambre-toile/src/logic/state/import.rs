@@ -205,7 +205,8 @@ impl ToileState {
                     at,
                     size,
                     content,
-                } => match self.create_element_inner(kind, at, size, content) {
+                    fill,
+                } => match self.create_element_inner(kind, at, size, content, fill) {
                     Ok(id) => slot_ids.push(Some(id)),
                     Err(_) => {
                         report.skip(format!("element slot {i}: rejected by the engine"));
@@ -373,6 +374,7 @@ mod tests {
             at: Point::new(x, 0.0),
             size: Size::new(10.0, 10.0),
             content: InitContent::None,
+            fill: None,
         }
     }
 

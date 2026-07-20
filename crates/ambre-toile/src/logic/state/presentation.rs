@@ -453,6 +453,7 @@ mod pdf_tests {
             at: Point::new(x, y),
             size: Size::new(w, h),
             content: InitContent::None,
+            fill: None,
         });
         out.display
             .into_iter()

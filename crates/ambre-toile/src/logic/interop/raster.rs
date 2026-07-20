@@ -42,6 +42,7 @@ pub fn import_raster(bytes: &[u8], limits: &Limits) -> Result<ImportBatch, Impor
         at: Point::ZERO,
         size,
         content: InitContent::Image(hash.0.clone()),
+        fill: None,
     });
     batch.media.push(blob);
     batch.report.imported = 1;

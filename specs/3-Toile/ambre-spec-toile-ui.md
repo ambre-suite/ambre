@@ -266,7 +266,12 @@ collaborators see the action before it commits.
 pub enum Tool {
     Select,                         // move / resize / rotate / marquee
     Pen,                            // Bezier vector path: click = node, drag = handles (see §5bis)
-    Sticky,                         // click-drop a sticky note, enter inline edit
+    Sticky(u32),                    // click-drop a sticky note (ARGB card colour), enter inline edit
+    // The colour rides the tool so a click can place the note atomically in the
+    // picked colour (CreateElement.fill, logic §2.C). The palette's Sticky button
+    // opens a colour picker that arms Sticky(colour); the bare-key chord (N) arms
+    // the default sticky yellow. aria-pressed compares by discriminant, so any
+    // Sticky(_) reads active regardless of colour (§5quinquies.A).
     Shape(ShapeKind),               // drag-rect to size a rect/ellipse/triangle/line
     Connector,                      // drag from element anchor to element anchor
     Draw,                           // freehand: sample points, stream, CommitStroke on release
@@ -303,8 +308,14 @@ frame bounds, grid) and quantizes before emitting — a pure UI concern, never p
 | `Ctrl/Cmd+G` / `Ctrl/Cmd+Shift+G` | `GroupElements` / `UngroupElements` (§2.F bis) |
 | `Ctrl/Cmd+A` | select all (local `SelectionChanged`) |
 | Arrow keys / `Shift`+Arrow | `MoveElements` by 1 px / 10 px (nudge) |
-| `Escape` | cancel gesture / exit group scope / clear selection |
+| `Escape` | cancel gesture / exit group scope / clear selection / **return to the Select tool** |
 | `Space`-drag | pan in any tool |
+
+`Escape` unwinds one layer of transient state per press, most-transient first: a focused embed blurs; then any
+in-flight gesture is cancelled and, if a creation tool (Sticky/Text/Shape/Pen/Connector/Draw) is armed, the
+active tool reverts to Select (so the armed-but-unused tool does not silently keep placing elements); then an
+entered group scope is left; then the selection is cleared. Reverting the tool writes the shared active-tool
+signal so the palette's pressed state follows (§5quinquies.A).
 
 Alt-drag on the Select tool duplicates the dragged selection (`DuplicateElements` with the drag delta).
 
@@ -382,10 +393,27 @@ consumer of the active tool (§1bis); the palette only drives the selection. Too
 per-element style (e.g. the Shape kind, the connector routing mode) are local palette signals folded into the
 `CreateElement` the tool emits.
 
+**Sticky colour picker.** The Sticky button is a split affordance: clicking it opens a small colour popover (a
+row of pastel swatches from the app token palette). Picking a swatch arms `Tool::Sticky(colour)` and closes the
+popover; the click then places notes in that colour (folded into `CreateElement.fill`, `toile-logic §2.C`),
+atomically — no create-then-restyle. The colour is remembered as the palette's live sticky colour, so the next
+sticky reuses it until changed. The bare-key chord `N` arms the default sticky yellow without opening the
+popover. This mirrors the Miro / Figma-whiteboard sticky flow.
+
+**Cursor feedback.** The canvas cursor reflects the active tool so the user sees what a click will do: a
+**note-shaped cursor** while the Sticky tool is armed (an inlined SVG data URI), a crosshair for the other
+creation tools (Text/Shape/Pen/Connector/Draw), a grab hand for the Hand tool, and the default arrow for Select.
+The cursor is a pure function of the active-tool signal (`cursor_css`, host-tested), applied as a CSS cursor on
+the canvas element by the chrome — it never touches the canvas render pass.
+
 ### B. Style / property inspector
 A DOM side panel, shown only when the selection is non-empty, that edits the selected elements'
-`ElementStyle` (`toile-logic §2.E`): fill, stroke, `stroke_w`, `opacity`, and the rich-text run attributes
-for sticky/text (bold/size/color, §6). Edits are debounced and emitted as one `RestyleElements { ids, style }`
+`ElementStyle` (`toile-logic §2.E`): fill (background), stroke, `stroke_w`, `opacity`, plus a **Text** section —
+text (foreground) colour (`text_color`), font family, size, and bold / italic. The font-family control is the
+shared `ambre_chrome::FontPicker` (the same one Trame's cell formatting uses, so a family label resolves to the
+same face; `ambre_canvas::registered_family_name`). The size field is blank ("Auto") for a sticky using the
+auto-size sentinel and sets a positive override when typed (`toile-logic §2.E` / §6). Edits are debounced and
+emitted as one `RestyleElements { ids, style }`
 over the whole selection (never per-attribute — the register is written whole, matching the single-register
 model of `toile-logic §2.E`); text-run edits route through `RestyleElements` or `EditText` as in §6. The panel
 also surfaces the z-order actions (Bring to Front / Send to Back / Forward / Backward -> `Reorder` with the
@@ -450,6 +478,20 @@ Sticky and text elements edit in place: the UI opens a Parley-backed editor over
 CRDT, `toile-logic §2.D`). Layout — line breaking, run styling, cursor/selection geometry — is Parley; glyphs
 are rasterized by Swash into the shared atlas. The formula-bar/toolbar equivalents for rich text (bold, size,
 color) mutate `ElementStyle`/runs and emit `RestyleElements` or `EditText`.
+
+**Entering and leaving an edit.** Placing a sticky/text element opens its editor immediately and reverts the
+active tool to Select, so the new element is selected and ready to type into rather than the next click dropping
+another one (§5). The caret **blinks** (~1 s cycle) to signal the field is editable. Opening the editor makes the
+edited element the selection, so leaving the edit keeps it selected:
+- **Escape** commits and closes the editor (the caret disappears) but the element **stays selected** — it does
+  not clear the selection or step out further; a second Escape then acts on the selection as usual (§5).
+- With a single sticky/text element selected and no editor open, **typing a printable character** enters edit
+  and **replaces** the whole body (Trame-cell parity, `trame-ui §5bis`). To edit the existing body instead,
+  **double-click** it (which opens the editor with the body preserved, caret at end). Space is excluded from
+  type-to-edit (it pans).
+
+A sticky's body is drawn in the fixed readable ink (its `fill` is the card colour, not the text) at a size that
+tracks the card (`render::sticky_font_size`), so the in-edit text matches the committed look.
 
 **Connector labels (`toile-logic §5.B`).** `DisplayConnector.label` is painted as text centered on the routed
 path midpoint (a small opaque pill behind it for legibility over crossing edges). Double-clicking a connector

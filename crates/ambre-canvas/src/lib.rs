@@ -62,7 +62,7 @@ pub use intent::FilterOpenPublisher;
 pub use perf::PerfPublisher;
 pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurface};
 pub use request_registry::{RequestRegistry, RequestTag};
-pub use text_cache::TextCache;
+pub use text_cache::{TextCache, registered_family_name};
 pub use text_input::TextInput;
 pub use theme::{Palette, Theme, ThemeControl};
 pub use view::{FrameStats, InputEvent, PerfSnapshot, RepaintPlan};

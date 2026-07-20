@@ -251,6 +251,7 @@ fn push_element(
         at: rect.origin(),
         size: Size::new(rect.width(), rect.height()),
         content,
+        fill: None,
     });
     batch.styles.push(style);
     slot

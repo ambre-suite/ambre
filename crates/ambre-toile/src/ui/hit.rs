@@ -29,6 +29,7 @@ pub fn exact_hit(elem: &DisplayElement, world_pt: Point) -> bool {
     match &elem.geom {
         DisplayGeom::Rect
         | DisplayGeom::Image(_)
+        | DisplayGeom::Sticky(_)
         | DisplayGeom::Text(_)
         | DisplayGeom::Frame
         | DisplayGeom::Embed(_)

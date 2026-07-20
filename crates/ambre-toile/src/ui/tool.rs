@@ -30,7 +30,11 @@ pub enum Tool {
     #[default]
     Select,
     Pen,
-    Sticky,
+    /// Sticky note. Carries the card colour (ARGB) picked from the palette so a
+    /// click places the note in that colour atomically (folded into
+    /// `CreateElement.fill`, toile-ui §5quinquies.A). `aria-pressed` compares by
+    /// discriminant, so any `Sticky(_)` reads active regardless of colour.
+    Sticky(u32),
     Shape(ShapeKind),
     Connector,
     Draw,
@@ -265,7 +269,8 @@ impl SelectTool {
 // =============================================================================
 
 /// Default sizes for click-placed (not drag-sized) elements, world units.
-const STICKY_SIZE: Size = Size::new(160.0, 120.0);
+// A sticky note is square (Miro-style): same height as before, narrower width.
+const STICKY_SIZE: Size = Size::new(120.0, 120.0);
 const TEXT_SIZE: Size = Size::new(200.0, 40.0);
 const CLICK_SHAPE_SIZE: Size = Size::new(120.0, 80.0);
 /// Below this drag extent (world units) a shape gesture counts as a click.
@@ -339,8 +344,14 @@ enum Draft {
     },
     /// Freehand stroke samples accumulated between press and release.
     Draw { points: Vec<StrokePoint> },
-    /// A click-placed sticky / text element, committed on release.
-    Place { kind: ElementKind, at: Point },
+    /// A click-placed sticky / text element, committed on release. `fill` carries
+    /// the sticky's picked card colour (`None` for a text element, which keeps its
+    /// per-kind default, §5quinquies.A).
+    Place {
+        kind: ElementKind,
+        at: Point,
+        fill: Option<u32>,
+    },
 }
 
 /// The active-tool state machine. Replaces the bare `SelectTool` the view drove
@@ -403,6 +414,20 @@ impl ToolMachine {
         self.pen_dragging = false;
     }
 
+    /// Handle Escape at the tool layer (§5): cancel any in-flight gesture and, if
+    /// a creation tool is armed, revert to Select so it stops silently placing
+    /// elements on the next click. Returns `true` when the active tool changed, so
+    /// the caller can republish the shared active-tool signal (§5quinquies.A).
+    pub fn escape(&mut self) -> bool {
+        self.cancel();
+        if self.tool != Tool::Select {
+            self.tool = Tool::Select;
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn pointer_down(
         &mut self,
         world: Point,
@@ -433,10 +458,11 @@ impl ToolMachine {
                 });
                 ToolOutcome::None
             }
-            Tool::Sticky => {
+            Tool::Sticky(color) => {
                 self.draft = Some(Draft::Place {
                     kind: ElementKind::Sticky,
                     at: world,
+                    fill: Some(color),
                 });
                 ToolOutcome::None
             }
@@ -444,6 +470,7 @@ impl ToolMachine {
                 self.draft = Some(Draft::Place {
                     kind: ElementKind::Text,
                     at: world,
+                    fill: None,
                 });
                 ToolOutcome::None
             }
@@ -515,6 +542,7 @@ impl ToolMachine {
                         at: Point::new(rect.x0, rect.y0),
                         size: rect.size(),
                         content: InitContent::None,
+                        fill: None,
                     })
                 }
                 Draft::Connector {
@@ -548,7 +576,7 @@ impl ToolMachine {
                         })
                     }
                 }
-                Draft::Place { kind, at } => {
+                Draft::Place { kind, at, fill } => {
                     let size = if kind == ElementKind::Sticky {
                         STICKY_SIZE
                     } else {
@@ -559,6 +587,7 @@ impl ToolMachine {
                         at,
                         size,
                         content: InitContent::Text(String::new()),
+                        fill,
                     })
                 }
             };
@@ -603,6 +632,7 @@ impl ToolMachine {
             at: Point::new(bb.x0, bb.y0),
             size: bb.size(),
             content: InitContent::Path(path),
+            fill: None,
         })
     }
 
@@ -1119,9 +1149,12 @@ mod tests {
     }
 
     #[test]
-    fn sticky_click_creates_sticky_with_empty_text() {
+    fn sticky_click_creates_sticky_with_empty_text_and_picked_fill() {
         let mut m = ToolMachine::new();
-        m.set_tool(Tool::Sticky);
+        // The tool carries the picked card colour; a click must place the sticky
+        // in that colour (folded into CreateElement.fill, §5quinquies.A).
+        let picked = 0xFFFF_00FF;
+        m.set_tool(Tool::Sticky(picked));
         let disp = empty_display();
         let cam = cam();
         let at = Point::new(40.0, 60.0);
@@ -1132,11 +1165,13 @@ mod tests {
                 at: a,
                 size,
                 content,
+                fill,
             }) => {
                 assert_eq!(kind, ElementKind::Sticky);
                 assert_eq!(a, at);
                 assert_eq!(size, STICKY_SIZE);
                 assert!(matches!(content, InitContent::Text(t) if t.is_empty()));
+                assert_eq!(fill, Some(picked));
             }
             other => panic!("expected CreateElement, got {other:?}"),
         }
@@ -1224,6 +1259,39 @@ mod tests {
             other => panic!("expected CreateElement(Path), got {other:?}"),
         }
         assert!(!m.is_active(), "pen state cleared after finishing");
+    }
+
+    #[test]
+    fn escape_reverts_an_armed_creation_tool_to_select() {
+        let mut m = ToolMachine::new();
+        m.set_tool(Tool::Sticky(0xFFFE_F08A));
+        let disp = empty_display();
+        let cam = cam();
+        // Arm a placement mid-gesture (pointer down, not yet released).
+        let at = Point::new(10.0, 10.0);
+        m.pointer_down(at, to_screen(&cam, at), &[], &disp, &cam, None);
+        assert!(m.is_active());
+        // Escape cancels the in-flight draft AND reverts the tool; it reports the
+        // change so the view republishes the shared signal.
+        assert!(m.escape(), "escape must report the tool changed");
+        assert_eq!(m.tool(), Tool::Select);
+        assert!(!m.is_active(), "the in-flight placement is cancelled");
+        // A stray click no longer places anything: on the Select tool it is at
+        // most a (here empty) selection change, never a CreateElement.
+        m.pointer_down(at, to_screen(&cam, at), &[], &disp, &cam, None);
+        assert!(!matches!(
+            m.pointer_up(at, &disp),
+            ToolOutcome::Command(ToileCommand::CreateElement { .. })
+        ));
+    }
+
+    #[test]
+    fn escape_on_the_select_tool_reports_no_tool_change() {
+        let mut m = ToolMachine::new();
+        // Already Select: Escape still cancels any gesture but the tool is
+        // unchanged, so it returns false (nothing to republish).
+        assert!(!m.escape());
+        assert_eq!(m.tool(), Tool::Select);
     }
 
     #[test]

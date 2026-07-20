@@ -228,6 +228,11 @@ pub struct ElementStyle {
     pub corner: f32,  // corner radius for rect / sticky
     pub font: FontSpec,
     pub shadow: Option<Shadow>,
+    /// Text (foreground) colour, ARGB. `None` = the kind's default ink (a sticky's
+    /// fixed readable ink, or the theme text colour for a free text element).
+    /// Distinct from `fill`, which is the card / shape background. Appended last so
+    /// postcard still decodes older registers written before this field existed.
+    pub text_color: Option<u32>,
 }
 
 impl Default for ElementStyle {
@@ -240,11 +245,50 @@ impl Default for ElementStyle {
             corner: 0.0,
             font: FontSpec::default(),
             shadow: None,
+            text_color: None,
         }
     }
 }
 
+/// The default sticky-note card colour (ARGB): a warm pastel yellow, the Miro /
+/// Figma-whiteboard default. Used as the seeded fill for a `sticky` element and
+/// as the Sticky tool's default colour (`toile-ui §5quinquies.A`).
+pub const STICKY_DEFAULT_FILL: u32 = 0xFFFE_F08A;
+
+/// Corner radius (world units) of a sticky-note card. A sticky is a plain
+/// rectangle (Miro-style), so this is zero; kept as a named constant so the
+/// card's shape is spec-anchored and easy to revisit.
+pub const STICKY_CORNER: f32 = 0.0;
+
+/// Sentinel `FontSpec.size` meaning "auto-size to the note" for a sticky: the
+/// renderer computes the body size from the card bounds instead of a fixed value
+/// (`toile-ui §6`). A positive size set from the style inspector overrides it.
+pub const STICKY_AUTO_FONT_SIZE: f32 = 0.0;
+
 impl ElementStyle {
+    /// The style seeded at element birth (`toile-logic §2.E` "Per-kind defaults").
+    /// Every kind uses [`ElementStyle::default`] EXCEPT `sticky`, which gets the
+    /// sticky yellow, no border, `corner = 0` (a plain card) and the auto-size
+    /// font sentinel so a fresh, still-empty note is immediately visible and its
+    /// text tracks the card size. The Sticky tool overrides the fill per placement
+    /// via `CreateElement.fill`.
+    pub fn for_kind(kind: ElementKind) -> Self {
+        match kind {
+            ElementKind::Sticky => Self {
+                fill: Some(STICKY_DEFAULT_FILL),
+                stroke: None,
+                stroke_w: 0.0,
+                corner: STICKY_CORNER,
+                font: FontSpec {
+                    size: STICKY_AUTO_FONT_SIZE,
+                    ..FontSpec::default()
+                },
+                ..Self::default()
+            },
+            _ => Self::default(),
+        }
+    }
+
     /// Serialize for the element's `"style"` binary register. Infallible in
     /// practice (a fixed, all-owned struct); a failure is logged and yields an
     /// empty blob, which decodes back to `default()`.
@@ -632,6 +676,13 @@ pub enum ToileCommand {
         at: Point,
         size: Size,
         content: InitContent,
+        /// Optional creation-time override of the seeded `style.fill` (ARGB). The
+        /// engine seeds a per-kind default style at birth (sticky = yellow, others
+        /// = white); `Some(argb)` overwrites just that fill, the rest of the
+        /// default is kept. The Sticky tool uses it to place a note in the picked
+        /// palette colour atomically (one element, one undo item). `None` keeps
+        /// the per-kind default. See `toile-logic §2.C / §2.E`.
+        fill: Option<u32>,
     },
     MoveElements {
         ids: Vec<ElementId>,
@@ -1084,9 +1135,14 @@ pub enum DisplayGeom {
     Ellipse,
     Triangle,
     Path(BezPath),
-    /// Sticky / text body. Phase 0 carries a plain string (a single LWW field);
-    /// a later slice upgrades it to `LoroText` + `Vec<TextRun>` for char-wise
-    /// convergence (§2.D) and Parley-ready runs.
+    /// Sticky note: a filled, rounded card (background = `style.fill`) with the
+    /// body string drawn on top in a fixed readable ink. Distinct from `Text`
+    /// (which has no card). Phase 0 carries a plain string; a later slice upgrades
+    /// it to `LoroText` + `Vec<TextRun>` for char-wise convergence (§2.D).
+    Sticky(String),
+    /// Free text body, no card background. Phase 0 carries a plain string (a
+    /// single LWW field); a later slice upgrades it to `LoroText` + `Vec<TextRun>`
+    /// for char-wise convergence (§2.D) and Parley-ready runs.
     Text(String),
     Image(String),      // media blob hash (toile-interop resolves the pixels)
     Stroke(Vec<Point>), // Logic-smoothed polyline (§4)

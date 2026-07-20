@@ -27,8 +27,15 @@ use std::time::Duration;
 
 use ambre_bus::app::toile::ElementStyle;
 use ambre_chrome::commands::CommandId;
-use ambre_chrome::{ColorPopover, Debouncer};
+use ambre_chrome::{ColorPopover, Debouncer, FontPicker};
 use leptos::prelude::*;
+
+/// Map a stored `FontSpec.family` string to the picker's family label (`None` =
+/// Default): only the offered labels round-trip; anything else (e.g. the raw
+/// default "sans-serif") reads as Default.
+fn family_label(family: &str) -> Option<String> {
+    matches!(family, "Sans" | "Serif" | "Monospace").then(|| family.to_owned())
+}
 
 use crate::ui::menu;
 use crate::ui::menu::CtxScope;
@@ -58,6 +65,12 @@ pub fn StyleInspector(
     let stroke = RwSignal::new(None::<u32>);
     let stroke_w = RwSignal::new(1.0_f32);
     let opacity = RwSignal::new(1.0_f32);
+    // Text (foreground) colour + font controls (§5quinquies.B / §6).
+    let text_color = RwSignal::new(None::<u32>);
+    let font_family = RwSignal::new(None::<String>);
+    let font_size = RwSignal::new(0.0_f32);
+    let bold = RwSignal::new(false);
+    let italic = RwSignal::new(false);
 
     // Re-seed the local controls whenever the view publishes a new common style
     // (selection change / external restyle). This only reads `model`, so pushing
@@ -69,6 +82,11 @@ pub fn StyleInspector(
             stroke.set(m.base.stroke);
             stroke_w.set(m.base.stroke_w);
             opacity.set(m.base.opacity);
+            text_color.set(m.base.text_color);
+            font_family.set(family_label(&m.base.font.family));
+            font_size.set(m.base.font.size);
+            bold.set(m.base.font.weight >= 700);
+            italic.set(m.base.font.italic);
         }
     });
 
@@ -82,6 +100,15 @@ pub fn StyleInspector(
             s.stroke = stroke.get_untracked();
             s.stroke_w = stroke_w.get_untracked();
             s.opacity = opacity.get_untracked();
+            s.text_color = text_color.get_untracked();
+            // A `None` family (Default) stores the default sans label, so the
+            // renderer resolves it to the bundled sans face.
+            s.font.family = font_family
+                .get_untracked()
+                .unwrap_or_else(|| "Sans".to_owned());
+            s.font.size = font_size.get_untracked().max(0.0);
+            s.font.weight = if bold.get_untracked() { 700 } else { 400 };
+            s.font.italic = italic.get_untracked();
         });
         let style = working.get_untracked();
         debouncer.call(RESTYLE_DEBOUNCE, move || restyle.set(Some(style)));
@@ -94,6 +121,14 @@ pub fn StyleInspector(
     });
     let on_stroke = Callback::new(move |c: Option<u32>| {
         stroke.set(c);
+        commit();
+    });
+    let on_text_color = Callback::new(move |c: Option<u32>| {
+        text_color.set(c);
+        commit();
+    });
+    let on_font = Callback::new(move |f: Option<String>| {
+        font_family.set(f);
         commit();
     });
 
@@ -181,6 +216,78 @@ pub fn StyleInspector(
                             }
                         />
                         {move || mixed_hint(mixed().opacity)}
+                    </div>
+                </div>
+
+                // -- Text: colour / font / size / bold / italic (§6) --
+                <div class="ambre-inspector-section">
+                    <div class="ambre-inspector-row">
+                        <ColorPopover
+                            title="Text colour"
+                            icon=icondata::MdiFormatColorText
+                            current=text_color
+                            default=Signal::derive(|| 0xff1a_1a1au32)
+                            reset_label="Default"
+                            on_pick=on_text_color
+                            alpha=true
+                        />
+                        {move || mixed_hint(mixed().text_color)}
+                    </div>
+                    <div class="ambre-inspector-row">
+                        <FontPicker current=font_family.into() on_pick=on_font />
+                        {move || mixed_hint(mixed().font_family)}
+                    </div>
+                    <div class="ambre-inspector-row">
+                        <label>"Size"</label>
+                        <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            placeholder="Auto"
+                            prop:value=move || {
+                                let s = font_size.get();
+                                if s > 0.0 { format!("{s:.0}") } else { String::new() }
+                            }
+                            on:mousedown=move |ev| ev.prevent_default()
+                            on:input=move |ev| {
+                                // Empty clears to the auto sentinel (0); a positive
+                                // value overrides (a sticky then stops auto-sizing).
+                                let raw = event_target_value(&ev);
+                                let v = raw.trim().parse::<f32>().unwrap_or(0.0);
+                                font_size.set(v.max(0.0));
+                                commit();
+                            }
+                        />
+                        {move || mixed_hint(mixed().font_size)}
+                    </div>
+                    <div
+                        class="ambre-inspector-section ambre-commandbar"
+                        role="toolbar"
+                        aria-label="Text style"
+                    >
+                        <button
+                            aria-label="Bold"
+                            aria-pressed=move || bold.get().then_some("true")
+                            on:mousedown=move |ev| ev.prevent_default()
+                            on:click=move |_| {
+                                bold.update(|b| *b = !*b);
+                                commit();
+                            }
+                        >
+                            <leptos_icons::Icon icon=icondata::MdiFormatBold />
+                        </button>
+                        <button
+                            aria-label="Italic"
+                            aria-pressed=move || italic.get().then_some("true")
+                            on:mousedown=move |ev| ev.prevent_default()
+                            on:click=move |_| {
+                                italic.update(|i| *i = !*i);
+                                commit();
+                            }
+                        >
+                            <leptos_icons::Icon icon=icondata::MdiFormatItalic />
+                        </button>
+                        {move || mixed_hint(mixed().bold || mixed().italic)}
                     </div>
                 </div>
 

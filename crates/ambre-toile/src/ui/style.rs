@@ -29,12 +29,25 @@ pub struct MixedFlags {
     pub stroke: bool,
     pub stroke_w: bool,
     pub opacity: bool,
+    pub text_color: bool,
+    pub font_family: bool,
+    pub font_size: bool,
+    pub bold: bool,
+    pub italic: bool,
 }
 
 impl MixedFlags {
     /// True when at least one tracked field differs across the selection.
     pub fn any(self) -> bool {
-        self.fill || self.stroke || self.stroke_w || self.opacity
+        self.fill
+            || self.stroke
+            || self.stroke_w
+            || self.opacity
+            || self.text_color
+            || self.font_family
+            || self.font_size
+            || self.bold
+            || self.italic
     }
 }
 
@@ -73,6 +86,11 @@ pub fn style_scope_for(selection: &[ElementId], display: &DisplayViewport) -> Op
         mixed.stroke |= s.stroke != base.stroke;
         mixed.stroke_w |= s.stroke_w != base.stroke_w;
         mixed.opacity |= s.opacity != base.opacity;
+        mixed.text_color |= s.text_color != base.text_color;
+        mixed.font_family |= s.font.family != base.font.family;
+        mixed.font_size |= s.font.size != base.font.size;
+        mixed.bold |= (s.font.weight >= 700) != (base.font.weight >= 700);
+        mixed.italic |= s.font.italic != base.font.italic;
     }
 
     Some(StyleModel { base, mixed })
