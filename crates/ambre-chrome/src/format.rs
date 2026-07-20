@@ -14,8 +14,11 @@
 //                     what a toggle means to its model (a `CommandId`, a style
 //                     patch, ...): the control never reaches past the DOM.
 //
-// Both do `on:mousedown prevent_default` so a click never steals focus from the
-// host's text pipe (the palette / grid-focus hazard both apps guard against).
+// `FormatToggle` does `on:mousedown prevent_default` so a click never steals focus
+// from the host's text pipe (the palette / grid-focus hazard both apps guard
+// against). `FontSizeSelect` must NOT: on a native <select>, preventing the
+// mousedown default suppresses the browser's opening of the option list, so the
+// dropdown never appears. It relies on `on:change` instead.
 // ============================================================================
 
 use leptos::prelude::*;
@@ -41,9 +44,10 @@ pub fn FontSizeSelect(
             aria-label="Font size"
             // The unset entry has an empty value, so `None` selects it.
             prop:value=move || current.get().map(|s| s.to_string()).unwrap_or_default()
-            // Keep the host's focus: a control steals it on mousedown, which would
-            // clear the active cell / selection before on:change can apply.
-            on:mousedown=move |ev| ev.prevent_default()
+            // NOTE: unlike the toggle buttons, a native <select> must NOT
+            // preventDefault on mousedown -- doing so suppresses the browser's own
+            // opening of the option list, so the dropdown never appears. The pick is
+            // committed by on:change, which fires regardless of focus movement.
             on:change=move |ev| {
                 // An empty value (the unset entry) parses to `None`.
                 on_pick.run(event_target_value(&ev).parse::<u16>().ok());
