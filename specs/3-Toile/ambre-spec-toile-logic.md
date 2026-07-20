@@ -259,7 +259,8 @@ pub struct ElementStyle {
 Storing the whole style as **one register** avoids the multi-register tear (e.g. a fill update racing a
 stroke update leaving an inconsistent half-applied style) that a per-attribute fan-out suffers — the exact
 defect enumerated in Trame `logic §11 bis.F`. Concurrent restyles resolve by LWW on the single register: all
-peers converge to one style, deterministically.
+peers converge to one style, deterministically. This is the cross-app "style as one LWW register" pattern
+(`ambre-spec-architecture.md §2.D`, normative): the same convention Trame's `cellstyle_{sheet_id}` follows.
 
 **Per-kind defaults.** Element birth seeds the style register with a per-kind default, not a bare
 `ElementStyle::default()`. Every kind uses the base default (white fill, no stroke) **except `sticky`**, whose
