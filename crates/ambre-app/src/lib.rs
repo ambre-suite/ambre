@@ -212,6 +212,11 @@ struct Wiring {
     /// the DOM tool palette and the bare-key tool chords; the canvas view reads it
     /// each frame and applies it. Tool selection is UI-only, canvas-local state.
     toile_active_tool: RwSignal<ambre_toile::ui::Tool>,
+    /// Toile canvas cursor (`toile-ui §5quinquies.A`): the position-dependent CSS
+    /// cursor the view publishes (directional resize on a selection edge / corner,
+    /// grab on the rotate handle, `grabbing` while moving). `None` falls back to
+    /// the tool's base `cursor_css`. Read by the chrome's cursor `Effect`.
+    toile_cursor: RwSignal<Option<&'static str>>,
     /// Toile style-inspector model (`toile-ui §5quinquies.B`): the selection's
     /// common `ElementStyle` + mixed-field mask, published by the canvas view; the
     /// DOM inspector reads it to render values and mixed-state. `None` hides it.
@@ -470,6 +475,10 @@ pub fn main() {
     // the keyboard tool chords and the canvas view, exactly like the context-menu
     // pair above. Starts on the default tool (Select).
     let toile_active_tool = RwSignal::new(ambre_toile::ui::Tool::default());
+    // Toile canvas cursor (`toile-ui §5quinquies.A`): the view publishes the
+    // position-dependent cursor here (directional resize on a selection edge, grab
+    // on the rotate handle); `None` falls back to the tool's base cursor.
+    let toile_cursor = RwSignal::new(None::<&'static str>);
     // Toile style inspector (`toile-ui §5quinquies.B`): the view publishes the
     // selection's common style into `toile_style_model` and drains a whole-style
     // edit from `toile_restyle`, exactly like the context-menu pair above.
@@ -655,6 +664,7 @@ pub fn main() {
         toile_ctx_scope,
         toile_menu_cmd,
         toile_active_tool,
+        toile_cursor,
         toile_style_model,
         toile_restyle,
         toile_float_bar,
@@ -1346,6 +1356,7 @@ pub fn main() {
     let ch_toile_ctx_scope = RwSignal::new(ambre_toile::ui::menu::CtxScope::default());
     let ch_toile_menu_cmd = RwSignal::new(None::<CommandId>);
     let ch_toile_active_tool = RwSignal::new(ambre_toile::ui::Tool::default());
+    let ch_toile_cursor = RwSignal::new(None::<&'static str>);
     let ch_toile_zoom = RwSignal::new(1.0_f64);
     let ch_toile_sel_stats = RwSignal::new(None::<toile_chrome::SelStats>);
     let ch_toile_style_model = RwSignal::new(None::<toile_chrome::StyleModel>);
@@ -1384,6 +1395,7 @@ pub fn main() {
                 ch_toile_ctx_scope,
                 ch_toile_menu_cmd,
                 ch_toile_active_tool,
+                ch_toile_cursor,
                 ch_toile_zoom,
                 ch_toile_sel_stats,
                 ch_toile_style_model,
@@ -1436,6 +1448,7 @@ pub fn main() {
                     toile_ctx_scope,
                     toile_menu_cmd,
                     toile_active_tool,
+                    toile_cursor,
                     zoom,
                     sel_stats_toile,
                     toile_style_model,

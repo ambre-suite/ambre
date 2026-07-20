@@ -42,12 +42,26 @@ pub enum Tool {
     Hand,
 }
 
-/// Screen-space pick radius (physical px) around a transform handle.
+/// Screen-space pick radius (physical px) around a corner / rotate handle.
 const HANDLE_PICK_PX: f64 = 9.0;
+/// Screen-space grab band (physical px) around a selection edge: the whole side
+/// resizes (with a directional cursor), even though only the corners draw a
+/// visual square (toile-ui §7).
+const EDGE_GRAB_PX: f64 = 6.0;
 /// Rotate handle offset above the selection's top edge (physical px).
 pub const ROTATE_OFFSET_PX: f64 = 26.0;
 /// Drawn size of a square resize handle (physical px), used by the overlay.
 pub const HANDLE_SIZE_PX: f64 = 8.0;
+
+/// The cursor an in-flight Select gesture calls for (§5quinquies.A): a directional
+/// resize / grab on a transform `Handle`, or a closed-hand move. Mapped to a CSS
+/// cursor string by the view (via `palette::resize_cursor`) so the cursor stays
+/// stable for the whole drag.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum GestureCursor {
+    Handle(Handle),
+    Move,
+}
 
 /// The 8 resize handles plus the rotate handle.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -90,12 +104,18 @@ enum Drag {
         id: ElementId,
         base: Rect,
         handle: Handle,
+        /// Live pointer (world), updated each move so the view can preview the
+        /// resize without a Logic round-trip.
+        last: Point,
     },
     Rotate {
         id: ElementId,
         center: Point,
         start_angle: f64,
         base_rot: f64,
+        /// Live pointer angle (world radians about `center`), updated each move
+        /// for the live preview.
+        last_angle: f64,
     },
     Marquee {
         start: Point,
@@ -136,16 +156,18 @@ impl SelectTool {
             && let Some(sb) = selection_bounds(selection, display)
         {
             let screen_b = world_rect_to_screen(sb, cam);
-            if let Some(h) = pick_handle(screen_b, screen) {
+            if let Some(h) = edge_handle_at(screen_b, screen) {
                 let id = selection[0].clone();
                 match h {
                     Handle::Rotate => {
                         let center = sb.center();
+                        let start_angle = (world - center).atan2();
                         self.drag = Some(Drag::Rotate {
                             id: id.clone(),
                             center,
-                            start_angle: (world - center).atan2(),
+                            start_angle,
                             base_rot: element_rotation(display, &id),
+                            last_angle: start_angle,
                         });
                     }
                     _ => {
@@ -153,6 +175,7 @@ impl SelectTool {
                             id,
                             base: sb,
                             handle: h,
+                            last: world,
                         });
                     }
                 }
@@ -200,7 +223,16 @@ impl SelectTool {
                 *last = world;
                 SelectOutcome::None
             }
-            Some(Drag::Resize { .. }) | Some(Drag::Rotate { .. }) => SelectOutcome::None,
+            Some(Drag::Resize { last, .. }) => {
+                *last = world;
+                SelectOutcome::None
+            }
+            Some(Drag::Rotate {
+                center, last_angle, ..
+            }) => {
+                *last_angle = (world - *center).atan2();
+                SelectOutcome::None
+            }
             Some(Drag::Marquee { start, current }) => {
                 *current = world;
                 SelectOutcome::Marquee(Rect::from_points(*start, *current))
@@ -223,7 +255,9 @@ impl SelectTool {
                     SelectOutcome::Command(ToileCommand::MoveElements { ids, delta })
                 }
             }
-            Drag::Resize { id, base, handle } => {
+            Drag::Resize {
+                id, base, handle, ..
+            } => {
                 let new = resize_rect(base, handle, world);
                 SelectOutcome::Command(ToileCommand::ResizeElement { id, new })
             }
@@ -232,6 +266,7 @@ impl SelectTool {
                 center,
                 start_angle,
                 base_rot,
+                ..
             } => {
                 let now = (world - center).atan2();
                 let radians = base_rot + (now - start_angle);
@@ -256,6 +291,75 @@ impl SelectTool {
         match &self.drag {
             Some(Drag::Marquee { start, current }) => Some(Rect::from_points(*start, *current)),
             _ => None,
+        }
+    }
+
+    /// The handle a resting hover targets, for the directional cursor (§5quinquies.A).
+    /// Same hit-test as `pointer_down`, but pure (no drag started): returns `None`
+    /// unless the selection is exactly one element and the pointer is on its edge /
+    /// corner / rotate handle. Never called while a drag is in flight.
+    pub fn hover_handle(
+        &self,
+        selection: &[ElementId],
+        display: &DisplayViewport,
+        cam: &ViewportTransform,
+        screen: Point,
+    ) -> Option<Handle> {
+        if selection.len() != 1 {
+            return None;
+        }
+        let sb = selection_bounds(selection, display)?;
+        edge_handle_at(world_rect_to_screen(sb, cam), screen)
+    }
+
+    /// The cursor the in-flight drag calls for (§5quinquies.A), so it stays stable
+    /// for the whole gesture regardless of where the pointer wanders. `None` at
+    /// rest or during a marquee.
+    pub fn gesture_cursor(&self) -> Option<GestureCursor> {
+        match &self.drag {
+            Some(Drag::Resize { handle, .. }) => Some(GestureCursor::Handle(*handle)),
+            Some(Drag::Rotate { .. }) => Some(GestureCursor::Handle(Handle::Rotate)),
+            Some(Drag::Move { .. }) => Some(GestureCursor::Move),
+            _ => None,
+        }
+    }
+
+    /// Per-element live transform for the in-flight gesture (§5): `(id, bounds,
+    /// rotation)` in world space, so the view can paint the real object being
+    /// resized / rotated / moved before the command commits on release. Empty when
+    /// no gesture (or a marquee) is in flight.
+    pub fn gesture_overrides(&self, display: &DisplayViewport) -> Vec<(ElementId, Rect, f64)> {
+        match &self.drag {
+            Some(Drag::Resize {
+                id,
+                base,
+                handle,
+                last,
+            }) => vec![(
+                id.clone(),
+                resize_rect(*base, *handle, *last),
+                element_rotation(display, id),
+            )],
+            Some(Drag::Rotate {
+                id,
+                start_angle,
+                base_rot,
+                last_angle,
+                ..
+            }) => {
+                let bounds = element_bounds(display, id).unwrap_or_default();
+                vec![(id.clone(), bounds, base_rot + (last_angle - start_angle))]
+            }
+            Some(Drag::Move { ids, start, last }) => {
+                let delta = *last - *start;
+                ids.iter()
+                    .filter_map(|id| {
+                        element_bounds(display, id)
+                            .map(|b| (id.clone(), b + delta, element_rotation(display, id)))
+                    })
+                    .collect()
+            }
+            _ => Vec::new(),
         }
     }
 }
@@ -674,6 +778,37 @@ impl ToolMachine {
         }
         self.select.marquee().map(Preview::Marquee)
     }
+
+    /// The handle a resting hover targets, for the directional resize cursor
+    /// (§5quinquies.A). `None` unless the Select tool is armed, no gesture is in
+    /// flight, and the pointer is on a single selection's edge / corner.
+    pub fn hover_handle(
+        &self,
+        selection: &[ElementId],
+        display: &DisplayViewport,
+        cam: &ViewportTransform,
+        screen: Point,
+    ) -> Option<Handle> {
+        if self.tool != Tool::Select || self.is_active() {
+            return None;
+        }
+        self.select.hover_handle(selection, display, cam, screen)
+    }
+
+    /// Per-element live transform for the in-flight Select gesture (§5), forwarded
+    /// so the view can preview the real object during resize / rotate / move.
+    pub fn gesture_overrides(&self, display: &DisplayViewport) -> Vec<(ElementId, Rect, f64)> {
+        self.select.gesture_overrides(display)
+    }
+
+    /// The cursor the in-flight Select drag calls for (§5quinquies.A); `None`
+    /// unless a resize / rotate / move is in flight on the Select tool.
+    pub fn gesture_cursor(&self) -> Option<GestureCursor> {
+        if self.tool != Tool::Select {
+            return None;
+        }
+        self.select.gesture_cursor()
+    }
 }
 
 /// Map a `SelectOutcome` into the unified `ToolOutcome`. The marquee rectangle is
@@ -827,18 +962,16 @@ pub fn world_rect_to_screen(r: Rect, cam: &ViewportTransform) -> Rect {
     Rect::from_points(t * Point::new(r.x0, r.y0), t * Point::new(r.x1, r.y1))
 }
 
-/// The 8 resize-handle centers (screen space) for a selection's screen bounds.
-pub fn resize_handle_points(b: Rect) -> [(Handle, Point); 8] {
-    let (cx, cy) = (b.center().x, b.center().y);
+/// The 4 corner resize-handle centers (screen space) for a selection's screen
+/// bounds -- the only handles drawn as a **visual square**. The sides are still
+/// grabbable / resizable (see `edge_handle_at`), they just show no square, which
+/// keeps the box light (toile-ui §7).
+pub fn resize_handle_points(b: Rect) -> [(Handle, Point); 4] {
     [
         (Handle::Nw, Point::new(b.x0, b.y0)),
-        (Handle::N, Point::new(cx, b.y0)),
         (Handle::Ne, Point::new(b.x1, b.y0)),
-        (Handle::E, Point::new(b.x1, cy)),
         (Handle::Se, Point::new(b.x1, b.y1)),
-        (Handle::S, Point::new(cx, b.y1)),
         (Handle::Sw, Point::new(b.x0, b.y1)),
-        (Handle::W, Point::new(b.x0, cy)),
     ]
 }
 
@@ -847,15 +980,47 @@ pub fn rotate_handle_point(b: Rect) -> Point {
     Point::new(b.center().x, b.y0 - ROTATE_OFFSET_PX)
 }
 
-/// Which handle (if any) a screen point presses, within the pick radius.
-fn pick_handle(screen_b: Rect, screen: Point) -> Option<Handle> {
+/// Which handle (if any) a screen point targets on a selection's screen bounds.
+/// The whole edge is grabbable (Miro): the rotate knob and the 4 corners test by
+/// proximity to their point (`HANDLE_PICK_PX`), while the 4 sides test by a grab
+/// band (`EDGE_GRAB_PX`) along the full length of the side -- so a side resizes
+/// (with a directional cursor) even though only the corners draw a visual square
+/// (toile-ui §7). Corners win over sides (tested first), so a corner press always
+/// resizes diagonally. Used by both `pointer_down` (start a resize/rotate) and
+/// `hover_handle` (pick the cursor), so press and hover always agree.
+fn edge_handle_at(screen_b: Rect, screen: Point) -> Option<Handle> {
     if rotate_handle_point(screen_b).distance(screen) <= HANDLE_PICK_PX {
         return Some(Handle::Rotate);
     }
-    resize_handle_points(screen_b)
-        .into_iter()
-        .find(|(_, p)| p.distance(screen) <= HANDLE_PICK_PX)
-        .map(|(h, _)| h)
+    // Corners first: a diagonal resize takes precedence over the two sides that
+    // meet there.
+    for (h, p) in [
+        (Handle::Nw, Point::new(screen_b.x0, screen_b.y0)),
+        (Handle::Ne, Point::new(screen_b.x1, screen_b.y0)),
+        (Handle::Se, Point::new(screen_b.x1, screen_b.y1)),
+        (Handle::Sw, Point::new(screen_b.x0, screen_b.y1)),
+    ] {
+        if p.distance(screen) <= HANDLE_PICK_PX {
+            return Some(h);
+        }
+    }
+    // Sides: within the grab band of the edge line AND projecting inside the
+    // side's own extent (so the band does not stick out past the corners).
+    let in_x = screen.x >= screen_b.x0 - EDGE_GRAB_PX && screen.x <= screen_b.x1 + EDGE_GRAB_PX;
+    let in_y = screen.y >= screen_b.y0 - EDGE_GRAB_PX && screen.y <= screen_b.y1 + EDGE_GRAB_PX;
+    if in_x && (screen.y - screen_b.y0).abs() <= EDGE_GRAB_PX {
+        return Some(Handle::N);
+    }
+    if in_x && (screen.y - screen_b.y1).abs() <= EDGE_GRAB_PX {
+        return Some(Handle::S);
+    }
+    if in_y && (screen.x - screen_b.x1).abs() <= EDGE_GRAB_PX {
+        return Some(Handle::E);
+    }
+    if in_y && (screen.x - screen_b.x0).abs() <= EDGE_GRAB_PX {
+        return Some(Handle::W);
+    }
+    None
 }
 
 /// Resize `base` by dragging `handle` to world point `to`; the opposite edge(s)
@@ -1097,6 +1262,164 @@ mod tests {
             }
             other => panic!("expected ResizeElement, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn edge_handle_at_picks_sides_corners_and_misses() {
+        // Screen bounds 100x100 at origin (0,0)-(100,100).
+        let b = Rect::new(0.0, 0.0, 100.0, 100.0);
+        // Mid-side points -> the cardinal side handle (whole edge grabbable, even
+        // though sides draw no visual square).
+        assert_eq!(edge_handle_at(b, Point::new(50.0, 0.0)), Some(Handle::N));
+        assert_eq!(edge_handle_at(b, Point::new(100.0, 50.0)), Some(Handle::E));
+        assert_eq!(edge_handle_at(b, Point::new(50.0, 100.0)), Some(Handle::S));
+        assert_eq!(edge_handle_at(b, Point::new(0.0, 50.0)), Some(Handle::W));
+        // A point anywhere along a side (not the midpoint) still grabs it.
+        assert_eq!(edge_handle_at(b, Point::new(20.0, 0.0)), Some(Handle::N));
+        // Corners -> diagonal handles, taking precedence over the two sides.
+        assert_eq!(edge_handle_at(b, Point::new(0.0, 0.0)), Some(Handle::Nw));
+        assert_eq!(edge_handle_at(b, Point::new(100.0, 0.0)), Some(Handle::Ne));
+        assert_eq!(
+            edge_handle_at(b, Point::new(100.0, 100.0)),
+            Some(Handle::Se)
+        );
+        assert_eq!(edge_handle_at(b, Point::new(0.0, 100.0)), Some(Handle::Sw));
+        // The rotate handle sits above the top-center edge.
+        let rot = rotate_handle_point(b);
+        assert_eq!(edge_handle_at(b, rot), Some(Handle::Rotate));
+        // Interior and far-outside points miss.
+        assert_eq!(edge_handle_at(b, Point::new(50.0, 50.0)), None);
+        assert_eq!(edge_handle_at(b, Point::new(200.0, 200.0)), None);
+    }
+
+    #[test]
+    fn gesture_overrides_track_resize_move_and_rotate() {
+        let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let disp = viewport(vec![rect_elem("a", bounds)]);
+        let cam = cam();
+        let sel = vec![ElementId("a".into())];
+
+        // Resize from the SE corner: the override carries the live resized rect.
+        let mut tool = SelectTool::new();
+        let se = Point::new(100.0, 100.0);
+        tool.pointer_down(se, to_screen(&cam, se), &sel, &disp, &cam, None);
+        tool.pointer_move(Point::new(150.0, 140.0));
+        let ov = tool.gesture_overrides(&disp);
+        assert_eq!(ov.len(), 1);
+        assert_eq!(ov[0].0, ElementId("a".into()));
+        assert_eq!(ov[0].1, Rect::new(0.0, 0.0, 150.0, 140.0));
+        assert_eq!(ov[0].2, 0.0);
+
+        // Move: the override shifts every selected element by the drag delta.
+        let mut tool = SelectTool::new();
+        let inside = Point::new(50.0, 50.0);
+        tool.pointer_down(inside, to_screen(&cam, inside), &sel, &disp, &cam, None);
+        tool.pointer_move(Point::new(70.0, 60.0));
+        let ov = tool.gesture_overrides(&disp);
+        assert_eq!(ov[0].1, Rect::new(20.0, 10.0, 120.0, 110.0));
+
+        // Rotate: bounds hold, rotation follows the pointer angle about the center.
+        let mut tool = SelectTool::new();
+        let rot_screen = to_screen(&cam, Point::new(50.0, 0.0)); // top-center world
+        let rot_screen = Point::new(rot_screen.x, rot_screen.y - ROTATE_OFFSET_PX);
+        // Press the rotate handle (world point under it is the top-center edge).
+        tool.pointer_down(Point::new(50.0, 0.0), rot_screen, &sel, &disp, &cam, None);
+        // Drag to the right-center: a quarter turn from straight up.
+        tool.pointer_move(Point::new(100.0, 50.0));
+        let ov = tool.gesture_overrides(&disp);
+        assert_eq!(ov[0].1, bounds);
+        assert!((ov[0].2 - std::f64::consts::FRAC_PI_2).abs() < 1e-9);
+    }
+
+    #[test]
+    fn hover_handle_only_for_a_single_select_at_rest() {
+        let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let disp = viewport(vec![
+            rect_elem("a", bounds),
+            rect_elem("b", Rect::new(200.0, 0.0, 300.0, 100.0)),
+        ]);
+        let cam = cam();
+        let mut m = ToolMachine::new();
+        let sel_a = vec![ElementId("a".into())];
+        // On the SE corner of the single selection -> the diagonal handle.
+        let se = to_screen(&cam, Point::new(100.0, 100.0));
+        assert_eq!(m.hover_handle(&sel_a, &disp, &cam, se), Some(Handle::Se));
+        // Interior -> no handle.
+        let inside = to_screen(&cam, Point::new(50.0, 50.0));
+        assert_eq!(m.hover_handle(&sel_a, &disp, &cam, inside), None);
+        // Multi-selection -> handles suppressed (Phase 0 shows the box only).
+        let sel_ab = vec![ElementId("a".into()), ElementId("b".into())];
+        assert_eq!(m.hover_handle(&sel_ab, &disp, &cam, se), None);
+        // A creation tool is armed -> never a resize hover.
+        m.set_tool(Tool::Shape(ShapeKind::Rect));
+        assert_eq!(m.hover_handle(&sel_a, &disp, &cam, se), None);
+        // Mid-drag -> the hover query is silent (the drag cursor takes over).
+        m.set_tool(Tool::Select);
+        m.pointer_down(Point::new(100.0, 100.0), se, &sel_a, &disp, &cam, None);
+        assert!(m.is_active());
+        assert_eq!(m.hover_handle(&sel_a, &disp, &cam, se), None);
+    }
+
+    #[test]
+    fn gesture_cursor_reflects_the_in_flight_drag() {
+        let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let disp = viewport(vec![rect_elem("a", bounds)]);
+        let cam = cam();
+        let sel = vec![ElementId("a".into())];
+
+        // Resize -> the grabbed handle.
+        let mut m = ToolMachine::new();
+        let se = to_screen(&cam, Point::new(100.0, 100.0));
+        m.pointer_down(Point::new(100.0, 100.0), se, &sel, &disp, &cam, None);
+        assert_eq!(m.gesture_cursor(), Some(GestureCursor::Handle(Handle::Se)));
+
+        // Rotate -> the rotate handle.
+        let mut m = ToolMachine::new();
+        let rot = to_screen(&cam, Point::new(50.0, 0.0));
+        let rot = Point::new(rot.x, rot.y - ROTATE_OFFSET_PX);
+        m.pointer_down(Point::new(50.0, 0.0), rot, &sel, &disp, &cam, None);
+        assert_eq!(
+            m.gesture_cursor(),
+            Some(GestureCursor::Handle(Handle::Rotate))
+        );
+
+        // Move -> the closed-hand marker.
+        let mut m = ToolMachine::new();
+        let inside = to_screen(&cam, Point::new(50.0, 50.0));
+        m.pointer_down(Point::new(50.0, 50.0), inside, &sel, &disp, &cam, None);
+        assert_eq!(m.gesture_cursor(), Some(GestureCursor::Move));
+
+        // At rest -> no drag cursor.
+        assert_eq!(ToolMachine::new().gesture_cursor(), None);
+    }
+
+    #[test]
+    fn resize_preview_then_release_emits_exactly_one_command() {
+        // A move step feeds the live preview, but the gesture still commits a
+        // single ResizeElement on release (undo granularity, toile-logic §949).
+        let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let disp = viewport(vec![rect_elem("a", bounds)]);
+        let cam = cam();
+        let sel = vec![ElementId("a".into())];
+        let mut tool = SelectTool::new();
+        let se = to_screen(&cam, Point::new(100.0, 100.0));
+        tool.pointer_down(Point::new(100.0, 100.0), se, &sel, &disp, &cam, None);
+        // Intermediate move updates the preview but emits nothing.
+        assert!(matches!(
+            tool.pointer_move(Point::new(130.0, 120.0)),
+            SelectOutcome::None
+        ));
+        assert!(!tool.gesture_overrides(&disp).is_empty());
+        // Release commits one resize to the final pointer.
+        match tool.pointer_up(Point::new(150.0, 140.0), &disp) {
+            SelectOutcome::Command(ToileCommand::ResizeElement { id, new }) => {
+                assert_eq!(id, ElementId("a".into()));
+                assert_eq!(new, Rect::new(0.0, 0.0, 150.0, 140.0));
+            }
+            other => panic!("expected a single ResizeElement, got {other:?}"),
+        }
+        // The gesture is over: no lingering override.
+        assert!(tool.gesture_overrides(&disp).is_empty());
     }
 
     // -- ToolMachine: creation tools -----------------------------------------

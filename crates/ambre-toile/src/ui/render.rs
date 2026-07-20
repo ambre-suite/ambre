@@ -449,6 +449,11 @@ pub fn paint_overlay<S: DrawSurface>(
     preview: Option<&Preview>,
     find_hits: &[ElementId],
     find_focus: Option<&ElementId>,
+    // Live transform overrides for an in-flight resize / rotate / move (§5): when
+    // an entry exists for a selected id, the selection box + handles follow its
+    // preview bounds instead of the committed geometry, so they stay glued to the
+    // object during the drag. Empty at rest.
+    gesture: &HashMap<ElementId, AnimatedElement>,
 ) {
     // Live gesture preview (world -> screen), a thin outline / trail.
     if let Some(p) = preview {
@@ -460,7 +465,7 @@ pub fn paint_overlay<S: DrawSurface>(
     // simply have no box until the camera (recentered on `focus`) brings them in.
     paint_find_highlights(surface, find_hits, find_focus, vp, cam, palette);
 
-    let Some(wb) = selection_bounds(selection, vp) else {
+    let Some(wb) = selection_preview_bounds(selection, vp, gesture) else {
         return;
     };
     let b = world_rect_to_screen(wb, cam);
@@ -472,8 +477,8 @@ pub fn paint_overlay<S: DrawSurface>(
     surface.stroke_line(b.center().x, b.y0, rot.x, rot.y, palette.selection, 1.0);
     draw_handle(surface, rot, palette);
 
-    // 8 resize handles (only for a single-element selection, matching the tool's
-    // handle picking; a multi-selection shows the box only in Phase 0).
+    // 4 corner resize handles (only for a single-element selection, matching the
+    // tool's corners-only picking; a multi-selection shows the box only in Phase 0).
     if selection.len() == 1 {
         for (_, p) in resize_handle_points(b) {
             draw_handle(surface, p, palette);
@@ -533,6 +538,34 @@ fn element_bounds(vp: &DisplayViewport, id: &ElementId) -> Option<Rect> {
         DisplayNode::Element(e) if &e.id == id => Some(e.bounds),
         _ => None,
     })
+}
+
+/// World union AABB of the selection for the overlay box, honoring any in-flight
+/// gesture override (§5): a selected id present in `gesture` contributes its live
+/// preview bounds, otherwise its committed display bounds. `None` when nothing
+/// selected is in the culled set.
+fn selection_preview_bounds(
+    selection: &[ElementId],
+    vp: &DisplayViewport,
+    gesture: &HashMap<ElementId, AnimatedElement>,
+) -> Option<Rect> {
+    if gesture.is_empty() {
+        return selection_bounds(selection, vp);
+    }
+    let mut acc: Option<Rect> = None;
+    for id in selection {
+        let b = gesture
+            .get(id)
+            .map(|a| a.bounds)
+            .or_else(|| element_bounds(vp, id));
+        if let Some(b) = b {
+            acc = Some(match acc {
+                Some(r) => r.union(b),
+                None => b,
+            });
+        }
+    }
+    acc
 }
 
 /// Outline the find matches present in the culled set (§5quater). Every hit gets
@@ -953,14 +986,62 @@ mod tests {
             None,
             &[],
             None,
+            &HashMap::new(),
         );
-        // 8 resize handles + 1 rotate handle = 9 filled squares.
+        // 4 corner handles + 1 rotate handle = 5 filled squares (corners-only §7).
         let handle_fills = surface
             .ops()
             .iter()
             .filter(|o| matches!(o, DrawOp::FillRect { .. }))
             .count();
-        assert_eq!(handle_fills, 9);
+        assert_eq!(handle_fills, 5);
+    }
+
+    #[test]
+    fn overlay_box_follows_gesture_override_bounds() {
+        // The element is committed at (0,0)-(50,50) but a live resize override
+        // stretches it to (0,0)-(90,70); the selection box must track the preview.
+        let vp = DisplayViewport {
+            reactions: Default::default(),
+            viewport: Default::default(),
+            nodes: vec![elem(
+                "r",
+                DisplayGeom::Rect,
+                Rect::new(0.0, 0.0, 50.0, 50.0),
+            )],
+        };
+        let preview_bounds = Rect::new(0.0, 0.0, 90.0, 70.0);
+        let mut gesture = HashMap::new();
+        gesture.insert(
+            ElementId("r".into()),
+            AnimatedElement {
+                id: ElementId("r".into()),
+                bounds: preview_bounds,
+                rotation: 0.0,
+                opacity: 1.0,
+                fill: None,
+            },
+        );
+        let cam = cam();
+        let mut surface = RecordingSurface::new();
+        paint_overlay(
+            &mut surface,
+            &[ElementId("r".into())],
+            &vp,
+            &cam,
+            &LIGHT_PALETTE,
+            None,
+            &[],
+            None,
+            &gesture,
+        );
+        // The selection box is stroked at the preview bounds, not the committed rect.
+        let expected = world_rect_to_screen(preview_bounds, &cam);
+        let has_box = surface
+            .ops()
+            .iter()
+            .any(|o| matches!(o, DrawOp::StrokeRect { rect, .. } if *rect == expected));
+        assert!(has_box, "selection box must follow the live preview bounds");
     }
 
     #[test]
@@ -984,6 +1065,7 @@ mod tests {
             None,
             &hits,
             Some(&ElementId("b".into())),
+            &HashMap::new(),
         );
         // No selection => no handles, only the two hit outlines (one per match).
         let strokes = surface

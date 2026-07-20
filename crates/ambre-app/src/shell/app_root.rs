@@ -56,6 +56,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         toile_ctx_scope,
         toile_menu_cmd,
         toile_active_tool,
+        toile_cursor,
         toile_style_model,
         toile_restyle,
         toile_float_bar,
@@ -149,7 +150,12 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // canvas render pass. Mounted only for a Toile board.
     if boot_is_toile {
         Effect::new(move |_| {
-            let cursor = ambre_toile::ui::palette::cursor_css(toile_active_tool.get());
+            // Position-dependent override (a directional resize / grab cursor over
+            // a selection edge / corner, or during a transform) wins; otherwise the
+            // cursor is the pure function of the active tool (§5quinquies.A).
+            let cursor = toile_cursor
+                .get()
+                .unwrap_or_else(|| ambre_toile::ui::palette::cursor_css(toile_active_tool.get()));
             if let Some(doc) = web_sys::window().and_then(|w| w.document())
                 && let Some(el) = doc.get_element_by_id("ambre-canvas")
                 && let Some(html) = el.dyn_ref::<web_sys::HtmlElement>()
