@@ -31,6 +31,7 @@ The specs predate this file and use their own phase vocabulary. Mapping:
 | `E2` | `CANVAS P0` remaining items, `CHROME P4` (launcher) | -- | -- |
 | `E3` | -- | `trame-logic §14`, `trame-features §10`, `trame-ui §18`, `trame-interop §10` (Phase 1) | -- |
 | `ET` | `ARCH P5` (test infrastructure) | Trame "Tested DoD" debt items (logic/features/ui/interop) | -- |
+| `EF` | `FIXTURES P0`-`P2`, `DOCFILE P0`-`P2`, `ARCH P8` (persisted schema versioning) | `trame-interop` native `.ambre` scope item | `toile-interop` native `.ambre` scope item |
 | `E4` | `CANVAS P1` (paths/PDF), `ARCH P6` (composition / in-place embeds) | -- | `toile-logic §13`, `toile-ui §13`, `toile-features §9`, `toile-interop §10` (Phase 0/1) |
 | `E5` | `ARCH P2` (`ambre-prose`), `ARCH P7` (`ambre-murmure`), `SYNC P4`, `SRV P1` | -- | -- |
 | `E6` | `ARCH P4`, `CANVAS P2` | Trame Phase 2+, `trame-logic §14 Phase 4` (scaling debt) | Toile Phase 2 (optimization) |
@@ -200,6 +201,77 @@ Stories:
 - `trame-ui §18` `[x]` — Leptos UI tests (`wasm-bindgen-test`, headless Chrome): reactive headless + real DOM for the Trame chrome. Landed as `ambre-trame/tests/chrome_ui.rs` (reactive belt + DOM `StatusBar`/`FindReplace`), run via `just test-wasm` in the re-enabled CI job.
 - `trame-features §10` / `trame-interop §10` `[x]` — wired the "Tested DoD" belts green in CI: the MVP filter/sort/undo `#[test]`s (added the three Phase-1 undo belts), the concurrent-filter LWW case folded into the 2-peer convergence property-test (`ApplyFilter`/`ClearFilter` ops + `is_filtered` in the converged snapshot), and the CSV roundtrip + malformed/byte-soup fuzz robustness cases. *(Conditional-formatting / validation / protection tests follow their Phase 2 / Post-MVP implementation.)*
 
+## EF — Document corpora & native file format  `[ ]` (transverse) — *makes the budgets measurable, and the data portable*
+
+*Two coupled foundations. `ambre-spec-fixtures.md` produces Ambre documents in known states, deterministically,
+on host, from code. `ambre-spec-docfile.md` specifies the `.ambre` container those documents are stored in --
+the only lossless round trip any app offers. They are one Epic because a fixture **is** a `.ambre` file and
+the fixture loader **is** the production importer: neither is finishable without the other.*
+
+> **Does not block `E4`.** `ET` stays `[x]` and remains the test foundation `E4` depends on. This Epic adds
+> capability rather than settling debt, and Toile needs none of it. Deliberately kept out of `ET` so that
+> Epic's derived status keeps meaning what `E4` reads it as meaning.
+>
+> **Why now rather than under `E6`.** Nearly every performance budget in the app specs is stated against a
+> document size, and no document of that size exists -- so those budgets are currently aspirational rather
+> than measured (`fixtures §4`). The scaling work already scheduled in `E6` (`trame-logic §14 Phase 4`,
+> `CANVAS P2` non-regression benchmarks) cannot show it succeeded without this corpus. Building the
+> measurement after the optimization is the wrong order.
+>
+> **Internal gating.** `DOCFILE P0` carries no gate and is buildable now. **`FIXTURES P0` is gated on it**:
+> `FixtureGen::build` returns plaintext `.ambre` bytes and its belt asserts on `DocFileError` variants, so
+> the container has to exist first (`fixtures §7`). The dependency runs one way only -- `DOCFILE P0` needs
+> nothing from the fixtures side -- which is why the container Story leads the Epic. `DOCFILE P1` is gated on
+> the `E6` Trame style consolidation (see that Epic): a file on a user's disk is a permanent migration
+> commitment, stronger than a server-side document because it is beyond our reach to migrate.
+
+Stories:
+- `[ ]` `DOCFILE P0` — the shared `.ambre` header helper in `ambre-core` (layout, `AmbreHeader`,
+  `DocFileError`, writer rule), the `migrate_ambre` harness and version registry, and the
+  `export_ambre_plaintext` / `import_ambre_plaintext` pair wired for Trame and Toile. **Belt:** round-trip
+  identity, full header rejection set, cross-app dispatch, non-destructive failure.
+- `[ ]` `FIXTURES P0` — the pinned-`PeerID` constructor seam on `TrameState` / `ToileState` (a public API
+  change in both, and the prerequisite for every reproducible artifact); the `fixtures` feature; `FixtureGen`
+  + registry + manifest + digest, the types in `ambre-core` so the orphan rule permits app-side impls;
+  `ToileState::import_snapshot`, `DocState::import_snapshot` and `export_snapshot` lifted to the enum,
+  `shape_of`, `canonical_dump` and `load_fixture`, with `DocState` made public; the determinism harness over
+  all three entropy sources (`PeerID`, commit clock, `document_id`), with the documented fallback to a
+  semantic digest. **Gated on `DOCFILE P0`**, soft-gated on `ARCH P8` (`schema_version` reads 0 until then).
+  **Belt:** determinism both directions, export/import round trip on every `DocState` variant, manifest
+  integrity, loader rejection.
+- `[ ]` `FIXTURES P1` — the correctness generators (deep formula DAG; cross-sheet references with merges and
+  active filters; Toile board with connectors and nested groups; post-convergence 2-peer state) and the
+  interop export sources; `just fixtures` / `fixtures-check` / `fixtures-freeze` over the `fixtures/current/`
+  + `fixtures/frozen/` layout, with the drift gate wired into the CI `test-native` job; and `CONTRIBUTING.md`
+  itself, which does not exist yet and is where the synthetic-only rule lands. **Belt:** drift gate green in
+  CI, new-generator and orphan-golden cases included.
+- `[ ]` `FIXTURES P2` — scale generators behind `just fixtures-bench-corpus`, sized to the budgets they serve (10k-cell DAG, 100k-cell memory,
+  50k-element board, 2 000-visible-element viewport, 10k-cell export source, 50-frame presentation);
+  `criterion` benches with committed baselines and the 20% regression criterion; the `RecordingSurface`
+  CPU-frame bench and the load-path bench (legs 2 to 5 of `architecture §5`); generators for further apps
+  as their engines land (`ambre-prose`, `ambre-murmure`). *Feeds the end-to-end document-open budget that
+  `ambre-spec-architecture.md §5` is to set from the resulting numbers -- no such budget exists today.*
+- `[ ]` `ARCH P8` — **persisted schema versioning** (`ambre-spec-architecture.md §2.D` + `§7 ARCH P8`): the
+  `meta` / `schema_version` root register written by `DocState::new`, the read rule at every full-state entry
+  point (equal proceeds, older migrates, newer refuses non-destructively), and the per-app migration chains.
+  Discharges the pre-1.0 debt left by the style-register caveat (a `postcard` layout change silently
+  `unwrap_or_default`s an old blob to the default style), and generalizes it from one register to the whole
+  document. **Belt:** the deliberately stale fixtures of `FIXTURES P1`. *Sits in this Epic because files are
+  what make it urgent, not because it is file-specific -- the register travels through every persistence
+  path (file, server snapshot, IndexedDB restore).*
+- `[ ]` `DOCFILE P1` — user-facing export/import: app-agnostic file download + picker routed by `doc_type`,
+  and the plaintext-at-rest statement in the export UI. **Gated on `ARCH P8` and on the `E6` style
+  consolidation** -- distinct gates: `ARCH P8` supplies the migration mechanism, `E6` lands the one schema
+  change already known while it is still free.
+- `[ ]` `DOCFILE P2` — the passphrase-sealed variant (container version bump carrying salt + Argon2id
+  parameters, export prompt, typed wrong-passphrase error).
+
+> **Two versions, two mechanisms.** `AMBRE_VERSION` versions the **container**; it does not version the CRDT
+> schema inside the payload, so `migrate_ambre` does not cover a schema change such as the `E6` style
+> consolidation. A file written before such a change passes every container check and then imports into an
+> engine reading containers that no longer mean what it expects -- a *successful open of a wrong document*.
+> The payload half is `ARCH P8` below, which is a **hard prerequisite of `DOCFILE P1`**.
+
 ## E4 — Toile MVP (infinite whiteboard + presentations)  `[ ]` (in progress) — *current core objective*
 
 *Second product on the validated stack: an infinite collaborative whiteboard with a presentation mode.
@@ -364,7 +436,15 @@ Stories:
   `logic/convergence_tests.rs::concurrent_whole_cell_style_edits_do_not_blend_across_containers`.
   **Ordering:** it does *not* preempt `E5`, but it changes the persisted schema, so it must land
   **before the public Beta**, while no third-party document exists and no migration path has to be
-  carried forever. *(The shared `styles` dictionary + `"s"` indirection and the `{v,t,s}` cell
+  carried forever. **It also gates `EF`/`DOCFILE P1`** (user-facing `.ambre` export): once a user holds a
+  document file on their own disk, that document is beyond our reach to migrate, which is a stronger
+  version of the same commitment this Story exists to avoid.
+  **Schema-version obligation.** This Story *is* a persisted-schema change, so it must bump the Trame
+  `SCHEMA_VERSION` (`EF`/`ARCH P8`, `architecture §2.D`). If it lands **before** `ARCH P8`, it does so on
+  the explicit basis that no third-party document exists and every server document is disposable — that
+  basis must be stated in the commit, not assumed. If it lands **after**, it ships a migration chain and a
+  stale fixture proving it. What it must never do is change the schema silently: an unmigrated document
+  imports cleanly and reads back with default styles (`architecture §2.D`, `postcard` caveat). *(The shared `styles` dictionary + `"s"` indirection and the `{v,t,s}` cell
   sub-map are explicitly out of scope: deferred behind a benchmark — Loro does not GC orphaned map
   entries, so the indirection would force a style-reclamation policy.)*
 - Trame Phase 2+ — basic .xlsx import, conditional formatting, data validation.
