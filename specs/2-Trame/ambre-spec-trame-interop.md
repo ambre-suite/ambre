@@ -9,6 +9,7 @@
 ## 1. OBJECTIVES & CONSTRAINTS
 
 **Scope:**
+- Native `.ambre` export/import for Trame: the `export_ambre_plaintext()` / `import_ambre_plaintext()` pair over the Trame `LoroDoc`, writing `DocType::Trame` in the header. The container itself -- layout, versioning, `migrate_ambre`, cross-app dispatch, at-rest policy -- is specified in `../1-Foundations/ambre-spec-docfile.md` and must not be re-implemented here. This is the only **lossless** path Trame offers: every conversion below drops something.
 - Import .xlsx → `LoroDoc` Trame (via `calamine`)
 - Export `LoroDoc` Trame → .xlsx (via `rust_xlsxwriter`)
 - Import/Export CSV

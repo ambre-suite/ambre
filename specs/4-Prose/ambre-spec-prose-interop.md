@@ -16,12 +16,13 @@
 This component handles:
 - Exporting the Prose `LoroDoc` to docx, Markdown, PDF, HTML.
 - Importing docx, Markdown, HTML into an initialized Prose `LoroDoc`.
-- Serialization/deserialization of the native `.ambre` format (Loro snapshot + postcard + zstd + XChaCha20).
+- Serialization/deserialization of the Prose half of the native `.ambre` format (header + Loro snapshot, no compression and no crypto at this layer). Container specified in `../1-Foundations/ambre-spec-docfile.md`.
 - Managing fidelity losses (best-effort) during conversions and reporting them to the user.
 
 This component delegates:
 - Actual CRDT mutations -> `ProseState::handle_command()` via `ProseCommand`.
-- Native format compression + encryption/decryption -> `ambre-sync`.
+- The container layout, versioning and migration of `.ambre` -> the shared helper specified in `../1-Foundations/ambre-spec-docfile.md`.
+- Any compression / encryption stage applied on top of a `.ambre` payload -> `ambre-sync` (and, for a local export, only on the explicit passphrase-sealed opt-in -- `docfile §3`).
 - Live wgpu + Parley/Swash rendering (display list, virtual scroll) -> `prose-ui`.
 - Binary asset (image) fetch/decrypt -> `ambre-sync` (media flow: `RestCommand::UploadMedia`/`DownloadMedia` -> `RestEvent::MediaUploaded`/`MediaDownloaded`, addressed by `content_hash`). The Logic thread never touches the network or S3.
 
@@ -362,69 +363,27 @@ pub enum InteropError {
 
 ### B. Native `.ambre` Format
 
-The native format is the reference persistence and sharing format. It involves no data
-conversion -- it is a packaged Loro binary snapshot.
+> **Normative definition moved.** The `.ambre` container -- header layout, version registry,
+> `migrate_ambre` migration policy, `DocType` dispatch, error taxonomy, and the at-rest protection
+> decision -- is specified in **`../1-Foundations/ambre-spec-docfile.md`**. It is a cross-app contract
+> (it carries a `DocType` byte and re-dispatches across apps on mismatch), so it belongs to the
+> foundations rather than to any one application spec. This section keeps only what is Prose-specific.
 
-```
-.ambre (binary)
-├── [4 bytes] magic: 0x414D4252  ("AMBR")
-├── [1 byte]  version: 0x01
-├── [1 byte]  doc_type: DocType as u8  (0x00 = Prose)
-├── [16 bytes] document_id: Uuid v7
-└── [remaining] payload: LoroDoc::export_snapshot()
-                          compressed zstd (ruzstd)
-                          encrypted XChaCha20-Poly1305 by ambre-sync
-```
+**What Prose owns.** The pair `export_ambre_plaintext()` / `import_ambre_plaintext()` for a Prose
+`LoroDoc`, calling the shared header helper in `ambre-core` rather than re-implementing the layout.
+The `doc_type` byte Prose writes is `DocType::Prose` (`0x00`); a file carrying any other value is
+returned as `WrongDocType { found }` and re-dispatched by the caller -- Prose never coerces it.
 
-Compression and encryption are applied by `ambre-sync` -- `ambre-prose/interop`
-only exposes `export_ambre_plaintext()` and `import_ambre_plaintext()` which operate on
-the raw Loro snapshot (before compression/encryption).
+**What Prose does not own:** the header itself, the version registry, migration, and the protection
+stage. In particular the format's at-rest question ("encrypted -- under which key?") is resolved in
+`ambre-spec-docfile.md §3`: a **local file is plaintext by default, passphrase-sealed on explicit
+opt-in, and never sealed under the `DocumentKey`**, whose server-side rotation on revocation would
+make an exported backup permanently unreadable. The `.ambre` container is a **file** format; the
+network snapshot path carries a bare `export_snapshot()` payload with no header, sealed under the
+`DocumentKey` by `ambre-sync`, and is a different destination with different rules.
 
-```rust
-// ambre-prose/src/interop/ambre.rs
-
-pub const AMBRE_MAGIC: [u8; 4] = *b"AMBR";
-pub const AMBRE_VERSION: u8 = 0x01;
-
-/// Produces the header + uncompressed, unencrypted Loro snapshot.
-/// ambre-sync applies zstd + XChaCha20 downstream.
-pub fn export_ambre_plaintext(
-    doc: &LoroDoc,
-    doc_id: Uuid,
-) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(22 + 1024);
-    buf.extend_from_slice(&AMBRE_MAGIC);
-    buf.push(AMBRE_VERSION);
-    buf.push(DocType::Prose as u8);
-    buf.extend_from_slice(doc_id.as_bytes());
-    buf.extend(doc.export_snapshot());
-    buf
-}
-
-/// Reads the header, checks magic + version + doc_type, returns the raw Loro snapshot.
-pub fn import_ambre_plaintext(
-    data: &[u8],
-) -> Result<(Uuid, Vec<u8>), InteropError> {
-    if data.len() < 22 { return Err(InteropError::TruncatedHeader); }
-    if &data[0..4] != &AMBRE_MAGIC { return Err(InteropError::InvalidMagic); }
-    if data[4] != AMBRE_VERSION    { return Err(InteropError::UnsupportedVersion { found: data[4] }); }
-    if data[5] != DocType::Prose as u8 { return Err(InteropError::WrongDocType); }
-    let doc_id = Uuid::from_bytes(data[6..22].try_into().unwrap());
-    Ok((doc_id, data[22..].to_vec()))
-}
-```
-
-**Version / doc-type recovery path (`UnsupportedVersion`, `WrongDocType`).**
-Both are surfaced to the UI as typed, non-destructive failures -- the original bytes are
-never mutated:
-
-- `UnsupportedVersion { found }` where `found < AMBRE_VERSION`: a forward migration step is
-  applied (`migrate_ambre(found, bytes) -> Result<Vec<u8>, InteropError>`, added per version
-  bump) before retrying import. `found > AMBRE_VERSION` (file written by a newer client) is
-  unrecoverable: the UI prompts the user to update, the file is left untouched.
-- `WrongDocType`: the file is a valid `.ambre` but for another app (e.g. a Toile board). The
-  caller re-dispatches to the matching app's importer using `data[5]` (`DocType`); Prose
-  never coerces it.
+The `InteropError` variants `TruncatedHeader` / `InvalidMagic` / `UnsupportedVersion` /
+`WrongDocType` (§A) mirror `DocFileError` and are produced by the shared helper.
 
 ---
 
@@ -859,7 +818,8 @@ transfer to the server during conversion.
 |------|---------|--------|------------|
 | Import docx/md/html | `Vec<u8>` received from UI thread via `UiEnvelope` | The imported file may contain macros or scripts | `docx-rs` does not execute macros. `html5ever` sanitizes HTML (no JS execution). |
 | PDF export with images | Image bytes read from the Logic `media_cache` | Presigned-URL fetch + decrypt happen entirely in `ambre-sync` | The Logic thread never sees the presigned URL nor the network: it only receives already-decrypted bytes via `RestEvent::MediaDownloaded`. Presigned URLs (5-minute TTL) are handled inside Sync. |
-| Native `.ambre` format | Plaintext Loro snapshot in the Logic thread | Isolated WASM memory of the Main instance (Logic thread) | Logic hands the plaintext snapshot to Sync as a typed `SyncCommand` payload over `flume`; the Main thread relays it to the separate Sync worker (`postMessage` + `postcard`), which alone compresses (zstd) and encrypts (XChaCha20). Plaintext never reaches the network. |
+| Native `.ambre` file (local export) | Header + plaintext Loro snapshot in the Logic thread | Isolated WASM memory (Logic thread), then the user's disk | Written as-is by default -- a local `.ambre` is **plaintext at rest**, like the .docx/.pdf/.md this spec already exports, and the export UI says so. A passphrase-sealed variant is an explicit opt-in. Never sealed under the `DocumentKey` (rotation hazard). See `docfile §3`. |
+| Network snapshot (a different destination) | Bare `export_snapshot()`, **no `.ambre` header** | Isolated WASM memory (Logic thread) | Logic hands the plaintext snapshot to Sync as a typed `SyncCommand` payload over `flume`; the Main thread relays it to the separate Sync worker (`postMessage` + `postcard`), which alone compresses (zstd) and encrypts (XChaCha20) under the `DocumentKey`. Plaintext never reaches the network. |
 | Import HTML clipboard | HTML from `navigator.clipboard.read()` | Malicious HTML (injection) | `html5ever` sanitizes, `markup5ever_rcdom` does not preserve `on*` attributes or `<script>`. |
 
 **Image resolution on export:**

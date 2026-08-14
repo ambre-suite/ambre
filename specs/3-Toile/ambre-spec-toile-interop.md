@@ -17,6 +17,7 @@
 ## 1. OBJECTIVES & CONSTRAINTS
 
 **Scope of this module:**
+- **Native `.ambre`:** `export_ambre_plaintext()` / `import_ambre_plaintext()` over the Toile `LoroDoc`, writing `DocType::Toile` in the header. The container -- layout, versioning, `migrate_ambre`, cross-app dispatch, at-rest policy -- is specified in `../1-Foundations/ambre-spec-docfile.md` and must not be re-implemented here. It is the only **lossless** round trip Toile offers; every converter below is lossy (SVG drops connector semantics and presentation order, PDF drops everything but pixels).
 - **Import:** SVG, PNG/JPG, Figma (JSON), Miro → a batch of `ToileCommand::CreateElement` (frames included, via
   `kind: Frame` — a frame is an element, `toile-logic §2.F`) applied atomically to `ToileState`.
 - **Export:** multi-page PDF (one page per presentation frame, or the whole board), high-res SVG/PNG raster,
