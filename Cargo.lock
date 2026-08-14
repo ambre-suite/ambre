@@ -178,12 +178,14 @@ name = "ambre-logic"
 version = "0.1.0"
 dependencies = [
  "ambre-bus",
+ "ambre-core",
  "ambre-toile",
  "ambre-trame",
  "flume",
  "futures-util",
  "image",
  "js-sys",
+ "kurbo",
  "parley",
  "tracing",
  "wasm-bindgen",
@@ -352,6 +354,7 @@ dependencies = [
  "ambre-bus",
  "ambre-canvas",
  "ambre-chrome",
+ "ambre-core",
  "ambre-draw",
  "csv",
  "flume",

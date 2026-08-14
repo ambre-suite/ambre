@@ -24,6 +24,7 @@ pub use logic::command::{
     SelectionStats, ToileCommand, ToileError, ToileEvent, ToileOutcome, ToileRequest, ZTarget,
 };
 pub use logic::index::{ElementBounds, SpatialIndex, Viewport};
+pub use logic::interop::docfile::{export_ambre_plaintext, import_ambre_plaintext};
 pub use logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, FontSpec, NodeId, PathType,
     Shadow, ShapeKind, StrokePoint,

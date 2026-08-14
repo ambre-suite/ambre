@@ -135,6 +135,34 @@ pub struct AmbreHeader {
 pub fn migrate_ambre(from: u8, bytes: &[u8]) -> Result<Vec<u8>, DocFileError>;
 ```
 
+**The shared helper (`ambre_core::docfile`, as built).** Each app's pair above is a two-line binding over
+these; no app re-derives the layout or either read rule (I5).
+
+```rust
+/// The writer rule: no version parameter, because there is no write mode to pick.
+pub fn write_ambre_plaintext(doc_type: DocType, document_id: Uuid, payload: &[u8]) -> Vec<u8>;
+
+/// Any `DocType`, version-recovery rule applied. What a file-open router reads
+/// before it knows which app to hand the bytes to.
+pub fn read_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError>;
+
+/// The same, plus the dispatch rule against the caller's own type. The whole body
+/// of each app's `import_ambre_plaintext`.
+pub fn read_ambre_plaintext_as(expected: DocType, data: &[u8]) -> Result<AmbreHeader, DocFileError>;
+
+/// The strict layout parse: current version only, no recovery. Used by the two
+/// above and by anything reading raw bytes (a header dump, a migration step
+/// checking its own output).
+pub fn parse_header(data: &[u8]) -> Result<AmbreHeader, DocFileError>;
+```
+
+An app owns the payload half only: its `export_ambre_plaintext` is `write_ambre_plaintext` over its own
+`export_snapshot()`, its `import_ambre_plaintext` is `read_ambre_plaintext_as` for its own `DocType`.
+`PayloadRejected` is raised there and nowhere else -- the container layer never touches a `LoroDoc` (I4).
+Each engine also carries the state-level pair (`TrameState` / `ToileState`: `export_ambre_plaintext(doc_id)`,
+and `import_ambre_plaintext(bytes)` returning the file's `document_id` with the display events of the
+reload), so a caller holding a live document does not reach for its `LoroDoc` to save it.
+
 **Error taxonomy.** Fatal by nature: a header failure means no document can be produced.
 
 ```rust
@@ -144,6 +172,11 @@ pub enum DocFileError {
     /// `found < AMBRE_VERSION` -> recoverable via `migrate_ambre`.
     /// `found > AMBRE_VERSION` -> unrecoverable, prompt the user to update.
     UnsupportedVersion { found: u8 },
+    /// The `doc_type` byte names no app this build knows -- a file from a client
+    /// that shipped a new document type, or corruption. Distinct from
+    /// `WrongDocType`, which is a *valid* type belonging to another app and is
+    /// therefore re-dispatchable; this one cannot carry a `DocType` at all.
+    UnknownDocType { found: u8 },
     /// A valid `.ambre` for a different app. Carries the type so the caller can
     /// re-dispatch instead of failing the user.
     WrongDocType { found: DocType },
@@ -208,9 +241,9 @@ Two obligations follow, and neither is optional:
 * **Unit Tests.**
   * **Round-trip identity (I1):** export -> import -> export is byte-identical, and the reloaded state is
     equal to the original, on every `DocType` with an engine.
-  * **Header rejection:** truncated header, bad magic, `UnsupportedVersion` in both directions,
-    `WrongDocType`, and a valid header over a corrupt payload -- each producing the right typed error and
-    **never** a panic.
+  * **Header rejection:** truncated header (at every length below 22), bad magic, `UnsupportedVersion` in
+    both directions, an unknown `doc_type` byte, `WrongDocType`, and a valid header over a corrupt payload
+    -- each producing the right typed error and **never** a panic.
   * **Dispatch:** a Toile file handed to the Trame importer yields `WrongDocType { found: Toile }` and is
     accepted by the Toile importer unchanged.
   * **Non-destructive failure (I3):** after every error path, the input buffer is unmodified.
@@ -287,12 +320,17 @@ Two obligations follow, and neither is optional:
 > **`ARCH P8` is a hard prerequisite of `DOCFILE P1`.** Container versioning alone would ship files whose
 > payloads have no migration story, and a file on a user's disk has unbounded age.
 
-### `DOCFILE P0` — Container  `[ ]`
-* `[ ]` Shared header helper in `ambre-core`: layout, `AmbreHeader`, `DocFileError`, writer rule.
-* `[ ]` `migrate_ambre` harness with the version registry, exercised via a synthetic step.
-* `[ ]` `export_ambre_plaintext` / `import_ambre_plaintext` wired for Trame and Toile (Prose and Murmure
+### `DOCFILE P0` — Container  `[x]`
+* `[x]` Shared header helper in `ambre-core`: layout, `AmbreHeader`, `DocFileError`, writer rule
+  (`ambre-core/src/docfile.rs`).
+* `[x]` `migrate_ambre` harness with the version registry, exercised via a synthetic step. The registry is
+  empty at `0x01` -- nothing precedes the initial layout -- so the walk it drives is proven by a synthetic
+  two-row registry: adding a real row is then the whole change.
+* `[x]` `export_ambre_plaintext` / `import_ambre_plaintext` wired for Trame and Toile (Prose and Murmure
   join with their engines).
-* `[ ]` **Belt:** round-trip identity, full header rejection set, dispatch, non-destructive failure.
+* `[x]` **Belt:** round-trip identity, full header rejection set, dispatch, non-destructive failure. The
+  cross-app dispatch case lives in `ambre-logic` (`tests/docfile_dispatch.rs`), the first crate that links
+  both engines, with a real file from each app rather than a hand-assembled header.
 
 ### `DOCFILE P1` — User-facing export/import  `[ ]`
 * `[ ]` Chrome: export to file (download) and import from file (picker), app-agnostic, routed by `doc_type`.

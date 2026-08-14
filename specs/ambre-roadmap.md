@@ -226,7 +226,7 @@ the fixture loader **is** the production importer: neither is finishable without
 > commitment, stronger than a server-side document because it is beyond our reach to migrate.
 
 Stories:
-- `[ ]` `DOCFILE P0` — the shared `.ambre` header helper in `ambre-core` (layout, `AmbreHeader`,
+- `[x]` `DOCFILE P0` — the shared `.ambre` header helper in `ambre-core` (layout, `AmbreHeader`,
   `DocFileError`, writer rule), the `migrate_ambre` harness and version registry, and the
   `export_ambre_plaintext` / `import_ambre_plaintext` pair wired for Trame and Toile. **Belt:** round-trip
   identity, full header rejection set, cross-app dispatch, non-destructive failure.

@@ -43,6 +43,10 @@ web-sys             = { workspace = true, features = [
 # Host tests craft a tiny PNG to drive a real Toile media import through the
 # dispatcher (service-plane routing, `toile-interop §5`).
 image = { workspace = true }
+# The cross-app `.ambre` dispatch belt (`docfile §4`): `DocType` / `Uuid` and the
+# container error taxonomy, plus the geometry the Toile command carries.
+ambre-core = { path = "../ambre-core" }
+kurbo = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
