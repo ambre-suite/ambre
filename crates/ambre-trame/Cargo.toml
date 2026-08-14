@@ -9,6 +9,9 @@ tracing  = { workspace = true }
 
 # Logic side (Logic thread): TrameState, CRDT / formula engine.
 ambre-bus = { path = "../ambre-bus" }
+# `DocType` / `Uuid` and the shared `.ambre` container header (`docfile §2`):
+# Trame supplies the payload, never its own header variant.
+ambre-core = { path = "../ambre-core" }
 loro      = { workspace = true }
 petgraph  = { workspace = true }
 nom       = { workspace = true }

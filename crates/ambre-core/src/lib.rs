@@ -7,12 +7,14 @@
 //! - [`PublicKey`]: wrapper `[u8; 32]` for Ed25519 or X25519
 //! - [`Version`]: version byte for serialization
 //! - [`Error`]: core error types
+//! - [`docfile`]: the `.ambre` container header, shared by every app
 
 // No hand-written `unsafe` in this crate (constitution pillar). Any future
 // `unsafe` block breaks the build rather than silently landing.
 #![forbid(unsafe_code)]
 
 pub mod doc_type;
+pub mod docfile;
 pub mod error;
 pub mod id;
 pub mod public_key;
@@ -22,6 +24,10 @@ pub mod version;
 
 // Re‑export the main types for convenient use.
 pub use doc_type::DocType;
+pub use docfile::{
+    AMBRE_MAGIC, AMBRE_VERSION, AmbreHeader, DocFileError, HEADER_LEN, migrate_ambre,
+    read_ambre_plaintext, read_ambre_plaintext_as, write_ambre_plaintext,
+};
 pub use error::{DocTypeError, Error, PublicKeyError, UuidError, VersionError};
 pub use id::{ChannelId, DocumentId, MeetingId, SnapshotId, UserId};
 pub use public_key::PublicKey;

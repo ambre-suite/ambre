@@ -20,6 +20,9 @@ use kurbo::{BezPath, Rect};
 use crate::logic::command::ToileCommand;
 use crate::logic::model::{Anchor, ElementKind, ElementStyle, EndCaps, PathType};
 
+/// The native `.ambre` container (`ambre-spec-docfile.md`). Lossless, so it sits
+/// apart from the converters here: no `ImportReport`, no warning list.
+pub mod docfile;
 pub mod limits;
 pub mod media;
 #[cfg(feature = "pdf")]

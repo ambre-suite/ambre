@@ -273,11 +273,13 @@ impl Default for TrameState {
 //   - sort       : single-column range/sheet sort;
 //   - filters    : shared filter apply / clear / recompute;
 //   - styles     : cell formatting;
-//   - sync       : CRDT delta flush, remote apply, snapshot import/export.
+//   - sync       : CRDT delta flush, remote apply, snapshot import/export;
+//   - docfile    : the native `.ambre` container, Trame side (`docfile §2.B`).
 // -----------------------------------------------------------------------------
 mod cells;
 mod clipboard;
 mod commands;
+pub mod docfile;
 mod fill;
 mod filters;
 mod find;

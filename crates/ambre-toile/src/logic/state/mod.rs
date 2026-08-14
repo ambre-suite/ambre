@@ -22,6 +22,7 @@
 //! - [`connectors`] -- connector lifecycle and queries (§5)
 //! - [`clipboard`] -- copy / paste / duplicate (§8 ter)
 //! - [`import`] -- atomic foreign-file import + media map seeding (`toile-interop`)
+//! - [`docfile`] -- native `.ambre` export / import (`ambre-spec-docfile.md` §2.B)
 //! - [`caches`] -- derived `bounds` / index / `layers` maintenance (§1)
 //! - [`derive`] -- read-only `DisplayViewport` derivation (§9)
 //! - [`codec`] -- pure geometry / (de)serialization helpers
@@ -33,6 +34,7 @@ mod clipboard;
 mod codec;
 mod connectors;
 mod derive;
+mod docfile;
 mod elements;
 mod find;
 mod groups;

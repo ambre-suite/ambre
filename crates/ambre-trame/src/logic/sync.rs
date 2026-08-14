@@ -132,7 +132,7 @@ impl TrameState {
     /// `DataReset` (+ sheet list, style state, conflicts) the UI needs to repaint.
     /// Shared tail of the single-delta [`import_and_reseed`] and the batched
     /// [`apply_remote_batch`] / quarantine-release paths.
-    fn reseed_after_merge(&mut self, origin: &str) -> Vec<TrameEvent> {
+    pub(super) fn reseed_after_merge(&mut self, origin: &str) -> Vec<TrameEvent> {
         // Rebuild the position <-> id cache first: the merged doc may carry rows
         // or columns this cache does not yet know about, and both the engine
         // reseed and the formatting reseed below resolve cell keys through it.
