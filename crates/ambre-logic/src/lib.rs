@@ -35,6 +35,14 @@ pub mod persistence;
 mod data;
 mod dispatch;
 
+/// Document-fixture loader, registry and driver (`ambre-spec-fixtures.md` §2.B).
+///
+/// Fixture code (I4): behind the non-default `fixtures` feature, because this
+/// crate **does** ship to wasm. `DocState::import_snapshot` / `export_snapshot`
+/// are the ungated production exceptions and live in this file, not here.
+#[cfg(feature = "fixtures")]
+pub mod fixtures;
+
 use ambre_bus::{
     AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent, RequestId, RestCommand,
     RestEvent, Role, SyncCommand, UiEvent, UserId,
@@ -52,7 +60,11 @@ use ambre_trame::TrameState;
 /// A closed sum mirroring [`AppCommand`] / [`AppEvent`]: the dispatcher matches
 /// the `(DocState, AppCommand)` pair to route a typed command to the right
 /// document model — no trait object, no downcast.
-enum DocState {
+///
+/// `pub` since `ambre-spec-fixtures.md` §2.B: the fixture loader hands one back
+/// and the round-trip belt of §4 quantifies over its variants, neither of which
+/// a crate-private enum allows.
+pub enum DocState {
     // Boxed: the per-document states differ widely in size (a `TrameState` is
     // several KB, a `ToileState` far smaller), so a bare enum would size every
     // slot to the largest variant. One heap indirection per open document is
@@ -62,11 +74,22 @@ enum DocState {
     // Future: Prose(ProseState), Murmure(MurmureState), …
 }
 
+/// The variant, never the contents. Neither `TrameState` nor `ToileState` is
+/// `Debug` — both hold a whole `LoroDoc` and printing one would dump a document
+/// into a log line, which the zero-knowledge posture rules out. What a caller
+/// actually wants here is which engine it is holding, which is what an error
+/// message (`FixtureError`, the dispatcher's mismatch warning) needs.
+impl std::fmt::Debug for DocState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DocState::{:?}", self.doc_type())
+    }
+}
+
 impl DocState {
     /// Build the state for a freshly-opened document of `doc_type`.
     ///
     /// Returns `None` for document types whose logic is not yet implemented.
-    fn new(doc_type: DocType) -> Option<Self> {
+    pub fn new(doc_type: DocType) -> Option<Self> {
         match doc_type {
             DocType::Trame => Some(DocState::Trame(Box::new(TrameState::new()))),
             DocType::Toile => Some(DocState::Toile(Box::new(ToileState::new()))),
@@ -77,6 +100,55 @@ impl DocState {
                 );
                 None
             }
+        }
+    }
+
+    /// The document's `doc_type`, recovered from the live variant. The inverse of
+    /// [`new`](Self::new), and what the fixture driver writes into a manifest.
+    pub fn doc_type(&self) -> DocType {
+        match self {
+            DocState::Trame(_) => DocType::Trame,
+            DocState::Toile(_) => DocType::Toile,
+        }
+    }
+
+    /// Load a full Loro snapshot into this state, returning the display events
+    /// the app emits.
+    ///
+    /// **Production code, ungated** (`fixtures §I4`): `ambre-logic` ships to
+    /// wasm, and this is the enum-level entry point a local restore goes through.
+    /// Its Toile arm is why `ToileState::import_snapshot` is ungated too --
+    /// gating that would make an ordinary client build fail to compile here.
+    ///
+    /// Lifted to the enum because a loader cannot address two engines that spell
+    /// the same operation differently (`TrameState::import_snapshot` versus, up
+    /// to this phase, `ToileState::apply_remote`).
+    pub fn import_snapshot(&mut self, payload: &[u8]) -> Vec<AppEvent> {
+        match self {
+            DocState::Trame(state) => state
+                .import_snapshot(payload)
+                .into_iter()
+                .map(AppEvent::Trame)
+                .collect(),
+            DocState::Toile(state) => state
+                .import_snapshot(payload)
+                .into_iter()
+                .map(AppEvent::Toile)
+                .collect(),
+        }
+    }
+
+    /// Export this state's full Loro snapshot.
+    ///
+    /// **Production code, ungated** (`fixtures §I4`), and the other half of the
+    /// round trip §4 asserts on every variant.
+    /// [`LogicState::export_snapshot`] cannot serve that belt: it takes a
+    /// `DocumentId` and needs a live registry entry, where the belt quantifies
+    /// over a bare `DocState`.
+    pub fn export_snapshot(&self) -> Vec<u8> {
+        match self {
+            DocState::Trame(state) => state.export_snapshot(),
+            DocState::Toile(state) => state.export_snapshot(),
         }
     }
 

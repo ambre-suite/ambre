@@ -37,6 +37,10 @@ mod derive;
 mod docfile;
 mod elements;
 mod find;
+/// The per-app half of `shape_of` / `canonical_dump` (`fixtures §2.B`). Fixture
+/// code (I4): behind the non-default `fixtures` feature, never in a client build.
+#[cfg(feature = "fixtures")]
+mod fixtures;
 mod groups;
 mod import;
 mod presence;
@@ -143,7 +147,45 @@ impl Default for ToileState {
 
 impl ToileState {
     pub fn new() -> Self {
+        Self::from_doc(LoroDoc::new())
+    }
+
+    /// A board whose CRDT identity and commit clock are **pinned**, so the same
+    /// command sequence produces the same bytes twice (`fixtures §I1`).
+    ///
+    /// Two of the three entropy sources of a Toile document are closed here; the
+    /// third, `document_id`, belongs to the caller and is supplied to
+    /// [`export_ambre_plaintext`](Self::export_ambre_plaintext).
+    ///
+    /// * **`PeerID`** -- `LoroDoc::new()` draws one at random, and
+    ///   [`peer`](Self::peer) is cached at construction and minted into every
+    ///   [`ElementId`] / [`ConnectorId`] (§2.A), so an unpinned peer changes the
+    ///   board's *content*, not merely its encoding.
+    /// * **Commit timestamps** -- Loro records one per commit unless told not to.
+    ///
+    /// Set before the board-scaffolding commit of [`new`](Self::new), so that op
+    /// is attributed to `peer` like every op after it.
+    ///
+    /// **Never for a live document.** Two concurrent writers sharing a `PeerID`
+    /// mint conflicting `OpID`s and corrupt the history; this exists for
+    /// single-owner, offline, host-side reproduction (a fixture generator, a
+    /// deterministic test). The client path is [`new`](Self::new).
+    pub fn with_peer(peer: u64) -> Self {
         let doc = LoroDoc::new();
+        // `set_peer_id` before any op: it is the peer the board scaffolding is
+        // attributed to, and every minted element id captures it.
+        doc.set_peer_id(peer)
+            .expect("a fresh LoroDoc accepts a peer id");
+        // No wall clock in the ops: a recorded timestamp would differ between two
+        // runs of the same generator and defeat the byte diff of `fixtures §4`.
+        doc.set_record_timestamp(false);
+        Self::from_doc(doc)
+    }
+
+    /// Shared body of [`new`](Self::new) and [`with_peer`](Self::with_peer): the
+    /// board scaffolding and every derived cache, over a `LoroDoc` the caller has
+    /// already configured.
+    fn from_doc(doc: LoroDoc) -> Self {
         // Board metadata is scaffolding; commit it before any user edit.
         let board = doc.get_map(BOARD);
         let _ = board.insert("bg_color", 0xFF1E_1E1Eu32 as i64);
@@ -339,6 +381,24 @@ impl ToileState {
     /// Full CRDT snapshot for local persistence / compaction / SnapshotNeeded.
     pub fn export_snapshot(&self) -> Vec<u8> {
         self.doc.export(ExportMode::Snapshot).unwrap_or_default()
+    }
+
+    /// Import a full CRDT snapshot (local restore, or a fixture loaded through
+    /// the production importer) and return the display events the UI needs.
+    ///
+    /// The counterpart of [`export_snapshot`](Self::export_snapshot), and the
+    /// Toile half of `DocState::import_snapshot` -- **production code, ungated**
+    /// (`fixtures §I4`): the enum method dispatches here for the Toile variant,
+    /// so putting this behind the `fixtures` feature would make an ordinary
+    /// client build fail to compile and take Toile's local restore with it.
+    ///
+    /// Loro's `import` ingests snapshots and incremental updates alike, so this
+    /// is [`apply_remote`](Self::apply_remote)'s body under the name a loader can
+    /// address uniformly across apps -- which is the whole reason it exists:
+    /// `TrameState::import_snapshot` was already spelled that way, `ToileState`
+    /// spelled it `apply_remote`, and a loader cannot dispatch on two names.
+    pub fn import_snapshot(&mut self, payload: &[u8]) -> Vec<ToileEvent> {
+        self.apply_remote(payload)
     }
 
     // -- undo / redo (§8 bis) --------------------------------------------------

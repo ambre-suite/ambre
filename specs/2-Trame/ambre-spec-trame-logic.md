@@ -83,6 +83,31 @@ within a peer's session; once minted, a uid lives in the CRDT and never changes.
 "{row_peer:016x}_{row_ctr:08x}:{col_peer:016x}_{col_ctr:08x}"
 ```
 
+#### The pinned-`PeerID` constructor (`TrameState::with_peer`)
+
+`TrameState::new()` builds over a `LoroDoc::new()`, which draws a **random** `PeerID`. Because every
+uid above carries that peer into the document's *content* — row and column uids, cell keys, sheet ids
+(§2.D) — the same command sequence run twice produces two different documents. That is correct for a
+live client and fatal for a reproducible one, so the engine exposes a second constructor:
+
+```rust
+impl TrameState {
+    /// A workbook whose `PeerID` and commit clock are pinned: `set_peer_id(peer)`
+    /// and `set_record_timestamp(false)`, both applied before the implicit-sheet
+    /// scaffolding commit so that op is attributed to `peer` too.
+    pub fn with_peer(peer: u64) -> Self;
+}
+```
+
+**Not for a live document.** Two concurrent writers sharing a `PeerID` mint colliding `OpID`s and
+corrupt the history — the one hazard §2.A's minting argument rests on avoiding. This constructor is
+for single-owner, offline, host-side reproduction: a fixture generator
+(`ambre-spec-fixtures.md` I1) or a deterministic test. Client code calls `new()`.
+
+Ungated (no Cargo feature): it is engine API documented here, and the determinism belt that asserts
+on it runs in the default host tier. The fixture *machinery* that consumes it is gated
+(`fixtures §I4`).
+
 ### A bis. Dense over used range — reconciliation with the virtual 100k grid
 
 The grid is virtual at `TOTAL_ROWS = 100_000`. We do **not** materialize 100k list elements. The

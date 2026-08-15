@@ -27,9 +27,26 @@ lint:
 # The server is excluded from `default-members` (native target), so it is
 # named explicitly with a second invocation.
 
-# native tier: workspace logic + the server on the native x86_64 target.
+# The fixture machinery sits behind a non-default `fixtures` feature
+# (`ambre-spec-fixtures.md` §5: `ambre-logic` ships to wasm, so the loader and
+# driver must not be reachable from a client build). `cargo test --workspace`
+# passes no `--features`, so it cannot reach that code at all -- hence the extra
+# line. `FIXTURES P1` replaces it with `just fixtures-check`, which adds the
+# golden drift gate on top of the same belts.
+#
+# **One invocation, and only the two crates that own gated tests.**
+# `--features ambre-logic/fixtures` propagates to `ambre-core` / `ambre-trame` /
+# `ambre-toile` (each declares the forward), so their gated code is compiled and
+# type-checked as a dependency here. Naming `ambre-trame` / `ambre-toile` as
+# packages too would additionally rebuild their whole test harnesses under a
+# second feature set for no coverage -- every gated test lives in `ambre-core`
+# and `ambre-logic` -- and this job already carries the workspace build plus the
+# native server stack on one runner disk.
+
+# native tier: workspace logic + the fixture belts + the server, on native x86_64.
 test-native:
     cargo test --workspace
+    cargo test -p ambre-core -p ambre-logic --features ambre-logic/fixtures
     cargo test -p ambre-server
 
 # The `db` feature flips the `cfg_attr(not(feature = "db"), ignore = ...)` gate

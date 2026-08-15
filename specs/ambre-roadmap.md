@@ -230,7 +230,7 @@ Stories:
   `DocFileError`, writer rule), the `migrate_ambre` harness and version registry, and the
   `export_ambre_plaintext` / `import_ambre_plaintext` pair wired for Trame and Toile. **Belt:** round-trip
   identity, full header rejection set, cross-app dispatch, non-destructive failure.
-- `[ ]` `FIXTURES P0` — the pinned-`PeerID` constructor seam on `TrameState` / `ToileState` (a public API
+- `[x]` `FIXTURES P0` — the pinned-`PeerID` constructor seam on `TrameState` / `ToileState` (a public API
   change in both, and the prerequisite for every reproducible artifact); the `fixtures` feature; `FixtureGen`
   + registry + manifest + digest, the types in `ambre-core` so the orphan rule permits app-side impls;
   `ToileState::import_snapshot`, `DocState::import_snapshot` and `export_snapshot` lifted to the enum,
@@ -238,7 +238,11 @@ Stories:
   all three entropy sources (`PeerID`, commit clock, `document_id`), with the documented fallback to a
   semantic digest. **Gated on `DOCFILE P0`**, soft-gated on `ARCH P8` (`schema_version` reads 0 until then).
   **Belt:** determinism both directions, export/import round trip on every `DocState` variant, manifest
-  integrity, loader rejection.
+  integrity, loader rejection. *The determinism harness passed on every axis, cross-process included, so the
+  byte diff stands and the semantic-digest fallback stays unadopted. The registry ships empty — `P1` writes
+  the generators — and the driver takes it as a parameter so the belt exercises the walk meanwhile. Scale is
+  asserted at 5 000 cells rather than 100 000, which moves to `P2`'s release-profile bench corpus; see
+  `fixtures §7` for that call.*
 - `[ ]` `FIXTURES P1` — the correctness generators (deep formula DAG; cross-sheet references with merges and
   active filters; Toile board with connectors and nested groups; post-convergence 2-peer state) and the
   interop export sources; `just fixtures` / `fixtures-check` / `fixtures-freeze` over the `fixtures/current/`
