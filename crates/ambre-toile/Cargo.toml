@@ -7,6 +7,11 @@ description = "Whiteboard & presentations application for Ambre — infinite can
 [features]
 # PDF export (toile-interop §3.A). Off by default; the Logic thread turns it on.
 pdf = ["dep:ambre-pdf", "dep:krilla"]
+# Document-fixture machinery (`ambre-spec-fixtures.md` §5). Non-default and
+# host-only. Explicitly forwards `ambre-core/fixtures`: a Cargo feature never
+# enables its dependency's feature implicitly, and the gated code names
+# `ambre_core::FixtureShape`.
+fixtures = ["ambre-core/fixtures"]
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }

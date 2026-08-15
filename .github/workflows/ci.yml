@@ -59,6 +59,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # This job builds the workspace three times over into one `target/`: the
+      # default feature set, then the `fixtures` one (non-default by design --
+      # `ambre-spec-fixtures.md` §5 keeps the fixture machinery out of any client
+      # build, so `cargo test --workspace` cannot reach it), then the native
+      # server stack (tokio / sqlx / aws-sdk-s3), which is excluded from
+      # `default-members` and pulls a dependency tree of its own. That overflowed
+      # the runner's free space at the last step -- `No space left on device`
+      # while archiving `libtokio.rlib`, with every test up to that point green.
+      #
+      # The hosted image ships ~30 GB of toolchains no Rust job here touches.
+      # Dropping them buys back an order of magnitude more than the build needs,
+      # and the `df` leaves the real figure in the log so the next squeeze is
+      # diagnosable rather than guessed at.
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
       # fontconfig dev headers: the font stack (fontique/parley via
       # ambre-draw/ambre-canvas) links the system fontconfig at build time.
       - name: System deps

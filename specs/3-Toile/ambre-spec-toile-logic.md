@@ -142,6 +142,52 @@ a frame child list, a layer entry) keeps resolving.
 > position-derived key would be invalidated by every reorder. Owning the id as a value (never a Loro op id,
 > which `LoroMovableList::mov` reassigns — see Trame `logic §2.A`) makes it reorder-invariant.
 
+#### The pinned-`PeerID` constructor (`ToileState::with_peer`)
+
+`ToileState::new()` builds over a `LoroDoc::new()`, which draws a **random** `PeerID`, and caches it
+in `peer` at construction. Because every `ElementId` / `ConnectorId` above is minted from that peer,
+it is part of the board's *content*, not merely its encoding: the same command sequence run twice
+produces two different boards. That is correct for a live client and fatal for a reproducible one, so
+the engine exposes a second constructor:
+
+```rust
+impl ToileState {
+    /// A board whose `PeerID` and commit clock are pinned: `set_peer_id(peer)`
+    /// and `set_record_timestamp(false)`, both applied before the board-metadata
+    /// scaffolding commit so that op is attributed to `peer` too.
+    pub fn with_peer(peer: u64) -> Self;
+}
+```
+
+**Not for a live document.** Two concurrent writers sharing a `PeerID` mint colliding ids — the one
+hazard this section's minting argument rests on avoiding. This constructor is for single-owner,
+offline, host-side reproduction: a fixture generator (`ambre-spec-fixtures.md` I1) or a
+deterministic test. Client code calls `new()`.
+
+Ungated (no Cargo feature): it is engine API documented here, and the determinism belt that asserts
+on it runs in the default host tier. The fixture *machinery* that consumes it is gated
+(`fixtures §I4`).
+
+#### `import_snapshot`, the named counterpart of `export_snapshot`
+
+Restoring a full snapshot went through `apply_remote` while Trame spelled the same operation
+`import_snapshot`; a loader quantifying over document types cannot dispatch on two names. The engine
+therefore exposes:
+
+```rust
+impl ToileState {
+    /// Import a full Loro snapshot (local restore, or a fixture through the
+    /// production importer) and return the display events the UI needs.
+    /// `apply_remote`'s body under the name every engine shares.
+    pub fn import_snapshot(&mut self, payload: &[u8]) -> Vec<ToileEvent>;
+}
+```
+
+Loro's `import` ingests snapshots and incremental updates alike, so the two are one path; the second
+name is what makes `DocState::import_snapshot` (`fixtures §2.B`) writable. **Ungated production
+code** (`fixtures §I4`): the enum method dispatches here for the Toile variant, so gating it would
+break an ordinary client build and take local restore with it.
+
 ### B. CRDT Schema
 
 ```

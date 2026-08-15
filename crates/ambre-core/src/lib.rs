@@ -8,6 +8,8 @@
 //! - [`Version`]: version byte for serialization
 //! - [`Error`]: core error types
 //! - [`docfile`]: the `.ambre` container header, shared by every app
+//! - [`fixtures`] (feature `fixtures`, host-only): the document-fixture
+//!   generator contract and its sidecar manifest
 
 // No hand-written `unsafe` in this crate (constitution pillar). Any future
 // `unsafe` block breaks the build rather than silently landing.
@@ -16,6 +18,10 @@
 pub mod doc_type;
 pub mod docfile;
 pub mod error;
+/// Fixture machinery (`ambre-spec-fixtures.md`). Behind the non-default
+/// `fixtures` feature so no client build can reach it (I4).
+#[cfg(feature = "fixtures")]
+pub mod fixtures;
 pub mod id;
 pub mod public_key;
 pub mod role;
@@ -29,6 +35,8 @@ pub use docfile::{
     read_ambre_plaintext, read_ambre_plaintext_as, write_ambre_plaintext,
 };
 pub use error::{DocTypeError, Error, PublicKeyError, UuidError, VersionError};
+#[cfg(feature = "fixtures")]
+pub use fixtures::{FixtureGen, FixtureManifest, FixtureShape, ShapeBody, seeded_document_id};
 pub use id::{ChannelId, DocumentId, MeetingId, SnapshotId, UserId};
 pub use public_key::PublicKey;
 pub use role::Role;

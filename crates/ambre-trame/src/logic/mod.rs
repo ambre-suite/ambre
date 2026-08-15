@@ -209,7 +209,46 @@ pub struct TrameState {
 
 impl TrameState {
     pub fn new() -> Self {
+        Self::from_doc(LoroDoc::new())
+    }
+
+    /// A workbook whose CRDT identity and commit clock are **pinned**, so the
+    /// same command sequence produces the same bytes twice (`fixtures §I1`).
+    ///
+    /// Two of the three entropy sources of a Trame document are closed here; the
+    /// third, `document_id`, belongs to the caller and is supplied to
+    /// [`export_ambre_plaintext`](Self::export_ambre_plaintext).
+    ///
+    /// * **`PeerID`** -- `LoroDoc::new()` draws one at random, and Trame builds
+    ///   sheet ids from it (`format!("{:016x}_{:08x}", doc.peer_id(), counter)`
+    ///   in `sheets.rs` / `interop.rs`), so an unpinned peer changes
+    ///   the document's *content*, not merely its encoding. That is also why a
+    ///   semantic digest is no escape hatch for it.
+    /// * **Commit timestamps** -- Loro records one per commit unless told not to.
+    ///
+    /// Set before the scaffolding commit of [`new`](Self::new), so the implicit
+    /// sheet's own op is attributed to `peer` like every op after it.
+    ///
+    /// **Never for a live document.** Two concurrent writers sharing a `PeerID`
+    /// mint conflicting `OpID`s and corrupt the history; this exists for
+    /// single-owner, offline, host-side reproduction (a fixture generator, a
+    /// deterministic test). The client path is [`new`](Self::new).
+    pub fn with_peer(peer: u64) -> Self {
         let doc = LoroDoc::new();
+        // `set_peer_id` before any op: it is the peer the scaffolding commit is
+        // attributed to, and Trame's sheet ids capture it.
+        doc.set_peer_id(peer)
+            .expect("a fresh LoroDoc accepts a peer id");
+        // No wall clock in the ops: a recorded timestamp would differ between two
+        // runs of the same generator and defeat the byte diff of `fixtures §4`.
+        doc.set_record_timestamp(false);
+        Self::from_doc(doc)
+    }
+
+    /// Shared body of [`new`](Self::new) and [`with_peer`](Self::with_peer): the
+    /// document scaffolding and every derived cache, over a `LoroDoc` the caller
+    /// has already configured.
+    fn from_doc(doc: LoroDoc) -> Self {
         // Register the implicit default sheet's name (idempotent map insert, so
         // a peer that also "creates" s0 converges to the same entry).
         let _ = doc.get_map(SHEETS_MAP).insert(DEFAULT_SHEET, "Sheet1");
@@ -283,6 +322,10 @@ pub mod docfile;
 mod fill;
 mod filters;
 mod find;
+/// The per-app half of `shape_of` / `canonical_dump` (`fixtures §2.B`). Fixture
+/// code (I4): behind the non-default `fixtures` feature, never in a client build.
+#[cfg(feature = "fixtures")]
+mod fixtures;
 mod helpers;
 mod interop;
 mod merges;

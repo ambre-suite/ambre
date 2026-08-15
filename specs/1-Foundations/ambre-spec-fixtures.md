@@ -109,6 +109,14 @@ signal it is reaching outside the engine instead of driving it.
   `ToileState::import_snapshot`. The last is not optional -- `DocState::import_snapshot` dispatches to it for
   the Toile variant, so gating it would make an ordinary client build fail to compile, taking Toile's local
   restore with it. Everything else is **fixture code** and sits behind the `fixtures` feature (§5).
+
+  **The two determinism seams are on the production side of that line**, and deliberately:
+  `TrameState::with_peer` / `ToileState::with_peer` are engine constructors, documented in
+  `trame-logic §2` / `toile-logic §2` rather than here, and the belt that asserts on them is the one
+  §4 makes P0's Definition of Done. That belt has to run under a bare `cargo test --workspace` -- the
+  CI `test-native` job passes no `--features` -- so gating the seams would put P0's own gate out of
+  CI's reach. They cost the client nothing: `ambre-app` never calls them, and neither pulls in a
+  fixture type.
 * **I5 — No `unsafe`** in our code, per the Security pillar.
 
 ---
@@ -293,9 +301,19 @@ impl DocState {
 fn shape_of(state: &DocState) -> FixtureShape;
 
 /// Load a committed fixture by name -- the entry point every consumer uses.
-/// Resolves `<corpus root>/current/<name>.ambre`, then: `import_ambre_plaintext`
-/// for the header, `DocState::new(doc_type)` for the empty state,
-/// `import_snapshot` to fill it.
+/// Resolves `<corpus root>/current/<name>.ambre`, then: `read_ambre_plaintext`
+/// for the header, `DocState::new(doc_type)` for the empty state, and the
+/// **app's own** `import_ambre_plaintext` to fill it.
+///
+/// That last hop is the app importer, not `DocState::import_snapshot`, and the
+/// difference is load-bearing: `import_snapshot` returns display events, and the
+/// two engines disagree about how a refused payload appears in them -- Trame
+/// returns none, Toile returns an error *event*. A loader reading rejection off
+/// that vector would accept a corrupt Toile artifact and hand back an empty
+/// board. The app importer returns a typed `DocFileError::PayloadRejected`
+/// instead, which is carried out verbatim. `DocState::import_snapshot` stays
+/// what it was introduced for: the enum-level restore path, and the half of the
+/// round trip §4 quantifies over.
 ///
 /// The corpus root is resolved from `CARGO_MANIFEST_DIR` walked up to the
 /// workspace root, never from the process working directory: `cargo test` runs
@@ -375,9 +393,10 @@ has no method that could.
    .ambre file + FixtureManifest  ->  disk
         |
         |  load_fixture(name):
-        |    import_ambre_plaintext()      (production importer)
+        |    read_ambre_plaintext()        (the header, type-agnostic)
         |    DocState::new(doc_type)
-        |    DocState::import_snapshot()
+        |    <app>::import_ambre_plaintext (production importer, typed payload
+        |                                   rejection -- see load_fixture above)
         v
    a test or a benchmark, starting from a known state
 
@@ -495,6 +514,17 @@ this component introduces no primitive.
   * **Round trip:** `export_snapshot` -> `import_snapshot` -> `export_snapshot` is stable, on **every**
     `DocState` variant -- which needs both halves lifted to the enum (§2.B), not just the new
     `ToileState::import_snapshot`.
+
+    **"Stable" is a fixed point, not byte equality with the source**, and the distinction is not a
+    weakening -- byte equality is false here for two reasons that are both correct behaviour.
+    `DocState::new` commits its own scaffolding (Trame's implicit sheet, Toile's board metadata) under
+    its own fresh peer *before* the import, so a restored document legitimately carries an op the
+    source never had; and both engines materialize their derived Loro containers lazily, on the first
+    read of a restored document, so the first re-export names containers the source snapshot did not.
+    Neither is a lost round trip. What must hold -- and what a regression in an import path would
+    break -- is that **once a document has been through the cycle, going through it again changes
+    nothing**: import a document's own exported bytes back into the state that produced them, and the
+    next export is identical.
   * **Loader rejection**, asserted on `import_ambre_plaintext` directly, not through `load_fixture`: the
     latter takes a corpus name and has no way to be handed byte soup. `load_fixture` gets its own, smaller
     belt -- missing name, unreadable root, and a `DocFileError` arriving intact as `FixtureError::Container`
@@ -691,7 +721,7 @@ this component introduces no primitive.
 > the change visible. That argues for building them **before** the consolidation: the drift gate is
 > precisely the tool that makes a schema migration reviewable.
 
-### `FIXTURES P0` — Core  `[ ]`
+### `FIXTURES P0` — Core  `[x]`
 > **Gated on `DOCFILE P0`.** `FixtureGen::build` returns plaintext `.ambre` bytes (§2.B), so it cannot be
 > written before `export_ambre_plaintext` exists; the loader-rejection belt below asserts on `DocFileError`
 > variants that `DOCFILE P0` defines. The gate is real and one-directional -- `DOCFILE P0` depends on nothing
@@ -707,24 +737,53 @@ this component introduces no primitive.
 > every committed manifest still says 0. Regenerating is the whole fix -- but it has to be *in* that commit,
 > or the drift gate goes red across the entire corpus for a reason no one will connect to `ARCH P8`.
 
-* `[ ]` **Determinism seams in the engines (I1):** a constructor taking a pinned `PeerID` on `TrameState`
+* `[x]` **Determinism seams in the engines (I1):** a constructor taking a pinned `PeerID` on `TrameState`
   and `ToileState`, plus a pinned commit clock. Leads the phase -- nothing else here is reproducible without
   it -- and carries the matching update to `trame-logic §2` / `toile-logic §2`, which own those constructors.
-* `[ ]` The `fixtures` feature in `ambre-core`, `ambre-trame`, `ambre-toile` and `ambre-logic`, plus
+  *Done: `TrameState::with_peer` / `ToileState::with_peer`, both `set_peer_id` + `set_record_timestamp(false)`
+  before the scaffolding commit, both documented in the engine specs, both ungated (I4).*
+* `[x]` The `fixtures` feature in `ambre-core`, `ambre-trame`, `ambre-toile` and `ambre-logic`, plus
   `serde_json` on `ambre-logic` (§1.B). Everything below sits behind it except the two `DocState` methods.
-* `[ ]` `FixtureGen` (with `seed()` and `generator_version()`), `FixtureManifest` / `FixtureShape` and the
+  *Done, with two additions §1.B did not anticipate: `ambre-crypto` on `ambre-logic` (the manifest digest,
+  which §1.B's own table already assigned to the driver) and `thiserror` (`FixtureError` wraps `DocFileError`
+  rather than flattening it). Both optional, both pulled in by the feature only. `hex` gains its `serde`
+  feature in `ambre-core`, without which `#[serde(with = "hex")]` does not resolve.*
+* `[x]` `FixtureGen` (with `seed()` and `generator_version()`), `FixtureManifest` / `FixtureShape` and the
   hex-encoded JSON sidecar, **in `ambre-core`** (§2.B); the generator registry and the driver in
-  `ambre-logic`.
-* `[ ]` `ToileState::import_snapshot`; `DocState::import_snapshot` **and `export_snapshot`** lifted to the
+  `ambre-logic`. *Done. The registry is empty until `P1` writes the generators; the driver takes it as a
+  parameter (`generate_into`) so the belt drives the same walk with a synthetic registry meanwhile -- the
+  pattern `docfile §2.A`'s equally-empty migration registry already uses. `ambre-core` also gains
+  `seeded_document_id(seed)`, which I1's third entropy source needs and §2.B named without siting.*
+* `[x]` `ToileState::import_snapshot`; `DocState::import_snapshot` **and `export_snapshot`** lifted to the
   enum -- all three ungated (I4); `shape_of`, `canonical_dump`, `load_fixture` and `FixtureError` behind the
-  feature; `DocState` made public (§2.B).
-* `[ ]` Determinism harness (I1) over the three entropy sources -- `PeerID`, commit clock, `document_id` --
+  feature; `DocState` made public (§2.B). *Done. `shape_of` / `canonical_dump` dispatch in `ambre-logic` over
+  per-app bodies in the app crates, for §6's reason: the code that decodes a schema moves in the same commit
+  as the schema. `DocState` also gains `doc_type()` (the inverse of `new`, which the driver writes into a
+  manifest) and a `Debug` printing the variant only -- neither engine is `Debug`, and dumping a `LoroDoc`
+  into a log line is not something the zero-knowledge posture allows.*
+* `[x]` Determinism harness (I1) over the three entropy sources -- `PeerID`, commit clock, `document_id` --
   extended to the cases the spike left open: 100k-cell scale and the 2-peer merge path. Should either fail,
   the fallback to a semantic digest **also redefines what `fixtures-check` compares** (§2.B leaves that
-  byte-diff as written until then).
-* `[ ]` **Belt:** determinism -- rebuild-identical, plus the test-only generator pair that proves a seed is
+  byte-diff as written until then). *Done, and **neither failed**: the byte diff stands and the semantic
+  fallback stays unadopted. The harness also asserts the **cross-process** half, which is the one that
+  matters (a hash-map-iterating encoder is stable within a run and unstable between runs), by re-execing its
+  own test binary. Two deliberate narrowings: **scale is asserted at 5 000 cells, not 100 000** -- this belt
+  runs on every `cargo test --workspace` and a 100k debug build is tens of seconds, exactly the "corpus
+  developers stop regenerating" failure §5 warns about; the 100k case is `FIXTURES P2`'s benchmark corpus,
+  built in release under `criterion`, and the invariant is reopened there if it breaks. And the 2-peer case
+  exchanges snapshots directly rather than through `MockSyncHandle`, which `P1`'s post-convergence generator
+  brings in.*
+* `[x]` **Belt:** determinism -- rebuild-identical, plus the test-only generator pair that proves a seed is
   actually used (§4); export/import round trip on every `DocState` variant; manifest integrity; loader
-  rejection on `import_ambre_plaintext`, and the smaller `load_fixture` belt beside it.
+  rejection on `import_ambre_plaintext`, and the smaller `load_fixture` belt beside it. *Done, split by gate:
+  `ambre-logic/tests/fixture_determinism.rs` is **ungated** and runs inside `cargo test --workspace`, which
+  is what makes P0's Definition of Done reachable in CI; `ambre-logic/tests/fixtures_corpus.rs` is gated and
+  runs from the one `--features ambre-logic/fixtures` line `test-native` gains (replaced by
+  `just fixtures-check` at `P1`). "Stable" above is now pinned to a **fixed point** rather than left to the
+  reader; §4 carries the definition and the two reasons byte equality with the source is the wrong reading.
+  That second `test-native` line makes the job build the workspace under two feature sets before the native
+  server stack, which overflowed a hosted runner's disk on the first push; the job now frees the image's
+  unused toolchains first, and prints `df` so the next squeeze is diagnosable rather than guessed at.*
 
 ### `FIXTURES P1` — Integration  `[ ]`
 * `[ ]` **Correctness generators** (small, committed): deep formula DAG; cross-sheet references with merges

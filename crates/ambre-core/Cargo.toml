@@ -4,11 +4,25 @@ version = "0.1.0"
 edition = "2024"
 description = "Types fondamentaux d'Ambre (UUID, DocType, PublicKey)"
 
+[features]
+# Document-fixture machinery (`ambre-spec-fixtures.md` §5). Non-default and
+# host-only: `ambre-app` never names it, so no client build can pull the
+# generator surface into wasm. Declared here because `FixtureGen` and the
+# manifest types live in this crate (§2.B -- the orphan rule puts the trait
+# upstream of both app crates), and every downstream crate re-declares
+# `fixtures = ["ambre-core/fixtures"]` because a Cargo feature never enables its
+# dependency's feature implicitly.
+fixtures = []
+
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 uuid = { workspace = true }
-hex = { workspace = true }
+# `serde` feature: the manifest digest is `#[serde(with = "hex")]`, which reads
+# `hex::serialize` / `hex::deserialize` off the crate root (fixtures §2.A). A
+# raw `[u8; 32]` would serialize as 32 JSON integers and defeat the readable
+# diff the sidecar exists for.
+hex = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
 serde_json = { workspace = true }

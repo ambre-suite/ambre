@@ -5,10 +5,39 @@ edition.workspace = true
 license.workspace = true
 description = "Logic thread — typed command dispatch, per-document state registry, viewport computation. Runs as a dedicated thread sharing the WASM heap."
 
+[features]
+# Document-fixture machinery (`ambre-spec-fixtures.md` §5). Non-default and
+# host-only -- this crate ships to wasm, so the gate matters most here: the
+# loader, `shape_of`, `canonical_dump` and the driver are all behind it, while
+# `DocState::import_snapshot` / `export_snapshot` are ungated production code
+# (I4). Every downstream feature is named explicitly: a Cargo feature never
+# enables its dependency's feature implicitly.
+fixtures = [
+    "ambre-core/fixtures",
+    "ambre-trame/fixtures",
+    "ambre-toile/fixtures",
+    "dep:ambre-crypto",
+    "dep:serde_json",
+    "dep:thiserror",
+]
+
 [dependencies]
 ambre-bus       = { path = "../ambre-bus" }
+# `DocType` / `Uuid`, the `.ambre` container error taxonomy (`docfile §2.B`) and,
+# under `fixtures`, the manifest types (`fixtures §2.B`).
+ambre-core      = { path = "../ambre-core" }
 ambre-trame     = { path = "../ambre-trame" }
 ambre-toile     = { path = "../ambre-toile" }
+
+# Fixture-only, host-only (§1.B). `ambre-crypto` supplies `hash::chain_hash` for
+# the manifest digest; `serde_json` encodes the sidecar. `serde_json` is a
+# workspace dependency but was not yet one of this crate's, which is the one new
+# dependency edge `FIXTURES P0` carries.
+ambre-crypto    = { path = "../ambre-crypto", optional = true }
+serde_json      = { workspace = true, optional = true }
+# The corpus error taxonomy (`FixtureError`), which wraps `DocFileError` rather
+# than flattening it into a string.
+thiserror       = { workspace = true, optional = true }
 # UI <-> Logic channels in shared memory. Logic blocks on `flume::Selector`
 # (Atomics-backed, works across the UI/Logic worker boundary).
 flume           = { workspace = true }
@@ -43,9 +72,7 @@ web-sys             = { workspace = true, features = [
 # Host tests craft a tiny PNG to drive a real Toile media import through the
 # dispatcher (service-plane routing, `toile-interop §5`).
 image = { workspace = true }
-# The cross-app `.ambre` dispatch belt (`docfile §4`): `DocType` / `Uuid` and the
-# container error taxonomy, plus the geometry the Toile command carries.
-ambre-core = { path = "../ambre-core" }
+# The geometry the Toile commands of the dispatch belt carry (`docfile §4`).
 kurbo = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
