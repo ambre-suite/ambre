@@ -45,7 +45,7 @@
 | `web-sys` | Browser APIs (Canvas, clipboard, file download) | DOM access from UI thread |
 | `postcard` | Serialization | Only the `ClipboardPayload` (OS clipboard blob); **not** the UI<->Logic hop |
 
-**Invariants:** prefix `TRAME-UI`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4` ("Invariants (normative)"); the cross-spec roll-up is `ambre-spec-testing.md §7`. The table covers the **built** surface. Multi-user cursors (§9), sparklines (§10), charts (§11) and PDF export (§12) have no implementing code -- `ambre-trame` declares neither `krilla` nor `ambre-pdf` -- so they carry no rows yet, per the seeding rule (architecture §4).
+**Invariants:** prefix `TRAME-UI`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4` ("Invariants (normative)"); the cross-spec roll-up is `ambre-spec-testing.md §7`. Rows `001..015` cover the built surface. Rows `016..023` cover multi-user cursors (§9), sparklines (§10), charts (§11) and PDF export (§12), which have no implementing code -- `ambre-trame` declares neither `krilla` nor `ambre-pdf` -- so they carry `Status: unimplemented` and cite the Story that will build them (architecture §4).
 
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
@@ -64,8 +64,16 @@
 | `TRAME-UI-013` | The renderer MUST NOT paint outside the grid region, whatever the canvas size or scroll offset. | §2.A; §4 | `ambre_trame::ui::renderer::tests::draw_cells_strip_skips_when_outside_grid`, `::draw_cells_scroll_strip_base_is_blank_not_pending_grey`, `ambre_trame::ui::grid::tests::group2::grid_bottom_floors_at_header_on_tiny_canvas`, `::header_strip_starts_at_top_of_canvas` | verified |
 | `TRAME-UI-014` | A cell in error MUST be marked visually from its displayed text; there MUST NOT be an `is_error` field on `DisplayCell`. | §2.B note | `ambre_trame::ui::renderer::tests::errored_cell_gets_a_corner_marker`, `::dirty_cell_gets_a_translucent_veil` | verified |
 | `TRAME-UI-015` | Escape MUST cancel an edit in progress without emitting any `TrameCommand`. | §6.C | none. The handler exists (`ui/view/interact.rs`), the absence of an outbound command is asserted nowhere -- and an absence is exactly what a test has to state | unverified |
+| `TRAME-UI-016` | A remote cursor's colour MUST be derived deterministically from its `UserId`, so the same collaborator keeps one colour across peers and reloads. | §9 | not built -- lands with `SYNC P4` / `SRV P1` (Epic `E5`), which supplies the spoof-proof `from_user_id` | unimplemented |
+| `TRAME-UI-017` | A remote cursor MUST be keyed by `UserId`, never by `pub_key` or connection: one collaborator on two devices MUST NOT render as two people. | §9 | not built -- lands with `SYNC P4` / `SRV P1` (Epic `E5`) | unimplemented |
+| `TRAME-UI-018` | A remote peer's `display_name` MUST be treated as cosmetic and self-asserted; it MUST NOT be used for identity or colouring. | §9; `trame-logic §7` | not built -- lands with `SYNC P4` / `SRV P1` (Epic `E5`) | unimplemented |
+| `TRAME-UI-019` | Presence MUST leave no trace in the document: a cursor move MUST NOT produce a CRDT delta nor force a viewport re-derive. | §9 | not built -- lands with `SYNC P4` / `SRV P1` (Epic `E5`) | unimplemented |
+| `TRAME-UI-020` | A sparkline MUST be derived on the UI thread from `DisplayViewport` data alone; it MUST NOT require a second round trip to the Logic thread. | §10 | not built -- lands with §18 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-UI-021` | A chart MUST be clipped to its host cell range and MUST NOT paint outside the grid. | §11 | not built -- lands with §18 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-UI-022` | PDF export MUST reuse the same `DrawSurface` render code as the screen, through `KrillaSurface` in the Logic thread; the UI thread MUST only trigger the download. | §12 | not built -- lands with §18 Phase 2 (Epic `E6`); `TRAME-IO-020` is the same rule seen from the interop side | unimplemented |
+| `TRAME-UI-023` | A PDF export MUST be pure vector: no rasterisation of text or shapes. | §12 "Pure vector" | not built -- lands with §18 Phase 2 (Epic `E6`) | unimplemented |
 
-> **Invariant coverage.** 11 `verified`, 4 `unverified`. The gaps are `TRAME-UI-004`, `-005`, `-015` (implemented rules with no test) and nothing on the four unbuilt sections above.
+> **Invariant coverage.** 11 `verified`, 4 `unverified`, 8 `unimplemented`. The four gaps are `TRAME-UI-004`, `-005`, `-015` and the render-loop pair -- rules that ship in the code today with nothing guarding them, which is the only kind of row that is a risk.
 
 ---
 

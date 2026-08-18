@@ -25,7 +25,7 @@ per-viewer playback local.
 
 ### Invariants
 
-Prefix `TOILE-FEAT`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4`; the cross-spec roll-up is `ambre-spec-testing.md §7`. The table covers the **built** features: presentation (§1), auto-layout (§2), boolean ops (§3), reactions and speaker notes (§4). **Comments (§4.D) carry no rows: the feature does not exist** -- `CreateComment` appears nowhere in the workspace, and the `comments` CRDT is a Phase 2 `[ ]` in §9. Undo granularity is the engine's (`TOILE-014`).
+Prefix `TOILE-FEAT`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4`; the cross-spec roll-up is `ambre-spec-testing.md §7`. Rows `001..010` cover the built features: presentation (§1), auto-layout (§2), boolean ops (§3), reactions and speaker notes (§4.A-C). Rows `011..017` cover comments (§4.D), whose CRDT does not exist -- `CreateComment` appears nowhere in the workspace -- so they carry `Status: unimplemented` and cite the Story that will build them (architecture §4). Undo granularity is the engine's (`TOILE-014`).
 
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
@@ -39,8 +39,15 @@ Prefix `TOILE-FEAT`. Grammar, falsifiability test and status values are normativ
 | `TOILE-FEAT-008` | Concurrent speaker-notes edits MUST converge character by character, and an out-of-range splice MUST be clamped rather than rejected or lost. | §1.D | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge`, `::edit_notes_produces_delta_and_is_undoable`, `::edit_notes_clamps_out_of_range_splice`, `::edit_notes_rejects_non_frame` | verified |
 | `TOILE-FEAT-009` | Concurrent auto-layout spec edits MUST converge by last-writer-wins on the whole spec. | §2 | `ambre_toile::logic::convergence_tests::concurrent_auto_layout_edits_converge`, `::set_auto_layout_add_change_clear`, `::set_auto_layout_rejects_non_frame` | verified |
 | `TOILE-FEAT-010` | A reaction tally MUST skip a deleted target rather than surface a dangling badge. | §4.A | `ambre_toile::logic::convergence_tests::derive_viewport_carries_tally_and_skips_deleted_target`, `::tally_skips_a_deleted_target` | verified |
+| `TOILE-FEAT-011` | Two peers dropping a comment on the same spot MUST mint distinct threads; neither MUST overwrite the other. | §4.D | not built -- lands with §9 Phase 2 (Epic `E4`) | unimplemented |
+| `TOILE-FEAT-012` | Message order in a thread MUST be the `LoroMovableList` order, never the `ts` register: clocks are untrusted. | §4.D | not built -- lands with §9 Phase 2 (Epic `E4`) | unimplemented |
+| `TOILE-FEAT-013` | A message body MUST be a `LoroText`, so a self-edit converges character-wise rather than by whole-string LWW. | §4.D | not built -- lands with §9 Phase 2 (Epic `E4`) | unimplemented |
+| `TOILE-FEAT-014` | A message author MUST be the canonical `UserId` resolved by `ambre-sync`, never a `PeerID`. | §4.D; §4.A | not built -- lands with §9 Phase 2 (Epic `E4`), and needs the `UserId` directory of `SYNC P4` (Epic `E5`) | unimplemented |
+| `TOILE-FEAT-015` | Resolving and reopening a thread MUST be idempotent and convergent, and MUST NOT destroy the thread or its messages. | §4.D | not built -- lands with §9 Phase 2 (Epic `E4`) | unimplemented |
+| `TOILE-FEAT-016` | A thread anchored to a deleted element MUST stay valid and simply not render; it MUST NOT be auto-deleted. | §4.D; `toile-logic §2.J` | not built -- lands with §9 Phase 2 (Epic `E4`) | unimplemented |
+| `TOILE-FEAT-017` | A comment command MUST NOT enter the undo stack: `Ctrl+Z` on the board MUST NOT retract a teammate-visible message. | §4.D; `toile-logic §8 bis` | not built -- lands with §9 Phase 2 (Epic `E4`) | unimplemented |
 
-> **Invariant coverage.** 10 `verified`, 0 `unverified`. The absent rows are the honest part: §4.D specifies a comments CRDT that does not exist anywhere in the workspace.
+> **Invariant coverage.** 10 `verified`, 0 `unverified`, 7 `unimplemented`. Writing §4.D's rules as rows is what makes the contradiction it used to hide impossible: a section cannot both specify a *mandatory* convergence belt and describe code nobody has written, once each of its rules carries a status.
 
 ---
 
@@ -366,7 +373,7 @@ CommentThreadOpened(CommentThreadId),     // echo of CreateComment so the UI can
 * **Tier.** host, entirely. `smart_animate`, `solve_layout`, the boolean geometry, the tally derivation and every sequence/playback handler are pure Rust. **wasm** for the presentation camera pass and inline notes editing on the GPU surface, specified in `toile-ui`.
 * **Seams.** `CommandSink` / `MockSyncHandle`; fake `FrameSnapshot`s to drive `smart_animate`.
 * **Mandatory belts.** A shared feature lands with a convergence case inside the 2-peer proptest (`TOILE-017`) **and** a local/shared split assertion -- what is CRDT converges, what is playback stays local (`TOILE-FEAT-001`). A pure solver lands with its own branch coverage, on host (`TOILE-FEAT-005`, `TOILE-FEAT-006`, `TOILE-FEAT-007` are the models).
-* **Not yet covered, because not yet built.** The comments CRDT (§4.D): distinct threads from a same-spot drop both surviving, concurrent replies converging in `LoroMovableList` order, resolve/reopen LWW. Written here as intent; it becomes `TOILE-FEAT` rows on the day `CreateComment` exists.
+* **Comments (§4.D) are not built.** Their rules are `TOILE-FEAT-011..017` in §0, with a convergence belt that becomes mandatory the day `CreateComment` exists -- not before.
 * **Benchmarks.** None today. §7 budgets `smart_animate` over a 500-element frame pair and `solve_layout` over a 200-child frame; neither has a `criterion` bench, so neither budget can fail a build.
 * **Definition of Done.** An increment is `[x]` only when its belts are green in CI **and** no invariant in §0 is left without a `Status`.
 

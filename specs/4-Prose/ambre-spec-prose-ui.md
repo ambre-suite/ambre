@@ -62,14 +62,27 @@ by this crate (`ambre-spec-ui.md §2.E`).
 All `web_sys::*` resources (`HTMLCanvasElement`, `GPUDevice`, `GPUQueue`) are `!Send`
 and confined to the UI thread. They never travel through a `flume` channel.
 
-**Invariants:**
+**Invariants:** prefix `PROSE-UI`. Grammar and status values are normative in `ambre-spec-architecture.md §4`; the roll-up is `ambre-spec-testing.md §7`. Every row is `unimplemented` -- `crates/ambre-prose` is empty -- and lands with `ARCH P2` (Epic `E5`).
 
-- The UI thread never owns a `LoroDoc` nor a `ProseState`. It is **stateless** with respect to content: it displays the `PageLayout` and Parley runs received from the Logic thread.
-- Any user input **immediately** produces a `ProseCommand` sent to the Logic thread via `flume` (`try_send`, non-blocking). Optimistic display (showing keystrokes before CRDT confirmation) is handled by a **local draft buffer** (see section 2.C).
-- The frame budget is **16 ms** (`requestAnimationFrame` at 60 FPS). The vertex batch build must never exceed this budget on the hot path (visible pages ± 1).
-- Blocking operations (full Parley layout, TOC recompute) **never** execute in the UI thread -- they come from the Logic thread as a pre-computed `PageLayout`.
-- No `unsafe` in `ambre-prose/ui`.
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `PROSE-UI-001` | The UI thread MUST hold no document data: no `LoroDoc`, no `ProseState`, only view state and what arrives as `ProseEvent`. | §1; §6 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-002` | Every mutation MUST leave the UI thread as a `ProseCommand`; there MUST NOT be a second model of the document. | §1; §6 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-003` | Sends to the Logic thread MUST be non-blocking (`try_send`): the UI thread MUST NOT wait on it. | §1 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-004` | Keystrokes MUST be displayed optimistically from a local draft buffer, never by mutating shared state on the UI side. | §1; §2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-005` | The draft buffer MUST be discarded when the confirming `ProseEvent` arrives, and MUST NOT survive a divergence between what was typed and what the document accepted. | §2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-006` | A full Parley layout or a TOC recompute MUST NOT run in the UI thread: both arrive pre-computed as `PageLayout`. | §1; §2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-007` | Only visible pages plus one on each side MUST be built into vertex batches; the full document MUST NOT be walked per frame. | §2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-008` | Hit-testing MUST be the exact inverse of the drawn layout, under zoom and scroll. | §2.E-bis | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-009` | A click that lands in no glyph MUST resolve to the nearest valid caret position, never to no position. | §2.E-bis | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-010` | Scroll position and selection MUST stay local: neither MUST enter the document. | §6 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-011` | A remote cursor MUST come from an encrypted ephemeral and MUST be keyed by the Sync-resolved `UserId`. | §2.I; §6 | not built -- lands with `ARCH P2` (Epic `E5`); needs the `UserId` directory of `SYNC P4` | unimplemented |
+| `PROSE-UI-012` | The contextual toolbar, the slash menu and the ruler MUST be DOM chrome, not canvas overlays. | §2.F; §2.G; §2.H | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-013` | A paste MUST be routed through the Logic thread as a command: the UI MUST NOT insert clipboard content into its own model. | §2.K | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-014` | Every colour drawn MUST come from the theme palette; no literal colour in render code. | §2.D; `ambre-spec-ui.md` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-015` | `ambre-prose`'s UI module MUST contain no `unsafe`. | context pillar "Security" | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
 
+> **Invariant coverage.** 15 `unimplemented`. The 16 ms frame budget of §1 is deliberately **not** a row: a number with no `criterion` bench behind it cannot be falsified, and turning §5's budgets into invariants is its own pass (`ambre-spec-testing.md §7`, seeding order).
 ---
 
 ## 2. TECHNICAL DESIGN & STATE
