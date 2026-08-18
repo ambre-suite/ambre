@@ -537,6 +537,36 @@ impl MasterSeed {
 
 ## 4. QUALITY & TESTABILITY
 
+> **Doctrine.** Reading generated code does not scale: a review forms an opinion, a verification proves a behaviour. A mechanism earns its place here **only when it permanently removes a class of code from the reading queue** -- otherwise it is one more thing to maintain and to read. Rust is what makes that trade cheap: types, the lint wall and property tests move whole categories out of human attention for good. Where no mechanism exists (the wgpu pipeline, the DOM glue), attention is spent **deliberately and said so**, never by default.
+
+* **Invariants (normative).** Every spec declares its invariants in its §1, one rule per entry, in this grammar:
+
+```
+ID:           SYNC-004
+Statement:    The Sync worker MUST NOT emit a frame whose payload is not AEAD-sealed.
+Sources:      ambre-spec-sync.md §3 | context pillar "E2EE" | derived
+Verification: ambre_sync::tests::outbound_frames_are_sealed
+Status:       verified | unverified | human-review | qa-manual
+```
+
+  * **ID** -- stable prefix per spec (`SYNC`, `SRV`, `TRAME-FORMULA`, ...), never renumbered. It is the **join key** across spec, test name and audit finding: `security-audit.md` already numbers findings this way, so an invariant that closes a finding cites it in `Sources`, and the finding stops drifting from the code silently.
+  * **Statement** -- RFC 2119 (MUST / MUST NOT / SHOULD / MAY). One rule per entry, no conjunctions.
+  * **Falsifiability test** -- if the way to falsify it cannot be stated, it is an intention, not an invariant. Rejected: *"sync is secure"*. Accepted: *"no frame leaves the client with a plaintext payload"*.
+  * **Verification** -- the concrete mechanism (test path, type-level construction, lint) or the explicit absence of one. `unverified` is a legitimate and valuable value; **silence about coverage is the failure mode**, not the absence of a test.
+  * **Storage** -- invariants live in the spec of the component they constrain, next to the design that produced them, never in a central registry: they follow the code lifecycle and are read by whoever edits the component. The cross-spec status roll-up (what is `unverified` today) is reported in `ambre-spec-testing.md §7`, which reports state, never intent.
+  * **Extraction from existing code is a comparison, not a source.** The systems are already implemented; an invariant read off the code describes what the code *does*, not what it *should* do, and freezes current bugs into specification. The spec and the pillars (`.ai/ambre-context.md §3`) stay the anchor; the code is inventory. Three outcomes per invariant, all three useful: **code complies** (locked against regression), **code violates** (a bug found -- the highest-value outcome), **code constrains beyond the spec** (an undocumented decision to write down, or an accidental constraint to remove -- the most frequent).
+
+* **Verification regime per component (normative).** The regime is chosen by the shape of the component, not by its importance:
+
+| Component | Regime | Mechanism |
+|---|---|---|
+| `ambre-trame::formula` (parser, VM, DAG) | Pure properties | `proptest` on host: order independence, exactness, parser round-trip, cycle detection. No I/O, thousands of cases |
+| CRDT state (`trame`, `toile`, later `prose`) | Reference model | 2-peer convergence via `MockSyncHandle` + `apply_remote`; incremental caches asserted against a full rebuild |
+| `ambre-crypto` | Strict | round-trip, tampering, zeroize, `proptest` -- **plus line-by-line human review**. The one place where reading is the mechanism, by choice |
+| ZK boundary (`ambre-sync`, `ambre-bus`, `ambre-server`) | Typing first, negative tests second | make plaintext **unrepresentable** at the transport boundary (`Ciphertext`, `SecretBytes`, `SecretString`); what the types cannot hold becomes a test asserting an absence |
+| `ambre-server` (blind relay) | Model-based over the real services | never mock the database -- for a service that *is* persistence, mocking tests the mock. `#[sqlx::test]` per-test database; order of operations is what produces the bugs, and order is what is not enumerated by hand |
+| `ambre-canvas` GPU pipeline, DOM glue | Assisted review + visual check | `qa-manual` via `/run`. Surface minimisation (the host-extraction seam below) is what keeps this surface small -- any rule that can live in pure Rust must live there, where it is verifiable |
+
 * **Unit tests / host testability.** As the Logic thread is **100% pure Rust** (zero WASM glue), all command/event routing is exercised **on the host** (x86_64) with mock `flume` channels (flume builds natively): WASM rustflags are scoped `[target.wasm32-unknown-unknown]`, so `cargo test -p ambre-logic` runs natively. `ambre-sync` is likewise host-testable — `SyncState` takes a `LogicSink` closure, so tests inject a `flume`-backed sink (`LogicSink::channel`) and drive `handle_command` directly, no worker needed. **This is a first-order benefit of the decomposition** (not just a dep graph property). `ambre-logic` has **9 tests** (`#[cfg(test)]`) building `LogicState` with two drainable receivers and verifying: P3 forward → `SyncCommand` with **`id` echo**; field preservation; `App` routed / drop on unknown doc; `DocumentCreated` → `RemoteSnapshot` → live state promotion; `SnapshotNeeded` → `SendSnapshot`; `Logout` clears `docs`; `CloseDocument` drop + forward. Extend to `ambre-sync` when its pipeline exits placeholder.
 
 * **Test tiering (transverse, normative).** Three named tiers gate every crate:
@@ -552,6 +582,23 @@ impl MasterSeed {
   * **"How to draw it" -- not unit-tested, by design.** The real GPU pipeline (`ambre-canvas`: `QuadRenderer` / `WgpuSurface` / `GlyphAtlas` -- tessellation to vertex/index batches, WGSL shaders, atlas packing) requires a real `wgpu::Device` (`QuadRenderer::new(&device, format)`), so it does not run under bare `cargo test`. It is thin, stable plumbing **validated visually** (`/run`). Options if a specific case ever needs coverage -- a headless wgpu device (software adapter; heavy, driver-dependent, fragile given the known Mesa/Intel issues) or golden-image readback (brittle under AA/driver drift) -- are reserved for a precise critical need, not routine. Default: trust the `DrawSurface` contract + visual check.
 
 * **CRDT convergence (normative).** Every collaborative CRDT state (Trame today; Prose/Toile later) must ship a **property-test of convergence**: `proptest`-generated sequences of operations interleaved across 2+ peers via `MockSyncHandle` + `apply_remote`, asserting identical final states once every delta has been exchanged. This generalizes `proptest` (already a workspace dependency) beyond `ambre-crypto` and is the realization of the "Prop-tests | determinism/convergence" matrix cells below.
+
+* **Mechanism ladder (normative).** Ordered by cost of ownership, not by sophistication. Adopt from the top: an invariant held by the compiler needs no test, no run and no reading.
+
+| Mechanism | Effect | Adopt when |
+|---|---|---|
+| Newtypes, enums, typestate, `#[must_use]` | the invariant holds if it compiles -- permanent, zero maintenance | always, and first choice for every ZK-boundary invariant |
+| Lint wall: `[workspace.lints]`, `deny(unwrap_used, panic, indexing_slicing)`, `#![forbid(unsafe_code)]` in **every** crate | removes a whole scanning category from review | always. The "no `unsafe`" pillar is a claim until the lint enforces it crate by crate |
+| `cargo-deny` (advisories, licences, duplicate versions) in CI | the supply chain of a crypto product, checked by machine | always |
+| `proptest` | universal rules over an unenumerated input space | pure logic and reference models (formula engine, CRDT convergence, cache vs rebuild) |
+| `cargo-fuzz` + `arbitrary` | robustness against hostile input | every decoder fed by the relay or by a file: postcard wire, `.ambre` container, formula parser, interop importers. The relay is untrusted **by design**, so this is not a hardening extra |
+| `cargo-mutants` | verifies the tests themselves -- a surviving mutant is unverified code | periodically, starting with the crates whose test belts were generated fastest |
+| `cargo-llvm-cov` (diff mode) | are the added lines exercised at all | CI gate, once the informative baseline exists |
+| `criterion` with a CI threshold | a perf regression never appears in a diff; the §5 budgets are otherwise unfalsifiable prose | every operation carrying a numbered budget in §5 |
+| `insta` snapshots | read consequences instead of code; reveals unintended blast radius | deterministic structured output (`RecordingSurface` op sequences, wire encodings). **Acceptance stays human** -- `cargo insta accept` accepts blindly, and delegating it rebuilds the original problem one level down |
+| `loom`, `miri` | interleavings under the C11 model, UB under Stacked/Tree Borrows | **only if hand-written `unsafe` or lock-free atomics appear.** Measured 2026-08: zero `unsafe` in 17 crates, atomics are flags and counters. Not adopted; re-run `rg 'unsafe\|Ordering::' --stats` before revisiting |
+
+* **Reading discipline.** Read: public signatures, property *names*, mutant reports, snapshot diffs, the `Verification` column. Do not read: function bodies and individual assertions already covered by a mechanism. A property is a specification sentence readable in three seconds; fifty assertions require reasoning by absence. Watch for **vacuous properties** -- `prop_assert!(result.is_ok())` proves nothing, and neither does a test that reimplements the function under test. Demand properties relating two independent paths: encode/decode, incremental vs full rebuild, peer A vs peer B. A found bug freezes into a named regression test, not into a property.
 
 * **Measured coverage.** `cargo-llvm-cov` over the host tier produces an `lcov` baseline (published as a CI artifact). Informative threshold first (measure the baseline), regression target afterwards.
 
