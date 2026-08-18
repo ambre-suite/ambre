@@ -2,6 +2,7 @@
 name = "ambre-draw"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Abstraction trait for shared rendering (screen & PDF) in Ambre"
 
 [features]

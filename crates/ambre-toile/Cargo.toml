@@ -2,6 +2,7 @@
 name = "ambre-toile"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Whiteboard & presentations application for Ambre — infinite canvas, embedded documents"
 
 [features]

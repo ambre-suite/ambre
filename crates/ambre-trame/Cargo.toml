@@ -2,6 +2,7 @@
 name = "ambre-trame"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Trame (spreadsheet) application -- IPC types, logic controller, and UI renderer"
 
 [features]

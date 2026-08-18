@@ -53,7 +53,7 @@
 | `SYNC-008` | An `Ephemeral` frame whose `counter` is not greater than the last one seen for its `(pub_key, document_id)` MUST be dropped. | §3 Attack Prevention | `ambre_sync::tests::monotonic_counter_accepted_replay_dropped` | verified |
 | `SYNC-009` | Decompression MUST be bounded by a size ceiling and MUST reject an unknown compression version. | §2.B | `ambre_sync::pipeline::tests::decompress_bomb_rejected`, `::decompress_unknown_version_rejected`, `::decompress_within_ceiling_ok` | verified |
 | `SYNC-010` | A shared `DocumentKey` MUST be wrapped for the invitee's X25519 exchange key alone. | §3 Document Sharing | `ambre_sync::sharing::tests::invite_request_wraps_for_the_invitee_only`; `ambre_crypto::tests::kek_binds_peer_identity`, `::weak_peer_public_key_rejected` | verified |
-| `SYNC-011` | The Sync worker MUST compile neither CRDT nor UI code. | §1 Scope | crate graph: `ambre-sync` declares neither `loro` nor `ambre-canvas` | verified |
+| `SYNC-011` | The Sync worker MUST compile neither CRDT nor UI code. | §1 Scope | crate graph: `ambre-sync` declares neither `loro` nor `ambre-canvas`; `deny.toml` bans `loro` outside the four app crates | verified |
 | `SYNC-012` | A failed unwrap of the remote `DocumentKey` MUST NOT be silently replaced by a freshly generated key. | derived (audit `H3`) | none. `updates.rs` still maps `Ok(None) \| Err(_)` to `DocumentKey::generate()` and opens the document local-only, so a transient error and a genuinely new document are indistinguishable | unverified |
 | `SYNC-013` | Application code MUST contain no `unsafe`. | pillar "Security" | measured zero `unsafe` workspace-wide, but `ambre-sync` carries no `#![forbid(unsafe_code)]` | unverified |
 

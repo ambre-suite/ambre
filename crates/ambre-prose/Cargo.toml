@@ -2,6 +2,7 @@
 name = "ambre-prose"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Word processing application for Ambre — rich text, layout, import/export"
 
 [dependencies]

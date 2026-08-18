@@ -2,6 +2,7 @@
 name = "ambre-murmure"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Secure messaging application for Ambre — E2EE channels, segments"
 
 [dependencies]

@@ -52,6 +52,26 @@ jobs:
       - run: just lint
 
   # ---------------------------------------------------------------------------
+  # deny -- supply chain (advisories, licences, sources) plus the zero-knowledge
+  # capability bans: which crates may link AEAD, Argon2, X25519, Ed25519 and the
+  # CRDT engine (`deny.toml`). Re-granting a capability has to be an edit of
+  # `deny.toml`, reviewed as such, instead of one line in a `Cargo.toml`.
+  # ---------------------------------------------------------------------------
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - run: just deny
+
+  # ---------------------------------------------------------------------------
   # test-native -- pure Rust on the native x86_64 target (the spec's "host"
   # tier): workspace logic + the server, zero external dependency.
   # ---------------------------------------------------------------------------

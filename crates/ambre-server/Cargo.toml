@@ -44,9 +44,13 @@ jsonwebtoken      = { workspace = true }
 openidconnect     = { workspace = true }
 reqwest           = { workspace = true }
 url               = { workspace = true }
-sharks            = { workspace = true }
-x25519-dalek      = { workspace = true }
-chacha20poly1305  = { workspace = true }
+
+# Least privilege (ZK-004 / SRV-012, `ambre-spec-architecture.md §3`): the server
+# verifies Ed25519 signatures and mints its own access tokens -- nothing else.
+# `chacha20poly1305`, `x25519-dalek` and `sharks` were declared here without a
+# single use in `src/`, which handed the relay process AEAD, key-exchange and
+# secret-sharing capability it must not hold. Adding any of them back is a
+# zero-knowledge decision, not a build detail: `deny.toml` refuses it.
 
 [dev-dependencies]
 tokio = { workspace = true }
