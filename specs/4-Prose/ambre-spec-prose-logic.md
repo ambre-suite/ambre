@@ -1,6 +1,7 @@
 # AMBRE -- SPEC: PROSE / LOGIC
 **Type:** Horizontal (Layer/Engine)
 **Status:** Draft
+**Implementation:** design-only
 
 > Prose document engine: CRDT structure for text and blocks, inline annotation model,
 > collaborative cursor management, pagination calculation, and interface contract between

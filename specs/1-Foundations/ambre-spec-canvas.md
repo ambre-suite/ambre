@@ -1,6 +1,7 @@
 # AMBRE — SPEC: Content Rendering Pipeline (`ambre-canvas`)
 **Type:** Horizontal (Foundation — UI Thread)
 **Status:** Draft
+**Implementation:** partial
 
 > GPU pipeline, frame lifecycle, GPU bootstrap + rAF driver (`bootstrap_gpu` / `start_raf_loop`), assets (icons, fonts, GlyphAtlas), `DrawSurface` abstraction, PDF export (krilla), and HiDPI handling. The frame **driver** (`FrameHost`) and the closed `AppView` registry live one layer up in `ambre-app` (see §A). This document covers **only content rendering** in the `<canvas>` (`ambre-canvas` crate), shared across all applications. The application **chrome** (menus, toolbars, dialogs, panels) is **DOM/Leptos** (`ambre-spec-chrome.md`); the canvas/DOM boundary, command registry, and design tokens are in the umbrella `ambre-spec-ui.md`. Everything executes in the **UI Thread** (page's main thread) — no business logic, no network, no crypto in this layer.
 >

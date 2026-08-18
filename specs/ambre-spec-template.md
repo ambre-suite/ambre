@@ -1,9 +1,20 @@
 # AMBRE — SPEC: [COMPONENT_NAME]
 **Type:** [Horizontal (Layer/Engine) | Vertical (Feature/Widget)]
 **Status:** [Draft | Reviewed | Frozen]
+**Implementation:** [implemented | partial | design-only]
 
 > Concise description of the component's single responsibility. Definition of the technical or functional problem being solved.
 > **Note:** This template is modular. Ignore or remove irrelevant sections for your scope (e.g., no CRDT for a pure calculation engine).
+
+---
+
+### Header fields (normative)
+
+> `Status` is about **this document** (has it been reviewed). `Implementation` is about **the code it describes**, and a reader must be able to tell within the first five lines whether they are reading a description or a wish. Two specs in the same format, one covering 30 000 shipped lines and one covering a 7-line stub, is the most expensive lie a spec corpus can tell.
+
+* **`implemented`** -- an implementing crate or module exists and this spec describes what it does. Divergences between the two are recorded **in this spec**, not discovered later.
+* **`partial`** -- part of the surface is built; the roadmap section marks which increments landed. The default for a spec under active construction.
+* **`design-only`** -- no implementing code beyond a stub. This spec is a proposal. It carries **no invariant table**: an invariant needs a `Verification` cell, and verification of code that does not exist can only be `unverified`, which fills the ledger (`ambre-spec-testing.md §7`) with noise and hides the real gaps. Invariants are seeded when the code lands.
 
 ---
 

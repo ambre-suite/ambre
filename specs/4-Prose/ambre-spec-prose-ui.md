@@ -1,6 +1,7 @@
 # AMBRE -- SPEC: PROSE / UI
 **Type:** Vertical (Feature/Widget)
 **Status:** Draft
+**Implementation:** design-only
 
 > Prose presentation layer: wgpu/Parley **content** rendering (DrawSurface) of the page
 > column, caret, selections, collaborative cursors, and inline comment/track-change

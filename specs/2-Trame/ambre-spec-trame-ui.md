@@ -1,6 +1,7 @@
 # AMBRE — SPEC: AMBRE-TRAME UI (Rendering & Interactions)
 **Type:** Vertical (Feature / Application — UI)
 **Status:** Draft
+**Implementation:** partial
 
 > Rendering and interaction layer of the Trame spreadsheet. Runs exclusively in the **UI thread**. Receives typed [`TrameEvent`](../../crates/ambre-bus/src/app/trame/event.rs) values (carried by move inside `AppEvent::Trame` over the shared-memory `flume` plane -- **no** `postMessage`, **no** postcard on this hop; `-logic.md` §9, `spec-ambre-architecture.md §2/§6`) from the Logic thread, renders the grid via `WgpuSurface` (QuadRenderer + GlyphAtlas), and translates user events into `TrameCommand` sent back to the Logic thread the same way. PDF export will be generated in the **Logic thread** via `KrillaSurface` (implementation of the shared `DrawSurface` trait) so as not to block the UI thread.
 >
@@ -43,6 +44,28 @@
 | `wasm-bindgen` | JS <-> Rust bridge | Canvas / DOM glue on the UI thread |
 | `web-sys` | Browser APIs (Canvas, clipboard, file download) | DOM access from UI thread |
 | `postcard` | Serialization | Only the `ClipboardPayload` (OS clipboard blob); **not** the UI<->Logic hop |
+
+**Invariants:** prefix `TRAME-UI`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4` ("Invariants (normative)"); the cross-spec roll-up is `ambre-spec-testing.md §7`. The table covers the **built** surface. Multi-user cursors (§9), sparklines (§10), charts (§11) and PDF export (§12) have no implementing code -- `ambre-trame` declares neither `krilla` nor `ambre-pdf` -- so they carry no rows yet, per the seeding rule (architecture §4).
+
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `TRAME-UI-001` | The UI thread MUST hold no document data -- only view state and the `DisplayViewport` received from the Logic thread. | §16 "Fundamental invariant" | structural: **no occurrence of `LoroDoc` or `loro::` anywhere under `ambre-trame/src/ui/`**; `deny.toml` bans `loro` outside the four app crates (`SYNC-011`) | verified |
+| `TRAME-UI-002` | Every document mutation MUST leave the UI thread as a `TrameCommand`; the UI MUST NOT write document state locally. | §16 | type-level: the single outbound path is `TrameView::send_command_lossless` (`ui/view/lifecycle.rs`), which accepts a `TrameCommand` and wraps it in `LogicCommand::App` -- there is no other sender | verified |
+| `TRAME-UI-003` | The UI thread MUST NOT block on the Logic channel: a full channel drops the command with a log, it never waits. | architecture §6; `ambre-spec-ui.md §1` | type-level: `send_command_lossless` is `try_send` and returns `Result<(), SendError>`; `SendError::Full` is handled at every call site | verified |
+| `TRAME-UI-004` | Only the visible viewport plus its adaptive padding MUST be requested from the Logic thread. | §3.A | none. The heuristic lives in `ui/grid/state.rs` (velocity -> 20/50/100 rows) and no test asserts the requested bounds against the visible range | unverified |
+| `TRAME-UI-005` | A `ViewportData` whose `version` is lower than the last accepted one MUST be discarded. | §2.B; §3 anti-flicker | none. The rule **is implemented** (`ui/grid/state.rs`: `if version < self.accepted_version { return; }`) and nothing exercises it; the deleted §14 named an `outdated_viewport_version_ignored` test that never existed | unverified |
+| `TRAME-UI-006` | The canvas dispatch over `TrameEvent` MUST be exhaustive -- no wildcard arm -- so a new variant is a compile error, not a silent drop. | §2.B; §18 | compiler: `ui/view/frame.rs::dispatch_trame` carries **no `_` arm**; adding a variant fails the build. (The §2.B excerpt used to end on a `_ => {}` that contradicted its own sentence and the code; corrected.) | verified |
+| `TRAME-UI-007` | Hit-testing MUST be the exact inverse of the drawn geometry, under zoom and under variable row/column metrics. | §3; §4bis | `ambre_trame::ui::grid::tests::group1::zoom_scales_metrics_and_round_trips_hit_test`, `::variable_metrics_round_trip_pixel_and_hit_test`, `::axis_pointer_resolution_follows_variable_metrics`, `::filter_button_hit_test_matches_drawn_rect`, `ambre_trame::render::tests::variable_metrics_shift_cells_and_hit_test` | verified |
+| `TRAME-UI-008` | A filtered-out row MUST collapse both the drawn geometry and keyboard navigation. | §5.A; §5.D | `ambre_trame::ui::grid::tests::group2::filtered_rows_collapse_geometry_and_nav`, `ambre_trame::render::tests::cell_rect_collapses_over_hidden_rows` | verified |
+| `TRAME-UI-009` | A merged block MUST select as a whole, and navigation MUST step over it rather than into it. | §8; §5.B | `ambre_trame::ui::grid::tests::group1::merge_block_selects_as_a_whole_and_nav_steps_over_it`, `::drag_selection_expands_to_whole_merge`, `::fill_handle_sits_on_merge_extent_corner`, `ambre_trame::ui::grid::tests::group2::snap_active_to_master_rehomes_after_merge` | verified |
+| `TRAME-UI-010` | An optimistic commit MUST NOT display the formula source as its own result. | §6.C | `ambre_trame::ui::grid::tests::group2::optimistic_commit_does_not_echo_formula_as_result` | verified |
+| `TRAME-UI-011` | The viewport MUST carry each cell's raw text alongside its displayed value, so reopening the editor shows the formula. | §6.A | `ambre_trame::ui::grid::tests::group2::viewport_data_preserves_formula_raw_for_editing`, `::editor_preview_display` | verified |
+| `TRAME-UI-012` | Every fill colour drawn by the renderer MUST come from the theme palette; no literal colour in render code. | §4.A; `ambre-spec-ui.md` (design tokens) | `ambre_trame::ui::renderer::tests::renderer_uses_only_palette_colors_for_fills` | verified |
+| `TRAME-UI-013` | The renderer MUST NOT paint outside the grid region, whatever the canvas size or scroll offset. | §2.A; §4 | `ambre_trame::ui::renderer::tests::draw_cells_strip_skips_when_outside_grid`, `::draw_cells_scroll_strip_base_is_blank_not_pending_grey`, `ambre_trame::ui::grid::tests::group2::grid_bottom_floors_at_header_on_tiny_canvas`, `::header_strip_starts_at_top_of_canvas` | verified |
+| `TRAME-UI-014` | A cell in error MUST be marked visually from its displayed text; there MUST NOT be an `is_error` field on `DisplayCell`. | §2.B note | `ambre_trame::ui::renderer::tests::errored_cell_gets_a_corner_marker`, `::dirty_cell_gets_a_translucent_veil` | verified |
+| `TRAME-UI-015` | Escape MUST cancel an edit in progress without emitting any `TrameCommand`. | §6.C | none. The handler exists (`ui/view/interact.rs`), the absence of an outbound command is asserted nowhere -- and an absence is exactly what a test has to state | unverified |
+
+> **Invariant coverage.** 11 `verified`, 4 `unverified`. The gaps are `TRAME-UI-004`, `-005`, `-015` (implemented rules with no test) and nothing on the four unbuilt sections above.
 
 ---
 
@@ -117,7 +140,8 @@ fn dispatch_trame(&mut self, ev: TrameEvent) {
         // PasteRejected, Clipboard, SortComplete, validation/protection,
         // ImportComplete, ExportComplete) are handled by the chrome relay and
         // are explicit no-ops on the canvas -- each named, none wildcarded.
-        _ => {}
+        // (This excerpt elides them; the real match in `ui/view/frame.rs` spells
+        //  every one out and carries no `_` arm -- `TRAME-UI-006`.)
     }
 }
 ```
@@ -1611,39 +1635,12 @@ fn draw_status_bar(&mut self) {
 
 ## 14. QUALITY & TESTABILITY
 
-UI tests are run with `wasm-bindgen-test` in a headless browser (Chrome via `wasm-pack test --headless`).
+> What this module guarantees, and what verifies each guarantee, is the table in §1. This section holds only what is not a claim about the tree's contents.
 
-```rust
-// Virtual scrolling
-#[wasm_bindgen_test]
-fn scroll_requests_correct_viewport_range() { /* ... */ }
-
-#[wasm_bindgen_test]
-fn padding_adapts_to_scroll_velocity() { /* slow -> 20, fast -> 100 */ }
-
-// Anti-flickering
-#[wasm_bindgen_test]
-fn outdated_viewport_version_ignored() { /* v=2 then v=1 -> v=1 dropped */ }
-
-// Editor
-#[wasm_bindgen_test]
-fn escape_cancels_editing_no_command_sent() { }
-
-#[wasm_bindgen_test]
-fn enter_commits_and_moves_down() { }
-
-// Autocompletion
-#[wasm_bindgen_test]
-fn function_completion_case_insensitive() { /* "sum" -> "SUM" */ }
-
-// Freeze
-#[wasm_bindgen_test]
-fn frozen_rows_not_offset_by_scroll() { }
-
-// Remote cursors
-#[wasm_bindgen_test]
-fn remote_cursor_color_deterministic_from_user_id() { }
-```
+* **Tiers, as measured.** This section used to open with "UI tests are run with `wasm-bindgen-test` in a headless browser" and list eight such tests, **none of which existed**. The real split is the opposite: **58 host tests** (`ui::grid`, `ui::renderer`, `render`) against **13 wasm tests** (`tests/chrome_ui.rs`). That is the host-extraction seam of architecture §4 working as intended -- geometry, hit-testing, selection, editor state and the draw call sequence are pure `data -> data` code and belong on the fast tier. The wasm tier keeps what is irreducibly DOM.
+* **Seams.** `RecordingSurface` (`ambre-draw`, feature `testing`) for every "what to draw" assertion -- ordered `DrawOp` sequence, geometry, palette, clip balance -- with no GPU. `MockSyncHandle` / `CommandSink` for the outbound `TrameCommand`s. The wgpu pipeline itself ("how to draw") is `qa-manual` by decision (architecture §4).
+* **Mandatory belts.** A new interaction lands with (a) a geometry round-trip -- drawn rect against hit-test, under zoom and variable metrics (`TRAME-UI-007`), and (b) a `RecordingSurface` assertion for anything it paints.
+* **Definition of Done.** An increment is `[x]` only when those belts are green in CI **and** no invariant in §1 is left without a `Status`.
 
 ---
 

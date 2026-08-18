@@ -1,6 +1,7 @@
 # AMBRE — SPEC: GENERAL ARCHITECTURE
 **Type:** Horizontal (Foundation)
 **Status:** Draft
+**Implementation:** partial
 
 > Technical architecture of AMBRE: **two-instance model** — a **Main** WASM instance (UI thread + Logic thread sharing one `SharedArrayBuffer` linear memory via `wasm_thread`, talking over **`flume`** typed Rust values) and a **separate Sync worker** (its own WASM instance/memory, reached over **`postMessage`** + `postcard`); crate breakdown and dependency boundaries, three-plane data plane (content / service / network), zero-knowledge security, performance budgets, and integration roadmap.
 
@@ -567,6 +568,7 @@ Status:       verified | unverified | human-review | qa-manual
   * **Falsifiability test** -- if the way to falsify it cannot be stated, it is an intention, not an invariant. Rejected: *"sync is secure"*. Accepted: *"no frame leaves the client with a plaintext payload"*.
   * **Verification** -- the concrete mechanism (test path, type-level construction, lint) or the explicit absence of one. `unverified` is a legitimate and valuable value; **silence about coverage is the failure mode**, not the absence of a test.
   * **Storage** -- invariants live in the spec of the component they constrain, next to the design that produced them, never in a central registry: they follow the code lifecycle and are read by whoever edits the component. The cross-spec status roll-up (what is `unverified` today) is reported in `ambre-spec-testing.md §7`, which reports state, never intent.
+  * **Seeding is gated on the code existing.** A spec whose header says `Implementation: design-only` (`ambre-spec-template.md`, "Header fields") carries **no** invariant table. Verification of code that does not exist can only be `unverified`, and a ledger full of `unverified` rows for unwritten components hides the rows that name a real gap. Invariants are written when the component lands, against the design that produced it.
   * **Extraction from existing code is a comparison, not a source.** The systems are already implemented; an invariant read off the code describes what the code *does*, not what it *should* do, and freezes current bugs into specification. The spec and the pillars (`.ai/ambre-context.md §3`) stay the anchor; the code is inventory. Three outcomes per invariant, all three useful: **code complies** (locked against regression), **code violates** (a bug found -- the highest-value outcome), **code constrains beyond the spec** (an undocumented decision to write down, or an accidental constraint to remove -- the most frequent).
 
 * **Verification regime per component (normative).** The regime is chosen by the shape of the component, not by its importance:

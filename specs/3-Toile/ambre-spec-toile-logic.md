@@ -1,6 +1,7 @@
 # AMBRE — SPEC: TOILE LOGIC (Infinite Canvas Engine)
 **Type:** Vertical (Feature / Application — Logic)
 **Status:** Draft
+**Implementation:** partial
 
 > Toile collaborative infinite-canvas engine: CRDT state management (`LoroDoc`) for freely positioned
 > elements, connectors, frames and freehand strokes; a spatial index (R-tree) for O(log N) viewport
@@ -115,16 +116,35 @@ UI/quality promise; they are candidates for V2 or removal (see `ambre-roadmap.md
 > **No `rayon` (MVP)** — culling is O(log N + k) with k = visible set; tessellation parallelism, if ever
 > needed, belongs to `toile-ui`, not the Logic thread.
 
-**Invariants:**
-- Derivation is **synchronous** in each `handle_command` / `apply_remote`: the state returns all events
-  (including `ViewportData`) in `ToileOutcome.display` / the returned `Vec<ToileEvent>`.
-- `LoroDoc` confined to the Logic thread: only exits via `export_updates()` → `Vec<u8>`.
-- The R-tree is a **derived cache**, never authoritative: it is rebuilt from `LoroDoc` on load and updated
-  incrementally; a full rebuild always yields the same tree as the incremental path (tested).
-- Connector geometry and stroke smoothing are **never** persisted in Loro — they are recomputed on read.
-- Element identity is a minted stable `ElementId` (`{peer:016x}_{counter:08x}`); positional keys are never used.
-- No `unsafe`.
+**Invariants:** prefix `TOILE` (the engine). Sibling specs reserve `TOILE-UI`, `TOILE-FEAT` and `TOILE-IO`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4` ("Invariants (normative)"); the cross-spec roll-up is `ambre-spec-testing.md §7`.
 
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `TOILE-001` | The `LoroDoc` MUST NOT leave the Logic thread; it exits only as bytes, through `export_updates` / `export_snapshot`. | §1 Scope; architecture §6 | type-level: `ToileState.doc` is private and no public signature in `ambre-toile` names `LoroDoc`; both exits return `Vec<u8>` | verified |
+| `TOILE-002` | Derivation MUST complete synchronously inside `handle_command` / `apply_remote`; the returned outcome carries every resulting display event. | §1; §8 | type-level: `handle_command` returns `ToileOutcome` by value and the crate has no async path; `ambre_toile::logic::state::derive::tests::derive_viewport_at_uses_the_given_camera` | verified |
+| `TOILE-003` | Element identity MUST be a minted, move-invariant `ElementId`; a positional or slot key MUST NOT be used. | §2.A | `ambre_toile::logic::convergence_tests::copy_does_not_mutate_and_paste_remints_offset`, `::paste_reproduces_selection_on_a_separate_board` | verified |
+| `TOILE-004` | The R-tree MUST be a derived cache: an incrementally maintained index MUST equal a from-scratch rebuild. | §1; §3 | `ambre_toile::logic::index::prop::incremental_matches_rebuild` (proptest), `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` (both inside the 2-peer proptest) | verified |
+| `TOILE-005` | The visible set MUST be resolved from the R-tree and MUST NOT drop an element intersecting the viewport. | §3 | `ambre_toile::logic::index::tests::query_visible_culls_offscreen`, `::remove_then_query_is_empty`, `ambre_toile::logic::convergence_tests::viewport_culls_offscreen_nodes` | verified |
+| `TOILE-006` | Connector geometry MUST be recomputed on read; moving an element MUST NOT write a CRDT mutation for its connectors. | §1; §5 | `ambre_toile::logic::connector::tests::straight_endpoints_are_the_anchors`, `::every_path_type_routes`, `::missing_endpoint_yields_none`; the CRDT schema stores endpoints and a path kind, no geometry (§2.B) | verified |
+| `TOILE-007` | A connector whose endpoint element is deleted MUST become dangling; its data MUST NOT be destroyed or silently corrupted. | §5.A; §6 | `ambre_toile::logic::convergence_tests::deleting_an_endpoint_makes_the_connector_dangle`, `::retarget_to_missing_element_reports_dangling`, `::retarget_rebinds_endpoint_without_dangling` | verified |
+| `TOILE-008` | Stroke smoothing MUST NOT be persisted: the CRDT stores raw sampled points only. | §1; §4 | `ambre_toile::logic::stroke::tests::passes_through_samples_and_is_denser`, `::empty_and_single_point`; `logic::convergence_tests::commit_stroke_creates_drawing` writes the raw `Vec<StrokePoint>` | verified |
+| `TOILE-009` | A group's bounds MUST be the derived union of its members' AABBs, never independently authored. | §2.F bis | `ambre_toile::logic::convergence_tests::group_unions_bounds_and_sits_below_members`, `::derive_populates_the_group_edge_on_members`, `::moving_a_group_translates_its_members` | verified |
+| `TOILE-010` | Ungrouping MUST preserve the surviving children and their relative order; deleting a group MUST cascade to its members. | §2.F bis | `ambre_toile::logic::convergence_tests::ungroup_keeps_children_and_order`, `::deleting_a_group_cascades_to_members` | verified |
+| `TOILE-011` | A frame's children MUST paint after the frame: a child's `layers` index MUST be greater than its frame's. | §2.G | `ambre_toile::logic::convergence_tests::frame_children_paint_after_their_frame`, `::set_frame_children_adds_and_removes_membership`, `::set_frame_children_detaches_from_a_group` | verified |
+| `TOILE-012` | A locked element MUST NOT be moved by a command. | §2.E note | `ambre_toile::logic::convergence_tests::locked_element_ignores_move` | verified |
+| `TOILE-013` | A paste or duplicate MUST re-mint every id; a connector fully inside the copy MUST survive and a half-copied one MUST be dropped. | §8.D | `ambre_toile::logic::convergence_tests::paste_keeps_fully_copied_connector_drops_half_copied`, `::copy_does_not_mutate_and_paste_remints_offset`, `::clipboard_payload_postcard_roundtrips` | verified |
+| `TOILE-014` | Each mutating command MUST end with `doc.commit()`, so one atomic user action is one undo item. | §8 bis | `ambre_toile::logic::state::elements::inner_tests::many_inner_creates_share_one_undo_item`, `ambre_toile::logic::state::elements::inner_tests::create_restyle_and_group_are_one_undo_item`, `ambre_toile::logic::convergence_tests::set_frame_children_is_one_undo_item`, `::duplicate_a_group_is_one_undo_item`, `::undo_reverts_group_as_one_item` | verified |
+| `TOILE-015` | Undo MUST revert local operations only, never a remote peer's. | §8 bis | none. `logic::convergence_tests::undo_reverts_create_and_redo_restores` covers the local half; **no test drives a remote edit and asserts undo leaves it alone** -- the Trame equivalent (`undo_local_only_not_remote`) exists and has no counterpart here | unverified |
+| `TOILE-016` | A cell of presence MUST travel as ephemeral only: broadcast, never appended to history, and keyed by the resolved `UserId`. | §7; §2 bus note | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only`, `::apply_ephemeral_keys_presence_by_user_id_without_touching_history`, `::apply_ephemeral_drops_a_malformed_frame` | verified |
+| `TOILE-017` | Two peers exchanging the same operations in any interleaving MUST converge to the same document and the same derived caches. | §6; architecture §4 "CRDT convergence" | `ambre_toile::logic::convergence_tests::two_peers_converge`, `::caches_match_a_full_rebuild` (proptest over create/move/resize/rotate/restyle/delete/reorder/group/ungroup/connect/stroke/frame/slide-order/auto-layout/react) | verified |
+| `TOILE-018` | An element's whole style MUST be a single LWW register; it MUST NOT be fanned out over per-attribute keys. | §2.E | structural: one `LoroValue::Binary` under the `"style"` key per element map (`logic/state/elements.rs`), decoded whole by `ElementStyle::from_bytes`; concurrent restyles are driven by the convergence proptest (`RestyleNth`) | verified |
+| `TOILE-019` | Find MUST be pure local view state: it MUST NOT mutate the document. | §8.E | `ambre_toile::logic::convergence_tests::find_matches_in_z_order_and_is_case_insensitive_by_default`, `::find_focus_wraps_after_from`, `::find_backward_steps_to_previous_hit_wrapping`, `::find_honors_match_case_and_whole_word`, `::find_ignores_non_text_elements_and_empty_query` | verified |
+| `TOILE-020` | Selection aggregates MUST be computed in the Logic thread over the whole selection, including elements outside the viewport. | §8.F | `ambre_toile::logic::convergence_tests::selection_stats_spans_offscreen_elements`, `::selection_stats_empty_ids_span_whole_board`, `::selection_stats_empty_ids_on_empty_board_is_none` | verified |
+| `TOILE-021` | A nested Ambre document MUST be stored as a reference; its content MUST NOT be inlined into this board. | §2.I | `ambre_toile::logic::convergence_tests::doc_embed_reference_survives_the_crdt_round_trip`, `::doc_embed_with_an_unreadable_reference_falls_back_to_a_frame` | verified |
+| `TOILE-022` | A derived kind (`group`, `drawing`) MUST NOT be creatable through `CreateElement`, and `SetText` MUST reject a non-text element. | §2.B; §8.A | `ambre_toile::logic::convergence_tests::group_and_drawing_are_not_creatable`, `::set_text_rejects_a_non_text_element`, `::set_text_overwrites_sticky_body` | verified |
+| `TOILE-023` | `ambre-toile` MUST contain no `unsafe`. | context pillar "Security" | measured zero `unsafe` in the crate, but no `#![forbid(unsafe_code)]` on its root -- a claim, not a mechanism (architecture §4 ladder) | unverified |
+
+> **Invariant coverage.** 21 `verified`, 2 `unverified` (`TOILE-015`, `TOILE-023`), 0 `human-review`, 0 `qa-manual`. Reported in `ambre-spec-testing.md §7`.
 ---
 
 ## 2. CRDT MODEL
@@ -1124,48 +1144,17 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
 ---
 
 ## 10. QUALITY & TESTABILITY
-> See the transverse test architecture in `ambre-spec-architecture.md §4`.
 
-- **Test tiers:** **host** (`cargo test`, x86_64, default) for the engine, index, routing and smoothing;
-  **wasm** (`wasm-bindgen-test`) only where a `cfg(target_arch = "wasm32")` seam or GPU surface is exercised —
-  the pure engine here is host-testable. No **db** tier (no server integration in this module).
-- **Unit tests:** every command path, every no-op guard (locked element, missing id), every error path
-  (`RetargetConnector` to a deleted element → `DanglingConnector`), and the id-minting counter monotonicity.
-  Target: every predicate branch of `handle_command`, `Connector::route`, the anchor/axis math, and
-  the culling query. Indicative coverage: all branches of routing (Straight/Elbow/Curved) and every `Anchor`.
-- **Index equivalence property test (mandatory):** for a random op sequence, assert the **incrementally
-  maintained** `SpatialIndex` equals a **from-scratch rebuild** — the core cache invariant (§1, §3).
-- **CRDT convergence (mandatory):** a 2-peer convergence property test — interleaved op sequences via
-  `MockSyncHandle` + `apply_remote` → identical final `LoroDoc` **and** identical derived `bounds`/`layers`/
-  `index`. Include concurrent move (LWW), concurrent restyle (single-register, no tear), concurrent create
-  (distinct ids), concurrent frame-children insert (`LoroMovableList` order), concurrent group membership
-  (a node ends in at most one group), and delete-vs-edit (dangling connector, no corruption). Also assert the
-  `layers` well-formedness rules of §2.H (missing-from-layers fallback order, skip of a dangling `NodeId`, no
-  duplicate) and the frame/child z-order invariant (§2.G).
-- **Clipboard & grouping (mandatory):** `PasteElements`/`DuplicateElements` re-mint every id (no collision with
-  the source, internal connectors remapped, orphan connectors dropped, `origin`→`at` offset); a round-trip
-  `CopyElements`→`PasteElements` on a *separate* `ToileState` reproduces the selection (cross-board portability).
-  `GroupElements` then `UngroupElements` is identity on the surviving children (relative order + `layers`
-  preserved); deleting a group cascades to its members; group bounds equal the union of member AABBs after a
-  member move.
-- **Find & selection stats:** `Find` returns hits in z-order with `match_case`/`whole_word` honored and a
-  wrapping `focus`, matches only text-bearing elements (sticky/text bodies, frame titles), and mutates nothing;
-  `RequestSelectionStats` returns the exact count and union AABB for a selection that includes an off-viewport
-  element (Logic-side geometry, §8 quinquies).
-- **Undo/redo:** local-only property test — an interleaved local+remote sequence, then `Undo` reverts **only**
-  local ops and `rebuild_after_undo_redo` yields caches identical to a from-scratch rebuild of the reverted doc;
-  an import batch undoes as a single item (`toile-interop §2.E`).
-- **Persistence & presence inbound:** an `export_snapshot` -> a fresh state loaded from that snapshot round-trip
-  reproduces identical `LoroDoc` + derived `bounds`/`layers`/`index` (§8); `apply_ephemeral` on a presence frame
-  yields the expected `PeerPresence` keyed by the resolved `UserId` and mutates neither `doc` nor history (§7).
-- **Reactions identity:** a same-user re-vote from two distinct `PeerID`s (same `my_user_id`) converges to **one**
-  entry and one tally unit — the `UserId`-keyed guarantee of `toile-features §4.A`.
-- **Mocks & Environment:** host seams `CommandSink` / `LogicSink` / `MockSyncHandle`; isolated, headless, no
-  live network.
-- **Benchmarks:** `criterion` on `query_visible` at N = 50 000 elements (target below), incremental
-  `SpatialIndex::update`, and `Connector::route` for a 500-connector board.
-- **Definition of Done (tested):** an increment is `[x]` only when unit + index-equivalence + convergence +
-  at least one relevant integration test are green in CI.
+> Transverse test architecture: `ambre-spec-architecture.md §4`. **What this engine guarantees, and what verifies each guarantee, is the table in §1.** This section used to enumerate, in prose, which cases "must" be covered -- an enumeration nothing could check, in a module where the coverage turned out to be there. The table names the tests instead.
+
+* **Tiers.** **host** for the whole engine (`just test-native`): the state, the spatial index, connector routing, stroke smoothing and the derivation feed are pure Rust with no `cfg(wasm32)` gate. **wasm** only where a GPU surface is exercised, which is `toile-ui`. No **db** tier.
+* **Seams.** `CommandSink` / `MockSyncHandle` for the Logic<->Sync boundary; `ToileState::with_peer` for a pinned `PeerID` and clock (`ambre-spec-fixtures.md §2`); `RecordingSurface` (`ambre-draw`, feature `testing`) for anything painted. Isolated, headless, no live network.
+* **Mandatory belts.** An increment lands with these or it does not land:
+  * **CRDT convergence** -- two peers, `proptest`-generated interleavings over every mutating command, asserting an identical `LoroDoc` (`TOILE-017`).
+  * **Cache vs rebuild** -- the incrementally maintained `SpatialIndex` and every derived cache against a from-scratch rebuild, inside that same proptest (`TOILE-004`). This is the invariant the whole engine rests on, and unlike Trame it is actually held here.
+  * **No-op guards** -- a locked element, a missing id, a derived kind: each must leave the document untouched (`TOILE-012`, `TOILE-022`).
+* **Benchmarks.** None today. §11's budgets -- `query_visible` at 50 000 elements, incremental `SpatialIndex::update`, `Connector::route` over 500 connectors -- are unfalsifiable prose until a `criterion` bench exists per budgeted operation (architecture §4, mechanism ladder).
+* **Definition of Done.** An increment is `[x]` only when the mandatory belts are green in CI **and** no invariant in §1 is left without a `Status`. A new guarantee arrives as a row in §1, never as a paragraph here.
 
 ---
 

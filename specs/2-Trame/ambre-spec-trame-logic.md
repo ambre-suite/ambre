@@ -1,6 +1,7 @@
 # AMBRE — SPEC: TRAME LOGIC (Spreadsheet Engine)
 **Type:** Vertical (Feature / Application — Logic)
 **Status:** Draft
+**Implementation:** partial
 
 > Trame collaborative spreadsheet engine: multi-sheet CRDT state management (`LoroDoc`), incremental formula compilation to bytecode, evaluation via stack VM, two-level dependency graph, synchronous recomputation inside `handle_command`, and production of data-oriented structures for rendering.
 >
@@ -41,13 +42,36 @@
 > **`ruzstd` absent** — compression delegated to the Sync thread.
 > **Rayon absent (MVP)** — incremental recomputation O(dirty) is sufficient. Planned Phase 3+.
 
-**Invariants:**
-- Dirty recomputation is **synchronous** in each `handle_command` / `apply_remote` — the state returns all events (including `ViewportData`) in the `TrameOutcome.display` / returned `Vec<TrameEvent>`.
-- `LoroDoc` confined to the Logic thread: only exits via `export_updates()` → `Vec<u8>`.
-- Computed values kept out of Loro: local `formula_cache`, each client recomputes independently.
-- Bytecode compiled once: only cells whose `raw` changed are recompiled.
-- No `unsafe`.
+**Invariants:** prefix `TRAME` (the engine). Sibling specs reserve `TRAME-UI`, `TRAME-FEAT` and `TRAME-IO`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4` ("Invariants (normative)"); the cross-spec roll-up is `ambre-spec-testing.md §7`.
 
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `TRAME-001` | The `LoroDoc` MUST NOT leave the Logic thread; it exits only as bytes, through `export_updates` / `export_snapshot`. | §1 Scope; architecture §6 | type-level: `TrameState.doc` is private and **no public signature in `ambre-trame` names `LoroDoc`**; both exits return `Vec<u8>` | verified |
+| `TRAME-002` | Dirty recomputation MUST complete synchronously inside `handle_command` / `apply_remote`; the returned outcome carries every resulting display event. | §1; §8 | type-level: `handle_command` returns `TrameOutcome` by value and the crate has no async path; `ambre_trame::logic::tests::group7::apply_remote_batch_emits_single_datareset_with_full_state` | verified |
+| `TRAME-003` | A row's or column's identity MUST be a minted `Uid` carried as the `LoroMovableList` element's **value**, never its position. | §2.A | `ambre_trame::model::sheet_index::tests::build_maps_positions_to_stable_ids`, `::apply_move_row_permutes_order_and_reindexes`, `::cell_key_is_fixed_length_and_stable` | verified |
+| `TRAME-004` | A sort MUST be a pure permutation of the row order (`rows_{sheet}.mov`); it MUST NOT rewrite a cell. | §2.A; §12 | `ambre_trame::logic::tests::group3::sort_range_ascending_moves_whole_rows`, `group4::sort_range_multi_already_sorted_emits_no_delta`, `group2::move_row_carries_cells_and_formula_follows_data` | verified |
+| `TRAME-005` | A single-cell reference MUST follow its row through a sort or a move; a range MUST remain a positional block. | §3.A "Cells follow, ranges are blocks"; §12 | `ambre_trame::logic::tests::group4::sort_range_formulas_follow_data`, `::sort_range_sum_block_is_stable_under_internal_sort` | verified |
+| `TRAME-006` | A reference past the used range MUST compile to a `Virtual` axis and read `Empty`, never an error. | §3.A; §5 | `ambre_trame::formula::compile::tests::ref_beyond_used_range_is_virtual`, `ambre_trame::formula::vm::tests::push_cell_virtual_beyond_used_range_reads_empty` | verified |
+| `TRAME-007` | A reference whose `Bound` `Uid` is absent from the `SheetIndex` MUST evaluate to `#REF!`, and every operator MUST propagate that error. | §5 | `ambre_trame::formula::vm::tests::push_cell_deleted_bound_yields_ref_error`, `::every_operator_propagates_an_operand_error`, `::unary_not_propagates_an_operand_error`, `::eval_range_over_cell_cap_yields_ref_error` | verified |
+| `TRAME-008` | A row or column delete MUST propagate `#REF!` to every formula that referenced the deleted line. | §5 "Propagation after delete_row/delete_col" | none, and the code does the **opposite**: the delete path reseeds and re-binds every formula from its raw text, so the reference lands positionally on the shifted grid. `ambre_trame::logic::tests::group2::formula_reference_is_positional_after_delete` asserts `=A2` reads **empty** after deleting row 1. `TRAME-007`'s VM primitive is unreachable from this path | unverified |
+| `TRAME-009` | Deleting a sheet MUST break its cross-sheet references (`#REF!`); a rename or a reorder MUST NOT. | §2.D; §12 | `ambre_trame::logic::tests::group1::cross_sheet_reference_survives_rename_and_breaks_on_delete`, `group3::cross_sheet_reference_converges_across_peers_on_rename`, `::rename_sheet_keeps_id_and_cells`, `ambre_trame::formula::parser::tests::deleted_sheet_id_yields_broken_ref` | verified |
+| `TRAME-010` | Computed values MUST NOT enter the CRDT: only the raw `v` is shared and each peer recomputes independently. | §1; §2.B | none. `ambre_trame::logic::tests::group1::sum_over_plain_literals_survives_reseed` covers recompute-after-reseed; **nothing asserts the absence of computed values from the document**, which is the half a remote peer depends on | unverified |
+| `TRAME-011` | Only cells whose raw text changed MUST be recompiled. | §4.C | `ambre_trame::formula::cache::tests::stale_cell_recompiled`, `::not_stale_no_recompile`, `::non_formula_clears_cache` | verified |
+| `TRAME-012` | A cyclic formula MUST be rejected with its culprit cells named; evaluation MUST NOT hang. | §4.D | `ambre_trame::formula::dag::tests::static_cycle_detected`, `::cycle_detection_kosaraju_returns_culprits`, `::self_reference_rejected`, `::rejected_cycle_leaves_no_stale_range_deps` | verified |
+| `TRAME-013` | Parser, compiler and VM MUST be total: no input produces a panic, every failure is a `CellValue::Error`. | §4.B; §4.D | `ambre_trame::formula::prop_tests::parser_never_panics_on_arbitrary_text`, `::parser_never_panics_on_formula_noise`, `::compile_emits_balanced_bytecode`, `::vm_is_total_and_deterministic` (proptest) | verified |
+| `TRAME-014` | Aggregate functions MUST be exact and order-independent over their range. | §4.A | `ambre_trame::formula::prop_tests::sum_is_exact_and_order_independent`, `::engine_sum_matches_naive_sum`, `::product_is_order_independent`, `::average_times_count_equals_sum`, `::min_max_bound_every_element` (proptest) | verified |
+| `TRAME-015` | Two peers exchanging the same operations in any interleaving MUST converge to the same document. | §12; architecture §4 "CRDT convergence" | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` (proptest), `ambre_trame::logic::tests::group3::two_peers_converge_via_mock_sync` | verified |
+| `TRAME-016` | A cell's whole style MUST be a single LWW register; concurrent restyles MUST NOT blend per attribute. | §2.B; §11 bis.F; §12 | `ambre_trame::logic::convergence_tests::concurrent_whole_cell_style_edits_do_not_blend_across_containers`, `::subset_style_edit_does_not_tear_a_whole_cell_rewrite`, `logic::tests::group1::bold_stays_on_the_cell_not_the_selection` | verified |
+| `TRAME-017` | Every mutating `TrameCommand` handler MUST end with `doc.commit()`, so that one command is one undo item. | §8 "Command Dispatch and Synchronous Recalculation" | `ambre_trame::logic::tests::group2::batch_write_is_one_undo_item`, `::filtered_column_edit_is_one_undo_item`, `group1::selection_style_is_a_single_undo`, `group6::replace_all_rewrites_and_undoes_as_one_group` | verified |
+| `TRAME-018` | Undo MUST revert local operations only, never a remote peer's. | §8; `trame-features` (undo/redo) | `ambre_trame::logic::tests::group2::undo_local_only_not_remote`, `::undo_insert_row_rebuilds_sheet_index`, `::undo_stack_cleared_on_doc_close` | verified |
+| `TRAME-019` | A merge MUST be refused locally while a covered cell is non-empty, and an unmerge MUST restore every covered value. | §6 "Data is Never Destroyed" | `ambre_trame::logic::tests::group2::merge_rejected_when_covered_cell_non_empty`, `::merge_marks_master_span_and_blanks_covered`, `::unmerge_restores_covered_cells`, `group3::concurrent_value_under_merge_is_masked_then_restored` | verified |
+| `TRAME-020` | A merge-masked cell MUST NOT participate in any computation, on any sheet, whichever tab is active. | §6 "DAG and Masked Cells"; §11 bis.E | `ambre_trame::logic::tests::group3::masked_cell_excluded_across_sheets_regardless_of_active_tab` -- the cross-sheet test §11 bis.E asks for, already green (**§11 bis.E is stale, see the note there**) | verified |
+| `TRAME-021` | A formula result MUST NOT depend on view state (active sheet, filter, hidden rows). | §11 bis.E; §12 | `ambre_trame::logic::tests::group5::shared_filter_does_not_affect_sum`, `group3::masked_cell_excluded_across_sheets_regardless_of_active_tab` | verified |
+| `TRAME-022` | A workbook MUST always hold at least one sheet. | §2.D | partial: `ambre_trame::logic::tests::group3::delete_last_sheet_rejected` covers the **local** guard only. Two peers concurrently deleting the two last sheets still converge to a sheet-less workbook; §2.D's deterministic re-insertion rule is decided, not implemented, and has no 2-peer regression test | unverified |
+| `TRAME-023` | The incrementally maintained `SheetIndex` MUST equal a from-scratch rebuild after any sequence of structural operations. | §2.C | none. Per-operation unit tests only (`ambre_trame::model::sheet_index::tests::apply_insert_and_delete_row_shift_positions`, `::apply_move_row_permutes_order_and_reindexes`). The equivalence property exists on the Toile index and not here, though this is the cache invariant the whole engine rests on | unverified |
+| `TRAME-024` | `ambre-trame` MUST contain no `unsafe`. | context pillar "Security" | measured zero `unsafe` in the crate, but no `#![forbid(unsafe_code)]` on its root -- a claim, not a mechanism (architecture §4 ladder) | unverified |
+
+> **Invariant coverage.** 19 `verified`, 5 `unverified`, 0 `human-review`, 0 `qa-manual`. The five gaps are `TRAME-008` (the spec asserts a `#REF!` propagation the delete path prevents), `TRAME-010`, `TRAME-022`, `TRAME-023` and `TRAME-024`; each is reported in `ambre-spec-testing.md §7`.
 ---
 
 ## 2. MULTI-SHEET CRDT MODEL
@@ -821,6 +845,18 @@ position in the rebuilt `SheetIndex` and evaluates to `BrokenRef`.
 
 No bytecode patching — the `AxisId::Bound(uid)` values in `CellId` and `RangeId` remain, absence in `SheetIndex` triggers `BrokenRef` at evaluation.
 
+> **Divergence (`TRAME-008`), as measured 2026-08.** The paragraph above is the intent; the code does the
+> opposite and the suite says so. The reseed re-binds every formula **from its raw text**, so `=A2` after
+> deleting row 1 recompiles against the *new* order and reads the shifted (empty) cell rather than
+> `#REF!` -- `logic::tests::group2::formula_reference_is_positional_after_delete` asserts exactly that and
+> is green. The `BrokenRef` primitive is real and tested at the VM level
+> (`formula::vm::tests::push_cell_deleted_bound_yields_ref_error`, `TRAME-007`), it is simply
+> **unreachable from the delete path**: nothing survives the reseed still holding the deleted `Uid`.
+> Today `#REF!` on a delete is reachable only for a **sheet** delete (`TRAME-009`) and for an off-grid
+> shift during paste/fill (`formula::shift`). Deciding between the two behaviours -- positional like
+> Excel, or uid-broken like §12's "Delete + Reinsert" -- is a product decision this spec has not made;
+> it currently claims one and ships the other.
+
 ---
 
 ## 6. CELL MERGES
@@ -1498,45 +1534,16 @@ UI Thread — re-render viewport
 
 ## 10. QUALITY & TESTABILITY
 
-```rust
-#[test] fn insert_row_stable_cell_keys()            { /* row uid not invalidated */ }
-#[test] fn sheetindex_o1_lookup_after_inserts()      { }
-#[test] fn sort_is_uid_permutation_refs_follow()     { /* mov reorders uids; =A1 ref tracks its physical cell */ }
-#[test] fn move_row_preserves_cell_keys()            { /* rows_.mov -> every cell key still resolves */ }
-#[test] fn static_cycle_cell_to_cell()               { /* A1=B1+1, B1=A1 -> CycleError */ }
-#[test] fn dynamic_cycle_via_range()                 { /* A5=SUM(A1:A10) -> CircularRef */ }
-#[test] fn dynamic_cycle_cross_sheet()               { /* Sheet1!A1=Sheet2!B1, Sheet2!B1=Sheet1!A1 */ }
-#[test] fn broken_ref_cell_after_delete_row()        { /* =A1 -> delete row -> #REF! */ }
-#[test] fn broken_ref_range_endpoint_after_delete()  { /* =SUM(A1:A10) -> delete row 10 -> #REF! */ }
-#[test] fn range_includes_inserted_row()             { /* insert dans A1:A100 -> inclus dans SUM */ }
-// `RangeEndpoint::EntireAxis` (A:A / 1:1) is reserved but the MVP parser never
-// emits it (§3.A), so there is no `SUM(A:A)` test yet -- it lands with unbounded-range
-// parsing (Phase 3).
-#[test] fn bytecode_only_stale_cells_recompiled()    { }
-#[test] fn merge_overlap_resolved_by_lww()           { }
-#[test] fn split_merge_restores_empty_cells()        { }
-#[test] fn crdt_convergence_concurrent_edits()       { }
-```
+> Transverse test architecture: `ambre-spec-architecture.md §4`. **What this engine guarantees, and what verifies each guarantee, is the table in §1.** It is the only list of tests this spec keeps, because it is the only one joined to a claim -- a name here that no longer resolves is a lie the reader cannot detect, and this section used to hold seventeen of them.
 
-```rust
-proptest! {
-    #[test]
-    fn dag_acyclic_after_valid_formulas(
-        formulas in prop::collection::vec(any_valid_formula(), 1..100)
-    ) { prop_assert!(!petgraph::algo::is_cyclic_directed(&ctrl.deps.cell_dag)); }
-
-    #[test]
-    fn sheetindex_incremental_eq_rebuild(
-        ops in prop::collection::vec(any_row_col_op(), 1..200)
-    ) { prop_assert_eq!(incremental_index, rebuilt_index); }
-
-    #[test]
-    fn crdt_convergence(
-        edits_a in prop::collection::vec(any_cell_edit(), 1..50),
-        edits_b in prop::collection::vec(any_cell_edit(), 1..50),
-    ) { prop_assert_eq!(doc_a.get_deep_value(), doc_b.get_deep_value()); }
-}
-```
+* **Tiers.** **host** for the whole engine (`just test-native`): `TrameState`, the formula pipeline, the CRDT model and the render feed are pure Rust with no `cfg(wasm32)` gate. **wasm** covers the DOM chrome only and is specified in `trame-ui`. No **db** tier.
+* **Seams.** `CommandSink` / `MockSyncHandle` for the Logic<->Sync boundary; `TrameState::with_peer` for a pinned `PeerID` and clock (`ambre-spec-fixtures.md §2`); `RecordingSurface` (`ambre-draw`, feature `testing`) for the render feed. Isolated, headless, no live network.
+* **Mandatory belts.** An increment lands with these or it does not land:
+  * **CRDT convergence** -- two peers, `proptest`-generated interleavings, identical documents (`TRAME-015`).
+  * **Formula properties** -- totality over arbitrary input, exactness and order independence over generated ASTs (`TRAME-013`, `TRAME-014`).
+  * **Cache vs rebuild** -- the incremental `SheetIndex` against a from-scratch rebuild (`TRAME-023`; **not written yet**, the one mandatory belt this engine is missing).
+* **Benchmarks.** None today. The seven budgets of §11 are unfalsifiable prose until a `criterion` bench exists per budgeted operation (architecture §4, mechanism ladder); `ambre-crypto` is the only crate in the workspace carrying one.
+* **Definition of Done.** An increment is `[x]` only when the mandatory belts above are green in CI **and** no invariant in §1 is left without a `Status`. A new guarantee arrives as a row in §1, never as a paragraph here.
 
 ---
 
@@ -1621,7 +1628,7 @@ explicit index the call sites already carry.
 | Dead tail loop in `compute_all_dirty` re-inserts values already in the cache (no-op). | Delete. |
 | `formula_cache: RefCell<HashMap<...>>` -- interior mutability is no longer needed (results are staged in a `Vec` before write-back). | Plain field + disjoint borrows, per the §7 sketch. |
 
-### E. View-independent merge masking (consistency)
+### E. View-independent merge masking (consistency) -- LANDED
 
 `masked_cells` is excluded from the engine feed **only for the active sheet** (`reseed_engine`
 skips masked keys only at local index 0). A cross-sheet reference to a masked, conflicted cell
@@ -1634,6 +1641,14 @@ every sheet; add a cross-sheet convergence test asserting a conflicted masked ce
 identically regardless of the active tab. *Tracked as an Epic `E3` / Phase 1 Story (a formula
 result that depends on view state is wrong at any document size), not with the Phase 4 scaling
 debt.*
+
+**Done.** `TrameState::masked_cells_for(sheet_id, index)` (`logic/merges.rs`) derives the masked set per
+sheet and `reseed_engine` excludes it uniformly, on every sheet. The cross-sheet test this section asked
+for exists and is green: `logic::tests::group3::masked_cell_excluded_across_sheets_regardless_of_active_tab`,
+which drives two peers into a conflicted masked cell and asserts an identical read from either active tab.
+Recorded as `TRAME-020` / `TRAME-021` in §1. *Found by seeding the invariant table -- the section had been
+carrying a fixed problem as open debt, which is the cheaper half of the same drift `§11 bis.F` shows in the
+other direction.*
 
 ### F. Consolidate the per-cell style fan-out (schema divergence from §2.B) -- LANDED
 

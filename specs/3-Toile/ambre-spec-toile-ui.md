@@ -1,6 +1,7 @@
 # AMBRE — SPEC: TOILE UI (Rendering & Interactions)
 **Type:** Vertical (Feature / Application — UI)
 **Status:** Draft
+**Implementation:** partial
 
 > Toile render + interaction layer running in the **UI (render) thread**: consumes the `DisplayViewport`
 > produced by `ToileState` (`toile-logic §9`), tessellates and paints the visible set through the shared
@@ -48,13 +49,33 @@ depends on `ambre-bus + ambre-draw + ambre-canvas + ambre-chrome + ambre-command
 > pop_transform}` — the `ambre-canvas` methods listed as its own CANVAS P1 items for "Toile"
 > (`ambre-spec-canvas.md §D`). The render thread never links the CRDT — it consumes `DisplayViewport` only.
 
-**Invariants:**
-- The render thread never blocks on business logic: at most one `SetViewport` per input frame, painting is
-  driven by the last `DisplayViewport` received (double-buffered).
-- 60+ FPS with a stable `requestAnimationFrame` loop; a dirty flag avoids repaint when nothing changed.
-- Hit-testing is exact but only over the culled candidate set (R-tree pre-filter from `toile-logic §3`).
-- No `unsafe` in our code.
+**Invariants:** prefix `TOILE-UI`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4`; the cross-spec roll-up is `ambre-spec-testing.md §7`.
 
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `TOILE-UI-001` | The render side MUST NOT link the CRDT: it consumes `DisplayViewport` and emits `ToileCommand`s. | §1 Dependencies | structural: `loro` appears nowhere under `ambre-toile/src/ui/` except in four explanatory comments -- no type, no call; `deny.toml` bans `loro` outside the four app crates (`SYNC-011`) | verified |
+| `TOILE-UI-002` | `world_to_screen` and `screen_to_world` MUST round-trip, and a zoom about a point MUST leave that world point fixed. | §3 | `ambre_toile::ui::viewport::tests::round_trip_is_identity`, `::zoom_about_keeps_anchor_world_point_fixed`, `::zoom_by_center_keeps_center_world_point_fixed`, `::center_maps_to_screen_center` | verified |
+| `TOILE-UI-003` | Zoom MUST stay inside 0.1x..10x, whatever the input. | §1; §3 | `ambre_toile::ui::viewport::tests::zoom_clamps_to_range`, `::fit_bounds_clamps_tiny_rect_to_max_zoom`, `::reset_zoom_returns_to_100_percent` | verified |
+| `TOILE-UI-004` | A fit MUST centre the target and scale it with padding; an empty rect MUST be ignored rather than produce a degenerate transform. | §3 | `ambre_toile::ui::viewport::tests::fit_bounds_centers_and_scales_with_padding`, `::fit_bounds_ignores_empty_rect`, `::fit_target_matches_fit_bounds`, `::glide_interpolates_center_and_zoom` | verified |
+| `TOILE-UI-005` | Hit-testing MUST be exact -- rotation, path fill and stroke width -- over the culled candidate set, and MUST return the front-most element. | §4 | `ambre_toile::ui::hit::tests::rect_inside_and_outside`, `::rotated_rect_uses_local_frame`, `::ellipse_corner_is_a_miss`, `::triangle_fill`, `::open_path_hits_near_the_stroke_only`, `::stroke_proximity`, `::topmost_wins_front_to_back`, `::marquee_selects_covered_elements` | verified |
+| `TOILE-UI-006` | A locked element and a group MUST NOT be hit directly. | §4; §2.E note of `toile-logic` | `ambre_toile::ui::hit::tests::locked_never_hits`, `::group_never_hits` | verified |
+| `TOILE-UI-007` | A click MUST resolve to the top-most enclosing group unless the user has entered that group's scope. | §5ter | `ambre_toile::ui::tool::tests::click_on_group_member_selects_top_most_group`, `::scoped_click_selects_the_member_inside_the_scope`, `::ungrouped_element_resolves_to_itself`, `::pointer_down_on_a_member_selects_the_group` | verified |
+| `TOILE-UI-008` | A gesture MUST emit exactly one command, on release; a click that moves nothing MUST emit none. | §5 | `ambre_toile::ui::tool::tests::resize_preview_then_release_emits_exactly_one_command`, `::click_without_movement_emits_no_command`, `::click_selects_then_drag_emits_move`, `::drag_corner_handle_emits_resize`, `::drag_rotate_handle_emits_rotate` | verified |
+| `TOILE-UI-009` | Escape or a tool switch MUST cancel an in-flight gesture without emitting a command. | §5 | `ambre_toile::ui::tool::tests::switching_tools_cancels_in_flight_gesture`, `::escape_reverts_an_armed_creation_tool_to_select`, `::escape_on_the_select_tool_reports_no_tool_change`, `::connector_release_on_empty_emits_nothing` | verified |
+| `TOILE-UI-010` | Snapping MUST quantize to the grid step, and the step MUST stay legible across the whole zoom range. | §3 | `ambre_toile::ui::grid::tests::snap_quantizes_to_step`, `::step_is_power_of_two_multiple_of_base`, `::spacing_never_illegible_across_zoom_sweep` | verified |
+| `TOILE-UI-011` | The content walk MUST balance every `push_transform` with its `pop_transform`. | §2 | `ambre_toile::ui::render::tests::content_walk_balances_transform_and_paints_each_node`, `::content_walk_applies_animation_override` | verified |
+| `TOILE-UI-012` | A sticky MUST paint as a filled card whose ink is independent of its fill and whose font size tracks the card size. | §5quinquies.A; `toile-logic §2.B` | `ambre_toile::ui::render::tests::sticky_paints_a_colored_card`, `::sticky_font_size_tracks_the_card_and_is_clamped`, `::sticky_font_size_auto_unless_overridden`, `::text_ink_precedence`, `::text_element_paints_no_card` | verified |
+| `TOILE-UI-013` | An image whose media is not resolved MUST paint a placeholder, never nothing. | §2; `toile-interop §5` | `ambre_toile::ui::render::tests::image_paints_pixels_when_resolved_else_placeholder` | verified |
+| `TOILE-UI-014` | Remote presence MUST render per peer with distinct colours, and MUST leave no trace in the document. | §8 | `ambre_toile::ui::presence::tests::two_peers_get_distinct_colours`, `::cursor_draws_arrow_and_label_chip`, `::selection_ghosts_outline_visible_elements_only`, `::live_stroke_draws_a_polyline`, `::laser_accumulates_a_fading_trail_and_clears_on_lift`; the document half is `TOILE-016` | verified |
+| `TOILE-UI-015` | An embedded document MUST map one child pixel to one screen pixel, through zoom and rotation. | §2; `toile-logic §2.I` | `ambre_toile::ui::embed::tests::a_child_pixel_is_a_screen_pixel`, `::transform_survives_a_rotated_embed`, `::child_size_scales_with_zoom`, `::child_origin_is_the_embeds_top_left`, `::screen_aabb_contains_a_rotated_quad` | verified |
+| `TOILE-UI-016` | At most one embed MUST hold focus, and focus MUST be dropped when its element leaves the frame. | §2; `toile-logic §2.I` | `ambre_toile::ui::embed::tests::only_the_focused_embed_comes_back_focused`, `::focus_is_dropped_when_its_element_leaves_the_frame`, `::escape_blurs_only_when_something_is_focused`, `::a_click_outside_returns_focus_to_the_board`, `::a_drag_from_an_embed_does_not_focus_it` | verified |
+| `TOILE-UI-017` | An embed session MUST open once per visible embed and MUST close only after the full debounce, so scrolling past it does not thrash the session. | §2; `toile-logic §2.I` | `ambre_toile::ui::embed::tests::a_visible_embed_opens_once_and_only_once`, `::close_waits_the_full_debounce`, `::a_scroll_oscillation_never_thrashes_the_session`, `::returning_before_the_deadline_cancels_the_close`, `::two_embeds_of_the_same_document_share_one_session` | verified |
+| `TOILE-UI-018` | Every context-menu entry and every menu-bar item MUST resolve to a command, with no duplicate id across menus. | §5ter; §5quinquies | `ambre_toile::ui::menu::tests::copy_cut_delete_resolve`, `::group_ungroup_resolve`, `::lock_unlock_resolve`, `::reorder_one_per_element`, `ambre_toile::ui::menu_bar::tests::every_menu_has_items`, `::menu_bar_ids_are_distinct`, `::edit_menu_carries_undo_redo_and_reuses_clipboard_ids`, `ambre_toile::ui::palette::tests::tool_for_command_maps_every_tool_id`, `::tool_chords_are_distinct` | verified |
+| `TOILE-UI-019` | A style edit from the floating bar MUST touch only the field it edits, and a mixed selection MUST report `None` rather than a wrong common value. | §5quinquies | `ambre_toile::ui::floatbar::tests::style_edit_touches_only_its_field`, `::common_fill_is_none_when_mixed`, `::common_fill_survives_when_shared`, `ambre_toile::ui::style::tests::differing_fill_flags_only_fill_mixed`, `::identical_elements_are_not_mixed` | verified |
+| `TOILE-UI-020` | The UI thread MUST NOT block on the Logic thread: at most one `SetViewport` per input frame, painting driven by the last `DisplayViewport` received. | §1; §9 | none. The double-buffering is implemented in the render loop and no test drives two viewport updates inside one frame to assert the coalescing | unverified |
+| `TOILE-UI-021` | The render loop MUST NOT repaint when nothing changed. | §1; §9 | none. The dirty flag exists; nothing asserts a clean frame produces no draw call, and no `criterion` bench guards the 60 FPS budget of §11 | unverified |
+
+> **Invariant coverage.** 19 `verified`, 2 `unverified` (`TOILE-UI-020`, `TOILE-UI-021` -- both about the render loop, both implemented and unexercised). "No `unsafe`" is crate-wide: `TOILE-023`.
 ---
 
 ## 1bis. UI-THREAD INTEGRATION (`AppView` / chrome / commands)
@@ -594,31 +615,15 @@ back-to-front by z-order; (2) the presence overlay (§8); (3) the **comment pins
 ---
 
 ## 10. QUALITY & TESTABILITY
-> See the transverse test architecture in `ambre-spec-architecture.md §4`.
 
-- **Test tiers:** **host** for pure geometry (viewport transforms, hit-testing, snapping, grid-step selection,
-  tessellation-tolerance bucketing, the tool state machine driven by synthetic input) — these are
-  `cfg`-agnostic and must be host-unit-tested. **wasm** (`wasm-bindgen-test`, headless Chrome) for the
-  `WgpuSurface` path, Parley layout on the GPU surface, and end-to-end input→command emission. No **db** tier.
-- **Unit tests:** `world_to_screen`/`screen_to_world` round-trip; `zoom_about` keeps the anchor fixed; every
-  `exact_hit` geometry branch (rect/ellipse/path fill/stroke proximity, rotated); marquee partial-cover
-  refinement; each `Tool` gesture emits exactly the expected `ToileCommand`; snapping quantization; each
-  keyboard shortcut and context-menu entry emits the expected command (§5, §5ter); group-selection resolution
-  (click selects the enclosing group, double-click enters, `Escape` leaves); the find panel emits `Find` with
-  the right options and steps `focus` on `Enter`/`Shift+Enter` (§5quater); a non-trivial selection change emits
-  `RequestSelectionStats` and the band renders `count`/`bounds`/zoom (§8bis); a comment-pin click opens the
-  thread panel and the Comment tool emits `CreateComment` with the right anchor (§4/§5sexies); `Ctrl`-click on a
-  linked element (and a plain click in present mode) follows the `LinkTarget` (§4); a double-click on a connector
-  emits `EditConnectorLabel` (§6); the Arrange row emits `ArrangeElements` with distribute disabled below 3
-  elements (§5quinquies.B). Target: every predicate branch of
-  hit-testing, the tool machine, and the selection-scope resolver.
-- **CRDT convergence:** N/A (no CRDT state in this module — it renders `DisplayViewport` and emits commands).
-- **Mocks & Environment:** `CommandSink` to assert emitted commands; a fake `DisplayViewport` feed to drive
-  paint tests; wasm GPU tests headless. No live network.
-- **Benchmarks:** `criterion` on a full-frame paint of a 2 000-visible-element `DisplayViewport` (target below),
-  path tessellation cache hit rate across a zoom sweep, and presence overlay cost at 20 concurrent cursors.
-- **Definition of Done (tested):** unit (geometry + tool machine) + at least one wasm render/input test green
-  in CI.
+> What this module guarantees, and what verifies each guarantee, is the table in §1. This section used to enumerate in prose the cases that "must" be unit-tested -- a paragraph nothing can check, in a module that had done the work: 164 host tests across `ui::viewport`, `ui::hit`, `ui::tool`, `ui::render`, `ui::embed`, `ui::presence`, `ui::menu`, `ui::menu_bar`, `ui::floatbar`, `ui::palette`, `ui::grid`, `ui::style` and `ui::status`.
+
+* **Tiers.** **host** for everything above -- viewport transforms, hit-testing, the tool state machine, snapping, the render walk through `RecordingSurface`, the embed transform and session lifecycle, the chrome models. All of it is `cfg`-agnostic geometry and decision logic, which is why it runs on the fast tier. **wasm** for the `WgpuSurface` path, Parley layout on the GPU surface, and end-to-end input->command. No **db** tier.
+* **Seams.** `CommandSink` to capture emitted commands; a fake `DisplayViewport` feed to drive paint tests; `RecordingSurface` for the draw-call sequence. Headless wasm for the GPU path, no live network.
+* **Mandatory belts.** A new interaction lands with (a) a geometry round-trip -- drawn rect against hit-test, under zoom and rotation (`TOILE-UI-002`, `TOILE-UI-005`), (b) a gesture test asserting the exact command emitted **and** that a no-movement click emits nothing (`TOILE-UI-008`), and (c) a `RecordingSurface` assertion for anything it paints.
+* **CRDT convergence.** N/A -- this module holds no CRDT state (`TOILE-UI-001`).
+* **Benchmarks.** None today. §11's budgets -- a 2 000-element frame paint, tessellation cache hit rate over a zoom sweep, presence overlay at 20 cursors -- have no `criterion` bench, which is also why `TOILE-UI-021` is `unverified`.
+* **Definition of Done.** An increment is `[x]` only when those belts are green in CI **and** no invariant in §1 is left without a `Status`.
 
 ---
 

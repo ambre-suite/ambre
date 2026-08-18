@@ -1,6 +1,7 @@
 # AMBRE -- SPEC: PROSE / FEATURES
 **Type:** Vertical (Feature/Widget)
 **Status:** Draft
+**Implementation:** design-only
 
 > User-facing features of Prose implemented on top of the CRDT engine (`prose-engine`).
 > Scope: inline and block styles, lists, headings, tables, table of contents, comments,
