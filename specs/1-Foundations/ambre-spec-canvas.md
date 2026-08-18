@@ -307,16 +307,7 @@ use peniko::Color;
 /// peer color is vivid, legible on light and dark backgrounds, and distinct from
 /// its neighbours; the result is always fully opaque (callers apply per-element
 /// alpha themselves).
-pub fn peer_color(user_id: &UserId) -> Color {
-    let mut hash: u32 = 0x811c_9dc5; // FNV-1a offset basis
-    for &b in user_id.as_bytes() {
-        hash ^= b as u32;
-        hash = hash.wrapping_mul(0x0100_0193); // FNV prime
-    }
-    let hue = (hash % 360) as f32;
-    let (r, g, b) = hsl_to_rgb(hue, 0.62, 0.55); // fixed S/L keeps peers legible
-    Color::from_rgba8(r, g, b, 255)
-}
+pub fn peer_color(user_id: &UserId) -> Color { /* ... */ }
 ```
 
 > **Dependency note.** Seeding on the canonical `UserId` (not raw `Uuid`) keeps the

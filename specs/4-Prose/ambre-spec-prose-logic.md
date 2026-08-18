@@ -188,11 +188,7 @@ ancestors in the `MovableTree`:
 
 ```rust
 // ambre-prose/src/features/list.rs
-pub fn compute_depth(tree: &LoroMovableTree, item_id: &TreeID) -> u8 {
-    tree.ancestors(item_id)
-        .filter(|id| block_type(tree, id) == BlockType::ListItem)
-        .count() as u8
-}
+pub fn compute_depth(tree: &LoroMovableTree, item_id: &TreeID) -> u8 { /* ... */ }
 ```
 
 **Nesting rules:**
@@ -213,9 +209,7 @@ Each leaf node (`Paragraph`, `Heading`, `ListItem`, `TableCell`, `CodeBlock`) ha
 
 ```rust
 // ambre-prose/src/doc.rs
-pub fn get_block_text(doc: &LoroDoc, id: &TreeID) -> LoroText {
-    doc.get_text(format!("t:{}", id.to_string()))
-}
+pub fn get_block_text(doc: &LoroDoc, id: &TreeID) -> LoroText { /* ... */ }
 ```
 
 **Why not `LoroMap` for body text:** `LoroMap` (LWW) has no concurrent positional insertion
@@ -260,33 +254,20 @@ pub const MARK_FIELD_TITLE:      &str = "f:ti"; // document title
 
 **`expand_type_for` -- single source of truth for all `ExpandType` policies:**
 
+The policy, by family -- **the function is total, an unknown key falls in the last row** (`PROSE-007`):
+
+| Mark family | `ExpandType` | Why |
+|---|---|---|
+| Link (`MARK_LINK`) | `None` | an adjacent insertion must not join the link |
+| Annotations (`MARK_COMMENT`, `MARK_SUGGEST_INS`, `MARK_SUGGEST_DEL`, `MARK_FOOTNOTE`, `MARK_CROSS_REF`) | `None` | an annotation never auto-extends over text it did not cover |
+| Dynamic fields (`MARK_FIELD_*`) | `None` | fixed value, nothing to extend |
+| Everything else -- base styles and typography | `After` | typing at the end of a bold span continues it |
+
 ```rust
 // ambre-prose/src/mark.rs
 use loro::ExpandType;
 
-pub fn expand_type_for(mark_key: &str) -> ExpandType {
-    match mark_key {
-        // Links: an adjacent insertion must not join the link
-        MARK_LINK => ExpandType::None,
-
-        // Annotations: never auto-extend
-        MARK_COMMENT
-        | MARK_SUGGEST_INS
-        | MARK_SUGGEST_DEL
-        | MARK_FOOTNOTE
-        | MARK_CROSS_REF => ExpandType::None,
-
-        // Dynamic fields: fixed value, no expansion
-        MARK_FIELD_PAGE_NUM
-        | MARK_FIELD_PAGE_COUNT
-        | MARK_FIELD_DATE
-        | MARK_FIELD_TITLE => ExpandType::None,
-
-        // Base styles and typography: expand to the right
-        // (continue style when typing at the end of the span)
-        _ => ExpandType::After,
-    }
-}
+pub fn expand_type_for(mark_key: &str) -> ExpandType { /* ... */ }
 ```
 
 #### `"styles"` -- `LoroMap`
@@ -389,20 +370,10 @@ pub enum PageRuns {
 impl PageLayout {
     /// Header runs for a given page: the static slice (shared by every page) or the
     /// per-page slice. Empty slice when `page` is out of range.
-    pub fn header_runs_for(&self, page: usize) -> &[ParleyRunData] {
-        match &self.header_runs {
-            PageRuns::Static(runs) => runs,
-            PageRuns::PerPage(pages) => pages.get(page).map(Vec::as_slice).unwrap_or(&[]),
-        }
-    }
+    pub fn header_runs_for(&self, page: usize) -> &[ParleyRunData] { /* ... */ }
 
     /// Footer runs for a given page. Same rule as `header_runs_for`.
-    pub fn footer_runs_for(&self, page: usize) -> &[ParleyRunData] {
-        match &self.footer_runs {
-            PageRuns::Static(runs) => runs,
-            PageRuns::PerPage(pages) => pages.get(page).map(Vec::as_slice).unwrap_or(&[]),
-        }
-    }
+    pub fn footer_runs_for(&self, page: usize) -> &[ParleyRunData] { /* ... */ }
 }
 
 /// Layout of a footnote placed at the bottom of a page.
@@ -967,76 +938,24 @@ impl ProseState {
     /// Content command from the UI thread (already typed -- no deserialization).
     /// A single `ProseCommand` can produce multiple display events
     /// (e.g. `DocUpdated` + `LayoutUpdated` + `RunsUpdated` after a keystroke) AND a delta.
-    pub fn handle_command(&mut self, command: ProseCommand) -> ProseOutcome {
-        // Cursor-only command: no CRDT mutation, only local presence on the ephemeral plane.
-        if let ProseCommand::UpdateCursor { pos } = &command {
-            return ProseOutcome {
-                display:   Vec::new(),
-                update:    None,
-                ephemeral: Some(self.build_presence_payload(pos)), // postcard PresencePayload
-            };
-        }
-
-        // 1. Mutate the CRDT and collect any NON-layout display events (Find results,
-        //    Clipboard, ...). `dispatch` performs the Loro mutation but does NOT export
-        //    updates and does NOT recompute layout (that is centralized below).
-        let mut display = self.dispatch(command);
-
-        // 2. Export the delta EXACTLY ONCE. Loro drains its internal diff on export,
-        //    so this must be the single call on the local path (P-06): the same bytes
-        //    feed both the DocUpdated event and the network `update`.
-        let delta = self.doc.export_updates();
-
-        // 3. If the command actually mutated the document, emit the standard keystroke
-        //    triple (DocUpdated + LayoutUpdated + RunsUpdated, P-31), reusing `delta`.
-        if !delta.is_empty() {
-            display.extend(self.produce_layout_events(delta.clone()));
-        }
-
-        ProseOutcome {
-            display,
-            update: (!delta.is_empty()).then_some(delta), // -> broadcast by Logic
-            ephemeral: None,
-        }
-    }
+    pub fn handle_command(&mut self, command: ProseCommand) -> ProseOutcome { /* ... */ }
 
     /// Remote CRDT delta OR snapshot (the Logic dispatcher calls this on
     /// `RemoteUpdate`/`RemoteSnapshot` after routing by `document_id`).
-    pub fn apply_remote(&mut self, payload: &[u8]) -> Vec<ProseEvent> {
-        self.doc.import(payload).ok();
-        self.invalidate_layout_from_delta(payload);
-        // DocUpdated must carry the IMPORTED remote bytes (`payload`), not a fresh local
-        // export -- export_updates is NOT called on this path (P-06).
-        self.produce_layout_events(payload.to_vec()) // -> [DocUpdated, LayoutUpdated, RunsUpdated]
-    }
+    pub fn apply_remote(&mut self, payload: &[u8]) -> Vec<ProseEvent> { /* ... */ }
 
     /// Remote `Ephemeral` payload (already decrypted by `ambre-sync`). The author
     /// identity is the **Sync-resolved `from_user_id`** (spoof-proof, `ambre-spec-sync.md §3`):
     /// the peer-authored payload carries only the cursor position and a self-asserted,
     /// cosmetic `display_name` -- never a `user_id`. The canonical id and the peer color
     /// are derived here from `from_user_id`.
-    pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &[u8]) -> Vec<ProseEvent> {
-        match postcard::from_bytes::<PresencePayload>(payload) {
-            Ok(p) => vec![ProseEvent::RemoteCursors { cursors: vec![RemoteCursor {
-                user_id:      from_user_id,
-                display_name: p.display_name,
-                color:        ambre_draw::peer::peer_color(&from_user_id), // shared cross-app helper (canvas §D)
-                position:     p.position,
-            }] }],
-            Err(_) => vec![], // non-Prose Ephemeral payload (ignored)
-        }
-    }
+    pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &[u8]) -> Vec<ProseEvent> { /* ... */ }
 
     /// On `SnapshotNeeded`: the Logic dispatcher then emits `SyncCommand::SendSnapshot`.
-    pub fn export_snapshot(&self) -> Vec<u8> {
-        self.doc.export_snapshot()
-    }
+    pub fn export_snapshot(&self) -> Vec<u8> { /* ... */ }
 
     /// Decrypted media arrived (dedicated Logic route): local cache + visual invalidation.
-    pub fn on_media_downloaded(&mut self, content_hash: String, data: Vec<u8>) -> Vec<ProseEvent> {
-        self.media_cache.insert(content_hash, data);
-        vec![ProseEvent::DocUpdated { delta: vec![] }] // empty delta = invalidation without mutation
-    }
+    pub fn on_media_downloaded(&mut self, content_hash: String, data: Vec<u8>) -> Vec<ProseEvent> { /* ... */ }
 }
 ```
 
@@ -1053,25 +972,7 @@ impl ProseState {
     /// (P-06). On the local path the caller passes the freshly exported delta (also used as
     /// `outcome.update`); on the remote path (`apply_remote`) it passes the imported remote
     /// `payload`. `DocUpdated.delta` therefore always carries the correct bytes on BOTH paths.
-    fn produce_layout_events(&mut self, delta: Vec<u8>) -> Vec<ProseEvent> {
-        let layout = self.recalculate_pagination();
-        let runs = self.shape_dirty_blocks();
-        self.layout_version += 1;
-        vec![
-            ProseEvent::DocUpdated { delta },
-            ProseEvent::LayoutUpdated {
-                layout,
-                // MVP emits a full recomputation from page 0; incremental invalidation
-                // (see §B) will narrow first_dirty_page to the modified block's page.
-                first_dirty_page: 0,
-                version: self.layout_version,
-            },
-            ProseEvent::RunsUpdated {
-                runs,
-                version: self.layout_version,
-            },
-        ]
-    }
+    fn produce_layout_events(&mut self, delta: Vec<u8>) -> Vec<ProseEvent> { /* ... */ }
 }
 ```
 
@@ -1432,13 +1333,9 @@ Sync Thread
 // ambre-prose/src/doc.rs
 impl ProseState {
     /// Raw Loro snapshot -- zstd compression + XChaCha20 encryption applied by ambre-sync.
-    pub fn export_snapshot(&self) -> Vec<u8> {
-        self.doc.export_snapshot()
-    }
+    pub fn export_snapshot(&self) -> Vec<u8> { /* ... */ }
 
-    pub fn import_snapshot(&mut self, snapshot: &[u8]) -> Result<(), ProseError> {
-        self.doc.import(snapshot).map_err(ProseError::LoroCrdt)
-    }
+    pub fn import_snapshot(&mut self, snapshot: &[u8]) -> Result<(), ProseError> { /* ... */ }
 }
 ```
 

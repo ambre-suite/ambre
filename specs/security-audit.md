@@ -85,9 +85,7 @@ mismatch.
 **Files:** `crates/ambre-server/src/s3.rs:66-72`, `routes/media.rs` (all three handlers)
 
 ```rust
-pub fn format_s3_media_key(env_prefix, document_id, content_hash: &str) -> String {
-    format!("{env_prefix}/documents/{document_id}/media/{content_hash}")
-}
+pub fn format_s3_media_key(env_prefix, document_id, content_hash: &str) -> String { /* ... */ }
 ```
 
 `content_hash` is taken verbatim from the client request body and interpolated
@@ -208,10 +206,7 @@ substitute a random key for a failed unwrap.
 **Files:** `sync/lib.rs:1168-1176`, `bus/rest.rs:129-153`
 
 ```rust
-fn handle_change_passphrase(&mut self, current: Vec<u8>, new: Vec<u8>) {
-    tracing::info!("Sync: ChangePassphrase");
-    let _ = (current, new);   // dropped without zeroization
-}
+fn handle_change_passphrase(&mut self, current: Vec<u8>, new: Vec<u8>) { /* ... */ }
 ```
 
 Both handlers are still stubs that bind-and-drop secret bytes without wiping

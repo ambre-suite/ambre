@@ -544,27 +544,15 @@ pub struct Viewport {
 impl Viewport {
     /// The world-space rectangle currently visible: the screen box mapped back
     /// through the inverse view transform. Drives `query_visible`.
-    pub fn to_world_rect(&self) -> kurbo::Rect {
-        let half = kurbo::Vec2::new(self.size.width, self.size.height) / (2.0 * self.zoom);
-        kurbo::Rect::from_center_size(self.center, (2.0 * half.x, 2.0 * half.y).into())
-    }
+    pub fn to_world_rect(&self) -> kurbo::Rect { /* ... */ }
 }
 
 impl SpatialIndex {
     /// O(N) build at load; asserted identical to the incremental path in tests.
-    pub fn build<'a>(elems: impl Iterator<Item = ElementBounds>) -> Self {
-        Self { tree: RTree::bulk_load(elems.collect()) }
-    }
+    pub fn build<'a>(elems: impl Iterator<Item = ElementBounds>) -> Self { /* ... */ }
 
     /// O(log N + k). Returned ids are paint-ordered by the caller via `layers`.
-    pub fn query_visible(&self, vp: &Viewport) -> impl Iterator<Item = ElementId> + '_ {
-        let r = vp.to_world_rect();
-        self.tree
-            .locate_in_envelope_intersecting(&AABB::from_corners(
-                [r.x0, r.y0], [r.x1, r.y1],
-            ))
-            .map(|e| e.id)
-    }
+    pub fn query_visible(&self, vp: &Viewport) -> impl Iterator<Item = ElementId> + '_ { /* ... */ }
 
     pub fn insert(&mut self, b: ElementBounds)         { self.tree.insert(b); }
     pub fn remove(&mut self, id: ElementId)            { /* locate + remove_at */ }
@@ -572,9 +560,7 @@ impl SpatialIndex {
 
     /// Point hit pre-filter (screen->world done by caller). Exact hit-test
     /// (rotation, path fill, stroke width) is refined in toile-ui.
-    pub fn query_point(&self, p: kurbo::Point) -> impl Iterator<Item = ElementId> + '_ {
-        self.tree.locate_all_at_point(&[p.x, p.y]).map(|e| e.id)
-    }
+    pub fn query_point(&self, p: kurbo::Point) -> impl Iterator<Item = ElementId> + '_ { /* ... */ }
 }
 ```
 
@@ -599,11 +585,9 @@ recomputed at derivation** (and again on the GPU path in `toile-ui`), never pers
 ```rust
 /// Derivation-time smoothing. Pure, deterministic, no allocation on the hot path
 /// beyond the output buffer. Returns a flattened polyline the UI tessellates.
-pub fn smooth_stroke(points: &[StrokePoint], out: &mut Vec<kurbo::Point>) {
-    out.clear();
-    // Catmull-Rom through sampled points; endpoints duplicated for tangents.
-    // (implementation: standard CR spline, `segments_per_span` from zoom in toile-ui)
-}
+/// Catmull-Rom through the sampled points, endpoints duplicated to give the first
+/// and last spans a tangent; `segments_per_span` comes from the zoom (toile-ui).
+pub fn smooth_stroke(points: &[StrokePoint], out: &mut Vec<kurbo::Point>) { /* ... */ }
 ```
 
 Streaming a live stroke (before commit) is an **ephemeral presence** payload, not a CRDT delta — see §7 and
@@ -647,15 +631,10 @@ impl Connector {
     /// Routes the connector against the current element bounds. `None` when an
     /// endpoint element was deleted (the connector is then dropped from the
     /// DisplayViewport and, if the deletion was local, garbage-collected -- §5.A).
-    pub fn route(&self, bounds: &HashMap<ElementId, kurbo::Rect>) -> Option<kurbo::BezPath> {
-        let a = anchor_point(bounds.get(&self.from)?, self.from_anch);
-        let b = anchor_point(bounds.get(&self.to)?,   self.to_anch);
-        Some(match self.path_type {
-            PathType::Straight => line(a, b),
-            PathType::Elbow    => elbow(a, self.from_anch, b, self.to_anch),
-            PathType::Curved   => cubic(a, self.from_anch, b, self.to_anch),
-        })
-    }
+    /// Resolves both anchors to points, then dispatches on `path_type`:
+    /// `Straight` a line, `Elbow` an orthogonal path respecting both anchor sides,
+    /// `Curved` a cubic whose control points leave along those sides.
+    pub fn route(&self, bounds: &HashMap<ElementId, kurbo::Rect>) -> Option<kurbo::BezPath> { /* ... */ }
 }
 ```
 
@@ -1048,12 +1027,8 @@ excluded).
 > gesture is one item. A live-stroke streams as ephemeral presence and commits once at `CommitStroke`.
 
 ```rust
-fn handle_undo(&mut self) {
-    if self.undo.undo().is_ok() { self.rebuild_after_undo_redo(); }
-}
-fn handle_redo(&mut self) {
-    if self.undo.redo().is_ok() { self.rebuild_after_undo_redo(); }
-}
+fn handle_undo(&mut self) { /* ... */ }
+fn handle_redo(&mut self) { /* ... */ }
 
 /// Loro has reapplied a prior version in `doc`; rebuild the derived caches from
 /// the diff (touched element bounds -> SpatialIndex update, layers/connectors

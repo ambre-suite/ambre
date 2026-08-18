@@ -111,6 +111,16 @@ test-wasm:
 cov:
     cargo llvm-cov --workspace --lcov --output-path lcov.info
 
+# A spec states what and why; the source states how (`ambre-spec-template.md §0`).
+# Shapes are the contract and stay -- `struct`, `enum`, trait and public
+# signatures. Function bodies are a second, uncompiled copy that drifts: a
+# `trame-ui` snippet contradicted its own sentence, and `proptest!` bodies
+# described a suite that did not exist. This makes the rule mechanical.
+
+# no implementation in the specs: fails on any function body in a rust fence.
+spec-code:
+    python3 scripts/spec_code.py --check
+
 # Ledger of the per-spec invariant tables (`ambre-spec-testing.md §7`), derived
 # rather than hand-counted -- a hand-maintained roll-up is the same failure mode
 # as a hand-maintained test list, and it was already wrong by one. Also enforces

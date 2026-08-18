@@ -26,6 +26,7 @@
 * **Forbidden:** complete function bodies (`fn foo(&mut self, ...) { ... }` with real logic). Replace them with (a) a one-line description of the algorithm, (b) the invariant it upholds, and (c) a pointer to the real code (`// ambre-crate/src/module.rs`).
 * **Illustrative only:** a short example test or snippet is fine to clarify intent; the authoritative test suite lives in the repo, never mirrored here.
 * **Decision test:** if a block can be copy-pasted into a `.rs` file and compiled as behavior, it is implementation and does not belong in a spec. If it is a shape declaration or a described algorithm, it does.
+* **Mechanised.** `just spec-code` (CI job `lint`) fails on any function body inside a rust fence in `specs/`. Keep the signature and its doc comment, collapse the body to `{ /* ... */ }`, and put the algorithm in the prose around it -- numbered steps or a table when it is a mapping. The rule was written long before it was enforced, and the corpus had accumulated 1 466 lines of bodies in the meantime.
 
 ## 1. OBJECTIVES & CONSTRAINTS
 * **Scope:** Strict definition of the component's boundaries. What it handles vs. what it delegates.
