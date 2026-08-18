@@ -35,6 +35,29 @@ Here are your STRICT engagement rules to save my quota and time:
 6. BUG-FIX WORKFLOW: When fixing a bug, first write an automated test that reproduces it (when feasible), then fix the bug, then confirm the test passes after the fix.
 7. DB/REDIS TESTS: `ambre-server` integration tests are gated by the Cargo feature `db` (never a bare `#[ignore]`). Pattern: `#[sqlx::test]` + `#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]`. Run with `just test-db` (services already up via `docker compose`); `#[sqlx::test]` auto-provisions an ephemeral DB and applies all migrations. Full convention in `ambre-spec-architecture.md §4`.
 
+### Verbosity budgets
+
+| Artefact | Budget |
+| :--- | :--- |
+| Chat / discussion | <= 10 lines, no restatement of the question |
+| Spec section | <= 1 page per concern |
+| Code comments | *Why* only -- never paraphrase the code |
+| Explicitly requested audit | unbounded |
+
+- One recommendation, not three options. Decision density is the dominant cost of this project.
+- Do not compensate by compressing into dense bullet lists: same load, fewer lines.
+- Escalate to long form only on explicit request.
+
+### Reading discipline
+
+Reading generated code does not scale: a review forms an opinion, a verification proves a behaviour (architecture spec §4, "Doctrine").
+
+- **Read:** public signatures, property *names*, mutant reports, snapshot diffs, the `Verification` column of an invariant table.
+- **Do not read:** function bodies and individual assertions already covered by a mechanism.
+- Prefer properties to assertions, and properties relating two independent paths (encode/decode, incremental vs full rebuild, peer A vs peer B). `prop_assert!(result.is_ok())` proves nothing; neither does a test that reimplements the function under test.
+- A found bug freezes into a named regression test, not into a property.
+- Accepting a generated artefact (snapshot, golden file) stays a human act -- delegating acceptance rebuilds the problem one level down.
+
 ---
 
 ## 3. NON-NEGOTIABLE PILLARS

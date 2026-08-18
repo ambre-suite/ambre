@@ -83,3 +83,42 @@ Tracked here so it is a decision, not an omission. None blocks the Trame MVP.
 ## 6. CI
 
 `.github/workflows/ci.yml` jobs `lint` / `test-native` / `test-db` / `test-wasm` / `coverage`, each calling the matching `just` recipe for local/CI parity (architecture §4, §7 ARCH P5). `test-wasm` now exercises `ambre-trame`, `ambre-chrome`, and `ambre-app`.
+
+---
+
+## 7. INVARIANT STATUS LEDGER
+
+> Roll-up of the per-spec invariant tables (grammar: architecture §4, "Invariants (normative)"). The invariants themselves live in the spec of the component they constrain; this section reports **state**, never intent.
+
+**Today: no spec carries an invariant table yet.** The grammar has just landed in `ambre-spec-template.md` §1; nothing has been seeded. The list below is therefore a seeding plan, not a coverage claim -- and saying so is the point of the ledger.
+
+Seeding order, highest value first:
+
+1. **The ZK boundary** (`ambre-spec-sync.md`, `ambre-spec-server.md`, and the §3 sections of both). It is the product's central claim and the only class with no mechanised verification today. Several `security-audit.md` findings are each the negation of an invariant that was never written down (`C1` ciphertext in logs, `H2` metadata to non-members, `H3` silent fallback to a random `DocumentKey`), so seeding here gives those IDs a second consumer instead of a second list. Typing comes first: `Ciphertext`, `SecretBytes` and `SecretString` already exist, and an invariant held by one of them ships as `verified` at zero cost.
+2. **Trame formula engine + CRDT convergence.** Already the best-verified area in the tree (`proptest` on both sides), so seeding is nearly free: the properties exist, they need an ID and a `Sources` line. This is what validates the grammar against material that already passes -- do it before generalising, not after.
+3. **The performance budgets** (architecture §5). Already numbered and falsifiable, and today verified by **one** criterion bench for roughly ten budgeted operations. Everything else in that table is currently prose.
+4. The remaining specs, once the grammar has survived (1)-(3) unchanged.
+
+Do not write every invariant first and derive afterwards -- that is waterfall. One component end to end, then decide.
+
+**Drift the ledger is meant to catch, observed today:** `security-audit.md` still lists `H5` (passphrases plaintext across IPC) as **OPEN**, while `ambre-bus/src/rest.rs` now carries `SecretBytes` / `SecretString` with `Zeroizing` + redacted `Debug`, and the module comment even cites `(H5)`. The finding was closed in code and the ledger was never updated. An ID joined to a `Verification` entry is exactly what makes that visible without re-reading the crate.
+
+---
+
+## 8. MECHANISM REALIZATION & GAPS
+
+> What the ladder in architecture §4 prescribes, against what is actually wired (measured 2026-08). Listed so each absence is a decision rather than an omission. None of these blocks the current MVP.
+
+| Mechanism | State | Gap |
+|---|---|---|
+| Type-level invariants | **strongest area** -- id newtype macro, `PublicKey`, `Ciphertext`, `SecretBytes`/`SecretString` | not the mechanism that is missing, the *statement*: nothing says which invariants these types hold, so the guarantee is invisible to anyone who has not read them |
+| `#![forbid(unsafe_code)]` | 2 crates of 17 (`ambre-core`, `ambre-protocol`) | the pillar is claimed workspace-wide; measured zero `unsafe` anywhere, so lifting it to every crate is free and turns a claim into a mechanism |
+| `[workspace.lints]` | absent | clippy runs the default set with `-D warnings`; no `pedantic`, no `deny(unwrap_used, panic, indexing_slicing)` |
+| `cargo-deny` | absent | no `deny.toml`, no CI job -- advisories and licences on a crypto dependency tree are unchecked |
+| `proptest` | wired | `ambre-crypto`, `ambre-trame::formula`, 2-peer convergence (`trame`, `toile`), `incremental_matches_rebuild` (toile index) |
+| `cargo-fuzz` | absent | no target on postcard decode, the `.ambre` container, or the formula parser -- all fed from an untrusted relay or from user files |
+| `cargo-mutants` | absent | ~1 170 test functions across the workspace, largely generated, never adversarially checked |
+| `cargo-llvm-cov` | wired, non-blocking (`just cov`) | lcov baseline only; no diff-mode gate on added lines |
+| `criterion` | 1 bench (`ambre-crypto/benches/crypto.rs`) | architecture §5 budgets roughly ten operations; no CI threshold job, so a regression cannot fail a build |
+| `insta` | absent | candidates: `RecordingSurface` op sequences, wire encodings |
+| `loom` / `miri` | **not adopted, by decision** | zero `unsafe`, atomics are flags and counters (`AtomicBool`/`AtomicU64`). Re-check with `rg 'unsafe|Ordering::' --stats` before revisiting |
