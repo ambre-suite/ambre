@@ -39,15 +39,25 @@
 
 > **Note on `ambre-bus`:** `ambre-sync` depends on `ambre-bus` for `SyncCommand`/`LogicEvent` (+ the `RestCommand`/`RestEvent`/`RequestId` service family) — not for `LogicCommand`, `UiEvent`, or UI types.
 
-**Invariants:**
+**Invariants:** grammar and status values in `ambre-spec-architecture.md §4`; the boundary-level rules these refine are `ZK-001..ZK-008` in `ambre-spec-architecture.md §3`.
 
-- **Zero plaintext on wire**: no byte of the CRDT payload reaches the network unencrypted and unsigned. Statically verifiable property: `PlaintextPayload` is never passed to `WsTransport`.
-- **Guaranteed causal order**: updates are always applied in `(snapshot_id, clock)` order. An update with an unknown `snapshot_id` is quarantined until the parent snapshot is received, then an automatic `WsClientMsg::RequestMissing` is triggered.
-- **Idempotence**: re-applying an already integrated CRDT update has no effect (inherited Loro property). Network duplicates are tolerated.
-- **No `unsafe`**: no `unsafe` in application code. RustCrypto crates are audited.
-- **Nonce uniqueness**: XChaCha20 nonce (192 bits) generated via CSPRNG per message. Collision probability over 2^96 messages cryptographically negligible.
-- **`WebSocket` (`web_sys`/`gloo-net`) is `!Send`**: created and used exclusively in the Sync thread.
-- **The Sync thread compiles neither UI nor CRDT**: guaranteed by the crate graph (`ambre-sync` depends on neither `ambre-canvas` nor `loro`).
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `SYNC-001` | The Sync worker MUST NOT hand `WsTransport` a payload that has not passed through the sealing pipeline. | `ZK-001`; §2.B | none. This spec used to claim a static property over a `PlaintextPayload` type **that does not exist in the tree**, and `Ciphertext(pub Vec<u8>)` accepts any bytes | unverified |
+| `SYNC-002` | The `DocumentKey` and the private signing key MUST NOT appear in any outbound message; only `pub_key` travels, inside `public_data`. | `ZK-002`; §3 Boundary Audit | crate graph (`ZK-002`) + `ZeroizeOnDrop` on both types | verified |
+| `SYNC-003` | Every sealed message MUST use a fresh 192-bit XChaCha20 nonce drawn from the CSPRNG. | §2.B | none. Sealing is exercised (`ambre_crypto::tests::prop_roundtrip_encrypt_decrypt`), nonce freshness is asserted nowhere | unverified |
+| `SYNC-004` | A message MUST NOT be replayable into another document: the `commitment_tag` binds the ciphertext to its `document_id`. | §3 Attack Prevention | `ambre_sync::pipeline::tests::tampered_document_id_rejected`; `ambre_crypto::tests::commitment_tag_wrong_aad_rejected` | verified |
+| `SYNC-005` | An update sealed under a different `DocumentKey` MUST be rejected, never applied. | §3 Attack Prevention | `ambre_sync::pipeline::tests::wrong_document_key_rejected`; `ambre_crypto::tests::tampered_ciphertext_fails`, `::prop_single_byte_mutation_fails` | verified |
+| `SYNC-006` | Updates MUST be applied in `(snapshot_id, clock)` order; an update whose parent snapshot is unknown MUST be quarantined, not applied. | §2.E | `ambre_sync::updates::tests::update_with_unknown_snapshot_quarantined`, `::quarantine_released_in_clock_order`, `::update_with_known_snapshot_delivered_immediately` | verified |
+| `SYNC-007` | The quarantine MUST be bounded: on overflow the oldest entry is dropped and a warning emitted. | §2.E | `ambre_sync::updates::tests::quarantine_overflow_drops_oldest_and_warns` | verified |
+| `SYNC-008` | An `Ephemeral` frame whose `counter` is not greater than the last one seen for its `(pub_key, document_id)` MUST be dropped. | §3 Attack Prevention | `ambre_sync::tests::monotonic_counter_accepted_replay_dropped` | verified |
+| `SYNC-009` | Decompression MUST be bounded by a size ceiling and MUST reject an unknown compression version. | §2.B | `ambre_sync::pipeline::tests::decompress_bomb_rejected`, `::decompress_unknown_version_rejected`, `::decompress_within_ceiling_ok` | verified |
+| `SYNC-010` | A shared `DocumentKey` MUST be wrapped for the invitee's X25519 exchange key alone. | §3 Document Sharing | `ambre_sync::sharing::tests::invite_request_wraps_for_the_invitee_only`; `ambre_crypto::tests::kek_binds_peer_identity`, `::weak_peer_public_key_rejected` | verified |
+| `SYNC-011` | The Sync worker MUST compile neither CRDT nor UI code. | §1 Scope | crate graph: `ambre-sync` declares neither `loro` nor `ambre-canvas` | verified |
+| `SYNC-012` | A failed unwrap of the remote `DocumentKey` MUST NOT be silently replaced by a freshly generated key. | derived (audit `H3`) | none. `updates.rs` still maps `Ok(None) \| Err(_)` to `DocumentKey::generate()` and opens the document local-only, so a transient error and a genuinely new document are indistinguishable | unverified |
+| `SYNC-013` | Application code MUST contain no `unsafe`. | pillar "Security" | measured zero `unsafe` workspace-wide, but `ambre-sync` carries no `#![forbid(unsafe_code)]` | unverified |
+
+**Non-invariant properties** (true, but not falsifiable as stated -- kept here as design notes, not as rules): CRDT update idempotence is inherited from Loro rather than guaranteed by this crate; `web_sys::WebSocket` being `!Send` is a type fact, enforced by the compiler at every use site.
 
 ---
 

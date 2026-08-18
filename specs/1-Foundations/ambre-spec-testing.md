@@ -90,18 +90,40 @@ Tracked here so it is a decision, not an omission. None blocks the Trame MVP.
 
 > Roll-up of the per-spec invariant tables (grammar: architecture §4, "Invariants (normative)"). The invariants themselves live in the spec of the component they constrain; this section reports **state**, never intent.
 
-**Today: no spec carries an invariant table yet.** The grammar has just landed in `ambre-spec-template.md` §1; nothing has been seeded. The list below is therefore a seeding plan, not a coverage claim -- and saying so is the point of the ledger.
+**Seeded: the ZK boundary (35 invariants).** `ZK-001..008` (architecture §3, the boundary itself), `SYNC-001..013` (`ambre-spec-sync.md §1`), `SRV-001..014` (`ambre-spec-server.md §1`).
 
-Seeding order, highest value first:
+| Status | Count | Reading |
+|---|---|---|
+| `verified` | 22 | a named test, a `proptest`, or the crate graph |
+| `human-review` | 2 | `ZK-006` / `SRV-001` (no ciphertext in logs) -- reviewer attention, by decision |
+| `unverified` | 11 | no mechanism today; each is listed below |
+| `qa-manual` | 0 | -- |
 
-1. **The ZK boundary** (`ambre-spec-sync.md`, `ambre-spec-server.md`, and the §3 sections of both). It is the product's central claim and the only class with no mechanised verification today. Several `security-audit.md` findings are each the negation of an invariant that was never written down (`C1` ciphertext in logs, `H2` metadata to non-members, `H3` silent fallback to a random `DocumentKey`), so seeding here gives those IDs a second consumer instead of a second list. Typing comes first: `Ciphertext`, `SecretBytes` and `SecretString` already exist, and an invariant held by one of them ships as `verified` at zero cost.
-2. **Trame formula engine + CRDT convergence.** Already the best-verified area in the tree (`proptest` on both sides), so seeding is nearly free: the properties exist, they need an ID and a `Sources` line. This is what validates the grammar against material that already passes -- do it before generalising, not after.
-3. **The performance budgets** (architecture §5). Already numbered and falsifiable, and today verified by **one** criterion bench for roughly ten budgeted operations. Everything else in that table is currently prose.
-4. The remaining specs, once the grammar has survived (1)-(3) unchanged.
+**Executed on the seeding pass:** `ambre-crypto` 19/19 and `ambre-sync` 57/57 green on the host tier; `ambre-server` 94 green with 62 ignored -- the `SRV-*` entries citing `routes::tests::*` are db-tier tests, run by the CI `test-db` job rather than by `cargo test`. Nothing cited here is a test that does not exist: every name in a `Verification` cell resolves to a `fn` in the tree.
+
+Three of the 22 are held by the **crate graph** rather than by a test (`ZK-002`, `ZK-003`, `SYNC-011`): a violation requires adding a dependency, which is visible in review but not currently refused by anything. A `cargo-deny` `[bans]` section turns that convention into a mechanism.
+
+### Divergence report
+
+The point of the exercise, and the part that does not come out of a test run.
+
+1. **`ZK-004` / `SRV-012` -- the code exceeds the spec.** `ambre-server/Cargo.toml` declares `chacha20poly1305` and `x25519-dalek` as **runtime** dependencies; neither appears anywhere in its `src/`. The spec's static check was phrased as "imports no `ambre-crypto`", which the code satisfies -- while the intent behind it (no decryption or key-exchange capability inside the server process) does not hold. This is the falsifiable restatement earning its keep on the first pass. Fix: drop both dependencies, then lock the property with a `cargo-deny` `[bans]` rule; `ZK-004` becomes `verified` at that point.
+2. **`SYNC-001` -- the flagship invariant was claimed static and is held by nothing.** `ambre-spec-sync.md` asserted a "statically verifiable property" over a `PlaintextPayload` type that **does not exist** in the tree, and `Ciphertext(pub Vec<u8>)` accepts any bytes from anywhere. The strongest fix is type-level, per the mechanism ladder: give the sealed payload a private field and a constructor reachable only from the crypto pipeline, which makes `ZK-001` and `SYNC-001` compiler-held instead of aspirational.
+3. **`SYNC-012` -- an undocumented decision (audit `H3` residue).** `ambre-sync/src/updates.rs` maps `Ok(None) | Err(_)` to `DocumentKey::generate()`, so a transient network failure and a genuinely new document are indistinguishable: the document opens local-only under a key no peer holds. Either the spec adopts this explicitly and states the divergence consequence, or the code separates the two cases. Today it is neither.
+4. **`ZK-008` / `SRV-002` -- configuration can violate a spec rule.** The presigned-URL TTL is `state.config.presigned_url_ttl_secs` (default 900 s) with no upper bound enforced, so a deployment can exceed the 15-minute ceiling without any code change. And while role refusals are tested, **no test asserts that a non-member is refused a presigned URL** -- the ACL-before-S3 ordering is verified for roles, not for membership.
+5. **`ZK-007` -- no mechanism exists for a whitelist.** "The relay learns nothing beyond this set" has no natural test. Candidate: an `insta` snapshot over the `WsClientMsg` / `WsServerMsg` shapes, so any new plaintext field shows up as a snapshot diff rather than as nothing at all.
+6. **The audit ledger lags the code.** `C1` (ciphertext in S3 logs), `C4` (cross-document snapshot access) and `H2` (metadata to non-members) are fixed in the tree but still listed **OPEN** in `security-audit.md`, alongside the `H5` case already noted below. Each now has an invariant citing its ID in `Sources`, which is what stops the two from drifting again. Updating those statuses is a separate pass.
+
+### Remaining seeding order
+
+1. ~~ZK boundary~~ -- done, above.
+2. **Trame formula engine + CRDT convergence.** Already the best-verified area (`proptest` on both sides), so seeding is nearly free: the properties exist and need an ID plus a `Sources` line. Expect a high `verified` ratio and few divergences -- that is the point, it validates the grammar against material that already passes.
+3. **The performance budgets** (architecture §5). Numbered and falsifiable already, but verified by **one** criterion bench for roughly ten budgeted operations.
+4. The remaining specs, once the grammar has survived (2)-(3) unchanged.
 
 Do not write every invariant first and derive afterwards -- that is waterfall. One component end to end, then decide.
 
-**Drift the ledger is meant to catch, observed today:** `security-audit.md` still lists `H5` (passphrases plaintext across IPC) as **OPEN**, while `ambre-bus/src/rest.rs` now carries `SecretBytes` / `SecretString` with `Zeroizing` + redacted `Debug`, and the module comment even cites `(H5)`. The finding was closed in code and the ledger was never updated. An ID joined to a `Verification` entry is exactly what makes that visible without re-reading the crate.
+**Drift the ledger is meant to catch, observed on the first pass:** `security-audit.md` still lists `H5` (passphrases plaintext across IPC) as **OPEN**, while `ambre-bus/src/rest.rs` now carries `SecretBytes` / `SecretString` with `Zeroizing` + redacted `Debug`, and the module comment even cites `(H5)`. The finding was closed in code and the ledger was never updated. An ID joined to a `Verification` entry is exactly what makes that visible without re-reading the crate.
 
 ---
 
