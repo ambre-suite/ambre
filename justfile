@@ -98,6 +98,15 @@ test-wasm:
 cov:
     cargo llvm-cov --workspace --lcov --output-path lcov.info
 
+# Supply chain + capability wall. `deny.toml` sets `[graph] all-features = true`,
+# so optional dependencies (the `fixtures` feature's `ambre-crypto` edge) are part
+# of the graph being checked rather than invisible to it. No network build: this
+# reads `Cargo.lock` and the advisory database only.
+
+# cargo-deny: advisories, licences, sources, and the ZK capability bans.
+deny:
+    cargo deny check
+
 # Local convenience: bring the db-tier backing services up.
 services-up:
     docker compose up -d postgres redis minio

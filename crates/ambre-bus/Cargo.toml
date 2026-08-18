@@ -2,6 +2,7 @@
 name = "ambre-bus"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "IPC message types for inter-thread communication in Ambre"
 
 [dependencies]

@@ -62,7 +62,7 @@ It does **not** handle:
 | `SRV-009` | A refresh token MUST be consumable exactly once, including under concurrent use. | §3 Token Model | `ambre_server::redis_ops::tests::refresh_consume_rejects_a_replayed_token`, `::only_one_racing_caller_claims_a_refresh_token` | verified |
 | `SRV-010` | An oversized frame MUST be rejected without partial side effects. | §6 Error Handling | `ambre_server::ws::handler::message::tests::oversized_delta_writes_no_pending`, `::oversized_ephemeral_writes_no_presence` | verified |
 | `SRV-011` | An organization or a document MUST NOT be left without an owner. | §2.B | `ambre_server::routes::orgs::tests::owner_cannot_demote_last_owner`, `::owner_cannot_remove_last_owner`; `routes::tests::owner_can_leave_when_another_owner_remains` | verified |
-| `SRV-012` | The server MUST perform no cryptographic operation beyond Ed25519 verification and minting its own access tokens. | §1 dependency note (least privilege) | none. See `ZK-004`: the capability is linked into the binary even though unused | unverified |
+| `SRV-012` | The server MUST perform no cryptographic operation beyond Ed25519 verification and minting its own access tokens. | §1 dependency note (least privilege) | `deny.toml` capability bans + CI job `deny` (see `ZK-004`); `ambre-server` no longer links AEAD, X25519 or Shamir | verified |
 | `SRV-013` | The rate limiter MUST fail closed on the auth tier. | §3 Network Security; audit `M6` | `ambre_server::middleware::rate_limit::tests::only_auth_tier_fails_closed` | verified |
 | `SRV-014` | Application code MUST contain no `unsafe`. | pillar "Security" | measured zero `unsafe` workspace-wide, but `ambre-server` carries no `#![forbid(unsafe_code)]` | unverified |
 

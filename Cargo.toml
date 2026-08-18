@@ -218,14 +218,20 @@ tower-http        = { version = "0.6", features = ["cors", "trace"] }
 futures-util      = "0.3"
 sqlx              = { version = "0.8", features = ["postgres", "uuid", "chrono", "runtime-tokio-rustls"] }
 rustis            = "0.19.3"
-aws-sdk-s3        = { version = "1.128", features = ["behavior-version-latest"] }
+# `default-features = false` drops exactly one default feature: `rustls`, which
+# is the SDK alias for `aws-smithy-runtime/tls-rustls` -- the *legacy* client
+# stack (hyper 0.14 / rustls 0.21), and with it `h2` 0.3 and `rustls-webpki`
+# 0.101, all four carrying open advisories. The remaining features are the
+# other defaults verbatim, so the modern `default-https-client` (hyper 1 /
+# rustls 0.23) is the only HTTP path left. See `deny.toml` and
+# `ambre-spec-testing.md §8`.
+aws-sdk-s3        = { version = "1.128", default-features = false, features = ["behavior-version-latest", "sigv4a", "http-1x", "default-https-client", "rt-tokio"] }
 chrono            = { version = "0.4", features = ["serde"] }
 base64            = "0.22"
 time              = "0.3"
 openidconnect     = "4"
 reqwest           = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 url               = "2"
-sharks            = "0.2"
 jsonwebtoken      = "9"
 
 # Import/export

@@ -94,20 +94,20 @@ Tracked here so it is a decision, not an omission. None blocks the Trame MVP.
 
 | Status | Count | Reading |
 |---|---|---|
-| `verified` | 22 | a named test, a `proptest`, or the crate graph |
+| `verified` | 24 | a named test, a `proptest`, or a `deny.toml` capability ban |
 | `human-review` | 2 | `ZK-006` / `SRV-001` (no ciphertext in logs) -- reviewer attention, by decision |
-| `unverified` | 11 | no mechanism today; each is listed below |
+| `unverified` | 9 | no mechanism today; each is listed below |
 | `qa-manual` | 0 | -- |
 
 **Executed on the seeding pass:** `ambre-crypto` 19/19 and `ambre-sync` 57/57 green on the host tier; `ambre-server` 94 green with 62 ignored -- the `SRV-*` entries citing `routes::tests::*` are db-tier tests, run by the CI `test-db` job rather than by `cargo test`. Nothing cited here is a test that does not exist: every name in a `Verification` cell resolves to a `fn` in the tree.
 
-Three of the 22 are held by the **crate graph** rather than by a test (`ZK-002`, `ZK-003`, `SYNC-011`): a violation requires adding a dependency, which is visible in review but not currently refused by anything. A `cargo-deny` `[bans]` section turns that convention into a mechanism.
+Five of the 24 are held by the **crate graph** rather than by a test (`ZK-002`, `ZK-003`, `ZK-004`, `SRV-012`, `SYNC-011`), and `deny.toml` now refuses the edit that would break them: each capability crate (AEAD, Argon2, X25519, Ed25519, `ambre-crypto`, `loro`) carries a `wrappers` list of the crates allowed to depend on it, checked by the CI `deny` job. Re-granting a capability is an edit of `deny.toml`, reviewed as such, rather than one line in a `Cargo.toml`.
 
 ### Divergence report
 
 The point of the exercise, and the part that does not come out of a test run.
 
-1. **`ZK-004` / `SRV-012` -- the code exceeds the spec.** `ambre-server/Cargo.toml` declares `chacha20poly1305` and `x25519-dalek` as **runtime** dependencies; neither appears anywhere in its `src/`. The spec's static check was phrased as "imports no `ambre-crypto`", which the code satisfies -- while the intent behind it (no decryption or key-exchange capability inside the server process) does not hold. This is the falsifiable restatement earning its keep on the first pass. Fix: drop both dependencies, then lock the property with a `cargo-deny` `[bans]` rule; `ZK-004` becomes `verified` at that point.
+1. **`ZK-004` / `SRV-012` -- the code exceeded the spec. Closed.** `ambre-server/Cargo.toml` declared `chacha20poly1305`, `x25519-dalek` **and** `sharks` as runtime dependencies; none appeared anywhere in its `src/`. The spec's static check was phrased as "imports no `ambre-crypto`", which the code satisfied -- while the intent behind it (no decryption, key-exchange or secret-sharing capability inside the relay process) did not hold. The falsifiable restatement earned its keep on the first pass. The three declarations are gone and `deny.toml` refuses their return; both invariants are now `verified`. Note for the day Shamir quorum recovery lands (`routes/orgs.rs`, N1): counting `k` encrypted shares before releasing a blob needs no `sharks` dependency, and reconstructing a secret server-side would be a zero-knowledge decision requiring a spec change first.
 2. **`SYNC-001` -- the flagship invariant was claimed static and is held by nothing.** `ambre-spec-sync.md` asserted a "statically verifiable property" over a `PlaintextPayload` type that **does not exist** in the tree, and `Ciphertext(pub Vec<u8>)` accepts any bytes from anywhere. The strongest fix is type-level, per the mechanism ladder: give the sealed payload a private field and a constructor reachable only from the crypto pipeline, which makes `ZK-001` and `SYNC-001` compiler-held instead of aspirational.
 3. **`SYNC-012` -- an undocumented decision (audit `H3` residue).** `ambre-sync/src/updates.rs` maps `Ok(None) | Err(_)` to `DocumentKey::generate()`, so a transient network failure and a genuinely new document are indistinguishable: the document opens local-only under a key no peer holds. Either the spec adopts this explicitly and states the divergence consequence, or the code separates the two cases. Today it is neither.
 4. **`ZK-008` / `SRV-002` -- configuration can violate a spec rule.** The presigned-URL TTL is `state.config.presigned_url_ttl_secs` (default 900 s) with no upper bound enforced, so a deployment can exceed the 15-minute ceiling without any code change. And while role refusals are tested, **no test asserts that a non-member is refused a presigned URL** -- the ACL-before-S3 ordering is verified for roles, not for membership.
@@ -136,7 +136,7 @@ Do not write every invariant first and derive afterwards -- that is waterfall. O
 | Type-level invariants | **strongest area** -- id newtype macro, `PublicKey`, `Ciphertext`, `SecretBytes`/`SecretString` | not the mechanism that is missing, the *statement*: nothing says which invariants these types hold, so the guarantee is invisible to anyone who has not read them |
 | `#![forbid(unsafe_code)]` | 2 crates of 17 (`ambre-core`, `ambre-protocol`) | the pillar is claimed workspace-wide; measured zero `unsafe` anywhere, so lifting it to every crate is free and turns a claim into a mechanism |
 | `[workspace.lints]` | absent | clippy runs the default set with `-D warnings`; no `pedantic`, no `deny(unwrap_used, panic, indexing_slicing)` |
-| `cargo-deny` | absent | no `deny.toml`, no CI job -- advisories and licences on a crypto dependency tree are unchecked |
+| `cargo-deny` | **wired** (`deny.toml`, `just deny`, CI job `deny`) | advisories / licences / sources, plus the capability bans that mechanise `ZK-002`, `ZK-003`, `ZK-004`, `SRV-012`, `SYNC-011`. Negative-tested: re-declaring `chacha20poly1305` on `ambre-server` fails the check, naming that crate |
 | `proptest` | wired | `ambre-crypto`, `ambre-trame::formula`, 2-peer convergence (`trame`, `toile`), `incremental_matches_rebuild` (toile index) |
 | `cargo-fuzz` | absent | no target on postcard decode, the `.ambre` container, or the formula parser -- all fed from an untrusted relay or from user files |
 | `cargo-mutants` | absent | ~1 170 test functions across the workspace, largely generated, never adversarially checked |
@@ -144,3 +144,13 @@ Do not write every invariant first and derive afterwards -- that is waterfall. O
 | `criterion` | 1 bench (`ambre-crypto/benches/crypto.rs`) | architecture §5 budgets roughly ten operations; no CI threshold job, so a regression cannot fail a build |
 | `insta` | absent | candidates: `RecordingSurface` op sequences, wire encodings |
 | `loom` / `miri` | **not adopted, by decision** | zero `unsafe`, atomics are flags and counters (`AtomicBool`/`AtomicU64`). Re-check with `rg 'unsafe|Ordering::' --stats` before revisiting |
+
+### What the first `cargo deny` run turned up
+
+Beyond the capability bans it was written for -- the reason a wall is worth having before anyone believes it works.
+
+* **Four vulnerabilities fixed, one accepted.** `h2` was patched on our side of the tree (0.4.14 -> 0.4.16). The other three -- `h2` 0.3 and `rustls-webpki` 0.101 (`RUSTSEC-2026-0258`, `-0098`, `-0099`, `-0104`) -- came from `aws-sdk-s3`, whose default feature `rustls` is an alias for the SDK's **legacy** client stack (hyper 0.14 / rustls 0.21) even though the modern one (`default-https-client`, hyper 1 / rustls 0.23) was already being built alongside it. Declaring the SDK with `default-features = false` and the other four defaults verbatim drops the legacy path: `hyper` 0.14, `rustls` 0.21, `h2` 0.3 and `rustls-webpki` 0.101 all leave the graph. Only `RUSTSEC-2023-0071` (Marvin, `rsa` via `openidconnect`) stays accepted, with its justification and exit condition in `deny.toml`: the server holds no RSA private key and only verifies id_token signatures, and no fixed version exists upstream.
+  * **Residual risk, stated:** nothing in the suite exercises a real S3 round trip (`ambre-spec-architecture.md §4` CI notes already record the missing minio service), so this TLS-stack swap is verified by compilation, by the dependency graph and by the 94 green host tests -- **not** by an actual handshake. A presigned upload against a local minio is the check to run before this reaches an environment that matters.
+
+* **`unmaintained` is scoped to `workspace`.** A transitive unmaintained crate (loro's `im` / `bitmaps`, tooling's `paste`, `gumdrop`, `proc-macro-error2`) is upstream's decision, not a signal this repo can act on. Scoping it keeps the check readable instead of permanently red.
+* **Ten crates declared no licence at all** (`ambre-core`, `ambre-crypto`, `ambre-protocol`, `ambre-bus`, `ambre-draw`, `ambre-pdf`, `ambre-trame`, `ambre-toile`, `ambre-prose`, `ambre-murmure`) while the other seven inherited `AGPL-3.0` from the workspace. Now inherited everywhere: an open-source suite whose crates half-declare their licence is a licensing defect, and it was found by a check written for something else entirely.

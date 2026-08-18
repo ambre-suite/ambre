@@ -2,6 +2,7 @@
 name = "ambre-pdf"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "KrillaSurface: DrawSurface implementation for PDF export (Logic thread, lazy-loaded)"
 
 [dependencies]

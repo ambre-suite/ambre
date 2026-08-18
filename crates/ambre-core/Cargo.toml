@@ -2,6 +2,7 @@
 name = "ambre-core"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Types fondamentaux d'Ambre (UUID, DocType, PublicKey)"
 
 [features]
