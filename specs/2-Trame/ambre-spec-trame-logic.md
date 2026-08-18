@@ -240,28 +240,17 @@ impl SheetIndex {
     /// Permute the row order to mirror a `mov(from, to)` (sort, reorder).
     pub fn apply_move_row(&mut self, from: usize, to: usize) { /* ... */ }
 
-    pub fn resolve(&self, row: usize, col: usize) -> Option<(Uid, Uid)> {
-        Some((*self.row_by_pos.get(row)?, *self.col_by_pos.get(col)?))
-    }
+    /// Position pair -> uid pair. `None` in virtual space (past the used range).
+    pub fn resolve(&self, row: usize, col: usize) -> Option<(Uid, Uid)> { /* ... */ }
 
     /// Used for #REF! detection
     pub fn contains_row(&self, id: &Uid) -> bool { self.row_to_pos.contains_key(id) }
     pub fn contains_col(&self, id: &Uid) -> bool { self.col_to_pos.contains_key(id) }
 
-    pub fn col_letter(index: usize) -> String {
-        let mut chars = Vec::new();
-        let mut n = index;
-        loop {
-            chars.push((b'A' + (n % 26) as u8) as char);
-            if n < 26 { break; }
-            n = n / 26 - 1;
-        }
-        chars.into_iter().rev().collect()
-    }
-
-    pub fn letter_to_index(s: &str) -> usize {
-        s.bytes().fold(0usize, |acc, b| acc * 26 + (b - b'A') as usize + 1) - 1
-    }
+    /// Bijective base-26 (A..Z, AA..), the spreadsheet convention: 0 -> "A",
+    /// 26 -> "AA". Round-trips with `letter_to_index`.
+    pub fn col_letter(index: usize) -> String   { /* ... */ }
+    pub fn letter_to_index(s: &str) -> usize    { /* ... */ }
 }
 ```
 
@@ -433,10 +422,9 @@ pub enum RangeEndpoint {
 }
 
 impl RangeId {
-    pub fn contains(&self, row: Uid, col: Uid, index: &SheetIndex) -> bool {
-        self.axis_contains(&self.row_start, &self.row_end, row, &index.row_to_pos)
-            && self.axis_contains(&self.col_start, &self.col_end, col, &index.col_to_pos)
-    }
+    /// True when the cell falls inside the range on **both** axes. Each axis is
+    /// tested independently against its endpoints, resolved through the index.
+    pub fn contains(&self, row: Uid, col: Uid, index: &SheetIndex) -> bool { /* ... */ }
 
     /// Resolves endpoints to positions for iteration. `entire` is the position an
     /// `EntireAxis` bound takes (0 for a start, axis_len-1 for an end). Returns
@@ -552,15 +540,10 @@ impl DependencyGraph {
         dirty
     }
 
-    fn find_cycle_cells(&self) -> Vec<CellId> {
-        petgraph::algo::kosaraju_scc(&self.cell_dag)
-            .into_iter()
-            .find(|scc| scc.len() > 1)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|n| self.cell_dag[n])
-            .collect()
-    }
+    /// The culprits of a static cycle: the first strongly connected component of
+    /// the cell DAG with more than one node (Kosaraju), mapped back to `CellId`s.
+    /// Empty when the graph is acyclic.
+    fn find_cycle_cells(&self) -> Vec<CellId> { /* ... */ }
 }
 ```
 
@@ -609,40 +592,15 @@ pub struct CellBytecode {
 
 ### B. AST → Bytecode Compilation
 
-```rust
-fn compile(expr: &Expr) -> Vec<Op> {
-    match expr {
-        Expr::Literal(CellValue::Number(n))  => vec![Op::PushNum(*n)],
-        Expr::Literal(CellValue::Text(s))    => vec![Op::PushStr(s.clone())],
-        Expr::Literal(CellValue::Boolean(b)) => vec![Op::PushBool(*b)],
-        Expr::Literal(_)                     => vec![Op::PushEmpty],
-        Expr::CellRef(r)                     => vec![Op::PushCell(bind_cell(r, index))],
-        Expr::Range(dep)                     => vec![Op::EvalRange(bind_range(dep, index))],
-        Expr::BinOp(kind, lhs, rhs) => {
-            let mut ops = compile(lhs);
-            ops.extend(compile(rhs));
-            ops.push(kind.to_op());
-            ops
-        }
-        Expr::FnCall(name, args) => {
-            let mut ops = Vec::new();
-            for arg in args { ops.extend(compile(arg)); }
-            ops.push(Op::CallFn { name: name.clone(), n_args: args.len() as u8 });
-            ops
-        }
-        // `SheetRef` and `Name` (named range) are eliminated by the
-        // `parser::resolve_refs` pass BEFORE compile() runs -- rewritten into a
-        // `CellRef`/`Range`, or into an `Op::PushError` for an undefined name /
-        // deleted target. Reaching this arm means resolution was skipped, so it is
-        // guarded by a `debug_assert!(false)` and degrades to `PushEmpty` (a blank
-        // value, never a panic) rather than silently succeeding.
-        Expr::SheetRef { .. } | Expr::Name(_) => {
-            debug_assert!(false, "unresolved SheetRef/Name reached compile()");
-            vec![Op::PushEmpty]
-        }
-    }
-}
-```
+`compile(&Expr) -> Vec<Op>` is a post-order walk of the AST (`ambre-trame/src/formula/compile.rs`):
+
+* a **literal** emits its `Push*`, an unrepresentable one emits `PushEmpty`;
+* a **cell reference** is bound against the current `SheetIndex` and emits `PushCell(CellId)`; a **range** binds the same way and emits `EvalRange(RangeId)` -- binding at compile time is what makes references survive a sort (`TRAME-005`);
+* a **binary operation** emits its operands then the operator, which is what keeps the stack balanced (`TRAME-013`);
+* a **function call** emits every argument then `CallFn { name, n_args }`.
+
+`SheetRef` and `Name` never reach this walk: `parser::resolve_refs` rewrites them into a `CellRef`/`Range` beforehand, or into `Op::PushError` for an undefined name or a deleted target. The arm exists anyway, guarded by a `debug_assert!` and degrading to `PushEmpty` -- a blank value, never a panic (`TRAME-013`).
+
 
 **A1 → CellId Resolution:** compilation receives the current `SheetIndex` (per sheet). `A1` (col=A→0, row=1→index 0) is resolved against the index to the `Uid`s currently at those positions, producing a stable `CellId { sheet, row: AxisId::Bound(uid), col: AxisId::Bound(uid) }`. The reference then **binds to those rows/columns**, surviving inserts, deletes, and reorders -- after a sort it still points at the same physical cells (now elsewhere), which is the §12 "references follow the data" guarantee. A position *beyond* the used range (e.g. `A100` on a 10-row sheet) has no `Uid`, so it compiles to `AxisId::Virtual(pos)` and reads `Empty` until that line is materialized (§3.A).
 
@@ -713,109 +671,19 @@ pub struct EvalContext<'a> {
 }
 
 impl<'a> EvalContext<'a> {
-    pub fn eval_cell(&mut self, cell: CellId) -> CellValue {
-        // Dynamic cycle: cell being evaluated in the call stack
-        if self.eval_stack.contains(&cell) {
-            return CellValue::Error(FormulaError::CircularReference);
-        }
-        if let Some(v) = self.resolved.get(&cell) {
-            return v.clone();
-        }
-        self.eval_stack.insert(cell);
-        let result = match self.bc.entries.get(&cell) {
-            None     => self.read_literal(cell),
-            Some(bc) => self.execute(bc),
-        };
-        self.eval_stack.remove(&cell);
-        self.resolved.insert(cell, result.clone());
-        result
-    }
-
-    fn execute(&mut self, bc: &CellBytecode) -> CellValue {
-        let mut stack: Vec<CellValue> = Vec::with_capacity(8);
-
-        for op in &bc.ops {
-            match op {
-                Op::PushNum(n)  => stack.push(CellValue::Number(*n)),
-                Op::PushStr(s)  => stack.push(CellValue::Text(s.clone())),
-                Op::PushBool(b) => stack.push(CellValue::Boolean(*b)),
-                Op::PushEmpty   => stack.push(CellValue::Empty),
-
-                Op::PushCell(r) => {
-                    // Resolve each axis to a position: a deleted Bound id -> #REF!;
-                    // a Virtual position past the used range -> Empty; otherwise
-                    // normalize to the canonical bound cell at that position and
-                    // recurse (detecting cycles).
-                    stack.push(self.read_cell(*r));
-                }
-
-                Op::EvalRange(dep) => {
-                    stack.push(CellValue::Range(self.eval_range(dep)));
-                }
-
-                Op::Add  => self.binop_num(&mut stack, |a, b| a + b),
-                Op::Sub  => self.binop_num(&mut stack, |a, b| a - b),
-                Op::Mul  => self.binop_num(&mut stack, |a, b| a * b),
-                Op::Div  => {
-                    let b = stack.pop().unwrap_or(CellValue::Empty);
-                    let a = stack.pop().unwrap_or(CellValue::Empty);
-                    stack.push(match (&a, &b) {
-                        (CellValue::Number(_), CellValue::Number(d)) if *d == 0.0
-                            => CellValue::Error(FormulaError::DivisionByZero),
-                        (CellValue::Number(x), CellValue::Number(y))
-                            => CellValue::Number(x / y),
-                        _ => CellValue::Error(FormulaError::TypeError),
-                    });
-                }
-                Op::Concat => {
-                    let b = stack.pop().unwrap_or(CellValue::Empty).to_string_val();
-                    let a = stack.pop().unwrap_or(CellValue::Empty).to_string_val();
-                    stack.push(CellValue::Text(a + &b));
-                }
-                // Eq, Ne, Lt, Le, Gt, Ge, Neg, Not, Pow: similar implementations
-
-                Op::CallFn { name, n_args } => {
-                    let args: Vec<CellValue> = stack
-                        .drain(stack.len() - *n_args as usize ..)
-                        .collect();
-                    stack.push(call_builtin(name, args));
-                }
-
-                Op::PushError(e) => stack.push(CellValue::Error(e.clone())),
-            }
-        }
-
-        stack.pop().unwrap_or(CellValue::Empty)
-    }
-
-    fn eval_range(&mut self, dep: &RangeId) -> Vec<CellValue> {
-        let idx = &self.indices[&dep.sheet];
-
-        let (row_start, row_end) = match dep.row_range(idx) {
-            Some(r) => r,
-            None    => return vec![CellValue::Error(FormulaError::BrokenRef)],
-        };
-        let (col_start, col_end) = match dep.col_range(idx) {
-            Some(r) => r,
-            None    => return vec![CellValue::Error(FormulaError::BrokenRef)],
-        };
-
-        // Iterate the logical span (preserving shape for VLOOKUP/INDEX); a
-        // position past the materialized range reads Empty, a materialized one
-        // normalizes to its (row_uid, col_uid) and recurses (cycle detection).
-        let mut values = Vec::new();
-        for rp in row_start..=row_end {
-            for cp in col_start..=col_end {
-                values.push(match (idx.row_id(rp), idx.col_id(cp)) {
-                    (Some(row), Some(col)) => self.eval_cell(CellId::bound(dep.sheet, row, col)),
-                    _                      => CellValue::Empty,
-                });
-            }
-        }
-        values
-    }
+    /// Cycle guard, memo, dispatch. See below.
+    pub fn eval_cell(&mut self, cell: CellId) -> CellValue { /* ... */ }
+    fn execute(&mut self, bc: &CellBytecode) -> CellValue  { /* ... */ }
+    fn eval_range(&mut self, dep: &RangeId) -> Vec<CellValue> { /* ... */ }
 }
 ```
+
+**`eval_cell`** -- three steps, in order: a cell already on `eval_stack` returns `CircularReference` (this is the *dynamic* cycle detection, catching what the static `cell_dag` cannot see: ranges, named ranges, cross-sheet); a cell already in `resolved` returns its memo; otherwise the cell is pushed on the stack, evaluated (literal read when it has no bytecode, `execute` when it has), popped, and memoised.
+
+**`execute`** -- a stack machine over `bc.ops`. Each `Push*` pushes its value; `PushCell` recurses through `eval_cell`; an operator pops its operands and pushes the result; `CallFn` pops `n_args` and pushes the return. Every failure is a `CellValue::Error` pushed like any other value, so an error propagates through the operators above it rather than aborting -- which is what makes the VM total (`TRAME-007`, `TRAME-013`). The result is the top of the stack, `Empty` if it is empty.
+
+**`eval_range`** -- resolve both endpoint pairs against the sheet index; a missing `Bound` endpoint returns a single `BrokenRef` for the whole range. Then walk the **logical** span row-major, preserving its shape for `VLOOKUP`/`INDEX`: a position past the materialized range reads `Empty`, a materialized one normalises to its `(row_uid, col_uid)` and recurses through `eval_cell`, so cycle detection covers ranges too.
+
 
 ---
 
@@ -884,29 +752,12 @@ LWW Loro resolves overlapping merge conflicts deterministically. Validation afte
 This conflict is unavoidable in collaborative CRDT. Rejecting Bob's delta would break convergence. **Strategy: the merge masks covered values without destroying them.**
 
 ```rust
-/// Field of TrameState
-masked_cells: HashSet<String>, // lid_keys of covered non-empty cells
-
-/// Returns detected conflict events -- added to TrameOutcome.display
-/// (handle_command) or the Vec<TrameEvent> returned by apply_remote().
-fn detect_and_handle_merge_conflicts(&mut self, sheet: SheetId) -> Vec<TrameEvent> {
-    let mut events = Vec::new();
-    for (master_key, extent_key) in self.load_merges(sheet) {
-        for covered_key in self.covered_cells(sheet, &master_key, &extent_key) {
-            if self.cell_has_raw(sheet, &covered_key) {
-                // Masked value: excluded from DAG, not displayed, not computed
-                // tant que la fusion est active
-                self.masked_cells.insert(covered_key.clone());
-                events.push(TrameEvent::MergeConflictDetected {
-                    master_cell:  self.parse_cell_key(&master_key, sheet),
-                    covered_cell: self.parse_cell_key(&covered_key, sheet),
-                });
-            }
-        }
-    }
-    events
-}
+/// Field of TrameState -- lid_keys of covered non-empty cells.
+masked_cells: HashSet<String>,
 ```
+
+`detect_and_handle_merge_conflicts(sheet)` walks every merge on the sheet and, for each covered cell that still carries a raw value, inserts its key into `masked_cells` and emits `TrameEvent::MergeConflictDetected { master_cell, covered_cell }`. A masked cell is excluded from the DAG feed, not displayed and not computed for as long as the merge is active -- uniformly on every sheet, not only the active one (`TRAME-020`). The returned events join `TrameOutcome.display` on the local path and the `Vec<TrameEvent>` of `apply_remote` on the remote one.
+
 
 Called after each `doc.import()` — returned events are added to the `Vec<TrameEvent>` of `apply_remote()`.
 
@@ -1077,70 +928,22 @@ for event in events { self.send_to_ui(UiEvent::Viewport { document_id, event: Ap
 
 ### Command Dispatch and Synchronous Recalculation
 
-```rust
-impl TrameState {
-    pub fn handle_command(&mut self, cmd: TrameCommand) -> TrameOutcome {
-        match cmd {
-            TrameCommand::ScrollViewport { version, row_start, row_end, col_start, col_end } => {
-                // P1 -- immediate viewport response, no sync payload
-                self.viewport = /* ... */;
-                self.compute_all_dirty(); // recompute dirty in viewport
-                TrameOutcome::display_only(vec![self.build_viewport(version)])
-            }
+`handle_command(TrameCommand) -> TrameOutcome` is a `match` over the command, and every mutating arm follows the same four steps (`ambre-trame/src/logic/commands.rs`):
 
-            TrameCommand::SetCellText { row, col, text } => {
-                // P2 -- Loro mutation + dirty propagation + synchronous recomputation
-                let cell_ref = self.resolve_cell(self.active_sheet, row, col);
-                self.apply_edit_cell(cell_ref, &text);
-                self.bytecode.invalidate(cell_ref);
-                let dirty = self.deps.collect_dirty(cell_ref, &self.sheet_indices);
-                self.dirty.extend(dirty);
-                self.compute_all_dirty();
-                // The incremental delta becomes TrameOutcome.update; the
-                // ambre-logic dispatcher turns it into SyncCommand::SendUpdate.
-                // The UI updates its cache optimistically, so no edit-ack is sent;
-                // only a fresh viewport when the recompute touched it.
-                let update = Some(self.export_incremental_delta());
-                let mut display = vec![];
-                if self.viewport_intersects_dirty() {
-                    display.push(self.build_viewport(self.tx_version));
-                }
-                TrameOutcome { display, update, ephemeral: None }
-            }
+1. **mutate** the `LoroDoc` (and end with `doc.commit()` -- `TRAME-017`);
+2. **invalidate** the bytecode of the touched cells;
+3. **collect the dirty set** through the dependency graph and recompute it, synchronously (`TRAME-002`);
+4. **return** a `TrameOutcome`: the display events, the incremental delta as `update`, presence as `ephemeral`. The state never names `SyncCommand` -- the `ambre-logic` dispatcher turns `update` into `SyncCommand::SendUpdate`.
 
-            // ... other variants: same pattern (mutation -> dirty -> compute_all_dirty -> TrameOutcome)
+Two shapes worth naming:
 
-            TrameCommand::Undo => { /* undo_manager.undo() + rebuild */ }
-            TrameCommand::Redo => { /* undo_manager.redo() + rebuild */ }
+* **`ScrollViewport`** is P1: no mutation, no `update`, recompute the dirty cells inside the new window and answer with one viewport.
+* **`SetCellText`** is P2: the full four steps, and it emits a fresh viewport **only if** the recompute touched the visible window. The UI has already updated its cache optimistically, so there is no edit ack (`TRAME-UI-010`).
 
-            _ => self.handle_features_and_interop(cmd),
-        }
-    }
+`Undo` / `Redo` drive the `UndoManager` then rebuild the derived caches. Feature and interop commands fall through to their own handlers.
 
-    /// Recomputes ALL dirty cells -- synchronous, no batching.
-    /// MVP: full recomputation of 10k cells takes < 50 ms (P95 mobile target).
-    /// This occasional lag is acceptable because it only occurs on large
-    /// RemoteUpdate (rare case) -- identical to the Prose pattern where
-    /// produce_layout_events() includes full pagination recomputation.
-    fn compute_all_dirty(&mut self) {
-        let mut topo = petgraph::visit::Topo::new(&self.deps.cell_dag);
-        let mut ctx = EvalContext::new(&self.doc, &self.sheet_indices, &self.bytecode, &self.formula_cache);
+**`compute_all_dirty`** walks the dependency DAG in topological order and evaluates each dirty cell through a fresh `EvalContext`, writing results into `formula_cache`. It is synchronous and unbatched: recomputing 10 000 cells fits the P95 mobile target of §11 (< 50 ms), and the occasional lag only shows on a large remote batch -- the same trade-off Prose makes with full pagination.
 
-        while let Some(node) = topo.next(&self.deps.cell_dag) {
-            let cell = self.deps.cell_dag[node];
-            if !self.dirty.remove(&cell) { continue; }
-
-            let raw = self.get_raw(cell);
-            self.bytecode.recompile_if_stale(
-                cell, &raw, &self.sheet_indices[&cell.sheet],
-                &self.sheet_name_to_id, &mut self.deps
-            );
-            let value = ctx.eval_cell(cell);
-            self.formula_cache.insert(cell, value);
-        }
-    }
-}
-```
 
 > **Invariant `doc.commit()` per `TrameCommand`:** each `TrameCommand` handler that mutates `LoroDoc` must end with `self.doc.commit()`. Loro groups all mutations since the last commit into a single `UndoManager` item. Without an explicit commit, multiple successive `TrameCommand` values could be grouped into a single undo item — which would break the expected granularity (1 command = 1 undo item). A cell edit (`SetCellText`) commits on cell exit (via `TrameCommand::CommitEdit` or a delay), not on each keystroke, so that an entire cell edit forms 1 undo item.
 

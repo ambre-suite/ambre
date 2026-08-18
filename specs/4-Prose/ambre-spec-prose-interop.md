@@ -457,53 +457,16 @@ Traversal is sequential (no full DOM in memory) to limit memory footprint.
 ```rust
 // ambre-prose/src/interop/docx.rs
 
-pub fn import_docx(bytes: &[u8]) -> Result<(ProseIr, ConversionReport), InteropError> {
-    let doc = docx_rs::read_docx(bytes).map_err(|e| InteropError::ParseFailed(e.to_string()))?;
-    let mut ir = ProseIr::default();
-    let mut report = ConversionReport::new(ConversionFormat::Docx);
+pub fn import_docx(bytes: &[u8]) -> Result<(ProseIr, ConversionReport), InteropError> { /* ... */ }
+```
 
-    for child in &doc.document.body.children {
-        match child {
-            BodyChild::Paragraph(p)  => ir.blocks.push(parse_paragraph(p, &mut report)?),
-            BodyChild::Table(t)      => ir.blocks.push(parse_table(t, &mut report)?),
-            BodyChild::SectionProps(sp) => import_section_props(sp, &mut ir.meta, &mut report),
-            // A structured-document tag at body level is almost always a TOC field. Emit a
-            // Toc block if it is a TOC sdt, otherwise flatten its content and warn (P-108).
-            BodyChild::Sdt(sdt)      => parse_body_sdt(sdt, &mut ir, &mut report)?,
-            // Any other body child (custom XML, structured markup we do not model) is dropped
-            // -- but never silently: loss is always reported (P-109).
-            other => report.warnings.push(ConversionWarning::FeatureNotSupported {
-                feature: format!("docx body element {:?}", core::mem::discriminant(other)),
-                format:  ConversionFormat::Docx,
-            }),
-        }
-    }
-    // margins/orientation come from the first `<w:sectPr>` (import_section_props above);
-    // headers/footers from the parts it references.
-    import_headers_footers(&doc, &mut ir.meta, &mut report)?;   // header{n}.xml / footer{n}.xml
-    // Footnotes, comments, suggestions imported from dedicated parts
-    import_footnotes(&doc, &mut ir, &mut report)?;
-    import_comments(&doc, &mut ir, &mut report)?;               // bodies/replies/author/resolved
-    import_track_changes(&doc, &mut ir, &mut report)?;          // fills suggest_author/suggest_date
+The traversal walks the body's children in order: a paragraph and a table each map to a `ProseIr` block, section properties fold into `ir.meta`, a structured-document tag recurses. **The final arm is not a silent `_`**: an unrecognised element pushes a `ConversionWarning::FeatureNotSupported` naming it, which is `PROSE-IO-005` -- a wildcard that discards without warning is the defect this pipeline is built to make impossible.
 
-    Ok((ir, report))
-}
+```rust
 
 /// Detects the raster content-type from magic bytes; unknown/vector types are not decodable
 /// in WASM and are reported rather than embedded (P-111).
-fn image_content_type(bytes: &[u8], report: &mut ConversionReport) -> Option<&'static str> {
-    match bytes {
-        [0x89, b'P', b'N', b'G', ..]        => Some("image/png"),
-        [0xFF, 0xD8, 0xFF, ..]              => Some("image/jpeg"),
-        _ => {   // EMF/WMF/TIFF and friends -- keep the alt text, warn, embed nothing.
-            report.warnings.push(ConversionWarning::FeatureNotSupported {
-                feature: "docx image (EMF/WMF/TIFF or unknown content-type)".into(),
-                format:  ConversionFormat::Docx,
-            });
-            None
-        }
-    }
-}
+fn image_content_type(bytes: &[u8], report: &mut ConversionReport) -> Option<&'static str> { /* ... */ }
 ```
 
 ---
@@ -538,32 +501,9 @@ Inline marks lost on Markdown export (systematic warning): `superscript`, `subsc
 ```rust
 // ambre-prose/src/interop/markdown.rs
 
-pub fn export_markdown(ir: &ProseIr) -> (String, ConversionReport) {
-    let mut events: Vec<pulldown_cmark::Event> = Vec::new();
-    let mut report = ConversionReport::new(ConversionFormat::Markdown);
+pub fn export_markdown(ir: &ProseIr) -> (String, ConversionReport) { /* ... */ }
 
-    for block in &ir.blocks {
-        ir_block_to_md_events(block, &mut events, &mut report);
-    }
-
-    let mut md = String::new();
-    pulldown_cmark_to_cmark::cmark(events.iter(), &mut md).unwrap();
-    (md, report)
-}
-
-pub fn import_markdown(input: &str) -> (ProseIr, ConversionReport) {
-    let parser = pulldown_cmark::Parser::new_ext(
-        input,
-        pulldown_cmark::Options::ENABLE_TABLES
-            | pulldown_cmark::Options::ENABLE_FOOTNOTES
-            | pulldown_cmark::Options::ENABLE_STRIKETHROUGH
-            | pulldown_cmark::Options::ENABLE_TASKLISTS,
-    );
-    let mut ir = ProseIr::default();
-    let mut report = ConversionReport::new(ConversionFormat::Markdown);
-    md_events_to_ir(parser, &mut ir, &mut report);
-    (ir, report)
-}
+pub fn import_markdown(input: &str) -> (ProseIr, ConversionReport) { /* ... */ }
 ```
 
 ---
@@ -619,43 +559,7 @@ pub fn export_pdf(
     layout: &PageLayout,
     fonts: &mut FontContext,   // shaping needs &mut; threaded to render_page_on, not to the surface
     options: &ExportOptions,   // plumbed through: no hardcoded language, TOC links gated (P-24/P-45)
-) -> Result<(Vec<u8>, ConversionReport), InteropError> {
-    let mut report = ConversionReport::new(ConversionFormat::Pdf);
-    let mut doc = krilla::Document::new();
-
-    doc.set_title(ir.meta.title.as_deref().unwrap_or(""));
-    // Language precedence: explicit option -> document language -> unset. Never a fixed locale.
-    if let Some(lang) = options.pdf_language.as_deref().or(ir.meta.lang.as_deref()) {
-        doc.set_language(lang);
-    }
-
-    // A4 (210x297 mm) is the fallback ONLY when the document carries no page setup; a document
-    // with an `IrPage` (e.g. Letter, Landscape) is honored exactly.
-    let page_size = krilla::PageSize {
-        width:  ir.meta.page.as_ref().map_or(210.0, |p| p.width_mm) * MM_TO_PT,
-        height: ir.meta.page.as_ref().map_or(297.0, |p| p.height_mm) * MM_TO_PT,
-    };
-
-    for page_idx in 0..layout.page_count {
-        let mut page = doc.add_page(page_size);
-        let mut krilla_surface = page.surface();
-        let mut surface = KrillaSurface { surface: &mut krilla_surface };
-
-        // Shared DrawSurface primitives -- fonts threaded separately (surface holds none).
-        render_page_on(&mut surface, fonts, page_idx, ir, layout, &mut report);
-
-        krilla_surface.finish();
-        page.finish();
-    }
-
-    // TOC hyperlinks and cross references -- gated on the caller's option (P-24).
-    if options.pdf_include_toc_links {
-        add_toc_links(&mut doc, ir, layout);
-    }
-
-    let pdf_bytes = doc.finish().map_err(|e| InteropError::RenderFailed(e.to_string()))?;
-    Ok((pdf_bytes, report))
-}
+) -> Result<(Vec<u8>, ConversionReport), InteropError> { /* ... */ }
 
 const MM_TO_PT: f32 = 2.834_645_7;
 ```
@@ -740,13 +644,7 @@ HTML import uses `html5ever` + `markup5ever_rcdom` to parse potentially malforme
 ```rust
 // ambre-prose/src/interop/html.rs
 
-pub fn import_html(input: &str) -> (ProseIr, ConversionReport) {
-    let dom = parse_html5(input); // html5ever -> RcDom
-    let mut ir = ProseIr::default();
-    let mut report = ConversionReport::new(ConversionFormat::Html);
-    traverse_dom(&dom.document, &mut ir, &mut report);
-    (ir, report)
-}
+pub fn import_html(input: &str) -> (ProseIr, ConversionReport) { /* ... */ }
 ```
 
 HTML import is also used for **clipboard paste** (`text/html` format) -- the same pipeline

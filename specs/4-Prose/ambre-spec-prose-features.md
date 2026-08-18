@@ -214,31 +214,11 @@ pub enum MarkValueError {
 /// Parse a color value. Accepts "#rrggbb" (opaque) and "#rrggbbaa" (explicit alpha).
 /// Returns a packed 0xRRGGBBAA u32 -- alpha defaults to 0xFF when the short form is used,
 /// so a round-trip of an opaque color is stable ("#3366cc" -> 0x3366ccFF -> "#3366cc").
-fn parse_color(raw: &str) -> Result<u32, MarkValueError> {
-    let hex = raw.strip_prefix('#').ok_or_else(|| MarkValueError::BadColor(raw.into()))?;
-    let (rgb, a) = match hex.len() {
-        6 => (u32::from_str_radix(hex, 16), 0xFFu32),
-        8 => (
-            u32::from_str_radix(&hex[..6], 16),
-            u8::from_str_radix(&hex[6..], 16)
-                .map_err(|_| MarkValueError::BadColor(raw.into()))? as u32,
-        ),
-        _ => return Err(MarkValueError::BadColor(raw.into())),
-    };
-    let rgb = rgb.map_err(|_| MarkValueError::BadColor(raw.into()))?;
-    Ok((rgb << 8) | a)
-}
+fn parse_color(raw: &str) -> Result<u32, MarkValueError> { /* ... */ }
 
 /// Parse a font size in points. Rejects NaN/inf and clamps the accepted domain to
 /// 1.0..=1638.0 pt (the OOXML half-point ceiling), matching what interop can round-trip.
-fn parse_font_size(raw: &str) -> Result<f32, MarkValueError> {
-    let v: f32 = raw.parse().map_err(|_| MarkValueError::BadFontSize(raw.into()))?;
-    if v.is_finite() && (1.0..=1638.0).contains(&v) {
-        Ok(v)
-    } else {
-        Err(MarkValueError::BadFontSize(raw.into()))
-    }
-}
+fn parse_font_size(raw: &str) -> Result<f32, MarkValueError> { /* ... */ }
 ```
 
 **Color alpha round-trip (P-58).** `ResolvedStyle::color`/`background` are `Option<u32>` packed
@@ -289,27 +269,7 @@ pub enum OrderedStyle {
 /// When an ordered list is interrupted and later resumes, the resumed run **restarts at 1**
 /// (Google Docs behavior). A future "continue previous numbering" affordance would be an
 /// explicit per-item override attribute; it is out of scope here and not inferred.
-pub fn compute_ordinal(tree: &LoroMovableTree, item_id: &TreeID) -> u32 {
-    let parent = tree.parent(item_id);
-    let siblings = tree.children(parent.as_ref()); // document order
-    let target_style = ordered_style_of(tree, item_id)
-        .expect("compute_ordinal called on a non-ordered item");
-
-    let mut ordinal = 0u32;
-    for sib in &siblings {
-        match ordered_style_of(tree, sib) {
-            // Same style: extend the current run.
-            Some(style) if style == target_style => ordinal += 1,
-            // Any other node type or a different ordered style breaks the run.
-            _ => ordinal = 0,
-        }
-        if sib == item_id {
-            // `ordinal` was just incremented for `item_id` itself.
-            return ordinal;
-        }
-    }
-    unreachable!("item_id must be a child of its own parent")
-}
+pub fn compute_ordinal(tree: &LoroMovableTree, item_id: &TreeID) -> u32 { /* ... */ }
 
 /// Engine accessor (impl: `ambre-prose/src/features/list.rs`).
 /// Reads BlockType + "a".list_style from the node's LoroMap and returns the
@@ -354,28 +314,7 @@ Headings are `BlockType::Heading` nodes with `"a": {level: u8}` (1..=6).
 pub fn compute_section_number(
     tree: &LoroMovableTree,
     heading_id: &TreeID,
-) -> Vec<u32> {
-    // Per-level counters, index 0 == H1 ... index 5 == H6.
-    let mut counter = [0u32; 6];
-    // DFS pre-order over the whole tree; stop when we reach the requested heading.
-    for node in tree.dfs_pre_order() {
-        let Some(raw_level) = heading_level_of(tree, &node) else {
-            continue; // not a heading -- headings-only numbering, other blocks ignored
-        };
-        // Clamp foreign/out-of-range levels into 1..=6 (never index out of bounds).
-        let level = raw_level.clamp(1, 6) as usize;
-        counter[level - 1] += 1;
-        // Reset all deeper levels so the next descent restarts at .1
-        for c in counter.iter_mut().skip(level) {
-            *c = 0;
-        }
-        if node == *heading_id {
-            // Emit the significant prefix counter[0..level].
-            return counter[..level].to_vec();
-        }
-    }
-    Vec::new() // heading_id not found (deleted concurrently) -> empty number
-}
+) -> Vec<u32> { /* ... */ }
 
 /// Engine accessor (impl: `ambre-prose/src/features/heading.rs`).
 /// Reads BlockType::Heading + "a".level from the node's LoroMap and returns the raw
@@ -958,47 +897,7 @@ pub fn intercept_command(
     cmd: ProseCommand,
     peer_id: u64,
     suggestion_id: Uuid,
-) -> Vec<ProseCommand> {
-    match cmd {
-        ProseCommand::InsertText { block_id, pos, text } => vec![
-            ProseCommand::InsertText { block_id: block_id.clone(), pos, text: text.clone() },
-            ProseCommand::ApplyMark {
-                block_id,
-                range: (pos, pos + text.chars().count() as u32),
-                key:   MARK_SUGGEST_INS.to_string(),
-                value: Some(suggestion_id.to_string()),
-            },
-        ],
-        // Deleting text in suggestion mode. Per P-72, a deletion over the author's own
-        // still-pending SUGGEST_INS is a real removal (retracting an unaccepted insertion),
-        // NOT a "suggest deletion of my own suggestion". We split the requested range into:
-        //   - sub-ranges carrying this peer's own pending "si": hard-deleted outright,
-        //   - everything else (original text, or other peers' suggestions): marked "sd".
-        ProseCommand::DeleteText { block_id, range } => {
-            let mut out = Vec::new();
-            // Reverse order so earlier offsets stay valid as we emit edits.
-            for seg in segment_delete_range(&block_id, range, peer_id).into_iter().rev() {
-                match seg.kind {
-                    // Own un-accepted insertion -> physically remove it (and its "si" mark
-                    // goes with the text). Overlap/nesting handled because we segment first.
-                    SegKind::OwnPendingIns => out.push(ProseCommand::DeleteText {
-                        block_id: block_id.clone(),
-                        range: seg.range,
-                    }),
-                    // Original text or another peer's content -> mark as suggested deletion.
-                    SegKind::Other => out.push(ProseCommand::ApplyMark {
-                        block_id: block_id.clone(),
-                        range: seg.range,
-                        key:   MARK_SUGGEST_DEL.to_string(),
-                        value: Some(suggestion_id.to_string()),
-                    }),
-                }
-            }
-            out
-        }
-        other => vec![other],
-    }
-}
+) -> Vec<ProseCommand> { /* ... */ }
 
 /// A slice of the requested delete range classified by what suggestion (if any) covers it.
 struct DeleteSegment { range: (u32, u32), kind: SegKind }
@@ -1023,55 +922,16 @@ fn segment_delete_range(
 
 /// Accept a single suggestion: an insertion becomes permanent (strip "si"), a deletion is
 /// applied for real (remove the covered text, which drops "sd" with it). Idempotent.
-pub fn accept_suggestion(doc: &mut LoroDoc, suggestion_id: Uuid) {
-    let sid = suggestion_id.to_string();
-    // A suggestion may span multiple blocks (P-73): resolve every "si"/"sd" span whose
-    // value == sid across the whole tree, not just one block.
-    for (block_id, range, is_insertion) in suggestion_spans(doc, &sid) {
-        let text = doc.get_text(&block_id);
-        if is_insertion {
-            // Accept insertion: the text stays, the tracking mark is removed.
-            text.unmark(range.0, range.1, MARK_SUGGEST_INS);
-        } else {
-            // Accept deletion: remove the text (the "sd" mark disappears with it).
-            text.delete(range.0, range.1);
-        }
-    }
-    // Drop the metadata entry once no span references it any more.
-    doc.get_map("annots").delete(&sid);
-    doc.commit();
-}
+pub fn accept_suggestion(doc: &mut LoroDoc, suggestion_id: Uuid) { /* ... */ }
 
 /// Reject a single suggestion: an insertion is removed from the doc (leaves no trace --
 /// invariant "rejected suggestions removed from the CRDT"), a deletion is cancelled
 /// (strip "sd", text stays). Idempotent.
-pub fn reject_suggestion(doc: &mut LoroDoc, suggestion_id: Uuid) {
-    let sid = suggestion_id.to_string();
-    for (block_id, range, is_insertion) in suggestion_spans(doc, &sid) {
-        let text = doc.get_text(&block_id);
-        if is_insertion {
-            // Reject insertion: physically remove the suggested text.
-            text.delete(range.0, range.1);
-        } else {
-            // Reject deletion: keep the text, drop the tracking mark.
-            text.unmark(range.0, range.1, MARK_SUGGEST_DEL);
-        }
-    }
-    doc.get_map("annots").delete(&sid);
-    doc.commit();
-}
+pub fn reject_suggestion(doc: &mut LoroDoc, suggestion_id: Uuid) { /* ... */ }
 
-pub fn accept_all(doc: &mut LoroDoc) {
-    for sid in all_suggestion_ids(doc) {
-        accept_suggestion(doc, sid);
-    }
-}
+pub fn accept_all(doc: &mut LoroDoc) { /* ... */ }
 
-pub fn reject_all(doc: &mut LoroDoc) {
-    for sid in all_suggestion_ids(doc) {
-        reject_suggestion(doc, sid);
-    }
-}
+pub fn reject_all(doc: &mut LoroDoc) { /* ... */ }
 
 /// All (block_id, range, is_insertion) spans across the whole tree whose "si"/"sd" mark
 /// value equals `sid`. A single suggestion can produce several spans (multi-block, P-73).
@@ -1112,11 +972,7 @@ RejectAllSuggestions,
 
 ```rust
 impl ProseState {
-    pub fn init_undo_manager(doc: &LoroDoc) {
-        let mut um = doc.undo_manager(PeerID::new_local());
-        um.set_max_undo_steps(200);
-        um.set_merge_interval(Duration::from_millis(500));
-    }
+    pub fn init_undo_manager(doc: &LoroDoc) { /* ... */ }
 }
 ```
 
@@ -1240,22 +1096,7 @@ pub fn find_all(
     doc: &LoroDoc,
     tree: &LoroMovableTree,
     query: &FindQuery,
-) -> Vec<FindMatch> {
-    // Empty query matches nothing (P-77): guard against a zero-length match that would
-    // otherwise loop forever / select every gap.
-    if query.text.is_empty() {
-        return Vec::new();
-    }
-    let mut out = Vec::new();
-    for block_id in tree.dfs_pre_order() {
-        let Some(text) = doc.try_get_text(&block_id) else { continue }; // leaf/non-text
-        let hay = text.to_string();
-        for (start, end) in match_offsets(&hay, query) {
-            out.push(FindMatch { block_id: block_id.clone(), range: (start, end) });
-        }
-    }
-    out
-}
+) -> Vec<FindMatch> { /* ... */ }
 
 /// All match spans of `query` within one block string, honoring case_sensitive and
 /// whole_word (regex is post-MVP). Offsets are in the same grapheme unit as ProseCommand
@@ -1271,29 +1112,7 @@ pub fn replace_all(
     tree: &LoroMovableTree,
     query: &FindQuery,
     replacement: &str,
-) -> Vec<ProseCommand> {
-    if query.text.is_empty() {
-        return Vec::new(); // empty query never replaces (P-77)
-    }
-    // Reverse document order so each edit's offsets stay valid as later edits apply.
-    let mut cmds = Vec::new();
-    for m in find_all(doc, tree, query).into_iter().rev() {
-        // Model a replace as delete-then-insert at the match start. Doing both as one
-        // range operation means the span's *inline marks are dropped* on the replaced
-        // text (P-77): the new text inherits only the mark set active at the insertion
-        // point (ExpandType::After marks continue, annotation marks do not), so bold over
-        // an old word does not silently coat an unrelated replacement. Annotation marks
-        // (cm/si/sd/fn/ref) covering the exact replaced span are intentionally not
-        // reapplied -- replacing the anchored text orphans the annotation per P-69/P-75.
-        cmds.push(ProseCommand::DeleteText { block_id: m.block_id.clone(), range: m.range });
-        cmds.push(ProseCommand::InsertText {
-            block_id: m.block_id,
-            pos:      m.range.0,
-            text:     replacement.to_string(),
-        });
-    }
-    cmds
-}
+) -> Vec<ProseCommand> { /* ... */ }
 ```
 
 Current state (occurrences, selected index) is maintained in the Logic thread and sent
@@ -1354,37 +1173,7 @@ pub fn compute_word_count(
     tree: &LoroMovableTree,
     layout: &PageLayout,
     blocks: Option<&[TreeID]>,   // None = entire document (body tree order)
-) -> WordCount {
-    use unicode_segmentation::UnicodeSegmentation;
-
-    let ids: Vec<TreeID> = match blocks {
-        Some(sel) => sel.to_vec(),
-        None => tree.dfs_pre_order().collect(),
-    };
-
-    let mut wc = WordCount {
-        words: 0, characters: 0, characters_with_spaces: 0,
-        paragraphs: 0, pages: 0,
-    };
-    for block_id in &ids {
-        let Some(text) = doc.try_get_text(block_id) else { continue };
-        let s = text.to_string();
-        // Words: unicode word segmentation, keeping only alphanumeric-bearing tokens.
-        wc.words += s.unicode_words().count() as u32;
-        for g in s.graphemes(true) {
-            wc.characters_with_spaces += 1;
-            if !g.chars().next().is_some_and(char::is_whitespace) {
-                wc.characters += 1;
-            }
-        }
-        // Each text-bearing block counts as one paragraph (headings/list items included,
-        // matching Docs' paragraph tally).
-        wc.paragraphs += 1;
-    }
-    // `pages` is stamped by the caller from `layout.page_count` on LayoutUpdated (P-78).
-    let _ = layout;
-    wc
-}
+) -> WordCount { /* ... */ }
 ```
 
 Event: `ProseEvent::WordCountUpdated { count: WordCount }`.

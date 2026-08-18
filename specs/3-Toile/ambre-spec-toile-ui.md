@@ -230,18 +230,7 @@ Input point → `screen_to_world` → R-tree candidate set (`query_point`, `toil
 candidate, front-to-back, first hit wins:
 
 ```rust
-fn exact_hit(elem: &DisplayElement, world_pt: kurbo::Point) -> bool {
-    let local = elem.transform.inverse() * world_pt; // undo rotation/scale
-    match &elem.geom {
-        DisplayGeom::Rect | DisplayGeom::Image(_) => elem.local_bounds().contains(local),
-        DisplayGeom::Ellipse                      => ellipse_contains(elem.local_bounds(), local),
-        DisplayGeom::Path(p) | DisplayGeom::Stroke(p) => {
-            // fill hit for closed paths, or within stroke_w/2 of the outline
-            path_hit(p, local, elem.style.stroke_w)
-        }
-        DisplayGeom::Text(_) => elem.local_bounds().contains(local),
-    }
-}
+fn exact_hit(elem: &DisplayElement, world_pt: kurbo::Point) -> bool { /* ... */ }
 ```
 
 Marquee (rubber-band) selection intersects the drag rect against the candidate AABBs, then refines to exact

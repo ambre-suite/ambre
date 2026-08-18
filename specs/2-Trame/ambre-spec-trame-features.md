@@ -240,26 +240,12 @@ fn sort_range(
     self.realize_sort(sort_start, &before, target)
 }
 
-fn compare_cell_values(a: &CellValue, b: &CellValue) -> std::cmp::Ordering {
-    use CellValue::*;
-    use std::cmp::Ordering::*;
-    match (a, b) {
-        (Number(x), Number(y))   => x.partial_cmp(y).unwrap_or(Equal),
-        (Text(x),   Text(y))     => x.cmp(y),
-        (Boolean(x), Boolean(y)) => x.cmp(y),
-        (Empty, Empty)           => Equal,
-        // Type order: Number < Text < Boolean < Error < Empty
-        (Number(_), _)  => Less,
-        (_, Number(_))  => Greater,
-        (Text(_), _)    => Less,
-        (_, Text(_))    => Greater,
-        (Boolean(_), _) => Less,
-        (_, Boolean(_)) => Greater,
-        (Error(_), _)   => Less,
-        _               => Equal,
-    }
-}
+/// Same-type comparison, then the type order below. NaN compares equal rather
+/// than poisoning the sort.
+fn compare_cell_values(a: &CellValue, b: &CellValue) -> std::cmp::Ordering { /* ... */ }
 ```
+
+**Type order: `Number` < `Text` < `Boolean` < `Error` < `Empty`.** Two values of the same type compare naturally (numeric, lexicographic, `false < true`); values of different types compare by that rank, so a column mixing numbers and text sorts the numbers first and never interleaves them. Empties sink to the end, which is what keeps a partially filled column readable after a sort.
 
 > **Sort is a pure row-order permutation.** Because each row carries an own move-invariant
 > `Uid` stored as the `rows_{sheet}` element *value* (`trame-logic §2.A`), reordering the list
@@ -360,41 +346,24 @@ pub enum CondFormatKind {
 Rules are evaluated in the Logic thread after each `compute_dirty_batch` for cells in the viewport. Evaluation produces a per-cell `style_override` injected into `DisplayCell.style` — it does not modify `LoroMap("styles")`.
 
 ```rust
-fn apply_cond_formats(&self, cell: CellRef, base_style: &CellStyle) -> CellStyle {
-    let sheet = cell.sheet;
-    let rules = self.load_cond_formats(sheet); // from LoroDoc, sorted by priority ASC
+/// Loads the sheet's rules (priority ascending) and returns the first match
+/// merged over the base style, or the base style unchanged (`TRAME-FEAT-017`,
+/// `TRAME-FEAT-018` -- the result is a display-time override, the stored style
+/// is never touched).
+fn apply_cond_formats(&self, cell: CellRef, base_style: &CellStyle) -> CellStyle { /* ... */ }
 
-    // First matching rule wins (Google Sheets behavior)
-    for rule in &rules {
-        if !self.cell_in_range(cell, &rule.range) { continue; }
-        if self.eval_cond_rule(cell, &rule.rule) {
-            return self.merge_styles(base_style, &rule.style);
-        }
-    }
-    base_style.clone()
-}
-
-fn eval_cond_rule(&self, cell: CellRef, rule: &CondFormatRule) -> bool {
-    match &rule.kind {
-        CondFormatKind::GreaterThan(val) => {
-            let cell_val = self.formula_cache.get(&cell).cloned().unwrap_or(CellValue::Empty);
-            let cmp_val  = self.resolve_value_or_ref(cell.sheet, val);
-            matches!((cell_val, cmp_val), (CellValue::Number(a), CellValue::Number(b)) if a > b)
-        }
-        CondFormatKind::Formula(formula) => {
-            // Compile and evaluate the formula in the context of the current cell
-            // Resolves relative references (A1 in the rule = current cell)
-            let result = self.eval_formula_in_context(cell, formula);
-            matches!(result, CellValue::Boolean(true) | CellValue::Number(n) if n != 0.0)
-        }
-        CondFormatKind::ColorScale2 { min_color, max_color } => {
-            // Gradient computation: requires range min/max -> computed once per rule
-            false // implemented in Phase 2
-        }
-        // ... other kinds
-    }
-}
+/// Evaluates one rule against one cell.
+fn eval_cond_rule(&self, cell: CellRef, rule: &CondFormatRule) -> bool { /* ... */ }
 ```
+
+Per kind:
+
+* **Comparison kinds** (`GreaterThan`, `LessThan`, `Between`, `Equal`) read the cell's cached value and the rule's operand -- which may itself be a cell reference -- and compare numerically; a type mismatch is a non-match, never an error.
+* **Text kinds** (`Contains`, `StartsWith`) compare on the displayed text.
+* **`Formula`** compiles and evaluates in the context of the cell being tested, so a relative `A1` in the rule means *this* cell (`TRAME-FEAT-019`). Truthy means `true` or a non-zero number.
+* **`IsEmpty` / `IsNotEmpty` / `IsError`** test the cached value directly.
+* **Gradient kinds** (`ColorScale2/3`, `DataBar`, `TopN`) need the range's min/max or ranking, computed once per rule rather than per cell -- Phase 3.
+
 
 **Interaction with normal styles:** the conditional formatting `style_override` is applied on top of the base style. `None` fields in `style_override` leave the base style intact.
 
@@ -415,11 +384,9 @@ pub struct TrameState {
 }
 
 impl TrameState {
-    pub fn new(doc: LoroDoc, /* ... */) -> Self {
-        let undo_manager = loro::UndoManager::new(&doc);
-        // Exclude non-undoable metadata fields if needed
-        Self { doc, undo_manager, /* ... */ }
-    }
+    /// The `UndoManager` is created on the document at open and dropped at close;
+    /// it is scoped to the local peer (`TRAME-018`).
+    pub fn new(doc: LoroDoc, /* ... */) -> Self { /* ... */ }
 }
 ```
 
@@ -453,21 +420,8 @@ stored previous version (the state keeps none) and **no** partial "touched cells
 rebuild -- the reseed is total, which is why the filter hidden-set is never stale
 after an undo.
 
-```rust
-fn apply_history(&mut self, undo: bool) -> TrameOutcome {
-    let changed = if undo { self.undo_manager.undo() } else { self.undo_manager.redo() };
-    match changed {
-        Ok(true) => {}                                   // something was un/redone
-        _ => return TrameOutcome::display_only(vec![self.undo_state_event()]),
-    }
-    // Full derived-cache reseed + delta broadcast, exactly like after_structural:
-    // rebuild_index -> reseed_engine -> rebuild_merges -> reseed_styles ->
-    // rebuild_filter (so filter_hidden is recomputed, never stale) -> flush_delta.
-    let mut outcome = self.after_structural();
-    outcome.display.push(self.undo_state_event());       // { can_undo, can_redo }
-    outcome
-}
-```
+`apply_history(undo)` drives `UndoManager::undo()` / `redo()`. When nothing was un/redone it returns only the refreshed `{ can_undo, can_redo }` event. Otherwise it runs the **same total reseed as any structural op** -- rebuild index, reseed engine, rebuild merges, reseed styles, rebuild filter, flush delta -- and appends that event. Rebuilding the filter is what keeps `filter_hidden` from going stale after an undo.
+
 
 **Keyboard shortcut:** `Ctrl+Z` / `Ctrl+Y` (or `Cmd` on macOS) → `TrameCommand::Undo` / `TrameCommand::Redo` from the UI Thread.
 
@@ -507,46 +461,14 @@ pub enum ValidationOnInvalid {
 
 ### Evaluation on Input
 
-```rust
-fn handle_set_cell_text(&mut self, row: u32, col: u32, text: String) -> Vec<TrameEvent> {
-    // Positional edit on the active sheet (SetCellText carries no sheet_id).
-    let cell_ref = self.resolve_cell(self.active_sheet, row, col);
+Before mutating, `handle_set_cell_text` resolves the cell on the active sheet (`SetCellText` carries no `sheet_id`) and looks for a validation covering it. If one applies and the value fails it:
 
-    // Check validation before Loro mutation
-    if let Some(validation) = self.find_validation(self.active_sheet, cell_ref) {
-        let result = self.eval_validation(&validation, &text, self.active_sheet);
-        // ValidationError/Warning still carry a `version` field; SetCellText is
-        // optimistic and version-less, so it is 0 here (Post-MVP: thread an edit
-        // sequence if echo-matching is ever needed).
-        match (result, &validation.on_invalid) {
-            (false, ValidationOnInvalid::Reject) => {
-                // Mutation blocked -- no CRDT delta emitted
-                return vec![TrameEvent::ValidationError {
-                    version: 0, row, col,
-                    message: validation.message.clone(),
-                }];
-            }
-            (false, ValidationOnInvalid::Warn) => {
-                // Mutation allowed but warning added to returned events
-                let events = vec![TrameEvent::ValidationWarning {
-                    version: 0, row, col,
-                    message: validation.message.clone(),
-                }];
-                // Continue to mutation -- additional events added below
-                self.apply_edit_cell(cell_ref, &text);
-                // ... compute_all_dirty, build_viewport, etc.
-                return events;
-            }
-            _ => {} // Info or validation passed -> continue
-        }
-    }
+* **`Reject`** returns `TrameEvent::ValidationError` and **emits no CRDT delta** -- the mutation never happens (`TRAME-FEAT-020`).
+* **`Warn`** applies the mutation and returns `TrameEvent::ValidationWarning` alongside it (`TRAME-FEAT-021`).
+* **`Info`**, or a passing value, falls through to the ordinary edit path.
 
-    // Loro mutation
-    self.apply_edit_cell(cell_ref, &text);
-    // ... compute_all_dirty, build_viewport, etc.
-    vec![] // events added by the caller (dispatch)
-}
-```
+Both events carry a `version` field that is `0` here: `SetCellText` is optimistic and version-less, and threading an edit sequence would only matter if echo-matching were ever needed.
+
 
 > **Fundamental limitation — CRDT convergence:** `Reject` validation blocks **local** input only. A remote delta sent by a collaborator (who doesn't have the same validation, or whose client doesn't respect it) will be applied via SecSync even if it violates the local rule. This delta triggers a `ValidationWarning` to the UI but **is not rejected** — rejecting it would break CRDT convergence.
 >
@@ -584,43 +506,17 @@ This model is documented in the protection invitation UI: *"Protection prevents 
 ### Enforcement on the Logic Thread Side
 
 ```rust
-fn check_protection(&self, sheet: SheetId, cell: CellRef) -> ProtectionResult {
-    // my_user_id is a UserId received via LogicEvent::SessionReady.
-    // No crypto types in the Logic thread -- UserId stable per-user.
-    let my_user_id = self.my_user_id;
-
-    for (range_key, protection) in self.load_protections(sheet) {
-        if !self.cell_in_protection_range(cell, &range_key, sheet) { continue; }
-
-        let allowed: Vec<UserId> = self.load_allowed_user_ids(&protection);
-        let owner = self.load_owner_user_id(&protection);
-
-        if my_user_id == owner || allowed.contains(&my_user_id) {
-            return ProtectionResult::Allowed;
-        } else {
-            return ProtectionResult::Denied { description: self.load_description(&protection) };
-        }
-    }
-    ProtectionResult::Allowed
-}
-
-fn handle_set_cell_text(&mut self, row: u32, col: u32, text: String) -> Vec<TrameEvent> {
-    let cell_ref = self.resolve_cell(self.active_sheet, row, col);
-
-    match self.check_protection(self.active_sheet, cell_ref) {
-        ProtectionResult::Denied { description } => {
-            return vec![TrameEvent::ProtectionDenied {
-                version: 0, row, col,
-                description,
-            }];
-            // No Loro mutation, no CRDT delta
-        }
-        ProtectionResult::Allowed => {}
-    }
-    // ...normal flow (validation, mutation, compute_all_dirty)
-    vec![]
-}
+/// Walks the sheet's protections and answers on the first one covering the cell:
+/// `Allowed` when this client's `UserId` is the owner or in the allowed list,
+/// `Denied { description }` otherwise. A cell covered by no protection is
+/// `Allowed`. Identity is the `UserId` carried by `LogicEvent::SessionReady` --
+/// never a `pub_key`, and no crypto type enters the Logic thread
+/// (`TRAME-FEAT-024`).
+fn check_protection(&self, sheet: SheetId, cell: CellRef) -> ProtectionResult { /* ... */ }
 ```
+
+On a local edit, `Denied` returns `TrameEvent::ProtectionDenied` and stops there -- no Loro mutation, no CRDT delta (`TRAME-FEAT-023`). `Allowed` continues into the ordinary path: validation, mutation, recompute.
+
 
 **On receiving a remote update:**
 
@@ -638,29 +534,13 @@ extension:
 /// TrameEvent. `from_user_id` is the Sync-resolved author (Post-MVP param, only
 /// needed for range-protection enforcement). Import errors are surfaced, not
 /// unwrapped.
-fn apply_remote(&mut self, payload: &[u8], from_user_id: UserId) -> Vec<TrameEvent> {
-    if self.doc.import(payload).is_err() { return vec![]; }
-    let diff = /* ... */;
-    let mut events = Vec::new();
-
-    for changed_cell in self.extract_changed_cells(diff) {
-        // Post-hoc protection check
-        if let ProtectionResult::Denied { description } =
-            self.check_protection_for_user(changed_cell.sheet, changed_cell, &from_user_id)
-        {
-            // The delta IS APPLIED (mandatory CRDT convergence)
-            // but the UI is warned via a returned event
-            events.push(TrameEvent::ProtectionViolationWarning {
-                row: /* ... */, col: /* ... */,
-                from_user_id,
-                description,
-            });
-        }
-        // Normal flow: dirty, recompute, etc.
-    }
-    events
-}
+/// Imports the remote delta, then re-checks protection **after the fact** for
+/// each changed cell, against the sender's `UserId`.
+fn apply_remote(&mut self, payload: &[u8], from_user_id: UserId) -> Vec<TrameEvent> { /* ... */ }
 ```
+
+A violation found this way emits `TrameEvent::ProtectionViolationWarning { from_user_id, description }` and **the delta is still applied** -- rejecting it would break convergence, which is the same trade-off validation makes (`TRAME-FEAT-022`, `TRAME-FEAT-023`). That is what "soft enforcement" means here, and why §6's security model says a modified client can bypass it.
+
 
 ---
 

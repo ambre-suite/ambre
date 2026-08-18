@@ -270,27 +270,12 @@ directly over `flume`, no worker needed.
 ```rust
 // ambre-sync/src/worker.rs -- the Sync worker's own instance entry.
 #[wasm_bindgen(start)]
-pub fn start() {
-    let scope: DedicatedWorkerGlobalScope = js_sys::global().dyn_into().unwrap();
-    let api_base = scope.location().host();
-    // Outbound: LogicEvent -> postcard -> postMessage to Main (relayed to Logic).
-    let logic_sink = LogicSink::new(move |ev| post_bytes(&scope, &postcard::to_allocvec(&ev).unwrap()));
-    // Inbound: onmessage decodes SyncCommand -> internal flume command channel.
-    let (cmd_tx, cmd_rx) = flume::unbounded::<SyncCommand>();
-    scope.set_onmessage(/* ... postcard-decode -> cmd_tx.send(cmd) ... */);
-    // Non-blocking select loop on the worker's free event loop.
-    wasm_bindgen_futures::spawn_local(run_wasm(cmd_rx, logic_sink, api_base));
-}
+pub fn start() { /* ... */ }
 
 /// The async loop (WASM). `LogicSink` abstracts "emit a LogicEvent": a postMessage
 /// closure in the worker, a flume sender in native tests. Non-blocking select over
 /// the command channel and the internal WS/HTTP SyncEvent channel.
-pub async fn run_wasm(cmd_rx: flume::Receiver<SyncCommand>, logic_sink: LogicSink, api_base: String) {
-    let mut state = SyncState::new(logic_sink, api_base);
-    // select! { cmd = cmd_rx.recv_async() => state.handle_command(cmd),
-    //           ev  = state.sync_events.recv_async() => state.handle_sync_event(ev) }
-    // exits when the command channel disconnects (Main/Logic gone) => teardown.
-}
+pub async fn run_wasm(cmd_rx: flume::Receiver<SyncCommand>, logic_sink: LogicSink, api_base: String) { /* ... */ }
 
 impl SyncState {
     /// Emits an event upward. In the worker this postcard-encodes + postMessages
@@ -298,9 +283,7 @@ impl SyncState {
     fn send_to_logic(&self, event: LogicEvent) { self.logic_sink.emit(event); }
 
     /// Responds to a service request by echoing its RequestId.
-    fn reply(&self, id: RequestId, evt: RestEvent) {
-        self.send_to_logic(LogicEvent::Rest { id, evt });
-    }
+    fn reply(&self, id: RequestId, evt: RestEvent) { /* ... */ }
 }
 ```
 
@@ -310,69 +293,10 @@ impl SyncState {
 
 ```rust
 impl SyncState {
-    fn handle_command(&mut self, cmd: SyncCommand) {
-        match cmd {
-            // -- Service plane (correlatable request/response) ----------------
-            SyncCommand::Rest { id, cmd } => self.handle_rest(id, cmd),
-
-            // -- Control / content-send (document) ---------------------------
-            SyncCommand::OpenDocument { document_id } => { /* GET members -> ECDH -> DocumentKey ;
-                creates SyncDocumentState ; GET S3 snapshot/deltas -> RemoteSnapshot/RemoteUpdate ;
-                WsClientMsg::Subscribe { document_id } */ }
-            SyncCommand::CloseDocument { document_id } => { /* Unsubscribe ; zeroize DocumentKey */ }
-            SyncCommand::SendUpdate { document_id, payload } => { /* compress -> encrypt -> WsClientMsg::Update */ }
-            SyncCommand::SendSnapshot { document_id, payload } => { /* encrypt -> presigned S3 PUT -> POST metadata */ }
-            SyncCommand::SendEphemeral { document_id, payload } => { /* encrypt -> WsClientMsg::Ephemeral */ }
-            SyncCommand::Reconnect { document_id } => { /* Subscribe + RequestMissing { after_seq } */ }
-
-            // -- Control (channel) -------------------------------------------
-            SyncCommand::OpenChannel { channel_id }  => { /* SubscribeChannel */ }
-            SyncCommand::CloseChannel { channel_id } => { /* UnsubscribeChannel */ }
-            SyncCommand::SendChannelUpdate { channel_id, payload }    => { /* route to active segment */ }
-            SyncCommand::SendChannelEphemeral { channel_id, payload } => { /* typing indicator */ }
-
-            // -- Lifecycle ---------------------------------------------------
-            SyncCommand::Shutdown => self.handle_logout(), // cleanup, zeroize, close WS
-        }
-    }
+    fn handle_command(&mut self, cmd: SyncCommand) { /* ... */ }
 
     /// Relayed service family. Each arm replies via `reply(id, RestEvent::...)`.
-    fn handle_rest(&mut self, id: RequestId, cmd: RestCommand) {
-        match cmd {
-            // -- Session ----------------------------------------------------
-            RestCommand::Unlock { passphrase } => {
-                // spawn_local: POST /api/auth/... -> parse { access_token, refresh_token } into AuthContext
-                // GET /api/keys/master + GET /api/auth/me (Bearer)
-                // Argon2id(passphrase, salt) -> User Key -> decrypts master_key_enc -> MasterSeed
-                // Derives signing_key + exchange_key; opens the multiplexed WS (GET /api/ws?token=<jwt>)
-                // WS onmessage -> handle_ws_message ; onclose -> 4401 reauth | backoff (sec.2.G)
-                //              ; onopen -> resubscribe_all ; zeroize passphrase
-                // reply(id, SessionReady{..}) | AccountSetupRequired (404) | or LogicEvent::AuthError
-            }
-            RestCommand::SetupAccount { passphrase } => { /* ... -> reply(id, AccountCreated { recovery_words }) */ }
-            RestCommand::Logout => { self.handle_logout(); self.reply(id, RestEvent::LoggedOut); }
-
-            // -- Documents CRUD ---------------------------------------------
-            RestCommand::ListDocuments => { /* GET /api/documents (doc_key_enc joined) -> ECDH -> reply(id, DocumentList) */ }
-            RestCommand::CreateDocument { doc_type, name } => { /* gen DocumentKey -> POST -> reply(id, DocumentCreated{document_id, doc_type}) */ }
-            // ... DeleteDocument / RenameDocument
-
-            // -- Sharing ----------------------------------------------------
-            RestCommand::InviteToDocument { document_id, invitee_email, role } => { /* search -> ECDH -> POST /share -> reply(id, InviteSent) */ }
-            RestCommand::RevokeFromDocument { document_id, user_id } => {
-                // atomic sequence: DELETE /share/{uid} -> gen DocumentKey -> GET members ->
-                // X25519 per member -> POST /rotate-key (server broadcasts KeyRotationRequired) ->
-                // swap key (old -> old_keys, zeroize) -> reply(id, RevocationComplete)
-            }
-
-            // -- Media ------------------------------------------------------
-            RestCommand::UploadMedia { document_id, data, mime_type } => { /* hash -> encrypt -> presigned S3 PUT -> POST -> reply(id, MediaUploaded) */ }
-            RestCommand::DownloadMedia { document_id, content_hash } => { /* presigned GET -> decrypt -> reply(id, MediaDownloaded) */ }
-
-            // Channels (CRUD/sharing), Users, Meetings: same pattern (reply(id, ...)).
-            _ => { /* ... */ }
-        }
-    }
+    fn handle_rest(&mut self, id: RequestId, cmd: RestCommand) { /* ... */ }
 }
 ```
 

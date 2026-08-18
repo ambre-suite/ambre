@@ -131,28 +131,23 @@ arm dispatches them **exhaustively** -- no `_ => {}` wildcard, so a new variant 
 a compile error, not a silent drop (see §18 and the render-worker
 `dispatch_trame`):
 
-```rust
-// ambre-app / ambre-trame -- typed TrameEvent dispatch (canvas side)
-fn dispatch_trame(&mut self, ev: TrameEvent) {
-    match ev {
-        TrameEvent::ViewportData { .. } => { self.on_viewport_data(ev); self.dirty = true; }
-        TrameEvent::DataReset | TrameEvent::CondFormatsUpdated { .. } => self.request_viewport(),
-        TrameEvent::SheetList { sheets, active } => self.set_tabs(sheets, active),
-        TrameEvent::SelectRange { r1, c1, r2, c2 } => self.set_selection(r1, c1, r2, c2),
-        TrameEvent::FilterApplied { col, .. } => self.filtered_col = Some(col),
-        TrameEvent::FilterCleared => self.filtered_col = None,
-        TrameEvent::FindResult { matches, active } => self.set_find_highlights(matches, active),
-        TrameEvent::Error { message } => self.log_and_announce(&message),
-        // chrome-only variants (StyleApplied, UndoState, MergeRejected,
-        // MergeConflictDetected, SelectionStats, ColumnValues, ReplaceDone,
-        // PasteRejected, Clipboard, SortComplete, validation/protection,
-        // ImportComplete, ExportComplete) are handled by the chrome relay and
-        // are explicit no-ops on the canvas -- each named, none wildcarded.
-        // (This excerpt elides them; the real match in `ui/view/frame.rs` spells
-        //  every one out and carries no `_` arm -- `TRAME-UI-006`.)
-    }
-}
-```
+**Canvas-side routing** (`ambre-trame/src/ui/view/frame.rs::dispatch_trame`), one arm per variant:
+
+| `TrameEvent` | Canvas effect |
+|---|---|
+| `ViewportData` | cache the payload, mark dirty |
+| `DataReset`, `CondFormatsUpdated` | re-request the viewport |
+| `SheetList` | refresh the tab strip |
+| `SelectRange` | set the selection, park input, announce |
+| `FilterApplied` / `FilterCleared` | set / clear the funnel-badge column |
+| `FindResult` | set the highlight set and navigate |
+| `Error` | log and announce |
+| `ExportComplete` | trigger the browser download |
+| `Clipboard` | build the transport blob, mark it pending for the host |
+| every chrome-only variant (`StyleApplied`, `UndoState`, `MergeRejected`, `MergeConflictDetected`, `SelectionStats`, `ColumnValues`, `ReplaceDone`, `PasteRejected`, `SortComplete`, validation/protection, `ImportComplete`) | explicit no-op on the canvas -- the chrome relay owns them |
+
+The match names every variant and carries **no `_` arm**, so a new variant is a compile error rather than a silent drop (`TRAME-UI-006`).
+
 
 > **`FormulaError` / `EditAck` / `ImportProgress` are not `TrameEvent` variants.**
 > A `#REF!`/parse error surfaces as the affected cell's displayed `text` inside
@@ -203,74 +198,20 @@ pub struct GridUiState {
 }
 ```
 
-**Visible viewport calculation:**
+**Visible viewport calculation** (`ui/grid/state.rs`). `col_offsets` / `row_offsets` are cumulative pixel offsets, so a pixel maps to an index by binary search (`partition_point`, saturating at 0). The visible range is the pair of indices at the scroll origin and at the far edge, each clamped to the last offset -- the clamp guards the empty-offsets case, where a bare `len - 1` would underflow.
 
-```rust
-fn visible_range(&self) -> (u32, u32, u32, u32) {
-    let col_start = self.col_at_pixel(self.scroll_x) as u32;
-    // `saturating_sub(1)` guards the empty-offsets case: `len() == 0` would
-    // underflow `len as u32 - 1` (unlike col_at_pixel, which already saturates).
-    let col_end   = self.col_at_pixel(self.scroll_x + self.grid_width + 1.0).min(
-        (self.col_offsets.len() as u32).saturating_sub(1)
-    );
-    let row_start = self.row_at_pixel(self.scroll_y) as u32;
-    let row_end   = self.row_at_pixel(self.scroll_y + self.grid_height + 1.0).min(
-        (self.row_offsets.len() as u32).saturating_sub(1)
-    );
-    (row_start, row_end, col_start, col_end)
-}
+**Requesting a window from the Logic thread** (`ui/grid/state.rs`):
 
-fn col_at_pixel(&self, x: f32) -> usize {
-    // Binary search in col_offsets
-    self.col_offsets.partition_point(|&o| o <= x).saturating_sub(1)
-}
-```
+1. Clamp the new scroll origin at 0.
+2. Take the visible index range above.
+3. Derive an **adaptive padding** from the gesture velocity -- roughly 20 rows when slow, 50 by default, 100 when fast. The velocity is a **local UI heuristic**: `ScrollViewport` carries no `velocity_px_ms` and no `sheet_id`, and the Logic thread resolves the active sheet itself.
+4. Emit `TrameCommand::ScrollViewport` with a fresh monotonic `version` and the padded window (half the padding on each side vertically, five columns each side horizontally).
 
-**Sending ScrollViewport to the Logic thread:**
-
-```rust
-fn on_scroll(&mut self, delta_x: f32, delta_y: f32) {
-    self.scroll_x = (self.scroll_x + delta_x).max(0.0);
-    self.scroll_y = (self.scroll_y + delta_y).max(0.0);
-
-    let (row_start, row_end, col_start, col_end) = self.visible_range();
-    // Adaptive padding: the velocity is a *local* UI heuristic for how much to
-    // pad -- it is NOT carried on the wire. `ScrollViewport` has no
-    // `velocity_px_ms`/`sheet_id` field; the Logic thread resolves the active
-    // sheet itself and just fills the requested window.
-    let velocity = (delta_x.abs() + delta_y.abs()) / 16.0; // estimated px/ms
-    let padding = if velocity < 1.0 { 20u32 } else if velocity > 10.0 { 100 } else { 50 };
-
-    self.logic_tx.send(AppCommand::Trame(TrameCommand::ScrollViewport {
-        version:   self.next_version(),
-        row_start: row_start.saturating_sub(padding / 2),
-        row_end:   row_end + padding / 2,
-        col_start: col_start.saturating_sub(5),
-        col_end:   col_end + 5,
-    }));
-}
-```
+The `version` is what makes a late response droppable (`TRAME-UI-005`).
 
 ### B. Updating `col_offsets` / `row_offsets`
 
-```rust
-fn update_offsets_from_viewport(&mut self, vp: &DisplayViewport) {
-    // Incremental offset update from viewport col_widths/row_heights
-    // Columns/rows outside the viewport keep their default value
-    let default_col_width  = 80.0f32;
-    let default_row_height = 20.0f32;
-
-    for (i, &w) in vp.col_widths.iter().enumerate() {
-        let col_idx = vp.col_start as usize + i;
-        if col_idx < self.col_offsets.len() {
-            // Rebuild offsets from col_idx if the width changed
-            if (self.col_width_at(col_idx) - w).abs() > 0.5 {
-                self.rebuild_col_offsets_from(col_idx);
-            }
-        }
-    }
-}
-```
+Each `DisplayViewport` carries the widths and heights of the range it covers. For every index in that range, compare the incoming size with the cached one; on the first difference, rebuild the cumulative offsets **from that index onward** and stop comparing. Indices outside the viewport keep the default size (80 x 20 px). The rebuild is suffix-only, so a resize far down the sheet does not re-walk the head.
 
 ---
 
@@ -372,61 +313,14 @@ surface.fill_rect(Rect::new(x_active_col, 0.0, x_active_col + COL_WIDTH, HEADER_
 
 ### C. Freeze (Frozen Rows/Columns)
 
-Frozen cells are rendered in a separate pass, on top of the scroll, without scroll offset.
+Frozen cells are rendered in a separate pass, on top of the scrolled content, without the scroll offset:
 
-```rust
-fn draw_freeze_overlay(&mut self) {
-    let frozen_rows = self.ui_state.frozen_rows;
-    let frozen_cols = self.ui_state.frozen_cols;
-    if frozen_rows == 0 && frozen_cols == 0 { return; }
+1. Nothing to do when neither axis is frozen.
+2. Walk the current viewport's cells and keep those whose row index is below `frozen_rows` **or** whose column index is below `frozen_cols` (the Logic thread already includes them in the viewport).
+3. Position each one on its frozen axis at its absolute offset -- the scroll is subtracted only on the axis that is *not* frozen -- then draw it with the ordinary cell painter.
+4. Stroke the separation line at the frozen boundary on each frozen axis.
 
-    // Render frozen cells from current_viewport
-    // (they are included in the viewport by the Logic thread)
-    if let Some(vp) = &self.current_viewport {
-        for cell in &vp.cells {
-            let is_frozen_row = cell.row_index < frozen_rows;
-            let is_frozen_col = cell.col_index < frozen_cols;
-            if !is_frozen_row && !is_frozen_col { continue; }
-
-            // Fixed position: no scroll subtraction
-            let x = if is_frozen_col {
-                self.col_offset(cell.col_index) + self.header_width // absolute position
-            } else {
-                self.col_offset(cell.col_index) - self.scroll_x + self.header_width
-            };
-            let y = if is_frozen_row {
-                self.row_offset(cell.row_index) + self.header_height
-            } else {
-                self.row_offset(cell.row_index) - self.scroll_y + self.header_height
-            };
-
-            self.draw_single_cell(cell, x, y);
-        }
-    }
-
-    // Freeze separation line
-    let sep = Color::from_rgb8(100, 100, 100);
-    if frozen_cols > 0 {
-        let sep_x = self.col_offset(frozen_cols as u32) + self.header_width;
-        surface.stroke_line(sep_x, 0.0, sep_x, self.grid_height, sep, 2.0);
-    }
-    if frozen_rows > 0 {
-        let sep_y = self.row_offset(frozen_rows as u32) + self.header_height;
-        surface.stroke_line(0.0, sep_y, self.grid_width, sep_y, sep, 2.0);
-    }
-}
-```
-
-**Freeze command from the UI:**
-
-```rust
-// Local state only -- not in Loro, no TrameCommand
-// Freeze rows/cols are a view preference, not shared data
-fn handle_freeze_rows(&mut self, row: u32) {
-    self.ui_state.frozen_rows = row;
-    // Triggers a re-render -- no message to the Logic thread
-}
-```
+**Freeze command from the UI.** Setting `frozen_rows` / `frozen_cols` is a write to local view state and a re-render. It produces no `TrameCommand` and no CRDT delta.
 
 > **Decision:** Freeze is local state (like Google Sheets). Not synchronized between collaborators — each user has their own freeze view.
 
@@ -510,43 +404,10 @@ the same arming pattern as `fill_drag`, sec.5.F) instead of a selection. Pointer
 guide line at the prospective edge (`TrameUiState::resize_preview`, painted in
 `ui::renderer::draw_overlay`); the release emits one command and grows nothing:
 
-```rust
-fn on_resize_drag_end(&mut self, hit: HeaderHit, px: f32) {
-    let v = self.next_version();
-    match hit {
-        HeaderHit::ColBorder(c) => {
-            let width = (px - self.col_left(c) + self.scroll_x).max(MIN_COL_WIDTH); // >= ~24px
-            self.logic_tx.send(TrameCommand::ResizeCol { version: v, sheet_id: self.ui_state.active_sheet, col: c, width_px: width });
-        }
-        HeaderHit::RowBorder(r) => {
-            let height = (px - self.row_top(r) + self.scroll_y).max(MIN_ROW_HEIGHT);
-            self.logic_tx.send(TrameCommand::ResizeRow { version: v, sheet_id: self.ui_state.active_sheet, row: r, height_px: height });
-        }
-        _ => {}
-    }
-    // Logic writes col_widths_{sheet}/row_heights_{sheet} (LWW per uid) and replies with a
-    // refreshed viewport carrying the new col_widths/row_heights; the UI rebuilds its offsets
-    // (sec.3.B). When a whole column/row is selected, the resize applies to every selected band.
-}
-```
-
-Resize is a **document mutation** (Loro, synchronised, undoable -- it is a per-uid LWW write, so
-two users resizing the same column converge on LWW, like any cell). If the dragged column/row is
-part of the current whole-axis selection, the new size is applied to **every** column/row in the
-selection (one command per band, one undo group).
-
-**Auto-fit on double-click (MVP).** Double-clicking a `ColBorder(i)` / `RowBorder(i)` zone fits the
-column/row to its content. This is **UI-side** and reuses `ResizeCol` / `ResizeRow` with no new
-command: the UI already owns the parley `font_cx` + `text_cache` and measures glyph runs, so it
-walks the column's **cached** cells (`cell_cache`, viewport + padding), takes the max natural width
-(`+2*CELL_PAD_X`, clamped to `MIN_COL_WIDTH`), and sends `ResizeCol { width_px }` (rows: max line
-height -> `ResizeRow`). One undo group, like a drag resize.
-
-> **Caveat (and the V1 upgrade path).** UI-side auto-fit fits the **cached** cells (what is on or
-> near screen), not necessarily the whole column -- correct in the overwhelming majority of cases
-> and instant. True whole-column auto-fit needs full-column text measurement, which would require a
-> parley `FontContext` in the Logic worker (fonts live UI/gpu-side today); that stays a **V1**
-> refinement (a Logic-side `AutoFitCol`/`AutoFitRow` measuring every materialized cell), not MVP.
+* **Column border** -> `TrameCommand::ResizeCol { version, sheet_id, col, width_px }`, the width taken from the pointer position minus the column's left edge plus the scroll, floored at `MIN_COL_WIDTH` (~24 px). **Row border** -> `ResizeRow`, symmetric on the vertical axis.
+* Any other header zone releases without emitting.
+* Logic writes `col_widths_{sheet}` / `row_heights_{sheet}` (LWW per uid) and answers with a refreshed viewport carrying the new sizes; the UI rebuilds its offsets (§3.B).
+* When a whole column or row is selected, the resize applies to every selected band.
 
 ### D. Inline insert "+" affordance
 
@@ -563,92 +424,29 @@ the menu, matching the fill-handle's directness.
 
 ### A. Keyboard
 
-```rust
-fn on_key_down(&mut self, key: &KeyCode, modifiers: &Modifiers) {
-    // Undo/Redo
-    if modifiers.ctrl_or_cmd() && *key == KeyCode::KeyZ {
-        if modifiers.shift() {
-            self.logic_tx.send(TrameCommand::Redo);
-        } else {
-            self.logic_tx.send(TrameCommand::Undo);
-        }
-        return;
-    }
+Handled in `ui/view/interact.rs`. Two modes, decided by whether the inline editor is open.
 
-    // Grid navigation. With Shift held, an arrow *extends* the selection
-    // (move `active`, keep `anchor`) instead of collapsing it to a single cell.
-    if self.ui_state.editing.is_none() {
-        let extend = modifiers.shift();   // move_selection extends when true (sec.8)
-        match key {
-            KeyCode::ArrowUp    => self.move_selection(0, -1, extend),
-            KeyCode::ArrowDown  => self.move_selection(0, 1, extend),
-            KeyCode::ArrowLeft  => self.move_selection(-1, 0, extend),
-            KeyCode::ArrowRight => self.move_selection(1, 0, extend),
-            KeyCode::Tab        => self.move_selection(1, 0, false),
-            KeyCode::Enter      => self.move_selection(0, 1, false),
-            KeyCode::Home       => self.goto_cell(self.ui_state.selection.row, 0),
-            KeyCode::End        => self.goto_end_of_row(),
-            KeyCode::PageDown   => self.scroll_pages(1),
-            KeyCode::PageUp     => self.scroll_pages(-1),
-            KeyCode::Delete | KeyCode::Backspace => {
-                // No dedicated ClearCell command: an empty SetCellText clears the
-                // cell (same path a committed empty edit takes). The UI updates
-                // its cache optimistically; no echo event is required.
-                let (row, col) = self.ui_state.selection.active();
-                self.logic_tx.send(TrameCommand::SetCellText { row, col, text: String::new() });
-            }
-            KeyCode::F2 => self.start_editing(EditTrigger::F2),
-            _ => {
-                // Character keystroke -> start editing
-                if let Some(c) = key.to_char(modifiers) {
-                    self.start_editing(EditTrigger::Char(c));
-                }
-            }
-        }
-    } else {
-        // Editor active
-        match key {
-            KeyCode::Escape => self.cancel_editing(),
-            KeyCode::Enter  => self.commit_editing(CommitDirection::Down),
-            KeyCode::Tab    => self.commit_editing(CommitDirection::Right),
-            _ => self.forward_key_to_editor(key, modifiers),
-        }
-    }
-}
-```
+**Always, before anything else:** `Ctrl/Cmd+Z` -> `Undo`, `Ctrl/Cmd+Shift+Z` -> `Redo`.
+
+**Grid mode** (no editor):
+
+| Key | Effect |
+|---|---|
+| Arrows | move the selection by one cell; with `Shift`, **extend** it (move `active`, keep `anchor`, §8) |
+| `Tab` / `Enter` | move right / down, never extending |
+| `Home` / `End` | first cell of the row / last non-empty cell of the row |
+| `PageUp` / `PageDown` | scroll by one viewport height |
+| `Delete` / `Backspace` | `SetCellText` with an empty string -- there is **no** dedicated `ClearCell` command, an empty commit is the clear path |
+| `F2` | open the editor on the active cell |
+| any printable character | open the editor seeded with that character |
+
+**Editor mode:** `Escape` cancels without emitting a command (`TRAME-UI-015`), `Enter` commits and moves down, `Tab` commits and moves right, everything else is forwarded to the editor.
 
 ### B. Mouse / Touch
 
-```rust
-fn on_pointer_down(&mut self, x: f32, y: f32, button: MouseButton) {
-    let (row, col) = self.cell_at_pixel(x, y);
+**Pointer down** resolves the pixel to a cell (§4bis hit-test). A left press on the cell that is *already* active, with no editor open, starts editing; any other left press collapses the selection to that single cell, scrolls it into view and re-requests the viewport. A press outside the grid falls through to the header zones (§4bis).
 
-    if button == MouseButton::Left {
-        if let Some((row, col)) = (row, col) {
-            if Some((row, col)) == self.ui_state.selection.active_cell()
-                && self.ui_state.editing.is_none()
-            {
-                // Double-click -> editing
-                self.start_editing(EditTrigger::Click);
-            } else {
-                // Single click -> selection
-                self.ui_state.selection = Selection::single(row, col);
-                self.ensure_cell_visible(row, col);
-                // Request content of the new active cell
-                self.request_viewport();
-            }
-        }
-    }
-}
-
-fn on_pointer_drag(&mut self, x: f32, y: f32) {
-    // Extend selection
-    if let Some((row, col)) = self.cell_at_pixel(x, y) {
-        self.ui_state.selection.extend_to(row, col);
-        self.request_viewport();
-    }
-}
-```
+**Pointer drag** extends the selection to the cell under the pointer and re-requests the viewport. The anchor never moves during a drag.
 
 ### C. Context Menu — Structural Ops, Merge, Sort, Filter (MVP)
 
@@ -691,65 +489,23 @@ pub enum ContextMenuItem {
     FilterByColumn,                  // opens the filter popover for the active column
     ClearFilter,
 }
-
-fn on_context_menu_select(&mut self, item: ContextMenuItem) {
-    let sel = &self.ui_state.selection;
-    let (row, col) = sel.active();
-    let sheet_id   = self.ui_state.active_sheet;
-    let v          = self.next_version();
-    match item {
-        ContextMenuItem::InsertRowAbove =>
-            self.logic_tx.send(TrameCommand::InsertRow { version: v, sheet_id, before_row: row }),
-        ContextMenuItem::InsertRowBelow =>
-            self.logic_tx.send(TrameCommand::InsertRow { version: v, sheet_id, before_row: row + 1 }),
-        ContextMenuItem::InsertColLeft =>
-            self.logic_tx.send(TrameCommand::InsertCol { version: v, sheet_id, before_col: col }),
-        ContextMenuItem::InsertColRight =>
-            self.logic_tx.send(TrameCommand::InsertCol { version: v, sheet_id, before_col: col + 1 }),
-        // One command per row/col in the selection span (each = 1 undo item).
-        ContextMenuItem::DeleteRows =>
-            for r in sel.row_span_desc() {  // descending so positions stay valid
-                self.logic_tx.send(TrameCommand::DeleteRow { version: self.next_version(), sheet_id, row: r });
-            },
-        ContextMenuItem::DeleteCols =>
-            for c in sel.col_span_desc() {
-                self.logic_tx.send(TrameCommand::DeleteCol { version: self.next_version(), sheet_id, col: c });
-            },
-        ContextMenuItem::MergeCells => {
-            let (r1, c1, r2, c2) = sel.bounds();
-            self.logic_tx.send(TrameCommand::MergeCells {
-                version: v, sheet_id, row: r1, col: c1,
-                row_span: r2 - r1 + 1, col_span: c2 - c1 + 1,
-            });
-            // A MergeRejected event (covered non-empty cell) surfaces a toast -- see sec.2.
-        }
-        ContextMenuItem::UnmergeCells =>
-            self.logic_tx.send(TrameCommand::UnmergeCells { version: v, sheet_id, row, col }),
-        ContextMenuItem::SortAsc =>
-            self.send_sort(sheet_id, /* ascending */ true),
-        ContextMenuItem::SortDesc =>
-            self.send_sort(sheet_id, false),
-        ContextMenuItem::FilterByColumn =>
-            self.open_filter_popover(sheet_id, col),   // see sec.5.D
-        ContextMenuItem::ClearFilter =>
-            self.logic_tx.send(TrameCommand::ClearFilter { sheet_id }),
-    }
-    self.ui_state.context_menu = None;  // close
-}
-
-// Single-column sort over the current selection (or the used range if a whole
-// column is selected). has_header defaults to false; toggled in the menu.
-fn send_sort(&mut self, sheet_id: SheetId, ascending: bool) {
-    let (r1, c1, r2, c2) = self.ui_state.selection.bounds();
-    self.ui_state.sort_pending = true;
-    self.logic_tx.send(TrameCommand::SortRange {
-        version: self.next_version(), sheet_id,
-        row_start: r1, row_end: r2, col_start: c1, col_end: c2,
-        sort_col: 0,  // reference column = first column of the range
-        ascending, has_header: false,
-    });
-}
 ```
+
+Each entry maps to one command, built from the current selection and the active sheet, then closes the menu:
+
+| Entry | Command |
+|---|---|
+| Insert row above / below | `InsertRow { before_row: row }` / `{ before_row: row + 1 }` |
+| Insert column left / right | `InsertCol { before_col: col }` / `{ before_col: col + 1 }` |
+| Delete rows / columns | one `DeleteRow` / `DeleteCol` **per index in the selection span, in descending order** so the remaining positions stay valid -- each is its own undo item |
+| Merge cells | `MergeCells` over the selection bounds; a covered non-empty cell answers `MergeRejected`, surfaced as a toast (§2) |
+| Unmerge cells | `UnmergeCells` at the active cell |
+| Sort ascending / descending | `SortRange` over the selection bounds, reference column = the range's first column, `has_header` false by default (toggled in the menu) |
+| Filter by column | opens the filter popover (§5.D), no command yet |
+| Clear filter | `ClearFilter { sheet_id }` |
+
+Every command carries a fresh monotonic `version`.
+
 
 **Menu polish (MVP).** The current DOM menu is an unstyled flat list ("fourre-tout"). For MVP
 `context_entries()` returns **grouped, iconed** entries with separators, in stable order:

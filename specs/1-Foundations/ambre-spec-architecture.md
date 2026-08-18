@@ -177,51 +177,16 @@ The frame driver `host::run_with` and the closed `AppView` registry live in `amb
 
 `ambre-app/src/lib.rs` (`#[wasm_bindgen(start)]`) creates the `flume` channels, spawns Logic, and spawns + relays the Sync worker. The Sync worker has its own `#[wasm_bindgen(start)]` in `ambre-sync/src/worker.rs`.
 
-```rust
-// ambre-app/src/lib.rs (excerpt)
-const CHANNEL_CAPACITY: usize = 1024;
+**`ambre-app/src/lib.rs`** (`#[wasm_bindgen(start)]`), in order:
 
-#[wasm_bindgen(start)]
-pub fn main() {
-    // tracing_wasm + console_error_panic_hook set here (panic hook -> ambreFatal).
+1. Create the four `flume::bounded` channels at `CHANNEL_CAPACITY = 1024`: UI->Logic (`LogicCommand`), Logic->UI (`UiEvent`), Logic->Sync (`SyncCommand`), Sync->Logic (`LogicEvent`).
+2. Spawn the **Logic** thread (`wasm_thread`, shared memory) with the two receivers and two senders it owns.
+3. Spawn the **Sync** worker -- a separate wasm artifact loaded through `ambre-sync_loader.js`, so it is a `web_sys::Worker`, not a `wasm_thread`.
+4. Start the render loop on the main thread. **The Logic<->Sync ends that stay on the main thread are the relay**: each frame, before drawing, drain `logic_to_sync_rx` and post each command to the worker as postcard bytes, and drain `logic_to_ui_rx` into the view.
 
-    // flume channels in this Main instance's shared heap.
-    let (ui_to_logic_tx, ui_to_logic_rx) = flume::bounded::<LogicCommand>(CHANNEL_CAPACITY);
-    let (logic_to_ui_tx, logic_to_ui_rx) = flume::bounded::<UiEvent>(CHANNEL_CAPACITY);
-    let (logic_to_sync_tx, logic_to_sync_rx) = flume::bounded::<SyncCommand>(CHANNEL_CAPACITY); // rx stays on main
-    let (sync_to_logic_tx, sync_to_logic_rx) = flume::bounded::<LogicEvent>(CHANNEL_CAPACITY);   // tx stays on main
+That relay is why Logic and Sync never share memory: the worker boundary is a postcard hop, while UI<->Logic passes typed values by move.
 
-    // Logic in a wasm_thread worker (shared heap). Blocks on flume::Selector.
-    wasm_thread::Builder::new().name("logic".into()).spawn(move || {
-        ambre_logic::run(ui_to_logic_rx, logic_to_ui_tx, logic_to_sync_tx, sync_to_logic_rx);
-    }).expect("spawn Logic thread");
-
-    // Sync as a SEPARATE wasm instance (classic Web Worker). Its onmessage feeds
-    // sync_to_logic_tx; kept alive by being captured in the per-frame relay.
-    let sync_worker = spawn_sync_worker(sync_to_logic_tx); // web_sys::Worker("/ambre-sync_loader.js")
-
-    // UI runs on THIS (main) thread. The per-frame relay drains logic_to_sync_rx,
-    // postcard-encodes each SyncCommand, and worker.postMessage(buf, [buf]).
-    host::run_with("ambre-canvas",
-        move |w, h, ti| AppView::Trame(TrameView::new(initial_doc, ui_to_logic_tx, view_rx, w, h, ti, ..)),
-        /* pre_frame = */ move || { while let Ok(cmd) = logic_to_sync_rx.try_recv() { post_to_worker(&sync_worker, &postcard::to_allocvec(&cmd).unwrap()); } /* + drain logic_to_ui_rx */ },
-        raf);
-}
-```
-
-```rust
-// ambre-sync/src/worker.rs (excerpt) — the Sync worker entry, its own instance.
-#[wasm_bindgen(start)]
-pub fn start() {
-    let scope: DedicatedWorkerGlobalScope = js_sys::global().dyn_into().unwrap();
-    let api_base = scope.location().host();
-    let logic_sink = LogicSink::new(move |ev| post_bytes(&scope, &postcard::to_allocvec(&ev).unwrap()));
-    let (cmd_tx, cmd_rx) = flume::unbounded::<SyncCommand>();
-    // onmessage: postcard-decode SyncCommand bytes -> cmd_tx (feeds run_wasm's select loop)
-    scope.set_onmessage(/* ... cmd_tx.send(decoded) ... */);
-    wasm_bindgen_futures::spawn_local(run_wasm(cmd_rx, logic_sink, api_base));
-}
-```
+**`ambre-sync/src/worker.rs`** (`#[wasm_bindgen(start)]`) is the worker's own entry: grab the `DedicatedWorkerGlobalScope`, derive the API base from its location, build a `LogicSink` that postcard-encodes each event and posts it back, install `onmessage` to decode incoming commands into an unbounded channel, and spawn the async run loop on it.
 
 **The Logic thread** blocks on `flume::Selector` over `from_ui` + `from_sync`, dispatches, and exits when **both** inputs disconnect (`Selector::wait` parks via flume's Atomics-backed blocking path, which crosses the UI/Logic worker boundary — only flume's *async* waker failed cross-worker, and that path is gone). **The Sync worker** runs a `futures_util::select!` loop over its command channel and its internal `SyncEvent` channel, both fed from within the same worker, while its JS event loop stays free for the WebSocket/fetch. **View construction via closure**: `ambre_app::host::run_with<F, P>(...)` receives `F: FnOnce(f64,f64,_) -> AppView`; the driver lives in the launcher (not `ambre-canvas`), so it names `TrameView` directly through the `AppView::Trame` variant — no cycle (§6).
 

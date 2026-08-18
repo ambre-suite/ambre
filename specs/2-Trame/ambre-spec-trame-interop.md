@@ -148,38 +148,22 @@ fn import_cell(
     cell_value: &calamine::DataType,
     formula: Option<&str>,
     style: Option<CellStyle>,
-) {
-    // A formula takes priority over the cached value; both resolve to a raw string.
-    let raw: String = if let Some(f) = formula {
-        // convert_excel_formula needs the sheet index + name map (section D).
-        match convert_excel_formula(f, sheet_index, sheet_name_to_id) {
-            ImportedCellKind::Formula(r) | ImportedCellKind::UnsupportedFormula(r) => r,
-            ImportedCellKind::Literal(r) => r,
-        }
-    } else {
-        match cell_value {
-            calamine::DataType::Int(n)      => n.to_string(),
-            calamine::DataType::Float(f)    => format_float(*f),
-            // Dates stay Excel serial numbers -- the engine's date functions use
-            // serials (epoch 1899-12-30), NOT ISO strings.
-            calamine::DataType::DateTime(f) => format_float(*f),
-            calamine::DataType::String(s)   => s.clone(),
-            calamine::DataType::Bool(b)     => if *b { "TRUE".into() } else { "FALSE".into() },
-            calamine::DataType::Error(_)    => return,   // skip error cells
-            calamine::DataType::Empty       => return,   // no entry for an empty cell
-        }
-    };
+) { /* ... */ }
 
-    let _ = state.materialize(row, col);
-    state.write_cell(row, col, &raw);          // flat: raw string is the cell value
-    if let Some(s) = style { state.set_cell_style_at(row, col, s); }
-}
-
-fn format_float(f: f64) -> String {
-    // Avoids scientific notation on small numbers, preserves precision
-    if f == f.trunc() && f.abs() < 1e15 { format!("{:.0}", f) } else { format!("{f}") }
-}
+/// Never scientific notation: an integral value under 1e15 prints without a
+/// fractional part, everything else uses the default float formatting.
+fn format_float(f: f64) -> String { /* ... */ }
 ```
+
+A formula takes priority over the cached value; both end up as one raw string in the flat cell model. Value conversion, by `calamine::DataType`:
+
+| Excel type | Raw string written |
+|---|---|
+| `Int`, `Float` | `format_float` |
+| `DateTime` | `format_float` -- **dates stay Excel serial numbers** (epoch 1899-12-30), never ISO strings, because the engine's date functions work on serials |
+| `String` | verbatim |
+| `Bool` | `TRUE` / `FALSE` |
+| `Error`, `Empty` | nothing written -- no entry is created |
 
 ### D. Excel Formula → Trame AST Conversion
 
@@ -206,46 +190,21 @@ pub enum ImportedCellKind {
 ```
 
 ```rust
+/// Normalises the argument separator (`;` -> `,`, an Excel locale artefact) and
+/// parses. A parse success yields `Formula("=...")`; a failure yields
+/// `UnsupportedFormula("\x00EXCEL:=...")` -- the leading null byte is a marker a
+/// user can never type, so the original text round-trips out unchanged instead of
+/// being downgraded to its last computed value (`TRAME-IO-010`, `TRAME-IO-011`).
 fn convert_excel_formula(
     excel_formula: &str,
     sheet_index:   &SheetIndex,         // explicit parameter -- no implicit current_sheet
     sheet_name_to_id: &HashMap<String, SheetId>,
-) -> ImportedCellKind {
-    // Normalization: ";" -> "," (argument separator per Excel locale)
-    let normalized = excel_formula.replace(';', ",");
-
-    match formula_parser::parse(&normalized, sheet_index, sheet_name_to_id) {
-        Ok(_ast) => ImportedCellKind::Formula(format!("={}", normalized)),
-        Err(_)   => {
-            // Unsupported formula -> opaque prefix for faithful round-trip
-            // The "\x00EXCEL:" prefix is a null byte -- never typed by a user
-            ImportedCellKind::UnsupportedFormula(
-                format!("\x00EXCEL:={}", normalized)
-            )
-        }
-    }
-}
+) -> ImportedCellKind { /* ... */ }
 
 fn import_cell_with_kind(
     kind: ImportedCellKind,
     cell_map: &mut loro::LoroMap,
-) {
-    match kind {
-        ImportedCellKind::Formula(raw) => {
-            cell_map.insert("v", raw);
-            cell_map.insert("t", "f");
-        }
-        ImportedCellKind::UnsupportedFormula(raw) => {
-            // Stored as-is -- the UI displays an "unsupported Excel formula" indicator
-            cell_map.insert("v", raw);
-            cell_map.insert("t", "x"); // type "x" = unsupported Excel formula
-        }
-        ImportedCellKind::Literal(raw) => {
-            cell_map.insert("v", raw);
-            // type inferred at evaluation
-        }
-    }
-}
+) { /* ... */ }
 ```
 
 **Round-trip guarantee:** on xlsx export, cells with `"t": "x"` have their `raw` stripped of the `\x00EXCEL:` prefix and the original formula is restored. Excel can thus re-execute it without loss.
@@ -261,17 +220,7 @@ xf format to a `CellStyle` value (indexed by xf id for reuse during the cell pas
 and hands it to `import_cell`, which writes the per-cell register:
 
 ```rust
-fn xf_styles(workbook: &Xlsx<Cursor<Vec<u8>>>) -> Vec<CellStyle> {
-    // One resolved CellStyle per xf index; `import_cell` looks up by the cell's xf.
-    workbook.xf_formats().map(|xf| CellStyle {
-        bold:     xf.font.bold,
-        italic:   xf.font.italic,
-        fg_color: xf.font.color.map(to_color),
-        bg_color: xf.fill.bg_color.map(to_color),
-        fmt:      xf.num_fmt.as_deref().map(number_format_from_excel).unwrap_or_default(),
-        ..CellStyle::default()
-    }).collect()
-}
+fn xf_styles(workbook: &Xlsx<Cursor<Vec<u8>>>) -> Vec<CellStyle> { /* ... */ }
 ```
 
 ### F. Documented Import Limitations
@@ -310,70 +259,7 @@ TrameEvent::ExportComplete {
 ### B. Implementation
 
 ```rust
-fn export_xlsx(state: &TrameState, sheet_ids: Option<Vec<SheetId>>) -> Result<Vec<u8>, XlsxError> {
-    use rust_xlsxwriter::{Workbook, Worksheet, Format};
-
-    let mut workbook = Workbook::new();
-    let sheets = sheet_ids.unwrap_or_else(|| state.all_sheet_ids());
-
-    for sheet_id in sheets {
-        let sheet_index = state.build_sheet_index(&sheet_id);
-        let ws: &mut Worksheet = workbook.add_worksheet();
-        // rust_xlsxwriter rejects names > 31 chars / forbidden chars / duplicates;
-        // propagate the error rather than panic on a user-chosen sheet name.
-        ws.set_name(&state.sheet_display_name(&sheet_id))?;
-
-        // Columns: widths
-        for (col_pos, col_id) in sheet_index.col_by_pos.iter().enumerate() {
-            if let Some(w) = state.col_width(&sheet_id, *col_id) {
-                ws.set_column_width(col_pos as u16, w as f64).ok();
-            }
-        }
-
-        // Rows and cells
-        for (row_pos, row_id) in sheet_index.row_by_pos.iter().enumerate() {
-            if let Some(h) = state.row_height(&sheet_id, *row_id) {
-                ws.set_row_height(row_pos as u32, h as f64).ok();
-            }
-
-            for (col_pos, col_id) in sheet_index.col_by_pos.iter().enumerate() {
-                // Positional cell (sheet is the engine u16 index).
-                let cell = CellId::bound(idx, *row_id, *col_id);
-                let raw = state.get_raw(cell);
-                if raw.is_empty() { continue; }
-
-                let fmt = state.cell_style_as_xlsx_format(cell, &workbook);
-
-                if raw.starts_with('=') {
-                    // The CRDT raw is id-qualified (`=#s0!A1`); rewrite `#id -> name`
-                    // to a name-qualified Excel formula before writing (§12 mapping,
-                    // -logic.md §12). The raw `#s0!A1` must never reach the file.
-                    let excel = state.formula_to_excel(&raw, &sheet_index);
-                    ws.write_formula_with_format(row_pos as u32, col_pos as u16, &excel, &fmt).ok();
-                } else if let Some(CellValue::Number(n)) = state.evaluated_value(cell) {
-                    // Numeric-vs-text is decided by the cell's **evaluated typed
-                    // value**, not by formula_cache membership: the engine already
-                    // parses every literal to a `CellValue`, so a plain "42" is a
-                    // `Number` and exports numeric, while "N/A" stays text. Reusing
-                    // `evaluated_value` keeps a single source of typing truth (no
-                    // re-parse of the raw string on the export side).
-                    ws.write_number_with_format(row_pos as u32, col_pos as u16, n, &fmt).ok();
-                } else {
-                    ws.write_with_format(row_pos as u32, col_pos as u16, raw.as_str(), &fmt).ok();
-                }
-            }
-        }
-
-        // Merges
-        for (master_key, extent_key) in state.load_merges(&sheet_id) {
-            let (r1, c1) = state.parse_cell_key_to_pos(&master_key, &sheet_index);
-            let (r2, c2) = state.parse_cell_key_to_pos(&extent_key, &sheet_index);
-            ws.merge_range(r1, c1, r2, c2, "", &Format::default()).ok();
-        }
-    }
-
-    workbook.save_to_buffer()   // propagate, do not unwrap
-}
+fn export_xlsx(state: &TrameState, sheet_ids: Option<Vec<SheetId>>) -> Result<Vec<u8>, XlsxError> { /* ... */ }
 ```
 
 **Formula fidelity on export:** Trame formulas are stored id-qualified in the CRDT (`#s0!A1`). On export they are rendered to Excel positional references (`A1`) via the `SheetIndex` **and** their `#id` sheet qualifiers mapped back to display names (§12, `-logic.md` §12). A reference to a deleted row/column (broken ref) → exported as `#REF!`.
@@ -403,58 +289,10 @@ impl TrameState {
     pub(super) fn import_csv(
         &mut self, data: Vec<u8>, delimiter: Option<u8>, has_header: bool,
         target_sheet_id: Option<String>, start_row: u32, start_col: u32,
-    ) -> TrameOutcome {
-        let delim = delimiter.unwrap_or_else(|| detect_csv_delimiter(&data));
-        let mut reader = csv::ReaderBuilder::new()
-            .delimiter(delim)
-            .has_headers(false)   // we drop the header ourselves, uniform read
-            .flexible(true)       // real exports have ragged rows
-            .from_reader(data.as_slice());
-        let mut records: Vec<Vec<String>> = reader.records()
-            .filter_map(Result::ok)
-            .map(|rec| rec.iter().map(str::to_owned).collect())
-            .collect();
-        if has_header && !records.is_empty() { records.remove(0); }
-        if records.is_empty() { return TrameOutcome::display_only(vec![]); }
-
-        let _ = self.undo_manager.group_start();
-        // Reuse an existing id, else (incl. None) mint a fresh "CSV Import" sheet.
-        let sheet_id = match target_sheet_id {
-            Some(id) if self.all_sheet_ids().iter().any(|s| s == &id) => id,
-            _ => self.create_import_sheet("CSV Import"),
-        };
-        self.active_sheet = sheet_id.clone();
-        self.reseed_active_sheet();
-
-        let rows = records.len() as u32;
-        let cols = records.iter().map(Vec::len).max().unwrap_or(0) as u32;
-        // Pre-materialize, then write -- so a materialize commit (excluded origin)
-        // never splits the single undo item (same reasoning as SetCellsBatch).
-        for (r, record) in records.iter().enumerate() {
-            for (c, value) in record.iter().enumerate() {
-                if !value.is_empty() { let _ = self.materialize(start_row + r as u32, start_col + c as u32); }
-            }
-        }
-        for (r, record) in records.into_iter().enumerate() {
-            for (c, value) in record.into_iter().enumerate() {
-                if !value.is_empty() { self.write_cell(start_row + r as u32, start_col + c as u32, &value); }
-            }
-        }
-
-        let mut outcome = self.finish_cell_writes();
-        outcome.display.push(self.sheet_list_event());
-        outcome.display.push(TrameEvent::ImportComplete { sheet_id, rows, cols });
-        outcome
-    }
+    ) -> TrameOutcome { /* ... */ }
 }
 
-fn detect_csv_delimiter(data: &[u8]) -> u8 {
-    // Count ',' vs ';' in the first kilobyte; comma wins a tie.
-    let sample = &data[..data.len().min(1024)];
-    let commas     = sample.iter().filter(|&&b| b == b',').count();
-    let semicolons = sample.iter().filter(|&&b| b == b';').count();
-    if semicolons > commas { b';' } else { b',' }
-}
+fn detect_csv_delimiter(data: &[u8]) -> u8 { /* ... */ }
 ```
 
 ### B. Export CSV
@@ -477,33 +315,7 @@ TrameCommand::ExportCsv {
 impl TrameState {
     pub(super) fn export_csv(
         &self, sheet_id: &str, delimiter: Option<u8>, range: Option<GridRange>,
-    ) -> TrameOutcome {
-        let Some(&idx) = self.sheet_id_to_u16.get(sheet_id) else {
-            return TrameOutcome::display_only(vec![]);   // unknown sheet
-        };
-        let index = if idx == 0 { self.index.clone() } else { self.build_sheet_index(sheet_id) };
-        let (row_start, row_end, col_start, col_end) = match range {
-            Some(r) => (r.row, r.row_end, r.col, r.col_end),
-            None => match self.used_extent(sheet_id, &index) {
-                None => return TrameOutcome::display_only(vec![]),   // empty sheet
-                Some((max_row, max_col)) => (0, max_row, 0, max_col),
-            },
-        };
-
-        let delim = delimiter.unwrap_or(b',');
-        let mut writer = csv::WriterBuilder::new().delimiter(delim).from_writer(Vec::new());
-        for row in row_start..=row_end {
-            let record: Vec<String> = (col_start..=col_end)
-                .map(|col| self.export_cell_text(sheet_id, idx, &index, row, col))
-                .collect();
-            let _ = writer.write_record(&record);
-        }
-        let data = writer.into_inner().unwrap_or_default();   // no panic on flush
-        TrameOutcome::display_only(vec![TrameEvent::ExportComplete {
-            filename: format!("{}.csv", self.sheet_display_name(sheet_id)),
-            data,
-        }])
-    }
+    ) -> TrameOutcome { /* ... */ }
 }
 ```
 

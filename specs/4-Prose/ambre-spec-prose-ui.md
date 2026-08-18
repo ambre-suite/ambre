@@ -194,41 +194,17 @@ impl PageColumn {
     /// Robust to an empty layout (`page_count == 0`) and to an out-of-range `scroll_y`
     /// (P-43 underflow, P-134 clamp): the returned range is always empty or in `[0, last]`
     /// with `first <= last`, never inverted.
-    pub fn visible_pages(&self, viewport: &Viewport) -> RangeInclusive<u32> {
-        if self.page_count == 0 {
-            return RangeInclusive::new(1, 0);            // canonical empty range (first > last)
-        }
-        let stride = self.page_height_px + self.gutter_px;
-        // scroll_y is clamped to [0, max_scroll] before any page math: a negative value must
-        // not silently saturate to 0 (that would mask a scroll bug) and an over-scroll must
-        // not push `first` past `last`.
-        let max_scroll = (self.total_height_px - viewport.height_px).max(0.0);
-        let scroll_y   = viewport.scroll_y.clamp(0.0, max_scroll);
-        let last_page  = self.page_count - 1;
-        let first = (scroll_y / stride).floor() as u32;
-        let last  = ((scroll_y + viewport.height_px / viewport.zoom) / stride).ceil() as u32;
-        let first = first.min(last_page);
-        let last  = last.min(last_page).max(first);      // never inverted: last >= first
-        first..=last
-    }
+    pub fn visible_pages(&self, viewport: &Viewport) -> RangeInclusive<u32> { /* ... */ }
 
     /// Absolute Y coordinate (from the document top) of the top of page i.
-    pub fn page_top_y(&self, page_index: u32) -> f32 {
-        page_index as f32 * (self.page_height_px + self.gutter_px)
-    }
+    pub fn page_top_y(&self, page_index: u32) -> f32 { /* ... */ }
 
     /// Inverse of `page_top_y`: maps a document Y (any value, including a gutter or a margin)
     /// to the page it belongs to and the Y within that page. A Y in the gutter between page i
     /// and i+1 is assigned to the nearer page edge (clamped into `[0, page_height_px]`), so a
     /// pointer never lands "between" pages with no page (P-148). Returns `None` only for an
     /// empty layout.
-    pub fn doc_y_to_page(&self, doc_y: f32) -> Option<(u32, f32)> {
-        if self.page_count == 0 { return None; }
-        let stride = self.page_height_px + self.gutter_px;
-        let idx = (doc_y / stride).floor().clamp(0.0, (self.page_count - 1) as f32) as u32;
-        let y_in_page = (doc_y - self.page_top_y(idx)).clamp(0.0, self.page_height_px);
-        Some((idx, y_in_page))
-    }
+    pub fn doc_y_to_page(&self, doc_y: f32) -> Option<(u32, f32)> { /* ... */ }
 }
 ```
 
@@ -277,9 +253,7 @@ pub struct ParleyRun {
 }
 
 impl From<ParleyRunData> for ParleyRun {
-    fn from(data: ParleyRunData) -> Self {
-        Self { data, draw: None }
-    }
+    fn from(data: ParleyRunData) -> Self { /* ... */ }
 }
 
 impl ParleyRun {
@@ -332,59 +306,30 @@ impl DraftBuffer {
     /// Append committed text at (block_id, pos). Re-anchors (clearing first) only when the
     /// draft moves to a different block; consecutive keystrokes in the same block accumulate.
     /// Used by handle_text_input for non-composition input.
-    pub fn push_str(&mut self, text: &str, block_id: &TreeID, pos: u32) {
-        if self.block_id.as_ref() != Some(block_id) {
-            self.clear();
-            self.block_id = Some(block_id.clone());
-            self.insert_pos = pos;
-        }
-        self.pending_text.push_str(text);
-    }
+    pub fn push_str(&mut self, text: &str, block_id: &TreeID, pos: u32) { /* ... */ }
 
     /// Start an IME composition at (block_id, pos). Clears any prior draft.
-    pub fn begin_composition(&mut self, block_id: TreeID, pos: u32) {
-        self.clear();
-        self.block_id   = Some(block_id);
-        self.insert_pos = pos;
-        self.composing  = true;
-    }
+    pub fn begin_composition(&mut self, block_id: TreeID, pos: u32) { /* ... */ }
 
     /// Replace the composed preview text (compositionupdate). Canvas preview only, no command.
-    pub fn set_composition(&mut self, text: &str) {
-        self.pending_text.clear();
-        self.pending_text.push_str(text);
-    }
+    pub fn set_composition(&mut self, text: &str) { /* ... */ }
 
     /// End composition; returns the anchor (block_id, pos) at which InsertText must be emitted.
     /// The anchor is the *current* `(block_id, insert_pos)`, which reanchor_after_remote_delta
     /// may have moved since begin_composition (P-131), so compositionend never emits at a stale
     /// begin position. Falls back to insert_pos 0 of the anchored block if unset.
-    pub fn end_composition(&mut self) -> (TreeID, u32) {
-        let anchor = (self.block_id.clone().expect("composition has an anchor block"), self.insert_pos);
-        self.clear();
-        anchor
-    }
+    pub fn end_composition(&mut self) -> (TreeID, u32) { /* ... */ }
 
     /// Called on receipt of a *confirming* ProseEvent::DocUpdated (see the clearing rule below).
     /// The Logic thread confirmed: the draft is integrated into the official runs.
-    pub fn clear(&mut self) {
-        self.pending_text.clear();
-        self.block_id = None;
-        self.insert_pos = 0;
-        self.composing = false;
-    }
+    pub fn clear(&mut self) { /* ... */ }
 
     /// Reanchor the draft after a remote delta arrived mid-typing/mid-composition (P-07, P-131).
     /// `shift` is the net offset change the delta applied at or before `insert_pos` in this
     /// block (supplied by the state layer from the delta). Keeps the pending text and, for a
     /// composition, keeps `composing` true so compositionend still emits at the corrected pos.
     /// If the delta deleted the anchored block, the draft is dropped (returns false).
-    pub fn reanchor(&mut self, block_still_alive: bool, shift: i64) -> bool {
-        if self.block_id.is_none() { return true; }
-        if !block_still_alive { self.clear(); return false; }
-        self.insert_pos = (self.insert_pos as i64 + shift).max(0) as u32;
-        true
-    }
+    pub fn reanchor(&mut self, block_still_alive: bool, shift: i64) -> bool { /* ... */ }
 }
 ```
 
@@ -446,149 +391,7 @@ pub fn build_display_list<S: DrawSurface>(
     fc:      &mut FontContext,
     tc:      &mut TextCache,
     strip:   &RepaintStrip,      // dirty pages/rects from plan_repaint (partial repaint)
-) {
-    let visible = state.page_column.visible_pages(&state.viewport);
-
-    for page_idx in visible {
-        if !strip.intersects_page(page_idx) { continue; }   // partial repaint: skip clean pages
-        let page_origin = Vec2::new(
-            state.viewport.page_margin_left_px,
-            state.page_column.page_top_y(page_idx) - state.viewport.scroll_y,
-        );
-
-        // 1. Page shadow and background
-        render_page_background_on(surface, page_origin, &state.layout);
-
-        // 2. Header
-        //    Parley runs are pre-shaped in the Logic thread (pagination Phase 3.B)
-        //    with dynamic fields already resolved (f:pn = page number, etc.).
-        //    The UI thread does not shape -- it assembles runs via layout.header_runs_for(page_idx).
-        //    Logic stores headers as PageRuns (Static | PerPage): a Static header shares one
-        //    pre-shaped run set across every page, PerPage carries a distinct set per page
-        //    (dynamic fields resolved). header_runs_for resolves that enum, so the UI never
-        //    indexes a raw Vec. If different_first_page and page_idx == 0, the first-page runs
-        //    are what header_runs_for(0) returns.
-        let header_height = if page_idx == 0 {
-            state.layout.header_first_height_px
-        } else {
-            state.layout.header_height_px
-        };
-        if header_height > 0.0 {
-            let runs = state.layout.header_runs_for(page_idx);
-            if !runs.is_empty() {
-                let header_origin = page_origin + Vec2::new(
-                    state.layout.margin_left_px,
-                    state.layout.margin_top_px,
-                );
-                render_runs_on(surface, runs, header_origin);
-            }
-        }
-
-        // 3. Visible blocks on this page
-        //    y_in_page in BlockLayout is relative to the start of the content area
-        //    (after margin_top + header_height). The vertical offset is:
-        //    page_origin.y + margin_top + header_height + block.y_in_page
-        //    blocks_on_page indexes a per-page slot Logic guarantees is populated for every
-        //    page (an empty Vec when the page holds no block), so this never surprises. For a
-        //    block split across a page boundary it yields the continuation BlockLayout that
-        //    falls on this page.
-        let content_top = state.layout.margin_top_px + header_height;
-        for block_layout in state.layout.blocks_on_page(page_idx) {
-            let block_origin = page_origin + Vec2::new(
-                state.layout.margin_left_px,
-                content_top + block_layout.y_in_page,
-            );
-            render_block_on(surface, block_layout, block_origin, state);
-        }
-
-        // 4. Footnotes
-        //    Positioned at the bottom of the content area, above the footer.
-        //    A horizontal separator (line 1/3 width) separates them from the body.
-        //    Each footnote's Parley runs are pre-shaped (FootnoteLayout.runs,
-        //    from pagination Phase 0) -- the UI thread directly assembles.
-        //    Logic populates one footnotes_per_page slot per page (empty Vec when none), so
-        //    .get(page_idx) never surprises -- every visible page index is in range.
-        if let Some(footnotes) = state.layout.footnotes_per_page.get(page_idx as usize) {
-            if !footnotes.is_empty() {
-                let footer_height = if page_idx == 0 {
-                    state.layout.footer_first_height_px
-                } else {
-                    state.layout.footer_height_px
-                };
-                let page_bottom = state.layout.page_height_px - state.layout.margin_bottom_px
-                                  - footer_height;
-                let footnotes_total: f32 = footnotes.iter().map(|f| f.height_px).sum();
-                let sep_y = page_bottom - footnotes_total - FOOTNOTE_SEP_HEIGHT;
-
-                // Separator
-                render_footnote_separator_on(surface,
-                    page_origin + Vec2::new(state.layout.margin_left_px, sep_y),
-                    state.layout.content_width_px / 3.0);
-
-                // Footnote text (pre-shaped runs in FootnoteLayout.runs)
-                let mut fn_y = sep_y + FOOTNOTE_SEP_HEIGHT;
-                for footnote in footnotes {
-                    let fn_origin = page_origin + Vec2::new(
-                        state.layout.margin_left_px, fn_y);
-                    render_runs_on(surface, &footnote.runs, fn_origin);
-                    fn_y += footnote.height_px;
-                }
-            }
-        }
-
-        // 5. Footer
-        //    Pre-shaped runs resolved via layout.footer_runs_for(page_idx) (Phase 3.B),
-        //    the PageRuns (Static | PerPage) counterpart of header_runs_for.
-        let footer_height = if page_idx == 0 {
-            state.layout.footer_first_height_px
-        } else {
-            state.layout.footer_height_px
-        };
-        if footer_height > 0.0 {
-            let runs = state.layout.footer_runs_for(page_idx);
-            if !runs.is_empty() {
-                let footer_origin = page_origin + Vec2::new(
-                    state.layout.margin_left_px,
-                    state.layout.page_height_px - state.layout.margin_bottom_px - footer_height,
-                );
-                render_runs_on(surface, runs, footer_origin);
-            }
-        }
-    }
-
-    // 6. Text cursor (blinking)
-    if let Some(cursor) = &state.cursor {
-        render_cursor_on(surface, cursor, state);
-    }
-
-    // 7. Selection (semi-transparent blue highlight)
-    if let Some(sel) = &state.selection {
-        render_selection_on(surface, sel, state);
-    }
-
-    // 8. Remote collaborative cursors
-    for rc in &state.remote_cursors {
-        render_remote_cursor_on(surface, rc, state);
-    }
-
-    // 9. Comment highlights
-    //    Scoped to the visible page range: the helper skips any comment whose anchor block
-    //    is outside `visible`, mirroring the body loop's blocks_on_page(page_idx) gate.
-    let visible = state.page_column.visible_pages(&state.viewport);
-    render_comment_highlights_on(surface, &state.comments, visible.clone(), state);
-
-    // 10. Track changes highlights
-    //    Same page-range scoping as comments: suggestions anchored off-screen are skipped.
-    render_suggestion_highlights_on(surface, &state.suggestions, visible, state);
-
-    // 11. Draft buffer (optimistic keystrokes)
-    //    Early-returns when draft_buffer is empty (the common case), touching no page.
-    render_draft_on(surface, &state.draft_buffer, state);
-
-    // 12. Spell check underlines (post-MVP)
-    #[cfg(feature = "spellcheck")]
-    render_spell_errors_on(surface, &state.spell_errors, state);
-}
+) { /* ... */ }
 ```
 
 #### UI Color Palette
@@ -625,47 +428,7 @@ pub fn handle_key(
     ev: &InputEvent,                          // from ambre-canvas (normalized DOM event)
     state: &mut ProseUiState,
     to_logic: &flume::Sender<LogicCommand>,   // channel to the Logic thread (try_send)
-) -> bool {
-    let InputEvent::KeyDown { key, ctrl, shift, .. } = ev else { return false };
-    match key.as_str() {
-        // Cursor navigation (view-local, no CRDT mutation). Ctrl upgrades horizontal moves to
-        // word granularity (P-123) and Home/End to document extremes (P-142); every Direction is
-        // resolved by `move_cursor` in the Interaction model below, which owns the x_goal
-        // lifecycle (P-124), cross-line/page/block wrapping (P-125), and affinity (P-126).
-        "ArrowLeft"  => { move_cursor(state, if *ctrl { Direction::WordLeft }  else { Direction::Left  }, *shift); true }
-        "ArrowRight" => { move_cursor(state, if *ctrl { Direction::WordRight } else { Direction::Right }, *shift); true }
-        "ArrowUp"    => { move_cursor(state, Direction::Up,    *shift); true }
-        "ArrowDown"  => { move_cursor(state, Direction::Down,  *shift); true }
-        "Home"       => { move_cursor(state, if *ctrl { Direction::DocStart } else { Direction::LineStart }, *shift); true }
-        "End"        => { move_cursor(state, if *ctrl { Direction::DocEnd   } else { Direction::LineEnd   }, *shift); true }
-        "PageUp"     => { move_cursor(state, Direction::PageUp,   *shift); true }
-        "PageDown"   => { move_cursor(state, Direction::PageDown, *shift); true }
-        "a" if ctrl  => { select_all(state); true }        // P-142
-        "Escape"     => { clear_transient_ui(state); true } // P-142: drop selection/menus/toolbar
-
-        // Editing (selection-aware; each helper deletes an active selection first, see below)
-        "Backspace"  => { delete_backward(state, to_logic); true }
-        "Delete"     => { delete_forward(state, to_logic);  true }
-        "Enter"      => { split_block(state, to_logic);     true }
-        "Tab"        => { send_cmd(to_logic, indent_or_next_cell(state)); true }
-
-        // Formatting shortcuts (also surfaced via the DOM chrome command registry)
-        "b" if ctrl => { send_cmd(to_logic, toggle_mark(state, MARK_BOLD));      true }
-        "i" if ctrl => { send_cmd(to_logic, toggle_mark(state, MARK_ITALIC));    true }
-        "u" if ctrl => { send_cmd(to_logic, toggle_mark(state, MARK_UNDERLINE)); true }
-        "z" if ctrl && !shift => { send_cmd(to_logic, ProseCommand::Undo); true }
-        "z" if ctrl &&  shift => { send_cmd(to_logic, ProseCommand::Redo); true }
-        "y" if ctrl => { send_cmd(to_logic, ProseCommand::Redo); true }
-
-        // Slash menu: opening `/` at block start raises a Leptos signal (DOM chrome menu),
-        // it is NOT a canvas overlay (see section G).
-        "/" if state.cursor_at_block_start() => {
-            state.open_slash_menu(state.cursor_position());  // -> Leptos signal
-            false // the `/` still flows to beforeinput so the model records it
-        }
-        _ => false, // printable text is handled by beforeinput / composition below
-    }
-}
+) -> bool { /* ... */ }
 ```
 
 Printable Latin text is **not** matched key-by-key here: it flows through the textarea's
@@ -675,16 +438,7 @@ the textarea (`ambre-spec-chrome.md §2.C`).
 
 ```rust
 // InputEvent::TextInput { text } branch (committed, non-composition input)
-pub fn handle_text_input(text: &str, state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>) {
-    // Type-to-replace: an active selection is deleted first, then the text is inserted at
-    // the collapsed caret. take_selection() normalizes the range, emits DeleteRange, and
-    // repositions the cursor to the range start (see "Selection-aware editing" below).
-    take_selection(state, to_logic);
-    let (block_id, pos) = (cursor_block(state), cursor_offset(state));
-    state.draft_buffer.push_str(text, &block_id, pos);
-    send_cmd(to_logic, ProseCommand::InsertText { block_id, pos, text: text.to_string() });
-    advance_cursor(state, text.chars().count() as u32);
-}
+pub fn handle_text_input(text: &str, state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>) { /* ... */ }
 ```
 
 #### Selection-aware editing
@@ -703,65 +457,19 @@ no selection, so the caret-only paths below are unchanged when nothing is select
 /// If a selection is active, delete it (DeleteRange) and collapse the caret to its start.
 /// Returns true iff a selection was consumed. Callers that then insert/split act at the
 /// collapsed caret. No selection -> no command, returns false.
-fn take_selection(state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>) -> bool {
-    let Some(sel) = state.selection.take() else { return false };
-    let (start, end) = sel.normalized();                 // document order, start <= end
-    if start == end {                                    // zero-width: nothing to delete
-        state.cursor = Some(TextCursor::at(start.0, start.1));
-        return false;
-    }
-    send_cmd(to_logic, ProseCommand::DeleteRange { anchor: start.clone(), focus: end });
-    state.cursor = Some(TextCursor::at(start.0, start.1));
-    true
-}
+fn take_selection(state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>) -> bool { /* ... */ }
 
 /// Backspace: delete the selection if any, else the grapheme before the caret. At offset 0
 /// with no selection, merge with the previous block via a zero-width cross-block DeleteRange
 /// (the block-merge case of prose-logic §C).
-fn delete_backward(state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>) {
-    if take_selection(state, to_logic) { return; }
-    let (block_id, pos) = (cursor_block(state), cursor_offset(state));
-    if pos == 0 {
-        if let Some((prev_id, prev_len)) = block_before(state, &block_id) {
-            // zero-width range across the boundary -> merge current block into the previous
-            send_cmd(to_logic, ProseCommand::DeleteRange {
-                anchor: (prev_id.clone(), prev_len),
-                focus:  (block_id, 0),
-            });
-            state.cursor = Some(TextCursor::at(prev_id, prev_len));
-        }
-        return;                                          // first block, offset 0 -> no-op
-    }
-    let prev = prev_grapheme_boundary(state, &block_id, pos);
-    send_cmd(to_logic, ProseCommand::DeleteText { block_id: block_id.clone(), range: (prev, pos) });
-    state.cursor = Some(TextCursor::at(block_id, prev));
-}
+fn delete_backward(state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>) { /* ... */ }
 
 /// Delete (forward): selection if any, else the grapheme after the caret; at block end,
 /// pull the next block up (merge) via a zero-width cross-block DeleteRange.
-fn delete_forward(state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>) {
-    if take_selection(state, to_logic) { return; }
-    let (block_id, pos) = (cursor_block(state), cursor_offset(state));
-    let len = block_text_len(state, &block_id);
-    if pos == len {
-        if let Some(next_id) = block_after(state, &block_id) {
-            send_cmd(to_logic, ProseCommand::DeleteRange {
-                anchor: (block_id.clone(), pos),
-                focus:  (next_id, 0),
-            });
-        }
-        return;
-    }
-    let next = next_grapheme_boundary(state, &block_id, pos);
-    send_cmd(to_logic, ProseCommand::DeleteText { block_id, range: (pos, next) });
-}
+fn delete_forward(state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>) { /* ... */ }
 
 /// Enter: delete the selection first, then split the (now collapsed) block at the caret.
-fn split_block(state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>) {
-    take_selection(state, to_logic);
-    let (block_id, pos) = (cursor_block(state), cursor_offset(state));
-    send_cmd(to_logic, ProseCommand::SplitBlock { block_id, pos });
-}
+fn split_block(state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>) { /* ... */ }
 ```
 
 Ordering on the `flume` channel is preserved, so the `DeleteRange` always applies before the
@@ -788,19 +496,7 @@ pub fn handle_composition(
     text: &str,
     state: &mut ProseUiState,
     to_logic: &flume::Sender<LogicCommand>,
-) {
-    match phase {
-        CompositionPhase::Start  => {
-            take_selection(state, to_logic);   // composed text replaces an active selection
-            state.draft_buffer.begin_composition(cursor_block(state), cursor_offset(state));
-        }
-        CompositionPhase::Update => state.draft_buffer.set_composition(text),   // canvas preview only
-        CompositionPhase::End    => {
-            let (block_id, pos) = state.draft_buffer.end_composition();
-            send_cmd(to_logic, ProseCommand::InsertText { block_id, pos, text: text.to_string() });
-        }
-    }
-}
+) { /* ... */ }
 ```
 
 #### Mouse & Touch
@@ -822,45 +518,7 @@ pub fn handle_pointer(
     ev: &InputEvent,
     state: &mut ProseUiState,
     to_logic: &flume::Sender<LogicCommand>,
-) -> bool {
-    match ev {
-        InputEvent::PointerDown { x, y, click_count, shift, .. } => {
-            let pos = screen_to_doc(*x, *y, &state.viewport, &state.page_column);
-            match *click_count {
-                1 => begin_click_selection(state, pos, *shift),   // caret, or extend if Shift (P-142)
-                2 => select_word_at(state, pos),                  // double-click word
-                _ => select_paragraph_at(state, pos),             // triple-click block (P-142)
-            }
-            state.slash_menu = None;                              // any click closes the slash menu
-            state.toolbar.hide();
-            true
-        }
-        // Only while the primary button is held: extend the drag selection. The anchor is the
-        // *drag-start* offset captured on PointerDown (P-120), never re-read from the live cursor,
-        // so a remote delta that shifts the cursor mid-drag cannot corrupt the anchor.
-        InputEvent::PointerMove { x, y, buttons, .. } if buttons & 1 != 0 => {
-            update_drag_selection(state, *x, *y);                 // owns hit_test + autoscroll (P-121)
-            true
-        }
-        InputEvent::PointerMove { x, y, .. } => {
-            // Hover only: surface comment/suggestion popovers under the pointer via Leptos signals
-            // (P-140). Canvas draws no popover; it just publishes the hovered annotation + anchor.
-            let pos = screen_to_doc(*x, *y, &state.viewport, &state.page_column);
-            state.update_hover(pos);
-            false
-        }
-        InputEvent::PointerUp { .. } => {
-            state.drag_anchor = None;                             // end the drag (P-120)
-            state.stop_autoscroll();                             // P-121
-            if let Some(sel) = &state.selection {
-                if sel.is_collapsed() { state.selection = None; } // zero-width -> caret only (P-122)
-                else { state.toolbar.show_at(selection_bounds(state)); }
-            }
-            true
-        }
-        _ => false,
-    }
-}
+) -> bool { /* ... */ }
 ```
 
 ---
@@ -883,14 +541,7 @@ pixels relative to the canvas.
 /// resolve which page the doc-Y lands on and the Y within that page (P-148); a gutter Y snaps to
 /// the nearer page edge via PageColumn::doc_y_to_page. Returns the page-local position so hit_test
 /// can index BlockLayout without re-deriving the page.
-pub fn screen_to_doc(x: f32, y: f32, vp: &Viewport, col: &PageColumn) -> DocPos {
-    let doc_x = x / vp.zoom - vp.page_margin_left_px;
-    let doc_y = y / vp.zoom + vp.scroll_y;                     // scroll_y already clamped (P-134)
-    match col.doc_y_to_page(doc_y) {
-        Some((page, y_in_page)) => DocPos::OnPage { page, x_in_page: doc_x, y_in_page },
-        None => DocPos::Empty,                                 // zero-page / empty layout (P-43)
-    }
-}
+pub fn screen_to_doc(x: f32, y: f32, vp: &Viewport, col: &PageColumn) -> DocPos { /* ... */ }
 
 pub enum DocPos {
     OnPage { page: u32, x_in_page: f32, y_in_page: f32 },
@@ -915,20 +566,7 @@ pub enum DocPos {
 ///    editable header/footer/footnote text (P-139).
 /// The horizontal offset within a run comes from the pre-shaped data (ParleyRun::hit_test_x),
 /// which works even when the block was culled and never painted (draw == None, P-137).
-pub fn hit_test(pos: DocPos, state: &ProseUiState) -> Option<(TreeID, u32)> {
-    let DocPos::OnPage { page, x_in_page, y_in_page } = pos else { return None };
-    let band = state.layout.band_at(page, y_in_page);          // Body | Header | Footer | Footnote
-    let Some(block) = state.layout.block_at(page, &band, y_in_page)
-        .or_else(|| state.layout.nearest_block(page, &band, y_in_page))  // P-119 / P-137
-    else { return None };
-    if block.is_leaf() {                                       // Image / HRule / PageBreak (P-138)
-        let off = if x_in_page < block.mid_x() { 0 } else { block.text_len };
-        return Some((block.block_id.clone(), off));
-    }
-    let run = state.run_cache.runs_for(&block.block_id)?;      // pre-shaped, no layout pass
-    let x_in_run = x_in_page - block.text_left_px;
-    Some((block.block_id.clone(), run.hit_test_line(y_in_page - block.y_in_page, x_in_run)))
-}
+pub fn hit_test(pos: DocPos, state: &ProseUiState) -> Option<(TreeID, u32)> { /* ... */ }
 ```
 
 **Cursor movement (`move_cursor`, `advance_cursor`).** `move_cursor` owns the `x_goal`
@@ -948,47 +586,14 @@ pub enum Direction {
 /// selection is collapsed to the caret (P-122). Vertical moves cross wrapped lines, page breaks,
 /// and block boundaries transparently by walking BlockLayout line boxes (P-125). Home/End honor
 /// the *wrapped* line under the caret and the caret affinity at a soft-wrap point (P-126).
-pub fn move_cursor(state: &mut ProseUiState, dir: Direction, extend: bool) {
-    let Some(cur) = state.cursor.clone() else { return };
-    let (next, x_goal) = match dir {
-        Direction::Left | Direction::Right =>
-            (grapheme_step(state, &cur, dir), None),
-        Direction::WordLeft | Direction::WordRight =>
-            (word_step(state, &cur, dir), None),               // P-123
-        Direction::Up | Direction::Down | Direction::PageUp | Direction::PageDown => {
-            let goal = cur.x_goal.unwrap_or_else(|| caret_x(state, &cur)); // P-124
-            (vertical_step(state, &cur, dir, goal), Some(goal))          // P-125
-        }
-        Direction::LineStart | Direction::LineEnd =>
-            (wrapped_line_edge(state, &cur, dir), None),       // P-126 (respects affinity)
-        Direction::DocStart => (doc_edge(state, false), None),
-        Direction::DocEnd   => (doc_edge(state, true),  None),
-    };
-    apply_caret(state, next, x_goal, extend);
-}
+pub fn move_cursor(state: &mut ProseUiState, dir: Direction, extend: bool) { /* ... */ }
 
 /// Common tail: place the caret, keep/clear x_goal, and either extend or collapse the selection.
-fn apply_caret(state: &mut ProseUiState, next: TextCursor, x_goal: Option<f32>, extend: bool) {
-    let mut next = next;
-    next.x_goal = x_goal;
-    if extend {
-        let anchor = state.selection.as_ref().map(|s| s.anchor)
-            .unwrap_or((state.cursor.as_ref().unwrap().block_id.clone(),
-                        state.cursor.as_ref().unwrap().offset));
-        let focus = (next.block_id.clone(), next.offset);
-        state.selection = Some(TextSelection { anchor, focus }); // may be backwards (P-144)
-    } else {
-        state.selection = None;                                 // collapse (P-122)
-    }
-    state.cursor = Some(next);
-    state.request_autoscroll_to_caret();                        // keep caret visible (P-121)
-}
+fn apply_caret(state: &mut ProseUiState, next: TextCursor, x_goal: Option<f32>, extend: bool) { /* ... */ }
 
 /// After a local InsertText/composition commit, advance the caret by `n` bytes in the same block.
 /// Clears x_goal (a horizontal edit invalidates the memorized column, P-124).
-pub fn advance_cursor(state: &mut ProseUiState, n: u32) {
-    if let Some(c) = state.cursor.as_mut() { c.offset += n; c.x_goal = None; }
-}
+pub fn advance_cursor(state: &mut ProseUiState, n: u32) { /* ... */ }
 ```
 
 **Drag selection & autoscroll (`update_drag_selection`, autoscroll, P-120/P-121/P-144).**
@@ -1001,16 +606,7 @@ pub fn advance_cursor(state: &mut ProseUiState, n: u32) {
 /// selection keeps growing while the document scrolls (P-121). The resulting selection may be
 /// backwards (focus before anchor); selection_bounds/render walk it in normalized order and clamp
 /// culled pages to the viewport edges (P-144).
-pub fn update_drag_selection(state: &mut ProseUiState, x: f32, y: f32) {
-    let pos = screen_to_doc(x, y, &state.viewport, &state.page_column);
-    if let Some((block_id, offset)) = hit_test(pos, state) {
-        let anchor = state.drag_anchor.clone()
-            .unwrap_or((block_id.clone(), offset));             // first move seeds the anchor
-        state.drag_anchor = Some(anchor.clone());
-        state.selection = Some(TextSelection { anchor, focus: (block_id, offset) });
-    }
-    arm_autoscroll(state, y);                                    // edge-proximity velocity (P-121)
-}
+pub fn update_drag_selection(state: &mut ProseUiState, x: f32, y: f32) { /* ... */ }
 
 /// Called every frame while a drag autoscroll is armed: advance scroll_y by the armed velocity,
 /// clamp to [0, max_scroll] (P-134), then re-run the hit-test at the last pointer Y so the
@@ -1026,16 +622,7 @@ mutates the CRDT.
 ```rust
 // ambre-prose/src/ui/input/zoom.rs
 
-pub fn apply_zoom(state: &mut ProseUiState, factor: f32, focus_screen: Vec2) {
-    let vp = &mut state.viewport;
-    let old = vp.zoom;
-    vp.zoom = (old * factor).clamp(ZOOM_MIN, ZOOM_MAX);         // 0.25 .. 4.0
-    // Keep `focus_screen` pinned: adjust scroll_y for the zoom delta, then clamp (P-134).
-    let doc_y = focus_screen.y / old + vp.scroll_y;
-    vp.scroll_y = doc_y - focus_screen.y / vp.zoom;
-    vp.page_margin_left_px = ((vp.width_px / vp.zoom) - state.page_column.page_width_px).max(0.0) / 2.0;
-    state.clamp_scroll();                                        // P-134
-}
+pub fn apply_zoom(state: &mut ProseUiState, factor: f32, focus_screen: Vec2) { /* ... */ }
 ```
 
 **Selection & transient-UI helpers referenced above.**
@@ -1234,10 +821,7 @@ all apps in the suite. Prose does not reimplement the hash (see `ambre-spec-canv
 ```rust
 // ambre-prose/src/ui/remote_cursor.rs
 
-fn user_color(user_id: &UserId) -> peniko::Color {
-    // Canonical cross-app peer color -- seeded on the spoof-proof UserId.
-    ambre_draw::peer::peer_color(user_id)
-}
+fn user_color(user_id: &UserId) -> peniko::Color { /* ... */ }
 ```
 
 Rendering:
@@ -1309,22 +893,11 @@ full-fidelity payload is built by the Logic thread from the whole CRDT.
 // ambre-prose/src/ui/clipboard.rs -- driver methods called by FrameHost (no web_sys here)
 
 /// Native copy/cut: request the authoritative build from Logic; nothing serialized UI-side.
-pub fn clipboard_write(&mut self, cut: bool) -> CopyOutcome {
-    match &self.selection {
-        None => CopyOutcome::Nothing,                    // browser default proceeds
-        Some(sel) => {
-            self.cut_pending = cut;
-            self.send_cmd(ProseCommand::CopySelection { anchor: sel.anchor.clone(), focus: sel.focus.clone() });
-            CopyOutcome::Deferred                         // host prevent_default()s, no setData yet
-        }
-    }
-}
+pub fn clipboard_write(&mut self, cut: bool) -> CopyOutcome { /* ... */ }
 
 /// Called by the host right after update(): if Logic replied (ProseEvent::Clipboard),
 /// return the ClipboardBlob to mirror to the OS clipboard next frame (poll_clipboard).
-pub fn poll_clipboard(&mut self) -> Option<ClipboardBlob> {
-    self.pending_clipboard.take()   // set in update() from ProseEvent::Clipboard { text, ambre }
-}
+pub fn poll_clipboard(&mut self) -> Option<ClipboardBlob> { /* ... */ }
 
 /// Native paste: prefer the in-memory blob when the OS text mirror still matches it
 /// (full fidelity), else decode blob.ambre; otherwise fall back to the plain-text mirror.
@@ -1332,31 +905,7 @@ pub fn poll_clipboard(&mut self) -> Option<ClipboardBlob> {
 /// clipboard (Foundation clipboard model, `ambre-spec-ui.md §2.E`), so paste has exactly
 /// two outcomes. Importing a foreign HTML/docx/md *document* is a separate flow (file open
 /// or drag-drop -> ProseCommand::ImportDocument), not a clipboard paste.
-pub fn paste_clipboard(&mut self, blob: ClipboardBlob) {
-    // Selection-aware, like every other mutating edit (§E "Selection-aware editing"): an active
-    // selection is deleted first (DeleteRange) and the caret collapsed to its start. `cursor_target`
-    // performs that take_selection step and returns the resulting insertion anchor -- the single
-    // insertion-position channel every paste variant funnels through (P-42).
-    let (block_id, pos) = self.cursor_target();   // consumes an active selection, returns caret
-
-    // Mirror gate (P-41), made explicit: `own_clipboard` holds the full-fidelity payload of
-    // OUR last copy/cut (stashed in update() from ProseEvent::Clipboard). Prefer it ONLY when
-    // the OS text mirror still matches what we copied -- i.e. the user has not copied something
-    // else in another app since. If the mirror diverged, our stash is stale and must be ignored.
-    if let Some(own) = &self.own_clipboard {
-        if own.text == blob.text {
-            let payload = own.payload.clone();
-            self.send_cmd(ProseCommand::PasteRich { block_id, pos, payload });
-            return;
-        }
-    }
-    // Foreign or diverged clipboard: decode the incoming blob's opaque payload if present,
-    // else fall back to the plain-text mirror.
-    match self.decode_ambre(&blob) {
-        Some(payload) => self.send_cmd(ProseCommand::PasteRich { block_id, pos, payload }),
-        None => self.send_cmd(ProseCommand::InsertText { block_id, pos, text: blob.text }),
-    }
-}
+pub fn paste_clipboard(&mut self, blob: ClipboardBlob) { /* ... */ }
 ```
 
 The Logic thread builds `ProseEvent::Clipboard { text, ambre }` from the CRDT selection

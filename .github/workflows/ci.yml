@@ -53,6 +53,8 @@ jobs:
       # Doc-side check, milliseconds: derives the invariant ledger and fails on a
       # status value or a missing Story citation (`ambre-spec-architecture.md §4`).
       - run: just invariants
+      # Same idea, other half: no function body in a spec (template §0).
+      - run: just spec-code
 
   # ---------------------------------------------------------------------------
   # deny -- supply chain (advisories, licences, sources) plus the zero-knowledge
