@@ -1,6 +1,7 @@
 # AMBRE — SPEC: AMBRE-TRAME FEATURES
 **Type:** Vertical (Feature / Application)
 **Status:** Draft
+**Implementation:** partial
 
 > Collaborative features of Trame on top of the calculation engine: sort, filters, conditional formatting, undo/redo, data validation, and range protection. All these features are built on `LoroDoc` and `TrameState` defined in `ambre-spec-trame-logic.md`.
 >
@@ -32,6 +33,28 @@ struct TrameOutcome {
 ```
 
 > The `fn handle_*(…) -> Vec<TrameEvent>` signatures shown in the following sections are the **display-only** form; for operations that must also broadcast a delta, read the return as the `display` branch of a `TrameOutcome` (the `update` branch carrying the Loro delta).
+
+### Invariants
+
+Prefix `TRAME-FEAT`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4`; the cross-spec roll-up is `ambre-spec-testing.md §7`. The table covers the **built** features -- shared filters (§1.A), sort (§2) and the execution model above. Personal filter views (§1.B), conditional formatting (§3), data validation (§5) and range protection (§6) are Phase 2/3: their command variants exist in `ambre-bus` and their Logic handlers are explicit no-ops, so they carry no rows yet (seeding rule, architecture §4). Undo/redo is specified here (§4) but owned by the engine: its invariants are `TRAME-017` and `TRAME-018` in `trame-logic §1`, not restated here.
+
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `TRAME-FEAT-001` | A feature handler MUST NOT send on any channel: it returns a `TrameOutcome` and the Logic dispatcher fans it out. | §0; architecture §4 (host testability) | type-level: `TrameState` holds no sink or sender and `handle_command` returns `TrameOutcome` by value; the dispatcher seam is exercised by `ambre_trame::logic::tests::group3::edit_emits_send_update_through_sink` | verified |
+| `TRAME-FEAT-002` | A shared filter MUST hide rows by their `row_uid`, so the hidden set follows the data through a sort or an insert. | §1.A | `ambre_trame::logic::tests::group5::shared_filter_hidden_follows_sort` | verified |
+| `TRAME-FEAT-003` | A filtered-out row MUST still be counted by formulas: filtering is a view, not a mutation of the data. | §1.A | `ambre_trame::logic::tests::group5::shared_filter_does_not_affect_sum` | verified |
+| `TRAME-FEAT-004` | The filter definition MUST persist in the document and be re-evaluated when a cell it covers is edited. | §1.A | `ambre_trame::logic::tests::group5::shared_filter_recomputes_on_edit`, `group4::shared_filter_by_values_hides_nonmatching`, `::shared_filter_condition_greater_than` | verified |
+| `TRAME-FEAT-005` | A peer receiving the broadcast MUST apply the hidden set directly, without re-evaluating the predicate. | §1.A | `ambre_trame::logic::tests::group5::shared_filter_applies_on_remote_import` | verified |
+| `TRAME-FEAT-006` | Two concurrent shared filters MUST converge by last-writer-wins. | §1.A; §12 of `trame-logic` | `ambre_trame::logic::tests::group5::concurrent_filters_converge_lww`; the 2-peer convergence proptest also drives `ApplyFilter`/`ClearFilter` and asserts the elected `is_filtered` set (`logic::convergence_tests::two_peers_converge_under_interleaved_ops`) | verified |
+| `TRAME-FEAT-007` | A shared filter MUST be undoable as an ordinary CRDT mutation. | §1.A; §4 | `ambre_trame::logic::tests::group5::shared_filter_is_undoable`, `group2::filtered_column_edit_is_one_undo_item` | verified |
+| `TRAME-FEAT-008` | A filter command that cannot apply (wrong sheet, virtual column, absent filter) MUST leave the document untouched. | §1.A | `ambre_trame::logic::tests::group5::shared_filter_noop_guards`, `::clear_filter_unhides_and_noops_when_absent` | verified |
+| `TRAME-FEAT-009` | Every filter operator MUST be exercised, and a filter definition MUST round-trip through its stored form. | §1.A | `ambre_trame::logic::tests::group5::condition_pass_covers_every_operator`, `::filter_pass_values_and_op_string_roundtrip` | verified |
+| `TRAME-FEAT-010` | A sort MUST order rows by their **evaluated** value, and MUST pin the header row when one is declared. | §2 | `ambre_trame::logic::tests::group3::sort_range_ascending_moves_whole_rows`, `::sort_range_descending_keeps_header`, `group4::sort_range_multi_pins_header_row` | verified |
+| `TRAME-FEAT-011` | A multi-column sort MUST be lexicographic over its keys, each key applying its own direction. | §2 "Multi-Column Sort" | `ambre_trame::logic::tests::group4::sort_range_multi_lexicographic_with_per_key_direction`, `::sort_range_multi_no_keys_is_noop` | verified |
+| `TRAME-FEAT-012` | A sort that changes no row order MUST emit no CRDT delta. | §2 | `ambre_trame::logic::tests::group4::sort_range_multi_already_sorted_emits_no_delta`, `::sort_range_noops` | verified |
+| `TRAME-FEAT-013` | A sort invoked without an explicit range MUST resolve it from the tracked selection, in the Logic thread. | §2 | `ambre_trame::logic::tests::group4::sort_selection_resolves_against_tracked_selection`, `::sort_selection_multi_resolves_against_tracked_selection`, `::sort_sheet_sorts_used_range_by_active_column` | verified |
+
+> **Invariant coverage.** 13 `verified`, 0 `unverified`. That is the expected shape for this spec: it is the Phase-1 surface, and it is the one the workspace tested most heavily before the grammar existed. The absent rows are the honest part -- four sections here describe features whose handlers are no-ops.
 
 ---
 
@@ -704,50 +727,12 @@ pub enum TrameEvent {
 
 ## 9. QUALITY & TESTABILITY
 
-```rust
-// Filters (shared filter implemented, Epic E3 -- see ambre-trame/src/logic.rs tests)
-#[test] fn shared_filter_by_values_hides_nonmatching() { /* LoroMap filter_hidden, is_filtered */ }
-#[test] fn shared_filter_condition_greater_than()      { /* numeric condition */ }
-#[test] fn shared_filter_does_not_affect_sum()         { /* SUM(A:A) includes hidden ones */ }
-#[test] fn clear_filter_unhides_and_noops_when_absent(){ }
-#[test] fn shared_filter_hidden_follows_sort()         { /* row_uid-keyed hidden set */ }
-#[test] fn shared_filter_recomputes_on_edit()          { /* stored def drives recompute */ }
-#[test] fn shared_filter_applies_on_remote_import()    { /* peer applies filter_hidden directly */ }
-#[test] fn concurrent_filters_converge_lww()           { /* Alice vs Bob filter -> LWW */ }
-#[test] fn shared_filter_is_undoable()                 { /* Ctrl+Z removes shared filter */ }
-#[test] fn shared_filter_noop_guards()                 { /* wrong sheet / virtual column */ }
-#[test] fn condition_pass_covers_every_operator()      { /* predicate branch coverage */ }
-// Phase 2:
-#[test] fn personal_filter_view_not_synced()           { /* no CRDT delta emitted */ }
+> What the built features guarantee, and what verifies each guarantee, is the table in §0. This section used to be a list of 30 `#[test]` names; 18 named real tests and 12 named tests for handlers that are still no-ops, with nothing distinguishing the two. The 18 are now `Verification` cells joined to a rule; the 12 are below, as what they always were -- intent.
 
-// Sort (implemented, Epic E3 -- see ambre-trame/src/logic.rs tests)
-#[test] fn sort_range_ascending_moves_whole_rows()     { /* row data travels with key col */ }
-#[test] fn sort_range_descending_keeps_header()        { /* has_header pin + reverse order */ }
-#[test] fn sort_range_formulas_follow_data()           { /* refs track their physical cell, no #REF! */ }
-#[test] fn sort_range_noops()                          { /* wrong sheet / already sorted */ }
-#[test] fn sort_multi_column_primary_secondary()        { /* MVP: lexicographic sort_keys */ }
-
-// Conditional formatting
-#[test] fn first_matching_rule_wins()                  { /* priority */ }
-#[test] fn formula_rule_relative_ref()                 { /* =A1>... resolved from target cell */ }
-#[test] fn cond_format_does_not_mutate_styles_map()    { /* style_override != LoroMap styles */ }
-
-// Undo/Redo
-#[test] fn undo_local_only_not_remote()                { /* Alice undo does not affect Bob */ }
-#[test] fn undo_insert_row_rebuilds_sheet_index()      { }
-#[test] fn undo_stack_cleared_on_doc_close()           { }
-#[test] fn filter_shared_is_undoable()                 { /* Ctrl+Z removes shared filter */ }
-#[test] fn filter_view_personal_not_undoable()         { /* personal view activation = not in undo stack */ }
-
-// Validation
-#[test] fn reject_blocks_mutation()                    { /* no CRDT delta on Reject */ }
-#[test] fn warn_allows_mutation_with_warning()         { }
-#[test] fn list_validation_dropdown_values()           { }
-
-// Protection (Post-MVP)
-#[test] fn protection_blocks_edit_for_non_owner()      { }
-#[test] fn remote_violation_applied_but_warned()       { /* CRDT not rejected */ }
-```
+* **Tier.** host, entirely (`just test-native`). Every feature here runs in the Logic thread on pure Rust.
+* **Mandatory belts per built feature.** A view feature (filter) lands with: a positive case, a no-op guard, a convergence case in the 2-peer proptest, and an "it does not change the data" case (`TRAME-FEAT-003` is the model). A mutation feature (sort) lands with: the permutation assertion, a header-pin case, a no-delta case, and a "references follow" case owned by `trame-logic §1`.
+* **Planned belts, for handlers that do not exist yet.** Written as intent, not as coverage: personal filter view emits no CRDT delta and is absent from the undo stack; conditional formatting resolves first-matching-rule-wins, resolves a relative `=A1>...` from the target cell, and never mutates the styles map; validation `Reject` blocks the mutation with no delta while `Warn` allows it; protection blocks a local edit for a non-owner and warns rather than rejects on a remote violation. Each becomes a `TRAME-FEAT` row on the day its handler stops being a no-op.
+* **Definition of Done.** An increment is `[x]` only when its belts are green in CI **and** no invariant in §0 is left without a `Status`.
 
 ---
 

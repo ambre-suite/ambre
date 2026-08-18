@@ -1,6 +1,7 @@
 # AMBRE — SPEC: DOCUMENT FILE FORMAT (`.ambre`)
 **Type:** Horizontal (Foundation — Interop / Persistence)
 **Status:** Draft
+**Implementation:** partial
 
 > The native, lossless, cross-app on-disk representation of an Ambre document. One container, every app.
 >

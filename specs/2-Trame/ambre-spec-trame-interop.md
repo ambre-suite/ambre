@@ -1,6 +1,7 @@
 # AMBRE — SPEC: AMBRE-TRAME INTEROP (Import / Export)
 **Type:** Vertical (Feature / Application — Interop)
 **Status:** Draft
+**Implementation:** partial
 
 > Import and export of third-party formats for Trame. All conversions run client-side in the **Logic thread** (WASM) — the server never sees the plaintext content. Supported formats: Excel (.xlsx), CSV, PDF.
 
@@ -20,10 +21,21 @@
 - Full PDF export: the DrawSurface rendering (KrillaSurface) is described in the UI spec
 - VBA Macros / Office Scripts: definitively out of scope
 
-**Invariants:**
-- **Zero-Knowledge**: all conversions happen in the Logic thread. No unencrypted file transits to the server.
-- **Client-side only**: import/export crates are compiled to WASM.
-- **No `unsafe`** in application code.
+**Invariants:** prefix `TRAME-IO`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4`; the cross-spec roll-up is `ambre-spec-testing.md §7`. The table covers the **built** paths -- CSV (§4) and the native `.ambre` container (§1). The .xlsx paths (§2, §3) and PDF export (§5) have no implementing code: `ambre-trame` declares `csv` and neither `calamine`, `rust_xlsxwriter` nor `krilla`. They carry no rows yet (seeding rule, architecture §4). `TRAME-024` ("no `unsafe`") covers the whole crate and is not restated here.
+
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `TRAME-IO-001` | Every conversion MUST run in the Logic thread; no plaintext file MUST reach the server. | §1; `ZK-001`, `ZK-004` | crate graph: `csv` is declared by `ambre-trame` (Logic thread) alone, and `ambre-server` declares no interop crate; `deny.toml` holds the relay's capability wall | verified |
+| `TRAME-IO-002` | Import and export MUST compile to `wasm32-unknown-unknown`: the conversion is client-side, with no server round trip. | §1 | the CI `test-wasm` job builds `ambre-trame` for `wasm32-unknown-unknown`; a non-WASM-compatible interop crate fails that job | verified |
+| `TRAME-IO-003` | A malformed or hostile CSV MUST NOT panic; it MUST fail as a typed error. | §4.A | `ambre_trame::logic::tests::group6::csv_import_malformed_never_panics`, `::csv_import_random_bytes_never_panics` | verified |
+| `TRAME-IO-004` | A CSV import followed by an export MUST round-trip the cell values. | §4 | `ambre_trame::logic::tests::group6::csv_import_export_roundtrip`, `::csv_import_then_export_drops_trailing_empties`, `group7::csv_export_typed_6x10_has_no_trailing_columns` | verified |
+| `TRAME-IO-005` | A CSV export MUST write evaluated values, never formula sources. | §4.B | `ambre_trame::logic::tests::group7::csv_export_evaluates_formulas` | verified |
+| `TRAME-IO-006` | The CSV delimiter MUST be auto-detected, and a header row MUST be skippable. | §4.A | `ambre_trame::logic::tests::group6::csv_delimiter_autodetect`, `::csv_import_skips_header`, `::csv_import_creates_sheet_and_cells` | verified |
+| `TRAME-IO-007` | An `.ambre` export/import round trip MUST preserve the document state, byte for byte on a bare document. | §1; `ambre-spec-docfile.md §2` | `ambre_trame::logic::docfile::tests::round_trip_is_byte_identical_on_a_bare_document`, `::round_trip_preserves_the_document_state`, `::the_header_names_trame_and_the_document` | verified |
+| `TRAME-IO-008` | A rejected file MUST leave both the input bytes and the current state untouched, and MUST fail typed rather than panic. | §1; `ambre-spec-docfile.md §2` | `ambre_trame::logic::docfile::tests::a_rejected_file_leaves_both_the_input_and_the_state_alone`, `::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic` | verified |
+| `TRAME-IO-009` | A `.ambre` file belonging to another app MUST be re-dispatched to that app, never coerced into Trame. | §1; `ambre-spec-docfile.md §2.A` | `ambre_trame::logic::docfile::tests::a_toile_file_is_re_dispatched_not_coerced` | verified |
+
+> **Invariant coverage.** 9 `verified`, 0 `unverified`. Every row covers a shipped path; the two large sections of this spec (.xlsx import and export) describe code that does not exist and are marked as such above.
 
 **Dependencies:**
 
@@ -562,21 +574,12 @@ synchronous pass.
 
 ## 8. QUALITY & TESTABILITY
 
-```rust
-// Import/Export roundtrip
-#[test] fn xlsx_import_export_roundtrip()              { /* import -> export -> re-import -> same values */ }
-#[test] fn csv_import_export_roundtrip()               { /* same */ }
-#[test] fn xlsx_import_formulas_converted()            { /* =SUM(A1:A10) correctly parsed */ }
-#[test] fn xlsx_import_broken_formula_warned()         { /* unsupported function -> warning */ }
-#[test] fn xlsx_import_styles_deduplicated()           { /* two cells same style -> same style_id */ }
-#[test] fn xlsx_import_merges()                        { /* merges correctly imported */ }
-#[test] fn xlsx_import_hidden_sheets()                 { /* hidden: true in LoroDoc */ }
-#[test] fn xlsx_export_cell_ref_to_a1()                { /* CellRef -> A1 via SheetIndex */ }
-#[test] fn xlsx_export_broken_ref_becomes_ref_error()  { /* broken ref -> #REF! in xlsx */ }
-#[test] fn csv_delimiter_autodetect()                  { /* comma vs semicolon */ }
-#[test] fn csv_import_extends_rows_cols_as_needed()    { }
-#[test] fn import_progress_batching_allows_p1_p2()     { /* scroll during import */ }
-```
+> What the built paths guarantee, and what verifies each guarantee, is the table in §1. This section used to list 12 `#[test]` names, of which **2** existed -- the ten others named tests for the .xlsx and PDF code that has never been written, in the same format as the two real ones.
+
+* **Tier.** host, entirely. Conversion is pure Rust in the Logic thread; a decoder needs no browser.
+* **Mandatory belts per format.** A new import path lands with: a round trip (import -> export -> re-import, identical values), a malformed-input case and a random-bytes case -- **the decoder is fed by user files, so totality is not optional** (architecture §4 names decoders as the first `cargo-fuzz` targets, and none exists yet).
+* **Planned belts, for the unwritten .xlsx paths.** Intent, not coverage: formula conversion, unsupported-function warning, style deduplication, merges, hidden sheets, `CellRef` -> A1 on export, broken ref -> `#REF!` in the file, import batching that keeps P1/P2 responsive. Each becomes a `TRAME-IO` row on the day the path exists.
+* **Definition of Done.** An increment is `[x]` only when its belts are green in CI **and** no invariant in §1 is left without a `Status`.
 
 ---
 

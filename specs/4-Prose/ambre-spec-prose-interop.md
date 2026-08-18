@@ -1,6 +1,7 @@
 # AMBRE -- SPEC: PROSE / INTEROP
 **Type:** Vertical (Feature/Widget)
 **Status:** Draft
+**Implementation:** design-only
 
 > Multi-format import and export pipeline for Prose. Bidirectional conversion between the
 > native CRDT structure (`LoroDoc` Prose) and external formats: docx, Markdown, PDF, HTML,

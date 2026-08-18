@@ -1,6 +1,7 @@
 # AMBRE — SPEC: TOILE FEATURES (Presentation, Auto-Layout, Collaboration)
 **Type:** Vertical (Feature / Application — Features)
 **Status:** Draft
+**Implementation:** partial
 
 > Higher-level Toile capabilities layered on the engine (`toile-logic`) and renderer (`toile-ui`):
 > presentation mode (frame sequencing, Smart Animate transitions, focus mode, presenter overlay), the
@@ -21,6 +22,25 @@ Every feature here is expressed as additional `ToileCommand` variants handled sy
 selection are **local/ephemeral**; the presentation *sequence* (which frames, in what order) and votes/reactions
 are **CRDT** (shared, persisted). This split is the through-line of the spec: persist shared intent, keep
 per-viewer playback local.
+
+### Invariants
+
+Prefix `TOILE-FEAT`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4`; the cross-spec roll-up is `ambre-spec-testing.md §7`. The table covers the **built** features: presentation (§1), auto-layout (§2), boolean ops (§3), reactions and speaker notes (§4). **Comments (§4.D) carry no rows: the feature does not exist** -- `CreateComment` appears nowhere in the workspace, and the `comments` CRDT is a Phase 2 `[ ]` in §9. Undo granularity is the engine's (`TOILE-014`).
+
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `TOILE-FEAT-001` | Shared intent (slide sequence, notes, auto-layout spec, reactions) MUST be CRDT; per-viewer playback MUST stay local and MUST NOT be synced. | §0 | `ambre_toile::logic::convergence_tests::present_mode_toggle_is_local`, `::playback_is_not_synced`, `::follow_state_is_not_synced`, `::present_broadcast_toggle_is_local`, `::set_slide_order_produces_delta_and_is_undoable` | verified |
+| `TOILE-FEAT-002` | The slide deck MUST deduplicate repeated frames, and playback MUST be clamped to the deck bounds. | §1.A | `ambre_toile::logic::convergence_tests::slide_order_dedups_repeated_frames`, `::playback_bounds`, `::adopted_slide_is_clamped_to_deck` | verified |
+| `TOILE-FEAT-003` | A follower MUST adopt the presenter's active slide; a non-follower MUST ignore the broadcast; manual navigation MUST break the follow. | §1.B | `ambre_toile::logic::convergence_tests::follower_adopts_presenter_slide`, `::non_follower_ignores_broadcast`, `::following_other_peer_ignores_broadcast`, `::manual_nav_breaks_follow`, `::follow_snaps_to_last_known_slide`, `::broadcast_frame_carries_active_slide`, `::no_broadcast_frame_when_not_broadcasting` | verified |
+| `TOILE-FEAT-004` | `smart_animate` MUST tween elements sharing an id, fade in the new ones and fade out the gone ones, and MUST reproduce the source and target frames exactly at `t=0` and `t=1`. | §1.C | `ambre_toile::logic::animate::tests::shared_id_tweens_at_midpoint`, `::new_element_fades_in`, `::gone_element_fades_out`, `::endpoints_reproduce_source_and_target`, `::mixed_membership_classifies_each_id`, `::empty_frames` | verified |
+| `TOILE-FEAT-005` | `solve_layout` MUST honour every direction x sizing x alignment combination, and MUST NOT produce negative spacing on overflow. | §2 | `ambre_toile::logic::autolayout::tests::overflow_does_not_produce_negative_spacing`, `::wrap_breaks_rows`, `::wrap_align_per_row`, `::sizing_fill_shares_leftover`, `::sizing_hug_equals_fixed`, `::align_space_between`, `::space_between_single_child_falls_back_to_start`, `::padding_offsets_origin`, `::empty_children_is_empty` | verified |
+| `TOILE-FEAT-006` | A boolean operation MUST be deterministic across runs and area-correct; fewer than two eligible paths MUST be rejected, not silently produce a degenerate element. | §3 | `ambre_toile::logic::boolean::tests::deterministic_across_runs`, `::union_area_is_combined_minus_overlap`, `::intersect_area_is_overlap`, `::subtract_removes_the_clip`, `::exclude_is_symmetric_difference`, `::fewer_than_two_paths_is_empty`, `ambre_toile::logic::state::boolean::tests::fewer_than_two_eligible_is_rejected`, `::keep_sources_leaves_inputs`, `::boolean_is_one_undo_item` | verified |
+| `TOILE-FEAT-007` | A reaction MUST be keyed by `UserId`: the same user reacting from two devices MUST count once. | §4.A | `ambre_toile::logic::convergence_tests::same_user_two_devices_is_one_entry`, `::concurrent_reactions_distinct_users_converge`, `::react_add_change_remove_updates_tally`, `::tally_skips_a_deleted_target`, `::react_broadcasts_delta_and_is_undoable`, `::react_before_session_ready_is_a_noop` | verified |
+| `TOILE-FEAT-008` | Concurrent speaker-notes edits MUST converge character by character, and an out-of-range splice MUST be clamped rather than rejected or lost. | §1.D | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge`, `::edit_notes_produces_delta_and_is_undoable`, `::edit_notes_clamps_out_of_range_splice`, `::edit_notes_rejects_non_frame` | verified |
+| `TOILE-FEAT-009` | Concurrent auto-layout spec edits MUST converge by last-writer-wins on the whole spec. | §2 | `ambre_toile::logic::convergence_tests::concurrent_auto_layout_edits_converge`, `::set_auto_layout_add_change_clear`, `::set_auto_layout_rejects_non_frame` | verified |
+| `TOILE-FEAT-010` | A reaction tally MUST skip a deleted target rather than surface a dangling badge. | §4.A | `ambre_toile::logic::convergence_tests::derive_viewport_carries_tally_and_skips_deleted_target`, `::tally_skips_a_deleted_target` | verified |
+
+> **Invariant coverage.** 10 `verified`, 0 `unverified`. The absent rows are the honest part: §4.D specifies a comments CRDT that does not exist anywhere in the workspace.
 
 ---
 
@@ -340,29 +360,15 @@ CommentThreadOpened(CommentThreadId),     // echo of CreateComment so the UI can
 ---
 
 ## 6. QUALITY & TESTABILITY
-> See the transverse test architecture in `ambre-spec-architecture.md §4`.
 
-- **Test tiers:** **host** for the pure logic — `smart_animate` matching/tween, `solve_layout`, boolean-op
-  geometry, reaction tally derivation, and the sequence/playback command handlers. **wasm** only for the
-  presentation camera pass and inline notes editing on the GPU surface. No **db** tier.
-- **Unit tests:** `smart_animate` covers all three cases (shared-id tween, fade-in, fade-out) and endpoint
-  `t=0/1`; `solve_layout` covers Horizontal/Vertical/Wrap × Hug/Fill/Fixed and padding/gap/align; boolean ops on
-  overlapping/disjoint/nested paths; tally derivation with add/change/remove; playback bounds (`Next` past last,
-  `Prev` before first). Target: every predicate branch of the solver and animate matcher.
-- **CRDT convergence (mandatory):** the collaborative state here is the **presentation sequence**, **speaker
-  notes**, **auto-layout spec**, **reactions**, and **comments** — a 2-peer convergence property test via
-  `MockSyncHandle` + `apply_remote` must show identical final `LoroDoc` for: concurrent slide reorders
-  (`LoroMovableList`), concurrent notes edits (`LoroText` char-CRDT), concurrent auto-layout spec edits (LWW
-  register), concurrent reactions (per-**user** keys — one vote per `UserId`, no double-count across devices —
-  convergent tally), and concurrent comments (distinct threads from a same-spot drop both survive, concurrent
-  replies converge in `LoroMovableList` order, resolve/reopen is LWW-convergent). Derived playback state is
-  excluded (local). Assert a two-device same-user re-vote is one entry (§4.A).
-- **Mocks & Environment:** `CommandSink`/`MockSyncHandle`; fake `FrameSnapshot`s to drive `smart_animate`;
-  headless wasm for the camera pass. No live network.
-- **Benchmarks:** `criterion` on `smart_animate` for a 500-element frame pair (must fit the transition frame
-  budget) and `solve_layout` for a 200-child frame.
-- **Definition of Done (tested):** unit + convergence (sequence/notes/autolayout/reactions) + one wasm
-  presentation test green in CI.
+> What the built features guarantee, and what verifies each guarantee, is the table in §0. This section used to enumerate in prose the cases that "must" be covered -- including a comments convergence belt for a feature that does not exist. The enumeration was right about the built half and unfalsifiable about the rest; the table is neither.
+
+* **Tier.** host, entirely. `smart_animate`, `solve_layout`, the boolean geometry, the tally derivation and every sequence/playback handler are pure Rust. **wasm** for the presentation camera pass and inline notes editing on the GPU surface, specified in `toile-ui`.
+* **Seams.** `CommandSink` / `MockSyncHandle`; fake `FrameSnapshot`s to drive `smart_animate`.
+* **Mandatory belts.** A shared feature lands with a convergence case inside the 2-peer proptest (`TOILE-017`) **and** a local/shared split assertion -- what is CRDT converges, what is playback stays local (`TOILE-FEAT-001`). A pure solver lands with its own branch coverage, on host (`TOILE-FEAT-005`, `TOILE-FEAT-006`, `TOILE-FEAT-007` are the models).
+* **Not yet covered, because not yet built.** The comments CRDT (§4.D): distinct threads from a same-spot drop both surviving, concurrent replies converging in `LoroMovableList` order, resolve/reopen LWW. Written here as intent; it becomes `TOILE-FEAT` rows on the day `CreateComment` exists.
+* **Benchmarks.** None today. §7 budgets `smart_animate` over a 500-element frame pair and `solve_layout` over a 200-child frame; neither has a `criterion` bench, so neither budget can fail a build.
+* **Definition of Done.** An increment is `[x]` only when its belts are green in CI **and** no invariant in §0 is left without a `Status`.
 
 ---
 

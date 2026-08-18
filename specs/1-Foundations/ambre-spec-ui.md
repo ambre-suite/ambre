@@ -1,6 +1,7 @@
 # AMBRE — SPEC: UI Thread (umbrella — boundary, crates, commands, tokens)
 **Type:** Horizontal (Foundation — UI Thread)
 **Status:** Draft
+**Implementation:** implemented
 
 > Umbrella of the **UI thread** (page's main thread). The UI thread has two subsystems, each with its own crate and dedicated spec: the **content** rendered in a wgpu `<canvas>` (`ambre-canvas`, `ambre-spec-canvas.md`) and the Leptos DOM **chrome** (`ambre-chrome`, `ambre-spec-chrome.md`). This document details neither: it fixes what is **cross-cutting** — the canvas/DOM boundary, the thread's crate map, the shared command model, and the single source of design tokens. Inter-thread transport is in `ambre-spec-architecture.md`.
 

@@ -1,6 +1,7 @@
 # AMBRE — SPEC: Test strategy realization & coverage debt
 **Type:** Horizontal (Foundation — Quality)
 **Status:** Draft
+**Implementation:** implemented
 
 > Operational companion to `ambre-spec-architecture.md` §4 ("Quality & Testability"). §4 defines the **normative** three-tier model (`host` / `db` / `wasm`), the per-crate strategy, and the CI shape. This spec records the **realization**: what is actually wired per crate today, the seams used to keep logic host-testable, and the **deliberate, deferred coverage debt** so it is tracked rather than rediscovered. When this spec and §4 disagree on intent, §4 wins; this spec only reports state.
 
@@ -90,20 +91,31 @@ Tracked here so it is a decision, not an omission. None blocks the Trame MVP.
 
 > Roll-up of the per-spec invariant tables (grammar: architecture §4, "Invariants (normative)"). The invariants themselves live in the spec of the component they constrain; this section reports **state**, never intent.
 
-**Seeded: the ZK boundary (35 invariants).** `ZK-001..008` (architecture §3, the boundary itself), `SYNC-001..013` (`ambre-spec-sync.md §1`), `SRV-001..014` (`ambre-spec-server.md §1`).
+**Seeded: 163 invariants over three passes.**
+* **The ZK boundary (35).** `ZK-001..008` (architecture §3, the boundary itself), `SYNC-001..013` (`ambre-spec-sync.md §1`), `SRV-001..014` (`ambre-spec-server.md §1`).
+* **The Trame vertical (61).** `TRAME-001..024` (`trame-logic §1`, the engine), `TRAME-UI-001..015` (`trame-ui §1`), `TRAME-FEAT-001..013` (`trame-features §0`), `TRAME-IO-001..009` (`trame-interop §1`). The second pass of the seeding order below, taken on the largest body of shipped code in the workspace (about 30 000 lines) and the best-tested one, so it measures the grammar against material that already passes.
+* **The Toile vertical (67).** `TOILE-001..023` (`toile-logic §1`, the engine), `TOILE-UI-001..021` (`toile-ui §1`), `TOILE-FEAT-001..010` (`toile-features §0`), `TOILE-IO-001..013` (`toile-interop §1`). The third pass, on the second app crate (about 23 000 lines).
 
-| Status | Count | Reading |
-|---|---|---|
-| `verified` | 24 | a named test, a `proptest`, or a `deny.toml` capability ban |
-| `human-review` | 2 | `ZK-006` / `SRV-001` (no ciphertext in logs) -- reviewer attention, by decision |
-| `unverified` | 9 | no mechanism today; each is listed below |
-| `qa-manual` | 0 | -- |
+| Status | ZK boundary | Trame vertical | Toile vertical | Total | Reading |
+|---|---|---|---|---|---|
+| `verified` | 24 | 52 | 63 | 139 | a named test, a `proptest`, a type-level construction, or a `deny.toml` capability ban |
+| `human-review` | 2 | 0 | 0 | 2 | `ZK-006` / `SRV-001` (no ciphertext in logs) -- reviewer attention, by decision |
+| `unverified` | 9 | 9 | 4 | 22 | no mechanism today; each is listed below |
+| `qa-manual` | 0 | 0 | 0 | 0 | -- |
 
-**Executed on the seeding pass:** `ambre-crypto` 19/19 and `ambre-sync` 57/57 green on the host tier; `ambre-server` 94 green with 62 ignored -- the `SRV-*` entries citing `routes::tests::*` are db-tier tests, run by the CI `test-db` job rather than by `cargo test`. Nothing cited here is a test that does not exist: every name in a `Verification` cell resolves to a `fn` in the tree.
+Per spec: `trame-logic` 19/24 `verified`, `trame-ui` 11/15, `trame-features` 13/13, `trame-interop` 9/9; `toile-logic` 21/23, `toile-ui` 19/21, `toile-features` 10/10, `toile-interop` 13/13. **No invariant was written for a component that does not exist** -- multi-user cursors, sparklines, charts and PDF export (`trame-ui §9-§12`), conditional formatting, validation and protection (`trame-features §3, §5, §6`), and both .xlsx paths (`trame-interop §2, §3`) describe code the crate does not contain, and each spec now says so where the table would have been.
+
+**Executed on the ZK pass:** `ambre-crypto` 19/19 and `ambre-sync` 57/57 green on the host tier; `ambre-server` 94 green with 62 ignored -- the `SRV-*` entries citing `routes::tests::*` are db-tier tests, run by the CI `test-db` job rather than by `cargo test`. Every name in a `Verification` cell resolves to a `fn` in the tree. That check turned out to be too weak -- it does not say the `fn` is reachable, and two `SRV-*` citations named the wrong module for tests behind a Cargo feature no job enabled; see "Feature-gated tests that no CI job could reach" below.
 
 Five of the 24 are held by the **crate graph** rather than by a test (`ZK-002`, `ZK-003`, `ZK-004`, `SRV-012`, `SYNC-011`), and `deny.toml` now refuses the edit that would break them: each capability crate (AEAD, Argon2, X25519, Ed25519, `ambre-crypto`, `loro`) carries a `wrappers` list of the crates allowed to depend on it, checked by the CI `deny` job. Re-granting a capability is an edit of `deny.toml`, reviewed as such, rather than one line in a `Cargo.toml`.
 
-### Divergence report
+**Executed on the Toile pass:** `cargo test -p ambre-toile --lib` -- **341 passed, 0 failed**; with `--features pdf`, **349 passed, 0 failed**. The 67 rows cite **240 distinct test paths**, every one green in that second run. Four `verified` rows are held by something other than a named test: `TOILE-001` (private `doc`, no public signature naming `LoroDoc`), `TOILE-002` (outcome by value, no async path), `TOILE-UI-001` (no `loro` reference under `src/ui/` outside comments) and `TOILE-IO-013` (crate graph plus the `deny.toml` capability wall). `TOILE-018` is held by the CRDT schema itself -- one `LoroValue::Binary` per element under the `"style"` key -- with concurrent restyles driven by the convergence proptest.
+
+**Executed on the Trame pass:** `cargo test -p ambre-trame --lib` -- **346 passed, 0 failed**. The 61 rows cite **112 distinct test paths**, every one of which appears in that run's green list -- matched mechanically against the runner output, not by reading.
+
+Eleven of the 52 `verified` rows are held by something other than a named test, which is the ladder of architecture §4 working downward from the top: three by a `proptest` (`TRAME-013`, `TRAME-014`, `TRAME-015`), five by construction (`TRAME-001` private `doc` with no public signature naming `LoroDoc`; `TRAME-002` outcome returned by value, no async path; `TRAME-UI-002` a single outbound sender; `TRAME-UI-003` `try_send` only; `TRAME-FEAT-001` no sink on `TrameState`), one by the compiler (`TRAME-UI-006`, an exhaustive match with no `_` arm) and two by the crate graph (`TRAME-UI-001`, `TRAME-IO-001`). None of those eleven can regress without failing a build.
+
+### Divergence report -- ZK boundary
 
 The point of the exercise, and the part that does not come out of a test run.
 
@@ -114,12 +126,57 @@ The point of the exercise, and the part that does not come out of a test run.
 5. **`ZK-007` -- no mechanism exists for a whitelist.** "The relay learns nothing beyond this set" has no natural test. Candidate: an `insta` snapshot over the `WsClientMsg` / `WsServerMsg` shapes, so any new plaintext field shows up as a snapshot diff rather than as nothing at all.
 6. **The audit ledger lags the code.** `C1` (ciphertext in S3 logs), `C4` (cross-document snapshot access) and `H2` (metadata to non-members) are fixed in the tree but still listed **OPEN** in `security-audit.md`, alongside the `H5` case already noted below. Each now has an invariant citing its ID in `Sources`, which is what stops the two from drifting again. Updating those statuses is a separate pass.
 
+### Divergence report -- Trame vertical
+
+Twelve findings on a body of code that was already the best-tested in the workspace, which is the argument for doing this on green material rather than on suspect material. The first seven are the engine (`trame-logic`), the last five the three sibling specs.
+
+1. **`TRAME-008` -- the spec claims a behaviour the code prevents.** `trame-logic §5` states that a row or column delete propagates `#REF!` to the formulas that referenced the deleted line. The delete path takes the structural reseed, which re-binds every formula **from its raw text**, so the reference lands positionally on the shifted grid and reads an *empty* cell. `logic::tests::group2::formula_reference_is_positional_after_delete` asserts exactly that, and is green. The `BrokenRef` primitive is real and tested at the VM level (`TRAME-007`) but **unreachable from this path**: nothing survives the reseed still holding the deleted `Uid`. `§12` ("References After Delete + Reinsert") describes the same unreachable outcome. The spec has not decided between Excel-like positional behaviour and uid-broken references; it claims one and ships the other. Noted in §5, not silently rewritten -- this is a product decision, not a typo.
+2. **`§11 bis.E` was carrying a fixed problem as open debt.** It described masking excluded only for the active sheet and asked for a cross-sheet convergence test. `masked_cells_for(sheet_id, index)` derives the set per sheet and `reseed_engine` excludes it uniformly, and the test it asks for exists and is green (`group3::masked_cell_excluded_across_sheets_regardless_of_active_tab`). Same drift as `§11 bis.F`, in the other direction: an appendix outliving its cause. Marked LANDED, recorded as `TRAME-020`/`TRAME-021`.
+3. **`§10 QUALITY & TESTABILITY` was fiction, and it is the general case.** It listed 17 test names; **zero** existed in the tree, while `ambre-trame` carried 346 real tests under entirely different names. Measured across the corpus **before this pass: 82 test names cited in specs, 23 of which resolve to a `fn`** -- `trame-logic` 0/17, `trame-ui` 0/8, `trame-interop` 2/12, `trame-features` 18/30, `ambre-spec-sync.md` 3/11, `prose-*` 0/4. **After it: 4 cited, 0 real**, all four in the Prose specs, where an intended-test list is legitimate -- those specs are `design-only` and describe no code at all. `ambre-spec-sync.md §4` went the same way as the others: its three blocks carried full `#[test]` and `proptest!` **bodies**, an uncompiled second copy of a suite that `ambre-spec-template.md §0` forbids for exactly the reason on display here. A test list in a spec has no join to the suite and no way to fail, so it decays silently; the `Verification` column has both, which is the entire reason for the column. The section is now the tiers, the seams, the mandatory belts and the DoD -- the parts that are not a claim about the tree's contents.
+4. **`TRAME-023` -- the engine's core cache invariant is unverified.** Nothing asserts that the incrementally maintained `SheetIndex` equals a from-scratch rebuild after an arbitrary sequence of structural operations; there are per-operation unit tests only. The equivalence property exists on the **Toile** spatial index and not here, on the index every formula resolution goes through. The deleted §10 claimed a `sheetindex_incremental_eq_rebuild` proptest -- the fiction was hiding the gap.
+5. **`TRAME-010` -- the invariant a remote peer depends on has no test.** "Computed values never enter the CRDT" is asserted nowhere; only the recompute-after-reseed side is covered. A regression here is invisible locally and corrupts every other peer.
+6. **`TRAME-022` -- "a workbook always keeps >= 1 sheet" holds locally only.** The local guard is tested; two peers concurrently deleting the last two sheets still converge to a sheet-less workbook. `§2.D`'s deterministic re-insertion rule is **decided but not implemented**, and the spec already said so -- the invariant table is what makes it countable instead of a parenthesis on line 1832.
+7. **`TRAME-024` -- `#![forbid(unsafe_code)]` is still absent** from `ambre-trame`, as from 15 of 17 crates (§8). Measured zero `unsafe`, so the pillar holds today by observation rather than by mechanism.
+
+8. **`trame-ui §14` claimed the opposite of the truth about its own tier.** It opened with "UI tests are run with `wasm-bindgen-test` in a headless browser" and listed eight such tests, **none of which existed**. The real split is 58 **host** tests (`ui::grid`, `ui::renderer`, `render`) against 13 wasm ones. The host-extraction seam of architecture §4 had been applied thoroughly and the spec never noticed -- so a reader planning a new interaction would have reached for the slow tier for work that belongs on the fast one.
+9. **`trame-ui §2.B` contradicted itself inside four lines.** The prose says the canvas dispatch carries "no `_ => {}` wildcard, so a new variant is a compile error"; the code excerpt directly under it ended on `_ => {}`. The **code** is right (`ui/view/frame.rs` has no wildcard arm), which makes this the dangerous shape of error: a stale snippet that a reader copies, silently giving up the compile-time check the sentence above it promises. Corrected, and pinned as `TRAME-UI-006`.
+10. **`TRAME-UI-005` -- an implemented rule with no test, and a regression that would be misread.** The anti-flicker rule (drop a `ViewportData` older than the last accepted) is in `ui/grid/state.rs` and nothing exercises it. A regression shows up as flicker under fast scroll, which reads as a GPU or rendering problem -- days spent in the wrong crate. The deleted §14 named an `outdated_viewport_version_ignored` test for exactly this; naming it was as far as it ever got.
+11. **A test list cannot distinguish a test from a wish, and both specs prove it.** `trame-interop §8` listed 12 names of which **2** existed -- the other ten describe .xlsx and PDF code that has never been written, in the same format as the two real ones. `trame-features §9` listed 30 of which 18 existed, the other 12 belonging to handlers that are explicit no-ops. Nothing in either document marked the difference. Both sections now keep their intent explicitly labelled as intent, and the real coverage lives in `Verification` cells.
+12. **Unwritten features carry the same authority as shipped ones.** `trame-ui §9-§12` (multi-user cursors, sparklines, charts, PDF export), `trame-features §3/§5/§6` and `trame-interop §2/§3` are full technical designs for code the crate does not contain -- `ambre-trame` declares neither `calamine`, `rust_xlsxwriter` nor `krilla`. The `Implementation` header field (`ambre-spec-template.md`) fixes this at the document level; **inside** a document, the absence of invariant rows for a section is now the signal, and each of these specs says so where its table stops.
+
+### Divergence report -- Toile vertical
+
+Six findings, and the shape is different from Trame's: the prose enumerations in Toile's quality sections were substantially **true** -- the coverage they demanded exists. What drifted here is not the account of the tests, it is the account of the features.
+
+1. **Eight tests that had never run.** `ambre-toile` keeps `krilla` optional, so `logic::interop::pdf_export` and `logic::state::presentation::pdf_tests` compile only under `--features pdf`. Every CI path (`just test-native` -> `cargo test --workspace`) enables no optional feature, so those eight were invisible: 341 tests ran, 349 exist. They pass. The `justfile` comment above the recipe even asserted that "every gated test lives in `ambre-core` and `ambre-logic`" -- a false statement inside the file whose whole job is local/CI parity. Fixed: `just test-native` now runs `cargo test -p ambre-toile --features pdf`. A test that never executes verifies nothing, so this belonged in the justfile, not in a caveat.
+2. **Comments are specified in three places and implemented in none.** `toile-logic §2.J` (anchoring model), `toile-ui §5sexies` (the DOM panel), `toile-features §4.D` (the full thread CRDT schema) -- and `toile-features §6` listed a **mandatory** convergence belt for them. `CreateComment` appears nowhere in the workspace. A belt cannot be mandatory for a feature that does not exist; the roadmap has always said so (`§9`, Phase 2, `[ ]`), while three technical sections read as description.
+3. **`toile-interop §1` declares two dependencies the crate does not have.** `serde_json` (Figma/Miro parse) and `lyon` (PNG render-back) are in the table; `ambre-toile/Cargo.toml` has neither, because both features are unbuilt. A dependency table is the most mechanically checkable paragraph in a spec -- `cargo tree` settles it in a second -- which is exactly why it is worth checking: it had quietly become a plan.
+4. **`TOILE-015` -- undo local-only is asserted nowhere.** `§8 bis` says Toile "reuses the same model as Trame", and Trame's belt (`undo_local_only_not_remote`) has no counterpart here. The model was reused; the test that proves it was not. This is the cheapest gap in the whole ledger to close.
+5. **The two apps have opposite gaps, and neither spec could have told you which.** `TOILE-004` -- the incrementally maintained spatial index equals a from-scratch rebuild -- is held by a real `proptest` inside the 2-peer convergence run. `TRAME-023` is the same invariant on `SheetIndex`, with no test at all. Same architecture, same doctrine, one built the belt and one did not, and before the tables both specs claimed it in prose.
+6. **What the exercise did *not* find is worth recording too.** Toile's 341 tests cover every rule its §1 stated in prose, and the four `unverified` rows are two render-loop behaviours nobody exercised (`TOILE-UI-020`, `TOILE-UI-021`), the undo gap above, and the missing `#![forbid(unsafe_code)]`. A spec can be accurate; the point of the grammar is that you no longer have to take that on faith.
+
+### Feature-gated tests that no CI job could reach
+
+Found while seeding Toile, then checked across the workspace, because the failure mode is invisible by construction: a test behind a Cargo feature that nothing enables does not fail, does not get reported as ignored, and does not appear in any count. It simply is not there.
+
+| Crate | Module | Gate | Tests | Ran in CI |
+|---|---|---|---|---|
+| `ambre-toile` | `logic::interop::pdf_export`, `logic::state::presentation::pdf_tests` | `--features pdf` | 8 | no |
+| `ambre-server` | `redis_ops::lua_tests` | `--features test-helpers` | 6 | no |
+
+Measured: `cargo test -p ambre-toile --lib` collects 341, with `--features pdf` 349 -- **the eight extra pass**. `cargo test -p ambre-server --features db` collects **156**, with `--features db,test-helpers` **162**; those six are Lua/Redis integration tests, so they are collected and compiled here but execute only against a live Redis (the CI `test-db` job's services), and this pass verified their existence and reachability, not their result.
+
+The server case is the one that matters. Five of those six tests are the entire `Verification` cell of **`SRV-006`** -- "per `(document, client)` the `clock` MUST increase strictly, validated and assigned atomically in a single Redis round trip", the ordering rule the relay's anti-replay behaviour rests on. It was marked `verified` on the ZK pass on the strength of five tests that no job could compile. The first pass checked that every cited name resolved to a `fn`; it did not check that the `fn` was reachable, and two of the cited paths were wrong at the module level as well (`redis_ops::tests::` for tests living in `lua_tests` / `redis_integration_tests`).
+
+Fixed in the `justfile`, which is where local/CI parity is defined: `test-native` gains `cargo test -p ambre-toile --features pdf`, `test-db` becomes `--features db,test-helpers`. **`Verification` now means "runs in CI", not "exists in the tree"** -- a name that resolves to a `fn` nobody executes is the same claim as a name that resolves to nothing.
+
 ### Remaining seeding order
 
 1. ~~ZK boundary~~ -- done, above.
-2. **Trame formula engine + CRDT convergence.** Already the best-verified area (`proptest` on both sides), so seeding is nearly free: the properties exist and need an ID plus a `Sources` line. Expect a high `verified` ratio and few divergences -- that is the point, it validates the grammar against material that already passes.
-3. **The performance budgets** (architecture §5). Numbered and falsifiable already, but verified by **one** criterion bench for roughly ten budgeted operations.
-4. The remaining specs, once the grammar has survived (2)-(3) unchanged.
+2. ~~Trame formula engine + CRDT convergence~~ -- done, above. The prediction was "a high `verified` ratio and few divergences": 52/61 `verified` across the four specs, and **twelve** divergences, none of them in the formula engine itself. They came from the surrounding spec -- an unreachable `#REF!` claim, an appendix outliving its cause, and a test list that had never been true. The grammar survived unchanged; what it needed was the `Sources` column pointing back at the paragraph that produced each rule, which is where every finding surfaced.
+3. ~~The remaining app verticals~~ -- Toile done, above. Prose is `design-only` (no code beyond a stub), so it is out of scope until its engine lands.
+4. **The performance budgets** (architecture §5). Now the largest single gap and the next pass: numbered and falsifiable already, but verified by **one** criterion bench across the workspace for roughly thirty budgeted operations (architecture §5, `trame-logic §11`, `toile-logic §11`, `toile-ui §11`, `sync §4`). Every quality section in the corpus now ends on the same sentence -- the budgets cannot fail a build -- which is what makes it the next thing worth mechanising.
+5. The foundation specs (`canvas`, `chrome`, `docfile`, `fixtures`), once the budgets have a mechanism.
 
 Do not write every invariant first and derive afterwards -- that is waterfall. One component end to end, then decide.
 

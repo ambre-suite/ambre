@@ -1,4 +1,7 @@
 # AMBRE — APP: MURMURE (COLLABORATIVE MESSAGING)
+**Status:** Draft
+**Implementation:** design-only
+
 > Specifications for real-time communication, channels, and E2EE persistence.
 
 ## 1. VISION & FLOW

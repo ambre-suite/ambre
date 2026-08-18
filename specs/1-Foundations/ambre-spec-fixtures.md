@@ -1,6 +1,7 @@
 # AMBRE — SPEC: FIXTURES (deterministic document corpora)
 **Type:** Horizontal (Foundation — Quality / Tooling)
 **Status:** Draft
+**Implementation:** partial
 
 > Producing Ambre documents in known, representative states -- deterministically, on the host target, from
 > code. A fixture is a document the test suite and the benchmarks start from instead of building by hand.

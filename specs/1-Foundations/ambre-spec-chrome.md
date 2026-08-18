@@ -1,6 +1,7 @@
 # AMBRE — SPEC: Chrome (Leptos DOM) + canvas cohabitation (`ambre-chrome`)
 **Type:** Horizontal (Foundation — UI Thread)
 **Status:** Draft
+**Implementation:** partial
 
 > The application **chrome** (menus, toolbars, dialogs, panels, command palette) rendered in **DOM via Leptos** (`ambre-chrome` crate), and its cohabitation with the wgpu `<canvas>` that renders the **content** (`ambre-canvas` crate). This spec covers the chrome stack, its components, text/IME input, and adaptive design. **Cross-cutting** UI thread concerns — canvas/DOM boundary, crate map, command model, single source of tokens — are in the umbrella `ambre-spec-ui.md`. The GPU pipeline is in `ambre-spec-canvas.md`; inter-thread transport in `ambre-spec-architecture.md`.
 

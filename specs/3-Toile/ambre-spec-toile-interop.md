@@ -1,6 +1,7 @@
 # AMBRE — SPEC: TOILE INTEROP (Import / Export & Media)
 **Type:** Vertical (Feature / Application — Interop)
 **Status:** Draft
+**Implementation:** partial
 
 > Toile import/export and asset lifecycle: importing SVG, PNG/JPG, Figma (JSON) and Miro diagrams into the
 > board CRDT; exporting multi-page PDF (via `krilla`/`KrillaSurface`), high-resolution SVG/PNG, and a
@@ -35,21 +36,35 @@
 | `usvg` / `resvg` | SVG parse → tree | Pure-Rust SVG import; `usvg` normalizes to a render tree we map to elements. Built with `default-features = false` (no font stack): the browser has no system fonts and Toile keeps text editable (§2.A) |
 | `roxmltree` | SVG `<text>` extraction | Reads editable `<text>` bodies/positions from the SVG source (usvg would flatten them to glyph paths, §2.A) |
 | `image` | PNG/JPG decode/encode | Pure-Rust raster codecs for image import + PNG export |
-| `serde_json` | Figma / Miro document parse | Their exchange formats are JSON |
-| `lyon` | Raster rasterization of vector export (PNG) | Via `ambre-canvas` tessellation for high-res raster |
+| `serde_json` | Figma / Miro document parse | Their exchange formats are JSON. **Not declared today** -- Figma/Miro import is unbuilt |
+| `lyon` | Raster rasterization of vector export (PNG) | Via `ambre-canvas` tessellation for high-res raster. **Not declared today** -- the §3.C render-back is unbuilt |
 | `postcard` | Web-Showcase embedded board snapshot | Compact self-contained payload |
 
 > **Encryption/compression are delegated.** AEAD (XChaCha20-Poly1305) and zstd live in the Sync/crypto layer;
 > this module hands **plaintext** blobs to that layer and never implements crypto itself (Zero-Knowledge pillar).
 
-**Invariants:**
-- Import is **atomic**: a whole file becomes one undoable batch; a parse failure imports nothing and surfaces
-  `ToileEvent::ImportFailed` with a reason.
-- Import never trusts remote geometry blindly: coordinates are clamped and element counts bounded (§2.D) to
-  avoid a hostile file exhausting memory or the R-tree.
-- Export is deterministic: the same board + selection yields byte-stable SVG/PDF structure (modulo timestamps).
-- No plaintext media or document content reaches the server except as ciphertext blobs on MinIO (§3, §5).
-- No `unsafe` in our code.
+**Invariants:** prefix `TOILE-IO`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4`; the cross-spec roll-up is `ambre-spec-testing.md §7`. The table covers the **built** paths: `.ambre`, SVG import/export, raster import, the media pipeline and PDF export. **Figma and Miro import (§2) carry no rows: neither exists** -- `ambre-toile` declares no JSON parser, and the two formats appear in the crate only as comments naming a future mapping. The Web-Showcase bundle (§3) is likewise unbuilt. "No `unsafe`" is crate-wide (`TOILE-023`).
+
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `TOILE-IO-001` | An import MUST be atomic: the whole file becomes one undoable batch, and a parse failure MUST import nothing and surface `ImportFailed`. | §1; §2 | `ambre_toile::logic::state::import::tests::import_is_one_undo_group`, `::a_broken_file_fails_without_touching_the_board`, `ambre_toile::logic::interop::tests::malformed_svg_fails_to_parse`, `::empty_svg_reports_empty`, `::too_many_elements_aborts_atomically`, `::too_deep_nesting_aborts_atomically` | verified |
+| `TOILE-IO-002` | An import MUST NOT trust foreign geometry: coordinates MUST be clamped, and element count, nesting depth and image dimensions MUST be bounded. | §2.D | `ambre_toile::logic::interop::limits::tests::coord_clamp_bounds_and_sanitizes`, `::rect_clamp_keeps_non_negative_extent`, `::element_count_guard`, `::depth_guard`, `::image_dim_guard`, `ambre_toile::logic::interop::tests::coordinates_are_clamped_to_the_world_bound` | verified |
+| `TOILE-IO-003` | Every mapped SVG node MUST land as its corresponding element kind, preserving text bodies as editable text and per-slot styles. | §2.A; §2.C | `ambre_toile::logic::interop::tests::rect_maps_to_shape_rect`, `::ellipse_maps_to_shape_path`, `::path_maps_to_shape_path_with_geometry`, `::text_maps_to_text_element_preserving_body`, `::nested_groups_are_rebuilt_innermost_first`, `::rect_import_preserves_fill_and_stroke_style`, `::unstyled_kinds_keep_the_default_style`, `ambre_toile::logic::state::import::tests::import_applies_styles_per_slot`, `::import_rebuilds_nested_groups` | verified |
+| `TOILE-IO-004` | Export MUST be deterministic: the same board yields a byte-stable structure. | §1; §3 | `ambre_toile::logic::interop::svg_export::tests::export_is_deterministic`, `::rect_serializes_with_fixed_attrs`, `::text_body_is_escaped`, `::float_formatter_trims`, `ambre_toile::logic::interop::tests::round_trip_rect_is_stable`, `::round_trip_path_geometry_survives` | verified |
+| `TOILE-IO-005` | A PDF export MUST be byte-stable and MUST produce one page per presentation frame, skipping a frame whose element is gone. | §3; §4 | `ambre_toile::logic::interop::pdf_export::tests::export_is_byte_stable`, `::export_yields_a_pdf`, `::multiple_pages_serialize`, `::empty_pages_is_an_error`, `ambre_toile::logic::state::presentation::pdf_tests::one_page_per_slide`, `::dangling_frame_is_skipped`, `::empty_deck_falls_back_to_one_page`, `::empty_board_yields_no_pages`. **These eight compile only under `--features pdf`** -- see the note below | verified |
+| `TOILE-IO-006` | Media MUST be content-addressed: two identical images MUST resolve to one blob. | §5 | `ambre_toile::logic::state::import::tests::import_seeds_the_media_map`, `::seed_media_dedups_repeated_hashes`, `::seed_media_writes_load_info`, `::seed_media_skips_unresolved_hash`, `ambre_toile::logic::interop::media::tests::first_request_fetches_then_dedups` | verified |
+| `TOILE-IO-007` | The media cache MUST evict only resolved entries: an in-flight load MUST never be evicted. | §5 | `ambre_toile::logic::interop::media::tests::loading_entries_are_never_evicted`, `::lru_evicts_least_recently_used_ready_entry`, `::loading_to_ready_carries_pixels`, `::loading_to_failed`, `::capacity_zero_coerced_to_one` | verified |
+| `TOILE-IO-008` | An image import MUST wait for its upload; a failed upload MUST abort the pending import, and a stale service response MUST be dropped. | §5 | `ambre_toile::logic::state::import::tests::image_import_defers_until_media_uploads`, `::a_failed_upload_aborts_the_pending_import`, `::a_stale_service_response_is_dropped` | verified |
+| `TOILE-IO-009` | An oversized or undecodable raster MUST abort atomically, and a generated thumbnail MUST stay bounded. | §2.D; §5 | `ambre_toile::logic::interop::raster::tests::oversized_image_aborts_atomically`, `::garbage_bytes_fail_to_decode`, `::thumbnail_is_bounded`, `::imports_one_image_with_thumbnail`, `ambre_toile::logic::interop::tests::embedded_png_maps_to_image_and_media_blob` | verified |
+| `TOILE-IO-010` | An `.ambre` export/import round trip MUST preserve the document state, byte for byte on a bare board. | §1; `ambre-spec-docfile.md §2` | `ambre_toile::logic::state::docfile::tests::round_trip_is_byte_identical_on_a_bare_document`, `::round_trip_preserves_the_document_state`, `::the_header_names_toile_and_the_document` | verified |
+| `TOILE-IO-011` | A rejected file MUST leave both the input bytes and the current board untouched, and MUST fail typed rather than panic. | §1; `ambre-spec-docfile.md §2` | `ambre_toile::logic::state::docfile::tests::a_rejected_file_leaves_both_the_input_and_the_state_alone`, `::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic` | verified |
+| `TOILE-IO-012` | A `.ambre` file belonging to another app MUST be re-dispatched to that app, never coerced into Toile. | §1; `ambre-spec-docfile.md §2.A` | `ambre_toile::logic::state::docfile::tests::a_trame_file_is_re_dispatched_not_coerced` | verified |
+| `TOILE-IO-013` | This module MUST NOT implement cryptography: it hands plaintext to the Sync layer and no document or media content reaches the server except as ciphertext. | §6; `ZK-001`, `ZK-004` | crate graph: `ambre-toile` declares no AEAD, KDF or key-exchange crate, and `deny.toml` refuses to let it -- each capability crate lists its allowed wrappers | verified |
+
+> **Invariant coverage.** 13 `verified`, 0 `unverified`.
+>
+> **Feature-gate note (`TOILE-IO-005`).** The eight PDF tests sit behind `--features pdf` (`ambre-toile` keeps `krilla` optional), and `just test-native` ran `cargo test --workspace`, which enables no optional feature -- so **those eight had never executed in CI**. `just test-native` now carries `cargo test -p ambre-toile --features pdf`. A test that never runs verifies nothing, which is why this was worth a line in the justfile rather than a caveat in the table.
+
 
 ---
 
@@ -264,27 +279,15 @@ posture.
 ---
 
 ## 7. QUALITY & TESTABILITY
-> See the transverse test architecture in `ambre-spec-architecture.md §4`.
 
-- **Test tiers:** **host** for every converter (SVG/Figma/Miro→commands, and export serializers), the safety
-  limits, and the media hashing/placeholder state machine — all pure and host-testable. **wasm** for the PDF
-  export path (proving `krilla` + Parley + swash link and run under `wasm32-unknown-unknown`), the browser
-  download path, and off-UI-thread font loading. No **db** tier here; MinIO/upload paths are exercised
-  against the crypto/Sync seam with a mock object store (server-side MinIO integration belongs to the Sync spec).
-  The §3.C PNG offscreen render-back needs a real GPU adapter in headless Chrome and lands with §3.C, not with
-  this phase (a flaky GPU test is worse than none).
-- **Unit tests:** round-trip SVG import→export→import stability for each primitive; Figma/Miro fixture files →
-  expected command batch (golden); every safety-limit branch aborts atomically with `ImportFailed`; PDF page
-  count == presentation frame count; media state machine (Loading→Ready, Loading→Failed, cache hit skips fetch);
-  content-addressing dedup (two identical images → one blob). Target: every mapped node type and every reject path.
-- **CRDT convergence:** N/A directly — import produces ordinary `CreateElement` batches whose convergence is
-  covered by `toile-logic §10`. A regression test asserts an import applied concurrently with a remote edit
-  merges without id collision (fresh `ElementId`s).
-- **Mocks & Environment:** `CommandSink` to capture import batches; a mock object store for media; golden fixture
-  files for foreign formats; headless wasm for render-back. No live network, no live MinIO.
-- **Benchmarks:** `criterion` on importing a 5 000-node SVG (target below) and PDF export of a 50-slide deck.
-- **Definition of Done (tested):** converter unit + golden fixtures + media state-machine tests + one wasm
-  export test green in CI.
+> What the built paths guarantee, and what verifies each guarantee, is the table in §1. This section used to enumerate in prose which cases "must" be covered, including golden fixtures for Figma and Miro importers that do not exist.
+
+* **Tiers.** host for every converter, the safety limits and the media state machine -- all pure and, in fact, host-tested today. **wasm** for the PDF export path (proving `krilla` + Parley + swash link under `wasm32-unknown-unknown`), the browser download path, and off-UI-thread font loading. No **db** tier: MinIO paths are exercised against the crypto/Sync seam with a mock object store. The §3.C PNG render-back needs a real GPU adapter in headless Chrome and lands with §3.C -- a flaky GPU test is worse than none.
+* **Seams.** `CommandSink` to capture import batches; a mock object store for media; the pinned-`PeerID` constructor for deterministic ids. No live network, no live MinIO.
+* **Mandatory belts per format.** A new import path lands with (a) a round trip, (b) a malformed-input case **and** a hostile-input case -- this decoder is fed by user files, so totality is not optional (architecture §4 names decoders as the first `cargo-fuzz` targets, and none exists yet), and (c) an atomicity case proving a rejected file leaves the board untouched.
+* **Not yet covered, because not yet built.** Figma and Miro fixture-to-command goldens (§2), the Web-Showcase bundle (§3), and the PNG render-back (§3.C). Intent, not coverage.
+* **Benchmarks.** None today. §8 budgets a 5 000-node SVG import and a 50-slide PDF export; neither has a `criterion` bench.
+* **Definition of Done.** An increment is `[x]` only when its belts are green in CI -- **including under the feature flags it needs** -- and no invariant in §1 is left without a `Status`.
 
 ---
 

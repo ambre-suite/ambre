@@ -34,28 +34,41 @@ lint:
 # line. `FIXTURES P1` replaces it with `just fixtures-check`, which adds the
 # golden drift gate on top of the same belts.
 #
-# **One invocation, and only the two crates that own gated tests.**
+# **One invocation for the fixture belts.**
 # `--features ambre-logic/fixtures` propagates to `ambre-core` / `ambre-trame` /
 # `ambre-toile` (each declares the forward), so their gated code is compiled and
-# type-checked as a dependency here. Naming `ambre-trame` / `ambre-toile` as
-# packages too would additionally rebuild their whole test harnesses under a
-# second feature set for no coverage -- every gated test lives in `ambre-core`
-# and `ambre-logic` -- and this job already carries the workspace build plus the
-# native server stack on one runner disk.
+# type-checked as a dependency here. Naming `ambre-trame` as a package too would
+# rebuild its whole test harness under a second feature set for no coverage --
+# it owns no `fixtures`-gated test -- and this job already carries the workspace
+# build plus the native server stack on one runner disk.
+#
+# **`ambre-toile` is a separate case: it owns 8 tests behind its `pdf` feature**
+# (`logic::interop::pdf_export`, `logic::state::presentation::pdf_tests`), which
+# `cargo test --workspace` cannot reach because it enables no optional feature.
+# They had never executed in CI. A test that never runs verifies nothing, so the
+# feature gets its own line rather than a caveat in `toile-interop §1`
+# (`TOILE-IO-005`).
 
 # native tier: workspace logic + the fixture belts + the server, on native x86_64.
 test-native:
     cargo test --workspace
     cargo test -p ambre-core -p ambre-logic --features ambre-logic/fixtures
+    cargo test -p ambre-toile --features pdf
     cargo test -p ambre-server
 
 # The `db` feature flips the `cfg_attr(not(feature = "db"), ignore = ...)` gate
 # off so the otherwise ignored tests run. Bring services up first with
 # `just services-up` (CI declares them as `services:` instead).
+#
+# `test-helpers` is the second half: `redis_ops::lua_tests` is
+# `cfg(all(test, feature = "test-helpers"))`, so its six Lua/clock tests --
+# including the five that verify `SRV-006`, the strict per-client clock -- did
+# not even compile under `--features db` alone. 156 tests were collected where
+# 162 exist.
 
 # db tier: server integration tests (needs postgres/redis/minio).
 test-db:
-    cargo test -p ambre-server --features db
+    cargo test -p ambre-server --features db,test-helpers
 
 # `wasm-pack` drives `wasm-bindgen-test-runner`; the pinned nightly + rust-src
 # (rust-toolchain.toml) supply `-Z build-std`.

@@ -1,6 +1,7 @@
 # AMBRE — SPEC: AMBRE-SYNC (SECSYNC MODULE)
 **Type:** Horizontal (Layer / Engine)
 **Status:** Draft
+**Implementation:** partial
 
 > End-to-end encrypted synchronization layer between WASM clients and the Blind Relay. This module implements the SecSync protocol in pure Rust: it transforms CRDT deltas produced by the Logic thread into cryptographically sealed messages, routes them via WebSocket, and re-injects remote updates into the Loro document — without ever exposing plaintext outside the client process.
 >
@@ -655,111 +656,27 @@ Rotation is **entirely orchestrated by the Sync thread** — the Logic thread do
 
 ## 4. QUALITY & TESTABILITY
 
-### Unit Tests
+> What this worker guarantees, and what verifies each guarantee, is the table in §1 (`SYNC-001..013`). This section used to open with three code blocks of `#[test]` and `proptest!` **bodies**: 11 named tests of which 3 existed, plus full function bodies that §0 of the spec template forbids -- a second, uncompiled copy of a test suite, free to drift from the real one and doing exactly that. The real names live in the `Verification` cells, where a rule fails with them.
 
-```rust
-// Round-trip encrypt/decrypt for all three message types
-#[test]
-fn roundtrip_update() { /* encrypt -> decrypt, assert_eq payload */ }
+### Tiers and seams
 
-// Tampering detection
-#[test]
-fn tampered_ciphertext_fails() {
-    let mut enc = encrypt_update(&data, &key, &nonce, &public_data);
-    enc.ciphertext[0] ^= 0xFF;
-    assert!(decrypt_update(&enc, &key).is_err());
-}
+* **Tier.** host, entirely (`just test-native`). `SyncState` takes a `LogicSink` closure, so a test injects a `flume`-backed sink and drives `handle_command` directly -- no worker, no browser. A wasm tier is reserved for real `gloo-net` interaction, which nothing exercises today.
+* **`MockWsTransport`** -- an in-memory bidirectional `flume` pair standing in for the WebSocket, so the full pipeline runs with no network.
+* **`MockBlindRelay`** -- an in-process relay for multi-client integration tests, simulating `createSnapshot` / `createUpdate` / `getDocument` / `hasAccess` / `hasBroadcastAccess`.
+* The Logic<->Sync channel needs no mock: it is `flume` on both sides, and a test drains `Receiver<LogicEvent>` to observe responses (the pattern of the `ambre-logic` host tests, architecture §4).
 
-// HMAC commitment: inter-document substitution detected
-#[test]
-fn commitment_tag_wrong_document_rejected() { /* modify document_id -> invalid HMAC */ }
+### Mandatory belts
 
-// Invalid signature
-#[test]
-fn invalid_signature_rejected() { /* wrong pub_key -> Err(InvalidSignature) */ }
+A change to the pipeline lands with all four, because this is the boundary the whole product rests on:
 
-// Version byte
-#[test]
-fn version_byte_routing() {
-    // 0x00 -> raw, 0x01 -> decompress, 0xFF -> Err(UnknownCompressionVersion)
-}
+1. **Round trip** -- seal then open, for every message type.
+2. **Tampering** -- a single mutated byte, a wrong key, a wrong `document_id`, a wrong signature: each MUST fail closed (`SYNC-004`, `SYNC-005`).
+3. **Ordering** -- an update ahead of its snapshot is quarantined and released in clock order, and the quarantine is bounded (`SYNC-006`, `SYNC-007`).
+4. **Replay** -- a non-increasing ephemeral counter is dropped (`SYNC-008`).
 
-// Quarantine: ordered release
-#[test]
-fn quarantine_released_in_clock_order() { /* update before snapshot -> quarantine -> snapshot -> release */ }
+### Known gap
 
-// Quarantine: RequestMissing triggered at 900
-#[test]
-fn quarantine_triggers_request_missing_at_threshold() { }
-
-// Anti-replay Ephemeral
-#[test]
-fn ephemeral_counter_replay_rejected() { /* counter <= last known -> DROP */ }
-```
-
-### Prop-Testing
-
-```rust
-proptest! {
-    /// Property: encrypt(decrypt(m)) == m for any payload and any key.
-    #[test]
-    fn roundtrip_encrypt_decrypt(
-        data in any::<Vec<u8>>(),
-        key  in any::<[u8; 32]>(),
-    ) {
-        let encrypted = encrypt_update(&data, &key, /* ... */).unwrap();
-        let decrypted = decrypt_update(&encrypted, &key).unwrap();
-        prop_assert_eq!(data, decrypted);
-    }
-
-    /// Property: clocks are strictly increasing.
-    #[test]
-    fn clock_monotonically_increases(n_updates in 1usize..1000) {
-        let mut state = SyncState::new_for_test();
-        let clocks: Vec<u64> = (0..n_updates)
-            .map(|_| state.next_clock())
-            .collect();
-        // windows(2) returns &[u64] -- no tuple
-        prop_assert!(clocks.windows(2).all(|w| w[0] < w[1]));
-    }
-
-    /// Property: compression then decompression is identity.
-    #[test]
-    fn ruzstd_roundtrip(data in any::<Vec<u8>>()) {
-        use ruzstd::encoding::{compress_to_vec, CompressionLevel};
-        use ruzstd::decoding::StreamingDecoder;
-        let compressed = compress_to_vec(&data, CompressionLevel::Fastest);
-        let mut decoder = StreamingDecoder::new(compressed.as_slice()).unwrap();
-        let mut decompressed = Vec::new();
-        std::io::Read::read_to_end(&mut decoder, &mut decompressed).unwrap();
-        prop_assert_eq!(data, decompressed);
-    }
-}
-```
-
-### Mocks & Environment
-
-```rust
-/// In-memory WebSocket transport -- bidirectional flume channel.
-/// Allows testing the full pipeline without WASM or network.
-pub struct MockWsTransport {
-    pub client_tx: flume::Sender<WsClientMsg>,
-    pub server_rx: flume::Receiver<WsClientMsg>,
-    pub server_tx: flume::Sender<WsServerMsg>,
-    pub client_rx: flume::Receiver<WsServerMsg>,
-}
-
-// The Logic <-> Sync channel is `flume`: no transport mock
-// needed. A test builds `SyncState` with a (Sender, Receiver) flume pair
-// and drains `Receiver<LogicEvent>` to observe responses (same approach as
-// the 9 host tests of `ambre-logic`, cf. ambre-spec-architecture.md sec.4).
-
-/// In-process Blind Relay for multi-client integration tests.
-/// Simulates: createSnapshot, createUpdate, getDocument, hasAccess, hasBroadcastAccess.
-pub struct MockBlindRelay { /* ... */ }
-```
-
-All tests compile in native mode (`#[cfg(not(target_arch = "wasm32"))]`) with `tokio::test`. WASM tests are reserved for real `gloo-net` interactions and run with `wasm-bindgen-test`.
+`SYNC-001` and `SYNC-003` are `unverified`, and both are type-level problems rather than missing tests: `Ciphertext(pub Vec<u8>)` accepts any bytes from anywhere, so "no unsealed payload reaches the transport" cannot be stated as a test without first making the unsealed state unrepresentable. Per the mechanism ladder (architecture §4), the fix is a private field with a constructor reachable only from the sealing pipeline -- after which the invariant is held by the compiler and needs no belt at all.
 
 ### Benchmarks (criterion)
 

@@ -1,4 +1,7 @@
 # AMBRE — APP: RENDEZ-VOUS (VIDEO & SYNCHRONOUS COLLABORATION)
+**Status:** Draft
+**Implementation:** design-only
+
 > Specifications for the WebRTC engine, encrypted signaling, and context sharing.
 
 ## 1. VISION & FLOW
