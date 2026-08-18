@@ -111,6 +111,16 @@ test-wasm:
 cov:
     cargo llvm-cov --workspace --lcov --output-path lcov.info
 
+# Ledger of the per-spec invariant tables (`ambre-spec-testing.md §7`), derived
+# rather than hand-counted -- a hand-maintained roll-up is the same failure mode
+# as a hand-maintained test list, and it was already wrong by one. Also enforces
+# the two rules that keep `unimplemented` honest (architecture §4): a declared
+# status value, and a Story citation on every unbuilt row.
+
+# invariant ledger: counts per spec + the rules that keep the statuses honest.
+invariants:
+    python3 scripts/invariants.py
+
 # Supply chain + capability wall. `deny.toml` sets `[graph] all-features = true`,
 # so optional dependencies (the `fixtures` feature's `ambre-crypto` edge) are part
 # of the graph being checked rather than invisible to it. No network build: this

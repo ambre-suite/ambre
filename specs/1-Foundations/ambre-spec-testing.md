@@ -91,19 +91,31 @@ Tracked here so it is a decision, not an omission. None blocks the Trame MVP.
 
 > Roll-up of the per-spec invariant tables (grammar: architecture §4, "Invariants (normative)"). The invariants themselves live in the spec of the component they constrain; this section reports **state**, never intent.
 
-**Seeded: 163 invariants over three passes.**
+> **Derived, not hand-counted.** `just invariants` (`scripts/invariants.py`, CI job `lint`) reads every table and prints the numbers below. It also enforces what keeps them meaningful: a status must be one of the five declared values, an `unimplemented` row must name the Story that will build it, and an id must never be reused or renumbered. The counts in this section were hand-maintained for exactly one week before being wrong by one -- the same failure mode as a hand-maintained test list, and the same fix.
+
+**288 invariant rows, split by whether the code exists.** The split is the whole point: one number is a debt, the other is a plan.
+
+| | Rows | Meaning |
+|---|---|---|
+| **Shipped surface** | **163** | code exists. `verified` 140, `unverified` 21, `human-review` 2, `qa-manual` 0. **The 21 are the debt** -- shipped code nothing would catch. |
+| **Specified, not built** | **125** | `unimplemented`. Rules written before the code, each bound to the Story that will build it. Not a risk; work. |
+
+**Three passes over shipped code:**
 * **The ZK boundary (35).** `ZK-001..008` (architecture §3, the boundary itself), `SYNC-001..013` (`ambre-spec-sync.md §1`), `SRV-001..014` (`ambre-spec-server.md §1`).
 * **The Trame vertical (61).** `TRAME-001..024` (`trame-logic §1`, the engine), `TRAME-UI-001..015` (`trame-ui §1`), `TRAME-FEAT-001..013` (`trame-features §0`), `TRAME-IO-001..009` (`trame-interop §1`). The second pass of the seeding order below, taken on the largest body of shipped code in the workspace (about 30 000 lines) and the best-tested one, so it measures the grammar against material that already passes.
 * **The Toile vertical (67).** `TOILE-001..023` (`toile-logic §1`, the engine), `TOILE-UI-001..021` (`toile-ui §1`), `TOILE-FEAT-001..010` (`toile-features §0`), `TOILE-IO-001..013` (`toile-interop §1`). The third pass, on the second app crate (about 23 000 lines).
 
-| Status | ZK boundary | Trame vertical | Toile vertical | Total | Reading |
-|---|---|---|---|---|---|
-| `verified` | 24 | 52 | 63 | 139 | a named test, a `proptest`, a type-level construction, or a `deny.toml` capability ban |
-| `human-review` | 2 | 0 | 0 | 2 | `ZK-006` / `SRV-001` (no ciphertext in logs) -- reviewer attention, by decision |
-| `unverified` | 9 | 9 | 4 | 22 | no mechanism today; each is listed below |
-| `qa-manual` | 0 | 0 | 0 | 0 | -- |
+**A fourth pass over unbuilt surface (125).** The `unimplemented` rows: `trame-features` 11 (personal filter views, conditional formatting, validation, protection), `trame-interop` 11 (xlsx, PDF), `trame-ui` 8 (multi-user cursors, sparklines, charts, PDF), `toile-features` 7 and `toile-logic`/`toile-ui` 3 each (the comments CRDT, its anchoring, its panel), `toile-interop` 6 (Figma/Miro, PNG render-back, Web-Showcase), and **76 across the four Prose specs**, whose crate is a `lib.rs` and nothing else.
 
-Per spec: `trame-logic` 19/24 `verified`, `trame-ui` 11/15, `trame-features` 13/13, `trame-interop` 9/9; `toile-logic` 21/23, `toile-ui` 19/21, `toile-features` 10/10, `toile-interop` 13/13. **No invariant was written for a component that does not exist** -- multi-user cursors, sparklines, charts and PDF export (`trame-ui §9-§12`), conditional formatting, validation and protection (`trame-features §3, §5, §6`), and both .xlsx paths (`trame-interop §2, §3`) describe code the crate does not contain, and each spec now says so where the table would have been.
+| Status | ZK | Trame | Toile | Prose | Total | Reading |
+|---|---|---|---|---|---|---|
+| `verified` | 24 | 53 | 63 | 0 | 140 | a named test, a `proptest`, a type-level construction, the compiler, or a `deny.toml` capability ban |
+| `human-review` | 2 | 0 | 0 | 0 | 2 | `ZK-006` / `SRV-001` (no ciphertext in logs) -- reviewer attention, by decision |
+| `unverified` | 9 | 8 | 4 | 0 | 21 | code exists, nothing would go red; each is listed below |
+| `qa-manual` | 0 | 0 | 0 | 0 | 0 | -- |
+| `unimplemented` | 0 | 30 | 19 | 76 | 125 | **counted apart** -- see the split above |
+
+Per spec, on the shipped side: `trame-logic` 19/24 `verified`, `trame-ui` 12/15, `trame-features` 13/13, `trame-interop` 9/9; `toile-logic` 21/23, `toile-ui` 19/21, `toile-features` 10/10, `toile-interop` 13/13.
 
 **Executed on the ZK pass:** `ambre-crypto` 19/19 and `ambre-sync` 57/57 green on the host tier; `ambre-server` 94 green with 62 ignored -- the `SRV-*` entries citing `routes::tests::*` are db-tier tests, run by the CI `test-db` job rather than by `cargo test`. Every name in a `Verification` cell resolves to a `fn` in the tree. That check turned out to be too weak -- it does not say the `fn` is reachable, and two `SRV-*` citations named the wrong module for tests behind a Cargo feature no job enabled; see "Feature-gated tests that no CI job could reach" below.
 
@@ -174,11 +186,12 @@ Fixed in the `justfile`, which is where local/CI parity is defined: `test-native
 
 1. ~~ZK boundary~~ -- done, above.
 2. ~~Trame formula engine + CRDT convergence~~ -- done, above. The prediction was "a high `verified` ratio and few divergences": 52/61 `verified` across the four specs, and **twelve** divergences, none of them in the formula engine itself. They came from the surrounding spec -- an unreachable `#REF!` claim, an appendix outliving its cause, and a test list that had never been true. The grammar survived unchanged; what it needed was the `Sources` column pointing back at the paragraph that produced each rule, which is where every finding surfaced.
-3. ~~The remaining app verticals~~ -- Toile done, above. Prose is `design-only` (no code beyond a stub), so it is out of scope until its engine lands.
-4. **The performance budgets** (architecture §5). Now the largest single gap and the next pass: numbered and falsifiable already, but verified by **one** criterion bench across the workspace for roughly thirty budgeted operations (architecture §5, `trame-logic §11`, `toile-logic §11`, `toile-ui §11`, `sync §4`). Every quality section in the corpus now ends on the same sentence -- the budgets cannot fail a build -- which is what makes it the next thing worth mechanising.
-5. The foundation specs (`canvas`, `chrome`, `docfile`, `fixtures`), once the budgets have a mechanism.
+3. ~~The remaining app verticals~~ -- Toile done, above.
+4. ~~Prose, ahead of its code~~ -- done: 76 rows across the four specs, every one `unimplemented` and bound to `ARCH P2`. This pass exists because the rule that forbade it was reversed (architecture §4): a design is reviewable as numbered falsifiable rules and is not reviewable as 5 800 lines of prose. What it produced immediately, beyond a readable contract: the same rule stated in two specs is now visibly the same rule (`PROSE-022` / `PROSE-FEAT-012` on local-only undo, `PROSE-009` / `PROSE-FEAT-017` on derived table geometry), and `prose-ui`'s 16 ms frame budget was deliberately **not** written as an invariant -- a number with no bench behind it cannot be falsified, which is the next item.
+5. **The performance budgets** (architecture §5). Now the largest single gap and the next pass: numbered and falsifiable already, but verified by **one** criterion bench across the workspace for roughly thirty budgeted operations (architecture §5, `trame-logic §11`, `toile-logic §11`, `toile-ui §11`, `sync §4`). Every quality section in the corpus now ends on the same sentence -- the budgets cannot fail a build -- which is what makes it the next thing worth mechanising.
+6. The foundation specs (`canvas`, `chrome`, `docfile`, `fixtures`), once the budgets have a mechanism.
 
-Do not write every invariant first and derive afterwards -- that is waterfall. One component end to end, then decide.
+One component end to end, then decide -- not every invariant in the corpus at once, which would be waterfall. Note what that rule is **not**: it is about the order of the passes, not about waiting for code. Writing a component's rules before its code is the normal case (`unimplemented`); writing every component's rules before any of them has been through the exercise is the mistake.
 
 **Drift the ledger is meant to catch, observed on the first pass:** `security-audit.md` still lists `H5` (passphrases plaintext across IPC) as **OPEN**, while `ambre-bus/src/rest.rs` now carries `SecretBytes` / `SecretString` with `Zeroizing` + redacted `Debug`, and the module comment even cites `(H5)`. The finding was closed in code and the ledger was never updated. An ID joined to a `Verification` entry is exactly what makes that visible without re-reading the crate.
 

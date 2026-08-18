@@ -46,20 +46,28 @@ No dependency on `ambre-sync`, `ambre-crypto`, or `ruzstd` -- the native format'
 compression/crypto consumer, per `ambre-spec-architecture.md §1`), not in `ambre-prose/interop`.
 The Logic thread carries **zero compression, zero crypto, zero network**.
 
-**Invariants:**
+**Invariants:** prefix `PROSE-IO`. Grammar and status values are normative in `ambre-spec-architecture.md §4`; the roll-up is `ambre-spec-testing.md §7`. Every row is `unimplemented` -- `crates/ambre-prose` is empty -- and lands with `ARCH P2` (Epic `E5`).
 
-- Any conversion is **stateless server-side**: the entire pipeline runs in the Logic thread in WASM memory. No chunk is sent to the Blind Relay during conversion.
-- An import exclusively produces typed `ProseCommand`s -- it never mutates the `LoroDoc` directly. This guarantees all mutations pass through the controller invariants.
-- Each export is **idempotent**: exporting the same document twice produces byte-identical files (up to metadata timestamp).
-- Any fidelity loss is **explicitly reported** via `ConversionReport::warnings` -- never silent.
-  This is a **hard gate**, not best-effort: every reader and writer either (a) represents an
-  input feature in `ProseIr` and round-trips it, or (b) pushes a `ConversionWarning` at the
-  exact drop site. A feature that is neither represented nor warned about is a spec violation.
-  Wildcard/`_` match arms over format elements MUST warn before discarding (see docx
-  `import_docx`), and any writer emitting an approximation (nearest color, `---` for both
-  `PageBreak` and `HRule`, Markdown dropping image geometry) MUST record it.
-- Images are stored in the CRDT as references (`content_hash`) and resolved at export from the Logic thread's `media_cache`, populated by `ambre-sync` via `RestCommand::DownloadMedia` -> `RestEvent::MediaDownloaded`. An export whose images are not yet cached (offline, or download pending) produces a document with placeholder images, reported in `ConversionReport`.
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `PROSE-IO-001` | Every conversion MUST run in the Logic thread in WASM memory; no chunk of a document MUST reach the relay during conversion. | §1; §3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-002` | An import MUST produce typed `ProseCommand`s only; it MUST NOT mutate the `LoroDoc` directly. | §1; §2.A | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-003` | An export MUST be idempotent: exporting the same document twice yields byte-identical output, up to a metadata timestamp. | §1 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-004` | Every fidelity loss MUST raise a `ConversionWarning` at the exact drop site; a feature neither represented in `ProseIr` nor warned about is a spec violation. | §1 (hard gate) | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-005` | A wildcard match arm over format elements MUST warn before discarding. | §1; §2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-006` | A writer emitting an approximation (nearest colour, `---` for both `PageBreak` and `HRule`, dropped image geometry) MUST record it in the report. | §1; §2.D | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-007` | An image MUST be stored in the CRDT as a `content_hash` reference and resolved at export from the media cache. | §1; §2.E | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-008` | An export whose images are not cached MUST emit placeholders and report them; it MUST NOT block or fail silently. | §1; §2.E | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-009` | Every format MUST pass through `ProseIr`: a reader MUST NOT write `ProseCommand`s directly from format structures, and a writer MUST NOT read the CRDT. | §2.A | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-010` | A malformed or hostile input file MUST fail as a typed error and MUST NOT panic. | §2.A; §4 | not built -- lands with `ARCH P2` (Epic `E5`); decoders are the first `cargo-fuzz` targets (architecture §4) | unimplemented |
+| `PROSE-IO-011` | A failed import MUST leave the document untouched: partial application MUST NOT be observable. | §2.A | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-012` | The native `.ambre` path MUST be the only lossless round trip, and MUST reuse the shared container of `ambre-spec-docfile.md` rather than re-implement it. | §2.B | not built -- lands with `ARCH P2` (Epic `E5`), on top of `DOCFILE P0` (Epic `EF`) | unimplemented |
+| `PROSE-IO-013` | A `.ambre` file belonging to another app MUST be re-dispatched, never coerced into Prose. | §2.B; `ambre-spec-docfile.md §2.A` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-014` | A DOCX round trip MUST preserve every structure represented in `ProseIr` -- styles, lists, tables, comments, tracked changes -- or warn for each one it does not. | §2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-015` | PDF export MUST reuse the same `DrawSurface` render path as the screen, through `KrillaSurface` in the Logic thread. | §2.E; `prose-ui §2.D` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-016` | An imported HTML document MUST be sanitised: no script, no remote fetch triggered by the import. | §2.F; §3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
 
+> **Invariant coverage.** 16 `unimplemented`. `PROSE-IO-004` is the one worth reading twice: it is written in this spec as a "hard gate", and as a row it becomes checkable per format instead of being a sentence everyone agrees with.
 ---
 
 ## 2. TECHNICAL DESIGN & STATE

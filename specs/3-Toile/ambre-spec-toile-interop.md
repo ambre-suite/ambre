@@ -36,14 +36,14 @@
 | `usvg` / `resvg` | SVG parse → tree | Pure-Rust SVG import; `usvg` normalizes to a render tree we map to elements. Built with `default-features = false` (no font stack): the browser has no system fonts and Toile keeps text editable (§2.A) |
 | `roxmltree` | SVG `<text>` extraction | Reads editable `<text>` bodies/positions from the SVG source (usvg would flatten them to glyph paths, §2.A) |
 | `image` | PNG/JPG decode/encode | Pure-Rust raster codecs for image import + PNG export |
-| `serde_json` | Figma / Miro document parse | Their exchange formats are JSON. **Not declared today** -- Figma/Miro import is unbuilt |
-| `lyon` | Raster rasterization of vector export (PNG) | Via `ambre-canvas` tessellation for high-res raster. **Not declared today** -- the §3.C render-back is unbuilt |
+| `serde_json` | Figma / Miro document parse | Their exchange formats are JSON. **Not declared today** -- Figma/Miro import is unbuilt (`TOILE-IO-014..016`) |
+| `lyon` | Raster rasterization of vector export (PNG) | Via `ambre-canvas` tessellation for high-res raster. **Not declared today** -- the §3.C render-back is unbuilt (`TOILE-IO-017`) |
 | `postcard` | Web-Showcase embedded board snapshot | Compact self-contained payload |
 
 > **Encryption/compression are delegated.** AEAD (XChaCha20-Poly1305) and zstd live in the Sync/crypto layer;
 > this module hands **plaintext** blobs to that layer and never implements crypto itself (Zero-Knowledge pillar).
 
-**Invariants:** prefix `TOILE-IO`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4`; the cross-spec roll-up is `ambre-spec-testing.md §7`. The table covers the **built** paths: `.ambre`, SVG import/export, raster import, the media pipeline and PDF export. **Figma and Miro import (§2) carry no rows: neither exists** -- `ambre-toile` declares no JSON parser, and the two formats appear in the crate only as comments naming a future mapping. The Web-Showcase bundle (§3) is likewise unbuilt. "No `unsafe`" is crate-wide (`TOILE-023`).
+**Invariants:** prefix `TOILE-IO`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4`; the cross-spec roll-up is `ambre-spec-testing.md §7`. The table covers the **built** paths: `.ambre`, SVG import/export, raster import, the media pipeline and PDF export. Rows `014..019` cover Figma/Miro import (§2.C), the PNG render-back (§3.C) and the Web-Showcase bundle (§3.D), none of which exist -- `ambre-toile` declares no JSON parser, and the two foreign formats appear in the crate only as comments naming a future mapping. They carry `Status: unimplemented` and cite the Story that will build them (architecture §4). "No `unsafe`" is crate-wide (`TOILE-023`).
 
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
@@ -60,8 +60,14 @@
 | `TOILE-IO-011` | A rejected file MUST leave both the input bytes and the current board untouched, and MUST fail typed rather than panic. | §1; `ambre-spec-docfile.md §2` | `ambre_toile::logic::state::docfile::tests::a_rejected_file_leaves_both_the_input_and_the_state_alone`, `::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic` | verified |
 | `TOILE-IO-012` | A `.ambre` file belonging to another app MUST be re-dispatched to that app, never coerced into Toile. | §1; `ambre-spec-docfile.md §2.A` | `ambre_toile::logic::state::docfile::tests::a_trame_file_is_re_dispatched_not_coerced` | verified |
 | `TOILE-IO-013` | This module MUST NOT implement cryptography: it hands plaintext to the Sync layer and no document or media content reaches the server except as ciphertext. | §6; `ZK-001`, `ZK-004` | crate graph: `ambre-toile` declares no AEAD, KDF or key-exchange crate, and `deny.toml` refuses to let it -- each capability crate lists its allowed wrappers | verified |
+| `TOILE-IO-014` | A Figma or Miro import MUST map every construct it recognises to a native element, and MUST list every construct it drops in `ImportReport`. | §2.C | not built -- lands with §10 Phase 2 (Epic `E6`); `ambre-toile` declares no JSON parser | unimplemented |
+| `TOILE-IO-015` | A foreign import MUST obey the same safety limits and the same atomicity as the SVG path: no separate, looser route into the board. | §2.C; §2.D | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TOILE-IO-016` | A Figma auto-layout frame MUST import as a plain frame with children at resolved absolute positions, and the dropped constraint MUST appear in the import report. | §2.C | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TOILE-IO-017` | The PNG render-back MUST run offscreen on the UI thread's `WgpuSurface` and MUST NOT block the visible frame. | §3.C | not built -- lands with §10 Phase 2 (Epic `E6`); needs a real GPU adapter, so its belt is wasm-tier | unimplemented |
+| `TOILE-IO-018` | A Web-Showcase bundle MUST embed its board snapshot and MUST NOT contact the relay to render. | §3.D | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TOILE-IO-019` | A Web-Showcase bundle MUST carry plaintext content and MUST say so at export time: exporting one leaves the zero-knowledge boundary. | §3.D; §6 | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
 
-> **Invariant coverage.** 13 `verified`, 0 `unverified`.
+> **Invariant coverage.** 13 `verified`, 0 `unverified`, 6 `unimplemented`.
 >
 > **Feature-gate note (`TOILE-IO-005`).** The eight PDF tests sit behind `--features pdf` (`ambre-toile` keeps `krilla` optional), and `just test-native` ran `cargo test --workspace`, which enables no optional feature -- so **those eight had never executed in CI**. `just test-native` now carries `cargo test -p ambre-toile --features pdf`. A test that never runs verifies nothing, which is why this was worth a line in the justfile rather than a caveat in the table.
 
@@ -285,7 +291,7 @@ posture.
 * **Tiers.** host for every converter, the safety limits and the media state machine -- all pure and, in fact, host-tested today. **wasm** for the PDF export path (proving `krilla` + Parley + swash link under `wasm32-unknown-unknown`), the browser download path, and off-UI-thread font loading. No **db** tier: MinIO paths are exercised against the crypto/Sync seam with a mock object store. The §3.C PNG render-back needs a real GPU adapter in headless Chrome and lands with §3.C -- a flaky GPU test is worse than none.
 * **Seams.** `CommandSink` to capture import batches; a mock object store for media; the pinned-`PeerID` constructor for deterministic ids. No live network, no live MinIO.
 * **Mandatory belts per format.** A new import path lands with (a) a round trip, (b) a malformed-input case **and** a hostile-input case -- this decoder is fed by user files, so totality is not optional (architecture §4 names decoders as the first `cargo-fuzz` targets, and none exists yet), and (c) an atomicity case proving a rejected file leaves the board untouched.
-* **Not yet covered, because not yet built.** Figma and Miro fixture-to-command goldens (§2), the Web-Showcase bundle (§3), and the PNG render-back (§3.C). Intent, not coverage.
+* **Unbuilt paths.** Figma/Miro (§2.C), the PNG render-back (§3.C) and the Web-Showcase bundle (§3.D) have their rules as `TOILE-IO-014..019` in §1; their belts (fixture-to-command goldens, a headless GPU readback, a no-network assertion) land with them.
 * **Benchmarks.** None today. §8 budgets a 5 000-node SVG import and a 50-slide PDF export; neither has a `criterion` bench.
 * **Definition of Done.** An increment is `[x]` only when its belts are green in CI -- **including under the feature flags it needs** -- and no invariant in §1 is left without a `Status`.
 

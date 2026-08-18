@@ -50,6 +50,9 @@ jobs:
           # from main without consuming the shared 10 GB budget (avoids eviction).
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: just lint
+      # Doc-side check, milliseconds: derives the invariant ledger and fails on a
+      # status value or a missing Story citation (`ambre-spec-architecture.md §4`).
+      - run: just invariants
 
   # ---------------------------------------------------------------------------
   # deny -- supply chain (advisories, licences, sources) plus the zero-knowledge

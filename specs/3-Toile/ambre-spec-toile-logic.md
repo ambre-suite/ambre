@@ -143,8 +143,11 @@ UI/quality promise; they are candidates for V2 or removal (see `ambre-roadmap.md
 | `TOILE-021` | A nested Ambre document MUST be stored as a reference; its content MUST NOT be inlined into this board. | §2.I | `ambre_toile::logic::convergence_tests::doc_embed_reference_survives_the_crdt_round_trip`, `::doc_embed_with_an_unreadable_reference_falls_back_to_a_frame` | verified |
 | `TOILE-022` | A derived kind (`group`, `drawing`) MUST NOT be creatable through `CreateElement`, and `SetText` MUST reject a non-text element. | §2.B; §8.A | `ambre_toile::logic::convergence_tests::group_and_drawing_are_not_creatable`, `::set_text_rejects_a_non_text_element`, `::set_text_overwrites_sticky_body` | verified |
 | `TOILE-023` | `ambre-toile` MUST contain no `unsafe`. | context pillar "Security" | measured zero `unsafe` in the crate, but no `#![forbid(unsafe_code)]` on its root -- a claim, not a mechanism (architecture §4 ladder) | unverified |
+| `TOILE-024` | A comment thread MUST be anchored either to a stable `ElementId` or to a free world point, never to a viewport coordinate. | §2.J | not built -- lands with `toile-features §9` Phase 2 (Epic `E4`) | unimplemented |
+| `TOILE-025` | A pin whose anchor element is deleted MUST go dangling like a connector: it MUST NOT be rendered and MUST NOT be destroyed. | §2.J; §5.A | not built -- lands with `toile-features §9` Phase 2 (Epic `E4`) | unimplemented |
+| `TOILE-026` | The `DisplayViewport` MUST carry pins and their badges, and MUST NOT stream thread bodies: those are fetched on demand. | §2.J; §9 | not built -- lands with `toile-features §9` Phase 2 (Epic `E4`) | unimplemented |
 
-> **Invariant coverage.** 21 `verified`, 2 `unverified` (`TOILE-015`, `TOILE-023`), 0 `human-review`, 0 `qa-manual`. Reported in `ambre-spec-testing.md §7`.
+> **Invariant coverage.** 21 `verified`, 2 `unverified` (`TOILE-015`, `TOILE-023`), 3 `unimplemented` (comment anchoring, §2.J), 0 `human-review`, 0 `qa-manual`. Reported in `ambre-spec-testing.md §7`.
 ---
 
 ## 2. CRDT MODEL

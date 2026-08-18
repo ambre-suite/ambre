@@ -74,8 +74,11 @@ depends on `ambre-bus + ambre-draw + ambre-canvas + ambre-chrome + ambre-command
 | `TOILE-UI-019` | A style edit from the floating bar MUST touch only the field it edits, and a mixed selection MUST report `None` rather than a wrong common value. | §5quinquies | `ambre_toile::ui::floatbar::tests::style_edit_touches_only_its_field`, `::common_fill_is_none_when_mixed`, `::common_fill_survives_when_shared`, `ambre_toile::ui::style::tests::differing_fill_flags_only_fill_mixed`, `::identical_elements_are_not_mixed` | verified |
 | `TOILE-UI-020` | The UI thread MUST NOT block on the Logic thread: at most one `SetViewport` per input frame, painting driven by the last `DisplayViewport` received. | §1; §9 | none. The double-buffering is implemented in the render loop and no test drives two viewport updates inside one frame to assert the coalescing | unverified |
 | `TOILE-UI-021` | The render loop MUST NOT repaint when nothing changed. | §1; §9 | none. The dirty flag exists; nothing asserts a clean frame produces no draw call, and no `criterion` bench guards the 60 FPS budget of §11 | unverified |
+| `TOILE-UI-022` | A comment pin MUST be painted in screen space and MUST NOT be occluded by board content, whatever the z-order. | §5sexies; `toile-logic §9` | not built -- lands with `toile-features §9` Phase 2 (Epic `E4`) | unimplemented |
+| `TOILE-UI-023` | The comments panel MUST hold no authoritative state: it re-reads a thread on `CommentsUpdated` and emits commands for every change. | §5sexies | not built -- lands with `toile-features §9` Phase 2 (Epic `E4`) | unimplemented |
+| `TOILE-UI-024` | A pin badge MUST come from `DisplayViewport.comments` and MUST NOT require reading the panel or the thread bodies. | §5sexies | not built -- lands with `toile-features §9` Phase 2 (Epic `E4`) | unimplemented |
 
-> **Invariant coverage.** 19 `verified`, 2 `unverified` (`TOILE-UI-020`, `TOILE-UI-021` -- both about the render loop, both implemented and unexercised). "No `unsafe`" is crate-wide: `TOILE-023`.
+> **Invariant coverage.** 19 `verified`, 2 `unverified` (`TOILE-UI-020`, `TOILE-UI-021` -- both about the render loop, both implemented and unexercised), 3 `unimplemented` (the comments panel, §5sexies). "No `unsafe`" is crate-wide: `TOILE-023`.
 ---
 
 ## 1bis. UI-THREAD INTEGRATION (`AppView` / chrome / commands)

@@ -36,7 +36,7 @@ struct TrameOutcome {
 
 ### Invariants
 
-Prefix `TRAME-FEAT`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4`; the cross-spec roll-up is `ambre-spec-testing.md §7`. The table covers the **built** features -- shared filters (§1.A), sort (§2) and the execution model above. Personal filter views (§1.B), conditional formatting (§3), data validation (§5) and range protection (§6) are Phase 2/3: their command variants exist in `ambre-bus` and their Logic handlers are explicit no-ops, so they carry no rows yet (seeding rule, architecture §4). Undo/redo is specified here (§4) but owned by the engine: its invariants are `TRAME-017` and `TRAME-018` in `trame-logic §1`, not restated here.
+Prefix `TRAME-FEAT`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4`; the cross-spec roll-up is `ambre-spec-testing.md §7`. Rows `001..013` cover the built features -- shared filters (§1.A), sort (§2) and the execution model above. Rows `014..024` cover Phase 2/3 features whose command variants exist in `ambre-bus` but whose Logic handlers are explicit no-ops: they carry `Status: unimplemented` and cite the Story that will build them (architecture §4). Undo/redo is specified here (§4) but owned by the engine: its invariants are `TRAME-017` and `TRAME-018` in `trame-logic §1`, not restated here.
 
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
@@ -53,8 +53,19 @@ Prefix `TRAME-FEAT`. Grammar, falsifiability test and status values are normativ
 | `TRAME-FEAT-011` | A multi-column sort MUST be lexicographic over its keys, each key applying its own direction. | §2 "Multi-Column Sort" | `ambre_trame::logic::tests::group4::sort_range_multi_lexicographic_with_per_key_direction`, `::sort_range_multi_no_keys_is_noop` | verified |
 | `TRAME-FEAT-012` | A sort that changes no row order MUST emit no CRDT delta. | §2 | `ambre_trame::logic::tests::group4::sort_range_multi_already_sorted_emits_no_delta`, `::sort_range_noops` | verified |
 | `TRAME-FEAT-013` | A sort invoked without an explicit range MUST resolve it from the tracked selection, in the Logic thread. | §2 | `ambre_trame::logic::tests::group4::sort_selection_resolves_against_tracked_selection`, `::sort_selection_multi_resolves_against_tracked_selection`, `::sort_sheet_sorts_used_range_by_active_column` | verified |
+| `TRAME-FEAT-014` | A personal filter view MUST NOT emit any CRDT delta: it is local state, persisted to IndexedDB alone. | §1.B | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-015` | Activating a personal filter view MUST recompute its hidden rows against the current document, never trust the stored set. | §1.B | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-016` | Activating a personal filter view MUST NOT be an undo item. | §1.B; §4 | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-017` | Conditional formatting MUST apply the first matching rule in ascending priority order, and stop there. | §3 Evaluation | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-018` | A conditional format MUST produce a display-time `style_override` and MUST NOT mutate the stored cell style. | §3 Evaluation | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-019` | A `Formula` conditional rule MUST resolve its relative references from the cell being evaluated, not from the rule's anchor. | §3 | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-020` | A `Reject` validation MUST block the local mutation and emit no CRDT delta. | §5 Evaluation on Input | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-021` | A `Warn` validation MUST allow the mutation and surface a warning alongside it. | §5 Evaluation on Input | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-022` | A remote delta violating a local validation MUST be applied and MUST surface a warning; it MUST NOT be rejected. | §5 "Fundamental limitation" | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-023` | Range protection MUST block a local edit by a non-owner, and MUST warn rather than reject on a remote violation. | §6 Enforcement | not built -- lands with §10 Phase 3 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-024` | Protection MUST identify its owner by `UserId`, never by `pub_key`. | §6 Security Model; §10 Phase 3 | not built -- lands with §10 Phase 3 (Epic `E6`) | unimplemented |
 
-> **Invariant coverage.** 13 `verified`, 0 `unverified`. That is the expected shape for this spec: it is the Phase-1 surface, and it is the one the workspace tested most heavily before the grammar existed. The absent rows are the honest part -- four sections here describe features whose handlers are no-ops.
+> **Invariant coverage.** 13 `verified`, 0 `unverified`, 11 `unimplemented`. The 13 are the Phase-1 surface, the area the workspace tested most heavily before the grammar existed. The 11 are the rules of §1.B, §3, §5 and §6, whose handlers are explicit no-ops today: each cites the Story that will build it, and that Story is not done until its rows have moved off `unimplemented`.
 
 ---
 
@@ -731,7 +742,7 @@ pub enum TrameEvent {
 
 * **Tier.** host, entirely (`just test-native`). Every feature here runs in the Logic thread on pure Rust.
 * **Mandatory belts per built feature.** A view feature (filter) lands with: a positive case, a no-op guard, a convergence case in the 2-peer proptest, and an "it does not change the data" case (`TRAME-FEAT-003` is the model). A mutation feature (sort) lands with: the permutation assertion, a header-pin case, a no-delta case, and a "references follow" case owned by `trame-logic §1`.
-* **Planned belts, for handlers that do not exist yet.** Written as intent, not as coverage: personal filter view emits no CRDT delta and is absent from the undo stack; conditional formatting resolves first-matching-rule-wins, resolves a relative `=A1>...` from the target cell, and never mutates the styles map; validation `Reject` blocks the mutation with no delta while `Warn` allows it; protection blocks a local edit for a non-owner and warns rather than rejects on a remote violation. Each becomes a `TRAME-FEAT` row on the day its handler stops being a no-op.
+* **Unbuilt handlers.** Their rules are `TRAME-FEAT-014..024` in §0, not prose here. When one of those handlers lands, its rows move from `unimplemented` to a `Verification` cell naming the test -- which is the whole point of writing them now rather than later.
 * **Definition of Done.** An increment is `[x]` only when its belts are green in CI **and** no invariant in §0 is left without a `Status`.
 
 ---

@@ -21,7 +21,7 @@
 - Full PDF export: the DrawSurface rendering (KrillaSurface) is described in the UI spec
 - VBA Macros / Office Scripts: definitively out of scope
 
-**Invariants:** prefix `TRAME-IO`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4`; the cross-spec roll-up is `ambre-spec-testing.md §7`. The table covers the **built** paths -- CSV (§4) and the native `.ambre` container (§1). The .xlsx paths (§2, §3) and PDF export (§5) have no implementing code: `ambre-trame` declares `csv` and neither `calamine`, `rust_xlsxwriter` nor `krilla`. They carry no rows yet (seeding rule, architecture §4). `TRAME-024` ("no `unsafe`") covers the whole crate and is not restated here.
+**Invariants:** prefix `TRAME-IO`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4`; the cross-spec roll-up is `ambre-spec-testing.md §7`. Rows `001..009` cover the built paths -- CSV (§4) and the native `.ambre` container (§1). Rows `010..020` cover the .xlsx paths (§2, §3) and PDF export (§5), which have no implementing code -- `ambre-trame` declares `csv`, and neither `calamine`, `rust_xlsxwriter` nor `krilla` -- so they carry `Status: unimplemented` and cite the Story that will build them (architecture §4). `TRAME-024` ("no `unsafe`") covers the whole crate and is not restated here.
 
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
@@ -34,8 +34,19 @@
 | `TRAME-IO-007` | An `.ambre` export/import round trip MUST preserve the document state, byte for byte on a bare document. | §1; `ambre-spec-docfile.md §2` | `ambre_trame::logic::docfile::tests::round_trip_is_byte_identical_on_a_bare_document`, `::round_trip_preserves_the_document_state`, `::the_header_names_trame_and_the_document` | verified |
 | `TRAME-IO-008` | A rejected file MUST leave both the input bytes and the current state untouched, and MUST fail typed rather than panic. | §1; `ambre-spec-docfile.md §2` | `ambre_trame::logic::docfile::tests::a_rejected_file_leaves_both_the_input_and_the_state_alone`, `::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic` | verified |
 | `TRAME-IO-009` | A `.ambre` file belonging to another app MUST be re-dispatched to that app, never coerced into Trame. | §1; `ambre-spec-docfile.md §2.A` | `ambre_trame::logic::docfile::tests::a_toile_file_is_re_dispatched_not_coerced` | verified |
+| `TRAME-IO-010` | An imported Excel formula MUST land in exactly one of three states -- parsed formula, unsupported formula preserved verbatim under the `\x00EXCEL:` marker, or literal -- never a silent mixture. | §2.D | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-IO-011` | An unsupported Excel formula MUST be preserved byte-for-byte and re-exported unchanged; it MUST NOT be downgraded to its last computed value. | §2.D | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-IO-012` | Every ignored Excel feature MUST raise a typed `ImportWarning`; silence MUST NOT be the report. | §2.F | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-IO-013` | An import MUST NOT starve the P1/P2 budgets: it lands in batches, and scrolling stays responsive while it runs. | §2.A; §7 | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-IO-014` | Two cells sharing a style MUST import to a single deduplicated style entry, not to two copies. | §2.E | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-IO-015` | A hidden Excel sheet MUST import as a sheet carrying `hidden: true`, never be dropped. | §2.F | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-IO-016` | Merges MUST survive an import/export round trip. | §2.C; §3.B | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-IO-017` | On export, a `CellId` MUST be rendered as its current A1 position through the `SheetIndex`, and a cross-sheet reference MUST be rendered with the sheet's display name (the `#id` sigil is internal). | §3.B; `trame-logic §2.D` | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-IO-018` | On export, a broken reference MUST be written as the literal `#REF!` the target format understands, never as an empty cell. | §3.B | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-IO-019` | An xlsx import followed by an export followed by a re-import MUST yield the same values. | §2; §3 | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-IO-020` | PDF export MUST run in the Logic thread through the shared `DrawSurface`; the UI thread MUST only trigger the download on `ExportComplete`. | §5; §9 | not built -- lands with §10 Phase 2 (Epic `E6`); `ambre-trame` declares neither `krilla` nor `ambre-pdf` | unimplemented |
 
-> **Invariant coverage.** 9 `verified`, 0 `unverified`. Every row covers a shipped path; the two large sections of this spec (.xlsx import and export) describe code that does not exist and are marked as such above.
+> **Invariant coverage.** 9 `verified`, 0 `unverified`, 11 `unimplemented`. Every `verified` row covers a shipped path. The eleven others are the rules the two large unbuilt sections of this spec have always contained -- they were prose, they are now falsifiable and countable.
 
 **Dependencies:**
 
@@ -578,7 +589,7 @@ synchronous pass.
 
 * **Tier.** host, entirely. Conversion is pure Rust in the Logic thread; a decoder needs no browser.
 * **Mandatory belts per format.** A new import path lands with: a round trip (import -> export -> re-import, identical values), a malformed-input case and a random-bytes case -- **the decoder is fed by user files, so totality is not optional** (architecture §4 names decoders as the first `cargo-fuzz` targets, and none exists yet).
-* **Planned belts, for the unwritten .xlsx paths.** Intent, not coverage: formula conversion, unsupported-function warning, style deduplication, merges, hidden sheets, `CellRef` -> A1 on export, broken ref -> `#REF!` in the file, import batching that keeps P1/P2 responsive. Each becomes a `TRAME-IO` row on the day the path exists.
+* **Unwritten .xlsx and PDF paths.** Their rules are `TRAME-IO-010..020` in §1, not prose here. Each lands with a `Verification` cell naming its test on the day the path exists.
 * **Definition of Done.** An increment is `[x]` only when its belts are green in CI **and** no invariant in §1 is left without a `Status`.
 
 ---

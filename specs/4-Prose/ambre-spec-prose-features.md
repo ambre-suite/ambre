@@ -51,14 +51,31 @@ Post-MVP dependencies:
 |-------|---------------|
 | `zspell` | Pure Rust spell checker, WASM-compatible, Hunspell dictionaries. |
 
-**Invariants:**
+**Invariants:** prefix `PROSE-FEAT`. Grammar and status values are normative in `ambre-spec-architecture.md §4`; the roll-up is `ambre-spec-testing.md §7`. Every row is `unimplemented` -- `crates/ambre-prose` is empty -- and lands with `ARCH P2` (Epic `E5`).
 
-- A `CommentId` or `SuggestionId` (`Uuid`) is stable for the entire document lifetime: it does not change after partial accept/reject or remote delta import.
-- List ordinals are **computed on demand** (not stored in the CRDT): they are derived from the `MovableTree` at read time. Storing ordinals in the CRDT would introduce unnecessary CRDT conflicts on any `ListItem` insertion.
-- The TOC is **derived** from the `MovableTree` (not duplicated): no copy of headings is stored in `"meta"` or elsewhere.
-- Rejected suggestions (track changes reject) are **removed from the CRDT** -- they leave no trace in the final document.
-- No feature short-circuits `ProseState::dispatch()` -- all mutations go through typed `ProseCommand`.
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `PROSE-FEAT-001` | A `CommentId` or `SuggestionId` MUST be stable for the document's lifetime: a partial accept, a reject or a remote delta MUST NOT change it. | §1; §2.H; §2.I | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-002` | List ordinals MUST be derived from the `MovableTree` at read time; they MUST NOT be stored in the CRDT. | §1; §2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-003` | The table of contents MUST be derived from the `MovableTree`; no copy of the headings MUST be stored. | §1; §2.F | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-004` | A rejected suggestion MUST be removed from the CRDT and MUST leave no trace in the final document. | §1; §2.I | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-005` | No feature MUST bypass `ProseState::dispatch()`: every mutation goes through a typed `ProseCommand`. | §1 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-006` | Text offsets MUST be counted in Unicode graphemes, never in Rust `char`s, wherever they address Loro positions. | §1 (`unicode-segmentation`) | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-007` | An inline mark MUST expand or not expand at its boundaries according to `expand_type_for` alone (`prose-logic §2.A`), never according to the applying feature. | §2.A; `PROSE-007` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-008` | Two concurrent applications of the same mark to overlapping ranges MUST converge without producing a torn or duplicated span. | §2.A | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-009` | A comment thread MUST stay anchored to its text range across concurrent edits, and MUST go orphaned rather than silently re-anchor when that range is deleted. | §2.H | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-010` | Accepting a suggestion MUST apply exactly the recorded change; it MUST NOT re-derive it from the current text. | §2.I | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-011` | Track changes MUST converge under concurrent accept and reject of the same suggestion: one outcome, never a half-applied edit. | §2.I | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-012` | Undo MUST be scoped to the local peer and MUST NOT revert a remote peer's edits (`PROSE-022` is the same rule in the engine). | §2.J | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-013` | A footnote MUST keep a stable id and MUST be renumbered from document order at read time, never from a stored number. | §2.K | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-014` | A cross reference to a deleted target MUST surface as a broken reference; it MUST NOT resolve to a neighbour. | §2.K | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-015` | A replace-all MUST be a single undo item. | §2.L; §2.J | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-016` | Find MUST be local view state and MUST NOT mutate the document. | §2.L | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-017` | A table row or column insert MUST converge with a concurrent edit inside the table without corrupting cell geometry (`PROSE-009` is the derived-span rule it relies on). | §2.D | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-018` | Word count MUST be derived on demand and MUST NOT be stored in the CRDT. | §2.M | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-019` | The spell checker MUST run locally and MUST NOT send document text anywhere. | §2.N; §3 | not built -- lands with the post-MVP spell-checker Story (Epic `E6`), after `ARCH P2` | unimplemented |
 
+> **Invariant coverage.** 19 `unimplemented`. Five of them (`001`-`005`) were already written as prose invariants in this section; the other fourteen were rules buried in §2's chapters, which is exactly the content a reviewer could not reach without reading seventeen hundred lines.
 ---
 
 ## 2. TECHNICAL DESIGN & STATE
@@ -1588,6 +1605,8 @@ direct path to the network.
 
 ## 4. QUALITY & TESTABILITY
 
+> **This is a test plan, not coverage.** Nothing here exists -- the rules these belts will hold are `PROSE-FEAT-001..019` in §1, all `unimplemented`.
+
 **Unit tests:**
 
 | Feature | Tested cases |
@@ -1607,27 +1626,10 @@ direct path to the network.
 
 **Prop-tests:**
 
-```rust
-proptest! {
-    #[test]
-    fn track_changes_roundtrip(ops in vec(arb_insert_delete(), 1..20)) {
-        let mut doc = make_doc_with_tracking();
-        apply_ops(&mut doc, &ops);
-        accept_all(&mut doc);
-        assert!(doc.check_state_correctness_slow());
-    }
-}
 
-proptest! {
-    #[test]
-    fn find_replace_idempotent(text in "\\PC{1,200}", query in "\\PC{1,10}") {
-        let doc = make_doc_with_text(&text);
-        let cmds = replace_all(&doc, &tree, &FindQuery::exact(&query), "__REPLACED__");
-        let doc2 = apply_commands(doc, cmds);
-        assert!(find_all(&doc2, &tree, &FindQuery::exact(&query)).is_empty());
-    }
-}
-```
+---
+
+**Planned properties.** Two `proptest`s: **track-changes round trip** (any interleaving of insert/delete suggestions, then accept-all, leaves a self-consistent document -- `PROSE-FEAT-010`/`-011`) and **replace-all idempotence** (after a replace, the query no longer matches -- `PROSE-FEAT-015`/`-016`). Written as properties, not as bodies: a test body in a spec is a second, uncompiled copy that drifts.
 
 ---
 
