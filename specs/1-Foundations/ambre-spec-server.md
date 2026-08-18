@@ -47,14 +47,24 @@ It does **not** handle:
 
 > **Wire types imported from `ambre-protocol`.** `ambre-server` imports `WsClientMsg`, `WsServerMsg`, `UpdatePublicData`, `EphemeralPublicData` from `ambre-protocol` — no local redefinition.
 
-**Invariants:**
-- No plaintext data transits through the server (neither stored nor logged)
-- ACLs are verified **before** any S3 read/write operation
-- Every authenticated request validates the access JWT (EdDSA signature + expiry) before touching PostgreSQL
-- S3 presigned URLs are issued only after PostgreSQL ACL verification
-- The Redis Lua script is atomic: clock validation + seq assignment in a single RTT
-- A client's `signing_pubkey` travels in the access-token `spk` claim — no PostgreSQL lookup per update
-- No `unsafe` in application code
+**Invariants:** grammar and status values in `ambre-spec-architecture.md §4`; the boundary-level rules these refine are `ZK-001..ZK-008` in `ambre-spec-architecture.md §3`.
+
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `SRV-001` | The server MUST NOT store or log plaintext document content. | `ZK-001`, `ZK-006`; §3 Boundary Audit | none beyond `ZK-006`: reviewer attention plus the explicit "never log the blob" rule in `s3.rs` | human-review |
+| `SRV-002` | An S3 presigned URL MUST NOT be issued before the PostgreSQL ACL check for the requesting user. | `ZK-008`; §3 | role refusals are covered (`ambre_server::routes::tests::media_confirm_upload_denied_to_viewer`, `::rotate_key_denied_to_editor`); **no test asserts a non-member is refused a URL** | unverified |
+| `SRV-003` | Every authenticated route MUST validate the access JWT (EdDSA signature + expiry) before touching PostgreSQL. | §1 | `ambre_server::jwt::tests::expired_token_is_rejected`, `::wrong_key_is_rejected`, `::mint_then_verify_roundtrips`; `routes::tests::unauth_endpoints_return_401` | verified |
+| `SRV-004` | A snapshot MUST be reachable only through the document it belongs to. | audit `C4` | `ambre_server::s3::tests::snapshot_key_validation_scopes_to_document`; `db::content::get_snapshot` filters on `id AND document_id` | verified |
+| `SRV-005` | A non-member MUST receive no document metadata -- not even `owner_id` or `doc_type`. | audit `H2`; §3 Boundary Audit | `ambre_server::routes::tests::get_document_hidden_from_non_member` | verified |
+| `SRV-006` | Per `(document, client)` the `clock` MUST increase strictly, validated and assigned atomically in a single Redis round trip. | §1, §2.A | `ambre_server::redis_ops::tests::sequential_clock_succeeds`, `::duplicate_clock_rejected`, `::clock_mismatch_rejected`, `::independent_clients_have_independent_clocks`, `::lua_script_contains_key_validation` | verified |
+| `SRV-007` | Every update, snapshot and ephemeral frame MUST carry a valid Ed25519 signature by the key in the token's `spk` claim; an unsigned or forged frame MUST have no side effect. | §1, §3 | `ambre_server::ws::handler::message::tests::invalid_signature_is_rejected`, `::unsigned_ephemeral_is_rejected`, `::forged_author_key_writes_no_presence`, `::tampered_ciphertext_rejects_signature`; `routes::tests::create_snapshot_rejects_forged_author` | verified |
+| `SRV-008` | A `viewer` MUST produce no write, and a non-owner MUST NOT rotate a document key. | §2.B | `ambre_server::ws::handler::message::tests::viewer_role_delta_writes_no_pending`; `routes::tests::media_confirm_upload_denied_to_viewer`, `::rotate_key_denied_to_editor` | verified |
+| `SRV-009` | A refresh token MUST be consumable exactly once, including under concurrent use. | §3 Token Model | `ambre_server::redis_ops::tests::refresh_consume_rejects_a_replayed_token`, `::only_one_racing_caller_claims_a_refresh_token` | verified |
+| `SRV-010` | An oversized frame MUST be rejected without partial side effects. | §6 Error Handling | `ambre_server::ws::handler::message::tests::oversized_delta_writes_no_pending`, `::oversized_ephemeral_writes_no_presence` | verified |
+| `SRV-011` | An organization or a document MUST NOT be left without an owner. | §2.B | `ambre_server::routes::orgs::tests::owner_cannot_demote_last_owner`, `::owner_cannot_remove_last_owner`; `routes::tests::owner_can_leave_when_another_owner_remains` | verified |
+| `SRV-012` | The server MUST perform no cryptographic operation beyond Ed25519 verification and minting its own access tokens. | §1 dependency note (least privilege) | none. See `ZK-004`: the capability is linked into the binary even though unused | unverified |
+| `SRV-013` | The rate limiter MUST fail closed on the auth tier. | §3 Network Security; audit `M6` | `ambre_server::middleware::rate_limit::tests::only_auth_tier_fails_closed` | verified |
+| `SRV-014` | Application code MUST contain no `unsafe`. | pillar "Security" | measured zero `unsafe` workspace-wide, but `ambre-server` carries no `#![forbid(unsafe_code)]` | unverified |
 
 ---
 
@@ -649,12 +659,7 @@ This model has O(1) Tokio tasks instead of O(active_documents). Redis SCAN is no
 
 ### Zero-Knowledge Invariants
 
-1. Argon2 runs **client-side** (Sync WASM thread — sole consumer of `ambre-crypto`) — no passphrase reaches the server.
-2. No symmetric key (User Key, Document Key, Meeting Key) is transmitted.
-3. Tracing spans never include ciphertext content — only identifiers (doc_id, user_id, seq) are logged.
-4. The compression version byte is inside the AEAD ciphertext — opaque to the server.
-5. S3 presigned URLs have a TTL ≤ 15 min, generated after ACL check.
-6. **Presence data is encrypted**: `doc:{doc_id}:presence` stores `presence_enc` (`Ephemeral.ciphertext` payload) — never the cursor or name in plaintext.
+Formalized as `ZK-001..ZK-008` (`ambre-spec-architecture.md §3`) and `SRV-001..SRV-014` (§1 above), which carry the verification mechanism and the status of each rule. They are not restated here: two copies of the same rule drift, and the copy without a `Verification` column is the one that gets believed.
 
 ### Public Key Trust Model (TOFU)
 
