@@ -263,6 +263,53 @@ fn anim_transform(a: &AnimatedElement) -> Affine {
     Affine::translate(c.to_vec2()) * Affine::rotate(a.rotation) * Affine::translate(-c.to_vec2())
 }
 
+/// A rotation of `theta` radians about `center` (screen space). The camera carries
+/// no rotation (pan + zoom only), so an element's world rotation is also its
+/// screen rotation, and the text / overlay passes -- which run in screen space --
+/// rotate about the element's screen-space center with this affine.
+fn rotate_about(center: Point, theta: f64) -> Affine {
+    Affine::translate(center.to_vec2())
+        * Affine::rotate(theta)
+        * Affine::translate(-center.to_vec2())
+}
+
+/// The screen-space rotation (radians) of an element's text: the live gesture /
+/// animation angle when overridden, else the angle baked into its display
+/// transform (a pure rotation about the AABB center, so `atan2(b, a)` recovers it).
+fn text_rotation(e: &DisplayElement, anim: Option<&AnimatedElement>) -> f64 {
+    match anim {
+        Some(a) => a.rotation,
+        None => {
+            let c = e.transform.as_coeffs();
+            c[1].atan2(c[0])
+        }
+    }
+}
+
+/// The screen-space rotation (radians) to apply to the selection box + handles of
+/// a single selected element: its live gesture angle when a resize / rotate / move
+/// is in flight, else the angle baked into its display transform. `0.0` when the
+/// id is not in the culled set.
+fn selection_rotation(
+    id: &ElementId,
+    vp: &DisplayViewport,
+    gesture: &HashMap<ElementId, AnimatedElement>,
+) -> f64 {
+    if let Some(a) = gesture.get(id) {
+        return a.rotation;
+    }
+    vp.nodes
+        .iter()
+        .find_map(|n| match n {
+            DisplayNode::Element(e) if &e.id == id => {
+                let c = e.transform.as_coeffs();
+                Some(c[1].atan2(c[0]))
+            }
+            _ => None,
+        })
+        .unwrap_or(0.0)
+}
+
 /// The style an element paints with this frame: its own, or the base overlaid
 /// with the animation override's opacity / fill (§1.C interpolates only those
 /// visual attributes; the rest of the register is held).
@@ -409,6 +456,13 @@ fn paint_text<S: DrawSurface>(
     let brush = Brush::Solid(color);
     let underline = e.style.font.underline;
     let strikethrough = e.style.font.strikethrough;
+    // A rotated element rotates its body too: the glyph run origins and the
+    // decoration endpoints are mapped through a rotation about the note's
+    // screen-space center, so the text follows the card instead of staying
+    // axis-aligned (toile-ui §5quinquies.A). `None` (no rotation) keeps the fast
+    // pure-translation path.
+    let rot = text_rotation(e, anim);
+    let rot_tf = (rot != 0.0).then(|| rotate_about(sb.center(), rot));
     for line in layout.lines() {
         for item in line.items() {
             let PositionedLayoutItem::GlyphRun(run) = item else {
@@ -416,18 +470,28 @@ fn paint_text<S: DrawSurface>(
             };
             let tx = sb.x0 + run.offset() as f64;
             let ty = sb.y0 + run.baseline() as f64;
-            surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+            let base = Affine::translate((tx, ty));
+            let glyph_tf = rot_tf.map_or(base, |r| r * base);
+            surface.draw_glyphs(&run, &brush, glyph_tf);
             // Per-run text decorations, drawn in the glyph ink (matches Trame's
             // cell decorations): a 1px underline just below the baseline and a 1px
-            // strikethrough through the x-height (~0.3em above the baseline).
+            // strikethrough through the x-height (~0.3em above the baseline). The
+            // endpoints ride the same rotation so the rules stay glued to the text.
             if underline || strikethrough {
                 let adv = run.advance() as f64;
+                let mut line = |ay: f64| {
+                    let (mut a, mut b) = (Point::new(tx, ay), Point::new(tx + adv, ay));
+                    if let Some(r) = rot_tf {
+                        a = r * a;
+                        b = r * b;
+                    }
+                    surface.stroke_line(a.x, a.y, b.x, b.y, color, 1.0);
+                };
                 if underline {
-                    surface.stroke_line(tx, ty + 2.0, tx + adv, ty + 2.0, color, 1.0);
+                    line(ty + 2.0);
                 }
                 if strikethrough {
-                    let sy = ty - (font_size as f64) * 0.3;
-                    surface.stroke_line(tx, sy, tx + adv, sy, color, 1.0);
+                    line(ty - (font_size as f64) * 0.3);
                 }
             }
         }
@@ -469,19 +533,69 @@ pub fn paint_overlay<S: DrawSurface>(
         return;
     };
     let b = world_rect_to_screen(wb, cam);
-    // Bounding box.
-    surface.stroke_rect(b, palette.selection, 1.5);
+    // A single selected element carries the box + handles rotated with it; a
+    // multi-selection keeps an axis-aligned union box (no shared rotation). The
+    // camera has no rotation, so the element's world angle is also its screen
+    // angle.
+    //
+    // The rotation is applied by mapping each corner / handle point through a
+    // screen-space rotation about `b`'s center, NOT via `push_transform`: the
+    // WgpuSurface's `stroke_rect` / `fill_rect` degrade a rotated rect to its
+    // axis-aligned bounding box (they only carry an AABB), so a pushed rotation
+    // would paint a bigger upright box instead. `stroke_line` maps its endpoints
+    // through the transform faithfully, so the box is drawn as four rotated edges,
+    // and each handle square is drawn axis-aligned (screen-aligned, Miro-style) at
+    // its rotated center.
+    let single = selection.len() == 1;
+    let theta = if single {
+        selection_rotation(&selection[0], vp, gesture)
+    } else {
+        0.0
+    };
+    let place = |p: Point| {
+        if theta == 0.0 {
+            p
+        } else {
+            rotate_about(b.center(), theta) * p
+        }
+    };
 
-    // Rotate handle: a short stem + the knob.
-    let rot = rotate_handle_point(b);
-    surface.stroke_line(b.center().x, b.y0, rot.x, rot.y, palette.selection, 1.0);
-    draw_handle(surface, rot, palette);
+    // Bounding box. Axis-aligned: the crisp `stroke_rect` fast path. Rotated: four
+    // `stroke_line` edges between the rotated corners (stroke_rect would degrade to
+    // an upright AABB on the WgpuSurface, see above).
+    if theta == 0.0 {
+        surface.stroke_rect(b, palette.selection, 1.5);
+    } else {
+        let c = [
+            place(Point::new(b.x0, b.y0)),
+            place(Point::new(b.x1, b.y0)),
+            place(Point::new(b.x1, b.y1)),
+            place(Point::new(b.x0, b.y1)),
+        ];
+        for i in 0..4 {
+            let (a, d) = (c[i], c[(i + 1) % 4]);
+            surface.stroke_line(a.x, a.y, d.x, d.y, palette.selection, 1.5);
+        }
+    }
+
+    // Rotate handle: a short stem above the top edge + the knob.
+    let stem_base = place(Point::new(b.center().x, b.y0));
+    let knob = place(rotate_handle_point(b));
+    surface.stroke_line(
+        stem_base.x,
+        stem_base.y,
+        knob.x,
+        knob.y,
+        palette.selection,
+        1.0,
+    );
+    draw_handle(surface, knob, palette);
 
     // 4 corner resize handles (only for a single-element selection, matching the
     // tool's corners-only picking; a multi-selection shows the box only in Phase 0).
-    if selection.len() == 1 {
+    if single {
         for (_, p) in resize_handle_points(b) {
-            draw_handle(surface, p, palette);
+            draw_handle(surface, place(p), palette);
         }
     }
 }
@@ -1074,6 +1188,115 @@ mod tests {
             .filter(|o| matches!(o, DrawOp::StrokeRect { .. }))
             .count();
         assert_eq!(strokes, 2);
+    }
+
+    // Build a node rotated `theta` radians about its AABB center, mirroring the
+    // Logic derive so the overlay / text passes see a realistic transform.
+    fn rotated_elem(id: &str, geom: DisplayGeom, bounds: Rect, theta: f64) -> DisplayNode {
+        let c = bounds.center();
+        let transform = Affine::translate(c.to_vec2())
+            * Affine::rotate(theta)
+            * Affine::translate(-c.to_vec2());
+        DisplayNode::Element(DisplayElement {
+            id: ElementId(id.to_owned()),
+            kind: ElementKind::Sticky,
+            transform,
+            bounds,
+            locked: false,
+            style: ElementStyle::default(),
+            geom,
+            group: None,
+        })
+    }
+
+    #[test]
+    fn overlay_rotates_box_and_handles_for_a_rotated_element() {
+        use std::f64::consts::FRAC_PI_4;
+        let vp = DisplayViewport {
+            reactions: Default::default(),
+            viewport: Default::default(),
+            nodes: vec![rotated_elem(
+                "r",
+                DisplayGeom::Rect,
+                Rect::new(0.0, 0.0, 50.0, 50.0),
+                FRAC_PI_4,
+            )],
+        };
+        let cam = cam();
+        let mut surface = RecordingSurface::new();
+        paint_overlay(
+            &mut surface,
+            &[ElementId("r".into())],
+            &vp,
+            &cam,
+            &LIGHT_PALETTE,
+            None,
+            &[],
+            None,
+            &HashMap::new(),
+        );
+        // The box must NOT be a `stroke_rect` (that degrades to an upright AABB on
+        // the WgpuSurface); it is drawn as rotated `stroke_line` edges instead.
+        assert!(
+            !surface
+                .ops()
+                .iter()
+                .any(|o| matches!(o, DrawOp::StrokeRect { .. })),
+            "a rotated box must not use stroke_rect"
+        );
+        // Still 5 handle squares (4 corners + rotate knob), each an axis-aligned
+        // (screen-aligned) square positioned at its rotated center.
+        let b = world_rect_to_screen(Rect::new(0.0, 0.0, 50.0, 50.0), &cam);
+        let expect_se = super::rotate_about(b.center(), FRAC_PI_4) * Point::new(b.x1, b.y1);
+        let half = HANDLE_SIZE_PX / 2.0;
+        let se_square = Rect::new(
+            expect_se.x - half,
+            expect_se.y - half,
+            expect_se.x + half,
+            expect_se.y + half,
+        );
+        let has_rotated_se_handle = surface.ops().iter().any(|o| {
+            matches!(o, DrawOp::FillRect { rect, .. }
+                if (rect.x0 - se_square.x0).abs() < 1e-6 && (rect.y0 - se_square.y0).abs() < 1e-6)
+        });
+        assert!(
+            has_rotated_se_handle,
+            "the SE handle must sit at its rotated position"
+        );
+        let handle_fills = surface
+            .ops()
+            .iter()
+            .filter(|o| matches!(o, DrawOp::FillRect { .. }))
+            .count();
+        assert_eq!(handle_fills, 5);
+    }
+
+    #[test]
+    fn rotated_sticky_body_rotates_its_glyphs() {
+        use std::f64::consts::FRAC_PI_4;
+        let vp = DisplayViewport {
+            reactions: Default::default(),
+            viewport: Default::default(),
+            nodes: vec![rotated_elem(
+                "s",
+                DisplayGeom::Sticky("hi".into()),
+                Rect::new(0.0, 0.0, 120.0, 120.0),
+                FRAC_PI_4,
+            )],
+        };
+        let surface = paint(&vp);
+        // Font-availability agnostic: if the headless host shapes no glyphs this
+        // holds vacuously; when it does, every run carries the element rotation
+        // rather than a pure translation.
+        for op in surface.ops() {
+            if let DrawOp::Glyphs { transform, .. } = op {
+                let c = transform.as_coeffs();
+                assert!(
+                    c[1].abs() > 1e-6,
+                    "a rotated sticky must rotate its glyph runs"
+                );
+            }
+        }
     }
 
     // A minimal palette for host tests (the generated LIGHT lives behind the

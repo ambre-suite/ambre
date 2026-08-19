@@ -16,7 +16,7 @@ use ambre_bus::app::toile::{
     Anchor, DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, EndCaps,
     InitContent, PathType, ShapeKind, StrokePoint, ToileCommand,
 };
-use ambre_draw::{BezPath, Point, Rect, Size};
+use ambre_draw::{Affine, BezPath, Point, Rect, Size};
 use kurbo::Shape;
 
 use super::hit::{hit_topmost, marquee_hits};
@@ -104,6 +104,10 @@ enum Drag {
         id: ElementId,
         base: Rect,
         handle: Handle,
+        /// The element's rotation (radians about `base.center()`), captured at
+        /// press so the resize math can keep the opposite corner world-fixed on a
+        /// rotated element.
+        rot: f64,
         /// Live pointer (world), updated each move so the view can preview the
         /// resize without a Logic round-trip.
         last: Point,
@@ -156,7 +160,13 @@ impl SelectTool {
             && let Some(sb) = selection_bounds(selection, display)
         {
             let screen_b = world_rect_to_screen(sb, cam);
-            if let Some(h) = edge_handle_at(screen_b, screen) {
+            let rot = element_rotation(display, &selection[0]);
+            // The drawn box is `screen_b` rotated by `rot` about its center, so a
+            // point hits a handle iff its de-rotated image hits the axis-aligned
+            // box (toile-ui §7). Press and hover share this de-rotation so they
+            // always agree.
+            let pick = unrotate_point(screen, screen_b.center(), rot);
+            if let Some(h) = edge_handle_at(screen_b, pick) {
                 let id = selection[0].clone();
                 match h {
                     Handle::Rotate => {
@@ -175,6 +185,7 @@ impl SelectTool {
                             id,
                             base: sb,
                             handle: h,
+                            rot,
                             last: world,
                         });
                     }
@@ -256,9 +267,13 @@ impl SelectTool {
                 }
             }
             Drag::Resize {
-                id, base, handle, ..
+                id,
+                base,
+                handle,
+                rot,
+                ..
             } => {
-                let new = resize_rect(base, handle, world);
+                let new = resize_rect_rotated(base, handle, world, rot);
                 SelectOutcome::Command(ToileCommand::ResizeElement { id, new })
             }
             Drag::Rotate {
@@ -309,7 +324,9 @@ impl SelectTool {
             return None;
         }
         let sb = selection_bounds(selection, display)?;
-        edge_handle_at(world_rect_to_screen(sb, cam), screen)
+        let screen_b = world_rect_to_screen(sb, cam);
+        let rot = element_rotation(display, &selection[0]);
+        edge_handle_at(screen_b, unrotate_point(screen, screen_b.center(), rot))
     }
 
     /// The cursor the in-flight drag calls for (§5quinquies.A), so it stays stable
@@ -334,11 +351,12 @@ impl SelectTool {
                 id,
                 base,
                 handle,
+                rot,
                 last,
             }) => vec![(
                 id.clone(),
-                resize_rect(*base, *handle, *last),
-                element_rotation(display, id),
+                resize_rect_rotated(*base, *handle, *last, *rot),
+                *rot,
             )],
             Some(Drag::Rotate {
                 id,
@@ -1054,10 +1072,69 @@ fn resize_rect(base: Rect, handle: Handle, to: Point) -> Rect {
     Rect::new(x0, y0, x1, y1).abs()
 }
 
+/// A rotation of `theta` radians about `center`.
+fn rotate_about(center: Point, theta: f64) -> Affine {
+    Affine::translate(center.to_vec2())
+        * Affine::rotate(theta)
+        * Affine::translate(-center.to_vec2())
+}
+
+/// De-rotate a screen point into a rotated selection box's local (axis-aligned)
+/// frame: the box is `screen_b` rotated by `theta` about its center, so a point
+/// hits a handle iff `unrotate_point(p, center, theta)` hits the axis-aligned box.
+fn unrotate_point(p: Point, center: Point, theta: f64) -> Point {
+    if theta == 0.0 {
+        return p;
+    }
+    rotate_about(center, -theta) * p
+}
+
+/// The point that stays fixed while `handle` resizes `base`: the opposite corner
+/// for a corner handle, the midpoint of the opposite edge for a side handle. Used
+/// to pin the anchor in world space when resizing a rotated element.
+fn resize_anchor(base: Rect, handle: Handle) -> Point {
+    let (cx, cy) = (base.center().x, base.center().y);
+    match handle {
+        Handle::Nw => Point::new(base.x1, base.y1),
+        Handle::Ne => Point::new(base.x0, base.y1),
+        Handle::Se => Point::new(base.x0, base.y0),
+        Handle::Sw => Point::new(base.x1, base.y0),
+        Handle::N => Point::new(cx, base.y1),
+        Handle::S => Point::new(cx, base.y0),
+        Handle::E => Point::new(base.x0, cy),
+        Handle::W => Point::new(base.x1, cy),
+        Handle::Rotate => base.center(),
+    }
+}
+
+/// Resize a rotated element, keeping the anchor (opposite corner / edge) fixed in
+/// world space. `base` is the element's unrotated local AABB and `rot` its angle
+/// (about `base.center()`). The result is the new unrotated AABB; the caller then
+/// re-applies `rot` about the NEW center (Logic derive), so we translate the rect
+/// to compensate the center shift and pin the anchor. `rot == 0` degenerates to
+/// the plain axis-aligned `resize_rect`.
+///
+/// Rotation about a point is translation-equivariant, so pinning the anchor is a
+/// single closed-form shift despite the new center depending on that shift:
+/// `shift = R_rot(c0) * anchor - R_rot(c1) * anchor`, with `c0`/`c1` the old / new
+/// centers and `anchor` invariant under the resize.
+fn resize_rect_rotated(base: Rect, handle: Handle, to: Point, rot: f64) -> Rect {
+    if rot == 0.0 {
+        return resize_rect(base, handle, to);
+    }
+    let c0 = base.center();
+    // Pointer into the element's unrotated local frame (rotation about c0).
+    let to_local = rotate_about(c0, -rot) * to;
+    let new = resize_rect(base, handle, to_local);
+    let anchor = resize_anchor(base, handle);
+    let shift = (rotate_about(c0, rot) * anchor) - (rotate_about(new.center(), rot) * anchor);
+    new + shift
+}
+
 /// Extract the rotation angle (radians) baked into an element's transform. The
 /// Logic derive stores it as a rotation about the AABB center, so the linear part
 /// is a pure rotation and `atan2(b, a)` recovers the angle.
-fn element_rotation(display: &DisplayViewport, id: &ElementId) -> f64 {
+pub fn element_rotation(display: &DisplayViewport, id: &ElementId) -> f64 {
     for node in &display.nodes {
         if let ambre_bus::app::toile::DisplayNode::Element(e) = node
             && &e.id == id
@@ -1290,6 +1367,61 @@ mod tests {
         // Interior and far-outside points miss.
         assert_eq!(edge_handle_at(b, Point::new(50.0, 50.0)), None);
         assert_eq!(edge_handle_at(b, Point::new(200.0, 200.0)), None);
+    }
+
+    /// A rectangle rotated `theta` radians about its AABB center (mirrors the
+    /// Logic derive), for the rotated hit-test / resize tests.
+    fn rotated_rect_elem(id: &str, bounds: Rect, theta: f64) -> DisplayNode {
+        let DisplayNode::Element(mut e) = rect_elem(id, bounds) else {
+            unreachable!()
+        };
+        e.transform = rotate_about(bounds.center(), theta);
+        DisplayNode::Element(e)
+    }
+
+    #[test]
+    fn hover_handle_follows_the_element_rotation() {
+        use std::f64::consts::FRAC_PI_2;
+        let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let disp = viewport(vec![rotated_rect_elem("a", bounds, FRAC_PI_2)]);
+        let cam = cam();
+        let m = ToolMachine::new();
+        let sel = vec![ElementId("a".into())];
+        let center = to_screen(&cam, bounds.center());
+        let se_screen = to_screen(&cam, Point::new(100.0, 100.0)); // axis-aligned SE
+        // The SE corner is drawn a quarter turn round the box center; the cursor
+        // hits it there, not at the axis-aligned position.
+        let rotated_se = rotate_about(center, FRAC_PI_2) * se_screen;
+        assert_eq!(
+            m.hover_handle(&sel, &disp, &cam, rotated_se),
+            Some(Handle::Se)
+        );
+        assert_ne!(
+            m.hover_handle(&sel, &disp, &cam, se_screen),
+            Some(Handle::Se),
+            "the un-rotated SE position must no longer read as SE"
+        );
+    }
+
+    #[test]
+    fn resize_rotated_pins_the_opposite_corner_in_world_space() {
+        use std::f64::consts::FRAC_PI_6;
+        let base = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let theta = FRAC_PI_6;
+        // Drag the SE handle; the NW corner (the anchor) must not move in world.
+        let to = Point::new(150.0, 140.0);
+        let new = resize_rect_rotated(base, Handle::Se, to, theta);
+        let old_nw = rotate_about(base.center(), theta) * Point::new(base.x0, base.y0);
+        let new_nw = rotate_about(new.center(), theta) * Point::new(new.x0, new.y0);
+        assert!(
+            (old_nw - new_nw).hypot() < 1e-9,
+            "anchor drifted: {old_nw:?} -> {new_nw:?}"
+        );
+        // Degenerate case: no rotation matches the plain axis-aligned resize.
+        assert_eq!(
+            resize_rect_rotated(base, Handle::Se, to, 0.0),
+            resize_rect(base, Handle::Se, to)
+        );
     }
 
     #[test]

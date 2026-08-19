@@ -67,7 +67,7 @@ pub(crate) fn mount_shell(
     toile_ctx_scope: RwSignal<ambre_toile::ui::menu::CtxScope>,
     toile_menu_cmd: RwSignal<Option<ambre_chrome::commands::CommandId>>,
     toile_active_tool: RwSignal<ambre_toile::ui::Tool>,
-    toile_cursor: RwSignal<Option<&'static str>>,
+    toile_cursor: RwSignal<Option<std::borrow::Cow<'static, str>>>,
     toile_style_model: RwSignal<Option<toile_chrome::StyleModel>>,
     toile_restyle: RwSignal<Option<ambre_bus::app::toile::ElementStyle>>,
     toile_float_bar: RwSignal<Option<toile_chrome::FloatBar>>,

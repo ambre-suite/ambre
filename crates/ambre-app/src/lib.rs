@@ -216,7 +216,7 @@ struct Wiring {
     /// cursor the view publishes (directional resize on a selection edge / corner,
     /// grab on the rotate handle, `grabbing` while moving). `None` falls back to
     /// the tool's base `cursor_css`. Read by the chrome's cursor `Effect`.
-    toile_cursor: RwSignal<Option<&'static str>>,
+    toile_cursor: RwSignal<Option<std::borrow::Cow<'static, str>>>,
     /// Toile style-inspector model (`toile-ui §5quinquies.B`): the selection's
     /// common `ElementStyle` + mixed-field mask, published by the canvas view; the
     /// DOM inspector reads it to render values and mixed-state. `None` hides it.
@@ -478,7 +478,7 @@ pub fn main() {
     // Toile canvas cursor (`toile-ui §5quinquies.A`): the view publishes the
     // position-dependent cursor here (directional resize on a selection edge, grab
     // on the rotate handle); `None` falls back to the tool's base cursor.
-    let toile_cursor = RwSignal::new(None::<&'static str>);
+    let toile_cursor = RwSignal::new(None::<std::borrow::Cow<'static, str>>);
     // Toile style inspector (`toile-ui §5quinquies.B`): the view publishes the
     // selection's common style into `toile_style_model` and drains a whole-style
     // edit from `toile_restyle`, exactly like the context-menu pair above.
@@ -1356,7 +1356,7 @@ pub fn main() {
     let ch_toile_ctx_scope = RwSignal::new(ambre_toile::ui::menu::CtxScope::default());
     let ch_toile_menu_cmd = RwSignal::new(None::<CommandId>);
     let ch_toile_active_tool = RwSignal::new(ambre_toile::ui::Tool::default());
-    let ch_toile_cursor = RwSignal::new(None::<&'static str>);
+    let ch_toile_cursor = RwSignal::new(None::<std::borrow::Cow<'static, str>>);
     let ch_toile_zoom = RwSignal::new(1.0_f64);
     let ch_toile_sel_stats = RwSignal::new(None::<toile_chrome::SelStats>);
     let ch_toile_style_model = RwSignal::new(None::<toile_chrome::StyleModel>);

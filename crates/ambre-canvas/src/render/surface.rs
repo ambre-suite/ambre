@@ -182,6 +182,16 @@ impl DrawSurface for WgpuSurface<'_> {
         let coords = parley_run.normalized_coords(); // &[NormalizedCoord] -- no alloc
         let clip = self.active_clip();
 
+        // A rotated run (Toile: a rotated sticky / text) rotates each glyph bitmap,
+        // not just the baseline. The quad path is otherwise axis-aligned, so for a
+        // rotation we map the four glyph-quad corners through the transform's linear
+        // part and emit a rotated quad. Detected from a non-zero off-diagonal.
+        // Rotated board text carries no cell clip, so the axis-aligned clip-trim
+        // path is skipped for it.
+        let coeffs = transform.as_coeffs();
+        let rotated = coeffs[1].abs() > 1e-9 || coeffs[2].abs() > 1e-9;
+        let linear = Affine::new([coeffs[0], coeffs[1], coeffs[2], coeffs[3], 0.0, 0.0]);
+
         let mut pen_x = 0.0f32;
         for glyph in run.glyphs() {
             let gx = pen_x + glyph.x;
@@ -204,6 +214,26 @@ impl DrawSurface for WgpuSurface<'_> {
 
             // Transform the glyph origin from run-local to screen space.
             let origin = transform * Point::new(gx as f64, gy as f64);
+
+            // Rotated run: emit a rotated quad (corners = origin + linear * local
+            // offset) and skip the axis-aligned path below.
+            if rotated {
+                let (bl, bt) = (slot.bearing_left as f64, slot.bearing_top as f64);
+                let (w, h) = (slot.pixel_width as f64, slot.pixel_height as f64);
+                let local = [(bl, -bt), (bl + w, -bt), (bl + w, -bt + h), (bl, -bt + h)];
+                let corners = local.map(|(ox, oy)| {
+                    let v = linear * Point::new(ox, oy);
+                    [(origin.x + v.x) as f32, (origin.y + v.y) as f32]
+                });
+                if slot.is_color {
+                    self.renderer
+                        .push_color_glyph_quad(corners, slot.uv_min, slot.uv_max);
+                } else {
+                    self.renderer
+                        .push_glyph_quad(corners, slot.uv_min, slot.uv_max, color);
+                }
+                continue;
+            }
 
             // Bitmap top-left in screen space.
             // bearing_top is positive upward (font convention), so subtract.

@@ -15,6 +15,8 @@
 // palette (and the keyboard) write a shared `RwSignal<Tool>` the view applies.
 // ============================================================================
 
+use std::borrow::Cow;
+
 use ambre_bus::app::toile::{STICKY_DEFAULT_FILL, ShapeKind};
 use ambre_commands::{CommandId, Key, KeyBinding, Keymap, Modifiers};
 
@@ -164,19 +166,87 @@ pub static ROTATE_CURSOR: std::sync::LazyLock<String> = std::sync::LazyLock::new
     )
 });
 
+/// The Lucide "move-horizontal" glyph (a horizontal double-headed arrow, `<->`,
+/// centred at 12,12 in a 0 0 24 24 box): rotated to any angle it becomes the
+/// directional resize cursor for that axis. Its `"` are swapped for `'` and its
+/// whitespace collapsed so the markup survives inside the CSS `url("…")`. Built
+/// once; shared by every rotated resize cursor.
+static MOVE_PATHS: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+    icondata::LuMoveHorizontal
+        .data
+        .replace('"', "'")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+});
+
+/// The base resize-axis angle (radians, screen space y-down) of a handle on the
+/// axis-aligned box, or `None` for the rotate handle. A resize direction has
+/// 180-degree symmetry, so opposite handles share an angle.
+fn resize_axis_base(h: Handle) -> Option<f64> {
+    use std::f64::consts::{FRAC_PI_2, FRAC_PI_4};
+    match h {
+        Handle::E | Handle::W => Some(0.0),
+        Handle::Nw | Handle::Se => Some(FRAC_PI_4),
+        Handle::N | Handle::S => Some(FRAC_PI_2),
+        Handle::Ne | Handle::Sw => Some(3.0 * FRAC_PI_4),
+        Handle::Rotate => None,
+    }
+}
+
+/// Snap a resize-axis angle (radians) to the nearest of the four native CSS resize
+/// keywords -- the crisp cursor for an axis-aligned box, and the graceful fallback
+/// when a data-URI cursor is unsupported.
+fn nearest_resize_keyword(a: f64) -> &'static str {
+    use std::f64::consts::{FRAC_PI_4, PI};
+    match (a.rem_euclid(PI) / FRAC_PI_4).round() as i64 % 4 {
+        0 => "ew-resize",
+        1 => "nwse-resize",
+        2 => "ns-resize",
+        _ => "nesw-resize",
+    }
+}
+
+/// A directional resize cursor rotated `deg` degrees: the `MOVE_PATHS` double
+/// arrow wrapped in a `rotate(deg 12 12)` group, painted twice (white under-stroke
+/// then dark top-stroke) so it stays legible on any board colour, hotspot centred.
+/// `fallback` is the native keyword shown if the data URI is unsupported.
+fn rotated_resize_cursor(deg: f64, fallback: &str) -> String {
+    let paths = MOVE_PATHS.as_str();
+    let d = deg.rem_euclid(360.0).round() as i64;
+    format!(
+        "url(\"data:image/svg+xml;utf8,\
+         <svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' \
+         fill='none' stroke-linecap='round' stroke-linejoin='round'>\
+         <g transform='rotate({d} 12 12)'>\
+         <g stroke='%23FFFFFF' stroke-width='4'>{paths}</g>\
+         <g stroke='%23222222' stroke-width='2'>{paths}</g>\
+         </g></svg>\") 14 14, {fallback}"
+    )
+}
+
 /// The CSS `cursor` value for hovering / dragging a selection transform handle
 /// (`toile-ui §5quinquies.A`, "Cursor feedback"): a directional double-arrow that
 /// matches the axis a corner or side resizes along, and a rotation cursor on the
-/// rotate handle. The selection box is the axis-aligned AABB (`world_rect_to_screen`
-/// keeps it axis-aligned), so the cursors stay axis-aligned even for a rotated
-/// element — no cursor rotation in the MVP. Pure and host-tested.
-pub fn resize_cursor(h: Handle) -> &'static str {
-    match h {
-        Handle::Nw | Handle::Se => "nwse-resize",
-        Handle::Ne | Handle::Sw => "nesw-resize",
-        Handle::N | Handle::S => "ns-resize",
-        Handle::E | Handle::W => "ew-resize",
-        Handle::Rotate => ROTATE_CURSOR.as_str(),
+/// rotate handle. `theta` is the element's rotation (radians). For an axis-aligned
+/// element (`theta == 0`) it returns the crisp **native** CSS keyword; for a
+/// rotated one it returns a **custom SVG cursor rotated to the exact angle**
+/// (`resize_axis_base(h) + theta`), so the arrow tilts continuously with the box
+/// -- native resize cursors are fixed OS bitmaps and cannot be rotated. Pure and
+/// host-tested.
+pub fn resize_cursor(h: Handle, theta: f64) -> Cow<'static, str> {
+    let Some(base) = resize_axis_base(h) else {
+        return Cow::Borrowed(ROTATE_CURSOR.as_str());
+    };
+    let angle = base + theta;
+    if theta == 0.0 {
+        // Axis-aligned: the native keyword is crisper than an SVG cursor.
+        Cow::Borrowed(nearest_resize_keyword(angle))
+    } else {
+        Cow::Owned(rotated_resize_cursor(
+            angle.to_degrees(),
+            nearest_resize_keyword(angle),
+        ))
     }
 }
 
@@ -277,22 +347,55 @@ mod tests {
     }
 
     #[test]
-    fn resize_cursor_maps_every_handle_to_its_css_keyword() {
-        assert_eq!(resize_cursor(Handle::Nw), "nwse-resize");
-        assert_eq!(resize_cursor(Handle::Se), "nwse-resize");
-        assert_eq!(resize_cursor(Handle::Ne), "nesw-resize");
-        assert_eq!(resize_cursor(Handle::Sw), "nesw-resize");
-        assert_eq!(resize_cursor(Handle::N), "ns-resize");
-        assert_eq!(resize_cursor(Handle::S), "ns-resize");
-        assert_eq!(resize_cursor(Handle::E), "ew-resize");
-        assert_eq!(resize_cursor(Handle::W), "ew-resize");
-        assert_eq!(resize_cursor(Handle::Rotate), ROTATE_CURSOR.as_str());
+    fn resize_cursor_uses_native_keywords_when_axis_aligned() {
+        // Axis-aligned element (theta = 0): each handle keeps its native keyword.
+        assert_eq!(resize_cursor(Handle::Nw, 0.0).as_ref(), "nwse-resize");
+        assert_eq!(resize_cursor(Handle::Se, 0.0).as_ref(), "nwse-resize");
+        assert_eq!(resize_cursor(Handle::Ne, 0.0).as_ref(), "nesw-resize");
+        assert_eq!(resize_cursor(Handle::Sw, 0.0).as_ref(), "nesw-resize");
+        assert_eq!(resize_cursor(Handle::N, 0.0).as_ref(), "ns-resize");
+        assert_eq!(resize_cursor(Handle::S, 0.0).as_ref(), "ns-resize");
+        assert_eq!(resize_cursor(Handle::E, 0.0).as_ref(), "ew-resize");
+        assert_eq!(resize_cursor(Handle::W, 0.0).as_ref(), "ew-resize");
+        assert_eq!(
+            resize_cursor(Handle::Rotate, 0.0).as_ref(),
+            ROTATE_CURSOR.as_str()
+        );
         assert!(ROTATE_CURSOR.starts_with("url(\""));
         assert!(ROTATE_CURSOR.ends_with("grab"));
         // The Lucide glyph made it in, and its `"` were swapped for `'` so the only
         // double quotes left are the two wrapping the `url(...)` value.
         assert!(ROTATE_CURSOR.contains("<path"));
         assert_eq!(ROTATE_CURSOR.matches('"').count(), 2);
+    }
+
+    #[test]
+    fn resize_cursor_rotates_continuously_when_the_element_is_rotated() {
+        use std::f64::consts::{FRAC_PI_2, FRAC_PI_6};
+        // A rotated element yields a custom SVG cursor tilted to the exact angle,
+        // not a native keyword: the E handle at a quarter turn points along 90 deg.
+        let c = resize_cursor(Handle::E, FRAC_PI_2);
+        assert!(
+            c.starts_with("url(\""),
+            "rotated resize cursor is a data URI"
+        );
+        assert!(
+            c.contains("rotate(90 12 12)"),
+            "tilted to the exact angle: {c}"
+        );
+        // It carries the move-arrow glyph and falls back to the nearest keyword.
+        assert!(c.contains("<path"));
+        assert!(c.ends_with("ns-resize"), "graceful native fallback: {c}");
+        // Only the two `url("...")` quotes survive (paths were re-quoted to `'`).
+        assert_eq!(c.matches('"').count(), 2);
+        // An arbitrary (non-45) angle is honoured exactly: 30 deg for the E axis.
+        let c = resize_cursor(Handle::E, FRAC_PI_6);
+        assert!(c.contains("rotate(30 12 12)"), "{c}");
+        // The rotate handle stays the rotation cursor regardless of angle.
+        assert_eq!(
+            resize_cursor(Handle::Rotate, FRAC_PI_6).as_ref(),
+            ROTATE_CURSOR.as_str()
+        );
     }
 
     #[test]
