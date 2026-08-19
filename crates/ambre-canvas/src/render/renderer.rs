@@ -736,6 +736,73 @@ impl QuadRenderer {
         ]);
     }
 
+    /// Append a coverage-mask glyph quad from four explicit corner positions
+    /// (screen space, CCW from the top-left in glyph-local orientation), for a
+    /// **rotated** glyph run: the caller has already mapped the quad corners
+    /// through the run transform, so the glyph bitmap rotates with the text rather
+    /// than staying upright (`toile-ui §5quinquies.A`). `corners` are `[tl, tr, br,
+    /// bl]`, matching the `uv_min`/`uv_max` mapping of [`push_glyph`].
+    pub fn push_glyph_quad(
+        &mut self,
+        corners: [[f32; 2]; 4],
+        uv_min: [f32; 2],
+        uv_max: [f32; 2],
+        color: Color,
+    ) {
+        let c = color_f32(color);
+        let uv = [
+            [uv_min[0], uv_min[1]],
+            [uv_max[0], uv_min[1]],
+            [uv_max[0], uv_max[1]],
+            [uv_min[0], uv_max[1]],
+        ];
+        let b = self.active_batches_mut();
+        let base = b.glyph_vertices.len() as u32;
+        for i in 0..4 {
+            b.glyph_vertices.push(GlyphVertex {
+                pos: corners[i],
+                uv: uv[i],
+                color: c,
+            });
+        }
+        b.glyph_indices
+            .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+
+    /// Rotated-quad counterpart of [`push_color_glyph`] (color emoji): same corner
+    /// convention as [`push_glyph_quad`]; the color pipeline ignores the tint.
+    pub fn push_color_glyph_quad(
+        &mut self,
+        corners: [[f32; 2]; 4],
+        uv_min: [f32; 2],
+        uv_max: [f32; 2],
+    ) {
+        let c = [0.0, 0.0, 0.0, 1.0];
+        let uv = [
+            [uv_min[0], uv_min[1]],
+            [uv_max[0], uv_min[1]],
+            [uv_max[0], uv_max[1]],
+            [uv_min[0], uv_max[1]],
+        ];
+        let b = self.active_batches_mut();
+        let base = b.color_glyph_vertices.len() as u32;
+        for i in 0..4 {
+            b.color_glyph_vertices.push(GlyphVertex {
+                pos: corners[i],
+                uv: uv[i],
+                color: c,
+            });
+        }
+        b.color_glyph_indices.extend_from_slice(&[
+            base,
+            base + 1,
+            base + 2,
+            base,
+            base + 2,
+            base + 3,
+        ]);
+    }
+
     // -- Frame flush ----------------------------------------------------------
 
     /// Encode the three-pass dirty-rect rendering for this frame.

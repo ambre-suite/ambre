@@ -219,7 +219,7 @@ pub struct ToileView {
     /// view writes it (`publish_cursor`); the chrome's cursor `Effect` prefers it
     /// over `cursor_css` when `Some`. Leptos signal, so wasm-only.
     #[cfg(target_arch = "wasm32")]
-    cursor: RwSignal<Option<&'static str>>,
+    cursor: RwSignal<Option<std::borrow::Cow<'static, str>>>,
     /// Live zoom factor published to the DOM zoom control / status bar each frame
     /// (§5quinquies.E / §8bis): `1.0` = 100%. The view owns the camera, so it is
     /// the source; the chip mirrors it. Written only on change. Wasm-only.
@@ -358,7 +358,7 @@ impl ToileView {
         #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<super::menu::CtxScope>,
         #[cfg(target_arch = "wasm32")] menu_cmd: RwSignal<Option<CommandId>>,
         #[cfg(target_arch = "wasm32")] active_tool: RwSignal<Tool>,
-        #[cfg(target_arch = "wasm32")] cursor: RwSignal<Option<&'static str>>,
+        #[cfg(target_arch = "wasm32")] cursor: RwSignal<Option<std::borrow::Cow<'static, str>>>,
         #[cfg(target_arch = "wasm32")] zoom: RwSignal<f64>,
         #[cfg(target_arch = "wasm32")] sel_stats: RwSignal<Option<super::status::SelStats>>,
         #[cfg(target_arch = "wasm32")] style_model: RwSignal<Option<super::style::StyleModel>>,
@@ -1358,16 +1358,23 @@ impl ToileView {
     /// camera. Only `publish_cursor` (wasm) consumes it; kept compiled on the host
     /// so the mapping type-checks there too.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-    fn cursor_at(&self, screen: Point) -> Option<&'static str> {
+    fn cursor_at(&self, screen: Point) -> Option<std::borrow::Cow<'static, str>> {
+        // A single selected element rotates its handles, so the directional resize
+        // cursor rotates with them (toile-ui §5quinquies.A).
+        let theta = self
+            .selection
+            .first()
+            .map(|id| super::tool::element_rotation(&self.display, id))
+            .unwrap_or(0.0);
         if let Some(g) = self.machine.gesture_cursor() {
             return Some(match g {
-                GestureCursor::Handle(h) => super::palette::resize_cursor(h),
-                GestureCursor::Move => "grabbing",
+                GestureCursor::Handle(h) => super::palette::resize_cursor(h, theta),
+                GestureCursor::Move => std::borrow::Cow::Borrowed("grabbing"),
             });
         }
         self.machine
             .hover_handle(&self.selection, &self.display, &self.cam, screen)
-            .map(super::palette::resize_cursor)
+            .map(|h| super::palette::resize_cursor(h, theta))
     }
 
     /// Keyboard shortcuts (`toile-ui §5`). Modifiers ride the event: `ctrl || meta`

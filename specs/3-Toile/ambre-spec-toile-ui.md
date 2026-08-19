@@ -433,9 +433,17 @@ a corner shows the diagonal (`nwse-resize` / `nesw-resize`), and the rotate hand
 (an inlined SVG: a nearly-closed circle with an arrow head) — the
 whole edge is grabbable even though only the corners draw a square (§7); a resize / rotate / move in flight
 holds the matching cursor (`grabbing` for a move) for the whole gesture. The view publishes this
-position-dependent cursor into a shared `Option<&'static str>` signal (`resize_cursor`, host-tested); the
-chrome's cursor effect prefers it and falls back to `cursor_css` when it is `None`. The box is the axis-aligned
-AABB, so the cursors are axis-aligned even for a rotated element (no cursor rotation, MVP).
+position-dependent cursor into a shared `Option<Cow<'static, str>>` signal (`resize_cursor`, host-tested); the
+chrome's cursor effect prefers it and falls back to `cursor_css` when it is `None`. For a **single** selected
+element the box, its handles and the resize cursors all **rotate with the element** (the camera carries no
+rotation, so the element's world angle is also its screen angle): the box is drawn as four rotated edges
+(`stroke_line`, since `stroke_rect` degrades a rotated rect to its upright AABB on the WgpuSurface), its handles
+sit at the rotated corners, and hit-testing de-rotates the pointer into the element's frame. The directional
+resize cursor also tilts to the exact angle: an axis-aligned element uses the crisp native CSS keyword
+(`ns-resize` / `nwse-resize` / ...), while a rotated one uses a **custom SVG cursor** -- the Lucide
+"move-horizontal" double arrow rotated to `resize_axis_base(handle) + rotation` -- because native resize cursors
+are fixed OS bitmaps that cannot rotate; the nearest CSS keyword rides along as the data-URI fallback. A
+**multi-selection** keeps an axis-aligned union box.
 
 ### B. Style / property inspector
 A DOM side panel, shown only when the selection is non-empty, that edits the selected elements'
