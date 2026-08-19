@@ -21,14 +21,12 @@
 //   - Overlay-only diff: draw_overlay
 // ============================================================================
 
-use ambre_draw::{
-    Alignment, Brush, Clock, Color, DrawSurface, FontContext, Layout, ParleyBrush, Rect,
-};
+use ambre_draw::{Clock, Color, DrawSurface, FontContext, Rect};
 
 use ambre_canvas::{Palette, TextCache};
 
 use super::TrameUiState;
-use super::grid::{self, COL_WIDTH, CellEditor, HitKind, ROW_HEIGHT};
+use super::grid::{self, COL_WIDTH, CellEditor, ROW_HEIGHT};
 use crate::render::{self, BODY_SIZE, CELL_PAD_X, GridLayout};
 use crate::{TOTAL_COLS, TOTAL_ROWS};
 

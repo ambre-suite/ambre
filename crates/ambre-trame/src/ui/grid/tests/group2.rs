@@ -145,52 +145,9 @@ fn filtered_rows_collapse_geometry_and_nav() {
     assert_eq!(state.active_row(), 1);
 }
 
-/// Shift+arrows grow the selection from a seeded mark; a bare arrow collapses
-/// it to the matching edge; typing and Delete replace the selected range.
-#[test]
-fn cell_editor_text_selection() {
-    let mut ed = CellEditor::new(0, 0, "hello world".to_owned());
-    assert_eq!(ed.caret, 11);
-    assert_eq!(ed.selection(), None);
-
-    // Shift+Left twice selects the last two chars ("ld").
-    ed.extend_left();
-    ed.extend_left();
-    assert_eq!(ed.selection(), Some((9, 11)));
-    assert_eq!(ed.selected_text(), "ld");
-
-    // A bare Left collapses to the selection's left edge (no extra move).
-    ed.move_left();
-    assert_eq!(ed.caret, 9);
-    assert_eq!(ed.selection(), None);
-
-    // Home..Shift? Extend to start, then replace the run by typing.
-    ed.extend_home();
-    assert_eq!(ed.selected_text(), "hello wor");
-    ed.insert("HI ");
-    assert_eq!(ed.buffer, "HI ld");
-    assert_eq!(ed.caret, 3);
-
-    // Delete with a selection removes it; without one, the next char.
-    ed.select_all();
-    assert!(ed.delete_forward());
-    assert_eq!(ed.buffer, "");
-    assert!(!ed.delete_forward());
-}
-
-/// Double-click word selection spans the alphanumeric run under the hit and
-/// Ctrl+A grabs the whole buffer.
-#[test]
-fn cell_editor_word_and_select_all() {
-    let mut ed = CellEditor::new(0, 0, "foo bar baz".to_owned());
-    ed.select_word(5); // inside "bar"
-    assert_eq!(ed.selected_text(), "bar");
-
-    ed.select_all();
-    assert_eq!(ed.selection(), Some((0, 11)));
-    ed.backspace();
-    assert_eq!(ed.buffer, "");
-}
+// The CellEditor caret / selection / word / IME internals are now the shared
+// `ambre_canvas::TextEditor` core: those semantics are covered by the core's own
+// tests and by `editor_parity` (shim -> intent delegation).
 
 /// Absolute moves clamp to the grid and report the new active cell; a move
 /// to the current cell is a no-op. End/Ctrl+End scan the local cache for the
@@ -362,28 +319,6 @@ fn dirty_and_error_lifecycle() {
     );
 }
 
-/// Insertion advances the caret; backspace and caret motion respect UTF-8
-/// boundaries (no byte-splitting a multi-byte char).
-#[test]
-fn editor_insert_backspace_caret_motion() {
-    let mut e = CellEditor::new(0, 0, String::new());
-    e.insert("ab");
-    assert_eq!(e.buffer, "ab");
-    assert_eq!(e.caret, 2);
-
-    e.move_left();
-    e.insert("X"); // between a and b
-    assert_eq!(e.buffer, "aXb");
-    assert_eq!(e.caret, 2);
-
-    // Multi-byte: 'e' acute is 2 bytes; backspace removes the whole char.
-    let mut e = CellEditor::new(0, 0, "caf\u{e9}".to_owned());
-    assert_eq!(e.caret, 5);
-    e.backspace();
-    assert_eq!(e.buffer, "caf");
-    assert_eq!(e.caret, 3);
-}
-
 /// The column-header strip starts at the top of the canvas and the cell area
 /// is pushed below it. A point inside the header strip is not a cell.
 #[test]
@@ -414,15 +349,4 @@ fn header_strip_starts_at_top_of_canvas() {
 fn grid_bottom_floors_at_header_on_tiny_canvas() {
     let state = TrameUiState::new(800.0, 10.0);
     assert_eq!(state.grid_bottom(), super::super::HEADER_HEIGHT);
-}
-
-/// The display string folds the IME preview in at the caret; `before_caret`
-/// covers prefix + preview (where the caret and IME popup sit).
-#[test]
-fn editor_preview_display() {
-    let mut e = CellEditor::new(0, 0, "ac".to_owned());
-    e.caret = 1; // between a and c
-    e.preview = "b".to_owned();
-    assert_eq!(e.display(), "abc");
-    assert_eq!(e.before_caret(), "ab");
 }

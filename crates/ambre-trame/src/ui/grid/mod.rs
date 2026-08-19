@@ -12,6 +12,10 @@
 
 use std::collections::{HashMap, HashSet};
 
+use ambre_canvas::{EditIntent, TextEditor, TextEditorStyle};
+use ambre_draw::Color;
+
+use crate::render::BODY_SIZE;
 use crate::{TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 
 // Cell layout.
@@ -98,294 +102,149 @@ impl CellData {
     }
 }
 
-/// A deferred pointer hit inside the in-cell editor. Resolving a click x to a
-/// byte offset needs text measurement (font metrics), which only the renderer
-/// has, so the view records the raw physical pointer x plus the intent here and
-/// the renderer resolves it into `caret` / `mark` on the next paint.
-#[derive(Clone, Copy)]
-pub struct PendingHit {
-    /// Physical pointer x (same space as `cell_pixel_rect`).
-    pub x: f64,
-    pub kind: HitKind,
-}
-
-/// What a resolved pointer hit does to the editor selection.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum HitKind {
-    /// Place the caret and collapse the selection (single click / drag start).
-    Place,
-    /// Extend the selection to the hit (drag move / shift-click).
-    Extend,
-    /// Select the word under the hit (double click).
-    Word,
-}
-
-/// In-progress edit of a single cell, driven by the transparent textarea pipe.
+/// In-progress edit of a single cell. A thin Trame wrapper over the shared
+/// `ambre_canvas::TextEditor` core (parley `PlainEditor` + font-free `EditIntent`
+/// queue), the same core Toile's element editor drives. All editing actions are
+/// recorded as font-free intents and applied at paint time (`draw_edit`), where a
+/// `FontContext` is live -- so a commit reads the buffer only after that flush.
 ///
-/// The `buffer` is the committed plaintext; `caret` is a byte offset into it
-/// (always on a char boundary). `preview` is the live IME composition string,
-/// conceptually inserted at the caret but kept separate so it can be styled and
-/// discarded/replaced atomically on each composition pass.
-///
-/// `mark` is the fixed end of a text selection (the moving end is `caret`);
-/// `None` means no selection (a bare caret). The selected range is
-/// `min(mark, caret)..max(mark, caret)`.
-#[derive(Clone, Default)]
+/// The method names of the old hand-rolled editor are kept as shims that queue
+/// the matching intent, so the input handlers read the same. Pointer hits push
+/// point intents the core resolves against its own layout (no more renderer-side
+/// byte-offset resolution).
 pub struct CellEditor {
     pub row: u32,
     pub col: u32,
-    pub buffer: String,
-    pub caret: usize,
-    pub preview: String,
-    pub mark: Option<usize>,
-    /// Pending pointer hit awaiting resolution by the renderer (then cleared).
-    pub pending: Option<PendingHit>,
+    /// The shared editor core (drawn by `renderer::draw_edit`).
+    pub(crate) core: TextEditor,
 }
 
 impl CellEditor {
-    /// Open an editor on `(row, col)` seeded with `text`, caret at the end.
+    /// Open an editor on `(row, col)` seeded with `text`, caret at the end. The
+    /// pinned style is a placeholder; `draw_edit` re-pins it from the cell's
+    /// formatting each paint before flushing.
     pub fn new(row: u32, col: u32, text: String) -> Self {
-        let caret = text.len();
+        let style = TextEditorStyle {
+            weight: 400,
+            italic: false,
+            family: "Sans".to_owned(),
+            base_size: BODY_SIZE,
+            color: Color::from_rgba8(0, 0, 0, 255),
+        };
         Self {
             row,
             col,
-            buffer: text,
-            caret,
-            preview: String::new(),
-            mark: None,
-            pending: None,
+            core: TextEditor::new(&text, style),
         }
     }
 
-    /// The selected byte range `start..end` (start <= end), or `None` when the
-    /// selection is empty (no mark, or mark collapsed onto the caret).
-    pub fn selection(&self) -> Option<(usize, usize)> {
-        match self.mark {
-            Some(m) if m != self.caret => Some((m.min(self.caret), m.max(self.caret))),
-            _ => None,
-        }
+    /// The current buffer text (IME preedit excluded). Font-free.
+    pub fn text(&self) -> String {
+        self.core.text()
+    }
+
+    /// Replace the whole buffer (the formula bar owns the text while focused).
+    pub fn set_text(&mut self, text: &str) {
+        self.core.set_text(text);
     }
 
     /// The currently selected substring, or empty when nothing is selected.
-    pub fn selected_text(&self) -> &str {
-        match self.selection() {
-            Some((s, e)) => &self.buffer[s..e],
-            None => "",
-        }
+    /// Font-free (safe inside a clipboard `copy` / `cut` event).
+    pub fn selected_text(&self) -> String {
+        self.core.selected_text().unwrap_or_default()
     }
 
-    /// Drop the active selection (keeps the caret where it is).
-    pub fn clear_selection(&mut self) {
-        self.mark = None;
+    /// Queue a raw editing intent (pointer hits, and the shims below).
+    pub fn push(&mut self, intent: EditIntent) {
+        self.core.push(intent);
     }
 
-    /// Delete the selected range, collapsing the caret to its start. Returns
-    /// `true` when something was removed.
-    pub fn delete_selection(&mut self) -> bool {
-        let Some((s, e)) = self.selection() else {
-            return false;
-        };
-        self.buffer.drain(s..e);
-        self.caret = s;
-        self.mark = None;
-        true
-    }
+    // -- Shims: queue the matching intent, applied at the next paint flush. -----
 
-    /// Insert committed text at the caret (latin typing, paste, IME commit),
-    /// replacing the selection first if there is one.
     pub fn insert(&mut self, s: &str) {
-        self.delete_selection();
-        self.buffer.insert_str(self.caret, s);
-        self.caret += s.len();
+        self.push(EditIntent::Insert(s.to_owned()));
     }
-
-    /// Delete the char before the caret, or the selection when there is one.
-    /// No-op at the start with no selection.
     pub fn backspace(&mut self) {
-        if self.delete_selection() {
-            return;
-        }
-        if self.caret == 0 {
-            return;
-        }
-        let prev = self.buffer[..self.caret]
-            .chars()
-            .next_back()
-            .map(char::len_utf8)
-            .unwrap_or(0);
-        self.buffer.drain(self.caret - prev..self.caret);
-        self.caret -= prev;
+        self.push(EditIntent::Backspace);
     }
-
-    /// Delete the selection, or the char after the caret when none (Del key).
-    /// Returns `true` when something was removed.
-    pub fn delete_forward(&mut self) -> bool {
-        if self.delete_selection() {
-            return true;
-        }
-        if let Some(c) = self.buffer[self.caret..].chars().next() {
-            self.buffer.drain(self.caret..self.caret + c.len_utf8());
-            return true;
-        }
-        false
+    pub fn delete_forward(&mut self) {
+        self.push(EditIntent::Delete);
     }
-
-    /// Byte offset one char left of the caret (or the caret at the start).
-    fn prev_offset(&self) -> usize {
-        self.buffer[..self.caret]
-            .chars()
-            .next_back()
-            .map(|c| self.caret - c.len_utf8())
-            .unwrap_or(self.caret)
+    pub fn delete_selection(&mut self) {
+        self.push(EditIntent::DeleteSelection);
     }
-
-    /// Byte offset one char right of the caret (or the caret at the end).
-    fn next_offset(&self) -> usize {
-        self.buffer[self.caret..]
-            .chars()
-            .next()
-            .map(|c| self.caret + c.len_utf8())
-            .unwrap_or(self.caret)
-    }
-
-    /// Move the caret one char left. Collapses an existing selection to its
-    /// left edge instead of moving past it (standard text-field behaviour).
     pub fn move_left(&mut self) {
-        if let Some((s, _)) = self.selection() {
-            self.caret = s;
-        } else {
-            self.caret = self.prev_offset();
-        }
-        self.mark = None;
+        self.push(EditIntent::Left {
+            select: false,
+            word: false,
+        });
     }
-
-    /// Move the caret one char right, collapsing a selection to its right edge.
     pub fn move_right(&mut self) {
-        if let Some((_, e)) = self.selection() {
-            self.caret = e;
-        } else {
-            self.caret = self.next_offset();
-        }
-        self.mark = None;
+        self.push(EditIntent::Right {
+            select: false,
+            word: false,
+        });
     }
-
-    /// Extend the selection one char left (Shift+Left).
     pub fn extend_left(&mut self) {
-        self.mark.get_or_insert(self.caret);
-        self.caret = self.prev_offset();
+        self.push(EditIntent::Left {
+            select: true,
+            word: false,
+        });
     }
-
-    /// Extend the selection one char right (Shift+Right).
     pub fn extend_right(&mut self) {
-        self.mark.get_or_insert(self.caret);
-        self.caret = self.next_offset();
+        self.push(EditIntent::Right {
+            select: true,
+            word: false,
+        });
     }
-
-    /// Move the caret to the start of the buffer (Home), dropping the selection.
     pub fn move_home(&mut self) {
-        self.caret = 0;
-        self.mark = None;
+        self.push(EditIntent::LineStart { select: false });
     }
-
-    /// Move the caret to the end of the buffer (End), dropping the selection.
     pub fn move_end(&mut self) {
-        self.caret = self.buffer.len();
-        self.mark = None;
+        self.push(EditIntent::LineEnd { select: false });
     }
-
-    /// Extend the selection to the start of the buffer (Shift+Home).
     pub fn extend_home(&mut self) {
-        self.mark.get_or_insert(self.caret);
-        self.caret = 0;
+        self.push(EditIntent::LineStart { select: true });
     }
-
-    /// Extend the selection to the end of the buffer (Shift+End).
     pub fn extend_end(&mut self) {
-        self.mark.get_or_insert(self.caret);
-        self.caret = self.buffer.len();
+        self.push(EditIntent::LineEnd { select: true });
     }
-
-    /// Select the whole buffer (Ctrl+A).
+    pub fn move_up(&mut self) {
+        self.push(EditIntent::Up { select: false });
+    }
+    pub fn move_down(&mut self) {
+        self.push(EditIntent::Down { select: false });
+    }
+    pub fn extend_up(&mut self) {
+        self.push(EditIntent::Up { select: true });
+    }
+    pub fn extend_down(&mut self) {
+        self.push(EditIntent::Down { select: true });
+    }
     pub fn select_all(&mut self) {
-        self.mark = Some(0);
-        self.caret = self.buffer.len();
+        self.push(EditIntent::SelectAll);
     }
 
-    /// Place the caret at byte offset `off` (clamped to a char boundary) and
-    /// collapse the selection. Used to resolve a single-click hit.
-    pub fn place_caret(&mut self, off: usize) {
-        self.caret = self.clamp_boundary(off);
-        self.mark = None;
+    /// Set the live IME composition preview (CompositionUpdate).
+    pub fn set_compose(&mut self, text: &str) {
+        self.push(EditIntent::Compose(text.to_owned()));
+    }
+    /// Finalize the IME composition into committed text (CompositionEnd).
+    pub fn commit_compose(&mut self, text: &str) {
+        self.push(EditIntent::ComposeEnd(text.to_owned()));
     }
 
-    /// Extend the selection to byte offset `off` (drag / shift-click hit),
-    /// seeding the mark at the current caret if there is no selection yet.
-    pub fn extend_to(&mut self, off: usize) {
-        self.mark.get_or_insert(self.caret);
-        self.caret = self.clamp_boundary(off);
+    /// Place the caret at a local-space (text-relative) point (click / drag start).
+    pub fn point_down(&mut self, x: f32, y: f32) {
+        self.push(EditIntent::PointerDown { x, y });
     }
-
-    /// Select the word surrounding byte offset `off` (double-click hit). Words
-    /// are maximal runs of alphanumeric chars; a hit on a non-word char selects
-    /// that single char.
-    pub fn select_word(&mut self, off: usize) {
-        let off = self.clamp_boundary(off);
-        let is_word = |c: char| c.is_alphanumeric() || c == '_';
-        // Anchor on the char to the right of the hit, falling back to the left.
-        let here = self.buffer[off..]
-            .chars()
-            .next()
-            .or_else(|| self.buffer[..off].chars().next_back());
-        let Some(here) = here else {
-            self.place_caret(off);
-            return;
-        };
-        let word = is_word(here);
-        let start = self.buffer[..off]
-            .char_indices()
-            .rev()
-            .take_while(|(_, c)| is_word(*c) == word)
-            .last()
-            .map(|(i, _)| i)
-            .unwrap_or(off);
-        let end = self.buffer[off..]
-            .char_indices()
-            .take_while(|(_, c)| is_word(*c) == word)
-            .last()
-            .map(|(i, c)| off + i + c.len_utf8())
-            .unwrap_or(off);
-        self.mark = Some(start);
-        self.caret = end;
+    /// Extend the selection to a local-space point (drag / shift-click).
+    pub fn point_drag(&mut self, x: f32, y: f32) {
+        self.push(EditIntent::PointerDrag { x, y });
     }
-
-    /// Snap a byte offset down to the nearest char boundary within the buffer.
-    fn clamp_boundary(&self, off: usize) -> usize {
-        let off = off.min(self.buffer.len());
-        if self.buffer.is_char_boundary(off) {
-            off
-        } else {
-            self.buffer[..off]
-                .char_indices()
-                .next_back()
-                .map(|(i, _)| i)
-                .unwrap_or(0)
-        }
-    }
-
-    /// The text shown before the caret (used to position caret + IME popup):
-    /// committed prefix followed by the live composition preview.
-    pub fn before_caret(&self) -> String {
-        let mut s = self.buffer[..self.caret].to_owned();
-        s.push_str(&self.preview);
-        s
-    }
-
-    /// The full visual string: prefix + preview + suffix.
-    pub fn display(&self) -> String {
-        let mut s = self.buffer[..self.caret].to_owned();
-        s.push_str(&self.preview);
-        s.push_str(&self.buffer[self.caret..]);
-        s
+    /// Select the word at a local-space point (double click).
+    pub fn word_at(&mut self, x: f32, y: f32) {
+        self.push(EditIntent::WordAt { x, y });
     }
 }
 

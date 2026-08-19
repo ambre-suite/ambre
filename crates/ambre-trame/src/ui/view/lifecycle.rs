@@ -69,6 +69,7 @@ impl TrameView {
             #[cfg(target_arch = "wasm32")]
             zoom_sig,
             editor: None,
+            pending_commit: None,
             editor_text_drag: false,
             selecting_drag: false,
             axis_drag: None,
@@ -297,16 +298,17 @@ impl TrameView {
         let Some(editor) = self.editor.take() else {
             return;
         };
+        let text = editor.text();
         tracing::info!(
             "[UI] commit_edit → sending SetCellText row={} col={} text='{:.80}'",
             editor.row,
             editor.col,
-            editor.buffer,
+            text,
         );
         if let Err(SendError::Full) = self.send_command_lossless(TrameCommand::SetCellText {
             row: editor.row,
             col: editor.col,
-            text: editor.buffer.clone(),
+            text: text.clone(),
         }) {
             tracing::error!("[UI] channel full, edit dropped — retry next frame");
         }
@@ -314,8 +316,7 @@ impl TrameView {
         // (§6.C). Lossless: it must not be dropped, or the group would stay open
         // until the next command and could absorb a later edit.
         let _ = self.send_command_lossless(TrameCommand::CommitEdit);
-        self.state
-            .set_cell_text(editor.row, editor.col, editor.buffer);
+        self.state.set_cell_text(editor.row, editor.col, text);
         // Content layer must repaint to show the committed text; overlay too, to
         // drop the edit field.
         self.needs_full = true;
@@ -338,7 +339,7 @@ impl TrameView {
         let Some(editor) = self.editor.take() else {
             return;
         };
-        let text = editor.buffer;
+        let text = editor.text();
         let cells = self.state.selection.selected_cells();
         tracing::info!(
             "[UI] commit_edit_filled -> {} cells, text='{:.80}'",

@@ -152,6 +152,19 @@ impl TextEditor {
         self.intents.push(intent);
     }
 
+    /// Replace the whole buffer synchronously (no font context needed), caret
+    /// re-seeded to the end at the next flush. For a host that owns the text
+    /// elsewhere and pushes it in wholesale (Trame's formula bar, which holds DOM
+    /// focus + caret while the in-cell editor is only the render / commit vehicle).
+    /// `initial` is left untouched, so [`committed_text`](Self::committed_text)
+    /// still compares against the open-time value.
+    pub fn set_text(&mut self, text: &str) {
+        if self.text() != text {
+            self.editor.set_text(text);
+            self.seeded = false;
+        }
+    }
+
     /// The current buffer text (IME preedit excluded). Font-free.
     pub fn text(&self) -> String {
         self.editor.text().chars().collect()

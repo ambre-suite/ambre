@@ -27,8 +27,8 @@ use leptos::prelude::RwSignal;
 use leptos::prelude::{Get, GetUntracked, Set};
 
 use super::grid::{
-    COL_WIDTH, CellEditor, CellRect, CursorMove, HeaderHit, HitKind, PendingHit, ROW_HEIGHT,
-    SelKind, Selection, TrameUiState,
+    COL_WIDTH, CellEditor, CellRect, CursorMove, HeaderHit, ROW_HEIGHT, SelKind, Selection,
+    TrameUiState,
 };
 use super::renderer::{self, DrawStats};
 use crate::TOTAL_COLS;
@@ -196,6 +196,19 @@ fn trigger_download(filename: &str, data: &[u8]) {
 fn trigger_download(_filename: &str, _data: &[u8]) {}
 
 /// Trame's view: a virtual-scroll spreadsheet grid (an `AppView::Trame`).
+/// A deferred cell-edit commit (applied at the next paint, after the editor
+/// flushes its queued intents). Set by grid keys / clicks that finish an edit.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PendingCommit {
+    /// Commit and move the cursor by `(drow, dcol)` (Enter, Tab, Up/Down).
+    Nav(i32, i32),
+    /// Commit in place, cursor unchanged (a click / right-click elsewhere; the
+    /// click's own selection has already moved the active cell).
+    Stay,
+    /// Commit the value into every selected cell (Ctrl/Cmd+Enter).
+    Fill,
+}
+
 pub struct TrameView {
     /// The document this view renders (from the active route).
     document_id: DocumentId,
@@ -264,6 +277,11 @@ pub struct TrameView {
     zoom_sig: RwSignal<f64>,
     /// Active in-cell edit session, or `None` in navigation mode.
     editor: Option<CellEditor>,
+    /// A commit requested from a grid key / click, deferred to the next paint.
+    /// The shared editor applies edits only at paint-time flush (a `FontContext`
+    /// is live only then), so the buffer is not final when the key is handled;
+    /// the commit runs after `draw_edit` flushes. `None` when no commit is pending.
+    pending_commit: Option<PendingCommit>,
     /// True while the pointer is dragging out a text selection inside the open
     /// editor (between a press in the cell and its release).
     editor_text_drag: bool,
