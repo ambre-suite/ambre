@@ -21,6 +21,10 @@
 pub mod render;
 pub mod text_cache;
 
+// -- Shared inline text-editor core (parley PlainEditor + font-free intent
+//    queue), wrapped by Toile's element editor and Trame's cell editor --------
+pub mod editor;
+
 // -- Per-frame view value types (GPU-agnostic) -------------------------------
 pub mod view;
 
@@ -55,6 +59,7 @@ pub mod request_registry;
 
 // -- Convenience re-exports --------------------------------------------------
 pub use anchor::{Anchor, AnchorPublisher};
+pub use editor::{CARET_WIDTH, EditIntent, TextEditor, TextEditorStyle};
 pub use fatal::{fatal_message, signal_fatal};
 #[cfg(target_arch = "wasm32")]
 pub use host::{GpuState, RafControl, bootstrap_gpu, start_raf_loop};
