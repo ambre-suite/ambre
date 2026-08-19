@@ -366,3 +366,75 @@ fn rect_path(r: Rect) -> BezPath {
     p.close_path();
     p
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn style() -> TextEditorStyle {
+        TextEditorStyle {
+            weight: 400,
+            italic: false,
+            family: "Sans".to_owned(),
+            base_size: 16.0,
+            color: Color::from_rgba8(0, 0, 0, 255),
+        }
+    }
+
+    /// Drive the core in a native host test (system fonts, no browser). Char
+    /// motion + edits are deterministic here, which is what the Trame parity
+    /// corpus relies on (`ambre-trame/src/ui/grid` tests).
+    fn left() -> EditIntent {
+        EditIntent::Left {
+            select: false,
+            word: false,
+        }
+    }
+
+    #[test]
+    fn char_motion_then_insert_lands_at_caret() {
+        let mut fcx = FontContext::default();
+        let mut ed = TextEditor::new("hello world", style());
+        ed.flush(&mut fcx, 1000.0, 1.0); // seeds caret at end
+        ed.push(left());
+        ed.push(left());
+        ed.push(EditIntent::Insert("X".to_owned()));
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.text(), "hello worXld");
+    }
+
+    #[test]
+    fn backspace_and_delete_selection() {
+        let mut fcx = FontContext::default();
+        let mut ed = TextEditor::new("abc", style());
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        ed.push(EditIntent::Backspace);
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.text(), "ab");
+        ed.push(EditIntent::SelectAll);
+        ed.push(EditIntent::DeleteSelection);
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.text(), "");
+    }
+
+    #[test]
+    fn select_all_reports_whole_buffer() {
+        let mut fcx = FontContext::default();
+        let mut ed = TextEditor::new("hello world", style());
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        ed.push(EditIntent::SelectAll);
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.selected_text().as_deref(), Some("hello world"));
+    }
+
+    #[test]
+    fn newline_makes_multi_line_text() {
+        let mut fcx = FontContext::default();
+        let mut ed = TextEditor::new("a", style());
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        ed.push(EditIntent::Newline);
+        ed.push(EditIntent::Insert("b".to_owned()));
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.text(), "a\nb");
+    }
+}

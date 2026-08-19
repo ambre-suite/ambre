@@ -1,4 +1,5 @@
 // Shared helpers here; tests split into groups reached via `use super::*`.
+mod editor_parity;
 mod group1;
 mod group2;
 
