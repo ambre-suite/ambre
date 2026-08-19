@@ -104,6 +104,10 @@ const DUPLICATE_NUDGE: f64 = 10.0;
 /// hides for the next (§6). ~530 ms is the familiar desktop cadence.
 const CARET_BLINK_MS: f64 = 530.0;
 
+/// Max press-to-release travel (screen px) still treated as a click, not a drag,
+/// for click-to-edit (§6): beyond it the gesture is a move and edit is not armed.
+const CLICK_SLOP: f64 = 4.0;
+
 pub struct ToileView {
     document_id: DocumentId,
     to_logic: flume::Sender<LogicCommand>,
@@ -157,6 +161,11 @@ pub struct ToileView {
     edit_dirty: bool,
     /// Whether a pointer is down inside the editor (text selection drag).
     edit_pointer_down: bool,
+    /// Click-to-edit arming (Miro-style, §6): set on a left press that lands on an
+    /// already-selected Sticky / Text element (id + press position). A release
+    /// near that position with the selection unchanged enters edit; a drag past the
+    /// slop (a move gesture) clears it. `None` when the press did not qualify.
+    click_edit_candidate: Option<(ElementId, Point)>,
 
     /// Last pointer position in screen (physical) pixels -- the zoom anchor.
     last_pointer: Point,
@@ -395,6 +404,7 @@ impl ToileView {
             edit_closing: false,
             edit_dirty: false,
             edit_pointer_down: false,
+            click_edit_candidate: None,
             last_pointer: Point::new(canvas_width / 2.0, canvas_height / 2.0),
             panning: None,
             space_down: false,
@@ -941,6 +951,9 @@ impl ToileView {
         // gesture runs below either way, and the grant is settled on release --
         // a drag from here moves the embed instead of entering it.
         self.arm_embed_press(world, screen);
+        // Capture the selection before the click settles it, to detect a press on
+        // an already-selected element (the click-to-edit trigger, §6).
+        let prev_selection = self.selection.clone();
         let out = self.machine.pointer_down(
             world,
             screen,
@@ -950,9 +963,27 @@ impl ToileView {
             self.group_scope.as_ref(),
         );
         self.apply_outcome(out);
+        // Click-to-edit (Miro-style, §6): a left press on a Sticky / Text element
+        // that was ALREADY the sole selection arms an edit. A first click only
+        // selects (the element was not selected before, so nothing is armed); a
+        // second click enters edit on release, unless a drag turns it into a move.
+        self.click_edit_candidate = (button == 0 && self.machine.tool() == Tool::Select)
+            .then(|| match self.selection.as_slice() {
+                [id] if *prev_selection == *self.selection && self.is_text_editable(id) => {
+                    Some((id.clone(), screen))
+                }
+                _ => None,
+            })
+            .flatten();
         self.publish_cursor(screen);
         self.needs_full = true;
         true
+    }
+
+    /// Whether an element id resolves to an inline-editable Sticky / Text element.
+    fn is_text_editable(&self, id: &ElementId) -> bool {
+        self.find_element(id)
+            .is_some_and(|e| matches!(e.kind, ElementKind::Sticky | ElementKind::Text))
     }
 
     // -- Context menu bridge (§5ter) -------------------------------------------
@@ -1258,6 +1289,8 @@ impl ToileView {
     fn handle_pointer_up(&mut self, x: f64, y: f64) -> bool {
         let screen = Point::new(x, y);
         self.last_pointer = screen;
+        // Consume any click-to-edit arming this release, whatever path is taken.
+        let edit_candidate = self.click_edit_candidate.take();
         if self.panning.take().is_some() {
             return true;
         }
@@ -1266,15 +1299,29 @@ impl ToileView {
         // before the gesture end below so a click that only focuses still lets
         // the Select tool finish its selection normally.
         self.settle_embed_press(screen);
+        let mut consumed = false;
         if self.machine.is_active() {
             let world = self.cam.screen_to_world() * screen;
             let out = self.machine.pointer_up(world, &self.display);
             self.apply_outcome(out);
             self.publish_cursor(screen);
             self.needs_full = true;
+            consumed = true;
+        }
+        // Click-to-edit (Miro-style, §6): a press on an already-selected Sticky /
+        // Text element released without a drag (a click, not a move) enters inline
+        // edit. Checked after the gesture settles, so a real move does not trigger
+        // it and the selection is still the armed element.
+        if let Some((id, down)) = edit_candidate
+            && self.editor.is_none()
+            && self.selection.as_slice() == std::slice::from_ref(&id)
+            && (screen - down).hypot() <= CLICK_SLOP
+        {
+            self.open_editor(id);
+            self.needs_full = true;
             return true;
         }
-        false
+        consumed
     }
 
     fn handle_double_click(&mut self, x: f64, y: f64) -> bool {
@@ -1504,6 +1551,23 @@ impl ToileView {
         })
     }
 
+    /// Optimistically set an element's body text in the local display, so the
+    /// static render matches a just-committed value before the model round-trip
+    /// delivers a fresh viewport (avoids a one-frame flash of the old body, §6).
+    fn patch_element_text(&mut self, id: &ElementId, text: &str) {
+        if let Some(DisplayNode::Element(e)) = self
+            .display
+            .nodes
+            .iter_mut()
+            .find(|n| matches!(n, DisplayNode::Element(e) if &e.id == id))
+        {
+            match &mut e.geom {
+                DisplayGeom::Sticky(t) | DisplayGeom::Text(t) => *t = text.to_owned(),
+                _ => {}
+            }
+        }
+    }
+
     /// The edited element's text origin (top-left screen corner + padding) and
     /// wrap width in screen pixels, plus its full screen rect (for hit tests).
     fn edit_geometry(&self, e: &DisplayElement) -> (Point, f32, Rect) {
@@ -1571,8 +1635,17 @@ impl ToileView {
         let id = self.editor.as_ref()?.id().clone();
         let e = self.find_element(&id)?;
         let (origin, _w, sb) = self.edit_geometry(e);
-        sb.contains(screen)
-            .then(|| Point::new(screen.x - origin.x, screen.y - origin.y))
+        // Unrotate the pointer about the element center into its axis-aligned
+        // frame, so clicks land on the rotated in-edit text (mirror of the overlay
+        // rotation in `drive_editor`, §5quinquies.A).
+        let rot = super::tool::element_rotation(&self.display, &id);
+        let p = if rot != 0.0 {
+            render::rotate_about(sb.center(), -rot) * screen
+        } else {
+            screen
+        };
+        sb.contains(p)
+            .then(|| Point::new(p.x - origin.x, p.y - origin.y))
     }
 
     /// Route an input event to the active editor. Returns `Some(consumed)` when
@@ -1714,20 +1787,38 @@ impl ToileView {
         let geom = self.find_element(&id).map(|e| self.edit_geometry(e));
 
         match geom {
-            Some((origin, wrap_w, _sb)) => {
+            Some((origin, wrap_w, sb)) => {
                 let zoom = self.cam.zoom;
                 let palette = self.theme.palette();
+                // A rotated element keeps its rotation while editing: rotate the
+                // whole overlay about the element's screen-space center, matching
+                // the static text pass (`render::text_rotation`, §5quinquies.A).
+                let rot = super::tool::element_rotation(&self.display, &id);
                 // Blink the caret on a ~1s cycle so it visibly signals "you can
                 // type here" (§6). `editor.is_some()` keeps the overlay redrawing
                 // every frame, so the toggle animates.
                 let caret_on = (self.frame_now_ms / CARET_BLINK_MS) as i64 % 2 == 0;
                 let ed = self.editor.as_mut().unwrap();
                 ed.flush(font_cx, wrap_w, zoom);
-                if !self.edit_closing {
-                    ed.render(surface, origin, palette, caret_on);
-                    if let Some(caret) = ed.caret_local() {
-                        set_caret_pipe(&self.text_input, origin, caret);
-                    }
+                // Always paint the body -- including the closing frame. The content
+                // pass already ran this frame with the element's static text
+                // suppressed (the editor was still live), so skipping the overlay
+                // here would leave one blank frame before the static text returns
+                // next frame. Painting the committed text bridges that gap. The
+                // caret + IME anchor are for active editing only, so they are gated
+                // off while closing.
+                let rotated = rot != 0.0;
+                if rotated {
+                    surface.push_transform(render::rotate_about(sb.center(), rot));
+                }
+                ed.render(surface, origin, palette, caret_on && !self.edit_closing);
+                if rotated {
+                    surface.pop_transform();
+                }
+                if !self.edit_closing
+                    && let Some(caret) = ed.caret_local()
+                {
+                    set_caret_pipe(&self.text_input, origin, caret);
                 }
             }
             // Element gone/culled: commit whatever the last flush produced.
@@ -1736,6 +1827,11 @@ impl ToileView {
 
         if self.edit_closing {
             if let Some(text) = self.editor.as_ref().unwrap().committed_text() {
+                // Optimistic local update: reflect the committed text in the static
+                // pass immediately, so dropping the editor does not flash the
+                // pre-edit body for the frames before the CRDT round-trip returns a
+                // fresh viewport (§6). The incoming viewport carries the same text.
+                self.patch_element_text(&id, &text);
                 self.send_edit(ToileCommand::SetText { id, text });
             }
             self.editor = None;

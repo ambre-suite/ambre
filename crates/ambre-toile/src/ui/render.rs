@@ -267,7 +267,7 @@ fn anim_transform(a: &AnimatedElement) -> Affine {
 /// no rotation (pan + zoom only), so an element's world rotation is also its
 /// screen rotation, and the text / overlay passes -- which run in screen space --
 /// rotate about the element's screen-space center with this affine.
-fn rotate_about(center: Point, theta: f64) -> Affine {
+pub(crate) fn rotate_about(center: Point, theta: f64) -> Affine {
     Affine::translate(center.to_vec2())
         * Affine::rotate(theta)
         * Affine::translate(-center.to_vec2())
@@ -437,6 +437,11 @@ fn paint_text<S: DrawSurface>(
     // on top for crisp glyphs (§6).
     let base_size = sticky_or_style_font_size(is_sticky, &e.style, bounds);
     let font_size = (base_size as f64 * cam.zoom) as f32;
+    // Body inset: the same padding the inline editor applies, so the static text
+    // and the in-edit text share one origin + wrap width and the body does not
+    // jump / re-wrap when entering or leaving edit (§6). Single source of truth.
+    let pad = super::edit::InlineEditor::pad(cam.zoom);
+    let wrap_w = (sb.width() - 2.0 * pad).max(1.0) as f32;
     // Text (foreground) colour, §2.E (see `resolved_text_ink`): `None` means "use
     // the theme text colour" (only a text element with neither text_color nor fill).
     let color = resolved_text_ink(is_sticky, e.style.text_color, fill)
@@ -446,7 +451,7 @@ fn paint_text<S: DrawSurface>(
         font_cx,
         text,
         font_size,
-        sb.width() as f32,
+        wrap_w,
         Alignment::Start,
         e.style.font.weight >= 700,
         e.style.font.italic,
@@ -468,8 +473,8 @@ fn paint_text<S: DrawSurface>(
             let PositionedLayoutItem::GlyphRun(run) = item else {
                 continue;
             };
-            let tx = sb.x0 + run.offset() as f64;
-            let ty = sb.y0 + run.baseline() as f64;
+            let tx = sb.x0 + pad + run.offset() as f64;
+            let ty = sb.y0 + pad + run.baseline() as f64;
             let base = Affine::translate((tx, ty));
             let glyph_tf = rot_tf.map_or(base, |r| r * base);
             surface.draw_glyphs(&run, &brush, glyph_tf);
