@@ -259,8 +259,8 @@ impl TrameView {
             if formula_input_focused() {
                 let text = self.formula_text.get_untracked();
                 if let Some(ed) = self.editor.as_mut() {
-                    if ed.buffer != text {
-                        ed.buffer = text;
+                    if ed.text() != text {
+                        ed.set_text(&text);
                         self.edit_dirty = true;
                     }
                 } else {
@@ -270,13 +270,13 @@ impl TrameView {
                         // session on the active cell, seeded with what was typed.
                         self.begin_edit_external();
                         if let Some(ed) = self.editor.as_mut() {
-                            ed.buffer = text;
+                            ed.set_text(&text);
                             self.edit_dirty = true;
                         }
                     }
                 }
             } else if let Some(ed) = self.editor.as_ref() {
-                let buffer = ed.buffer.clone();
+                let buffer = ed.text();
                 if self.formula_text.get_untracked() != buffer {
                     self.formula_text.set(buffer);
                 }
@@ -292,7 +292,7 @@ impl TrameView {
                 match action {
                     FormulaAction::Commit(dir) => {
                         if let Some(ed) = self.editor.as_mut() {
-                            ed.buffer = self.formula_text.get_untracked();
+                            ed.set_text(&self.formula_text.get_untracked());
                         }
                         self.commit_edit();
                         match dir {
@@ -318,7 +318,7 @@ impl TrameView {
                     // keep the selection put (no cursor advance).
                     FormulaAction::CommitFill => {
                         if let Some(ed) = self.editor.as_mut() {
-                            ed.buffer = self.formula_text.get_untracked();
+                            ed.set_text(&self.formula_text.get_untracked());
                         }
                         self.commit_edit_filled();
                         self.text_input.focus();
@@ -498,6 +498,9 @@ impl TrameView {
         });
 
         // The in-cell edit field sits above everything (after the active border).
+        // draw_edit flushes the editor's queued intents (a FontContext is live
+        // here), so the buffer is final afterwards -- which is why a deferred
+        // commit is resolved below, not in the key handler.
         if let Some(editor) = &mut self.editor {
             renderer::draw_edit(
                 surface,
@@ -506,7 +509,6 @@ impl TrameView {
                 editor,
                 self.caret_on,
                 font_cx,
-                text_cache,
             );
 
             // The caret was just drawn: close the input->caret latency probe.
@@ -519,6 +521,19 @@ impl TrameView {
                 let _ = self
                     .perf
                     .measure_with_start_mark("ambre:input-to-caret", "ambre:input");
+            }
+        }
+
+        // Resolve a deferred cell-edit commit now that the flush applied every
+        // queued edit (grid Enter / Tab / Up / Down / click-outside / Ctrl+Enter).
+        if let Some(pc) = self.pending_commit.take() {
+            match pc {
+                PendingCommit::Fill => self.commit_edit_filled(),
+                PendingCommit::Stay => self.commit_edit(),
+                PendingCommit::Nav(dr, dc) => {
+                    self.commit_edit();
+                    self.nav_move(dr, dc, false);
+                }
             }
         }
     }

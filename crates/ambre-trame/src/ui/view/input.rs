@@ -323,7 +323,7 @@ impl TrameView {
             InputEvent::CompositionUpdate { text } => {
                 self.begin_edit(String::new());
                 if let Some(ed) = self.editor.as_mut() {
-                    ed.preview = text.clone();
+                    ed.set_compose(text);
                 }
                 self.edit_dirty = true;
                 true

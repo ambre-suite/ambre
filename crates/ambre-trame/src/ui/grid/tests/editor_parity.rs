@@ -1,15 +1,14 @@
-// Parity of the shared `ambre_canvas::TextEditor` core with the (soon replaced)
-// hand-rolled `CellEditor`, over the keyboard editing operations both support
-// (axis 1: share the editor core). Driving the same op sequence through each and
-// asserting the buffer text + selected text match after EVERY step locks the
-// motion / selection / edit semantics BEFORE the migration deletes the hand-rolled
-// motions -- so the migration is a proven behaviour-preserving swap, not a rewrite
-// on faith.
+// Delegation regression for the `CellEditor` wrapper over the shared
+// `ambre_canvas::TextEditor` core (axis 1). Each wrapper method is a shim that
+// queues one `EditIntent`; this replays an op corpus through the wrapper AND
+// through the core driven with the intent directly, flushes both, and asserts the
+// buffer text + selected text match after EVERY step -- so a wrong shim->intent
+// mapping (e.g. Home wired to the wrong intent) is caught.
 //
-// The corpus is single-line ASCII on purpose: that is what a spreadsheet cell
-// holds today, and it is where `CellEditor`'s whole-buffer Home/End coincide with
-// the shared core's visual line start/end. Multi-line and pointer / word-at-offset
-// hits (which need font metrics) are covered separately by the core's own tests.
+// The corpus is single-line ASCII: that is what a spreadsheet cell holds today,
+// and where the wrapper's Home/End (visual line) coincide with whole-buffer. The
+// original hand-rolled-vs-core parity was proven in the commit that introduced
+// this file, before the migration; this is its living continuation.
 
 use super::CellEditor;
 
@@ -93,27 +92,29 @@ fn intent(op: &Op) -> EditIntent {
     }
 }
 
-/// Build both editors on `seed`, replay `ops`, and assert the buffer text and the
-/// selected text match after every step.
+/// Build the wrapper and a directly-driven core on `seed`, replay `ops`, flush
+/// both each step, and assert the buffer text and selected text match.
 fn assert_parity(seed: &str, ops: &[Op]) {
     let mut fcx = FontContext::default();
     let mut cell = CellEditor::new(0, 0, seed.to_owned());
     let mut core = TextEditor::new(seed, style());
-    // First flush seeds the core caret at text end (matches `CellEditor::new`).
+    // First flush seeds both carets at text end.
+    cell.core.flush(&mut fcx, 1000.0, 1.0);
     core.flush(&mut fcx, 1000.0, 1.0);
 
     for (i, op) in ops.iter().enumerate() {
         apply_cell(&mut cell, op);
         core.push(intent(op));
+        cell.core.flush(&mut fcx, 1000.0, 1.0);
         core.flush(&mut fcx, 1000.0, 1.0);
 
         assert_eq!(
-            cell.buffer,
+            cell.text(),
             core.text(),
             "buffer diverged after step {i} ({op:?})"
         );
         assert_eq!(
-            cell.selected_text(),
+            cell.selected_text().as_str(),
             core.selected_text().as_deref().unwrap_or(""),
             "selection diverged after step {i} ({op:?})"
         );

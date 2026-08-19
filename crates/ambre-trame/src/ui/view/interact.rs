@@ -599,6 +599,16 @@ impl TrameView {
         self.state.clipboard_anchor = None;
     }
 
+    /// Map a physical pointer position into the open editor's local (text-relative)
+    /// frame, for a pointer intent the shared core resolves against its layout.
+    /// Single-line: the local y is 0 (line 0), so only x carries information.
+    fn editor_local_point(&self, x: f64, _y: f64) -> Option<(f32, f32)> {
+        let ed = self.editor.as_ref()?;
+        let (cx, _cy, _cw, _ch) = self.state.cell_pixel_rect(ed.row, ed.col)?;
+        let pad = crate::render::CELL_PAD_X * self.state.zoom;
+        Some(((x - (cx + pad)).max(0.0) as f32, 0.0))
+    }
+
     /// True when physical pixel `(x, y)` falls on the cell currently being
     /// edited -- the gate for in-cell mouse text selection vs. committing.
     pub(crate) fn pointer_in_editor(&self, x: f64, y: f64) -> bool {
@@ -612,27 +622,24 @@ impl TrameView {
     pub(crate) fn handle_input_editing(&mut self, ev: &InputEvent) -> bool {
         match ev {
             InputEvent::Text { text } => {
+                // Queue the insertion; the shared editor applies it at the paint
+                // flush and the formula bar mirrors `ed.text()` there (frame.rs).
                 if let Some(ed) = self.editor.as_mut() {
                     ed.insert(text);
-                    #[cfg(target_arch = "wasm32")]
-                    self.formula_text.set(ed.buffer.clone());
                 }
                 self.reset_blink();
                 true
             }
             InputEvent::CompositionUpdate { text } => {
                 if let Some(ed) = self.editor.as_mut() {
-                    ed.preview = text.clone();
+                    ed.set_compose(text);
                 }
                 self.reset_blink();
                 true
             }
             InputEvent::CompositionEnd { text } => {
                 if let Some(ed) = self.editor.as_mut() {
-                    ed.preview.clear();
-                    ed.insert(text);
-                    #[cfg(target_arch = "wasm32")]
-                    self.formula_text.set(ed.buffer.clone());
+                    ed.commit_compose(text);
                 }
                 self.reset_blink();
                 true
@@ -643,17 +650,19 @@ impl TrameView {
                 x, y, button: 0, ..
             } => {
                 if self.pointer_in_editor(*x, *y) {
-                    if let Some(ed) = self.editor.as_mut() {
-                        ed.pending = Some(PendingHit {
-                            x: *x,
-                            kind: HitKind::Place,
-                        });
+                    if let Some((lx, ly)) = self.editor_local_point(*x, *y)
+                        && let Some(ed) = self.editor.as_mut()
+                    {
+                        ed.point_down(lx, ly);
                     }
                     self.editor_text_drag = true;
                     self.reset_blink();
                     return true;
                 }
-                self.commit_edit();
+                // Press outside: commit (deferred to the paint flush) and let the
+                // click select the cell under it.
+                self.pending_commit = Some(PendingCommit::Stay);
+                self.edit_dirty = true;
                 self.text_input.focus();
                 if let Some((row, col)) = self.state.cell_at(*x, *y) {
                     self.select_cell(row, col);
@@ -661,12 +670,11 @@ impl TrameView {
                 true
             }
             // Drag inside the edited cell extends the text selection.
-            InputEvent::PointerMove { x, .. } if self.editor_text_drag => {
-                if let Some(ed) = self.editor.as_mut() {
-                    ed.pending = Some(PendingHit {
-                        x: *x,
-                        kind: HitKind::Extend,
-                    });
+            InputEvent::PointerMove { x, y } if self.editor_text_drag => {
+                if let Some((lx, ly)) = self.editor_local_point(*x, *y)
+                    && let Some(ed) = self.editor.as_mut()
+                {
+                    ed.point_drag(lx, ly);
                 }
                 self.reset_blink();
                 true
@@ -677,11 +685,10 @@ impl TrameView {
             }
             // Double-click inside the edited cell selects the word under it.
             InputEvent::DoubleClick { x, y } if self.pointer_in_editor(*x, *y) => {
-                if let Some(ed) = self.editor.as_mut() {
-                    ed.pending = Some(PendingHit {
-                        x: *x,
-                        kind: HitKind::Word,
-                    });
+                if let Some((lx, ly)) = self.editor_local_point(*x, *y)
+                    && let Some(ed) = self.editor.as_mut()
+                {
+                    ed.word_at(lx, ly);
                 }
                 self.reset_blink();
                 true
@@ -692,7 +699,8 @@ impl TrameView {
             InputEvent::PointerDown {
                 x, y, button: 2, ..
             } => {
-                self.commit_edit();
+                self.pending_commit = Some(PendingCommit::Stay);
+                self.edit_dirty = true;
                 self.text_input.focus();
                 if let Some((row, col)) = self.state.cell_at(*x, *y) {
                     self.select_cell(row, col);
@@ -711,7 +719,11 @@ impl TrameView {
                 // (Ctrl/Cmd+X) fall through to the chrome keymap.
                 if *ctrl || *meta {
                     if key == "Enter" {
-                        self.commit_edit_filled();
+                        // Deferred: the fill reads the buffer after the paint flush.
+                        // `edit_dirty` schedules that paint (else it would wait for
+                        // the blink tick).
+                        self.pending_commit = Some(PendingCommit::Fill);
+                        self.edit_dirty = true;
                         return true;
                     }
                     if matches!(key.as_str(), "a" | "A") {
@@ -724,14 +736,17 @@ impl TrameView {
                     return false;
                 }
                 match key.as_str() {
+                    // Enter / Tab / Up / Down commit and move (spreadsheet). The
+                    // commit is deferred to the paint flush so the queued edits are
+                    // applied before the buffer is read (§ shared editor).
                     "Enter" => {
-                        self.commit_edit();
-                        self.nav_move(1, 0, false);
+                        self.pending_commit = Some(PendingCommit::Nav(1, 0));
+                        self.edit_dirty = true;
                         true
                     }
                     "Tab" => {
-                        self.commit_edit();
-                        self.nav_move(0, 1, false);
+                        self.pending_commit = Some(PendingCommit::Nav(0, 1));
+                        self.edit_dirty = true;
                         true
                     }
                     "Escape" => {
@@ -741,8 +756,6 @@ impl TrameView {
                     "Backspace" => {
                         if let Some(ed) = self.editor.as_mut() {
                             ed.backspace();
-                            #[cfg(target_arch = "wasm32")]
-                            self.formula_text.set(ed.buffer.clone());
                         }
                         self.reset_blink();
                         true
@@ -753,8 +766,6 @@ impl TrameView {
                     "Delete" if !*shift => {
                         if let Some(ed) = self.editor.as_mut() {
                             ed.delete_forward();
-                            #[cfg(target_arch = "wasm32")]
-                            self.formula_text.set(ed.buffer.clone());
                         }
                         self.reset_blink();
                         true
@@ -804,15 +815,16 @@ impl TrameView {
                         self.reset_blink();
                         true
                     }
-                    // Up/Down commit and move, as in a spreadsheet.
+                    // Up/Down commit and move, as in a spreadsheet (single-line;
+                    // multi-line caret motion lands in a later step).
                     "ArrowUp" => {
-                        self.commit_edit();
-                        self.nav_move(-1, 0, false);
+                        self.pending_commit = Some(PendingCommit::Nav(-1, 0));
+                        self.edit_dirty = true;
                         true
                     }
                     "ArrowDown" => {
-                        self.commit_edit();
-                        self.nav_move(1, 0, false);
+                        self.pending_commit = Some(PendingCommit::Nav(1, 0));
+                        self.edit_dirty = true;
                         true
                     }
                     // Printable keys fall through to the textarea -> `Text`.
