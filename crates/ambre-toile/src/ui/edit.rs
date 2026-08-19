@@ -1,124 +1,34 @@
 // ambre-toile/src/ui/edit.rs
 // ============================================================================
-// Inline text editor for sticky / text elements (toile-ui §6). Wraps a
-// `parley::PlainEditor` -- the multi-line, layout-aware cousin of Trame's
-// single-line `CellEditor`. PlainEditor owns its own `Layout` and re-shapes on
-// every edit, so it needs a live `FontContext` for *any* operation (move,
-// select, hit, render). The Toile render thread only holds that `FontContext`
-// during paint (`ambre-app` frame host), so this editor cannot be driven at
-// input time.
+// Inline text editor for sticky / text elements (toile-ui §6). A thin Toile
+// wrapper over the shared `ambre_canvas::TextEditor` core (parley `PlainEditor`
+// + font-free `EditIntent` queue, driven at paint time when a `FontContext` is
+// live). Trame's cell editor wraps the same core.
 //
-// The seam that resolves this is the same one Trame uses for its deferred hit
-// resolution: `handle_input` records font-free [`EditIntent`]s in a queue; the
-// paint pass drains and applies them through the PlainEditor driver, then
-// renders caret / selection / glyphs. Reading the committed buffer needs no
-// font context, so the view can emit `SetText` on close from the queue-flush.
-//
-// Coordinate spaces: PlainEditor lays out in its own local frame with the
-// origin at the element's top-left screen corner and the zoom baked into the
-// font size + wrap width (matching `render::paint_text`). The view converts
-// screen pointers to this local frame before queueing a pointer intent, so this
-// module stays font-free at input time and purely geometric at paint time.
+// This wrapper owns only the Toile-specific concerns: which element is under
+// edit (`ElementId`), and how the pinned style / size is derived from the
+// element (sticky ink + auto-size, matching the static render in `render.rs`).
+// Every editing operation delegates to the core.
 // ============================================================================
 
 use ambre_bus::app::toile::{DisplayElement, ElementId};
-use ambre_canvas::Palette;
-use ambre_draw::{
-    Affine, Alignment, BoundingBox, Brush, Color, DrawSurface, FontContext, FontFamily, FontStack,
-    FontStyle, FontWeight, LayoutContext, PlainEditor, Point, PositionedLayoutItem, Rect,
-    StyleProperty,
-};
+use ambre_canvas::{Palette, TextEditor, TextEditorStyle};
+use ambre_draw::{BoundingBox, Color, DrawSurface, FontContext, Point};
 
-/// Caret bar width in screen pixels.
-const CARET_WIDTH: f32 = 1.5;
+// Re-export the shared intent type so the view keeps its `super::edit::EditIntent`
+// import path (the enum lives in the shared core now).
+pub use ambre_canvas::EditIntent;
+
 /// Inner padding (screen px at zoom 1) between the element border and the text,
 /// matching the sticky / text body inset.
 const TEXT_PAD: f64 = 4.0;
-
-/// A font-free editing action recorded at input time and applied at paint time,
-/// when the `FontContext` is available. Pointer coordinates are already mapped
-/// into the editor's local (element-top-left-relative) screen frame.
-#[derive(Clone, Debug)]
-pub enum EditIntent {
-    /// Insert committed text at the caret (latin typing / paste / IME commit).
-    Insert(String),
-    /// Insert a hard line break (Enter in a multi-line body).
-    Newline,
-    Backspace,
-    Delete,
-    /// Delete the current selection (cut). No-op when the selection is collapsed.
-    DeleteSelection,
-    /// Horizontal caret motion; `select` extends the selection (Shift), `word`
-    /// jumps by word (Ctrl/Alt).
-    Left {
-        select: bool,
-        word: bool,
-    },
-    Right {
-        select: bool,
-        word: bool,
-    },
-    /// Vertical caret motion across wrapped lines; `select` extends (Shift).
-    Up {
-        select: bool,
-    },
-    Down {
-        select: bool,
-    },
-    /// Caret to the start / end of the current visual line; `select` extends.
-    LineStart {
-        select: bool,
-    },
-    LineEnd {
-        select: bool,
-    },
-    SelectAll,
-    /// Place the caret at a local-space point (single click / drag start).
-    PointerDown {
-        x: f32,
-        y: f32,
-    },
-    /// Extend the selection to a local-space point (drag / shift-click).
-    PointerDrag {
-        x: f32,
-        y: f32,
-    },
-    /// Select the word under a local-space point (double click).
-    WordAt {
-        x: f32,
-        y: f32,
-    },
-    /// Live IME composition preview for this pass (replaces the previous).
-    Compose(String),
-    /// IME composition committed: finalize the preedit as real text.
-    ComposeEnd(String),
-}
 
 /// An in-progress inline edit of one sticky / text element.
 pub struct InlineEditor {
     /// The element being edited (its body is authoritative here until close).
     id: ElementId,
-    editor: PlainEditor<Brush>,
-    /// The editor's own layout context (PlainEditor re-shapes through it). Kept
-    /// here so the editor is self-contained and never borrows the shared
-    /// `TextCache` layout context.
-    layout_cx: LayoutContext<Brush>,
-    /// Font-free actions awaiting a paint-time flush (`FontContext` needed).
-    intents: Vec<EditIntent>,
-    /// The body at open time, to suppress a no-op `SetText` on close.
-    initial: String,
-    /// Whether the caret has been seeded to the text end (done on first flush).
-    seeded: bool,
-
-    // Style snapshot captured at open, applied to the editor's default style so
-    // the edit looks like the committed result.
-    weight: u16,
-    italic: bool,
-    /// Font family label (matches the render family map, `text_cache`).
-    family: String,
-    /// Font size in world units (zoom is applied per paint).
-    base_size: f32,
-    color: Color,
+    /// The shared editor core (PlainEditor + intent queue + pinned style).
+    core: TextEditor,
 }
 
 impl InlineEditor {
@@ -137,21 +47,16 @@ impl InlineEditor {
         // Size: sticky auto-sizes from bounds unless overridden (§6).
         let base_size =
             super::render::sticky_or_style_font_size(is_sticky, &elem.style, elem.bounds).max(1.0);
-        let mut editor = PlainEditor::<Brush>::new(base_size);
-        editor.set_text(text);
-        editor.set_alignment(Alignment::Start);
-        Self {
-            id: elem.id.clone(),
-            editor,
-            layout_cx: LayoutContext::new(),
-            intents: Vec::new(),
-            initial: text.to_owned(),
-            seeded: false,
+        let style = TextEditorStyle {
             weight: font.weight,
             italic: font.italic,
             family: font.family.clone(),
             base_size,
             color,
+        };
+        Self {
+            id: elem.id.clone(),
+            core: TextEditor::new(text, style),
         }
     }
 
@@ -167,142 +72,33 @@ impl InlineEditor {
 
     /// Record an action to apply at the next paint-time flush.
     pub fn push(&mut self, intent: EditIntent) {
-        self.intents.push(intent);
+        self.core.push(intent);
     }
 
     /// The committed body, or `None` when it is unchanged from open (no-op
     /// commit). IME preedit is excluded. Requires no font context.
     pub fn committed_text(&self) -> Option<String> {
-        let text: String = self.editor.text().chars().collect();
-        (text != self.initial).then_some(text)
+        self.core.committed_text()
     }
 
     /// The currently selected text, or `None` when the selection is collapsed
-    /// (or an IME composition is active). Font-free: reads the buffer over the
-    /// selection byte range, so it can be called synchronously inside a native
-    /// clipboard `copy`/`cut` event (§5ter).
+    /// (or an IME composition is active). Font-free: safe inside a native
+    /// clipboard `copy` / `cut` event (§5ter).
     pub fn selected_text(&self) -> Option<String> {
-        self.editor.selected_text().map(str::to_owned)
+        self.core.selected_text()
     }
 
     /// Push the pinned style + geometry onto the editor for this paint, then
-    /// apply every queued intent through the driver. Must run before rendering
-    /// so the layout reflects the latest edits. `wrap_w` is the wrap width in
-    /// screen pixels; `zoom` bakes into the font size.
+    /// apply every queued intent. Must run before rendering. `wrap_w` is the wrap
+    /// width in screen pixels; `zoom` bakes into the font size.
     pub fn flush(&mut self, font_cx: &mut FontContext, wrap_w: f32, zoom: f64) {
-        // Re-apply style + geometry each frame: zoom (hence font size + wrap
-        // width) can change mid-edit, and PlainEditor holds no camera.
-        let styles = self.editor.edit_styles();
-        styles.insert(StyleProperty::FontSize(self.base_size * zoom as f32));
-        styles.insert(StyleProperty::FontWeight(FontWeight::new(
-            self.weight as f32,
-        )));
-        styles.insert(StyleProperty::FontStyle(if self.italic {
-            FontStyle::Italic
-        } else {
-            FontStyle::Normal
-        }));
-        // Resolve the family to the same registered face the static render uses, so
-        // the in-edit body matches its committed look (§6).
-        let face = ambre_canvas::registered_family_name(Some(self.family.as_str()));
-        styles.insert(StyleProperty::FontStack(FontStack::Single(
-            FontFamily::Named(face.into()),
-        )));
-        styles.insert(StyleProperty::Brush(Brush::Solid(self.color)));
-        self.editor.set_width(Some(wrap_w.max(1.0)));
-
-        // Scope the driver so its borrow of `font_cx` / `layout_cx` ends before the
-        // layout refresh below.
-        {
-            let intents = std::mem::take(&mut self.intents);
-            let mut drv = self.editor.driver(font_cx, &mut self.layout_cx);
-            if !self.seeded {
-                // Open with the caret at the end of the seeded body (Trame parity).
-                drv.move_to_text_end();
-                self.seeded = true;
-            }
-            for intent in intents {
-                match intent {
-                    EditIntent::Insert(s) => drv.insert_or_replace_selection(&s),
-                    EditIntent::Newline => drv.insert_or_replace_selection("\n"),
-                    EditIntent::Backspace => drv.backdelete(),
-                    EditIntent::Delete => drv.delete(),
-                    EditIntent::DeleteSelection => drv.delete_selection(),
-                    EditIntent::Left { select, word } => match (select, word) {
-                        (false, false) => drv.move_left(),
-                        (true, false) => drv.select_left(),
-                        (false, true) => drv.move_word_left(),
-                        (true, true) => drv.select_word_left(),
-                    },
-                    EditIntent::Right { select, word } => match (select, word) {
-                        (false, false) => drv.move_right(),
-                        (true, false) => drv.select_right(),
-                        (false, true) => drv.move_word_right(),
-                        (true, true) => drv.select_word_right(),
-                    },
-                    EditIntent::Up { select } => {
-                        if select {
-                            drv.select_up()
-                        } else {
-                            drv.move_up()
-                        }
-                    }
-                    EditIntent::Down { select } => {
-                        if select {
-                            drv.select_down()
-                        } else {
-                            drv.move_down()
-                        }
-                    }
-                    EditIntent::LineStart { select } => {
-                        if select {
-                            drv.select_to_line_start()
-                        } else {
-                            drv.move_to_line_start()
-                        }
-                    }
-                    EditIntent::LineEnd { select } => {
-                        if select {
-                            drv.select_to_line_end()
-                        } else {
-                            drv.move_to_line_end()
-                        }
-                    }
-                    EditIntent::SelectAll => drv.select_all(),
-                    EditIntent::PointerDown { x, y } => drv.move_to_point(x, y),
-                    EditIntent::PointerDrag { x, y } => drv.extend_selection_to_point(x, y),
-                    EditIntent::WordAt { x, y } => drv.select_word_at_point(x, y),
-                    EditIntent::Compose(s) => {
-                        if s.is_empty() {
-                            drv.clear_compose();
-                        } else {
-                            drv.set_compose(&s, None);
-                        }
-                    }
-                    EditIntent::ComposeEnd(s) => {
-                        // Finalize: drop the preedit, then insert the committed text.
-                        drv.clear_compose();
-                        if !s.is_empty() {
-                            drv.insert_or_replace_selection(&s);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Rebuild the layout before the caller renders. `edit_styles()` and
-        // `set_width()` above mark the layout dirty every frame, but only a driver
-        // operation refreshes it -- so on a frame with no intents (the common
-        // steady-caret case) the layout would stay dirty and `try_layout()` /
-        // `cursor_geometry()` would return `None`, painting neither glyphs nor
-        // caret. Refreshing here keeps both live every frame (§6).
-        self.editor.refresh_layout(font_cx, &mut self.layout_cx);
+        self.core.flush(font_cx, wrap_w, zoom);
     }
 
     /// The caret rectangle in local editor coordinates, for the transparent
     /// textarea pipe / IME anchor. Call after [`flush`](Self::flush).
     pub fn caret_local(&mut self) -> Option<BoundingBox> {
-        self.editor.cursor_geometry(CARET_WIDTH)
+        self.core.caret_local()
     }
 
     /// Draw the selection band, glyphs and caret over the element (screen space).
@@ -316,45 +112,9 @@ impl InlineEditor {
         palette: &Palette,
         show_caret: bool,
     ) {
-        let dx = origin.x;
-        let dy = origin.y;
-
-        // Selection band behind the text.
-        let sel = palette.selection.with_alpha(0.30);
-        for (bb, _line) in self.editor.selection_geometry() {
-            surface.fill_rect(offset_box(bb, dx, dy), sel);
-        }
-
-        // Glyph runs.
-        let brush = Brush::Solid(self.color);
-        let layout = self.editor.try_layout();
-        if let Some(layout) = layout {
-            for line in layout.lines() {
-                for item in line.items() {
-                    let PositionedLayoutItem::GlyphRun(run) = item else {
-                        continue;
-                    };
-                    let tx = dx + run.offset() as f64;
-                    let ty = dy + run.baseline() as f64;
-                    surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
-                }
-            }
-        }
-
-        // Caret bar (blinking: only on the "on" half of the cycle). It takes the
-        // text colour, not the theme caret: the body ink is fixed (a sticky's dark
-        // ink on a light card), so the theme caret -- near-white in a light theme --
-        // would be invisible against the card. Matching the glyph colour keeps the
-        // caret legible whatever the card / text colour.
-        if show_caret && let Some(bb) = self.editor.cursor_geometry(CARET_WIDTH) {
-            surface.fill_rect(offset_box(bb, dx, dy), self.color);
-        }
+        self.core
+            .render(surface, origin, palette.selection, show_caret);
     }
-}
-
-/// Translate a parley `BoundingBox` (local editor space) into a screen `Rect`.
-fn offset_box(bb: BoundingBox, dx: f64, dy: f64) -> Rect {
-    Rect::new(bb.x0 + dx, bb.y0 + dy, bb.x1 + dx, bb.y1 + dy)
 }
 
 /// ARGB `u32` text color to an opaque `Color` (text ignores element opacity).
