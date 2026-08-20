@@ -102,6 +102,7 @@ pub trait CommandSource {
 
 - Each app implements `CommandSource` and registers its commands. Chrome **does not know about apps**: it displays commands and their state (same dependency inversion as the `AppView` enum on the rendering side).
 - The keybinding manager is a `HashMap<KeyBinding, CommandId>`. A menu is a list of `CommandId`; a ribbon would be a tree of `CommandId` grouped by `category`.
+  - **Shared keymap rules (X26).** The `Ctrl`/`Cmd` fold (a `KeyBinding` matches interchangeably on macOS `Cmd` and other-platform `Ctrl`) and multi-chord commands (redo = `Ctrl+Shift+Z` **and** `Ctrl+Y`) are decided **once** here, so every app behaves identically instead of each folding modifiers and binding redo its own way. Tracked in the cross-app factoring Story (`ambre-roadmap.md`).
 - `Command`/`CommandId` (`ambre-commands`) is a **UI affordance**; `AppCommand`/`LogicCommand` (`ambre-bus`) is the **IPC payload**. An invoked `Command` *produces* a `LogicCommand` — distinct layers.
 
 **Data flow (unidirectional, Elm-like):**
