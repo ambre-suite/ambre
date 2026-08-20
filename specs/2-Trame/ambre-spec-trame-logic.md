@@ -5,11 +5,15 @@
 
 > Trame collaborative spreadsheet engine: multi-sheet CRDT state management (`LoroDoc`), incremental formula compilation to bytecode, evaluation via stack VM, two-level dependency graph, synchronous recomputation inside `handle_command`, and production of data-oriented structures for rendering.
 >
-> **Scope of this spec:** The engine (`TrameState`) that runs in the **Logic thread** (one of the three `wasm_thread` threads of the single WASM binary). Trame is a complete Logic + UI application -- rendering (QuadRenderer/DrawSurface), user interactions, and the UI thread are covered in a separate spec (`spec-ambre-trame-ui.md`). Features (sort, filters, conditional formatting, undo/redo, validation) are covered in `spec-ambre-trame-features.md`. xlsx/PDF/CSV interoperability is covered in `spec-ambre-trame-interop.md`.
+> **Scope.** The `TrameState` engine running in the Logic thread. Rendering and UI are in
+> `trame-ui`, features (sort, filters, conditional formatting, undo/redo, validation) in
+> `trame-features`, and xlsx/PDF/CSV interoperability in `trame-interop`.
 >
-> **State registry.** Trame state is a concrete value, not a trait object. The Logic thread holds a typed registry `HashMap<DocumentId, DocState>` where `enum DocState { Trame(TrameState), ... }`, and dispatch is a `match` on `(DocState, AppCommand)` -- no trait object, no `Box<dyn Any>`, no `downcast`. `TrameState::handle_command` returns a typed [`TrameOutcome`]; the `ambre-logic` dispatcher reads it and forwards display events to the UI and CRDT/ephemeral payloads to Sync over bare `flume` channels. See `spec-ambre-architecture.md section 6`.
->
-> `LoroDoc` is instantiated in the Logic thread and never leaves it.
+> **State registry.** The Logic thread holds `HashMap<DocumentId, DocState>` with
+> `enum DocState { Trame(TrameState), ... }`; dispatch is a `match` on `(DocState, AppCommand)` -- no
+> trait object, no `downcast`. `TrameState::handle_command` returns a typed [`TrameOutcome`]; the
+> `ambre-logic` dispatcher forwards display events to the UI and CRDT/ephemeral payloads to Sync. The
+> `LoroDoc` is instantiated in the Logic thread and never leaves it. See architecture section 6.
 
 ---
 
@@ -86,21 +90,15 @@ Positional addressing (`"R{row}C{col}"`) is **rejected**: inserting a row at pos
 `PeerID` and `counter` a per-session monotonic counter. Inserting a row = 1 CRDT operation
 (push/insert one uid value). No cell key is invalidated.
 
-> **Why an owned value, not the Loro element id.** `LoroMovableList` does expose a per-element op
-> id via `get_cursor(pos, Side::Middle).id` (a `loro::ID { peer, counter }`), but
-> `LoroMovableList::mov(from, to)` **reassigns the moved element's op id** -- it becomes the move
-> op's id. A cell keyed by that slot id would be orphaned by every reorder. Owning the uid as the
-> element's *value* makes it **move-invariant**: a reorder (`mov`) shuffles the values, the uid each
-> carries is untouched, and every `"{row_uid}:{col_uid}"` cell key keeps resolving. This is what
-> lets a sort be a **pure order permutation** (section 12, `trame-features section 2`) instead of a content
-> rewrite, and what lets id-based references follow the data. See the rejected "Loro slot id as
-> cell key" and "sort by content rewrite" entries in section 13.
+> **Why the value, not the Loro element id.** `LoroMovableList::mov` reassigns the moved element's
+> op id, so a cell keyed by that slot id is orphaned by every reorder. The uid as the element's
+> *value* is move-invariant: a `mov` shuffles the values, each carried uid is untouched, and every
+> `"{row_uid}:{col_uid}"` cell key keeps resolving. This is what lets a sort be a pure order
+> permutation (section 12, section 13).
 
-**Convergence of minting.** Two peers that concurrently insert a row each mint a **distinct** uid
-(their `PeerID` differs), so both rows survive and `LoroMovableList` orders the two values
-canonically -- no shared counter, no LWW collision. This is the section 2.D sheet-id argument applied to
-rows/columns (see the rejected shared-counter hazard in section 13). The counter need only be unique
-within a peer's session; once minted, a uid lives in the CRDT and never changes.
+**Convergence of minting.** Two peers concurrently inserting a row each mint a distinct uid (their
+`PeerID` differs), so both rows survive and `LoroMovableList` orders them canonically -- no shared
+counter, no LWW collision (section 13).
 
 **Key format in `LoroMap("cells_{sheet}")` -- fixed-length 51 chars** (16 + `_` + 8 per side, joined by `:`):
 ```
@@ -109,10 +107,9 @@ within a peer's session; once minted, a uid lives in the CRDT and never changes.
 
 #### The pinned-`PeerID` constructor (`TrameState::with_peer`)
 
-`TrameState::new()` builds over a `LoroDoc::new()`, which draws a **random** `PeerID`. Because every
-uid above carries that peer into the document's *content* -- row and column uids, cell keys, sheet ids
-(section 2.D) -- the same command sequence run twice produces two different documents. That is correct for a
-live client and fatal for a reproducible one, so the engine exposes a second constructor:
+`TrameState::new()` draws a random `PeerID`, which every uid carries into the document content -- so
+the same command sequence run twice yields two different documents. Correct for a live client, fatal
+for a reproducible one, so the engine exposes a second constructor:
 
 ```rust
 impl TrameState {
@@ -124,38 +121,21 @@ impl TrameState {
 ```
 
 **Not for a live document.** Two concurrent writers sharing a `PeerID` mint colliding `OpID`s and
-corrupt the history -- the one hazard section 2.A's minting argument rests on avoiding. This constructor is
-for single-owner, offline, host-side reproduction: a fixture generator
-(`ambre-spec-fixtures.md` I1) or a deterministic test. Client code calls `new()`.
-
-Ungated (no Cargo feature): it is engine API documented here, and the determinism belt that asserts
-on it runs in the default host tier. The fixture *machinery* that consumes it is gated
-(`fixtures section I4`).
+corrupt the history. This constructor is for single-owner, offline, host-side reproduction (a fixture
+generator, `ambre-spec-fixtures.md` I1, or a deterministic test); client code calls `new()`. It is
+ungated engine API; the fixture machinery that consumes it is gated (`fixtures section I4`).
 
 ### A bis. Dense over used range -- reconciliation with the virtual 100k grid
 
-The grid is virtual at `TOTAL_ROWS = 100_000`. We do **not** materialize 100k list elements. The
-model that keeps O(1) insert *and* CRDT convergence is:
+The grid is virtual at `TOTAL_ROWS = 100_000`; the `rows_/cols_` `LoroMovableList`s are dense only
+over the used range `[0..hwm]` (high-water mark). Beyond it a row/column is virtual: no element, no
+storage; a read returns the generated label, a write materializes up to that index. List index ==
+grid position, so resolving `A5` is a direct `row_by_pos[5]` lookup.
 
-> **Own stable `Uid`s carried as element values, `rows_/cols_` `LoroMovableList` dense over the
-> *used range* `[0..hwm]` (high-water mark), rows/columns beyond the used range are virtual** (no
-> element, no storage; a read there returns the generated label, a write there materializes up to
-> that index).
-
-Crucially, **list index == grid position**: resolving `A5` is a direct `row_by_pos[5]` lookup, and a
-concurrent insert of two distinct rows is two independent element insertions that Loro orders
-canonically -- convergent *and* intent-preserving, with no shared mutable counter.
-
-**Materialization cap.** To bound the pathological "single value far down" case (for example an edit at row
-99 999 in an otherwise empty sheet, which would materialize ~100k placeholders), a write that would
-extend the used range by more than `ROW_MATERIALIZE_CAP` (= 10 000) rows past the current high-water
-mark is **rejected** (the cell write is dropped and a warning is surfaced). Normal top-down editing
-is unaffected. The symmetric cap applies to columns (bounded by `TOTAL_COLS = 1000` anyway).
-
-The **truly-sparse run-length** alternative (store only non-empty rows + a per-row `gap_before`
-counter + an order-statistic tree) is **rejected** -- see section 13: splitting a shared gap on concurrent
-inserts is not convergent under LWW and corrupts absolute numbering. The order-statistic tree only
-speeds the position query; it does not remove the shared-counter hazard.
+**Materialization cap.** A write extending the used range by more than `ROW_MATERIALIZE_CAP`
+(= 10 000) rows past the high-water mark is rejected (dropped, warning surfaced), bounding the
+"single value far down" case. Columns are bounded by `TOTAL_COLS = 1000`. The truly-sparse run-length
+alternative is rejected (section 13).
 
 ### B. CRDT Schema
 
@@ -219,12 +199,11 @@ Features (defined in spec-ambre-trame-features.md):
 
 ### C. SheetIndex -- Bidirectional O(1) Cache
 
-The `Vec`s are dense over the **used range** (`len == hwm`, see section 2.A bis), never over the 100k
-virtual grid, so `resolve` is a direct O(1) index lookup and memory is proportional to real sheet
-size. `row_by_pos[i]` is the `Uid` carried by the element at list position `i` (read from the
-element's *value*, parsed with [`parse_uid`], not from a Loro cursor -- see section 2.A). Because the uid
-is move-invariant, a `rows_{sheet}.mov(from, to)` simply **permutes `row_by_pos`** and every cell
-key still resolves; this is the single primitive behind sort (section 12) and any future drag-to-reorder.
+The `Vec`s are dense over the used range (`len == hwm`, section 2.A bis), so `resolve` is a direct
+O(1) lookup and memory is proportional to real sheet size. `row_by_pos[i]` is the `Uid` carried by
+the element at position `i` (its value, parsed with [`parse_uid`]). Because the uid is
+move-invariant, a `rows_{sheet}.mov` permutes `row_by_pos` and every cell key still resolves -- the
+single primitive behind sort (section 12).
 
 ```rust
 pub struct SheetIndex {
@@ -263,27 +242,19 @@ impl SheetIndex {
 
 ### D. Sheet Lifecycle (create / rename / reorder / delete)
 
-A workbook is a set of sheets ordered by `sheet_order` (a `LoroMovableList` of
-stable `sheet_id`s). Each operation below is a small, convergent CRDT mutation;
-none rewrites another sheet's content. The four commands are
-[`CreateSheet`](#8-interface-contract-api) / `RenameSheet` / `MoveSheet` /
-`DeleteSheet` (section 9).
+A workbook is a set of sheets ordered by `sheet_order` (a `LoroMovableList` of stable `sheet_id`s).
+Each command below is a small, convergent CRDT mutation that rewrites no other sheet:
+[`CreateSheet`](#8-interface-contract-api) / `RenameSheet` / `MoveSheet` / `DeleteSheet` (section 9).
 
-> **Sheet identity is a stable `sheet_id`, never the display name.** Formulas
-> depend on `sheet_id`; the display name is a mutable label resolved to its id
-> at parse time. This is the section 2.A principle applied to sheets: rename and
-> reorder never invalidate a reference, exactly as a row insert never
-> invalidates a cell key. Only **delete** removes an id, and that is the only
-> operation that can produce a cross-sheet `#REF!`.
+> **Sheet identity is a stable `sheet_id`, never the display name.** Formulas depend on `sheet_id`;
+> the name is a mutable label resolved at parse time. Rename and reorder never invalidate a
+> reference (the section 2.A principle applied to sheets); only **delete** removes an id, and only
+> delete can produce a cross-sheet `#REF!`.
 
 **`sheet_id` generation.** The implicit first sheet keeps the constant
-[`DEFAULT_SHEET`](../../crates/ambre-trame/src/logic.rs) `"s0"` so two fresh
-states (creator and reloading peer) address the same containers and merge
-cleanly. Every **explicit** sheet gets a peer-scoped id
-`"{peer:016x}_{counter:08x}"` (the document `PeerID` plus a per-session
-counter), so two peers that concurrently "add a sheet" mint two **distinct**
-ids -- both survive, neither overwrites the other (LWW on a single shared id is
-thereby avoided, mirroring the rejected shared-counter hazard of section 13).
+[`DEFAULT_SHEET`](../../crates/ambre-trame/src/logic.rs) `"s0"` so two fresh states merge cleanly.
+Every explicit sheet gets a peer-scoped `"{peer:016x}_{counter:08x}"`, so concurrent "add a sheet"
+mints two distinct ids -- both survive, no LWW on a shared id (section 13).
 
 #### Create
 
@@ -304,19 +275,14 @@ the next reseed (its empty cell set needs no recompute). Reply:
 sheets.get(sheet_id).set("name", new_name)   // LWW on the name field only
 ```
 
-The `sheet_id` is untouched, so **every cross-sheet reference keeps resolving and
-keeps computing** -- no formula is recompiled for a rename. The formula *text*
-shown in the formula bar is reconstructed from `sheet_id -> current name`, so a
-renamed sheet immediately displays the new qualifier (`Data!A1` where the user
-once typed `Sheet2!A1`). Concurrent renames resolve by LWW on the `name` field;
-all peers converge to one name and reconstruct identical formula text.
+The `sheet_id` is untouched, so every cross-sheet reference keeps resolving -- no formula is
+recompiled. The formula-bar text is reconstructed from `sheet_id -> current name`, so a rename
+immediately shows the new qualifier (`Data!A1` for a once-typed `Sheet2!A1`). Concurrent renames
+resolve by LWW on the `name` field.
 
-> **Implementation note.** This requires the compiled cross-sheet dependency to
-> carry the `sheet_id` (the engine's local `u16` is a per-session interning of
-> it), and the stored raw `v` text to be re-rendered through the current
-> `sheet_id -> name` map rather than replayed verbatim. The MVP engine re-parses
-> raw text by display name on reseed, so until id-persistence lands a rename
-> breaks an existing cross-sheet reference -- tracked in section 14.
+> **As-built gap.** This needs the compiled dependency to carry the `sheet_id` and the raw text to
+> re-render through the current `sheet_id -> name` map. The MVP engine re-parses raw text by display
+> name on reseed, so until id-persistence lands a rename breaks a cross-sheet reference (section 14).
 
 #### Reorder (move)
 
@@ -324,10 +290,9 @@ all peers converge to one name and reconstruct identical formula text.
 sheet_order.mov(from_index, to_index)   // 1 LoroMovableList move op
 ```
 
-Pure presentation: `sheet_order` drives only the tab strip and the local `u16`
-index assignment, never resolution (references are by `sheet_id`). No recompute.
-`MoveSheet { sheet_id, to_index }` looks up the current index and issues one
-`mov`; concurrent moves converge through `LoroMovableList`'s canonical ordering.
+Pure presentation: `sheet_order` drives only the tab strip and the local `u16` index, never
+resolution (references are by `sheet_id`). No recompute. `MoveSheet` issues one `mov`; concurrent
+moves converge through `LoroMovableList`'s canonical ordering.
 
 #### Delete
 
@@ -338,27 +303,19 @@ sheets.delete(sheet_id)
 // cellstyle_{id}, merges_{id}, and the feature maps of trame-features.
 ```
 
-- **Cross-sheet `#REF!`.** A formula `=Sheet2!A1` whose `sheet_id` is gone
-  resolves to `BrokenRef` at evaluation -- the section 5 mechanism, extended to the
-  sheet axis: absence in the `sheet_id -> u16` map is the trigger, no bytecode
-  patching. Deleting a sheet marks every dependent formula dirty (full reseed,
-  since the `u16` remap shifts indices) and recomputes them to `#REF!`.
-- **A workbook always keeps >= 1 sheet.** Deleting the last sheet is **rejected
-  locally** (`TrameEvent::Error`) -- this is the **as-built** guarantee. For the
-  concurrent case (two peers delete different sheets and the deletes converge to an
-  empty `sheet_order`), the **decided rule** is **deterministic re-insertion**: the
-  sheet whose `sheet_id` sorts first is re-inserted, identically on every peer, so
-  the workbook is never sheet-less. This preserves the CRDT convergence + intent
-  invariant of section 12 (no peer sees a sheet-less state, and all converge to the same
-  surviving sheet) rather than momentarily emptying the workbook. **Not yet
-  implemented:** the local guard ships today; the concurrent rule must land with a
-  2-peer convergence regression test (section 14, roadmap) before it is relied on.
-- **Active sheet deleted** (locally or by a remote delete): the active sheet
-  switches to the previous tab, or the first remaining sheet if it was first.
+- **Cross-sheet `#REF!`.** A formula whose `sheet_id` is gone resolves to `BrokenRef` (the section 5
+  mechanism on the sheet axis: absence in the `sheet_id -> u16` map, no bytecode patching). Delete
+  marks every dependent formula dirty (full reseed, the `u16` remap shifts indices) and recomputes
+  to `#REF!`.
+- **A workbook always keeps >= 1 sheet.** Deleting the last sheet is rejected locally
+  (`TrameEvent::Error`) -- the as-built guarantee. The decided rule for the concurrent case (deletes
+  converging to an empty `sheet_order`) is deterministic re-insertion of the lowest-sorting
+  `sheet_id`, identical on every peer (section 12). Not yet implemented: the concurrent rule needs a
+  2-peer regression test (section 14) before it is relied on.
+- **Active sheet deleted:** the active sheet switches to the previous tab, or the first remaining.
 
-**Engine impact.** Create/move/rename need at most a `SheetList` refresh; only
-**delete** forces a reseed + recompute (sheet set changed -> `u16` remap +
-`#REF!` propagation), aligned with the structural-op reseed path of section 8.
+**Engine impact.** Create/move/rename need at most a `SheetList` refresh; only delete forces a reseed
++ recompute (`u16` remap + `#REF!` propagation), the structural-op reseed path of section 8.
 
 ---
 
@@ -374,29 +331,23 @@ sheets.delete(sheet_id)
 
 ### A. Range Types
 
-**Two reference representations.** The `nom` parser produces *positional* refs
-(`CellRef { sheet: u16, row: u32, col: u32 }`, `RangeDep { .. : u32 }`) -- a typed
-`A1` / `A1:B10`. Compilation resolves those against the current per-sheet
-`SheetIndex` into the *uid-anchored* engine forms below (`CellId` / `RangeId`),
-which are what the bytecode, dependency graph, bytecode cache and VM are keyed
-by. Binding `A1` to the row/column `Uid` is what makes a reference follow the data
-(section 4.B / section 12).
+**Two reference representations.** The `nom` parser produces positional refs (`CellRef`, `RangeDep`,
+typed `A1` / `A1:B10`). Compilation resolves them against the per-sheet `SheetIndex` into the
+uid-anchored engine forms below (`CellId` / `RangeId`), which key the bytecode, dependency graph,
+cache and VM. Binding `A1` to the row/column `Uid` is what makes a reference follow the data
+(section 4.B, section 12).
 
-**Bound vs virtual axes (`AxisId`).** Within the used range a single-cell
-reference binds to the row/column `Uid`. Beyond the used range -- a *virtual*
-row/column with no list element yet (section 2.A bis), so no `Uid` -- there is nothing to
-bind to, so the reference keeps the grid position it was typed at and reads
-`Empty` until that line is materialized (a later re-edit then re-binds it to the
-new `Uid`). This is the only correct way to model `=A100` on a 10-row sheet.
+**Bound vs virtual axes (`AxisId`).** Within the used range a single-cell reference binds to the
+row/column `Uid`. Beyond it a virtual position has no `Uid` (section 2.A bis), so the reference keeps
+the grid position it was typed at and reads `Empty` until that line is materialized (a re-edit then
+re-binds it). This models `=A100` on a 10-row sheet.
 
-**Cells follow, ranges are blocks.** Only *single-cell* references bind to a `Uid`
-and follow their row/column through a sort (section 12). A **range** is compiled with
-`Virtual` (positional) endpoints, so it denotes a rectangular *region* -- a block
-of grid positions -- not a set of specific rows. Sorting the rows inside
-`SUM(A1:A3)` reorders the same three values, leaving the block (and its total)
-intact; this matches Excel/Sheets and is the only well-defined behavior, since
-uid-bound endpoints could scatter and invert the rectangle (see section 13). A range
-therefore never `#REF!`s on a row delete -- it shifts positionally, like Excel.
+**Cells follow, ranges are blocks.** Only single-cell references bind to a `Uid` and follow their
+row through a sort (section 12). A range compiles with `Virtual` (positional) endpoints, so it
+denotes a rectangular region, not a set of specific rows: sorting inside `SUM(A1:A3)` reorders the
+same three values and leaves the block total intact (Excel/Sheets behaviour; uid-bound endpoints
+could invert the rectangle, section 13). A range never `#REF!`s on a row delete -- it shifts
+positionally.
 
 ```rust
 pub enum AxisId {
@@ -685,9 +636,6 @@ masked_cells: HashSet<String>,
 
 `detect_and_handle_merge_conflicts(sheet)` walks every merge on the sheet and, for each covered cell that still carries a raw value, inserts its key into `masked_cells` and emits `TrameEvent::MergeConflictDetected { master_cell, covered_cell }`. A masked cell is excluded from the DAG feed, not displayed and not computed for as long as the merge is active -- uniformly on every sheet, not only the active one (`TRAME-020`). The returned events join `TrameOutcome.display` on the local path and the `Vec<TrameEvent>` of `apply_remote` on the remote one.
 
-
-Called after each `doc.import()` -- returned events are added to the `Vec<TrameEvent>` of `apply_remote()`.
-
 **Guaranteed behavior:**
 - Bob's value exists in `LoroDoc` -- not erased, not corrupted.
 - It is invisible as long as Alice's merge is active (`masked_cells`).
@@ -855,7 +803,10 @@ Two shapes worth naming:
 **`compute_all_dirty`** walks the dependency DAG in topological order and evaluates each dirty cell through a fresh `EvalContext`, writing results into `formula_cache`. It is synchronous and unbatched: recomputing 10 000 cells fits the P95 mobile target of section 11 (< 50 ms), and the occasional lag only shows on a large remote batch -- the same trade-off Prose makes with full pagination.
 
 
-> **Invariant `doc.commit()` per `TrameCommand`:** each `TrameCommand` handler that mutates `LoroDoc` must end with `self.doc.commit()`. Loro groups all mutations since the last commit into a single `UndoManager` item. Without an explicit commit, multiple successive `TrameCommand` values could be grouped into a single undo item -- which would break the expected granularity (1 command = 1 undo item). A cell edit (`SetCellText`) commits on cell exit (via `TrameCommand::CommitEdit` or a delay), not on each keystroke, so that an entire cell edit forms 1 undo item.
+> **One command, one undo item (`TRAME-017`).** Loro groups every mutation since the last commit
+> into one `UndoManager` item, so each mutating handler ends with `self.doc.commit()`. A cell edit
+> commits on cell exit (`TrameCommand::CommitEdit` or a delay), not per keystroke, so the whole edit
+> is one undo item.
 
 ### Priorities and Budgets
 
@@ -869,13 +820,15 @@ Two shapes worth naming:
 
 ### Optional Phase 2 -- Asynchronous P4 Yield
 
-Full recomputation of 10k formula cells takes < 50 ms (target). During these 50 ms, the Logic thread is blocked -- P1 (scroll) messages accumulate. This lag is **occasional** and **rare** (large `RemoteUpdate` during active scroll). It is accepted for the MVP, aligned with the Prose pattern.
+Recomputing 10k cells takes < 50 ms (target), blocking the Logic thread so P1 (scroll) messages
+accumulate. This lag is rare (a large `RemoteUpdate` during active scroll) and accepted for the MVP.
+If Phase 2 benchmarks show a real problem on mobile, a yield mechanism fits without touching the
+typed data plane or the `DocState` registry:
 
-If Phase 2 benchmarks show a real problem on mobile hardware, a yield mechanism can be added without touching the typed data plane or the `DocState` registry:
-
-- `compute_all_dirty()` is replaced by `compute_dirty_batch(N)` which processes N cells and returns a boolean `more_dirty`.
-- If `more_dirty`, `handle_command` adds a `TrameEvent::ComputePending` to `TrameOutcome.display`.
-- The `LogicState` dispatcher in `ambre-logic`, when it sees this signal, re-enqueues a `TrameCommand::ContinueDirtyCompute` (for example via a self-send on the Logic command channel) so pending P1/P2 commands are drained first.
+- `compute_all_dirty()` becomes `compute_dirty_batch(N)`, returning a boolean `more_dirty`.
+- On `more_dirty`, `handle_command` adds `TrameEvent::ComputePending` to `TrameOutcome.display`.
+- The `ambre-logic` dispatcher re-enqueues a `TrameCommand::ContinueDirtyCompute` so pending P1/P2
+  commands drain first.
 - The `DisplayViewport` is sent with `is_dirty=true` on cells not yet recomputed.
 
 This mechanism is **additive** -- it does not change `TrameState`'s method signatures or the `DocState` dispatch. It adds two variants (`TrameCommand::ContinueDirtyCompute`, `TrameEvent::ComputePending`) specific to Trame.
@@ -884,18 +837,16 @@ This mechanism is **additive** -- it does not change `TrameState`'s method signa
 
 ## 9. DATA-ORIENTED STRUCTURES (UI Thread)
 
-> **Typed data plane (no postcard on the UI<->Logic hop):** `TrameCommand` (UI->Logic) and `TrameEvent` (Logic->UI) travel as **Rust values** inside `AppCommand::Trame` / `AppEvent::Trame` over the `flume` channels between the UI and Logic threads of the single WASM binary -- they are **not** serialized (shared memory; see `spec-ambre-architecture.md section 2/section 6`). postcard is reserved for the Logic<->Sync `postMessage` hop (`SyncCommand`/`LogicEvent`) and for real network bytes. The UI thread sends a `LogicCommand::App { document_id, command: AppCommand::Trame(cmd) }`; the Logic thread `match`es it to the right `DocState` and dispatches.
+> **Typed data plane (no postcard on the UI<->Logic hop):** `TrameCommand` and `TrameEvent` travel
+> as Rust values inside `AppCommand::Trame` / `AppEvent::Trame` over the `flume` channels (shared
+> memory, not serialized; architecture section 2/section 6). postcard is reserved for the Logic<->Sync
+> hop and real network bytes.
 
-> **Canonical definitions live in `ambre-bus::app::trame`.** `TrameCommand`,
-> `TrameEvent` and `DisplayCell` are defined in `crates/ambre-bus/src/app/trame/`
-> ({`command`, `event`}`.rs`); the shared value types (`CellStyle`, `StylePatch`,
-> `NumberFormat`, `ClipboardPayload`, `FilterKind`, ...) live in the sibling
-> `style`/`clipboard`/`features` modules. This section mirrors that surface for
-> reference; the code is authoritative. `TrameCommand`/`TrameEvent`/`DisplayCell`
-> derive only `Debug, Clone` -- **no `serde`** (they never cross the wire, only
-> the shared-memory `flume` plane, `trame-features section 7`). The value types they carry
-> *do* derive `Serialize`/`Deserialize` because they are postcard-encoded into the
-> clipboard payload and the CRDT style register.
+> **Canonical definitions live in `ambre-bus::app::trame`** (`command`/`event`.rs; value types in the
+> sibling `style`/`clipboard`/`features` modules). This section mirrors that surface; the code is
+> authoritative. `TrameCommand`/`TrameEvent`/`DisplayCell` derive only `Debug, Clone` -- no `serde`,
+> they never cross the wire. The value types they carry do derive `Serialize`/`Deserialize` (postcard
+> into the clipboard payload and the CRDT style register).
 
 The viewport reply is the `TrameEvent::ViewportData` struct-variant (below); there
 is no separate `DisplayViewport` type on the bus -- the Logic thread builds the
@@ -961,12 +912,9 @@ pub enum NumberFormat {
     Text,                 // force raw text, no numeric/date auto-cast
     Custom(String),       // Excel-style format code, for example "#,##0.00;[Red](#,##0.00)"
 }
-// "Special" (zip code, phone, SSN) is locale-specific and is NOT a distinct primitive:
-// it is expressed via `Custom(..)` patterns rather than a hardcoded, US-centric variant.
-// Target state -- locale source (X41): the locale that drives `thousands`, the decimal
-// separator, and `Date`/`Time` `Locale*` patterns is the document-carried resolved locale
-// `meta.lang` (Foundations), not the local machine, so collaborators see identical formatting.
-// See the cross-app factoring Story (`ambre-roadmap.md`).
+// "Special" (zip code, phone, SSN) is expressed via `Custom(..)`, not a US-centric variant.
+// Target (X41): locale-driven formatting (`thousands`, decimal separator, `Locale*` patterns)
+// reads the document-carried `meta.lang`, not the local machine, so collaborators match.
 
 /// Partial style update -- only `Some(..)` fields are applied. A toolbar control
 /// sets a single field at a time (for example toggle bold -> patch { bold: Some(true), .. }).
@@ -1165,10 +1113,8 @@ pub enum TrameEvent {
     ExportComplete { filename: String, data: Vec<u8> },
 }
 
-> **Planned presence surface (not yet on the bus).** The collaborative-cursor
-> types below and the `UpdateCursor` command / `RemoteCursors` event that carry
-> them are the design target for ephemeral presence; they are **not** in the
-> `ambre-bus` `TrameEvent`/`TrameCommand` today (section 9 "planned surface" note). They
+> **Planned presence surface (not yet on the bus).** The cursor types below and the `UpdateCursor` /
+> `RemoteCursors` pair are the design target for ephemeral presence, not yet in `ambre-bus`. They
 > land with `apply_ephemeral`.
 
 /// Peer-authored `Ephemeral` wire payload. Carries ONLY the cell position + a
@@ -1219,18 +1165,17 @@ pub struct RemoteCursorPayload {
 }
 ```
 
-> **Note.** The **whole** current presence set travels as `TrameEvent::RemoteCursors {
-> cursors: Vec<RemoteCursorPayload> }` -- one entry per live peer, rebuilt from the
-> ephemeral store on every change -- exactly like Prose's `RemoteCursors { cursors:
-> Vec<RemoteCursor> }`. The UI replaces its remote-cursor set wholesale from each event,
-> so a peer that left (absent from the new set) drops with no separate removal path. The
-> event travels on the content plane (by move on `flume`), so it needs no `serde` of its
-> own -- `TrameEvent` derives only `Debug, Clone`. The sole presence type that genuinely
-> needs `serde` is the wire `PresencePayload` (postcard in the `Ephemeral` bytes).
+> **Note.** The whole presence set travels as `TrameEvent::RemoteCursors { cursors:
+> Vec<RemoteCursorPayload> }`, rebuilt on every change (like Prose). The UI replaces its set
+> wholesale, so a departed peer drops with no separate removal path. Only the wire
+> `PresencePayload` needs `serde` (postcard in the `Ephemeral` bytes); `TrameEvent` derives only
+> `Debug, Clone`.
 
 ### Shared Rendering Module -- `ambre-trame/src/render.rs`
 
-Rendering functions are parameterized on the `DrawSurface` trait (defined in `ambre-draw`). The **same code** serves both screen rendering (`WgpuSurface` in the UI thread) and PDF export (`KrillaSurface` in the Logic thread, lazy-loaded). These functions live in `ambre-trame`, not in a separate UI crate.
+Rendering functions are parameterized on the `DrawSurface` trait (`ambre-draw`), so the same code
+serves screen (`WgpuSurface`, UI thread) and PDF export (`KrillaSurface`, Logic thread, lazy-loaded).
+They live in `ambre-trame`, not a separate UI crate.
 
 ```rust
 // ambre-trame/src/render.rs
@@ -1300,7 +1245,9 @@ specs in `1-Foundations/`; it MUST NOT be re-derived here.
 
 ## 10. QUALITY & TESTABILITY
 
-> Transverse test architecture: `ambre-spec-architecture.md section 4`. **What this engine guarantees, and what verifies each guarantee, is the table in section 1.** It is the only list of tests this spec keeps, because it is the only one joined to a claim -- a name here that no longer resolves is a lie the reader cannot detect, and this section used to hold seventeen of them.
+> Transverse test architecture: `ambre-spec-architecture.md section 4`. **What this engine
+> guarantees, and what verifies each guarantee, is the table in section 1** -- the only list of tests
+> this spec keeps, because it is the only one joined to a claim.
 
 * **Tiers.** **host** for the whole engine (`just test-native`): `TrameState`, the formula pipeline, the CRDT model and the render feed are pure Rust with no `cfg(wasm32)` gate. **wasm** covers the DOM chrome only and is specified in `trame-ui`. No **db** tier.
 * **Seams.** `CommandSink` / `MockSyncHandle` for the Logic<->Sync boundary; `TrameState::with_peer` for a pinned `PeerID` and clock (`ambre-spec-fixtures.md section 2`); `RecordingSurface` (`ambre-draw`, feature `testing`) for the render feed. Isolated, headless, no live network.
@@ -1331,12 +1278,9 @@ specs in `1-Foundations/`; it MUST NOT be re-derived here.
 
 ## 11 bis. SCALING & CONSISTENCY DEBT (2026-07 ARCHITECTURE REVIEW)
 
-> Findings of the 2026-07-09 architecture review of `ambre-trame`. The identity layer
-> (`Uid` / `SheetIndex` / `AxisId`, section 2-section 3) is sound. Findings A-E are recomputation strategies
-> sitting on top of it, fixable without a document-format migration. **Finding F is the exception:**
-> it is a divergence of the persisted schema itself (section 2.B), so it must land before the public Beta,
-> while no third-party document exists and the fix is a writer/reader change with no migration path
-> to carry. Tracked as **Phase 4** Stories in section 14 (Epic `E5` in `specs/ambre-roadmap.md`).
+> Findings of the 2026-07-09 architecture review. The identity layer (`Uid` / `SheetIndex` /
+> `AxisId`, section 2-section 3) is sound. Findings A-D are recomputation strategies fixable without a
+> format migration; E and F have landed. Open items are Phase 4 Stories in section 14 (Epic `E5`).
 
 ### A. Incremental remote apply (kill the O(document) reseed)
 
@@ -1394,97 +1338,33 @@ explicit index the call sites already carry.
 | Dead tail loop in `compute_all_dirty` re-inserts values already in the cache (no-op). | Delete. |
 | `formula_cache: RefCell<HashMap<...>>` -- interior mutability is no longer needed (results are staged in a `Vec` before write-back). | Plain field + disjoint borrows, per the section 7 sketch. |
 
-### E. View-independent merge masking (consistency) -- LANDED
+### E. View-independent merge masking -- LANDED
 
-`masked_cells` is excluded from the engine feed **only for the active sheet** (`reseed_engine`
-skips masked keys only at local index 0). A cross-sheet reference to a masked, conflicted cell
-therefore evaluates differently depending on which sheet is currently displayed. This contradicts
-section 6 ("DAG and Masked Cells": masked cells do not participate in any computation) and the rule that
-formula results never depend on view state.
+`masked_cells` is derived per sheet from `merges_{sheet}` at feed time (`masked_cells_for`,
+`logic/merges.rs`) and excluded uniformly on every sheet, so a conflicted masked cell reads
+identically whichever tab is active (section 6). Verified as `TRAME-020` / `TRAME-021` (section 1).
 
-**Target.** Derive masking per sheet from `merges_{sheet}` at feed time and exclude uniformly on
-every sheet; add a cross-sheet convergence test asserting a conflicted masked cell reads
-identically regardless of the active tab. *Tracked as an Epic `E3` / Phase 1 Story (a formula
-result that depends on view state is wrong at any document size), not with the Phase 4 scaling
-debt.*
+### F. Consolidate the per-cell style fan-out -- LANDED
 
-**Done.** `TrameState::masked_cells_for(sheet_id, index)` (`logic/merges.rs`) derives the masked set per
-sheet and `reseed_engine` excludes it uniformly, on every sheet. The cross-sheet test this section asked
-for exists and is green: `logic::tests::group3::masked_cell_excluded_across_sheets_regardless_of_active_tab`,
-which drives two peers into a conflicted masked cell and asserts an identical read from either active tab.
-Recorded as `TRAME-020` / `TRAME-021` in section 1. *Found by seeding the invariant table -- the section had been
-carrying a fixed problem as open debt, which is the cheaper half of the same drift `section 11 bis.F` shows in the
-other direction.*
+A cell's style used to scatter across up to 11 per-sheet LWW registers, which tore border colour (a
+concurrent edit could keep one peer's presence with another's colour) and dropped colour-only or
+font-only cells on reload. It is now one register per cell (`cellstyle_{sheet}`, whole `CellStyle`
+postcard-encoded, `logic/styles.rs`); `set_cell_style` writes the selection and commits once (one
+delta, one undo item). Concurrency is whole-cell last-writer-wins, never a per-attribute blend
+(`TRAME-016`, section 12). Verified by `concurrent_whole_cell_style_edits_do_not_blend_across_containers`
+and `subset_style_edit_does_not_tear_a_whole_cell_rewrite` (`logic/convergence_tests.rs`).
 
-### F. Consolidate the per-cell style fan-out (schema divergence from section 2.B) -- LANDED
-
-**Original divergence from section 2.B.** The schema prescribes one style reference per cell (the `"s"` key
-of the cell sub-map) pointing into a shared `styles` map. The implementation instead **used to**
-scatter one cell's style across up to **11 per-sheet `LoroMap`s**, each an independent LWW register
-keyed by the cell id pair: `format_` (a legacy bold/italic mask), `style_` (the packed rich mask:
-underline, wrap, alignments, border presence/style, number-format family, decimals, font size),
-`fgcolor_`, `bgcolor_`, `bordcolor{0..3}_` (one per edge), `font_` and `numfmt_`.
-
-**Resolution (landed).** The style fan-out is now **one register per cell**: a per-sheet map
-`cellstyle_{sheet}` whose value is the whole style -- bold/italic plus the full `CellStyle` --
-postcard-encoded into a single binary LWW register (`StyleRecord { bold, italic, style }`, see
-`logic/styles.rs`). The packed-mask machinery (`pack_style_mask` and the `STYLE_*`/`FMT_*` bit
-constants) is deleted; `CellStyle` is stored serde-verbatim. `set_cell_style` pre-materializes the
-selection, writes every register without committing, then commits **once** inside one `UndoManager`
-group -- so a selection restyle is one delta and one undo item.
-
-This closed four problems at once:
-
-1. **Write amplification.** `set_cell_style` touched 9 containers per cell and committed **per cell**
-   inside the selection loop (N Loro transactions, each fanned out over 11 containers, compressed and
-   encrypted on the sync path). Now: one register, one commit per selection.
-2. **Two sources of truth for font style.** `format_{sheet}` carried only bold/italic while
-   `style_{sheet}` held a richer mask -- a vestigial container with duplicated `DisplayCell`
-   plumbing. Folded into the single record.
-3. **Border-colour tear (correctness).** Border *presence/style* lived in the `style_` mask while
-   border *colour* lived in `bordcolor{edge}_`: two concurrent edits of one edge could converge on
-   one peer's presence with the other's colour -- a torn value inside a single conceptual attribute.
-   Gone: the whole edge is in one register.
-4. **Colour/font reseed data-loss (correctness).** `reseed_styles` iterated only the `style_` mask
-   map; a cell whose *only* style was a colour or font had mask 0, hence no `style_` entry, hence was
-   **dropped on reload** -- the colour/font vanished on reopen. Gone: reseed iterates the one map
-   that holds every styled cell.
-
-**Convergence semantics (revised -- this replaces the earlier "not a convergence defect" note).**
-Style is now atomic **per cell**: two peers concurrently restyling the same cell race exactly once,
-so the converged cell always carries a style *one* peer actually wrote -- never a per-attribute blend
-across containers. This is a deliberate choice of **whole-cell last-writer-wins** over per-attribute
-merge, documented as an assumed Excel difference in section 12. The earlier claim that the fan-out was "not
-a convergence defect" was **wrong on two counts**: it only checked two *whole-cell* rewrites (which
-did converge, because each cell's containers were written at adjacent Lamports) and missed both the
-*subset*-vs-whole tear and the border-colour tear above. Locked in by two regression tests in
-`logic/convergence_tests.rs`: `concurrent_whole_cell_style_edits_do_not_blend_across_containers`
-(the original whole-cell case) and `subset_style_edit_does_not_tear_a_whole_cell_rewrite` (a
-colour-only patch racing a whole-cell rewrite, which tore under the old schema).
-
-*Why whole-cell and not per-attribute:* per-attribute merge (Alice bolds while Bob recolours, both
-stick) is what a **server-authoritative** suite like Google Sheets does cheaply because a central
-server linearizes every op. Ambre is a blind relay with no server-side content ordering, so
-per-attribute merge costs exactly the multi-container fan-out we just removed (and it was inconsistent
-anyway: the `style_` mask already merged underline/wrap/aligns as one block). Whole-cell LWW is
-predictable, matches a single "apply this style" user action, and is closer to Excel co-authoring
-(which resolves same-cell conflicts coarsely, even escalating to a manual merge pane). A future
-per-attribute model, if ever justified, would be a nested `LoroMap` per cell -- not a return to the
-flat fan-out.
-
-**Deliberately still out of scope.** The shared `styles` dictionary and the `"s"` style-id
-indirection are a *deduplication* optimization (storage O(distinct styles)), orthogonal to the
-consolidation above and with a real cost: Loro does not garbage-collect orphaned map entries, so the
-indirection forces a reclamation policy for unreferenced styles plus a dereference on every cell
-read. Deferred until benchmarks justify it -- the same treatment section 14 Phase 3 gives the
-`SheetRangeIndex` interval tree. The `{v,t,s}` cell sub-map falls under the same rule: `"t"` is a
-type cache the engine already rederives.
+**Still out of scope.** The shared `styles` dictionary and the `"s"` indirection are a deduplication
+optimization with a real cost: Loro does not garbage-collect orphaned entries, so it needs a
+reclamation policy plus a dereference per read. Deferred until benchmarks justify it (section 14
+Phase 3). The `{v,t,s}` sub-map falls under the same rule.
 
 ---
 
 ## 12. ASSUMED SEMANTIC DIFFERENCES WITH EXCEL
 
-Trame is not a semantic clone of Excel. These differences are **intentional**, documented, and motivated by the collaborative CRDT model. They must be clearly communicated to users coming from Excel.
+Trame is not a semantic clone of Excel. These differences are intentional, motivated by the
+collaborative CRDT model, and must be communicated to users coming from Excel.
 
 ### References After Structural Operations
 
@@ -1526,7 +1406,10 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 
 **Trame:** a cell's whole style is **one CRDT register** (`cellstyle_{sheet}`, section 2.B / section 11 bis.F), so concurrent restyles of the same cell resolve by **whole-cell last-writer-wins**: the converged cell carries the style *one* peer wrote, never a per-attribute blend. This is atomic **per cell, not per selection** -- a `SetCellStyle` over a range writes each cell's register independently, so two concurrent restyles of *overlapping, differently-shaped* selections can leave the overlap split cell-by-cell between the two writers (each cell still internally consistent). Applying the style again reconciles it.
 
-**Why this is correct for a blind relay:** per-attribute merge is only cheap with a server that orders content; Ambre's server is a blind relay that never sees plaintext, so the only content ordering is per-register LWW. Splitting one cell's style back over ~11 registers to fake per-attribute merge is exactly the fan-out section 11 bis.F removed (and it tore borders and lost colours on reload). Whole-cell LWW is predictable, matches a single "apply this style" intent, and is closer to Excel than to Sheets. A finer model, if ever justified, is a nested per-cell `LoroMap` -- never the flat fan-out.
+**Why this is correct for a blind relay:** per-attribute merge is only cheap with a server that
+orders content; Ambre's blind relay never sees plaintext, so the only ordering is per-register LWW.
+Faking per-attribute merge means the multi-register fan-out section 11 bis.F removed. A finer model,
+if ever justified, is a nested per-cell `LoroMap`, never the flat fan-out.
 
 ---
 
@@ -1556,42 +1439,39 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 > `specs/ambre-roadmap.md`.
 
 **Phase 0 -- Core standalone**
-- [~] Multi-sheet `LoroDoc`, per-sheet CRDT schema (section 2.B: `sheets`, `cells_/format_/rows_/cols_{sheet}`, dense stable-id model) *(Landed: the structural foundation -- implicit default sheet, lazy materialization, `MATERIALIZE_CAP`, explicit add-sheet + `sheet_order` (with the tabs UI), and `filter_hidden_{sheet}` (with the shared filter). `cond_formats`/`validations`/`protections` legitimately await their Phase 2 / Post-MVP features.*
-  **Still open, and the reason this box is `[~]`:** the `{v,t,s}` cell sub-map and the shared
-  `styles` map were never implemented -- values are flat in `cells_{sheet}`. Split in two by the
-  2026-07-09 review (section 11 bis.F): **(a)** consolidating the style fan-out into one container per cell
-  is **DONE** -- styles now live in one `cellstyle_{sheet}` register per cell (whole-cell LWW), which
-  also fixed a border tear and a colour/font reseed data-loss; **(b)** the shared `styles` dictionary
-  + `"s"` indirection (a *dedup* optimization) and the `{v,t,s}` sub-map are **deferred behind a
-  benchmark** and are not a prerequisite for anything.*
-- [x] Bidirectional `SheetIndex` (`model::SheetIndex`, dense over used range) + `sheet_name_to_id`
-- [x] `nom` parser: arithmetic, `CellRef`, bounded `Range` (`A1:B10`), basic functions, cross-sheet references (`Sheet2!A1` via `sheet_name_to_id`). `RangeEndpoint::EntireAxis` (A:A / 1:1) is reserved in the type but not parsed yet -- Phase 3.
+- [~] Multi-sheet `LoroDoc`, per-sheet CRDT schema (section 2.B). Structural foundation landed;
+  `cond_formats`/`validations`/`protections` await their Phase 2 / Post-MVP features. **Open (why
+  `[~]`):** the `{v,t,s}` sub-map and the shared `styles` dictionary are unbuilt -- values are flat
+  in `cells_{sheet}` and style is one register per cell (section 11 bis.F). Both are deferred behind a
+  benchmark and block nothing.
+- [x] Bidirectional `SheetIndex` (dense over used range) + `sheet_name_to_id`
+- [x] `nom` parser: arithmetic, `CellRef`, bounded `Range` (`A1:B10`), functions, cross-sheet refs. `EntireAxis` (A:A / 1:1) reserved but not parsed (Phase 3).
 - [x] Bytecode VM: full `Op` set, `compile()`, `execute()`, `EvalContext`
 - [x] Two-level `DependencyGraph` + `collect_dirty`
-- [x] Cycles: static Kosaraju + dynamic `eval_stack` (cell-to-cell, ranges, cross-sheet)
-- [x] `#REF!`: detection via `SheetIndex.contains_*`
-- [x] `TrameCommand` and `TrameEvent`: consolidated enums (section 9, single source of truth) *(MVP subset; extended per feature)*
-- [x] Unit tests + property tests + postcard round-trip `TrameCommand`/`TrameEvent`
+- [x] Cycles: static Kosaraju + dynamic `eval_stack`
+- [x] `#REF!` detection via `SheetIndex.contains_*`
+- [x] `TrameCommand` / `TrameEvent` consolidated enums (section 9)
+- [x] Unit + property tests + postcard round-trip
 
-**Phase 1 -- Logic Thread Integration**
-- [x] Logic-thread command dispatch (`handle_command` returning `TrameOutcome`, section 8) *(typed `DocState` + `match`; see `spec-ambre-architecture.md section 6`)*
+**Phase 1 -- Logic Thread Integration** *(Epic `E3`)*
+- [x] Logic-thread command dispatch (`handle_command` -> `TrameOutcome`, section 8)
 - [x] Synchronous recomputation `compute_all_dirty()` in each handler
 - [x] `DisplayViewport` + anti-flickering (`tx_version`)
-- [x] Insert/delete rows/columns (`TrameCommand::Insert/DeleteRow/Column { at }`): one `LoroMovableList` op, `rebuild_index` + positional engine reseed + formatting reseed; delete purges the removed line's cells/formatting; no-op past the used range *(Epic `E3`)*
-- [x] Merges: `merges_{sheet}` LWW map (master/extent stable-id pairs), client-side non-empty rejection (`MergeRejected`), `DisplayCell.is_merged`/`merge_span`, masked covered cells (`masked_cells`, excluded from the engine, restored on unmerge), deterministic overlap precedence, conflict detection (`MergeConflictDetected`) on import. Merges follow their cells across structural ops *(Epic `E3`)*
-- [x] **View-independent merge masking (correction, section 11 bis.E).** Masking was excluded from the engine feed only for the active sheet (`reseed_engine` skipped masked keys only at local index 0), so a cross-sheet reference to a masked conflicted cell evaluated differently depending on the displayed tab -- a formula result that depended on view state, contradicting section 6 ("masked cells do not participate in any computation"). Fixed: masking is now derived per sheet from `merges_{sheet}` at feed time via `masked_cells_for(sheet_id, index)` (the side-effect-free masking half of `rebuild_merges`) and excluded uniformly on every sheet; for the active sheet it returns exactly `self.masked_cells`. Covered by the 2-peer cross-sheet regression `masked_cell_excluded_across_sheets_regardless_of_active_tab` (a conflicted masked cell reads identically whether or not its sheet is the active tab). *(Epic `E3`)*
-- [x] Shared rendering module `ambre-trame/src/render.rs`: `GridLayout` + `draw_cells_on<S>()`, `draw_grid_lines_on<S>()`, `draw_col_headers_on<S>()`, `draw_row_headers_on<S>()`, all `DrawSurface`-generic. `ui::renderer` composes them (cells layer + header overlay); uniform-metrics `GridLayout` (variable widths/heights land with the resize story below); `DisplayViewport`-fed PDF path lands with `export_pdf.rs` (Phase 3). *(Epic `E3`)*
-- [x] `MockSyncHandle` for controller tests (via `CommandSink`) *(`ambre-bus::CommandSink` seam + `ambre-trame::test_support::MockSyncHandle`: captures emitted `SyncCommand`s and relays CRDT deltas peer-to-peer. Production forwards `TrameOutcome` payloads from `ambre-logic`; the test seam mirrors that exact relay via `MockSyncHandle::absorb`, so tests drive the same `SyncCommand`s the dispatcher emits) (Epic `E3`)*
-- [x] Undo/Redo via Loro `UndoManager` (`TrameCommand::Undo/Redo` -> `undo_manager.undo()/redo()` + full derived-cache reseed via `after_structural` + `flush_delta` broadcast of the inverse ops; `TrameEvent::UndoState { can_undo, can_redo }`; chrome `UNDO`/`REDO` commands bound to Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y). Implicit row/column materialization is committed under an excluded origin (`add_exclude_origin_prefix`) so undo reverts only the value and the cell key still resolves to its stable list-element ids on redo *(Epic `E3`)*
-- [x] **Own-uid cell model (section 2.A) + id-based engine (section 3, section 12).** Each `rows_/cols_` element carries a minted `Uid` as its *value* (replacing the Loro cursor id); `SheetIndex` reads values and gained `apply_move_row`. The compiled engine is uid-anchored: positional AST `CellRef`/`RangeDep` are resolved at compile time into `CellId`/`RangeId` over `AxisId { Bound(Uid), Virtual(pos) }` (a reference past the used range stays virtual and reads `Empty`). `SortRange` is a single `mov` permutation that **preserves** the uid-anchored bytecode (no reseed/re-parse) and recomputes, so single-cell references follow the moved data -- the section 12 guarantee, proven by `sort_range_formulas_follow_data`. Ranges are positional blocks (`Virtual` endpoints), so `SUM(A1:A3)` over a sorted block stays intact (`sort_range_sum_block_is_stable_under_internal_sort`; uid-bound endpoints would invert -- see section 13). Other structural ops still reset+reseed (re-bind against the converged order). Landed in stages, 164 tests green. *(Epic `E3`)*
-- [x] Manual cell formatting (`TrameCommand::SetCellStyle` + `StylePatch`): write the extended `CellStyle` (bold/italic/underline, font/size, fg/bg, `NumberFormat`, h/v align, wrap, borders) into the `styles` LoroMap; value -> `display_text` formatting per `NumberFormat` done in the Logic thread. Emits `StyleApplied`. *(Epic `E3`)*
-- [x] Clipboard paste (`TrameCommand::PasteRange` + `ClipboardPayload`): relative-formula reindexing + style application from the anchor; `PasteRejected` on protected range. (Copy/cut stay UI-local.) *(Epic `E3`)*
-- [x] Autofill (`TrameCommand::FillRange` + `FillMode`): Copy replication or Series increment (numeric/date pattern detection). *(Epic `E3`)*
-- [x] Find & replace (`ReplaceAll` / `FindNext`): full-document scan (UI cache is viewport-only); `FindResult` / `ReplaceDone`. *(Epic `E3`)*
-- [x] Selection aggregates (`RequestSelectionStats` -> `SelectionStats`: sum/avg/count/count_num/min/max) for the status bar; computed in the Logic thread since the selection can exceed the viewport. *(Epic `E3`)*
-- [x] **Column/row resize (`ResizeCol` / `ResizeRow`).** `col_widths_{sheet}` / `row_heights_{sheet}` LWW maps keyed by col/row `Uid` (section 2.B), clamped to a minimum (`logic/metrics.rs`); the `ViewportData` reply carries per-column `col_widths` / per-row `row_heights` slices. **Variable-metrics `GridLayout`** (section 9): cumulative offsets from the width/height maps (default for unset axes), via `col_w`/`row_h`/`col_left`/`row_top`/`col_at`/`row_at`, used by the screen path (the PDF path passes empty maps = uniform). Undoable (plain CRDT write); LWW convergence on concurrent resize covered by a 2-peer test. *(was Phase 2; promoted to MVP.)*
-- [x] **Multi-column sort (`SortRangeMulti`).** Lexicographic `sort_by` over `sort_keys` (decreasing priority), same `compare_cell_values` precedence and `has_header` pin as single-column sort, realised as the same pure `rows_{sheet}` `mov` permutation (uid-anchored bytecode preserved, references follow). Emits `SortComplete` + `DataReset`. *(was `-features` Phase 2; promoted to MVP -- see `-features` section 2. Landed with the `SortDialog` UI; the ranged `SortRangeMulti` and the parameterless `SortSelectionMulti` share `realize_sort` -- see `-features` section 2.)*
-- [x] **CRDT convergence property-test (test debt, Epic `ET`).** `proptest`-generated interleaved sequences of `SetCellText` / insert-delete row-column / `SortRange` / merge / `FillRange` applied across 2 peers, asserting identical final states after full history exchange (per `ambre-spec-architecture.md section 4`). Primary target: references-after-sort and structural-op reconciliation (the own-uid model, section 2.A/section 12). Includes recompute determinism (a fresh peer rebuilt from the converged snapshot renders the same grid). *(`ambre-trame/src/logic/convergence_tests.rs::two_peers_converge_under_interleaved_ops`: routes a generated `(peer, op)` program over a bounded 5x4 grid, exchanges full snapshots both ways, and `prop_assert_eq!`s the materialized window -- text, formula results, bold, merge geometry. Uses snapshots rather than incremental `SendUpdate` deltas, since each peer's implicit-s0 `new()` op is a private dependency an incremental delta would leave dangling.)* **DoD:** required for the MVP to be considered tested.
+- [x] Insert/delete rows/columns: one `LoroMovableList` op + reseed; delete purges the line's cells
+- [x] Merges: `merges_{sheet}` LWW map, non-empty rejection, masked covered cells, conflict detection on import; merges follow their cells across structural ops
+- [x] View-independent merge masking (section 11 bis.E)
+- [x] Shared rendering module `ambre-trame/src/render.rs` (`GridLayout` + `draw_*_on<S>`, `DrawSurface`-generic)
+- [x] `MockSyncHandle` for controller tests (via `CommandSink`)
+- [x] Undo/Redo via Loro `UndoManager`; implicit materialization committed under an excluded origin so undo reverts only the value
+- [x] Own-uid cell model (section 2.A) + id-based engine (section 3, section 12): sort is a pure `mov` permutation preserving the uid-anchored bytecode; single-cell references follow the data, ranges stay positional blocks
+- [x] Manual cell formatting (`SetCellStyle` + `StylePatch`); `display_text` formatting per `NumberFormat` in the Logic thread
+- [x] Clipboard paste (`PasteRange` + `ClipboardPayload`): relative-formula reindexing + styles; `PasteRejected` on protected range
+- [x] Autofill (`FillRange` + `FillMode`): copy or series increment
+- [x] Find & replace (`ReplaceAll` / `FindNext`): full-document scan
+- [x] Selection aggregates (`RequestSelectionStats` -> `SelectionStats`)
+- [x] Column/row resize (`ResizeCol` / `ResizeRow`): per-axis LWW maps + variable-metrics `GridLayout` *(promoted from Phase 2)*
+- [x] Multi-column sort (`SortRangeMulti`): same pure `mov` permutation, lexicographic over `sort_keys` *(promoted from Phase 2)*
+- [x] CRDT convergence property-test (`TRAME-015`): 2-peer interleaved ops, identical converged documents. **DoD:** required for the MVP to be tested.
 
 **Phase 2 -- Core features (~50 functions)**
 - [x] SUM, AVERAGE, MIN, MAX, COUNT, IF, AND, OR *(plus ABS, COUNTA, CONCATENATE, LEFT, RIGHT, MID, LEN, LOWER, UPPER, NOT, POWER, ROUND, SQRT, TRIM -- 22 implemented)*
@@ -1608,9 +1488,9 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
   - Text: SEARCH, REPLACE, EXACT, TEXTJOIN, CHAR, CODE
   - Date/time: TIME, HOUR, MINUTE, SECOND, WEEKDAY, EDATE, EOMONTH
   - Lookup/reference: HLOOKUP, CHOOSE, ROWS, COLUMNS, ROW, COLUMN. **Context note:** `ROW()`/`COLUMN()` need the evaluating cell's position, threaded into `call_builtin` via `FnCtx` (`EvalContext::current_pos`, set in `eval_cell` from the cell's `SheetIndex` position -- same pattern as `now_serial`). Only the **no-argument** form is supported; the reference form (`ROW(A1)`) and `OFFSET`/`INDIRECT` need reference-preserving compilation (args are pre-evaluated to values, losing the reference identity) and are **deferred to Phase 3**.
-- [x] Named ranges, cross-sheet references *(Epic `E3`: `CellRef`/`RangeDep` carry a local `sheet: u16`; the parser emits `Expr::SheetRef`/`Expr::Name`, resolved by a context-aware `resolve_refs` pass against a `FormulaCtx` (sheet display name -> index, defined name -> target). Named ranges fully wired e2e: `named_ranges` LWW CRDT map, `TrameCommand::DefineName`/`DeleteName`, positional resolution on reseed. `reseed_engine` is multi-sheet (active sheet pinned to index 0; cross-sheet `Sheet2!A1` evaluates in the engine, unit-tested). **Gap:** the end-to-end cross-sheet path needs a sheet-creation command (`CreateSheet`/`ActivateSheet`), which lands with the sheet-tabs UI (see Phase 0) -- the engine is ready, only the entry point is missing)*
-- [x] Sheet lifecycle commands `CreateSheet` / `RenameSheet` / `MoveSheet` / `DeleteSheet` + `ActivateSheet` (section 2.D): peer-scoped `sheet_id` minting (`{peer:016x}_{counter:08x}`), `sheet_order` `LoroMovableList` ops (default sheet implicit-first, never eagerly pushed), last-sheet-deletion guard (`TrameEvent::Error`), active-sheet fallback on delete, delete-driven reseed (drops per-sheet containers) + full engine remap. `TrameEvent::SheetList { sheets, active }` refreshes the tab strip (also on load). Unlocks the end-to-end cross-sheet path (unit-tested `cross_sheet_formula_evaluates_end_to_end`). *(Epic `E3`. The sheet-tabs UI has since landed as the DOM `SheetTabs` component. **Still open:** the last-sheet-deletion guard is enforced **locally** only. The concurrent-deletion rule is now **decided** -- deterministic re-insertion of the first-sorting `sheet_id` (section 2.D) -- but not yet implemented; it needs a 2-peer convergence regression test before it ships.)*
-- [x] Cross-sheet references bound to `sheet_id` (not display name): the CRDT `v` text is canonicalized to an id-qualified form (`#s0!A1` via the `#` sigil) at edit time, and the formula-bar text is reconstructed through `sheet_id -> name`, so rename/reorder preserve references and delete yields cross-sheet `#REF!` (section 2.D rename note, section 12). *(Epic `E3`: `formula::SheetQualifier` on `Expr::SheetRef`, parser `#id` token + `FormulaCtx::resolve_sheet_id`, `FormulaError::BrokenRef`/`Op::PushError`, `formula::render` AST printer with `canonicalize`/`to_display_form`, `TrameState::canonicalize_input`/`formula_display` + `sheet_id_to_u16`/`sheet_id_to_name` maps. Tests: parser `#id`/`#REF!`, render round-trips, `cross_sheet_reference_survives_rename_and_breaks_on_delete`, `cross_sheet_reference_converges_across_peers_on_rename`)* **Interop note (deferred):** xlsx/CSV export must map `#id -> name` and import `name -> #id` (tracked in the interop spec). Pre-existing display-name formulas are canonicalized on next edit (no bulk rewrite).
+- [x] Named ranges (`named_ranges` LWW map, `DefineName`/`DeleteName`) and cross-sheet references, resolved by a context-aware `resolve_refs` pass against a `FormulaCtx`.
+- [x] Sheet lifecycle `CreateSheet` / `RenameSheet` / `MoveSheet` / `DeleteSheet` + `ActivateSheet` (section 2.D); `SheetList` refreshes the tab strip. **Still open:** the last-sheet-deletion guard is local only; the concurrent-deletion rule is decided (section 2.D) but needs a 2-peer regression test (Phase 3).
+- [x] Cross-sheet references bound to `sheet_id`: the CRDT `v` is canonicalized to an id-qualified form (`#s0!A1`) at edit time and the formula bar reconstructs the name, so rename/reorder preserve references and delete yields `#REF!` (section 2.D, section 12). **Deferred:** xlsx/CSV interop must map `#id <-> name` (interop spec).
 
 **Phase 3 -- Optimization & Completion**
 - [ ] `SheetRangeIndex` interval tree 2D if benchmarks justify it
@@ -1644,15 +1524,9 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
   reindex comment), targeted cycle check instead of whole-graph `is_cyclic_directed`,
   dirty-subgraph topological recompute, delete the dead write-back loop, drop the `formula_cache`
   `RefCell`.
-- [x] **Consolidate the per-cell style fan-out (section 11 bis.F):** DONE. One `cellstyle_{sheet}` register
-  per cell holding the whole style (bold/italic + `CellStyle`, postcard-encoded), one commit per
-  selection inside a single undo group. Folded bold/italic in (the `format_`/`style_`/colour/font/
-  numfmt maps are gone), and turned out to be a **correctness** fix after all, not just cost: the old
-  fan-out tore border colour vs presence and lost colour/font-only cells on reload. Convergence is now
-  whole-cell last-writer-wins (section 12, "Concurrent Cell Formatting"). Covered by
-  `subset_style_edit_does_not_tear_a_whole_cell_rewrite` and `selection_style_is_a_single_undo`.
-  *(The shared `styles` dictionary + `"s"` indirection and the `{v,t,s}` sub-map are explicitly
-  **not** part of this item -- deferred behind a benchmark, section 11 bis.F "out of scope".)*
+- [x] **Consolidate the per-cell style fan-out (section 11 bis.F):** DONE. One `cellstyle_{sheet}`
+  register per cell, one commit per selection. The shared `styles` dictionary and the `{v,t,s}`
+  sub-map stay deferred behind a benchmark.
 
 > **View-independent merge masking (section 11 bis.E)** is a correctness defect, not scaling debt, so it
 > is tracked as an **E3 / Phase 1** Story (see the Phase 1 list above), not in this phase.
