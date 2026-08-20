@@ -282,8 +282,13 @@ fn draw_cell<S: DrawSurface>(
 ```
 
 > **Wrap / vertical alignment / overflow (MVP):** `CellStyle.wrap` and `CellStyle.v_align`
-> are honoured above. `wrap` rows may need a taller `row_height` -- the Logic thread returns
-> the measured height in `DisplayViewport.row_heights`; the UI does not remeasure.
+> are honoured above. `wrap` rows -- and rows whose text carries explicit newlines
+> (`Alt+Enter` in the in-cell editor, §6) -- may need a taller `row_height`: both make a
+> cell taller than one line. Auto-height is a Logic-thread concern -- it returns the measured
+> height in `DisplayViewport.row_heights` and the UI does not remeasure. Until auto-height is
+> implemented, a multi-line cell simply lays out its lines and is clipped to the current row
+> height (like any vertical overflow); the user can raise the row height manually to reveal
+> the rest.
 >
 > **Decision (overflow vs ellipsis):** a non-wrapped value that exceeds its column spills
 > over **empty** right-neighbour cells (`overflow_clip_width` extends the clip up to the
