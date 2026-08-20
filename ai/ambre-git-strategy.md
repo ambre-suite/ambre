@@ -16,7 +16,7 @@
   `Assisted-by: Claude Code`.
 * **Pre-commit, mandatory when the commit touches Rust.** Run `cargo fmt --all`, then clear every
   compilation warning, then every `cargo clippy` warning. Commit only once the tree is clean.
-  `just lint` checks it.
+  `./run_tests.sh lint` checks it.
 * **A commit that touches only `specs/`** runs `just invariants` and `just spec-code` instead.
 * **Commit message.** Imperative subject, 72 characters maximum, no final period. The body explains
   why. Rest of the rules in `ai/ambre-writing-style.md`.

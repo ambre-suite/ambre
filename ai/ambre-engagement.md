@@ -11,6 +11,10 @@
   Produce the Rust code or the diff directly.
 * **RESPECT THE SPECS.** The specification is the only source of truth. If the current code diverges
   but works for the requested case, do not refactor everything at once.
+* **NEVER COPY A SPEC INTO AGENT MEMORY.** Whatever an agent carries across sessions, a memory
+  store, a rules file, a persona, holds only what the repository does not: user preferences,
+  working habits, external pointers. A design fact copied there is a duplicate that goes stale and
+  then contradicts the spec. Put the durable fact in the spec and read it again next session.
 * **OUTPUT FORMAT.** Prefer a targeted implementation block or a diff over rewriting a 500-line
   `.rs` file.
 * **BE DECISIVE.** One recommendation, never "it depends". Reject a bad idea with a technical

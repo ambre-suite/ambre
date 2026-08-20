@@ -161,12 +161,25 @@ trunk build --release
 ### Running the Server
 
 ```bash
-cd crates/ambre-server
-cargo run --release
+./run_server.sh
 ```
 
-The server will start on `http://localhost:3000`. The frontend can be served via `trunk serve`
-(default port `8080`).
+The script loads `.env` and runs `cargo run -p ambre-server`. Bring the backing services up first
+with `docker compose up -d`. The server starts on `http://localhost:3000`. The frontend is served
+by `trunk serve` (default port `8080`).
+
+### Running the Tests
+
+```bash
+./run_tests.sh            # lint + native + db + wasm
+./run_tests.sh db         # one tier: all | lint | native | db | wasm
+```
+
+The `justfile` holds the exact command lines CI runs, one recipe per tier. It does nothing else:
+the db tier fails when called through `just` alone, because the recipe neither starts the backing
+services nor loads `.env`. `run_tests.sh` wraps the same recipes and adds those two steps, then
+tears the services down on exit unless `KEEP_SERVICES=1`. Use the script locally and `just` to
+reproduce a CI job bit-for-bit.
 
 ## Roadmap
 
