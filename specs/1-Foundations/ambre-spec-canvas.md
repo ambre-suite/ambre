@@ -136,16 +136,10 @@ requestAnimationFrame callback (raf_timestamp: f64)
 **Default GPU backend — WebGL2:**
 wgpu uses the GL backend (WebGL2) by default on WASM. WebGPU is opt-in via `?webgpu` in the URL. Reason: Mesa/Intel Firefox compositor bug — GPU pixels are correct (confirmed by readback) but the browser compositor does not display them on-screen. The GL backend bypasses this bug as it goes through a different compositor path.
 
-```rust
-// ambre-canvas/src/host.rs -- bootstrap_gpu()
-let use_webgpu = url_flag("webgpu");
-let backends = if use_webgpu {
-    wgpu::Backends::BROWSER_WEBGPU
-} else {
-    wgpu::Backends::GL  // default: WebGL2
-};
-// Limits: wgpu::Limits::downlevel_webgl2_defaults() for GL compatibility
-```
+`bootstrap_gpu()` (`ambre-canvas/src/host.rs`) reads the `?webgpu` URL flag and
+picks `wgpu::Backends::BROWSER_WEBGPU` when it is set, `wgpu::Backends::GL`
+(WebGL2, the default) otherwise; it requests `wgpu::Limits::downlevel_webgl2_defaults()`
+so the surface stays GL-compatible.
 
 Vertex/fragment shaders (`QuadRenderer`) are identical regardless of backend — no quality degradation in GL.
 

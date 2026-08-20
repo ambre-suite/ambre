@@ -1058,11 +1058,10 @@ impl DrawSurface for WgpuSurface<'_> { /* ... */ }
 
 ### Usage from the UI thread
 
-```rust
-// UI thread -- in UiState::render()
-let mut surface = WgpuSurface::new(&mut gpu.quad_renderer);
-trame::renderer::draw_grid(&mut surface, &self.trame, &mut gpu.font_cx, &mut gpu.text_cache, ...);
-```
+In `UiState::render()` the UI thread wraps its `quad_renderer` in a `WgpuSurface`
+and hands that surface -- together with the Trame view state, the font context and
+the text cache -- to `trame::renderer::draw_grid`, which paints the grid through
+the shared `DrawSurface` abstraction.
 
 ### `KrillaSurface` and the PDF pipeline — Logic thread
 
