@@ -493,3 +493,59 @@ Stories:
   - **Version history** (X37): Trame keeps only an in-memory undo stack; Prose specs a
     `meta.version_history` (`LoroList`, S3-backed snapshots, Post-MVP). Add the same named-snapshot
     subsystem to Trame, reusing the SecSync S3 pipeline. Post-MVP.
+
+- **Cross-app shared-component factoring (2026-08 Prose-vs-Trame review, architect decisions)** `[ ]`
+  — the NEEDS-HUMAN calls of the same review, arbitrated by the architect. Each promotes a behavior
+  that is shared **by nature** across the editors into one common model, so Prose, Trame, Toile (and,
+  where noted, Murmure) stop reinventing it divergently. Specs describe the target state and cite this
+  Story. Grouped by subsystem:
+  - **Shared Find/Replace crate** (X8/X9/X11): promote Prose's session model (full match list +
+    live match cursor: `FindResults { matches, current }` + `FindUpdated { current }`) into a common
+    crate consumed by Prose, Trame, Toile and later Murmure. Trame drops its stateless whole-grid
+    re-scan (`FindNext`/`ReplaceAll`/`ReplaceOne`) for the shared session model. This retires the X9
+    (event-shape) and X11 (factoring) findings with it.
+  - **Shared zoom model + status-bar widget** (X4): one zoom model **and** one UX widget, docked
+    bottom-right in the shared status bar (`ambre-chrome::StatusBar`, cf. X72) as Trame already does.
+    Toile drops its top-toolbar zoom widget and its divergent UX for this shared widget. The model
+    carries a **zoom-to-selection** option (Toile needs it; offered to Prose/Trame too). Audit note:
+    Trame's zoom is reportedly already implemented -- reconcile the spec with the code first.
+  - **Shared interop vocabulary** (X18/X19/X20): one import/export vocabulary in Foundations,
+    Toile included. Unify the event names on Prose's (`ImportCompleted` / `ExportReady`); promote
+    Prose's `ConversionReport` (+ `ConversionWarning`) to the shared conversion-report type; adopt one
+    progress model (`ImportProgress` / `ExportProgress { percent }`, emitted past a size threshold).
+    Trame renames `ImportComplete`/`ExportComplete`, replaces its import-only off-bus `ImportWarning`,
+    and gains the progress events.
+  - **Shared text-editing core** (X23/X24): consolidate the editing core already begun between Trame
+    and Toile in `ambre-canvas`. Shaping runs on the Logic thread (never the render thread); every
+    consumer -- including Trame's single-line cell editor -- MUST carry a **draft buffer** that echoes
+    the keystroke locally so the Logic round-trip adds no perceived latency. Anti-glitch contract: the
+    draft **reshapes the whole edited line** with the real shaper (never a glyph appended to a stale
+    line), the draft->confirmed swap is idempotent, and the Logic thread returns only what the draft
+    could not know (reflow: line wrapping, pagination), never a re-render of the current line. A shared
+    IME/composition model (draft buffer + composition + remote-delta reanchor, from Prose) is part of
+    the core; Trame's cell editor adopts it.
+  - **Shared document locale** (X41): a resolved locale carried by the document (`meta.lang`) in
+    Foundations, read by Prose, Trame and Toile for all number/date formatting, so collaborators on
+    differently-configured machines see identical formatting. Trame stops leaving its locale source
+    unnamed and reads `meta.lang`.
+  - **Shared row/column resize command** (X46): the two table models stay distinct (spreadsheet grid
+    vs Prose table block -- different scale and semantics), but the row/column **resize command** is
+    factored into one shared primitive. No shared table object model.
+  - **Shared media-cache cap** (X55): every decoded-media consumer routes through the shared
+    64 MiB LRU `media_cache` (`prose-features` P-66), Trame's charts / float objects included and
+    Toile included -- Toile being the heaviest image consumer, its cap size may need revisiting, but
+    the mechanism stays common. Follows the X35 decision (Trame reuses the shared media flow).
+  - **Cell hyperlinks in Trame** (X50): real per-cell clickable links (Excel/Sheets parity), on a
+    link + open-URL model **shared** with Prose (`MARK_LINK`, X51) and Toile -- one host open-URL
+    affordance, never an app-private one. Trame code change.
+  - **Bounded undo cap** (X13): give Trame's `UndoManager` a bounded step cap (a shared parameter,
+    Toile included), matching Prose's bound (200). Merge / commit granularity stays per-domain
+    (Trame commits on cell exit; Prose merges keystrokes) -- only the cap is shared.
+  - **Legacy copy/paste chords everywhere** (X16): `Ctrl+Insert` / `Shift+Insert` / `Shift+Delete`
+    map to the same shared copy/cut/paste `CommandId`s as `Ctrl+C`/`X`/`V`, handled once in the shared
+    keyboard pipe, in every app (ergonomic for left-handers using the mouse left-handed). Prose and
+    Toile gain them.
+  - **Cross-app rich paste** (follow-up to the shared clipboard, `ambre-spec-ui.md sec.2.E`): a shared
+    interchange format above the per-app opaque `ambre` payloads, so a paste across apps keeps
+    structure (a Trame range -> a Prose table, a Toile object -> a Prose image) instead of falling
+    back to `text/plain`. Future; today cross-app paste is text-only by design.

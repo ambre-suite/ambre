@@ -377,6 +377,11 @@ Undo only undoes **local peer** operations (current user). Remote operations are
 
 **Scope:** per open document. The `UndoManager` is created on document open and destroyed on close. No undo stack persistence between sessions.
 
+> **Target state -- bounded step cap (X13).** The stack is currently unbounded. It gains a bounded
+> step cap (a shared parameter, matching Prose's bound of 200, Toile included) so a long session
+> cannot grow it without limit. Only the cap is shared; the commit / merge granularity below stays
+> Trame's own (one commit per cell exit). See the cross-app factoring Story (`ambre-roadmap.md`).
+
 ```rust
 pub struct TrameState {
     // ...existing fields...

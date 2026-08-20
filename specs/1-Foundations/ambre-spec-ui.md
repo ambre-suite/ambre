@@ -155,6 +155,16 @@ mirror still matches it (proof the OS clipboard holds our own last copy), else d
 `blob.ambre` into its typed payload. **Cut** is each app's own policy (Toile emits
 `DeleteElements` right after the copy command; Trame keeps its marching-ants delete-on-paste).
 
+**Chords (X16).** Copy / cut / paste are shared `CommandId`s in the keyboard pipe: both the modern
+`Ctrl+C` / `Ctrl+X` / `Ctrl+V` **and** the legacy `Ctrl+Insert` / `Shift+Insert` / `Shift+Delete`
+map to the same three intents, handled once here, in every app (the legacy set is ergonomic for a
+left-hander driving the mouse left-handed).
+
+> **Follow-up -- cross-app rich paste.** Today `blob.ambre` is each app's own opaque payload, so a
+> paste **across** apps falls back to `text`. A shared interchange format above these payloads --
+> letting a Trame range become a Prose table, or a Toile object a Prose image -- is a future goal
+> tracked in the cross-app factoring Story (`ambre-roadmap.md`).
+
 ---
 
 ## 3. SECURITY & CONFIDENTIALITY (ZERO-KNOWLEDGE)

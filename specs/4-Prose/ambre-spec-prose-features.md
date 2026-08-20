@@ -472,6 +472,23 @@ these are the *single-peer, command-time* rules, consistent with the TreeID-keye
   of a merge (neither corner) shrinks the derived rowspan/colspan automatically, since spans are
   recomputed from the two surviving corners.
 
+**Keyboard cell traversal (P-152, X47).** Inside a table, the caret moves cell-to-cell by the
+word-processor convention (Word / Google Docs), so a table is fully keyboard-navigable:
+
+- **`Tab`** moves the caret to the start of the **next** `TableCell` in reading order (left to
+  right, wrapping to the first cell of the next `TableRow`), selecting that cell's whole content
+  so the next keystroke replaces it (Docs behavior).
+- **`Shift+Tab`** moves to the **previous** cell, wrapping to the last cell of the previous row.
+- **`Tab` in the last cell** (bottom-right) appends a new `TableRow` (`InsertTableRow` after the
+  last row) and lands the caret in its first cell -- the one growth path that is a CRDT mutation;
+  the other traversals are caret-only, never a mutation.
+- A **merged** region counts as a single cell: `Tab` skips its covered (masked) cells and lands
+  on the anchor. Traversal resolves positions to the current grid, so a concurrent
+  insert/delete never strands the caret.
+
+The chords are consumed (`preventDefault`) only while the caret is inside a table; outside a
+table, `Tab` keeps its document-level meaning.
+
 ---
 
 ### E. Images

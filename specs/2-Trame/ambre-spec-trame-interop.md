@@ -94,6 +94,13 @@
 >   (no `version`/`sheets_count`/`warnings`) and `ExportComplete` is
 >   `{ filename, data }`.
 
+> **Target state -- shared interop vocabulary (X18/X19/X20).** These names and types are
+> superseded by one import/export vocabulary in Foundations, Toile included: event names unify on
+> Prose's (`ImportCompleted` / `ExportReady`); the import-only off-bus `ImportWarning` is replaced by
+> the shared `ConversionReport` (+ `ConversionWarning`); and a shared progress model
+> (`ImportProgress` / `ExportProgress { percent }`, emitted past a size threshold) arrives. See the
+> cross-app factoring Story (`ambre-roadmap.md`).
+
 ### A. General Flow
 
 ```
