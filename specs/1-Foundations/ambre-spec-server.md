@@ -313,19 +313,24 @@ channel meeting:{meeting_id}   → PUB/SUB
 
 > **Presence and Zero-Knowledge:** The value stored in `doc:{doc_id}:presence` is the opaque `Ephemeral.ciphertext` payload — the server never sees a participant's cursor, selection, or display name. Only `pub_key_hex` (the client's Ed25519 public key) is in plaintext, needed for the expiration sweep.
 
-**Atomic Lua script — clock validation + seq assignment:**
+**Atomic clock validation + seq assignment.** Run as one Redis server-side script
+(executed atomically) so a peer's per-clock check and the sequence bump cannot
+interleave with another peer's. Keys and arguments:
 
-```lua
--- KEYS[1] = doc:{id}:clocks, KEYS[2] = doc:{id}:seq
--- ARGV[1] = pub_key_hex, ARGV[2] = incoming clock
-local current  = tonumber(redis.call('HGET', KEYS[1], ARGV[1])) or 0
-local incoming = tonumber(ARGV[2])
-if incoming ~= current + 1 then
-    return redis.error_reply('CLOCK_MISMATCH:' .. current)
-end
-redis.call('HSET', KEYS[1], ARGV[1], incoming)
-return redis.call('INCR', KEYS[2])
+```text
+KEYS[1] = doc:{id}:clocks   (HASH pub_key_hex -> last accepted clock)
+KEYS[2] = doc:{id}:seq      (INT monotonic sequence)
+ARGV[1] = pub_key_hex       ARGV[2] = incoming clock
+
+1. current  := clocks[pub_key_hex] or 0
+2. if incoming != current + 1: fail CLOCK_MISMATCH:{current}   (gap or replay)
+3. clocks[pub_key_hex] := incoming
+4. return INCR seq                                             (the assigned seq)
 ```
+
+The exact script lives in the source (`ambre-server`); the invariant it upholds is
+the monotonic per-`pub_key` clock (`SYNC-008` counterpart) and a single global
+sequence.
 
 #### S3 Object Storage Hierarchy
 
@@ -371,23 +376,17 @@ Axum never sees QUIC. Caddy absorbs TLS/QUIC termination and proxies in HTTP/1.1
 
 **Binary** WebSocket messages, serialized via `postcard`. Leading version byte:
 
+Each WS frame is a leading version byte (`0x01`) followed by the postcard-encoded message.
+`encode_ws_msg` prepends the byte and appends the postcard bytes; `decode_ws_msg` dispatches on
+the first byte (`0x01` -> decode the rest; other -> `UnsupportedVersion`; empty -> `EmptyFrame`).
+`ambre-server` (WS codec).
+
 ```rust
 // Types are imported from ambre-protocol -- not redefined here
 use ambre_protocol::{WsClientMsg, WsServerMsg};
 
-fn encode_ws_msg(msg: &WsServerMsg) -> Vec<u8> {
-    let mut buf = vec![0x01]; // version byte
-    postcard::to_extend(msg, &mut buf).expect("WsServerMsg serialization failed");
-    buf
-}
-
-fn decode_ws_msg(data: &[u8]) -> Result<WsClientMsg, WsError> {
-    match data.first() {
-        Some(0x01) => Ok(postcard::from_bytes::<WsClientMsg>(&data[1..])?),
-        Some(v)    => Err(WsError::UnsupportedVersion(*v)),
-        None       => Err(WsError::EmptyFrame),
-    }
-}
+fn encode_ws_msg(msg: &WsServerMsg) -> Vec<u8> { /* ... */ }
+fn decode_ws_msg(data: &[u8]) -> Result<WsClientMsg, WsError> { /* ... */ }
 ```
 
 The REST API uses **JSON** (Content-Type: application/json). Binary fields (keys, ciphertexts) are **base64url** encoded.
@@ -429,67 +428,68 @@ pub struct AppState {
     pub pubsub:       PubSubHub,       // single shared PubSubStream + in-process fan-out (see sec.7)
 }
 
-pub fn api_router() -> Router<AppState> {
-    Router::new()
-        .route("/auth/{provider}/login",    get(auth::oidc_login))
-        .route("/auth/{provider}/callback", post(auth::oidc_callback))
-        .route("/auth/setup",               post(auth::setup_account))
-        .route("/auth/dev/login",           post(auth::dev_login))  // DEV_MODE only -- deterministic keys from username
-        .route("/auth/config",              get(auth::auth_config))
-        .route("/auth/refresh",             post(auth::refresh))    // rotates the refresh token, mints a new access JWT
-        .route("/auth/logout",              post(auth::logout))     // revokes the refresh token
-        .route("/auth/me",                  get(auth::me))
-        .route("/keys/master",              put(keys::store_master).get(keys::get_master))
-        .route("/keys/master/rotate",       put(keys::rotate_master))
-        .route("/users/search",             get(users::search))
-        .route("/users/{id}/pubkeys",       get(users::pubkeys))
-        .route("/documents",                post(docs::create).get(docs::list))
-        .route("/documents/{id}",           get(docs::get).delete(docs::delete).patch(docs::update))
-        .route("/documents/{id}/snapshot",  get(sync::doc_get_snapshot).post(sync::doc_create_snapshot))
-        .route("/documents/{id}/snapshot/upload-url",   post(sync::doc_snapshot_upload_url))
-        .route("/documents/{id}/snapshot/download-url", post(sync::doc_snapshot_download_url))
-        .route("/documents/{id}/deltas",    get(sync::doc_get_deltas).post(sync::doc_push_deltas))
-        .route("/documents/{id}/share",     post(share::doc_invite))
-        .route("/documents/{id}/share/{uid}", delete(share::doc_revoke))
-        .route("/documents/{id}/members",   get(share::doc_list_members))
-        .route("/documents/{id}/members/{uid}", patch(share::doc_update_role))
-        .route("/documents/{id}/rotate-key", post(share::doc_rotate_key))
-        .route("/documents/{id}/media/upload-url",   post(media::doc_upload_url))
-        .route("/documents/{id}/media/download-url", post(media::doc_download_url))
-        .route("/documents/{id}/media",              post(media::doc_confirm_upload))
-        .route("/channels",                 post(channels::create).get(channels::list))
-        .route("/channels/{id}",            get(channels::get).delete(channels::delete).patch(channels::update))
-        .route("/channels/{id}/members",    post(channels::invite).get(channels::list_members))
-        .route("/channels/{id}/members/{uid}", delete(channels::revoke).patch(channels::update_role))
-        .route("/channels/{id}/rotate-key", post(channels::rotate_key))
-        .route("/channels/{id}/meta/snapshot", get(sync::chan_meta_get_snapshot).post(sync::chan_meta_create_snapshot))
-        .route("/channels/{id}/meta/snapshot/upload-url",   post(sync::chan_meta_snapshot_upload_url))
-        .route("/channels/{id}/meta/snapshot/download-url", post(sync::chan_meta_snapshot_download_url))
-        .route("/channels/{id}/meta/deltas",   get(sync::chan_meta_get_deltas))
-        .route("/channels/{id}/segments/{seg_id}/snapshot", get(sync::seg_get_snapshot).post(sync::seg_create_snapshot))
-        .route("/channels/{id}/segments/{seg_id}/snapshot/upload-url",   post(sync::seg_snapshot_upload_url))
-        .route("/channels/{id}/segments/{seg_id}/snapshot/download-url", post(sync::seg_snapshot_download_url))
-        .route("/channels/{id}/segments/{seg_id}/deltas",   get(sync::seg_get_deltas).post(sync::seg_push_deltas))
-        .route("/channels/{id}/segments/{seg_id}/seal",     post(sync::seg_seal))
-        .route("/channels/{id}/read-cursor", put(channels::update_read_cursor))
-        .route("/channels/unread",           get(channels::unread_counts))
-        .route("/channels/{id}/media/upload-url",   post(media::chan_upload_url))
-        .route("/channels/{id}/media/download-url", post(media::chan_download_url))
-        .route("/channels/{id}/media",              post(media::chan_confirm_upload))
-        .route("/meetings",                  post(meetings::create))
-        .route("/meetings/{id}",             get(meetings::get).delete(meetings::end))
-        .route("/meetings/{id}/join",        post(meetings::join))
-        .route("/meetings/{id}/leave",       post(meetings::leave))
-        .route("/organizations",             post(orgs::create))
-        .route("/organizations/{id}",        get(orgs::get).patch(orgs::update).delete(orgs::delete))
-        .route("/organizations/{id}/members",      post(orgs::add_member).get(orgs::list_members))
-        .route("/organizations/{id}/members/{uid}", delete(orgs::remove_member).patch(orgs::update_member_role))
-        .route("/organizations/{id}/recover/{uid}", post(orgs::recover_master_key))
-        // Single multiplexed WebSocket (documents + channels on the same WS)
-        .route("/ws",                          get(ws::upgrade))
-        // Meetings: separate endpoint (SDP/ICE signaling, ephemeral lifecycle)
-        .route("/ws/meetings/{meeting_id}",    get(ws::meeting_signaling_upgrade))
-}
+pub fn api_router() -> Router<AppState> { /* routes below, ambre-server/src/router.rs */ }
+```
+
+The route table (method(s) `path` -> handler module), grouped by resource:
+
+```text
+auth        GET  /auth/{provider}/login          -> auth::oidc_login
+            POST /auth/{provider}/callback        -> auth::oidc_callback
+            POST /auth/setup                      -> auth::setup_account
+            POST /auth/dev/login                  -> auth::dev_login   (DEV_MODE, deterministic keys)
+            GET  /auth/config                     -> auth::auth_config
+            POST /auth/refresh                    -> auth::refresh     (rotate refresh token, mint access JWT)
+            POST /auth/logout                     -> auth::logout      (revoke refresh token)
+            GET  /auth/me                         -> auth::me
+keys        PUT|GET /keys/master                  -> keys::store_master | keys::get_master
+            PUT  /keys/master/rotate              -> keys::rotate_master
+users       GET  /users/search                    -> users::search
+            GET  /users/{id}/pubkeys              -> users::pubkeys
+documents   POST|GET /documents                   -> docs::create | docs::list
+            GET|DELETE|PATCH /documents/{id}      -> docs::get | docs::delete | docs::update
+            GET|POST /documents/{id}/snapshot     -> sync::doc_get_snapshot | doc_create_snapshot
+            POST /documents/{id}/snapshot/upload-url   -> sync::doc_snapshot_upload_url
+            POST /documents/{id}/snapshot/download-url -> sync::doc_snapshot_download_url
+            GET|POST /documents/{id}/deltas       -> sync::doc_get_deltas | doc_push_deltas
+            POST /documents/{id}/share            -> share::doc_invite
+            DELETE /documents/{id}/share/{uid}    -> share::doc_revoke
+            GET  /documents/{id}/members          -> share::doc_list_members
+            PATCH /documents/{id}/members/{uid}   -> share::doc_update_role
+            POST /documents/{id}/rotate-key       -> share::doc_rotate_key
+            POST /documents/{id}/media/upload-url      -> media::doc_upload_url
+            POST /documents/{id}/media/download-url    -> media::doc_download_url
+            POST /documents/{id}/media            -> media::doc_confirm_upload
+channels    POST|GET /channels                    -> channels::create | channels::list
+            GET|DELETE|PATCH /channels/{id}       -> channels::get | delete | update
+            POST|GET /channels/{id}/members       -> channels::invite | list_members
+            DELETE|PATCH /channels/{id}/members/{uid} -> channels::revoke | update_role
+            POST /channels/{id}/rotate-key        -> channels::rotate_key
+            GET|POST /channels/{id}/meta/snapshot -> sync::chan_meta_get_snapshot | chan_meta_create_snapshot
+            POST /channels/{id}/meta/snapshot/upload-url   -> sync::chan_meta_snapshot_upload_url
+            POST /channels/{id}/meta/snapshot/download-url -> sync::chan_meta_snapshot_download_url
+            GET  /channels/{id}/meta/deltas       -> sync::chan_meta_get_deltas
+            GET|POST /channels/{id}/segments/{seg_id}/snapshot -> sync::seg_get_snapshot | seg_create_snapshot
+            POST /channels/{id}/segments/{seg_id}/snapshot/upload-url   -> sync::seg_snapshot_upload_url
+            POST /channels/{id}/segments/{seg_id}/snapshot/download-url -> sync::seg_snapshot_download_url
+            GET|POST /channels/{id}/segments/{seg_id}/deltas -> sync::seg_get_deltas | seg_push_deltas
+            POST /channels/{id}/segments/{seg_id}/seal -> sync::seg_seal
+            PUT  /channels/{id}/read-cursor       -> channels::update_read_cursor
+            GET  /channels/unread                 -> channels::unread_counts
+            POST /channels/{id}/media/upload-url       -> media::chan_upload_url
+            POST /channels/{id}/media/download-url     -> media::chan_download_url
+            POST /channels/{id}/media             -> media::chan_confirm_upload
+meetings    POST /meetings                        -> meetings::create
+            GET|DELETE /meetings/{id}             -> meetings::get | meetings::end
+            POST /meetings/{id}/join              -> meetings::join
+            POST /meetings/{id}/leave             -> meetings::leave
+orgs        POST /organizations                   -> orgs::create
+            GET|PATCH|DELETE /organizations/{id}  -> orgs::get | update | delete
+            POST|GET /organizations/{id}/members  -> orgs::add_member | list_members
+            DELETE|PATCH /organizations/{id}/members/{uid} -> orgs::remove_member | update_member_role
+            POST /organizations/{id}/recover/{uid} -> orgs::recover_master_key
+ws          GET  /ws                              -> ws::upgrade                    (multiplexed docs + channels)
+            GET  /ws/meetings/{meeting_id}        -> ws::meeting_signaling_upgrade  (SDP/ICE signaling)
 ```
 
 **Notes on key routes:**
@@ -602,40 +602,15 @@ Download Snapshot (on open, and on SnapshotAvailable)
 
 The "one task per active document" model is rejected (see section 8). The flusher is a **single global Tokio task** per Axum instance:
 
+`global_s3_flusher` is spawned once at startup: every 15s it iterates the `doc:*:pending` keys
+with a non-blocking rustis `SCAN` (cursor loop, 100 at a time) and flushes each in parallel
+(`tokio::spawn` per doc). `flush_doc_pending` does `LRANGE -> parallel S3 upload -> INSERT into
+PostgreSQL -> LTRIM`; it is idempotent (a crash between `LRANGE` and `LTRIM` re-flushes next
+cycle, and S3 duplicates collapse on the zero-padded-seq key). `ambre-server` (S3 flusher).
+
 ```rust
-/// Spawned once at startup.
-/// Iterates over all documents with a non-empty pending LIST.
-async fn global_s3_flusher(state: AppState) {
-    loop {
-        tokio::time::sleep(Duration::from_secs(15)).await;
-
-        // SCAN over doc:*:pending keys to find documents to flush
-        // Uses iterative rustis SCAN to avoid blocking Redis
-        let mut cursor = 0u64;
-        loop {
-            let (next_cursor, keys): (u64, Vec<String>) = state.redis
-                .scan(cursor, Some("doc:*:pending"), Some(100))
-                .await
-                .unwrap_or((0, vec![]));
-
-            // Flush in parallel (tokio::spawn per doc_id)
-            let tasks: Vec<_> = keys.into_iter().map(|key| {
-                let state = state.clone();
-                tokio::spawn(async move { flush_doc_pending(&state, &key).await })
-            }).collect();
-            futures::future::join_all(tasks).await;
-
-            cursor = next_cursor;
-            if cursor == 0 { break; }
-        }
-    }
-}
-
-async fn flush_doc_pending(state: &AppState, pending_key: &str) {
-    // LRANGE -> parallel S3 upload -> INSERT updates PostgreSQL -> LTRIM
-    // Idempotent: if crash between LRANGE and LTRIM, next cycle re-flushes
-    // S3 duplicates handled by unique key (zero-padded seq)
-}
+async fn global_s3_flusher(state: AppState) { /* ... */ }
+async fn flush_doc_pending(state: &AppState, pending_key: &str) { /* ... */ }
 ```
 
 This model has O(1) Tokio tasks instead of O(active_documents). Redis SCAN is non-blocking. Flush latency stays ≤ 15s + SCAN duration.
@@ -722,15 +697,11 @@ pub struct AuthSession {
 /// Axum extractor: parses `Authorization: Bearer <jwt>`, verifies signature +
 /// expiry, returns AuthSession. Rejects missing/invalid/expired tokens with 401
 /// (the client's REST wrapper then refreshes once and retries -- see ambre-spec-sync.md).
-async fn from_request_parts(parts, state) -> Result<AuthSession, AppError> {
-    let token = bearer_token(parts).ok_or(AppError::Unauthorized)?;
-    let claims = state.jwt.verify(&token).map_err(|_| AppError::Unauthorized)?;
-    Ok(AuthSession {
-        user_id:        Uuid::parse_str(&claims.sub).map_err(|_| AppError::Unauthorized)?,
-        signing_pubkey: PublicKey::from_hex(&claims.spk).map_err(|_| AppError::Unauthorized)?.into(),
-    })
-}
+async fn from_request_parts(parts, state) -> Result<AuthSession, AppError> { /* ... */ }
 ```
+
+It reads the bearer token, verifies it with `state.jwt`, and builds `AuthSession { user_id,
+signing_pubkey }` from the `sub`/`spk` claims -- any missing/invalid step is `Unauthorized`.
 
 The WebSocket upgrade reuses the same verification on the `?token=` query parameter (browser WS cannot send an `Authorization` header).
 
@@ -890,44 +861,25 @@ pub enum AppError {
 }
 
 impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
-        let (status, code) = match &self {
-            AppError::Unauthorized | AppError::SessionExpired
-                => (StatusCode::UNAUTHORIZED,          "UNAUTHORIZED"),
-            AppError::Forbidden
-                => (StatusCode::FORBIDDEN,             "FORBIDDEN"),
-            AppError::NotFound { .. }
-                => (StatusCode::NOT_FOUND,             "NOT_FOUND"),
-            AppError::Conflict { .. }
-                => (StatusCode::CONFLICT,              "CONFLICT"),
-            AppError::ClockMismatch { .. }
-                => (StatusCode::CONFLICT,              "CLOCK_MISMATCH"),
-            AppError::InvalidSignature
-                => (StatusCode::UNPROCESSABLE_ENTITY,  "INVALID_SIGNATURE"),
-            AppError::SnapshotRequired
-                => (StatusCode::CONFLICT,              "SNAPSHOT_REQUIRED"),
-            AppError::CompactionLockHeld
-                => (StatusCode::CONFLICT,              "COMPACTION_LOCK_HELD"),
-            AppError::UnknownProvider(_)
-                => (StatusCode::BAD_REQUEST,           "UNKNOWN_PROVIDER"),
-            _   => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR"),
-        };
-
-        tracing::error!(error = %self, code = code);
-
-        // Infra errors return a generic message -- never a stack trace
-        let message = match &self {
-            AppError::Database(_) | AppError::Redis(_) | AppError::S3(_)
-                => "Internal server error".to_string(),
-            other => other.to_string(),
-        };
-
-        (status, axum::Json(serde_json::json!({
-            "error": code,
-            "message": message,
-        }))).into_response()
-    }
+    fn into_response(self) -> Response { /* status + JSON body per the table below */ }
 }
+```
+
+`into_response` logs the error, maps the variant to an `(HTTP status, code)` pair, and returns
+`{ "error": code, "message": ... }` -- infra variants (`Database`/`Redis`/`S3`) return a generic
+message, never a stack trace; all other variants surface their `Display` text.
+
+```text
+Unauthorized | SessionExpired  -> 401 UNAUTHORIZED
+Forbidden                      -> 403 FORBIDDEN
+NotFound                       -> 404 NOT_FOUND
+Conflict                       -> 409 CONFLICT
+ClockMismatch                  -> 409 CLOCK_MISMATCH
+SnapshotRequired               -> 409 SNAPSHOT_REQUIRED
+CompactionLockHeld             -> 409 COMPACTION_LOCK_HELD
+InvalidSignature               -> 422 INVALID_SIGNATURE
+UnknownProvider                -> 400 UNKNOWN_PROVIDER
+Database | Redis | S3 | *      -> 500 INTERNAL_ERROR   (generic message)
 ```
 
 **WebSocket errors**: sent via `WsServerMsg::Error { code, message }` before close, postcard-serialized. **Auth failure at upgrade** is signalled with the application close code **4401** ("unauthorized", in the 4000-4999 user range) rather than a generic drop, so the client distinguishes an expired/rotated token (refresh + reconnect silently) from a network blip (plain backoff) -- see `ambre-spec-sync.md §2.G`.
