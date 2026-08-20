@@ -1335,6 +1335,32 @@ UI Thread — re-render viewport
 
 ---
 
+## SECURITY & CONFIDENTIALITY (ZERO-KNOWLEDGE)
+
+### Boundary Audit
+
+Every outbound flow the Logic thread produces, and where its content is sealed.
+
+| Flow | Data | Encryption |
+|------|------|------------|
+| Logic -> Sync (`SyncCommand::SendUpdate`) | Raw Loro delta plaintext (domain bytes; the state never names the transport) | XChaCha20-Poly1305 + Ed25519 in `ambre-sync`, before `WsClientMsg::Update` reaches the Blind Relay (see §9 data flow) |
+| Logic -> Sync (`SyncCommand::SendSnapshot`) | Raw Loro snapshot plaintext (`export_snapshot()`) | Sealed in `ambre-sync` on the same path |
+| Logic -> Sync (`SyncCommand::SendEphemeral`) | Serialized `PresencePayload` (sheet id, row, column, self-asserted `display_name`; no `user_id`) | Sealed in `ambre-sync` -> `Ephemeral.ciphertext`; `from_user_id` added by Sync on the inbound path |
+| Logic -> UI (`TrameEvent`) | `DisplayCell`, viewport, `RemoteCursors` -- shared WASM memory | No process boundary; no exposure outside the browser process |
+
+`ambre-trame` never contacts the network, never imports `ambre-crypto`, and never
+sends plaintext to `ambre-server`. The `document_id` is added by the `ambre-logic`
+dispatcher, not by `TrameState`. No plaintext leaves the Logic thread except as
+domain bytes bound for the Sync thread, which seals them.
+
+### Cryptography
+
+This audit identifies the flows only. The proof that the seal is correct
+(XChaCha20-Poly1305, Ed25519, local key management) belongs to the Sync and crypto
+specs in `1-Foundations/`; it MUST NOT be re-derived here.
+
+---
+
 ## 10. QUALITY & TESTABILITY
 
 > Transverse test architecture: `ambre-spec-architecture.md §4`. **What this engine guarantees, and what verifies each guarantee, is the table in §1.** It is the only list of tests this spec keeps, because it is the only one joined to a claim -- a name here that no longer resolves is a lie the reader cannot detect, and this section used to hold seventeen of them.
