@@ -328,7 +328,8 @@ High-fidelity PDF export runs in the **Logic thread** via `ambre_pdf::KrillaSurf
 **Flow:**
 
 ```
-TrameCommand::ExportPdf { sheet_id, page_setup: PdfPageSetup }
+TrameCommand::ExportPdf { sheet_id, page_setup: Option<PdfPageSetup> }
+  │   (None -> read the sheet's persisted "page_setup_{sheet_id}"; Some -> one-off override)
   │
   [Logic Thread]
   ├─ Computes the layout: which cells fit on which page
@@ -342,9 +343,14 @@ TrameCommand::ExportPdf { sheet_id, page_setup: PdfPageSetup }
   └─ trigger_download(&filename, &data)
 ```
 
+`PdfPageSetup` is the resolved projection of the sheet's **persisted** `"page_setup_{sheet_id}"`
+container (`trame-logic §2.B`, X67/X68): the export reads the shared page format rather than taking
+it as an ephemeral argument, so two peers exporting the same sheet get the same layout. A one-off
+export MAY override fields for a single run without mutating the container.
+
 ```rust
 pub struct PdfPageSetup {
-    pub orientation: PdfOrientation,    // Portrait | Landscape
+    pub orientation: PdfOrientation,    // Portrait | Landscape (first-class, not derived)
     pub paper_size:  PdfPaperSize,      // A4 | Letter | A3 | ...
     pub margins:     PdfMargins,        // top, right, bottom, left in mm
     pub scale:       f32,               // 1.0 = 100%

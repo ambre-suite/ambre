@@ -464,3 +464,18 @@ Stories:
   header drag-and-drop with an insertion guide line. *(This is the grid column/row reorder, distinct
   from the sheet-tab reorder, which is plain `MoveSheet` and already ships in the DOM `SheetTabs`.)*
 - Rendez-Vous — SFrame encryption (E2EE video): `SYNC P4` / Rendez-Vous.
+- **Trame feature-parity gaps (2026-08 Prose-vs-Trame review)** `[ ]` — three subsystems Prose
+  ships and Trame lacks, surfaced by the cross-app review. Each is a Trame **code** change; the
+  specs describe the target state and cite this Story.
+  - **Cell comments / notes** (X31): Trame has no anchored-comment container; Prose has the full
+    `annots` subsystem (`prose-features` reconcile P-68 / orphan P-69). Add a cell-anchored note
+    subsystem mirroring that model -- anchored on the move-invariant `(row_uid, col_uid)` pair, with
+    the same orphan handling when a bound row/column is deleted. Persisted-schema change (bumps the
+    Trame `SCHEMA_VERSION`).
+  - **Media resolution flow** (X35): Trame declares the `"media"` CRDT container (`trame-logic §2.B`)
+    but no resolution/download/cache. Wire it to the **same** shared Foundation media flow Prose uses
+    (`MediaState` / `DownloadMedia` P-65 + 64 MiB LRU P-66), never a Trame-private copy.
+  - **Persisted page setup** (X67/X68): move page format (paper size, margins, orientation) out of the
+    ephemeral `PdfPageSetup` export param into a persisted per-sheet CRDT container, shared like Google
+    Sheets' print settings, with a first-class `orientation` field. Export then reads the persisted
+    setup. Persisted-schema change (bumps the Trame `SCHEMA_VERSION`).
