@@ -28,8 +28,3 @@ This file is a directory, not a manual. Each row says what a file holds and when
 | [`specs/ambre-spec-template.md`](specs/ambre-spec-template.md) | Writing or restructuring a spec. Defines the section order, the header fields and the ban on implementation in specs. |
 | [`specs/1-Foundations/ambre-spec-architecture.md`](specs/1-Foundations/ambre-spec-architecture.md) | The three-thread stack, the channel topology, and the normative invariant grammar (section 4) and performance budgets (section 5). |
 | [`specs/1-Foundations/ambre-spec-testing.md`](specs/1-Foundations/ambre-spec-testing.md) | The test tiers, and the cross-spec invariant ledger (section 7): what is verified, what is debt. |
-
-## Subagents
-
-A subagent inherits no project file, this one included. Start every subagent prompt with the
-instruction to read it, or the subagent works outside these rules.
