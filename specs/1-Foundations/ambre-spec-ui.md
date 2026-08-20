@@ -107,12 +107,15 @@ pub trait CommandSource {
 
 **Data flow (unidirectional, Elm-like):**
 
-```
-chrome click / shortcut → CommandId invoked
-  → LogicCommand to Logic thread → CRDT mutation (Loro)
-  → UiEvent in return → UI thread dispatcher:
-       • Leptos signals  → chrome updates (Bold button toggles)
-       • canvas renderer → content repaints
+```mermaid
+flowchart TD
+    A[chrome click / shortcut] --> B[CommandId invoked]
+    B --> C[LogicCommand to Logic thread]
+    C --> D[CRDT mutation, Loro]
+    D --> E[UiEvent in return]
+    E --> F[UI thread dispatcher]
+    F --> G[Leptos signals to chrome updates<br/>Bold button toggles]
+    F --> H[canvas renderer to content repaints]
 ```
 
 ### D. Design Tokens (single source)

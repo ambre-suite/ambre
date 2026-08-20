@@ -38,48 +38,42 @@ Murmure is the command and discussion center. Unlike classic SaaS tools, every m
 
 An active channel accumulates ~200 messages/day with 20 participants. A single `Loro::Doc` per channel would become unmanageable (50 MB+ in 2 years with Loro's tombstone overhead). The solution: **one channel = a chain of segments**, each segment being an independent `Loro::Doc`.
 
-```
-channel_{id}/
-├── meta                          ← Lightweight Loro::Doc (name, topic, members, pinned)
-├── segments/
-│   ├── seg_001                   ← messages 1-5000 (sealed, read-only)
-│   ├── seg_002                   ← messages 5001-10000 (sealed, read-only)
-│   └── seg_003                   ← messages 10001-... (active segment, writable)
-```
+Channel storage layout (`channel_{id}/`):
+
+- `meta` -- lightweight Loro::Doc (name, topic, members, pinned)
+- `segments/`:
+  - `seg_001` -- messages 1-5000 (sealed, read-only)
+  - `seg_002` -- messages 5001-10000 (sealed, read-only)
+  - `seg_003` -- messages 10001-... (active segment, writable)
 
 **The client only loads the active segment + metadata** (~2 MB max on first display). Older segments are lazy-loaded when scrolling up.
 
 ### CRDT Structure -- Doc meta (per channel)
 
-```
-Loro::Doc (meta)
-├── "channel" (Map)        → {name, type, created, topic}
-├── "members" (Map)        → {"pubkey_alice": {role, joined}}
-├── "pinned" (Array)       → [{msg_id, segment_id}]
-└── "segments" (Array)     → [
-│     {id: "seg_001", from_ts: 1710000000, to_ts: 1720000000, msg_count: 5000, sealed: true},
-│     {id: "seg_002", from_ts: 1720000000, to_ts: 1730000000, msg_count: 5000, sealed: true},
-│     {id: "seg_003", from_ts: 1730000000, to_ts: null, msg_count: 1847, sealed: false}
-│   ]
-```
+`Loro::Doc (meta)`:
+
+- `"channel"` (Map) -- `{name, type, created, topic}`
+- `"members"` (Map) -- `{"pubkey_alice": {role, joined}}`
+- `"pinned"` (Array) -- `[{msg_id, segment_id}]`
+- `"segments"` (Array), e.g.:
+  - `{id: "seg_001", from_ts: 1710000000, to_ts: 1720000000, msg_count: 5000, sealed: true}`
+  - `{id: "seg_002", from_ts: 1720000000, to_ts: 1730000000, msg_count: 5000, sealed: true}`
+  - `{id: "seg_003", from_ts: 1730000000, to_ts: null, msg_count: 1847, sealed: false}`
 
 ### CRDT Structure -- Segment (one Loro::Doc per segment)
 
-```
-Loro::Doc (segment)
-├── "messages" (Array)           → chronological order
-│   └── (Map) {
-│         id,
-│         author_pubkey,
-│         timestamp,
-│         content,               → Loro::Text (editable, rich formatting)
-│         reply_to,              → parent message id (threads)
-│         reactions,             → Map {"👍": ["pubkey_a", "pubkey_b"]}
-│         edited,                → bool
-│         deleted                → tombstone (soft delete)
-│       }
-└── "media" (Map)                → same system as documents
-```
+`Loro::Doc (segment)`:
+
+- `"messages"` (Array) -- chronological order; each entry a Map:
+  - `id`
+  - `author_pubkey`
+  - `timestamp`
+  - `content` -- Loro::Text (editable, rich formatting)
+  - `reply_to` -- parent message id (threads)
+  - `reactions` -- Map `{"thumbs-up": ["pubkey_a", "pubkey_b"]}`
+  - `edited` -- bool
+  - `deleted` -- tombstone (soft delete)
+- `"media"` (Map) -- same system as documents
 
 `content` as `Loro::Text` enables message editing and rich formatting (bold, links, inline code, mentions).
 
@@ -87,13 +81,13 @@ Loro::Doc (segment)
 
 See **section 11** for the full hierarchy. Summary of messaging keys:
 
-```
-channels/{channel_id}/meta/snapshots/{snapshot_id}
-channels/{channel_id}/meta/deltas/{seq:010}
-channels/{channel_id}/segments/{seg_id}/snapshot      ← sealed = final snapshot only
-channels/{channel_id}/segments/{seg_id}/deltas/{seq:010} ← active segment only
-channels/{channel_id}/media/{content_hash}
-```
+Object storage paths:
+
+- `channels/{channel_id}/meta/snapshots/{snapshot_id}`
+- `channels/{channel_id}/meta/deltas/{seq:010}`
+- `channels/{channel_id}/segments/{seg_id}/snapshot` -- sealed = final snapshot only
+- `channels/{channel_id}/segments/{seg_id}/deltas/{seq:010}` -- active segment only
+- `channels/{channel_id}/media/{content_hash}`
 
 ### Segment sealing
 

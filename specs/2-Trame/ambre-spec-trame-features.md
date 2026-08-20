@@ -81,16 +81,13 @@ Visible to all collaborators. Stored in the `LoroDoc` -- the view is synchronize
 `filters_{sheet_id}` (empty map = no filter) rather than under a nested `active`
 sub-map -- one fewer container to merge, same LWW semantics:
 
-```
-"filters_{sheet_id}" (LoroMap)         → empty = no filter
-  ├── "col"    : String                → column uid the filter is applied to
-  ├── "kind"   : String                → "values" | "condition"
-  ├── "values" : LoroList<String>      → displayed (checked) values (kind="values")
-  ├── "op"     : String                → operator (kind="condition")
-  │       // "eq" | "ne" | "gt" | "lt" | "gte" | "lte" | "contains"
-  │       // | "not_contains" | "starts_with" | "is_empty" | "is_not_empty"
-  └── "value"  : String                → operand (kind="condition")
-```
+`"filters_{sheet_id}"` (LoroMap) -- empty = no filter:
+
+- `"col"` (String) -- column uid the filter is applied to
+- `"kind"` (String) -- `"values" | "condition"`
+- `"values"` (LoroList<String>) -- displayed (checked) values (kind="values")
+- `"op"` (String) -- operator (kind="condition"): `eq | ne | gt | lt | gte | lte | contains | not_contains | starts_with | is_empty | is_not_empty`
+- `"value"` (String) -- operand (kind="condition")
 
 The `FilterKind` enum (`Values(Vec<String>)` / `Condition { op, value }`, with
 `FilterOp`) lives in **`ambre-bus`** (re-exported by `ambre-trame`) and travels
@@ -100,32 +97,24 @@ typed in `TrameCommand::ApplyFilter`. Colour filters are Phase 2.
 
 Rows hidden by the filter are stored in a separate `LoroMap` to avoid polluting `rows_{sheet_id}`:
 
-```
-"filter_hidden_{sheet_id}" (LoroMap)
-  └── "{row_uid}" : bool         → true = hidden by the active filter
-```
+`"filter_hidden_{sheet_id}"` (LoroMap):
+
+- `"{row_uid}"` (bool) -- true = hidden by the active filter
 
 This `LoroMap` is recomputed by the Logic thread after each change to the filter or data. Only the filter author recomputes it -- other clients receive `filter_hidden` via SecSync and apply it directly without recomputing (`apply_remote` -> `rebuild_filter`, no recompute).
 
 **Flow (implemented):**
 
-```
-TrameCommand::ApplyFilter { sheet_id, col, kind: FilterKind }
-  │  (no-op for a non-active sheet or a virtual/never-materialized column)
-  ├─ compute_all_dirty (so the formula_cache is current)
-  ├─ write_filter_hidden: evaluate each materialized row's cell in `col` via
-  │     engine.evaluated_value; row_uids failing `filter_pass(kind, value)` are
-  │     written into LoroMap("filter_hidden_{sheet}") as {row_uid -> true}
-  ├─ persist_filter_def: store col/kind/op/value(+values list) in "filters_{sheet}"
-  ├─ rebuild_filter: derive `hidden_rows` (grid positions) from the uid map
-  ├─ display : [TrameEvent::FilterApplied { hidden_row_count }, DataReset]
-  └─ update  : CRDT delta → outcome.update → SyncCommand::SendUpdate (dispatcher)
+`TrameCommand::ApplyFilter { sheet_id, col, kind: FilterKind }` (no-op for a non-active sheet or a virtual/never-materialized column):
 
-TrameCommand::ClearFilter { sheet_id }
-  │  (no-op -- no delta -- when no filter is active)
-  └─ clears "filter_hidden_{sheet}" + "filters_{sheet}", emits
-     [TrameEvent::FilterCleared, DataReset]
-```
+- `compute_all_dirty` (so the `formula_cache` is current).
+- `write_filter_hidden`: evaluate each materialized row's cell in `col` via `engine.evaluated_value`; `row_uid`s failing `filter_pass(kind, value)` are written into `LoroMap("filter_hidden_{sheet}")` as `{row_uid -> true}`.
+- `persist_filter_def`: store `col`/`kind`/`op`/`value` (+values list) in `"filters_{sheet}"`.
+- `rebuild_filter`: derive `hidden_rows` (grid positions) from the uid map.
+- display: `[TrameEvent::FilterApplied { hidden_row_count }, DataReset]`.
+- update: CRDT delta -> `outcome.update` -> `SyncCommand::SendUpdate` (dispatcher).
+
+`TrameCommand::ClearFilter { sheet_id }` (no-op, no delta, when no filter is active): clears `"filter_hidden_{sheet}"` + `"filters_{sheet}"` and emits `[TrameEvent::FilterCleared, DataReset]`.
 
 A `SetCellText` on the active sheet calls `recompute_active_filter`: it reloads
 the stored definition and rewrites `filter_hidden_{sheet}` so a row's hidden
@@ -160,18 +149,13 @@ pub struct FilterView {
 
 **Flow:**
 
-```
-TrameCommand::ActivateFilterView { view_id }
-  │
-  ├─ Loads from IndexedDB
-  ├─ Recomputes hidden_rows on current doc state
-  └─ Sends DisplayViewport without hidden rows
-     (without touching the LoroDoc -- zero CRDT delta emitted)
+`TrameCommand::ActivateFilterView { view_id }`:
 
-TrameCommand::SaveFilterView { name, filter_def }
-  │
-  └─ Persists in IndexedDB only
-```
+- Loads from IndexedDB.
+- Recomputes `hidden_rows` on the current doc state.
+- Sends `DisplayViewport` without hidden rows (without touching the LoroDoc -- zero CRDT delta emitted).
+
+`TrameCommand::SaveFilterView { name, filter_def }`: persists in IndexedDB only.
 
 **UI indicator:** when a personal view is active, the UI Thread displays a distinctive badge to signal that the view is not shared.
 
@@ -298,20 +282,18 @@ Two users sorting simultaneously: LWW on the row `LoroMovableList` -- the last c
 
 ### CRDT Storage
 
-```
-"cond_formats_{sheet_id}" (LoroList)
-  └── item (LoroMap)
-      ├── "id"       : String           → stable rule identifier
-      ├── "range"    : String           → "{row_uid}:{col_uid}:{row_uid_end}:{col_uid_end}"
-      ├── "priority" : i64              → evaluation order (smaller = higher priority)
-      ├── "rule"     : LoroMap          → rule definition
-      │   ├── "kind" : String           → see CondFormatKind
-      │   └── ...kind-specific fields
-      └── "style"    : LoroMap          → style applied if rule is true
-          ├── "fg"   : u32 (optional)
-          ├── "bg"   : u32
-          └── "bold" : bool
-```
+`"cond_formats_{sheet_id}"` (LoroList), each item a LoroMap:
+
+- `"id"` (String) -- stable rule identifier
+- `"range"` (String) -- `"{row_uid}:{col_uid}:{row_uid_end}:{col_uid_end}"`
+- `"priority"` (i64) -- evaluation order (smaller = higher priority)
+- `"rule"` (LoroMap) -- rule definition:
+  - `"kind"` (String) -- see CondFormatKind
+  - ...kind-specific fields
+- `"style"` (LoroMap) -- style applied if the rule is true:
+  - `"fg"` (u32, optional)
+  - `"bg"` (u32)
+  - `"bold"` (bool)
 
 ```rust
 pub enum CondFormatKind {
@@ -439,14 +421,12 @@ match Prose (`prose-ui`); redo is not `Ctrl+Y` only.
 
 ### CRDT Storage
 
-```
-"validations_{sheet_id}" (LoroMap)
-  └── "{row_uid}:{col_uid}:{row_uid_end}:{col_uid_end}" (LoroMap)
-      ├── "kind"       : String    → see ValidationKind
-      ├── "params"     : LoroMap   → parameters based on kind
-      ├── "on_invalid" : String    → "warn" | "reject" | "info"
-      └── "message"    : String    → displayed message (encrypted in name_enc style)
-```
+`"validations_{sheet_id}"` (LoroMap), keyed by `"{row_uid}:{col_uid}:{row_uid_end}:{col_uid_end}"` (LoroMap):
+
+- `"kind"` (String) -- see ValidationKind
+- `"params"` (LoroMap) -- parameters based on kind
+- `"on_invalid"` (String) -- `"warn" | "reject" | "info"`
+- `"message"` (String) -- displayed message (encrypted in name_enc style)
 
 ```rust
 pub enum ValidationKind {
@@ -496,13 +476,11 @@ This model is documented in the protection invitation UI: *"Protection prevents 
 
 ### CRDT Storage
 
-```
-"protections_{sheet_id}" (LoroMap)
-  └── "{row_uid}:{col_uid}:{row_uid_end}:{col_uid_end}" (LoroMap)
-      ├── "owner_user_id"    : String     → creator's UserId as Uuid hex (stable, per-user)
-      ├── "allowed_user_ids" : LoroList   → [UserId as uuid_hex, ...] -- empty = owner only
-      └── "description"      : String     → optional
-```
+`"protections_{sheet_id}"` (LoroMap), keyed by `"{row_uid}:{col_uid}:{row_uid_end}:{col_uid_end}"` (LoroMap):
+
+- `"owner_user_id"` (String) -- creator's UserId as Uuid hex (stable, per-user)
+- `"allowed_user_ids"` (LoroList) -- [UserId as uuid_hex, ...]; empty = owner only
+- `"description"` (String) -- optional
 
 > **Note: `UserId` and not `pub_key`.** The Ed25519 public key is a per-device credential
 > that changes on key rotation (member revocation). Using `pub_key` would break

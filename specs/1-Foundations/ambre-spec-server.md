@@ -233,64 +233,64 @@ CREATE TABLE meetings (
 
 #### Redis/Valkey Structure
 
-```
+```text
 # Auth: stateless access JWT (EdDSA / Ed25519) -- NO server-side session record.
 # The access token carries claims { sub: user_id, spk: signing_pubkey_hex, iat, exp }
 # (TTL 900s). The WS update hot path reads signing_pubkey from the verified token
 # claim (spk) -- no Redis/PostgreSQL lookup per update.
 #
 # Refresh tokens: opaque (UUIDv4), revocable, rotated on each use (TTL 30d).
-refresh:{refresh_token}        → HASH { user_id, signing_pubkey_hex }
+refresh:{refresh_token}        -> HASH { user_id, signing_pubkey_hex }
 
 # Global per-document sequence (SecSync seq)
-doc:{doc_id}:seq               → STRING (monotonic INCR)
+doc:{doc_id}:seq               -> STRING (monotonic INCR)
 
 # Per-client per-document clocks (SecSync clock)
-doc:{doc_id}:clocks            → HASH { pub_key_hex: clock_value }
+doc:{doc_id}:clocks            -> HASH { pub_key_hex: clock_value }
 
 # Delta buffer before S3 flush (drained by the global flusher)
-doc:{doc_id}:pending           → LIST of serialized blobs { seq, s3_key, ciphertext_size }
+doc:{doc_id}:pending           -> LIST of serialized blobs { seq, s3_key, ciphertext_size }
 
 # Compaction lock (SET NX, TTL 30s)
-doc:{doc_id}:compact_lock      → STRING
+doc:{doc_id}:compact_lock      -> STRING
 
 # Messaging segment seal lock
-channel:{channel_id}:seal      → STRING (SET NX, TTL 30s)
+channel:{channel_id}:seal      -> STRING (SET NX, TTL 30s)
 
 # Global per-channel sequence (SecSync seq -- same pattern as documents)
-channel:{channel_id}:seq       → STRING (monotonic INCR)
+channel:{channel_id}:seq       -> STRING (monotonic INCR)
 
 # Per-client per-channel clocks
-channel:{channel_id}:clocks    → HASH { pub_key_hex: clock_value }
+channel:{channel_id}:clocks    -> HASH { pub_key_hex: clock_value }
 
 # Channel delta buffer before S3 flush
-channel:{channel_id}:pending   → LIST of serialized blobs { seq, s3_key, ciphertext_size }
+channel:{channel_id}:pending   -> LIST of serialized blobs { seq, s3_key, ciphertext_size }
 
 # Per-channel presence (encrypted blobs, same pattern as documents)
-channel:{channel_id}:presence  → HASH { pub_key_hex: presence_enc_b64 }
+channel:{channel_id}:presence  -> HASH { pub_key_hex: presence_enc_b64 }
 
 # Active WebSocket sessions per channel
 # Populated at SubscribeChannel, cleaned at UnsubscribeChannel or multiplexed WS disconnect
-channel:{channel_id}:sessions  → HASH { connection_id: "1" }
+channel:{channel_id}:sessions  -> HASH { connection_id: "1" }
 
 # Document broadcast PubSub
-channel doc:{doc_id}           → PUB/SUB (postcard-serialized WsServerMsg)
+channel doc:{doc_id}           -> PUB/SUB (postcard-serialized WsServerMsg)
 
 # Channel broadcast PubSub (same pattern as documents)
-channel chan:{channel_id}      → PUB/SUB (postcard-serialized WsServerMsg)
+channel chan:{channel_id}      -> PUB/SUB (postcard-serialized WsServerMsg)
 
 # Per-user broadcast PubSub (server-initiated pushes not tied to an open doc)
 # Every WS connection subscribes to its own user:{user_id} channel for the whole
 # session. Used for events the recipient cannot yet be a doc-subscriber of --
 # e.g. WsServerMsg::DocumentShared on a fresh invite (the invitee does not know
 # the document_id yet, so doc:{doc_id} could not reach them).
-channel user:{user_id}         → PUB/SUB (postcard-serialized WsServerMsg)
+channel user:{user_id}         -> PUB/SUB (postcard-serialized WsServerMsg)
 
 # Per-document presence
 # IMPORTANT: presence data (cursor, selection) are encrypted blobs
 # sent by the client in WsClientMsg::Ephemeral. The server stores the opaque blob.
 # It never sees the cursor or the name in plaintext.
-doc:{doc_id}:presence          → HASH { pub_key_hex: presence_enc_b64 }
+doc:{doc_id}:presence          -> HASH { pub_key_hex: presence_enc_b64 }
                                   presence_enc = ciphertext of the Ephemeral payload
                                   MVP: periodic sweep (last_seen > 15s via auxiliary field)
                                   Valkey 8+: HEXPIRE 15s per field
@@ -301,14 +301,14 @@ doc:{doc_id}:presence          → HASH { pub_key_hex: presence_enc_b64 }
 # dropped to save two hot-path Redis writes per (un)subscribe. If targeted routing
 # is ever needed (e.g. force-disconnect on revoke), reintroduce it WITH a TTL.
 
-# Reverse lookup user → open documents
-user:{user_id}:open_docs       → SET { doc_id_1, doc_id_2 }
+# Reverse lookup user -> open documents
+user:{user_id}:open_docs       -> SET { doc_id_1, doc_id_2 }
 
 # Active meeting participants (non-sensitive metadata: joined_at, audio, video, screen)
-meeting:{meeting_id}:participants → HASH { user_id: JSON{joined_at, audio, video, screen} }
+meeting:{meeting_id}:participants -> HASH { user_id: JSON{joined_at, audio, video, screen} }
 
 # Meeting signaling PubSub
-channel meeting:{meeting_id}   → PUB/SUB
+channel meeting:{meeting_id}   -> PUB/SUB
 ```
 
 > **Presence and Zero-Knowledge:** The value stored in `doc:{doc_id}:presence` is the opaque `Ephemeral.ciphertext` payload -- the server never sees a participant's cursor, selection, or display name. Only `pub_key_hex` (the client's Ed25519 public key) is in plaintext, needed for the expiration sweep.
@@ -334,25 +334,20 @@ sequence.
 
 #### S3 Object Storage Hierarchy
 
-```
-{env}-ambre/
-├── documents/
-│   └── {doc_id}/
-│       ├── snapshots/{snapshot_id}     -- encrypted full CRDT state
-│       ├── deltas/{seq:010}            -- encrypted delta (zero-padded → lexicographic sort)
-│       └── media/{content_hash}        -- encrypted blob (BLAKE2b-256, content-addressable)
-│
-└── channels/
-    └── {channel_id}/
-        ├── meta/
-        │   ├── snapshots/{snapshot_id}
-        │   └── deltas/{seq:010}
-        ├── segments/
-        │   └── {seg_id}/
-        │       ├── snapshot            -- sealed segment: single immutable file
-        │       └── deltas/{seq:010}
-        └── media/{content_hash}
-```
+Object storage layout (`{env}-ambre/`):
+
+- `documents/{doc_id}/`
+  - `snapshots/{snapshot_id}` -- encrypted full CRDT state
+  - `deltas/{seq:010}` -- encrypted delta (zero-padded -> lexicographic sort)
+  - `media/{content_hash}` -- encrypted blob (BLAKE2b-256, content-addressable)
+- `channels/{channel_id}/`
+  - `meta/`
+    - `snapshots/{snapshot_id}`
+    - `deltas/{seq:010}`
+  - `segments/{seg_id}/`
+    - `snapshot` -- sealed segment: single immutable file
+    - `deltas/{seq:010}`
+  - `media/{content_hash}`
 
 Conventions: `doc_id`, `channel_id`, `snapshot_id`, `seg_id` -> UUIDv7. `seq` -> zero-padded 10 digits. `content_hash` -> BLAKE2b-256 hex (64 chars).
 
@@ -360,14 +355,17 @@ Conventions: `doc_id`, `channel_id`, `snapshot_id`, `seg_id` -> UUIDv7. `seq` ->
 
 #### Network Topology & Transport
 
-```
-Client (WASM)
-  │
-  ├── HTTP/3 (QUIC/UDP) ──► Caddy (TLS terminated) ──► Axum (internal HTTP/1.1)
-  │       REST API (JSON) + WebSocket upgrade (binary postcard)
-  │
-  ├── Direct HTTPS ──► Object Storage S3 (presigned URLs -- Caddy not involved)
-  └── DTLS-SRTP (UDP) ──► str0m SFU (WebRTC media -- separate service)
+```mermaid
+flowchart LR
+    C["Client (WASM)"]
+    CADDY["Caddy (TLS terminated)"]
+    AXUM["Axum (internal HTTP/1.1)"]
+    S3["Object Storage S3"]
+    SFU["str0m SFU (WebRTC media, separate service)"]
+    C -->|"HTTP/3 QUIC/UDP<br/>REST JSON + WebSocket upgrade (binary postcard)"| CADDY
+    CADDY --> AXUM
+    C -->|"Direct HTTPS, presigned URLs (Caddy not involved)"| S3
+    C -->|"DTLS-SRTP UDP"| SFU
 ```
 
 Axum never sees QUIC. Caddy absorbs TLS/QUIC termination and proxies in HTTP/1.1.
@@ -504,83 +502,35 @@ ws          GET  /ws                              -> ws::upgrade                
 
 #### Blind Relay Flow -- Update Sequence
 
-```
-Client (WASM Sync thread)
-  │
-  │  WsClientMsg::Update { ciphertext, nonce, public_data, signature }
-  ▼
-Axum WS Handler
-  │
-  ├── 1. Validates the access JWT (?token= at upgrade): claims { sub, spk }
-  │       (signing_pubkey read from the verified `spk` claim -- no Redis/PostgreSQL lookup)
-  │
-  ├── 2. Verifies document_id is in this connection's subscription set
-  │       (in-memory HashSet<Uuid> per connection, populated by Subscribe)
-  │
-  ├── 3. Verifies PostgreSQL ACL: user_id in document_members (role in editor|owner)
-  │       (result cacheable in Redis TTL 60s by {user_id, doc_id})
-  │
-  ├── 4. Verifies Ed25519 signature (direct ed25519-dalek):
-  │       valid sign over (ciphertext || nonce || postcard(public_data))?
-  │       public_data.pub_key == session's signing_pubkey_hex?
-  │
-  ├── 5. Redis Lua script (atomic):
-  │       validates sequential clock → assigns global seq
-  │
-  ├── 6. Pushes to doc:{id}:pending (LIST) -- { seq, ciphertext_bytes }
-  │       flush to S3 by the global flusher (see below)
-  │
-  ├── 7. Publishes to Redis PubSub: channel doc:{doc_id}
-  │       payload: postcard-serialized WsServerMsg::Update { seq, ... }
-  │
-  └── 8. Broadcasts WsServerMsg::Update { seq, ... } to all connected clients
-          via local PubSub subscriptions to this Axum instance
-```
+On `WsClientMsg::Update { ciphertext, nonce, public_data, signature }` from the client (WASM Sync thread), the Axum WS handler:
+
+1. Validates the access JWT (`?token=` at upgrade): claims `{ sub, spk }`; `signing_pubkey` read from the verified `spk` claim -- no Redis/PostgreSQL lookup.
+2. Verifies `document_id` is in this connection's subscription set (in-memory `HashSet<Uuid>` per connection, populated by Subscribe).
+3. Verifies the PostgreSQL ACL: `user_id in document_members` (role in editor|owner); result cacheable in Redis TTL 60s by `{user_id, doc_id}`.
+4. Verifies the Ed25519 signature (direct ed25519-dalek): a valid sign over `(ciphertext || nonce || postcard(public_data))`, and `public_data.pub_key == session signing_pubkey_hex`.
+5. Runs a Redis Lua script (atomic): validates the sequential clock, assigns a global seq.
+6. Pushes to `doc:{id}:pending` (LIST) -- `{ seq, ciphertext_bytes }`; flushed to S3 by the global flusher (see below).
+7. Publishes to the Redis PubSub channel `doc:{doc_id}`: payload `postcard(WsServerMsg::Update { seq, ... })`.
+8. Broadcasts `WsServerMsg::Update { seq, ... }` to all connected clients via local PubSub subscriptions to this Axum instance.
 
 #### Snapshot Flow -- Upload/Download via S3 Presigned URLs
 
 Snapshots do **not** transit via WebSocket (they can be multiple MB). The `Snapshot` type in `ambre-protocol` defines the S3 blob format (ciphertext + nonce + public_data + commitment_tag + signature, postcard-serialized).
 
-```
-Upload Snapshot (compaction initiator)
-  Client (WASM Sync thread)
-    │
-    ├── 1. Encrypts snapshot → postcard-serialized blob (full Snapshot)
-    │
-    ├── 2. POST /api/documents/{id}/snapshot/upload-url
-    │      → server verifies ACL (owner/editor), generates presigned PUT URL (TTL 15 min)
-    │
-    ├── 3. PUTs directly to S3 (opaque blob -- Caddy not involved)
-    │
-    ├── 4. POST /api/documents/{id}/snapshot
-    │      body: { snapshot_id, author_pubkey, parent_hash, parent_snapshot_proof,
-    │             update_clocks, s3_key, covered_seq }
-    │      covered_seq = the author's high-water `last_seq` at snapshot time
-    │      → server INSERTs snapshots PostgreSQL (incl. covered_seq)
-    │      → server Publishes doc:{doc_id} → WsServerMsg::SnapshotAvailable { snapshot_id }
-    │      (delta purge is NOT done here: the hourly compaction job trims the
-    │       updates index to seq <= MIN(covered_seq) of a document's retained
-    │       snapshots, the only GC now that updates.snapshot_id has no FK cascade)
+**Upload snapshot (compaction initiator)** -- client (WASM Sync thread):
 
-Download Snapshot (on open, and on SnapshotAvailable)
-  Client (WASM Sync thread)
-    │
-    ├── 1a. On open: GET /api/documents/{id}/snapshot → { snapshot_id, s3_key, covered_seq }
-    │       (404 when never snapshotted → full delta replay from seq 0)
-    ├── 1b. Or: receives WsServerMsg::SnapshotAvailable { snapshot_id }
-    │
-    ├── 2. POST /api/documents/{id}/snapshot/download-url
-    │      body: { snapshot_id }
-    │      → server verifies ACL, generates presigned GET URL (TTL 15 min)
-    │
-    ├── 3. GETs directly from S3 → postcard blob
-    │
-    ├── 4. postcard::from_bytes → Snapshot → decryption → LogicEvent::RemoteSnapshot
-    │
-    └── 5. Cold-start gating: set last_seq = covered_seq, then
-           RequestMissing { after_seq: covered_seq } so only deltas NOT folded
-           into the snapshot are replayed (not the whole history since genesis).
-```
+1. Encrypts the snapshot -> postcard blob (full `Snapshot`).
+2. `POST /api/documents/{id}/snapshot/upload-url` -- server verifies ACL (owner/editor), generates a presigned PUT URL (TTL 15 min).
+3. PUTs directly to S3 (opaque blob -- Caddy not involved).
+4. `POST /api/documents/{id}/snapshot` with body `{ snapshot_id, author_pubkey, parent_hash, parent_snapshot_proof, update_clocks, s3_key, covered_seq }`, where `covered_seq` is the author's high-water `last_seq` at snapshot time. The server INSERTs into `snapshots` PostgreSQL (incl. `covered_seq`) and publishes `doc:{doc_id}` -> `WsServerMsg::SnapshotAvailable { snapshot_id }`. Delta purge is NOT done here: the hourly compaction job trims the updates index to `seq <= MIN(covered_seq)` of a document's retained snapshots -- the only GC now that `updates.snapshot_id` has no FK cascade.
+
+**Download snapshot (on open, and on `SnapshotAvailable`)** -- client (WASM Sync thread):
+
+1. On open: `GET /api/documents/{id}/snapshot` -> `{ snapshot_id, s3_key, covered_seq }` (404 when never snapshotted -> full delta replay from seq 0). Or: receives `WsServerMsg::SnapshotAvailable { snapshot_id }`.
+2. `POST /api/documents/{id}/snapshot/download-url` with body `{ snapshot_id }` -- server verifies ACL, generates a presigned GET URL (TTL 15 min).
+3. GETs directly from S3 -> postcard blob.
+4. `postcard::from_bytes` -> `Snapshot` -> decryption -> `LogicEvent::RemoteSnapshot`.
+5. Cold-start gating: set `last_seq = covered_seq`, then `RequestMissing { after_seq: covered_seq }` so only deltas NOT folded into the snapshot are replayed (not the whole history since genesis).
 
 > **Replay fan-out.** `handle_request_missing` rehydrates each delta from S3 (or the
 > Redis pending list). These fetches run **concurrently** (`join_all`), then the batch is
@@ -650,23 +600,19 @@ Formalized as `ZK-001..ZK-008` (`ambre-spec-architecture.md section 3`) and `SRV
 
 ### Authentication -- OIDC
 
-```
-Client                  Axum Server              OIDC Provider
-  │── GET /login ───────►│                              │
-  │                      ├── generates state + nonce      │
-  │                      │   (Redis state store TTL 10min)│
-  │   redirect_url ◄─────┤                              │
-  │── redirect ────────────────────────────────────────► │
-  │         Authorization Code ◄────────────────────── │
-  │── POST /api/auth/{p}/callback ──────────────────────►
-  │                      ├── validates state             │
-  │                      ├── exchanges code → tokens     │
-  │                      ├── validates id_token JWT       │
-  │                      ├── extracts sub + email         │
-  │                      ├── upserts users PostgreSQL     │
-  │                      ├── mints access JWT (claims sub + spk, TTL 900s)
-  │                      ├── stores opaque refresh token in Redis (TTL 30d)
-  │   200 { access_token, refresh_token, access_expires_in } ◄─┤  (JSON body -- NO Set-Cookie)
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant A as Axum Server
+    participant O as OIDC Provider
+    C->>A: GET /login
+    Note over A: generates state + nonce<br/>Redis state store TTL 10min
+    A-->>C: redirect_url
+    C->>O: redirect
+    O-->>C: Authorization Code
+    C->>A: POST /api/auth/{p}/callback
+    Note over A: validates state<br/>exchanges code for tokens<br/>validates id_token JWT<br/>extracts sub + email<br/>upserts users PostgreSQL<br/>mints access JWT (claims sub + spk, TTL 900s)<br/>stores opaque refresh token in Redis (TTL 30d)
+    A-->>C: 200 access_token, refresh_token, access_expires_in<br/>JSON body, NO Set-Cookie
 ```
 
 Providers: Google, GitHub, Microsoft, Apple.
@@ -709,22 +655,8 @@ The WebSocket upgrade reuses the same verification on the `?token=` query parame
 
 The full flow is specified in `ambre-spec-sync.md` section 3. The initiator client calls both routes in sequence. Server responsibilities:
 
-```
-1. DELETE /api/documents/{id}/share/{uid}
-   → DELETE FROM document_members WHERE document_id = $1 AND user_id = $2
-   → NO broadcast here -- the new keys are not yet in the database
-
-2. POST /api/documents/{id}/rotate-key
-   body: [{ user_id, doc_key_enc }] for all remaining members
-   → Atomic PostgreSQL transaction:
-     UPDATE document_members SET doc_key_enc = $new WHERE document_id = $id AND user_id = $uid
-     for each (user_id, doc_key_enc) in the list
-   → Verification: the user_ids in the list must all be in document_members
-     (the revoked member was already deleted in step 1 -- their key cannot be re-encrypted)
-   → broadcast WsServerMsg::KeyRotationRequired { revoked_user_id } via PubSub
-     (AT THIS POINT the new doc_key_enc values are in the database -- no race condition.
-      Other clients fetching GET /members will receive the new keys.)
-```
+1. `DELETE /api/documents/{id}/share/{uid}` -> `DELETE FROM document_members WHERE document_id = $1 AND user_id = $2`. No broadcast here -- the new keys are not yet in the database.
+2. `POST /api/documents/{id}/rotate-key` with body `[{ user_id, doc_key_enc }]` for all remaining members. Atomic PostgreSQL transaction: `UPDATE document_members SET doc_key_enc = $new WHERE document_id = $id AND user_id = $uid` for each `(user_id, doc_key_enc)` in the list. Verification: the `user_id`s in the list must all be in `document_members` (the revoked member was already deleted in step 1 -- their key cannot be re-encrypted). Then broadcast `WsServerMsg::KeyRotationRequired { revoked_user_id }` via PubSub -- at this point the new `doc_key_enc` values are in the database, so there is no race, and other clients fetching `GET /members` receive the new keys.
 
 ### Network Security & Headers
 
@@ -896,17 +828,21 @@ Database | Redis | S3 | *      -> 500 INTERNAL_ERROR   (generic message)
 
 **PubSub hub (in-process fan-out -- single Redis subscription per channel per instance).** WARNING: `rustis` keeps subscriptions **connection-global**: a `Client` holds `HashMap<channel, (_, PubSubSender)>` -- **one** sender per channel per connection. Two WebSockets on the same `doc:X` over the shared client therefore collide ("already subscribed"), so a per-WS `PubSubStream` is **impossible** for collaboration. The server runs a single `PubSubHub` task (spawned once at boot, cloned into every `AppState`): it owns **one** `PubSubStream` on the shared RESP3 connection, ref-counts the Redis `SUBSCRIBE` per channel (subscribe on the first interested connection, unsubscribe when the last leaves), and **fans out in-process** -- on each Redis message it clones the (already postcard-encoded `WsServerMsg`) payload to every locally interested WS via an `mpsc` sink keyed by `connection_id`. The handler calls `pubsub.subscribe(channel, connection_id, outbound_tx)` / `unsubscribe(...)`. Binary payloads are published as `RefBulkString` (a raw `&[u8]` makes rustis panic, which would 1006-drop the publisher and trigger a reconnect storm).
 
-```
-Axum instance A          Redis PubSub          Axum instance B
-  │ Alice connected           │                   Bob connected │
-  │ (multiplexed WS)           │                   (multiplexed WS) │
-  ├── Subscribe doc:{id} ────►│◄─── Subscribe doc:{id} ────────┤
-  │                           │                                 │
-Alice sends Update            │                                 │
-  ├── Publish doc:{id} ───────►│─── Message ───────────────────►│
-  │                           │                   Broadcast → Bob┤
-  │◄── (self) ────────────────┤
-  ├── Broadcast → Alice
+```mermaid
+sequenceDiagram
+    participant A as Axum instance A
+    participant R as Redis PubSub
+    participant B as Axum instance B
+    Note over A: Alice connected (multiplexed WS)
+    Note over B: Bob connected (multiplexed WS)
+    A->>R: Subscribe doc:{id}
+    B->>R: Subscribe doc:{id}
+    Note over A: Alice sends Update
+    A->>R: Publish doc:{id}
+    R->>B: Message
+    Note over B: Broadcast to Bob
+    R-->>A: self
+    Note over A: Broadcast to Alice
 ```
 
 ### Event Types

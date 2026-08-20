@@ -110,18 +110,12 @@ Toile plugs into the shared UI-thread runtime exactly like Trame (`ambre-spec-ar
 
 ## 2. RENDERING ARCHITECTURE
 
-```
-DisplayViewport (postcard, from Logic)
-        │  double-buffered swap on arrival
-        ▼
-ViewportTransform (world<->screen Affine)  ── pan/zoom, no Logic round-trip for the transform itself
-        │  push_transform on the surface (WgpuSurface CPU-side matrix)
-        ▼
-paint_content ── walks DisplayViewport.nodes, emits ABSTRACT DrawSurface calls
-        │        (fill_rect | fill_path/stroke_path | draw_glyphs | push_clip | image quad)
-        ▼
-WgpuSurface: DrawSurface  (from ambre-canvas) ── QuadRenderer + GlyphAtlas do the tessellation/atlas/GPU
-```
+Per-frame content path in Toile's UI thread:
+
+1. `DisplayViewport` (postcard, from Logic) -- double-buffered swap on arrival.
+2. `ViewportTransform` (world<->screen Affine) -- pan/zoom, no Logic round-trip for the transform itself; `push_transform` on the surface (WgpuSurface CPU-side matrix).
+3. `paint_content` -- walks `DisplayViewport.nodes`, emits abstract `DrawSurface` calls (`fill_rect` | `fill_path`/`stroke_path` | `draw_glyphs` | `push_clip` | image quad).
+4. `WgpuSurface: DrawSurface` (from `ambre-canvas`) -- `QuadRenderer` + `GlyphAtlas` do the tessellation/atlas/GPU.
 
 **"What to draw" vs "how to draw".** Toile owns only the **content walk** (`paint_content`/`paint_overlay`),
 emitting abstract `DrawSurface` calls -- the same seam as Trame (`ambre-spec-architecture.md section 4`). The

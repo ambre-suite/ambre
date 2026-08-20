@@ -95,33 +95,14 @@ fn handle_input(&mut self, ev: &InputEvent) -> bool;   // true => host calls pre
 
 `FrameHost` runs a direct `requestAnimationFrame` loop (no Winit/Masonry). Each frame (`FrameHost::render`) follows this sequential pipeline:
 
-```
-requestAnimationFrame callback (raf_timestamp: f64)
-  |
-  +-- 1. view.update()                        ~0.05 ms
-  |       drains Receiver<UiEvent> (flume try_recv) → applies → raises dirty flags
-  |       (a Disconnected => FatalError: Logic dead, see architecture section 2.B)
-  |
-  +-- 2. HUD refresh gate (hud_tick)
-  |       overlay refreshed at most every 500 ms (avoids rebuild on idle frames)
-  |
-  +-- 3. view.plan_repaint(hud_tick) -> RepaintPlan
-  |       decides ContentRepaint {Full | Scroll{dx,dy} | Reuse} + Option<strip> and OverlayRepaint {Redraw | Reuse}
-  |
-  +-- 4. Build CPU-side vertex batch          ~0.5-1 ms  [CONDITIONAL: active layer]
-  |       quad_renderer.begin_frame(w, h)
-  |       WgpuSurface::new(&mut quad_renderer)
-  |       if content active: surface.begin_layer(Layer::Content); view.paint_content(.., strip)
-  |       if overlay redraw: surface.begin_layer(Layer::Overlay); view.paint_overlay(.., &stats)
-  |       text_cache.evict_if_oversized(5_000)
-  |
-  +-- 5. GPU upload + render pass             ~0.3-1 ms  [ALWAYS: present required]
-  |       surface.get_current_texture()
-  |       quad_renderer.flush_dirty_rect(.., plan.content, plan.overlay)
-  |       queue.submit(encoder.finish())
-  |
-  +-- 6. surface_texture.present()
-```
+Within the `requestAnimationFrame` callback (`raf_timestamp: f64`):
+
+1. `view.update()` (~0.05 ms) -- drains `Receiver<UiEvent>` (`flume try_recv`), applies, raises dirty flags. A `Disconnected` becomes `FatalError` (Logic dead, see architecture section 2.B).
+2. HUD refresh gate (`hud_tick`) -- overlay refreshed at most every 500 ms (avoids rebuild on idle frames).
+3. `view.plan_repaint(hud_tick)` -> `RepaintPlan` -- decides `ContentRepaint { Full | Scroll { dx, dy } | Reuse }` + `Option<strip>` and `OverlayRepaint { Redraw | Reuse }`.
+4. Build CPU-side vertex batch (~0.5-1 ms, CONDITIONAL: active layer) -- `quad_renderer.begin_frame(w, h)`; `WgpuSurface::new(&mut quad_renderer)`; if content active, `surface.begin_layer(Layer::Content)` then `view.paint_content(.., strip)`; if overlay redraw, `surface.begin_layer(Layer::Overlay)` then `view.paint_overlay(.., &stats)`; `text_cache.evict_if_oversized(5_000)`.
+5. GPU upload + render pass (~0.3-1 ms, ALWAYS: present required) -- `surface.get_current_texture()`; `quad_renderer.flush_dirty_rect(.., plan.content, plan.overlay)`; `queue.submit(encoder.finish())`.
+6. `surface_texture.present()`.
 
 **Generic 2-layer model (`Layer`).** Rendering distinguishes two layers (generic rename, no longer says "Trame"):
 - `Layer::Content` -- **persistent** layer, offscreen ping-pong, scroll-band reuse (`ContentRepaint { Full, Scroll { dx_px, dy_px }, Reuse }`; `content_strip: Option<Rect>` = area exposed by a scroll).

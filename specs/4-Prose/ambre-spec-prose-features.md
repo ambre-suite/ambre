@@ -328,13 +328,12 @@ fn heading_level_of(tree: &LoroMovableTree, id: &TreeID) -> Option<u8>;
 
 CRDT structure:
 
-```
-Table (BlockType::Table)
-└── TableRow (BlockType::TableRow)  xn
-    └── TableCell (BlockType::TableCell)  xm
-        └── LoroText (+ inline marks)
-            + inline blocks: Paragraph, Heading, ListItem (no nested Table)
-```
+Block hierarchy for a table:
+
+- `Table` (BlockType::Table)
+  - `TableRow` (BlockType::TableRow) -- repeated n times
+    - `TableCell` (BlockType::TableCell) -- repeated m times
+      - `LoroText` (+ inline marks); plus inline blocks: Paragraph, Heading, ListItem (no nested Table)
 
 Style attributes are stored in each node's `LoroMap` `"a"`:
 
@@ -498,15 +497,14 @@ Images are `BlockType::Image` nodes in the `MovableTree`, inserted via
 
 #### CRDT Attributes
 
-```
-"a" of the Image node:
-├── "content_hash" : String -- content hash addressing the encrypted media blob (resolved via the ambre-sync media flow)
-├── "alt"       : String   -- alt text
-├── "w"         : u32      -- width in px (display dimension, not original dimension)
-├── "h"         : u32      -- height in px
-├── "align"     : u8       -- ImageAlign discriminant
-└── "caption"   : String   -- optional caption (used by O.8 Table of Figures)
-```
+Image node `"a"`:
+
+- `"content_hash"` (String) -- content hash addressing the encrypted media blob (resolved via the ambre-sync media flow)
+- `"alt"` (String) -- alt text
+- `"w"` (u32) -- width in px (display dimension, not original dimension)
+- `"h"` (u32) -- height in px
+- `"align"` (u8) -- ImageAlign discriminant
+- `"caption"` (String) -- optional caption (used by O.8 Table of Figures)
 
 ```rust
 // ambre-prose/src/features/image.rs
@@ -700,26 +698,23 @@ configuration plus the stable `block_id` (`TreeID`) that points at the text node
 text is never duplicated inline (see `prose-logic section 2.A`). Editing commands (`InsertText`,
 `ApplyMark`, ...) target the header/footer via this `block_id` like any other block.
 
-```
-"meta"
-├── "different_first_page" : bool    -- document-level flag; governs BOTH header_first
-│                                     and footer_first at once (Google Docs semantics:
-│                                     a single "Different first page" checkbox).
-├── "header" : LoroMap
-│   ├── "enabled"  : bool
-│   ├── "block_id" : String   -- stable TreeID of the header LoroText node
-│   └── "align"    : "left"|"center"|"right"
-├── "header_first" : LoroMap   -- content used on page 0 iff different_first_page = true
-│   ├── "block_id" : String    -- (same config shape as "header")
-│   └── "align"    : "left"|"center"|"right"
-├── "footer" : LoroMap
-│   ├── "enabled"  : bool
-│   ├── "block_id" : String
-│   └── "align"    : "left"|"center"|"right"
-└── "footer_first" : LoroMap    -- content used on page 0 iff different_first_page = true
-    ├── "block_id" : String
-    └── "align"    : "left"|"center"|"right"
-```
+`"meta"`:
+
+- `"different_first_page"` (bool) -- document-level flag; governs BOTH `header_first` and `footer_first` at once (Google Docs semantics: a single "Different first page" checkbox).
+- `"header"` (LoroMap):
+  - `"enabled"` (bool)
+  - `"block_id"` (String) -- stable TreeID of the header LoroText node
+  - `"align"` -- `"left"|"center"|"right"`
+- `"header_first"` (LoroMap) -- content used on page 0 iff different_first_page = true:
+  - `"block_id"` (String) -- same config shape as `"header"`
+  - `"align"` -- `"left"|"center"|"right"`
+- `"footer"` (LoroMap):
+  - `"enabled"` (bool)
+  - `"block_id"` (String)
+  - `"align"` -- `"left"|"center"|"right"`
+- `"footer_first"` (LoroMap) -- content used on page 0 iff different_first_page = true:
+  - `"block_id"` (String)
+  - `"align"` -- `"left"|"center"|"right"`
 
 **First-page header/footer activation (P-53).** `different_first_page` is a **single
 document-level flag** (hoisted out of `"header"`), not a per-side one: it activates
@@ -810,22 +805,20 @@ length of the target `LoroText` is clamped to its end.
 
 Comments are discussion threads anchored on a text range via the `"cm"` mark.
 
-```
-"annots"
-└── "{comment_id}" : LoroMap
-    ├── "anchor_block" : String
-    ├── "anchor_start" : u32
-    ├── "anchor_end"   : u32
-    ├── "resolved"     : bool
-    ├── "created_at"   : u64
-    └── "replies"      : LoroList<LoroMap>
-        └── LoroMap
-            ├── "id"         : String (Uuid)
-            ├── "author"     : String
-            ├── "peer_id"    : u64
-            ├── "created_at" : u64
-            └── "text"       : LoroText
-```
+`"annots"`:
+
+- `"{comment_id}"` (LoroMap):
+  - `"anchor_block"` (String)
+  - `"anchor_start"` (u32)
+  - `"anchor_end"` (u32)
+  - `"resolved"` (bool)
+  - `"created_at"` (u64)
+  - `"replies"` (LoroList<LoroMap>), each LoroMap:
+    - `"id"` (String, Uuid)
+    - `"author"` (String)
+    - `"peer_id"` (u64)
+    - `"created_at"` (u64)
+    - `"text"` (LoroText)
 
 Commands:
 
@@ -893,14 +886,13 @@ Model via `MarkType` on `LoroText`:
 - `MARK_SUGGEST_INS` (`"si"`): text present, suggested as insertion.
 - `MARK_SUGGEST_DEL` (`"sd"`): text present, suggested as deletion.
 
-```
-"annots"
-└── "{suggestion_id}" : LoroMap
-    ├── "type"       : u8  -- 0 = insertion, 1 = deletion
-    ├── "author"     : String
-    ├── "peer_id"    : u64
-    └── "created_at" : u64
-```
+`"annots"`:
+
+- `"{suggestion_id}"` (LoroMap):
+  - `"type"` (u8) -- 0 = insertion, 1 = deletion
+  - `"author"` (String)
+  - `"peer_id"` (u64)
+  - `"created_at"` (u64)
 
 #### Suggestion grouping granularity (P-71)
 
@@ -1014,12 +1006,11 @@ Commands: `Undo`, `Redo` (in `ProseCommand`).
 
 Mark `"fn"` on the main `LoroText`, value = `FootnoteId`. Content in `"annots"`:
 
-```
-"annots"
-└── "{footnote_id}" : LoroMap
-    ├── "type"    : "footnote"
-    └── "text"    : LoroText
-```
+`"annots"`:
+
+- `"{footnote_id}"` (LoroMap):
+  - `"type"` -- `"footnote"`
+  - `"text"` (LoroText)
 
 The ordinal is computed on demand (`MovableTree` traversal + position in `LoroText`).
 
