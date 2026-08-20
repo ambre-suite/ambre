@@ -164,6 +164,9 @@ impl CellEditor {
     pub fn insert(&mut self, s: &str) {
         self.push(EditIntent::Insert(s.to_owned()));
     }
+    pub fn newline(&mut self) {
+        self.push(EditIntent::Newline);
+    }
     pub fn backspace(&mut self) {
         self.push(EditIntent::Backspace);
     }
