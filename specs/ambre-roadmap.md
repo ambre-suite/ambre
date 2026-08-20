@@ -392,6 +392,14 @@ Stories:
   (`ambre-bus::app::toile`, `AppCommand::Toile`/`AppEvent::Toile`, `DocState::Toile`, remote/snapshot/ephemeral
   legs) -- and the `doc_embed` element kind land under the `toile-logic §13` story above, not here. Sits on top
   of the logic/canvas/ui stack.
+- `[ ]` **Toile export cursor drops a delta on export error (correctness)** — `emit_with_update`
+  advances the exported version-vector cursor **unconditionally**, even when the Loro export fails
+  (`ambre-toile/src/logic/state/mod.rs:472-478`, `.ok().filter(...)` then `exported_vv = oplog_vv()`).
+  Trame retains the cursor on export error and retries the range (`ambre-trame/src/logic/sync.rs:18-31`),
+  so no delta is lost. Align Toile on Trame's retained-cursor guarantee: on export error keep
+  `exported_vv` unchanged and return `None` so the range is re-exported next time. Specced in
+  `toile-logic §8` (vv-cursor data-flow note). Needs a regression test (forced export error -> next
+  export still carries the range).
 
 ## E5 — Application expansion  `[ ]` (deferred)
 
@@ -504,26 +512,30 @@ Stories:
     crate consumed by Prose, Trame, Toile and later Murmure. Trame drops its stateless whole-grid
     re-scan (`FindNext`/`ReplaceAll`/`ReplaceOne`) for the shared session model. This retires the X9
     (event-shape) and X11 (factoring) findings with it.
-  - **Shared zoom model + status-bar widget** (X4): one zoom model **and** one UX widget, docked
-    bottom-right in the shared status bar (`ambre-chrome::StatusBar`, cf. X72) as Trame already does.
-    Toile drops its top-toolbar zoom widget and its divergent UX for this shared widget. The model
-    carries a **zoom-to-selection** option (Toile needs it; offered to Prose/Trame too). Audit note:
-    Trame's zoom is reportedly already implemented -- reconcile the spec with the code first.
+  - **Shared zoom model** (X4): the status-bar widget is **already** shared -- `ambre-chrome`'s
+    `ZoomChip` + `ZOOM_PRESETS` ladder (`status.rs`), used by both Trame and Toile. What is **not**
+    shared is the zoom *engine* (the factor + transform): Trame keeps its own in `grid/state.rs`,
+    Toile its own in `ui/viewport.rs` (the richest -- wheel/pinch + zoom-to-selection via
+    `fit_bounds`). The work: factor the zoom engine into one shared model, give Trame the missing
+    keyboard (`Ctrl+=/-/0`) and pinch zoom (today `Ctrl+wheel` is left to the browser) and the
+    zoom-to-selection option, and bring zoom to Prose (none today). One consistent model, one widget.
   - **Shared interop vocabulary** (X18/X19/X20): one import/export vocabulary in Foundations,
     Toile included. Unify the event names on Prose's (`ImportCompleted` / `ExportReady`); promote
     Prose's `ConversionReport` (+ `ConversionWarning`) to the shared conversion-report type; adopt one
     progress model (`ImportProgress` / `ExportProgress { percent }`, emitted past a size threshold).
     Trame renames `ImportComplete`/`ExportComplete`, replaces its import-only off-bus `ImportWarning`,
     and gains the progress events.
-  - **Shared text-editing core** (X23/X24): consolidate the editing core already begun between Trame
-    and Toile in `ambre-canvas`. Shaping runs on the Logic thread (never the render thread); every
-    consumer -- including Trame's single-line cell editor -- MUST carry a **draft buffer** that echoes
-    the keystroke locally so the Logic round-trip adds no perceived latency. Anti-glitch contract: the
-    draft **reshapes the whole edited line** with the real shaper (never a glyph appended to a stale
-    line), the draft->confirmed swap is idempotent, and the Logic thread returns only what the draft
-    could not know (reflow: line wrapping, pagination), never a re-render of the current line. A shared
-    IME/composition model (draft buffer + composition + remote-delta reanchor, from Prose) is part of
-    the core; Trame's cell editor adopts it.
+  - **Shared text-editing substrate + two layout drivers** (X23/X24): the inline editing core is
+    already shared -- `ambre-canvas`'s `TextEditor` (Parley `PlainEditor`) wrapped by Trame's
+    `CellEditor` and Toile's `InlineEditor` (`ambre-canvas/src/editor.rs`, `text_input.rs`). The one
+    thing that legitimately differs is the **layout driver**: the inline core shapes a single run on
+    the **render thread** (cheap for a short cell / sticky; the editor buffer is the local echo, no
+    Logic round-trip to display), whereas Prose's flowing, paginated document shapes on the **Logic
+    thread** (pagination) and ships pre-shaped `ParleyRunData`. Everything under the driver is the
+    shared substrate to consolidate: the `<textarea>` input pipe, the IME/composition state machine
+    (`Compose`/`ComposeEnd` + remote-delta reanchor), the font-free `EditIntent` vocabulary, Parley +
+    `FontContext` + `ParleyRunData`, and the selection/caret model (`anchor`/`focus`, byte offsets,
+    grapheme nav; cf. X12). Target: one substrate, two drivers -- not one shaping thread.
   - **Shared document locale** (X41): a resolved locale carried by the document (`meta.lang`) in
     Foundations, read by Prose, Trame and Toile for all number/date formatting, so collaborators on
     differently-configured machines see identical formatting. Trame stops leaving its locale source
@@ -563,10 +575,13 @@ Stories:
     `ContentRepaint { Full | Scroll | Reuse }` contract (`ambre-spec-canvas.md`); Prose's
     `RepaintStrip` is a specialization of it (the GPU scroll-band `Scroll` mode simply unused by
     Prose), not a parallel mechanism.
-  - **Shared floating-menu primitive** (X61): one `ambre-chrome` floating-menu primitive (placement,
-    up/down/Enter/Escape keyboard nav, click-outside close) underlies every menu -- Prose's slash
-    menu, Trame's autocomplete + filter/format/find popovers, and Toile's floating menu -- instead of
-    each app reimplementing the pattern.
+  - **Shared floating-menu primitive** (X61): today only the right-click `ContextMenu`
+    (`ambre-chrome/src/context_menu.rs`) is a shared floating shell (Trame + Toile, via the app
+    shell); Trame's format/filter popovers (`chrome/popovers/`) and Toile's floating selection toolbar
+    (`floatbar.rs`) each roll their own shell and reuse only the shared value controls
+    (`ColorPopover`, `FontPicker`, ...). Target: one `ambre-chrome` floating-menu primitive (placement
+    + flip, up/down/Enter/Escape nav, click-outside close) underlying every floating menu -- those
+    popovers, Toile's floatbar, and Prose's future slash menu -- not a per-app shell each.
   - **Shared perf telemetry** (X69): the `ambre-canvas::PerfPublisher` (FPS chip + timings panel) is
     wired uniformly in every app (Prose and Toile join Trame), available at least in debug, rather
     than surfaced by Trame alone.

@@ -981,9 +981,16 @@ impl ToileState {
 ```
 
 **Data flow.** `handle_command` mutates `doc`, updates `index`/`bounds`/`layers`, re-derives the visible set,
-and returns `display` (to UI) + `sync` (`SendUpdate` with `doc.export_updates()`, or a `SendEphemeral` presence
-frame). `apply_remote` / `apply_ephemeral` are the symmetric inbound paths. All bare `flume`; tests use the
-`CommandSink` seam.
+and returns `display` (to UI) + `sync` (`SendUpdate` with the delta, or a `SendEphemeral` presence frame).
+The delta uses the **idempotent vv-cursor** like Trame and Prose, not a single-drain: `emit_with_update`
+exports `ExportMode::Updates { from: &exported_vv }` and advances `exported_vv = doc.oplog_vv()`
+(`ambre-toile/src/logic/state/mod.rs`). `apply_remote` / `apply_ephemeral` are the symmetric inbound paths.
+All bare `flume`; tests use the `CommandSink` seam.
+>
+> **Cursor retained on export error (as Trame).** The cursor advance MUST be conditional on export
+> success: on error, `exported_vv` stays put and the range is re-exported next time, mirroring
+> `trame-logic §8` (`ambre-trame/src/logic/sync.rs`). Advancing unconditionally drops that delta
+> silently -- the correctness gap tracked in the roadmap (Toile export-cursor Story).
 
 > **Persistence & snapshot exchange (dispatcher-orchestrated, as Trame).** The `ambre-logic` dispatcher owns the
 > transport, exactly as in `trame-logic §8`: whenever a `handle_command` outcome carried a `SendUpdate` (the doc
