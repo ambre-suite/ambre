@@ -1064,6 +1064,10 @@ pub enum NumberFormat {
 }
 // "Special" (zip code, phone, SSN) is locale-specific and is NOT a distinct primitive:
 // it is expressed via `Custom(..)` patterns rather than a hardcoded, US-centric variant.
+// Target state -- locale source (X41): the locale that drives `thousands`, the decimal
+// separator, and `Date`/`Time` `Locale*` patterns is the document-carried resolved locale
+// `meta.lang` (Foundations), not the local machine, so collaborators see identical formatting.
+// See the cross-app factoring Story (`ambre-roadmap.md`).
 
 /// Partial style update -- only `Some(..)` fields are applied. A toolbar control
 /// sets a single field at a time (e.g. toggle bold -> patch { bold: Some(true), .. }).
@@ -1134,6 +1138,10 @@ pub enum TrameCommand {
     FillRange  { sheet_id: String, src: GridRange, dest: GridRange, mode: FillMode },
 
     // -- Find & replace (whole-document scan, Logic-side) ----------------
+    // Target state -- this stateless whole-grid re-scan is superseded by the shared
+    // session-based Find/Replace crate (Prose's match-list + live cursor model), consumed
+    // by Prose, Trame, Toile and Murmure. See the cross-app factoring Story
+    // (`ambre-roadmap.md`, X8/X9/X11).
     FindNext   { query: String, match_case: bool, whole_cell: bool },
     ReplaceAll { query: String, replacement: String, match_case: bool,
                  whole_cell: bool, in_formulas: bool, all_sheets: bool },
