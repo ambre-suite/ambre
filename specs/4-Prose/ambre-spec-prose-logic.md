@@ -11,7 +11,7 @@
 
 > **Architecture note.** The client uses the **two-instance model** -- a **Main** WASM instance (UI thread + Logic thread sharing one linear memory via `wasm_thread`, talking over typed `flume` values) and a **separate Sync worker** (its own WASM instance/memory, reached over `postMessage` + `postcard`, relayed by the Main thread) -- see `ambre-spec-architecture.md §2.B`. Consequences for this spec:
 > - **State registry.** The state of a Prose document is `ProseState`, a concrete value stored in the Logic thread's typed registry (`enum DocState { Trame(TrameState), Prose(ProseState), … }`) and dispatched via `match` (no trait object, no `Box<dyn Any>`).
-> - **Typed data plane.** `ProseCommand`/`ProseEvent` (+ their payload types: `PageLayout`, `BlockLayout`, …) live in **`ambre-bus`** (re-exported by `ambre-prose`) and travel **by move** on `flume`, inside `AppCommand::Prose(..)` / `AppEvent::Prose(..)`. **No `serde` derivation** on them. `serde`/`postcard` only remain for **network bytes**: Loro CRDT payloads (`export_updates`/`export_snapshot`, already `Vec<u8>`) and the `Ephemeral` presence payload (`PresencePayload`, postcard).
+> - **Typed data plane.** `ProseCommand`/`ProseEvent` (+ their payload types: `PageLayout`, `BlockLayout`, …) live in **`ambre-bus`** (re-exported by `ambre-prose`) and travel **by move** on `flume`, inside `AppCommand::Prose(..)` / `AppEvent::Prose(..)`. **No `serde` derivation** on them. `serde`/`postcard` only remain for **network bytes**: Loro CRDT payloads (the vv-cursor `ExportMode::Updates` delta / `export_snapshot`, already `Vec<u8>`) and the `Ephemeral` presence payload (`PresencePayload`, postcard).
 > - **Typed outcome for editing.** A handler that mutates the CRDT **returns** domain bytes (Loro delta); the Logic dispatcher emits `SyncCommand::SendUpdate { document_id, payload }`. `ProseState` holds no transport handle of its own. See §C and `ambre-spec-architecture.md §7 ARCH P2`.
 > - **Sync->Logic event routing.** `ProseState` does **not** see `LogicEvent`: the generic dispatcher in `ambre-logic` routes incoming events (`RemoteUpdate`/`RemoteSnapshot`/`RemoteEphemeral`/`SnapshotNeeded`/…) to `ProseState`'s content methods (`apply_remote`, `apply_ephemeral`, `export_snapshot`). `LogicEvent::RemoteEphemeral` carries a **Sync-resolved `from_user_id: UserId`** (spoof-proof -- a peer cannot forge another user's id, see `ambre-spec-sync.md §3`); the dispatcher passes it to `apply_ephemeral(from_user_id, payload)`.
 
@@ -948,6 +948,12 @@ pub struct ProseState {
     layout_version:   u64,               // incremented on each pagination recomputation
     tracking:         bool,              // track changes active
     media_cache:      HashMap<String, Vec<u8>>,  // content_hash -> decrypted image bytes
+    /// Last CRDT version vector broadcast to Sync. The local delta is
+    /// `doc.export(ExportMode::Updates { from: &last_exported_vv })`, then the vv is
+    /// advanced to `doc.oplog_vv()`. Idempotent: exporting twice from the same vv
+    /// yields the same bytes, so the delta stream cannot be truncated (mirrors
+    /// `trame-logic §8`; `TrameState.last_exported_vv`).
+    last_exported_vv: VersionVector,
 }
 
 /// Result of a content command. The Logic dispatcher explodes it:
@@ -955,7 +961,7 @@ pub struct ProseState {
 /// `ephemeral` -> SyncCommand::SendEphemeral (adding the document_id held by Logic).
 pub struct ProseOutcome {
     pub display:   Vec<ProseEvent>,
-    pub update:    Option<Vec<u8>>,   // raw Loro delta (export_updates)
+    pub update:    Option<Vec<u8>>,   // raw Loro delta (vv-cursor ExportMode::Updates)
     pub ephemeral: Option<Vec<u8>>,   // PresencePayload postcard (local presence)
 }
 
@@ -991,12 +997,12 @@ impl ProseState {
     /// Produces the standard keystroke TRIPLE (DocUpdated + LayoutUpdated + RunsUpdated,
     /// P-31) after any LoroDoc mutation (local or remote).
     ///
-    /// The confirmed `delta` bytes are passed IN by the caller -- this method NEVER calls
-    /// `export_updates()` itself, because Loro drains its internal diff on export and a
-    /// second drain here would return empty bytes and silently truncate the delta stream
-    /// (P-06). On the local path the caller passes the freshly exported delta (also used as
-    /// `outcome.update`); on the remote path (`apply_remote`) it passes the imported remote
-    /// `payload`. `DocUpdated.delta` therefore always carries the correct bytes on BOTH paths.
+    /// The confirmed `delta` bytes are passed IN by the caller -- this method never
+    /// re-derives them. On the local path the caller passes the vv-cursor delta
+    /// (`doc.export(ExportMode::Updates { from: &last_exported_vv })`, then advances the
+    /// vv), which is also `outcome.update`; on the remote path (`apply_remote`) it passes
+    /// the imported remote `payload`. So `DocUpdated.delta` carries the exact bytes applied
+    /// on BOTH paths -- never a re-export of the whole state (P-06 / `PROSE-023`).
     fn produce_layout_events(&mut self, delta: Vec<u8>) -> Vec<ProseEvent> { /* ... */ }
 }
 ```
@@ -1175,8 +1181,8 @@ pub enum ProseCommand {
 
     // -- Undo / Redo --
     // Dispatched to `self.undo_manager.undo()/redo()` (P-10). The manager applies the
-    // inverse local operation to `doc`, which produces a delta exported exactly once on
-    // the local path (P-06) and broadcast like any other mutation.
+    // inverse local operation to `doc`, whose new ops the vv-cursor exports as one delta
+    // on the local path (P-06) and broadcasts like any other mutation.
     Undo,
     Redo,
 }
@@ -1475,6 +1481,7 @@ plaintext to `ambre-server`.
 | **Pagination in the Sync thread** | Does not know Parley, reserved for crypto/network. |
 | **`contentEditable` / Slate.js / ProseMirror** | Rejected globally: outside Rust-first + wgpu/DrawSurface vision. |
 | **Loro branches for track changes** | Full `LoroDoc` fork = memory overhead O(doc_size × suggestions). `MarkType si/sd` is O(1). |
+| **Single-drain `export_updates()` for the local delta** | Draining Loro's internal diff is order-fragile: a second call returns empty and silently truncates the stream, forcing every caller to thread the one exported copy by hand. The idempotent vv-cursor (`ExportMode::Updates { from: &last_exported_vv }`, then advance the vv) exports the same ops from a stored version vector as many times as needed, and is the mechanism `trame-logic §8` already uses -- one delta model for both apps on the shared engine. |
 
 ---
 
