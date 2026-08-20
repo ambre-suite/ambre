@@ -81,7 +81,7 @@ No dependency on `ambre-sync` or `ambre-crypto`.
 | `PROSE-023` | `DocUpdated` MUST carry the exact bytes that were applied -- the imported remote payload on the remote path, the freshly exported delta on the local one -- never a re-export of the current state. | §2.C (P-06) | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
 | `PROSE-024` | `ProseState` MUST NOT name `SyncCommand`: it returns a typed outcome the Logic dispatcher fans out. | §2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
 | `PROSE-025` | `ambre-prose` MUST NOT contact the network and MUST NOT depend on `ambre-crypto` or `ambre-sync`. | §1; §3 | not built -- lands with `ARCH P2` (Epic `E5`); `deny.toml` already bans `ambre-crypto` outside `ambre-sync`/`ambre-logic`, so this one is half-held before the crate exists | unimplemented |
-| `PROSE-026` | `ambre-prose` MUST contain no `unsafe`. | context pillar "Security" | not built -- lands with `ARCH P2` (Epic `E5`); `#![forbid(unsafe_code)]` on the crate root makes it compiler-held from day one | unimplemented |
+| `PROSE-026` | `ambre-prose` MUST contain no `unsafe`. | README pillar "Security" | not built -- lands with `ARCH P2` (Epic `E5`); `#![forbid(unsafe_code)]` on the crate root makes it compiler-held from day one | unimplemented |
 
 > **Invariant coverage.** 26 `unimplemented`, nothing else -- the honest shape for a spec whose crate is empty. The point of writing them now: three specs (`prose-ui`, `prose-features`, `prose-interop`) are built on this contract, and a contradiction between them is visible between two tables in a way it never was between two chapters of prose.
 ---

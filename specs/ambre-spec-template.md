@@ -36,7 +36,7 @@
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
 | `XXX-001` | The component MUST ... | this spec §2.B \| `derived` | `crate::module::test_name` | verified |
-| `XXX-002` | The component MUST NOT ... | context pillar "E2EE" | -- | unverified |
+| `XXX-002` | The component MUST NOT ... | README pillar "E2EE" | -- | unverified |
 | `XXX-003` | The component MUST ... | this spec §4.A | not built -- lands with `E5` / `ARCH P2` | unimplemented |
 
 > `XXX` is this spec's stable prefix, declared once and never renumbered -- it is the join key between spec, test name and audit finding. Prose that cannot be falsified ("the engine is robust") is an intention, not an invariant: it belongs in **Scope** above. Every row carries a `Status`; `unverified` and `unimplemented` are legitimate values, an empty cell is not. A rule for code that does not exist yet is written as a row (`unimplemented`), never held back and never left as prose -- `ambre-spec-architecture.md §4` carries the two conditions that keep it honest.

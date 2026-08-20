@@ -80,7 +80,7 @@ and confined to the UI thread. They never travel through a `flume` channel.
 | `PROSE-UI-012` | The contextual toolbar, the slash menu and the ruler MUST be DOM chrome, not canvas overlays. | §2.F; §2.G; §2.H | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
 | `PROSE-UI-013` | A paste MUST be routed through the Logic thread as a command: the UI MUST NOT insert clipboard content into its own model. | §2.K | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
 | `PROSE-UI-014` | Every colour drawn MUST come from the theme palette; no literal colour in render code. | §2.D; `ambre-spec-ui.md` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-UI-015` | `ambre-prose`'s UI module MUST contain no `unsafe`. | context pillar "Security" | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-015` | `ambre-prose`'s UI module MUST contain no `unsafe`. | README pillar "Security" | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
 
 > **Invariant coverage.** 15 `unimplemented`. The 16 ms frame budget of §1 is deliberately **not** a row: a number with no `criterion` bench behind it cannot be falsified, and turning §5's budgets into invariants is its own pass (`ambre-spec-testing.md §7`, seeding order).
 ---

@@ -69,7 +69,7 @@
 | `TRAME-021` | A formula result MUST NOT depend on view state (active sheet, filter, hidden rows). | §11 bis.E; §12 | `ambre_trame::logic::tests::group5::shared_filter_does_not_affect_sum`, `group3::masked_cell_excluded_across_sheets_regardless_of_active_tab` | verified |
 | `TRAME-022` | A workbook MUST always hold at least one sheet. | §2.D | partial: `ambre_trame::logic::tests::group3::delete_last_sheet_rejected` covers the **local** guard only. Two peers concurrently deleting the two last sheets still converge to a sheet-less workbook; §2.D's deterministic re-insertion rule is decided, not implemented, and has no 2-peer regression test | unverified |
 | `TRAME-023` | The incrementally maintained `SheetIndex` MUST equal a from-scratch rebuild after any sequence of structural operations. | §2.C | none. Per-operation unit tests only (`ambre_trame::model::sheet_index::tests::apply_insert_and_delete_row_shift_positions`, `::apply_move_row_permutes_order_and_reindexes`). The equivalence property exists on the Toile index and not here, though this is the cache invariant the whole engine rests on | unverified |
-| `TRAME-024` | `ambre-trame` MUST contain no `unsafe`. | context pillar "Security" | measured zero `unsafe` in the crate, but no `#![forbid(unsafe_code)]` on its root -- a claim, not a mechanism (architecture §4 ladder) | unverified |
+| `TRAME-024` | `ambre-trame` MUST contain no `unsafe`. | README pillar "Security" | measured zero `unsafe` in the crate, but no `#![forbid(unsafe_code)]` on its root -- a claim, not a mechanism (architecture §4 ladder) | unverified |
 
 > **Invariant coverage.** 19 `verified`, 5 `unverified`, 0 `human-review`, 0 `qa-manual`. The five gaps are `TRAME-008` (the spec asserts a `#REF!` propagation the delete path prevents), `TRAME-010`, `TRAME-022`, `TRAME-023` and `TRAME-024`; each is reported in `ambre-spec-testing.md §7`.
 ---
@@ -1383,7 +1383,7 @@ remote batch through `reseed_after_merge` -> `reseed_engine` (`logic/sync.rs`, `
 which does `engine.reset()` and re-parses/recompiles **every formula of every sheet**. The same
 full reseed runs on undo/redo, sheet rename, define/delete name, and sheet switch/delete. In
 active collaboration each peer keystroke costs O(total cells) on the receiver -- incompatible with
-the <= 50 ms client processing budget (`ambre-context.md` §4) at the 100k-cell target.
+the <= 50 ms client processing budget (`README.md` "Performance Targets") at the 100k-cell target.
 
 **Target design (restores §8 P3).** Drive the apply path from Loro's subscription diff events:
 - changed `cells_{sheet}` keys -> `engine.on_cell_changed` per touched cell (existing entry point);
