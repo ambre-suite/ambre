@@ -916,6 +916,27 @@ from `ProseEvent::Clipboard` (the same `payload` type carried by `ProseCommand::
 returned by `decode_ambre`). It is what the mirror gate in `paste_clipboard` consults. **Cut**
 clears the source range after the copy command, Prose's own policy.
 
+### L. Content Accessibility (DOM mirror)
+
+Content (page column, caret, selection, highlights) is painted on the canvas, which exposes
+no accessibility tree. Foundations mandates the same remedy for every app: content a11y is a
+**DOM mirror** -- an accessible `<textarea>` plus a live region -- not AccessKit
+(`ambre-spec-chrome.md sec.2.F`, CHROME P3; the a11y tree on the web is the DOM). Prose meets
+it with two DOM surfaces `ambre-app`/`ambre-chrome` already own:
+
+- **Accessible text surface.** The shared transparent `<textarea>` (sec.2.E, the
+  keyboard/IME pipe) is the screen-reader-navigable mirror of the editable content: it carries
+  editing focus and holds the caret block's text, so a screen reader reads and caret-navigates
+  the text the user is editing rather than a silent canvas.
+- **Live region (`aria-live="polite"`).** The view announces caret context on selection
+  change -- the block type and heading level, entering or leaving a table cell, footnote, or
+  comment thread, and the accept/reject state of a tracked change. This is Prose's analog of
+  Trame's active-cell announce (`ambre-spec-trame-ui.md sec.2.B`, the `SelectRange` announce
+  arm); both feed the one live-region contract of CHROME P3.
+
+Chrome (toolbar, slash menu, ruler, comment panel) inherits ARIA from `ambre-chrome` on its own
+(sec.7 rejected-decisions note); this subsection is only about the **content** the canvas owns.
+
 ---
 
 ## 3. SECURITY & CONFIDENTIALITY (ZERO-KNOWLEDGE)
