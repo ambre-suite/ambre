@@ -96,18 +96,7 @@ in A fade out, only in B fade in.
 /// No CRDT mutation -- it animates the *presentation* of existing elements.
 pub fn smart_animate(
     from: &FrameSnapshot, to: &FrameSnapshot, t: f64 /* 0..=1, eased */,
-) -> Vec<AnimatedElement> {
-    to.elements.iter().map(|e| {
-        match from.by_id(e.id) {
-            Some(a) => AnimatedElement::lerp(a, e, t),      // shared id -> tween
-            None    => AnimatedElement::fade_in(e, t),      // new in B
-        }
-    }).chain(
-        from.elements.iter()
-            .filter(|a| to.by_id(a.id).is_none())
-            .map(|a| AnimatedElement::fade_out(a, t))       // gone in B
-    ).collect()
-}
+) -> Vec<AnimatedElement> { /* ... */ }
 ```
 
 Because matching is by **stable id**, an element the author moved/resized between two frames animates smoothly

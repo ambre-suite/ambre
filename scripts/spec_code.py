@@ -81,21 +81,58 @@ def bodies(text: str):
             buf.append(line)
 
 
+def is_empty_body(text: str) -> bool:
+    """True when a `{ ... }` body carries no code -- only whitespace or comments.
+
+    This is what tells a collapsed shape (`fn f(...) { /* ... */ }`, possibly over
+    a multi-line signature) from a real implementation, replacing the old
+    single-line `size > 2` heuristic that missed a body under a wrapped signature.
+    """
+    inner = text[text.find("{") + 1 : text.rfind("}")]
+    inner = re.sub(r"/\*.*?\*/", "", inner, flags=re.S)  # block comments
+    inner = re.sub(r"//[^\n]*", "", inner)               # line comments
+    return inner.strip() == ""
+
+
 def scan(block: list[str], start: int):
-    depth = 0
-    open_at = None
-    for i, line in enumerate(block):
-        if depth == 0 and SIGNATURE.match(line) and not line.rstrip().endswith(";"):
-            # a signature inside a trait/impl block stub ends with `;`
-            if "{" in line or (i + 1 < len(block) and block[i + 1].strip().startswith("{")):
-                open_at = i
-        if open_at is not None:
-            depth += line.count("{") - line.count("}")
-            if depth <= 0 and "{" in "".join(block[open_at : i + 1]):
-                size = i - open_at + 1
-                if size > 2:  # `fn f() { }` over two lines is a shape, not a body
-                    yield start + open_at + 1, size, block[open_at].strip()
-                open_at, depth = None, 0
+    """Yield (line_no, size, first_line) for every real fn body in a rust fence.
+
+    Depth is tracked only inside a detected body, so the `impl {` / `trait {`
+    wrapper braces are ignored and a method is seen at the fence's top level. A
+    signature can span several lines (one parameter per line): the opening brace
+    is the first `{` reached before any signature-terminating `;`.
+    """
+    i, n = 0, len(block)
+    while i < n:
+        line = block[i]
+        if not (SIGNATURE.match(line) and not line.rstrip().endswith(";")):
+            i += 1
+            continue
+        # Walk the (possibly multi-line) signature to its body brace.
+        j, opened = i, False
+        while j < n:
+            if "{" in block[j]:
+                opened = True
+                break
+            if block[j].rstrip().endswith(";"):  # split declaration, no body
+                break
+            j += 1
+        if not opened:
+            i += 1
+            continue
+        # Track brace depth from the opening line until the body closes.
+        depth, k = 0, j
+        while k < n:
+            depth += block[k].count("{") - block[k].count("}")
+            if depth <= 0:
+                break
+            k += 1
+        # A body closing on its opening line is a one-liner accessor -- a shape
+        # the template tolerates as illustrative. Only a multi-line block with
+        # real content is a forbidden implementation.
+        if j != k and not is_empty_body("\n".join(block[i : k + 1])):
+            yield start + i + 1, k - i + 1, block[i].strip()
+        i = k + 1
 
 
 def loose_impl(text: str):
