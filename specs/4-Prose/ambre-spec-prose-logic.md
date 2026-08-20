@@ -82,8 +82,9 @@ No dependency on `ambre-sync` or `ambre-crypto`.
 | `PROSE-024` | `ProseState` MUST NOT name `SyncCommand`: it returns a typed outcome the Logic dispatcher fans out. | §2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
 | `PROSE-025` | `ambre-prose` MUST NOT contact the network and MUST NOT depend on `ambre-crypto` or `ambre-sync`. | §1; §3 | not built -- lands with `ARCH P2` (Epic `E5`); `deny.toml` already bans `ambre-crypto` outside `ambre-sync`/`ambre-logic`, so this one is half-held before the crate exists | unimplemented |
 | `PROSE-026` | `ambre-prose` MUST contain no `unsafe`. | README pillar "Security" | not built -- lands with `ARCH P2` (Epic `E5`); `#![forbid(unsafe_code)]` on the crate root makes it compiler-held from day one | unimplemented |
+| `PROSE-027` | A document MUST converge to at least one root body block: an empty `"blocks"` tree is invalid. Two peers concurrently emptying the tree MUST deterministically re-insert one block (the tombstoned root block whose `TreeID` sorts first), identically on every peer -- not just the local recreate-on-open (P-147). | §2.A | not built -- lands with `ARCH P2` (Epic `E5`); needs a 2-peer convergence regression test, like Trame's `TRAME-022` | unimplemented |
 
-> **Invariant coverage.** 26 `unimplemented`, nothing else -- the honest shape for a spec whose crate is empty. The point of writing them now: three specs (`prose-ui`, `prose-features`, `prose-interop`) are built on this contract, and a contradiction between them is visible between two tables in a way it never was between two chapters of prose.
+> **Invariant coverage.** 27 `unimplemented`, nothing else -- the honest shape for a spec whose crate is empty. The point of writing them now: three specs (`prose-ui`, `prose-features`, `prose-interop`) are built on this contract, and a contradiction between them is visible between two tables in a way it never was between two chapters of prose.
 ---
 
 ## 2. TECHNICAL DESIGN & STATE
@@ -202,7 +203,24 @@ pub fn compute_depth(tree: &LoroMovableTree, item_id: &TreeID) -> u8 { /* ... */
 | ListItem | ListItem (nesting), Paragraph (degenerate case) |
 | All others | -- (leaves) |
 
-#### Body Text -- `LoroText` (Fugue CRDT)
+#### At least one body block (convergence)
+
+A document MUST always converge to **>= 1 root body block** -- an empty `"blocks"` tree is not
+a valid state (`PROSE-027`). Two guards, at two layers:
+
+- **Local guard (P-147, UI).** Deleting the last block, or opening a doc whose tree is empty,
+  recreates one empty `Paragraph` locally so the caret always has a home. This is the as-built,
+  single-peer guarantee; it does **not** by itself make concurrent peers agree.
+- **CRDT convergence rule (the missing piece X57 flags).** When two peers concurrently delete the
+  last remaining blocks and the deletes converge to an empty tree, a **deterministic
+  re-insertion** restores one block **identically on every peer**: the tombstoned root block
+  whose `TreeID` sorts first is revived (its `LoroText` and metadata intact), so all replicas
+  converge to the same surviving block rather than a blockless document. This is the direct
+  analog of Trame's `TRAME-022` (>= 1 sheet, deterministic re-insertion, `trame-logic sec.2.D`);
+  Prose owes the same convergence invariant, not only the local recreate.
+
+Both guards target the root body tree only; a `TableCell` or `ListItem` emptying to zero children
+follows its own per-type rule (an empty table node is deleted whole, `prose-features`).
 
 Each leaf node (`Paragraph`, `Heading`, `ListItem`, `TableCell`, `CodeBlock`) has a
 `LoroText` accessible via the key convention `"t:{tree_id}"`:
