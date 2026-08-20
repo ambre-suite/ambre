@@ -464,9 +464,9 @@ Stories:
   header drag-and-drop with an insertion guide line. *(This is the grid column/row reorder, distinct
   from the sheet-tab reorder, which is plain `MoveSheet` and already ships in the DOM `SheetTabs`.)*
 - Rendez-Vous — SFrame encryption (E2EE video): `SYNC P4` / Rendez-Vous.
-- **Trame feature-parity gaps (2026-08 Prose-vs-Trame review)** `[ ]` — three subsystems Prose
-  ships and Trame lacks, surfaced by the cross-app review. Each is a Trame **code** change; the
-  specs describe the target state and cite this Story.
+- **Trame feature-parity gaps (2026-08 Prose-vs-Trame review)** `[ ]` — subsystems and event
+  shapes Prose ships and Trame lacks, surfaced by the cross-app review. Each is a Trame **code**
+  change; the specs describe the target state and cite this Story.
   - **Cell comments / notes** (X31): Trame has no anchored-comment container; Prose has the full
     `annots` subsystem (`prose-features` reconcile P-68 / orphan P-69). Add a cell-anchored note
     subsystem mirroring that model -- anchored on the move-invariant `(row_uid, col_uid)` pair, with
@@ -479,3 +479,17 @@ Stories:
     ephemeral `PdfPageSetup` export param into a persisted per-sheet CRDT container, shared like Google
     Sheets' print settings, with a first-class `orientation` field. Export then reads the persisted
     setup. Persisted-schema change (bumps the Trame `SCHEMA_VERSION`).
+  - **Clipboard text/plain mirror** (X2): `TrameEvent::Clipboard` carries only the styled
+    `ClipboardPayload`; the shared `ClipboardBlob { text, ambre }` (`ambre-spec-ui.md`) also carries a
+    `text/plain` rendering for foreign-app paste. Change the event to `{ text, ambre }` like Prose
+    (`prose-logic` `Clipboard { text, ambre }`) so the host writes both flavors to the OS clipboard.
+  - **User-facing error code** (X56): `TrameEvent::Error { message }` surfaces no machine-readable
+    code; Prose's `Error { code: u16, message }` maps a typed `ProseError`. Add a typed Trame error
+    enum mapped to a `code`, so hosts branch on the code rather than parse the message.
+  - **Oversized float-object clamp** (X58): Trame declares no geometry cap on images / charts; Prose
+    clamps each image dimension to `MAX_IMAGE_DIM_PX = 10_000` before it reaches the CRDT
+    (`prose-features`). Clamp `DisplayFloatObject` / chart dimensions to the same bound so an absurd
+    size cannot make layout cost unbounded.
+  - **Version history** (X37): Trame keeps only an in-memory undo stack; Prose specs a
+    `meta.version_history` (`LoroList`, S3-backed snapshots, Post-MVP). Add the same named-snapshot
+    subsystem to Trame, reusing the SecSync S3 pipeline. Post-MVP.

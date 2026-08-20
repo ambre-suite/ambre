@@ -1219,7 +1219,12 @@ pub enum TrameEvent {
     MergeRejected { reason: String },
     MergeConflictDetected { master_row: u32, master_col: u32, covered_row: u32, covered_col: u32 },
     UndoState { can_undo: bool, can_redo: bool },
-    Error { message: String },
+    // `code` is a machine-readable discriminant from a typed `TrameError`, `message` its
+    // human-readable rendering -- so a host branches on the code, never parses the string.
+    // Mirrors Prose's `Error { code: u16, message }` mapped from a typed `ProseError`.
+    // Target state -- as-built is `Error { message }` (no code); see the Prose-vs-Trame
+    // parity-gap Story (`ambre-roadmap.md`, X56).
+    Error { code: u16, message: String },
 
     // -- Sort / filter / stats -------------------------------------------
     SortComplete,
@@ -1232,7 +1237,13 @@ pub enum TrameEvent {
     FindResult { matches: Vec<(u32, u32)>, active: Option<usize> },
     ReplaceDone { replaced: u32 },
     PasteRejected { reason: String },
-    Clipboard(ClipboardPayload),
+    // Both flavors of the shared `ClipboardBlob` (`ambre-spec-ui.md`): `ambre` is the
+    // full-fidelity styled payload (postcard-encoded `ClipboardPayload`) for same-app paste,
+    // `text` is the `text/plain` mirror a foreign app receives. Mirrors Prose's
+    // `ProseEvent::Clipboard { text, ambre }`; the host writes both to the OS clipboard.
+    // Target state -- as-built is `Clipboard(ClipboardPayload)` (no text mirror); see the
+    // Prose-vs-Trame parity-gap Story (`ambre-roadmap.md`, X2).
+    Clipboard { text: String, ambre: Vec<u8> },
 
     // -- Deferred feature surface (emitted once handlers land) ------------
     FilterViewSaved { view_id: String },

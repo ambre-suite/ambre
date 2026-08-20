@@ -389,6 +389,12 @@ No direct Google Sheets API in WASM — authentication cookies and CORS block di
 | Export .xlsx 10k cells | < 1 s | `rust_xlsxwriter` in memory |
 | Export CSV 10k lines | < 100 ms | |
 
+> **These targets are not yet `criterion` benches (X66).** Like the engine budgets of `trame-logic`,
+> a number with no bench behind it is unfalsifiable prose (architecture §4, mechanism ladder). Prose's
+> import/export subsystem carries a per-format `criterion` table (`prose-interop`); Trame's shared
+> import/export path does not yet. Each row above becomes a falsifiable benchmark when the format's
+> path is built (test debt, Epic `ET`, §8).
+
 **Progress for long imports (deferred — must fit the synchronous model).**
 `handle_command` runs to completion synchronously (`-logic.md` §8), so an import
 cannot yield mid-operation and there is **no** `ImportProgress` bus event today. A
