@@ -18,5 +18,9 @@
   compilation warning, then every `cargo clippy` warning. Commit only once the tree is clean.
   `./run_tests.sh lint` checks it.
 * **A commit that touches only `specs/`** runs `just invariants` and `just spec-code` instead.
+* **A commit that adds or edits a ` ```mermaid ` block** renders every touched block locally first
+  and commits only once each one parses. Use the mermaid CLI, for example
+  `npx --yes @mermaid-js/mermaid-cli -i block.mmd -o /dev/null`. `just spec-code` checks the fence
+  tag, not the diagram, so a broken diagram passes the lint and fails only on the forge.
 * **Commit message.** Imperative subject, 72 characters maximum, no final period. The body explains
   why. Rest of the rules in `ai/ambre-writing-style.md`.
