@@ -582,11 +582,16 @@ pub enum Direction {
 /// the *wrapped* line under the caret and the caret affinity at a soft-wrap point (P-126).
 pub fn move_cursor(state: &mut ProseUiState, dir: Direction, extend: bool) { /* ... */ }
 
-/// Common tail: place the caret, keep/clear x_goal, and either extend or collapse the selection.
+/// Common tail: place the caret, keep/clear x_goal, either extend or collapse the selection,
+/// then REVEAL the caret (P-149) -- if the new caret line box falls outside the viewport,
+/// `scroll_y` is nudged the minimum amount to bring it inside (with a small margin), clamped
+/// to `[0, max_scroll]` (P-134). Every keyboard move funnels through here, so caret navigation
+/// can never leave the caret off-screen. Never mutates the CRDT.
 fn apply_caret(state: &mut ProseUiState, next: TextCursor, x_goal: Option<f32>, extend: bool) { /* ... */ }
 
 /// After a local InsertText/composition commit, advance the caret by `n` bytes in the same block.
-/// Clears x_goal (a horizontal edit invalidates the memorized column, P-124).
+/// Clears x_goal (a horizontal edit invalidates the memorized column, P-124) and reveals the
+/// caret through the same P-149 rule, so typing at the bottom edge scrolls the new line into view.
 pub fn advance_cursor(state: &mut ProseUiState, n: u32) { /* ... */ }
 ```
 

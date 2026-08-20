@@ -1145,6 +1145,12 @@ FindResults { matches: Vec<FindMatch>, current: usize },
 FindUpdated { current: usize },
 ```
 
+**Reveal the current match (P-150).** On `FindResults` and `FindUpdated`, the UI thread
+does not only re-highlight: it scrolls the `current` match into view when that match's
+line box falls outside the viewport, reusing the caret-reveal mechanism (P-149,
+`prose-ui`). So `FindNext`/`FindPrev` can never leave the selected occurrence off-screen --
+the same reveal-on-find behavior Trame gives its match cell (`trame-ui`).
+
 ---
 
 ### M. Word Count
