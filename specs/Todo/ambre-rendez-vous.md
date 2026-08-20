@@ -33,17 +33,15 @@ Rendez-vous transforms Ambre into a living meeting space. Unlike Zoom or Teams, 
 
 ### Topology: SFU (Selective Forwarding Unit)
 
+```mermaid
+flowchart LR
+    Alice --- SFU[SFU Rust, blind]
+    Bob --- SFU
+    Carol --- SFU
+    Dave --- SFU
 ```
-              ┌─────────────┐
-  Alice ──────┤             ├────── Bob
-              │   SFU Rust  │
-  Carol ──────┤   (blind)   ├────── Dave
-              │             │
-              └─────────────┘
 
-Each participant sends 1 stream → SFU forwards it to N-1
-SFU NEVER decrypts
-```
+Each participant sends 1 stream; the SFU forwards it to N-1 peers. The SFU NEVER decrypts.
 
 No mesh (explodes at 4+ participants), no MCU (incompatible with E2EE). The SFU routes encrypted streams without touching them -- consistent with the "blind server" model.
 
@@ -52,27 +50,32 @@ No mesh (explodes at 4+ participants), no MCU (incompatible with E2EE). The SFU 
 1. **DTLS-SRTP (transport):** hop-by-hop encryption client<->SFU. The SFU decrypts transport to route.
 2. **SFrame (RFC 9605, content):** E2EE encryption of the media frame before sending. The SFU sees the SFrame header (routing) but the payload is opaque.
 
-```
-Client → SFrame encrypt → [DTLS-SRTP] → SFU sees noise → [DTLS-SRTP] → SFrame decrypt → Client
+```mermaid
+flowchart LR
+    C1[Client] --> E[SFrame encrypt] --> D1[DTLS-SRTP] --> SFU[SFU sees noise] --> D2[DTLS-SRTP] --> DE[SFrame decrypt] --> C2[Client]
 ```
 
 ### Client pipeline
 
-```
-BROWSER (WASM + Web APIs)
-├── Capture          → getUserMedia (browser API, unavoidable)
-├── Encoding/Decoding → WebCodecs API (native browser codecs)
-├── Audio processing  → Web Audio API (echo cancel, noise suppression)
-├── E2EE encryption   → SFrame in Rust/WASM (full control)
-├── Control           → Rust/WASM logic (UI, signaling, state)
-└── Transport         → WebRTC via web-sys bindings + RTCRtpScriptTransform
+Client (browser, WASM + Web APIs):
 
-SFU SERVER (100% Rust)
-├── Signaling         → Axum WebSocket
-├── Media routing     → str0m (webrtc-rs)
-├── TURN/STUN         → coturn or Rust equivalent
-└── Recording         → Not possible E2E (by design), or opt-in client-side
-```
+| Stage | Technology |
+|---|---|
+| Capture | getUserMedia (browser API, unavoidable) |
+| Encoding/Decoding | WebCodecs API (native browser codecs) |
+| Audio processing | Web Audio API (echo cancel, noise suppression) |
+| E2EE encryption | SFrame in Rust/WASM (full control) |
+| Control | Rust/WASM logic (UI, signaling, state) |
+| Transport | WebRTC via web-sys bindings + RTCRtpScriptTransform |
+
+SFU server (100% Rust):
+
+| Stage | Technology |
+|---|---|
+| Signaling | Axum WebSocket |
+| Media routing | str0m (webrtc-rs) |
+| TURN/STUN | coturn or Rust equivalent |
+| Recording | Not possible E2E (by design), or opt-in client-side |
 
 ### Key management
 

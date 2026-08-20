@@ -36,11 +36,12 @@ SIGNATURE = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+\w+")
 FENCE = re.compile(r"^```(.*)$")
 
 # Fence tags allowed in the spec corpus. `rust` carries Rust shapes (checked for
-# bodies below); `text` and the untagged fence carry diagrams / pseudo-code; the
-# rest are genuine non-Rust artefacts (schemas, configs, styles). `lua` is NOT
-# allowed: an embedded script is implementation and belongs in the source, shown
-# here as `text` if a reference is truly needed (ambre-spec-template.md §0).
-ALLOWED_TAGS = {"", "rust", "text", "json", "toml", "yaml", "sql", "css", "html", "bash", "sh", "ron"}
+# bodies below); `text` and the untagged fence carry diagrams / pseudo-code;
+# `mermaid` carries a rendered diagram (sequence, flowchart); the rest are
+# genuine non-Rust artefacts (schemas, configs, styles). `lua` is NOT allowed:
+# an embedded script is implementation and belongs in the source, shown here as
+# `text` if a reference is truly needed (ambre-spec-template.md section 0).
+ALLOWED_TAGS = {"", "rust", "text", "json", "toml", "yaml", "sql", "css", "html", "bash", "sh", "ron", "mermaid"}
 
 # Lines that betray Rust living outside a ```rust fence -- the tag is wrong and
 # the body checker would never see them.

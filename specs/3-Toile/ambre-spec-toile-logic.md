@@ -213,39 +213,23 @@ break an ordinary client build and take local restore with it.
 
 ### B. CRDT Schema
 
-```
-LoroDoc
-├── "board" (LoroMap)                 → {name, bg_color: u32, grid_size: f64, grid_snap: bool}
-│
-├── "elements" (LoroMap)              → all board nodes, key = ElementId (frames included, see section 2.F)
-│   └── "{elem_id}" (LoroMap)
-│       ├── "type"    : String        → "sticky" | "shape" | "text" | "image" | "frame" | "group"
-│       │                               | "drawing" | "embed" | "doc_embed"
-│       │                               (see section 2.C; group = section 2.F bis; doc_embed = nested Ambre doc, section 2.I)
-│       ├── "x","y"   : f64           → world position (top-left of AABB, pre-rotation)
-│       ├── "w","h"   : f64           → world size
-│       ├── "rot"     : f64           → radians, about the AABB center
-│       ├── "locked"  : bool          → top-level field, NOT part of ElementStyle
-│       ├── "link"    : Binary?       → optional postcard(LinkTarget) -- hyperlink / go-to-frame (section 2.K).
-│       │                               Absent = no link. Top-level, NOT part of ElementStyle (a link is
-│       │                               navigation behavior, not a visual attribute -- same reasoning as `locked`).
-│       ├── "style"   : Binary        → postcard(ElementStyle) -- one LWW register per element (see section 2.E)
-│       └── "payload" : (per type)    → see section 2.C
-│
-├── "connectors" (LoroMap)           → key = ConnectorId
-│   └── "{conn_id}" (LoroMap)        → {from_elem, from_anchor, to_elem, to_anchor, path_type,
-│                                        arrows: {start: bool, end: bool}, style: Binary,
-│                                        label: LoroText}   // edge caption, char-CRDT (section 5.B); empty = no label
-│
-├── "layers" (LoroMovableList<NodeId>) → global z-order, back-to-front paint order.
-│                                        NodeId = Element(ElementId) | Connector(ConnectorId) -- frames and
-│                                        connectors share the single z-order (section 2.G).
-│
-└── "media" (LoroMap)                → key = blake2b(plaintext); value = {w, h, mime, thumb: Binary}
-                                        (`thumb` = inline micro-thumbnail placeholder; full blob lives
-                                        content-addressed on MinIO. No back-pointer: N elements may share
-                                        one hash -- dedup, see `toile-interop section 5`.)
-```
+`LoroDoc`:
+
+- `"board"` (LoroMap) -- `{name, bg_color: u32, grid_size: f64, grid_snap: bool}`
+- `"elements"` (LoroMap) -- all board nodes, key = ElementId (frames included, see section 2.F):
+  - `"{elem_id}"` (LoroMap):
+    - `"type"` (String) -- `"sticky" | "shape" | "text" | "image" | "frame" | "group" | "drawing" | "embed" | "doc_embed"` (see section 2.C; group = section 2.F bis; doc_embed = nested Ambre doc, section 2.I)
+    - `"x"`, `"y"` (f64) -- world position (top-left of AABB, pre-rotation)
+    - `"w"`, `"h"` (f64) -- world size
+    - `"rot"` (f64) -- radians, about the AABB center
+    - `"locked"` (bool) -- top-level field, NOT part of ElementStyle
+    - `"link"` (Binary?) -- optional `postcard(LinkTarget)` (hyperlink / go-to-frame, section 2.K). Absent = no link. Top-level, NOT part of ElementStyle (a link is navigation behavior, not a visual attribute -- same reasoning as `locked`).
+    - `"style"` (Binary) -- `postcard(ElementStyle)`, one LWW register per element (see section 2.E)
+    - `"payload"` (per type) -- see section 2.C
+- `"connectors"` (LoroMap) -- key = ConnectorId:
+  - `"{conn_id}"` (LoroMap) -- `{from_elem, from_anchor, to_elem, to_anchor, path_type, arrows: {start: bool, end: bool}, style: Binary, label: LoroText}` (label = edge caption, char-CRDT, section 5.B; empty = no label)
+- `"layers"` (LoroMovableList<NodeId>) -- global z-order, back-to-front paint order. `NodeId = Element(ElementId) | Connector(ConnectorId)` -- frames and connectors share the single z-order (section 2.G).
+- `"media"` (LoroMap) -- key = `blake2b(plaintext)`; value = `{w, h, mime, thumb: Binary}` (`thumb` = inline micro-thumbnail placeholder; the full blob lives content-addressed on MinIO. No back-pointer: N elements may share one hash -- dedup, see `toile-interop section 5`).
 
 `NodeId` is the z-order node identity:
 

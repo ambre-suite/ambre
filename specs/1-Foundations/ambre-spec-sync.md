@@ -203,32 +203,13 @@ The pipeline is identical for the three message types (Snapshot, Update, Ephemer
 
 **Encryption:**
 
-```
-CRDT Data (Vec<u8>)
-  │
-  ├─ If size > 256 bytes → ruzstd::encoding::compress_to_vec(data, CompressionLevel::Fastest)
-  │                         version = 0x01
-  └─ Otherwise → version = 0x00 (raw, no compression)
-  │
-  ▼
-PlaintextPayload = [version_byte | data]
-  │
-  │  XChaCha20-Poly1305 (AEAD)
-  │  key   = document_key (256 bits)
-  │  nonce = getrandom::<[u8; 24]>()
-  │  aad   = postcard::to_stdvec(&public_data)  ← binds ciphertext to metadata
-  ▼
-ciphertext (Poly1305 tag integrated -- authenticity guaranteed)
-  │
-  │  HMAC-SHA256(document_key, nonce || ciphertext || public_data_bytes)
-  │  → commitment_tag: [u8; 32]  ← key-commitment (XChaCha20-Poly1305 is not key-committing)
-  │                                 Explicit field in ambre_protocol::{Update|Snapshot|Ephemeral}
-  │
-  │  Ed25519::sign(signing_key, nonce || ciphertext || public_data_bytes || commitment_tag)
-  │  → signature [u8; 64]         ← covers commitment_tag to prevent its modification
-  ▼
-ambre_protocol::{Update|Snapshot|Ephemeral} ready to send via WsClientMsg
-```
+Outbound encryption pipeline, from `CRDT Data (Vec<u8>)` to a sendable `ambre_protocol::{Update|Snapshot|Ephemeral}`:
+
+1. Compress: if size > 256 bytes, `ruzstd::encoding::compress_to_vec(data, CompressionLevel::Fastest)` and `version = 0x01`; otherwise `version = 0x00` (raw, no compression).
+2. Form `PlaintextPayload = [version_byte | data]`.
+3. Encrypt with XChaCha20-Poly1305 (AEAD): `key = document_key` (256 bits), `nonce = getrandom::<[u8; 24]>()`, `aad = postcard::to_stdvec(&public_data)` (binds the ciphertext to its metadata). Output: `ciphertext` with the Poly1305 tag integrated (authenticity guaranteed).
+4. Commit the key: `HMAC-SHA256(document_key, nonce || ciphertext || public_data_bytes)` -> `commitment_tag: [u8; 32]`, an explicit key-commitment field in `ambre_protocol::{Update|Snapshot|Ephemeral}` (XChaCha20-Poly1305 is not key-committing).
+5. Sign: `Ed25519::sign(signing_key, nonce || ciphertext || public_data_bytes || commitment_tag)` -> `signature [u8; 64]`, which covers `commitment_tag` to prevent its modification.
 
 > **commitment_tag note:** The HMAC-SHA256 tag is distinct from the AEAD Poly1305 tag. It serves as proof of key-commitment: XChaCha20-Poly1305 is not key-committing (a given ciphertext can theoretically be decrypted by two different keys). HMAC(document_key, ...) cryptographically binds the message to a specific key, preventing a compromised server from re-injecting a ciphertext into another document context.
 
@@ -236,26 +217,13 @@ ambre_protocol::{Update|Snapshot|Ephemeral} ready to send via WsClientMsg
 
 **Decryption (symmetrical path):**
 
-```
-Reception WsServerMsg::{Update|Ephemeral|...} (or S3 blob for Snapshot)
-  │
-  │  1. Ed25519::verify(public_data.pub_key, nonce || ciphertext || public_data_bytes || commitment_tag)
-  │     → Err(InvalidSignature) → DROP + SyncWarning
-  │
-  │  2. HMAC-SHA256::verify(document_key, nonce || ciphertext || public_data_bytes) == commitment_tag
-  │     → Err → DROP + SyncWarning (possible inter-document substitution or wrong key)
-  │
-  │  3. XChaCha20-Poly1305::decrypt(document_key, nonce, aad=public_data_bytes, ciphertext)
-  │     → Err(AuthenticationFailed) → DROP + SyncWarning (corruption or attack)
-  ▼
-PlaintextPayload = [version_byte | data]
-  │
-  ├─ version == 0x01 → ruzstd::decode_all(data) → Vec<u8>
-  ├─ version == 0x00 → data as is
-  └─ unknown version → Err(UnknownCompressionVersion) → DROP
-  ▼
-CRDT bytes → send_to_logic(LogicEvent::RemoteUpdate { .. })   // via LogicSink
-```
+Inbound reception of `WsServerMsg::{Update|Ephemeral|...}` (or an S3 blob for a Snapshot):
+
+1. `Ed25519::verify(public_data.pub_key, nonce || ciphertext || public_data_bytes || commitment_tag)` -- `Err(InvalidSignature)` -> DROP + SyncWarning.
+2. `HMAC-SHA256::verify(document_key, nonce || ciphertext || public_data_bytes) == commitment_tag` -- `Err` -> DROP + SyncWarning (possible inter-document substitution or wrong key).
+3. `XChaCha20-Poly1305::decrypt(document_key, nonce, aad=public_data_bytes, ciphertext)` -- `Err(AuthenticationFailed)` -> DROP + SyncWarning (corruption or attack).
+4. Decompress `PlaintextPayload = [version_byte | data]`: `0x01` -> `ruzstd::decode_all(data)`; `0x00` -> data as is; unknown version -> `Err(UnknownCompressionVersion)` -> DROP.
+5. Send the CRDT bytes to the Logic thread: `send_to_logic(LogicEvent::RemoteUpdate { .. })` via `LogicSink`.
 
 **Key to use during decryption:**
 - If `public_data.snapshot_id` corresponds to a snapshot encrypted with an old key (post-rotation), look up in `old_keys` before using `document_key`.
@@ -306,93 +274,80 @@ impl SyncState {
 
 ### D. Data Flow
 
-```
-Logic Thread                        Sync Thread                    Blind Relay / S3
-─────────────────                  ──────────────────────          ─────────────────
-     │                                      │                           │
-     │── SyncCommand::Unlock ──────────────▶│                           │
-     │                                      │── GET /keys/master ──────▶│
-     │                                      │── GET /auth/me ──────────▶│
-     │                                      │── Argon2 + decryption     │
-     │                                      │── opens WS /api/ws ──────▶│
-     │◀─ LogicEvent::SessionReady ─────────│                           │
-     │                                      │                           │
-     │── SyncCommand::ListDocuments ───────▶│── GET /documents ────────▶│
-     │                                      │── decrypts name_enc       │
-     │◀─ LogicEvent::DocumentList ─────────│                           │
-     │                                      │                           │
-     │── SyncCommand::OpenDocument ────────▶│── GET /members ──────────▶│
-     │                                      │── decrypts DocumentKey    │
-     │                                      │── GET S3 snapshot ───────▶│
-     │                                      │── Subscribe {doc_id} ────▶│
-     │◀─ LogicEvent::RemoteSnapshot ───────│                           │
-     │◀─ LogicEvent::ConnectionStatus ─────│                           │
-     │                                      │                           │
-     │── SyncCommand::SendUpdate ──────────▶│── compress → encrypt ────▶│
-     │                                      │── WsClientMsg::Update     │
-     │                                      │◀─ WsServerMsg::Update ────│
-     │◀─ LogicEvent::RemoteUpdate ─────────│                           │
-     │                                      │                           │
-     │── SyncCommand::SendSnapshot ────────▶│── encrypt → S3 PUT ──────▶│
-     │                                      │── POST metadata ─────────▶│
-     │                                      │                           │
-     │── SyncCommand::InviteToDocument ────▶│── GET /users/search ─────▶│
-     │                                      │── encrypts DocumentKey    │
-     │                                      │── POST /share ───────────▶│
-     │◀─ LogicEvent::InviteSent ───────────│                           │
-     │                                      │                           │
-     │── SyncCommand::RevokeFromDocument ──▶│── DELETE /share/{uid} ───▶│
-     │                                      │── generates new key       │
-     │                                      │── POST /rotate-key ──────▶│
-     │◀─ LogicEvent::RevocationComplete ───│                           │
-     │                                      │                           │
-     │── SyncCommand::UploadMedia ─────────▶│── encrypt → S3 PUT ──────▶│
-     │◀─ LogicEvent::MediaUploaded ────────│                           │
+```mermaid
+sequenceDiagram
+    participant L as Logic Thread
+    participant S as Sync Thread
+    participant R as Blind Relay / S3
+    L->>S: SyncCommand::Unlock
+    S->>R: GET /keys/master
+    S->>R: GET /auth/me
+    Note over S: Argon2 + decryption
+    S->>R: opens WS /api/ws
+    S-->>L: LogicEvent::SessionReady
+    L->>S: SyncCommand::ListDocuments
+    S->>R: GET /documents
+    Note over S: decrypts name_enc
+    S-->>L: LogicEvent::DocumentList
+    L->>S: SyncCommand::OpenDocument
+    S->>R: GET /members
+    Note over S: decrypts DocumentKey
+    S->>R: GET S3 snapshot
+    S->>R: Subscribe {doc_id}
+    S-->>L: LogicEvent::RemoteSnapshot
+    S-->>L: LogicEvent::ConnectionStatus
+    L->>S: SyncCommand::SendUpdate
+    S->>R: compress then encrypt
+    Note over S: WsClientMsg::Update
+    R-->>S: WsServerMsg::Update
+    S-->>L: LogicEvent::RemoteUpdate
+    L->>S: SyncCommand::SendSnapshot
+    S->>R: encrypt then S3 PUT
+    S->>R: POST metadata
+    L->>S: SyncCommand::InviteToDocument
+    S->>R: GET /users/search
+    Note over S: encrypts DocumentKey
+    S->>R: POST /share
+    S-->>L: LogicEvent::InviteSent
+    L->>S: SyncCommand::RevokeFromDocument
+    S->>R: DELETE /share/{uid}
+    Note over S: generates new key
+    S->>R: POST /rotate-key
+    S-->>L: LogicEvent::RevocationComplete
+    L->>S: SyncCommand::UploadMedia
+    S->>R: encrypt then S3 PUT
+    S-->>L: LogicEvent::MediaUploaded
 ```
 
 ### E. Quarantine Management
 
 An update with an unknown parent `snapshot_id` is quarantined:
 
-```
-Reception Update with unknown snapshot_id
-  │
-  ├─ Add to quarantine[snapshot_id].push(update)
-  │
-  ├─ If quarantine.total_len() >= 900 (alert threshold)
-  │   └─ Send WsClientMsg::RequestMissing { after_seq: last_known_seq }
-  │
-  ├─ If quarantine.total_len() >= 1000 (hard limit)
-  │   └─ Drop oldest updates (LRU by clock)
-  │   └─ LogicEvent::SyncWarning { code: QUARANTINE_OVERFLOW }
-  │
-  Reception Snapshot with matching snapshot_id
-  │
-  └─ Release quarantine[snapshot_id] in clock ASC order
-      └─ Apply each update via LogicEvent::RemoteUpdate
-```
+On an `Update` with an unknown `snapshot_id`:
+
+- Add to `quarantine[snapshot_id].push(update)`.
+- If `quarantine.total_len() >= 900` (alert threshold): send `WsClientMsg::RequestMissing { after_seq: last_known_seq }`.
+- If `quarantine.total_len() >= 1000` (hard limit): drop the oldest updates (LRU by clock) and emit `LogicEvent::SyncWarning { code: QUARANTINE_OVERFLOW }`.
+
+On a `Snapshot` with a matching `snapshot_id`: release `quarantine[snapshot_id]` in clock-ASC order, applying each update via `LogicEvent::RemoteUpdate`.
 
 > **Genesis snapshot id (never-snapshotted documents).** A brand-new document has no snapshot, yet its first deltas still need a stable parent `snapshot_id` or they would quarantine forever (random per-client id, never uploaded). Every client deterministically derives the same base id from the document id: `SnapshotId::genesis(document_id) = SnapshotId::from_bytes(*document_id.as_bytes())` (pure client-side, `ambre-core`). `SyncDocumentState::new` and `handle_open_document` seed `known_snapshots` with this genesis id, so the very first deltas are always releasable across F5 and across devices. (Deltas written before this rule, under an old random id, are orphans -- only relevant to pre-existing dev data.)
 
 ### F. Batching and Compaction
 
-```
-Reception SyncCommand::SendUpdate
-  │
-  ├─ Immediate encryption → WsClientMsg::Update sent (real-time)
-  └─ Increment local_clock
+On `SyncCommand::SendUpdate`:
 
-Reception SyncCommand::SendSnapshot
-  │
-  ├─ Verify compaction_lock == false
-  │   └─ If true → LogicEvent::SyncWarning { code: COMPACTION_IN_PROGRESS } → skip
-  │
-  ├─ compaction_lock = true
-  ├─ Full snapshot encryption
-  ├─ POST to Object Storage (via presigned URL from the Blind Relay)
-  ├─ Signal server: purge deltas seq <= current_seq
-  └─ compaction_lock = false
-```
+- Encrypt immediately -> `WsClientMsg::Update` sent (real-time).
+- Increment `local_clock`.
+
+On `SyncCommand::SendSnapshot`:
+
+- Verify `compaction_lock == false`; if true, emit `LogicEvent::SyncWarning { code: COMPACTION_IN_PROGRESS }` and skip.
+- Set `compaction_lock = true`.
+- Encrypt the full snapshot.
+- POST to Object Storage (via a presigned URL from the Blind Relay).
+- Signal the server to purge deltas `seq <= current_seq`.
+- Set `compaction_lock = false`.
 
 ### G. Authentication & WebSocket Resilience
 
@@ -404,27 +359,9 @@ The server uses **no cookie**: a stateless EdDSA access JWT (TTL 900s) + an opaq
 
 **WebSocket reconnection.** The single multiplexed WS is opened at `Unlock` and must survive token expiry, server restarts (ephemeral JWT seed in dev), and network blips:
 
-```
-onclose(code) ─┬─ code == 4401 (unauthorized) ─► reauthenticate():
-               │     refresh().await  (dev: re-run dev-login from the stored username)
-               │       ok  -> reset backoff, reopen WS
-               │       err -> schedule_reconnect()
-               │
-               └─ any other close ─────────────► schedule_reconnect()
-
-schedule_reconnect(): exponential backoff base 250ms x2, cap 10s, + random jitter,
-                      armed via setTimeout (DedicatedWorkerGlobalScope) -> ReconnectNow.
-                      The attempt counter is reset ONLY on a real inbound frame
-                      (not on bare onopen: an auth-rejected upgrade emits 101 then an
-                      immediate 4401 close -- resetting on onopen would tight-loop and
-                      saturate the WS rate-limit -> 429).
-
-onopen ──► resubscribe_all(): for each server-created doc, ws_send(Subscribe) +
-           ws_send(RequestMissing { after_seq: last_seq }). MUST run on onopen, not
-           synchronously in open_websocket: a Subscribe sent while the socket is
-           CONNECTING is dropped -> server has the connection but no subscription
-           -> 403 "not subscribed".
-```
+- `onclose(code)`: if `code == 4401` (unauthorized), run `reauthenticate()` -- `refresh().await` (dev: re-run dev-login from the stored username); on ok, reset backoff and reopen the WS; on err, `schedule_reconnect()`. Any other close -> `schedule_reconnect()`.
+- `schedule_reconnect()`: exponential backoff, base 250 ms x2, cap 10s, plus random jitter; armed via `setTimeout` (DedicatedWorkerGlobalScope) -> `ReconnectNow`. The attempt counter resets ONLY on a real inbound frame, not on a bare `onopen`: an auth-rejected upgrade emits 101 then an immediate 4401 close, so resetting on `onopen` would tight-loop and saturate the WS rate-limit (429).
+- `onopen`: `resubscribe_all()` -- for each server-created doc, `ws_send(Subscribe)` + `ws_send(RequestMissing { after_seq: last_seq })`. This MUST run on `onopen`, not synchronously in `open_websocket`: a Subscribe sent while the socket is CONNECTING is dropped, leaving the server with the connection but no subscription (403 "not subscribed").
 
 > **Decisive rationale (4401 vs generic drop).** When the access token expires or the server rotates its (dev-ephemeral) JWT seed, every token is invalid. A generic close would trigger plain backoff that never recovers (the new connection is rejected too). The explicit **4401** lets the client refresh (or, in dev, re-derive its identity via dev-login) and reconnect **silently**, with no user action.
 
@@ -538,39 +475,32 @@ Two triggers: (A) the initiator client revokes a member via `SyncCommand::Revoke
 
 Rotation is **entirely orchestrated by the Sync thread** -- the Logic thread does neither crypto nor network. The DocumentKey never leaves the Sync thread.
 
-```
-[Initiator client -- Logic thread]
-1. User revokes a member via UI
-   Logic thread emits SyncCommand::RevokeFromDocument { document_id, user_id }
+**Initiator client -- Logic thread**
 
-[Initiator client -- Sync thread (async via spawn_local)]
-2. DELETE /api/documents/{id}/share/{uid}
-3. Generates new DocumentKey via CSPRNG
-4. GET /api/documents/{id}/members → list of remaining members + pubkeys
-5. For each remaining member:
-   X25519(own_exchange_key, member.exchange_pubkey) → encrypts new key
-6. POST /api/documents/{id}/rotate-key with encrypted_keys_per_member
-   → server atomically replaces all doc_key_enc AND sets invited_by = rotator
-     (Postgres transaction) -- the rotator is the new wrapper of record, so a
-     later unwrap resolves to the rotator's exchange key, not the stale inviter's
-   → server broadcasts WsServerMsg::KeyRotationRequired at THIS moment
-     (new keys are in the database -- no race condition)
-7. Completes messages being encrypted with the old key
-8. Stores old key in old_keys (LRU, max 10 entries)
-9. Replaces document_key with new_key, zeroize() the old one
-10. Sends LogicEvent::RevocationComplete { document_id } to the Logic thread
+1. User revokes a member via UI; the Logic thread emits `SyncCommand::RevokeFromDocument { document_id, user_id }`.
 
-[Initiator client -- Logic thread]
-11. Triggers SyncCommand::SendSnapshot { document_id, payload }
-    → snapshot encrypted with the new key → seals post-revocation state
+**Initiator client -- Sync thread (async via `spawn_local`)**
 
-[Other clients -- Sync thread (receiving WsServerMsg::KeyRotationRequired)]
-12. GET /api/documents/{id}/members → fetches new doc_key_enc + wrapper_exchange_pub_key
-13. X25519 ECDH against the wrapper's (rotator's) exchange key → decrypts new DocumentKey
-14. Swaps document_key, old → old_keys, zeroize
-15. Sends LogicEvent::MemberRevoked { document_id, revoked_user_id } to the Logic thread
-    (Logic thread is informed of the departure, can update UI)
-```
+2. `DELETE /api/documents/{id}/share/{uid}`.
+3. Generates a new `DocumentKey` via CSPRNG.
+4. `GET /api/documents/{id}/members` -> list of remaining members + pubkeys.
+5. For each remaining member: `X25519(own_exchange_key, member.exchange_pubkey)` encrypts the new key.
+6. `POST /api/documents/{id}/rotate-key` with `encrypted_keys_per_member`. The server atomically replaces all `doc_key_enc` AND sets `invited_by = rotator` (Postgres transaction) -- the rotator is the new wrapper of record, so a later unwrap resolves to the rotator's exchange key, not the stale inviter's. The server broadcasts `WsServerMsg::KeyRotationRequired` at this moment (new keys are in the database -- no race).
+7. Completes messages being encrypted with the old key.
+8. Stores the old key in `old_keys` (LRU, max 10 entries).
+9. Replaces `document_key` with `new_key`, `zeroize()` the old one.
+10. Sends `LogicEvent::RevocationComplete { document_id }` to the Logic thread.
+
+**Initiator client -- Logic thread**
+
+11. Triggers `SyncCommand::SendSnapshot { document_id, payload }` -- the snapshot is encrypted with the new key, sealing the post-revocation state.
+
+**Other clients -- Sync thread (receiving `WsServerMsg::KeyRotationRequired`)**
+
+12. `GET /api/documents/{id}/members` -> fetches the new `doc_key_enc` + `wrapper_exchange_pub_key`.
+13. `X25519` ECDH against the wrapper's (rotator's) exchange key -> decrypts the new `DocumentKey`.
+14. Swaps `document_key`, old -> `old_keys`, zeroize.
+15. Sends `LogicEvent::MemberRevoked { document_id, revoked_user_id }` to the Logic thread, which learns of the departure and can update the UI.
 
 **Security:** The DocumentKey never crosses the `flume` Logic <-> Sync channel (stays confined to the Sync thread). The `WsServerMsg::KeyRotationRequired` broadcast is emitted by the server **after** new keys are in the database (step 6) -- other clients never fetch a stale `doc_key_enc`.
 

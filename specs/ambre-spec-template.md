@@ -26,7 +26,8 @@
 * **Forbidden:** complete function bodies (`fn foo(&mut self, ...) { ... }` with real logic). Replace them with (a) a one-line description of the algorithm, (b) the invariant it upholds, and (c) a pointer to the real code (`// ambre-crate/src/module.rs`).
 * **Illustrative only:** a short example test or snippet is fine to clarify intent; the authoritative test suite lives in the repo, never mirrored here.
 * **Decision test:** if a block can be copy-pasted into a `.rs` file and compiled as behavior, it is implementation and does not belong in a spec. If it is a shape declaration or a described algorithm, it does.
-* **Fences.** Rust -- and only Rust -- goes in a ` ```rust ` fence: shapes and signatures, never a body. Everything else declares its language so the checker can pair fences and never mistake code for prose: diagrams, trees, wire layouts and pseudo-code use ` ``` ` (untagged) or ` ```text `; a genuine non-Rust artefact uses its own tag (` ```sql `, ` ```toml `, ` ```yaml `, ` ```css `, ` ```json `, ` ```html `, ` ```bash `). An embedded runnable script (e.g. `lua`) is implementation, not a shape -- state its algorithm as pseudo-code in a ` ```text ` fence and point to the source. Every fence must be closed; a Rust shape left in an untagged fence is a tagging bug, not an exemption.
+* **Fences.** Rust -- and only Rust -- goes in a ` ```rust ` fence: shapes and signatures, never a body. Everything else declares its language so the checker can pair fences and never mistake code for prose: wire layouts and pseudo-code use ` ``` ` (untagged) or ` ```text `; a rendered diagram uses ` ```mermaid ` (see the next bullet); a genuine non-Rust artefact uses its own tag (` ```sql `, ` ```toml `, ` ```yaml `, ` ```css `, ` ```json `, ` ```html `, ` ```bash `). An embedded runnable script (e.g. `lua`) is implementation, not a shape -- state its algorithm as pseudo-code in a ` ```text ` fence and point to the source. Every fence must be closed; a Rust shape left in an untagged fence is a tagging bug, not an exemption.
+* **Diagrams: no ASCII-art.** A relationship or a flow renders as a ` ```mermaid ` diagram (sequence, flowchart) -- ASCII source a forge renders as a real figure. Everything else is plain text, never a box drawn with `+`, `|`, `--` or Unicode box glyphs: a hierarchy (a CRDT schema, a directory layout) is a **nested bullet list**, a sequence of steps is a **numbered list**, and a mapping (key to value, entry to thread) is a **table**. Printable ASCII only (`ai/ambre-writing-style.md`), so a Unicode box or arrow is a defect. A dense, heavily annotated figure that mermaid cannot hold becomes a small mermaid graph plus prose, not a wall of boxes.
 * **Mechanised.** `just spec-code` (CI job `lint`) fails on any function body inside a ` ```rust ` fence in `specs/`, on any Rust shape sitting in a non-`rust` fence, on a disallowed fence tag (`lua`, ...), and on an unterminated fence. Keep the signature and its doc comment, collapse the body to `{ /* ... */ }`, and put the algorithm in the prose around it -- numbered steps or a table when it is a mapping. The rule was written long before it was enforced, and the corpus had accumulated 1 466 lines of bodies in the meantime.
 
 ## 1. OBJECTIVES & CONSTRAINTS
@@ -52,7 +53,7 @@
 
 ### B. Interface Contract (API)
 * **Traits & Public API:** Definition of public methods, implemented traits, and input/output types.
-* **Data Flow:** Diagram of message passing (Flume Channels) between the Logic Worker and this component.
+* **Data Flow:** A ` ```mermaid ` sequence or flowchart of the message passing (flume channels) between the Logic worker and this component -- not an ASCII-art box (section 0).
 
 ---
 

@@ -103,23 +103,13 @@
 
 ### A. General Flow
 
-```
-.xlsx File (Vec<u8> received from the UI Thread via postMessage)
-  │
-  ├─ calamine::open_workbook_from_rs() → Xlsx<Cursor<Vec<u8>>>
-  │
-  ├─ For each sheet:
-  │   ├─ Create a new sheet in LoroDoc (CreateSheet)
-  │   ├─ Import dimensions (rows/columns with data)
-  │   ├─ Import cells (value, type, formula, style)
-  │   ├─ Import column widths / row heights
-  │   └─ Import cell merges
-  │
-  ├─ Import cell styles (flat cellstyle_{sheet} register per cell -- no shared "styles" map)
-  ├─ Import named ranges
-  └─ return TrameOutcome { update: Some(delta), .. } → ambre-logic → SyncCommand::SendUpdate
-     (one-way; import never calls SyncCommand directly, -logic.md section 8)
-```
+`.xlsx` file import (a `Vec<u8>` received from the UI thread via `postMessage`):
+
+1. `calamine::open_workbook_from_rs()` -> `Xlsx<Cursor<Vec<u8>>>`.
+2. For each sheet: create a new sheet in the LoroDoc (`CreateSheet`); import dimensions (rows/columns with data); import cells (value, type, formula, style); import column widths / row heights; import cell merges.
+3. Import cell styles (flat `cellstyle_{sheet}` register per cell -- no shared `"styles"` map).
+4. Import named ranges.
+5. Return `TrameOutcome { update: Some(delta), .. }` -> `ambre-logic` -> `SyncCommand::SendUpdate` (one-way; import never calls `SyncCommand` directly, see -logic.md section 8).
 
 ### B. UI Command
 
@@ -334,21 +324,16 @@ High-fidelity PDF export runs in the **Logic thread** via `ambre_pdf::KrillaSurf
 
 **Flow:**
 
-```
-TrameCommand::ExportPdf { sheet_id, page_setup: Option<PdfPageSetup> }
-  │   (None -> read the sheet's persisted "page_setup_{sheet_id}"; Some -> one-off override)
-  │
-  [Logic Thread]
-  ├─ Computes the layout: which cells fit on which page
-  ├─ Produces a Vec<DisplayPage> (list of paginated DisplayViewports)
-  ├─ Generates the PDF via KrillaSurface (impl DrawSurface, lazy-loaded)
-  │   └─ Reuses rendering functions parameterized on DrawSurface
-  │      (same code as screen rendering -- see spec-ambre-trame-ui.md section 12)
-  └─ TrameEvent::ExportComplete { filename, data: Vec<u8> }
-       │
-  [UI Thread]
-  └─ trigger_download(&filename, &data)
-```
+`TrameCommand::ExportPdf { sheet_id, page_setup: Option<PdfPageSetup> }` (None -> read the sheet's persisted `"page_setup_{sheet_id}"`; Some -> one-off override):
+
+Logic thread:
+
+1. Computes the layout: which cells fit on which page.
+2. Produces a `Vec<DisplayPage>` (paginated `DisplayViewport`s).
+3. Generates the PDF via `KrillaSurface` (impl `DrawSurface`, lazy-loaded), reusing the rendering functions parameterized on `DrawSurface` (same code as screen rendering -- see spec-ambre-trame-ui.md section 12).
+4. Emits `TrameEvent::ExportComplete { filename, data: Vec<u8> }`.
+
+UI thread: `trigger_download(&filename, &data)`.
 
 `PdfPageSetup` is the resolved projection of the sheet's **persisted** `"page_setup_{sheet_id}"`
 container (`trame-logic section 2.B`, X67/X68): the export reads the shared page format rather than taking

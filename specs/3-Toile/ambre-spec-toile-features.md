@@ -58,12 +58,11 @@ Presentation is **not a separate application** -- it is an orchestrated view of 
 
 ### A. Sequence (CRDT)
 
-```
-LoroDoc
-└── "presentation" (LoroMap)
-    ├── "order"   (LoroMovableList<FrameId>)  → the slide sequence (reorderable, convergent)
-    └── "config"  (LoroMap)                   → {transition_ms, autoplay, loop}
-```
+`LoroDoc`:
+
+- `"presentation"` (LoroMap):
+  - `"order"` (LoroMovableList<FrameId>) -- the slide sequence (reorderable, convergent)
+  - `"config"` (LoroMap) -- `{transition_ms, autoplay, loop}`
 
 > **`FrameId` is an `ElementId`.** A frame is an ordinary element (`toile-logic section 2.F`); `FrameId` is just the
 > `ElementId` of an element whose `type = "frame"`. `presentation.order` is a top-level `LoroDoc` list (it is
@@ -206,11 +205,10 @@ Placing an emoji reaction or a vote on an element or frame is shared state that 
 CRDT map keyed by target + **canonical `UserId`** (one entry per user per target -> a user's re-vote is LWW on
 their own key, and tallies are convergent):
 
-```
-LoroDoc
-└── "reactions" (LoroMap)
-    └── "{target_id}/{user_id}" : Binary(postcard(Reaction))   // {emoji | vote_weight, ts}
-```
+`LoroDoc`:
+
+- `"reactions"` (LoroMap):
+  - `"{target_id}/{user_id}"` (Binary) -- `postcard(Reaction)` = `{emoji | vote_weight, ts}`
 
 > **Flat composite key, not a nested sub-map per target.** The entries live directly in the single `reactions`
 > root map under a composite `"{target_id}/{user_id}"` key, **not** in a per-target nested `LoroMap`. A per-target
@@ -261,17 +259,16 @@ reload and converge, so they are CRDT. The *anchoring* rule is fixed in `toile-l
 (`CommentAnchor = Element(ElementId) | Point{x,y}`); the thread schema and semantics live here, next to
 reactions.
 
-```
-LoroDoc
-└── "comments" (LoroMap)                        → key = CommentThreadId (minted stable id, toile-logic section 2.A)
-    └── "{thread_id}" (LoroMap)
-        ├── "anchor"   : Binary                 → postcard(CommentAnchor) -- element id or free world point
-        ├── "resolved" : bool                   → LWW flag; a resolved thread renders collapsed/muted, never deleted
-        └── "messages" (LoroMovableList<LoroMap>)→ ordered messages, append-mostly. Each message LoroMap:
-            ├── "author" : String               → canonical UserId (hyphenated UUID)
-            ├── "ts"     : i64                   → author-local wall clock, DISPLAY ONLY
-            └── "body"   (LoroText)              → nested char-CRDT container (self-edit converges char-wise)
-```
+`LoroDoc`:
+
+- `"comments"` (LoroMap) -- key = CommentThreadId (minted stable id, toile-logic section 2.A):
+  - `"{thread_id}"` (LoroMap):
+    - `"anchor"` (Binary) -- `postcard(CommentAnchor)` (element id or free world point)
+    - `"resolved"` (bool) -- LWW flag; a resolved thread renders collapsed/muted, never deleted
+    - `"messages"` (LoroMovableList<LoroMap>) -- ordered messages, append-mostly. Each message LoroMap:
+      - `"author"` (String) -- canonical UserId (hyphenated UUID)
+      - `"ts"` (i64) -- author-local wall clock, DISPLAY ONLY
+      - `"body"` (LoroText) -- nested char-CRDT container (self-edit converges char-wise)
 
 Each message is a `LoroMap` inside the `messages` `LoroMovableList`, holding an `author` register, a `ts`
 register, and a **nested `LoroText`** body container -- so a user editing *their own* message converges

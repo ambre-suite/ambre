@@ -735,19 +735,15 @@ Images are resolved ahead of export through the Foundation media flow -- the Log
 issues **no network call** and holds **no crypto** (`ambre-spec-architecture.md section 1`,
 `section 2.D RestCommand`). All fetch + decrypt work happens in the Sync worker:
 
-```
-UI / Logic thread                          Sync worker (ambre-sync)
-  RestCommand::DownloadMedia { document_id, content_hash }
-      ──(LogicCommand::Rest -> SyncCommand::Rest, relayed by Main)──>
-                                             presigned S3 GET -> decrypt
-      <──(RestEvent::MediaDownloaded { document_id, content_hash, data })──
-  ProseState::on_media_downloaded(content_hash, data)
-      -> media_cache.insert(content_hash, data)
-
-  ProseCommand::ExportDocument { format: Pdf }
-      -> for each IrBlock::Image { content_hash }:
-          -> bytes read from media_cache (already decrypted, no I/O)
-          -> image bytes included in the PDF
+```mermaid
+sequenceDiagram
+    participant U as UI / Logic thread
+    participant S as Sync worker (ambre-sync)
+    U->>S: RestCommand::DownloadMedia { document_id, content_hash }<br/>LogicCommand::Rest to SyncCommand::Rest, relayed by Main
+    Note over S: presigned S3 GET then decrypt
+    S-->>U: RestEvent::MediaDownloaded { document_id, content_hash, data }
+    Note over U: ProseState::on_media_downloaded<br/>media_cache.insert(content_hash, data)
+    Note over U: ProseCommand::ExportDocument { format: Pdf }<br/>for each IrBlock::Image: read bytes from media_cache<br/>(already decrypted, no I/O), include in the PDF
 ```
 
 In V1 MVP, an export whose images are not yet in `media_cache` produces a placeholder and

@@ -173,45 +173,35 @@ speeds the position query; it does not remove the shared-counter hazard.
 > consolidation just landed -- stay deferred behind a benchmark (section 11 bis.F, "out of scope"). See section 14
 > Phase 0.
 
-```
-LoroDoc
-├── "workbook" (LoroMap)              → {name, author, created}
-├── "sheet_order" (LoroMovableList)   → [sheet_id, ...] reorderable
-├── "sheets" (LoroMap)
-│   └── "{sheet_id}" (LoroMap)        → {name: LoroText, hidden: bool, tab_color: u32}
-│
-├── "rows_{sheet_id}" (LoroMovableList)   → each element VALUE = a row's own uid (move-invariant)
-├── "cols_{sheet_id}" (LoroMovableList)   → same for columns
-│
-├── "cells_{sheet_id}" (LoroMap)      → sparse, key = "{row_uid}:{col_uid}"
-│   └── "{uid}:{uid}" (LoroMap)
-│       ├── "v" : LoroText            → raw value ("42", "=SUM(A1:A10)", "text")
-│       ├── "t" : String              → "n" | "s" | "b" | ""
-│       └── "s" : String              → style_id
-│
-├── "col_widths_{sheet_id}" (LoroMap) → {col_uid: f64}
-├── "row_heights_{sheet_id}" (LoroMap)
-│
-├── "merges_{sheet_id}" (LoroMap)     → {"{row_uid}:{col_uid}": "{row_uid_end}:{col_uid_end}"}
-│
-├── "styles" (LoroMap)                → shared styles (TARGET dedup, deferred -- section 11 bis.F "out of scope")
-│   └── "style_007" (LoroMap)         → {bold, italic, underline, font, size, fg, bg, fmt, halign, valign, wrap, border}
-│                                        AS-BUILT instead: one register per cell, whole style inline --
-├── "cellstyle_{sheet_id}" (LoroMap) → {"{row_uid}:{col_uid}": Binary(postcard(StyleRecord{bold,italic,CellStyle}))}
-│
-├── "named_ranges" (LoroMap)          → {"TOTAL": {sheet_id, range}}
-├── "media" (LoroMap)                 → {hash_blake2b: {dims, anchor, mime}}
-│
-│   ── Features (defined in spec-ambre-trame-features.md) ──
-├── "filters_{sheet_id}" (LoroMap)    → active shared filter {col_uid, kind, values/condition}
-├── "filter_hidden_{sheet_id}" (LoroMap) → {row_uid: bool} -- rows hidden by filter
-├── "cond_formats_{sheet_id}" (LoroList) → conditional formatting rules [{range, priority, rule, style}]
-├── "validations_{sheet_id}" (LoroMap) → data validations [{kind, params, on_invalid, message}]
-├── "protections_{sheet_id}" (LoroMap) → range protection (Post-MVP) [{owner, allowed, description}]
-└── "page_setup_{sheet_id}" (LoroMap)  → persisted print/page format, shared like Sheets:
-                                          {orientation, paper_size, margins{t,r,b,l}, scale,
-                                           fit_to_page, print_gridlines, print_headers}
-```
+`LoroDoc` root:
+
+- `"workbook"` (LoroMap) -- `{name, author, created}`
+- `"sheet_order"` (LoroMovableList) -- `[sheet_id, ...]`, reorderable
+- `"sheets"` (LoroMap):
+  - `"{sheet_id}"` (LoroMap) -- `{name: LoroText, hidden: bool, tab_color: u32}`
+- `"rows_{sheet_id}"` (LoroMovableList) -- each element VALUE = a row's own uid (move-invariant)
+- `"cols_{sheet_id}"` (LoroMovableList) -- same for columns
+- `"cells_{sheet_id}"` (LoroMap) -- sparse, key = `"{row_uid}:{col_uid}"`:
+  - `"{uid}:{uid}"` (LoroMap):
+    - `"v"` (LoroText) -- raw value ("42", "=SUM(A1:A10)", "text")
+    - `"t"` (String) -- `"n" | "s" | "b" | ""`
+    - `"s"` (String) -- style_id
+- `"col_widths_{sheet_id}"` (LoroMap) -- `{col_uid: f64}`
+- `"row_heights_{sheet_id}"` (LoroMap)
+- `"merges_{sheet_id}"` (LoroMap) -- `{"{row_uid}:{col_uid}": "{row_uid_end}:{col_uid_end}"}`
+- `"styles"` (LoroMap) -- shared styles (TARGET dedup, deferred -- section 11 bis.F "out of scope"); e.g. `"style_007"` (LoroMap) -- `{bold, italic, underline, font, size, fg, bg, fmt, halign, valign, wrap, border}`. AS-BUILT instead: one register per cell, whole style inline.
+- `"cellstyle_{sheet_id}"` (LoroMap) -- `{"{row_uid}:{col_uid}": Binary(postcard(StyleRecord{bold,italic,CellStyle}))}`
+- `"named_ranges"` (LoroMap) -- `{"TOTAL": {sheet_id, range}}`
+- `"media"` (LoroMap) -- `{hash_blake2b: {dims, anchor, mime}}`
+
+Features (defined in spec-ambre-trame-features.md):
+
+- `"filters_{sheet_id}"` (LoroMap) -- active shared filter `{col_uid, kind, values/condition}`
+- `"filter_hidden_{sheet_id}"` (LoroMap) -- `{row_uid: bool}`, rows hidden by the filter
+- `"cond_formats_{sheet_id}"` (LoroList) -- conditional formatting rules `[{range, priority, rule, style}]`
+- `"validations_{sheet_id}"` (LoroMap) -- data validations `[{kind, params, on_invalid, message}]`
+- `"protections_{sheet_id}"` (LoroMap) -- range protection (Post-MVP) `[{owner, allowed, description}]`
+- `"page_setup_{sheet_id}"` (LoroMap) -- persisted print/page format, shared like Sheets: `{orientation, paper_size, margins{t,r,b,l}, scale, fit_to_page, print_gridlines, print_headers}`
 
 > **Page setup is persisted, not an export-time parameter (X67/X68).** Print/page format lives in
 > the per-sheet `"page_setup_{sheet_id}"` container above, so it converges across peers and survives
@@ -1361,29 +1351,22 @@ The UI thread instantiates `WgpuSurface` and calls these functions in its `reque
 
 ### Data Flow
 
-```
-UI Thread
-  │  flume send: LogicCommand::App { document_id, AppCommand::Trame(cmd) }   (typed value)
-  ▼
-ambre-logic -- LogicState::handle_app_command()
-  │  match (DocState::Trame(state), AppCommand::Trame(cmd))
-  │  → state.handle_command(cmd) → TrameOutcome
-  │       (LoroDoc mutation, compute_all_dirty(), build_viewport -- all synchronous)
-  │  → for ev in outcome.display: send_to_ui(UiEvent::Viewport { AppEvent::Trame(ev) })
-  │  → outcome.update    → send_to_sync(SyncCommand::SendUpdate    { document_id, payload })
-  │  → outcome.ephemeral → send_to_sync(SyncCommand::SendEphemeral { document_id, payload })
-  ▼
-Sync thread → encryption + signature → WsClientMsg::Update → Blind Relay
-
-Sync thread → Logic thread (remote update)
-  │  postMessage (postcard): LogicEvent::RemoteUpdate { document_id, payload }
-  ▼
-ambre-logic -- LogicState::apply_remote()
-  │  match DocState::Trame(state) → state.apply_remote(&payload) → Vec<TrameEvent>
-  │       (doc.import, compute_all_dirty(), build_viewport -- all synchronous)
-  │  → for ev in events: send_to_ui(UiEvent::Viewport { AppEvent::Trame(ev) })
-  ▼
-UI Thread -- re-render viewport
+```mermaid
+sequenceDiagram
+    participant UI as UI Thread
+    participant LOGIC as ambre-logic
+    participant SYNC as Sync thread
+    participant RELAY as Blind Relay
+    UI->>LOGIC: flume LogicCommand::App { document_id, AppCommand::Trame(cmd) }
+    Note over LOGIC: handle_app_command -> state.handle_command(cmd) -> TrameOutcome<br/>LoroDoc mutation, compute_all_dirty, build_viewport (synchronous)
+    LOGIC-->>UI: UiEvent::Viewport { AppEvent::Trame(ev) } for each outcome.display
+    LOGIC->>SYNC: SyncCommand::SendUpdate { document_id, payload } (outcome.update)
+    LOGIC->>SYNC: SyncCommand::SendEphemeral { document_id, payload } (outcome.ephemeral)
+    SYNC->>RELAY: encrypt + sign -> WsClientMsg::Update
+    RELAY->>SYNC: remote WsServerMsg::Update
+    SYNC->>LOGIC: LogicEvent::RemoteUpdate { document_id, payload } (postMessage postcard)
+    Note over LOGIC: apply_remote -> state.apply_remote(&payload) -> Vec<TrameEvent><br/>doc.import, compute_all_dirty, build_viewport (synchronous)
+    LOGIC-->>UI: UiEvent::Viewport { AppEvent::Trame(ev) } (re-render viewport)
 ```
 
 ---
