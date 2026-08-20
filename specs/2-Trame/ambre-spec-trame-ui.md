@@ -552,18 +552,12 @@ sharing the same entries minus the cell-only ones.
 `trame_chrome`) listing ordered sort levels (column picker + asc/desc + a "data has header
 row" toggle), with add/remove level. Applying emits the typed `SortRangeMulti`:
 
+`SortKey { col: u32 /* index within range */, ascending: bool }`, decreasing priority; the
+Logic thread sorts lexicographically on `sort_keys` and replies `SortComplete` (which clears
+`sort_pending`, sec.2). `ambre-trame/src/ui/view/interact.rs`.
+
 ```rust
-fn on_sort_dialog_apply(&mut self, keys: Vec<SortKey>, has_header: bool) {
-    let (r1, c1, r2, c2) = self.ui_state.selection.bounds();   // whole-column sel resolved by Logic
-    self.ui_state.sort_pending = true;
-    self.logic_tx.send(TrameCommand::SortRangeMulti {
-        version: self.next_version(), sheet_id: self.ui_state.active_sheet,
-        row_start: r1, row_end: r2, col_start: c1, col_end: c2,
-        sort_keys: keys, has_header,
-    });
-    // SortKey { col: u32 /* index within range */, ascending: bool }, decreasing priority.
-    // Logic sorts lexicographically on sort_keys; SortComplete clears sort_pending (sec.2).
-}
+fn on_sort_dialog_apply(&mut self, keys: Vec<SortKey>, has_header: bool) { /* ... */ }
 ```
 
 ### D. Shared Filter Popover (MVP)
@@ -577,16 +571,11 @@ values) and a minimal `condition` kind (op + value). Applying sends a single
 `FilterApplied { hidden_row_count }`, after which the viewport no longer lists hidden
 rows. A funnel badge is drawn on the filtered column header while `filter_active`.
 
+Sends one `ApplyFilter { sheet_id, col, kind: FilterKind::Values | Condition, values,
+condition }` and closes the popover. `ambre-trame/src/ui/view/interact.rs`.
+
 ```rust
-fn apply_filter_from_popover(&mut self, sheet_id: SheetId, col: u32, p: &FilterPopover) {
-    self.logic_tx.send(TrameCommand::ApplyFilter {
-        sheet_id, col,
-        kind:      p.kind,                 // FilterKind::Values | Condition
-        values:    p.selected_values.clone(),
-        condition: p.condition.clone(),
-    });
-    self.ui_state.context_menu = None;
-}
+fn apply_filter_from_popover(&mut self, sheet_id: SheetId, col: u32, p: &FilterPopover) { /* ... */ }
 ```
 
 **Filter feedback on the first row (MVP).** Today a filtered column is signalled only by a
@@ -620,35 +609,18 @@ range also goes through the Logic thread, which reindexes relative formulas and 
 This is the shared, cross-app clipboard model (`1-Foundations/ambre-spec-ui.md`): the OS write
 happens lazily, one frame after the keypress, still inside the transient user-activation window.
 
+`on_copy` arms the marching-ants anchor + `cut_pending`, sends the parameterless `CopyRange`,
+and returns `CopyOutcome::Deferred` (the host `prevent_default`s and writes nothing yet). The
+reply `TrameEvent::Clipboard(payload)` is built from the full document; the view stashes a
+`ClipboardBlob` (TSV + postcard) in memory for a same-tab paste and marks it pending, and the
+host mirrors it to the OS clipboard the next frame (`poll_clipboard`). `on_paste` prefers the
+in-memory blob when the OS `text/plain` mirror still matches (full fidelity), else decodes
+`blob.ambre` into `PasteRange` at the active cell (Logic reindexes relative formulas); a cut
+then clears the source range. `ambre-trame/src/ui/view/interact.rs`, `frame.rs`.
+
 ```rust
-// Ctrl+C / Ctrl+X -- request the authoritative build; nothing is serialised UI-side.
-fn on_copy(&mut self, cut: bool) -> CopyOutcome {
-    // In-cell text selection is synchronous text; a grid range defers to Logic.
-    self.clipboard_anchor = Some(self.ui_state.selection.bounds());  // marching-ants
-    self.cut_pending = cut;
-    self.logic_tx.send(TrameCommand::CopyRange);
-    CopyOutcome::Deferred            // host prevent_default()s, does not setData yet
-}
-
-// TrameEvent::Clipboard(payload) -- built from the full document; stash a ClipboardBlob
-// (TSV + postcard) in memory (same-tab paste) and mark it pending; the host mirrors it to
-// the OS clipboard next frame (poll_clipboard -> async_write_clipboard).
-
-// Ctrl+V -- paste at the active cell. Reindexing happens in the Logic thread.
-fn on_paste(&mut self, blob: ClipboardBlob) {
-    // Prefer the in-memory blob when the OS text mirror still matches it (full fidelity),
-    // else decode blob.ambre -> PasteRange, else grid_paste_text(blob.text).
-    let (row, col) = self.ui_state.selection.active();
-    self.logic_tx.send(TrameCommand::PasteRange {
-        version: self.next_version(), sheet_id: self.ui_state.active_sheet,
-        target_row: row, target_col: col, payload,
-    });
-    if self.cut_pending {
-        // Clear the source range after a cut (empty SetCellText, like Delete).
-        self.clear_range(self.clipboard_anchor.take());
-        self.cut_pending = false;
-    }
-}
+fn on_copy(&mut self, cut: bool) -> CopyOutcome { /* ... */ }
+fn on_paste(&mut self, blob: ClipboardBlob) { /* ... */ }
 ```
 
 Keyboard: Ctrl+C / Ctrl+X / Ctrl+V ride the native clipboard events (they are not decoded in
@@ -662,15 +634,11 @@ A small blue square is drawn at the bottom-right of the selection. Dragging it e
 selection to a destination range and emits `FillRange`; the Logic thread chooses `Series`
 (detected numeric/date pattern) or `Copy`.
 
+Sends `FillRange { src, dest = src + dragged extent, mode: FillMode::Auto }` -- the Logic
+thread picks `Copy` vs `Series`. `ambre-trame/src/ui/view/interact.rs`.
+
 ```rust
-fn on_fill_handle_drag_end(&mut self, dest: (u32, u32)) {
-    let src  = self.ui_state.selection.bounds();
-    let dest = self.extend_bounds(src, dest);   // src + dragged extent
-    self.logic_tx.send(TrameCommand::FillRange {
-        version: self.next_version(), sheet_id: self.ui_state.active_sheet,
-        src: src.into(), dest: dest.into(), mode: FillMode::Auto,  // Logic picks Copy vs Series
-    });
-}
+fn on_fill_handle_drag_end(&mut self, dest: (u32, u32)) { /* ... */ }
 ```
 Hit-testing the handle uses a ~6px square at the selection's bottom-right corner; cursor
 switches to a crosshair on hover.
@@ -718,26 +686,14 @@ struct FindReplaceState {
     all_sheets:  bool,     // replace mode only -> Scope::Workbook
 }
 
-// Find / Find Next: resolve the search origin from the tracked active cell, like the
-// parameterless filter/sort intents (sec.5.C/5.D). The Logic thread keeps the active cell
-// via SetActiveCell, so the panel need not carry the cursor.
-fn on_find_next(&mut self, p: &FindReplaceState) {
-    self.logic_tx.send(TrameCommand::FindNext {
-        query: p.query.clone(), match_case: p.match_case, whole_cell: p.whole_cell,
-    });
-    // FindResult { matches, active } -> the chrome forwards `matches` (current-sheet hits)
-    // and `active` (next match) to the render worker, which highlights the visible matches
-    // and scrolls `active` into view.
-}
-
-fn on_replace_all(&mut self, p: &FindReplaceState) {
-    self.logic_tx.send(TrameCommand::ReplaceAll {
-        query: p.query.clone(), replacement: p.replacement.clone(),
-        match_case: p.match_case, whole_cell: p.whole_cell,
-        in_formulas: p.in_formulas, all_sheets: p.all_sheets,
-    });
-    // ReplaceDone { replaced } -> toast "N replaced" via chrome::notify_event.
-}
+// Find / Find Next resolves the search origin from the tracked active cell (Logic keeps it via
+// SetActiveCell, so the panel carries no cursor), sends FindNext { query, match_case,
+// whole_cell }, and the reply FindResult { matches, active } drives the highlight + scroll to
+// `active`. Replace All sends ReplaceAll { query, replacement, match_case, whole_cell,
+// in_formulas, all_sheets } and toasts ReplaceDone { replaced } via chrome::notify_event.
+// ambre-trame/src/ui/view/interact.rs.
+fn on_find_next(&mut self, p: &FindReplaceState) { /* ... */ }
+fn on_replace_all(&mut self, p: &FindReplaceState) { /* ... */ }
 ```
 
 The match scan compares against each cell's **displayed value** (`whole_cell` = exact
@@ -782,23 +738,14 @@ pub enum ToolbarAction {
     Merge,                                     // reuses MergeCells (sec.5.C)
 }
 
-fn on_toolbar_action(&mut self, action: ToolbarAction) {
-    let range = self.ui_state.selection.bounds().into();
-    let patch = match action {
-        ToolbarAction::Bold       => StylePatch { bold: Some(!self.active_style().bold), ..Default::default() },
-        ToolbarAction::AlignV(v)  => StylePatch { v_align: Some(v), ..Default::default() },
-        ToolbarAction::NumberFmt(f)=> StylePatch { fmt: Some(f), ..Default::default() },
-        ToolbarAction::Wrap(w)    => StylePatch { wrap: Some(w), ..Default::default() },
-        // ... one field per control
-        ToolbarAction::Merge      => return self.merge_selection(),  // existing path
-        _ => self.patch_for(action),
-    };
-    self.logic_tx.send(TrameCommand::SetCellStyle {
-        version: self.next_version(), sheet_id: self.ui_state.active_sheet, range, patch,
-    });
-    // StyleApplied { version } refreshes the viewport (display_text reformatted by Logic).
-}
+fn on_toolbar_action(&mut self, action: ToolbarAction) { /* ... */ }
 ```
+
+Each action maps to one `StylePatch` field (`Bold` toggles the active cell's `bold`, `AlignV`
+sets `v_align`, `NumberFmt` sets `fmt`, `Wrap` sets `wrap`, ...) and sends `SetCellStyle {
+range, patch }` over the selection; `Merge` reuses `merge_selection` (sec.5.C). The reply
+`StyleApplied { version }` refreshes the viewport (Logic reformats `display_text`).
+`ambre-trame/src/ui/view/interact.rs`.
 
 Color pickers and the number-format menu are small **DOM popovers** anchored under their
 toolbar button (`NumberFormatPopover`, `BordersPopover`, `ColorPopover`, `H/VAlignPopover`,
@@ -866,72 +813,28 @@ is clipped to its own -- possibly taller -- rectangle intersected with the live
 clip; downward growth only ever covers cells below, never the header strip. The
 following sketch predates the shared core and is illustrative only.
 
+`draw_inline_editor` paints the active cell's white background + blue focus border under the
+shared `TextEditor` core (the core draws the buffer, selection and caret). `draw_formula_bar`
+shows the active cell reference (`A1`) and its raw value -- or the live editor content while
+editing. Both are illustrative here; the shipped bar is DOM chrome (see the sec.6 note).
+`ambre-trame/src/ui/renderer/`.
+
 ```rust
-fn draw_inline_editor(&mut self) {
-    let editor = match &self.ui_state.editing { Some(e) => e, None => return };
-    let x = self.col_offset(editor.col) - self.scroll_x + self.header_width;
-    let y = self.row_offset(editor.row) - self.scroll_y + self.header_height;
-    let w = self.col_width_at(editor.col as usize).max(100.0); // min-width for input
-    let h = self.row_height_at(editor.row as usize);
-
-    // White background + blue border
-    let rect = Rect::new(x, y, x + w, y + h);
-    surface.fill_rect(rect, Color::WHITE);
-    surface.stroke_rect(rect, Color::from_rgb8(26, 115, 232), 2.0);
-
-    // Text with blinking cursor
-    // ... Parley rendering of editor content with cursor
-}
-
-fn draw_formula_bar(&mut self) {
-    // Fixed area at the top of the grid
-    // Displays:
-    // - The active cell reference (e.g. "A1") in a box on the left
-    // - The raw value of the active cell (or editor content if editing in progress)
-    let cell_ref_label = self.active_cell_label(); // "A1", "B10", etc.
-    let formula_content = if let Some(editor) = &self.ui_state.editing {
-        editor.content.clone()
-    } else {
-        self.current_viewport.as_ref()
-            .and_then(|vp| vp.cells.iter().find(|c| {
-                let (row, col) = self.ui_state.selection.active();
-                c.row_index == row && c.col_index == col
-            }))
-            .map(|c| c.raw.clone())
-            .unwrap_or_default()
-    };
-    // ... DrawSurface rendering of the formula bar
-}
+fn draw_inline_editor(&mut self) { /* ... */ }
+fn draw_formula_bar(&mut self) { /* ... */ }
 ```
 
 ### C. Commit and Cancel
 
+`commit_editing` takes the open editor, sends `SetCellText { row, col, text }` (an empty `text`
+clears the cell -- no `ClearCell`) then `CommitEdit` to close the undo group (one edit = one
+undo item, `spec-ambre-trame-logic.md sec.8`), and moves the selection per `direction`.
+`cancel_editing` just drops the editor -- no `TrameCommand`, no Loro mutation.
+`ambre-trame/src/ui/view/interact.rs`.
+
 ```rust
-fn commit_editing(&mut self, direction: CommitDirection) {
-    let editor = match self.ui_state.editing.take() { Some(e) => e, None => return };
-    let (row, col) = (editor.row, editor.col);
-
-    // Positional edit at the active cell; an empty `text` clears it (no ClearCell).
-    self.logic_tx.send(AppCommand::Trame(TrameCommand::SetCellText {
-        row, col,
-        text: editor.content,
-    }));
-    // Close the undo group on cell exit so the whole edit = 1 undo item
-    // (spec-ambre-trame-logic.md sec.8 "doc.commit() per TrameCommand").
-    self.logic_tx.send(TrameCommand::CommitEdit);
-
-    // Move selection according to direction
-    match direction {
-        CommitDirection::Down  => self.move_selection(0, 1),
-        CommitDirection::Right => self.move_selection(1, 0),
-        CommitDirection::Stay  => {}
-    }
-}
-
-fn cancel_editing(&mut self) {
-    self.ui_state.editing = None;
-    // No TrameCommand sent -- no Loro mutation
-}
+fn commit_editing(&mut self, direction: CommitDirection) { /* ... */ }
+fn cancel_editing(&mut self) { /* ... */ }
 ```
 
 ---
@@ -952,57 +855,22 @@ const FUNCTION_COMPLETIONS: &[FunctionCompletion] = &[
     // ... ~50 MVP functions
 ];
 
-fn compute_completions(&self, editor: &InlineEditor) -> Vec<Completion> {
-    if !editor.content.starts_with('=') { return vec![]; }
-
-    // Guard: cursor may be 0 (before the '=') and must land on a char boundary;
-    // `content[1..cursor]` would panic on `1..0` or a mid-codepoint index.
-    let Some(cursor_text) = editor.content.get(1..editor.cursor.max(1)) else { return vec![]; };
-
-    // Find the current token (last word after =, (, +, etc.)
-    let token_start = cursor_text.rfind(|c: char| !c.is_alphanumeric() && c != '_')
-        .map(|i| i + 1).unwrap_or(0);
-    let token = &cursor_text[token_start..];
-
-    if token.is_empty() { return vec![]; }
-    let token_upper = token.to_uppercase();
-
-    FUNCTION_COMPLETIONS.iter()
-        .filter(|f| f.name.starts_with(&token_upper))
-        .map(|f| Completion::Function(f.clone()))
-        .take(8)
-        .collect()
-}
+fn compute_completions(&self, editor: &InlineEditor) -> Vec<Completion> { /* ... */ }
 ```
+
+Only fires on a formula (`content` starts with `=`); it isolates the token under the cursor
+(the last run of alphanumerics/`_`, guarding the `1..cursor` slice against a zero or
+mid-codepoint index) and returns up to 8 `FUNCTION_COMPLETIONS` whose name starts with the
+uppercased token. `ambre-trame/src/ui/` (autocompletion).
 
 ### B. Cell References
 
-```rust
-// When the user types a single letter after "=" or an operator
-// -> suggest matching columns with their contents
-fn compute_cell_ref_completions(&self, token: &str) -> Vec<Completion> {
-    // Guard: `letter_to_index` subtracts `b'A'` per byte, so a non-A..Z token
-    // (empty, digits, lowercase after upper-casing is fine, but symbols) would
-    // underflow. Only proceed on a pure A..Z token.
-    let upper = token.to_uppercase();
-    if upper.is_empty() || !upper.bytes().all(|b| b.is_ascii_uppercase()) { return vec![]; }
+On a pure `A..Z` token (guarded so `letter_to_index`'s `b - b'A'` never underflows), suggests
+the first 5 non-empty cells of the matching column from the current viewport, as `CellRef {
+label, preview }`. `ambre-trame/src/ui/` (autocompletion).
 
-    // Find columns whose letter starts with the token
-    if let Some(vp) = &self.current_viewport {
-        let col_start = SheetIndex::letter_to_index(&upper);
-        // Return the first N non-empty cells of the column
-        vp.cells.iter()
-            .filter(|c| c.col_index == col_start as u32 && !c.display_text.is_empty())
-            .map(|c| Completion::CellRef {
-                label: format!("{}{}", token.to_uppercase(), c.row_index + 1),
-                preview: c.display_text.clone(),
-            })
-            .take(5)
-            .collect()
-    } else {
-        vec![]
-    }
-}
+```rust
+fn compute_cell_ref_completions(&self, token: &str) -> Vec<Completion> { /* ... */ }
 ```
 
 ### C. Autocompletion Dropdown Rendering
@@ -1053,45 +921,16 @@ pub struct Selection {
 }
 
 impl Selection {
-    pub fn single(row: u32, col: u32) -> Self {
-        Self { anchor: (row, col), active: (row, col) }
-    }
+    pub fn single(row: u32, col: u32) -> Self { /* anchor == active */ }
     pub fn extend_to(&mut self, row: u32, col: u32) { self.active = (row, col); }
     pub fn active(&self) -> (u32, u32) { self.active }
-
-    pub fn contains_col(&self, col: u32) -> bool {
-        let (c1, c2) = (self.anchor.1.min(self.active.1), self.anchor.1.max(self.active.1));
-        col >= c1 && col <= c2
-    }
-    pub fn contains_row(&self, row: u32) -> bool {
-        let (r1, r2) = (self.anchor.0.min(self.active.0), self.anchor.0.max(self.active.0));
-        row >= r1 && row <= r2
-    }
+    pub fn contains_col(&self, col: u32) -> bool { /* col in normalized [anchor.1, active.1] */ }
+    pub fn contains_row(&self, row: u32) -> bool { /* row in normalized [anchor.0, active.0] */ }
 }
 
-fn draw_selection(&mut self) {
-    let (r1, c1) = (
-        self.ui_state.selection.anchor.0.min(self.ui_state.selection.active.0),
-        self.ui_state.selection.anchor.1.min(self.ui_state.selection.active.1),
-    );
-    let (r2, c2) = (
-        self.ui_state.selection.anchor.0.max(self.ui_state.selection.active.0),
-        self.ui_state.selection.anchor.1.max(self.ui_state.selection.active.1),
-    );
-
-    let x1 = self.col_offset(c1) - self.scroll_x + self.header_width;
-    let y1 = self.row_offset(r1) - self.scroll_y + self.header_height;
-    let x2 = self.col_offset(c2) - self.scroll_x + self.header_width
-             + self.col_width_at(c2 as usize);
-    let y2 = self.row_offset(r2) - self.scroll_y + self.header_height
-             + self.row_height_at(r2 as usize);
-
-    let rect = Rect::new(x1, y1, x2, y2);
-    // Semi-transparent blue background
-    surface.fill_rect(rect, Color::from_rgba8(26, 115, 232, 40));
-    // Blue border
-    surface.stroke_rect(rect, Color::from_rgb8(26, 115, 232), 1.5);
-}
+// draw_selection paints the normalized anchor..active rectangle: a semi-transparent blue fill
+// plus a blue border, in viewport pixels. ambre-trame/src/ui/renderer/overlay.rs.
+fn draw_selection(&mut self) { /* ... */ }
 ```
 
 ---
@@ -1111,53 +950,20 @@ pub struct RemoteCursor {
     pub display_name: Option<String>,
 }
 
-fn draw_remote_cursors(&mut self) {
-    for cursor in &self.ui_state.remote_cursors {
-        let x = self.col_offset(cursor.col) - self.scroll_x + self.header_width;
-        let y = self.row_offset(cursor.row) - self.scroll_y + self.header_height;
-        let w = self.col_width_at(cursor.col as usize);
-        let h = self.row_height_at(cursor.row as usize);
-
-        // Colored border of the collaborator's active cell
-        surface.stroke_rect(Rect::new(x, y, x + w, y + h), cursor.color, 2.0);
-
-        // Name label (small colored badge at the top of the cell)
-        if let Some(name) = &cursor.display_name {
-            self.draw_cursor_label(name, cursor.color, x, y);
-        }
-    }
-}
-
-// Update from decrypted LogicEvent::RemoteEphemeral.
-// The author identity is the Sync-resolved from_user_id (pub_key -> UserId done in
-// ambre-sync/trusted_keys), assembled Logic-side into TrameEvent::RemoteCursors; the peer
-// payload (PresencePayload) never carries a user_id. The UI thread never manipulates
-// any cryptographic key.
-//
-// The event carries the WHOLE live peer set (Vec<RemoteCursorPayload>), already resolved
-// to current (row, col) and colored with ambre_draw::peer::peer_color Logic-side. The UI
-// replaces its set wholesale -- a peer absent from the new set (left, or its anchor no
-// longer resolves) drops on its own, so there is no insert-only accumulation and no ghost
-// cursor.
-fn on_remote_cursors(&mut self, cursors: Vec<RemoteCursorPayload>) {
-    self.ui_state.remote_cursors = cursors.into_iter().map(|p| RemoteCursor {
-        user_id: p.user_id,
-        color: self.color_for_user(&p.user_id),   // ambre_draw::peer::peer_color -- shared cross-app
-        row: p.row,
-        col: p.col,
-        display_name: (!p.display_name.is_empty()).then_some(p.display_name),
-    }).collect();
-}
-
-fn color_for_user(&self, user_id: &UserId) -> Color {
-    // Deterministic per-user color via the shared cross-app helper
-    // `ambre_draw::peer::peer_color` (same algorithm in Prose, Trame, and Toile, so a
-    // given collaborator gets the same colour everywhere). Seeded on the canonical
-    // `UserId`; the helper converts through its own `hsl_to_rgb` (`ambre-draw/src/peer.rs`)
-    // and returns a peniko `Color::from_rgb8`.
-    ambre_draw::peer::peer_color(user_id)
-}
+fn draw_remote_cursors(&mut self) { /* ... */ }
+fn on_remote_cursors(&mut self, cursors: Vec<RemoteCursorPayload>) { /* ... */ }
+fn color_for_user(&self, user_id: &UserId) -> Color { /* ... */ }
 ```
+
+`draw_remote_cursors` paints each peer's active-cell border + name badge in the peer colour.
+`on_remote_cursors` receives the WHOLE live peer set (`Vec<RemoteCursorPayload>`, already
+resolved to `(row, col)` and coloured Logic-side) and **replaces** `remote_cursors` wholesale --
+a peer absent from the new set (left, or its anchor no longer resolves) drops on its own, so
+there is no insert-only accumulation and no ghost cursor. `color_for_user` delegates to the
+shared `ambre_draw::peer::peer_color` (same algorithm in Prose, Trame and Toile, seeded on the
+canonical `UserId`), so a collaborator keeps one colour everywhere. The event is assembled
+Logic-side from the Sync-resolved `from_user_id`; the peer `PresencePayload` never carries a
+`user_id`, and the UI thread touches no cryptographic key. `ambre-trame/src/ui/`.
 
 ---
 
@@ -1166,40 +972,14 @@ fn color_for_user(&self, user_id: &UserId) -> Color {
 Sparklines are mini-charts rendered inside a cell. They are computed and rendered entirely on the UI thread side from `DisplayViewport` data.
 
 ```rust
-// A sparkline is described in DisplayCell via style/raw fields
-// Cell syntax: "=SPARKLINE(A1:A10)" (Phase 2 feature)
-// For MVP: sparkline type detected from a special style field
-
-fn draw_sparkline(&mut self, cell: &DisplayCell, x: f32, y: f32, w: f32, h: f32) {
-    // Sparkline data is in cell.sparkline_data (Phase 2)
-    // For now: mini line chart from numeric values in the range
-    let values = match &cell.sparkline {
-        Some(s) => &s.values,
-        None    => return,
-    };
-    if values.is_empty() { return; }
-
-    let min = values.iter().cloned().fold(f64::INFINITY, f64::min);
-    let max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let range = (max - min).max(1.0);
-    let n = values.len();
-    let padding = 2.0f32;
-
-    let mut path = BezPath::new();
-    for (i, &v) in values.iter().enumerate() {
-        let px = x + padding + (i as f32 / (n - 1).max(1) as f32) * (w - padding * 2.0);
-        let py = y + h - padding - ((v - min) / range) as f32 * (h - padding * 2.0);
-        if i == 0 { path.move_to((px, py)); } else { path.line_to((px, py)); }
-    }
-
-    // DrawSurface has no stroke_path; a sparkline polyline is drawn segment by
-    // segment with stroke_line over the (px, py) points.
-    let c = Color::from_rgb8(26, 115, 232);
-    for w in points.windows(2) {
-        surface.stroke_line(w[0].0, w[0].1, w[1].0, w[1].1, c, 1.5);
-    }
-}
+// A sparkline is described in DisplayCell via style/raw fields; cell syntax
+// "=SPARKLINE(A1:A10)" (Phase 2). For MVP the type is detected from a style field.
+fn draw_sparkline(&mut self, cell: &DisplayCell, x: f32, y: f32, w: f32, h: f32) { /* ... */ }
 ```
+
+Maps the cell's numeric `values` to a min/max-normalized polyline inside the `(x, y, w, h)` box
+and strokes it segment by segment (`DrawSurface` has no `stroke_path`). Empty values draw
+nothing. `ambre-trame/src/ui/renderer/`.
 
 ---
 
@@ -1217,33 +997,12 @@ pub struct ChartDef {
 
 pub enum ChartKind { Bar, Line, Pie, Area }
 
-fn draw_chart(&mut self, obj: &DisplayFloatObject, chart: &ChartDef) {
-    // Chart data is in the DisplayCell corresponding to data_range
-    // Extracted from current_viewport if available, otherwise requested from the Logic thread
-    let data = self.extract_chart_data(chart);
-    if data.is_empty() { return; }
-
-    let x = obj.x - self.scroll_x + self.header_width;
-    let y = obj.y - self.scroll_y + self.header_height;
-    let w = obj.width;
-    let h = obj.height;
-
-    // White background with shadow
-    surface.fill_rect(Rect::new(x, y, x + w, y + h), Color::WHITE);
-
-    match chart.kind {
-        ChartKind::Bar  => self.draw_bar_chart(&data, x, y, w, h),
-        ChartKind::Line => self.draw_line_chart(&data, x, y, w, h),
-        ChartKind::Pie  => self.draw_pie_chart(&data, x, y, w, h),
-        ChartKind::Area => self.draw_area_chart(&data, x, y, w, h),
-    }
-
-    // Title
-    if let Some(title) = &chart.title {
-        self.draw_chart_title(title, x, y, w);
-    }
-}
+fn draw_chart(&mut self, obj: &DisplayFloatObject, chart: &ChartDef) { /* ... */ }
 ```
+
+Extracts the chart data for `data_range` (from `current_viewport`, else requested from Logic),
+paints the float object's white background, then dispatches on `chart.kind` to the per-kind
+renderer (bar/line/pie/area) and draws the optional title. `ambre-trame/src/ui/renderer/`.
 
 ---
 
@@ -1338,40 +1097,17 @@ pub struct GridLayout {
 
 ## 13. SHEET TABS
 
+> **Delivered as DOM chrome.** The tab strip is a `trame_chrome` component (sec.18); the
+> `DrawSurface` sketch below predates that move and is illustrative.
+
+`draw_sheet_tabs` lays the tabs left to right along the bottom edge, each sized to its label,
+the active one white with a thicker blue top border, then draws the trailing "+" button.
+`on_sheet_tab_click` sends `ActivateSheet`, resets the scroll, and re-requests the viewport.
+`ambre-trame/src/ui/renderer/`, `chrome/`.
+
 ```rust
-fn draw_sheet_tabs(&mut self) {
-    let tab_height = 24.0f32;
-    let y = self.window_height - tab_height;
-    let mut x = 0.0f32;
-
-    for (sheet_id, sheet_name) in &self.ui_state.sheets {
-        let is_active = *sheet_id == self.ui_state.active_sheet;
-        let tab_width = self.measure_text(sheet_name) + 16.0;
-
-        let rect = Rect::new(x, y, x + tab_width, y + tab_height);
-        let bg = if is_active { Color::WHITE } else { Color::from_rgb8(230, 230, 230) };
-        surface.fill_rect(rect, bg);
-
-        // Thicker top border if active
-        let border_width = if is_active { 2.5 } else { 1.0 };
-        let border_color = if is_active { Color::from_rgb8(26, 115, 232) } else { Color::GRAY };
-        surface.stroke_rect(rect, border_color, border_width);
-
-        self.draw_tab_text(sheet_name, x, y, tab_width, tab_height);
-        x += tab_width + 2.0;
-    }
-
-    // "+" button for new sheet
-    self.draw_add_sheet_button(x, y);
-}
-
-fn on_sheet_tab_click(&mut self, sheet_id: SheetId) {
-    self.logic_tx.send(TrameCommand::ActivateSheet { sheet_id });
-    self.ui_state.active_sheet = sheet_id;
-    self.scroll_x = 0.0;
-    self.scroll_y = 0.0;
-    self.request_viewport();
-}
+fn draw_sheet_tabs(&mut self) { /* ... */ }
+fn on_sheet_tab_click(&mut self, sheet_id: SheetId) { /* ... */ }
 ```
 
 ### Full Sheet Lifecycle (MVP)
@@ -1380,31 +1116,19 @@ The tab strip is the entry point for the four lifecycle commands the Logic threa
 already implements (`-logic` sec.2.D). The `SheetList` event refreshes the strip after
 each one.
 
+Each handler is a thin intent send, the Logic thread owning every rule:
+- `on_add_sheet_button` -> `CreateSheet { name }` (Logic mints a peer-scoped `sheet_id`, replies `SheetList`).
+- `on_sheet_tab_rename_commit` -> `RenameSheet { sheet_id, name }` on a non-blank name.
+- `on_sheet_tab_delete` -> `DeleteSheet { sheet_id }`; Logic rejects the last sheet (`Error` -> toast) and decides the active-sheet fallback.
+- `on_sheet_tab_drag_drop` -> `MoveSheet { sheet_id, to_index }` (drop slot).
+
+`ambre-trame/src/ui/view/interact.rs`, `chrome/`.
+
 ```rust
-// "+" button -> create. The Logic thread mints a peer-scoped sheet_id and replies SheetList.
-fn on_add_sheet_button(&mut self) {
-    self.logic_tx.send(TrameCommand::CreateSheet { name: self.next_sheet_name() });
-}
-
-// Double-click a tab -> inline rename editor on the tab label.
-fn on_sheet_tab_rename_commit(&mut self, sheet_id: SheetId, name: String) {
-    if !name.trim().is_empty() {
-        self.logic_tx.send(TrameCommand::RenameSheet { sheet_id, name });
-    }
-}
-
-// Right-click a tab -> tab context menu { Rename, Delete }.
-// Delete is rejected by the Logic thread if it is the last sheet (TrameEvent::Error -> toast).
-fn on_sheet_tab_delete(&mut self, sheet_id: SheetId) {
-    self.logic_tx.send(TrameCommand::DeleteSheet { sheet_id });
-    // Active-sheet fallback is decided by the Logic thread; UI updates active_sheet
-    // from the next SheetList + ViewportData.
-}
-
-// Drag a tab horizontally -> reorder. to_index is the drop slot in the strip.
-fn on_sheet_tab_drag_drop(&mut self, sheet_id: SheetId, to_index: u32) {
-    self.logic_tx.send(TrameCommand::MoveSheet { sheet_id, to_index });
-}
+fn on_add_sheet_button(&mut self) { /* ... */ }
+fn on_sheet_tab_rename_commit(&mut self, sheet_id: SheetId, name: String) { /* ... */ }
+fn on_sheet_tab_delete(&mut self, sheet_id: SheetId) { /* ... */ }
+fn on_sheet_tab_drag_drop(&mut self, sheet_id: SheetId, to_index: u32) { /* ... */ }
 ```
 
 ---
@@ -1427,21 +1151,15 @@ shows nothing.
 > parameterless (`RequestSelectionStats`): the Logic thread resolves the tracked selection
 > itself.
 
-```rust
-fn on_selection_changed(&mut self) {
-    let sel = self.ui_state.selection;
-    if sel.is_single() { self.status_stats = None; return; }
-    // Parameterless: the Logic thread resolves the active sheet and the tracked
-    // selection itself (kept current by SetActiveCell) -- no sheet_id/range field.
-    self.logic_tx.send(AppCommand::Trame(TrameCommand::RequestSelectionStats));
-    // SelectionStats { sum, avg, count, count_num, min, max } -> cache + redraw.
-}
+On a multi-cell selection `on_selection_changed` sends the parameterless
+`RequestSelectionStats` (Logic resolves the tracked selection itself, no `sheet_id`/`range`)
+and caches the reply `SelectionStats { sum, avg, count, count_num, min, max }`; a single cell
+clears the band. `draw_status_bar` renders the cached stats right-aligned (`count_num` drives
+Sum/Avg/Min/Max visibility). `ambre-trame/src/ui/`, `chrome/status.rs`.
 
-fn draw_status_bar(&mut self) {
-    let Some(s) = &self.status_stats else { return };
-    // e.g. "Sum: 1 234   Avg: 205.7   Count: 6"  (count_num drives Sum/Avg visibility)
-    // DrawSurface fill_rect band + right-aligned draw_glyphs.
-}
+```rust
+fn on_selection_changed(&mut self) { /* ... */ }
+fn draw_status_bar(&mut self) { /* ... */ }
 ```
 
 ---
