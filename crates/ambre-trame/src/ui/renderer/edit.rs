@@ -40,21 +40,32 @@ pub fn draw_edit<S: DrawSurface>(
         color: palette.cell_text,
     });
 
-    // Apply queued intents against this frame's layout. Single-line: a very wide
-    // wrap so the text overflows the cell (spreadsheet behaviour) instead of
-    // wrapping. Multi-line wrapping lands in a later step.
+    // Apply queued intents against this frame's layout. The text wraps to the
+    // cell's content width and Alt+Enter inserts explicit newlines, so the edit
+    // is multi-line (Excel/Sheets in-cell editor).
     let pad = CELL_PAD_X * state.zoom;
-    editor.core.flush(font_cx, 1.0e6, state.zoom);
+    let wrap_w = (cw - 2.0 * pad).max(1.0) as f32;
+    editor.core.flush(font_cx, wrap_w, state.zoom);
 
-    // Vertically centre the (single) line in the row, like the static cell text.
+    // The field grows downward to fit every line, overflowing the cell like a
+    // spreadsheet, and is never shorter than the row. A layout that fits the row
+    // stays vertically centred (matches the static cell); a taller one top-aligns
+    // with a small pad so line 0 reads at the cell top.
     let text_h = editor.core.layout_height().unwrap_or(0.0) as f64;
-    let y_off = ((ch - text_h) / 2.0).max(0.0);
+    let (y_off, box_h) = if text_h + 2.0 * pad <= ch {
+        (((ch - text_h) / 2.0).max(0.0), ch)
+    } else {
+        (pad, text_h + 2.0 * pad)
+    };
     let origin = ambre_draw::Point::new(x + pad, y + y_off);
 
-    let cell = Rect::new(x, y, x + cw, y + ch);
-    surface.push_clip(cell);
+    // The field may extend below the cell; clip to it (intersected with the live
+    // clip) so the overflowing lines show. Downward growth only ever covers the
+    // cells below, never the header strip above.
+    let field = Rect::new(x, y, x + cw, y + box_h);
+    surface.push_clip(field);
     // Content-coloured field over the underlying cell + active border interior.
-    surface.fill_rect(cell, palette.content_bg);
+    surface.fill_rect(field, palette.content_bg);
     // Selection band + glyphs (incl. IME preedit) + blinking caret.
     editor
         .core

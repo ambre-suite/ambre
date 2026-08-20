@@ -712,6 +712,7 @@ impl TrameView {
                 ctrl,
                 meta,
                 shift,
+                alt,
                 ..
             } => {
                 // Ctrl/Cmd+Enter fills the whole selection with the typed value;
@@ -736,9 +737,18 @@ impl TrameView {
                     return false;
                 }
                 match key.as_str() {
-                    // Enter / Tab / Up / Down commit and move (spreadsheet). The
-                    // commit is deferred to the paint flush so the queued edits are
-                    // applied before the buffer is read (§ shared editor).
+                    // Alt+Enter inserts a newline (multi-line cell); a bare Enter
+                    // commits and moves down (spreadsheet convention).
+                    "Enter" if *alt => {
+                        if let Some(ed) = self.editor.as_mut() {
+                            ed.newline();
+                        }
+                        self.reset_blink();
+                        true
+                    }
+                    // Enter / Tab commit and move (spreadsheet). The commit is
+                    // deferred to the paint flush so the queued edits are applied
+                    // before the buffer is read (§ shared editor).
                     "Enter" => {
                         self.pending_commit = Some(PendingCommit::Nav(1, 0));
                         self.edit_dirty = true;
@@ -815,16 +825,25 @@ impl TrameView {
                         self.reset_blink();
                         true
                     }
-                    // Up/Down commit and move, as in a spreadsheet (single-line;
-                    // multi-line caret motion lands in a later step).
+                    // Up/Down move the caret between lines inside the edit (a
+                    // multi-line cell); Shift extends the selection. Cell nav by
+                    // arrows only applies when NOT editing.
                     "ArrowUp" => {
-                        self.pending_commit = Some(PendingCommit::Nav(-1, 0));
-                        self.edit_dirty = true;
+                        if let Some(ed) = self.editor.as_mut() {
+                            if *shift { ed.extend_up() } else { ed.move_up() }
+                        }
+                        self.reset_blink();
                         true
                     }
                     "ArrowDown" => {
-                        self.pending_commit = Some(PendingCommit::Nav(1, 0));
-                        self.edit_dirty = true;
+                        if let Some(ed) = self.editor.as_mut() {
+                            if *shift {
+                                ed.extend_down()
+                            } else {
+                                ed.move_down()
+                            }
+                        }
+                        self.reset_blink();
                         true
                     }
                     // Printable keys fall through to the textarea -> `Text`.

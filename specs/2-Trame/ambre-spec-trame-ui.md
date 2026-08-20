@@ -440,7 +440,17 @@ Handled in `ui/view/interact.rs`. Two modes, decided by whether the inline edito
 | `F2` | open the editor on the active cell |
 | any printable character | open the editor seeded with that character |
 
-**Editor mode:** `Escape` cancels without emitting a command (`TRAME-UI-015`), `Enter` commits and moves down, `Tab` commits and moves right, everything else is forwarded to the editor.
+**Editor mode:** the editor is multi-line (the shared `ambre_canvas::TextEditor`
+core over parley `PlainEditor`, §6). `Escape` cancels without emitting a command
+(`TRAME-UI-015`); `Enter` commits and moves down, `Tab` commits and moves right,
+`Ctrl/Cmd+Enter` fills the whole selection with the typed value. `Alt+Enter`
+inserts a newline in the cell (the only way to add a line, since bare `Enter`
+commits). Arrow `Up`/`Down` move the caret between lines (with `Shift`, extend the
+selection) -- inside the editor they never navigate cells; cell navigation by
+arrows applies in grid mode only. `Left`/`Right`/`Home`/`End`, `Backspace`/
+`Delete`, and printable characters go to the editor. Because every edit is queued
+as a font-free intent and applied at the paint flush (a live `FontContext` exists
+only then), the four committing chords defer the commit to just after that flush.
 
 ### B. Mouse / Touch
 
@@ -831,6 +841,22 @@ pub enum EditTrigger {
 ```
 
 ### B. Inline Editor Rendering
+
+The editor field is drawn by the shared `ambre_canvas::TextEditor` core (the same
+unit-text engine Toile uses for sticky/text elements, §canvas). Trame supplies the
+cell geometry and pins the cell's formatting (weight, italic, size, ink) each
+frame; the core lays out the buffer, resolves queued pointer hits against that
+layout, and paints the selection band, glyphs (including the live IME preedit) and
+the blinking caret.
+
+The layout **wraps to the cell content width** and honours explicit newlines
+(`Alt+Enter`), so a cell edits multi-line. The field **grows downward** to fit
+every line, overflowing the cell over the rows below (Excel/Sheets behaviour), and
+is never shorter than the row: a layout that fits one row stays vertically centred
+(matching the static cell), a taller one top-aligns from the cell top. The field
+is clipped to its own -- possibly taller -- rectangle intersected with the live
+clip; downward growth only ever covers cells below, never the header strip. The
+following sketch predates the shared core and is illustrative only.
 
 ```rust
 fn draw_inline_editor(&mut self) {
