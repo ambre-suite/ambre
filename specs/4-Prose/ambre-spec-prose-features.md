@@ -41,7 +41,7 @@ This component delegates:
 | `loro` | `LoroText::mark()`, `LoroMap` for comment threads, `UndoManager`. |
 | `ambre-core` | `Uuid` for stable comment, suggestion, footnote IDs (via `ambre-bus` re-export). |
 | `ambre-bus` | Typed IPC types for features, carried by `ProseCommand`/`ProseEvent` (-> `AppCommand::Prose`/`AppEvent::Prose`). |
-| `unicode-segmentation` | Grapheme counting for Loro offsets (`chars()` Rust ≠ Unicode graphemes). |
+| `unicode-segmentation` | Grapheme counting for Loro offsets (`chars()` Rust != Unicode graphemes). |
 
 > **No `serde` on feature types.** They travel **typed, by move** on `flume`, inside `ProseCommand`/`ProseEvent` (shared memory). `serde`/`postcard` are only used for **network bytes** (Loro CRDT payloads and `Ephemeral`) -- see `ambre-spec-prose-logic.md`.
 
@@ -51,31 +51,31 @@ Post-MVP dependencies:
 |-------|---------------|
 | `zspell` | Pure Rust spell checker, WASM-compatible, Hunspell dictionaries. |
 
-**Invariants:** prefix `PROSE-FEAT`. Grammar and status values are normative in `ambre-spec-architecture.md §4`; the roll-up is `ambre-spec-testing.md §7`. Every row is `unimplemented` -- `crates/ambre-prose` is empty -- and lands with `ARCH P2` (Epic `E5`).
+**Invariants:** prefix `PROSE-FEAT`. Grammar and status values are normative in `ambre-spec-architecture.md section 4`; the roll-up is `ambre-spec-testing.md section 7`. Every row is `unimplemented` -- `crates/ambre-prose` is empty -- and lands with `ARCH P2` (Epic `E5`).
 
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
-| `PROSE-FEAT-001` | A `CommentId` or `SuggestionId` MUST be stable for the document's lifetime: a partial accept, a reject or a remote delta MUST NOT change it. | §1; §2.H; §2.I | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-002` | List ordinals MUST be derived from the `MovableTree` at read time; they MUST NOT be stored in the CRDT. | §1; §2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-003` | The table of contents MUST be derived from the `MovableTree`; no copy of the headings MUST be stored. | §1; §2.F | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-004` | A rejected suggestion MUST be removed from the CRDT and MUST leave no trace in the final document. | §1; §2.I | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-005` | No feature MUST bypass `ProseState::dispatch()`: every mutation goes through a typed `ProseCommand`. | §1 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-006` | Text offsets MUST be counted in Unicode graphemes, never in Rust `char`s, wherever they address Loro positions. | §1 (`unicode-segmentation`) | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-007` | An inline mark MUST expand or not expand at its boundaries according to `expand_type_for` alone (`prose-logic §2.A`), never according to the applying feature. | §2.A; `PROSE-007` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-008` | Two concurrent applications of the same mark to overlapping ranges MUST converge without producing a torn or duplicated span. | §2.A | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-009` | A comment thread MUST stay anchored to its text range across concurrent edits, and MUST go orphaned rather than silently re-anchor when that range is deleted. | §2.H | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-010` | Accepting a suggestion MUST apply exactly the recorded change; it MUST NOT re-derive it from the current text. | §2.I | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-011` | Track changes MUST converge under concurrent accept and reject of the same suggestion: one outcome, never a half-applied edit. | §2.I | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-012` | Undo MUST be scoped to the local peer and MUST NOT revert a remote peer's edits (`PROSE-022` is the same rule in the engine). | §2.J | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-013` | A footnote MUST keep a stable id and MUST be renumbered from document order at read time, never from a stored number. | §2.K | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-014` | A cross reference to a deleted target MUST surface as a broken reference; it MUST NOT resolve to a neighbour. | §2.K | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-015` | A replace-all MUST be a single undo item. | §2.L; §2.J | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-016` | Find MUST be local view state and MUST NOT mutate the document. | §2.L | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-017` | A table row or column insert MUST converge with a concurrent edit inside the table without corrupting cell geometry (`PROSE-009` is the derived-span rule it relies on). | §2.D | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-018` | Word count MUST be derived on demand and MUST NOT be stored in the CRDT. | §2.M | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-019` | The spell checker MUST run locally and MUST NOT send document text anywhere. | §2.N; §3 | not built -- lands with the post-MVP spell-checker Story (Epic `E6`), after `ARCH P2` | unimplemented |
+| `PROSE-FEAT-001` | A `CommentId` or `SuggestionId` MUST be stable for the document's lifetime: a partial accept, a reject or a remote delta MUST NOT change it. | section 1; section 2.H; section 2.I | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-002` | List ordinals MUST be derived from the `MovableTree` at read time; they MUST NOT be stored in the CRDT. | section 1; section 2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-003` | The table of contents MUST be derived from the `MovableTree`; no copy of the headings MUST be stored. | section 1; section 2.F | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-004` | A rejected suggestion MUST be removed from the CRDT and MUST leave no trace in the final document. | section 1; section 2.I | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-005` | No feature MUST bypass `ProseState::dispatch()`: every mutation goes through a typed `ProseCommand`. | section 1 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-006` | Text offsets MUST be counted in Unicode graphemes, never in Rust `char`s, wherever they address Loro positions. | section 1 (`unicode-segmentation`) | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-007` | An inline mark MUST expand or not expand at its boundaries according to `expand_type_for` alone (`prose-logic section 2.A`), never according to the applying feature. | section 2.A; `PROSE-007` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-008` | Two concurrent applications of the same mark to overlapping ranges MUST converge without producing a torn or duplicated span. | section 2.A | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-009` | A comment thread MUST stay anchored to its text range across concurrent edits, and MUST go orphaned rather than silently re-anchor when that range is deleted. | section 2.H | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-010` | Accepting a suggestion MUST apply exactly the recorded change; it MUST NOT re-derive it from the current text. | section 2.I | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-011` | Track changes MUST converge under concurrent accept and reject of the same suggestion: one outcome, never a half-applied edit. | section 2.I | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-012` | Undo MUST be scoped to the local peer and MUST NOT revert a remote peer's edits (`PROSE-022` is the same rule in the engine). | section 2.J | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-013` | A footnote MUST keep a stable id and MUST be renumbered from document order at read time, never from a stored number. | section 2.K | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-014` | A cross reference to a deleted target MUST surface as a broken reference; it MUST NOT resolve to a neighbour. | section 2.K | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-015` | A replace-all MUST be a single undo item. | section 2.L; section 2.J | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-016` | Find MUST be local view state and MUST NOT mutate the document. | section 2.L | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-017` | A table row or column insert MUST converge with a concurrent edit inside the table without corrupting cell geometry (`PROSE-009` is the derived-span rule it relies on). | section 2.D | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-018` | Word count MUST be derived on demand and MUST NOT be stored in the CRDT. | section 2.M | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-019` | The spell checker MUST run locally and MUST NOT send document text anywhere. | section 2.N; section 3 | not built -- lands with the post-MVP spell-checker Story (Epic `E6`), after `ARCH P2` | unimplemented |
 
-> **Invariant coverage.** 19 `unimplemented`. Five of them (`001`-`005`) were already written as prose invariants in this section; the other fourteen were rules buried in §2's chapters, which is exactly the content a reviewer could not reach without reading seventeen hundred lines.
+> **Invariant coverage.** 19 `unimplemented`. Five of them (`001`-`005`) were already written as prose invariants in this section; the other fourteen were rules buried in section 2's chapters, which is exactly the content a reviewer could not reach without reading seventeen hundred lines.
 ---
 
 ## 2. TECHNICAL DESIGN & STATE
@@ -178,7 +178,7 @@ pub enum LineHeight { Multiple(f32), Exact(f32), AtLeast(f32) }
 ```
 
 **Note (P-83):** paragraph style is stored as a per-property `LoroMap` (one key per
-`ParagraphStyle` field), not a single opaque blob -- canonical storage lives in Logic §C.
+`ParagraphStyle` field), not a single opaque blob -- canonical storage lives in Logic section C.
 `SetParagraphStyle` writes only the keys that changed, so two concurrent edits to DIFFERENT
 properties (e.g. `align` vs `space_after`) merge cleanly via Loro per-key LWW; concurrent edits
 to the SAME property remain LWW.
@@ -330,8 +330,8 @@ CRDT structure:
 
 ```
 Table (BlockType::Table)
-└── TableRow (BlockType::TableRow)  ×n
-    └── TableCell (BlockType::TableCell)  ×m
+└── TableRow (BlockType::TableRow)  xn
+    └── TableCell (BlockType::TableCell)  xm
         └── LoroText (+ inline marks)
             + inline blocks: Paragraph, Heading, ListItem (no nested Table)
 ```
@@ -410,7 +410,7 @@ positions from the current view); the dispatcher resolves them to the anchor and
 positional; the *stored* merge is never positional.
 
 **Concurrent-edit semantics (CRDT).** This mirrors the resolved Trame merge model
-(`trame-logic §12` / §6) so both apps behave identically:
+(`trame-logic section 12` / section 6) so both apps behave identically:
 
 - **Insert inside a merge.** A concurrent `InsertTableRow`/`InsertTableCol` whose new line
   falls between the anchor and extent corners is **absorbed**: the derived rowspan/colspan
@@ -451,7 +451,7 @@ these are the *single-peer, command-time* rules, consistent with the TreeID-keye
   dispatcher checks the covered set (every cell except the anchor). If any covered cell still
   holds `LoroText` content, the command is **rejected locally** with
   `CommandRejected { reason: MergeCoversNonEmpty }` and nothing is written -- the same
-  local guard Trame applies (`trame-logic §6` "merge blocked if covered cell is non-empty",
+  local guard Trame applies (`trame-logic section 6` "merge blocked if covered cell is non-empty",
   `TRAME-019`). This is the *single-peer* rule; it cannot see a concurrent write, so the
   masking model above is what keeps a *concurrent* value under a merge from being lost. Both
   halves must be present for the "behave identically" claim to hold: the local guard refuses,
@@ -529,7 +529,7 @@ pub enum ImageAlign {
 ```
 
 > **MVP note:** `ImageAlign::Left` and `Right` are accepted in the CRDT and preserved
-> on docx import, but the pagination engine (`prose-engine` §2.B Phase 1) treats them
+> on docx import, but the pagination engine (`prose-engine` section 2.B Phase 1) treats them
 > as `Block` in the MVP. Text wrapping is post-MVP -- it requires a line-breaking
 > algorithm with exclusion zones, extension of Parley.
 
@@ -539,7 +539,7 @@ pub enum ImageAlign {
 #### Blob Resolution
 
 The `content_hash` addresses an encrypted media blob. Resolution goes through the Foundation
-media flow (`ambre-spec-architecture.md §2.D`): the Logic thread issues
+media flow (`ambre-spec-architecture.md section 2.D`): the Logic thread issues
 `RestCommand::DownloadMedia { document_id, content_hash }`; the **Sync worker** performs the
 presigned-URL GET and decryption and replies `RestEvent::MediaDownloaded { content_hash, data }`,
 which `ProseState::on_media_downloaded` caches in `media_cache`. The Logic thread makes **no
@@ -674,7 +674,7 @@ pub struct TableOfContents {
 // Walks the tree in document order, keeps every `BlockType::Heading` with level
 // <= max_level, resolves each heading's start page from `layout`, and (when
 // `numbered`) prefixes the `compute_section_number` counter. See the 3-pass TOC
-// stabilization in `ambre-spec-prose-logic.md` §2.B.
+// stabilization in `ambre-spec-prose-logic.md` section 2.B.
 pub fn build_toc(
     tree: &LoroMovableTree,
     layout: &PageLayout,
@@ -697,7 +697,7 @@ UpdateTocConfig { block_id: TreeID, max_level: u8, numbered: bool },
 Headers and footers are `LoroText` nodes in the `"blocks"` tree, independent from the
 document body and repeated on each page. `"meta"` of the `LoroDoc` holds only their
 configuration plus the stable `block_id` (`TreeID`) that points at the text node -- the
-text is never duplicated inline (see `prose-logic §2.A`). Editing commands (`InsertText`,
+text is never duplicated inline (see `prose-logic section 2.A`). Editing commands (`InsertText`,
 `ApplyMark`, ...) target the header/footer via this `block_id` like any other block.
 
 ```
@@ -727,7 +727,7 @@ document-level flag** (hoisted out of `"header"`), not a per-side one: it activa
 checkbox. When it is `false`, `header_first`/`footer_first` are inert (their `block_id`
 nodes are retained but never rendered, so toggling the flag back on is lossless). The
 pagination engine reads this one flag to decide, on page 0 only, whether to render the
-`*_first` block instead of the regular one (`prose-logic §2.B`); `header.enabled` /
+`*_first` block instead of the regular one (`prose-logic section 2.B`); `header.enabled` /
 `footer.enabled` still gate whether the side is shown at all.
 
 Headers/footers content supports **dynamic fields** inserted as special marks. Their
@@ -842,7 +842,7 @@ EditCommentReply { comment_id: Uuid, reply_id: Uuid, new_text: String },
 **Author / peer_id source (P-30).** The commands carry only `text`: the dispatcher fills
 `author` and `peer_id` from the **current session identity**, never from the client-supplied
 payload. `peer_id` is the local `LoroDoc` peer id; `author` is the session `display_name`
-(the same Sync-resolved identity used for presence -- see `prose-logic §2`). A client cannot
+(the same Sync-resolved identity used for presence -- see `prose-logic section 2`). A client cannot
 forge another user's name on a comment or reply because the field is stamped server-of-record
 side (the local Logic thread), not read off the wire.
 
@@ -1428,7 +1428,7 @@ direct path to the network.
 
 ## 4. QUALITY & TESTABILITY
 
-> **This is a test plan, not coverage.** Nothing here exists -- the rules these belts will hold are `PROSE-FEAT-001..019` in §1, all `unimplemented`.
+> **This is a test plan, not coverage.** Nothing here exists -- the rules these belts will hold are `PROSE-FEAT-001..019` in section 1, all `unimplemented`.
 
 **Unit tests:**
 
@@ -1461,9 +1461,9 @@ direct path to the network.
 | Operation | Target | Thread |
 |-----------|--------|--------|
 | `build_toc()` -- 50 headings | < 1 ms | Logic |
-| `compute_ordinal()` -- 100 items | < 500 µs | Logic |
-| `compute_section_number()` -- 50 headings | < 500 µs | Logic |
-| `intercept_command()` track changes | < 100 µs | Logic |
+| `compute_ordinal()` -- 100 items | < 500 us | Logic |
+| `compute_section_number()` -- 50 headings | < 500 us | Logic |
+| `intercept_command()` track changes | < 100 us | Logic |
 | `accept_all()` -- 100 suggestions | < 5 ms | Logic |
 | `find_all()` -- 100 pages, query 10 chars | < 20 ms | Logic |
 | `replace_all()` -- 50 occurrences | < 30 ms | Logic |
@@ -1486,7 +1486,7 @@ direct path to the network.
 |-------------|-------------|
 | **Ordinals stored in the CRDT** | Guaranteed CRDT conflicts on any insertion. O(siblings) on demand is sufficient. |
 | **TOC as CRDT structure** | Guaranteed desynchronization. Derived view only. |
-| **Loro branches for track changes** | Memory overhead O(doc_size × suggestions). Inline MarkType is O(1). |
+| **Loro branches for track changes** | Memory overhead O(doc_size x suggestions). Inline MarkType is O(1). |
 | **Comments in a separate LoroDoc** | Double synchronization, CRDT consistency impossible with the main doc. |
 | **LanguageTool server** | Violation of Zero-Knowledge: plaintext to third-party server. |
 | **LanguageTool WASM (grammar)** | Model > 100 MB. Incompatible with binary budget. |

@@ -1,4 +1,4 @@
-# AMBRE — APP: MURMURE (COLLABORATIVE MESSAGING)
+# AMBRE -- APP: MURMURE (COLLABORATIVE MESSAGING)
 **Status:** Draft
 **Implementation:** design-only
 
@@ -49,7 +49,7 @@ channel_{id}/
 
 **The client only loads the active segment + metadata** (~2 MB max on first display). Older segments are lazy-loaded when scrolling up.
 
-### CRDT Structure — Doc meta (per channel)
+### CRDT Structure -- Doc meta (per channel)
 
 ```
 Loro::Doc (meta)
@@ -63,7 +63,7 @@ Loro::Doc (meta)
 │   ]
 ```
 
-### CRDT Structure — Segment (one Loro::Doc per segment)
+### CRDT Structure -- Segment (one Loro::Doc per segment)
 
 ```
 Loro::Doc (segment)
@@ -104,7 +104,7 @@ When the active segment exceeds ~5000 messages (or ~2 MB snapshot):
 3. Updates Doc meta (marks `sealed: true`, creates new segment)
 4. Old segment deltas are purged (snapshot is sufficient)
 
-Sealed segments are **immutable** — no more deltas, just a final snapshot. This simplifies storage and sync.
+Sealed segments are **immutable** -- no more deltas, just a final snapshot. This simplifies storage and sync.
 
 ### Messaging compaction
 
@@ -112,11 +112,11 @@ More aggressive than for documents: compaction every **1-2 min** (vs 5 min for d
 
 ### Unread tracking
 
-The only real server-side addition. The server tracks a "last read seq" cursor per user per channel — unencrypted metadata (Postgres, see section 9 `channel_read_cursors`).
+The only real server-side addition. The server tracks a "last read seq" cursor per user per channel -- unencrypted metadata (Postgres, see section 9 `channel_read_cursors`).
 
 ### Typing indicators
 
-Native use case for SecSync **Ephemeral messages** — never persisted, anti-replay counter.
+Native use case for SecSync **Ephemeral messages** -- never persisted, anti-replay counter.
 
 ### Server-side authorization (Blind Relay enforcement)
 
@@ -131,15 +131,15 @@ Native use case for SecSync **Ephemeral messages** — never persisted, anti-rep
 A channel is one document crypto-side (see *Key management*), so it reuses the same
 membership model. The relay MUST enforce, server-side:
 
-1. **Subscription ACL** — `SubscribeChannel` requires a `channel_members` row for the
+1. **Subscription ACL** -- `SubscribeChannel` requires a `channel_members` row for the
    caller (same shape as `document_members`), re-checked on a short TTL exactly like
    `MEMBERSHIP_RECHECK_TTL` for documents. Without it any authenticated user who learns
    a `channel_id` can receive every broadcast (Zero-Knowledge leak: sender identity,
-   timing, volume — even though the ciphertext stays sealed) and inject traffic.
-2. **Signature verification** — every `ChannelUpdate` MUST pass `verify_update_signature`
+   timing, volume -- even though the ciphertext stays sealed) and inject traffic.
+2. **Signature verification** -- every `ChannelUpdate` MUST pass `verify_update_signature`
    before it is sequenced/persisted/broadcast, identical to `handle_update`. Ephemerals
    (typing/presence) carry the anti-replay counter and are signature-checked too.
-3. **Clock + seq** — persisted channel updates go through the same
+3. **Clock + seq** -- persisted channel updates go through the same
    `verify_clock_and_assign_seq` Lua path (per active segment) as document deltas.
 
 Rationale: the Blind Relay's promise is "the server only knows routing metadata for
@@ -194,8 +194,8 @@ Since the server is "blind", indexing is done client-side:
 
 ### B. Bot Features
 * **Interactive Messages:** Sending messages with buttons, dropdown menus, and forms (UI schemas rendered via wgpu + Parley/Swash).
-* **Cross-App Triggers:** - *Trame → Murmure:* A bot monitors a budget cell and posts an alert if the threshold is exceeded.
-    - *Murmure → Toile:* A `/brainstorm` command automatically creates a new Board with a mind-map template.
+* **Cross-App Triggers:** - *Trame -> Murmure:* A bot monitors a budget cell and posts an alert if the threshold is exceeded.
+    - *Murmure -> Toile:* A `/brainstorm` command automatically creates a new Board with a mind-map template.
 * **Slash Commands:** Registered command system (e.g. `/jira create`, `/crypto price`) with client-side autocompletion.
 * **WASM Applets (Sandboxing):** Ability to run data cleanup or formatting scripts directly in the Logic thread without leaving the security scope.
 

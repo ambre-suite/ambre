@@ -1,4 +1,4 @@
-# AMBRE — CODE AUDIT
+# AMBRE -- CODE AUDIT
 
 > Full-codebase audit across 16 crates, ~51 000 lines of Rust. Findings grouped by severity.
 > **Date:** 2026-07-05 (supersedes the 2026-06-07 pass on 7 crates / ~15 000 lines)
@@ -20,31 +20,31 @@ Verified against the current tree. IDs are preserved for traceability.
 
 | ID | Title | Status (2026-07-05) |
 | :-- | :-- | :-- |
-| C1 | Ciphertext logged in S3 flusher error paths | **OPEN** — `s3.rs:215,223` still log `blob_str` (contains `ciphertext_b64`). |
-| C2 | Missing Redis PubSub subscriber (cross-instance sync broken) | **RESOLVED** — `ws/pubsub_hub.rs` (`PubSubHub::spawn`, subscribe/unsubscribe fan-out) is wired in `main.rs`. |
-| C3 | Timing side-channel in HMAC commitment verification | **FALSE POSITIVE** — see "Corrections to the previous audit" below. `Mac::verify_slice` is constant-time. |
-| H1 | WS handler silently drops DB/Redis errors | **PARTIAL** — `insert_update` now logs at ERROR; `append_pending_delta` and `doc_broadcast` are still `let _ =`. |
-| H2 | Document metadata leaked to non-members | **OPEN** — `documents.rs` `get_document` still returns `id`/`owner_id`/`doc_type`/`name_enc` when `mem == None`. |
-| H3 | Silent fallback to random DocumentKey on ECDH failure | **OPEN** — `sync/lib.rs:2202-2210`, `unwrap_or_else(\|_\| DocumentKey::generate())` unchanged. |
-| H4 | Passphrases not zeroized in stub handlers | **OPEN** — `handle_change_passphrase`/`handle_recover_account` are still `let _ = (...)`. |
-| H5 | Passphrases/recovery words plaintext across IPC | **OPEN** — IPC types in `bus/rest.rs` still carry bare `Vec<u8>`/`String`. |
-| H6 | Remote CRDT edits silently dropped (`apply_remote` stub) | **RESOLVED** — `trame/src/logic/sync.rs` implements `apply_remote`/`apply_remote_batch` via Loro `import` + reseed. |
-| H7 | Stale formula cache on plain-text conversion | **RESOLVED** — `on_cell_changed` evicts the cache entry when a cell is cleared; `cell_text` gates on `is_formula_cell()`. |
-| M6 | Rate limiter fail-open + fixed-window burst | **OPEN** — still fail-open (`allowing request`) and a fixed-window counter. |
-| M7 | OIDC discovery failure silently ignored | **OPEN** — `main.rs` still `.ok().unwrap_or_default()`. |
-| M8 | `ambre-logic` persistence.rs dead code | **RESOLVED** — `pub mod persistence;` is now declared in `lib.rs`. |
-| M9 | No HTTP timeouts in Sync thread | **OPEN** — `sync/http.rs` still sets no per-request timeout. |
-| M10 | `WsError` does not trigger reconnection | **OPEN** — `sync/lib.rs:1466` still only logs; no `schedule_reconnect()`. |
+| C1 | Ciphertext logged in S3 flusher error paths | **OPEN** -- `s3.rs:215,223` still log `blob_str` (contains `ciphertext_b64`). |
+| C2 | Missing Redis PubSub subscriber (cross-instance sync broken) | **RESOLVED** -- `ws/pubsub_hub.rs` (`PubSubHub::spawn`, subscribe/unsubscribe fan-out) is wired in `main.rs`. |
+| C3 | Timing side-channel in HMAC commitment verification | **FALSE POSITIVE** -- see "Corrections to the previous audit" below. `Mac::verify_slice` is constant-time. |
+| H1 | WS handler silently drops DB/Redis errors | **PARTIAL** -- `insert_update` now logs at ERROR; `append_pending_delta` and `doc_broadcast` are still `let _ =`. |
+| H2 | Document metadata leaked to non-members | **OPEN** -- `documents.rs` `get_document` still returns `id`/`owner_id`/`doc_type`/`name_enc` when `mem == None`. |
+| H3 | Silent fallback to random DocumentKey on ECDH failure | **OPEN** -- `sync/lib.rs:2202-2210`, `unwrap_or_else(\|_\| DocumentKey::generate())` unchanged. |
+| H4 | Passphrases not zeroized in stub handlers | **OPEN** -- `handle_change_passphrase`/`handle_recover_account` are still `let _ = (...)`. |
+| H5 | Passphrases/recovery words plaintext across IPC | **OPEN** -- IPC types in `bus/rest.rs` still carry bare `Vec<u8>`/`String`. |
+| H6 | Remote CRDT edits silently dropped (`apply_remote` stub) | **RESOLVED** -- `trame/src/logic/sync.rs` implements `apply_remote`/`apply_remote_batch` via Loro `import` + reseed. |
+| H7 | Stale formula cache on plain-text conversion | **RESOLVED** -- `on_cell_changed` evicts the cache entry when a cell is cleared; `cell_text` gates on `is_formula_cell()`. |
+| M6 | Rate limiter fail-open + fixed-window burst | **OPEN** -- still fail-open (`allowing request`) and a fixed-window counter. |
+| M7 | OIDC discovery failure silently ignored | **OPEN** -- `main.rs` still `.ok().unwrap_or_default()`. |
+| M8 | `ambre-logic` persistence.rs dead code | **RESOLVED** -- `pub mod persistence;` is now declared in `lib.rs`. |
+| M9 | No HTTP timeouts in Sync thread | **OPEN** -- `sync/http.rs` still sets no per-request timeout. |
+| M10 | `WsError` does not trigger reconnection | **OPEN** -- `sync/lib.rs:1466` still only logs; no `schedule_reconnect()`. |
 
 The stub-related MEDIUM/OTHER findings from the previous pass (channel handlers,
 meeting handlers, Murmure/Rendez-Vous) remain accurate: those subsystems are
-still `tracing::info!`-only no-ops, which is expected — they are `Todo/` specs.
+still `tracing::info!`-only no-ops, which is expected -- they are `Todo/` specs.
 
 ---
 
 ## CRITICAL (2)
 
-### C4 — Cross-document snapshot access (IDOR) in `snapshot_download_url`
+### C4 -- Cross-document snapshot access (IDOR) in `snapshot_download_url`
 
 **Crate:** `ambre-server`
 **File:** `crates/ambre-server/src/routes/sync.rs:172-203`, `db.rs get_snapshot`
@@ -62,7 +62,7 @@ let url = s3::generate_presigned_download_url(..., &snap.s3_key, ...);
 document A can pass A's id in the path (passing the ACL) and **any** snapshot
 UUID belonging to document B in the body, and receive a presigned GET URL for
 B's blob. The same shape exists conceptually for any "authorize on path id,
-fetch by body id" pair — audit `snapshot_metadata` and the delta paths for the
+fetch by body id" pair -- audit `snapshot_metadata` and the delta paths for the
 same pattern.
 
 **Impact, honestly scoped.** The blob is E2EE: the attacker gets ciphertext
@@ -79,7 +79,7 @@ mismatch.
 
 ---
 
-### C5 — Path traversal via unvalidated `content_hash` into S3 keys
+### C5 -- Path traversal via unvalidated `content_hash` into S3 keys
 
 **Crate:** `ambre-server`
 **Files:** `crates/ambre-server/src/s3.rs:66-72`, `routes/media.rs` (all three handlers)
@@ -90,13 +90,13 @@ pub fn format_s3_media_key(env_prefix, document_id, content_hash: &str) -> Strin
 
 `content_hash` is taken verbatim from the client request body and interpolated
 straight into the S3 object key, in `media_upload_url`, `media_download_url` and
-`media_confirm_upload`. Nothing validates it. The spec (`server §`, line ~333)
+`media_confirm_upload`. Nothing validates it. The spec (`server section `, line ~333)
 states `content_hash` MUST be a 64-char BLAKE2b-256 hex string, but that
 contract is enforced **nowhere in the code**.
 
 A caller who is a member of document A can send
 `content_hash = "../<docB>/media/<hash>"` (or `../../snapshots/<id>`) and obtain
-a presigned URL that points outside A's media prefix — reading or, via the
+a presigned URL that points outside A's media prefix -- reading or, via the
 upload URL, **writing** an object under another document's prefix. Combined with
 C4, this widens the blast radius of the blind-relay bypass.
 
@@ -114,14 +114,14 @@ uploaded bytes rather than trusting the client's hash at all.
 
 ## HIGH (6)
 
-### H8 — Revoked member retains write access on a live WebSocket
+### H8 -- Revoked member retains write access on a live WebSocket
 
 **Crate:** `ambre-server`
 **File:** `crates/ambre-server/src/ws/handler.rs:271-289 (subscribe), 300-405 (update)`
 
 Membership is checked once, at `Subscribe` (`verify_document_access`). After that
 `handle_update` only checks the in-memory `conn.doc_subscriptions.contains(&doc_id)`
-set — it never re-consults `document_members`. If an owner revokes a member
+set -- it never re-consults `document_members`. If an owner revokes a member
 (`revoke_from_document`) while that member holds an open, already-subscribed
 socket, the member keeps writing accepted, signed, sequenced updates until they
 disconnect. This compounds the previously-noted "WS session never re-validated"
@@ -141,7 +141,7 @@ on a short TTL cache rather than trusting the subscription set indefinitely.
 
 ---
 
-### H9 — Unbounded zstd decompression on the peer-fed sync path (WASM OOM)
+### H9 -- Unbounded zstd decompression on the peer-fed sync path (WASM OOM)
 
 **Crate:** `ambre-sync`
 **File:** `crates/ambre-sync/src/pipeline.rs:63-76`
@@ -168,7 +168,7 @@ compressed length and a max ratio). Reject before allocating the full output.
 
 ---
 
-### H2 — Document metadata leaked to non-members *(carried over, still open)*
+### H2 -- Document metadata leaked to non-members *(carried over, still open)*
 
 **Crate:** `ambre-server`
 **File:** `crates/ambre-server/src/routes/documents.rs:295-319`
@@ -183,7 +183,7 @@ document UUID is an unnecessary metadata disclosure.
 
 ---
 
-### H3 — Silent fallback to a random DocumentKey on unwrap failure *(carried over)*
+### H3 -- Silent fallback to a random DocumentKey on unwrap failure *(carried over)*
 
 **Crate:** `ambre-sync`
 **File:** `crates/ambre-sync/src/lib.rs:2200-2210`
@@ -200,7 +200,7 @@ substitute a random key for a failed unwrap.
 
 ---
 
-### H4 / H5 — Passphrase & recovery-word material not zeroized *(carried over)*
+### H4 / H5 -- Passphrase & recovery-word material not zeroized *(carried over)*
 
 **Crates:** `ambre-sync`, `ambre-bus`
 **Files:** `sync/lib.rs:1168-1176`, `bus/rest.rs:129-153`
@@ -212,7 +212,7 @@ fn handle_change_passphrase(&mut self, current: Vec<u8>, new: Vec<u8>) { /* ... 
 Both handlers are still stubs that bind-and-drop secret bytes without wiping
 them; the IPC types (`RestCommand::Unlock/SetupAccount/ChangePassphrase/
 RecoverAccount`) still move bare `Vec<u8>`/`String` through the Logic thread. The
-BIP39 recovery mnemonic — equivalent to the master key — travels as a plain
+BIP39 recovery mnemonic -- equivalent to the master key -- travels as a plain
 `String`. Note the doc comment on `bus/rest.rs:132` *claims* "zeroized by the
 Sync thread after use", which is currently false; the comment is aspirational.
 
@@ -223,7 +223,7 @@ handler that consumes them, including the stubs.
 
 ## MEDIUM (9)
 
-### M13 — Ed25519 verification is non-strict (signature malleability)
+### M13 -- Ed25519 verification is non-strict (signature malleability)
 
 **Crate:** `ambre-crypto`
 **File:** `crates/ambre-crypto/src/signature.rs:38-52`
@@ -245,7 +245,7 @@ verification, both client-side (`envelope::open`) and server-side
 
 ---
 
-### M14 — ECDH KEK derivation omits identity binding
+### M14 -- ECDH KEK derivation omits identity binding
 
 **Crate:** `ambre-crypto`
 **File:** `crates/ambre-crypto/src/ecdh.rs:33-43`
@@ -258,25 +258,25 @@ hasher.update(shared);      // = X25519(own, peer)
 The key-encryption key is derived from `domain || shared_secret` only. The two
 parties' public keys are **not** mixed in. This is not exploitable on its own
 (the shared secret already binds both keys), but it deviates from the standard
-HKDF-with-`info = pk_sender ‖ pk_recipient` construction and removes the natural
+HKDF-with-`info = pk_sender || pk_recipient` construction and removes the natural
 transcript binding you'd want if the wrap scheme ever grows (multiple recipients,
 key confirmation, rewrapping). Additionally, `shared_secret` does not reject an
 all-zero output (contributory behaviour): a peer public key of low order yields a
 predictable shared secret. x25519-dalek doesn't reject these by default.
 
 **Recommendation:** derive the KEK via HKDF-BLAKE2b with
-`info = KEK_DOMAIN ‖ sender_pk ‖ recipient_pk`, and reject an all-zero shared
+`info = KEK_DOMAIN || sender_pk || recipient_pk`, and reject an all-zero shared
 secret (`CryptoError::WeakPublicKey`). Cheap, and it future-proofs the wrap path.
 
 ---
 
-### M15 — JWT access token carried in the WebSocket query string
+### M15 -- JWT access token carried in the WebSocket query string
 
 **Crate:** `ambre-server`
 **Files:** `ws/handler.rs:50-78`, `main.rs:315` (`TraceLayer::new_for_http()`)
 
 The access JWT is passed as `GET /api/ws?token=<jwt>`. This is a documented,
-justified choice (the browser WS API forbids custom headers — spec `server §478`).
+justified choice (the browser WS API forbids custom headers -- spec `server section 478`).
 The residual risk the spec does *not* call out: query strings land in reverse-
 proxy access logs, browser history, and `Referer`, and `TraceLayer` will log the
 request URI at DEBUG. A short-lived access token limits the window, but it's
@@ -289,7 +289,7 @@ never appears in a URL.
 
 ---
 
-### M16 — `get_deltas` limit is unbounded
+### M16 -- `get_deltas` limit is unbounded
 
 **Crate:** `ambre-server`
 **File:** `crates/ambre-server/src/routes/sync.rs:210,237`
@@ -306,13 +306,13 @@ bounded by the document's history) but it's a trivial amplification vector.
 
 ---
 
-### M6 — Rate limiter fail-open + fixed-window burst *(carried over)*
+### M6 -- Rate limiter fail-open + fixed-window burst *(carried over)*
 
 **Crate:** `ambre-server`
 **File:** `crates/ambre-server/src/middleware/rate_limit.rs:131-197`
 
-Still fail-open (any Redis error → `allowing request`), still a fixed-window
-counter (2× burst across the boundary), still `INCR` then a separate `EXPIRE`
+Still fail-open (any Redis error -> `allowing request`), still a fixed-window
+counter (2x burst across the boundary), still `INCR` then a separate `EXPIRE`
 (a crash between them leaves a TTL-less key). See original writeup.
 
 **Fix:** sliding-window (sorted-set) counters; `SET key 1 EX ttl NX` for atomic
@@ -320,7 +320,7 @@ TTL; a fail-closed degraded mode for the auth tier.
 
 ---
 
-### M17 — Permissive CORS (`Any` origin + `Any` headers)
+### M17 -- Permissive CORS (`Any` origin + `Any` headers)
 
 **Crate:** `ambre-server`
 **File:** `crates/ambre-server/src/main.rs:191-194`
@@ -330,7 +330,7 @@ CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any)
 ```
 
 Because auth is a `Bearer` token in memory (no cookies), this is **not** a CSRF
-hole today — a cross-origin page can't read the response, and there's no ambient
+hole today -- a cross-origin page can't read the response, and there's no ambient
 credential to ride. But `allow_origin(Any)` is broader than a self-hostable,
 sovereignty-focused product wants as a default, and it forecloses ever moving the
 refresh token to a cookie without a rework.
@@ -340,9 +340,9 @@ default-deny. Keep `Any` only behind an explicit dev flag.
 
 ---
 
-### M7 — OIDC discovery failure silently swallowed at startup *(carried over)*
-### M9 — No HTTP timeouts in the Sync thread *(carried over)*
-### M10 — `WsError` does not trigger reconnection *(carried over)*
+### M7 -- OIDC discovery failure silently swallowed at startup *(carried over)*
+### M9 -- No HTTP timeouts in the Sync thread *(carried over)*
+### M10 -- `WsError` does not trigger reconnection *(carried over)*
 
 Unchanged from the previous audit; see that pass for the writeups and fixes.
 
@@ -357,7 +357,7 @@ Unchanged from the previous audit; see that pass for the writeups and fixes.
   or gate behind an explicit `recovery` API.
 - **`MasterSeed` and `DocumentKey` derive `Clone`** (`keys.rs:35,72`): silent
   duplication of secret material; each clone is a separate copy to zeroize.
-  Carried over — still present.
+  Carried over -- still present.
 - **Argon2id parameters** (`passphrase.rs:14-17`): 64 MiB / 3 passes / **1 lane**.
   Memory/passes are reasonable for a 2024 mobile SoC; the single lane is the weak
   axis. Re-confirm against `Cargo.lock` and consider bumping parallelism where the
@@ -373,11 +373,11 @@ Unchanged from the previous audit; see that pass for the writeups and fixes.
 ### ambre-server
 
 - **H1 residue**: `append_pending_delta` and `doc_broadcast` failures are still
-  swallowed (`let _ =`) after the seq is irreversibly assigned — a Redis blip
+  swallowed (`let _ =`) after the seq is irreversibly assigned -- a Redis blip
   drops the delta from the flush list (never reaches S3) with no error surfaced.
   Log at ERROR + dead-letter.
 - **`setup_account` hardcoded identity** (`documents.rs`): `temp@ambre.app` /
-  `"User"`, rate-limited only by the global auth tier — account-creation spam
+  `"User"`, rate-limited only by the global auth tier -- account-creation spam
   vector. Carried over.
 - **Clock hash unbounded growth** (`redis_ops.rs`): per-author entries in
   `doc:{id}:clocks` are never pruned; a document edited by many ephemeral authors
@@ -387,10 +387,10 @@ Unchanged from the previous audit; see that pass for the writeups and fixes.
   cycle. Carried over.
 - **53 `.unwrap()/.expect()` in non-test server code**: most are startup/encode
   invariants, but audit the request-path ones (e.g. `postcard::to_allocvec(...).
-  expect("postcard encode Update")` in `ws/handler.rs`) — a malformed value there
+  expect("postcard encode Update")` in `ws/handler.rs`) -- a malformed value there
   panics the connection task.
 - **`snapshot_metadata` shares C4's shape** (`sync.rs`): authorize on path id,
-  return `s3_key` — verify it can't be pivoted the same way once C4 is fixed.
+  return `s3_key` -- verify it can't be pivoted the same way once C4 is fixed.
 
 ### ambre-sync
 
@@ -403,7 +403,7 @@ Unchanged from the previous audit; see that pass for the writeups and fixes.
 - **AuthError messages leak crypto detail** (key lengths, algorithm names):
   carried over.
 
-### ambre-trame (largest crate — 24.7k LOC)
+### ambre-trame (largest crate -- 24.7k LOC)
 
 The formula-engine and CRDT-logic gaps from the previous pass are worth
 re-checking now that `apply_remote` (H6) landed:
@@ -411,17 +411,17 @@ re-checking now that `apply_remote` (H6) landed:
 - **Range registration O(range_size)** (`formula/dag.rs`): `=SUM(A1:ZZ100000)`
   still iterates the full range at registration. With remote apply now live, a
   peer can push such a formula and burn CPU on every collaborator. Bound it.
-- **`flush_delta` swallows Loro export errors** via `.ok()` — a failed export
+- **`flush_delta` swallows Loro export errors** via `.ok()` -- a failed export
   silently drops the local delta. Now that remote apply works, a dropped local
   delta means permanent divergence, not just a missed frame.
-- Duplicated `col_to_alpha` (×4) and glyph-draw loops (×5): maintainability debt,
+- Duplicated `col_to_alpha` (x4) and glyph-draw loops (x5): maintainability debt,
   unchanged.
 - `LEFT`/`RIGHT` negative-length `as usize` wrap, `Pow` NaN/inf passthrough,
   `as u32` on negative floats: carried over, still worth the guards.
 
 ### ambre-canvas
 
-- **M1–M5 (matchMedia DPI, GPU context-loss, atlas/text-cache all-or-nothing
+- **M1-M5 (matchMedia DPI, GPU context-loss, atlas/text-cache all-or-nothing
   eviction, stroke-corner double-blend)**: re-verified, all **still open**.
   `text_cache.rs:82` `evict_if_oversized` still does `self.layouts.clear()`;
   `render/mod.rs` still full-clears the glyph atlas on overflow; `stroke_rect`
@@ -432,15 +432,15 @@ re-checking now that `apply_remote` (H6) landed:
 
 ## CORRECTIONS TO THE PREVIOUS AUDIT
 
-Rigour cuts both ways — one prior finding does not hold up:
+Rigour cuts both ways -- one prior finding does not hold up:
 
 - **C3 (timing side-channel in HMAC commitment verification) is a FALSE
-  POSITIVE.** The claim was that `Hmac::verify_slice` in `hmac ≤ 0.12.1` uses a
+  POSITIVE.** The claim was that `Hmac::verify_slice` in `hmac <= 0.12.1` uses a
   non-constant-time byte comparison. It does not: `verify_slice` compares via
   `CtOutput`, whose `PartialEq` is implemented in constant time using the
   `subtle` crate. There is no RUSTSEC advisory to this effect. `commitment.rs`
   as written is correct; no change is required. (The general advice to pin
-  crypto deps in `Cargo.lock` still stands — but the lockfile wasn't in this
+  crypto deps in `Cargo.lock` still stands -- but the lockfile wasn't in this
   snapshot to confirm.)
 
 ---
@@ -449,36 +449,36 @@ Rigour cuts both ways — one prior finding does not hold up:
 
 Confirmed against the current tree:
 
-- **Cross-instance sync now works** — `PubSubHub` (`ws/pubsub_hub.rs`) is the
+- **Cross-instance sync now works** -- `PubSubHub` (`ws/pubsub_hub.rs`) is the
   missing subscriber from C2, correctly one-subscriber-per-channel fanned out
   in-process.
-- **Remote collaborative apply is real** — Trame's `apply_remote`/
+- **Remote collaborative apply is real** -- Trame's `apply_remote`/
   `apply_remote_batch` import Loro deltas and reseed the viewport (H6 closed).
-- **Atomic, strict clock+seq** — the Lua script enforces `incoming == current+1`
+- **Atomic, strict clock+seq** -- the Lua script enforces `incoming == current+1`
   exactly, atomically, rejecting both rollback and gaps. No TOCTOU.
-- **Envelope order is correct** — seal: AEAD → HMAC commitment → Ed25519 sign;
-  open: verify signature → verify commitment → AEAD open. The signature covers
+- **Envelope order is correct** -- seal: AEAD -> HMAC commitment -> Ed25519 sign;
+  open: verify signature -> verify commitment -> AEAD open. The signature covers
   the commitment tag, so the relay cannot substitute it.
-- **Ed25519 signature is verified server-side before seq assignment** — the blind
+- **Ed25519 signature is verified server-side before seq assignment** -- the blind
   relay authenticates the author before touching state.
 - **Domain separation** on every derivation (`SIGN`/`EXCH`/`KEK` domains).
 - **`ZeroizeOnDrop`** on `MasterSeed` and `DocumentKey`.
 - **CSPRNG nonces** (192-bit XChaCha20 via `getrandom`, mapped to
   `crypto.getRandomValues` on WASM).
-- **Ephemeral anti-replay** — per-author monotonic counter drops replayed
+- **Ephemeral anti-replay** -- per-author monotonic counter drops replayed
   presence messages.
-- **Zero SQL injection** — every query uses `sqlx::query*()` with `.bind()`.
+- **Zero SQL injection** -- every query uses `sqlx::query*()` with `.bind()`.
 - **Exactly one `unsafe`** in the whole codebase (`core/version.rs
   new_unchecked`), with an explicit documented safety contract. `ambre-crypto`,
   `ambre-canvas`, `ambre-bus` remain `unsafe`-free.
-- **`ambre-crypto` is NOT a dependency of `ambre-server`** — the server verifies
+- **`ambre-crypto` is NOT a dependency of `ambre-server`** -- the server verifies
   Ed25519 via `ed25519-dalek` directly and never links `DocumentKey`/`MasterSeed`/
-  Argon2 into its process. Least-privilege boundary held (spec `server §948`).
+  Argon2 into its process. Least-privilege boundary held (spec `server section 948`).
 - **476 test functions** across unit/integration/wasm targets.
 
 ---
 
-## ADDENDUM 2026-07-08 — NEW SURFACE NOT IN THE 2026-07-05 PASS
+## ADDENDUM 2026-07-08 -- NEW SURFACE NOT IN THE 2026-07-05 PASS
 
 The 2026-07-05 snapshot predates the **organizations / key-escrow** subsystem
 (`routes/orgs.rs`, `routes/keys.rs`, `db/orgs.rs`, the org half of `routes/share.rs`).
@@ -487,9 +487,9 @@ It is now wired in `main.rs` (`/organizations`, `/organizations/{id}/recover/{ui
 Everything in Waves R0-R5 is confirmed still applied (all commits since
 2026-07-05 are the remediation waves).
 
-### N1 (HIGH) — Org master-key recovery bypasses the advertised Shamir threshold
+### N1 (HIGH) -- Org master-key recovery bypasses the advertised Shamir threshold
 
-**Crate:** `ambre-server` · **File:** `routes/orgs.rs:337-370`, `db/orgs.rs`
+**Crate:** `ambre-server` -- **File:** `routes/orgs.rs:337-370`, `db/orgs.rs`
 
 `recover_master_key` returns a target member's `org_master_key_enc` on the
 authority of a **single** `owner`/`admin` (`require_org_role(... &["owner","admin"])`).
@@ -511,12 +511,12 @@ role only and document loudly that recovery is single-authority. Reject
 `shamir_threshold > 1` at org creation while unenforced, so the schema never
 advertises a guarantee the server doesn't keep.
 
-### N2 (MEDIUM) — `invite_to_document` lets an editor mint co-owners
+### N2 (MEDIUM) -- `invite_to_document` lets an editor mint co-owners
 
-**Crate:** `ambre-server` · **File:** `routes/share.rs:62,65`
+**Crate:** `ambre-server` -- **File:** `routes/share.rs:62,65`
 
 The caller must be `owner` or `editor` (`["owner","editor"].contains(&m.role)`),
-but the granted role is only checked against `["owner","editor","viewer"]` — it is
+but the granted role is only checked against `["owner","editor","viewer"]` -- it is
 **not** bounded by the caller's own role. An `editor` can therefore invite an
 arbitrary user as `owner`; that new owner can then `revoke_from_document` /
 `rotate_document_key` (both `owner`-only). Privilege escalation from editor to
@@ -525,7 +525,7 @@ arbitrary user as `owner`; that new owner can then `revoke_from_document` /
 **Fix:** clamp the invitable role to `<= caller.role` (only an `owner` may grant
 `owner`).
 
-### N3 (LOW, carried) — `setup_account` hardcoded placeholder identity
+### N3 (LOW, carried) -- `setup_account` hardcoded placeholder identity
 
 `routes/documents.rs:74-75` still creates accounts as `temp@ambre.app` / `"User"`,
 rate-limited only by the global auth tier. Unchanged from the previous pass's
@@ -534,19 +534,19 @@ rate-limited only by the global auth tier. Unchanged from the previous pass's
 ### Residuals from 2026-07-05 "OTHER NOTABLE FINDINGS" no wave covered
 
 Still open, re-confirmed: `signature.rs` positional (non-length-prefixed)
-`ciphertext ‖ aad` transcript; `MasterSeed`/`DocumentKey` `Clone` (DocumentKey by
+`ciphertext || aad` transcript; `MasterSeed`/`DocumentKey` `Clone` (DocumentKey by
 design, documented); sync `AuthError` messages still carry crypto detail
 (`auth.rs` sends raw `e`); ephemeral remote-counter map has no eviction. None are
 exploitable in isolation; track them or explicitly close as WON'T-DO.
 
 ---
 
-## ADDENDUM 2026-07-08 (2) — SURFACED WHILE IMPLEMENTING WAVE R6
+## ADDENDUM 2026-07-08 (2) -- SURFACED WHILE IMPLEMENTING WAVE R6
 
 Two issues in the account-setup path noticed during the N3 work. Neither was in
 the R6 scope; both are recorded here for a follow-up wave.
 
-### N4 (HIGH) — Passphrase transmitted in cleartext to the server (zero-knowledge breach)
+### N4 (HIGH) -- Passphrase transmitted in cleartext to the server (zero-knowledge breach)
 
 **Crate:** `ambre-server` / `ambre-sync`
 **Files:** `sync/auth.rs` (`handle_setup_account`), `routes/documents.rs`
@@ -558,8 +558,8 @@ the R6 scope; both are recorded here for a follow-up wave.
 `#[allow(dead_code)]`, never used). The passphrase is client-only secret material:
 the master key is derived from it *client-side* (Argon2) and only the *wrapped*
 seed plus salt should ever reach the server. Shipping the plaintext passphrase
-over the wire — where it lands in request logs, proxy buffers, and the server
-process — directly violates the Zero-Knowledge pillar ("the server only knows
+over the wire -- where it lands in request logs, proxy buffers, and the server
+process -- directly violates the Zero-Knowledge pillar ("the server only knows
 routing metadata; no content, no encryption keys"). The field being unused
 server-side does not help: it is on the wire and in memory.
 
@@ -573,7 +573,7 @@ and the server `SetupAccountRequest`; the server never needs it (it only stores
 `master_key_enc` + `master_key_salt`). Add a regression assert that the setup
 request body carries no passphrase field.
 
-### N5 (LOW) — No uniqueness on `users.email` weakens the N3 identity
+### N5 (LOW) -- No uniqueness on `users.email` weakens the N3 identity
 
 **Crate:** `ambre-server`
 **Files:** `migrations/20250101000000_initial_schema.sql` (`email TEXT NOT NULL`),
@@ -582,7 +582,7 @@ request body carries no passphrase field.
 N3 now records the client-supplied `email`, but the column has no `UNIQUE`
 constraint, so multiple accounts can share one email. That (a) leaves the original
 account-creation spam vector from N3 only partially closed, and (b) makes
-`get_user_by_email` (used by `invite_to_document`) ambiguous — it resolves the
+`get_user_by_email` (used by `invite_to_document`) ambiguous -- it resolves the
 first match, so which identity an invite targets is not well-defined once
 duplicates exist. Deferred from R6 because a `UNIQUE` constraint is a migration
 that must also account for the OIDC placeholder rows.
@@ -597,24 +597,24 @@ rather than the current `500` (a unique violation currently surfaces as
 ## REMEDIATION ROADMAP
 
 Security-first ordering, grouped into waves. Same `[ ]`/`[x]` convention as
-`ambre-roadmap.md` — a wave is `[x]` only when every story under it is `[x]`.
+`ambre-roadmap.md` -- a wave is `[x]` only when every story under it is `[x]`.
 Each story carries its finding ID, the file to touch, and the concrete action.
 
-### Wave R0 — Authorization holes (do first; small diffs, real bypasses)
+### Wave R0 -- Authorization holes (do first; small diffs, real bypasses)
 
-- [x] **C4** — `db::get_snapshot` takes `document_id` and filters
+- [x] **C4** -- `db::get_snapshot` takes `document_id` and filters
       `WHERE id = $1 AND document_id = $2`; `snapshot_download_url` passes the
       path `doc_id`, returns 404 on mismatch. (`server/db.rs`, `routes/sync.rs`)
       Regression guard added in the `create_snapshot` roundtrip test.
-- [x] **C4-audit** — swept: `get_snapshot_metadata` (via `get_latest_snapshot`)
+- [x] **C4-audit** -- swept: `get_snapshot_metadata` (via `get_latest_snapshot`)
       and `get_deltas` (via `get_updates_after`) already scope by `doc_id`;
       `get_snapshot` was the only bare-id fetch, now fixed.
       (`server/routes/sync.rs`, `routes/media.rs`)
-- [x] **C5** — `s3::is_valid_content_hash` enforces `^[0-9a-f]{64}$`; all three
+- [x] **C5** -- `s3::is_valid_content_hash` enforces `^[0-9a-f]{64}$`; all three
       media handlers reject a malformed hash with `BadRequest` before the key
       builder runs. Unit-tested (`s3::tests::content_hash_validation`).
       (`server/routes/media.rs`, `s3.rs`)
-- [x] **C5-hardening** — WON'T DO (by design). Server-side BLAKE2b-256 re-hashing
+- [x] **C5-hardening** -- WON'T DO (by design). Server-side BLAKE2b-256 re-hashing
       of uploaded bytes would force the server to GET and stream the blob body,
       breaking the Blind Relay pillar (server never touches blob content) and the
       direct client->S3 presigned upload path. The traversal threat this story
@@ -625,61 +625,61 @@ Each story carries its finding ID, the file to touch, and the concrete action.
       hash only as an S3 key (never as an integrity proof) is acceptable given
       those guarantees. (`server/routes/media.rs`)
 
-### Wave R1 — Peer-triggered DoS & live-session authz
+### Wave R1 -- Peer-triggered DoS & live-session authz
 
-- [x] **H9** — `decompress_zstd_bounded` streams the zstd body through a
+- [x] **H9** -- `decompress_zstd_bounded` streams the zstd body through a
       `Read::take(ceiling + 1)` cap and rejects with `DecompressTooLarge` before
       the full output allocates. Ceiling = `body.len() * 200` clamped to
       `[1 MiB, 64 MiB]`. Guarded by `decompress_bomb_rejected` /
       `decompress_within_ceiling_ok`. (`sync/pipeline.rs`)
-- [x] **H8** — `handle_update` re-consults `document_members` on a 30 s TTL
+- [x] **H8** -- `handle_update` re-consults `document_members` on a 30 s TTL
       (`MEMBERSHIP_RECHECK_TTL`) via `doc_access_verified_at`; on a failed
       re-check it drops the subscription (local + Redis session) and returns 403,
       so a mid-session revoke stops write acceptance within the TTL instead of at
       disconnect. (`server/ws/handler.rs`)
-- [x] **M16** — `params.limit.unwrap_or(100).clamp(1, 1000)` in `get_deltas`.
+- [x] **M16** -- `params.limit.unwrap_or(100).clamp(1, 1000)` in `get_deltas`.
       (`server/routes/sync.rs`)
 
-### Wave R2 — Make the E2EE story honest (fail-closed + secret hygiene) [x]
+### Wave R2 -- Make the E2EE story honest (fail-closed + secret hygiene) [x]
 
-- [x] **H3** — the open-document task now sends `SyncEvent::OpenDocumentFailed`
+- [x] **H3** -- the open-document task now sends `SyncEvent::OpenDocumentFailed`
       (surfaced as `LogicEvent::AuthError`) when the wrapped DocumentKey cannot be
       unwrapped for a server-side doc; the `unwrap_or_else(|_| generate())` random
       fallback is gone. Local-only (404) opens still generate a fresh key as
       before. (`sync/lib.rs`)
-- [x] **H4** — `handle_change_passphrase` / `handle_recover_account` take the new
+- [x] **H4** -- `handle_change_passphrase` / `handle_recover_account` take the new
       `SecretBytes` / `SecretString` types, which zeroize on drop; the
       `let _ = (...)` bind-and-leak is replaced by an explicit `drop(...)` with a
       comment. (`sync/lib.rs`)
-- [x] **H5** — new `SecretBytes` (`Zeroizing<Vec<u8>>`) / `SecretString`
+- [x] **H5** -- new `SecretBytes` (`Zeroizing<Vec<u8>>`) / `SecretString`
       (`Zeroizing<String>`) IPC types carry the secret fields of
       `Unlock`/`SetupAccount`/`ChangePassphrase`/`RecoverAccount`: redacted
       `Debug`, wiped on drop everywhere along the relay, exposed only via `Deref`.
       The `bus/rest.rs` "zeroized after use" comment is now true. (`bus/rest.rs`,
       `sync/lib.rs`)
-- [x] **H2** — `get_document` returns 404 when the caller is neither a member nor
+- [x] **H2** -- `get_document` returns 404 when the caller is neither a member nor
       the owner, so `owner_id`/`doc_type`/existence no longer leak. Regression
       guard: `get_document_hidden_from_non_member`. (`server/routes/documents.rs`)
-- [x] **C1** — the S3 flusher error paths no longer log `blob_str` (which carries
+- [x] **C1** -- the S3 flusher error paths no longer log `blob_str` (which carries
       `update_b64` ciphertext); they log only `key`, `blob_len`, and once parsed
       `s3_key` / `seq`. (`server/s3.rs`)
 
-### Wave R3 — Crypto hardening (cheap, while the surface is small) [x]
+### Wave R3 -- Crypto hardening (cheap, while the surface is small) [x]
 
-- [x] **M13** — `signature::verify` and the server's `verify_update_signature`
+- [x] **M13** -- `signature::verify` and the server's `verify_update_signature`
       now use `verify_strict` (canonical `S`, no small-order `A`), closing
       signature malleability on the author-attribution primitive. The `Verifier`
       trait import is dropped on both sides (`verify_strict` is inherent).
       (`crypto/signature.rs`, `server/ws/handler/message.rs`)
-- [x] **M14** — the KEK is now derived via HKDF-BLAKE2b (`SimpleHkdf`, required
+- [x] **M14** -- the KEK is now derived via HKDF-BLAKE2b (`SimpleHkdf`, required
       by BLAKE2b's variable-output core) with
-      `info = KEK_DOMAIN ‖ sender_pk ‖ recipient_pk`; wrap/unwrap feed the
+      `info = KEK_DOMAIN || sender_pk || recipient_pk`; wrap/unwrap feed the
       identity pair in the matching sender/recipient order. `shared_secret`
       rejects a non-contributory (low-order) peer key with
       `CryptoError::WeakPublicKey`. Domain bumped to `ambre-kek-v2` (not
       wire-compatible with v1). Regression guards: `weak_peer_public_key_rejected`,
       `kek_binds_peer_identity`. (`crypto/ecdh.rs`, `crypto/error.rs`)
-- [x] **crypto-hygiene** — `aead::seal` returns `Result<_, CryptoError>`
+- [x] **crypto-hygiene** -- `aead::seal` returns `Result<_, CryptoError>`
       (`EncryptionFailed`) instead of `.expect`; the error propagates through
       `envelope::seal` and the `pipeline::seal_*` chain. `MasterSeed` no longer
       derives `Clone`; its raw `as_bytes` accessor is replaced by a named
@@ -693,51 +693,51 @@ Each story carries its finding ID, the file to touch, and the concrete action.
       `.expect("CSPRNG")` style; peer-facing `wrap_key_b64` propagates the error
       (invite fails, rotation skips the member). (`crypto/keys.rs`, `crypto/aead.rs`,
       `sync/pipeline.rs`, `sync/sharing.rs`, `sync/auth.rs`)
-- [x] **argon2-review** — confirmed against `Cargo.lock`: `argon2` 0.5.3, no
+- [x] **argon2-review** -- confirmed against `Cargo.lock`: `argon2` 0.5.3, no
       relevant RUSTSEC advisory. `LANES` kept at 1 (documented): the KDF runs in a
       single-threaded WASM worker, so `p > 1` only adds sequential work with no
       parallel speedup, and memory-hardness is governed by `MEM_KIB`, not the lane
       count. Params stay versioned so the lane count can rise if a threaded target
       lands. (`crypto/passphrase.rs`)
 
-### Wave R4 — Robustness / operational [x]
+### Wave R4 -- Robustness / operational [x]
 
-- [x] **H1** — `handle_update` now logs `append_pending_delta` / `doc_broadcast`
+- [x] **H1** -- `handle_update` now logs `append_pending_delta` / `doc_broadcast`
       failures at ERROR (instead of `let _ =`); a failed pending-push (the only
       path a sequenced delta takes to S3) is dead-lettered via the new
       `redis_ops::push_dead_letter` onto `doc:{id}:deadletter` for operator
       replay. (`server/ws/handler/message.rs`, `redis_ops.rs`)
-- [x] **M6** — fixed-window `INCR`/`EXPIRE` replaced by an atomic sliding-window
+- [x] **M6** -- fixed-window `INCR`/`EXPIRE` replaced by an atomic sliding-window
       sorted-set Lua script (`SLIDING_WINDOW_LUA`: prune/add/count/PEXPIRE in one
       round trip), killing the 2x boundary burst and the TTL-less-key window.
       The auth tier now fails **closed** (503) on a Redis outage
       (`RateLimitCategory::fail_closed`); API/WS stay fail-open. Guard:
       `only_auth_tier_fails_closed`. (`server/middleware/rate_limit.rs`)
-- [x] **M7** — OIDC init failure is no longer swallowed by `.ok().unwrap_or_default()`:
+- [x] **M7** -- OIDC init failure is no longer swallowed by `.ok().unwrap_or_default()`:
       when credentials are configured a discovery failure logs at ERROR and
       fail-fasts startup; when unconfigured it warns and disables provider login.
       (`server/main.rs`)
-- [x] **M9** — every Sync HTTP call attaches an `AbortSignal::timeout(30s)`
+- [x] **M9** -- every Sync HTTP call attaches an `AbortSignal::timeout(30s)`
       (`timeout_signal`), so a hung connection aborts instead of stalling the
       Sync worker future forever. `web-sys` gains the `AbortSignal` feature.
       (`sync/http.rs`, root `Cargo.toml`)
-- [x] **M10** — `SyncEvent::WsError` now tears down the dead socket
+- [x] **M10** -- `SyncEvent::WsError` now tears down the dead socket
       (`handle_ws_disconnected`) and takes the same `schedule_reconnect()` backoff
       path as `WsDisconnected`, instead of only logging; an `onerror` without a
       following `onclose` no longer stalls reconnection. (`sync/websocket.rs`)
-- [x] **M15** — the server `TraceLayer` span records only the URI *path*, never
+- [x] **M15** -- the server `TraceLayer` span records only the URI *path*, never
       the query string (the WS `?token=` JWT no longer reaches the access log);
       the reverse-proxy log-stripping requirement and a future one-time-ticket
       option are documented in `ambre-spec-server.md` sec.3 and on `WsQuery`.
       (`server/main.rs`, `ws/handler/mod.rs`, `spec-server.md`)
-- [x] **M17** — CORS is config-driven and default-deny: `CORS_ALLOWED_ORIGINS`
+- [x] **M17** -- CORS is config-driven and default-deny: `CORS_ALLOWED_ORIGINS`
       (comma-separated) drives an explicit allow-list; `allow_origin(Any)` is only
       reachable behind `DEV_MODE` (logged at startup). Parsing guard:
       `cors_tests`. (`server/main.rs`)
 
-### Wave R5 — Maintainability debt (no security impact) [x]
+### Wave R5 -- Maintainability debt (no security impact) [x]
 
-- [x] **trame-formula** — range registration in `formula/dag.rs` is already
+- [x] **trame-formula** -- range registration in `formula/dag.rs` is already
       two-level (O(ranges), not O(range_size)); the residual O(range_size) hazard
       was `eval_range` materializing one `CellValue` per member cell, so a peer's
       `=SUM(A1:ZZ100000)` could OOM a collaborator's Logic worker. Capped at
@@ -747,7 +747,7 @@ Each story carries its finding ID, the file to touch, and the concrete action.
       export cursor so the delta is retried instead of silently lost (which,
       with remote apply live, would mean permanent divergence).
       (`trame/src/logic/sync.rs`, `formula/vm.rs`)
-- [x] **trame-dedup** — the four `col_to_alpha`/`col_label`/`col_letter` copies
+- [x] **trame-dedup** -- the four `col_to_alpha`/`col_label`/`col_letter` copies
       and the two `alpha_to_col` copies now delegate to a single crate-level
       `columns` module; the five `lines() -> GlyphRun -> draw_glyphs` loops
       collapse into `render::text::draw_layout_runs` (+ a `_decorated` variant
@@ -755,7 +755,7 @@ Each story carries its finding ID, the file to touch, and the concrete action.
       reject a negative/non-finite length with `#NUM!` (`str_count_arg`, no more
       `as usize` wrap), `Pow` surfaces NaN/inf as `#NUM!`. (`trame/src/columns.rs`,
       `formula/vm.rs`, `formula/functions/builtins_a.rs`, `render/**`, `ui/**`)
-- [x] **canvas-eviction** — `TextCache` evicts by LRU (`last_used` tick) down to
+- [x] **canvas-eviction** -- `TextCache` evicts by LRU (`last_used` tick) down to
       a 75% low-water mark instead of `clear()`ing the whole map (M4). The glyph
       atlas keeps a per-glyph retained bitmap + `last_used` frame and, on
       overflow, defers to a next-frame `compact()` that repacks the last
@@ -763,7 +763,7 @@ Each story carries its finding ID, the file to touch, and the concrete action.
       no blank flash) instead of the old full-clear (M3). Deferred so it never
       rewrites UVs already baked into the current frame's vertex buffer.
       (`canvas/text_cache.rs`, `canvas/render/atlas.rs`)
-- [x] **canvas-gpu** — `webglcontextlost` (with the required `preventDefault`)
+- [x] **canvas-gpu** -- `webglcontextlost` (with the required `preventDefault`)
       and `webglcontextrestored` listeners are wired on the canvas;
       restore reconfigures the surface + offscreens and forces a full repaint
       (`FrameHost::notify_context_restored`). A `Lost`/`Outdated`
@@ -771,12 +771,12 @@ Each story carries its finding ID, the file to touch, and the concrete action.
       logging. The DPI watcher is fixed: the old `match_media("(resolution)")`
       never fired (no threshold); it now queries `(resolution: Ndppx)` and
       re-arms on each change (M1/M2). (`app/host/run.rs`, `app/host/frame.rs`)
-- [x] **canvas-stroke** — `stroke_rect` was already a non-overlapping
+- [x] **canvas-stroke** -- `stroke_rect` was already a non-overlapping
       picture-frame (two full-width horizontals owning the corners + two inset
       verticals), so the M5 translucent double-blend was closed by the refactor;
       documented, and guarded the degenerate rect-shorter-than-stroke case that
       would otherwise emit an inverted vertical quad. (`canvas/render/surface.rs`)
-- [x] **server-hygiene** — the flusher `ltrim` desync is fixed: it now trims by a
+- [x] **server-hygiene** -- the flusher `ltrim` desync is fixed: it now trims by a
       `processed` count that advances on BOTH successful uploads and dead-lettered
       poison entries and stops only on the first TRANSIENT failure, so a poison
       entry ahead of a good one no longer re-uploads the good one every cycle and
@@ -790,9 +790,9 @@ Each story carries its finding ID, the file to touch, and the concrete action.
       replay window the hash exists to close; growth is already membership-bound.
       (`server/s3.rs`, `ws/handler/message.rs`, `redis_ops.rs`)
 
-### Wave R6 — Organizations / key-escrow subsystem (new surface, 2026-07-08) [x]
+### Wave R6 -- Organizations / key-escrow subsystem (new surface, 2026-07-08) [x]
 
-- [x] **N1** — recovery is now `owner`-only (was `owner`/`admin`) and
+- [x] **N1** -- recovery is now `owner`-only (was `owner`/`admin`) and
       `create_org` rejects `shamir_threshold > 1` (plus a `1 <= threshold <= total`
       bounds check) via `validate_shamir_params`, so the schema never advertises a
       k-of-n quorum the server cannot enforce while threshold reconstruction is
@@ -800,12 +800,12 @@ Each story carries its finding ID, the file to touch, and the concrete action.
       single-authority contract loudly. Guards: `shamir_threshold_1_accepted`,
       `shamir_threshold_above_1_rejected_until_reconstruction_lands`,
       `shamir_out_of_range_rejected`. (`server/routes/orgs.rs`)
-- [x] **N2** — `invite_to_document` ranks roles (`doc_role_rank`: owner > editor >
+- [x] **N2** -- `invite_to_document` ranks roles (`doc_role_rank`: owner > editor >
       viewer) and clamps the granted role to `<= caller.role`, so only an `owner`
       may grant `owner`; an unknown role is rejected. Guards: `doc_role_rank_ordering`,
       `editor_cannot_grant_owner`, `owner_can_grant_any_valid_role`.
       (`server/routes/share.rs`)
-- [x] **N3** — `SetupAccountRequest` now carries client-supplied `email` /
+- [x] **N3** -- `SetupAccountRequest` now carries client-supplied `email` /
       `display_name` (plumbed through `RestCommand::SetupAccount`, the sync
       `handle_setup_account` -> `http::SetupAccountRequest`); the hardcoded
       `temp@ambre.app` / `"User"` is gone. Server-side `validate_identity` bounds
@@ -813,35 +813,35 @@ Each story carries its finding ID, the file to touch, and the concrete action.
       (non-empty, <= 128 chars). Guards: `validate_identity_*`.
       (`server/routes/documents.rs`, `sync/auth.rs`, `bus/rest.rs`, `sync/http.rs`)
 - [x] **R6-residuals**:
-      - **Signature transcript length-prefixed** — `signature::message` now frames
+      - **Signature transcript length-prefixed** -- `signature::message` now frames
         each field as `len(u32 LE) || bytes` (nonce, ciphertext, aad,
         commitment_tag), so the ciphertext|aad boundary is unambiguous. The
         server's independent `verify_update_signature` mirrors the exact framing
         (`push_framed`, must stay byte-identical, documented on both sides). Guards:
         `ciphertext_aad_boundary_is_unambiguous`, `sign_then_verify_roundtrips`.
         (`crypto/signature.rs`, `server/ws/handler/message.rs`)
-      - **Sync `AuthError` sanitized** — the unlock error paths no longer leak
+      - **Sync `AuthError` sanitized** -- the unlock error paths no longer leak
         crypto detail (algorithm names, key/salt lengths, decrypt specifics) into
         the user-facing message; they emit two generic strings
         (`account data is corrupted` / `incorrect passphrase or corrupted account
         data`) and log the concrete cause at WARN. (`sync/auth.rs`)
-      - **Ephemeral remote-counter map bounded** — `accept_ephemeral_counter` caps
+      - **Ephemeral remote-counter map bounded** -- `accept_ephemeral_counter` caps
         the per-document map at `MAX_EPHEMERAL_REMOTE_AUTHORS` (512) and evicts the
         least-active (lowest-counter) author at the cap, so a peer minting
         arbitrary signing keys can no longer grow it without bound. Guards:
         `monotonic_counter_accepted_replay_dropped`, `author_map_is_bounded`.
         (`sync/lib.rs`, `sync/websocket.rs`)
 
-### Wave R7 — Account-setup path (surfaced during R6) [x]
+### Wave R7 -- Account-setup path (surfaced during R6) [x]
 
-- [x] **N4** — the passphrase no longer ships to the server: the `passphrase`
+- [x] **N4** -- the passphrase no longer ships to the server: the `passphrase`
       field is removed from both the sync `http::SetupAccountRequest` and the
       server `SetupAccountRequest` (the server only receives `master_key_enc` +
       `master_key_salt`), restoring the Zero-Knowledge invariant; the invariant
       is documented on both structs. The sync worker also stops logging the
       passphrase length on the Unlock/SetupAccount paths (secret metadata in
       the console). (`sync/auth.rs`, `sync/http.rs`, `server/routes/documents.rs`)
-- [x] **N5** — `users.email` is now globally unique, case-insensitively
+- [x] **N5** -- `users.email` is now globally unique, case-insensitively
       (`users_email_lower_unique` on `lower(email)`). Collision policy settled:
       the email namespace is shared by ALL providers (setup / oidc / dev) and
       the first claimant wins; a later claim -- a `/auth/setup` insert or an

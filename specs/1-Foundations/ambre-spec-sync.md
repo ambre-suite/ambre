@@ -1,13 +1,13 @@
-# AMBRE — SPEC: AMBRE-SYNC (SECSYNC MODULE)
+# AMBRE -- SPEC: AMBRE-SYNC (SECSYNC MODULE)
 **Type:** Horizontal (Layer / Engine)
 **Status:** Draft
 **Implementation:** partial
 
-> End-to-end encrypted synchronization layer between WASM clients and the Blind Relay. This module implements the SecSync protocol in pure Rust: it transforms CRDT deltas produced by the Logic thread into cryptographically sealed messages, routes them via WebSocket, and re-injects remote updates into the Loro document — without ever exposing plaintext outside the client process.
+> End-to-end encrypted synchronization layer between WASM clients and the Blind Relay. This module implements the SecSync protocol in pure Rust: it transforms CRDT deltas produced by the Logic thread into cryptographically sealed messages, routes them via WebSocket, and re-injects remote updates into the Loro document -- without ever exposing plaintext outside the client process.
 >
-> `ambre-sync` runs exclusively in the **Sync worker** — a *separate* WASM instance with its **own** linear memory, in a dedicated `web_sys::Worker` (not a `wasm_thread`; see the two-instance rationale in `ambre-spec-architecture.md §1/§6`). It has no access to the `LoroDoc` (Logic thread) or the WebGPU canvas (UI thread).
+> `ambre-sync` runs exclusively in the **Sync worker** -- a *separate* WASM instance with its **own** linear memory, in a dedicated `web_sys::Worker` (not a `wasm_thread`; see the two-instance rationale in `ambre-spec-architecture.md section 1/section 6`). It has no access to the `LoroDoc` (Logic thread) or the WebGPU canvas (UI thread).
 >
-> **Architecture note.** Two-instance model (`ambre-spec-architecture.md §1/§2.B`): the **Main** instance runs UI + Logic (`wasm_thread`, shared memory, `flume`); the **Sync** worker is a *separate* WASM instance reached over `postMessage`. For `ambre-sync`: (1) Logic ↔ Sync envelopes (`SyncCommand`/`LogicEvent`) are `postcard`-encoded on the `postMessage` hop (the Main thread relays), while inside the Sync worker `flume` carries typed values by move between its own `onmessage` and its WS/HTTP callbacks; (2) the entry point is `ambre_sync::run(from_logic, to_logic)`, driven by `worker.rs`; (3) **postcard applies on the network wire** (`ambre-protocol`) **and** on the Main ↔ Sync `postMessage` hop. The crypto pipeline, quarantine, batching, and security are described below.
+> **Architecture note.** Two-instance model (`ambre-spec-architecture.md section 1/section 2.B`): the **Main** instance runs UI + Logic (`wasm_thread`, shared memory, `flume`); the **Sync** worker is a *separate* WASM instance reached over `postMessage`. For `ambre-sync`: (1) Logic <-> Sync envelopes (`SyncCommand`/`LogicEvent`) are `postcard`-encoded on the `postMessage` hop (the Main thread relays), while inside the Sync worker `flume` carries typed values by move between its own `onmessage` and its WS/HTTP callbacks; (2) the entry point is `ambre_sync::run(from_logic, to_logic)`, driven by `worker.rs`; (3) **postcard applies on the network wire** (`ambre-protocol`) **and** on the Main <-> Sync `postMessage` hop. The crypto pipeline, quarantine, batching, and security are described below.
 
 ---
 
@@ -21,40 +21,40 @@
 |---|---|---|
 | `ambre-core` | Fundamental types (`Uuid`, `DocType`) | Common foundation |
 | `ambre-crypto` | Crypto primitives (`MasterSeed`, `DocumentKey`, AEAD, sign, Argon2) | Sole crypto consumer client-side |
-| `ambre-protocol` | Network types (`Update`, `Snapshot`, `Ephemeral`, `WsClientMsg`, `WsServerMsg`) | Single source of truth — no local redefinition |
-| `ambre-bus` | `SyncCommand`, `LogicEvent` (+ `RestCommand`/`RestEvent`/`RequestId`, `ambre-core` re-exports) | **Typed** interface with the Logic thread — values travel by move on `flume`, **no (de)serialization**. `ambre-sync` does not depend directly on `ambre-core` (types via `ambre-bus` re-export). |
-| `chacha20poly1305` (RustCrypto) | XChaCha20-Poly1305 AEAD | Via `ambre-crypto` — listed here for transitive dependency clarity |
+| `ambre-protocol` | Network types (`Update`, `Snapshot`, `Ephemeral`, `WsClientMsg`, `WsServerMsg`) | Single source of truth -- no local redefinition |
+| `ambre-bus` | `SyncCommand`, `LogicEvent` (+ `RestCommand`/`RestEvent`/`RequestId`, `ambre-core` re-exports) | **Typed** interface with the Logic thread -- values travel by move on `flume`, **no (de)serialization**. `ambre-sync` does not depend directly on `ambre-core` (types via `ambre-bus` re-export). |
+| `chacha20poly1305` (RustCrypto) | XChaCha20-Poly1305 AEAD | Via `ambre-crypto` -- listed here for transitive dependency clarity |
 | `ed25519-dalek` | Ed25519 signature | Via `ambre-crypto` |
 | `blake2` + `hmac` + `sha2` | Hash and commitment tag | Via `ambre-crypto` |
-| `ruzstd` | zstd compression AND decompression | Pure Rust, `wasm32` compatible — single crate for both directions |
+| `ruzstd` | zstd compression AND decompression | Pure Rust, `wasm32` compatible -- single crate for both directions |
 | `rand_core` + `getrandom` | Nonce generation | `getrandom` with `wasm_js` feature for WASM |
 | `lru` | LRU cache for `old_keys` and quarantine | Bounded, minimal allocation |
-| `flume` | Logic ↔ Sync inter-thread channels | **Typed** transport (`SyncCommand`/`LogicEvent`) by move over shared memory. Entry point `run(from_logic, to_logic)`. Used in WASM **and** native (tests). |
+| `flume` | Logic <-> Sync inter-thread channels | **Typed** transport (`SyncCommand`/`LogicEvent`) by move over shared memory. Entry point `run(from_logic, to_logic)`. Used in WASM **and** native (tests). |
 | `postcard` | Network wire encoding | **Only** via `ambre-protocol` (WebSocket): `[version_byte] [postcard(WsServerMsg)]`. No postcard on the inter-thread path. |
-| `gloo-net` (`websocket` + `http` features) | WASM WebSocket + HTTP fetch | `web_sys::WebSocket` + `web_sys::fetch` wrapped — **`!Send`, confined to the Sync thread**. (Forward-looking placeholder today; code uses `web_sys::WebSocket` directly.) |
+| `gloo-net` (`websocket` + `http` features) | WASM WebSocket + HTTP fetch | `web_sys::WebSocket` + `web_sys::fetch` wrapped -- **`!Send`, confined to the Sync thread**. (Forward-looking placeholder today; code uses `web_sys::WebSocket` directly.) |
 | `web-sys` + `js-sys` + `wasm-bindgen` | `WebSocket` + async glue | The socket and its `onmessage`/`onclose` closures live in the Sync thread. |
-| `wasm-bindgen-futures` | `spawn_local` for async operations | Rust future bridge → JS event loop (HTTP fetch, WebSocket connect, rotation) |
+| `wasm-bindgen-futures` | `spawn_local` for async operations | Rust future bridge -> JS event loop (HTTP fetch, WebSocket connect, rotation) |
 | `tokio-tungstenite` (`cfg not(wasm32)`) | Native WebSocket for tests | Headless test backend only |
 
-> **Transport note.** The Sync worker is a **separate WASM instance**, so `SyncCommand`/`LogicEvent` cross the Main ↔ Sync boundary as `postcard`-encoded `postMessage` payloads (big blobs on a Transferable `ArrayBuffer`), relayed by the Main thread. **Inside** the worker, `worker.rs` decodes each `SyncCommand` in its `onmessage` and pushes it onto an **internal** `flume` channel; `run_wasm` runs a **non-blocking** `select!` loop over that channel plus the WS/HTTP event channel, and emits `LogicEvent` back through a `LogicSink` closure that `postcard`-encodes + `postMessage`s to Main. Both ends of every internal `flume` live **in this same worker**, so flume's async waker fires correctly (the old cross-worker `Atomics.wait` freeze — Sync being a `wasm_thread` blocking on a channel fed from another worker — no longer exists; see `ambre-spec-architecture.md §2.B/§6`). In native tests `run(from_logic, to_logic)` is driven directly over `flume`.
+> **Transport note.** The Sync worker is a **separate WASM instance**, so `SyncCommand`/`LogicEvent` cross the Main <-> Sync boundary as `postcard`-encoded `postMessage` payloads (big blobs on a Transferable `ArrayBuffer`), relayed by the Main thread. **Inside** the worker, `worker.rs` decodes each `SyncCommand` in its `onmessage` and pushes it onto an **internal** `flume` channel; `run_wasm` runs a **non-blocking** `select!` loop over that channel plus the WS/HTTP event channel, and emits `LogicEvent` back through a `LogicSink` closure that `postcard`-encodes + `postMessage`s to Main. Both ends of every internal `flume` live **in this same worker**, so flume's async waker fires correctly (the old cross-worker `Atomics.wait` freeze -- Sync being a `wasm_thread` blocking on a channel fed from another worker -- no longer exists; see `ambre-spec-architecture.md section 2.B/section 6`). In native tests `run(from_logic, to_logic)` is driven directly over `flume`.
 
-> **Note on `ambre-bus`:** `ambre-sync` depends on `ambre-bus` for `SyncCommand`/`LogicEvent` (+ the `RestCommand`/`RestEvent`/`RequestId` service family) — not for `LogicCommand`, `UiEvent`, or UI types.
+> **Note on `ambre-bus`:** `ambre-sync` depends on `ambre-bus` for `SyncCommand`/`LogicEvent` (+ the `RestCommand`/`RestEvent`/`RequestId` service family) -- not for `LogicCommand`, `UiEvent`, or UI types.
 
-**Invariants:** grammar and status values in `ambre-spec-architecture.md §4`; the boundary-level rules these refine are `ZK-001..ZK-008` in `ambre-spec-architecture.md §3`.
+**Invariants:** grammar and status values in `ambre-spec-architecture.md section 4`; the boundary-level rules these refine are `ZK-001..ZK-008` in `ambre-spec-architecture.md section 3`.
 
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
-| `SYNC-001` | The Sync worker MUST NOT hand `WsTransport` a payload that has not passed through the sealing pipeline. | `ZK-001`; §2.B | none. This spec used to claim a static property over a `PlaintextPayload` type **that does not exist in the tree**, and `Ciphertext(pub Vec<u8>)` accepts any bytes | unverified |
-| `SYNC-002` | The `DocumentKey` and the private signing key MUST NOT appear in any outbound message; only `pub_key` travels, inside `public_data`. | `ZK-002`; §3 Boundary Audit | crate graph (`ZK-002`) + `ZeroizeOnDrop` on both types | verified |
-| `SYNC-003` | Every sealed message MUST use a fresh 192-bit XChaCha20 nonce drawn from the CSPRNG. | §2.B | none. Sealing is exercised (`ambre_crypto::tests::prop_roundtrip_encrypt_decrypt`), nonce freshness is asserted nowhere | unverified |
-| `SYNC-004` | A message MUST NOT be replayable into another document: the `commitment_tag` binds the ciphertext to its `document_id`. | §3 Attack Prevention | `ambre_sync::pipeline::tests::tampered_document_id_rejected`; `ambre_crypto::tests::commitment_tag_wrong_aad_rejected` | verified |
-| `SYNC-005` | An update sealed under a different `DocumentKey` MUST be rejected, never applied. | §3 Attack Prevention | `ambre_sync::pipeline::tests::wrong_document_key_rejected`; `ambre_crypto::tests::tampered_ciphertext_fails`, `::prop_single_byte_mutation_fails` | verified |
-| `SYNC-006` | Updates MUST be applied in `(snapshot_id, clock)` order; an update whose parent snapshot is unknown MUST be quarantined, not applied. | §2.E | `ambre_sync::updates::tests::update_with_unknown_snapshot_quarantined`, `::quarantine_released_in_clock_order`, `::update_with_known_snapshot_delivered_immediately` | verified |
-| `SYNC-007` | The quarantine MUST be bounded: on overflow the oldest entry is dropped and a warning emitted. | §2.E | `ambre_sync::updates::tests::quarantine_overflow_drops_oldest_and_warns` | verified |
-| `SYNC-008` | An `Ephemeral` frame whose `counter` is not greater than the last one seen for its `(pub_key, document_id)` MUST be dropped. | §3 Attack Prevention | `ambre_sync::tests::monotonic_counter_accepted_replay_dropped` | verified |
-| `SYNC-009` | Decompression MUST be bounded by a size ceiling and MUST reject an unknown compression version. | §2.B | `ambre_sync::pipeline::tests::decompress_bomb_rejected`, `::decompress_unknown_version_rejected`, `::decompress_within_ceiling_ok` | verified |
-| `SYNC-010` | A shared `DocumentKey` MUST be wrapped for the invitee's X25519 exchange key alone. | §3 Document Sharing | `ambre_sync::sharing::tests::invite_request_wraps_for_the_invitee_only`; `ambre_crypto::tests::kek_binds_peer_identity`, `::weak_peer_public_key_rejected` | verified |
-| `SYNC-011` | The Sync worker MUST compile neither CRDT nor UI code. | §1 Scope | crate graph: `ambre-sync` declares neither `loro` nor `ambre-canvas`; `deny.toml` bans `loro` outside the four app crates | verified |
+| `SYNC-001` | The Sync worker MUST NOT hand `WsTransport` a payload that has not passed through the sealing pipeline. | `ZK-001`; section 2.B | none. This spec used to claim a static property over a `PlaintextPayload` type **that does not exist in the tree**, and `Ciphertext(pub Vec<u8>)` accepts any bytes | unverified |
+| `SYNC-002` | The `DocumentKey` and the private signing key MUST NOT appear in any outbound message; only `pub_key` travels, inside `public_data`. | `ZK-002`; section 3 Boundary Audit | crate graph (`ZK-002`) + `ZeroizeOnDrop` on both types | verified |
+| `SYNC-003` | Every sealed message MUST use a fresh 192-bit XChaCha20 nonce drawn from the CSPRNG. | section 2.B | none. Sealing is exercised (`ambre_crypto::tests::prop_roundtrip_encrypt_decrypt`), nonce freshness is asserted nowhere | unverified |
+| `SYNC-004` | A message MUST NOT be replayable into another document: the `commitment_tag` binds the ciphertext to its `document_id`. | section 3 Attack Prevention | `ambre_sync::pipeline::tests::tampered_document_id_rejected`; `ambre_crypto::tests::commitment_tag_wrong_aad_rejected` | verified |
+| `SYNC-005` | An update sealed under a different `DocumentKey` MUST be rejected, never applied. | section 3 Attack Prevention | `ambre_sync::pipeline::tests::wrong_document_key_rejected`; `ambre_crypto::tests::tampered_ciphertext_fails`, `::prop_single_byte_mutation_fails` | verified |
+| `SYNC-006` | Updates MUST be applied in `(snapshot_id, clock)` order; an update whose parent snapshot is unknown MUST be quarantined, not applied. | section 2.E | `ambre_sync::updates::tests::update_with_unknown_snapshot_quarantined`, `::quarantine_released_in_clock_order`, `::update_with_known_snapshot_delivered_immediately` | verified |
+| `SYNC-007` | The quarantine MUST be bounded: on overflow the oldest entry is dropped and a warning emitted. | section 2.E | `ambre_sync::updates::tests::quarantine_overflow_drops_oldest_and_warns` | verified |
+| `SYNC-008` | An `Ephemeral` frame whose `counter` is not greater than the last one seen for its `(pub_key, document_id)` MUST be dropped. | section 3 Attack Prevention | `ambre_sync::tests::monotonic_counter_accepted_replay_dropped` | verified |
+| `SYNC-009` | Decompression MUST be bounded by a size ceiling and MUST reject an unknown compression version. | section 2.B | `ambre_sync::pipeline::tests::decompress_bomb_rejected`, `::decompress_unknown_version_rejected`, `::decompress_within_ceiling_ok` | verified |
+| `SYNC-010` | A shared `DocumentKey` MUST be wrapped for the invitee's X25519 exchange key alone. | section 3 Document Sharing | `ambre_sync::sharing::tests::invite_request_wraps_for_the_invitee_only`; `ambre_crypto::tests::kek_binds_peer_identity`, `::weak_peer_public_key_rejected` | verified |
+| `SYNC-011` | The Sync worker MUST compile neither CRDT nor UI code. | section 1 Scope | crate graph: `ambre-sync` declares neither `loro` nor `ambre-canvas`; `deny.toml` bans `loro` outside the four app crates | verified |
 | `SYNC-012` | A failed unwrap of the remote `DocumentKey` MUST NOT be silently replaced by a freshly generated key. | derived (audit `H3`) | none. `updates.rs` still maps `Ok(None) \| Err(_)` to `DocumentKey::generate()` and opens the document local-only, so a transient error and a genuinely new document are indistinguishable | unverified |
 | `SYNC-013` | Application code MUST contain no `unsafe`. | pillar "Security" | measured zero `unsafe` workspace-wide, but `ambre-sync` carries no `#![forbid(unsafe_code)]` | unverified |
 
@@ -186,16 +186,16 @@ struct SyncDocumentState {
 }
 ```
 
-> **`LogicSink`, not a transport trait.** Outbound `LogicEvent`s go through a thin `LogicSink` closure — a
+> **`LogicSink`, not a transport trait.** Outbound `LogicEvent`s go through a thin `LogicSink` closure -- a
 > `postMessage`(postcard) sink in the worker instance, a `flume`-backed sink (`LogicSink::channel`) in native
-> tests (same seam architecture §4 uses to host-test `SyncState`). Inbound `SyncCommand`s arrive via `onmessage`
+> tests (same seam architecture section 4 uses to host-test `SyncState`). Inbound `SyncCommand`s arrive via `onmessage`
 > (worker) or a `flume::Receiver` (native). No heavyweight transport abstraction.
 
 **Execution model (separate instance, non-blocking loop):**
 
-`worker.rs` is the Sync worker's `#[wasm_bindgen(start)]` entry (its own instance). It (1) sets `onmessage` to `postcard`-decode each `SyncCommand` and push it onto an internal `flume` command channel, and (2) `spawn_local`s the async `run_wasm` loop, a **non-blocking** `select!` over that command channel and the internal WS/HTTP `SyncEvent` channel: `select { cmd = cmd_rx.recv_async() => handle_command(cmd), frame = ws.next() if to_logic_not_full => handle_ws(frame) }`. Network I/O (HTTP fetch presigned URLs, key rotation, WS connect) is driven by `wasm_bindgen_futures::spawn_local` / `JsFuture` on the worker's **free JS event loop**. The WS branch is **disabled while the outbound path to Main is full** (backpressure: Sync stops reading the socket → TCP backpressure; see `ambre-spec-architecture.md §7 ARCH P1`, "cyclic deadlock"). Because Sync is its **own** instance (not a `wasm_thread`), the loop never had to choose between blocking its stack to stay alive and keeping a free event loop for the socket — the historical freeze is gone by construction.
+`worker.rs` is the Sync worker's `#[wasm_bindgen(start)]` entry (its own instance). It (1) sets `onmessage` to `postcard`-decode each `SyncCommand` and push it onto an internal `flume` command channel, and (2) `spawn_local`s the async `run_wasm` loop, a **non-blocking** `select!` over that command channel and the internal WS/HTTP `SyncEvent` channel: `select { cmd = cmd_rx.recv_async() => handle_command(cmd), frame = ws.next() if to_logic_not_full => handle_ws(frame) }`. Network I/O (HTTP fetch presigned URLs, key rotation, WS connect) is driven by `wasm_bindgen_futures::spawn_local` / `JsFuture` on the worker's **free JS event loop**. The WS branch is **disabled while the outbound path to Main is full** (backpressure: Sync stops reading the socket -> TCP backpressure; see `ambre-spec-architecture.md section 7 ARCH P1`, "cyclic deadlock"). Because Sync is its **own** instance (not a `wasm_thread`), the loop never had to choose between blocking its stack to stay alive and keeping a free event loop for the socket -- the historical freeze is gone by construction.
 
-**Startup readiness handshake (mandatory).** The worker installs its inbound `onmessage` only at the **end** of its asynchronous WASM bootstrap. Any `SyncCommand` Main `postMessage`s *before* that instant falls into the bootstrap window and is **silently dropped** (no handler exists yet). This is a timing race: the boot `DevLogin` is enqueued by Main during launch, before the worker's spawn even returns, so on a slow-coming-up worker it was lost — leaving `signing_key` unset, every subsequent `OpenDocument` parked in `pending_opens` ("queuing OpenDocument until session ready"), and the document stuck forever behind the loading overlay. Devtools-open masked it by slowing Main enough that the command left after the worker was ready (a classic Heisenbug). The contract, therefore: as the **last** step of its `#[wasm_bindgen(start)]`, right after `set_onmessage`, the worker posts a **readiness sentinel** — an empty payload (a `postcard`-encoded `LogicEvent` is never zero-length, so emptiness is unambiguous). Main's Logic→Sync relay treats every command as **buffered until** it observes that sentinel: commands wait in the `logic_to_sync` `flume` channel (FIFO order preserved) and **nothing is posted into the bootstrap window**. This makes delivery timing-independent for `DevLogin` and every other early command. Do not paper over it by delaying the `DevLogin` dispatch — buffering on the relay is the general fix; a delay only narrows the race.
+**Startup readiness handshake (mandatory).** The worker installs its inbound `onmessage` only at the **end** of its asynchronous WASM bootstrap. Any `SyncCommand` Main `postMessage`s *before* that instant falls into the bootstrap window and is **silently dropped** (no handler exists yet). This is a timing race: the boot `DevLogin` is enqueued by Main during launch, before the worker's spawn even returns, so on a slow-coming-up worker it was lost -- leaving `signing_key` unset, every subsequent `OpenDocument` parked in `pending_opens` ("queuing OpenDocument until session ready"), and the document stuck forever behind the loading overlay. Devtools-open masked it by slowing Main enough that the command left after the worker was ready (a classic Heisenbug). The contract, therefore: as the **last** step of its `#[wasm_bindgen(start)]`, right after `set_onmessage`, the worker posts a **readiness sentinel** -- an empty payload (a `postcard`-encoded `LogicEvent` is never zero-length, so emptiness is unambiguous). Main's Logic->Sync relay treats every command as **buffered until** it observes that sentinel: commands wait in the `logic_to_sync` `flume` channel (FIFO order preserved) and **nothing is posted into the bootstrap window**. This makes delivery timing-independent for `DevLogin` and every other early command. Do not paper over it by delaying the `DevLogin` dispatch -- buffering on the relay is the general fix; a delay only narrows the race.
 
 ### B. Cryptographic Pipeline
 
@@ -218,7 +218,7 @@ PlaintextPayload = [version_byte | data]
   │  nonce = getrandom::<[u8; 24]>()
   │  aad   = postcard::to_stdvec(&public_data)  ← binds ciphertext to metadata
   ▼
-ciphertext (Poly1305 tag integrated — authenticity guaranteed)
+ciphertext (Poly1305 tag integrated -- authenticity guaranteed)
   │
   │  HMAC-SHA256(document_key, nonce || ciphertext || public_data_bytes)
   │  → commitment_tag: [u8; 32]  ← key-commitment (XChaCha20-Poly1305 is not key-committing)
@@ -232,7 +232,7 @@ ambre_protocol::{Update|Snapshot|Ephemeral} ready to send via WsClientMsg
 
 > **commitment_tag note:** The HMAC-SHA256 tag is distinct from the AEAD Poly1305 tag. It serves as proof of key-commitment: XChaCha20-Poly1305 is not key-committing (a given ciphertext can theoretically be decrypted by two different keys). HMAC(document_key, ...) cryptographically binds the message to a specific key, preventing a compromised server from re-injecting a ciphertext into another document context.
 
-> **Snapshots note:** Encrypted `Snapshot` messages do not transit via WebSocket — they are uploaded/downloaded via S3 presigned URLs (see `ambre-spec-server.md` §2.B). The crypto pipeline is identical, only the transport differs.
+> **Snapshots note:** Encrypted `Snapshot` messages do not transit via WebSocket -- they are uploaded/downloaded via S3 presigned URLs (see `ambre-spec-server.md` section 2.B). The crypto pipeline is identical, only the transport differs.
 
 **Decryption (symmetrical path):**
 
@@ -259,7 +259,7 @@ CRDT bytes → send_to_logic(LogicEvent::RemoteUpdate { .. })   // via LogicSink
 
 **Key to use during decryption:**
 - If `public_data.snapshot_id` corresponds to a snapshot encrypted with an old key (post-rotation), look up in `old_keys` before using `document_key`.
-- If absent from `old_keys` → `Err(UnknownKey)` → quarantine + `SyncWarning`.
+- If absent from `old_keys` -> `Err(UnknownKey)` -> quarantine + `SyncWarning`.
 
 ### C. Interface Contract (API)
 
@@ -300,9 +300,9 @@ impl SyncState {
 }
 ```
 
-> `RequestId` is **allocated by the UI**, echoed by Logic, then echoed by Sync in the response — `ambre-sync` merely re-emits it via `reply`. **Errors** are not in `RestEvent`: they arrive as `LogicEvent::AuthError`/`ApiError` (may be response **or** spontaneous).
+> `RequestId` is **allocated by the UI**, echoed by Logic, then echoed by Sync in the response -- `ambre-sync` merely re-emits it via `reply`. **Errors** are not in `RestEvent`: they arrive as `LogicEvent::AuthError`/`ApiError` (may be response **or** spontaneous).
 
-`SyncCommand`/`LogicEvent` types (+ `RestCommand`/`RestEvent`/`RequestId`) are defined in `ambre-bus` and imported here — see `ambre-spec-architecture.md §2.D` (typed data plane, three planes, and business types `DocumentSummary`/`MemberInfo`/`UserInfo`/...).
+`SyncCommand`/`LogicEvent` types (+ `RestCommand`/`RestEvent`/`RequestId`) are defined in `ambre-bus` and imported here -- see `ambre-spec-architecture.md section 2.D` (typed data plane, three planes, and business types `DocumentSummary`/`MemberInfo`/`UserInfo`/...).
 
 ### D. Data Flow
 
@@ -396,7 +396,7 @@ Reception SyncCommand::SendSnapshot
 
 ### G. Authentication & WebSocket Resilience
 
-The server uses **no cookie**: a stateless EdDSA access JWT (TTL 900s) + an opaque revocable refresh token (see `ambre-spec-server.md §3`). The Sync worker is the sole holder of both.
+The server uses **no cookie**: a stateless EdDSA access JWT (TTL 900s) + an opaque revocable refresh token (see `ambre-spec-server.md section 3`). The Sync worker is the sole holder of both.
 
 **Token store (`AuthContext`).** Access + refresh tokens are held **in memory** in the Sync worker (never `localStorage`/cookies). `Unlock`/`SetupAccount`/`dev-login` parse the JSON login body (`{ access_token, refresh_token, access_expires_in }`) into the store. Every REST call sends `Authorization: Bearer <access_token>`; the WebSocket carries the access token in the **`?token=<jwt>`** query parameter (browser WS forbids custom headers).
 
@@ -441,10 +441,10 @@ onopen ──► resubscribe_all(): for each server-created doc, ws_send(Subscri
 | Data | Leaves the client? | Wire form | Guarantee |
 |---|---|---|---|
 | CRDT content (text, data) | Yes | XChaCha20-Poly1305 ciphertext | Blind Relay sees `ciphertext` + `nonce`, never plaintext |
-| Document Key | No | Stays in `SyncState` — ZeroizeOnDrop | Never in a network message |
+| Document Key | No | Stays in `SyncState` -- ZeroizeOnDrop | Never in a network message |
 | Signing Key (private) | No | Same | Only `pub_key` in `public_data` |
 | Compression version | No | Encoded in AEAD ciphertext | Opaque to the server |
-| `document_id`, `pub_key`, `clock`, `seq` | Yes | Plaintext in `public_data` | Minimal routing metadata — does not reveal content |
+| `document_id`, `pub_key`, `clock`, `seq` | Yes | Plaintext in `public_data` | Minimal routing metadata -- does not reveal content |
 | Cursors / presence | Yes | Encrypted in `Ephemeral` payload | Server never sees cursor or name in plaintext |
 
 **Accepted metadata leak (MVP):** the Blind Relay infers "a client with public key X modified document Y at instant T". This information is deemed acceptable for MVP.
@@ -458,18 +458,18 @@ onopen ──► resubscribe_all(): for each server-created doc, ws_send(Subscri
 - **Double Compaction**: Redis lock `SET NX TTL 30s` server-side + `compaction_lock` client-side.
 - **Plaintext presence**: Ephemeral payloads (cursor, selection, name) are **encrypted** with the Document Key before sending. The server only sees `document_id`, `pub_key`, `counter`.
 
-### Presence identity — `pub_key` → canonical `UserId`
+### Presence identity -- `pub_key` -> canonical `UserId`
 
 An `Ephemeral` frame authenticates its author by the Ed25519 `public_data.pub_key`
 (verified at reception, sec.2.F). That key is **per-session/per-device**, so it is
 the wrong key for presence: the same user on two devices would otherwise show up as
 two collaborators in two colors, and it cannot be reconciled with the cross-app
 peer color/name (`ambre_draw::peer::peer_color`, hashed on the canonical `UserId`;
-see `ambre-spec-canvas.md §D`). The app engines
-therefore require presence keyed by the **canonical `UserId`** (`toile-logic §7`,
-`trame-logic §7`, `prose-logic §2` `apply_ephemeral`): the Sync thread must resolve
+see `ambre-spec-canvas.md section D`). The app engines
+therefore require presence keyed by the **canonical `UserId`** (`toile-logic section 7`,
+`trame-logic section 7`, `prose-logic section 2` `apply_ephemeral`): the Sync thread must resolve
 the author `pub_key` to a `UserId`
-**before** delivering the frame, and it does so on the trusted side — a peer cannot
+**before** delivering the frame, and it does so on the trusted side -- a peer cannot
 put another user's id in the payload.
 
 Consequently `LogicEvent::RemoteEphemeral` carries a resolved
@@ -486,14 +486,14 @@ thread builds `signing_keys: HashMap<[u8; 32], UserId>` on
 `SyncDocumentState` from the members list at open, and
 `resolve_ephemeral_author` is a lookup in it. The map is rebuilt when membership
 changes (invite / revoke / role change). An author key absent from the directory
-is **not** resolved and the frame is **dropped** — presence is best-effort, and a
+is **not** resolved and the frame is **dropped** -- presence is best-effort, and a
 cursor is never shown under a guessed identity.
 
 This directory is a *membership* directory, not a *trust* store: it answers "which
 member authored this frame", trusting the server's key mapping. Detecting a server
 that substitutes a member's keys is the TOFU trusted-keys store's job
-(architecture §3, server "Public Key Trust Model"), a separate and orthogonal
-concern — presence resolution does not wait on it.
+(architecture section 3, server "Public Key Trust Model"), a separate and orthogonal
+concern -- presence resolution does not wait on it.
 
 The `MemberInfo` bus type deliberately stays key-free (`user_id`, `display_name`,
 `email`, `role`): the directory lives in the Sync thread, which is the only side
@@ -502,12 +502,12 @@ that verifies ephemeral signatures. Key material does not cross to Logic/UI.
 The anti-replay counter (sec. above) stays keyed by `pub_key`: it is a per-device
 replay guard, orthogonal to the per-user presence identity.
 
-### Document Sharing — Key Wrapping
+### Document Sharing -- Key Wrapping
 
 The DocumentKey is shared via **static X25519 ECDH**: the wrapper seals it under a
 KEK derived from `ECDH(wrapper_secret, recipient_pubkey)`; the recipient recovers
 it with `ECDH(recipient_secret, wrapper_pubkey)`. The shared secret is symmetric,
-so **the recipient must unwrap against the WRAPPER's exchange public key — never
+so **the recipient must unwrap against the WRAPPER's exchange public key -- never
 its own.** Using `entry.exchange_pub_key` (the recipient's own key) silently
 derives the wrong secret.
 
@@ -519,7 +519,7 @@ derives the wrong secret.
   user's exchange key, via a `LEFT JOIN`). `unwrap_document_key` and the
   `KeyRotationRequired` handler both unwrap against it (falling back to the
   member's own key only for legacy rows without `invited_by`).
-- **Failure handling:** a failed unwrap MUST be treated as an error — never
+- **Failure handling:** a failed unwrap MUST be treated as an error -- never
   fall back to a freshly generated DocumentKey for a server-existing document.
   A bogus key makes the client encrypt and push **undecryptable** updates,
   permanently poisoning the shared history (every peer hits a commitment-tag
@@ -529,21 +529,21 @@ derives the wrong secret.
 subscriber of `doc:{document_id}`, so the server pushes `DocumentShared
 { document_id, doc_type }` on the per-user channel `user:{invitee_id}` (see
 server spec sec.7). The Sync thread forwards it as `LogicEvent::DocumentShared`
-→ `UiEvent::DocumentShared`; the UI refreshes its document list and notifies the
+-> `UiEvent::DocumentShared`; the UI refreshes its document list and notifies the
 user, with no polling and no manual reload.
 
-### Document Key Rotation — Full Flow
+### Document Key Rotation -- Full Flow
 
 Two triggers: (A) the initiator client revokes a member via `SyncCommand::RevokeFromDocument`, (B) other clients receive `WsServerMsg::KeyRotationRequired` via WebSocket.
 
-Rotation is **entirely orchestrated by the Sync thread** — the Logic thread does neither crypto nor network. The DocumentKey never leaves the Sync thread.
+Rotation is **entirely orchestrated by the Sync thread** -- the Logic thread does neither crypto nor network. The DocumentKey never leaves the Sync thread.
 
 ```
-[Initiator client — Logic thread]
+[Initiator client -- Logic thread]
 1. User revokes a member via UI
    Logic thread emits SyncCommand::RevokeFromDocument { document_id, user_id }
 
-[Initiator client — Sync thread (async via spawn_local)]
+[Initiator client -- Sync thread (async via spawn_local)]
 2. DELETE /api/documents/{id}/share/{uid}
 3. Generates new DocumentKey via CSPRNG
 4. GET /api/documents/{id}/members → list of remaining members + pubkeys
@@ -551,20 +551,20 @@ Rotation is **entirely orchestrated by the Sync thread** — the Logic thread do
    X25519(own_exchange_key, member.exchange_pubkey) → encrypts new key
 6. POST /api/documents/{id}/rotate-key with encrypted_keys_per_member
    → server atomically replaces all doc_key_enc AND sets invited_by = rotator
-     (Postgres transaction) — the rotator is the new wrapper of record, so a
+     (Postgres transaction) -- the rotator is the new wrapper of record, so a
      later unwrap resolves to the rotator's exchange key, not the stale inviter's
    → server broadcasts WsServerMsg::KeyRotationRequired at THIS moment
-     (new keys are in the database — no race condition)
+     (new keys are in the database -- no race condition)
 7. Completes messages being encrypted with the old key
 8. Stores old key in old_keys (LRU, max 10 entries)
 9. Replaces document_key with new_key, zeroize() the old one
 10. Sends LogicEvent::RevocationComplete { document_id } to the Logic thread
 
-[Initiator client — Logic thread]
+[Initiator client -- Logic thread]
 11. Triggers SyncCommand::SendSnapshot { document_id, payload }
     → snapshot encrypted with the new key → seals post-revocation state
 
-[Other clients — Sync thread (receiving WsServerMsg::KeyRotationRequired)]
+[Other clients -- Sync thread (receiving WsServerMsg::KeyRotationRequired)]
 12. GET /api/documents/{id}/members → fetches new doc_key_enc + wrapper_exchange_pub_key
 13. X25519 ECDH against the wrapper's (rotator's) exchange key → decrypts new DocumentKey
 14. Swaps document_key, old → old_keys, zeroize
@@ -572,22 +572,22 @@ Rotation is **entirely orchestrated by the Sync thread** — the Logic thread do
     (Logic thread is informed of the departure, can update UI)
 ```
 
-**Security:** The DocumentKey never crosses the `flume` Logic ↔ Sync channel (stays confined to the Sync thread). The `WsServerMsg::KeyRotationRequired` broadcast is emitted by the server **after** new keys are in the database (step 6) — other clients never fetch a stale `doc_key_enc`.
+**Security:** The DocumentKey never crosses the `flume` Logic <-> Sync channel (stays confined to the Sync thread). The `WsServerMsg::KeyRotationRequired` broadcast is emitted by the server **after** new keys are in the database (step 6) -- other clients never fetch a stale `doc_key_enc`.
 
-**`old_keys` cache:** capped at 10 LRU entries per document. Beyond that, snapshots prior to the 11th rotation are no longer locally decryptable → force a re-sync from S3.
+**`old_keys` cache:** capped at 10 LRU entries per document. Beyond that, snapshots prior to the 11th rotation are no longer locally decryptable -> force a re-sync from S3.
 
 ---
 
 ## 4. QUALITY & TESTABILITY
 
-> What this worker guarantees, and what verifies each guarantee, is the table in §1 (`SYNC-001..013`). This section used to open with three code blocks of `#[test]` and `proptest!` **bodies**: 11 named tests of which 3 existed, plus full function bodies that §0 of the spec template forbids -- a second, uncompiled copy of a test suite, free to drift from the real one and doing exactly that. The real names live in the `Verification` cells, where a rule fails with them.
+> What this worker guarantees, and what verifies each guarantee, is the table in section 1 (`SYNC-001..013`). This section used to open with three code blocks of `#[test]` and `proptest!` **bodies**: 11 named tests of which 3 existed, plus full function bodies that section 0 of the spec template forbids -- a second, uncompiled copy of a test suite, free to drift from the real one and doing exactly that. The real names live in the `Verification` cells, where a rule fails with them.
 
 ### Tiers and seams
 
 * **Tier.** host, entirely (`just test-native`). `SyncState` takes a `LogicSink` closure, so a test injects a `flume`-backed sink and drives `handle_command` directly -- no worker, no browser. A wasm tier is reserved for real `gloo-net` interaction, which nothing exercises today.
 * **`MockWsTransport`** -- an in-memory bidirectional `flume` pair standing in for the WebSocket, so the full pipeline runs with no network.
 * **`MockBlindRelay`** -- an in-process relay for multi-client integration tests, simulating `createSnapshot` / `createUpdate` / `getDocument` / `hasAccess` / `hasBroadcastAccess`.
-* The Logic<->Sync channel needs no mock: it is `flume` on both sides, and a test drains `Receiver<LogicEvent>` to observe responses (the pattern of the `ambre-logic` host tests, architecture §4).
+* The Logic<->Sync channel needs no mock: it is `flume` on both sides, and a test drains `Receiver<LogicEvent>` to observe responses (the pattern of the `ambre-logic` host tests, architecture section 4).
 
 ### Mandatory belts
 
@@ -600,7 +600,7 @@ A change to the pipeline lands with all four, because this is the boundary the w
 
 ### Known gap
 
-`SYNC-001` and `SYNC-003` are `unverified`, and both are type-level problems rather than missing tests: `Ciphertext(pub Vec<u8>)` accepts any bytes from anywhere, so "no unsealed payload reaches the transport" cannot be stated as a test without first making the unsealed state unrepresentable. Per the mechanism ladder (architecture §4), the fix is a private field with a constructor reachable only from the sealing pipeline -- after which the invariant is held by the compiler and needs no belt at all.
+`SYNC-001` and `SYNC-003` are `unverified`, and both are type-level problems rather than missing tests: `Ciphertext(pub Vec<u8>)` accepts any bytes from anywhere, so "no unsealed payload reaches the transport" cannot be stated as a test without first making the unsealed state unrepresentable. Per the mechanism ladder (architecture section 4), the fix is a private field with a constructor reachable only from the sealing pipeline -- after which the invariant is held by the compiler and needs no belt at all.
 
 ### Benchmarks (criterion)
 
@@ -609,10 +609,10 @@ A change to the pipeline lands with all four, because this is the boundary the w
 | Outbound encryption 1 KB (compress+AEAD+HMAC+Ed25519 sign) | < 200 us | < 500 us | Bottleneck: Ed25519 sign (~80-150 us) |
 | Inbound decryption 1 KB (Ed25519 verify+HMAC+AEAD+decompress) | < 350 us | < 1 ms | Bottleneck: Ed25519 verify (~150-250 us) |
 | Full crypto round-trip (excluding network) | < 600 us | < 1.5 ms | |
-| zstd compression snapshot 100 KB (`ruzstd`) | < 5 ms | — | |
-| Quarantine release 100 updates | < 1 ms | — | |
+| zstd compression snapshot 100 KB (`ruzstd`) | < 5 ms | -- | |
+| Quarantine release 100 updates | < 1 ms | -- | |
 
-> **Architecture alignment:** these targets are identical to `ambre-spec-architecture.md` §5. P95 targets are calibrated on RustCrypto WASM benchmarks (without SIMD) on mid-range 2024 mobile SoC. The `ambre-crypto` benchmark (§7 SYNC P0) validates these targets on real mobile device.
+> **Architecture alignment:** these targets are identical to `ambre-spec-architecture.md` section 5. P95 targets are calibrated on RustCrypto WASM benchmarks (without SIMD) on mid-range 2024 mobile SoC. The `ambre-crypto` benchmark (section 7 SYNC P0) validates these targets on real mobile device.
 
 ---
 
@@ -621,7 +621,7 @@ A change to the pipeline lands with all four, because this is the boundary the w
 **Performance budget:**
 
 - The Sync worker is a **separate WASM instance** (its own linear memory, a dedicated `web_sys::Worker`): it executes in **true parallelism** from the Logic thread and the UI thread, on its own core if available.
-- Crypto operations are blocking in the Sync thread but affect neither the Logic thread nor the UI thread (separate threads, separate event loops). `flume` transport moves payloads **by move** in the shared heap — no boundary recopy.
+- Crypto operations are blocking in the Sync thread but affect neither the Logic thread nor the UI thread (separate threads, separate event loops). `flume` transport moves payloads **by move** in the shared heap -- no boundary recopy.
 - Target latency for a 1 KB update: outbound encryption < 200 us (P95 mobile), ceiling < 500 us.
 
 **Binary size (`ambre-sync` contribution to total binary):**
@@ -639,8 +639,8 @@ A change to the pipeline lands with all four, because this is the boundary the w
 
 - Base (session): < 1 MB (MasterSeed, SigningKey, ExchangeKey + HashMap overhead)
 - Per open document (`SyncDocumentState`): < 1 MB (DocumentKey, counters, sync state, quarantine)
-- `quarantine` per document: capped at 1000 updates × ~2 KB average = ~2 MB max
-- `old_keys` per document: capped at 10 × DocumentKey (32 bytes + overhead) = negligible
+- `quarantine` per document: capped at 1000 updates x ~2 KB average = ~2 MB max
+- `old_keys` per document: capped at 10 x DocumentKey (32 bytes + overhead) = negligible
 - Typical scenario (1 host doc + 3 embedded): ~4-8 MB total Sync overhead
 
 ---
@@ -660,12 +660,12 @@ A change to the pipeline lands with all four, because this is the boundary the w
 | **Unbounded `old_keys` cache** | On rapid repeated rotations (attack or bug), the cache would grow. LRU at 10 entries is sufficient for real cases (< 5 simultaneously active rotations). |
 | **Wire types redefined in `ambre-sync`** | `ambre-protocol` is the source of truth. Redefining locally (`SecSyncUpdate`, etc.) creates guaranteed divergence (e.g. `[u8; 32]` vs `Vec<u8>` for `pub_key`). |
 | **Yrs instead of Loro** | Out of scope. Yrs and Loro snapshots have comparable compression ratios (3:1 to 8:1 on text). The Loro choice imposes no constraint on `ambre-sync`. |
-| **Shared-nothing UI <-> Logic (`postMessage` + `MessagePort` + postcard on every link)** | Imposes `postcard` + 2 WASM↔JS memcpy per hop and a transport trait. The UI <-> Logic link instead uses **`flume` channels** carrying typed Rust values by move (shared memory). Do not go back: it would reintroduce serialization and transport abstraction for nothing. The accepted cost (nightly toolchain `-Z build-std`, COOP/COEP headers for `SharedArrayBuffer`) is documented in `ambre-spec-architecture.md §6`. |
-| **`wasm_thread` for the Sync worker** | **Rejected** (`ambre-spec-architecture.md §6`): `wasm_thread` is run-to-completion, so an async `spawn_local` Sync loop returns and gets GC-terminated after the first poll (the historical freeze). Sync is instead its **own** WASM instance in a normal `web_sys::Worker` with a permanent event loop, reached over `postMessage`. `wasm_thread` + shared memory (`+atomics`/`-Z build-std`/COOP-COEP) is kept **only** for the UI ↔ Logic link inside the Main instance. |
-| **One Sync thread per open document** | Would imply N additional threads for a Toile with embedded documents — each with its own RustCrypto copy. Unacceptable on mobile. Single multi-document Sync thread (`HashMap<Uuid, SyncDocumentState>`) with a single multiplexed WebSocket (Subscribe/Unsubscribe per document). |
-| **Blocking `flume` loop with a real WebSocket** | `Atomics.wait` (under `flume::recv`) freezes the Worker's JS event loop, therefore the WS callbacks. To avoid once the real WS is wired: non-blocking loop `select { recv_async ..., ws.next() ... }`. Detail in `ambre-spec-architecture.md §7 ARCH P1`. |
-| **One WebSocket per open document** | Connection waste (5 WS for a Toile with 4 embedded documents). Browser limits (~6 connections per origin), keepalives costly on mobile battery. Messages already carry `document_id` in `publicData` — the server demultiplexes. Single multiplexed WS per session with Subscribe/Unsubscribe. |
-| **Snapshot via WebSocket** | Snapshots can be multiple MB — too large for a WebSocket message. Upload/download via S3 presigned URLs. `WsServerMsg::SnapshotAvailable` notifies clients. |
+| **Shared-nothing UI <-> Logic (`postMessage` + `MessagePort` + postcard on every link)** | Imposes `postcard` + 2 WASM<->JS memcpy per hop and a transport trait. The UI <-> Logic link instead uses **`flume` channels** carrying typed Rust values by move (shared memory). Do not go back: it would reintroduce serialization and transport abstraction for nothing. The accepted cost (nightly toolchain `-Z build-std`, COOP/COEP headers for `SharedArrayBuffer`) is documented in `ambre-spec-architecture.md section 6`. |
+| **`wasm_thread` for the Sync worker** | **Rejected** (`ambre-spec-architecture.md section 6`): `wasm_thread` is run-to-completion, so an async `spawn_local` Sync loop returns and gets GC-terminated after the first poll (the historical freeze). Sync is instead its **own** WASM instance in a normal `web_sys::Worker` with a permanent event loop, reached over `postMessage`. `wasm_thread` + shared memory (`+atomics`/`-Z build-std`/COOP-COEP) is kept **only** for the UI <-> Logic link inside the Main instance. |
+| **One Sync thread per open document** | Would imply N additional threads for a Toile with embedded documents -- each with its own RustCrypto copy. Unacceptable on mobile. Single multi-document Sync thread (`HashMap<Uuid, SyncDocumentState>`) with a single multiplexed WebSocket (Subscribe/Unsubscribe per document). |
+| **Blocking `flume` loop with a real WebSocket** | `Atomics.wait` (under `flume::recv`) freezes the Worker's JS event loop, therefore the WS callbacks. To avoid once the real WS is wired: non-blocking loop `select { recv_async ..., ws.next() ... }`. Detail in `ambre-spec-architecture.md section 7 ARCH P1`. |
+| **One WebSocket per open document** | Connection waste (5 WS for a Toile with 4 embedded documents). Browser limits (~6 connections per origin), keepalives costly on mobile battery. Messages already carry `document_id` in `publicData` -- the server demultiplexes. Single multiplexed WS per session with Subscribe/Unsubscribe. |
+| **Snapshot via WebSocket** | Snapshots can be multiple MB -- too large for a WebSocket message. Upload/download via S3 presigned URLs. `WsServerMsg::SnapshotAvailable` notifies clients. |
 
 ---
 
@@ -673,33 +673,33 @@ A change to the pipeline lands with all four, because this is the boundary the w
 
 > Detailed backlog of this spec; cross-cutting scheduling (milestones) lives in `specs/ambre-roadmap.md`.
 
-### SYNC P0 — Core Crypto (standalone)
+### SYNC P0 -- Core Crypto (standalone)
 
 - [x] Encrypt/decrypt pipeline for the 3 message types (with `commitment_tag` HMAC), in complete isolation. *`ambre-crypto`: generic `seal`/`open` envelope over `aad` (the 3 types only differ by their serialized `PublicData`); AEAD / HMAC-SHA256 / Ed25519 / X25519 / Argon2id / BLAKE2b primitives.*
 - [x] Exhaustive unit tests + prop-tests (round-trip, tampering, commitment tag). *The `version byte` stays at the Sync layer (compression), outside `ambre-crypto`.*
 - [x] Reference criterion benchmarks. *Desktop: seal 1 KB ~34 us, open 1 KB ~48 us (P95 targets 200/350 us). Mobile measurement to be done at Sync wiring.*
 - [x] `ruzstd` compress/decompress roundtrip validation *(Sync layer: `ambre-sync::pipeline`, version-byte 0x00/0x01, threshold 256 bytes, host tests)*
-- [x] `MasterSeed` → `derive_signing_key` / `derive_exchange_key` implementation + tests *(domain-separated BLAKE2b derivation, deterministic)*
+- [x] `MasterSeed` -> `derive_signing_key` / `derive_exchange_key` implementation + tests *(domain-separated BLAKE2b derivation, deterministic)*
 - [x] No WebSocket, no Logic thread *(standalone crate, zero network/IPC dep)*
 
-### SYNC P1 — Logic thread integration
+### SYNC P1 -- Logic thread integration
 
 - [x] Entry point `ambre_sync::run(from_logic, to_logic)` (`flume` channels), blocking `recv()` loop, `SyncState` skeleton + `handle_command`/`handle_rest` dispatch (placeholders).
-- [x] **Wired crypto pipeline** (`ambre-sync::pipeline`): compression version-byte + `ambre-crypto::envelope`, `Update`/`Snapshot`/`Ephemeral` assembly/disassembly, outbound encryption (`SendUpdate`/`SendEphemeral` → `WsClientMsg`, Snapshot seal) and inbound decryption (`handle_ws_message` → `RemoteUpdate`/`RemoteEphemeral`, failure → `SyncWarning`). Session keys derived from `MasterSeed` (local placeholder seed pending network Unlock). Host tests. *Real network/WebSocket out of scope (next item).*
-- [x] **Non-blocking loop** (`recv_async` + WS `JsFuture`) when the real WebSocket is wired — prerequisite `Atomics.wait` + cyclic deadlock fix (cf. `ambre-spec-architecture.md §7 ARCH P1`).
-- [x] `RestCommand::Unlock` implementation (fetch GET /api/keys/master + Argon2 → MasterSeed → keypair derivation)
+- [x] **Wired crypto pipeline** (`ambre-sync::pipeline`): compression version-byte + `ambre-crypto::envelope`, `Update`/`Snapshot`/`Ephemeral` assembly/disassembly, outbound encryption (`SendUpdate`/`SendEphemeral` -> `WsClientMsg`, Snapshot seal) and inbound decryption (`handle_ws_message` -> `RemoteUpdate`/`RemoteEphemeral`, failure -> `SyncWarning`). Session keys derived from `MasterSeed` (local placeholder seed pending network Unlock). Host tests. *Real network/WebSocket out of scope (next item).*
+- [x] **Non-blocking loop** (`recv_async` + WS `JsFuture`) when the real WebSocket is wired -- prerequisite `Atomics.wait` + cyclic deadlock fix (cf. `ambre-spec-architecture.md section 7 ARCH P1`).
+- [x] `RestCommand::Unlock` implementation (fetch GET /api/keys/master + Argon2 -> MasterSeed -> keypair derivation)
 - [x] `RestCommand::SetupAccount` implementation (MasterSeed generation, key upload)
 - [x] `SyncCommand::OpenDocument` / `CloseDocument` implementation (multi-document `HashMap<Uuid, SyncDocumentState>`)
 - [x] Documents CRUD implementation (`RestCommand`): `ListDocuments`, `CreateDocument`, `RenameDocument`, `DeleteDocument`
 - [x] `MockWsTransport` for end-to-end tests without network
 - [x] Quarantine: implementation + ordered release tests + automatic RequestMissing *(release by `clock` ASC on `SnapshotAvailable`, cap 900/1000 + `SyncWarning` on overflow, 4 host tests)*
 
-### SYNC P2 — Blind Relay & Network
+### SYNC P2 -- Blind Relay & Network
 
 - [x] Real WebSocket connection (`gloo-net` WASM, `tokio-tungstenite` native)
 - [x] HTTP REST via `gloo-net::http` (CRUD, sharing, media, users search)
-- [x] Delta-sync on reconnect (`last_known_seq` → `RequestMissing`)
-- [x] `WsServerMsg::SnapshotRequired` handling → `LogicEvent::SnapshotNeeded`
+- [x] Delta-sync on reconnect (`last_known_seq` -> `RequestMissing`)
+- [x] `WsServerMsg::SnapshotRequired` handling -> `LogicEvent::SnapshotNeeded`
 - [x] `MockBlindRelay` in-process for multi-client tests
 - [x] Auth: `AuthContext` (in-memory access + refresh tokens), `Authorization: Bearer` on REST, `?token=` on the WS, 401 -> `/auth/refresh` -> retry wrapper.
 - [x] WS resilience (sec.2.G): exponential-backoff reconnect (250ms..10s + jitter), close **4401** -> silent reauth (refresh, or dev re-login), resubscribe + `RequestMissing` on `onopen`, pre-session update buffer, self-echo `local_clock` recovery.
@@ -707,26 +707,26 @@ A change to the pipeline lands with all four, because this is the boundary the w
 - [x] **Snapshot upload (client leg)**: `SyncCommand::SendSnapshot` -> seal -> `POST /snapshot/upload-url` -> S3 PUT -> `POST /snapshot` (with `covered_seq = last_seq`) -> adopt the returned `snapshot_id` as `current_snapshot_id` (`SyncEvent::SnapshotUploaded` -> `snapshot_known`). Host path stops after sealing (no network).
 - [x] **Snapshot download + cold-start seq gating**: on open, `GET /snapshot` -> `POST /snapshot/download-url` -> S3 GET -> `RemoteSnapshot`; the snapshot's `covered_seq` seeds `last_seq` so the post-open `RequestMissing` replays only newer deltas, not the whole history since genesis. Falls back to a full replay when no snapshot or the download fails. (4 host tests: gating on/off, upload adoption, host-path seal.)
 
-### SYNC P3 — Sharing & Revocation
+### SYNC P3 -- Sharing & Revocation
 
-- [x] Full `InviteToDocument` flow (search user → fetch pubkeys → ECDH wrap DocumentKey → POST /share)
-- [x] Full `RevokeFromDocument` flow (DELETE /share → key rotation → POST /rotate-key → 15 steps, see §3)
-- [x] ECDH unwrap against the **wrapper's** exchange key (`wrapper_exchange_pub_key`, from `invited_by`) — invite + rotation paths; rotation updates `invited_by` to the rotator (see §3 "Document Sharing — Key Wrapping")
-- [x] `WsServerMsg::DocumentShared` on `user:{id}` → `LogicEvent`/`UiEvent::DocumentShared` → live document-list refresh + notification (no reload)
+- [x] Full `InviteToDocument` flow (search user -> fetch pubkeys -> ECDH wrap DocumentKey -> POST /share)
+- [x] Full `RevokeFromDocument` flow (DELETE /share -> key rotation -> POST /rotate-key -> 15 steps, see section 3)
+- [x] ECDH unwrap against the **wrapper's** exchange key (`wrapper_exchange_pub_key`, from `invited_by`) -- invite + rotation paths; rotation updates `invited_by` to the rotator (see section 3 "Document Sharing -- Key Wrapping")
+- [x] `WsServerMsg::DocumentShared` on `user:{id}` -> `LogicEvent`/`UiEvent::DocumentShared` -> live document-list refresh + notification (no reload)
 - [x] LRU `old_keys` cache, 10 entries per document
 - [x] Ephemeral anti-replay (`ephemeral_remote_counters`)
 - [x] Media flow: `UploadMedia` (encryption + presigned URL + S3 PUT + confirmation POST), `DownloadMedia` (S3 GET + decryption)
 
-### SYNC P4 — Channels, Meetings & Optimization
+### SYNC P4 -- Channels, Meetings & Optimization
 
-- [ ] Presence identity resolution: a per-document `pub_key` -> `UserId` directory built from the members response already fetched at open (members' Ed25519 `signing_pub_key`, § "Presence identity"), stored on `SyncDocumentState`, so `resolve_ephemeral_author` returns the canonical `UserId` and inbound `RemoteEphemeral` is delivered with a spoof-proof `from_user_id` (consumed by `toile-logic §7` / `trame-logic §7`). Until then inbound ephemerals are dropped; the contract (`RemoteEphemeral.from_user_id`) and the Logic-side handling already exist. *(Scheduled under `ARCH P6`: no server change is needed — the earlier "`GET /members` exposes only the exchange key" premise was wrong.)*
-- [ ] Own-`Role` resolution at open: `handle_open_document` already receives every member's role in the same members response; resolve this client's own entry and carry it on `SyncEvent::OpenDocumentReady` -> `LogicEvent::DocumentReady` so the Logic thread can gate edits as UX (architecture §2.D). A 404 local-only document is `Role::Owner`. The server stays authoritative (it already rejects a read-only write on the WS `Update` path). *(Scheduled under `ARCH P6`.)*
-- [ ] Murmure channels: `OpenChannel`, `SendChannelUpdate`, `SendChannelEphemeral`, internal segment management (creation, sealing, routing — the Logic thread does not see segment_ids)
+- [ ] Presence identity resolution: a per-document `pub_key` -> `UserId` directory built from the members response already fetched at open (members' Ed25519 `signing_pub_key`, section "Presence identity"), stored on `SyncDocumentState`, so `resolve_ephemeral_author` returns the canonical `UserId` and inbound `RemoteEphemeral` is delivered with a spoof-proof `from_user_id` (consumed by `toile-logic section 7` / `trame-logic section 7`). Until then inbound ephemerals are dropped; the contract (`RemoteEphemeral.from_user_id`) and the Logic-side handling already exist. *(Scheduled under `ARCH P6`: no server change is needed -- the earlier "`GET /members` exposes only the exchange key" premise was wrong.)*
+- [ ] Own-`Role` resolution at open: `handle_open_document` already receives every member's role in the same members response; resolve this client's own entry and carry it on `SyncEvent::OpenDocumentReady` -> `LogicEvent::DocumentReady` so the Logic thread can gate edits as UX (architecture section 2.D). A 404 local-only document is `Role::Owner`. The server stays authoritative (it already rejects a read-only write on the WS `Update` path). *(Scheduled under `ARCH P6`.)*
+- [ ] Murmure channels: `OpenChannel`, `SendChannelUpdate`, `SendChannelEphemeral`, internal segment management (creation, sealing, routing -- the Logic thread does not see segment_ids)
 - [ ] Meetings: WebRTC signaling (`SignalingClientMsg` / `SignalingServerMsg`)
-- [ ] Compression threshold tuning (default 256 bytes — adjust if benchmarks justify)
+- [ ] Compression threshold tuning (default 256 bytes -- adjust if benchmarks justify)
 - [ ] WebSocket backpressure: bounded pending message buffer
 - [ ] Security audit: ZK boundary review, systematic `zeroize` verification on all sensitive types
 
-### SYNC Post-MVP — Optimizations
+### SYNC Post-MVP -- Optimizations
 
-- [ ] `doc_key_cache: HashMap<Uuid, DocumentKey>` in `SyncState` — avoids N × X25519 ECDH on each `ListDocuments` (populated by `OpenDocument` and `ListDocuments`, zeroize on logout)
+- [ ] `doc_key_cache: HashMap<Uuid, DocumentKey>` in `SyncState` -- avoids N x X25519 ECDH on each `ListDocuments` (populated by `OpenDocument` and `ListDocuments`, zeroize on logout)

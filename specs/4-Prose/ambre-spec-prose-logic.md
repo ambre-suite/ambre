@@ -9,11 +9,11 @@
 > `prose-features`, `prose-interop`, and `prose-ui` build. These four modules are internal
 > to the `ambre-prose` crate.
 
-> **Architecture note.** The client uses the **two-instance model** -- a **Main** WASM instance (UI thread + Logic thread sharing one linear memory via `wasm_thread`, talking over typed `flume` values) and a **separate Sync worker** (its own WASM instance/memory, reached over `postMessage` + `postcard`, relayed by the Main thread) -- see `ambre-spec-architecture.md §2.B`. Consequences for this spec:
-> - **State registry.** The state of a Prose document is `ProseState`, a concrete value stored in the Logic thread's typed registry (`enum DocState { Trame(TrameState), Prose(ProseState), … }`) and dispatched via `match` (no trait object, no `Box<dyn Any>`).
-> - **Typed data plane.** `ProseCommand`/`ProseEvent` (+ their payload types: `PageLayout`, `BlockLayout`, …) live in **`ambre-bus`** (re-exported by `ambre-prose`) and travel **by move** on `flume`, inside `AppCommand::Prose(..)` / `AppEvent::Prose(..)`. **No `serde` derivation** on them. `serde`/`postcard` only remain for **network bytes**: Loro CRDT payloads (the vv-cursor `ExportMode::Updates` delta / `export_snapshot`, already `Vec<u8>`) and the `Ephemeral` presence payload (`PresencePayload`, postcard).
-> - **Typed outcome for editing.** A handler that mutates the CRDT **returns** domain bytes (Loro delta); the Logic dispatcher emits `SyncCommand::SendUpdate { document_id, payload }`. `ProseState` holds no transport handle of its own. See §C and `ambre-spec-architecture.md §7 ARCH P2`.
-> - **Sync->Logic event routing.** `ProseState` does **not** see `LogicEvent`: the generic dispatcher in `ambre-logic` routes incoming events (`RemoteUpdate`/`RemoteSnapshot`/`RemoteEphemeral`/`SnapshotNeeded`/…) to `ProseState`'s content methods (`apply_remote`, `apply_ephemeral`, `export_snapshot`). `LogicEvent::RemoteEphemeral` carries a **Sync-resolved `from_user_id: UserId`** (spoof-proof -- a peer cannot forge another user's id, see `ambre-spec-sync.md §3`); the dispatcher passes it to `apply_ephemeral(from_user_id, payload)`.
+> **Architecture note.** The client uses the **two-instance model** -- a **Main** WASM instance (UI thread + Logic thread sharing one linear memory via `wasm_thread`, talking over typed `flume` values) and a **separate Sync worker** (its own WASM instance/memory, reached over `postMessage` + `postcard`, relayed by the Main thread) -- see `ambre-spec-architecture.md section 2.B`. Consequences for this spec:
+> - **State registry.** The state of a Prose document is `ProseState`, a concrete value stored in the Logic thread's typed registry (`enum DocState { Trame(TrameState), Prose(ProseState), ... }`) and dispatched via `match` (no trait object, no `Box<dyn Any>`).
+> - **Typed data plane.** `ProseCommand`/`ProseEvent` (+ their payload types: `PageLayout`, `BlockLayout`, ...) live in **`ambre-bus`** (re-exported by `ambre-prose`) and travel **by move** on `flume`, inside `AppCommand::Prose(..)` / `AppEvent::Prose(..)`. **No `serde` derivation** on them. `serde`/`postcard` only remain for **network bytes**: Loro CRDT payloads (the vv-cursor `ExportMode::Updates` delta / `export_snapshot`, already `Vec<u8>`) and the `Ephemeral` presence payload (`PresencePayload`, postcard).
+> - **Typed outcome for editing.** A handler that mutates the CRDT **returns** domain bytes (Loro delta); the Logic dispatcher emits `SyncCommand::SendUpdate { document_id, payload }`. `ProseState` holds no transport handle of its own. See section C and `ambre-spec-architecture.md section 7 ARCH P2`.
+> - **Sync->Logic event routing.** `ProseState` does **not** see `LogicEvent`: the generic dispatcher in `ambre-logic` routes incoming events (`RemoteUpdate`/`RemoteSnapshot`/`RemoteEphemeral`/`SnapshotNeeded`/...) to `ProseState`'s content methods (`apply_remote`, `apply_ephemeral`, `export_snapshot`). `LogicEvent::RemoteEphemeral` carries a **Sync-resolved `from_user_id: UserId`** (spoof-proof -- a peer cannot forge another user's id, see `ambre-spec-sync.md section 3`); the dispatcher passes it to `apply_ephemeral(from_user_id, payload)`.
 
 ---
 
@@ -31,7 +31,7 @@ This component handles:
 
 This component delegates:
 - wgpu/Parley rendering (DrawSurface) -> `prose-ui` module.
-- User-facing features (TOC, track changes, comments, lists…) -> `prose-features` module.
+- User-facing features (TOC, track changes, comments, lists...) -> `prose-features` module.
 - Multi-format import/export -> `prose-interop` module.
 - Encryption/transport -> `ambre-sync`.
 
@@ -45,44 +45,44 @@ This component delegates:
 | `ambre-bus` | Typed IPC types: `ProseCommand`/`ProseEvent` (+ payloads), `AppCommand`/`AppEvent`, `SyncCommand`, `RestCommand`/`RestEvent`. |
 | `ambre-draw` | `DrawSurface` trait + kurbo/peniko re-exports. Page rendering functions (`render_block_on`, etc.) are parameterized on this trait -- same code for screen (WgpuSurface) and PDF export (KrillaSurface). |
 | `postcard` | Binary serialization **only for network payloads**: the `Ephemeral` presence payload (`PresencePayload`). CRDT snapshots/deltas are already `Vec<u8>` produced by Loro. **No postcard on the inter-thread path** (typed values on `flume`). |
-| `serde` | `Serialize`/`Deserialize` **only** on postcard-serialized types bound for the network (`PresencePayload`, `CursorPosition`). IPC types (`ProseCommand`/`ProseEvent`, `PageLayout`, `RemoteCursor`, …) do not carry it (move on `flume`). |
+| `serde` | `Serialize`/`Deserialize` **only** on postcard-serialized types bound for the network (`PresencePayload`, `CursorPosition`). IPC types (`ProseCommand`/`ProseEvent`, `PageLayout`, `RemoteCursor`, ...) do not carry it (move on `flume`). |
 | `thiserror` | Typed `ProseError`, mapped to `ProseEvent::Error`. |
 
 No dependency on `ambre-sync` or `ambre-crypto`.
 
-**Invariants:** prefix `PROSE` (the engine). Sibling specs reserve `PROSE-UI`, `PROSE-FEAT` and `PROSE-IO`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4`; the cross-spec roll-up is `ambre-spec-testing.md §7`.
+**Invariants:** prefix `PROSE` (the engine). Sibling specs reserve `PROSE-UI`, `PROSE-FEAT` and `PROSE-IO`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md section 4`; the cross-spec roll-up is `ambre-spec-testing.md section 7`.
 
 **Every row is `unimplemented`:** `crates/ambre-prose` is a `lib.rs` and nothing else. They land with `ARCH P2` (Epic `E5`), and that Story is not `[x]` until each row carries a `Verification` cell instead. Written now, and not left as prose, because a design is reviewable as numbered falsifiable rules and is not reviewable as fifteen hundred lines of paragraphs -- and because these rules are the contract three other specs already depend on.
 
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
-| `PROSE-001` | The `LoroDoc` MUST NOT leave the Logic thread; it exits only as bytes. | §1; architecture §6 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-002` | All editable text MUST live in `LoroText`; a `LoroMap` MUST NOT hold body text. | §1; §2.A | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-003` | Exported deltas MUST be treated as opaque bytes: `ambre-prose` MUST NOT inspect them after serialization. | §1; §2.D | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-004` | After convergence, a cursor expressed as a `loro::Cursor` MUST resolve to the same absolute position on every peer. | §1; §2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-005` | A list item's depth MUST be derived from its ancestor chain in the `MovableTree`; it MUST NOT be stored in the CRDT. | §1; §2.A | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-006` | Header and footer MUST be ordinary blocks addressed by a stable `TreeID`; there MUST NOT be a recursive `SetHeaderContent` command carrying nested commands. | §1; §2.A | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-007` | A mark's expansion behaviour MUST come from `expand_type_for`, which MUST be total: an unknown key returns a default, never a panic. | §2.A; §4 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-008` | A mark value MUST be encoded as a canonical string (`f32::to_string()` form), so two peers writing the same value produce identical bytes. | §2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-009` | A table cell's span geometry MUST be derived from the corner blocks, never stored, so a concurrent row or column insert cannot corrupt it. | §2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-010` | Pagination MUST run in the Logic thread and MUST produce a `PageLayout` that is the single source of truth for both the UI thread and PDF export. | §2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-011` | Every in-range page index MUST resolve to a `Vec`, empty if the page holds nothing: a UI lookup MUST NOT hit a missing entry. | §2.B (P-51) | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-012` | A manual page break MUST never be relaxed, and margin collapse MUST never be skipped: both sit above every heuristic in the constraint order. | §2.B constraint table | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-013` | A heading MUST NOT be split across pages: it is pushed whole to the next page. | §2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-014` | An image MUST NOT be split across pages. | §2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-015` | A footnote MUST appear on the same page as the line that references it, and MUST follow that line through any later relocation. | §2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-016` | A header or footer MUST NOT consume more than a quarter of the page height. | §2.B (`MAX_HF_HEIGHT_FRACTION`) | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-017` | A fresh page MUST accept at least one line: the layout MUST NOT produce a degenerate empty page. | §2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-018` | A block continuation MUST start at the top of its page and MUST NOT carry the block's `space_before`. | §2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-019` | TOC stabilization MUST run as a bounded multi-pass step, never inline in the interactive path. | §2.B (P-23) | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-020` | The author of a remote ephemeral MUST be the Sync-resolved `from_user_id`; the payload's own claim MUST NOT be trusted. | §2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-021` | A peer's `display_name` MUST be treated as cosmetic and self-asserted, never as identity. | §2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-022` | Undo MUST be scoped to the local peer: it MUST NOT revert a remote peer's edits. | §2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-023` | `DocUpdated` MUST carry the exact bytes that were applied -- the imported remote payload on the remote path, the freshly exported delta on the local one -- never a re-export of the current state. | §2.C (P-06) | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-024` | `ProseState` MUST NOT name `SyncCommand`: it returns a typed outcome the Logic dispatcher fans out. | §2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-025` | `ambre-prose` MUST NOT contact the network and MUST NOT depend on `ambre-crypto` or `ambre-sync`. | §1; §3 | not built -- lands with `ARCH P2` (Epic `E5`); `deny.toml` already bans `ambre-crypto` outside `ambre-sync`/`ambre-logic`, so this one is half-held before the crate exists | unimplemented |
+| `PROSE-001` | The `LoroDoc` MUST NOT leave the Logic thread; it exits only as bytes. | section 1; architecture section 6 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-002` | All editable text MUST live in `LoroText`; a `LoroMap` MUST NOT hold body text. | section 1; section 2.A | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-003` | Exported deltas MUST be treated as opaque bytes: `ambre-prose` MUST NOT inspect them after serialization. | section 1; section 2.D | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-004` | After convergence, a cursor expressed as a `loro::Cursor` MUST resolve to the same absolute position on every peer. | section 1; section 2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-005` | A list item's depth MUST be derived from its ancestor chain in the `MovableTree`; it MUST NOT be stored in the CRDT. | section 1; section 2.A | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-006` | Header and footer MUST be ordinary blocks addressed by a stable `TreeID`; there MUST NOT be a recursive `SetHeaderContent` command carrying nested commands. | section 1; section 2.A | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-007` | A mark's expansion behaviour MUST come from `expand_type_for`, which MUST be total: an unknown key returns a default, never a panic. | section 2.A; section 4 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-008` | A mark value MUST be encoded as a canonical string (`f32::to_string()` form), so two peers writing the same value produce identical bytes. | section 2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-009` | A table cell's span geometry MUST be derived from the corner blocks, never stored, so a concurrent row or column insert cannot corrupt it. | section 2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-010` | Pagination MUST run in the Logic thread and MUST produce a `PageLayout` that is the single source of truth for both the UI thread and PDF export. | section 2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-011` | Every in-range page index MUST resolve to a `Vec`, empty if the page holds nothing: a UI lookup MUST NOT hit a missing entry. | section 2.B (P-51) | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-012` | A manual page break MUST never be relaxed, and margin collapse MUST never be skipped: both sit above every heuristic in the constraint order. | section 2.B constraint table | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-013` | A heading MUST NOT be split across pages: it is pushed whole to the next page. | section 2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-014` | An image MUST NOT be split across pages. | section 2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-015` | A footnote MUST appear on the same page as the line that references it, and MUST follow that line through any later relocation. | section 2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-016` | A header or footer MUST NOT consume more than a quarter of the page height. | section 2.B (`MAX_HF_HEIGHT_FRACTION`) | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-017` | A fresh page MUST accept at least one line: the layout MUST NOT produce a degenerate empty page. | section 2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-018` | A block continuation MUST start at the top of its page and MUST NOT carry the block's `space_before`. | section 2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-019` | TOC stabilization MUST run as a bounded multi-pass step, never inline in the interactive path. | section 2.B (P-23) | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-020` | The author of a remote ephemeral MUST be the Sync-resolved `from_user_id`; the payload's own claim MUST NOT be trusted. | section 2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-021` | A peer's `display_name` MUST be treated as cosmetic and self-asserted, never as identity. | section 2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-022` | Undo MUST be scoped to the local peer: it MUST NOT revert a remote peer's edits. | section 2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-023` | `DocUpdated` MUST carry the exact bytes that were applied -- the imported remote payload on the remote path, the freshly exported delta on the local one -- never a re-export of the current state. | section 2.C (P-06) | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-024` | `ProseState` MUST NOT name `SyncCommand`: it returns a typed outcome the Logic dispatcher fans out. | section 2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-025` | `ambre-prose` MUST NOT contact the network and MUST NOT depend on `ambre-crypto` or `ambre-sync`. | section 1; section 3 | not built -- lands with `ARCH P2` (Epic `E5`); `deny.toml` already bans `ambre-crypto` outside `ambre-sync`/`ambre-logic`, so this one is half-held before the crate exists | unimplemented |
 | `PROSE-026` | `ambre-prose` MUST contain no `unsafe`. | README pillar "Security" | not built -- lands with `ARCH P2` (Epic `E5`); `#![forbid(unsafe_code)]` on the crate root makes it compiler-held from day one | unimplemented |
-| `PROSE-027` | A document MUST converge to at least one root body block: an empty `"blocks"` tree is invalid. Two peers concurrently emptying the tree MUST deterministically re-insert one block (the tombstoned root block whose `TreeID` sorts first), identically on every peer -- not just the local recreate-on-open (P-147). | §2.A | not built -- lands with `ARCH P2` (Epic `E5`); needs a 2-peer convergence regression test, like Trame's `TRAME-022` | unimplemented |
+| `PROSE-027` | A document MUST converge to at least one root body block: an empty `"blocks"` tree is invalid. Two peers concurrently emptying the tree MUST deterministically re-insert one block (the tombstoned root block whose `TreeID` sorts first), identically on every peer -- not just the local recreate-on-open (P-147). | section 2.A | not built -- lands with `ARCH P2` (Epic `E5`); needs a 2-peer convergence regression test, like Trame's `TRAME-022` | unimplemented |
 
 > **Invariant coverage.** 27 `unimplemented`, nothing else -- the honest shape for a spec whose crate is empty. The point of writing them now: three specs (`prose-ui`, `prose-features`, `prose-interop`) are built on this contract, and a contradiction between them is visible between two tables in a way it never was between two chapters of prose.
 ---
@@ -309,9 +309,9 @@ not a distinct structure.
 Pagination is computed in the Logic thread via Parley. The result -- a `PageLayout`
 -- is sent to the UI thread via `ProseEvent::LayoutUpdated`.
 
-> **Architecture references:** `ambre-spec-canvas.md` §B.2 note -- Parley in the Logic
+> **Architecture references:** `ambre-spec-canvas.md` section B.2 note -- Parley in the Logic
 > thread covers: widows/orphans, keep-with-next on headings, image positioning,
-> manual page breaks, footnotes. `ambre-spec-architecture.md` §2.D --
+> manual page breaks, footnotes. `ambre-spec-architecture.md` section 2.D --
 > pagination = business logic, Logic thread only.
 
 > **Family resolution is shared.** Before shaping, every `font_family` label (from
@@ -517,7 +517,7 @@ For each block in DFS pre-order traversal of the MovableTree:
        Table:
          For each TableRow:
            For each cell, the occupied height includes the cell's own box model
-           (attributes "pad", "bt", "bb" from the TableCell "a" map, logic §2.A):
+           (attributes "pad", "bt", "bb" from the TableCell "a" map, logic section 2.A):
              cell_height = Parley::layout(cell_text, cell_width - 2 * pad)
                            + 2 * pad          -- top and bottom padding
                            + bt + bb.         -- top and bottom border widths
@@ -538,7 +538,7 @@ For each block in DFS pre-order traversal of the MovableTree:
          from its rendered width against the TOC content width (leader + page-number
          column excluded): lines_i = max(1, ceil(entry_text_width_i / toc_text_width)).
          total_lines = sum(lines_i).
-         total_height = total_lines × toc_line_height + space_before + space_after.
+         total_height = total_lines x toc_line_height + space_before + space_after.
          (This tighter estimate also reduces the stabilization iterations of P-23.)
 
   1.4  Store: (block_id, block_type, total_height, line_count, line_heights[],
@@ -818,7 +818,7 @@ variable field), shaping is done once and the result stored as PageRuns::Static
 (one Vec, reused on every page -- no per-page clone). If f:pn is present, each page
 is shaped and stored as PageRuns::PerPage (index = page index). The UI reads either
 variant uniformly through header_runs_for(page) / footer_runs_for(page).
-Total cost: ~10 µs × page_count if f:pn present, ~10 µs if absent.
+Total cost: ~10 us x page_count if f:pn present, ~10 us if absent.
 Negligible within the 20 ms budget for 100 pages.
 ```
 
@@ -831,7 +831,7 @@ the algorithm relaxes constraints in this order (from highest to lowest priority
 |----------|-----------|-------------|
 | 1 (absolute) | **Manual page break** (`PageBreak`) | Never relaxed -- always honored. |
 | 2 (absolute) | **Footnotes on the reference page** | If the footnote doesn't fit: it overflows to the next page with a "continued" marker. Post-MVP. MVP: the footnote pushes the content. |
-| 3 | **Orphans** (min 2 lines at page bottom) | Relaxed if the block is ≤ 3 lines AND overflows the page (geometric contradiction). |
+| 3 | **Orphans** (min 2 lines at page bottom) | Relaxed if the block is <= 3 lines AND overflows the page (geometric contradiction). |
 | 4 | **Widows** (min 2 lines at next page top) | Relaxed if satisfying widows violates orphans and the block doesn't fit on a page. |
 | 5 | **keep_together** | Relaxed if the block is larger than an entire page (geometric impossibility). |
 | 6 | **keep_with_next** / unbreakable Heading | Relaxed if the previous block (or heading) occupies > 25% of the page (excessive displacement). |
@@ -848,7 +848,7 @@ is handled by `prose-ui` directly from `"meta.header/footer"` data.
 **TOC (placeholder):** the `Toc` block is a placeholder whose height is estimated
 from the qualified headings, summing each entry's wrapped line count (a long title
 spans several TOC lines, so one line per entry underestimates -- see Phase 1.3, P-94)
-× `toc_line_height`. After placement, if the page count changes (which modifies page
+x `toc_line_height`. After placement, if the page count changes (which modifies page
 numbers in the TOC), a second stabilization pass is triggered (max 3 iterations for
 convergence -- beyond that, accept the approximation).
 
@@ -954,7 +954,7 @@ pub struct ProseState {
     /// `doc.export(ExportMode::Updates { from: &last_exported_vv })`, then the vv is
     /// advanced to `doc.oplog_vv()`. Idempotent: exporting twice from the same vv
     /// yields the same bytes, so the delta stream cannot be truncated (mirrors
-    /// `trame-logic §8`; `TrameState.last_exported_vv`).
+    /// `trame-logic section 8`; `TrameState.last_exported_vv`).
     last_exported_vv: VersionVector,
 }
 
@@ -978,7 +978,7 @@ impl ProseState {
     pub fn apply_remote(&mut self, payload: &[u8]) -> Vec<ProseEvent> { /* ... */ }
 
     /// Remote `Ephemeral` payload (already decrypted by `ambre-sync`). The author
-    /// identity is the **Sync-resolved `from_user_id`** (spoof-proof, `ambre-spec-sync.md §3`):
+    /// identity is the **Sync-resolved `from_user_id`** (spoof-proof, `ambre-spec-sync.md section 3`):
     /// the peer-authored payload carries only the cursor position and a self-asserted,
     /// cosmetic `display_name` -- never a `user_id`. The canonical id and the peer color
     /// are derived here from `from_user_id`.
@@ -1044,7 +1044,7 @@ pub enum ProseCommand {
     ///    comments/suggestions/footnotes follows the same rule as DeleteText.
     DeleteRange   { anchor: (TreeID, u32), focus: (TreeID, u32) },
     /// `value` is the mark's payload, always encoded as a String (see the mark constants in
-    /// logic §2.A). CANONICAL NUMERIC ENCODING (P-17): a numeric-valued mark (`fs` font size)
+    /// logic section 2.A). CANONICAL NUMERIC ENCODING (P-17): a numeric-valued mark (`fs` font size)
     /// is a plain base-10 decimal string with a `.` decimal separator, no exponent, no
     /// trailing zeros, no thousands separator, no unit suffix -- e.g. `fs` = "11" or "11.5",
     /// never "11.0pt" nor "1.1e1". This is exactly Rust's `f32::to_string()` output and is
@@ -1148,7 +1148,7 @@ pub enum ProseCommand {
     DeleteFootnote  { footnote_id: Uuid },
     /// Insert a cross reference at `pos` pointing at `target_block_id`. TARGET ID STRATEGY
     /// (P-09): the reference stores the target's stable Loro `TreeID` (serialized form) in
-    /// the `ref` mark value as "{target_block_id}:{kind}" (logic §2.A). The `TreeID` is the
+    /// the `ref` mark value as "{target_block_id}:{kind}" (logic section 2.A). The `TreeID` is the
     /// CRDT identity that survives `MoveBlock` and concurrent edits, so a live reference is
     /// never stale. For interop round-trip (logic-interop), the `TreeID` is mapped to/from
     /// the foreign format's own anchor (a generated bookmark id on export, resolved back to
@@ -1190,7 +1190,7 @@ pub enum ProseCommand {
 }
 
 /// Typed initializer for `InsertBlock` (P-08). Each variant carries exactly the creation
-/// attributes of the target block type, so the handler writes the node's "a" map (logic §2.A)
+/// attributes of the target block type, so the handler writes the node's "a" map (logic section 2.A)
 /// directly -- no stringly-typed attribute path, no post-insert corrective command.
 #[derive(Debug, Clone)]
 pub enum BlockInit {
@@ -1278,7 +1278,7 @@ pub enum ProseEvent {
 
 #### `PresencePayload`, `CursorPosition`, and `RemoteCursor`
 
-> ⚠️ **`PresencePayload` and `CursorPosition` keep `serde`**: they are the **postcard-serialized** `Ephemeral` payload that transits over the network (encrypted by `ambre-sync`) -- real network bytes. **`RemoteCursor` does NOT** carry `serde`: it is a Logic -> UI event payload (content plane, moved on `flume`), built from the Sync-resolved `from_user_id`.
+> **WARNING -- `PresencePayload` and `CursorPosition` keep `serde`**: they are the **postcard-serialized** `Ephemeral` payload that transits over the network (encrypted by `ambre-sync`) -- real network bytes. **`RemoteCursor` does NOT** carry `serde`: it is a Logic -> UI event payload (content plane, moved on `flume`), built from the Sync-resolved `from_user_id`.
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1389,7 +1389,7 @@ plaintext to `ambre-server`.
 
 ## 4. QUALITY & TESTABILITY
 
-> **This is a test plan, not coverage.** `crates/ambre-prose` is empty; nothing below exists. What the engine will guarantee is the table in §1, where every row is `unimplemented` and cites `ARCH P2`. The cases here are the belts those rows will land with -- kept because the pagination case list is the hard part of the design and is worth reviewing before anyone writes it.
+> **This is a test plan, not coverage.** `crates/ambre-prose` is empty; nothing below exists. What the engine will guarantee is the table in section 1, where every row is `unimplemented` and cites `ARCH P2`. The cases here are the belts those rows will land with -- kept because the pagination case list is the hard part of the design and is worth reviewing before anyone writes it.
 
 **Planned unit cases** -- host tier (`cfg(not(target_arch = "wasm32"))`):
 
@@ -1421,11 +1421,11 @@ plaintext to `ambre-server`.
 | Pagination: no margin at page top | First block of a page -> space_before ignored |
 | Pagination: incremental invalidation (unchanged height) | Modify text without changing height -> no placement recalculation |
 | Pagination: incremental invalidation (changed height) | Add line -> recalculate from this block, previous blocks unchanged |
-| Pagination: TOC placeholder estimated height | 10 headings × toc_line_height -> correct estimated height |
+| Pagination: TOC placeholder estimated height | 10 headings x toc_line_height -> correct estimated height |
 | `BlockType::Toc`: allowed at root | Nesting rule |
 | Round-trip postcard of the Prose **network payload** (`PresencePayload` / `CursorPosition`) | `assert_eq!` after double serialization (these are the only postcard types -- `ProseCommand`/`ProseEvent`/`RemoteCursor` move typed on `flume`, nothing to serialize) |
 
-**Planned properties.** Two, both `proptest` over generated command sequences: **2-peer convergence** (interleaved `ProseCommand`s, identical text on both peers -- `PROSE-004`'s belt as well) and **totality of `expand_type_for`** (any key, no panic -- `PROSE-007`). Bodies are deliberately not written here: an uncompiled copy of a test drifts from the real one, which is the failure this corpus already paid for once (`ambre-spec-testing.md §7`).
+**Planned properties.** Two, both `proptest` over generated command sequences: **2-peer convergence** (interleaved `ProseCommand`s, identical text on both peers -- `PROSE-004`'s belt as well) and **totality of `expand_type_for`** (any key, no panic -- `PROSE-007`). Bodies are deliberately not written here: an uncompiled copy of a test drifts from the real one, which is the failure this corpus already paid for once (`ambre-spec-testing.md section 7`).
 
 ---
 
@@ -1482,8 +1482,8 @@ plaintext to `ambre-server`.
 | **Pagination in the UI thread** | `requestAnimationFrame` (16ms). A full recomputation (>20ms) would block rendering. Logic thread mandatory. |
 | **Pagination in the Sync thread** | Does not know Parley, reserved for crypto/network. |
 | **`contentEditable` / Slate.js / ProseMirror** | Rejected globally: outside Rust-first + wgpu/DrawSurface vision. |
-| **Loro branches for track changes** | Full `LoroDoc` fork = memory overhead O(doc_size × suggestions). `MarkType si/sd` is O(1). |
-| **Single-drain `export_updates()` for the local delta** | Draining Loro's internal diff is order-fragile: a second call returns empty and silently truncates the stream, forcing every caller to thread the one exported copy by hand. The idempotent vv-cursor (`ExportMode::Updates { from: &last_exported_vv }`, then advance the vv) exports the same ops from a stored version vector as many times as needed, and is the mechanism `trame-logic §8` already uses -- one delta model for both apps on the shared engine. |
+| **Loro branches for track changes** | Full `LoroDoc` fork = memory overhead O(doc_size x suggestions). `MarkType si/sd` is O(1). |
+| **Single-drain `export_updates()` for the local delta** | Draining Loro's internal diff is order-fragile: a second call returns empty and silently truncates the stream, forcing every caller to thread the one exported copy by hand. The idempotent vv-cursor (`ExportMode::Updates { from: &last_exported_vv }`, then advance the vv) exports the same ops from a stored version vector as many times as needed, and is the mechanism `trame-logic section 8` already uses -- one delta model for both apps on the shared engine. |
 
 ---
 
@@ -1509,7 +1509,7 @@ plaintext to `ambre-server`.
 - [ ] Incremental layout invalidation (re-measure modified block, recalculate from that block).
 - [ ] `shape_dirty_blocks()` -> `ProseEvent::RunsUpdated`.
 - [ ] Host tests of `ProseState` with mock `flume` channels (pure dispatch, x86_64 -- like `ambre-logic` tests).
-- [ ] Exhaustive pagination unit tests (19 cases -- see §4).
+- [ ] Exhaustive pagination unit tests (19 cases -- see section 4).
 - [ ] Criterion benchmarks (100 pages < 20 ms, incremental < 3 ms).
 
 **Phase 2 -- Collaborative Cursors & Undo (Week 3)**

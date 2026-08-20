@@ -23,7 +23,7 @@ This component handles:
 This component delegates:
 - Actual CRDT mutations -> `ProseState::handle_command()` via `ProseCommand`.
 - The container layout, versioning and migration of `.ambre` -> the shared helper specified in `../1-Foundations/ambre-spec-docfile.md`.
-- Any compression / encryption stage applied on top of a `.ambre` payload -> `ambre-sync` (and, for a local export, only on the explicit passphrase-sealed opt-in -- `docfile §3`).
+- Any compression / encryption stage applied on top of a `.ambre` payload -> `ambre-sync` (and, for a local export, only on the explicit passphrase-sealed opt-in -- `docfile section 3`).
 - Live wgpu + Parley/Swash rendering (display list, virtual scroll) -> `prose-ui`.
 - Binary asset (image) fetch/decrypt -> `ambre-sync` (media flow: `RestCommand::UploadMedia`/`DownloadMedia` -> `RestEvent::MediaUploaded`/`MediaDownloaded`, addressed by `content_hash`). The Logic thread never touches the network or S3.
 
@@ -43,29 +43,29 @@ This component delegates:
 
 No dependency on `ambre-sync`, `ambre-crypto`, or `ruzstd` -- the native format's **compression
 (zstd) and encryption (XChaCha20-Poly1305)** are applied by `ambre-sync` downstream (sole
-compression/crypto consumer, per `ambre-spec-architecture.md §1`), not in `ambre-prose/interop`.
+compression/crypto consumer, per `ambre-spec-architecture.md section 1`), not in `ambre-prose/interop`.
 The Logic thread carries **zero compression, zero crypto, zero network**.
 
-**Invariants:** prefix `PROSE-IO`. Grammar and status values are normative in `ambre-spec-architecture.md §4`; the roll-up is `ambre-spec-testing.md §7`. Every row is `unimplemented` -- `crates/ambre-prose` is empty -- and lands with `ARCH P2` (Epic `E5`).
+**Invariants:** prefix `PROSE-IO`. Grammar and status values are normative in `ambre-spec-architecture.md section 4`; the roll-up is `ambre-spec-testing.md section 7`. Every row is `unimplemented` -- `crates/ambre-prose` is empty -- and lands with `ARCH P2` (Epic `E5`).
 
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
-| `PROSE-IO-001` | Every conversion MUST run in the Logic thread in WASM memory; no chunk of a document MUST reach the relay during conversion. | §1; §3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-IO-002` | An import MUST produce typed `ProseCommand`s only; it MUST NOT mutate the `LoroDoc` directly. | §1; §2.A | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-IO-003` | An export MUST be idempotent: exporting the same document twice yields byte-identical output, up to a metadata timestamp. | §1 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-IO-004` | Every fidelity loss MUST raise a `ConversionWarning` at the exact drop site; a feature neither represented in `ProseIr` nor warned about is a spec violation. | §1 (hard gate) | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-IO-005` | A wildcard match arm over format elements MUST warn before discarding. | §1; §2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-IO-006` | A writer emitting an approximation (nearest colour, `---` for both `PageBreak` and `HRule`, dropped image geometry) MUST record it in the report. | §1; §2.D | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-IO-007` | An image MUST be stored in the CRDT as a `content_hash` reference and resolved at export from the media cache. | §1; §2.E | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-IO-008` | An export whose images are not cached MUST emit placeholders and report them; it MUST NOT block or fail silently. | §1; §2.E | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-IO-009` | Every format MUST pass through `ProseIr`: a reader MUST NOT write `ProseCommand`s directly from format structures, and a writer MUST NOT read the CRDT. | §2.A | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-IO-010` | A malformed or hostile input file MUST fail as a typed error and MUST NOT panic. | §2.A; §4 | not built -- lands with `ARCH P2` (Epic `E5`); decoders are the first `cargo-fuzz` targets (architecture §4) | unimplemented |
-| `PROSE-IO-011` | A failed import MUST leave the document untouched: partial application MUST NOT be observable. | §2.A | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-IO-012` | The native `.ambre` path MUST be the only lossless round trip, and MUST reuse the shared container of `ambre-spec-docfile.md` rather than re-implement it. | §2.B | not built -- lands with `ARCH P2` (Epic `E5`), on top of `DOCFILE P0` (Epic `EF`) | unimplemented |
-| `PROSE-IO-013` | A `.ambre` file belonging to another app MUST be re-dispatched, never coerced into Prose. | §2.B; `ambre-spec-docfile.md §2.A` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-IO-014` | A DOCX round trip MUST preserve every structure represented in `ProseIr` -- styles, lists, tables, comments, tracked changes -- or warn for each one it does not. | §2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-IO-015` | PDF export MUST reuse the same `DrawSurface` render path as the screen, through `KrillaSurface` in the Logic thread. | §2.E; `prose-ui §2.D` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-IO-016` | An imported HTML document MUST be sanitised: no script, no remote fetch triggered by the import. | §2.F; §3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-001` | Every conversion MUST run in the Logic thread in WASM memory; no chunk of a document MUST reach the relay during conversion. | section 1; section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-002` | An import MUST produce typed `ProseCommand`s only; it MUST NOT mutate the `LoroDoc` directly. | section 1; section 2.A | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-003` | An export MUST be idempotent: exporting the same document twice yields byte-identical output, up to a metadata timestamp. | section 1 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-004` | Every fidelity loss MUST raise a `ConversionWarning` at the exact drop site; a feature neither represented in `ProseIr` nor warned about is a spec violation. | section 1 (hard gate) | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-005` | A wildcard match arm over format elements MUST warn before discarding. | section 1; section 2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-006` | A writer emitting an approximation (nearest colour, `---` for both `PageBreak` and `HRule`, dropped image geometry) MUST record it in the report. | section 1; section 2.D | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-007` | An image MUST be stored in the CRDT as a `content_hash` reference and resolved at export from the media cache. | section 1; section 2.E | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-008` | An export whose images are not cached MUST emit placeholders and report them; it MUST NOT block or fail silently. | section 1; section 2.E | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-009` | Every format MUST pass through `ProseIr`: a reader MUST NOT write `ProseCommand`s directly from format structures, and a writer MUST NOT read the CRDT. | section 2.A | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-010` | A malformed or hostile input file MUST fail as a typed error and MUST NOT panic. | section 2.A; section 4 | not built -- lands with `ARCH P2` (Epic `E5`); decoders are the first `cargo-fuzz` targets (architecture section 4) | unimplemented |
+| `PROSE-IO-011` | A failed import MUST leave the document untouched: partial application MUST NOT be observable. | section 2.A | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-012` | The native `.ambre` path MUST be the only lossless round trip, and MUST reuse the shared container of `ambre-spec-docfile.md` rather than re-implement it. | section 2.B | not built -- lands with `ARCH P2` (Epic `E5`), on top of `DOCFILE P0` (Epic `EF`) | unimplemented |
+| `PROSE-IO-013` | A `.ambre` file belonging to another app MUST be re-dispatched, never coerced into Prose. | section 2.B; `ambre-spec-docfile.md section 2.A` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-014` | A DOCX round trip MUST preserve every structure represented in `ProseIr` -- styles, lists, tables, comments, tracked changes -- or warn for each one it does not. | section 2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-015` | PDF export MUST reuse the same `DrawSurface` render path as the screen, through `KrillaSurface` in the Logic thread. | section 2.E; `prose-ui section 2.D` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-016` | An imported HTML document MUST be sanitised: no script, no remote fetch triggered by the import. | section 2.F; section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
 
 > **Invariant coverage.** 16 `unimplemented`. `PROSE-IO-004` is the one worth reading twice: it is written in this spec as a "hard gate", and as a row it becomes checkable per format instead of being a sentence everyone agrees with.
 ---
@@ -113,7 +113,7 @@ pub struct IrMeta {
     pub title:  Option<String>,
     pub lang:   Option<String>,   // BCP 47
     pub page:   Option<IrPage>,
-    // Headers/footers are MVP features (features §G). They are carried in the IR so no
+    // Headers/footers are MVP features (features section G). They are carried in the IR so no
     // export drops them silently. `first` variants are set only when different_first_page.
     pub header:       Option<IrHeaderFooter>,
     pub header_first: Option<IrHeaderFooter>,
@@ -149,7 +149,7 @@ pub struct IrPage {
 }
 
 /// A comment thread. `anchor_*` locate the commented range; the live "cm" mark on the runs
-/// carries `comment_id` for round-trip. Bodies/replies/author/date/resolved (features §H)
+/// carries `comment_id` for round-trip. Bodies/replies/author/date/resolved (features section H)
 /// have an IR home so docx `comments.xml` and HTML `data-comment-id` export real content.
 #[derive(Debug, Clone)]
 pub struct IrComment {
@@ -171,7 +171,7 @@ pub struct IrReply {
 pub enum IrBlock {
     Paragraph  { style_id: Option<String>, para_style: IrParaStyle, runs: Vec<IrRun> },
     Heading    { level: u8, numbered: bool, runs: Vec<IrRun> },
-    // Depth is NOT stored: it is derived from `children` nesting, matching logic §C where
+    // Depth is NOT stored: it is derived from `children` nesting, matching logic section C where
     // `ListItem` depth is derived from the MovableTree ancestor chain and never persisted
     // (avoids the double-encoding that would drift from the tree).
     ListItem   { style: IrListStyle, runs: Vec<IrRun>, children: Vec<IrBlock> },
@@ -186,7 +186,7 @@ pub enum IrBlock {
     Footnote   { id: Uuid, runs: Vec<IrRun> },
 }
 
-/// Table-level styling (features §E). `header_row` promotes the first row to `<w:tblHeader>`
+/// Table-level styling (features section E). `header_row` promotes the first row to `<w:tblHeader>`
 /// / `<thead>` / `<th>`; `banded_rows` applies alternating row shading.
 #[derive(Debug, Clone)]
 pub struct IrTableStyle {
@@ -206,14 +206,14 @@ pub enum IrCellVAlign { Top, Center, Bottom }
 pub struct IrTableCell {
     pub rowspan:      u32,
     pub colspan:      u32,
-    // Cell styling (features §E). Colors are `0x00RRGGBB` (see `IrRun::color`).
+    // Cell styling (features section E). Colors are `0x00RRGGBB` (see `IrRun::color`).
     pub bg:           Option<u32>,   // cell shading -> <w:shd> / background-color
     pub borders:      bool,          // draw cell borders -> <w:tcBorders> / border
     pub border_color: Option<u32>,   // border color, defaults to text color when None
     pub padding_pt:   Option<f32>,   // cell margins -> <w:tcMar> / padding
     pub valign:       IrCellVAlign,  // -> <w:vAlign> / vertical-align
     // Paragraph, Heading, ListItem, and Image are allowed. A nested Table or CodeBlock is
-    // not representable (logic §C TableCell rule) and is reported `FeatureNotSupported`
+    // not representable (logic section C TableCell rule) and is reported `FeatureNotSupported`
     // during import -- never dropped silently. An `Image` cell round-trips (P-112).
     pub blocks:       Vec<IrBlock>,
 }
@@ -240,18 +240,18 @@ pub struct IrRun {
     pub comment_id:    Option<Uuid>,
     // Suggestion (track-change) marks. `suggest_ins`/`suggest_del` are the suggestion ids
     // (logic `MarkType si/sd`). `suggest_author`/`suggest_date` carry the docx
-    // `<w:ins/w:del w:author w:date>` metadata so it round-trips both ways (features §I).
+    // `<w:ins/w:del w:author w:date>` metadata so it round-trips both ways (features section I).
     pub suggest_ins:    Option<Uuid>,
     pub suggest_del:    Option<Uuid>,
     pub suggest_author: Option<String>,
     pub suggest_date:   Option<u64>,       // Unix ms
     pub footnote_ref:   Option<Uuid>,
-    /// Dynamic header/footer field carried inline (features §G). Set only inside
+    /// Dynamic header/footer field carried inline (features section G). Set only inside
     /// `IrHeaderFooter::runs`; `None` in body runs.
     pub field:          Option<IrField>,
     /// Cross reference: `(target_block_id, kind)`. `target_block_id` is the IR-level id of
     /// the referenced block, mapping to logic `InsertCrossRef { target_block_id, kind }`
-    /// (logic §C). Rendered as a docx/pdf field and an HTML anchor.
+    /// (logic section C). Rendered as a docx/pdf field and an HTML anchor.
     pub cross_ref:      Option<(Uuid, IrCrossRefKind)>,
 }
 
@@ -260,15 +260,15 @@ pub struct IrParaStyle {
     pub align:          Option<IrTextAlign>,
     pub indent_first:   Option<f32>,
     pub indent_left:    Option<f32>,
-    pub indent_right:   Option<f32>,   // logic ParagraphStyle.indent_right (§C)
+    pub indent_right:   Option<f32>,   // logic ParagraphStyle.indent_right (section C)
     pub space_before:   Option<f32>,
     pub space_after:    Option<f32>,
-    /// Line spacing as a **multiple** (e.g. `1.15`), matching logic §C which stores only a
+    /// Line spacing as a **multiple** (e.g. `1.15`), matching logic section C which stores only a
     /// multiple. Docx `<w:spacing w:lineRule="exact"|"atLeast">` (fixed-point spacing) is
     /// NOT representable and is reported `FormattingLost` on import -- never dropped silently.
     pub line_height:    Option<f32>,
-    pub keep_together:  bool,          // logic ParagraphStyle.keep_together (§C)
-    pub keep_with_next: bool,          // logic ParagraphStyle.keep_with_next (§C)
+    pub keep_together:  bool,          // logic ParagraphStyle.keep_together (section C)
+    pub keep_with_next: bool,          // logic ParagraphStyle.keep_with_next (section C)
 }
 
 /// Character-formatting defaults carried by a named style (P-118). Purpose-built like
@@ -357,10 +357,10 @@ the whole call.
 
 #[derive(Debug, Clone)]
 pub enum InteropError {
-    // Native .ambre header failures (see §B).
+    // Native .ambre header failures (see section B).
     TruncatedHeader,
     InvalidMagic,
-    UnsupportedVersion { found: u8 },   // recovery: see §B migration path
+    UnsupportedVersion { found: u8 },   // recovery: see section B migration path
     WrongDocType,
     // Whole-document import/export failures.
     ParseFailed(String),    // format bytes could not be parsed at all
@@ -385,14 +385,14 @@ returned as `WrongDocType { found }` and re-dispatched by the caller -- Prose ne
 
 **What Prose does not own:** the header itself, the version registry, migration, and the protection
 stage. In particular the format's at-rest question ("encrypted -- under which key?") is resolved in
-`ambre-spec-docfile.md §3`: a **local file is plaintext by default, passphrase-sealed on explicit
+`ambre-spec-docfile.md section 3`: a **local file is plaintext by default, passphrase-sealed on explicit
 opt-in, and never sealed under the `DocumentKey`**, whose server-side rotation on revocation would
 make an exported backup permanently unreadable. The `.ambre` container is a **file** format; the
 network snapshot path carries a bare `export_snapshot()` payload with no header, sealed under the
 `DocumentKey` by `ambre-sync`, and is a different destination with different rules.
 
 The `InteropError` variants `TruncatedHeader` / `InvalidMagic` / `UnsupportedVersion` /
-`WrongDocType` (§A) mirror `DocFileError` and are produced by the shared helper.
+`WrongDocType` (section A) mirror `DocFileError` and are produced by the shared helper.
 
 ---
 
@@ -443,7 +443,7 @@ The `InteropError` variants `TruncatedHeader` / `InvalidMagic` / `UnsupportedVer
 | Automatic section numbering | Not exported (Word manages its own numbering via fields), warning |
 | Dynamic cross references (`CrossRefKind::PageNumber`) | Exported as Word `{ PAGE }` fields -- updated on open in Word |
 | `BlockType::Toc` | Exported as standard Word TOC field |
-| Docx `<w:spacing w:lineRule="exact"/"atLeast">` (import) | Not representable (IR stores a spacing multiple only, logic §C) -- degraded to nearest multiple, `FormattingLost` warning |
+| Docx `<w:spacing w:lineRule="exact"/"atLeast">` (import) | Not representable (IR stores a spacing multiple only, logic section C) -- degraded to nearest multiple, `FormattingLost` warning |
 | Headers / footers | Round-trip via `/word/header{n}.xml` + `/word/footer{n}.xml` referenced from `<w:sectPr>` (`IrMeta.header/footer`, `first` variants under `w:titlePg`) |
 | Page orientation | Round-trips via `<w:pgSz w:orient>` <-> `IrPage.orientation` |
 | Docx image content-type EMF/WMF/TIFF | Not decodable in WASM -- skipped with a `FeatureNotSupported` warning (png/jpeg import natively) |
@@ -515,17 +515,17 @@ PDF/A-compliant document with vector text, active hyperlinks (TOC, cross referen
 and XMP metadata.
 
 **`DrawSurface` architecture:** the `DrawSurface` trait is defined in the `ambre-draw`
-crate (source of truth: `ambre-spec-architecture.md` §2.D). It depends on `kurbo`,
+crate (source of truth: `ambre-spec-architecture.md` section 2.D). It depends on `kurbo`,
 `peniko`, `parley` (types only -- no direct dependency on the final rendering engine).
 
 Prose does **not** define its own surface types. Both `DrawSurface` implementations are
 owned by Foundation and reused as-is:
 
-- **Screen:** `ambre_canvas::render::WgpuSurface` (UI thread) -- `ambre-spec-canvas.md §D`.
+- **Screen:** `ambre_canvas::render::WgpuSurface` (UI thread) -- `ambre-spec-canvas.md section D`.
 - **PDF:** `ambre_pdf::KrillaSurface` (Logic thread, lazy-loaded), living in the shared
   **`ambre-pdf`** crate (deps `ambre-draw` + `krilla`) -- *not* in an app crate, since PDF
   export only translates `DrawSurface` primitives to krilla and is app-agnostic
-  (`ambre-spec-canvas.md §D`). Its signature is Foundation's:
+  (`ambre-spec-canvas.md section D`). Its signature is Foundation's:
   `KrillaSurface<'a, 'b> { surface: &'a mut krilla::surface::Surface<'b> }` -- the surface
   carries **no** `FontContext`; fonts are threaded to the render layer separately, exactly
   as `paint_content(.., fc: &mut FontContext, ..)` does on screen.
@@ -539,7 +539,7 @@ use ambre_pdf::KrillaSurface;   // Foundation-owned, not redefined here
 `DrawSurface` trait methods (`draw_glyphs`, `fill_rect`, `draw_image`, path/clip/transform)
 and the per-run/per-block draw helpers are identical whether the target is the screen or a
 PDF. The **top-level entry point is not** a single shared function: the screen renderer
-draws from live `ProseUiState` one visible block at a time (`render_block_on`, `prose-ui §D`)
+draws from live `ProseUiState` one visible block at a time (`render_block_on`, `prose-ui section D`)
 for partial repaint + glyph caching, while the export renderer draws from the immutable
 `ProseIr` + `PageLayout` a whole page at a time (`render_page_on`, below). Their input models
 differ by design (live editable state vs frozen export IR), so they are distinct callers
@@ -568,14 +568,14 @@ const MM_TO_PT: f32 = 2.834_645_7;
 
 | Feature | Support |
 |---------|---------|
-| Vector text (no text image) | ✓ via Parley + Krilla |
-| TOC hyperlinks (clickable) | ✓ |
-| Internal cross references (page, section) | ✓ |
-| External links (`link` mark) | ✓ |
-| Raster images (png, jpeg) | ✓ |
-| Page numbers in footer | ✓ |
-| XMP metadata (title, lang, author) | ✓ |
-| PDF forms | ✗ (out of scope) |
+| Vector text (no text image) | yes via Parley + Krilla |
+| TOC hyperlinks (clickable) | yes |
+| Internal cross references (page, section) | yes |
+| External links (`link` mark) | yes |
+| Raster images (png, jpeg) | yes |
+| Page numbers in footer | yes |
+| XMP metadata (title, lang, author) | yes |
+| PDF forms | no (out of scope) |
 | PDF/UA (accessibility) | Post-MVP |
 
 ---
@@ -725,15 +725,15 @@ transfer to the server during conversion.
 |------|---------|--------|------------|
 | Import docx/md/html | `Vec<u8>` received from UI thread via `UiEnvelope` | The imported file may contain macros or scripts | `docx-rs` does not execute macros. `html5ever` sanitizes HTML (no JS execution). |
 | PDF export with images | Image bytes read from the Logic `media_cache` | Presigned-URL fetch + decrypt happen entirely in `ambre-sync` | The Logic thread never sees the presigned URL nor the network: it only receives already-decrypted bytes via `RestEvent::MediaDownloaded`. Presigned URLs (5-minute TTL) are handled inside Sync. |
-| Native `.ambre` file (local export) | Header + plaintext Loro snapshot in the Logic thread | Isolated WASM memory (Logic thread), then the user's disk | Written as-is by default -- a local `.ambre` is **plaintext at rest**, like the .docx/.pdf/.md this spec already exports, and the export UI says so. A passphrase-sealed variant is an explicit opt-in. Never sealed under the `DocumentKey` (rotation hazard). See `docfile §3`. |
+| Native `.ambre` file (local export) | Header + plaintext Loro snapshot in the Logic thread | Isolated WASM memory (Logic thread), then the user's disk | Written as-is by default -- a local `.ambre` is **plaintext at rest**, like the .docx/.pdf/.md this spec already exports, and the export UI says so. A passphrase-sealed variant is an explicit opt-in. Never sealed under the `DocumentKey` (rotation hazard). See `docfile section 3`. |
 | Network snapshot (a different destination) | Bare `export_snapshot()`, **no `.ambre` header** | Isolated WASM memory (Logic thread) | Logic hands the plaintext snapshot to Sync as a typed `SyncCommand` payload over `flume`; the Main thread relays it to the separate Sync worker (`postMessage` + `postcard`), which alone compresses (zstd) and encrypts (XChaCha20) under the `DocumentKey`. Plaintext never reaches the network. |
 | Import HTML clipboard | HTML from `navigator.clipboard.read()` | Malicious HTML (injection) | `html5ever` sanitizes, `markup5ever_rcdom` does not preserve `on*` attributes or `<script>`. |
 
 **Image resolution on export:**
 
 Images are resolved ahead of export through the Foundation media flow -- the Logic thread
-issues **no network call** and holds **no crypto** (`ambre-spec-architecture.md §1`,
-`§2.D RestCommand`). All fetch + decrypt work happens in the Sync worker:
+issues **no network call** and holds **no crypto** (`ambre-spec-architecture.md section 1`,
+`section 2.D RestCommand`). All fetch + decrypt work happens in the Sync worker:
 
 ```
 UI / Logic thread                          Sync worker (ambre-sync)
@@ -815,11 +815,11 @@ Fixtures are static versioned files, never generated on the fly in tests.
 | `ambre-prose/interop` (logic) | ~40 KB | ~13 KB |
 | **Total interop** | **~1.02 MB** | **~308 KB** |
 
-> `krilla` is billed to the shared **`ambre-pdf`** crate (§E), not to `ambre-prose/interop`.
+> `krilla` is billed to the shared **`ambre-pdf`** crate (section E), not to `ambre-prose/interop`.
 > It is counted once here because Prose is the first PDF-exporting consumer; a second consumer
 > (e.g. Toile) reuses the same `ambre-pdf` code and adds no krilla weight (P-44).
 
-> ⚠️ Interop crates represent a significant binary cost. If the total WASM budget is
+> WARNING: Interop crates represent a significant binary cost. If the total WASM budget is
 > exceeded, use **lazy loading** (WASM bundle splitting): `docx-rs`, `krilla`,
 > `html5ever`, and `pulldown-cmark` are excluded from the startup binary and dynamically
 > loaded in the Logic thread on the first import/export operation. No additional worker --
@@ -827,7 +827,7 @@ Fixtures are static versioned files, never generated on the fly in tests.
 > import/export, the Logic thread is intentionally blocked (waiting screen on the UI side);
 > the Logic thread has **no JS event loop**, so Sync -> Logic events queue in the bounded
 > `flume` relay drained by the Main thread and are delivered once the Logic thread unblocks
-> -- none are lost (backpressure via `CHANNEL_CAPACITY`, see `ambre-spec-architecture.md §2.B`).
+> -- none are lost (backpressure via `CHANNEL_CAPACITY`, see `ambre-spec-architecture.md section 2.B`).
 
 ---
 
