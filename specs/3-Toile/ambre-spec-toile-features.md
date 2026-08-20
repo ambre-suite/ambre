@@ -298,7 +298,7 @@ own top-level entry under the deterministic `comments` root).
   commit to the CRDT but are excluded from the `loro::UndoManager` scope (`toile-logic §8 bis`), the same stance
   as ephemeral presence being non-undoable.
 - **@mentions & notifications are deferred (post-MVP).** A mention would need a notification channel; that is
-  **Murmure**'s domain (`ambre-context §1`), so mentions land only once Toile↔Murmure notification routing
+  **Murmure**'s domain (`README.md` "Applications"), so mentions land only once Toile↔Murmure notification routing
   exists. MVP comments are plain-text threads with resolution. See the roadmap.
 
 Rendering (anchored pins with an unread/resolved state, the thread panel) is `toile-ui §5sexies` / `§8ter`; the

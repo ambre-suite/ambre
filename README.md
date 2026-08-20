@@ -2,26 +2,31 @@
 
 **End-to-End Encrypted, 100% Rust**
 
-AMBRE is a next-generation collaborative office suite built entirely in Rust, featuring real-time collaboration with CRDTs, end-to-end encryption (E2EE), and GPU-accelerated rendering via wgpu (WebGL2/WebGPU). It runs as a single-page WebAssembly application with a Rust-native server backend.
+AMBRE is a next-generation collaborative office suite built entirely in Rust, featuring real-time
+collaboration with CRDTs, end-to-end encryption (E2EE), and GPU-accelerated rendering via wgpu
+(WebGL2/WebGPU). It runs as a single-page WebAssembly application with a Rust-native server backend.
 
 ## Vision & Identity
 
 AMBRE is a collaborative office suite that is:
-- **100% Rust** – both client (WASM) and server
-- **End-to-End Encrypted (Zero-Knowledge)** – the server acts as a blind relay
-- **Open Source** – fully transparent development
 
-**Differentiator:** The only suite combining CRDT + Rust/WASM/wgpu + native E2EE without privacy compromises.
+- **100% Rust** -- both client (WASM) and server
+- **End-to-End Encrypted (Zero-Knowledge)** -- the server acts as a blind relay
+- **Open Source** -- fully transparent development
+- **European cloud** -- hosted in the EU
+
+**Differentiator:** the only suite combining CRDT + Rust/WASM/wgpu + native E2EE without privacy
+compromises.
 
 ## Applications
 
 | Application | Description |
 |-------------|-------------|
 | **Prose** | Collaborative word processing |
-| **Trame** | Collaborative spreadsheet |
-| **Toile** | Infinite whiteboard and presentations |
+| **Trame** | Collaborative spreadsheet: calculation engine, formulas, dependency DAG |
+| **Toile** | Infinite whiteboard and presentations. **A Miro, not a Figma** |
 | **Murmure** | Secure messaging with E2EE channels |
-| **Rendez-Vous** | E2EE video conferencing (WebRTC/SFrame) |
+| **Rendez-Vous** | E2EE video conferencing (WebRTC/SFrame). Ephemeral, not a document type |
 
 ## Core Principles (Non-Negotiable Pillars)
 
@@ -29,37 +34,59 @@ AMBRE is a collaborative office suite that is:
 |--------|------------|
 | **Rust-first** | 100% Rust client and server. Pure Rust libraries preferred over C bindings. |
 | **Pure CSR** | Single Page Application in WASM. All computation client-side; server only relays. |
-| **E2EE** | Server is a blind relay – never sees plaintext content. |
-| **Security** | No `unsafe` in our code. TOFU (Trust On First Use) model with out-of-band verification. |
+| **E2EE** | Server is a blind relay: it never sees plaintext content. |
+| **Security** | No `unsafe` in our code. TOFU (Trust On First Use) model with out-of-band verification. A key transparency log is planned for V2. |
 | **Performance** | Mobile-first targets (see below). |
 | **Zero-Knowledge** | Server only knows routing metadata (document_id, public key, clock, sequence). No content, no encryption keys. |
 
 ## Performance Targets (Mobile-First)
 
-All targets calibrated for a mid‑range 2024 smartphone.
+All targets calibrated for a mid-range 2024 smartphone. The per-operation budgets derived from them
+are normative in [`specs/1-Foundations/ambre-spec-architecture.md`](specs/1-Foundations/ambre-spec-architecture.md),
+section 5.
 
 | Requirement | Target | Justification |
 |-------------|--------|---------------|
 | **Render framerate** | 60+ FPS | Smooth interaction, no jank. Render thread must never be blocked by computation. |
 | **Content display latency** | < 15 ms | Between user action (scroll, input) and visual update. Users should perceive no lag. |
-| **Inter‑user latency** | < 300 ms | Between one user’s input and display on a collaborator’s screen. Network‑dependent, but client processing adds ≤ 50 ms. |
-| **Initial load time** | < 3 s on 4G | First interactive display. WASM binary < 2 MB gzipped. |
-| **Client memory** | < 100 MB | For a typical document. Proportional to document size, not its history. |
+| **Inter-user latency** | < 300 ms | Between one user's input and display on a collaborator's screen. Network-dependent, but client processing adds no more than 50 ms. |
+| **Initial load time** | < 3 s on 4G | First interactive display. WASM binary < 2 MB gzipped. |
+| **Client memory** | < 100 MB | For a typical document. Proportional to document size, not its history. |
 
-**Architectural orientation:** 3 isolated WASM workers (render / business logic / encrypted sync), GPU rendering via wgpu (WebGL2 default, WebGPU opt-in), real‑time CRDT collaboration.
+**Architectural orientation:** 3 isolated WASM workers (render / business logic / encrypted sync),
+GPU rendering via wgpu, real-time CRDT collaboration.
 
 ## Technology Choices
 
 | Domain | Choice | Justification |
 |--------|--------|---------------|
-| **Language** | Rust → WebAssembly (client), native Rust (server) | Memory safety without GC, performance, compiler as safety net for AI‑generated code. |
-| **Rendering** | wgpu + lyon + Parley/Swash | Vertex/fragment shaders only (no compute overhead). WebGL2 by default, WebGPU opt-in. Path tessellation via lyon, text via Parley/Swash glyph atlas. No DOM HTML for application UI. |
-| **Collaboration** | CRDT | Conflict resolution without a central truth server. Compatible with E2EE (no server content understanding). Offline‑first editing. |
+| **Language** | Rust -> WebAssembly (client), native Rust (server) | Memory safety without GC, performance, compiler as safety net for generated code. |
+| **Rendering** | wgpu + lyon + Parley/Swash | Vertex/fragment shaders only. Path tessellation via lyon, text via Parley/Swash glyph atlas. No DOM HTML for application UI. WebGPU is the target backend, WebGL2 the current default (`ambre-canvas`, see below). |
+| **Collaboration** | CRDT | Conflict resolution without a central truth server. Compatible with E2EE (no server content understanding). Offline-first editing. |
 | **Internal serialization** | Compact binary format | IPC between workers and network protocol. Small, fast to parse, no textual overhead. JSON only for REST API. |
-| **Real‑time transport** | Binary WebSocket | CRDT deltas, presence, cursors. Persistent connection, low per‑message overhead. |
-| **HTTP transport** | HTTP/2 minimum, HTTP/3 (QUIC) targeted | Multiplexing (HTTP/2), reduced mobile latency (QUIC eliminates TCP head‑of‑line blocking). |
-| **Encryption** | Modern pure‑Rust primitives | AEAD (XChaCha20‑Poly1305), signatures (Ed25519), key exchange (X25519), hash (BLAKE2b), KDF (Argon2). No OpenSSL bindings. |
-| **Compression** | zstd, pure Rust implementation | Applied before encryption. WASM‑compatible. |
+| **Real-time transport** | Binary WebSocket | CRDT deltas, presence, cursors. Persistent connection, low per-message overhead. |
+| **HTTP transport** | HTTP/2 minimum, HTTP/3 (QUIC) targeted | Multiplexing (HTTP/2), reduced mobile latency (QUIC eliminates TCP head-of-line blocking). |
+| **Encryption** | Modern pure-Rust primitives | AEAD (XChaCha20-Poly1305), signatures (Ed25519), key exchange (X25519), hash (BLAKE2b), KDF (Argon2). No OpenSSL bindings. |
+| **Compression** | zstd, pure Rust implementation | Applied before encryption. WASM-compatible. |
+
+WebGL2 is the default backend because a compositor bug on some drivers cannot be detected from
+JavaScript. WebGPU is opt-in through the `?webgpu` URL flag.
+
+## Rejected Alternatives
+
+Product and stack alternatives, evaluated and rejected. Rejected *architectural* decisions, such as
+channel topology, worker model and dispatch, are listed in
+[`specs/1-Foundations/ambre-spec-architecture.md`](specs/1-Foundations/ambre-spec-architecture.md),
+section 6.
+
+| Alternative | Rejected because |
+|-------------|-------------------|
+| **JavaScript / TypeScript** | Incompatible with the Rust-first pillar. No memory safety guarantee. Performance insufficient for heavy client-side computation (formulas, CRDT, crypto). |
+| **DOM / HTML for the application UI** | Performance insufficient for 60 FPS rendering of complex documents (a 100k-cell spreadsheet, an infinite whiteboard). The DOM is not designed for high-performance custom rendering. |
+| **Raw WebGL, without the wgpu abstraction** | Low-level API with no 2D abstraction and no portability across backends. wgpu drives WebGL2 and WebGPU from one code path, which is what makes the default above switchable. |
+| **OnlyOffice** | No native E2EE. Server-centric architecture, incompatible with the blind relay model. |
+| **CryptPad** | JavaScript stack, OT instead of CRDT, DOM rendering. Fails the Rust-first and Performance pillars. |
+| **Electron / Tauri** | AMBRE is a web application (browser PWA). No native desktop client: one codebase, one deployment. |
 
 ## Project Structure
 
@@ -70,15 +97,44 @@ AMBRE is organized as a Cargo workspace with the following crates:
 | `ambre-core` | Core types, UUID, versioning, errors |
 | `ambre-crypto` | Cryptographic primitives (AEAD, signatures, KDF) |
 | `ambre-protocol` | Wire format, WebSocket messages, signaling |
-| `ambre-bus` | Inter‑worker communication |
+| `ambre-bus` | Inter-worker communication |
 | `ambre-draw` | `DrawSurface` trait + shared primitives (kurbo, peniko, parley types) |
+| `ambre-canvas` | Content rendering runtime for the UI thread (wgpu) |
+| `ambre-pdf` | `DrawSurface` implementation backed by krilla, for PDF export |
+| `ambre-chrome` | Shared, app-agnostic Leptos chrome toolkit |
+| `ambre-commands` | Shared command registry for the UI thread |
+| `ambre-logic` | Logic thread entry point: command and event routing, pure Rust |
 | `ambre-sync` | CRDT synchronization layer |
-| `ambre-server` | Blind‑relay server (Axum, PostgreSQL, Redis) |
+| `ambre-server` | Blind-relay server (Axum, PostgreSQL, Redis) |
 | `ambre-trame` | Spreadsheet application |
 | `ambre-prose` | Word processor application |
 | `ambre-toile` | Whiteboard/presentation application |
 | `ambre-murmure` | Secure messaging |
 | `ambre-app` | Main WASM application (UI integration) |
+
+## Specifications
+
+The `specs/` directory is the source of truth for behaviour. Layout:
+
+| Path | Content |
+|------|---------|
+| [`specs/ambre-roadmap.md`](specs/ambre-roadmap.md) | The single entry point for scheduling: Epics, their dependency order, and the Stories they contain. |
+| [`specs/ambre-spec-template.md`](specs/ambre-spec-template.md) | The contract every spec follows: section order, header fields, and the rule that keeps implementation out of the specs. |
+| `specs/1-Foundations/` | Horizontal specs: architecture, sync, server, canvas, chrome, ui, docfile, fixtures, testing. |
+| `specs/2-Trame/`, `specs/3-Toile/`, `specs/4-Prose/` | Vertical specs, one directory per application. |
+| `specs/Todo/` | Applications not started: Murmure, Rendez-Vous. |
+| [`specs/security-audit.md`](specs/security-audit.md) | Numbered audit findings. An invariant that closes a finding cites it. |
+
+Each application directory holds the same four specs: **`-logic`** (CRDT state and computation
+engine), **`-ui`** (rendering and interaction), **`-features`** (user-facing behaviour), and
+**`-interop`** (import, export, file formats).
+
+Every spec declares its rules as an invariant table, one falsifiable rule per row. The grammar and
+the status values are normative in
+[`specs/1-Foundations/ambre-spec-architecture.md`](specs/1-Foundations/ambre-spec-architecture.md),
+section 4; the cross-spec roll-up is in
+[`specs/1-Foundations/ambre-spec-testing.md`](specs/1-Foundations/ambre-spec-testing.md), section 7.
+The CI `lint` job runs `just invariants` and `just spec-code` over the corpus.
 
 ## Getting Started
 
@@ -109,7 +165,8 @@ cd crates/ambre-server
 cargo run --release
 ```
 
-The server will start on `http://localhost:3000`. The frontend can be served via `trunk serve` (default port `8080`).
+The server will start on `http://localhost:3000`. The frontend can be served via `trunk serve`
+(default port `8080`).
 
 ## Roadmap
 
@@ -117,7 +174,8 @@ See [`specs/ambre-roadmap.md`](specs/ambre-roadmap.md) for detailed milestones a
 
 ## License
 
-AMBRE is open‑source software licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE).
+AMBRE is open-source software licensed under the
+[GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE).
 
 This license ensures that:
 - The software remains free and open-source
@@ -128,8 +186,10 @@ See the `LICENSE` file for full terms and conditions.
 
 ## Contributing
 
-Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) (to be written) and adhere to the project’s coding standards and architectural principles.
+Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) (to be
+written) and adhere to the project's coding standards and architectural principles. Agents work
+from [`AGENTS.md`](AGENTS.md).
 
 ---
 
-*AMBRE – Privacy‑by‑design collaboration, powered by Rust.*
+*AMBRE - Privacy-by-design collaboration, powered by Rust.*

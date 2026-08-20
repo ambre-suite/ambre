@@ -4,7 +4,6 @@ target
 lcov.info
 .vscode
 dist
-AGENTS.md
 .env
 # Local DB tooling config (pgAdmin/DBeaver), contains dev connection details.
 servers.json

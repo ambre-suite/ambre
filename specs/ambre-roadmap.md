@@ -192,7 +192,7 @@ Stories:
 
 ## ET — Testing & CI foundation  `[x]` (transverse) — *settles the MVP test debt*
 
-*Testability is a non-negotiable pillar (`ambre-context.md §3`, template §4, `ambre-spec-architecture.md §4`). The Trame MVP (`E3`) shipped functional but under-tested: ~20 server DB/redis tests are bare-`#[ignore]`, there is no CI, no measured coverage, no CRDT convergence property-test, and zero Leptos UI test. This Epic makes the existing tests run and closes the gaps before stacking new apps (`E4` onward). Per the tested Definition of Done (template §4), the apps it touches are only truly "done" once this is green.*
+*Testability is a non-negotiable pillar (`README.md` "Core Principles", template §4, `ambre-spec-architecture.md §4`). The Trame MVP (`E3`) shipped functional but under-tested: ~20 server DB/redis tests are bare-`#[ignore]`, there is no CI, no measured coverage, no CRDT convergence property-test, and zero Leptos UI test. This Epic makes the existing tests run and closes the gaps before stacking new apps (`E4` onward). Per the tested Definition of Done (template §4), the apps it touches are only truly "done" once this is green.*
 
 Stories:
 - `ARCH P5` `[x]` — CI GitHub Actions (`lint` / `test-host` / `test-db` / `test-wasm` / `coverage`) with postgres/redis/minio services; root `justfile` for local/CI parity.

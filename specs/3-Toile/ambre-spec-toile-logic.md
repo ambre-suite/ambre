@@ -142,7 +142,7 @@ UI/quality promise; they are candidates for V2 or removal (see `ambre-roadmap.md
 | `TOILE-020` | Selection aggregates MUST be computed in the Logic thread over the whole selection, including elements outside the viewport. | §8.F | `ambre_toile::logic::convergence_tests::selection_stats_spans_offscreen_elements`, `::selection_stats_empty_ids_span_whole_board`, `::selection_stats_empty_ids_on_empty_board_is_none` | verified |
 | `TOILE-021` | A nested Ambre document MUST be stored as a reference; its content MUST NOT be inlined into this board. | §2.I | `ambre_toile::logic::convergence_tests::doc_embed_reference_survives_the_crdt_round_trip`, `::doc_embed_with_an_unreadable_reference_falls_back_to_a_frame` | verified |
 | `TOILE-022` | A derived kind (`group`, `drawing`) MUST NOT be creatable through `CreateElement`, and `SetText` MUST reject a non-text element. | §2.B; §8.A | `ambre_toile::logic::convergence_tests::group_and_drawing_are_not_creatable`, `::set_text_rejects_a_non_text_element`, `::set_text_overwrites_sticky_body` | verified |
-| `TOILE-023` | `ambre-toile` MUST contain no `unsafe`. | context pillar "Security" | measured zero `unsafe` in the crate, but no `#![forbid(unsafe_code)]` on its root -- a claim, not a mechanism (architecture §4 ladder) | unverified |
+| `TOILE-023` | `ambre-toile` MUST contain no `unsafe`. | README pillar "Security" | measured zero `unsafe` in the crate, but no `#![forbid(unsafe_code)]` on its root -- a claim, not a mechanism (architecture §4 ladder) | unverified |
 | `TOILE-024` | A comment thread MUST be anchored either to a stable `ElementId` or to a free world point, never to a viewport coordinate. | §2.J | not built -- lands with `toile-features §9` Phase 2 (Epic `E4`) | unimplemented |
 | `TOILE-025` | A pin whose anchor element is deleted MUST go dangling like a connector: it MUST NOT be rendered and MUST NOT be destroyed. | §2.J; §5.A | not built -- lands with `toile-features §9` Phase 2 (Epic `E4`) | unimplemented |
 | `TOILE-026` | The `DisplayViewport` MUST carry pins and their badges, and MUST NOT stream thread bodies: those are fetched on demand. | §2.J; §9 | not built -- lands with `toile-features §9` Phase 2 (Epic `E4`) | unimplemented |
@@ -1167,7 +1167,7 @@ command, keeping the render thread free of business logic (the Trame `DisplayVie
 | **Separate `frames` map + frame-specific lifecycle commands** | Duplicates the whole move/resize/delete/reorder lifecycle and splits z-order across two structures. A frame is an element (§2.F); `layers` is the single z-order (§2.G). |
 | **Global shared undo stack** | Would let a peer undo others' actions and break collaboration. Local-only `loro::UndoManager`, aligned with Trame (§8 bis). |
 | **Connectors on a separate always-on-top pass** | Prevents placing a connector behind an element. Connectors live in `layers` as `NodeId`s (§2.G). |
-| **HTML5 Canvas / SVG DOM engine** | Insufficient performance for 10 000+ objects (core `ambre-context §6`, Toile Todo §7). |
+| **HTML5 Canvas / SVG DOM engine** | Insufficient performance for 10 000+ objects (core `README.md` "Rejected Alternatives", Toile Todo §7). |
 
 ---
 

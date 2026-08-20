@@ -684,7 +684,7 @@ this component introduces no primitive.
   names it, so the only way it reaches a client build is a workspace-wide `--features fixtures`; the recipes
   of §2.B are therefore package-scoped rather than workspace-wide. None of it can be
   pulled into a client build by accident and none of it touches the 2 MB gzipped budget
-  (`ambre-context.md §4`). This matters most in `ambre-logic`, which **does** ship to wasm: `shape_of`,
+  (`README.md` "Performance Targets"). This matters most in `ambre-logic`, which **does** ship to wasm: `shape_of`,
   `load_fixture`, `canonical_dump` and the driver are gated there, while `DocState::import_snapshot` and
   `export_snapshot` are ungated production code. **Not `#[cfg(test)]`:** such a module is reachable only
   from its own crate's test harness, whereas `just fixtures` invokes the generators from a binary.
