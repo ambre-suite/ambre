@@ -65,7 +65,7 @@
 | `TRAME-UI-014` | A cell in error MUST be marked visually from its displayed text; there MUST NOT be an `is_error` field on `DisplayCell`. | §2.B note | `ambre_trame::ui::renderer::tests::errored_cell_gets_a_corner_marker`, `::dirty_cell_gets_a_translucent_veil` | verified |
 | `TRAME-UI-015` | Escape MUST cancel an edit in progress without emitting any `TrameCommand`. | §6.C | none. The handler exists (`ui/view/interact.rs`), the absence of an outbound command is asserted nowhere -- and an absence is exactly what a test has to state | unverified |
 | `TRAME-UI-016` | A remote cursor's colour MUST be derived deterministically from its `UserId`, so the same collaborator keeps one colour across peers and reloads. | §9 | not built -- lands with `SYNC P4` / `SRV P1` (Epic `E5`), which supplies the spoof-proof `from_user_id` | unimplemented |
-| `TRAME-UI-017` | A remote cursor MUST be keyed by `UserId`, never by `pub_key` or connection: one collaborator on two devices MUST NOT render as two people. | §9 | not built -- lands with `SYNC P4` / `SRV P1` (Epic `E5`) | unimplemented |
+| `TRAME-UI-017` | A remote cursor MUST be identified by `UserId`, never by `pub_key` or connection: one collaborator on two devices MUST NOT render as two people. The Logic presence table deduplicates by `UserId` before the whole set reaches the UI. | §9 | not built -- lands with `SYNC P4` / `SRV P1` (Epic `E5`) | unimplemented |
 | `TRAME-UI-018` | A remote peer's `display_name` MUST be treated as cosmetic and self-asserted; it MUST NOT be used for identity or colouring. | §9; `trame-logic §7` | not built -- lands with `SYNC P4` / `SRV P1` (Epic `E5`) | unimplemented |
 | `TRAME-UI-019` | Presence MUST leave no trace in the document: a cursor move MUST NOT produce a CRDT delta nor force a viewport re-derive. | §9 | not built -- lands with `SYNC P4` / `SRV P1` (Epic `E5`) | unimplemented |
 | `TRAME-UI-020` | A sparkline MUST be derived on the UI thread from `DisplayViewport` data alone; it MUST NOT require a second round trip to the Logic thread. | §10 | not built -- lands with §18 Phase 2 (Epic `E6`) | unimplemented |
@@ -189,8 +189,11 @@ pub struct GridUiState {
     /// Active inline editor
     editing: Option<InlineEditor>,
 
-    /// Remote cursors -- key = UserId (resolved by ambre-sync before reaching here)
-    remote_cursors: HashMap<UserId, RemoteCursor>,
+    /// Remote cursors -- the whole live peer set, replaced wholesale from each
+    /// `TrameEvent::RemoteCursors` (like Prose's `Vec<RemoteCursor>`), so a departed
+    /// peer drops with no separate removal path. Each `user_id` was resolved by
+    /// `ambre-sync` before reaching here.
+    remote_cursors: Vec<RemoteCursor>,
 
     /// Undo/Redo state
     can_undo: bool,
@@ -1109,7 +1112,7 @@ pub struct RemoteCursor {
 }
 
 fn draw_remote_cursors(&mut self) {
-    for (_, cursor) in &self.ui_state.remote_cursors {
+    for cursor in &self.ui_state.remote_cursors {
         let x = self.col_offset(cursor.col) - self.scroll_x + self.header_width;
         let y = self.row_offset(cursor.row) - self.scroll_y + self.header_height;
         let w = self.col_width_at(cursor.col as usize);
@@ -1130,17 +1133,20 @@ fn draw_remote_cursors(&mut self) {
 // ambre-sync/trusted_keys), assembled Logic-side into TrameEvent::RemoteCursors; the peer
 // payload (PresencePayload) never carries a user_id. The UI thread never manipulates
 // any cryptographic key.
-fn on_remote_presence(&mut self, presence: RemotePresence) {
-    // RemotePresence { user_id: UserId, display_name, sheet_id, row, col }
-    // emitted by the Logic thread in TrameEvent::RemoteCursors
-    let color = self.color_for_user(&presence.user_id);
-    self.ui_state.remote_cursors.insert(presence.user_id, RemoteCursor {
-        user_id: presence.user_id,
-        color,
-        row: presence.row,
-        col: presence.col,
-        display_name: presence.display_name,
-    });
+//
+// The event carries the WHOLE live peer set (Vec<RemoteCursorPayload>), already resolved
+// to current (row, col) and colored with ambre_draw::peer::peer_color Logic-side. The UI
+// replaces its set wholesale -- a peer absent from the new set (left, or its anchor no
+// longer resolves) drops on its own, so there is no insert-only accumulation and no ghost
+// cursor.
+fn on_remote_cursors(&mut self, cursors: Vec<RemoteCursorPayload>) {
+    self.ui_state.remote_cursors = cursors.into_iter().map(|p| RemoteCursor {
+        user_id: p.user_id,
+        color: self.color_for_user(&p.user_id),   // ambre_draw::peer::peer_color -- shared cross-app
+        row: p.row,
+        col: p.col,
+        display_name: (!p.display_name.is_empty()).then_some(p.display_name),
+    }).collect();
 }
 
 fn color_for_user(&self, user_id: &UserId) -> Color {
@@ -1452,7 +1458,7 @@ network live in the Sync thread). Its outbound flows:
 | UI -> OS clipboard | `ClipboardPayload` as base64 postcard under the app-agnostic `application/x-ambre` MIME (`ambre-spec-ui.md sec.2.E` -- one private MIME for every app, each serializing its own payload behind the bytes), plus a `text/plain` fallback | Local OS boundary, user-initiated (copy/cut); never sent to `ambre-server` |
 | UI -> browser download (`ExportComplete`) | Export bytes received from the Logic thread | Local file write, user-initiated; no server involvement |
 | UI <-> Logic (`TrameCommand` / `TrameEvent`) | Rust values over `flume`, shared WASM memory | No serialization, no process boundary |
-| Remote presence (inbound) | `RemotePresence` already decrypted by the Logic thread; `user_id` resolved in `ambre-sync` | The UI thread never touches ciphertext; ephemeral payloads are sealed in `ambre-sync` |
+| Remote presence (inbound) | `TrameEvent::RemoteCursors` (whole peer set, `Vec<RemoteCursorPayload>`) already decrypted by the Logic thread; each `user_id` resolved in `ambre-sync` | The UI thread never touches ciphertext; ephemeral payloads are sealed in `ambre-sync` |
 
 The UI thread holds no plaintext path to the server. `web-sys` clipboard and
 download are local browser APIs. Presence reaches the UI already decrypted, and
