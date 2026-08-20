@@ -423,7 +423,10 @@ after an undo.
 `apply_history(undo)` drives `UndoManager::undo()` / `redo()`. When nothing was un/redone it returns only the refreshed `{ can_undo, can_redo }` event. Otherwise it runs the **same total reseed as any structural op** -- rebuild index, reseed engine, rebuild merges, reseed styles, rebuild filter, flush delta -- and appends that event. Rebuilding the filter is what keeps `filter_hidden` from going stale after an undo.
 
 
-**Keyboard shortcut:** `Ctrl+Z` / `Ctrl+Y` (or `Cmd` on macOS) → `TrameCommand::Undo` / `TrameCommand::Redo` from the UI Thread.
+**Keyboard shortcut:** `Ctrl+Z` -> `Undo`; **both** `Ctrl+Shift+Z` **and** `Ctrl+Y` -> `Redo` (or
+`Cmd` on macOS), emitting `TrameCommand::Undo` / `TrameCommand::Redo` from the UI thread. The two
+redo chords are the as-built binding (`trame-logic` chrome `UNDO`/`REDO`, `trame-ui sec.9`) and
+match Prose (`prose-ui`); redo is not `Ctrl+Y` only.
 
 ---
 
@@ -678,3 +681,8 @@ the Sync and crypto specs in `1-Foundations/`; it MUST NOT be re-derived here.
 - [ ] Range protection: `TrameCommand::SetProtection` / `RemoveProtection` (soft-enforcement, identified by `UserId: Uuid` — not `pub_key`)
 - [ ] Validation: `ListRange`, `DateRange`, `Regex`
 - [ ] Optimization: cache of pre-compiled conditional formatting rules
+- [ ] Version history / named snapshots (X37): today Trame keeps only the in-memory `UndoManager`
+  stack (§4), dropped on document close. Prose specs a persisted `meta.version_history` (`LoroList`
+  of `{name, created_at, snapshot_id}`, S3-backed, `prose-features`). Trame gets the same
+  named-snapshot subsystem, reusing the SecSync S3 pipeline. Tracked as a Trame code change in the
+  roadmap parity-gap Story (`ambre-roadmap.md`).

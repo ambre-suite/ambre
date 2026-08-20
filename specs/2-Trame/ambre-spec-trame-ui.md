@@ -987,6 +987,12 @@ nothing. `ambre-trame/src/ui/renderer/`.
 
 Charts are `DisplayFloatObject` of kind `Chart(ChartDef)`. The Logic thread stores the chart definition in `"media"` Loro. The UI thread renders the chart via `DrawSurface` (fill_rect + fill_path lyon) in the float object area.
 
+> **Float-object geometry is clamped (X58).** Every `DisplayFloatObject` dimension (chart or image)
+> is clamped to `MAX_IMAGE_DIM_PX = 10_000` px before it reaches the CRDT, the same pre-CRDT bound
+> Prose applies to images (`prose-features`). Past this the per-frame layout and raster cost is
+> unbounded and no viewport can show the object at native size. Target state -- the clamp is a Trame
+> code change tracked in the Prose-vs-Trame parity-gap Story (`ambre-roadmap.md`).
+
 ```rust
 pub struct ChartDef {
     pub kind:        ChartKind,
@@ -1205,6 +1211,8 @@ re-derived here.
 | Operation | Target | Note |
 |---|---|---|
 | Frame rendering at 60 FPS (budget) | < 16 ms | GPU-bound (vertex/fragment shaders) |
+| Keystroke -> cell-editor draft display (UI thread only) | < 2 ms | No round-trip; the inline editor echoes locally |
+| Keystroke -> CRDT confirmation (Logic thread round-trip) | < 15 ms | Same round-trip Prose budgets (`prose-ui`) |
 | Scroll (send ScrollViewport) | < 1 ms | UI thread non-blocking |
 | Receive + render `TrameEvent::ViewportData` | < 5 ms | typed value by move (no deserialization) + vertex batch build |
 | Autocompletion (computation + dropdown rendering) | < 2 ms | Static lookup, no round-trip |
