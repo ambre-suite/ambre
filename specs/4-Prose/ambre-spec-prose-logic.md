@@ -111,6 +111,8 @@ meta
 │                                        (source of the f:dt "last modified date" field)
 ├── "lang"                : String     -- BCP 47, e.g. "fr-FR"
 ├── "page"                : LoroMap    -- page format
+│   ├── "orientation"     : String     -- "portrait"|"landscape" (first-class, kept consistent
+│   │                                     with width/height; parity with Trame page setup, X68)
 │   ├── "width_mm"        : f32
 │   ├── "height_mm"       : f32
 │   ├── "margin_top_mm"   : f32

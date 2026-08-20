@@ -207,8 +207,36 @@ LoroDoc
 ├── "filter_hidden_{sheet_id}" (LoroMap) → {row_uid: bool} — rows hidden by filter
 ├── "cond_formats_{sheet_id}" (LoroList) → conditional formatting rules [{range, priority, rule, style}]
 ├── "validations_{sheet_id}" (LoroMap) → data validations [{kind, params, on_invalid, message}]
-└── "protections_{sheet_id}" (LoroMap) → range protection (Post-MVP) [{owner, allowed, description}]
+├── "protections_{sheet_id}" (LoroMap) → range protection (Post-MVP) [{owner, allowed, description}]
+└── "page_setup_{sheet_id}" (LoroMap)  → persisted print/page format, shared like Sheets:
+                                          {orientation, paper_size, margins{t,r,b,l}, scale,
+                                           fit_to_page, print_gridlines, print_headers}
 ```
+
+> **Page setup is persisted, not an export-time parameter (X67/X68).** Print/page format lives in
+> the per-sheet `"page_setup_{sheet_id}"` container above, so it converges across peers and survives
+> a session -- the Google Sheets model, where print settings are shared document state. `orientation`
+> (Portrait | Landscape) is a first-class field, not derived from paper dimensions. PDF export reads
+> this container (`trame-interop`); it is no longer carried as an ephemeral `ExportPdf` argument.
+> **Target state:** the built MVP still passes an ephemeral `PdfPageSetup`; migrating it into this
+> container is a deferred Trame code Story (`ambre-roadmap.md` E6, "Trame feature-parity gaps") and a
+> persisted-schema change (bumps `SCHEMA_VERSION`).
+
+> **Deferred -- cell comments / notes.** The MVP schema has **no** anchored-comment container,
+> though a cell note is a standard spreadsheet convention. This is a known parity gap with Prose,
+> which ships the full `annots` subsystem (`prose-features` reconcile P-68 / orphan P-69). When
+> built, a Trame cell note anchors on the move-invariant `(row_uid, col_uid)` pair and reuses the
+> Prose orphan-handling model on a bound-line delete. Tracked as a deferred Story in
+> `ambre-roadmap.md` (E6, "Trame feature-parity gaps"); out of MVP scope here.
+
+> **Media resolution reuses the shared flow, not a Trame copy.** The `"media"` container above
+> holds only the CRDT metadata (`{hash_blake2b: {dims, anchor, mime}}`). Resolving a hash to
+> pixels goes through the **Foundation media flow** owned by `ambre-sync`
+> (`RestCommand::DownloadMedia` -> `RestEvent::MediaDownloaded`, addressed by `content_hash`;
+> `ambre-spec-sync.md`), and the Logic-thread side mirrors Prose exactly: a `MediaState`
+> lifecycle (`prose-features` P-65) feeding a bounded `media_cache` LRU (P-66). Trame MUST NOT
+> reinvent a private download/cache. The wiring is a deferred Trame code Story
+> (`ambre-roadmap.md` E6, "Trame feature-parity gaps"); only the container is MVP.
 
 ### C. SheetIndex — Bidirectional O(1) Cache
 
