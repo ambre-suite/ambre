@@ -616,6 +616,32 @@ pub enum TrameEvent {
 
 ---
 
+## SECURITY & CONFIDENTIALITY (ZERO-KNOWLEDGE)
+
+### Boundary Audit
+
+A feature handler is pure: it does no networking and no direct `send_to_ui`. It
+returns a `TrameOutcome { display, update, ephemeral }`. The outbound flows:
+
+| Flow | Data | Encryption |
+|------|------|------------|
+| `outcome.update` -> Sync | Loro CRDT delta for the mutation (filter, sort, conditional format, validation, protection edit) | The `ambre-logic` dispatcher emits `SyncCommand::SendUpdate`; the delta is sealed in `ambre-sync` |
+| `outcome.ephemeral` -> Sync | Presence bytes, when the feature carries one | Sealed in `ambre-sync` -> `Ephemeral.ciphertext` |
+| `outcome.display` -> UI | `TrameEvent` (viewport, presence) -- shared WASM memory | No process boundary |
+| Data-validation message | Stored in `LoroMap` alongside cell content | Encrypted at rest like any cell value; the server sees ciphertext only |
+
+Range protection (§6) is soft client-side enforcement: the server is a Blind
+Relay and cannot verify a protection because the content is encrypted. An
+official client respects it; a modified client can bypass it. No feature handler
+holds a Sync sink, imports `ambre-crypto`, or opens a socket.
+
+### Cryptography
+
+This audit identifies the flows only. The seal on the CRDT deltas is specified by
+the Sync and crypto specs in `1-Foundations/`; it MUST NOT be re-derived here.
+
+---
+
 ## 9. QUALITY & TESTABILITY
 
 > What the built features guarantee, and what verifies each guarantee, is the table in §0. This section used to be a list of 30 `#[test]` names; 18 named real tests and 12 named tests for handlers that are still no-ops, with nothing distinguishing the two. The 18 are now `Verification` cells joined to a rule; the 12 are below, as what they always were -- intent.

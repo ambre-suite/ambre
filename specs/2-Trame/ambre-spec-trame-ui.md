@@ -1428,6 +1428,32 @@ fn draw_status_bar(&mut self) {
 
 ---
 
+## SECURITY & CONFIDENTIALITY (ZERO-KNOWLEDGE)
+
+### Boundary Audit
+
+The UI thread runs no encryption and opens no socket (see §1: encryption and
+network live in the Sync thread). Its outbound flows:
+
+| Flow | Data | Encryption |
+|------|------|------------|
+| UI -> OS clipboard | `ClipboardPayload` as base64 postcard under `application/x-ambre-trame`, plus a `text/plain` fallback | Local OS boundary, user-initiated (copy/cut); never sent to `ambre-server`. The private MIME is under review (see cross-app finding X1) |
+| UI -> browser download (`ExportComplete`) | Export bytes received from the Logic thread | Local file write, user-initiated; no server involvement |
+| UI <-> Logic (`TrameCommand` / `TrameEvent`) | Rust values over `flume`, shared WASM memory | No serialization, no process boundary |
+| Remote presence (inbound) | `RemotePresence` already decrypted by the Logic thread; `user_id` resolved in `ambre-sync` | The UI thread never touches ciphertext; ephemeral payloads are sealed in `ambre-sync` |
+
+The UI thread holds no plaintext path to the server. `web-sys` clipboard and
+download are local browser APIs. Presence reaches the UI already decrypted, and
+the peer payload never carries a `user_id`.
+
+### Cryptography
+
+This audit identifies the flows only. The seal on CRDT and ephemeral payloads is
+specified by the Sync and crypto specs in `1-Foundations/`; it MUST NOT be
+re-derived here.
+
+---
+
 ## 14. QUALITY & TESTABILITY
 
 > What this module guarantees, and what verifies each guarantee, is the table in §1. This section holds only what is not a claim about the tree's contents.

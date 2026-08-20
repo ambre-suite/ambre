@@ -395,6 +395,33 @@ synchronous pass.
 
 ---
 
+## SECURITY & CONFIDENTIALITY (ZERO-KNOWLEDGE)
+
+### Boundary Audit
+
+Every conversion runs client-side in the Logic thread. The outbound flows and
+where their content is sealed:
+
+| Flow | Data | Encryption |
+|------|------|------------|
+| Import (.xlsx / .csv) | File bytes read locally in the Logic thread; the conversion produces a Loro delta -> `SyncCommand::SendUpdate` | The delta is sealed in `ambre-sync`. No file byte reaches the server (`TRAME-IO-001`) |
+| Export (.xlsx / .csv / PDF) | `TrameEvent::Export*` carries `Vec<u8>` to the UI thread over shared WASM memory; the UI thread triggers a local browser download | No process boundary; the bytes leave the device only by the user's own download action, never to `ambre-server` |
+| Google Sheets (MVP) | None: no direct API call from WASM. The user round-trips through .xlsx / .csv | No outbound flow specific to this feature in the MVP |
+| Google Sheets (V2, out of MVP scope) | A backend proxy would fetch the sheet as JSON | Content would be encrypted on client reception; the design is deferred and MUST be re-audited when built |
+
+`ambre-server` declares no interop crate; `csv`, the Excel reader, and the PDF
+surface are declared by `ambre-trame` (Logic thread) alone. The `deny.toml`
+capability wall holds the relay's boundary. No plaintext file crosses to the
+server.
+
+### Cryptography
+
+This audit identifies the flows only. The proof that the CRDT seal is correct
+belongs to the Sync and crypto specs in `1-Foundations/`; it MUST NOT be
+re-derived here.
+
+---
+
 ## 8. QUALITY & TESTABILITY
 
 > What the built paths guarantee, and what verifies each guarantee, is the table in §1. This section used to list 12 `#[test]` names, of which **2** existed -- the ten others named tests for the .xlsx and PDF code that has never been written, in the same format as the two real ones.
