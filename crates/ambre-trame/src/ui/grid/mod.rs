@@ -12,7 +12,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use ambre_canvas::{EditIntent, TextEditor, TextEditorStyle};
+use ambre_canvas::{TextEditor, TextEditorStyle};
 use ambre_draw::Color;
 
 use crate::render::BODY_SIZE;
@@ -108,10 +108,11 @@ impl CellData {
 /// recorded as font-free intents and applied at paint time (`draw_edit`), where a
 /// `FontContext` is live -- so a commit reads the buffer only after that flush.
 ///
-/// The method names of the old hand-rolled editor are kept as shims that queue
-/// the matching intent, so the input handlers read the same. Pointer hits push
-/// point intents the core resolves against its own layout (no more renderer-side
-/// byte-offset resolution).
+/// The wrapper only binds the core to a `(row, col)`; every editing operation
+/// and buffer accessor reaches the core through `Deref`/`DerefMut` (the named
+/// intent constructors -- `insert`, `backspace`, the caret moves -- live on the
+/// core now). Pointer hits push point intents the core resolves against its own
+/// layout (no renderer-side byte-offset resolution).
 pub struct CellEditor {
     pub row: u32,
     pub col: u32,
@@ -138,116 +139,29 @@ impl CellEditor {
         }
     }
 
-    /// The current buffer text (IME preedit excluded). Font-free.
-    pub fn text(&self) -> String {
-        self.core.text()
-    }
-
-    /// Replace the whole buffer (the formula bar owns the text while focused).
-    pub fn set_text(&mut self, text: &str) {
-        self.core.set_text(text);
-    }
-
     /// The currently selected substring, or empty when nothing is selected.
-    /// Font-free (safe inside a clipboard `copy` / `cut` event).
+    /// Font-free (safe inside a clipboard `copy` / `cut` event). Trame wants a
+    /// plain `String`; the core returns an `Option`.
     pub fn selected_text(&self) -> String {
         self.core.selected_text().unwrap_or_default()
     }
+}
 
-    /// Queue a raw editing intent (pointer hits, and the shims below).
-    pub fn push(&mut self, intent: EditIntent) {
-        self.core.push(intent);
+// Every editing operation and buffer accessor lives on the shared core; the
+// wrapper only binds it to a `(row, col)`. Deref exposes `insert`, `backspace`,
+// the caret/selection moves, `text`, `set_text`, `push`, etc. directly on a
+// `CellEditor` (the inherent `selected_text` above shadows the core's for the
+// Trame `String` signature).
+impl std::ops::Deref for CellEditor {
+    type Target = TextEditor;
+    fn deref(&self) -> &TextEditor {
+        &self.core
     }
+}
 
-    // -- Shims: queue the matching intent, applied at the next paint flush. -----
-
-    pub fn insert(&mut self, s: &str) {
-        self.push(EditIntent::Insert(s.to_owned()));
-    }
-    pub fn newline(&mut self) {
-        self.push(EditIntent::Newline);
-    }
-    pub fn backspace(&mut self) {
-        self.push(EditIntent::Backspace);
-    }
-    pub fn delete_forward(&mut self) {
-        self.push(EditIntent::Delete);
-    }
-    pub fn delete_selection(&mut self) {
-        self.push(EditIntent::DeleteSelection);
-    }
-    pub fn move_left(&mut self) {
-        self.push(EditIntent::Left {
-            select: false,
-            word: false,
-        });
-    }
-    pub fn move_right(&mut self) {
-        self.push(EditIntent::Right {
-            select: false,
-            word: false,
-        });
-    }
-    pub fn extend_left(&mut self) {
-        self.push(EditIntent::Left {
-            select: true,
-            word: false,
-        });
-    }
-    pub fn extend_right(&mut self) {
-        self.push(EditIntent::Right {
-            select: true,
-            word: false,
-        });
-    }
-    pub fn move_home(&mut self) {
-        self.push(EditIntent::LineStart { select: false });
-    }
-    pub fn move_end(&mut self) {
-        self.push(EditIntent::LineEnd { select: false });
-    }
-    pub fn extend_home(&mut self) {
-        self.push(EditIntent::LineStart { select: true });
-    }
-    pub fn extend_end(&mut self) {
-        self.push(EditIntent::LineEnd { select: true });
-    }
-    pub fn move_up(&mut self) {
-        self.push(EditIntent::Up { select: false });
-    }
-    pub fn move_down(&mut self) {
-        self.push(EditIntent::Down { select: false });
-    }
-    pub fn extend_up(&mut self) {
-        self.push(EditIntent::Up { select: true });
-    }
-    pub fn extend_down(&mut self) {
-        self.push(EditIntent::Down { select: true });
-    }
-    pub fn select_all(&mut self) {
-        self.push(EditIntent::SelectAll);
-    }
-
-    /// Set the live IME composition preview (CompositionUpdate).
-    pub fn set_compose(&mut self, text: &str) {
-        self.push(EditIntent::Compose(text.to_owned()));
-    }
-    /// Finalize the IME composition into committed text (CompositionEnd).
-    pub fn commit_compose(&mut self, text: &str) {
-        self.push(EditIntent::ComposeEnd(text.to_owned()));
-    }
-
-    /// Place the caret at a local-space (text-relative) point (click / drag start).
-    pub fn point_down(&mut self, x: f32, y: f32) {
-        self.push(EditIntent::PointerDown { x, y });
-    }
-    /// Extend the selection to a local-space point (drag / shift-click).
-    pub fn point_drag(&mut self, x: f32, y: f32) {
-        self.push(EditIntent::PointerDrag { x, y });
-    }
-    /// Select the word at a local-space point (double click).
-    pub fn word_at(&mut self, x: f32, y: f32) {
-        self.push(EditIntent::WordAt { x, y });
+impl std::ops::DerefMut for CellEditor {
+    fn deref_mut(&mut self) -> &mut TextEditor {
+        &mut self.core
     }
 }
 
