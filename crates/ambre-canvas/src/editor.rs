@@ -462,6 +462,20 @@ impl TextEditor {
                     let tx = dx + run.offset() as f64;
                     let ty = dy + run.baseline() as f64;
                     surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+
+                    // Underline decoration. parley underlines the IME preedit
+                    // range itself (a `StyleProperty::Underline` on the composing
+                    // text), so drawing the run's underline here restores the IME
+                    // preedit hint that `draw_glyphs` alone drops. Drawn as a thin
+                    // filled rect (not `stroke_line`) so it follows a caller
+                    // rotation like the glyphs and caret. Placed 2px below the
+                    // baseline, matching the static cell decoration.
+                    if run.style().underline.is_some() {
+                        let adv = run.advance() as f64;
+                        let uy = ty + 2.0;
+                        let bar = Rect::new(tx, uy, tx + adv, uy + 1.0);
+                        surface.fill_path(&rect_path(bar), &brush);
+                    }
                 }
             }
         }
@@ -559,5 +573,48 @@ mod tests {
         ed.push(EditIntent::Insert("b".to_owned()));
         ed.flush(&mut fcx, 1000.0, 1.0);
         assert_eq!(ed.text(), "a\nb");
+    }
+
+    /// The IME preedit hint: parley underlines the composing range, and `render`
+    /// relies on that to redraw the underline `draw_glyphs` drops. Assert the
+    /// composing run carries the underline decoration (and that `ComposeEnd`
+    /// clears it) so the render path has something to draw.
+    #[test]
+    fn ime_preedit_run_is_underlined() {
+        let mut fcx = FontContext::default();
+        let mut ed = TextEditor::new("", style());
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        ed.push(EditIntent::Compose("abc".to_owned()));
+        ed.flush(&mut fcx, 1000.0, 1.0);
+
+        let underlined = ed
+            .editor
+            .try_layout()
+            .expect("layout after flush")
+            .lines()
+            .flat_map(|l| l.items())
+            .any(|item| match item {
+                PositionedLayoutItem::GlyphRun(run) => run.style().underline.is_some(),
+                _ => false,
+            });
+        assert!(underlined, "composing preedit run should be underlined");
+
+        ed.push(EditIntent::ComposeEnd("abc".to_owned()));
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.text(), "abc");
+        let still_underlined = ed
+            .editor
+            .try_layout()
+            .expect("layout after flush")
+            .lines()
+            .flat_map(|l| l.items())
+            .any(|item| match item {
+                PositionedLayoutItem::GlyphRun(run) => run.style().underline.is_some(),
+                _ => false,
+            });
+        assert!(
+            !still_underlined,
+            "committed text should not stay underlined"
+        );
     }
 }
