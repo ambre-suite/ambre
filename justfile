@@ -117,7 +117,9 @@ cov:
 # `trame-ui` snippet contradicted its own sentence, and `proptest!` bodies
 # described a suite that did not exist. This makes the rule mechanical.
 
-# no implementation in the specs: fails on any function body in a rust fence.
+# no implementation in the specs: fails on any function body in a ```rust fence,
+# on Rust shapes left in a non-rust fence, on a disallowed fence tag (lua, ...),
+# and on an unterminated fence (ambre-spec-template.md sec.0, Fences rule).
 spec-code:
     python3 scripts/spec_code.py --check
 
