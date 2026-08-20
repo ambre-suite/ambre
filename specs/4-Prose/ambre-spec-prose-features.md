@@ -1177,7 +1177,9 @@ pub fn compute_word_count(
 ```
 
 Event: `ProseEvent::WordCountUpdated { count: WordCount }`.
-Displayed in the status bar by `prose-ui`.
+The word count is Prose's slot in the shared, app-agnostic `ambre-chrome` status bar
+(`ambre-spec-chrome.md sec.2.B` -- one status bar provided by `ambre-chrome`, parameterized
+per app), fed by `prose-ui` from this event; it is not a Prose-specific status-bar widget.
 
 ---
 

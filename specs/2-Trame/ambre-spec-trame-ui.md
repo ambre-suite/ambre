@@ -1411,11 +1411,15 @@ like Excel/Sheets (Sum / Average / Count). The selection can exceed the viewport
 (sec.16). On each non-trivial selection change the UI requests them; for a single cell it
 shows nothing.
 
-> **Delivered as DOM Leptos chrome** (`trame_chrome::StatusBar`), like every other E3
-> surface -- the `DrawSurface` sketch below predates the chrome-in-DOM decision. The request
-> is parameterless (`RequestSelectionStats`): the Logic thread resolves the tracked selection
-> itself. The same band also hosts the perf HUD (fps + frame timings), migrated out of the
-> wgpu overlay -- a permanent `<fps>` chip that expands a diagnostics panel on click.
+> **Delivered as DOM Leptos chrome**: Trame's parameterization of the shared, app-agnostic
+> `ambre-chrome` status bar (`ambre-spec-chrome.md sec.2.B` -- one status bar provided by
+> `ambre-chrome`, parameterized per app), the same way `trame_chrome::FormatBar` is Trame's
+> parameterization of the shared format bar. `trame_chrome::StatusBar` fills the app slots:
+> the selection aggregates below and the perf HUD (fps + frame timings), the latter migrated
+> out of the wgpu overlay as a permanent `<fps>` chip that expands a diagnostics panel on
+> click. The `DrawSurface` sketch below predates the chrome-in-DOM decision. The request is
+> parameterless (`RequestSelectionStats`): the Logic thread resolves the tracked selection
+> itself.
 
 ```rust
 fn on_selection_changed(&mut self) {
