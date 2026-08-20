@@ -19,6 +19,11 @@ from pathlib import Path
 
 SPECS = Path(__file__).resolve().parent.parent / "specs"
 
+# Non-normative analysis documents that live under `specs/` but are not specs: an
+# audit and an open-questions log. They quote real source on purpose, so they are
+# exempt from the "shapes only" rule, exactly like everything under `reviews/`.
+NON_NORMATIVE = {"security-audit.md", "fixtures-open-questions.md"}
+
 # `fn name(...) ... {` on one line, or a signature whose brace lands on the next.
 # A trailing `;` is a declaration, not a body.
 SIGNATURE = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+\w+")
@@ -40,6 +45,13 @@ ALLOWED_TAGS = {"", "rust", "text", "json", "toml", "yaml", "sql", "css", "html"
 # Lines that betray Rust living outside a ```rust fence -- the tag is wrong and
 # the body checker would never see them.
 RUST_HINT = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?(?:fn|struct|enum|trait|impl|mod)\b")
+
+# A statement sitting at brace-depth 0 of a ```rust fence is loose implementation:
+# it is code that is not part of any declaration (a `match`, a `let`, a loop, a
+# `self.` call). `bodies()` never sees it because it is wrapped in no `fn`. A real
+# spec fence at depth 0 holds only items -- `struct`/`enum`/`trait`/`impl`/`fn`
+# signatures, `use`, `type`, `const`, attributes -- never a running statement.
+STMT_HINT = re.compile(r"^\s*(?:let|match|for|while|loop|return|if|self)\b")
 
 
 def fence_tag(line: str) -> str:
@@ -85,6 +97,28 @@ def scan(block: list[str], start: int):
                 open_at, depth = None, 0
 
 
+def loose_impl(text: str):
+    """Yield (line_no, first_line) for a running statement at depth 0 of a rust fence.
+
+    Tracks brace depth inside each ```rust fence; a statement keyword seen while
+    depth is 0 is code that belongs to no declaration -- the free-floating snippet
+    (`match ... { }`, `let x = ...`) that `bodies()`, keyed on `fn`, cannot catch.
+    """
+    lines = text.splitlines()
+    in_fence = scan_this = False
+    depth = 0
+    for i, line in enumerate(lines, 1):
+        if FENCE.match(line):
+            in_fence, scan_this, depth = (not in_fence), (not in_fence and fence_tag(line) == "rust"), 0
+            continue
+        if in_fence and scan_this:
+            if depth == 0 and STMT_HINT.match(line):
+                yield i, line.strip()[:70]
+            depth += line.count("{") - line.count("}")
+            if depth < 0:
+                depth = 0
+
+
 def fence_issues(text: str):
     """Yield (line_no, kind, detail) for every fence defect in one spec.
 
@@ -120,12 +154,17 @@ def main() -> int:
     files = 0
     fence_defects = 0
     for path in sorted(SPECS.rglob("*.md")):
-        if "reviews/" in str(path.relative_to(SPECS)):
-            continue  # scratch review logs, not part of the normative corpus
+        rel_str = str(path.relative_to(SPECS))
+        # Analysis artefacts, not normative specs: they quote real source (an audit
+        # cites the vulnerable line as its evidence; a review logs a code smell), so
+        # the "no implementation" rule does not apply. Same status as `reviews/`.
+        if "reviews/" in rel_str or path.name in NON_NORMATIVE:
+            continue
         text = path.read_text()
         rel = path.relative_to(SPECS)
         found = list(bodies(text))
         fences = list(fence_issues(text))
+        loose = list(loose_impl(text))
         if found:
             files += 1
             print(f"\n{rel}  ({len(found)} bodies, {sum(f[1] for f in found)} lines)")
@@ -135,13 +174,18 @@ def main() -> int:
         for lineno, kind, detail in fences:
             fence_defects += 1
             print(f"\n{rel}:{lineno}  FENCE {kind}: {detail}")
+        for lineno, sig in loose:
+            fence_defects += 1
+            print(f"\n{rel}:{lineno}  LOOSE-IMPL (statement at fence depth 0): {sig}")
     print(f"\n{total} lines of function bodies across {files} specs; {fence_defects} fence defects")
     if check and (total or fence_defects):
         print(
             "\nERROR: a spec states what and why, the source states how "
             "(ambre-spec-template.md §0). Rust shapes live only in ```rust fences "
-            "and carry no bodies; collapse a body to `{ /* ... */ }` plus a pointer "
-            "to the real file, and tag every fence per the template's Fences rule.",
+            "and carry no bodies and no loose statements; collapse a body to "
+            "`{ /* ... */ }` plus a pointer to the real file, turn a running snippet "
+            "(match/let/for at fence depth 0) into prose, and tag every fence per "
+            "the template's Fences rule.",
             file=sys.stderr,
         )
         return 1
