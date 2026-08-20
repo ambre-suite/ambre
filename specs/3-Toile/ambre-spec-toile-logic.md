@@ -1001,10 +1001,8 @@ Toile reuses the **same model as Trame** (`trame-features §4`): a `loro::UndoMa
 open and dropped on close, that undoes only the **local peer's** operations — remote edits are never undone
 (the behaviour of every modern collaborative editor). No cross-session persistence.
 
-```rust
-// created in ToileState::new
-let undo = loro::UndoManager::new(&doc);
-```
+`ToileState::new` constructs the `loro::UndoManager` from `&doc`, so the manager
+observes only this peer's local transactions.
 
 **Granularity — one undo item per atomic user action:** a create, a move/resize/rotate drag (committed on
 release), a restyle, a delete, a `CommitStroke`, a connector create/retarget, a `SetFrameChildren`, an

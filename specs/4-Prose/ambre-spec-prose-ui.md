@@ -339,23 +339,17 @@ confirms this UI's own pending input for the anchored block. An empty-delta `Doc
 delta touches only *other* blocks (foreign origin) must **not** clear the draft -- otherwise an
 image finishing download would wipe in-progress keystrokes. On receipt, `update()` applies:
 
-```rust
-// in ProseUiState::update(), on ProseEvent::DocUpdated { delta, .. }
-if delta.is_empty() {
-    // media download, presence, or other no-content event -> keep the draft untouched.
-} else if delta.confirms(self.draft_buffer.block_id.as_ref()) {
-    // our own edit came back confirmed -> the pending text is now in the official runs.
-    self.draft_buffer.clear();
-} else {
-    // a foreign/remote delta: reanchor the still-pending draft over the applied shift
-    // (P-131) instead of clearing it; drop it only if the anchored block was deleted.
-    let (alive, shift) = delta.effect_on_block(self.draft_buffer.block_id.as_ref());
-    if !self.draft_buffer.reanchor(alive, shift) {
-        // block gone -> also collapse the cursor to the confirmed CRDT position.
-        self.reposition_cursor_to_confirmed();
-    }
-}
-```
+On `ProseEvent::DocUpdated { delta, .. }`, `ProseUiState::update()` branches on the delta:
+
+- **Empty delta** (media download, presence, any no-content event) -- the draft is
+  kept untouched.
+- **Delta that confirms the anchored block** (this UI's own edit came back) -- the
+  pending text is now in the official runs, so the draft buffer is cleared.
+- **Any other (foreign/remote) delta** -- the still-pending draft is *reanchored*
+  over the applied shift (P-131) rather than cleared: `effect_on_block` reports
+  whether the anchored block is still alive and by how much it shifted. Only if the
+  block was deleted does the draft drop and the cursor collapse to the confirmed
+  CRDT position.
 
 The draft buffer is rendered via `DrawSurface::draw_glyphs` as a temporary run with the
 current cursor style (or the composition style while `composing`), positioned after the

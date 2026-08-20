@@ -897,40 +897,17 @@ impl TrameState {
     /// replaces its cursors wholesale, so a departed peer disappears on its own.
     pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &[u8]) -> Vec<TrameEvent> { /* cursors */ }
 
-    /// Export a full CRDT snapshot (compaction / local persistence / SnapshotNeeded).
+    /// Export a full CRDT snapshot (compaction / `SnapshotNeeded` -> `SendSnapshot`).
     pub fn export_snapshot(&self) -> Vec<u8> { self.doc.export(ExportMode::Snapshot) }
 }
 ```
 
-**Production dispatch (`ambre-logic::LogicState`).** The single place that touches the transport — the state never does. `document_id` filtering is the registry lookup, not an `if document_id != self.doc_id` inside the state:
+**Production dispatch (`ambre-logic::LogicState`).** The generic dispatcher is the single place that touches the transport -- the state never does; `document_id` filtering is the registry lookup, not an `if document_id != self.doc_id` inside the state. Its routing is normative in `ambre-spec-architecture.md sec.4` ("Logic thread dispatch") and is not re-specified here. The Trame-specific contract it rests on:
 
-```rust
-// ambre-logic/src/lib.rs (condensed)
-match (self.docs.get_mut(&document_id)?, command) {
-    (DocState::Trame(state), AppCommand::Trame(cmd)) => {
-        let outcome = state.handle_command(cmd);
-        // Snapshot for local persistence whenever the doc changed.
-        let snapshot = outcome.update.is_some().then(|| state.export_snapshot());
-        for event in outcome.display {
-            self.send_to_ui(UiEvent::Viewport { document_id, event: AppEvent::Trame(event) });
-        }
-        if let Some(payload) = outcome.update {
-            self.send_to_sync(SyncCommand::SendUpdate { document_id, payload });
-        }
-        if let Some(snapshot) = snapshot { self.send_to_persist(document_id, snapshot); }
-        if let Some(payload) = outcome.ephemeral {
-            self.send_to_sync(SyncCommand::SendEphemeral { document_id, payload });
-        }
-    }
-}
-
-// Remote inbound (LogicEvent::RemoteUpdate / RemoteSnapshot):
-let events = state.apply_remote(&payload);           // import + recompute
-let snapshot = (!events.is_empty()).then(|| state.export_snapshot());
-for event in events { self.send_to_ui(UiEvent::Viewport { document_id, event: AppEvent::Trame(event) }); }
-// SnapshotNeeded -> SyncCommand::SendSnapshot { document_id, payload: state.export_snapshot() }
-// SessionReady / ConnectionStatus / SyncWarning are handled by LogicState, not TrameState.
-```
+- A local `TrameCommand` yields a `TrameOutcome`; the dispatcher explodes it -- `display` -> `UiEvent::Viewport`, `update` -> `SyncCommand::SendUpdate`, `ephemeral` -> `SyncCommand::SendEphemeral`.
+- A remote `RemoteUpdate`/`RemoteSnapshot` routes to `apply_remote`, whose `TrameEvent`s become `UiEvent::Viewport`; the import is never re-broadcast.
+- `SnapshotNeeded` -> `export_snapshot()` -> `SyncCommand::SendSnapshot`. Persistence is server-side only: there is no per-change local-persist path (local IndexedDB durability is deferred Epic `E5`, architecture sec.4).
+- `SessionReady` / `ConnectionStatus` / `SyncWarning` are handled by `LogicState`, not `TrameState`.
 
 ### Command Dispatch and Synchronous Recalculation
 
