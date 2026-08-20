@@ -405,7 +405,7 @@ Shape, Connector, Draw (freehand), Sticky, Text, Comment (section 5) -- plus zoo
 whose `CommandState.active` reflects the current `Tool`, so exactly one tool reads as selected; clicking emits
 `SetTool` (the same signal the keyboard shortcut resolves to). The canvas-side `ToolMachine` stays the sole
 consumer of the active tool (section 1bis); the palette only drives the selection. Tool sub-options that are not
-per-element style (e.g. the Shape kind, the connector routing mode) are local palette signals folded into the
+per-element style (for example the Shape kind, the connector routing mode) are local palette signals folded into the
 `CreateElement` the tool emits.
 
 **Sticky colour picker.** The Sticky button is a split affordance: clicking it opens a small colour popover (a

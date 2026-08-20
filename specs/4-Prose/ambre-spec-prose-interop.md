@@ -263,7 +263,7 @@ pub struct IrParaStyle {
     pub indent_right:   Option<f32>,   // logic ParagraphStyle.indent_right (section C)
     pub space_before:   Option<f32>,
     pub space_after:    Option<f32>,
-    /// Line spacing as a **multiple** (e.g. `1.15`), matching logic section C which stores only a
+    /// Line spacing as a **multiple** (for example `1.15`), matching logic section C which stores only a
     /// multiple. Docx `<w:spacing w:lineRule="exact"|"atLeast">` (fixed-point spacing) is
     /// NOT representable and is reported `FormattingLost` on import -- never dropped silently.
     pub line_height:    Option<f32>,
@@ -322,7 +322,7 @@ pub struct IrStyle {
 pub struct ConversionReport {
     pub format:   ConversionFormat,
     pub warnings: Vec<ConversionWarning>,
-    pub errors:   Vec<ConversionError>,     // non-fatal errors (missing images, etc.)
+    pub errors:   Vec<ConversionError>,     // non-fatal errors (missing images and so on)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -345,7 +345,7 @@ pub enum ConversionError {
 
 **`InteropError` vs `ConversionError` -- fatal vs non-fatal (disambiguation).**
 `ConversionError` is a **non-fatal** entry inside a `ConversionReport`: the conversion still
-produced a usable document (e.g. a missing image, a paragraph that failed to render but was
+produced a usable document (for example a missing image, a paragraph that failed to render but was
 skipped). `InteropError` is the **fatal** `Result::Err` returned by an import/export entry
 point when no document can be produced at all (corrupt ZIP, unreadable header). The two carry
 homonymous `ParseFailed`/`RenderFailed` variants intentionally: a `ParseFailed` *inside*
@@ -548,7 +548,7 @@ over the same `DrawSurface` primitives -- there is no claim of one function serv
 **Execution in the Logic thread:** Parley is already available there for pagination.
 The PDF is produced in memory (`Vec<u8>`) and transmitted to the UI thread via
 `ProseEvent::ExportReady { format: Pdf, data: Vec<u8>, mime: "application/pdf", .. }` for download.
-Generating a 100-page document can exceed 500ms -- blocking the UI thread during that
+Generating a 100-page document can exceed 500 ms -- blocking the UI thread during that
 time would freeze the interface.
 
 ```rust
@@ -639,7 +639,7 @@ Inline Marks -> HTML Attributes:
 #### HTML Import
 
 HTML import uses `html5ever` + `markup5ever_rcdom` to parse potentially malformed HTML
-(clipboard from browser, Google Docs HTML export, etc.).
+(clipboard from browser, Google Docs HTML export and so on).
 
 ```rust
 // ambre-prose/src/interop/html.rs
@@ -813,7 +813,7 @@ Fixtures are static versioned files, never generated on the fly in tests.
 
 > `krilla` is billed to the shared **`ambre-pdf`** crate (section E), not to `ambre-prose/interop`.
 > It is counted once here because Prose is the first PDF-exporting consumer; a second consumer
-> (e.g. Toile) reuses the same `ambre-pdf` code and adds no krilla weight (P-44).
+> (for example Toile) reuses the same `ambre-pdf` code and adds no krilla weight (P-44).
 
 > WARNING: Interop crates represent a significant binary cost. If the total WASM budget is
 > exceeded, use **lazy loading** (WASM bundle splitting): `docx-rs`, `krilla`,
@@ -840,7 +840,7 @@ Fixtures are static versioned files, never generated on the fly in tests.
 | **`wasm-bindgen` + `fetch` for PDF** | PDF export is 100% local (Krilla + Parley). No external service. |
 | **`printpdf` for PDF export** | Does not support Parley for typographic layout -- text would be rendered as graphic primitives without proper ligatures or justification. Krilla is designed to integrate with Parley. |
 | **Duplicating PDF/live rendering code** | Rendering functions parameterized on `DrawSurface` are shared between `WgpuSurface` (UI thread, live rendering) and `KrillaSurface` (Logic thread, PDF export). Duplicating rendering code for PDF would be a permanent source of divergence. |
-| **PDF in the UI thread** | Generating a 100-page document can exceed 500ms -- would block rendering. `KrillaSurface` is instantiated in the Logic thread; the UI thread receives `ProseEvent::ExportReady` and triggers the download. |
+| **PDF in the UI thread** | Generating a 100-page document can exceed 500 ms -- would block rendering. `KrillaSurface` is instantiated in the Logic thread; the UI thread receives `ProseEvent::ExportReady` and triggers the download. |
 | **`comrak` instead of `pulldown-cmark`** | `pulldown-cmark` is lighter and actively maintained. `comrak` is complete but ~2x heavier in binary for zero functional gain on our use case. |
 
 ---

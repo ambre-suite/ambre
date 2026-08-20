@@ -43,7 +43,7 @@ This component delegates:
 | `parley` | Typographic layout used in the Logic thread to compute block heights (pagination). Direct dependency (not only via `ambre-draw`) because `ambre-prose` uses Parley's full API (`Layout`, `FontContext`, line-breaking) -- not just the `GlyphRun` types exposed by `DrawSurface`. |
 | `ambre-core` | `Uuid`, `DocType`, common types (via `ambre-bus` re-export). |
 | `ambre-bus` | Typed IPC types: `ProseCommand`/`ProseEvent` (+ payloads), `AppCommand`/`AppEvent`, `SyncCommand`, `RestCommand`/`RestEvent`. |
-| `ambre-draw` | `DrawSurface` trait + kurbo/peniko re-exports. Page rendering functions (`render_block_on`, etc.) are parameterized on this trait -- same code for screen (WgpuSurface) and PDF export (KrillaSurface). |
+| `ambre-draw` | `DrawSurface` trait + kurbo/peniko re-exports. Page rendering functions (`render_block_on` and so on) are parameterized on this trait -- same code for screen (WgpuSurface) and PDF export (KrillaSurface). |
 | `postcard` | Binary serialization **only for network payloads**: the `Ephemeral` presence payload (`PresencePayload`). CRDT snapshots/deltas are already `Vec<u8>` produced by Loro. **No postcard on the inter-thread path** (typed values on `flume`). |
 | `serde` | `Serialize`/`Deserialize` **only** on postcard-serialized types bound for the network (`PresencePayload`, `CursorPosition`). IPC types (`ProseCommand`/`ProseEvent`, `PageLayout`, `RemoteCursor`, ...) do not carry it (move on `flume`). |
 | `thiserror` | Typed `ProseError`, mapped to `ProseEvent::Error`. |
@@ -107,7 +107,7 @@ The Prose document is a single `LoroDoc` containing four root containers:
 - `"title"` (String)
 - `"created_at"` (u64) -- Unix timestamp ms
 - `"updated_at"` (u64) -- Unix timestamp ms of the last content mutation (source of the f:dt "last modified date" field)
-- `"lang"` (String) -- BCP 47, e.g. "fr-FR"
+- `"lang"` (String) -- BCP 47, for example "fr-FR"
 - `"page"` (LoroMap) -- page format:
   - `"orientation"` (String) -- `"portrait"|"landscape"` (first-class, kept consistent with width/height; parity with Trame page setup, X68)
   - `"width_mm"` (f32)
@@ -117,9 +117,9 @@ The Prose document is a single `LoroDoc` containing four root containers:
   - `"margin_left_mm"` (f32)
   - `"margin_right_mm"` (f32)
 - `"defaults"` (LoroMap) -- document default values (4th cascade level):
-  - `"font_family"` (String) -- toolbar label, e.g. "Sans" (resolved via registered_family_name)
-  - `"font_size_pt"` (f32) -- e.g. 11.0
-  - `"line_height"` (f32) -- Multiple, e.g. 1.15
+  - `"font_family"` (String) -- toolbar label, for example "Sans" (resolved via registered_family_name)
+  - `"font_size_pt"` (f32) -- for example 11.0
+  - `"line_height"` (f32) -- Multiple, for example 1.15
 - `"header"` (LoroMap) -- header (prose-features):
   - `"enabled"` (bool)
   - `"block_id"` (String) -- stable TreeID of the header LoroText node (in "blocks"; holds inline marks + MARK_FIELD_*)
@@ -404,7 +404,7 @@ pub struct FootnoteLayout {
     pub height_px:    f32,       // height of the footnote text (measured by Parley)
     /// Pre-shaped Parley runs of the footnote text.
     /// Shaped in Pagination Phase 0 (measuring height_px requires shaping --
-    /// might as well keep the result). Includes the ordinal prefix (e.g. "1. ").
+    /// might as well keep the result). Includes the ordinal prefix (for example "1. ").
     pub runs:         Vec<ParleyRunData>,
 }
 
@@ -468,7 +468,7 @@ struct PageBudget {
        (position of the "fn" mark in the source block's LoroText).
        Sort by order of appearance in the document (DFS block order + offset).
        Assign ordinals (1, 2, 3...) in that order.
-       Prefix each footnote's text with its ordinal ("1. ", "2. ", etc.)
+       Prefix each footnote's text with its ordinal ("1. ", "2. " and so on)
        before shaping.
 ```
 
@@ -963,7 +963,7 @@ pub struct ProseOutcome {
 impl ProseState {
     /// Content command from the UI thread (already typed -- no deserialization).
     /// A single `ProseCommand` can produce multiple display events
-    /// (e.g. `DocUpdated` + `LayoutUpdated` + `RunsUpdated` after a keystroke) AND a delta.
+    /// (for example `DocUpdated` + `LayoutUpdated` + `RunsUpdated` after a keystroke) AND a delta.
     pub fn handle_command(&mut self, command: ProseCommand) -> ProseOutcome { /* ... */ }
 
     /// Remote CRDT delta OR snapshot (the Logic dispatcher calls this on
@@ -985,7 +985,7 @@ impl ProseState {
 }
 ```
 
-> **`ConnectionStatus`, `SyncWarning`, `MemberRevoked`, sharing, uploaded media**: are not Prose content -- the `ambre-logic` dispatcher routes them directly as `UiEvent` (online/offline indicator, `UiEvent::SyncWarning`, etc.) without going through `ProseState`.
+> **`ConnectionStatus`, `SyncWarning`, `MemberRevoked`, sharing, uploaded media**: are not Prose content -- the `ambre-logic` dispatcher routes them directly as `UiEvent` (online/offline indicator, `UiEvent::SyncWarning` and so on) without going through `ProseState`.
 
 ```rust
 impl ProseState {
@@ -1039,10 +1039,10 @@ pub enum ProseCommand {
     /// `value` is the mark's payload, always encoded as a String (see the mark constants in
     /// logic section 2.A). CANONICAL NUMERIC ENCODING (P-17): a numeric-valued mark (`fs` font size)
     /// is a plain base-10 decimal string with a `.` decimal separator, no exponent, no
-    /// trailing zeros, no thousands separator, no unit suffix -- e.g. `fs` = "11" or "11.5",
+    /// trailing zeros, no thousands separator, no unit suffix -- for example `fs` = "11" or "11.5",
     /// never "11.0pt" nor "1.1e1". This is exactly Rust's `f32::to_string()` output and is
     /// what `f32::from_str` round-trips; interop (logic-interop) parses/emits the same form.
-    /// `None` clears the value for keys whose presence alone is meaningful (e.g. `b`, `i`).
+    /// `None` clears the value for keys whose presence alone is meaningful (for example `b`, `i`).
     ApplyMark     { block_id: TreeID, range: (u32, u32), key: String, value: Option<String> },
     RemoveMark    { block_id: TreeID, range: (u32, u32), key: String },
 
@@ -1113,7 +1113,7 @@ pub enum ProseCommand {
 
     // -- Headers / footers --
     /// The header and footer each have a stable TreeID in "meta".
-    /// All text editing commands (InsertText, ApplyMark, etc.)
+    /// All text editing commands (InsertText, ApplyMark and so on)
     /// target them directly via this block_id -- no special variant.
     SetHeaderEnabled      { enabled: bool },
     SetFooterEnabled      { enabled: bool },
@@ -1224,7 +1224,7 @@ pub enum ProseEvent {
     // -- Features --
     /// Recalculated TOC (triggered by LayoutUpdated).
     TocUpdated    { toc: TableOfContents },
-    /// Word count updated (debounced 500ms).
+    /// Word count updated (debounced 500 ms).
     WordCountUpdated { count: WordCount },
     /// Find search results.
     FindResults   { matches: Vec<FindMatch>, current: usize },
@@ -1383,12 +1383,12 @@ plaintext to `ambre-server`.
 | Pagination: keep_together relaxed (block > page) | Block 80 lines keep_together, page = 50 lines -> normal split |
 | Pagination: keep_with_next (heading + paragraph) | Heading at page bottom, following paragraph overflows -> heading moved |
 | Pagination: implicit unbreakable heading | Heading with < 2 lines of space after -> heading to next page |
-| Pagination: footnote reserves bottom-of-page space | Block with "fn" mark, footnote height = 30px -> available reduced by 30 + SEP |
+| Pagination: footnote reserves bottom-of-page space | Block with "fn" mark, footnote height = 30 px -> available reduced by 30 + SEP |
 | Pagination: footnote forces new_page if conflict | Footnote doesn't fit on current page -> new_page + reservation |
-| Pagination: header/footer reduce budget | Header 40px + footer 20px -> available = content_height - 60 |
-| Pagination: different_first_page | Page 0 header_first 60px, pages 1+ header 40px -> different budgets |
+| Pagination: header/footer reduce budget | Header 40 px + footer 20 px -> available = content_height - 60 |
+| Pagination: different_first_page | Page 0 header_first 60 px, pages 1+ header 40 px -> different budgets |
 | Pagination: table split by row | Table 20 rows, page = 15 rows -> 15 rows page 1, 5 rows page 2 |
-| Pagination: block image not split | Image 800px, remaining = 200px -> entire image on next page |
+| Pagination: block image not split | Image 800 px, remaining = 200 px -> entire image on next page |
 | Pagination: vertical margin collapse | Block A space_after=20, block B space_before=30 -> effective space = 30 (max) |
 | Pagination: no margin at page top | First block of a page -> space_before ignored |
 | Pagination: incremental invalidation (unchanged height) | Modify text without changing height -> no placement recalculation |
@@ -1451,7 +1451,7 @@ plaintext to `ambre-server`.
 | **`ordered: bool` in `ListItem` CRDT** | Cannot encode `Todo` or `LowerRoman`. Replaced by the full `ListStyle` discriminant. |
 | **`ProseEvent` spread across multiple enums** | `ambre-prose` is a single crate -- centralizing in a single enum is simpler and avoids any module visibility issues. |
 | **`BlockType::Quote`** | Quote is a visual style (indentation, sidebar), not a distinct structure. `Paragraph { style_id: "quote" }` is consistent with the Google Docs model. |
-| **Pagination in the UI thread** | `requestAnimationFrame` (16ms). A full recomputation (>20ms) would block rendering. Logic thread mandatory. |
+| **Pagination in the UI thread** | `requestAnimationFrame` (16 ms). A full recomputation (>20 ms) would block rendering. Logic thread mandatory. |
 | **Pagination in the Sync thread** | Does not know Parley, reserved for crypto/network. |
 | **`contentEditable` / Slate.js / ProseMirror** | Rejected globally: outside Rust-first + wgpu/DrawSurface vision. |
 | **Loro branches for track changes** | Full `LoroDoc` fork = memory overhead O(doc_size x suggestions). `MarkType si/sd` is O(1). |

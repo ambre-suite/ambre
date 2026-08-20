@@ -180,7 +180,7 @@ pub enum LineHeight { Multiple(f32), Exact(f32), AtLeast(f32) }
 **Note (P-83):** paragraph style is stored as a per-property `LoroMap` (one key per
 `ParagraphStyle` field), not a single opaque blob -- canonical storage lives in Logic section C.
 `SetParagraphStyle` writes only the keys that changed, so two concurrent edits to DIFFERENT
-properties (e.g. `align` vs `space_after`) merge cleanly via Loro per-key LWW; concurrent edits
+properties (for example `align` vs `space_after`) merge cleanly via Loro per-key LWW; concurrent edits
 to the SAME property remain LWW.
 
 Commands (aligned with `ProseCommand` -- source of truth in `prose-engine`):
@@ -304,7 +304,7 @@ Headings are `BlockType::Heading` nodes with `"a": {level: u8}` (1..=6).
 ```rust
 // ambre-prose/src/features/heading.rs
 
-/// Section number of a heading as a level-depth vector, e.g. `[1, 2, 1]` for "1.2.1".
+/// Section number of a heading as a level-depth vector, for example `[1, 2, 1]` for "1.2.1".
 ///
 /// **Level validation/clamping (P-61).** Headings carry `"a": {level: u8}` documented as
 /// `1..=6`, but an imported (docx/foreign) document may contain `level == 0` or `> 6`.
@@ -750,9 +750,9 @@ CRDT (like every dynamic field). Its value carries only the desired *format*, re
 /// timestamp) and the document locale (`meta.lang`, falling back to the export locale
 /// used elsewhere), so it re-localizes without a CRDT rewrite and stays convergent.
 pub enum DateFieldFormat {
-    /// Locale short date, e.g. en-US "7/19/26", fr-FR "19/07/2026".
+    /// Locale short date, for example en-US "7/19/26", fr-FR "19/07/2026".
     Short,
-    /// Locale long date, e.g. en-US "July 19, 2026", fr-FR "19 juillet 2026".
+    /// Locale long date, for example en-US "July 19, 2026", fr-FR "19 juillet 2026".
     Long,
     /// ISO-8601 calendar date, locale-independent: "2026-07-19".
     Iso,
@@ -781,7 +781,7 @@ Commands:
 SetHeaderEnabled      { enabled: bool },
 SetFooterEnabled      { enabled: bool },
 // The header and footer each have a stable block_id in "meta".
-// To edit their content, use InsertText / ApplyMark / etc. targeting that block_id
+// To edit their content, use InsertText, ApplyMark and similar commands targeting that block_id
 // directly -- identical to any other block. No dedicated recursive command.
 //
 // `target` (P-54) disambiguates the regular vs first-page block when
@@ -846,7 +846,7 @@ currently sits; the stored `anchor_*` triple is a **cache** used only to (a) ren
 before the block's runs are shaped and (b) survive as a last-known position if the mark is
 gone. On every edit that touches an annotated block, `reconcile_comment_anchors(block_id)`
 rewrites the `anchor_*` cache from the current span of the `"cm"` mark. If the two ever
-disagree (e.g. after a remote delta), the mark wins and the cache is refreshed; the `anchor_*`
+disagree (for example after a remote delta), the mark wins and the cache is refreshed; the `anchor_*`
 values never drive rendering when a live mark exists.
 
 **Orphaning and overlap (P-69).**
@@ -964,7 +964,7 @@ fn all_suggestion_ids(doc: &LoroDoc) -> Vec<Uuid>;
 ```
 
 **Multi-block suggestions and toggling off (P-73).** A single suggestion whose span was
-split across a block boundary (e.g. an insertion that included a paragraph break) is stored
+split across a block boundary (for example an insertion that included a paragraph break) is stored
 as several `si`/`sd` spans sharing one `suggestion_id`; `suggestion_spans` collects **all**
 of them, so accept/reject act atomically on the whole change regardless of block count.
 `EnableTrackChanges { enabled: false }` **while suggestions are pending** does **not**
@@ -1062,7 +1062,7 @@ Resolved at display time from the current `PageLayout`.
 **Dangling reference rule (P-74).** When `target_block_id` no longer resolves to a live node
 (the target was deleted), the reference is **not** an error and is **not** removed from the
 CRDT: `prose-ui` renders it as a neutral broken-reference placeholder (Google Docs style,
-e.g. a struck-through "?" or the last-known label for `CustomText`), and the mark is retained
+for example a struck-through "?" or the last-known label for `CustomText`), and the mark is retained
 so that a concurrent undo/re-insert of the target restores resolution. `PageNumber`/
 `SectionNumber` against a dead target render the placeholder; `CustomText` still shows its
 literal label (it carries its own text and does not depend on the target existing).
@@ -1379,7 +1379,7 @@ without `page_count`. `prose-ui` removes gutters and adapts width to the viewpor
 
 #### O.12 Protected Zones
 
-Read-only ranges for certain peers (e.g. templates with delimited editable zones).
+Read-only ranges for certain peers (for example templates with delimited editable zones).
 
 **Model:** mark `MARK_PROTECTED` (`"prot"`), value = list of authorized `peer_id`s.
 `ProseState::dispatch()` checks the current peer before applying any mutation on a
@@ -1498,7 +1498,7 @@ direct path to the network.
 **Phase 1 -- Tables, TOC, Word Count (Week 2)**
 - [ ] Tables: row/column CRUD, merge, cell styles (`bg`, border, valign), `TableStyle`.
 - [ ] TOC: `build_toc()`, `BlockType::Toc` placeholder.
-- Word count: `compute_word_count()`, debounce 500ms, `ProseEvent::WordCountUpdated`.
+- Word count: `compute_word_count()`, debounce 500 ms, `ProseEvent::WordCountUpdated`.
 
 **Phase 2 -- Headers, Footers, Find & Replace (Week 2-3)**
 - [ ] Headers/footers: `"meta.header/footer"` structure, dynamic fields, different first page.

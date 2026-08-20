@@ -178,7 +178,7 @@ Virtual scroll culls pages outside the viewport to never rasterize more than
 pub struct PageColumn {
     pub page_height_px:   f32,
     pub page_width_px:    f32,      // page trim width (used to center the column, P-135 zoom)
-    pub gutter_px:        f32,      // space between pages (default: 16px)
+    pub gutter_px:        f32,      // space between pages (default: 16 px)
     pub page_count:       u32,      // number of pages in the current PageLayout (0 for an empty layout)
     pub total_height_px:  f32,      // page_count * (page_height + gutter)
 }
@@ -335,7 +335,7 @@ impl DraftBuffer {
 
 **Clearing rule (P-07).** The draft is cleared **only** by a `DocUpdated` that actually
 confirms this UI's own pending input for the anchored block. An empty-delta `DocUpdated`
-(e.g. `on_media_downloaded` emits `DocUpdated { delta: vec![] }`) and a `DocUpdated` whose
+(for example `on_media_downloaded` emits `DocUpdated { delta: vec![] }`) and a `DocUpdated` whose
 delta touches only *other* blocks (foreign origin) must **not** clear the draft -- otherwise an
 image finishing download would wipe in-progress keystrokes. On receipt, `update()` applies:
 
@@ -362,7 +362,7 @@ block's last confirmed run.
 On each `requestAnimationFrame` (if `dirty`), the display list is built from
 `ProseUiState` and submitted to `QuadRenderer` for GPU flush.
 
-Block rendering functions (`render_block_on`, `render_selection_on`, etc.) are
+Block rendering functions (`render_block_on`, `render_selection_on` and so on) are
 parameterized on the `DrawSurface` trait defined in `ambre-draw`. The UI thread
 instantiates `WgpuSurface` -- the same code is reused by `prose-interop` with
 `KrillaSurface` for PDF export in the Logic thread.
@@ -646,7 +646,7 @@ pub fn apply_zoom(state: &mut ProseUiState, factor: f32, focus_screen: Vec2) { /
   the caret to the delta's primary edit point (`reposition_cursor_to_confirmed`) rather than
   leaving it at a now-invalid offset; a selection is collapsed to that point.
 - **Remote-cursor jump rule (P-146).** A remote cursor whose new position is **non-adjacent** to
-  its previous one skips the 100ms interpolation (section I) and snaps, so a collaborator jumping across
+  its previous one skips the 100 ms interpolation (section I) and snaps, so a collaborator jumping across
   the document does not draw a cursor sliding through unrelated text.
 - **IME reanchor (P-131).** Covered by `DraftBuffer::reanchor` (section C): a remote delta mid-composition
   shifts `insert_pos`, so `compositionend` emits `InsertText` at the corrected byte offset.
@@ -844,12 +844,12 @@ fn user_color(user_id: &UserId) -> peniko::Color { /* ... */ }
 ```
 
 Rendering:
-- **Cursor bar:** vertical 2px line, peer color, height = line height.
+- **Cursor bar:** vertical 2 px line, peer color, height = line height.
 - **Label:** `display_name` badge displayed above the bar, peer-colored background.
 - **Remote selection:** semi-transparent rectangle (15% opacity) over the selected range.
 
 Remote cursors animate with a CSS-like transition (linear position interpolation over
-100ms) to mask network latency.
+100 ms) to mask network latency.
 
 ---
 
@@ -1005,14 +1005,14 @@ Tolerance: pixel diff <= 2% (anti-aliasing varies by GPU).
 
 ## 5. PERFORMANCE & RESOURCES
 
-**Frame budget (16ms at 60 FPS):**
+**Frame budget (16 ms at 60 FPS):**
 
 | Step | Budget | Notes |
 |-------|--------|-------|
 | `build_display_list()` (3 visible pages) | < 4 ms | `BlockLayout` traversal + pre-shaped run assembly |
 | Build vertex batch + GPU upload | < 4 ms | QuadRenderer + wgpu |
 | Submit GPU + present frame | < 6 ms | GPU-bound, varies by hardware |
-| **Total frame budget** | **< 14 ms** | 2ms margin for interleaved input events |
+| **Total frame budget** | **< 14 ms** | 2 ms margin for interleaved input events |
 
 Steps 9-11 (comment / suggestion highlights + draft buffer) are **O(visible)**, not
 O(total annotations): the highlight helpers skip any annotation anchored outside the
@@ -1090,7 +1090,7 @@ source of truth.
 | **`winit` for input** | Web-only target: winit is indirection without benefit and conflicts with DOM event ownership. Events are captured directly via `web-sys` (DOM listeners + the transparent `<textarea>`) and delivered as `InputEvent` (`ambre-spec-ui.md section 6`, `ambre-spec-chrome.md section 2.C`). |
 | **`prose-ui` owning `navigator.clipboard` + a `text/html` clipboard payload** | Clipboard is host-driven and Logic-authoritative (`ambre-spec-ui.md section 2.E`): the host performs OS clipboard I/O in the activation window; the payload is `ClipboardBlob { text, ambre }` (opaque `x-ambre`), built from the full CRDT -- not `text/html`, not viewport-culled. |
 | **Canvas 2D (non-WebGL)** | Insufficient performance for high-quality typographic rendering. wgpu (WebGL2/WebGPU) is AMBRE's foundational choice. |
-| **Synchronous CRDT confirmation before display** | Logic thread round-trip ~1-3ms perceptible at high typing cadence. The draft buffer absorbs this latency without compromising consistency. |
+| **Synchronous CRDT confirmation before display** | Logic thread round-trip ~1-3 ms perceptible at high typing cadence. The draft buffer absorbs this latency without compromising consistency. |
 | **Selection via `window.getSelection()` DOM** | Outside WASM context. Selection is managed entirely via Parley metrics and pointer events. |
 | **`requestIdleCallback` in the Logic thread** | Not available in a `wasm_thread` worker (the Logic thread). Deferred/low-priority work there uses the P1-P4 priority scheduler of `ambre-logic`, not `requestIdleCallback`. (On the UI thread, where it *is* available, the host may use it for opportunistic layout -- `ambre-spec-chrome.md section 5.B`.) |
 | **Layouts without versioning** | Without `version: u64` on `LayoutUpdated`, two pagination recalculations arriving out of order would produce stale display. The UI thread silently drops any `LayoutUpdated` whose version is lower than the last applied layout. |
@@ -1112,7 +1112,7 @@ source of truth.
 - [ ] `DraftBuffer`: optimistic display + clear on `DocUpdated`.
 - [ ] `hit_test()`: mouse click -> `(block_id, offset)`.
 - [ ] `handle_pointer()`: `InputEvent::PointerDown` cursor, `PointerMove` drag selection, `PointerUp` toolbar.
-- [ ] `DrawSurface` rendering of blinking cursor (2px fill_rect) and selection (alpha fill_rect).
+- [ ] `DrawSurface` rendering of blinking cursor (2 px fill_rect) and selection (alpha fill_rect).
 - [ ] `flume` UI -> Logic thread send: `LogicCommand::App { command: AppCommand::Prose(ProseCommand) }` (`try_send`, non-blocking).
 - [ ] Prose `AppView::Prose` variant: inherent `update` (drain `UiEvent` `flume`) / `plan_repaint` / `paint_content` / `paint_overlay` dispatched by `FrameHost`.
 - [ ] Unit tests keyboard, hit_test, draft buffer.

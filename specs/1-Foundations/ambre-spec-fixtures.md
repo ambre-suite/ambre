@@ -143,7 +143,7 @@ reviewable diff, so a binary encoding would defeat its only purpose. It lets CI 
 ```rust
 #[derive(Serialize, Deserialize, PartialEq)]
 struct FixtureManifest {
-    /// Generator identity, e.g. "trame/formula_dag_deep". Also the artifact
+    /// Generator identity, for example "trame/formula_dag_deep". Also the artifact
     /// **stem**: the whole filename in `current/`, the part before the `@` in
     /// `frozen/` (section 2.B). `String` because `fixtures-check` reads manifests back
     /// off disk, and owned deserialization cannot borrow `'static`.
@@ -250,7 +250,7 @@ trait FixtureGen {
     /// driver copies it into the manifest, having no other source for it.
     fn generator_version(&self) -> u32;
 
-    /// Build the document and return the plaintext `.ambre` bytes, i.e. the
+    /// Build the document and return the plaintext `.ambre` bytes, that is the
     /// output of the app's `export_ambre_plaintext()`. Not a raw snapshot: the
     /// header makes the artifact self-describing and loadable through the
     /// production importer.

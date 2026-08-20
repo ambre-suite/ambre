@@ -328,7 +328,7 @@ budget.
 | **Automatic/implicit Web-Showcase publish** | Declassifies E2EE content; must be an explicit, confirmed user action (section 3.D). |
 | **Non-atomic import (stream elements as they parse)** | A mid-file failure would leave a corrupt partial board; import is one atomic undoable batch (section 1). |
 | **Trusting foreign-file coordinates/counts** | Memory-exhaustion vector; imports are bounded and clamped (section 2.D). |
-| **C/OpenSSL-backed codecs (e.g. libpng/native PDF)** | Rust-first pillar -- `image`, `usvg`, `krilla` are pure Rust. |
+| **C/OpenSSL-backed codecs (for example libpng/native PDF)** | Rust-first pillar -- `image`, `usvg`, `krilla` are pure Rust. |
 
 ---
 

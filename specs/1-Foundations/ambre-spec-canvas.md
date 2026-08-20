@@ -51,7 +51,7 @@
   | `smallvec` | Inline storage for short lists (<8 items) | Avoids heap on hot path. |
   | `image` | Bitmap decoding | Pure Rust. Only activated decoders (PNG, JPEG, WebP) compiled -- feature flags. |
 
-  > **Inbound transport note.** content to display arrives from the Logic thread as **typed `UiEvent` values** on a shared `flume` channel (common linear memory). The view drains it **without blocking** at the start of each frame (`AppView::update` -> `from_logic.try_recv()` loop until `Empty`), applies mutations, and raises its dirty flags. No serialization on the UI side: payloads are typed `AppEvent` (e.g. `TrameEvent::ViewportData`). The UI thread **never blocks**; on the outbound side it sends via `try_send` (drop-on-`Full`, the next viewport supersedes via `version`). See `ambre-spec-architecture.md section 2`.
+  > **Inbound transport note.** content to display arrives from the Logic thread as **typed `UiEvent` values** on a shared `flume` channel (common linear memory). The view drains it **without blocking** at the start of each frame (`AppView::update` -> `from_logic.try_recv()` loop until `Empty`), applies mutations, and raises its dirty flags. No serialization on the UI side: payloads are typed `AppEvent` (for example `TrameEvent::ViewportData`). The UI thread **never blocks**; on the outbound side it sends via `try_send` (drop-on-`Full`, the next viewport supersedes via `version`). See `ambre-spec-architecture.md section 2`.
 
   No dependency on a native toolkit (GTK, Qt, Win32). No unaudited C bindings in our code.
 
@@ -59,7 +59,7 @@
   - wgpu, `QuadRenderer`, `GlyphAtlas`, and associated `web_sys` resources (`HTMLCanvasElement`, `GPUDevice`) are **confined to the UI Thread**. `!Send`, never transit to other threads.
   - **The UI thread never blocks**: inbound drain via `try_recv`, outbound send via `try_send`.
   - Conditional rendering via `RepaintPlan` (dirty flags): CPU phases (build vertex batch) and GPU phases (upload + draw) are skipped for `Reuse` layers.
-  - The rAF loop starts only after GPU init complete (avoids Firefox 60Hz vsync calibration on empty frames).
+  - The rAF loop starts only after GPU init complete (avoids Firefox 60 Hz vsync calibration on empty frames).
   - No `unsafe` in AMBRE code. Third-party crates with unsafe (wgpu, swash) are encapsulated.
   - Total frame budget is <= 16.6 ms at 60 FPS (see section 5 for breakdown).
   - No `fetch` or `WebSocket` calls in the rendering layer -- exception: lazy font loading from same origin.
@@ -77,7 +77,7 @@ The UI runtime runs on the **page's main thread**, symmetrical to `ambre_logic::
 - **`AppView`** (`ambre-app/src/host.rs`) -- a closed sum over document types (`AppView { Trame(TrameView), ... }`), symmetric to the `AppCommand`/`DocState` data plane (no trait object, no `Box<dyn Any>`, exhaustiveness checked by the compiler). Each variant's view exposes the **inherent** driver method set; the `FrameHost` `match`es over the enum to call them. Views are GPU-agnostic at the type level (only name `WgpuSurface`, which compiles on all targets), so apps test their view **without a browser**.
 
 ```rust
-// inherent methods on each app view (e.g. ambre_trame::ui::TrameView),
+// inherent methods on each app view (for example ambre_trame::ui::TrameView),
 // dispatched by AppView's match arms:
 fn update(&mut self);                                   // drain inbound (flume try_recv) -> dirty flags, no GPU
 fn plan_repaint(&mut self, hud_tick: bool) -> RepaintPlan;
@@ -180,7 +180,7 @@ pub struct FontConfig {
 ```
 
 - **Base fonts (required):** three families back the formatting toolbar's family choices -- **Noto Sans** (sans, regular/bold/italic/bold-italic), **DejaVu Serif** (serif), and **DejaVu Sans Mono** (monospace) -- served as static assets from the Ambre server (same origin -- no privacy leak). The UI thread and the Logic thread do an independent `fetch()` at startup -- the browser's HTTP cache deduplicates: single physical download, two `FontContext` in shared memory. Coverage: Latin/Latin-Extended, Cyrillic, Greek. **Family resolution is shared:** every app's text renderers **and** inline editors map a toolbar label (`Sans`/`Serif`/`Monospace`/`Default`, plus any unknown or CSS-generic name) to one of these loaded faces through `ambre_canvas::registered_family_name`, so a label resolves to the same face across apps and no family is ever passed to Parley as an unmatched `Named` (which would shape zero glyphs). **Local dev (Trunk):** TTF files are in `crates/ambre-app/fonts/` and copied to `dist/fonts/` via `<link data-trunk rel="copy-dir" href="fonts" />`.
-- **Additional fonts (lazy):** for CJK, Arabic, Devanagari, color emoji, etc. scripts, fonts are loaded on demand via `fetch()` from the static server. Loading triggers when Parley encounters a codepoint absent from base fonts (fallback chain). Color emoji uses **Noto Color Emoji** (CBDT bitmap build); all bundled faces are OFL 1.1 / permissive (see `crates/ambre-app/fonts/LICENSES.md`).
+- **Additional fonts (lazy):** for CJK, Arabic, Devanagari, color emoji and other scripts, fonts are loaded on demand via `fetch()` from the static server. Loading triggers when Parley encounters a codepoint absent from base fonts (fallback chain). Color emoji uses **Noto Color Emoji** (CBDT bitmap build); all bundled faces are OFL 1.1 / permissive (see `crates/ambre-app/fonts/LICENSES.md`).
 - **System fonts (native desktop -- post-MVP):** Parley can query system fonts via `fontdb`. Not available on WASM.
 
 > **`include_bytes!` ruled out:** Fonts are not embedded in the WASM binary via `include_bytes!`. This lightens it by ~600 KB raw and enables deduplication via the browser's HTTP cache. Both the UI thread and the Logic thread need the fonts -- `fetch()` from the Ambre server (same origin) creates no privacy leak.
@@ -336,7 +336,7 @@ The rendering layer consists of pure drawing primitives. ZK audit:
 
 - **No network outbound flows** in this layer. Displayed content is provided by the Logic thread as **typed `UiEvent` values** drained from a `flume` channel (shared memory) -- no network, no deserialization.
 - **No direct persistence**: layout states (ratios, expansions) are sent up to the Logic thread (which decides on persistence) only on explicit request.
-- **Fonts:** additional fonts loaded on demand via `fetch()` come from the AMBRE static server (same origin) -- no request to third-party CDNs (Google Fonts, etc.).
+- **Fonts:** additional fonts loaded on demand via `fetch()` come from the AMBRE static server (same origin) -- no request to third-party CDNs (Google Fonts and others).
 - **Invariant:** zero `fetch`/WebSocket calls in this layer (exception: lazy font loading from same origin). Zero exfiltration surface.
 
 ---

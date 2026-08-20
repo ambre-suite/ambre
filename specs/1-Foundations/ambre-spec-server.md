@@ -236,7 +236,7 @@ CREATE TABLE meetings (
 ```text
 # Auth: stateless access JWT (EdDSA / Ed25519) -- NO server-side session record.
 # The access token carries claims { sub: user_id, spk: signing_pubkey_hex, iat, exp }
-# (TTL 900s). The WS update hot path reads signing_pubkey from the verified token
+# (TTL 900 s). The WS update hot path reads signing_pubkey from the verified token
 # claim (spk) -- no Redis/PostgreSQL lookup per update.
 #
 # Refresh tokens: opaque (UUIDv4), revocable, rotated on each use (TTL 30d).
@@ -251,11 +251,11 @@ doc:{doc_id}:clocks            -> HASH { pub_key_hex: clock_value }
 # Delta buffer before S3 flush (drained by the global flusher)
 doc:{doc_id}:pending           -> LIST of serialized blobs { seq, s3_key, ciphertext_size }
 
-# Compaction lock (SET NX, TTL 30s)
+# Compaction lock (SET NX, TTL 30 s)
 doc:{doc_id}:compact_lock      -> STRING
 
 # Messaging segment seal lock
-channel:{channel_id}:seal      -> STRING (SET NX, TTL 30s)
+channel:{channel_id}:seal      -> STRING (SET NX, TTL 30 s)
 
 # Global per-channel sequence (SecSync seq -- same pattern as documents)
 channel:{channel_id}:seq       -> STRING (monotonic INCR)
@@ -282,7 +282,7 @@ channel chan:{channel_id}      -> PUB/SUB (postcard-serialized WsServerMsg)
 # Per-user broadcast PubSub (server-initiated pushes not tied to an open doc)
 # Every WS connection subscribes to its own user:{user_id} channel for the whole
 # session. Used for events the recipient cannot yet be a doc-subscriber of --
-# e.g. WsServerMsg::DocumentShared on a fresh invite (the invitee does not know
+# for example WsServerMsg::DocumentShared on a fresh invite (the invitee does not know
 # the document_id yet, so doc:{doc_id} could not reach them).
 channel user:{user_id}         -> PUB/SUB (postcard-serialized WsServerMsg)
 
@@ -292,14 +292,14 @@ channel user:{user_id}         -> PUB/SUB (postcard-serialized WsServerMsg)
 # It never sees the cursor or the name in plaintext.
 doc:{doc_id}:presence          -> HASH { pub_key_hex: presence_enc_b64 }
                                   presence_enc = ciphertext of the Ephemeral payload
-                                  MVP: periodic sweep (last_seen > 15s via auxiliary field)
-                                  Valkey 8+: HEXPIRE 15s per field
+                                  MVP: periodic sweep (last_seen > 15 s via auxiliary field)
+                                  Valkey 8+: HEXPIRE 15 s per field
 
 # (removed) doc:{doc_id}:sessions -- a per-document connection registry was
 # specced but never consumed: live delivery runs entirely through the doc:{doc_id}
 # PubSub channel + the in-process PubSubHub, which never reads such a hash. It was
 # dropped to save two hot-path Redis writes per (un)subscribe. If targeted routing
-# is ever needed (e.g. force-disconnect on revoke), reintroduce it WITH a TTL.
+# is ever needed (for example force-disconnect on revoke), reintroduce it WITH a TTL.
 
 # Reverse lookup user -> open documents
 user:{user_id}:open_docs       -> SET { doc_id_1, doc_id_2 }
@@ -506,7 +506,7 @@ On `WsClientMsg::Update { ciphertext, nonce, public_data, signature }` from the 
 
 1. Validates the access JWT (`?token=` at upgrade): claims `{ sub, spk }`; `signing_pubkey` read from the verified `spk` claim -- no Redis/PostgreSQL lookup.
 2. Verifies `document_id` is in this connection's subscription set (in-memory `HashSet<Uuid>` per connection, populated by Subscribe).
-3. Verifies the PostgreSQL ACL: `user_id in document_members` (role in editor|owner); result cacheable in Redis TTL 60s by `{user_id, doc_id}`.
+3. Verifies the PostgreSQL ACL: `user_id in document_members` (role in editor|owner); result cacheable in Redis TTL 60 s by `{user_id, doc_id}`.
 4. Verifies the Ed25519 signature (direct ed25519-dalek): a valid sign over `(ciphertext || nonce || postcard(public_data))`, and `public_data.pub_key == session signing_pubkey_hex`.
 5. Runs a Redis Lua script (atomic): validates the sequential clock, assigns a global seq.
 6. Pushes to `doc:{id}:pending` (LIST) -- `{ seq, ciphertext_bytes }`; flushed to S3 by the global flusher (see below).
@@ -552,7 +552,7 @@ Snapshots do **not** transit via WebSocket (they can be multiple MB). The `Snaps
 
 The "one task per active document" model is rejected (see section 8). The flusher is a **single global Tokio task** per Axum instance:
 
-`global_s3_flusher` is spawned once at startup: every 15s it iterates the `doc:*:pending` keys
+`global_s3_flusher` is spawned once at startup: every 15 s it iterates the `doc:*:pending` keys
 with a non-blocking rustis `SCAN` (cursor loop, 100 at a time) and flushes each in parallel
 (`tokio::spawn` per doc). `flush_doc_pending` does `LRANGE -> parallel S3 upload -> INSERT into
 PostgreSQL -> LTRIM`; it is idempotent (a crash between `LRANGE` and `LTRIM` re-flushes next
@@ -563,7 +563,7 @@ async fn global_s3_flusher(state: AppState) { /* ... */ }
 async fn flush_doc_pending(state: &AppState, pending_key: &str) { /* ... */ }
 ```
 
-This model has O(1) Tokio tasks instead of O(active_documents). Redis SCAN is non-blocking. Flush latency stays <= 15s + SCAN duration.
+This model has O(1) Tokio tasks instead of O(active_documents). Redis SCAN is non-blocking. Flush latency stays <= 15 s + SCAN duration.
 
 ---
 
@@ -611,7 +611,7 @@ sequenceDiagram
     C->>O: redirect
     O-->>C: Authorization Code
     C->>A: POST /api/auth/{p}/callback
-    Note over A: validates state<br/>exchanges code for tokens<br/>validates id_token JWT<br/>extracts sub + email<br/>upserts users PostgreSQL<br/>mints access JWT (claims sub + spk, TTL 900s)<br/>stores opaque refresh token in Redis (TTL 30d)
+    Note over A: validates state<br/>exchanges code for tokens<br/>validates id_token JWT<br/>extracts sub + email<br/>upserts users PostgreSQL<br/>mints access JWT (claims sub + spk, TTL 900 s)<br/>stores opaque refresh token in Redis (TTL 30d)
     A-->>C: 200 access_token, refresh_token, access_expires_in<br/>JSON body, NO Set-Cookie
 ```
 
@@ -633,7 +633,7 @@ pub struct AuthSession {
 }
 ```
 
-- **Access token** -- EdDSA JWT, TTL 900s (`ACCESS_TTL_SECS`). Signed with `JwtKeys` derived from `JWT_SIGNING_SEED`. **Multi-instance deployments MUST set the same seed** so any instance can verify a token minted by another; absent (dev), an ephemeral key is generated and all tokens die on restart -- the client recovers via the 4401 reconnect path (sec.7).
+- **Access token** -- EdDSA JWT, TTL 900 s (`ACCESS_TTL_SECS`). Signed with `JwtKeys` derived from `JWT_SIGNING_SEED`. **Multi-instance deployments MUST set the same seed** so any instance can verify a token minted by another; absent (dev), an ephemeral key is generated and all tokens die on restart -- the client recovers via the 4401 reconnect path (sec.7).
 - **Refresh token** -- opaque UUIDv4, stored `refresh:{token}` -> `{ user_id, signing_pubkey_hex }` (TTL 30d, `REFRESH_TTL_SECS`). `POST /api/auth/refresh` validates and **rotates** it (old token consumed, new minted) and returns a fresh access JWT. `POST /api/auth/logout` deletes it.
 - **Dev login** (`POST /api/auth/dev/login`, gated by `DEV_MODE`) -- upserts a user whose keypair is **deterministically derived from the username** (BLAKE2b), so the same `?user=alice` always reauthenticates to the same identity without OIDC. Disabled in production.
 
@@ -677,7 +677,7 @@ The full flow is specified in `ambre-spec-sync.md` section 3. The initiator clie
 
 TLS via **rustls** (Caddy as terminator). No OpenSSL in the Axum chain.
 
-> **Operational: `?token=` in logs (M15).** The WS upgrade carries the access JWT as a `?token=` query parameter (the browser `WebSocket` API forbids custom headers). A bearer credential in a URL lands in reverse-proxy access logs, browser history, and `Referer`. Mitigations: (1) the server's own `TraceLayer` span records only the URI **path**, never the query string; (2) the reverse proxy (Caddy) **MUST** strip or redact the `token` query parameter from its access logs; (3) the access token is short-lived (`ACCESS_TTL_SECS`, default 900s) to bound the exposure window. A future hardening is a one-time WS ticket (short-TTL Redis nonce minted over an authenticated POST, exchanged in the query) so the long-lived JWT never appears in a URL.
+> **Operational: `?token=` in logs (M15).** The WS upgrade carries the access JWT as a `?token=` query parameter (the browser `WebSocket` API forbids custom headers). A bearer credential in a URL lands in reverse-proxy access logs, browser history, and `Referer`. Mitigations: (1) the server's own `TraceLayer` span records only the URI **path**, never the query string; (2) the reverse proxy (Caddy) **MUST** strip or redact the `token` query parameter from its access logs; (3) the access token is short-lived (`ACCESS_TTL_SECS`, default 900 s) to bound the exposure window. A future hardening is a one-time WS ticket (short-TTL Redis nonce minted over an authenticated POST, exchanged in the query) so the long-lived JWT never appears in a URL.
 
 > **Operational: CORS (M17).** `CORS_ALLOWED_ORIGINS` is a comma-separated allow-list of the self-hoster's origins; CORS is **default-deny**. The permissive `allow_origin(Any)` fallback is only reachable behind `DEV_MODE` and is logged at startup, so a production deployment cannot accidentally ship a wildcard origin.
 
@@ -726,10 +726,10 @@ CI: `cargo test` with `DATABASE_URL` pointing to test PostgreSQL. `#[cfg(feature
 
 | Endpoint | Target (p99) | Tool |
 |---|---|---|
-| WS Update (receive + validate + broadcast) | < 5ms | criterion + tokio-test |
-| Redis Lua script (clock validation) | < 1ms | Direct Redis benchmark |
-| S3 presigned URL | < 50ms | integration |
-| GET deltas (100 entries) | < 20ms | k6 |
+| WS Update (receive + validate + broadcast) | < 5 ms | criterion + tokio-test |
+| Redis Lua script (clock validation) | < 1 ms | Direct Redis benchmark |
+| S3 presigned URL | < 50 ms | integration |
+| GET deltas (100 entries) | < 20 ms | k6 |
 
 ---
 
@@ -737,16 +737,16 @@ CI: `cargo test` with `DATABASE_URL` pointing to test PostgreSQL. `#[cfg(feature
 
 | Operation | Target | Potential bottleneck |
 |---|---|---|
-| WS Update receive + broadcast | < 5ms p99 | Lua Redis + PubSub |
-| S3 presigned URL generation | < 50ms | S3 SDK (network I/O) |
-| Document cold start (snapshot + N deltas) | < 500ms | S3 + Postgres read |
-| OIDC auth callback | < 200ms | Provider token exchange |
-| Global S3 flush batch (15s cycle) | < 2s for 1000 deltas | Parallel S3 upload |
-| Presence sweep MVP (30s) | < 10ms | Redis SCAN |
+| WS Update receive + broadcast | < 5 ms p99 | Lua Redis + PubSub |
+| S3 presigned URL generation | < 50 ms | S3 SDK (network I/O) |
+| Document cold start (snapshot + N deltas) | < 500 ms | S3 + Postgres read |
+| OIDC auth callback | < 200 ms | Provider token exchange |
+| Global S3 flush batch (15 s cycle) | < 2 s for 1000 deltas | Parallel S3 upload |
+| Presence sweep MVP (30 s) | < 10 ms | Redis SCAN |
 
 **Horizontal scalability:** the server is stateless at the application level. State is in Redis (PubSub, refresh tokens, presence, pending deltas, clocks/seq) and PostgreSQL. Multiple Axum instances coexist behind Caddy. Redis PubSub ensures WebSocket broadcasts reach clients on any instance.
 
-**Memory:** no in-process blob cache. Buffer `LIST doc:{id}:pending` in Redis. Average delta ~1 KB. 15s buffer on an active document ~ 50 deltas x 1 KB = ~50 KB per open document.
+**Memory:** no in-process blob cache. Buffer `LIST doc:{id}:pending` in Redis. Average delta ~1 KB. 15 s buffer on an active document ~ 50 deltas x 1 KB = ~50 KB per open document.
 
 ---
 
@@ -859,11 +859,11 @@ sequenceDiagram
 
 ### Heartbeat and Presence (MVP)
 
-The client sends a `WsClientMsg::Ephemeral` (encrypted payload) every ~10s. The server:
+The client sends a `WsClientMsg::Ephemeral` (encrypted payload) every ~10 s. The server:
 1. `HSET doc:{id}:presence {pub_key_hex} {presence_enc_b64}` in Redis
 2. Forwards to all other clients via PubSub (the blob is opaque -- pure relay)
 
-Sweep every 30s: purge entries whose `last_seen > 15s` (auxiliary field `doc:{id}:presence_ts:{pub_key_hex}` -> TTL 15s).
+Sweep every 30 s: purge entries whose `last_seen > 15 s` (auxiliary field `doc:{id}:presence_ts:{pub_key_hex}` -> TTL 15 s).
 
 **Valkey 8+ migration:** `HEXPIRE doc:{id}:presence {pub_key_hex} 15` on each heartbeat. No more sweep timer.
 
@@ -878,7 +878,7 @@ No push notifications in MVP. The client queries `GET /api/channels/unread` on r
 | Technology / Approach | Reason |
 |---|---|
 | **`ambre-crypto` as a dependency of `ambre-server`** | Violates least privilege: exposes `DocumentKey`, `MasterSeed`, Argon2 in the server process. The only crypto operation needed is Ed25519 verification -- direct `ed25519-dalek` suffices. |
-| **Redefining wire types in `ambre-server`** | `ambre-protocol` is the source of truth. Redefining locally creates guaranteed divergence (e.g., `pub_key: Vec<u8>` vs `[u8; 32]` observed in the original). |
+| **Redefining wire types in `ambre-server`** | `ambre-protocol` is the source of truth. Redefining locally creates guaranteed divergence (for example, `pub_key: Vec<u8>` vs `[u8; 32]` observed in the original). |
 | **`deadpool_redis` / `redis-rs`** | Replaced by `rustis` (native RESP3 client, multiplexed, Clone-able `Client` without pool). |
 | **`doc_type` with English names** | `spreadsheet`, `document`, `whiteboard` diverge from application names. Canonical French names: `prose`, `trame`, `toile`, `murmure`. |
 | **Plaintext Redis presence** | `doc:{id}:presence` stored `name`, `color`, `cursor` as plaintext JSON -- ZK violation. Replaced by `presence_enc` (opaque Ephemeral ciphertext). |
@@ -889,7 +889,7 @@ No push notifications in MVP. The client queries `GET /api/channels/unread` on r
 | **One WebSocket per document/channel** | Connection waste (5 WS for a Toile with 4 embedded documents). Browser limits (~6 connections per origin). Messages already carry `document_id` in `publicData` -- the server demultiplexes. Single multiplexed WS per session with Subscribe/Unsubscribe, single endpoint `GET /api/ws`. Meetings keep a separate endpoint (ephemeral signaling). |
 | **gRPC / Protobuf** | No native WASM browser support without grpc-web proxy. Postcard + WebSocket is simpler. |
 | **External message broker (NATS, Kafka)** | Over-engineering for MVP. Redis PubSub suffices. NATS JetStream migration possible in V2. |
-| **Cookie sessions (Redis `session:{id}`, HttpOnly + CSRF double-submit)** | **WARNING -- Reversed.** The COI SPA's Sync worker owns the network and cannot reliably attach cookies to the WebSocket; cookies also forced CSRF protection on every mutating route. Replaced by **Bearer access JWT (EdDSA, TTL 900s) + opaque revocable refresh token (Redis, TTL 30d)**. Revocation is preserved (refresh deleted at logout); the WS hot path reads `signing_pubkey` from the `spk` claim with no lookup. CSRF middleware removed (no ambient credential to forge). |
+| **Cookie sessions (Redis `session:{id}`, HttpOnly + CSRF double-submit)** | **WARNING -- Reversed.** The COI SPA's Sync worker owns the network and cannot reliably attach cookies to the WebSocket; cookies also forced CSRF protection on every mutating route. Replaced by **Bearer access JWT (EdDSA, TTL 900 s) + opaque revocable refresh token (Redis, TTL 30d)**. Revocation is preserved (refresh deleted at logout); the WS hot path reads `signing_pubkey` from the `spk` claim with no lookup. CSRF middleware removed (no ambient credential to forge). |
 | **Stateless JWT as the *sole* token (no refresh)** | A bare stateless JWT is not revocable before `exp`. Kept the **refresh** token server-side in Redis (rotated on use, revoked at logout) as the revocable part; only the short-lived access token is stateless. |
 | **ORM (Diesel, SeaORM)** | Diesel blocks native async. SeaORM obscures critical queries. sqlx with compile-time check is the right abstraction level. |
 | **S3 blobs proxied by the server** | The server must not see the content. Presigned URLs: direct upload/download client -> S3. |

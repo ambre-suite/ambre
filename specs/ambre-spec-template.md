@@ -4,7 +4,7 @@
 **Implementation:** [implemented | partial | design-only]
 
 > Concise description of the component's single responsibility. Definition of the technical or functional problem being solved.
-> **Note:** This template is modular. Ignore or remove irrelevant sections for your scope (e.g., no CRDT for a pure calculation engine).
+> **Note:** This template is modular. Ignore or remove irrelevant sections for your scope (for example, no CRDT for a pure calculation engine).
 
 ---
 
@@ -26,14 +26,14 @@
 * **Forbidden:** complete function bodies (`fn foo(&mut self, ...) { ... }` with real logic). Replace them with (a) a one-line description of the algorithm, (b) the invariant it upholds, and (c) a pointer to the real code (`// ambre-crate/src/module.rs`).
 * **Illustrative only:** a short example test or snippet is fine to clarify intent; the authoritative test suite lives in the repo, never mirrored here.
 * **Decision test:** if a block can be copy-pasted into a `.rs` file and compiled as behavior, it is implementation and does not belong in a spec. If it is a shape declaration or a described algorithm, it does.
-* **Fences.** Rust -- and only Rust -- goes in a ` ```rust ` fence: shapes and signatures, never a body. Everything else declares its language so the checker can pair fences and never mistake code for prose: wire layouts and pseudo-code use ` ``` ` (untagged) or ` ```text `; a rendered diagram uses ` ```mermaid ` (see the next bullet); a genuine non-Rust artefact uses its own tag (` ```sql `, ` ```toml `, ` ```yaml `, ` ```css `, ` ```json `, ` ```html `, ` ```bash `). An embedded runnable script (e.g. `lua`) is implementation, not a shape -- state its algorithm as pseudo-code in a ` ```text ` fence and point to the source. Every fence must be closed; a Rust shape left in an untagged fence is a tagging bug, not an exemption.
+* **Fences.** Rust -- and only Rust -- goes in a ` ```rust ` fence: shapes and signatures, never a body. Everything else declares its language so the checker can pair fences and never mistake code for prose: wire layouts and pseudo-code use ` ``` ` (untagged) or ` ```text `; a rendered diagram uses ` ```mermaid ` (see the next bullet); a genuine non-Rust artefact uses its own tag (` ```sql `, ` ```toml `, ` ```yaml `, ` ```css `, ` ```json `, ` ```html `, ` ```bash `). An embedded runnable script (for example `lua`) is implementation, not a shape -- state its algorithm as pseudo-code in a ` ```text ` fence and point to the source. Every fence must be closed; a Rust shape left in an untagged fence is a tagging bug, not an exemption.
 * **Diagrams: no ASCII-art.** A relationship or a flow renders as a ` ```mermaid ` diagram (sequence, flowchart) -- ASCII source a forge renders as a real figure. Everything else is plain text, never a box drawn with `+`, `|`, `--` or Unicode box glyphs: a hierarchy (a CRDT schema, a directory layout) is a **nested bullet list**, a sequence of steps is a **numbered list**, and a mapping (key to value, entry to thread) is a **table**. Printable ASCII only (`ai/ambre-writing-style.md`), so a Unicode box or arrow is a defect. A dense, heavily annotated figure that mermaid cannot hold becomes a small mermaid graph plus prose, not a wall of boxes.
 * **Mechanised.** `just spec-code` (CI job `lint`) fails on any function body inside a ` ```rust ` fence in `specs/`, on any Rust shape sitting in a non-`rust` fence, on a disallowed fence tag (`lua`, ...), and on an unterminated fence. Keep the signature and its doc comment, collapse the body to `{ /* ... */ }`, and put the algorithm in the prose around it -- numbered steps or a table when it is a mapping. The rule was written long before it was enforced, and the corpus had accumulated 1 466 lines of bodies in the meantime.
 
 ## 1. OBJECTIVES & CONSTRAINTS
 * **Scope:** Strict definition of the component's boundaries. What it handles vs. what it delegates.
 * **Dependencies:** List of internal or external crates. Systematic justification for any new dependency.
-* **Invariants:** Numbered, falsifiable properties this component guarantees (e.g., no allocation on the hot path, deterministic computation, no plaintext crossing a transport boundary). Fill the table below. The grammar, the falsifiability test and the status values are normative in `ambre-spec-architecture.md section 4` ("Invariants (normative)") -- reference it, do not redefine it.
+* **Invariants:** Numbered, falsifiable properties this component guarantees (for example, no allocation on the hot path, deterministic computation, no plaintext crossing a transport boundary). Fill the table below. The grammar, the falsifiability test and the status values are normative in `ambre-spec-architecture.md section 4` ("Invariants (normative)") -- reference it, do not redefine it.
 
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
@@ -67,7 +67,7 @@
 > Prescriptive. Every spec MUST fill in each item below. See the transverse test architecture in `ambre-spec-architecture.md section 4` (test tiering, CRDT convergence, CI, coverage) -- reference it, do not redefine it.
 * **Invariant coverage:** every invariant declared in section 1 carries a `Verification` entry -- a concrete mechanism (test path, type-level construction, lint) or the explicit absence of one (`human-review`, `qa-manual`, `unverified`). The ID is the join key in both directions: the test name cites it, the invariant names the test. The cross-spec status roll-up lives in `ambre-spec-testing.md section 7`.
 * **Test tiers:** Declare which tiers this component touches -- **host** (`cargo test`, x86_64, default), **db** (server integration, feature `db` + docker compose), **wasm** (`wasm-bindgen-test`, headless Chrome, for any `cfg(target_arch = "wasm32")` / Leptos / GPU surface).
-* **Unit Tests:** Coverage strategy for pure functions and state machines. State an indicative coverage target (e.g. every predicate branch, every no-op guard, every error path).
+* **Unit Tests:** Coverage strategy for pure functions and state machines. State an indicative coverage target (for example every predicate branch, every no-op guard, every error path).
 * **CRDT convergence:** If the component holds collaborative CRDT state, a 2-peer convergence property-test is **mandatory** (interleaved op sequences via `MockSyncHandle` + `apply_remote` -> identical final states). Otherwise state "N/A (no CRDT state)".
 * **Mocks & Environment:** Host seams used (`CommandSink` / `LogicSink` / `Mock*`); wasm via `wasm-bindgen-test`; DB via feature `db` + `docker compose up`. Isolated, headless, no live network.
 * **Benchmarks:** `criterion` targets and regression criteria (latency, CPU).
@@ -76,7 +76,7 @@
 ---
 
 ## 5. PERFORMANCE & RESOURCES
-* **Performance Budget:** Maximum execution time per typical operation (e.g., <16ms for wgpu rendering at 60 FPS, <1ms for vertex batch build in steady state).
+* **Performance Budget:** Maximum execution time per typical operation (for example, <16 ms for wgpu rendering at 60 FPS, <1 ms for vertex batch build in steady state).
 * **WASM Impact:** Evaluation of binary size and heap memory footprint.
 
 ---
