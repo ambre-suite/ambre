@@ -152,6 +152,116 @@ impl TextEditor {
         self.intents.push(intent);
     }
 
+    // -- Named intent constructors -------------------------------------------
+    // Readable one-liners for the common editing operations; each just queues
+    // the matching `EditIntent`, applied at the next `flush`. Callers that need
+    // an uncovered variant still use `push` directly.
+
+    /// Insert literal text at the caret (typing / paste).
+    pub fn insert(&mut self, s: &str) {
+        self.push(EditIntent::Insert(s.to_owned()));
+    }
+    /// Insert a line break at the caret.
+    pub fn newline(&mut self) {
+        self.push(EditIntent::Newline);
+    }
+    /// Delete the selection, else the char before the caret.
+    pub fn backspace(&mut self) {
+        self.push(EditIntent::Backspace);
+    }
+    /// Delete the selection, else the char after the caret.
+    pub fn delete_forward(&mut self) {
+        self.push(EditIntent::Delete);
+    }
+    /// Delete the current selection only (no-op when empty).
+    pub fn delete_selection(&mut self) {
+        self.push(EditIntent::DeleteSelection);
+    }
+    /// Move the caret left, collapsing any selection.
+    pub fn move_left(&mut self) {
+        self.push(EditIntent::Left {
+            select: false,
+            word: false,
+        });
+    }
+    /// Move the caret right, collapsing any selection.
+    pub fn move_right(&mut self) {
+        self.push(EditIntent::Right {
+            select: false,
+            word: false,
+        });
+    }
+    /// Extend the selection one place left.
+    pub fn extend_left(&mut self) {
+        self.push(EditIntent::Left {
+            select: true,
+            word: false,
+        });
+    }
+    /// Extend the selection one place right.
+    pub fn extend_right(&mut self) {
+        self.push(EditIntent::Right {
+            select: true,
+            word: false,
+        });
+    }
+    /// Move the caret to the start of the line.
+    pub fn move_home(&mut self) {
+        self.push(EditIntent::LineStart { select: false });
+    }
+    /// Move the caret to the end of the line.
+    pub fn move_end(&mut self) {
+        self.push(EditIntent::LineEnd { select: false });
+    }
+    /// Extend the selection to the start of the line.
+    pub fn extend_home(&mut self) {
+        self.push(EditIntent::LineStart { select: true });
+    }
+    /// Extend the selection to the end of the line.
+    pub fn extend_end(&mut self) {
+        self.push(EditIntent::LineEnd { select: true });
+    }
+    /// Move the caret up one line.
+    pub fn move_up(&mut self) {
+        self.push(EditIntent::Up { select: false });
+    }
+    /// Move the caret down one line.
+    pub fn move_down(&mut self) {
+        self.push(EditIntent::Down { select: false });
+    }
+    /// Extend the selection up one line.
+    pub fn extend_up(&mut self) {
+        self.push(EditIntent::Up { select: true });
+    }
+    /// Extend the selection down one line.
+    pub fn extend_down(&mut self) {
+        self.push(EditIntent::Down { select: true });
+    }
+    /// Select the whole buffer.
+    pub fn select_all(&mut self) {
+        self.push(EditIntent::SelectAll);
+    }
+    /// Set the live IME composition preview (CompositionUpdate).
+    pub fn set_compose(&mut self, text: &str) {
+        self.push(EditIntent::Compose(text.to_owned()));
+    }
+    /// Finalize the IME composition into committed text (CompositionEnd).
+    pub fn commit_compose(&mut self, text: &str) {
+        self.push(EditIntent::ComposeEnd(text.to_owned()));
+    }
+    /// Place the caret at a local-space (text-relative) point (click / drag start).
+    pub fn point_down(&mut self, x: f32, y: f32) {
+        self.push(EditIntent::PointerDown { x, y });
+    }
+    /// Extend the selection to a local-space point (drag / shift-click).
+    pub fn point_drag(&mut self, x: f32, y: f32) {
+        self.push(EditIntent::PointerDrag { x, y });
+    }
+    /// Select the word at a local-space point (double click).
+    pub fn word_at(&mut self, x: f32, y: f32) {
+        self.push(EditIntent::WordAt { x, y });
+    }
+
     /// Replace the whole buffer synchronously (no font context needed), caret
     /// re-seeded to the end at the next flush. For a host that owns the text
     /// elsewhere and pushes it in wholesale (Trame's formula bar, which holds DOM
