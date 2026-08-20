@@ -447,6 +447,15 @@ per grid column; the dispatcher keeps them in lockstep:
 these are the *single-peer, command-time* rules, consistent with the TreeID-keyed
 `{anchor -> extent}` model):
 
+- **`MergeTableCells` while a covered cell is non-empty.** Before any merge is written, the
+  dispatcher checks the covered set (every cell except the anchor). If any covered cell still
+  holds `LoroText` content, the command is **rejected locally** with
+  `CommandRejected { reason: MergeCoversNonEmpty }` and nothing is written -- the same
+  local guard Trame applies (`trame-logic §6` "merge blocked if covered cell is non-empty",
+  `TRAME-019`). This is the *single-peer* rule; it cannot see a concurrent write, so the
+  masking model above is what keeps a *concurrent* value under a merge from being lost. Both
+  halves must be present for the "behave identically" claim to hold: the local guard refuses,
+  the concurrent path masks and restores.
 - **`MergeTableCells` over an already-merged / overlapping region.** The dispatcher first
   resolves the requested corners to the covered cell set. If that set intersects any existing
   merge, all intersecting `merged` entries are **removed first**, then the single new entry is
