@@ -146,7 +146,7 @@ Crucially, **list index == grid position**: resolving `A5` is a direct `row_by_p
 concurrent insert of two distinct rows is two independent element insertions that Loro orders
 canonically -- convergent *and* intent-preserving, with no shared mutable counter.
 
-**Materialization cap.** To bound the pathological "single value far down" case (e.g. an edit at row
+**Materialization cap.** To bound the pathological "single value far down" case (for example an edit at row
 99 999 in an otherwise empty sheet, which would materialize ~100k placeholders), a write that would
 extend the used range by more than `ROW_MATERIALIZE_CAP` (= 10 000) rows past the current high-water
 mark is **rejected** (the cell write is dropped and a warning is surfaced). Normal top-down editing
@@ -189,7 +189,7 @@ speeds the position query; it does not remove the shared-counter hazard.
 - `"col_widths_{sheet_id}"` (LoroMap) -- `{col_uid: f64}`
 - `"row_heights_{sheet_id}"` (LoroMap)
 - `"merges_{sheet_id}"` (LoroMap) -- `{"{row_uid}:{col_uid}": "{row_uid_end}:{col_uid_end}"}`
-- `"styles"` (LoroMap) -- shared styles (TARGET dedup, deferred -- section 11 bis.F "out of scope"); e.g. `"style_007"` (LoroMap) -- `{bold, italic, underline, font, size, fg, bg, fmt, halign, valign, wrap, border}`. AS-BUILT instead: one register per cell, whole style inline.
+- `"styles"` (LoroMap) -- shared styles (TARGET dedup, deferred -- section 11 bis.F "out of scope"); for example `"style_007"` (LoroMap) -- `{bold, italic, underline, font, size, fg, bg, fmt, halign, valign, wrap, border}`. AS-BUILT instead: one register per cell, whole style inline.
 - `"cellstyle_{sheet_id}"` (LoroMap) -- `{"{row_uid}:{col_uid}": Binary(postcard(StyleRecord{bold,italic,CellStyle}))}`
 - `"named_ranges"` (LoroMap) -- `{"TOTAL": {sheet_id, range}}`
 - `"media"` (LoroMap) -- `{hash_blake2b: {dims, anchor, mime}}`
@@ -620,7 +620,7 @@ pub struct CellBytecode {
 `SheetRef` and `Name` never reach this walk: `parser::resolve_refs` rewrites them into a `CellRef`/`Range` beforehand, or into `Op::PushError` for an undefined name or a deleted target. The arm exists anyway, guarded by a `debug_assert!` and degrading to `PushEmpty` -- a blank value, never a panic (`TRAME-013`).
 
 
-**A1 -> CellId Resolution:** compilation receives the current `SheetIndex` (per sheet). `A1` (col=A->0, row=1->index 0) is resolved against the index to the `Uid`s currently at those positions, producing a stable `CellId { sheet, row: AxisId::Bound(uid), col: AxisId::Bound(uid) }`. The reference then **binds to those rows/columns**, surviving inserts, deletes, and reorders -- after a sort it still points at the same physical cells (now elsewhere), which is the section 12 "references follow the data" guarantee. A position *beyond* the used range (e.g. `A100` on a 10-row sheet) has no `Uid`, so it compiles to `AxisId::Virtual(pos)` and reads `Empty` until that line is materialized (section 3.A).
+**A1 -> CellId Resolution:** compilation receives the current `SheetIndex` (per sheet). `A1` (col=A->0, row=1->index 0) is resolved against the index to the `Uid`s currently at those positions, producing a stable `CellId { sheet, row: AxisId::Bound(uid), col: AxisId::Bound(uid) }`. The reference then **binds to those rows/columns**, surviving inserts, deletes, and reorders -- after a sort it still points at the same physical cells (now elsewhere), which is the section 12 "references follow the data" guarantee. A position *beyond* the used range (for example `A100` on a 10-row sheet) has no `Uid`, so it compiles to `AxisId::Virtual(pos)` and reads `Empty` until that line is materialized (section 3.A).
 
 ### C. Bytecode Cache and Incremental Compilation
 
@@ -816,7 +816,7 @@ pub struct TrameState {
     dirty:         HashSet<CellId>,
     float_objects: rstar::RTree<FloatObject>,
     /// Cache name -> SheetId for resolving cross-sheet references
-    /// in formulas (e.g. Sheet2!A1). Updated on each CreateSheet/RenameSheet/DeleteSheet.
+    /// in formulas (for example Sheet2!A1). Updated on each CreateSheet/RenameSheet/DeleteSheet.
     sheet_name_to_id: HashMap<String, SheetId>,
     viewport:      Viewport,
     tx_version:    u64,
@@ -892,7 +892,7 @@ impl TrameState {
     ///   - `display`   : Vec<TrameEvent>  -> UI Thread (UiEvent::Viewport)
     ///   - `update`    : Option<Vec<u8>>  -> Sync (SyncCommand::SendUpdate)
     ///   - `ephemeral` : Option<Vec<u8>>  -> Sync (SyncCommand::SendEphemeral)
-    /// A single command can yield several display events (e.g. ViewportData +
+    /// A single command can yield several display events (for example ViewportData +
     /// DataReset). Loro mutation + dirty propagation + compute_all_dirty()
     /// all run synchronously here before the outcome is returned.
     pub fn handle_command(&mut self, cmd: TrameCommand) -> TrameOutcome { /* section 8 dispatch */ }
@@ -953,7 +953,7 @@ Two shapes worth naming:
 | Priority | Task | Trigger | Behavior |
 |:---|:---|:---|:---|
 | **P1** | Scroll | `ScrollViewport` | `compute_all_dirty()` synchronous. Padding 20-100 rows depending on velocity. `DisplayViewport` immediate with `is_dirty=true` on pending cells if recomputation is not finished (theoretical case Phase 2). |
-| **P2** | Input / Structure | `SetCellText`, `SetCellsBatch`, `InsertRow`, etc. | Loro mutation -> dirty propagation -> `compute_all_dirty()` synchronous -> `ViewportData` (+ `DataReset` when the region changed). |
+| **P2** | Input / Structure | `SetCellText`, `SetCellsBatch`, `InsertRow` and so on | Loro mutation -> dirty propagation -> `compute_all_dirty()` synchronous -> `ViewportData` (+ `DataReset` when the region changed). |
 | **P3** | Remote import | `LogicEvent::RemoteUpdate` | `doc.import()` -> diff -> dirty -> `compute_all_dirty()` synchronous -> `ViewportData`. **As-built:** the MVP routes every remote batch through a full engine reseed (O(document)), a known divergence from this diff-driven target that breaks the <=50 ms budget at 100k cells -- tracked as Phase 4 debt (section 11 bis.A). |
 
 **Anti-flickering:** `tx_version` incremented on each `DisplayViewport`. UI thread drops `version < last_processed`.
@@ -966,7 +966,7 @@ If Phase 2 benchmarks show a real problem on mobile hardware, a yield mechanism 
 
 - `compute_all_dirty()` is replaced by `compute_dirty_batch(N)` which processes N cells and returns a boolean `more_dirty`.
 - If `more_dirty`, `handle_command` adds a `TrameEvent::ComputePending` to `TrameOutcome.display`.
-- The `LogicState` dispatcher in `ambre-logic`, when it sees this signal, re-enqueues a `TrameCommand::ContinueDirtyCompute` (e.g. via a self-send on the Logic command channel) so pending P1/P2 commands are drained first.
+- The `LogicState` dispatcher in `ambre-logic`, when it sees this signal, re-enqueues a `TrameCommand::ContinueDirtyCompute` (for example via a self-send on the Logic command channel) so pending P1/P2 commands are drained first.
 - The `DisplayViewport` is sent with `is_dirty=true` on cells not yet recomputed.
 
 This mechanism is **additive** -- it does not change `TrameState`'s method signatures or the `DocState` dispatch. It adds two variants (`TrameCommand::ContinueDirtyCompute`, `TrameEvent::ComputePending`) specific to Trame.
@@ -1050,7 +1050,7 @@ pub enum NumberFormat {
     Date(DatePattern),    // Iso | LocaleShort | LocaleLong
     Time(TimePattern),    // Hm | Hms
     Text,                 // force raw text, no numeric/date auto-cast
-    Custom(String),       // Excel-style format code, e.g. "#,##0.00;[Red](#,##0.00)"
+    Custom(String),       // Excel-style format code, for example "#,##0.00;[Red](#,##0.00)"
 }
 // "Special" (zip code, phone, SSN) is locale-specific and is NOT a distinct primitive:
 // it is expressed via `Custom(..)` patterns rather than a hardcoded, US-centric variant.
@@ -1060,7 +1060,7 @@ pub enum NumberFormat {
 // See the cross-app factoring Story (`ambre-roadmap.md`).
 
 /// Partial style update -- only `Some(..)` fields are applied. A toolbar control
-/// sets a single field at a time (e.g. toggle bold -> patch { bold: Some(true), .. }).
+/// sets a single field at a time (for example toggle bold -> patch { bold: Some(true), .. }).
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct StylePatch {
     pub bold:      Option<bool>,
@@ -1211,7 +1211,7 @@ pub enum TrameEvent {
     ViewportData { version: u64, row_start: u32, col_start: u32,
                    cells: Vec<DisplayCell>, col_widths: Vec<f32>, row_heights: Vec<f32> },
     DataReset,                                           // re-fetch the visible region
-    SelectRange { r1: u32, c1: u32, r2: u32, c2: u32 }, // e.g. after unmerge
+    SelectRange { r1: u32, c1: u32, r2: u32, c2: u32 }, // for example after unmerge
     StyleApplied { style: CellStyle, bold: bool, italic: bool, merged: bool, numeric: bool },
     SheetList { sheets: Vec<(String, String)>, active: String },
     MergeRejected { reason: String },
@@ -1714,7 +1714,7 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 **Phase 3 -- Optimization & Completion**
 - [ ] `SheetRangeIndex` interval tree 2D if benchmarks justify it
 - [ ] Floating objects R-tree
-- [ ] `compute_all_dirty` benchmarks on mobile hardware -- if > 50ms P95, implement the asynchronous P4 yield (`ContinueDirtyCompute` / `ComputePending`, see section 8 optional Phase 2)
+- [ ] `compute_all_dirty` benchmarks on mobile hardware -- if > 50 ms P95, implement the asynchronous P4 yield (`ContinueDirtyCompute` / `ComputePending`, see section 8 optional Phase 2)
 - [ ] **Concurrent last-sheet-deletion convergence (section 2.D):** implement the decided deterministic re-insertion rule (the first-sorting `sheet_id` is re-inserted identically on every peer when converging deletes empty `sheet_order`), gated by a 2-peer convergence regression test. Today only the **local** last-sheet guard ships.
 - [ ] **`RangeEndpoint::EntireAxis` (`A:A` / `1:1`) parsing:** the type variant is reserved but the MVP parser never emits it; wire whole-column/row range parsing + evaluation (section 4.B, section 9).
 - [ ] Advanced functions: XLOOKUP, LAMBDA, dynamic arrays

@@ -306,7 +306,7 @@ pub enum CondFormatKind {
     Contains(String),
     StartsWith(String),
     // Custom formula
-    Formula(String),        // e.g. "=A1>AVERAGE(A:A)"
+    Formula(String),        // for example "=A1>AVERAGE(A:A)"
     // Presets
     IsEmpty,
     IsNotEmpty,
@@ -576,7 +576,7 @@ pub enum TrameEvent {
 ## 8. INTERACTIONS WITH THE ENGINE
 
 **Filters and calculations:**
-- Filtered rows are excluded from `DisplayViewport` but **not** from `SUM`, `COUNT`, etc. calculations. To exclude hidden rows, use `SUBTOTAL` (Phase 2).
+- Filtered rows are excluded from `DisplayViewport` but **not** from `SUM`, `COUNT` and other calculations. To exclude hidden rows, use `SUBTOTAL` (Phase 2).
 - The `is_filtered` flag is added to `DisplayCell` for the UI Thread to manage rendering.
 
 **Sort and DAG:**

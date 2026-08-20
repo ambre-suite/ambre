@@ -126,7 +126,7 @@ struct SyncState {
 
     /// Cache of decrypted DocumentKeys (post-MVP).
     /// Populated by OpenDocument and ListDocuments -- avoids redoing X25519 ECDH
-    /// on each ListDocuments for N documents (~150us per ECDH on mobile).
+    /// on each ListDocuments for N documents (~150 us per ECDH on mobile).
     /// ZeroizeOnDrop on each entry. Invalidated on logout.
     /// MVP: no cache, ECDH recomputed on each ListDocuments (acceptable for < 20 docs).
     // doc_key_cache: HashMap<Uuid, DocumentKey>,
@@ -351,7 +351,7 @@ On `SyncCommand::SendSnapshot`:
 
 ### G. Authentication & WebSocket Resilience
 
-The server uses **no cookie**: a stateless EdDSA access JWT (TTL 900s) + an opaque revocable refresh token (see `ambre-spec-server.md section 3`). The Sync worker is the sole holder of both.
+The server uses **no cookie**: a stateless EdDSA access JWT (TTL 900 s) + an opaque revocable refresh token (see `ambre-spec-server.md section 3`). The Sync worker is the sole holder of both.
 
 **Token store (`AuthContext`).** Access + refresh tokens are held **in memory** in the Sync worker (never `localStorage`/cookies). `Unlock`/`SetupAccount`/`dev-login` parse the JSON login body (`{ access_token, refresh_token, access_expires_in }`) into the store. Every REST call sends `Authorization: Bearer <access_token>`; the WebSocket carries the access token in the **`?token=<jwt>`** query parameter (browser WS forbids custom headers).
 
@@ -360,7 +360,7 @@ The server uses **no cookie**: a stateless EdDSA access JWT (TTL 900s) + an opaq
 **WebSocket reconnection.** The single multiplexed WS is opened at `Unlock` and must survive token expiry, server restarts (ephemeral JWT seed in dev), and network blips:
 
 - `onclose(code)`: if `code == 4401` (unauthorized), run `reauthenticate()` -- `refresh().await` (dev: re-run dev-login from the stored username); on ok, reset backoff and reopen the WS; on err, `schedule_reconnect()`. Any other close -> `schedule_reconnect()`.
-- `schedule_reconnect()`: exponential backoff, base 250 ms x2, cap 10s, plus random jitter; armed via `setTimeout` (DedicatedWorkerGlobalScope) -> `ReconnectNow`. The attempt counter resets ONLY on a real inbound frame, not on a bare `onopen`: an auth-rejected upgrade emits 101 then an immediate 4401 close, so resetting on `onopen` would tight-loop and saturate the WS rate-limit (429).
+- `schedule_reconnect()`: exponential backoff, base 250 ms x2, cap 10 s, plus random jitter; armed via `setTimeout` (DedicatedWorkerGlobalScope) -> `ReconnectNow`. The attempt counter resets ONLY on a real inbound frame, not on a bare `onopen`: an auth-rejected upgrade emits 101 then an immediate 4401 close, so resetting on `onopen` would tight-loop and saturate the WS rate-limit (429).
 - `onopen`: `resubscribe_all()` -- for each server-created doc, `ws_send(Subscribe)` + `ws_send(RequestMissing { after_seq: last_seq })`. This MUST run on `onopen`, not synchronously in `open_websocket`: a Subscribe sent while the socket is CONNECTING is dropped, leaving the server with the connection but no subscription (403 "not subscribed").
 
 > **Decisive rationale (4401 vs generic drop).** When the access token expires or the server rotates its (dev-ephemeral) JWT seed, every token is invalid. A generic close would trigger plain backoff that never recovers (the new connection is rejected too). The explicit **4401** lets the client refresh (or, in dev, re-derive its identity via dev-login) and reconnect **silently**, with no user action.
@@ -392,7 +392,7 @@ The server uses **no cookie**: a stateless EdDSA access JWT (TTL 900s) + an opaq
 - **Replay (Ephemeral)**: the `counter` is monotonic per `(document_id, session)`. A receiving client rejects any Ephemeral message with `counter <= last_known_counter` for that `(pub_key, document_id)`.
 - **Inter-document substitution**: the `commitment_tag` HMAC(document_key, nonce || ciphertext || public_data) binds the ciphertext to its `document_id`. A message cannot be re-injected into another document.
 - **Snapshot reordering**: the `parent_snapshot_proof` (BLAKE2b chain) guarantees chain integrity without decryption.
-- **Double Compaction**: Redis lock `SET NX TTL 30s` server-side + `compaction_lock` client-side.
+- **Double Compaction**: Redis lock `SET NX TTL 30 s` server-side + `compaction_lock` client-side.
 - **Plaintext presence**: Ephemeral payloads (cursor, selection, name) are **encrypted** with the Document Key before sending. The server only sees `document_id`, `pub_key`, `counter`.
 
 ### Presence identity -- `pub_key` -> canonical `UserId`
@@ -588,7 +588,7 @@ A change to the pipeline lands with all four, because this is the boundary the w
 | **JSON on the internal wire** | `postcard` is ~10x more compact, faster parsing, already in the project. |
 | **Unbounded quarantine** | A permanently missing snapshot would make quarantine grow without limit. LRU + automatic RequestMissing at 900 updates is the right balance. |
 | **Unbounded `old_keys` cache** | On rapid repeated rotations (attack or bug), the cache would grow. LRU at 10 entries is sufficient for real cases (< 5 simultaneously active rotations). |
-| **Wire types redefined in `ambre-sync`** | `ambre-protocol` is the source of truth. Redefining locally (`SecSyncUpdate`, etc.) creates guaranteed divergence (e.g. `[u8; 32]` vs `Vec<u8>` for `pub_key`). |
+| **Wire types redefined in `ambre-sync`** | `ambre-protocol` is the source of truth. Redefining locally (`SecSyncUpdate` and so on) creates guaranteed divergence (for example `[u8; 32]` vs `Vec<u8>` for `pub_key`). |
 | **Yrs instead of Loro** | Out of scope. Yrs and Loro snapshots have comparable compression ratios (3:1 to 8:1 on text). The Loro choice imposes no constraint on `ambre-sync`. |
 | **Shared-nothing UI <-> Logic (`postMessage` + `MessagePort` + postcard on every link)** | Imposes `postcard` + 2 WASM<->JS memcpy per hop and a transport trait. The UI <-> Logic link instead uses **`flume` channels** carrying typed Rust values by move (shared memory). Do not go back: it would reintroduce serialization and transport abstraction for nothing. The accepted cost (nightly toolchain `-Z build-std`, COOP/COEP headers for `SharedArrayBuffer`) is documented in `ambre-spec-architecture.md section 6`. |
 | **`wasm_thread` for the Sync worker** | **Rejected** (`ambre-spec-architecture.md section 6`): `wasm_thread` is run-to-completion, so an async `spawn_local` Sync loop returns and gets GC-terminated after the first poll (the historical freeze). Sync is instead its **own** WASM instance in a normal `web_sys::Worker` with a permanent event loop, reached over `postMessage`. `wasm_thread` + shared memory (`+atomics`/`-Z build-std`/COOP-COEP) is kept **only** for the UI <-> Logic link inside the Main instance. |
@@ -632,7 +632,7 @@ A change to the pipeline lands with all four, because this is the boundary the w
 - [x] `WsServerMsg::SnapshotRequired` handling -> `LogicEvent::SnapshotNeeded`
 - [x] `MockBlindRelay` in-process for multi-client tests
 - [x] Auth: `AuthContext` (in-memory access + refresh tokens), `Authorization: Bearer` on REST, `?token=` on the WS, 401 -> `/auth/refresh` -> retry wrapper.
-- [x] WS resilience (sec.2.G): exponential-backoff reconnect (250ms..10s + jitter), close **4401** -> silent reauth (refresh, or dev re-login), resubscribe + `RequestMissing` on `onopen`, pre-session update buffer, self-echo `local_clock` recovery.
+- [x] WS resilience (sec.2.G): exponential-backoff reconnect (250 ms..10s + jitter), close **4401** -> silent reauth (refresh, or dev re-login), resubscribe + `RequestMissing` on `onopen`, pre-session update buffer, self-echo `local_clock` recovery.
 - [x] Hydration across refresh/devices: deterministic `SnapshotId::genesis(document_id)` anchors a never-snapshotted document's first deltas (no eternal quarantine).
 - [x] **Snapshot upload (client leg)**: `SyncCommand::SendSnapshot` -> seal -> `POST /snapshot/upload-url` -> S3 PUT -> `POST /snapshot` (with `covered_seq = last_seq`) -> adopt the returned `snapshot_id` as `current_snapshot_id` (`SyncEvent::SnapshotUploaded` -> `snapshot_known`). Host path stops after sealing (no network).
 - [x] **Snapshot download + cold-start seq gating**: on open, `GET /snapshot` -> `POST /snapshot/download-url` -> S3 GET -> `RemoteSnapshot`; the snapshot's `covered_seq` seeds `last_seq` so the post-open `RequestMissing` replays only newer deltas, not the whole history since genesis. Falls back to a full replay when no snapshot or the download fails. (4 host tests: gating on/off, upload adoption, host-path seal.)

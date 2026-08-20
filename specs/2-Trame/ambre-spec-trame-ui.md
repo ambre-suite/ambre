@@ -122,7 +122,7 @@ pub fn draw_grid<S: DrawSurface>(
     // 7. Column header background (on top of tints)
     // 8. Row header background
     // 9. Header separators (stroke_line)
-    // 10. Active cell border (stroke_rect, 2px blue)
+    // 10. Active cell border (stroke_rect, 2 px blue)
     // 11. Text: cell body + column labels + row numbers (draw_glyphs)
     // 12. FPS overlay (fill_rect + draw_glyphs)
 }
@@ -358,7 +358,7 @@ header sibling `header_hit(x, y) -> HeaderHit`:
 enum HeaderHit {
     ColBody(u32),          // header body -> whole-column select / drag-extend
     RowBody(u32),
-    ColBorder(u32),        // +/-4px around the right border of col i -> resize col i
+    ColBorder(u32),        // +/-4 px around the right border of col i -> resize col i
     RowBorder(u32),        // resize row i
     ColInsert(u32),        // small "+" affordance shown on hover at a boundary
     RowInsert(u32),
@@ -645,7 +645,7 @@ thread picks `Copy` vs `Series`. `ambre-trame/src/ui/view/interact.rs`.
 ```rust
 fn on_fill_handle_drag_end(&mut self, dest: (u32, u32)) { /* ... */ }
 ```
-Hit-testing the handle uses a ~6px square at the selection's bottom-right corner; cursor
+Hit-testing the handle uses a ~6 px square at the selection's bottom-right corner; cursor
 switches to a crosshair on hover.
 
 **Merged-cell source (Excel behaviour).** When the source is tiled by equal merged blocks --
@@ -705,7 +705,7 @@ The match scan compares against each cell's **displayed value** (`whole_cell` = 
 equality, else substring); `match_case` toggles case folding. `ReplaceAll` rewrites the raw
 cell text; `in_formulas` controls whether formula-source cells (`=...`) are eligible. A
 formula cell is special-cased: with `in_formulas` it matches and is rewritten on its **raw
-formula text** ("search within formulas", e.g. `=A1` -> `=B2`), not on its evaluated result;
+formula text** ("search within formulas", for example `=A1` -> `=B2`), not on its evaluated result;
 plain cells always match on the displayed value. `all_sheets` widens the scope from the
 active sheet (`Scope::Sheet`) to the whole workbook (`Scope::Workbook`). The whole `ReplaceAll` is one undo group and replies `DataReset` so the
 UI re-fetches the rewritten region. `FindResult` matches are local view state (never synced);
@@ -721,7 +721,7 @@ the grid context menu (sec.5.C), the filter popover (sec.5.D) and the find/repla
 (sec.5.G), reusing the shared chrome command channel rather than a canvas `DrawSurface`
 overlay. Every control emits `TrameCommand::SetCellStyle { range, patch }` over the current
 selection (the toggle buttons -- Bold/Italic/Underline -- and Undo/Redo route through the
-shared `CommandId` path; the value controls emit a `StylePatch`); control state (e.g. the
+shared `CommandId` path; the value controls emit a `StylePatch`); control state (for example the
 bold toggle) is read from the **active cell's** resolved `CellStyle`, pushed to the chrome by
 `TrameEvent::StyleApplied`. Styles are document mutations (LoroDoc, synchronised -- sec.16),
 unlike freeze/selection which are local.
@@ -901,7 +901,7 @@ the live rectangle into `Selection.extra`), **Shift+arrows / Shift+Page / Shift+
 (`move_cursor`/`move_to` take an `extend` flag), and **Shift+Ctrl+End** to grow to the last
 cached non-empty cell. `InputEvent::PointerDown` carries `shift` / `ctrl` (Cmd folded into
 `ctrl` by the host). Range rendering iterates `Selection::rects()` in `renderer::draw_overlay`
-(translucent fill + 1px outline per rectangle). The 2px active-cell border is drawn **only
+(translucent fill + 1 px outline per rectangle). The 2 px active-cell border is drawn **only
 for a lone single-cell selection** (Excel behaviour): in a multi-cell or disjoint selection
 the range fill + outline already mark the block, so a separate active-cell border would read
 as a spurious second selection following the cursor. Each rendered rectangle is also expanded
@@ -1022,7 +1022,7 @@ renderer (bar/line/pie/area) and draws the optional title. `ambre-trame/src/ui/r
 ### Principle: shared `DrawSurface` trait, PDF rendering in the Logic thread
 
 The `DrawSurface` trait is defined in `ambre-draw` (see `spec-ambre-architecture.md` section 2.D).
-The shared drawing functions (`draw_cells_on`, `draw_grid_lines_on`, etc.) live in
+The shared drawing functions (`draw_cells_on`, `draw_grid_lines_on` and so on) live in
 `ambre-trame/src/render.rs` -- they are parameterized over `DrawSurface` and documented in
 `spec-ambre-trame-logic.md` section 9 (shared rendering module).
 
@@ -1030,7 +1030,7 @@ The shared drawing functions (`draw_cells_on`, `draw_grid_lines_on`, etc.) live 
 - **Logic thread**: instantiates `ambre_pdf::KrillaSurface` (Foundation-owned, in the shared `ambre-pdf` crate; lazy-loaded) -> vector PDF export. The Logic thread emits `TrameEvent::ExportComplete`; the UI thread triggers the download.
 
 **Why PDF generation in the Logic thread and not the UI thread:**
-Generating a PDF for a 100-sheet document can exceed 500ms. Blocking the UI thread
+Generating a PDF for a 100-sheet document can exceed 500 ms. Blocking the UI thread
 during that time would freeze the interface. The Logic thread can take the necessary time
 without impacting FPS.
 
@@ -1053,7 +1053,7 @@ produce a multi-page screenshot, not a vector PDF.
 
 The `DrawSurface` trait is defined in `ambre-draw` (see `spec-ambre-architecture.md` section 2.D).
 The Trame spec does not redefine its signature. See `spec-ambre-trame-logic.md` section 9 for
-the parameterized drawing functions (`draw_cells_on<S>`, etc.) and the concrete
+the parameterized drawing functions (`draw_cells_on<S>` and so on) and the concrete
 implementations (`WgpuSurface`, `KrillaSurface`).
 
 ### `WgpuSurface` -- UI thread (in `ambre-app`)
@@ -1264,7 +1264,7 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 | **Autocompletion via Logic thread round-trip** | Unacceptable latency for an interactive feature. The function list is static and compiled into the UI binary. Cell values are in the current `DisplayViewport`. |
 | **Remote cursors without encryption** | Ephemeral payloads are E2EE encrypted (see `spec-ambre-sync`). The server never sees the cursor or the name. The UI thread receives the already-decrypted payload from the Logic thread. |
 | **GPU pixel rasterization for PDF** | Would turn the export into a multi-page screenshot. The `DrawSurface` trait abstracts drawing primitives -- the rendering code is reused as-is to `KrillaSurface` for a purely vector PDF. |
-| **PDF in the UI thread** | Generating a 100-sheet PDF can exceed 500ms -- would block rendering. `KrillaSurface` is instantiated in the Logic thread; the UI thread receives `TrameEvent::ExportComplete` and triggers the download. |
+| **PDF in the UI thread** | Generating a 100-sheet PDF can exceed 500 ms -- would block rendering. `KrillaSurface` is instantiated in the Logic thread; the UI thread receives `TrameEvent::ExportComplete` and triggers the download. |
 | **Peer identification by `pub_key [u8;32]`** | The public key is a per-device cryptographic credential, not an identity. It changes on key rotation. `UserId: Uuid` is the canonical per-user identifier. The `pub_key -> UserId` resolution is done in `ambre-sync` via `trusted_keys` -- it does not leak into `RemoteCursor`. |
 | **Business logic in the UI thread** | The UI thread computes no formulas, accesses no `LoroDoc`, never mutates the document directly. Everything goes through `TrameCommand`. Local states (selection, freeze, autocompletion) are view states, not document states. |
 

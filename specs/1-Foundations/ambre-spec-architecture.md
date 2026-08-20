@@ -226,7 +226,7 @@ The Logic thread's P3 dispatch reduces to **a single arm** (`Rest { id, cmd } =>
 | Logic -> Sync | `SyncCommand` | `command.rs` |
 | Sync -> Logic | `LogicEvent` | `event.rs` |
 | (shared) | `RestCommand`/`RestEvent`/`RequestId` + business types | `rest.rs` |
-| (per-app content plane) | `TrameCommand`+`TrameEvent`+`DisplayCell`+value types; `ToileCommand`+`ToileEvent`+`Display*`+model | `app/<name>.rs` (e.g. `app/trame/`, `app/toile.rs`) |
+| (per-app content plane) | `TrameCommand`+`TrameEvent`+`DisplayCell`+value types; `ToileCommand`+`ToileEvent`+`Display*`+model | `app/<name>.rs` (for example `app/trame/`, `app/toile.rs`) |
 
 **`ambre-bus` layout -- envelopes by direction, content plane by app.** The four transport **envelopes** stay split by direction (each is bound to one channel hop). The typed per-app **content plane** is instead grouped **one module per document type** under `app/`: a document type's command enum, event enum and shared value / display types are co-located (`app/trame/` = `command`/`event`/`style`/`clipboard`/`features`; `app/toile.rs` = the whole Toile data plane). `AppCommand` (`logic.rs`) and `AppEvent` (`ui.rs`) are thin closed sums referencing `crate::app::<name>::...`. All per-app types are re-exported flat at the crate root (`ambre_bus::TrameCommand`, `ambre_bus::ToileEvent`, ...), so downstream crates are unaffected by the internal layout. *Rationale:* a per-app command and its event share the app's whole value-type vocabulary (styles, geometry); grouping by app keeps a document type in one place and stops the event side reaching across a direction boundary for shared types. *(Revised 2026-07: previously the content plane was also split by direction -- `logic.rs (+ TrameCommand)` / `ui.rs (+ TrameEvent, DisplayCell)` -- which scattered each app and forced `ui.rs` to reference `crate::logic::` value types.)*
 
@@ -577,7 +577,7 @@ Status:       verified | unverified | human-review | qa-manual | unimplemented
 | `ambre-protocol` | Serialization round-trip | -- | yes (postcard roundtrip) | -- |
 | `ambre-bus` | **Envelope construction + content-plane helpers (host, `tests/host.rs`): `to_tsv`, `has_decimals`, `RequestId`, Logic<->Sync postcard round-trips** | -- | -- | -- |
 | `ambre-logic` | **Typed dispatch on host (9 tests, flume mock)** | -- | -- | -- |
-| `ambre-sync` | Crypto pipeline, quarantine, rotation | `MockBlindRelay` + `MockWsTransport` (`tests/integration.rs`) | yes (clock monotonic) | yes (encrypt/decrypt 1KB) |
+| `ambre-sync` | Crypto pipeline, quarantine, rotation | `MockBlindRelay` + `MockWsTransport` (`tests/integration.rs`) | yes (clock monotonic) | yes (encrypt/decrypt 1 KB) |
 | `ambre-canvas` | TextCache, dirty/RepaintPlan; app render via `RecordingSurface` (mock `DrawSurface`, `ambre-draw` feature `testing`) | headless | -- | frame budget |
 | `ambre-commands` | Registry lookup, keybindings, derived state (`CommandState`) | -- | -- | -- |
 | `ambre-chrome` | **host: `key_from_dom`, `place_menu` (extracted).** Leptos components: reactive headless (`CommandStates`) + ARIA a11y, menu positioning (flip) | **`wasm-bindgen-test` (DOM): `CommandStates`, `ToastHost`, `AppShell` (`tests/chrome_ui.rs`); `Dialog`/`ContextMenu` interactions deferred (`ambre-spec-testing.md section 5`)** | -- | -- |
@@ -598,11 +598,11 @@ Status:       verified | unverified | human-review | qa-manual | unimplemented
 | `flume` send/receive UI <-> Logic (shared heap, by move) | < 1 us | -- | UI <-> Logic | benchmark |
 | Logic <-> Sync `postMessage` (postcard encode + structured clone / transfer) | < 1 ms | -- | Main <-> Sync | benchmark |
 | Scroll round-trip UI -> Logic -> UI (P1) | < 2 ms | -- | UI <-> Logic | benchmark e2e |
-| Outbound encryption 1KB (compress+AEAD+HMAC+Ed25519) | < 200 us | < 500 us | Sync | criterion |
-| Inbound decryption 1KB (verify+HMAC+AEAD+decompress) | < 350 us | < 1 ms | Sync | criterion |
+| Outbound encryption 1 KB (compress+AEAD+HMAC+Ed25519) | < 200 us | < 500 us | Sync | criterion |
+| Inbound decryption 1 KB (verify+HMAC+AEAD+decompress) | < 350 us | < 1 ms | Sync | criterion |
 | Full crypto round-trip (excluding network) | < 600 us | < 1.5 ms | Sync | criterion |
-| Snapshot compression 100KB (ruzstd) | < 5 ms | -- | Sync | criterion |
-| `doc.import()` Loro update (1KB delta) | < 2 ms | -- | Logic | criterion |
+| Snapshot compression 100 KB (ruzstd) | < 5 ms | -- | Sync | criterion |
+| `doc.import()` Loro update (1 KB delta) | < 2 ms | -- | Logic | criterion |
 | Trame formula DAG recompute (10k cells) | < 50 ms | -- | Logic | custom benchmark |
 | Scroll viewport response (P1, end-to-end) | < 15 ms | -- | Logic -> UI | benchmark e2e |
 

@@ -55,7 +55,7 @@ Channel storage layout (`channel_{id}/`):
 - `"channel"` (Map) -- `{name, type, created, topic}`
 - `"members"` (Map) -- `{"pubkey_alice": {role, joined}}`
 - `"pinned"` (Array) -- `[{msg_id, segment_id}]`
-- `"segments"` (Array), e.g.:
+- `"segments"` (Array), for example:
   - `{id: "seg_001", from_ts: 1710000000, to_ts: 1720000000, msg_count: 5000, sealed: true}`
   - `{id: "seg_002", from_ts: 1720000000, to_ts: 1730000000, msg_count: 5000, sealed: true}`
   - `{id: "seg_003", from_ts: 1730000000, to_ts: null, msg_count: 1847, sealed: false}`
@@ -93,7 +93,7 @@ Object storage paths:
 
 When the active segment exceeds ~5000 messages (or ~2 MB snapshot):
 
-1. Client acquires Redis lock (`channel:{id}:seal`, SET NX, TTL 30s)
+1. Client acquires Redis lock (`channel:{id}:seal`, SET NX, TTL 30 s)
 2. Encodes the final segment snapshot, encrypts it, PUT to Object Storage
 3. Updates Doc meta (marks `sealed: true`, creates new segment)
 4. Old segment deltas are purged (snapshot is sufficient)
@@ -190,13 +190,13 @@ Since the server is "blind", indexing is done client-side:
 * **Interactive Messages:** Sending messages with buttons, dropdown menus, and forms (UI schemas rendered via wgpu + Parley/Swash).
 * **Cross-App Triggers:** - *Trame -> Murmure:* A bot monitors a budget cell and posts an alert if the threshold is exceeded.
     - *Murmure -> Toile:* A `/brainstorm` command automatically creates a new Board with a mind-map template.
-* **Slash Commands:** Registered command system (e.g. `/jira create`, `/crypto price`) with client-side autocompletion.
+* **Slash Commands:** Registered command system (for example `/jira create`, `/crypto price`) with client-side autocompletion.
 * **WASM Applets (Sandboxing):** Ability to run data cleanup or formatting scripts directly in the Logic thread without leaving the security scope.
 
 ### C. Integration Modes
 * **Native (Rust/TS SDK):** Full client running on a third-party server, connecting via WebSocket to the Blind Relay.
 * **Inbound Webhooks (Bridge):** "Encryptor" micro-service that receives standard JSON (GitHub, Stripe) and transforms it into a signed Loro mutation before sending to the relay.
-* **Ephemeral Bots:** Scripts launched on demand by a user to perform a one-off task on the local document (e.g. "Sort all messages by sentiment").
+* **Ephemeral Bots:** Scripts launched on demand by a user to perform a one-off task on the local document (for example "Sort all messages by sentiment").
 
 ### D. Bot UX
 * **Trust Indicator:** Visual badge certifying the bot uses an organization-verified key.

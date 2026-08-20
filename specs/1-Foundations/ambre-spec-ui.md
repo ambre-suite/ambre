@@ -32,7 +32,7 @@
 Static DOM composed *around* a canvas costs one layout pass; the compositor then recomposes already rasterized layers at zero cost per frame. The only sensitive case is floating UI **anchored to content that pans/zooms** (selection toolbar on Toile): a DOM element **transform-synced** each frame.
 
 **Communication (the only two channels across the boundary):**
-- **Canvas -> DOM** via **signals**: the wgpu handler detects an event (e.g. right-click), computes position, triggers a Leptos signal that opens a DOM context menu at the coordinates.
+- **Canvas -> DOM** via **signals**: the wgpu handler detects an event (for example right-click), computes position, triggers a Leptos signal that opens a DOM context menu at the coordinates.
 - **DOM -> Canvas** via **commands**: a button invokes a `CommandId` -> `LogicCommand` -> mutation -> `UiEvent` -> repaint (section 2.C).
 
 The only DOM element living *above* the canvas is the transparent input `<textarea>` (keyboard/IME/clipboard, detailed in `ambre-spec-chrome.md`).
@@ -79,14 +79,14 @@ Menus, toolbar buttons, keyboard shortcuts, context menus, command palette are *
 ```rust
 // ambre-commands/src/lib.rs
 
-/// Stable namespaced identifier, e.g. "prose.format.bold".
+/// Stable namespaced identifier, for example "prose.format.bold".
 pub struct CommandId(pub &'static str);
 
 pub struct Command {
     pub id: CommandId,
     pub title: fn(&Locale) -> String,           // i18n label
     pub icon: Option<IconId>,
-    pub default_keybinding: Option<KeyBinding>,  // e.g. Ctrl+B
+    pub default_keybinding: Option<KeyBinding>,  // for example Ctrl+B
     pub category: CommandCategory,               // palette grouping / tabs
 }
 
@@ -143,7 +143,7 @@ app-specific payload (postcard of the active app's typed clipboard payload) unde
   OS clipboard with empty content).
 - `Nothing` -- nothing selected; the browser default proceeds.
 
-Logic builds the full payload from the whole CRDT (never culled) and replies (e.g.
+Logic builds the full payload from the whole CRDT (never culled) and replies (for example
 `ToileEvent::Clipboard` / `TrameEvent::Clipboard`). The view drains it in `update()`, serializes
 a `ClipboardBlob`, keeps it **in memory** for a full-fidelity same-tab paste, and marks it
 pending. Right after `view.update()`, the host calls `view.poll_clipboard()`; a `Some(blob)`

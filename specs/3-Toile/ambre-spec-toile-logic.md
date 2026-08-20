@@ -309,7 +309,7 @@ pub struct ElementStyle {
 }
 ```
 
-Storing the whole style as **one register** avoids the multi-register tear (e.g. a fill update racing a
+Storing the whole style as **one register** avoids the multi-register tear (for example a fill update racing a
 stroke update leaving an inconsistent half-applied style) that a per-attribute fan-out suffers -- the exact
 defect enumerated in Trame `logic section 11 bis.F`. Concurrent restyles resolve by LWW on the single register: all
 peers converge to one style, deterministically. This is the cross-app "style as one LWW register" pattern
@@ -375,7 +375,7 @@ above the frame). This gives correct visual nesting without a separate per-frame
 - **`DeleteElements`** removes the id from `layers`, from any frame's `children`, and drops the element's
   locally-owned connectors (section 5.A) -- one convergent local batch.
 - **Well-formedness is derived, not assumed.** Paint order is `layers`; any id present in `elements` but
-  **absent** from `layers` (e.g. a concurrent op dropped its entry) is painted **last**, ordered by
+  **absent** from `layers` (for example a concurrent op dropped its entry) is painted **last**, ordered by
   `ElementId` -- deterministic and convergent on all peers. Any `NodeId` in `layers` whose target is gone is
   **skipped** at derivation (same stance as a dangling connector, section 5.A). No id is ever duplicated: create
   pushes exactly once; a defensive de-dup at derivation keeps the first occurrence.
@@ -483,7 +483,7 @@ navigation behavior, not a visual attribute -- same reasoning as `locked`).
 pub enum LinkTarget {
     Url(String),              // external web URL, opened sandboxed by the shell
     Frame(ElementId),         // recenter/zoom the camera to a frame on THIS board (a frame is an element, section 2.F)
-    Document(uuid::Uuid),     // open another Ambre document (e.g. a Prose doc or a sibling board)
+    Document(uuid::Uuid),     // open another Ambre document (for example a Prose doc or a sibling board)
 }
 ```
 
@@ -821,7 +821,7 @@ pub enum AlignEdge { Left, HCenter, Right, Top, VCenter, Bottom }
 pub enum Axis { Horizontal, Vertical }
 
 /// Type-specific seed passed to `CreateElement`. The variant must match `kind`
-/// (a mismatch, e.g. `Path` content on a `Sticky`, is rejected):
+/// (a mismatch, for example `Path` content on a `Sticky`, is rejected):
 ///   Sticky/Text  -> None (or `Text` for a pre-filled body)
 ///
 /// `CreateElement.fill` is an optional creation-time override of the seeded
@@ -830,7 +830,7 @@ pub enum Axis { Horizontal, Vertical }
 /// of the style is unchanged). The Sticky tool uses it to place a note in the
 /// colour the user picked from the palette (ui section 5quinquies.A), atomically -- one
 /// element, one undo item -- rather than a create followed by a restyle. `None`
-/// keeps the per-kind default (e.g. the sticky yellow).
+/// keeps the per-kind default (for example the sticky yellow).
 ///   Shape(Path)  -> Path (the Pen tool's postcard BezPath, ui section 5bis)
 ///   Shape(other) -> None (geometry comes from `size`)
 ///   Image        -> Image (blob hash into `media`, interop section 2.B/section 5)

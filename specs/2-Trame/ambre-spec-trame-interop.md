@@ -445,7 +445,7 @@ re-derived here.
 | **`xlsx` crate (Node bindings)** | Outside the Rust-first vision. |
 | **Server-side .xlsx conversion** | Would violate Zero-Knowledge -- the server would see the plaintext content. |
 | **Direct Google Sheets API from WASM** | CORS + OAuth authentication impossible from a Web Worker without a backend proxy. Import/export via .xlsx for MVP. |
-| **PDF export in the UI Thread** | Would block rendering (>500ms for a large document). `KrillaSurface` is instantiated in the Logic thread (lazy-loaded) -- the UI Thread receives `TrameEvent::ExportComplete` and triggers the download. See `spec-ambre-architecture.md` section 5 and `ambre-spec-ui.md` section 2.B. |
+| **PDF export in the UI Thread** | Would block rendering (>500 ms for a large document). `KrillaSurface` is instantiated in the Logic thread (lazy-loaded) -- the UI Thread receives `TrameEvent::ExportComplete` and triggers the download. See `spec-ambre-architecture.md` section 5 and `ambre-spec-ui.md` section 2.B. |
 
 ---
 

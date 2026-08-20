@@ -162,7 +162,7 @@ The previous audit flagged an *unbounded RESP parser recursion on the server*;
 this is the analogous, arguably worse, hazard on the **client** because it's
 reachable by any co-editor of a shared document.
 
-**Fix:** cap the decompressed size (e.g. read in a bounded loop into a
+**Fix:** cap the decompressed size (for example read in a bounded loop into a
 `Vec::with_capacity(limit)` and error past a per-message ceiling derived from the
 compressed length and a max ratio). Reject before allocating the full output.
 
@@ -235,7 +235,7 @@ valid signature over the *same* message. Ambre uses the signature as the author-
 attribution primitive on the blind relay, and pairs it with a monotonic per-
 author clock. Malleability doesn't let an attacker forge a *new* message, but in
 a system that treats "signature identifies the author" as load-bearing, allowing
-signature variants is a footgun (e.g. any downstream dedup/equality on signature
+signature variants is a footgun (for example any downstream dedup/equality on signature
 bytes breaks, and it weakens non-repudiation reasoning).
 
 **Recommendation:** switch to `verify_strict` for `Update`/`Snapshot`/`Ephemeral`
@@ -386,7 +386,7 @@ Unchanged from the previous audit; see that pass for the writeups and fixes.
   `break`s and skips the `ltrim`, so already-flushed entries are re-processed next
   cycle. Carried over.
 - **53 `.unwrap()/.expect()` in non-test server code**: most are startup/encode
-  invariants, but audit the request-path ones (e.g. `postcard::to_allocvec(...).
+  invariants, but audit the request-path ones (for example `postcard::to_allocvec(...).
   expect("postcard encode Update")` in `ws/handler.rs`) -- a malformed value there
   panics the connection task.
 - **`snapshot_metadata` shares C4's shape** (`sync.rs`): authorize on path id,
@@ -717,7 +717,7 @@ Each story carries its finding ID, the file to touch, and the concrete action.
       when credentials are configured a discovery failure logs at ERROR and
       fail-fasts startup; when unconfigured it warns and disables provider login.
       (`server/main.rs`)
-- [x] **M9** -- every Sync HTTP call attaches an `AbortSignal::timeout(30s)`
+- [x] **M9** -- every Sync HTTP call attaches an `AbortSignal::timeout(30 s)`
       (`timeout_signal`), so a hung connection aborts instead of stalling the
       Sync worker future forever. `web-sys` gains the `AbortSignal` feature.
       (`sync/http.rs`, root `Cargo.toml`)
