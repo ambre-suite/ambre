@@ -159,19 +159,13 @@ speeds the position query; it does not remove the shared-counter hazard.
 
 ### B. CRDT Schema
 
-> **Target schema, not as-built.** The cell sub-map (`{v,t,s}`) and the shared `styles` map below
-> are **not** implemented: cell values are stored flat in `cells_{sheet_id}`, and a cell's style is
-> stored **as-built** in one per-sheet map `cellstyle_{sheet_id}` -- key `"{row_uid}:{col_uid}"`,
-> value = the whole style of the cell (bold/italic plus the full `CellStyle`: alignments, wrap,
-> colours, borders, font, number format, decimals, size) postcard-encoded into a single binary LWW
-> register. This is one register **per cell**, not one **per attribute**: it is the convergence
-> invariant (section 11 bis.F), and the cross-app "style as one LWW register" pattern
-> (`ambre-spec-architecture.md section 2.D`, normative) that Toile's element `"style"` register also follows.
-> It replaced an earlier fan-out over up to 11 per-sheet maps, which had two
-> real defects (a border-colour tear and a colour/font reseed data-loss, section 11 bis.F). The shared
-> `styles` dictionary and the `"s"` indirection -- a *deduplication* optimization, orthogonal to the
-> consolidation just landed -- stay deferred behind a benchmark (section 11 bis.F, "out of scope"). See section 14
-> Phase 0.
+> **As-built vs target.** Cell values are stored flat in `cells_{sheet_id}`; the `{v,t,s}` sub-map
+> below is the target, not built. A cell's style is one register **per cell**, not per attribute:
+> `cellstyle_{sheet_id}` maps `"{row_uid}:{col_uid}"` to the whole `StyleRecord` (bold/italic plus
+> `CellStyle`) postcard-encoded into a binary LWW register. This is the convergence invariant
+> (section 11 bis.F) and the cross-app "style as one LWW register" pattern (architecture section 2.D),
+> which Toile's element `"style"` register also follows. The shared `styles` dictionary and the `"s"`
+> indirection are a deduplication optimization, deferred behind a benchmark (section 11 bis.F).
 
 `LoroDoc` root:
 
@@ -189,7 +183,7 @@ speeds the position query; it does not remove the shared-counter hazard.
 - `"col_widths_{sheet_id}"` (LoroMap) -- `{col_uid: f64}`
 - `"row_heights_{sheet_id}"` (LoroMap)
 - `"merges_{sheet_id}"` (LoroMap) -- `{"{row_uid}:{col_uid}": "{row_uid_end}:{col_uid_end}"}`
-- `"styles"` (LoroMap) -- shared styles (TARGET dedup, deferred -- section 11 bis.F "out of scope"); for example `"style_007"` (LoroMap) -- `{bold, italic, underline, font, size, fg, bg, fmt, halign, valign, wrap, border}`. AS-BUILT instead: one register per cell, whole style inline.
+- `"styles"` (LoroMap) -- shared style dictionary, target dedup deferred (section 11 bis.F); for example `"style_007"` -- `{bold, italic, underline, font, size, fg, bg, fmt, halign, valign, wrap, border}`. As-built: one register per cell (`cellstyle_{sheet_id}` below).
 - `"cellstyle_{sheet_id}"` (LoroMap) -- `{"{row_uid}:{col_uid}": Binary(postcard(StyleRecord{bold,italic,CellStyle}))}`
 - `"named_ranges"` (LoroMap) -- `{"TOTAL": {sheet_id, range}}`
 - `"media"` (LoroMap) -- `{hash_blake2b: {dims, anchor, mime}}`
@@ -203,21 +197,16 @@ Features (defined in spec-ambre-trame-features.md):
 - `"protections_{sheet_id}"` (LoroMap) -- range protection (Post-MVP) `[{owner, allowed, description}]`
 - `"page_setup_{sheet_id}"` (LoroMap) -- persisted print/page format, shared like Sheets: `{orientation, paper_size, margins{t,r,b,l}, scale, fit_to_page, print_gridlines, print_headers}`
 
-> **Page setup is persisted, not an export-time parameter (X67/X68).** Print/page format lives in
-> the per-sheet `"page_setup_{sheet_id}"` container above, so it converges across peers and survives
-> a session -- the Google Sheets model, where print settings are shared document state. `orientation`
-> (Portrait | Landscape) is a first-class field, not derived from paper dimensions. PDF export reads
-> this container (`trame-interop`); it is no longer carried as an ephemeral `ExportPdf` argument.
-> **Target state:** the built MVP still passes an ephemeral `PdfPageSetup`; migrating it into this
-> container is a deferred Trame code Story (`ambre-roadmap.md` E6, "Trame feature-parity gaps") and a
-> persisted-schema change (bumps `SCHEMA_VERSION`).
+> **Page setup is persisted state, not an export parameter (X67/X68).** `"page_setup_{sheet_id}"`
+> converges across peers and survives a session (the Google Sheets model). `orientation` (Portrait |
+> Landscape) is a first-class field, not derived from paper dimensions; PDF export reads this
+> container (`trame-interop`). As-built the MVP still passes an ephemeral `PdfPageSetup`; migrating it
+> here is a deferred Story (`ambre-roadmap.md` E6) and bumps `SCHEMA_VERSION`.
 
-> **Deferred -- cell comments / notes.** The MVP schema has **no** anchored-comment container,
-> though a cell note is a standard spreadsheet convention. This is a known parity gap with Prose,
-> which ships the full `annots` subsystem (`prose-features` reconcile P-68 / orphan P-69). When
-> built, a Trame cell note anchors on the move-invariant `(row_uid, col_uid)` pair and reuses the
-> Prose orphan-handling model on a bound-line delete. Tracked as a deferred Story in
-> `ambre-roadmap.md` (E6, "Trame feature-parity gaps"); out of MVP scope here.
+> **Deferred -- cell comments / notes.** The MVP schema has no anchored-comment container, a known
+> parity gap with Prose's `annots` subsystem (`prose-features` P-68 / P-69). When built, a note
+> anchors on the move-invariant `(row_uid, col_uid)` pair and reuses the Prose orphan-handling model
+> on a bound-line delete. Deferred Story `ambre-roadmap.md` E6.
 
 > **Media resolution reuses the shared flow, not a Trame copy.** The `"media"` container above
 > holds only the CRDT metadata (`{hash_blake2b: {dims, anchor, mime}}`). Resolving a hash to
@@ -452,15 +441,10 @@ impl RangeId {
     pub fn row_range(&self, index: &SheetIndex) -> Option<(usize, usize)> { /* axis resolve */ }
     pub fn col_range(&self, index: &SheetIndex) -> Option<(usize, usize)> { /* axis resolve */ }
 
+    /// Resolve one endpoint to a position: `EntireAxis` -> `entire`,
+    /// `Bound(uid)` -> its index or `None` (-> #REF!), `Virtual(p)` -> `p`.
     fn endpoint_pos(ep: &RangeEndpoint, entire: usize, pos: impl Fn(&Uid) -> Option<usize>)
-        -> Option<usize>
-    {
-        match ep {
-            RangeEndpoint::EntireAxis                   => Some(entire),
-            RangeEndpoint::Specific(AxisId::Bound(u))   => pos(u),         // None -> #REF!
-            RangeEndpoint::Specific(AxisId::Virtual(p)) => Some(*p as usize),
-        }
-    }
+        -> Option<usize> { /* ... */ }
 }
 ```
 
@@ -481,89 +465,32 @@ pub struct DependencyGraph {
 }
 
 impl DependencyGraph {
+    /// Rebuild `formula_cell`'s edges, reject a static cycle, reindex its ranges.
     pub fn update(
         &mut self,
-        formula_cell: CellId,
+        formula_cell:   CellId,
         new_cell_deps:  Vec<CellId>,
         new_range_deps: Vec<RangeId>,
-    ) -> Result<(), CycleError> {
-        // Update cell_dag
-        let node = self.get_or_create_node(formula_cell);
-        let old: Vec<_> = self.cell_dag
-            .edges_directed(node, petgraph::Direction::Outgoing)
-            .map(|e| e.id()).collect();
-        for e in old { self.cell_dag.remove_edge(e); }
-        for dep in &new_cell_deps {
-            self.cell_dag.add_edge(node, self.get_or_create_node(*dep), ());
-        }
+    ) -> Result<(), CycleError> { /* ... */ }
 
-        // Static cycle detection on cell_dag
-        if petgraph::algo::is_cyclic_directed(&self.cell_dag) {
-            // Rollback
-            let added: Vec<_> = self.cell_dag
-                .edges_directed(node, petgraph::Direction::Outgoing)
-                .map(|e| e.id()).collect();
-            for e in added { self.cell_dag.remove_edge(e); }
-            return Err(CycleError(self.find_cycle_cells()));
-        }
-
-        // Update range_deps + range_index
-        for (_, entries) in self.range_index.iter_mut() {
-            entries.retain(|(c, _)| *c != formula_cell);
-        }
-        self.range_deps.remove(&formula_cell);
-        if !new_range_deps.is_empty() {
-            for dep in &new_range_deps {
-                self.range_index.entry(dep.sheet).or_default()
-                    .push((formula_cell, dep.clone()));
-            }
-            self.range_deps.insert(formula_cell, new_range_deps);
-        }
-        Ok(())
-    }
-
-    /// Collects all cells to mark dirty after `changed` is modified.
-    pub fn collect_dirty(
-        &self,
-        changed: CellId,
-        index: &SheetIndex,   // the changed cell's sheet index
-    ) -> HashSet<CellId> {
-        let mut dirty = HashSet::new();
-
-        // Level 1: DFS descendants in cell_dag
-        if let Some(&node) = self.cell_to_node.get(&changed) {
-            let mut dfs = petgraph::visit::Dfs::new(&self.cell_dag, node);
-            while let Some(n) = dfs.next(&self.cell_dag) {
-                dirty.insert(self.cell_dag[n]);
-            }
-        }
-
-        // Level 2: formulas whose range contains changed. Only a fully bound
-        // cell can sit inside a uid-keyed range; a virtual cell is skipped.
-        let (Some(row), Some(col)) = (changed.row_uid(), changed.col_uid()) else { return dirty };
-        if let Some(entries) = self.range_index.get(&changed.sheet) {
-            for (formula_cell, dep) in entries {
-                if dep.contains(row, col, index) {
-                    dirty.insert(*formula_cell);
-                    // Propagate in cell_dag from formula_cell
-                    if let Some(&node) = self.cell_to_node.get(formula_cell) {
-                        let mut dfs = petgraph::visit::Dfs::new(&self.cell_dag, node);
-                        while let Some(n) = dfs.next(&self.cell_dag) {
-                            dirty.insert(self.cell_dag[n]);
-                        }
-                    }
-                }
-            }
-        }
-        dirty
-    }
+    /// Every cell to mark dirty after `changed` is written.
+    pub fn collect_dirty(&self, changed: CellId, index: &SheetIndex) -> HashSet<CellId> { /* ... */ }
 
     /// The culprits of a static cycle: the first strongly connected component of
     /// the cell DAG with more than one node (Kosaraju), mapped back to `CellId`s.
-    /// Empty when the graph is acyclic.
     fn find_cycle_cells(&self) -> Vec<CellId> { /* ... */ }
 }
 ```
+
+`update` (`ambre-trame/src/formula/dag.rs`): (1) replace the cell's outgoing `cell_dag`
+edges with `new_cell_deps`; (2) if `cell_dag` is now cyclic, roll the edges back and return
+`CycleError(find_cycle_cells())`; (3) drop the cell's old `range_index` / `range_deps` entries and
+reinsert `new_range_deps`, keyed by sheet. One formula edit is one `update`.
+
+`collect_dirty` walks two levels: (1) a DFS of `cell_dag` descendants from `changed`; (2) for every
+range dependency whose rectangle contains `changed` (only a fully bound cell can, a virtual one is
+skipped), add the dependent formula and DFS its descendants too. The union is the dirty set
+recomputed synchronously (section 8).
 
 ---
 
@@ -637,39 +564,21 @@ impl BytecodeCache {
     /// compilation bind every positional `A1` to its row/column `AxisId`.
     pub fn recompile_if_stale(
         &mut self,
-        cell:        CellId,
-        raw:         &str,
-        indices:     &HashMap<u16, SheetIndex>,
-        deps:        &mut DependencyGraph,
-        ctx:         &dyn FormulaCtx,
-    ) {
-        if !self.stale.remove(&cell) { return; }
-
-        if !raw.starts_with('=') {
-            self.entries.remove(&cell);
-            deps.update(cell, vec![], vec![]).ok();
-            return;
-        }
-
-        match formula_parser::parse(&raw[1..], sheet_index, sheet_name_to_id) {
-            Ok(ast) => {
-                let bc = compile_with_deps(&ast);
-                match deps.update(cell, bc.cell_deps.clone(), bc.range_deps.clone()) {
-                    Ok(()) => { self.entries.insert(cell, bc); }
-                    Err(CycleError(cycle)) => {
-                        self.entries.remove(&cell);
-                        // compute_cell traitera le CycleError
-                    }
-                }
-            }
-            Err(e) => {
-                self.entries.remove(&cell);
-                // formula_cache will receive ParseError directly in compute_cell
-            }
-        }
-    }
+        cell:    CellId,
+        raw:     &str,
+        indices: &HashMap<u16, SheetIndex>,
+        deps:    &mut DependencyGraph,
+        ctx:     &dyn FormulaCtx,
+    ) { /* ... */ }
 }
 ```
+
+`recompile_if_stale` (`ambre-trame/src/formula/cache.rs`) returns at once unless `cell` is stale.
+A non-formula (`raw` without a leading `=`) drops any cached bytecode and clears the cell's deps. A
+formula is parsed against its `SheetIndex` and compiled; `deps.update` then either stores the
+bytecode or, on a `CycleError`, drops the entry so `compute_cell` reports the cycle. A parse error
+also drops the entry and surfaces in `compute_cell`. Only a raw-text change marks a cell stale
+(`TRAME-011`).
 
 ### D. Stack VM with Dynamic Cycle Detection
 
@@ -1327,27 +1236,19 @@ Rendering functions are parameterized on the `DrawSurface` trait (defined in `am
 // ambre-trame/src/render.rs
 use ambre_draw::DrawSurface;
 
-/// Rendu des cellules d'un viewport sur n'importe quelle surface.
-pub fn draw_cells_on<S: DrawSurface>(
-    surface: &mut S,
-    vp: &DisplayViewport,
-    layout: &GridLayout,
-) {
-    for cell in &vp.cells {
-        if cell.is_merged && cell.merge_span.is_none() { continue; }
-        let (x, y, w, h) = layout.cell_rect(cell.row_index, cell.col_index);
-        // fill, text, borders -- identical screen and PDF
-        surface.fill_path(/* ... */);
-        surface.draw_glyphs(/* ... */);
-    }
-}
+/// Draw a viewport's cells onto any surface (fill, text, borders).
+pub fn draw_cells_on<S: DrawSurface>(surface: &mut S, vp: &DisplayViewport, layout: &GridLayout) { /* ... */ }
 
 pub fn draw_grid_lines_on<S: DrawSurface>(surface: &mut S, layout: &GridLayout) { /* ... */ }
 pub fn draw_col_headers_on<S: DrawSurface>(surface: &mut S, layout: &GridLayout) { /* ... */ }
 pub fn draw_row_headers_on<S: DrawSurface>(surface: &mut S, layout: &GridLayout) { /* ... */ }
 ```
 
-The UI thread instantiates `WgpuSurface` and calls these functions in its `requestAnimationFrame` loop. The Logic thread instantiates `KrillaSurface` for PDF export (triggered by `TrameCommand::ExportPdf`).
+`draw_cells_on` iterates `vp.cells`, skips a merge-covered cell (`is_merged` with no `merge_span`),
+resolves each cell rectangle through `layout`, and emits the same fill, glyph, and border calls on
+either surface. The UI thread instantiates `WgpuSurface` and calls these in its
+`requestAnimationFrame` loop; the Logic thread instantiates `KrillaSurface` for PDF export
+(`TrameCommand::ExportPdf`).
 
 ### Data Flow
 

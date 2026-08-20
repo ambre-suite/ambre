@@ -232,62 +232,22 @@ Each `DisplayViewport` carries the widths and heights of the range it covers. Fo
 > **Current state:** `draw_grid` covers background, headers, grid lines, text, active cell border, and FPS overlay. The rendering below (custom borders, error indicators, dirty opacity) is to be implemented.
 
 ```rust
-// Cell rendering via DrawSurface (generic screen + PDF)
+// Cell rendering via DrawSurface (generic screen + PDF).
 fn draw_cell<S: DrawSurface>(
     surface:    &mut S,
     cell:       &DisplayCell,
     x: f64, y: f64, w: f64, h: f64,
     font_cx:    &mut FontContext,
     text_cache: &mut TextCache,
-) {
-    // Cells covered by a merge: do not render
-    if cell.is_merged && cell.merge_span.is_none() { return; }
-
-    // Cell background
-    let bg = cell.style.bg_color.unwrap_or(Color::WHITE);
-    // TODO: reduced opacity for dirty cells (alpha = 0.5)
-    // DrawSurface does not yet support opacity -- to add with fill_path + Brush::Solid with alpha
-    surface.fill_rect(Rect::new(x, y, x + w, y + h), bg);
-
-    // Text
-    if !cell.display_text.is_empty() {
-        let align = match cell.style.h_align {
-            HAlign::Auto => if cell.display_text.parse::<f64>().is_ok() { Alignment::End } else { Alignment::Start },
-            HAlign::Left   => Alignment::Start,
-            HAlign::Center => Alignment::Center,
-            HAlign::Right  => Alignment::End,
-        };
-        let fg = cell.style.fg_color.unwrap_or(Color::BLACK);
-        // Wrap: constrain to the cell width so Parley breaks lines. No wrap: let the
-        // text overflow into empty right-neighbour cells (Excel behaviour, sec.4.C).
-        let size  = cell.style.size.unwrap_or(11.0);
-        let max_w = if cell.style.wrap { (w - 6.0) as f32 } else { f32::MAX };
-        let layout = text_cache.get_or_build(font_cx, &cell.display_text, size, max_w, align);
-        // Vertical alignment (replaces the hard-coded centring).
-        let y_off = match cell.style.v_align {
-            VAlign::Top    => 0.0,
-            VAlign::Middle => ((h - layout.height() as f64) / 2.0).max(0.0),
-            VAlign::Bottom =>  (h - layout.height() as f64).max(0.0),
-        };
-        let brush = Brush::Solid(fg);
-        // Clip to the cell, except a non-wrapped overflowing text spills up to the next
-        // non-empty cell (overflow_clip_width scans the viewport row).
-        let clip_w = if cell.style.wrap { w } else { overflow_clip_width(cell, w) };
-        surface.push_clip(Rect::new(x, y, x + clip_w, y + h));
-        for line in layout.lines() {
-            for item in line.items() {
-                let PositionedLayoutItem::GlyphRun(run) = item else { continue };
-                let tx = x + 3.0 + run.offset() as f64;
-                let ty = y + y_off + run.baseline() as f64;
-                surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
-            }
-        }
-        surface.pop_clip();
-    }
-
-    // Custom borders (cell.style.border via fill_path/lyon), error indicator: TODO
-}
+) { /* ... */ }
 ```
+
+`draw_cell` (`ambre-app/src/trame/renderer.rs`) skips a merge-covered cell, then fills the
+background. With text, it resolves horizontal alignment (`Auto` right-aligns a number, left-aligns
+text), builds the Parley layout at the cell font size (wrapped to `w - 6` px, else unconstrained),
+offsets it for vertical alignment, clips to the cell width (a non-wrapped overflow spills to the next
+non-empty cell, `overflow_clip_width`), and draws each glyph run. Custom borders, the error
+indicator, and dirty-cell opacity are not built.
 
 > **Wrap / vertical alignment / overflow (MVP):** `CellStyle.wrap` and `CellStyle.v_align`
 > are honoured above. `wrap` rows -- and rows whose text carries explicit newlines

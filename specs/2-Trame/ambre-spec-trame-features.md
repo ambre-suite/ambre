@@ -179,50 +179,12 @@ TrameCommand::SortRange {
 **Implementation:**
 
 ```rust
-// As-built: `TrameState::sort_range` (`logic/sort.rs`). Sorting only ever targets
-// the ACTIVE sheet (the UI activates it first): the formula cache the keys read
-// from is pinned to engine index 0. The header (if any) is pinned by starting the
-// sortable region one row down; rows after `row_end` are simply never moved -- there
-// is no "rows after the range" chain to append (that was a bug: `rows` only spans
-// the range, so `skip(row_end + 1)` was always empty).
+// As-built: `TrameState::sort_range` (`logic/sort.rs`).
+/// Sort a range on the active sheet by one column, whole rows travelling by uid.
 fn sort_range(
     &mut self, sheet_id: &str, row_start: u32, row_end: u32, col_start: u32,
     col_end: u32, sort_col: u32, ascending: bool, has_header: bool,
-) -> TrameOutcome {
-    if sheet_id != self.active_sheet { return TrameOutcome::display_only(vec![]); }
-    // Clamp to materialized rows; virtual rows carry no data to reorder.
-    let last = self.index.row_len().saturating_sub(1) as u32;
-    let row_end = row_end.min(last);
-    if col_start + sort_col > col_end || row_start > row_end {
-        return TrameOutcome::display_only(vec![]);
-    }
-    let sort_col_abs = col_start + sort_col;
-    let sort_start = if has_header { row_start + 1 } else { row_start };
-    if sort_start >= row_end { return TrameOutcome::display_only(vec![]); } // <= 1 sortable row
-
-    // Key each sortable row by its uid and the evaluated value of its sort column
-    // (`active_cell_id` builds the CellId with the engine u16 index -- not the
-    // String sheet_id). Whole rows travel by uid; no cell content is read/rewritten.
-    let mut keyed: Vec<(Uid, CellValue)> = (sort_start..=row_end)
-        .filter_map(|pos| {
-            let row_uid = self.index.row_id(pos as usize)?;
-            let value = self.engine
-                .evaluated_value(self.active_cell_id(pos, sort_col_abs))
-                .unwrap_or(CellValue::Empty);
-            Some((row_uid, value))
-        })
-        .collect();
-
-    let before: Vec<Uid> = keyed.iter().map(|(uid, _)| *uid).collect();
-    keyed.sort_by(|(_, a), (_, b)| {
-        let ord = compare_cell_values(a, b); // Number < Text < Boolean < Error < Empty
-        if ascending { ord } else { ord.reverse() }
-    });
-    let target: Vec<Uid> = keyed.into_iter().map(|(uid, _)| uid).collect();
-    // realize_sort replays the permutation as `mov` ops on rows_{sheet} (a no-op +
-    // SortComplete when already ordered); the delta rides outcome.update.
-    self.realize_sort(sort_start, &before, target)
-}
+) -> TrameOutcome { /* ... */ }
 
 /// Same-type comparison, then the type order below. NaN compares equal rather
 /// than poisoning the sort.
