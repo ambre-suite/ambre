@@ -885,10 +885,16 @@ impl TrameState {
     /// remote import is never re-broadcast.
     pub fn apply_remote(&mut self, payload: &[u8]) -> Vec<TrameEvent> { /* import + recompute */ }
 
-    /// Apply a remote ephemeral (presence) payload -> RemoteCursors events.
+    /// Apply a remote ephemeral (presence) payload -> a single `RemoteCursors` event
+    /// carrying the WHOLE current peer set (`Vec<RemoteCursorPayload>`), like Prose.
     /// The author identity is the **Sync-resolved `from_user_id`** (spoof-proof,
-    /// `ambre-spec-sync.md §3`): the peer-authored payload carries only the cell position
-    /// and a self-asserted, cosmetic `display_name` -- never a `user_id`.
+    /// `ambre-spec-sync.md §3`): the peer-authored payload carries only the `CellAnchor`
+    /// and a self-asserted, cosmetic `display_name` -- never a `user_id`. The method
+    /// updates this peer's entry in the ephemeral presence table, then rebuilds the full
+    /// set: each `CellAnchor` is resolved to a current `(row, col)` through the
+    /// `SheetIndex`, its `color` is `ambre_draw::peer::peer_color(user_id)`, and a peer
+    /// whose anchor no longer resolves is dropped from the set (P-26 mirror). The UI
+    /// replaces its cursors wholesale, so a departed peer disappears on its own.
     pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &[u8]) -> Vec<TrameEvent> { /* cursors */ }
 
     /// Export a full CRDT snapshot (compaction / local persistence / SnapshotNeeded).
@@ -1247,19 +1253,38 @@ pub enum TrameEvent {
 /// the canonical identity is the Sync-resolved `from_user_id` delivered out-of-band on
 /// `LogicEvent::RemoteEphemeral` (a peer cannot forge another user's id,
 /// `ambre-spec-sync.md §3`).
+/// Move-invariant cell anchor for presence -- the spreadsheet analog of Prose's
+/// `CursorPosition` (`prose-logic`). It carries the row and column **uids**
+/// (`Uid = {peer, counter}`, §2.A), NOT raw row/col indices, so a remote cursor
+/// follows its cell through concurrent row/column inserts, deletes and sorts
+/// instead of jumping. A `Uid` is globally unique and portable across peers (like a
+/// Loro `TreeID`), so it means the same thing on every replica with no remapping.
+#[derive(Serialize, Deserialize)]
+pub struct CellAnchor {
+    pub sheet_id: SheetId,
+    pub row_uid:  Uid,
+    pub col_uid:  Uid,
+}
+// Best-effort presence rule (the mirror of Prose's P-26): if a remote `CellAnchor`'s
+// `sheet_id`, `row_uid` or `col_uid` resolves to no live sheet/row/column -- the
+// authoring peer's structural delta has not landed yet, or the row/column was
+// deleted -- the remote cursor is silently dropped (no error). It reappears on its
+// own once the delta lands and the uids resolve again.
+
 #[derive(Serialize, Deserialize)]
 pub struct PresencePayload {
-    pub sheet_id:     SheetId,
-    pub row:          u32,
-    pub col:          u32,
-    pub selection:    Option<(u32, u32, u32, u32)>,
+    pub anchor:       CellAnchor,
+    pub selection:    Option<(CellAnchor, CellAnchor)>,  // top-left, bottom-right corners
     pub display_name: String,   // self-asserted, cosmetic (never trusted for identity)
 }
 
-/// Logic -> UI event payload. Assembled in `apply_ephemeral` from the trusted
-/// `from_user_id` + the wire `PresencePayload`; `user_id` is set to `from_user_id`
-/// and is NEVER read from the peer payload. `color` is derived from `user_id`
-/// (same hash as `trame-ui::color_for_user` / `prose-ui::user_color`).
+/// Logic -> UI event payload, ONE per live remote peer. Assembled in `apply_ephemeral`
+/// from the trusted `from_user_id` + the wire `PresencePayload`; `user_id` is set to
+/// `from_user_id` and is NEVER read from the peer payload. `color` is
+/// `ambre_draw::peer::peer_color(user_id)` -- the one shared cross-app peer color,
+/// never a per-app hash. `row`/`col` are the `CellAnchor` uids RESOLVED to the peer's
+/// current grid position by the Logic thread against its `SheetIndex`; a cursor whose
+/// anchor no longer resolves is dropped, not sent.
 pub struct RemoteCursorPayload {
     pub user_id:      UserId,
     pub display_name: String,
@@ -1271,10 +1296,14 @@ pub struct RemoteCursorPayload {
 }
 ```
 
-> **Note.** `RemoteCursorPayload` would travel inside `TrameEvent::RemoteCursors` on the content
-> plane (by move on `flume`), so it needs no `serde` of its own -- `TrameEvent` derives only
-> `Debug, Clone`. The sole presence type that genuinely needs `serde` is the wire
-> `PresencePayload` (postcard in the `Ephemeral` bytes).
+> **Note.** The **whole** current presence set travels as `TrameEvent::RemoteCursors {
+> cursors: Vec<RemoteCursorPayload> }` -- one entry per live peer, rebuilt from the
+> ephemeral store on every change -- exactly like Prose's `RemoteCursors { cursors:
+> Vec<RemoteCursor> }`. The UI replaces its remote-cursor set wholesale from each event,
+> so a peer that left (absent from the new set) drops with no separate removal path. The
+> event travels on the content plane (by move on `flume`), so it needs no `serde` of its
+> own -- `TrameEvent` derives only `Debug, Clone`. The sole presence type that genuinely
+> needs `serde` is the wire `PresencePayload` (postcard in the `Ephemeral` bytes).
 
 ### Shared Rendering Module — `ambre-trame/src/render.rs`
 
