@@ -626,7 +626,9 @@ pub fn apply_zoom(state: &mut ProseUiState, factor: f32, focus_screen: Vec2) { /
 
 **Selection & transient-UI helpers referenced above.**
 - `select_all` (P-142) sets the selection anchor to the first block offset 0 and the focus to the
-  last block's end (`doc_edge(true)`), then shows the toolbar.
+  last block's end (`doc_edge(true)`), then shows the toolbar. It is bound to **`Ctrl/Cmd+A`** in
+  `handle_key` (X70); the handler is otherwise unreachable by keyboard, and Trame binds the same
+  chord (`ambre-spec-trame-ui.md sec.9`). The event is consumed (`preventDefault`).
 - `clear_transient_ui` (Escape, P-142) drops `selection`, closes `slash_menu`, hides the toolbar,
   and cancels any in-flight drag/autoscroll; it never mutates the CRDT.
 - `select_word_at` / `select_paragraph_at` resolve word / block boundaries off the pre-shaped run
@@ -649,6 +651,15 @@ pub fn apply_zoom(state: &mut ProseUiState, factor: f32, focus_screen: Vec2) { /
   the caret at the new block start once `LayoutUpdated` arrives. This is the **local** recreate-on-
   open guard only; the **CRDT convergence** guarantee for two peers concurrently emptying the doc
   is `PROSE-027` (deterministic re-insertion, `prose-logic sec.2.A`), not this rule.
+
+- **Link click-navigation (P-151).** A `MARK_LINK` span carries a `link: Option<String>` URL
+  (`sec.7`) but is inert without an intent: `hit_test` resolves only `(TreeID, offset)`, so a click
+  lands the caret and never opens the target. On a `PointerDown` with `ctrl` (or `Cmd` on macOS)
+  whose hit offset falls inside a `MARK_LINK` run, `handle_pointer` resolves the run's URL and asks
+  the host to open it -- `LogicCommand`-routed to the shared open-URL host affordance
+  (`RestCommand`-adjacent, `ambre-spec-sync.md`), never a raw `window.open` from WASM. A plain click
+  (no modifier) still only places the caret, so a link stays editable. Hover paints the link
+  affordance cursor. No CRDT mutation.
 
 **Hit-testing recap.** `hit_test` finds the block by bisection on `BlockLayout::y_in_page`
 (O(log n)) within the resolved band, then reads the offset from the block's **pre-shaped** run
@@ -956,7 +967,7 @@ already-decrypted data transmitted by the Logic thread.
 
 ## 4. QUALITY & TESTABILITY
 
-**Unit tests (native, `cfg(not(target_arch = "wasm32"))`):**
+**Unit tests (host tier, `cfg(not(target_arch = "wasm32"))`):**
 
 | Case | Method |
 |-----|---------|
