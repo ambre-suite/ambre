@@ -1,4 +1,4 @@
-# AMBRE — SPEC: AMBRE-TRAME FEATURES
+# AMBRE -- SPEC: AMBRE-TRAME FEATURES
 **Type:** Vertical (Feature / Application)
 **Status:** Draft
 **Implementation:** partial
@@ -7,20 +7,20 @@
 >
 > **Scope:** Logic thread only. Rendering of resulting states (hidden rows, conditional styles, protection indicators) is delegated to `ambre-spec-trame-ui.md`.
 
-> **Architecture note.** The client runs a 3-thread shared-memory architecture (`flume` channels, single WASM binary) — see `ambre-spec-architecture.md`. Implications for this spec:
-> - **State registry.** A Trame document's state is `TrameState`, a concrete value stored in the Logic thread's typed registry (`enum DocState { Trame(TrameState), … }`) and dispatched via `match` (no trait object, no `Box<dyn Any>`).
-> - **Typed data plane, zero inter-thread postcard.** `TrameCommand`/`TrameEvent`/`DisplayCell` live in **`ambre-bus`** (re-exported by `ambre-trame`), travel **by move** on `flume` inside `AppCommand::Trame(..)` / `AppEvent::Trame(..)` — **no `serde` derive**. `Vec<u8>` only remain for real network bytes (Loro deltas/snapshots).
-> - **Typed outcome for editing.** A handler that mutates the CRDT does not "self-synchronize": it **returns** domain bytes that the Logic dispatcher fans out to the Sync thread. See §0 below and `ambre-spec-architecture.md §7 ARCH P2` ("one-way content handler").
+> **Architecture note.** The client runs a 3-thread shared-memory architecture (`flume` channels, single WASM binary) -- see `ambre-spec-architecture.md`. Implications for this spec:
+> - **State registry.** A Trame document's state is `TrameState`, a concrete value stored in the Logic thread's typed registry (`enum DocState { Trame(TrameState), ... }`) and dispatched via `match` (no trait object, no `Box<dyn Any>`).
+> - **Typed data plane, zero inter-thread postcard.** `TrameCommand`/`TrameEvent`/`DisplayCell` live in **`ambre-bus`** (re-exported by `ambre-trame`), travel **by move** on `flume` inside `AppCommand::Trame(..)` / `AppEvent::Trame(..)` -- **no `serde` derive**. `Vec<u8>` only remain for real network bytes (Loro deltas/snapshots).
+> - **Typed outcome for editing.** A handler that mutates the CRDT does not "self-synchronize": it **returns** domain bytes that the Logic dispatcher fans out to the Sync thread. See section 0 below and `ambre-spec-architecture.md section 7 ARCH P2` ("one-way content handler").
 
 ---
 
-## 0. EXECUTION MODEL — COMMANDS, EVENTS, OUTCOME
+## 0. EXECUTION MODEL -- COMMANDS, EVENTS, OUTCOME
 
-All features below are driven by `TrameCommand` (UI → Logic thread) and produce `TrameEvent` (Logic thread → UI) — both types live in `ambre-bus` and are transported typed inside `AppCommand::Trame` / `AppEvent::Trame` (the Logic dispatcher routes by `DocumentId` to the live `TrameState`).
+All features below are driven by `TrameCommand` (UI -> Logic thread) and produce `TrameEvent` (Logic thread -> UI) -- both types live in `ambre-bus` and are transported typed inside `AppCommand::Trame` / `AppEvent::Trame` (the Logic dispatcher routes by `DocumentId` to the live `TrameState`).
 
 A feature handler does **not** do networking or direct `send_to_ui`. Depending on what it produces:
-- **Display only** (filter, visual sort, conditional formatting): returns `TrameEvent` (display) → the dispatcher wraps them in `UiEvent::Viewport`.
-- **CRDT mutation to broadcast** (cell edit, row insertion, shared filter application, …): the Loro mutation produces a **delta**; the handler passes it back via a **typed outcome** (domain bytes), and the Logic dispatcher emits `SyncCommand::SendUpdate { document_id, payload }` (Logic adds the `document_id` it holds). Target schema:
+- **Display only** (filter, visual sort, conditional formatting): returns `TrameEvent` (display) -> the dispatcher wraps them in `UiEvent::Viewport`.
+- **CRDT mutation to broadcast** (cell edit, row insertion, shared filter application, ...): the Loro mutation produces a **delta**; the handler passes it back via a **typed outcome** (domain bytes), and the Logic dispatcher emits `SyncCommand::SendUpdate { document_id, payload }` (Logic adds the `document_id` it holds). Target schema:
 
 ```rust
 // App level (ambre-trame). The Logic dispatcher fans out the outcome; the app remains
@@ -32,40 +32,40 @@ struct TrameOutcome {
 }
 ```
 
-> The `fn handle_*(…) -> Vec<TrameEvent>` signatures shown in the following sections are the **display-only** form; for operations that must also broadcast a delta, read the return as the `display` branch of a `TrameOutcome` (the `update` branch carrying the Loro delta).
+> The `fn handle_*(...) -> Vec<TrameEvent>` signatures shown in the following sections are the **display-only** form; for operations that must also broadcast a delta, read the return as the `display` branch of a `TrameOutcome` (the `update` branch carrying the Loro delta).
 
 ### Invariants
 
-Prefix `TRAME-FEAT`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4`; the cross-spec roll-up is `ambre-spec-testing.md §7`. Rows `001..013` cover the built features -- shared filters (§1.A), sort (§2) and the execution model above. Rows `014..024` cover Phase 2/3 features whose command variants exist in `ambre-bus` but whose Logic handlers are explicit no-ops: they carry `Status: unimplemented` and cite the Story that will build them (architecture §4). Undo/redo is specified here (§4) but owned by the engine: its invariants are `TRAME-017` and `TRAME-018` in `trame-logic §1`, not restated here.
+Prefix `TRAME-FEAT`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md section 4`; the cross-spec roll-up is `ambre-spec-testing.md section 7`. Rows `001..013` cover the built features -- shared filters (section 1.A), sort (section 2) and the execution model above. Rows `014..024` cover Phase 2/3 features whose command variants exist in `ambre-bus` but whose Logic handlers are explicit no-ops: they carry `Status: unimplemented` and cite the Story that will build them (architecture section 4). Undo/redo is specified here (section 4) but owned by the engine: its invariants are `TRAME-017` and `TRAME-018` in `trame-logic section 1`, not restated here.
 
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
-| `TRAME-FEAT-001` | A feature handler MUST NOT send on any channel: it returns a `TrameOutcome` and the Logic dispatcher fans it out. | §0; architecture §4 (host testability) | type-level: `TrameState` holds no sink or sender and `handle_command` returns `TrameOutcome` by value; the dispatcher seam is exercised by `ambre_trame::logic::tests::group3::edit_emits_send_update_through_sink` | verified |
-| `TRAME-FEAT-002` | A shared filter MUST hide rows by their `row_uid`, so the hidden set follows the data through a sort or an insert. | §1.A | `ambre_trame::logic::tests::group5::shared_filter_hidden_follows_sort` | verified |
-| `TRAME-FEAT-003` | A filtered-out row MUST still be counted by formulas: filtering is a view, not a mutation of the data. | §1.A | `ambre_trame::logic::tests::group5::shared_filter_does_not_affect_sum` | verified |
-| `TRAME-FEAT-004` | The filter definition MUST persist in the document and be re-evaluated when a cell it covers is edited. | §1.A | `ambre_trame::logic::tests::group5::shared_filter_recomputes_on_edit`, `group4::shared_filter_by_values_hides_nonmatching`, `::shared_filter_condition_greater_than` | verified |
-| `TRAME-FEAT-005` | A peer receiving the broadcast MUST apply the hidden set directly, without re-evaluating the predicate. | §1.A | `ambre_trame::logic::tests::group5::shared_filter_applies_on_remote_import` | verified |
-| `TRAME-FEAT-006` | Two concurrent shared filters MUST converge by last-writer-wins. | §1.A; §12 of `trame-logic` | `ambre_trame::logic::tests::group5::concurrent_filters_converge_lww`; the 2-peer convergence proptest also drives `ApplyFilter`/`ClearFilter` and asserts the elected `is_filtered` set (`logic::convergence_tests::two_peers_converge_under_interleaved_ops`) | verified |
-| `TRAME-FEAT-007` | A shared filter MUST be undoable as an ordinary CRDT mutation. | §1.A; §4 | `ambre_trame::logic::tests::group5::shared_filter_is_undoable`, `group2::filtered_column_edit_is_one_undo_item` | verified |
-| `TRAME-FEAT-008` | A filter command that cannot apply (wrong sheet, virtual column, absent filter) MUST leave the document untouched. | §1.A | `ambre_trame::logic::tests::group5::shared_filter_noop_guards`, `::clear_filter_unhides_and_noops_when_absent` | verified |
-| `TRAME-FEAT-009` | Every filter operator MUST be exercised, and a filter definition MUST round-trip through its stored form. | §1.A | `ambre_trame::logic::tests::group5::condition_pass_covers_every_operator`, `::filter_pass_values_and_op_string_roundtrip` | verified |
-| `TRAME-FEAT-010` | A sort MUST order rows by their **evaluated** value, and MUST pin the header row when one is declared. | §2 | `ambre_trame::logic::tests::group3::sort_range_ascending_moves_whole_rows`, `::sort_range_descending_keeps_header`, `group4::sort_range_multi_pins_header_row` | verified |
-| `TRAME-FEAT-011` | A multi-column sort MUST be lexicographic over its keys, each key applying its own direction. | §2 "Multi-Column Sort" | `ambre_trame::logic::tests::group4::sort_range_multi_lexicographic_with_per_key_direction`, `::sort_range_multi_no_keys_is_noop` | verified |
-| `TRAME-FEAT-012` | A sort that changes no row order MUST emit no CRDT delta. | §2 | `ambre_trame::logic::tests::group4::sort_range_multi_already_sorted_emits_no_delta`, `::sort_range_noops` | verified |
-| `TRAME-FEAT-013` | A sort invoked without an explicit range MUST resolve it from the tracked selection, in the Logic thread. | §2 | `ambre_trame::logic::tests::group4::sort_selection_resolves_against_tracked_selection`, `::sort_selection_multi_resolves_against_tracked_selection`, `::sort_sheet_sorts_used_range_by_active_column` | verified |
-| `TRAME-FEAT-014` | A personal filter view MUST NOT emit any CRDT delta: it is local state, persisted to IndexedDB alone. | §1.B | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
-| `TRAME-FEAT-015` | Activating a personal filter view MUST recompute its hidden rows against the current document, never trust the stored set. | §1.B | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
-| `TRAME-FEAT-016` | Activating a personal filter view MUST NOT be an undo item. | §1.B; §4 | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
-| `TRAME-FEAT-017` | Conditional formatting MUST apply the first matching rule in ascending priority order, and stop there. | §3 Evaluation | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
-| `TRAME-FEAT-018` | A conditional format MUST produce a display-time `style_override` and MUST NOT mutate the stored cell style. | §3 Evaluation | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
-| `TRAME-FEAT-019` | A `Formula` conditional rule MUST resolve its relative references from the cell being evaluated, not from the rule's anchor. | §3 | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
-| `TRAME-FEAT-020` | A `Reject` validation MUST block the local mutation and emit no CRDT delta. | §5 Evaluation on Input | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
-| `TRAME-FEAT-021` | A `Warn` validation MUST allow the mutation and surface a warning alongside it. | §5 Evaluation on Input | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
-| `TRAME-FEAT-022` | A remote delta violating a local validation MUST be applied and MUST surface a warning; it MUST NOT be rejected. | §5 "Fundamental limitation" | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
-| `TRAME-FEAT-023` | Range protection MUST block a local edit by a non-owner, and MUST warn rather than reject on a remote violation. | §6 Enforcement | not built -- lands with §10 Phase 3 (Epic `E6`) | unimplemented |
-| `TRAME-FEAT-024` | Protection MUST identify its owner by `UserId`, never by `pub_key`. | §6 Security Model; §10 Phase 3 | not built -- lands with §10 Phase 3 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-001` | A feature handler MUST NOT send on any channel: it returns a `TrameOutcome` and the Logic dispatcher fans it out. | section 0; architecture section 4 (host testability) | type-level: `TrameState` holds no sink or sender and `handle_command` returns `TrameOutcome` by value; the dispatcher seam is exercised by `ambre_trame::logic::tests::group3::edit_emits_send_update_through_sink` | verified |
+| `TRAME-FEAT-002` | A shared filter MUST hide rows by their `row_uid`, so the hidden set follows the data through a sort or an insert. | section 1.A | `ambre_trame::logic::tests::group5::shared_filter_hidden_follows_sort` | verified |
+| `TRAME-FEAT-003` | A filtered-out row MUST still be counted by formulas: filtering is a view, not a mutation of the data. | section 1.A | `ambre_trame::logic::tests::group5::shared_filter_does_not_affect_sum` | verified |
+| `TRAME-FEAT-004` | The filter definition MUST persist in the document and be re-evaluated when a cell it covers is edited. | section 1.A | `ambre_trame::logic::tests::group5::shared_filter_recomputes_on_edit`, `group4::shared_filter_by_values_hides_nonmatching`, `::shared_filter_condition_greater_than` | verified |
+| `TRAME-FEAT-005` | A peer receiving the broadcast MUST apply the hidden set directly, without re-evaluating the predicate. | section 1.A | `ambre_trame::logic::tests::group5::shared_filter_applies_on_remote_import` | verified |
+| `TRAME-FEAT-006` | Two concurrent shared filters MUST converge by last-writer-wins. | section 1.A; section 12 of `trame-logic` | `ambre_trame::logic::tests::group5::concurrent_filters_converge_lww`; the 2-peer convergence proptest also drives `ApplyFilter`/`ClearFilter` and asserts the elected `is_filtered` set (`logic::convergence_tests::two_peers_converge_under_interleaved_ops`) | verified |
+| `TRAME-FEAT-007` | A shared filter MUST be undoable as an ordinary CRDT mutation. | section 1.A; section 4 | `ambre_trame::logic::tests::group5::shared_filter_is_undoable`, `group2::filtered_column_edit_is_one_undo_item` | verified |
+| `TRAME-FEAT-008` | A filter command that cannot apply (wrong sheet, virtual column, absent filter) MUST leave the document untouched. | section 1.A | `ambre_trame::logic::tests::group5::shared_filter_noop_guards`, `::clear_filter_unhides_and_noops_when_absent` | verified |
+| `TRAME-FEAT-009` | Every filter operator MUST be exercised, and a filter definition MUST round-trip through its stored form. | section 1.A | `ambre_trame::logic::tests::group5::condition_pass_covers_every_operator`, `::filter_pass_values_and_op_string_roundtrip` | verified |
+| `TRAME-FEAT-010` | A sort MUST order rows by their **evaluated** value, and MUST pin the header row when one is declared. | section 2 | `ambre_trame::logic::tests::group3::sort_range_ascending_moves_whole_rows`, `::sort_range_descending_keeps_header`, `group4::sort_range_multi_pins_header_row` | verified |
+| `TRAME-FEAT-011` | A multi-column sort MUST be lexicographic over its keys, each key applying its own direction. | section 2 "Multi-Column Sort" | `ambre_trame::logic::tests::group4::sort_range_multi_lexicographic_with_per_key_direction`, `::sort_range_multi_no_keys_is_noop` | verified |
+| `TRAME-FEAT-012` | A sort that changes no row order MUST emit no CRDT delta. | section 2 | `ambre_trame::logic::tests::group4::sort_range_multi_already_sorted_emits_no_delta`, `::sort_range_noops` | verified |
+| `TRAME-FEAT-013` | A sort invoked without an explicit range MUST resolve it from the tracked selection, in the Logic thread. | section 2 | `ambre_trame::logic::tests::group4::sort_selection_resolves_against_tracked_selection`, `::sort_selection_multi_resolves_against_tracked_selection`, `::sort_sheet_sorts_used_range_by_active_column` | verified |
+| `TRAME-FEAT-014` | A personal filter view MUST NOT emit any CRDT delta: it is local state, persisted to IndexedDB alone. | section 1.B | not built -- lands with section 10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-015` | Activating a personal filter view MUST recompute its hidden rows against the current document, never trust the stored set. | section 1.B | not built -- lands with section 10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-016` | Activating a personal filter view MUST NOT be an undo item. | section 1.B; section 4 | not built -- lands with section 10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-017` | Conditional formatting MUST apply the first matching rule in ascending priority order, and stop there. | section 3 Evaluation | not built -- lands with section 10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-018` | A conditional format MUST produce a display-time `style_override` and MUST NOT mutate the stored cell style. | section 3 Evaluation | not built -- lands with section 10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-019` | A `Formula` conditional rule MUST resolve its relative references from the cell being evaluated, not from the rule's anchor. | section 3 | not built -- lands with section 10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-020` | A `Reject` validation MUST block the local mutation and emit no CRDT delta. | section 5 Evaluation on Input | not built -- lands with section 10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-021` | A `Warn` validation MUST allow the mutation and surface a warning alongside it. | section 5 Evaluation on Input | not built -- lands with section 10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-022` | A remote delta violating a local validation MUST be applied and MUST surface a warning; it MUST NOT be rejected. | section 5 "Fundamental limitation" | not built -- lands with section 10 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-023` | Range protection MUST block a local edit by a non-owner, and MUST warn rather than reject on a remote violation. | section 6 Enforcement | not built -- lands with section 10 Phase 3 (Epic `E6`) | unimplemented |
+| `TRAME-FEAT-024` | Protection MUST identify its owner by `UserId`, never by `pub_key`. | section 6 Security Model; section 10 Phase 3 | not built -- lands with section 10 Phase 3 (Epic `E6`) | unimplemented |
 
-> **Invariant coverage.** 13 `verified`, 0 `unverified`, 11 `unimplemented`. The 13 are the Phase-1 surface, the area the workspace tested most heavily before the grammar existed. The 11 are the rules of §1.B, §3, §5 and §6, whose handlers are explicit no-ops today: each cites the Story that will build it, and that Story is not done until its rows have moved off `unimplemented`.
+> **Invariant coverage.** 13 `verified`, 0 `unverified`, 11 `unimplemented`. The 13 are the Phase-1 surface, the area the workspace tested most heavily before the grammar existed. The 11 are the rules of section 1.B, section 3, section 5 and section 6, whose handlers are explicit no-ops today: each cites the Story that will build it, and that Story is not done until its rows have moved off `unimplemented`.
 
 ---
 
@@ -75,7 +75,7 @@ Google Sheets distinguishes two filtering modes. Both are implemented.
 
 ### A. Shared Filter
 
-Visible to all collaborators. Stored in the `LoroDoc` — the view is synchronized via SecSync.
+Visible to all collaborators. Stored in the `LoroDoc` -- the view is synchronized via SecSync.
 
 **CRDT Schema (implemented):** the active filter is stored *flat* in
 `filters_{sheet_id}` (empty map = no filter) rather than under a nested `active`
@@ -105,7 +105,7 @@ Rows hidden by the filter are stored in a separate `LoroMap` to avoid polluting 
   └── "{row_uid}" : bool         → true = hidden by the active filter
 ```
 
-This `LoroMap` is recomputed by the Logic thread after each change to the filter or data. Only the filter author recomputes it — other clients receive `filter_hidden` via SecSync and apply it directly without recomputing (`apply_remote` → `rebuild_filter`, no recompute).
+This `LoroMap` is recomputed by the Logic thread after each change to the filter or data. Only the filter author recomputes it -- other clients receive `filter_hidden` via SecSync and apply it directly without recomputing (`apply_remote` -> `rebuild_filter`, no recompute).
 
 **Flow (implemented):**
 
@@ -134,7 +134,7 @@ recompute -- the hidden set is keyed by `row_uid`, so `rebuild_filter` simply
 remaps it to the new positions and the hidden flag follows its row.
 
 **Rendering:** hidden rows are not dropped from the viewport; each cell in a
-hidden row is returned with `DisplayCell::is_filtered = true` (§8) and the UI
+hidden row is returned with `DisplayCell::is_filtered = true` (section 8) and the UI
 Thread collapses those rows.
 
 **DAG interaction:** hidden rows are excluded from `DisplayViewport` but **included in calculations**. `=SUM(A:A)` on a filtered column returns the sum of all rows. To exclude hidden rows, the user uses `SUBTOTAL` (planned Phase 2).
@@ -166,7 +166,7 @@ TrameCommand::ActivateFilterView { view_id }
   ├─ Loads from IndexedDB
   ├─ Recomputes hidden_rows on current doc state
   └─ Sends DisplayViewport without hidden rows
-     (without touching the LoroDoc — zero CRDT delta emitted)
+     (without touching the LoroDoc -- zero CRDT delta emitted)
 
 TrameCommand::SaveFilterView { name, filter_def }
   │
@@ -248,13 +248,13 @@ fn compare_cell_values(a: &CellValue, b: &CellValue) -> std::cmp::Ordering { /* 
 **Type order: `Number` < `Text` < `Boolean` < `Error` < `Empty`.** Two values of the same type compare naturally (numeric, lexicographic, `false < true`); values of different types compare by that rank, so a column mixing numbers and text sorts the numbers first and never interleaves them. Empties sink to the end, which is what keeps a partially filled column readable after a sort.
 
 > **Sort is a pure row-order permutation.** Because each row carries an own move-invariant
-> `Uid` stored as the `rows_{sheet}` element *value* (`trame-logic §2.A`), reordering the list
+> `Uid` stored as the `rows_{sheet}` element *value* (`trame-logic section 2.A`), reordering the list
 > with `MovableList::mov` leaves every `"{row_uid}:{col_uid}"` cell key intact -- the data
 > follows the move with **no cell rewrite**. The sort touches only the order list (one `mov`
 > per displaced row), then rebuilds the `SheetIndex`. Crucially it **preserves** the engine's
 > uid-anchored bytecode (no reseed/re-parse) and merely recomputes; single-cell references
-> (bound to a row/column `Uid`, `trame-logic §3`) resolve to the new positions, so they
-> **follow the data** -- the §8 / `trame-logic §12` guarantee. A *range* is a positional block
+> (bound to a row/column `Uid`, `trame-logic section 3`) resolve to the new positions, so they
+> **follow the data** -- the section 8 / `trame-logic section 12` guarantee. A *range* is a positional block
 > (its endpoints stay positional), so an internal sort leaves the block and its total intact.
 > `compare_cell_values` uses an explicit type-rank (`Number < Text < Boolean < Error < Empty`);
 > `Error` ranks **before** `Empty` (errors are not last -- blanks are).
@@ -269,7 +269,7 @@ fn compare_cell_values(a: &CellValue, b: &CellValue) -> std::cmp::Ordering { /* 
 
 > **MVP.** Promoted from Phase 2: multi-column sort ships with the single-column sort. It is the
 > same pure row-order permutation (uid-anchored bytecode preserved, references follow), only the
-> comparator changes. UI entry point = the `SortDialog` (`-ui` §5.C).
+> comparator changes. UI entry point = the `SortDialog` (`-ui` section 5.C).
 
 ```rust
 TrameCommand::SortRangeMulti {
@@ -290,7 +290,7 @@ Implementation: `sort_by` with lexicographic comparison on `sort_keys` in order.
 
 ### Concurrent Sort Conflict
 
-Two users sorting simultaneously: LWW on the row `LoroMovableList` — the last commit wins. Deterministic result. Behavior identical to Google Sheets.
+Two users sorting simultaneously: LWW on the row `LoroMovableList` -- the last commit wins. Deterministic result. Behavior identical to Google Sheets.
 
 ---
 
@@ -343,7 +343,7 @@ pub enum CondFormatKind {
 
 ### Evaluation
 
-Rules are evaluated in the Logic thread after each `compute_dirty_batch` for cells in the viewport. Evaluation produces a per-cell `style_override` injected into `DisplayCell.style` — it does not modify `LoroMap("styles")`.
+Rules are evaluated in the Logic thread after each `compute_dirty_batch` for cells in the viewport. Evaluation produces a per-cell `style_override` injected into `DisplayCell.style` -- it does not modify `LoroMap("styles")`.
 
 ```rust
 /// Loads the sheet's rules (priority ascending) and returns the first match
@@ -371,7 +371,7 @@ Per kind:
 
 ## 4. UNDO / REDO
 
-### Model: `loro::UndoManager` — Local-Only Undo
+### Model: `loro::UndoManager` -- Local-Only Undo
 
 Undo only undoes **local peer** operations (current user). Remote operations are never undone. This is the behavior of Google Sheets and all modern collaborative editors.
 
@@ -398,17 +398,17 @@ impl TrameState {
 **Undo commit granularity:**
 
 Each atomic user operation constitutes an undo item. Granularity follows Google Sheets:
-- `SetCellText` + confirmation (Enter or click elsewhere) → 1 undo item
-- Rapid succession of keystrokes in the same cell → 1 undo item (commit on cell exit)
-- `InsertRow` → 1 undo item
-- `SortRange` → 1 undo item (undoes the entire reordering)
-- `ApplyFilter` (shared filter) → **undoable** — the filter is a `LoroDoc` mutation like any other. `UndoManager` tracks it automatically. Ctrl+Z removes the filter.
-- `ActivateFilterView` (personal view) → **non-undoable** — it's a local view state, not a doc mutation. Not in `UndoManager`.
-- `AddCondFormat`, `RemoveCondFormat` → undoable (LoroDoc mutations)
-- `AddValidation`, `RemoveValidation` → undoable (LoroDoc mutations)
-- Formatting (`SetStyle`) → 1 undo item
+- `SetCellText` + confirmation (Enter or click elsewhere) -> 1 undo item
+- Rapid succession of keystrokes in the same cell -> 1 undo item (commit on cell exit)
+- `InsertRow` -> 1 undo item
+- `SortRange` -> 1 undo item (undoes the entire reordering)
+- `ApplyFilter` (shared filter) -> **undoable** -- the filter is a `LoroDoc` mutation like any other. `UndoManager` tracks it automatically. Ctrl+Z removes the filter.
+- `ActivateFilterView` (personal view) -> **non-undoable** -- it's a local view state, not a doc mutation. Not in `UndoManager`.
+- `AddCondFormat`, `RemoveCondFormat` -> undoable (LoroDoc mutations)
+- `AddValidation`, `RemoveValidation` -> undoable (LoroDoc mutations)
+- Formatting (`SetStyle`) -> 1 undo item
 
-> **Note:** Google Sheets makes filter non-undoable. Trame makes the opposite choice — it's more consistent with the model "everything in LoroDoc is undoable". The user experience is better (no mental exception to remember).
+> **Note:** Google Sheets makes filter non-undoable. Trame makes the opposite choice -- it's more consistent with the model "everything in LoroDoc is undoable". The user experience is better (no mental exception to remember).
 
 **Implementation:**
 
@@ -478,7 +478,7 @@ Before mutating, `handle_set_cell_text` resolves the cell on the active sheet (`
 Both events carry a `version` field that is `0` here: `SetCellText` is optimistic and version-less, and threading an edit sequence would only matter if echo-matching were ever needed.
 
 
-> **Fundamental limitation — CRDT convergence:** `Reject` validation blocks **local** input only. A remote delta sent by a collaborator (who doesn't have the same validation, or whose client doesn't respect it) will be applied via SecSync even if it violates the local rule. This delta triggers a `ValidationWarning` to the UI but **is not rejected** — rejecting it would break CRDT convergence.
+> **Fundamental limitation -- CRDT convergence:** `Reject` validation blocks **local** input only. A remote delta sent by a collaborator (who doesn't have the same validation, or whose client doesn't respect it) will be applied via SecSync even if it violates the local rule. This delta triggers a `ValidationWarning` to the UI but **is not rejected** -- rejecting it would break CRDT convergence.
 >
 > **Documented consequence:** validations are an input aid, not an integrity barrier. They prevent accidental errors by official AMBRE client users. They do not guarantee that the document will never contain out-of-validation values. This point must be clearly communicated in the validation configuration UI.
 
@@ -490,7 +490,7 @@ Both events carry a `version` field that is `0` here: `SetCellText` is optimisti
 
 ### Security Model
 
-The server is a Blind Relay. It cannot verify that a CRDT delta respects a protection — content is encrypted. **Protection is soft-enforcement on the client side.** An official AMBRE client respects it. A modified client can bypass it.
+The server is a Blind Relay. It cannot verify that a CRDT delta respects a protection -- content is encrypted. **Protection is soft-enforcement on the client side.** An official AMBRE client respects it. A modified client can bypass it.
 
 This model is documented in the protection invitation UI: *"Protection prevents accidental modifications. It does not constitute a cryptographic guarantee."*
 
@@ -500,16 +500,16 @@ This model is documented in the protection invitation UI: *"Protection prevents 
 "protections_{sheet_id}" (LoroMap)
   └── "{row_uid}:{col_uid}:{row_uid_end}:{col_uid_end}" (LoroMap)
       ├── "owner_user_id"    : String     → creator's UserId as Uuid hex (stable, per-user)
-      ├── "allowed_user_ids" : LoroList   → [UserId as uuid_hex, ...] — empty = owner only
+      ├── "allowed_user_ids" : LoroList   → [UserId as uuid_hex, ...] -- empty = owner only
       └── "description"      : String     → optional
 ```
 
 > **Note: `UserId` and not `pub_key`.** The Ed25519 public key is a per-device credential
 > that changes on key rotation (member revocation). Using `pub_key` would break
 > protections after each rotation. `UserId: Uuid` is the canonical per-user identifier,
-> stable. The `pub_key → UserId` resolution is done in `ambre-sync` — the Logic thread
-> only sees `UserId` (see `ambre-spec-architecture.md` §2.D and the `RemoteCursor` pattern
-> in `ambre-spec-prose-logic.md` §C).
+> stable. The `pub_key -> UserId` resolution is done in `ambre-sync` -- the Logic thread
+> only sees `UserId` (see `ambre-spec-architecture.md` section 2.D and the `RemoteCursor` pattern
+> in `ambre-spec-prose-logic.md` section C).
 
 ### Enforcement on the Logic Thread Side
 
@@ -529,10 +529,10 @@ On a local edit, `Denied` returns `TrameEvent::ProtectionDenied` and stops there
 **On receiving a remote update:**
 
 Post-hoc protection enforcement needs the delta's **author**, which the MVP
-`apply_remote(&mut self, payload: &[u8]) -> Vec<TrameEvent>` (`-logic.md` §8) does
+`apply_remote(&mut self, payload: &[u8]) -> Vec<TrameEvent>` (`-logic.md` section 8) does
 **not** receive. Enforcing it (Post-MVP) therefore requires threading the
 Sync-resolved `from_user_id` into `apply_remote` -- the same trusted,
-spoof-proof identity `apply_ephemeral` already gets (`-logic.md` §8, `-sync.md §3`),
+spoof-proof identity `apply_ephemeral` already gets (`-logic.md` section 8, `-sync.md section 3`),
 never an id read from the payload. The signature below shows that Post-MVP
 extension:
 
@@ -547,16 +547,16 @@ extension:
 fn apply_remote(&mut self, payload: &[u8], from_user_id: UserId) -> Vec<TrameEvent> { /* ... */ }
 ```
 
-A violation found this way emits `TrameEvent::ProtectionViolationWarning { from_user_id, description }` and **the delta is still applied** -- rejecting it would break convergence, which is the same trade-off validation makes (`TRAME-FEAT-022`, `TRAME-FEAT-023`). That is what "soft enforcement" means here, and why §6's security model says a modified client can bypass it.
+A violation found this way emits `TrameEvent::ProtectionViolationWarning { from_user_id, description }` and **the delta is still applied** -- rejecting it would break convergence, which is the same trade-off validation makes (`TRAME-FEAT-022`, `TRAME-FEAT-023`). That is what "soft enforcement" means here, and why section 6's security model says a modified client can bypass it.
 
 
 ---
 
 ## 7. ADDITIONAL MESSAGES (TrameEvent)
 
-> **Source of truth:** the `TrameEvent` enum lives in **`ambre-bus`** (`ambre-bus/src/app/trame/event.rs`, re-exported flat at the crate root and by `ambre-trame`) and constitutes the payload of `AppEvent::Trame`. `ambre-spec-trame-logic.md §9` documents the base; the variants below are **additions** for the features of this spec.
+> **Source of truth:** the `TrameEvent` enum lives in **`ambre-bus`** (`ambre-bus/src/app/trame/event.rs`, re-exported flat at the crate root and by `ambre-trame`) and constitutes the payload of `AppEvent::Trame`. `ambre-spec-trame-logic.md section 9` documents the base; the variants below are **additions** for the features of this spec.
 >
-> **No `serde`.** `TrameEvent` travel **by move** on `flume` (shared memory) inside `AppEvent::Trame` — no (de)serialization. Derives: `#[derive(Debug, Clone)]`.
+> **No `serde`.** `TrameEvent` travel **by move** on `flume` (shared memory) inside `AppEvent::Trame` -- no (de)serialization. Derives: `#[derive(Debug, Clone)]`.
 
 ```rust
 // Additions to TrameEvent for the features of this spec
@@ -602,17 +602,17 @@ pub enum TrameEvent {
 - The `is_filtered` flag is added to `DisplayCell` for the UI Thread to manage rendering.
 
 **Sort and DAG:**
-- The sort permutes the `rows_{sheet}` order list (one `mov` per displaced row, see §2); cells
+- The sort permutes the `rows_{sheet}` order list (one `mov` per displaced row, see section 2); cells
   are keyed by their move-invariant `Uid`, so no cell is rewritten. The engine's uid-anchored
   bytecode is **preserved** (no reseed/re-parse); the sort just rebuilds the `SheetIndex` and
   recomputes, refreshing the `formula_cache` from the new positions.
 - The `SheetIndex` row order is permuted to mirror the moves; each row's `Uid` -- and the cells
   keyed by it -- travel together.
 - Single-cell references **follow the data**: a `CellId` binds each axis to its row/column `Uid`
-  (`trame-logic §3`) resolved to a position at eval, so a reference to a sorted row still points
-  at the same physical cell after the sort (`trame-logic §12`). A *range* is a positional block
+  (`trame-logic section 3`) resolved to a position at eval, so a reference to a sorted row still points
+  at the same physical cell after the sort (`trame-logic section 12`). A *range* is a positional block
   (`Virtual` endpoints): sorting the rows inside `SUM(A1:A3)` reorders the same values, so the
-  block total is unchanged -- uid-bound endpoints would scatter and invert (`trame-logic §13`).
+  block total is unchanged -- uid-bound endpoints would scatter and invert (`trame-logic section 13`).
 
 **Conditional formatting and dirty:**
 - Conditional formatting rules are re-evaluated after each `compute_dirty_batch` for cells in the viewport.
@@ -638,7 +638,7 @@ returns a `TrameOutcome { display, update, ephemeral }`. The outbound flows:
 | `outcome.display` -> UI | `TrameEvent` (viewport, presence) -- shared WASM memory | No process boundary |
 | Data-validation message | Stored in `LoroMap` alongside cell content | Encrypted at rest like any cell value; the server sees ciphertext only |
 
-Range protection (§6) is soft client-side enforcement: the server is a Blind
+Range protection (section 6) is soft client-side enforcement: the server is a Blind
 Relay and cannot verify a protection because the content is encrypted. An
 official client respects it; a modified client can bypass it. No feature handler
 holds a Sync sink, imports `ambre-crypto`, or opens a socket.
@@ -652,12 +652,12 @@ the Sync and crypto specs in `1-Foundations/`; it MUST NOT be re-derived here.
 
 ## 9. QUALITY & TESTABILITY
 
-> What the built features guarantee, and what verifies each guarantee, is the table in §0. This section used to be a list of 30 `#[test]` names; 18 named real tests and 12 named tests for handlers that are still no-ops, with nothing distinguishing the two. The 18 are now `Verification` cells joined to a rule; the 12 are below, as what they always were -- intent.
+> What the built features guarantee, and what verifies each guarantee, is the table in section 0. This section used to be a list of 30 `#[test]` names; 18 named real tests and 12 named tests for handlers that are still no-ops, with nothing distinguishing the two. The 18 are now `Verification` cells joined to a rule; the 12 are below, as what they always were -- intent.
 
 * **Tier.** host, entirely (`just test-native`). Every feature here runs in the Logic thread on pure Rust.
-* **Mandatory belts per built feature.** A view feature (filter) lands with: a positive case, a no-op guard, a convergence case in the 2-peer proptest, and an "it does not change the data" case (`TRAME-FEAT-003` is the model). A mutation feature (sort) lands with: the permutation assertion, a header-pin case, a no-delta case, and a "references follow" case owned by `trame-logic §1`.
-* **Unbuilt handlers.** Their rules are `TRAME-FEAT-014..024` in §0, not prose here. When one of those handlers lands, its rows move from `unimplemented` to a `Verification` cell naming the test -- which is the whole point of writing them now rather than later.
-* **Definition of Done.** An increment is `[x]` only when its belts are green in CI **and** no invariant in §0 is left without a `Status`.
+* **Mandatory belts per built feature.** A view feature (filter) lands with: a positive case, a no-op guard, a convergence case in the 2-peer proptest, and an "it does not change the data" case (`TRAME-FEAT-003` is the model). A mutation feature (sort) lands with: the permutation assertion, a header-pin case, a no-delta case, and a "references follow" case owned by `trame-logic section 1`.
+* **Unbuilt handlers.** Their rules are `TRAME-FEAT-014..024` in section 0, not prose here. When one of those handlers lands, its rows move from `unimplemented` to a `Verification` cell naming the test -- which is the whole point of writing them now rather than later.
+* **Definition of Done.** An increment is `[x]` only when its belts are green in CI **and** no invariant in section 0 is left without a `Status`.
 
 ---
 
@@ -665,29 +665,29 @@ the Sync and crypto specs in `1-Foundations/`; it MUST NOT be re-derived here.
 
 > Tracked as Stories of Epic **E3** (Trame MVP) in `specs/ambre-roadmap.md`.
 
-**Phase 1 — MVP (with the engine)**
+**Phase 1 -- MVP (with the engine)**
 - [x] Shared filter: `TrameCommand::ApplyFilter` / `ClearFilter`, `filter_hidden_{sheet}` Loro *(Epic `E3`: `FilterKind::Values` / `Condition { op, value }` typed in `ambre-bus`; the failing rows' `row_uid`s are written into `filter_hidden_{sheet}` and broadcast, the definition persisted flat in `filters_{sheet}` (LWW). Hidden rows ride the viewport flagged `DisplayCell::is_filtered` (still counted by `=SUM`); the uid-keyed hidden set follows the data across a sort/insert, and `SetCellText` recomputes the active filter. Undoable (plain CRDT mutation). Emits `TrameEvent::FilterApplied { hidden_row_count, col }` / `FilterCleared` + `DataReset`. Tests: by-values, condition, sum-unaffected, clear, follows-sort, recompute-on-edit, remote-import, LWW convergence, undoable, no-op guards, full predicate coverage.)*
-- [x] Simple sort: `TrameCommand::SortRange` (single column) *(Epic `E3`: typed sort keys via `engine.evaluated_value` + `compare_cell_values` precedence `Number < Text < Boolean < Error < Empty`; `has_header` pin, ascending/descending. Realized as a **pure `rows_{sheet}` order permutation** (`MovableList::mov`): cells keyed by their move-invariant `Uid` follow for free, references follow the data (`trame-logic §2.A`, §12). Emits `TrameEvent::SortComplete` + `DataReset`. Tests: ascending whole-row move, descending+header, formulas follow data, no-op guards.)* **Depends on the own-uid cell model (`trame-logic §14`).**
-- [x] **Multi-column sort: `TrameCommand::SortRangeMulti`** *(promoted from Phase 2 to MVP; same pure permutation as single-column sort, lexicographic comparator over `sort_keys`. UI: `SortDialog`, `-ui` §5.C.)* *(Epic `E3`: `sort_range_multi` keys each sortable row by the evaluated value in every sort column and `sort_by`s lexicographically over the keys -- first non-equal column decides, each key applying its own ascending/descending direction via `compare_cell_values`. Out-of-range keys are dropped; the permutation is realized through the shared `realize_sort` helper (`mov` ops on `rows_{sheet}`, uid-anchored bytecode preserved). Both the typed ranged `SortRangeMulti` and the parameterless `SortSelectionMulti` (Logic resolves the range from the tracked selection, driven by the `SortDialog`) are wired. Emits `SortComplete` + `DataReset`.)*
-- [x] **Filter feedback on the first row** (UI story, `-ui` §5.D): Excel-style autofilter dropdown buttons on the filter range's header row, fed by `FilterApplied { col }`. *(Logic side unchanged -- the existing shared filter; this is the UX surface the funnel-only badge lacked. Delivered: always-on buttons on the active cell's current region (resolved UI-side from the viewport cache), chevron/funnel keyed off `filtered_col`, a click selects the column and opens the existing `FilterPopover` via a one-shot `FilterOpenPublisher` canvas->launcher intent that re-runs the context-menu `FILTER_COLUMN` path -- one filter code path, two entry points. See `-ui` §5.D.)*
+- [x] Simple sort: `TrameCommand::SortRange` (single column) *(Epic `E3`: typed sort keys via `engine.evaluated_value` + `compare_cell_values` precedence `Number < Text < Boolean < Error < Empty`; `has_header` pin, ascending/descending. Realized as a **pure `rows_{sheet}` order permutation** (`MovableList::mov`): cells keyed by their move-invariant `Uid` follow for free, references follow the data (`trame-logic section 2.A`, section 12). Emits `TrameEvent::SortComplete` + `DataReset`. Tests: ascending whole-row move, descending+header, formulas follow data, no-op guards.)* **Depends on the own-uid cell model (`trame-logic section 14`).**
+- [x] **Multi-column sort: `TrameCommand::SortRangeMulti`** *(promoted from Phase 2 to MVP; same pure permutation as single-column sort, lexicographic comparator over `sort_keys`. UI: `SortDialog`, `-ui` section 5.C.)* *(Epic `E3`: `sort_range_multi` keys each sortable row by the evaluated value in every sort column and `sort_by`s lexicographically over the keys -- first non-equal column decides, each key applying its own ascending/descending direction via `compare_cell_values`. Out-of-range keys are dropped; the permutation is realized through the shared `realize_sort` helper (`mov` ops on `rows_{sheet}`, uid-anchored bytecode preserved). Both the typed ranged `SortRangeMulti` and the parameterless `SortSelectionMulti` (Logic resolves the range from the tracked selection, driven by the `SortDialog`) are wired. Emits `SortComplete` + `DataReset`.)*
+- [x] **Filter feedback on the first row** (UI story, `-ui` section 5.D): Excel-style autofilter dropdown buttons on the filter range's header row, fed by `FilterApplied { col }`. *(Logic side unchanged -- the existing shared filter; this is the UX surface the funnel-only badge lacked. Delivered: always-on buttons on the active cell's current region (resolved UI-side from the viewport cache), chevron/funnel keyed off `filtered_col`, a click selects the column and opens the existing `FilterPopover` via a one-shot `FilterOpenPublisher` canvas->launcher intent that re-runs the context-menu `FILTER_COLUMN` path -- one filter code path, two entry points. See `-ui` section 5.D.)*
 - [x] Undo/Redo: `TrameCommand::Undo` / `Redo` via `UndoManager` Loro *(delivered under `trame-logic` Phase 1 -- see that section)*
 - [x] All feature variants are in the `TrameCommand` / `TrameEvent` enums (defined in `ambre-bus`, re-exported by `ambre-trame`; transported in `AppCommand::Trame` / `AppEvent::Trame`) *(Epic `E3`: commands `SaveFilterView` / `ActivateFilterView` / `SortRangeMulti` (+ `SortKey`) / `AddCondFormat` / `UpdateCondFormat` / `RemoveCondFormat` / `AddValidation` / `RemoveValidation` / `SetProtection` / `RemoveProtection` with payload types `GridRange`, `CondFormatKind`, `CondStyle`, `ValidationKind`, `ValidationOnInvalid`; events `FilterViewSaved` / `CondFormatsUpdated` / `ValidationError` / `ValidationWarning` / `ProtectionDenied` / `ProtectionViolationWarning` (`from_user_id: UserId`). Ranges carried in grid coordinates at the bus level (`RangeDep` is engine-private). Logic-thread handlers are explicit no-ops until their phase lands.)*
-- [x] **Pure** handlers: return `TrameEvent` (display) and/or a `TrameOutcome` (CRDT delta → `SyncCommand::SendUpdate` by the Logic dispatcher) — no direct inter-thread send from the app model (preserves host testability, cf. `ambre-spec-architecture.md §4`) *(Epic `E3`: `TrameState::handle_command` returns `TrameOutcome { display, update, ephemeral }`; `TrameState` holds no sink/sender. The Logic dispatcher (`ambre-logic::LogicState`) fans the outcome out -- `display → UiEvent::Viewport`, `update → SyncCommand::SendUpdate`, `ephemeral → SendEphemeral` -- adding the `DocumentId` it holds. `CommandSink` remains the test seam (`MockSyncHandle`).)*
-- [x] **Tested DoD (test debt, Epic `ET`).** All MVP `#[test]`s listed in §9 (filters, simple sort, undo/redo) green on the **host** tier in CI -- including the three Phase-1 undo belts (`undo_local_only_not_remote`, `undo_insert_row_rebuilds_sheet_index`, `undo_stack_cleared_on_doc_close`); the concurrent-filter LWW case (`concurrent_filters_converge_lww`) folds into the Trame 2-peer convergence property-test, which now drives `ApplyFilter`/`ClearFilter` ops and asserts the LWW-elected `is_filtered` set in its converged snapshot (`logic/convergence_tests.rs`, `trame-logic §14`, `ambre-spec-architecture.md §4`). *(The conditional-formatting / validation / protection `#[test]`s in §9 follow their Phase 2 / Post-MVP implementation.)*
+- [x] **Pure** handlers: return `TrameEvent` (display) and/or a `TrameOutcome` (CRDT delta -> `SyncCommand::SendUpdate` by the Logic dispatcher) -- no direct inter-thread send from the app model (preserves host testability, cf. `ambre-spec-architecture.md section 4`) *(Epic `E3`: `TrameState::handle_command` returns `TrameOutcome { display, update, ephemeral }`; `TrameState` holds no sink/sender. The Logic dispatcher (`ambre-logic::LogicState`) fans the outcome out -- `display -> UiEvent::Viewport`, `update -> SyncCommand::SendUpdate`, `ephemeral -> SendEphemeral` -- adding the `DocumentId` it holds. `CommandSink` remains the test seam (`MockSyncHandle`).)*
+- [x] **Tested DoD (test debt, Epic `ET`).** All MVP `#[test]`s listed in section 9 (filters, simple sort, undo/redo) green on the **host** tier in CI -- including the three Phase-1 undo belts (`undo_local_only_not_remote`, `undo_insert_row_rebuilds_sheet_index`, `undo_stack_cleared_on_doc_close`); the concurrent-filter LWW case (`concurrent_filters_converge_lww`) folds into the Trame 2-peer convergence property-test, which now drives `ApplyFilter`/`ClearFilter` ops and asserts the LWW-elected `is_filtered` set in its converged snapshot (`logic/convergence_tests.rs`, `trame-logic section 14`, `ambre-spec-architecture.md section 4`). *(The conditional-formatting / validation / protection `#[test]`s in section 9 follow their Phase 2 / Post-MVP implementation.)*
 
-**Phase 2 — V1**
+**Phase 2 -- V1**
 - [ ] Personal filter views (`TrameCommand::ActivateFilterView` / `SaveFilterView`, IndexedDB)
 - [ ] Conditional formatting: `TrameCommand::AddCondFormat` / `RemoveCondFormat` / `UpdateCondFormat`, basic kinds (value comparison, `IsEmpty`, `Formula`)
 - [ ] Data validation: `TrameCommand::AddValidation` / `RemoveValidation`, kinds `List`, `NumberRange`, `TextLength`
 - [ ] `SUBTOTAL` function in the engine (excludes filtered rows)
 
-**Phase 3 — Post-MVP**
+**Phase 3 -- Post-MVP**
 - [ ] Conditional formatting: `ColorScale2`, `ColorScale3`, `DataBar`, `TopN`
-- [ ] Range protection: `TrameCommand::SetProtection` / `RemoveProtection` (soft-enforcement, identified by `UserId: Uuid` — not `pub_key`)
+- [ ] Range protection: `TrameCommand::SetProtection` / `RemoveProtection` (soft-enforcement, identified by `UserId: Uuid` -- not `pub_key`)
 - [ ] Validation: `ListRange`, `DateRange`, `Regex`
 - [ ] Optimization: cache of pre-compiled conditional formatting rules
 - [ ] Version history / named snapshots (X37): today Trame keeps only the in-memory `UndoManager`
-  stack (§4), dropped on document close. Prose specs a persisted `meta.version_history` (`LoroList`
+  stack (section 4), dropped on document close. Prose specs a persisted `meta.version_history` (`LoroList`
   of `{name, created_at, snapshot_id}`, S3-backed, `prose-features`). Trame gets the same
   named-snapshot subsystem, reusing the SecSync S3 pipeline. Tracked as a Trame code change in the
   roadmap parity-gap Story (`ambre-roadmap.md`).

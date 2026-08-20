@@ -1,5 +1,5 @@
-# AMBRE — SPEC: DOCUMENT FILE FORMAT (`.ambre`)
-**Type:** Horizontal (Foundation — Interop / Persistence)
+# AMBRE -- SPEC: DOCUMENT FILE FORMAT (`.ambre`)
+**Type:** Horizontal (Foundation -- Interop / Persistence)
 **Status:** Draft
 **Implementation:** partial
 
@@ -11,10 +11,10 @@
 > clean way to leave, currently has no lossless option. For a product whose pitch is that the server cannot
 > read your data, "and you can only get it out through a lossy converter" is a weak ending.
 >
-> **Provenance.** The container was first defined in `ambre-spec-prose-interop.md §B`. It is cross-app -- it
+> **Provenance.** The container was first defined in `ambre-spec-prose-interop.md section B`. It is cross-app -- it
 > carries a `DocType` byte and its own `WrongDocType` path re-dispatches to another app's importer -- so
 > defining it inside a vertical spec, for an app that is still a stub, put a foundation-level contract in the
-> wrong place. This spec is now normative for the container; `prose-interop §B` references it and keeps only
+> wrong place. This spec is now normative for the container; `prose-interop section B` references it and keeps only
 > Prose's own concerns.
 
 ---
@@ -24,13 +24,13 @@
 ### A. Scope
 
 **Handles:** the container layout; the version registry and migration policy; `DocType` dispatch on read;
-the at-rest protection policy (§3); the error taxonomy; the round-trip invariants.
+the at-rest protection policy (section 3); the error taxonomy; the round-trip invariants.
 
 **Delegates:**
 * Producing and consuming the payload -- each app's interop module owns `export_ambre_plaintext()` /
   `import_ambre_plaintext()` against its own `LoroDoc`.
 * Compression and encryption -- `ambre-sync`, the sole compression/crypto consumer
-  (`ambre-spec-architecture.md §1`). The container layer carries none (I4).
+  (`ambre-spec-architecture.md section 1`). The container layer carries none (I4).
 * The CRDT schema inside the payload -- the app logic specs.
 
 **Out of scope:** third-party format conversion (the per-app interop specs); the wire protocol
@@ -43,17 +43,17 @@ the at-rest protection policy (§3); the error taxonomy; the round-trip invarian
 
 ### C. Invariants
 
-* **I1 — Lossless.** A `.ambre` round trip is the identity on document state. Unlike every other export
+* **I1 -- Lossless.** A `.ambre` round trip is the identity on document state. Unlike every other export
   path there is no `ConversionReport` and no warning list, because there is nothing to lose: the payload
   **is** the document. A `.ambre` export that needed to warn about anything would be a bug in the container,
   not a fidelity trade-off.
-* **I2 — Self-describing.** `doc_type` and `version` precede any app-specific parsing. A reader identifies a
+* **I2 -- Self-describing.** `doc_type` and `version` precede any app-specific parsing. A reader identifies a
   file without guessing from its extension or content.
-* **I3 — Forward-compatible reads, non-destructive failures.** An older version migrates on read; a newer
+* **I3 -- Forward-compatible reads, non-destructive failures.** An older version migrates on read; a newer
   version is refused cleanly. The original bytes are never mutated in place, under any error.
-* **I4 — No cryptography in the container layer.** `export_ambre_plaintext` / `import_ambre_plaintext` are
-  pure functions over bytes. Protection is a separate, explicit stage (§3).
-* **I5 — One container, every app.** No per-app header variant. The only app-dependent value is the
+* **I4 -- No cryptography in the container layer.** `export_ambre_plaintext` / `import_ambre_plaintext` are
+  pure functions over bytes. Protection is a separate, explicit stage (section 3).
+* **I5 -- One container, every app.** No per-app header variant. The only app-dependent value is the
   `doc_type` byte.
 
 ---
@@ -73,7 +73,7 @@ the at-rest protection policy (§3); the error taxonomy; the round-trip invarian
 | 22 | rest | `payload` | `LoroDoc::export_snapshot()`, uncompressed and unencrypted at this layer. |
 
 **Version registry.** One row per container version, appended never rewritten. A bump is a container change
-only -- it does **not** track the CRDT schema inside the payload (see §7 for why that distinction matters).
+only -- it does **not** track the CRDT schema inside the payload (see section 7 for why that distinction matters).
 
 | Version | Status | Change |
 |---|---|---|
@@ -84,11 +84,11 @@ only -- it does **not** track the CRDT schema inside the payload (see §7 for wh
 > runs `just fixtures-freeze <name>` for one **named** artifact per `doc_type` -- several generators share a
 > `doc_type`, so which lineage keeps migration coverage is a choice, not a default -- moving it from
 > `fixtures/current/` into `fixtures/frozen/`
-> (`ambre-spec-fixtures.md §4`). Skip it and the version that just left becomes untestable forever: no
+> (`ambre-spec-fixtures.md section 4`). Skip it and the version that just left becomes untestable forever: no
 > generator can produce it again, and `migrate_ambre` loses the only input that proves it works.
 
 **Two stages, and they are not interchangeable.** The container is stage one; protection is stage two, and
-which protection applies depends on **where the file is going** (§3):
+which protection applies depends on **where the file is going** (section 3):
 
 ```
    app state
@@ -104,9 +104,9 @@ which protection applies depends on **where the file is going** (§3):
 > **The network path does not use this container.** As built, `SyncCommand::SendSnapshot` carries a **bare**
 > `export_snapshot()` payload with no header, which `ambre-sync` compresses and seals under the
 > `DocumentKey`. That is correct and stays: the server already holds `document_id` and `doc_type` as routing
-> metadata, so a header would duplicate them inside the ciphertext for nothing. `prose-interop §B` described
+> metadata, so a header would duplicate them inside the ciphertext for nothing. `prose-interop section B` described
 > the container as "the reference persistence **and sharing** format", conflating the two destinations; that
-> conflation is the root of the at-rest question resolved in §3. **`.ambre` is a file format, not a wire
+> conflation is the root of the at-rest question resolved in section 3. **`.ambre` is a file format, not a wire
 > format.**
 
 ### B. Interface Contract (API)
@@ -203,11 +203,11 @@ writer path, N reader paths, is the only combination that stays testable as vers
 ## 3. SECURITY & CONFIDENTIALITY (ZERO-KNOWLEDGE)
 
 **Boundary audit.** The container layer opens no socket and touches no key (I4). Nothing in this spec can
-reach the Blind Relay; the network path is a different payload entirely (§2.A).
+reach the Blind Relay; the network path is a different payload entirely (section 2.A).
 
 ### At-rest protection of a local file -- the decision
 
-`prose-interop §B` said the native format is "encrypted XChaCha20-Poly1305 by `ambre-sync`" **without
+`prose-interop section B` said the native format is "encrypted XChaCha20-Poly1305 by `ambre-sync`" **without
 naming the key**. Read the obvious way -- the `DocumentKey`, the key Sync already holds for that document --
 that is a trap, and it is the reason this section exists.
 
@@ -234,7 +234,7 @@ Two obligations follow, and neither is optional:
 
 ## 4. QUALITY & TESTABILITY
 
-> Tiering, CI shape and the tested Definition of Done are normative in `ambre-spec-architecture.md §4`.
+> Tiering, CI shape and the tested Definition of Done are normative in `ambre-spec-architecture.md section 4`.
 > Referenced, not redefined.
 
 * **Test tiers.** **host** only. Pure byte handling; no `cfg(target_arch = "wasm32")` surface, no database.
@@ -260,9 +260,9 @@ Two obligations follow, and neither is optional:
 * **CRDT convergence.** N/A -- the container holds no CRDT state, it transports one.
 
 * **Benchmarks.** Export and import cost is dominated by the Loro snapshot, not by the 22-byte header;
-  measured through the load-path benches of `ambre-spec-fixtures.md §4` rather than duplicated here.
+  measured through the load-path benches of `ambre-spec-fixtures.md section 4` rather than duplicated here.
 
-* **Definition of Done (tested).** Per architecture §4, no phase in §7 ships `[x]` without its belt green in
+* **Definition of Done (tested).** Per architecture section 4, no phase in section 7 ships `[x]` without its belt green in
   CI.
 
 ---
@@ -271,7 +271,7 @@ Two obligations follow, and neither is optional:
 
 * **Performance Budget.** The container adds a 22-byte write and a 22-byte parse. It carries **no** budget
   of its own: export is `export_snapshot()` plus a header, import is a header parse plus `import_snapshot`,
-  and both of those legs are budgeted where they belong (`ambre-spec-fixtures.md §4`, load path legs 3 and
+  and both of those legs are budgeted where they belong (`ambre-spec-fixtures.md section 4`, load path legs 3 and
   4). Adding a target here would duplicate one.
 
 * **WASM Impact.** Negligible: header handling is a few dozen bytes of code in `ambre-core`, shared by every
@@ -284,12 +284,12 @@ Two obligations follow, and neither is optional:
 
 | Rejected | Justification |
 |---|---|
-| **Sealing a local file under the `DocumentKey`** | A revocation-triggered key rotation makes the file permanently unreadable, silently and long after export. Detailed in §3. |
-| **Using `.ambre` as the wire/snapshot format too** | The server already holds `document_id` and `doc_type` as routing metadata; putting them inside the ciphertext duplicates them and buys nothing. Conflating the two destinations is what produced the at-rest ambiguity in the first place (§2.A). |
+| **Sealing a local file under the `DocumentKey`** | A revocation-triggered key rotation makes the file permanently unreadable, silently and long after export. Detailed in section 3. |
+| **Using `.ambre` as the wire/snapshot format too** | The server already holds `document_id` and `doc_type` as routing metadata; putting them inside the ciphertext duplicates them and buys nothing. Conflating the two destinations is what produced the at-rest ambiguity in the first place (section 2.A). |
 | **A per-app container variant** | Four headers to keep in step, and "open this file" stops being one user action. The `doc_type` byte plus the dispatch rule cover the whole need. |
 | **A zip / OPC-style container** (OOXML's approach) | Buys multi-part packaging Ambre does not need -- the payload is one opaque CRDT blob -- at the cost of a zip dependency in the Logic thread and a much larger attack surface on untrusted input. |
 | **A text-based container (JSON/RON wrapper around base64)** | Inflates every file, and readability is illusory: the payload stays opaque binary. The header is the only part worth reading, and a 22-byte layout is trivially inspectable with any hex viewer. |
-| **Carrying the document name in the header** | The name is E2EE metadata (`name_enc`, `architecture §3`), and the filename already serves the purpose. Putting it in the header would leak it into a plaintext file whose contents the user may have chosen not to expose. |
+| **Carrying the document name in the header** | The name is E2EE metadata (`name_enc`, `architecture section 3`), and the filename already serves the purpose. Putting it in the header would leak it into a plaintext file whose contents the user may have chosen not to expose. |
 | **Version negotiation / backward-compatible writes** | Writers emit the current version only; compatibility is a read-side obligation. One writer and N readers stays testable as versions accumulate; N writers does not. |
 
 ---
@@ -301,7 +301,7 @@ Two obligations follow, and neither is optional:
 > block `E4`.
 
 > **Sequencing constraint (binding).** The *user-facing* export must not ship before the Trame per-cell
-> style consolidation (`ambre-roadmap.md` E6 / `trame-logic §11 bis.F`). That Story is scheduled while **no
+> style consolidation (`ambre-roadmap.md` E6 / `trame-logic section 11 bis.F`). That Story is scheduled while **no
 > third-party document exists**; a file on a user's disk is a stronger and more permanent commitment than a
 > server-side document, because it is beyond our reach to migrate. The same argument that defers other
 > third-party-document work applies here with more force, and it applies to `P1`, not to `P0`.
@@ -313,7 +313,7 @@ Two obligations follow, and neither is optional:
 > what it expects. That is a *successful open of a wrong document*, which is worse than a rejection.
 >
 > The payload half is solved separately, by the `meta` / `schema_version` register specified in
-> `ambre-spec-architecture.md §2.D` and built under `ARCH P8`. Both checks run, in order: the header first
+> `ambre-spec-architecture.md section 2.D` and built under `ARCH P8`. Both checks run, in order: the header first
 > (is this an `.ambre` this client can parse?), then the schema (is this a document this client understands?).
 > They are deliberately the same shape -- equal proceeds, older migrates, newer refuses non-destructively --
 > so there is one rule to learn.
@@ -321,7 +321,7 @@ Two obligations follow, and neither is optional:
 > **`ARCH P8` is a hard prerequisite of `DOCFILE P1`.** Container versioning alone would ship files whose
 > payloads have no migration story, and a file on a user's disk has unbounded age.
 
-### `DOCFILE P0` — Container  `[x]`
+### `DOCFILE P0` -- Container  `[x]`
 * `[x]` Shared header helper in `ambre-core`: layout, `AmbreHeader`, `DocFileError`, writer rule
   (`ambre-core/src/docfile.rs`).
 * `[x]` `migrate_ambre` harness with the version registry, exercised via a synthetic step. The registry is
@@ -333,15 +333,15 @@ Two obligations follow, and neither is optional:
   cross-app dispatch case lives in `ambre-logic` (`tests/docfile_dispatch.rs`), the first crate that links
   both engines, with a real file from each app rather than a hand-assembled header.
 
-### `DOCFILE P1` — User-facing export/import  `[ ]`
+### `DOCFILE P1` -- User-facing export/import  `[ ]`
 * `[ ]` Chrome: export to file (download) and import from file (picker), app-agnostic, routed by `doc_type`.
-* `[ ]` Plaintext-at-rest statement in the export UI (§3).
+* `[ ]` Plaintext-at-rest statement in the export UI (section 3).
 * `[ ]` **Belt:** the fixtures corpus drift gate (`ambre-spec-fixtures.md`) covering this reader/writer.
 * **Gated on** `ARCH P8` (persisted schema versioning) and on the E6 style consolidation, per the constraints
   above. The two gates are distinct: `ARCH P8` gives payload migration a mechanism, E6 makes the one schema
   change we already know about land while it is still free.
 
-### `DOCFILE P2` — Passphrase-sealed variant  `[ ]`
+### `DOCFILE P2` -- Passphrase-sealed variant  `[ ]`
 * `[ ]` Container version bump carrying salt + Argon2id parameters in the header.
 * `[ ]` Export-time passphrase prompt; import-time unlock with a typed wrong-passphrase error.
 * `[ ]` **Belt:** seal/open round trip, wrong passphrase, parameter upgrade on an old file.

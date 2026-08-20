@@ -1,9 +1,9 @@
-# AMBRE — SPEC: Server (Blind Relay)
+# AMBRE -- SPEC: Server (Blind Relay)
 **Type:** Horizontal (Layer/Engine)
 **Status:** Draft
 **Implementation:** partial
 
-> The AMBRE server is a **Blind Relay**: it routes, sequences, and persists encrypted blobs without ever accessing plaintext content. It exposes a REST API + WebSocket via Axum (Tokio), serialized in Postcard (binary) for real-time messages. It makes no business decisions on content — only metadata, ACLs, and sequencing are visible to it.
+> The AMBRE server is a **Blind Relay**: it routes, sequences, and persists encrypted blobs without ever accessing plaintext content. It exposes a REST API + WebSocket via Axum (Tokio), serialized in Postcard (binary) for real-time messages. It makes no business decisions on content -- only metadata, ACLs, and sequencing are visible to it.
 
 ---
 
@@ -14,7 +14,7 @@
 - Metadata storage and retrieval (PostgreSQL)
 - The ephemeral and real-time layer (Redis/Valkey)
 - Routing and sequencing of encrypted blobs to/from Object Storage (S3)
-- Generation of presigned URLs for direct client → S3 access
+- Generation of presigned URLs for direct client -> S3 access
 - WebRTC signaling relay (meetings)
 - Inter-client WebSocket broadcast via Redis PubSub
 
@@ -22,7 +22,7 @@ It does **not** handle:
 - Content encryption/decryption (Sync WASM thread domain)
 - CRDT logic (Logic WASM thread domain)
 - Cryptographic key management in plaintext (never transmitted to the server)
-- Content compression (opaque — version byte in ciphertext)
+- Content compression (opaque -- version byte in ciphertext)
 
 **Dependencies:**
 
@@ -34,7 +34,7 @@ It does **not** handle:
 | `rustis` | Multiplexed async Redis client (RESP3, Clone-able `Client` without pool) |
 | `aws-sdk-s3` | Official S3 SDK for presigned URLs |
 | `openidconnect` | OIDC Rust client, PKCE flows |
-| `ed25519-dalek` | Ed25519 signature verification on updates — **server's only crypto operation** |
+| `ed25519-dalek` | Ed25519 signature verification on updates -- **server's only crypto operation** |
 | `postcard` | Compact binary serialization for WebSocket messages |
 | `serde` / `serde_json` | REST serialization (JSON) |
 | `uuid` | UUIDv7 for identifiers |
@@ -44,27 +44,27 @@ It does **not** handle:
 | `axum-extra` | Typed headers (`Authorization: Bearer`) |
 | `jsonwebtoken` | OIDC id_token validation **and** our own access-token mint/verify (EdDSA) |
 
-> **`ambre-crypto` intentionally absent.** The server only needs to verify Ed25519 signatures — direct `ed25519-dalek` suffices. Importing `ambre-crypto` would expose `DocumentKey`, `MasterSeed` in the server process without any legitimate need (violation of the least privilege principle).
+> **`ambre-crypto` intentionally absent.** The server only needs to verify Ed25519 signatures -- direct `ed25519-dalek` suffices. Importing `ambre-crypto` would expose `DocumentKey`, `MasterSeed` in the server process without any legitimate need (violation of the least privilege principle).
 
-> **Wire types imported from `ambre-protocol`.** `ambre-server` imports `WsClientMsg`, `WsServerMsg`, `UpdatePublicData`, `EphemeralPublicData` from `ambre-protocol` — no local redefinition.
+> **Wire types imported from `ambre-protocol`.** `ambre-server` imports `WsClientMsg`, `WsServerMsg`, `UpdatePublicData`, `EphemeralPublicData` from `ambre-protocol` -- no local redefinition.
 
-**Invariants:** grammar and status values in `ambre-spec-architecture.md §4`; the boundary-level rules these refine are `ZK-001..ZK-008` in `ambre-spec-architecture.md §3`.
+**Invariants:** grammar and status values in `ambre-spec-architecture.md section 4`; the boundary-level rules these refine are `ZK-001..ZK-008` in `ambre-spec-architecture.md section 3`.
 
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
-| `SRV-001` | The server MUST NOT store or log plaintext document content. | `ZK-001`, `ZK-006`; §3 Boundary Audit | none beyond `ZK-006`: reviewer attention plus the explicit "never log the blob" rule in `s3.rs` | human-review |
-| `SRV-002` | An S3 presigned URL MUST NOT be issued before the PostgreSQL ACL check for the requesting user. | `ZK-008`; §3 | role refusals are covered (`ambre_server::routes::tests::media_confirm_upload_denied_to_viewer`, `::rotate_key_denied_to_editor`); **no test asserts a non-member is refused a URL** | unverified |
-| `SRV-003` | Every authenticated route MUST validate the access JWT (EdDSA signature + expiry) before touching PostgreSQL. | §1 | `ambre_server::jwt::tests::expired_token_is_rejected`, `::wrong_key_is_rejected`, `::mint_then_verify_roundtrips`; `routes::tests::unauth_endpoints_return_401` | verified |
+| `SRV-001` | The server MUST NOT store or log plaintext document content. | `ZK-001`, `ZK-006`; section 3 Boundary Audit | none beyond `ZK-006`: reviewer attention plus the explicit "never log the blob" rule in `s3.rs` | human-review |
+| `SRV-002` | An S3 presigned URL MUST NOT be issued before the PostgreSQL ACL check for the requesting user. | `ZK-008`; section 3 | role refusals are covered (`ambre_server::routes::tests::media_confirm_upload_denied_to_viewer`, `::rotate_key_denied_to_editor`); **no test asserts a non-member is refused a URL** | unverified |
+| `SRV-003` | Every authenticated route MUST validate the access JWT (EdDSA signature + expiry) before touching PostgreSQL. | section 1 | `ambre_server::jwt::tests::expired_token_is_rejected`, `::wrong_key_is_rejected`, `::mint_then_verify_roundtrips`; `routes::tests::unauth_endpoints_return_401` | verified |
 | `SRV-004` | A snapshot MUST be reachable only through the document it belongs to. | audit `C4` | `ambre_server::s3::tests::snapshot_key_validation_scopes_to_document`; `db::content::get_snapshot` filters on `id AND document_id` | verified |
-| `SRV-005` | A non-member MUST receive no document metadata -- not even `owner_id` or `doc_type`. | audit `H2`; §3 Boundary Audit | `ambre_server::routes::tests::get_document_hidden_from_non_member` | verified |
-| `SRV-006` | Per `(document, client)` the `clock` MUST increase strictly, validated and assigned atomically in a single Redis round trip. | §1, §2.A | `ambre_server::redis_ops::lua_tests::sequential_clock_succeeds`, `::duplicate_clock_rejected`, `::clock_mismatch_rejected`, `::independent_clients_have_independent_clocks`, `::lua_script_contains_key_validation` -- **db tier, and behind `--features test-helpers`**: until `just test-db` carried that feature these five compiled in no CI job at all (`ambre-spec-testing.md §7`) | verified |
-| `SRV-007` | Every update, snapshot and ephemeral frame MUST carry a valid Ed25519 signature by the key in the token's `spk` claim; an unsigned or forged frame MUST have no side effect. | §1, §3 | `ambre_server::ws::handler::message::tests::invalid_signature_is_rejected`, `::unsigned_ephemeral_is_rejected`, `::forged_author_key_writes_no_presence`, `::tampered_ciphertext_rejects_signature`; `routes::tests::create_snapshot_rejects_forged_author` | verified |
-| `SRV-008` | A `viewer` MUST produce no write, and a non-owner MUST NOT rotate a document key. | §2.B | `ambre_server::ws::handler::message::tests::viewer_role_delta_writes_no_pending`; `routes::tests::media_confirm_upload_denied_to_viewer`, `::rotate_key_denied_to_editor` | verified |
-| `SRV-009` | A refresh token MUST be consumable exactly once, including under concurrent use. | §3 Token Model | `ambre_server::redis_ops::redis_integration_tests::refresh_consume_rejects_a_replayed_token`, `::only_one_racing_caller_claims_a_refresh_token` (db tier) | verified |
-| `SRV-010` | An oversized frame MUST be rejected without partial side effects. | §6 Error Handling | `ambre_server::ws::handler::message::tests::oversized_delta_writes_no_pending`, `::oversized_ephemeral_writes_no_presence` | verified |
-| `SRV-011` | An organization or a document MUST NOT be left without an owner. | §2.B | `ambre_server::routes::orgs::tests::owner_cannot_demote_last_owner`, `::owner_cannot_remove_last_owner`; `routes::tests::owner_can_leave_when_another_owner_remains` | verified |
-| `SRV-012` | The server MUST perform no cryptographic operation beyond Ed25519 verification and minting its own access tokens. | §1 dependency note (least privilege) | `deny.toml` capability bans + CI job `deny` (see `ZK-004`); `ambre-server` no longer links AEAD, X25519 or Shamir | verified |
-| `SRV-013` | The rate limiter MUST fail closed on the auth tier. | §3 Network Security; audit `M6` | `ambre_server::middleware::rate_limit::tests::only_auth_tier_fails_closed` | verified |
+| `SRV-005` | A non-member MUST receive no document metadata -- not even `owner_id` or `doc_type`. | audit `H2`; section 3 Boundary Audit | `ambre_server::routes::tests::get_document_hidden_from_non_member` | verified |
+| `SRV-006` | Per `(document, client)` the `clock` MUST increase strictly, validated and assigned atomically in a single Redis round trip. | section 1, section 2.A | `ambre_server::redis_ops::lua_tests::sequential_clock_succeeds`, `::duplicate_clock_rejected`, `::clock_mismatch_rejected`, `::independent_clients_have_independent_clocks`, `::lua_script_contains_key_validation` -- **db tier, and behind `--features test-helpers`**: until `just test-db` carried that feature these five compiled in no CI job at all (`ambre-spec-testing.md section 7`) | verified |
+| `SRV-007` | Every update, snapshot and ephemeral frame MUST carry a valid Ed25519 signature by the key in the token's `spk` claim; an unsigned or forged frame MUST have no side effect. | section 1, section 3 | `ambre_server::ws::handler::message::tests::invalid_signature_is_rejected`, `::unsigned_ephemeral_is_rejected`, `::forged_author_key_writes_no_presence`, `::tampered_ciphertext_rejects_signature`; `routes::tests::create_snapshot_rejects_forged_author` | verified |
+| `SRV-008` | A `viewer` MUST produce no write, and a non-owner MUST NOT rotate a document key. | section 2.B | `ambre_server::ws::handler::message::tests::viewer_role_delta_writes_no_pending`; `routes::tests::media_confirm_upload_denied_to_viewer`, `::rotate_key_denied_to_editor` | verified |
+| `SRV-009` | A refresh token MUST be consumable exactly once, including under concurrent use. | section 3 Token Model | `ambre_server::redis_ops::redis_integration_tests::refresh_consume_rejects_a_replayed_token`, `::only_one_racing_caller_claims_a_refresh_token` (db tier) | verified |
+| `SRV-010` | An oversized frame MUST be rejected without partial side effects. | section 6 Error Handling | `ambre_server::ws::handler::message::tests::oversized_delta_writes_no_pending`, `::oversized_ephemeral_writes_no_presence` | verified |
+| `SRV-011` | An organization or a document MUST NOT be left without an owner. | section 2.B | `ambre_server::routes::orgs::tests::owner_cannot_demote_last_owner`, `::owner_cannot_remove_last_owner`; `routes::tests::owner_can_leave_when_another_owner_remains` | verified |
+| `SRV-012` | The server MUST perform no cryptographic operation beyond Ed25519 verification and minting its own access tokens. | section 1 dependency note (least privilege) | `deny.toml` capability bans + CI job `deny` (see `ZK-004`); `ambre-server` no longer links AEAD, X25519 or Shamir | verified |
+| `SRV-013` | The rate limiter MUST fail closed on the auth tier. | section 3 Network Security; audit `M6` | `ambre_server::middleware::rate_limit::tests::only_auth_tier_fails_closed` | verified |
 | `SRV-014` | Application code MUST contain no `unsafe`. | pillar "Security" | measured zero `unsafe` workspace-wide, but `ambre-server` carries no `#![forbid(unsafe_code)]` | unverified |
 
 ---
@@ -123,7 +123,7 @@ CREATE TABLE org_recovery_log (
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Documents (metadata only — content in S3)
+-- Documents (metadata only -- content in S3)
 -- doc_type: canonical French names, aligned with DocType enum in ambre-core
 CREATE TABLE documents (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -132,7 +132,7 @@ CREATE TABLE documents (
     name_enc   BYTEA,                        -- E2EE encrypted name (ciphertext under the Document Key; opaque to the server)
                                              -- GET /documents returns name_enc TOGETHER WITH the caller's doc_key_enc
                                              -- (from document_members) so the client decrypts the title without opening
-                                             -- the document. Source of DocumentSummary.name. See ambre-spec-architecture.md §3.
+                                             -- the document. Source of DocumentSummary.name. See ambre-spec-architecture.md section 3.
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -209,7 +209,7 @@ CREATE TABLE channel_members (
     PRIMARY KEY (channel_id, user_id)
 );
 
--- "Last read message" cursors (navigation metadata — unencrypted)
+-- "Last read message" cursors (navigation metadata -- unencrypted)
 CREATE TABLE channel_read_cursors (
     user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     channel_id UUID NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
@@ -218,7 +218,7 @@ CREATE TABLE channel_read_cursors (
     PRIMARY KEY (user_id, channel_id)
 );
 
--- Meetings (ephemeral — state in Redis, minimal Postgres archiving)
+-- Meetings (ephemeral -- state in Redis, minimal Postgres archiving)
 -- MVP: name in plaintext (meetings are ephemeral, not a critical secret)
 -- Post-MVP: ephemeral MeetingKey to encrypt the name
 CREATE TABLE meetings (
@@ -257,7 +257,7 @@ doc:{doc_id}:compact_lock      → STRING
 # Messaging segment seal lock
 channel:{channel_id}:seal      → STRING (SET NX, TTL 30s)
 
-# Global per-channel sequence (SecSync seq — same pattern as documents)
+# Global per-channel sequence (SecSync seq -- same pattern as documents)
 channel:{channel_id}:seq       → STRING (monotonic INCR)
 
 # Per-client per-channel clocks
@@ -281,7 +281,7 @@ channel chan:{channel_id}      → PUB/SUB (postcard-serialized WsServerMsg)
 
 # Per-user broadcast PubSub (server-initiated pushes not tied to an open doc)
 # Every WS connection subscribes to its own user:{user_id} channel for the whole
-# session. Used for events the recipient cannot yet be a doc-subscriber of —
+# session. Used for events the recipient cannot yet be a doc-subscriber of --
 # e.g. WsServerMsg::DocumentShared on a fresh invite (the invitee does not know
 # the document_id yet, so doc:{doc_id} could not reach them).
 channel user:{user_id}         → PUB/SUB (postcard-serialized WsServerMsg)
@@ -311,7 +311,7 @@ meeting:{meeting_id}:participants → HASH { user_id: JSON{joined_at, audio, vid
 channel meeting:{meeting_id}   → PUB/SUB
 ```
 
-> **Presence and Zero-Knowledge:** The value stored in `doc:{doc_id}:presence` is the opaque `Ephemeral.ciphertext` payload — the server never sees a participant's cursor, selection, or display name. Only `pub_key_hex` (the client's Ed25519 public key) is in plaintext, needed for the expiration sweep.
+> **Presence and Zero-Knowledge:** The value stored in `doc:{doc_id}:presence` is the opaque `Ephemeral.ciphertext` payload -- the server never sees a participant's cursor, selection, or display name. Only `pub_key_hex` (the client's Ed25519 public key) is in plaintext, needed for the expiration sweep.
 
 **Atomic clock validation + seq assignment.** Run as one Redis server-side script
 (executed atomically) so a peer's per-clock check and the sequence bump cannot
@@ -354,7 +354,7 @@ sequence.
         └── media/{content_hash}
 ```
 
-Conventions: `doc_id`, `channel_id`, `snapshot_id`, `seg_id` → UUIDv7. `seq` → zero-padded 10 digits. `content_hash` → BLAKE2b-256 hex (64 chars).
+Conventions: `doc_id`, `channel_id`, `snapshot_id`, `seg_id` -> UUIDv7. `seq` -> zero-padded 10 digits. `content_hash` -> BLAKE2b-256 hex (64 chars).
 
 ### B. Interface Contract (API)
 
@@ -366,8 +366,8 @@ Client (WASM)
   ├── HTTP/3 (QUIC/UDP) ──► Caddy (TLS terminated) ──► Axum (internal HTTP/1.1)
   │       REST API (JSON) + WebSocket upgrade (binary postcard)
   │
-  ├── Direct HTTPS ──► Object Storage S3 (presigned URLs — Caddy not involved)
-  └── DTLS-SRTP (UDP) ──► str0m SFU (WebRTC media — separate service)
+  ├── Direct HTTPS ──► Object Storage S3 (presigned URLs -- Caddy not involved)
+  └── DTLS-SRTP (UDP) ──► str0m SFU (WebRTC media -- separate service)
 ```
 
 Axum never sees QUIC. Caddy absorbs TLS/QUIC termination and proxies in HTTP/1.1.
@@ -391,7 +391,7 @@ fn decode_ws_msg(data: &[u8]) -> Result<WsClientMsg, WsError> { /* ... */ }
 
 The REST API uses **JSON** (Content-Type: application/json). Binary fields (keys, ciphertexts) are **base64url** encoded.
 
-#### WebSocket Types — imported from `ambre-protocol`
+#### WebSocket Types -- imported from `ambre-protocol`
 
 ```rust
 // ambre-server imports these types, does not redefine them.
@@ -412,7 +412,7 @@ use ambre_protocol::{
 };
 ```
 
-#### Axum Structure — AppState & Router
+#### Axum Structure -- AppState & Router
 
 ```rust
 // rustis::client::Client is Clone (internal Arc) -- no pool needed
@@ -495,14 +495,14 @@ ws          GET  /ws                              -> ws::upgrade                
 **Notes on key routes:**
 
 - **`GET /api/ws`**: single multiplexed WebSocket per client session. Documents and channels share this connection. The handler maintains a `HashSet<Uuid>` of subscribed documents and channels. Dynamic Subscribe/Unsubscribe. Meetings keep a separate endpoint (`GET /api/ws/meetings/{id}`) because SDP/ICE signaling has an ephemeral lifecycle without a Subscribe pattern. **Auth:** the browser `WebSocket` API forbids custom headers, so the access JWT travels in the **`?token=<jwt>`** query parameter (validated like a Bearer header). On an invalid/expired token the handler closes with application code **4401** so the client can refresh and reconnect silently (see sec.7). Each connection is assigned a server-generated `connection_id` (UUIDv4) -- the stateless access token carries no connection identity.
-- **`GET /api/documents`**: returns for each document `{ id, doc_type, name_enc, role, doc_key_enc, updated_at }` — the `document_members` join includes `doc_key_enc` for the current user in the response. The Sync thread can decrypt all names in a single fetch, without N round-trips.
+- **`GET /api/documents`**: returns for each document `{ id, doc_type, name_enc, role, doc_key_enc, updated_at }` -- the `document_members` join includes `doc_key_enc` for the current user in the response. The Sync thread can decrypt all names in a single fetch, without N round-trips.
 - **`POST /api/documents/{id}/media`** and **`POST /api/channels/{id}/media`**: confirmation routes after S3 upload. Body: `{ content_hash, mime_type, size_bytes }`. The server verifies ACL, inserts into the Postgres `media` table. Called by the Sync thread after successful S3 PUT.
-- **`POST /api/.../media/upload-url`**: generates a presigned PUT URL (TTL 15 min) after ACL verification. No Postgres insertion — the INSERT is done by the confirmation route above.
-- **`GET /api/documents/{id}/members`**: returns each member as `{ user_id, email, display_name, role, signing_pub_key, exchange_pub_key, doc_key_enc, wrapper_exchange_pub_key }`. `wrapper_exchange_pub_key` is the exchange key of `invited_by` (resolved via a `LEFT JOIN`), against which the recipient performs the ECDH unwrap of `doc_key_enc` — **not** its own `exchange_pub_key`. Falls back to the member's own key for legacy rows with a null `invited_by`.
+- **`POST /api/.../media/upload-url`**: generates a presigned PUT URL (TTL 15 min) after ACL verification. No Postgres insertion -- the INSERT is done by the confirmation route above.
+- **`GET /api/documents/{id}/members`**: returns each member as `{ user_id, email, display_name, role, signing_pub_key, exchange_pub_key, doc_key_enc, wrapper_exchange_pub_key }`. `wrapper_exchange_pub_key` is the exchange key of `invited_by` (resolved via a `LEFT JOIN`), against which the recipient performs the ECDH unwrap of `doc_key_enc` -- **not** its own `exchange_pub_key`. Falls back to the member's own key for legacy rows with a null `invited_by`.
 - **`POST /api/documents/{id}/share`**: after inserting the membership, publishes `WsServerMsg::DocumentShared { document_id, doc_type }` on `user:{invitee_id}` (sec.7) so the invitee's open sessions refresh their list live.
 - **`POST /api/documents/{id}/rotate-key`**: replaces every `doc_key_enc` **and sets `invited_by` to the rotator** (the new wrapper of record), inside one Postgres transaction. The `WsServerMsg::KeyRotationRequired` broadcast is emitted **at the end** of this route, not on `DELETE /share`. The new `doc_key_enc` values are in the database before other clients fetch them.
 
-#### Blind Relay Flow — Update Sequence
+#### Blind Relay Flow -- Update Sequence
 
 ```
 Client (WASM Sync thread)
@@ -512,12 +512,12 @@ Client (WASM Sync thread)
 Axum WS Handler
   │
   ├── 1. Validates the access JWT (?token= at upgrade): claims { sub, spk }
-  │       (signing_pubkey read from the verified `spk` claim — no Redis/PostgreSQL lookup)
+  │       (signing_pubkey read from the verified `spk` claim -- no Redis/PostgreSQL lookup)
   │
   ├── 2. Verifies document_id is in this connection's subscription set
   │       (in-memory HashSet<Uuid> per connection, populated by Subscribe)
   │
-  ├── 3. Verifies PostgreSQL ACL: user_id ∈ document_members (role ∈ editor|owner)
+  ├── 3. Verifies PostgreSQL ACL: user_id in document_members (role in editor|owner)
   │       (result cacheable in Redis TTL 60s by {user_id, doc_id})
   │
   ├── 4. Verifies Ed25519 signature (direct ed25519-dalek):
@@ -527,7 +527,7 @@ Axum WS Handler
   ├── 5. Redis Lua script (atomic):
   │       validates sequential clock → assigns global seq
   │
-  ├── 6. Pushes to doc:{id}:pending (LIST) — { seq, ciphertext_bytes }
+  ├── 6. Pushes to doc:{id}:pending (LIST) -- { seq, ciphertext_bytes }
   │       flush to S3 by the global flusher (see below)
   │
   ├── 7. Publishes to Redis PubSub: channel doc:{doc_id}
@@ -537,7 +537,7 @@ Axum WS Handler
           via local PubSub subscriptions to this Axum instance
 ```
 
-#### Snapshot Flow — Upload/Download via S3 Presigned URLs
+#### Snapshot Flow -- Upload/Download via S3 Presigned URLs
 
 Snapshots do **not** transit via WebSocket (they can be multiple MB). The `Snapshot` type in `ambre-protocol` defines the S3 blob format (ciphertext + nonce + public_data + commitment_tag + signature, postcard-serialized).
 
@@ -550,7 +550,7 @@ Upload Snapshot (compaction initiator)
     ├── 2. POST /api/documents/{id}/snapshot/upload-url
     │      → server verifies ACL (owner/editor), generates presigned PUT URL (TTL 15 min)
     │
-    ├── 3. PUTs directly to S3 (opaque blob — Caddy not involved)
+    ├── 3. PUTs directly to S3 (opaque blob -- Caddy not involved)
     │
     ├── 4. POST /api/documents/{id}/snapshot
     │      body: { snapshot_id, author_pubkey, parent_hash, parent_snapshot_proof,
@@ -591,14 +591,14 @@ Download Snapshot (on open, and on SnapshotAvailable)
 > covers every delta (the common F5-on-an-existing-document case), its post-open
 > `RequestMissing { after_seq: covered_seq }` matches **no** newer rows in the durable
 > index. The server MUST nonetheless send **one empty `MissingUpdates`** for that first,
-> empty page — it must not return silently. The client gates its hydration-complete
+> empty page -- it must not return silently. The client gates its hydration-complete
 > signal (`DocumentReady`, which dismisses the loading overlay) on **receiving** a
 > `MissingUpdates`; silence leaves the overlay spinning forever. The rule is scoped to the
 > **first** page only: a later empty page simply ends the paged replay (earlier pages
-> already released the client). The other early returns — not subscribed, replay throttle
-> (`REPLAY_MIN_INTERVAL`), membership recheck failed — are deliberate and send nothing.
+> already released the client). The other early returns -- not subscribed, replay throttle
+> (`REPLAY_MIN_INTERVAL`), membership recheck failed -- are deliberate and send nothing.
 
-#### Async S3 Flush — Global Model
+#### Async S3 Flush -- Global Model
 
 The "one task per active document" model is rejected (see section 8). The flusher is a **single global Tokio task** per Axum instance:
 
@@ -613,7 +613,7 @@ async fn global_s3_flusher(state: AppState) { /* ... */ }
 async fn flush_doc_pending(state: &AppState, pending_key: &str) { /* ... */ }
 ```
 
-This model has O(1) Tokio tasks instead of O(active_documents). Redis SCAN is non-blocking. Flush latency stays ≤ 15s + SCAN duration.
+This model has O(1) Tokio tasks instead of O(active_documents). Redis SCAN is non-blocking. Flush latency stays <= 15s + SCAN duration.
 
 ---
 
@@ -629,26 +629,26 @@ This model has O(1) Tokio tasks instead of O(active_documents). Redis SCAN is no
 | Master Seed | `master_key_enc` (encrypted client-side User Key Argon2) | Master Seed, passphrase |
 | Pubkeys | `signing_pubkey` (Ed25519), `exchange_pubkey` (X25519) | Private keys |
 | Presence | Opaque ciphertext (`presence_enc`) | Cursor, selection, plaintext name |
-| Signatures | Ed25519 signature per message | — |
-| Network metadata | Source IP, timestamps, blob sizes | — |
-| Auth | access JWT claims (`sub`, `spk`), refresh token → `user_id`, `signing_pubkey_hex` | Symmetric keys, passphrase |
+| Signatures | Ed25519 signature per message | -- |
+| Network metadata | Source IP, timestamps, blob sizes | -- |
+| Auth | access JWT claims (`sub`, `spk`), refresh token -> `user_id`, `signing_pubkey_hex` | Symmetric keys, passphrase |
 
 ### Zero-Knowledge Invariants
 
-Formalized as `ZK-001..ZK-008` (`ambre-spec-architecture.md §3`) and `SRV-001..SRV-014` (§1 above), which carry the verification mechanism and the status of each rule. They are not restated here: two copies of the same rule drift, and the copy without a `Verification` column is the one that gets believed.
+Formalized as `ZK-001..ZK-008` (`ambre-spec-architecture.md section 3`) and `SRV-001..SRV-014` (section 1 above), which carry the verification mechanism and the status of each rule. They are not restated here: two copies of the same rule drift, and the copy without a `Verification` column is the one that gets believed.
 
 ### Public Key Trust Model (TOFU)
 
 `GET /api/users/search?email` and `GET /api/users/{id}/pubkeys` return `exchange_pubkey` + `signing_pubkey`. A compromised server could substitute these keys (server MITM attack).
 
-**MVP Countermeasure — TOFU with out-of-band fingerprint:**
+**MVP Countermeasure -- TOFU with out-of-band fingerprint:**
 - On first invitation, the client displays the BLAKE2b-256 fingerprint (first 20 bytes, base32 encoded) of the fetched `exchange_pubkey`.
 - The inviter can verify this fingerprint out-of-band with the invitee (SMS, in person).
 - Accepted keys are stored in IndexedDB (`trusted_keys: HashMap<UserId, [u8; 32]>`). Any subsequent divergence triggers a "key changed" UI alert.
 - **Documented and displayed limit in the UI:** without out-of-band verification, protection relies on trust in the server.
 - **V2:** Key Transparency Log (append-only, Merkle-auditable).
 
-### Authentication — OIDC
+### Authentication -- OIDC
 
 ```
 Client                  Axum Server              OIDC Provider
@@ -666,14 +666,14 @@ Client                  Axum Server              OIDC Provider
   │                      ├── upserts users PostgreSQL     │
   │                      ├── mints access JWT (claims sub + spk, TTL 900s)
   │                      ├── stores opaque refresh token in Redis (TTL 30d)
-  │   200 { access_token, refresh_token, access_expires_in } ◄─┤  (JSON body — NO Set-Cookie)
+  │   200 { access_token, refresh_token, access_expires_in } ◄─┤  (JSON body -- NO Set-Cookie)
 ```
 
 Providers: Google, GitHub, Microsoft, Apple.
 
 > **Why JWT + refresh and not a cookie session.** The client is a cross-origin-isolated SPA whose Sync **worker** owns the network. The browser `WebSocket` API cannot attach cookies/headers reliably across the worker boundary, and a stateless EdDSA access token lets the WS hot path read `signing_pubkey` straight from the verified `spk` claim (no Redis/PG round-trip per update). Revocation is preserved by keeping the **refresh** token server-side (Redis, revoked at logout). See sec.8 (the prior "stateless JWT rejected" decision is reversed: the *refresh* token is the revocable part).
 
-### Token Model — Access JWT + Refresh
+### Token Model -- Access JWT + Refresh
 
 ```rust
 /// Access-token claims (EdDSA / Ed25519). Verified on every authenticated
@@ -687,9 +687,9 @@ pub struct AuthSession {
 }
 ```
 
-- **Access token** — EdDSA JWT, TTL 900s (`ACCESS_TTL_SECS`). Signed with `JwtKeys` derived from `JWT_SIGNING_SEED`. **Multi-instance deployments MUST set the same seed** so any instance can verify a token minted by another; absent (dev), an ephemeral key is generated and all tokens die on restart -- the client recovers via the 4401 reconnect path (sec.7).
-- **Refresh token** — opaque UUIDv4, stored `refresh:{token}` → `{ user_id, signing_pubkey_hex }` (TTL 30d, `REFRESH_TTL_SECS`). `POST /api/auth/refresh` validates and **rotates** it (old token consumed, new minted) and returns a fresh access JWT. `POST /api/auth/logout` deletes it.
-- **Dev login** (`POST /api/auth/dev/login`, gated by `DEV_MODE`) — upserts a user whose keypair is **deterministically derived from the username** (BLAKE2b), so the same `?user=alice` always reauthenticates to the same identity without OIDC. Disabled in production.
+- **Access token** -- EdDSA JWT, TTL 900s (`ACCESS_TTL_SECS`). Signed with `JwtKeys` derived from `JWT_SIGNING_SEED`. **Multi-instance deployments MUST set the same seed** so any instance can verify a token minted by another; absent (dev), an ephemeral key is generated and all tokens die on restart -- the client recovers via the 4401 reconnect path (sec.7).
+- **Refresh token** -- opaque UUIDv4, stored `refresh:{token}` -> `{ user_id, signing_pubkey_hex }` (TTL 30d, `REFRESH_TTL_SECS`). `POST /api/auth/refresh` validates and **rotates** it (old token consumed, new minted) and returns a fresh access JWT. `POST /api/auth/logout` deletes it.
+- **Dev login** (`POST /api/auth/dev/login`, gated by `DEV_MODE`) -- upserts a user whose keypair is **deterministically derived from the username** (BLAKE2b), so the same `?user=alice` always reauthenticates to the same identity without OIDC. Disabled in production.
 
 ### Bearer Authentication (extractor)
 
@@ -705,14 +705,14 @@ signing_pubkey }` from the `sub`/`spk` claims -- any missing/invalid step is `Un
 
 The WebSocket upgrade reuses the same verification on the `?token=` query parameter (browser WS cannot send an `Authorization` header).
 
-### Document Key Rotation — Server Side
+### Document Key Rotation -- Server Side
 
-The full flow is specified in `ambre-spec-sync.md` §3. The initiator client calls both routes in sequence. Server responsibilities:
+The full flow is specified in `ambre-spec-sync.md` section 3. The initiator client calls both routes in sequence. Server responsibilities:
 
 ```
 1. DELETE /api/documents/{id}/share/{uid}
    → DELETE FROM document_members WHERE document_id = $1 AND user_id = $2
-   → NO broadcast here — the new keys are not yet in the database
+   → NO broadcast here -- the new keys are not yet in the database
 
 2. POST /api/documents/{id}/rotate-key
    body: [{ user_id, doc_key_enc }] for all remaining members
@@ -720,9 +720,9 @@ The full flow is specified in `ambre-spec-sync.md` §3. The initiator client cal
      UPDATE document_members SET doc_key_enc = $new WHERE document_id = $id AND user_id = $uid
      for each (user_id, doc_key_enc) in the list
    → Verification: the user_ids in the list must all be in document_members
-     (the revoked member was already deleted in step 1 — their key cannot be re-encrypted)
+     (the revoked member was already deleted in step 1 -- their key cannot be re-encrypted)
    → broadcast WsServerMsg::KeyRotationRequired { revoked_user_id } via PubSub
-     (AT THIS POINT the new doc_key_enc values are in the database — no race condition.
+     (AT THIS POINT the new doc_key_enc values are in the database -- no race condition.
       Other clients fetching GET /members will receive the new keys.)
 ```
 
@@ -741,7 +741,7 @@ The full flow is specified in `ambre-spec-sync.md` §3. The initiator client cal
 ))
 ```
 
-> ⚠️ **COOP/COEP Note (REQUIRED).** The client's **Main** instance shares a **linear memory** (`SharedArrayBuffer`) between its UI and Logic threads (`wasm_thread`); the separate Sync worker inherits cross-origin isolation from it — see `ambre-spec-architecture.md §2.B`. `SharedArrayBuffer` requires the page to be **cross-origin isolated**, so the headers `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` (or `credentialless`) **must** be served on the main HTML document (and the worker bootstrap). Consequence to document for self-hosting: any embedded cross-origin resource must carry appropriate `Cross-Origin-Resource-Policy` / CORS, otherwise it is blocked. This is the accepted cost of copy-free typed `flume` transport across threads.
+> **WARNING -- COOP/COEP Note (REQUIRED).** The client's **Main** instance shares a **linear memory** (`SharedArrayBuffer`) between its UI and Logic threads (`wasm_thread`); the separate Sync worker inherits cross-origin isolation from it -- see `ambre-spec-architecture.md section 2.B`. `SharedArrayBuffer` requires the page to be **cross-origin isolated**, so the headers `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` (or `credentialless`) **must** be served on the main HTML document (and the worker bootstrap). Consequence to document for self-hosting: any embedded cross-origin resource must carry appropriate `Cross-Origin-Resource-Policy` / CORS, otherwise it is blocked. This is the accepted cost of copy-free typed `flume` transport across threads.
 
 TLS via **rustls** (Caddy as terminator). No OpenSSL in the Axum chain.
 
@@ -759,16 +759,16 @@ TLS via **rustls** (Caddy as terminator). No OpenSSL in the Axum chain.
 
 **Redis Lua script**: tested against local Valkey in CI. Cases: valid clock, invalid clock (CLOCK_MISMATCH), first update (current = 0), concurrency with two simultaneous clients.
 
-**Postcard serialization**: round-trip on all `WsClientMsg` / `WsServerMsg` variants — imported from `ambre-protocol`.
+**Postcard serialization**: round-trip on all `WsClientMsg` / `WsServerMsg` variants -- imported from `ambre-protocol`.
 
-**ACL**: each handler tested with owner, editor, viewer, non-member → HTTP code verification.
+**ACL**: each handler tested with owner, editor, viewer, non-member -> HTTP code verification.
 
-**Ed25519 signature verification**: update with valid signature → accepted. Invalid signature → 422. `pub_key` not matching session's `signing_pubkey` → 422.
+**Ed25519 signature verification**: update with valid signature -> accepted. Invalid signature -> 422. `pub_key` not matching session's `signing_pubkey` -> 422.
 
 ### Prop-Testing / Fuzzing
 
 `cargo-fuzz` on:
-- `decode_ws_msg`: any arbitrary binary input → `Err`, never panic.
+- `decode_ws_msg`: any arbitrary binary input -> `Err`, never panic.
 - Request parameter parsing (`after_seq`, UUIDs): no panic on malformed input.
 
 `proptest`: property "seq is strictly increasing" regardless of clock arrival order on the Lua script.
@@ -814,7 +814,7 @@ CI: `cargo test` with `DATABASE_URL` pointing to test PostgreSQL. `#[cfg(feature
 
 **Horizontal scalability:** the server is stateless at the application level. State is in Redis (PubSub, refresh tokens, presence, pending deltas, clocks/seq) and PostgreSQL. Multiple Axum instances coexist behind Caddy. Redis PubSub ensures WebSocket broadcasts reach clients on any instance.
 
-**Memory:** no in-process blob cache. Buffer `LIST doc:{id}:pending` in Redis. Average delta ~1 KB. 15s buffer on an active document ≈ 50 deltas × 1 KB = ~50 KB per open document.
+**Memory:** no in-process blob cache. Buffer `LIST doc:{id}:pending` in Redis. Average delta ~1 KB. 15s buffer on an active document ~ 50 deltas x 1 KB = ~50 KB per open document.
 
 ---
 
@@ -882,7 +882,7 @@ UnknownProvider                -> 400 UNKNOWN_PROVIDER
 Database | Redis | S3 | *      -> 500 INTERNAL_ERROR   (generic message)
 ```
 
-**WebSocket errors**: sent via `WsServerMsg::Error { code, message }` before close, postcard-serialized. **Auth failure at upgrade** is signalled with the application close code **4401** ("unauthorized", in the 4000-4999 user range) rather than a generic drop, so the client distinguishes an expired/rotated token (refresh + reconnect silently) from a network blip (plain backoff) -- see `ambre-spec-sync.md §2.G`.
+**WebSocket errors**: sent via `WsServerMsg::Error { code, message }` before close, postcard-serialized. **Auth failure at upgrade** is signalled with the application close code **4401** ("unauthorized", in the 4000-4999 user range) rather than a generic drop, so the client distinguishes an expired/rotated token (refresh + reconnect silently) from a network blip (plain backoff) -- see `ambre-spec-sync.md section 2.G`.
 
 ---
 
@@ -892,9 +892,9 @@ Database | Redis | S3 | *      -> 500 INTERNAL_ERROR   (generic message)
 
 **Multiplexed WebSocket:** Each WebSocket connection (`GET /api/ws`) maintains a `HashSet<Uuid>` of subscribed documents and a `HashSet<Uuid>` of subscribed channels. Redis PubSub subscribe/unsubscribe is dynamic: the server subscribes to the Redis channel `doc:{doc_id}` or `chan:{channel_id}` on `Subscribe`/`SubscribeChannel`, and unsubscribes on `Unsubscribe`/`UnsubscribeChannel` or disconnect. Meetings keep a separate WebSocket endpoint (`GET /api/ws/meetings/{id}`) because their ephemeral lifecycle (SDP/ICE signaling) does not follow the Subscribe/Unsubscribe pattern.
 
-**Per-user channel (`user:{user_id}`):** in addition to the dynamic per-document/per-channel subscriptions, every connection subscribes to **its own** `user:{user_id}` channel for the whole session (registered right after the connection is established, unsubscribed on disconnect). It carries server-initiated pushes the recipient could not otherwise receive because they are **not yet** a subscriber of the relevant document. The first case is **`WsServerMsg::DocumentShared { document_id, doc_type }`**, published to `user:{invitee_id}` when a document is shared (`POST /documents/{id}/share`): the invitee does not know `document_id` yet, so a `doc:{doc_id}` broadcast could never reach them. The client refreshes its document list and notifies the user — no polling. (Contrast: `KeyRotationRequired` rides `doc:{doc_id}` because the affected members are already subscribed.)
+**Per-user channel (`user:{user_id}`):** in addition to the dynamic per-document/per-channel subscriptions, every connection subscribes to **its own** `user:{user_id}` channel for the whole session (registered right after the connection is established, unsubscribed on disconnect). It carries server-initiated pushes the recipient could not otherwise receive because they are **not yet** a subscriber of the relevant document. The first case is **`WsServerMsg::DocumentShared { document_id, doc_type }`**, published to `user:{invitee_id}` when a document is shared (`POST /documents/{id}/share`): the invitee does not know `document_id` yet, so a `doc:{doc_id}` broadcast could never reach them. The client refreshes its document list and notifies the user -- no polling. (Contrast: `KeyRotationRequired` rides `doc:{doc_id}` because the affected members are already subscribed.)
 
-**PubSub hub (in-process fan-out — single Redis subscription per channel per instance).** ⚠️ `rustis` keeps subscriptions **connection-global**: a `Client` holds `HashMap<channel, (_, PubSubSender)>` -- **one** sender per channel per connection. Two WebSockets on the same `doc:X` over the shared client therefore collide ("already subscribed"), so a per-WS `PubSubStream` is **impossible** for collaboration. The server runs a single `PubSubHub` task (spawned once at boot, cloned into every `AppState`): it owns **one** `PubSubStream` on the shared RESP3 connection, ref-counts the Redis `SUBSCRIBE` per channel (subscribe on the first interested connection, unsubscribe when the last leaves), and **fans out in-process** -- on each Redis message it clones the (already postcard-encoded `WsServerMsg`) payload to every locally interested WS via an `mpsc` sink keyed by `connection_id`. The handler calls `pubsub.subscribe(channel, connection_id, outbound_tx)` / `unsubscribe(...)`. Binary payloads are published as `RefBulkString` (a raw `&[u8]` makes rustis panic, which would 1006-drop the publisher and trigger a reconnect storm).
+**PubSub hub (in-process fan-out -- single Redis subscription per channel per instance).** WARNING: `rustis` keeps subscriptions **connection-global**: a `Client` holds `HashMap<channel, (_, PubSubSender)>` -- **one** sender per channel per connection. Two WebSockets on the same `doc:X` over the shared client therefore collide ("already subscribed"), so a per-WS `PubSubStream` is **impossible** for collaboration. The server runs a single `PubSubHub` task (spawned once at boot, cloned into every `AppState`): it owns **one** `PubSubStream` on the shared RESP3 connection, ref-counts the Redis `SUBSCRIBE` per channel (subscribe on the first interested connection, unsubscribe when the last leaves), and **fans out in-process** -- on each Redis message it clones the (already postcard-encoded `WsServerMsg`) payload to every locally interested WS via an `mpsc` sink keyed by `connection_id`. The handler calls `pubsub.subscribe(channel, connection_id, outbound_tx)` / `unsubscribe(...)`. Binary payloads are published as `RefBulkString` (a raw `&[u8]` makes rustis panic, which would 1006-drop the publisher and trigger a reconnect storm).
 
 ```
 Axum instance A          Redis PubSub          Axum instance B
@@ -925,9 +925,9 @@ Alice sends Update            │                                 │
 
 The client sends a `WsClientMsg::Ephemeral` (encrypted payload) every ~10s. The server:
 1. `HSET doc:{id}:presence {pub_key_hex} {presence_enc_b64}` in Redis
-2. Forwards to all other clients via PubSub (the blob is opaque — pure relay)
+2. Forwards to all other clients via PubSub (the blob is opaque -- pure relay)
 
-Sweep every 30s: purge entries whose `last_seen > 15s` (auxiliary field `doc:{id}:presence_ts:{pub_key_hex}` → TTL 15s).
+Sweep every 30s: purge entries whose `last_seen > 15s` (auxiliary field `doc:{id}:presence_ts:{pub_key_hex}` -> TTL 15s).
 
 **Valkey 8+ migration:** `HEXPIRE doc:{id}:presence {pub_key_hex} 15` on each heartbeat. No more sweep timer.
 
@@ -941,22 +941,22 @@ No push notifications in MVP. The client queries `GET /api/channels/unread` on r
 
 | Technology / Approach | Reason |
 |---|---|
-| **`ambre-crypto` as a dependency of `ambre-server`** | Violates least privilege: exposes `DocumentKey`, `MasterSeed`, Argon2 in the server process. The only crypto operation needed is Ed25519 verification — direct `ed25519-dalek` suffices. |
+| **`ambre-crypto` as a dependency of `ambre-server`** | Violates least privilege: exposes `DocumentKey`, `MasterSeed`, Argon2 in the server process. The only crypto operation needed is Ed25519 verification -- direct `ed25519-dalek` suffices. |
 | **Redefining wire types in `ambre-server`** | `ambre-protocol` is the source of truth. Redefining locally creates guaranteed divergence (e.g., `pub_key: Vec<u8>` vs `[u8; 32]` observed in the original). |
 | **`deadpool_redis` / `redis-rs`** | Replaced by `rustis` (native RESP3 client, multiplexed, Clone-able `Client` without pool). |
 | **`doc_type` with English names** | `spreadsheet`, `document`, `whiteboard` diverge from application names. Canonical French names: `prose`, `trame`, `toile`, `murmure`. |
-| **Plaintext Redis presence** | `doc:{id}:presence` stored `name`, `color`, `cursor` as plaintext JSON — ZK violation. Replaced by `presence_enc` (opaque Ephemeral ciphertext). |
+| **Plaintext Redis presence** | `doc:{id}:presence` stored `name`, `color`, `cursor` as plaintext JSON -- ZK violation. Replaced by `presence_enc` (opaque Ephemeral ciphertext). |
 | **S3 flush: one Tokio task per active document** | Not scalable to >1000 active documents (1000 dormant tasks). Replaced by a single global flusher with Redis SCAN. |
 | **PostgreSQL lookup of `signing_pubkey` per update** | Adds a PostgreSQL query on the hot path (every WS update). `signing_pubkey` travels in the verified access-token `spk` claim. |
 | **Axum with native QUIC (quinn)** | Caddy as HTTP/3 terminator is lower operational risk. Axum only sees internal HTTP/1.1. |
-| **SSE instead of WebSockets** | Unidirectional (server → client). The client must send real-time updates. |
-| **One WebSocket per document/channel** | Connection waste (5 WS for a Toile with 4 embedded documents). Browser limits (~6 connections per origin). Messages already carry `document_id` in `publicData` — the server demultiplexes. Single multiplexed WS per session with Subscribe/Unsubscribe, single endpoint `GET /api/ws`. Meetings keep a separate endpoint (ephemeral signaling). |
+| **SSE instead of WebSockets** | Unidirectional (server -> client). The client must send real-time updates. |
+| **One WebSocket per document/channel** | Connection waste (5 WS for a Toile with 4 embedded documents). Browser limits (~6 connections per origin). Messages already carry `document_id` in `publicData` -- the server demultiplexes. Single multiplexed WS per session with Subscribe/Unsubscribe, single endpoint `GET /api/ws`. Meetings keep a separate endpoint (ephemeral signaling). |
 | **gRPC / Protobuf** | No native WASM browser support without grpc-web proxy. Postcard + WebSocket is simpler. |
 | **External message broker (NATS, Kafka)** | Over-engineering for MVP. Redis PubSub suffices. NATS JetStream migration possible in V2. |
-| **Cookie sessions (Redis `session:{id}`, HttpOnly + CSRF double-submit)** | ⚠️ **Reversed.** The COI SPA's Sync worker owns the network and cannot reliably attach cookies to the WebSocket; cookies also forced CSRF protection on every mutating route. Replaced by **Bearer access JWT (EdDSA, TTL 900s) + opaque revocable refresh token (Redis, TTL 30d)**. Revocation is preserved (refresh deleted at logout); the WS hot path reads `signing_pubkey` from the `spk` claim with no lookup. CSRF middleware removed (no ambient credential to forge). |
+| **Cookie sessions (Redis `session:{id}`, HttpOnly + CSRF double-submit)** | **WARNING -- Reversed.** The COI SPA's Sync worker owns the network and cannot reliably attach cookies to the WebSocket; cookies also forced CSRF protection on every mutating route. Replaced by **Bearer access JWT (EdDSA, TTL 900s) + opaque revocable refresh token (Redis, TTL 30d)**. Revocation is preserved (refresh deleted at logout); the WS hot path reads `signing_pubkey` from the `spk` claim with no lookup. CSRF middleware removed (no ambient credential to forge). |
 | **Stateless JWT as the *sole* token (no refresh)** | A bare stateless JWT is not revocable before `exp`. Kept the **refresh** token server-side in Redis (rotated on use, revoked at logout) as the revocable part; only the short-lived access token is stateless. |
 | **ORM (Diesel, SeaORM)** | Diesel blocks native async. SeaORM obscures critical queries. sqlx with compile-time check is the right abstraction level. |
-| **S3 blobs proxied by the server** | The server must not see the content. Presigned URLs: direct upload/download client → S3. |
+| **S3 blobs proxied by the server** | The server must not see the content. Presigned URLs: direct upload/download client -> S3. |
 | **`WsClientMsg::Ephemeral` without signature** | Without a signature, any client could forge a presence message on behalf of another. `signature: [u8; 64]` is mandatory (defined in `ambre-protocol`). |
 
 ---
@@ -965,7 +965,7 @@ No push notifications in MVP. The client queries `GET /api/channels/unread` on r
 
 > Detailed backlog of this spec; cross-cutting scheduling (milestones) lives in `specs/ambre-roadmap.md`.
 
-### SRV P0 — Core (Functional Blind Relay)
+### SRV P0 -- Core (Functional Blind Relay)
 
 - [x] Full PostgreSQL schema with sqlx migrations (`doc_type` in French names)
 - [x] OIDC auth (Google first)
@@ -974,15 +974,15 @@ No push notifications in MVP. The client queries `GET /api/channels/unread` on r
 - [x] `GET /api/documents` with inline `doc_key_enc` (`document_members` join)
 - [x] Single multiplexed WebSocket (`GET /api/ws`): per-document Subscribe/Unsubscribe, Update + Ephemeral + MissingUpdates + SnapshotRequired + SnapshotAvailable. HashSet<Uuid> of subscriptions per connection. Dynamic Redis PubSub.
 - [x] Redis Lua script (clock + seq)
-- [x] Global S3 flusher (single Tokio task, Redis SCAN) — *flusher loop + SCAN done; S3 upload wired*
+- [x] Global S3 flusher (single Tokio task, Redis SCAN) -- *flusher loop + SCAN done; S3 upload wired*
 - [x] S3 presigned URLs (snapshots + media)
 - [x] Snapshot routes: `GET /snapshot` (latest id + s3_key + `covered_seq`), `POST /snapshot` (confirm + insert + `SnapshotAvailable` broadcast), `POST /snapshot/upload-url`, `POST /snapshot/download-url`. `snapshots.covered_seq` column gates the client replay.
 - [x] `RequestMissing` replay rehydrates deltas from S3/Redis **concurrently** (`join_all` + re-sort by seq), not serially.
 - [x] Media routes: upload-url + download-url + confirmation POST
-- [x] Typed error handling (`thiserror` → HTTP)
-- [x] Structured logging (`tracing` → JSON → Promtail → Loki)
+- [x] Typed error handling (`thiserror` -> HTTP)
+- [x] Structured logging (`tracing` -> JSON -> Promtail -> Loki)
 
-### SRV P1 — Channels + Meetings
+### SRV P1 -- Channels + Meetings
 
 - [ ] Channels CRUD + members + ACL
 - [ ] Channel Redis keys (seq, clocks, pending, presence, sessions, PubSub)
@@ -991,10 +991,10 @@ No push notifications in MVP. The client queries `GET /api/channels/unread` on r
 - [ ] Segments: sealing, history
 - [ ] Unread tracking (PostgreSQL cursors)
 - [ ] Meetings: creation, join/leave, WebSocket signaling (MVP: plaintext name)
-- [x] Document Key rotation (server flow: DELETE share + POST rotate-key — broadcast on rotate-key)
+- [x] Document Key rotation (server flow: DELETE share + POST rotate-key -- broadcast on rotate-key)
 - [x] `KeyRotationRequired` notifications via PubSub (emitted on POST /rotate-key, not DELETE /share)
 
-### SRV P2 — Hardening & Organizations
+### SRV P2 -- Hardening & Organizations
 
 - [x] Per-user/IP rate limiting (tower middleware; key `user:{sub}` from the JWT, else `ip:{ip}`)
 - [x] ~~CSRF protection (Double Submit Cookie)~~ -- **removed**: Bearer JWT carries no ambient credential, so there is no cross-site request forgery surface (see sec.8).

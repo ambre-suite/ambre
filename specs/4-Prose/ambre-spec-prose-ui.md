@@ -12,11 +12,11 @@
 
 > **Architecture note.** The client uses the **two-instance model** -- a **Main** WASM
 > instance (UI thread + Logic thread sharing one linear memory via `wasm_thread`, typed
-> `flume` values) and a **separate Sync worker** -- see `ambre-spec-architecture.md §2.B`.
+> `flume` values) and a **separate Sync worker** -- see `ambre-spec-architecture.md section 2.B`.
 > For this spec:
 > - **Typed `flume` transport, no `postMessage`/postcard on the UI <-> Logic path.** The UI sends `LogicCommand::App { document_id, command: AppCommand::Prose(ProseCommand) }` and receives `UiEvent::Viewport { event: AppEvent::Prose(ProseEvent) }` -- Rust values **by move** on `flume`, no serialization on the UI side. (`postMessage`/postcard is only the Main <-> Sync hop, invisible to this layer.)
-> - **The Prose view is an `AppView` variant.** Like `TrameView`, the Prose presentation exposes the inherent driver methods (`update`/`plan_repaint`/`paint_content`/`paint_overlay`/`resize`/`handle_input`) that the `FrameHost` `match`es over -- adding Prose is a new `AppView::Prose(ProseView)` arm in `ambre-app` (see `ambre-spec-canvas.md §A`). The GPU pipeline (`QuadRenderer`, `WgpuSurface`) lives in `ambre-canvas`; the `FrameHost` driver lives in `ambre-app`.
-> - **Canvas / DOM boundary (`ambre-spec-ui.md §2.A`).** The canvas owns **content** (page column, caret, selections, content hit-testing, remote cursors, inline highlights). The DOM (Leptos, `ambre-chrome` + a specific `prose_chrome`) owns **all chrome** (contextual toolbar, slash menu, ruler, comment panel, dialogs, menus). Input is captured by DOM listeners and the transparent `<textarea>` -- **winit is not used** (`ambre-spec-ui.md §6`).
+> - **The Prose view is an `AppView` variant.** Like `TrameView`, the Prose presentation exposes the inherent driver methods (`update`/`plan_repaint`/`paint_content`/`paint_overlay`/`resize`/`handle_input`) that the `FrameHost` `match`es over -- adding Prose is a new `AppView::Prose(ProseView)` arm in `ambre-app` (see `ambre-spec-canvas.md section A`). The GPU pipeline (`QuadRenderer`, `WgpuSurface`) lives in `ambre-canvas`; the `FrameHost` driver lives in `ambre-app`.
+> - **Canvas / DOM boundary (`ambre-spec-ui.md section 2.A`).** The canvas owns **content** (page column, caret, selections, content hit-testing, remote cursors, inline highlights). The DOM (Leptos, `ambre-chrome` + a specific `prose_chrome`) owns **all chrome** (contextual toolbar, slash menu, ruler, comment panel, dialogs, menus). Input is captured by DOM listeners and the transparent `<textarea>` -- **winit is not used** (`ambre-spec-ui.md section 6`).
 > - Memory is **shared** across UI <-> Logic (single heap): the `ProseCommand` is **moved**, not copied.
 
 ---
@@ -31,7 +31,7 @@ This component handles (**canvas content** unless noted):
 - Text caret, selection (mouse, keyboard, touch); keyboard/IME input via the shared transparent `<textarea>` (`ambre-chrome`).
 - Remote collaborative cursors; inline comment and track-change highlights.
 - **DOM chrome** (Leptos, `ambre-chrome`/`prose_chrome`): contextual toolbar, slash menu, interactive ruler, comment side panel, accept/reject affordances.
-- Clipboard: the host-driven, Logic-authoritative `ClipboardBlob` flow (`clipboard_write`/`poll_clipboard`/`paste_clipboard`, `ambre-spec-ui.md §2.E`).
+- Clipboard: the host-driven, Logic-authoritative `ClipboardBlob` flow (`clipboard_write`/`poll_clipboard`/`paste_clipboard`, `ambre-spec-ui.md section 2.E`).
 
 This component delegates:
 - All CRDT mutations -> Logic thread via `flume`: `LogicCommand::App { document_id, command: AppCommand::Prose(ProseCommand) }`.
@@ -56,33 +56,33 @@ This component delegates:
 
 Input events reach the view as `InputEvent` (from `ambre-canvas`) via `AppView::handle_input`;
 DOM listeners and the transparent `<textarea>` are wired by `ambre-app`/`ambre-chrome`.
-**No `winit`** (`ambre-spec-ui.md §6`). `navigator.clipboard` is driven by the **host**, not
-by this crate (`ambre-spec-ui.md §2.E`).
+**No `winit`** (`ambre-spec-ui.md section 6`). `navigator.clipboard` is driven by the **host**, not
+by this crate (`ambre-spec-ui.md section 2.E`).
 
 All `web_sys::*` resources (`HTMLCanvasElement`, `GPUDevice`, `GPUQueue`) are `!Send`
 and confined to the UI thread. They never travel through a `flume` channel.
 
-**Invariants:** prefix `PROSE-UI`. Grammar and status values are normative in `ambre-spec-architecture.md §4`; the roll-up is `ambre-spec-testing.md §7`. Every row is `unimplemented` -- `crates/ambre-prose` is empty -- and lands with `ARCH P2` (Epic `E5`).
+**Invariants:** prefix `PROSE-UI`. Grammar and status values are normative in `ambre-spec-architecture.md section 4`; the roll-up is `ambre-spec-testing.md section 7`. Every row is `unimplemented` -- `crates/ambre-prose` is empty -- and lands with `ARCH P2` (Epic `E5`).
 
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
-| `PROSE-UI-001` | The UI thread MUST hold no document data: no `LoroDoc`, no `ProseState`, only view state and what arrives as `ProseEvent`. | §1; §6 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-UI-002` | Every mutation MUST leave the UI thread as a `ProseCommand`; there MUST NOT be a second model of the document. | §1; §6 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-UI-003` | Sends to the Logic thread MUST be non-blocking (`try_send`): the UI thread MUST NOT wait on it. | §1 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-UI-004` | Keystrokes MUST be displayed optimistically from a local draft buffer, never by mutating shared state on the UI side. | §1; §2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-UI-005` | The draft buffer MUST be discarded when the confirming `ProseEvent` arrives, and MUST NOT survive a divergence between what was typed and what the document accepted. | §2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-UI-006` | A full Parley layout or a TOC recompute MUST NOT run in the UI thread: both arrive pre-computed as `PageLayout`. | §1; §2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-UI-007` | Only visible pages plus one on each side MUST be built into vertex batches; the full document MUST NOT be walked per frame. | §2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-UI-008` | Hit-testing MUST be the exact inverse of the drawn layout, under zoom and scroll. | §2.E-bis | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-UI-009` | A click that lands in no glyph MUST resolve to the nearest valid caret position, never to no position. | §2.E-bis | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-UI-010` | Scroll position and selection MUST stay local: neither MUST enter the document. | §6 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-UI-011` | A remote cursor MUST come from an encrypted ephemeral and MUST be keyed by the Sync-resolved `UserId`. | §2.I; §6 | not built -- lands with `ARCH P2` (Epic `E5`); needs the `UserId` directory of `SYNC P4` | unimplemented |
-| `PROSE-UI-012` | The contextual toolbar, the slash menu and the ruler MUST be DOM chrome, not canvas overlays. | §2.F; §2.G; §2.H | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-UI-013` | A paste MUST be routed through the Logic thread as a command: the UI MUST NOT insert clipboard content into its own model. | §2.K | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-UI-014` | Every colour drawn MUST come from the theme palette; no literal colour in render code. | §2.D; `ambre-spec-ui.md` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-001` | The UI thread MUST hold no document data: no `LoroDoc`, no `ProseState`, only view state and what arrives as `ProseEvent`. | section 1; section 6 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-002` | Every mutation MUST leave the UI thread as a `ProseCommand`; there MUST NOT be a second model of the document. | section 1; section 6 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-003` | Sends to the Logic thread MUST be non-blocking (`try_send`): the UI thread MUST NOT wait on it. | section 1 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-004` | Keystrokes MUST be displayed optimistically from a local draft buffer, never by mutating shared state on the UI side. | section 1; section 2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-005` | The draft buffer MUST be discarded when the confirming `ProseEvent` arrives, and MUST NOT survive a divergence between what was typed and what the document accepted. | section 2.C | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-006` | A full Parley layout or a TOC recompute MUST NOT run in the UI thread: both arrive pre-computed as `PageLayout`. | section 1; section 2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-007` | Only visible pages plus one on each side MUST be built into vertex batches; the full document MUST NOT be walked per frame. | section 2.B | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-008` | Hit-testing MUST be the exact inverse of the drawn layout, under zoom and scroll. | section 2.E-bis | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-009` | A click that lands in no glyph MUST resolve to the nearest valid caret position, never to no position. | section 2.E-bis | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-010` | Scroll position and selection MUST stay local: neither MUST enter the document. | section 6 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-011` | A remote cursor MUST come from an encrypted ephemeral and MUST be keyed by the Sync-resolved `UserId`. | section 2.I; section 6 | not built -- lands with `ARCH P2` (Epic `E5`); needs the `UserId` directory of `SYNC P4` | unimplemented |
+| `PROSE-UI-012` | The contextual toolbar, the slash menu and the ruler MUST be DOM chrome, not canvas overlays. | section 2.F; section 2.G; section 2.H | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-013` | A paste MUST be routed through the Logic thread as a command: the UI MUST NOT insert clipboard content into its own model. | section 2.K | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-014` | Every colour drawn MUST come from the theme palette; no literal colour in render code. | section 2.D; `ambre-spec-ui.md` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
 | `PROSE-UI-015` | `ambre-prose`'s UI module MUST contain no `unsafe`. | README pillar "Security" | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
 
-> **Invariant coverage.** 15 `unimplemented`. The 16 ms frame budget of §1 is deliberately **not** a row: a number with no `criterion` bench behind it cannot be falsified, and turning §5's budgets into invariants is its own pass (`ambre-spec-testing.md §7`, seeding order).
+> **Invariant coverage.** 15 `unimplemented`. The 16 ms frame budget of section 1 is deliberately **not** a row: a number with no `criterion` bench behind it cannot be falsified, and turning section 5's budgets into invariants is its own pass (`ambre-spec-testing.md section 7`, seeding order).
 ---
 
 ## 2. TECHNICAL DESIGN & STATE
@@ -368,7 +368,7 @@ instantiates `WgpuSurface` -- the same code is reused by `prose-interop` with
 `KrillaSurface` for PDF export in the Logic thread.
 
 This is the body of the Prose `AppView`'s `paint_content` driver method. It adopts the
-**Foundation driver signature** (`ambre-spec-canvas.md §A`): the surface plus the
+**Foundation driver signature** (`ambre-spec-canvas.md section A`): the surface plus the
 `FontContext`/`TextCache`/`strip` the glyph cache and partial repaint need (P-39). `TextCache`
 supplies each run's `RunDrawState` on first paint (raster + upload, not shaping, P-38); `strip`
 is the dirty-rectangle set from `plan_repaint`, so only touched pages are re-emitted. All
@@ -414,8 +414,8 @@ pub fn build_display_list<S: DrawSurface>(
 #### Keyboard
 
 Keyboard input reaches the view as `InputEvent` through `AppView::handle_input` (there is
-**no `winit`** -- `ambre-spec-ui.md §6`). The physical source is the shared transparent
-`<textarea>` overlay (`ambre-spec-chrome.md §2.C`): it owns editing focus (a click in the
+**no `winit`** -- `ambre-spec-ui.md section 6`). The physical source is the shared transparent
+`<textarea>` overlay (`ambre-spec-chrome.md section 2.C`): it owns editing focus (a click in the
 canvas calls `textarea.focus()`), and DOM `keydown`/`beforeinput` are normalized by
 `ambre-app`/`ambre-chrome` into `InputEvent` before dispatch. `handle_input` returns `true`
 when the host must `preventDefault()`.
@@ -435,7 +435,7 @@ pub fn handle_key(
 Printable Latin text is **not** matched key-by-key here: it flows through the textarea's
 `beforeinput` event, which `ambre-app` turns into `InputEvent::TextInput { text }`. The view
 then pushes it to the draft buffer and emits `ProseCommand::InsertText`, and the host clears
-the textarea (`ambre-spec-chrome.md §2.C`).
+the textarea (`ambre-spec-chrome.md section 2.C`).
 
 ```rust
 // InputEvent::TextInput { text } branch (committed, non-composition input)
@@ -448,7 +448,7 @@ Every content-mutating edit (typing, Backspace, Delete, Enter, rich paste) first
 the active selection, so the two most common editing operations -- type-to-replace and
 delete-selection -- have a single, shared path. The primitive is `take_selection`: it
 normalizes the current selection to document order, emits one `ProseCommand::DeleteRange`
-(the cross-block delete + block-merge primitive, `prose-logic §C`), collapses the caret to
+(the cross-block delete + block-merge primitive, `prose-logic section C`), collapses the caret to
 the range start, and clears `state.selection`. It is a no-op (returns `false`) when there is
 no selection, so the caret-only paths below are unchanged when nothing is selected.
 
@@ -462,7 +462,7 @@ fn take_selection(state: &mut ProseUiState, to_logic: &flume::Sender<LogicComman
 
 /// Backspace: delete the selection if any, else the grapheme before the caret. At offset 0
 /// with no selection, merge with the previous block via a zero-width cross-block DeleteRange
-/// (the block-merge case of prose-logic §C).
+/// (the block-merge case of prose-logic section C).
 fn delete_backward(state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>) { /* ... */ }
 
 /// Delete (forward): selection if any, else the grapheme after the caret; at block end,
@@ -475,12 +475,12 @@ fn split_block(state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>)
 
 Ordering on the `flume` channel is preserved, so the `DeleteRange` always applies before the
 following `InsertText`/`SplitBlock`; grouping both under one undo step is Logic's concern
-(undo granularity, `prose-features §I`).
+(undo granularity, `prose-features section I`).
 
 #### IME (Input Method Editor)
 
-IME (Japanese, Korean, Chinese, Vietnamese…) is **not owned by `prose-ui`**: it is handled by
-the shared transparent `<textarea>` pipe in `ambre-chrome` (`ambre-spec-chrome.md §2.C`). The
+IME (Japanese, Korean, Chinese, Vietnamese...) is **not owned by `prose-ui`**: it is handled by
+the shared transparent `<textarea>` pipe in `ambre-chrome` (`ambre-spec-chrome.md section 2.C`). The
 textarea captures `compositionstart -> compositionupdate* -> compositionend`; `ambre-app`
 forwards them to the view as `InputEvent::Composition { phase, text }`. During composition the
 view renders the intermediate text in the draft buffer with a **composition style** (dotted
@@ -503,7 +503,7 @@ pub fn handle_composition(
 #### Mouse & Touch
 
 Pointer input arrives as **`InputEvent` variants** (from `ambre-canvas`, `ambre-spec-canvas.md
-§A`) -- there is no separate `PointerEvent` type on this path (P-136). The DOM `pointerdown`/
+section A`) -- there is no separate `PointerEvent` type on this path (P-136). The DOM `pointerdown`/
 `pointermove`/`pointerup` listeners in `ambre-app` normalize to
 `InputEvent::PointerDown/PointerMove/PointerUp { x, y, buttons, click_count, ctrl, shift }`,
 where `x`/`y` are **CSS pixels relative to the canvas top-left** (not doc coordinates) and
@@ -527,7 +527,7 @@ pub fn handle_pointer(
 ### E-bis. Interaction Model (coordinates, hit-test, cursor, drag, zoom)
 
 This subsection defines, **once**, every handler the keyboard/pointer/IME dispatchers above
-reference. All caret positions use the **canonical unit of `prose-logic §C`: a UTF-8 byte
+reference. All caret positions use the **canonical unit of `prose-logic section C`: a UTF-8 byte
 offset within the block `LoroText`** (P-130); grapheme boundaries are computed on that byte
 string. Doc coordinates are document pixels (pre-zoom, pre-scroll); screen coordinates are CSS
 pixels relative to the canvas.
@@ -646,9 +646,9 @@ pub fn apply_zoom(state: &mut ProseUiState, factor: f32, focus_screen: Vec2) { /
   the caret to the delta's primary edit point (`reposition_cursor_to_confirmed`) rather than
   leaving it at a now-invalid offset; a selection is collapsed to that point.
 - **Remote-cursor jump rule (P-146).** A remote cursor whose new position is **non-adjacent** to
-  its previous one skips the 100ms interpolation (§I) and snaps, so a collaborator jumping across
+  its previous one skips the 100ms interpolation (section I) and snaps, so a collaborator jumping across
   the document does not draw a cursor sliding through unrelated text.
-- **IME reanchor (P-131).** Covered by `DraftBuffer::reanchor` (§C): a remote delta mid-composition
+- **IME reanchor (P-131).** Covered by `DraftBuffer::reanchor` (section C): a remote delta mid-composition
   shifts `insert_pos`, so `compositionend` emits `InsertText` at the corrected byte offset.
 - **Slash menu race/close (P-132, P-133).** `/` opens the menu optimistically but still flows to
   `beforeinput` so the model records the character (round-trip is idempotent, P-132); the menu
@@ -679,10 +679,10 @@ never-painted blocks (P-137).
 
 The contextual toolbar is a **DOM Leptos component** (`prose_chrome::FormatBar`, built on
 `ambre-chrome`), like Trame's `FormatBar` -- **not** a canvas `DrawSurface` overlay
-(`ambre-spec-ui.md §2.A`, `ambre-spec-chrome.md §2.B`). It appears anchored above the
+(`ambre-spec-ui.md section 2.A`, `ambre-spec-chrome.md section 2.B`). It appears anchored above the
 selection on `PointerUp` with a non-empty selection and hides when the selection is canceled.
 The canvas view computes the anchor rectangle and raises a Leptos signal (Canvas -> DOM via
-signals, `ambre-spec-ui.md §2.C`); the toolbar element is **transform-synced** to that anchor
+signals, `ambre-spec-ui.md section 2.C`); the toolbar element is **transform-synced** to that anchor
 each frame so it tracks scroll. Its buttons invoke `CommandId`s from `ambre-commands`, which
 map to `ProseCommand`s.
 
@@ -715,8 +715,8 @@ pub enum TriState { #[default] Off, On, Mixed }
 
 **Toolbar buttons:**
 
-`B` `I` `U` `S` `<>` (inline code) | `🔗` (link) | `H1` `H2` `H3` (change block type)
-| `"` (blockquote) | `···` (more -> color picker, font size)
+`B` `I` `U` `S` `<>` (inline code) | `[link]` | `H1` `H2` `H3` (change block type)
+| `"` (blockquote) | `[more]` (color picker, font size)
 
 Each button invokes a `CommandId` (`ambre-commands`) resolved to a `ProseCommand`:
 - Toggle mark -> `ProseCommand::ApplyMark` or `ProseCommand::RemoveMark`.
@@ -724,7 +724,7 @@ Each button invokes a `CommandId` (`ambre-commands`) resolved to a `ProseCommand
 
 The toolbar is a DOM Leptos element (`prose_chrome::FormatBar`), transform-synced to the
 selection anchor -- no canvas z-order concern, the browser compositor layers DOM over canvas.
-Overflow (`⋯`) and mobile bottom-sheet behavior follow `ambre-spec-chrome.md §2.B`.
+Overflow (`...`) and mobile bottom-sheet behavior follow `ambre-spec-chrome.md section 2.B`.
 
 ---
 
@@ -771,18 +771,18 @@ pub enum SlashCommand {
 
 | Label | Icon | Command |
 |-------|-------|---------|
-| Text | ¶ | `InsertBlock(Paragraph)` |
+| Text | [para] | `InsertBlock(Paragraph)` |
 | Heading 1 | H1 | `SetHeading(1)` |
 | Heading 2 | H2 | `SetHeading(2)` |
 | Heading 3 | H3 | `SetHeading(3)` |
-| Bullet list | • | `InsertBlock(ListItem { Bullet })` |
+| Bullet list | [bullet] | `InsertBlock(ListItem { Bullet })` |
 | Numbered list | 1. | `InsertBlock(ListItem { Ordered })` |
-| Task list | ☑ | `InsertBlock(ListItem { Todo })` |
-| Table | ⊞ | `InsertTable { rows: 3, cols: 3 }` |
+| Task list | [check] | `InsertBlock(ListItem { Todo })` |
+| Table | [grid] | `InsertTable { rows: 3, cols: 3 }` |
 | Code | `</>` | `SetCodeBlock { lang: None }` |
 | Separator | -- | `InsertHRule` |
-| Page break | ⬜ | `InsertPageBreak` |
-| Table of contents | ≡ | `InsertToc` |
+| Page break | [pagebreak] | `InsertPageBreak` |
+| Table of contents | [toc] | `InsertToc` |
 
 Selection via `^` `v` `Enter`. Close via `Escape` or click outside the menu.
 The `/` and `query` are removed from the body text before sending the block command.
@@ -829,13 +829,13 @@ handles emit `ProseCommand::SetParagraphStyle` on `on_pointer_up`.
 
 Remote cursors are received via `ProseEvent::RemoteCursors` from the Logic thread.
 The author identity is the **Sync-resolved `from_user_id`** (spoof-proof,
-`ambre-spec-sync.md §3`): `ambre-sync` decrypts the `Ephemeral` message and resolves
+`ambre-spec-sync.md section 3`): `ambre-sync` decrypts the `Ephemeral` message and resolves
 the canonical `UserId` before delivery, so the Logic thread never resolves identity
 itself. The peer-authored payload carries only the cursor position and a self-asserted,
 cosmetic `display_name` -- never a `user_id`. Each peer is assigned a color derived from
 that `UserId` via the **shared cross-app helper** `ambre_draw::peer::peer_color` -- the
 same function Trame and Toile call, so a given collaborator has the same color across
-all apps in the suite. Prose does not reimplement the hash (see `ambre-spec-canvas.md §D`).
+all apps in the suite. Prose does not reimplement the hash (see `ambre-spec-canvas.md section D`).
 
 ```rust
 // ambre-prose/src/ui/remote_cursor.rs
@@ -890,7 +890,7 @@ Suggestion **highlights are canvas content** (drawn inline by the view):
 - **Suggested insertion:** green underlined text, very light green background.
 - **Suggested deletion:** red strikethrough text, very light red background.
 
-The `✓ Accept` / `✗ Reject` affordance is a **DOM Leptos popover** (`prose_chrome`),
+The `Accept` / `Reject` affordance is a **DOM Leptos popover** (`prose_chrome`),
 anchored (transform-synced) to the hovered suggestion via a Leptos signal the view raises;
 its buttons invoke `ProseCommand::AcceptSuggestion` / `RejectSuggestion`. It is not a canvas
 overlay.
@@ -900,7 +900,7 @@ overlay.
 ### K. Clipboard
 
 Prose uses the shared, **Logic-authoritative, host-driven** clipboard model
-(`ambre-spec-ui.md §2.E`). `prose-ui` **never** calls `navigator.clipboard` -- the host
+(`ambre-spec-ui.md section 2.E`). `prose-ui` **never** calls `navigator.clipboard` -- the host
 (`ambre-app`) performs the OS clipboard I/O inside the user-activation window. The transport
 type is the app-agnostic `ClipboardBlob { text: String, ambre: Option<Vec<u8>> }` (`ambre-bus`):
 `text` is the `text/plain` mirror; `ambre` is Prose's opaque payload (postcard of a typed
@@ -921,7 +921,7 @@ pub fn poll_clipboard(&mut self) -> Option<ClipboardBlob> { /* ... */ }
 /// Native paste: prefer the in-memory blob when the OS text mirror still matches it
 /// (full fidelity), else decode blob.ambre; otherwise fall back to the plain-text mirror.
 /// The `ClipboardBlob` carries only { text, ambre } -- there is NO text/html on the OS
-/// clipboard (Foundation clipboard model, `ambre-spec-ui.md §2.E`), so paste has exactly
+/// clipboard (Foundation clipboard model, `ambre-spec-ui.md section 2.E`), so paste has exactly
 /// two outcomes. Importing a foreign HTML/docx/md *document* is a separate flow (file open
 /// or drag-drop -> ProseCommand::ImportDocument), not a clipboard paste.
 pub fn paste_clipboard(&mut self, blob: ClipboardBlob) { /* ... */ }
@@ -963,7 +963,7 @@ Chrome (toolbar, slash menu, ruler, comment panel) inherits ARIA from `ambre-chr
 | Flow | Data | Risk | Mitigation |
 |------|---------|--------|------------|
 | `flume` UI -> Logic thread | Typed `ProseCommand` (in `LogicCommand::App`) | Plaintext data in the **shared** WASM heap of the threads | Normal: the heap is only accessible from inside the user's browser process (sandbox). The value is **moved** between threads -- no serialization, no boundary copy, no external exposure. |
-| Clipboard write (host `navigator.clipboard.write`, `ClipboardBlob`) | `text/plain` mirror + opaque `x-ambre` payload of the selection | The browser may expose the clipboard to other tabs | Browser standard -- outside AMBRE's control; `prose-ui` never touches `navigator.clipboard` (host-driven, `ambre-spec-ui.md §2.E`) |
+| Clipboard write (host `navigator.clipboard.write`, `ClipboardBlob`) | `text/plain` mirror + opaque `x-ambre` payload of the selection | The browser may expose the clipboard to other tabs | Browser standard -- outside AMBRE's control; `prose-ui` never touches `navigator.clipboard` (host-driven, `ambre-spec-ui.md section 2.E`) |
 | Document import (foreign HTML/docx via file open or drag-drop, `ProseCommand::ImportDocument`) | Untrusted external document bytes | Malicious HTML | Routed through `import_html` (html5ever sanitizes) in the Logic thread -- *not* a clipboard-paste path |
 | Remote cursors | `display_name` received via `ProseEvent::RemoteCursors` | Already decrypted in the Logic thread | No additional exposure |
 
@@ -991,7 +991,7 @@ already-decrypted data transmitted by the Logic thread.
 
 | Case | Method |
 |-----|---------|
-| wgpu rendering: page rendered without panic on 800×600 canvas | `wasm-bindgen-test` with headless canvas |
+| wgpu rendering: page rendered without panic on 800x600 canvas | `wasm-bindgen-test` with headless canvas |
 | `flume` UI -> Logic thread: `LogicCommand::App` emitted and routed to `ProseState` | Mock `flume` channels (host test) |
 | `paste_clipboard`: `ClipboardBlob` with `ambre` -> `PasteRich`; blob without `ambre` -> plain-text `InsertText` (two outcomes only, no HTML branch) | Host-driven, `ClipboardBlob` fixtures (no `navigator.clipboard` in `prose-ui`) |
 
@@ -999,7 +999,7 @@ already-decrypted data transmitted by the Logic thread.
 
 Snapshots of rendered pages via `QuadRenderer` compared to reference snapshots (PNG).
 Tool: custom cargo script that exports the display list as PNG via `wgpu` headless.
-Tolerance: pixel diff ≤ 2% (anti-aliasing varies by GPU).
+Tolerance: pixel diff <= 2% (anti-aliasing varies by GPU).
 
 ---
 
@@ -1082,17 +1082,17 @@ source of truth.
 
 | Alternative | Rejected because |
 |-------------|-------------|
-| **Parley shaping in the UI thread** | Shaping is O(n_glyphs) and can exceed 16 ms on a long block. Crucially, **pagination already shapes every block in the Logic thread** (`prose-logic §2.B`) to measure page breaks -- so shaping in the UI would *duplicate* that work and risk blocking the render thread (violating the "render thread never blocked by computation" pillar). The UI receives pre-shaped `ParleyRunData` and only draws glyphs. This is a deliberate Prose-specific departure from the generic UI-thread `TextCache` shaping path (`ambre-spec-canvas.md §D`, used for Trame single-line cells); the Foundation Prose-frame budgets are annotated accordingly (`ambre-spec-chrome.md §5.A`, `ambre-spec-canvas.md §5.A`). |
+| **Parley shaping in the UI thread** | Shaping is O(n_glyphs) and can exceed 16 ms on a long block. Crucially, **pagination already shapes every block in the Logic thread** (`prose-logic section 2.B`) to measure page breaks -- so shaping in the UI would *duplicate* that work and risk blocking the render thread (violating the "render thread never blocked by computation" pillar). The UI receives pre-shaped `ParleyRunData` and only draws glyphs. This is a deliberate Prose-specific departure from the generic UI-thread `TextCache` shaping path (`ambre-spec-canvas.md section D`, used for Trame single-line cells); the Foundation Prose-frame budgets are annotated accordingly (`ambre-spec-chrome.md section 5.A`, `ambre-spec-canvas.md section 5.A`). |
 | **DOM/HTML for editor rendering** | Rejected. Unpredictable layout, impossible to control pagination, JS/WASM interop cost. |
 | **`contentEditable`** | Non-deterministic behavior across browsers, inconsistent IME handling, impossible to control for pagination and virtual scroll. |
-| **Full-page rendering each frame** | 100 pages × full rendering = blown budget. Virtual scroll with culling of non-visible pages is mandatory. |
-| **Chrome (toolbar, slash menu, ruler, comment panel) drawn on the canvas via `DrawSurface`** | Rejected per the Foundation canvas/DOM boundary (`ambre-spec-ui.md §2.A`): chrome is DOM/Leptos (`ambre-chrome`/`prose_chrome`), transform-synced to canvas anchors. Static DOM over a canvas is one layout pass then zero-cost compositor recomposition, and inherits ARIA a11y, focus trap, and IME for free -- none of which a canvas widget gets. Only **content** (caret, selections, highlights, remote cursors) stays on the canvas. |
-| **`winit` for input** | Web-only target: winit is indirection without benefit and conflicts with DOM event ownership. Events are captured directly via `web-sys` (DOM listeners + the transparent `<textarea>`) and delivered as `InputEvent` (`ambre-spec-ui.md §6`, `ambre-spec-chrome.md §2.C`). |
-| **`prose-ui` owning `navigator.clipboard` + a `text/html` clipboard payload** | Clipboard is host-driven and Logic-authoritative (`ambre-spec-ui.md §2.E`): the host performs OS clipboard I/O in the activation window; the payload is `ClipboardBlob { text, ambre }` (opaque `x-ambre`), built from the full CRDT -- not `text/html`, not viewport-culled. |
+| **Full-page rendering each frame** | 100 pages x full rendering = blown budget. Virtual scroll with culling of non-visible pages is mandatory. |
+| **Chrome (toolbar, slash menu, ruler, comment panel) drawn on the canvas via `DrawSurface`** | Rejected per the Foundation canvas/DOM boundary (`ambre-spec-ui.md section 2.A`): chrome is DOM/Leptos (`ambre-chrome`/`prose_chrome`), transform-synced to canvas anchors. Static DOM over a canvas is one layout pass then zero-cost compositor recomposition, and inherits ARIA a11y, focus trap, and IME for free -- none of which a canvas widget gets. Only **content** (caret, selections, highlights, remote cursors) stays on the canvas. |
+| **`winit` for input** | Web-only target: winit is indirection without benefit and conflicts with DOM event ownership. Events are captured directly via `web-sys` (DOM listeners + the transparent `<textarea>`) and delivered as `InputEvent` (`ambre-spec-ui.md section 6`, `ambre-spec-chrome.md section 2.C`). |
+| **`prose-ui` owning `navigator.clipboard` + a `text/html` clipboard payload** | Clipboard is host-driven and Logic-authoritative (`ambre-spec-ui.md section 2.E`): the host performs OS clipboard I/O in the activation window; the payload is `ClipboardBlob { text, ambre }` (opaque `x-ambre`), built from the full CRDT -- not `text/html`, not viewport-culled. |
 | **Canvas 2D (non-WebGL)** | Insufficient performance for high-quality typographic rendering. wgpu (WebGL2/WebGPU) is AMBRE's foundational choice. |
 | **Synchronous CRDT confirmation before display** | Logic thread round-trip ~1-3ms perceptible at high typing cadence. The draft buffer absorbs this latency without compromising consistency. |
 | **Selection via `window.getSelection()` DOM** | Outside WASM context. Selection is managed entirely via Parley metrics and pointer events. |
-| **`requestIdleCallback` in the Logic thread** | Not available in a `wasm_thread` worker (the Logic thread). Deferred/low-priority work there uses the P1-P4 priority scheduler of `ambre-logic`, not `requestIdleCallback`. (On the UI thread, where it *is* available, the host may use it for opportunistic layout -- `ambre-spec-chrome.md §5.B`.) |
+| **`requestIdleCallback` in the Logic thread** | Not available in a `wasm_thread` worker (the Logic thread). Deferred/low-priority work there uses the P1-P4 priority scheduler of `ambre-logic`, not `requestIdleCallback`. (On the UI thread, where it *is* available, the host may use it for opportunistic layout -- `ambre-spec-chrome.md section 5.B`.) |
 | **Layouts without versioning** | Without `version: u64` on `LayoutUpdated`, two pagination recalculations arriving out of order would produce stale display. The UI thread silently drops any `LayoutUpdated` whose version is lower than the last applied layout. |
 
 ---

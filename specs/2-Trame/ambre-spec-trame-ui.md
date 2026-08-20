@@ -1,9 +1,9 @@
-# AMBRE — SPEC: AMBRE-TRAME UI (Rendering & Interactions)
-**Type:** Vertical (Feature / Application — UI)
+# AMBRE -- SPEC: AMBRE-TRAME UI (Rendering & Interactions)
+**Type:** Vertical (Feature / Application -- UI)
 **Status:** Draft
 **Implementation:** partial
 
-> Rendering and interaction layer of the Trame spreadsheet. Runs exclusively in the **UI thread**. Receives typed [`TrameEvent`](../../crates/ambre-bus/src/app/trame/event.rs) values (carried by move inside `AppEvent::Trame` over the shared-memory `flume` plane -- **no** `postMessage`, **no** postcard on this hop; `-logic.md` §9, `spec-ambre-architecture.md §2/§6`) from the Logic thread, renders the grid via `WgpuSurface` (QuadRenderer + GlyphAtlas), and translates user events into `TrameCommand` sent back to the Logic thread the same way. PDF export will be generated in the **Logic thread** via `KrillaSurface` (implementation of the shared `DrawSurface` trait) so as not to block the UI thread.
+> Rendering and interaction layer of the Trame spreadsheet. Runs exclusively in the **UI thread**. Receives typed [`TrameEvent`](../../crates/ambre-bus/src/app/trame/event.rs) values (carried by move inside `AppEvent::Trame` over the shared-memory `flume` plane -- **no** `postMessage`, **no** postcard on this hop; `-logic.md` section 9, `spec-ambre-architecture.md section 2/section 6`) from the Logic thread, renders the grid via `WgpuSurface` (QuadRenderer + GlyphAtlas), and translates user events into `TrameCommand` sent back to the Logic thread the same way. PDF export will be generated in the **Logic thread** via `KrillaSurface` (implementation of the shared `DrawSurface` trait) so as not to block the UI thread.
 >
 > This spec covers: virtual scrolling, wgpu/lyon/Parley/Swash rendering pipeline, inline editing, formula bar, autocompletion, freeze, sparklines, charts, multi-user cursors, and PDF export via `krilla`.
 >
@@ -16,7 +16,7 @@
 **Scope:**
 - Grid rendering via wgpu/QuadRenderer at 60+ FPS
 - Virtual scrolling: only visible cells + padding are rendered
-- User input handling → `TrameCommand` to Logic thread
+- User input handling -> `TrameCommand` to Logic thread
 - Formula bar and inline editor
 - Function and cell reference autocompletion
 - Row/column freeze
@@ -35,9 +35,9 @@
 | Crate / API | Role | Rationale |
 |---|---|---|
 | `wgpu` (via `QuadRenderer`) | GPU vertex/fragment rendering | WebGL2 by default, WebGPU opt-in. Zero compute shader. |
-| `lyon` | Path tessellation | Rects, grid lines, borders → triangles. |
+| `lyon` | Path tessellation | Rects, grid lines, borders -> triangles. |
 | `parley` | Text layout and shaping | BiDi, line breaking, HarfRust/Skrifa shaping. |
-| `swash` | Glyph rasterization | Glyphs → bitmap R8 → GlyphAtlas GPU. |
+| `swash` | Glyph rasterization | Glyphs -> bitmap R8 -> GlyphAtlas GPU. |
 | `ambre-draw` | `DrawSurface` trait + types | Unified screen/PDF interface. |
 | `ambre-pdf` | Shared PDF surface (`KrillaSurface`, owns `krilla`) | Foundation-owned; the Logic thread instantiates `ambre_pdf::KrillaSurface`. Trame depends on `ambre-pdf`, not on `krilla` directly. |
 | `ambre-bus` | Typed data plane: `TrameCommand` / `TrameEvent` / `DisplayCell` | UI<->Logic values carried by move on `flume` (no serialization) |
@@ -45,33 +45,33 @@
 | `web-sys` | Browser APIs (Canvas, clipboard, file download) | DOM access from UI thread |
 | `postcard` | Serialization | Only the `ClipboardPayload` (OS clipboard blob); **not** the UI<->Logic hop |
 
-**Invariants:** prefix `TRAME-UI`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4` ("Invariants (normative)"); the cross-spec roll-up is `ambre-spec-testing.md §7`. Rows `001..015` cover the built surface. Rows `016..023` cover multi-user cursors (§9), sparklines (§10), charts (§11) and PDF export (§12), which have no implementing code -- `ambre-trame` does not yet depend on the shared `ambre-pdf` crate (which owns `krilla`) -- so they carry `Status: unimplemented` and cite the Story that will build them (architecture §4).
+**Invariants:** prefix `TRAME-UI`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md section 4` ("Invariants (normative)"); the cross-spec roll-up is `ambre-spec-testing.md section 7`. Rows `001..015` cover the built surface. Rows `016..023` cover multi-user cursors (section 9), sparklines (section 10), charts (section 11) and PDF export (section 12), which have no implementing code -- `ambre-trame` does not yet depend on the shared `ambre-pdf` crate (which owns `krilla`) -- so they carry `Status: unimplemented` and cite the Story that will build them (architecture section 4).
 
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
-| `TRAME-UI-001` | The UI thread MUST hold no document data -- only view state and the `DisplayViewport` received from the Logic thread. | §16 "Fundamental invariant" | structural: **no occurrence of `LoroDoc` or `loro::` anywhere under `ambre-trame/src/ui/`**; `deny.toml` bans `loro` outside the four app crates (`SYNC-011`) | verified |
-| `TRAME-UI-002` | Every document mutation MUST leave the UI thread as a `TrameCommand`; the UI MUST NOT write document state locally. | §16 | type-level: the single outbound path is `TrameView::send_command_lossless` (`ui/view/lifecycle.rs`), which accepts a `TrameCommand` and wraps it in `LogicCommand::App` -- there is no other sender | verified |
-| `TRAME-UI-003` | The UI thread MUST NOT block on the Logic channel: a full channel drops the command with a log, it never waits. | architecture §6; `ambre-spec-ui.md §1` | type-level: `send_command_lossless` is `try_send` and returns `Result<(), SendError>`; `SendError::Full` is handled at every call site | verified |
-| `TRAME-UI-004` | Only the visible viewport plus its adaptive padding MUST be requested from the Logic thread. | §3.A | none. The heuristic lives in `ui/grid/state.rs` (velocity -> 20/50/100 rows) and no test asserts the requested bounds against the visible range | unverified |
-| `TRAME-UI-005` | A `ViewportData` whose `version` is lower than the last accepted one MUST be discarded. | §2.B; §3 anti-flicker | none. The rule **is implemented** (`ui/grid/state.rs`: `if version < self.accepted_version { return; }`) and nothing exercises it; the deleted §14 named an `outdated_viewport_version_ignored` test that never existed | unverified |
-| `TRAME-UI-006` | The canvas dispatch over `TrameEvent` MUST be exhaustive -- no wildcard arm -- so a new variant is a compile error, not a silent drop. | §2.B; §18 | compiler: `ui/view/frame.rs::dispatch_trame` carries **no `_` arm**; adding a variant fails the build. (The §2.B excerpt used to end on a `_ => {}` that contradicted its own sentence and the code; corrected.) | verified |
-| `TRAME-UI-007` | Hit-testing MUST be the exact inverse of the drawn geometry, under zoom and under variable row/column metrics. | §3; §4bis | `ambre_trame::ui::grid::tests::group1::zoom_scales_metrics_and_round_trips_hit_test`, `::variable_metrics_round_trip_pixel_and_hit_test`, `::axis_pointer_resolution_follows_variable_metrics`, `::filter_button_hit_test_matches_drawn_rect`, `ambre_trame::render::tests::variable_metrics_shift_cells_and_hit_test` | verified |
-| `TRAME-UI-008` | A filtered-out row MUST collapse both the drawn geometry and keyboard navigation. | §5.A; §5.D | `ambre_trame::ui::grid::tests::group2::filtered_rows_collapse_geometry_and_nav`, `ambre_trame::render::tests::cell_rect_collapses_over_hidden_rows` | verified |
-| `TRAME-UI-009` | A merged block MUST select as a whole, and navigation MUST step over it rather than into it. | §8; §5.B | `ambre_trame::ui::grid::tests::group1::merge_block_selects_as_a_whole_and_nav_steps_over_it`, `::drag_selection_expands_to_whole_merge`, `::fill_handle_sits_on_merge_extent_corner`, `ambre_trame::ui::grid::tests::group2::snap_active_to_master_rehomes_after_merge` | verified |
-| `TRAME-UI-010` | An optimistic commit MUST NOT display the formula source as its own result. | §6.C | `ambre_trame::ui::grid::tests::group2::optimistic_commit_does_not_echo_formula_as_result` | verified |
-| `TRAME-UI-011` | The viewport MUST carry each cell's raw text alongside its displayed value, so reopening the editor shows the formula. | §6.A | `ambre_trame::ui::grid::tests::group2::viewport_data_preserves_formula_raw_for_editing`, `::editor_preview_display` | verified |
-| `TRAME-UI-012` | Every fill colour drawn by the renderer MUST come from the theme palette; no literal colour in render code. | §4.A; `ambre-spec-ui.md` (design tokens) | `ambre_trame::ui::renderer::tests::renderer_uses_only_palette_colors_for_fills` | verified |
-| `TRAME-UI-013` | The renderer MUST NOT paint outside the grid region, whatever the canvas size or scroll offset. | §2.A; §4 | `ambre_trame::ui::renderer::tests::draw_cells_strip_skips_when_outside_grid`, `::draw_cells_scroll_strip_base_is_blank_not_pending_grey`, `ambre_trame::ui::grid::tests::group2::grid_bottom_floors_at_header_on_tiny_canvas`, `::header_strip_starts_at_top_of_canvas` | verified |
-| `TRAME-UI-014` | A cell in error MUST be marked visually from its displayed text; there MUST NOT be an `is_error` field on `DisplayCell`. | §2.B note | `ambre_trame::ui::renderer::tests::errored_cell_gets_a_corner_marker`, `::dirty_cell_gets_a_translucent_veil` | verified |
-| `TRAME-UI-015` | Escape MUST cancel an edit in progress without emitting any `TrameCommand`. | §6.C | none. The handler exists (`ui/view/interact.rs`), the absence of an outbound command is asserted nowhere -- and an absence is exactly what a test has to state | unverified |
-| `TRAME-UI-016` | A remote cursor's colour MUST be derived deterministically from its `UserId`, so the same collaborator keeps one colour across peers and reloads. | §9 | not built -- lands with `SYNC P4` / `SRV P1` (Epic `E5`), which supplies the spoof-proof `from_user_id` | unimplemented |
-| `TRAME-UI-017` | A remote cursor MUST be identified by `UserId`, never by `pub_key` or connection: one collaborator on two devices MUST NOT render as two people. The Logic presence table deduplicates by `UserId` before the whole set reaches the UI. | §9 | not built -- lands with `SYNC P4` / `SRV P1` (Epic `E5`) | unimplemented |
-| `TRAME-UI-018` | A remote peer's `display_name` MUST be treated as cosmetic and self-asserted; it MUST NOT be used for identity or colouring. | §9; `trame-logic §7` | not built -- lands with `SYNC P4` / `SRV P1` (Epic `E5`) | unimplemented |
-| `TRAME-UI-019` | Presence MUST leave no trace in the document: a cursor move MUST NOT produce a CRDT delta nor force a viewport re-derive. | §9 | not built -- lands with `SYNC P4` / `SRV P1` (Epic `E5`) | unimplemented |
-| `TRAME-UI-020` | A sparkline MUST be derived on the UI thread from `DisplayViewport` data alone; it MUST NOT require a second round trip to the Logic thread. | §10 | not built -- lands with §18 Phase 2 (Epic `E6`) | unimplemented |
-| `TRAME-UI-021` | A chart MUST be clipped to its host cell range and MUST NOT paint outside the grid. | §11 | not built -- lands with §18 Phase 2 (Epic `E6`) | unimplemented |
-| `TRAME-UI-022` | PDF export MUST reuse the same `DrawSurface` render code as the screen, through `KrillaSurface` in the Logic thread; the UI thread MUST only trigger the download. | §12 | not built -- lands with §18 Phase 2 (Epic `E6`); `TRAME-IO-020` is the same rule seen from the interop side | unimplemented |
-| `TRAME-UI-023` | A PDF export MUST be pure vector: no rasterisation of text or shapes. | §12 "Pure vector" | not built -- lands with §18 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-UI-001` | The UI thread MUST hold no document data -- only view state and the `DisplayViewport` received from the Logic thread. | section 16 "Fundamental invariant" | structural: **no occurrence of `LoroDoc` or `loro::` anywhere under `ambre-trame/src/ui/`**; `deny.toml` bans `loro` outside the four app crates (`SYNC-011`) | verified |
+| `TRAME-UI-002` | Every document mutation MUST leave the UI thread as a `TrameCommand`; the UI MUST NOT write document state locally. | section 16 | type-level: the single outbound path is `TrameView::send_command_lossless` (`ui/view/lifecycle.rs`), which accepts a `TrameCommand` and wraps it in `LogicCommand::App` -- there is no other sender | verified |
+| `TRAME-UI-003` | The UI thread MUST NOT block on the Logic channel: a full channel drops the command with a log, it never waits. | architecture section 6; `ambre-spec-ui.md section 1` | type-level: `send_command_lossless` is `try_send` and returns `Result<(), SendError>`; `SendError::Full` is handled at every call site | verified |
+| `TRAME-UI-004` | Only the visible viewport plus its adaptive padding MUST be requested from the Logic thread. | section 3.A | none. The heuristic lives in `ui/grid/state.rs` (velocity -> 20/50/100 rows) and no test asserts the requested bounds against the visible range | unverified |
+| `TRAME-UI-005` | A `ViewportData` whose `version` is lower than the last accepted one MUST be discarded. | section 2.B; section 3 anti-flicker | none. The rule **is implemented** (`ui/grid/state.rs`: `if version < self.accepted_version { return; }`) and nothing exercises it; the deleted section 14 named an `outdated_viewport_version_ignored` test that never existed | unverified |
+| `TRAME-UI-006` | The canvas dispatch over `TrameEvent` MUST be exhaustive -- no wildcard arm -- so a new variant is a compile error, not a silent drop. | section 2.B; section 18 | compiler: `ui/view/frame.rs::dispatch_trame` carries **no `_` arm**; adding a variant fails the build. (The section 2.B excerpt used to end on a `_ => {}` that contradicted its own sentence and the code; corrected.) | verified |
+| `TRAME-UI-007` | Hit-testing MUST be the exact inverse of the drawn geometry, under zoom and under variable row/column metrics. | section 3; section 4bis | `ambre_trame::ui::grid::tests::group1::zoom_scales_metrics_and_round_trips_hit_test`, `::variable_metrics_round_trip_pixel_and_hit_test`, `::axis_pointer_resolution_follows_variable_metrics`, `::filter_button_hit_test_matches_drawn_rect`, `ambre_trame::render::tests::variable_metrics_shift_cells_and_hit_test` | verified |
+| `TRAME-UI-008` | A filtered-out row MUST collapse both the drawn geometry and keyboard navigation. | section 5.A; section 5.D | `ambre_trame::ui::grid::tests::group2::filtered_rows_collapse_geometry_and_nav`, `ambre_trame::render::tests::cell_rect_collapses_over_hidden_rows` | verified |
+| `TRAME-UI-009` | A merged block MUST select as a whole, and navigation MUST step over it rather than into it. | section 8; section 5.B | `ambre_trame::ui::grid::tests::group1::merge_block_selects_as_a_whole_and_nav_steps_over_it`, `::drag_selection_expands_to_whole_merge`, `::fill_handle_sits_on_merge_extent_corner`, `ambre_trame::ui::grid::tests::group2::snap_active_to_master_rehomes_after_merge` | verified |
+| `TRAME-UI-010` | An optimistic commit MUST NOT display the formula source as its own result. | section 6.C | `ambre_trame::ui::grid::tests::group2::optimistic_commit_does_not_echo_formula_as_result` | verified |
+| `TRAME-UI-011` | The viewport MUST carry each cell's raw text alongside its displayed value, so reopening the editor shows the formula. | section 6.A | `ambre_trame::ui::grid::tests::group2::viewport_data_preserves_formula_raw_for_editing`, `::editor_preview_display` | verified |
+| `TRAME-UI-012` | Every fill colour drawn by the renderer MUST come from the theme palette; no literal colour in render code. | section 4.A; `ambre-spec-ui.md` (design tokens) | `ambre_trame::ui::renderer::tests::renderer_uses_only_palette_colors_for_fills` | verified |
+| `TRAME-UI-013` | The renderer MUST NOT paint outside the grid region, whatever the canvas size or scroll offset. | section 2.A; section 4 | `ambre_trame::ui::renderer::tests::draw_cells_strip_skips_when_outside_grid`, `::draw_cells_scroll_strip_base_is_blank_not_pending_grey`, `ambre_trame::ui::grid::tests::group2::grid_bottom_floors_at_header_on_tiny_canvas`, `::header_strip_starts_at_top_of_canvas` | verified |
+| `TRAME-UI-014` | A cell in error MUST be marked visually from its displayed text; there MUST NOT be an `is_error` field on `DisplayCell`. | section 2.B note | `ambre_trame::ui::renderer::tests::errored_cell_gets_a_corner_marker`, `::dirty_cell_gets_a_translucent_veil` | verified |
+| `TRAME-UI-015` | Escape MUST cancel an edit in progress without emitting any `TrameCommand`. | section 6.C | none. The handler exists (`ui/view/interact.rs`), the absence of an outbound command is asserted nowhere -- and an absence is exactly what a test has to state | unverified |
+| `TRAME-UI-016` | A remote cursor's colour MUST be derived deterministically from its `UserId`, so the same collaborator keeps one colour across peers and reloads. | section 9 | not built -- lands with `SYNC P4` / `SRV P1` (Epic `E5`), which supplies the spoof-proof `from_user_id` | unimplemented |
+| `TRAME-UI-017` | A remote cursor MUST be identified by `UserId`, never by `pub_key` or connection: one collaborator on two devices MUST NOT render as two people. The Logic presence table deduplicates by `UserId` before the whole set reaches the UI. | section 9 | not built -- lands with `SYNC P4` / `SRV P1` (Epic `E5`) | unimplemented |
+| `TRAME-UI-018` | A remote peer's `display_name` MUST be treated as cosmetic and self-asserted; it MUST NOT be used for identity or colouring. | section 9; `trame-logic section 7` | not built -- lands with `SYNC P4` / `SRV P1` (Epic `E5`) | unimplemented |
+| `TRAME-UI-019` | Presence MUST leave no trace in the document: a cursor move MUST NOT produce a CRDT delta nor force a viewport re-derive. | section 9 | not built -- lands with `SYNC P4` / `SRV P1` (Epic `E5`) | unimplemented |
+| `TRAME-UI-020` | A sparkline MUST be derived on the UI thread from `DisplayViewport` data alone; it MUST NOT require a second round trip to the Logic thread. | section 10 | not built -- lands with section 18 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-UI-021` | A chart MUST be clipped to its host cell range and MUST NOT paint outside the grid. | section 11 | not built -- lands with section 18 Phase 2 (Epic `E6`) | unimplemented |
+| `TRAME-UI-022` | PDF export MUST reuse the same `DrawSurface` render code as the screen, through `KrillaSurface` in the Logic thread; the UI thread MUST only trigger the download. | section 12 | not built -- lands with section 18 Phase 2 (Epic `E6`); `TRAME-IO-020` is the same rule seen from the interop side | unimplemented |
+| `TRAME-UI-023` | A PDF export MUST be pure vector: no rasterisation of text or shapes. | section 12 "Pure vector" | not built -- lands with section 18 Phase 2 (Epic `E6`) | unimplemented |
 
 > **Invariant coverage.** 11 `verified`, 4 `unverified`, 8 `unimplemented`. The four gaps are `TRAME-UI-004`, `-005`, `-015` and the render-loop pair -- rules that ship in the code today with nothing guarding them, which is the only kind of row that is a risk.
 
@@ -133,7 +133,7 @@ pub fn draw_grid<S: DrawSurface>(
 The Logic thread delivers **typed** `TrameEvent` values by move (no postcard, no
 `LogicEnvelope` on this hop). The single `UiEvent::Viewport(AppEvent::Trame(ev))`
 arm dispatches them **exhaustively** -- no `_ => {}` wildcard, so a new variant is
-a compile error, not a silent drop (see §18 and the render-worker
+a compile error, not a silent drop (see section 18 and the render-worker
 `dispatch_trame`):
 
 **Canvas-side routing** (`ambre-trame/src/ui/view/frame.rs::dispatch_trame`), one arm per variant:
@@ -158,7 +158,7 @@ The match names every variant and carries **no `_` arm**, so a new variant is a 
 > A `#REF!`/parse error surfaces as the affected cell's displayed `text` inside
 > `ViewportData` (the UI draws a corner marker when that text is an error string;
 > there is no `DisplayCell::is_error` field), edits are
-> optimistic (no ack), and there is no mid-import progress event (interop §7). The
+> optimistic (no ack), and there is no mid-import progress event (interop section 7). The
 > chrome relay routes user-facing variants (`MergeRejected`, `ExportComplete` ->
 > `trigger_download`, ...) via `notify_event` / `mirror_event` / `apply_style_event`.
 
@@ -291,7 +291,7 @@ fn draw_cell<S: DrawSurface>(
 
 > **Wrap / vertical alignment / overflow (MVP):** `CellStyle.wrap` and `CellStyle.v_align`
 > are honoured above. `wrap` rows -- and rows whose text carries explicit newlines
-> (`Alt+Enter` in the in-cell editor, §6) -- may need a taller `row_height`: both make a
+> (`Alt+Enter` in the in-cell editor, section 6) -- may need a taller `row_height`: both make a
 > cell taller than one line. Auto-height is a Logic-thread concern -- it returns the measured
 > height in `DisplayViewport.row_heights` and the UI does not remeasure. Until auto-height is
 > implemented, a multi-line cell simply lays out its lines and is clipped to the current row
@@ -335,7 +335,7 @@ Frozen cells are rendered in a separate pass, on top of the scrolled content, wi
 
 **Freeze command from the UI.** Setting `frozen_rows` / `frozen_cols` is a write to local view state and a re-render. It produces no `TrameCommand` and no CRDT delta.
 
-> **Decision:** Freeze is local state (like Google Sheets). Not synchronized between collaborators — each user has their own freeze view.
+> **Decision:** Freeze is local state (like Google Sheets). Not synchronized between collaborators -- each user has their own freeze view.
 
 ---
 
@@ -348,7 +348,7 @@ Frozen cells are rendered in a separate pass, on top of the scrolled content, wi
 > inline insert affordance are **UI-thread view state + existing typed commands**. The
 > **resize** leg (sec.4bis.C) is the one part that needs a **new data plane**: the
 > `col_widths_{sheet}` / `row_heights_{sheet}` Loro maps and the `ResizeCol` / `ResizeRow`
-> commands are introduced under this story (`-logic` §2.B/§9), alongside a variable-metric
+> commands are introduced under this story (`-logic` section 2.B/section 9), alongside a variable-metric
 > `GridLayout`. They do not exist yet -- only the uniform-metric layout does.
 
 The header band is divided into three hit zones per cell, resolved in `cell_at_pixel`'s
@@ -389,7 +389,7 @@ resolves "whole column C" to the used-range rectangle for sort / filter / `SetCe
 `DeleteSelectedCols` / `RequestSelectionStats`. This is the same UI->Logic contract already used
 by every E3 feature; the UI never needs the document height (sec.16).
 
-> **Relation to `RangeEndpoint::EntireAxis` (`-logic` §3.A).** The whole-axis UI selection is the
+> **Relation to `RangeEndpoint::EntireAxis` (`-logic` section 3.A).** The whole-axis UI selection is the
 > interactive cousin of a formula's `A:A` / `1:1` -- and is resolved the **same way**: the Logic
 > thread clamps the unbounded axis to the used range `[0..hwm]` (exactly `endpoint_pos`'s `entire`
 > bound). They stay **separate types** -- `EntireAxis` lives in the compiled formula engine and is
@@ -419,7 +419,7 @@ guide line at the prospective edge (`TrameUiState::resize_preview`, painted in
 
 * **Column border** -> `TrameCommand::ResizeCol { version, sheet_id, col, width_px }`, the width taken from the pointer position minus the column's left edge plus the scroll, floored at `MIN_COL_WIDTH` (~24 px). **Row border** -> `ResizeRow`, symmetric on the vertical axis.
 * Any other header zone releases without emitting.
-* Logic writes `col_widths_{sheet}` / `row_heights_{sheet}` (LWW per uid) and answers with a refreshed viewport carrying the new sizes; the UI rebuilds its offsets (§3.B).
+* Logic writes `col_widths_{sheet}` / `row_heights_{sheet}` (LWW per uid) and answers with a refreshed viewport carrying the new sizes; the UI rebuilds its offsets (section 3.B).
 * When a whole column or row is selected, the resize applies to every selected band.
 
 ### D. Inline insert "+" affordance
@@ -445,7 +445,7 @@ Handled in `ui/view/interact.rs`. Two modes, decided by whether the inline edito
 
 | Key | Effect |
 |---|---|
-| Arrows | move the selection by one cell; with `Shift`, **extend** it (move `active`, keep `anchor`, §8) |
+| Arrows | move the selection by one cell; with `Shift`, **extend** it (move `active`, keep `anchor`, section 8) |
 | `Tab` / `Enter` | move right / down, never extending |
 | `Home` / `End` | first cell of the row / last non-empty cell of the row |
 | `PageUp` / `PageDown` | scroll by one viewport height |
@@ -454,7 +454,7 @@ Handled in `ui/view/interact.rs`. Two modes, decided by whether the inline edito
 | any printable character | open the editor seeded with that character |
 
 **Editor mode:** the editor is multi-line (the shared `ambre_canvas::TextEditor`
-core over parley `PlainEditor`, §6). `Escape` cancels without emitting a command
+core over parley `PlainEditor`, section 6). `Escape` cancels without emitting a command
 (`TRAME-UI-015`); `Enter` commits and moves down, `Tab` commits and moves right,
 `Ctrl/Cmd+Enter` fills the whole selection with the typed value. `Alt+Enter`
 inserts a newline in the cell (the only way to add a line, since bare `Enter`
@@ -467,11 +467,11 @@ only then), the four committing chords defer the commit to just after that flush
 
 ### B. Mouse / Touch
 
-**Pointer down** resolves the pixel to a cell (§4bis hit-test). A left press on the cell that is *already* active, with no editor open, starts editing; any other left press collapses the selection to that single cell, scrolls it into view and re-requests the viewport. A press outside the grid falls through to the header zones (§4bis).
+**Pointer down** resolves the pixel to a cell (section 4bis hit-test). A left press on the cell that is *already* active, with no editor open, starts editing; any other left press collapses the selection to that single cell, scrolls it into view and re-requests the viewport. A press outside the grid falls through to the header zones (section 4bis).
 
 **Pointer drag** extends the selection to the cell under the pointer and re-requests the viewport. The anchor never moves during a drag.
 
-### C. Context Menu — Structural Ops, Merge, Sort, Filter (MVP)
+### C. Context Menu -- Structural Ops, Merge, Sort, Filter (MVP)
 
 Right-click on the grid (or on a header) opens a context menu. It is the single MVP
 entry point for the structural / feature commands the Logic thread already handles but
@@ -521,10 +521,10 @@ Each entry maps to one command, built from the current selection and the active 
 | Insert row above / below | `InsertRow { before_row: row }` / `{ before_row: row + 1 }` |
 | Insert column left / right | `InsertCol { before_col: col }` / `{ before_col: col + 1 }` |
 | Delete rows / columns | one `DeleteRow` / `DeleteCol` **per index in the selection span, in descending order** so the remaining positions stay valid -- each is its own undo item |
-| Merge cells | `MergeCells` over the selection bounds; a covered non-empty cell answers `MergeRejected`, surfaced as a toast (§2) |
+| Merge cells | `MergeCells` over the selection bounds; a covered non-empty cell answers `MergeRejected`, surfaced as a toast (section 2) |
 | Unmerge cells | `UnmergeCells` at the active cell |
 | Sort ascending / descending | `SortRange` over the selection bounds, reference column = the range's first column, `has_header` false by default (toggled in the menu) |
-| Filter by column | opens the filter popover (§5.D), no command yet |
+| Filter by column | opens the filter popover (section 5.D), no command yet |
 | Clear filter | `ClearFilter { sheet_id }` |
 
 Every command carries a fresh monotonic `version`.
@@ -595,7 +595,7 @@ same popover the context-menu entry opens, so there is one filter code path with
 The filter range is the used range of the contiguous data block around the active cell (resolved
 Logic-side, like sort). The button row is the range's first row; with a `has_header` data block the
 buttons sit on the header labels (Excel), otherwise on row 1. The per-column filtered state comes
-from `FilterApplied { col }` (already dispatched, §18), so the render worker tracks the set of
+from `FilterApplied { col }` (already dispatched, section 18), so the render worker tracks the set of
 filtered columns and paints the funnel on exactly those buttons. The column-letter funnel badge is
 kept as a secondary cue.
 
@@ -803,7 +803,7 @@ pub enum EditTrigger {
 ### B. Inline Editor Rendering
 
 The editor field is drawn by the shared `ambre_canvas::TextEditor` core (the same
-unit-text engine Toile uses for sticky/text elements, §canvas). Trame supplies the
+unit-text engine Toile uses for sticky/text elements, section canvas). Trame supplies the
 cell geometry and pins the cell's formatting (weight, italic, size, ink) each
 frame; the core lays out the buffer, resolves queued pointer hits against that
 layout, and paints the selection band, glyphs (including the live IME preedit) and
@@ -846,7 +846,7 @@ fn cancel_editing(&mut self) { /* ... */ }
 
 ## 7. AUTOCOMPLETION
 
-Autocompletion is entirely on the UI thread side — no round-trip to the Logic thread.
+Autocompletion is entirely on the UI thread side -- no round-trip to the Logic thread.
 
 ### A. Functions
 
@@ -1021,13 +1021,13 @@ renderer (bar/line/pie/area) and draws the optional title. `ambre-trame/src/ui/r
 
 ### Principle: shared `DrawSurface` trait, PDF rendering in the Logic thread
 
-The `DrawSurface` trait is defined in `ambre-draw` (see `spec-ambre-architecture.md` §2.D).
+The `DrawSurface` trait is defined in `ambre-draw` (see `spec-ambre-architecture.md` section 2.D).
 The shared drawing functions (`draw_cells_on`, `draw_grid_lines_on`, etc.) live in
-`ambre-trame/src/render.rs` — they are parameterized over `DrawSurface` and documented in
-`spec-ambre-trame-logic.md` §9 (shared rendering module).
+`ambre-trame/src/render.rs` -- they are parameterized over `DrawSurface` and documented in
+`spec-ambre-trame-logic.md` section 9 (shared rendering module).
 
-- **UI thread**: instantiates `WgpuSurface` (defined in `ambre-app`) → live GPU rendering via the shared functions.
-- **Logic thread**: instantiates `ambre_pdf::KrillaSurface` (Foundation-owned, in the shared `ambre-pdf` crate; lazy-loaded) → vector PDF export. The Logic thread emits `TrameEvent::ExportComplete`; the UI thread triggers the download.
+- **UI thread**: instantiates `WgpuSurface` (defined in `ambre-app`) -> live GPU rendering via the shared functions.
+- **Logic thread**: instantiates `ambre_pdf::KrillaSurface` (Foundation-owned, in the shared `ambre-pdf` crate; lazy-loaded) -> vector PDF export. The Logic thread emits `TrameEvent::ExportComplete`; the UI thread triggers the download.
 
 **Why PDF generation in the Logic thread and not the UI thread:**
 Generating a PDF for a 100-sheet document can exceed 500ms. Blocking the UI thread
@@ -1038,10 +1038,10 @@ without impacting FPS.
 
 High-fidelity PDF export requires that all primitives (rectangles, text, borders,
 charts) be emitted directly as vectors to `krilla::Surface`.
-**Rasterizing GPU pixels and re-embedding them in the PDF is forbidden** — this would
+**Rasterizing GPU pixels and re-embedding them in the PDF is forbidden** -- this would
 produce a multi-page screenshot, not a vector PDF.
 
-> **Rectangular clipping:** `DrawSurface::push_clip(Rect)` / `pop_clip()` are implemented CPU-side in `WgpuSurface` (clipping vertices outside the rect before push). For `KrillaSurface`, if krilla does not support native clipping at MVP, we emulate by **truncating text at the cell edge before rendering** (Parley measurement) -- **no ellipsis**, to match the screen path exactly (§4.A "the text is clipped at the cell edge (no ellipsis in MVP)"). Keeping the same clip-at-edge rule is what preserves the "same code, same output" guarantee; an ellipsis on the PDF path only would break it.
+> **Rectangular clipping:** `DrawSurface::push_clip(Rect)` / `pop_clip()` are implemented CPU-side in `WgpuSurface` (clipping vertices outside the rect before push). For `KrillaSurface`, if krilla does not support native clipping at MVP, we emulate by **truncating text at the cell edge before rendering** (Parley measurement) -- **no ellipsis**, to match the screen path exactly (section 4.A "the text is clipped at the cell edge (no ellipsis in MVP)"). Keeping the same clip-at-edge rule is what preserves the "same code, same output" guarantee; an ellipsis on the PDF path only would break it.
 
 > **Fonts on the Logic thread.** PDF text shaping needs a font database, which the
 > screen path gets from the UI/GPU side. The Logic thread therefore seeds its own
@@ -1049,14 +1049,14 @@ produce a multi-page screenshot, not a vector PDF.
 > eagerly at startup, so `KrillaSurface` can shape and emit vector glyphs without
 > any UI/GPU dependency (landed: base-font layer + eager Logic-thread seeding).
 
-### `DrawSurface` trait — source of truth in `ambre-draw`
+### `DrawSurface` trait -- source of truth in `ambre-draw`
 
-The `DrawSurface` trait is defined in `ambre-draw` (see `spec-ambre-architecture.md` §2.D).
-The Trame spec does not redefine its signature. See `spec-ambre-trame-logic.md` §9 for
+The `DrawSurface` trait is defined in `ambre-draw` (see `spec-ambre-architecture.md` section 2.D).
+The Trame spec does not redefine its signature. See `spec-ambre-trame-logic.md` section 9 for
 the parameterized drawing functions (`draw_cells_on<S>`, etc.) and the concrete
 implementations (`WgpuSurface`, `KrillaSurface`).
 
-### `WgpuSurface` — UI thread (in `ambre-app`)
+### `WgpuSurface` -- UI thread (in `ambre-app`)
 
 ```rust
 /// wgpu backend -- GPU screen rendering. Instantiated in ambre-app (UI thread).
@@ -1074,7 +1074,7 @@ and hands that surface -- together with the Trame view state, the font context a
 the text cache -- to `trame::renderer::draw_grid`, which paints the grid through
 the shared `DrawSurface` abstraction.
 
-### `KrillaSurface` and the PDF pipeline — Logic thread
+### `KrillaSurface` and the PDF pipeline -- Logic thread
 
 `KrillaSurface` is Foundation-owned: its `DrawSurface` implementation lives in the
 shared **`ambre-pdf`** crate (deps `ambre-draw` + `krilla`), not in an app crate,
@@ -1085,7 +1085,7 @@ sections). Trame does not redefine it; it uses `ambre_pdf::KrillaSurface`.
 The Trame-specific PDF driver -- pagination (`GridLayout` for PDF), the `ExportPdf`
 command handling, and the calls into the shared drawing functions -- lives in
 `ambre-trame/src/export_pdf.rs` (Logic thread, lazy-loaded). See
-`spec-ambre-trame-logic.md` §9 for the code.
+`spec-ambre-trame-logic.md` section 9 for the code.
 
 ### GridLayout for PDF
 
@@ -1178,7 +1178,7 @@ fn draw_status_bar(&mut self) { /* ... */ }
 
 ### Boundary Audit
 
-The UI thread runs no encryption and opens no socket (see §1: encryption and
+The UI thread runs no encryption and opens no socket (see section 1: encryption and
 network live in the Sync thread). Its outbound flows:
 
 | Flow | Data | Encryption |
@@ -1202,12 +1202,12 @@ re-derived here.
 
 ## 14. QUALITY & TESTABILITY
 
-> What this module guarantees, and what verifies each guarantee, is the table in §1. This section holds only what is not a claim about the tree's contents.
+> What this module guarantees, and what verifies each guarantee, is the table in section 1. This section holds only what is not a claim about the tree's contents.
 
-* **Tiers, as measured.** This section used to open with "UI tests are run with `wasm-bindgen-test` in a headless browser" and list eight such tests, **none of which existed**. The real split is the opposite: **58 host tests** (`ui::grid`, `ui::renderer`, `render`) against **13 wasm tests** (`tests/chrome_ui.rs`). That is the host-extraction seam of architecture §4 working as intended -- geometry, hit-testing, selection, editor state and the draw call sequence are pure `data -> data` code and belong on the fast tier. The wasm tier keeps what is irreducibly DOM.
-* **Seams.** `RecordingSurface` (`ambre-draw`, feature `testing`) for every "what to draw" assertion -- ordered `DrawOp` sequence, geometry, palette, clip balance -- with no GPU. `MockSyncHandle` / `CommandSink` for the outbound `TrameCommand`s. The wgpu pipeline itself ("how to draw") is `qa-manual` by decision (architecture §4).
+* **Tiers, as measured.** This section used to open with "UI tests are run with `wasm-bindgen-test` in a headless browser" and list eight such tests, **none of which existed**. The real split is the opposite: **58 host tests** (`ui::grid`, `ui::renderer`, `render`) against **13 wasm tests** (`tests/chrome_ui.rs`). That is the host-extraction seam of architecture section 4 working as intended -- geometry, hit-testing, selection, editor state and the draw call sequence are pure `data -> data` code and belong on the fast tier. The wasm tier keeps what is irreducibly DOM.
+* **Seams.** `RecordingSurface` (`ambre-draw`, feature `testing`) for every "what to draw" assertion -- ordered `DrawOp` sequence, geometry, palette, clip balance -- with no GPU. `MockSyncHandle` / `CommandSink` for the outbound `TrameCommand`s. The wgpu pipeline itself ("how to draw") is `qa-manual` by decision (architecture section 4).
 * **Mandatory belts.** A new interaction lands with (a) a geometry round-trip -- drawn rect against hit-test, under zoom and variable metrics (`TRAME-UI-007`), and (b) a `RecordingSurface` assertion for anything it paints.
-* **Definition of Done.** An increment is `[x]` only when those belts are green in CI **and** no invariant in §1 is left without a `Status`.
+* **Definition of Done.** An increment is `[x]` only when those belts are green in CI **and** no invariant in section 1 is left without a `Status`.
 
 ---
 
@@ -1236,9 +1236,9 @@ A state can exist in multiple layers. The rule is simple: **a single source of t
 | **Derived state** | `formula_cache`, `dirty` set, `filter_hidden` | Logic thread (recomputed from LoroDoc) | No |
 | **Local history** | Undo stack (`UndoManager`) | Logic thread (in memory, current session) | No |
 
-**Fundamental invariant:** the UI thread contains no document data — only view states and the `DisplayViewport` received from the Logic thread. Every mutation goes through a `TrameCommand`. There are no two mental models of the document: `LoroDoc` is the single source of truth.
+**Fundamental invariant:** the UI thread contains no document data -- only view states and the `DisplayViewport` received from the Logic thread. Every mutation goes through a `TrameCommand`. There are no two mental models of the document: `LoroDoc` is the single source of truth.
 
-**`ViewportPatch` — Phase 2 optimization:**
+**`ViewportPatch` -- Phase 2 optimization:**
 
 When only a few cells change in the current viewport (remote P3 import on visible cells), the Logic thread can send a differential patch rather than a full viewport:
 
@@ -1250,7 +1250,7 @@ TrameEvent::ViewportPatch {
 }
 ```
 
-The UI thread applies the patch on the existing `current_viewport`. Avoids serialization and deserialization of a full viewport for partial updates. The decision to send a patch vs a full viewport is in the Logic thread based on change size (threshold: < 10% of visible cells → patch).
+The UI thread applies the patch on the existing `current_viewport`. Avoids serialization and deserialization of a full viewport for partial updates. The decision to send a patch vs a full viewport is in the Logic thread based on change size (threshold: < 10% of visible cells -> patch).
 
 ---
 
@@ -1263,9 +1263,9 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 | **Freeze synchronized between collaborators** | Same behavior as Google Sheets: the freeze view is a local preference. Synchronizing it would generate unnecessary conflicts (each user has a different screen size). |
 | **Autocompletion via Logic thread round-trip** | Unacceptable latency for an interactive feature. The function list is static and compiled into the UI binary. Cell values are in the current `DisplayViewport`. |
 | **Remote cursors without encryption** | Ephemeral payloads are E2EE encrypted (see `spec-ambre-sync`). The server never sees the cursor or the name. The UI thread receives the already-decrypted payload from the Logic thread. |
-| **GPU pixel rasterization for PDF** | Would turn the export into a multi-page screenshot. The `DrawSurface` trait abstracts drawing primitives — the rendering code is reused as-is to `KrillaSurface` for a purely vector PDF. |
-| **PDF in the UI thread** | Generating a 100-sheet PDF can exceed 500ms — would block rendering. `KrillaSurface` is instantiated in the Logic thread; the UI thread receives `TrameEvent::ExportComplete` and triggers the download. |
-| **Peer identification by `pub_key [u8;32]`** | The public key is a per-device cryptographic credential, not an identity. It changes on key rotation. `UserId: Uuid` is the canonical per-user identifier. The `pub_key → UserId` resolution is done in `ambre-sync` via `trusted_keys` — it does not leak into `RemoteCursor`. |
+| **GPU pixel rasterization for PDF** | Would turn the export into a multi-page screenshot. The `DrawSurface` trait abstracts drawing primitives -- the rendering code is reused as-is to `KrillaSurface` for a purely vector PDF. |
+| **PDF in the UI thread** | Generating a 100-sheet PDF can exceed 500ms -- would block rendering. `KrillaSurface` is instantiated in the Logic thread; the UI thread receives `TrameEvent::ExportComplete` and triggers the download. |
+| **Peer identification by `pub_key [u8;32]`** | The public key is a per-device cryptographic credential, not an identity. It changes on key rotation. `UserId: Uuid` is the canonical per-user identifier. The `pub_key -> UserId` resolution is done in `ambre-sync` via `trusted_keys` -- it does not leak into `RemoteCursor`. |
 | **Business logic in the UI thread** | The UI thread computes no formulas, accesses no `LoroDoc`, never mutates the document directly. Everything goes through `TrameCommand`. Local states (selection, freeze, autocompletion) are view states, not document states. |
 
 ---
@@ -1275,7 +1275,7 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 > Tracked as Stories of Epic **E3** (Trame MVP) in `specs/ambre-roadmap.md`. Items already delivered
 > under **E0**/**E1** (virtual scroll, inline cell editor) are checked below.
 
-**Phase 1 — MVP**
+**Phase 1 -- MVP**
 - [x] Virtual scrolling + grid rendering *(delivered under `ARCH P2`; the shared `ambre_trame::render` module has since landed -- `GridLayout` + the `DrawSurface`-generic `draw_cells_on` / `draw_grid_lines_on` / `draw_col_headers_on` / `draw_row_headers_on`, composed by `ui::renderer`. Only the `KrillaSurface` PDF consumer of those primitives remains, in Phase 3.)*
 - [x] UI-only layers on top of shared rendering: scroll offset, dirty opacity, error indicators
 - [x] Column/row headers (via `ambre_trame::render::draw_col_headers_on<S>` / `draw_row_headers_on<S>`, wired in `ui::renderer::draw_overlay`)
@@ -1302,9 +1302,9 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 - [x] **Filter feedback on the first row (sec.5.D): Excel-style autofilter buttons** drawn on the filter range's header row (chevron unfiltered / funnel when filtered), opening the existing `FilterPopover`. The render worker tracks the filtered-column set from `FilterApplied { col }`. *(The "filter range" is the Excel-style current region around the active cell, resolved UI-side from the viewport cache -- `TrameUiState::current_region` / `filter_button_rect` / `filter_button_at` (`ui/grid.rs`); the buttons are always-on so they double as the entry point even before any filter. `ui::renderer::draw_overlay` paints a bordered button per visible region column with a `draw_chevron` / `draw_funnel` glyph keyed off `filtered_col`; the column-letter funnel badge is kept as a secondary cue. A left-click selects the button's column and raises a one-shot `ambre_canvas::FilterOpenPublisher` intent (canvas->launcher, since the view owns no `CommandId` channel); the per-frame relay in `ambre-app` consumes it and runs the exact body of the context-menu `FILTER_COLUMN` branch -- one filter code path, two entry points. The filter operation itself stays Logic-side via `ApplyFilterToActiveColumn` / `RequestActiveColumnValues`.)*
 - [x] `on_logic_message` wiring: full, **exhaustive** `TrameEvent` dispatch *(one entry point per side over the real `ambre-bus::TrameEvent` enum, no `_ => {}` wildcard so a future variant is a compile error rather than a silent drop). **Canvas side** -- `ui::view::TrameView::dispatch_trame` (called from the single `UiEvent::Viewport(AppEvent::Trame(..))` arm in `update`): `ViewportData` -> cache merge + `data_dirty`; `SheetList` -> tab strip; `Error` -> log + a11y announce; `FilterApplied`/`FilterCleared` -> funnel-badge column; `FindResult` -> highlight set + `nav_goto`; `DataReset`/`CondFormatsUpdated` -> viewport re-fetch; every chrome-only variant is an explicit no-op. **Chrome side** (per-frame relay in `ambre-app`, fanned out to `trame_chrome`): `notify_event` toasts the user-facing variants (rejections, validation error/warning, protection denied/violation, merge conflict, sort/filter completion, **`ReplaceDone` -> "N cells replaced"**), `mirror_event` maps `UndoState` to the Undo/Redo toggle enablement, `apply_style_event` drives the formatting toolbar from `StyleApplied`; `ColumnValues`/`FilterApplied`/`FilterCleared`/`FindResult`/`SelectionStats` also feed the filter popover / find counter / status bar inline (the canvas treats them all as no-ops). The original sketch also named `EditAck`, `FormulaError`, `ImportProgress`, `ExportComplete`: these are **not** enum variants -- a `#REF!`/`#DIV/0!` error surfaces as the affected cell's displayed `text` inside `ViewportData` (the UI draws a corner marker when the text is an error string; there is no `DisplayCell::is_error` field), edits are optimistic (no `EditAck`), and import/export are Phase 3.)*
 
-- [x] **Leptos UI tests (test debt, Epic `ET`).** The Trame chrome (`trame_chrome`: `formula_bar`, `find_replace`, filter/borders/color popovers, `FormatBar`, `StatusBar`, context menu) carries no test today. Baseline: `wasm-bindgen-test` (`cargo test --target wasm32-unknown-unknown --features <chrome-test>`, headless Chrome) covers the chrome end to end -- presentation logic and DOM -- and is self-sufficient (`ambre-spec-architecture.md §4`). Recommended optimization (not mandatory): extract the *pure* parts (formula-bar parsing, find/replace match computation, style-state derivation, `TrameEvent` -> view-state mapping) out of the `cfg(wasm32)` gate into host-tested functions -- faster, coverage/proptest-friendly -- leaving only the thin DOM glue in wasm. The shared `render` primitives stay host (`RecordingSurface` mock `DrawSurface`). Note: feature *behaviour* (merge/autofill/sort/filter) is already host-testable in `ambre-trame::logic` -- this story only covers the chrome layer. **DoD:** at least the reactive/presentation belt + one DOM `wasm-bindgen-test` green in CI. *(Done: `crates/ambre-trame/tests/chrome_ui.rs` -- a `cfg(target_arch = "wasm32")` `wasm-bindgen-test` suite run under headless Chrome via `wasm-pack` (`just test-wasm`). Reactive/presentation belt: `apply_style_event` (StyleApplied -> StyleState signals), `mirror_event` (UndoState -> command store), the `command_to_app` CommandId -> AppCommand mapping. DOM belt: `StatusBar` and `FindReplace` mounted into a real document and asserted via `web-sys`. Wire-up: wasm-only dev-deps; `proptest` scoped to the host target (its `wait-timeout` dep does not compile on wasm32) with `convergence_tests` gated to non-wasm; the `test-wasm` CI job re-enabled and a `wasm` tier added to `run_tests.sh`. The recommended pure-extraction optimization was not pursued -- the belt runs the existing functions directly in wasm.)*
+- [x] **Leptos UI tests (test debt, Epic `ET`).** The Trame chrome (`trame_chrome`: `formula_bar`, `find_replace`, filter/borders/color popovers, `FormatBar`, `StatusBar`, context menu) carries no test today. Baseline: `wasm-bindgen-test` (`cargo test --target wasm32-unknown-unknown --features <chrome-test>`, headless Chrome) covers the chrome end to end -- presentation logic and DOM -- and is self-sufficient (`ambre-spec-architecture.md section 4`). Recommended optimization (not mandatory): extract the *pure* parts (formula-bar parsing, find/replace match computation, style-state derivation, `TrameEvent` -> view-state mapping) out of the `cfg(wasm32)` gate into host-tested functions -- faster, coverage/proptest-friendly -- leaving only the thin DOM glue in wasm. The shared `render` primitives stay host (`RecordingSurface` mock `DrawSurface`). Note: feature *behaviour* (merge/autofill/sort/filter) is already host-testable in `ambre-trame::logic` -- this story only covers the chrome layer. **DoD:** at least the reactive/presentation belt + one DOM `wasm-bindgen-test` green in CI. *(Done: `crates/ambre-trame/tests/chrome_ui.rs` -- a `cfg(target_arch = "wasm32")` `wasm-bindgen-test` suite run under headless Chrome via `wasm-pack` (`just test-wasm`). Reactive/presentation belt: `apply_style_event` (StyleApplied -> StyleState signals), `mirror_event` (UndoState -> command store), the `command_to_app` CommandId -> AppCommand mapping. DOM belt: `StatusBar` and `FindReplace` mounted into a real document and asserted via `web-sys`. Wire-up: wasm-only dev-deps; `proptest` scoped to the host target (its `wait-timeout` dep does not compile on wasm32) with `convergence_tests` gated to non-wasm; the `test-wasm` CI job re-enabled and a `wasm` tier added to `run_tests.sh`. The recommended pure-extraction optimization was not pursued -- the belt runs the existing functions directly in wasm.)*
 
-**Phase 2 — V1**
+**Phase 2 -- V1**
 - [ ] Row/column freeze
 - [ ] Function autocompletion
 - [ ] Multi-user cursors (`TrameEvent::RemoteCursors`, identified by `UserId`)
@@ -1313,7 +1313,7 @@ The UI thread applies the patch on the existing `current_viewport`. Avoids seria
 - [ ] Whole-column auto-fit (Logic-side `AutoFitCol`/`AutoFitRow` measuring every materialized cell -- upgrade over the MVP cached-cells auto-fit, sec.4bis.C)
 - [ ] Context menu extensions (conditional formatting, data validation entries)
 
-**Phase 3 — Post-V1**
+**Phase 3 -- Post-V1**
 - [ ] Sparklines
 - [ ] wgpu/lyon charts (bar, line, pie)
 - [ ] PDF export: UI thread receives `TrameEvent::ExportComplete` and triggers `trigger_download()` (PDF rendering in the Logic thread via `KrillaSurface`)
