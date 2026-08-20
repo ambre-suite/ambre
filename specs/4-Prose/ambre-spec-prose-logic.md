@@ -117,7 +117,7 @@ meta
 │   ├── "margin_left_mm"  : f32
 │   └── "margin_right_mm" : f32
 ├── "defaults"            : LoroMap    -- document default values (4th cascade level)
-│   ├── "font_family"     : String     -- e.g. "Arial"
+│   ├── "font_family"     : String     -- toolbar label, e.g. "Sans" (resolved via registered_family_name)
 │   ├── "font_size_pt"    : f32        -- e.g. 11.0
 │   └── "line_height"     : f32        -- Multiple, e.g. 1.15
 ├── "header"              : LoroMap    -- header (prose-features)
@@ -293,6 +293,13 @@ Pagination is computed in the Logic thread via Parley. The result -- a `PageLayo
 > thread covers: widows/orphans, keep-with-next on headings, image positioning,
 > manual page breaks, footnotes. `ambre-spec-architecture.md` §2.D --
 > pagination = business logic, Logic thread only.
+
+> **Family resolution is shared.** Before shaping, every `font_family` label (from
+> `meta.defaults`, from `MARK_FONT_FAMILY`, or the toolbar's `Sans`/`Serif`/`Monospace`/
+> `Default` and any unknown or CSS-generic name) is mapped to one of the loaded base faces
+> through `ambre_canvas::registered_family_name`, exactly as Trame does
+> (`ambre-spec-canvas.md sec.2` base-fonts note, `ambre-spec-trame-ui.md sec.5bis`). A raw
+> label is never handed to Parley as an unmatched `Named`, which would shape zero glyphs.
 
 #### Structures
 
