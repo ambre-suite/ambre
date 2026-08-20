@@ -388,6 +388,13 @@ pub fn build_display_list<S: DrawSurface>(
 ) { /* ... */ }
 ```
 
+> **`RepaintStrip` honors the shared Content-layer contract (X49).** It is a **specialization** of
+> the Foundation `ContentRepaint { Full | Scroll | Reuse }` + `content_strip` contract
+> (`ambre-spec-canvas.md`), not a parallel mechanism: Prose maps its dirty pages / rects onto
+> `Full` and `Reuse` and simply does not use the GPU scroll-band `Scroll { dx, dy }` mode (page
+> pagination reflows rather than scroll-blits a band). Trame and Toile use the same contract, `Scroll`
+> included. Tracked in the cross-app factoring Story (`ambre-roadmap.md`).
+
 #### UI Color Palette
 
 | Element | Color | Opacity |

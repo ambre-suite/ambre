@@ -549,3 +549,24 @@ Stories:
     interchange format above the per-app opaque `ambre` payloads, so a paste across apps keeps
     structure (a Trame range -> a Prose table, a Toile object -> a Prose image) instead of falling
     back to `text/plain`. Future; today cross-app paste is text-only by design.
+  - **Shared keymap** (X26): the `Ctrl`/`Cmd` fold (a Mac uses `Cmd` interchangeably) and the redo
+    chords (`Ctrl+Shift+Z` **and** `Ctrl+Y`) are decided once in the shared keyboard pipe, so every
+    app behaves identically. Extends the X16 shared-`CommandId` decision. Prose gains the `Cmd` fold;
+    Trame gains `Ctrl+Y`.
+  - **Selection endpoint naming** (X12): converge the moving endpoint of a selection on the web term
+    `focus` across every app and the shared editing core; Trame renames `active` -> `focus`. The
+    fixed endpoint stays `anchor`. Pure rename.
+  - **Shared HiDPI handling** (X5): the `device_pixel_ratio` scaling is a service of the shared
+    `ambre-canvas` surface, applied once so every app renders crisply on Retina / 4K; app specs just
+    reference it, Toile included. Trame's UI spec stops reading as if it lacked HiDPI.
+  - **Shared partial-repaint contract** (X49): Prose (and Toile) honor the Foundation Content-layer
+    `ContentRepaint { Full | Scroll | Reuse }` contract (`ambre-spec-canvas.md`); Prose's
+    `RepaintStrip` is a specialization of it (the GPU scroll-band `Scroll` mode simply unused by
+    Prose), not a parallel mechanism.
+  - **Shared floating-menu primitive** (X61): one `ambre-chrome` floating-menu primitive (placement,
+    up/down/Enter/Escape keyboard nav, click-outside close) underlies every menu -- Prose's slash
+    menu, Trame's autocomplete + filter/format/find popovers, and Toile's floating menu -- instead of
+    each app reimplementing the pattern.
+  - **Shared perf telemetry** (X69): the `ambre-canvas::PerfPublisher` (FPS chip + timings panel) is
+    wired uniformly in every app (Prose and Toile join Trame), available at least in debug, rather
+    than surfaced by Trame alone.

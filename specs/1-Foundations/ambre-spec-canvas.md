@@ -130,6 +130,17 @@ requestAnimationFrame callback (raf_timestamp: f64)
 **Conditional rendering.** Phase 4 is skipped for any `Reuse` layer; phase 5 (present) always runs to avoid an empty canvas. rAF stays active to drain inbound messages even when the UI is static. `FrameStats` (fps/frame/drain/draw/gpu) measured by the host are passed to `paint_overlay` for the HUD.
 
 > The debug HUD currently lives in the Trame renderer (minor coupling via `FrameStats`) — future candidate to become a generic `FrameHost` overlay.
+>
+> **Target state -- shared perf telemetry (X69).** The `PerfPublisher` (FPS chip + timings panel) is
+> a shared canvas primitive wired uniformly in every app, not surfaced by Trame alone: Prose and
+> Toile join, available at least in debug. Tracked in the cross-app factoring Story
+> (`ambre-roadmap.md`).
+
+**HiDPI is a surface service (X5).** `device_pixel_ratio` scaling (a Retina / 4K screen has 2+
+physical pixels per CSS pixel) is applied **once** by the shared `ambre-canvas` surface -- the
+drawing buffer is sized in physical pixels and the projection scales by the ratio -- so every app
+(Trame, Prose, Toile) renders crisply without repeating the concern. App UI specs reference this
+service rather than each declaring their own `device_pixel_ratio` handling.
 
 **Double buffering:** `present_mode: PresentMode::AutoNoVsync`, `desired_maximum_frame_latency: 2`. No forced vsync — lets the browser manage cadence to reach 190–200 Hz on high-refresh screens.
 

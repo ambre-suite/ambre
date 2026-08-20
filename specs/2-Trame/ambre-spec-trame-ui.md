@@ -96,6 +96,11 @@ pub struct TrameUiState {
     pub active_col:      usize,
     pub cell_cache:      HashMap<(usize, usize), String>,
 }
+// Target state -- selection endpoint naming (X12): the moving endpoint of a selection is named
+// `focus` across every app and the shared editing core (the web term, `getSelection().focusNode`);
+// the fixed endpoint stays `anchor`. Trame renames `active` -> `focus` (`active_row`/`active_col`
+// -> `focus_row`/`focus_col`, `anchor`/`active` band endpoints -> `anchor`/`focus`). Tracked in the
+// cross-app factoring Story (`ambre-roadmap.md`).
 
 // ambre-app/src/trame/renderer.rs -- draw_grid generic over DrawSurface
 pub fn draw_grid<S: DrawSurface>(
