@@ -8,3 +8,6 @@ dist
 # Local DB tooling config (pgAdmin/DBeaver), contains dev connection details.
 servers.json
 .claude
+# Python bytecode cache from the scripts/ tooling (just spec-code / invariants).
+__pycache__/
+*.pyc
