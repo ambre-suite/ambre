@@ -647,7 +647,9 @@ pub fn apply_zoom(state: &mut ProseUiState, factor: f32, focus_screen: Vec2) { /
   closes on `Backspace` that erases the `/`, on a space, or on any pointer click (P-133).
 - **Empty-doc first block (P-147).** A `PointerDown` returning `DocPos::Empty` / `hit_test == None`
   on a zero-block doc sends `ProseCommand::SplitBlock`-equivalent block creation to Logic and parks
-  the caret at the new block start once `LayoutUpdated` arrives.
+  the caret at the new block start once `LayoutUpdated` arrives. This is the **local** recreate-on-
+  open guard only; the **CRDT convergence** guarantee for two peers concurrently emptying the doc
+  is `PROSE-027` (deterministic re-insertion, `prose-logic sec.2.A`), not this rule.
 
 **Hit-testing recap.** `hit_test` finds the block by bisection on `BlockLayout::y_in_page`
 (O(log n)) within the resolved band, then reads the offset from the block's **pre-shaped** run
