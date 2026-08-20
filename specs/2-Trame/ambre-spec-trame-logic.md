@@ -1685,7 +1685,7 @@ Trame is not a semantic clone of Excel. These differences are **intentional**, d
 - [ ] Reference-preserving functions: `ROW(reference)`/`COLUMN(reference)`, OFFSET, INDIRECT *(require the compiler/VM to pass reference identity, not the pre-evaluated value, into the call; the no-arg `ROW()`/`COLUMN()` already ship in Phase 2)*
 - [ ] Rayon for independent DAG branches
 - [ ] `SheetIndex` O(log N) for shifts
-- [ ] PDF export via `KrillaSurface` in `ambre-trame/src/export_pdf.rs` (lazy-loaded)
+- [ ] PDF export driving `ambre_pdf::KrillaSurface` (shared crate) from the Trame PDF pipeline in `ambre-trame/src/export_pdf.rs` (lazy-loaded)
 - [ ] 1M-cell benchmarks
 
 **Phase 4 — Scaling & consistency debt (2026-07 architecture review, §11 bis)**

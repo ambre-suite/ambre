@@ -39,13 +39,13 @@
 | `parley` | Text layout and shaping | BiDi, line breaking, HarfRust/Skrifa shaping. |
 | `swash` | Glyph rasterization | Glyphs → bitmap R8 → GlyphAtlas GPU. |
 | `ambre-draw` | `DrawSurface` trait + types | Unified screen/PDF interface. |
-| `krilla` | PDF generation | Instantiated in the **Logic thread** via `KrillaSurface`. |
+| `ambre-pdf` | Shared PDF surface (`KrillaSurface`, owns `krilla`) | Foundation-owned; the Logic thread instantiates `ambre_pdf::KrillaSurface`. Trame depends on `ambre-pdf`, not on `krilla` directly. |
 | `ambre-bus` | Typed data plane: `TrameCommand` / `TrameEvent` / `DisplayCell` | UI<->Logic values carried by move on `flume` (no serialization) |
 | `wasm-bindgen` | JS <-> Rust bridge | Canvas / DOM glue on the UI thread |
 | `web-sys` | Browser APIs (Canvas, clipboard, file download) | DOM access from UI thread |
 | `postcard` | Serialization | Only the `ClipboardPayload` (OS clipboard blob); **not** the UI<->Logic hop |
 
-**Invariants:** prefix `TRAME-UI`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4` ("Invariants (normative)"); the cross-spec roll-up is `ambre-spec-testing.md §7`. Rows `001..015` cover the built surface. Rows `016..023` cover multi-user cursors (§9), sparklines (§10), charts (§11) and PDF export (§12), which have no implementing code -- `ambre-trame` declares neither `krilla` nor `ambre-pdf` -- so they carry `Status: unimplemented` and cite the Story that will build them (architecture §4).
+**Invariants:** prefix `TRAME-UI`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4` ("Invariants (normative)"); the cross-spec roll-up is `ambre-spec-testing.md §7`. Rows `001..015` cover the built surface. Rows `016..023` cover multi-user cursors (§9), sparklines (§10), charts (§11) and PDF export (§12), which have no implementing code -- `ambre-trame` does not yet depend on the shared `ambre-pdf` crate (which owns `krilla`) -- so they carry `Status: unimplemented` and cite the Story that will build them (architecture §4).
 
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
@@ -1251,7 +1251,7 @@ The shared drawing functions (`draw_cells_on`, `draw_grid_lines_on`, etc.) live 
 `spec-ambre-trame-logic.md` §9 (shared rendering module).
 
 - **UI thread**: instantiates `WgpuSurface` (defined in `ambre-app`) → live GPU rendering via the shared functions.
-- **Logic thread**: instantiates `KrillaSurface` (defined in `ambre-trame/src/export_pdf.rs`, lazy-loaded) → vector PDF export. The Logic thread emits `TrameEvent::ExportComplete`; the UI thread triggers the download.
+- **Logic thread**: instantiates `ambre_pdf::KrillaSurface` (Foundation-owned, in the shared `ambre-pdf` crate; lazy-loaded) → vector PDF export. The Logic thread emits `TrameEvent::ExportComplete`; the UI thread triggers the download.
 
 **Why PDF generation in the Logic thread and not the UI thread:**
 Generating a PDF for a 100-sheet document can exceed 500ms. Blocking the UI thread
@@ -1301,8 +1301,16 @@ trame::renderer::draw_grid(&mut surface, &self.trame, &mut gpu.font_cx, &mut gpu
 
 ### `KrillaSurface` and the PDF pipeline — Logic thread
 
-`KrillaSurface` impl and the full PDF pipeline live in `ambre-trame/src/export_pdf.rs`
-(Logic thread, lazy-loaded). See `spec-ambre-trame-logic.md` §9 for the code.
+`KrillaSurface` is Foundation-owned: its `DrawSurface` implementation lives in the
+shared **`ambre-pdf`** crate (deps `ambre-draw` + `krilla`), not in an app crate,
+because every app (Prose, Toile, Trame) reuses the same surface. Foundations
+mandates this placement (`1-Foundations/ambre-spec-canvas.md`, `ambre-pdf`
+sections). Trame does not redefine it; it uses `ambre_pdf::KrillaSurface`.
+
+The Trame-specific PDF driver -- pagination (`GridLayout` for PDF), the `ExportPdf`
+command handling, and the calls into the shared drawing functions -- lives in
+`ambre-trame/src/export_pdf.rs` (Logic thread, lazy-loaded). See
+`spec-ambre-trame-logic.md` §9 for the code.
 
 ### GridLayout for PDF
 

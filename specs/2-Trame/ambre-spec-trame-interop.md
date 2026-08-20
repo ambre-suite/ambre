@@ -21,7 +21,7 @@
 - Full PDF export: the DrawSurface rendering (KrillaSurface) is described in the UI spec
 - VBA Macros / Office Scripts: definitively out of scope
 
-**Invariants:** prefix `TRAME-IO`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4`; the cross-spec roll-up is `ambre-spec-testing.md §7`. Rows `001..009` cover the built paths -- CSV (§4) and the native `.ambre` container (§1). Rows `010..020` cover the .xlsx paths (§2, §3) and PDF export (§5), which have no implementing code -- `ambre-trame` declares `csv`, and neither `calamine`, `rust_xlsxwriter` nor `krilla` -- so they carry `Status: unimplemented` and cite the Story that will build them (architecture §4). `TRAME-024` ("no `unsafe`") covers the whole crate and is not restated here.
+**Invariants:** prefix `TRAME-IO`. Grammar, falsifiability test and status values are normative in `ambre-spec-architecture.md §4`; the cross-spec roll-up is `ambre-spec-testing.md §7`. Rows `001..009` cover the built paths -- CSV (§4) and the native `.ambre` container (§1). Rows `010..020` cover the .xlsx paths (§2, §3) and PDF export (§5), which have no implementing code -- `ambre-trame` declares `csv`, and neither `calamine`, `rust_xlsxwriter` nor the shared `ambre-pdf` crate (which owns `krilla`) -- so they carry `Status: unimplemented` and cite the Story that will build them (architecture §4). `TRAME-024` ("no `unsafe`") covers the whole crate and is not restated here.
 
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
@@ -44,7 +44,7 @@
 | `TRAME-IO-017` | On export, a `CellId` MUST be rendered as its current A1 position through the `SheetIndex`, and a cross-sheet reference MUST be rendered with the sheet's display name (the `#id` sigil is internal). | §3.B; `trame-logic §2.D` | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
 | `TRAME-IO-018` | On export, a broken reference MUST be written as the literal `#REF!` the target format understands, never as an empty cell. | §3.B | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
 | `TRAME-IO-019` | An xlsx import followed by an export followed by a re-import MUST yield the same values. | §2; §3 | not built -- lands with §10 Phase 2 (Epic `E6`) | unimplemented |
-| `TRAME-IO-020` | PDF export MUST run in the Logic thread through the shared `DrawSurface`; the UI thread MUST only trigger the download on `ExportComplete`. | §5; §9 | not built -- lands with §10 Phase 2 (Epic `E6`); `ambre-trame` declares neither `krilla` nor `ambre-pdf` | unimplemented |
+| `TRAME-IO-020` | PDF export MUST run in the Logic thread through the shared `DrawSurface`, using `ambre_pdf::KrillaSurface` from the shared `ambre-pdf` crate (never an app-local surface); the UI thread MUST only trigger the download on `ExportComplete`. | §5; §9 | not built -- lands with §10 Phase 2 (Epic `E6`); `ambre-trame` does not yet depend on the shared `ambre-pdf` crate | unimplemented |
 
 > **Invariant coverage.** 9 `verified`, 0 `unverified`, 11 `unimplemented`. Every `verified` row covers a shipped path. The eleven others are the rules the two large unbuilt sections of this spec have always contained -- they were prose, they are now falsifiable and countable.
 
@@ -323,7 +323,7 @@ impl TrameState {
 
 ## 5. EXPORT PDF
 
-High-fidelity PDF export runs in the **Logic thread** via `KrillaSurface` (implementation of the `DrawSurface` trait defined in `ambre-draw`, lazy-loaded). The UI Thread only triggers the download upon receiving `TrameEvent::ExportComplete`.
+High-fidelity PDF export runs in the **Logic thread** via `ambre_pdf::KrillaSurface` (the `DrawSurface` implementation owned by the shared `ambre-pdf` crate, not by an app crate; lazy-loaded). The UI Thread only triggers the download upon receiving `TrameEvent::ExportComplete`.
 
 **Flow:**
 
@@ -462,6 +462,6 @@ re-derived here.
 - [ ] Progress for long imports: `TrameEvent::ImportProgress` (500-cell batching)
 
 **Phase 3 — Post-V1**
-- [ ] PDF export: `TrameCommand::ExportPdf` → `KrillaSurface` in the **Logic thread** (`ambre-trame/src/export_pdf.rs`, lazy-loaded) → `TrameEvent::ExportComplete`
+- [ ] PDF export: `TrameCommand::ExportPdf` → `ambre_pdf::KrillaSurface` (shared crate) driven from the Trame PDF pipeline in the **Logic thread** (`ambre-trame/src/export_pdf.rs`, lazy-loaded) → `TrameEvent::ExportComplete`
 - [ ] .ods (OpenDocument Spreadsheet) import via `calamine` (already supported by the crate)
 - [ ] Google Sheets integration via backend proxy (V2)
