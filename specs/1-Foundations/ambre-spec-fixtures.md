@@ -9,8 +9,9 @@
 > **Problem solved.** Today an Ambre document only comes into existence by a human clicking in the WASM SPA.
 > Two consequences: the performance budgets of `ambre-spec-trame-logic.md` and `ambre-spec-toile-logic.md`
 > are **unmeasurable**, because no large document exists to measure against; and every state-dependent
-> defect (the view-dependent merge masking of `trame-logic section 11 bis.E` is the reference case) is reproduced
-> by hand-written setup inside individual tests, repeated and unshared.
+> defect is reproduced by hand-written setup inside individual tests, repeated and unshared. The
+> reference case is Trame's view-dependent merge masking: a merge-masked cell computed differently
+> depending on which sheet was active (`trame-logic section 11 bis.E`, fixed).
 >
 > **Not the interop fixtures.** `ambre-toile/src/logic/interop/fixtures/*.svg` are **input** files --
 > third-party formats fed to a converter. These are **document-state** fixtures: serialized Ambre CRDT
