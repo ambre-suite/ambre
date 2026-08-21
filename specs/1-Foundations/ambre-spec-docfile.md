@@ -301,10 +301,11 @@ Two obligations follow, and neither is optional:
 > block `E4`.
 
 > **Sequencing constraint (binding).** The *user-facing* export must not ship before the Trame per-cell
-> style consolidation (`ambre-roadmap.md` E6 / `trame-logic section 11 bis.F`). That Story is scheduled while **no
-> third-party document exists**; a file on a user's disk is a stronger and more permanent commitment than a
-> server-side document, because it is beyond our reach to migrate. The same argument that defers other
-> third-party-document work applies here with more force, and it applies to `P1`, not to `P0`.
+> style consolidation (`ambre-roadmap.md` E6 / `trame-logic section 11 bis.F`) -- **discharged**: that
+> Story has landed. It changed the schema while **no third-party document existed**; a file on a
+> user's disk is a stronger and more permanent commitment than a server-side document, because it is
+> beyond our reach to migrate. The same argument that defers other third-party-document work applies
+> here with more force, and it applies to `P1`, not to `P0`.
 >
 > **Two independent versions, both checked.** `AMBRE_VERSION` versions the **container** -- the 22-byte
 > header. It does **not** version the CRDT schema inside the payload, and `migrate_ambre` does not address

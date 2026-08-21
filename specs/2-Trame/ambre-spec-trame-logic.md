@@ -69,7 +69,7 @@
 | `TRAME-017` | Every mutating `TrameCommand` handler MUST end with `doc.commit()`, so that one command is one undo item. | section 8 "Command Dispatch and Synchronous Recalculation" | `ambre_trame::logic::tests::group2::batch_write_is_one_undo_item`, `::filtered_column_edit_is_one_undo_item`, `group1::selection_style_is_a_single_undo`, `group6::replace_all_rewrites_and_undoes_as_one_group` | verified |
 | `TRAME-018` | Undo MUST revert local operations only, never a remote peer's. | section 8; `trame-features` (undo/redo) | `ambre_trame::logic::tests::group2::undo_local_only_not_remote`, `::undo_insert_row_rebuilds_sheet_index`, `::undo_stack_cleared_on_doc_close` | verified |
 | `TRAME-019` | A merge MUST be refused locally while a covered cell is non-empty, and an unmerge MUST restore every covered value. | section 6 "Data is Never Destroyed" | `ambre_trame::logic::tests::group2::merge_rejected_when_covered_cell_non_empty`, `::merge_marks_master_span_and_blanks_covered`, `::unmerge_restores_covered_cells`, `group3::concurrent_value_under_merge_is_masked_then_restored` | verified |
-| `TRAME-020` | A merge-masked cell MUST NOT participate in any computation, on any sheet, whichever tab is active. | section 6 "DAG and Masked Cells"; section 11 bis.E | `ambre_trame::logic::tests::group3::masked_cell_excluded_across_sheets_regardless_of_active_tab` -- the cross-sheet test section 11 bis.E asks for, already green (**section 11 bis.E is stale, see the note there**) | verified |
+| `TRAME-020` | A merge-masked cell MUST NOT participate in any computation, on any sheet, whichever tab is active. | section 6 "DAG and Masked Cells"; section 11 bis.E | `ambre_trame::logic::tests::group3::masked_cell_excluded_across_sheets_regardless_of_active_tab` | verified |
 | `TRAME-021` | A formula result MUST NOT depend on view state (active sheet, filter, hidden rows). | section 11 bis.E; section 12 | `ambre_trame::logic::tests::group5::shared_filter_does_not_affect_sum`, `group3::masked_cell_excluded_across_sheets_regardless_of_active_tab` | verified |
 | `TRAME-022` | A workbook MUST always hold at least one sheet. | section 2.D | partial: `ambre_trame::logic::tests::group3::delete_last_sheet_rejected` covers the **local** guard only. Two peers concurrently deleting the two last sheets still converge to a sheet-less workbook; section 2.D's deterministic re-insertion rule is decided, not implemented, and has no 2-peer regression test | unverified |
 | `TRAME-023` | The incrementally maintained `SheetIndex` MUST equal a from-scratch rebuild after any sequence of structural operations. | section 2.C | none. Per-operation unit tests only (`ambre_trame::model::sheet_index::tests::apply_insert_and_delete_row_shift_positions`, `::apply_move_row_permutes_order_and_reindexes`). The equivalence property exists on the Toile index and not here, though this is the cache invariant the whole engine rests on | unverified |
@@ -94,7 +94,8 @@ Positional addressing (`"R{row}C{col}"`) is **rejected**: inserting a row at pos
 > op id, so a cell keyed by that slot id is orphaned by every reorder. The uid as the element's
 > *value* is move-invariant: a `mov` shuffles the values, each carried uid is untouched, and every
 > `"{row_uid}:{col_uid}"` cell key keeps resolving. This is what lets a sort be a pure order
-> permutation (section 12, section 13).
+> permutation (section 12, `trame-features section 2`). Section 13 records the two alternatives this
+> rejects: the Loro slot id as cell key, and sort by content rewrite.
 
 **Convergence of minting.** Two peers concurrently inserting a row each mint a distinct uid (their
 `PeerID` differs), so both rows survive and `LoroMovableList` orders them canonically -- no shared
@@ -280,9 +281,10 @@ recompiled. The formula-bar text is reconstructed from `sheet_id -> current name
 immediately shows the new qualifier (`Data!A1` for a once-typed `Sheet2!A1`). Concurrent renames
 resolve by LWW on the `name` field.
 
-> **As-built gap.** This needs the compiled dependency to carry the `sheet_id` and the raw text to
-> re-render through the current `sheet_id -> name` map. The MVP engine re-parses raw text by display
-> name on reseed, so until id-persistence lands a rename breaks a cross-sheet reference (section 14).
+> **As built.** `canonicalize_input` binds each cross-sheet qualifier to its `sheet_id` at edit time,
+> so the CRDT stores `#s0!A1` where the user typed `Sheet2!A1`. Plain text, an unqualified formula
+> and a formula that fails to parse are stored verbatim. A formula written before this landed keeps
+> its display-name text until its next edit -- there is no bulk rewrite (section 14 Phase 2).
 
 #### Reorder (move)
 

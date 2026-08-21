@@ -174,8 +174,8 @@ Stories:
 > **Known schema deferral (does not gate `E3`).** `trame-logic section 14 Phase 0` stays `[~]`: the
 > `{v,t,s}` cell sub-map and the shared `styles` map of `section 2.B` were never implemented. The MVP is
 > functionally complete without them, and the 2026-07-09 review split the remainder in two -- the
-> style fan-out consolidation (an `E6` Story, gated on the public Beta) and the `styles` dictionary
-> (deferred behind a benchmark). See `trame-logic section 11 bis.F`.
+> style fan-out consolidation (an `E6` Story, landed) and the `styles` dictionary (deferred behind a
+> benchmark). See `trame-logic section 11 bis.F`.
 
 - *(Below: the original E3 scope, delivered.)*
 - `trame-logic section 14 Phase 1 & 2` -- multi-sheet `LoroDoc` + `SheetIndex`; insert/delete rows/columns; cell merges;
@@ -435,30 +435,29 @@ Stories:
   check, full-DAG topo walk, dead write-back loop, `formula_cache` `RefCell`).
   *(View-independent merge masking, being a correctness defect rather than scaling debt, moved to
   the `E3` Story below. Bold/italic folding is absorbed by the style-consolidation Story below.)*
-- **Trame per-cell style consolidation (schema, `trame-logic section 11 bis.F`)** `[ ]` -- a cell's style is
-  scattered over up to 11 per-sheet `LoroMap`s (`format_`, `style_`, `fgcolor_`, `bgcolor_`,
-  `bordcolor{0..3}_`, `font_`, `numfmt_`) instead of the single style reference `trame-logic section 2.B`
-  prescribes. Costs: `set_cell_style` touches 9 containers per cell and commits **per cell** inside
-  the selection loop; `format_{sheet}` survives as a vestigial bold/italic mask duplicating
-  `style_{sheet}`; no style deduplication. Target: one style container per cell holding the whole
-  `CellStyle`, one transaction per selection.
-  **Not a correctness defect** -- the suspicion that concurrent whole-cell style edits could converge
-  to a per-container blend was tested and refuted (a whole-cell edit writes every container in one
-  monotonic-Lamport burst, so Loro's LWW elects the same winner in each); locked in by
-  `logic/convergence_tests.rs::concurrent_whole_cell_style_edits_do_not_blend_across_containers`.
-  **Ordering:** it does *not* preempt `E5`, but it changes the persisted schema, so it must land
-  **before the public Beta**, while no third-party document exists and no migration path has to be
-  carried forever. **It also gates `EF`/`DOCFILE P1`** (user-facing `.ambre` export): once a user holds a
-  document file on their own disk, that document is beyond our reach to migrate, which is a stronger
-  version of the same commitment this Story exists to avoid.
-  **Schema-version obligation.** This Story *is* a persisted-schema change, so it must bump the Trame
-  `SCHEMA_VERSION` (`EF`/`ARCH P8`, `architecture section 2.D`). If it lands **before** `ARCH P8`, it does so on
-  the explicit basis that no third-party document exists and every server document is disposable -- that
-  basis must be stated in the commit, not assumed. If it lands **after**, it ships a migration chain and a
-  stale fixture proving it. What it must never do is change the schema silently: an unmigrated document
-  imports cleanly and reads back with default styles (`architecture section 2.D`, `postcard` caveat). *(The shared `styles` dictionary + `"s"` indirection and the `{v,t,s}` cell
-  sub-map are explicitly out of scope: deferred behind a benchmark -- Loro does not GC orphaned map
-  entries, so the indirection would force a style-reclamation policy.)*
+- **Trame per-cell style consolidation (schema, `trame-logic section 11 bis.F`)** `[x]` -- a cell's
+  style was scattered over up to 11 per-sheet `LoroMap`s (`format_`, `style_`, `fgcolor_`, `bgcolor_`,
+  `bordcolor{0..3}_`, `font_`, `numfmt_`) instead of the single style reference
+  `trame-logic section 2.B` prescribes. Landed as one register per cell: the per-sheet map
+  `cellstyle_{sheet}` carries the whole style, postcard-encoded (`StyleRecord { bold, italic, style }`,
+  `logic/styles.rs`). `set_cell_style` writes every register of the selection, then commits once, so a
+  restyle is one delta and one undo item. The packed mask (`pack_style_mask`, the `STYLE_*`/`FMT_*`
+  constants) is deleted.
+  **It was a correctness defect after all.** This replaces the earlier "not a correctness defect"
+  entry, which tested whole-cell rewrites only. The fan-out also tore a border edge (a concurrent
+  edit could keep one peer's border presence with another's border colour), and it dropped
+  colour-only and font-only cells on reload (`reseed_styles` iterated the `style_` mask map, and
+  those cells carry mask 0). Convergence is now whole-cell last-writer-wins (`TRAME-016`,
+  `trame-logic section 12`), locked in by
+  `logic/convergence_tests.rs::concurrent_whole_cell_style_edits_do_not_blend_across_containers` and
+  `::subset_style_edit_does_not_tear_a_whole_cell_rewrite`.
+  **Schema-version obligation, carried over.** The Story changed the persisted schema and landed
+  before `ARCH P8`, on the stated basis that no third-party document exists and every server document
+  is disposable. No Trame `SCHEMA_VERSION` exists yet, so `ARCH P8` (`EF`, `architecture section 2.D`)
+  adopts this layout as its baseline version instead of carrying a migration step for it.
+  *(The shared `styles` dictionary + `"s"` indirection and the `{v,t,s}` cell sub-map stay out of
+  scope: deferred behind a benchmark -- Loro does not GC orphaned map entries, so the indirection
+  would force a style-reclamation policy.)*
 - Trame Phase 2+ -- basic .xlsx import, conditional formatting, data validation.
 - **Trame column/row reorder (drag & drop)** `[x]` -- Excel-style drag to move a whole
   column/row to a new position. **Pulled into the MVP** once investigation showed it was far
