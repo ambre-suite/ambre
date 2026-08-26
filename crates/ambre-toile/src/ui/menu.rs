@@ -1,25 +1,25 @@
 // ambre-toile/src/ui/menu.rs
 // ============================================================================
-// Command surface for the Toile right-click context menu (toile-ui SS5ter). The
+// Command surface for the Toile right-click context menu (`toile-menus`). The
 // host-visible half: the `CommandId`s the menu contributes, the pure selection
 // scope descriptor the canvas view publishes to the DOM chrome, and the pure
 // `CommandId -> Vec<ToileCommand>` resolver the view applies against its local
 // selection.
 //
 // Kept in the always-compiled `ui` module (not the wasm-only `chrome`) so it is
-// host-unit-tested (SS10), exactly like `ui::find`. The wasm-only entry builder
+// host-unit-tested, exactly like `ui::find`. The wasm-only entry builder
 // (icons + `MenuEntry` + separators) that consumes these lives in `chrome::menu`.
 //
 // Unlike Trame -- whose context commands are parameterless because the Logic
 // thread tracks the active cell -- Toile selection is UI-only state living in
-// `ToileView` (toile-ui SS7 / SS11bis). The Logic thread never sees it, so a menu
+// `ToileView` (`toile-selection`, and `ambre-spec-ui.md`). The Logic thread never sees it, so a menu
 // `CommandId` cannot be turned into a `ToileCommand { ids: .. }` in the DOM
 // shell. The shell forwards the bare `CommandId` into the view, which calls
 // [`resolve_menu_command`] with its selection to build the real command(s).
 //
 // Everything here is pure and `cfg`-agnostic (no Leptos, no wasm), so it is
-// host-unit-tested per toile-ui SS10 ("each context-menu entry emits the expected
-// command"). The wasm-only entry builder (icons + separators) lives in `mod.rs`.
+// host-unit-tested per `toile-menus`: each context-menu entry emits the expected
+// command. The wasm-only entry builder (icons + separators) lives in `mod.rs`.
 // ============================================================================
 
 use ambre_bus::app::toile::{
@@ -30,7 +30,7 @@ use ambre_commands::CommandId;
 use kurbo::{Rect, Vec2};
 
 /// Diagonal offset applied to a menu Duplicate so the copy is visibly distinct
-/// from its source (SS8 ter), matching the `Ctrl/Cmd+D` nudge in the view.
+/// from its source (`toile-clipboard`), matching the `Ctrl/Cmd+D` nudge in the view.
 const DUPLICATE_NUDGE: f64 = 10.0;
 
 // -- Command identities --------------------------------------------------------
@@ -71,7 +71,7 @@ pub const REMOVE_FROM_FRAME: CommandId = CommandId("toile.frame.remove");
 /// Select every element on the board (local, never synced).
 pub const SELECT_ALL: CommandId = CommandId("toile.selection.all");
 
-// -- Reactions (§4.A) ----------------------------------------------------------
+// -- Reactions ----------------------------------------------------------
 // A minimal, fixed emoji set for the reaction affordance: each id sets the local
 // user's reaction on every selected element (one `React` per target, LWW on the
 // user's own key). `REACT_CLEAR` removes it. The picker is intentionally small
@@ -118,7 +118,7 @@ pub const COMMANDS: &[CommandId] = &[
 
 /// Pure descriptor of the current selection, published by the canvas view on a
 /// right-click and consumed by the entry builder (`mod.rs`) to omit inapplicable
-/// rows (the "greyed out when inapplicable" of SS5ter, realized as omission --
+/// rows (the "greyed out when inapplicable" of `toile-menus`, realized as omission --
 /// the Trame pattern). `Default` is the empty-canvas scope (Paste + Select-All).
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct CtxScope {
@@ -227,7 +227,7 @@ fn containing_frame(
 
 /// Translate a menu `CommandId` into the `ToileCommand`(s) to emit against the
 /// current selection. The single place a Toile menu id becomes command(s); pure
-/// and host-tested (toile-ui SS10). `PASTE` and `SELECT_ALL` are UI-only intents
+/// and host-tested (`toile-menus`). `PASTE` and `SELECT_ALL` are UI-only intents
 /// handled in the view (clipboard / local selection), so they return `vec![]`.
 pub fn resolve_menu_command(
     id: CommandId,
@@ -240,7 +240,7 @@ pub fn resolve_menu_command(
     match id {
         COPY => vec![ToileCommand::CopyElements { ids: ids() }],
         // Cut = copy then delete; the channel preserves order, so the copy
-        // captures the selection before the delete removes it (SS5ter).
+        // captures the selection before the delete removes it (`toile-clipboard`).
         CUT => vec![
             ToileCommand::CopyElements { ids: ids() },
             ToileCommand::DeleteElements { ids: ids() },
@@ -276,7 +276,7 @@ pub fn resolve_menu_command(
         // parent-frame edge), so Remove is a best-effort against that container.
         ADD_TO_FRAME => frame_children(selection, display, true),
         REMOVE_FROM_FRAME => frame_children(selection, display, false),
-        // Reactions (§4.A): set / clear the local user's reaction on each
+        // Reactions: set / clear the local user's reaction on each
         // selected target. One `React` per element; the emoji glyph is looked up
         // from the fixed picker set.
         REACT_CLEAR => react_each(selection, None),

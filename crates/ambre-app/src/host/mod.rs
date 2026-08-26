@@ -7,7 +7,7 @@
 //                names the concrete app views, so it must live downstream of the
 //                app crates -- here, in the launcher -- not in `ambre-canvas`,
 //                which is upstream of them (a closed enum naming `TrameView`
-//                upstream would cycle; ambre-spec-architecture.md 6).
+//                upstream would cycle; ambre-spec-architecture.md).
 //   FrameHost    drives one `AppView` across the GPU and the rAF loop: owns the
 //                `ambre_canvas::GpuState`, measures timings, encodes the layers
 //                from the view's `RepaintPlan`, presents the swapchain, and
@@ -60,16 +60,17 @@ pub use run::run_with;
 /// Private clipboard MIME type carrying the base64 postcard
 /// [`ClipboardPayload`](ambre_bus::ClipboardPayload) for an internal round-trip
 /// on the *synchronous* `copy`/`paste` events (Ctrl+C/Ctrl+V). Browsers that
-/// reject it fall back to `text/plain` (`-ui.md` sec.5.E).
+/// reject it fall back to `text/plain` (`ambre-spec-clipboard.md`).
 const AMBRE_CLIPBOARD_TYPE: &str = "application/x-ambre";
 
 /// The same payload under the `web ` prefix the *asynchronous* Clipboard API
 /// (`navigator.clipboard.read`/`write`) requires for a custom type. This is the
 /// channel the toolbar/menu Paste button uses, since it cannot ride a native
-/// `paste` event (`-ui.md` sec.5.E).
+/// `paste` event (`ambre-spec-clipboard.md`).
 pub(crate) const AMBRE_CLIPBOARD_WEB_TYPE: &str = "web application/x-ambre";
 
-/// Synchronous same-tab ownership marker (`-ui.md` sec.5.E). Written into the
+/// Synchronous same-tab ownership marker (`ambre-spec-clipboard.md`,
+/// `UI-THREAD-007`). Written into the
 /// clipboard event's `DataTransfer` *synchronously* during `copy`/`cut`, so --
 /// unlike the async payload write, which needs a user-activation context Firefox
 /// denies from the rAF loop -- it always reaches the OS clipboard. On `paste`,
@@ -237,8 +238,8 @@ impl AppView {
     }
 
     /// The nested `doc_embed`s this view wants painted, projected to screen space
-    /// (§2.I "Render"). Only a Toile embeds documents; every other app returns
-    /// an empty set, so `FrameHost` owns no children for it.
+    /// (`toile-embeds`, "Render"). Only a Toile embeds documents; every
+    /// other app returns an empty set, so `FrameHost` owns no children for it.
     fn visible_embeds(&self) -> Vec<VisibleEmbed> {
         match self {
             AppView::Toile(v) => v.visible_embeds(),
@@ -246,9 +247,10 @@ impl AppView {
         }
     }
 
-    /// The child document the last input event was routed into (§2.I "Input
-    /// focus"), for `FrameHost` to forward the remapped event to. `None` off a
-    /// Toile, or when the board itself consumed the event.
+    /// The child document the last input event was routed into
+    /// (`toile-embeds`, "Input focus"), for `FrameHost` to forward the
+    /// remapped event to. `None` off a Toile, or when the board itself consumed
+    /// the event.
     fn child_route(&self) -> Option<DocumentId> {
         match self {
             AppView::Toile(v) => v.child_route(),
@@ -257,7 +259,7 @@ impl AppView {
     }
 
     /// Map a physical screen point into the focused embed's child pixel space
-    /// (§2.I). `None` off a Toile or when nothing is focused.
+    /// (`toile-embeds`). `None` off a Toile or when nothing is focused.
     fn embed_to_child_space(&self, screen: Point) -> Option<Point> {
         match self {
             AppView::Toile(v) => v.embed_to_child_space(screen),

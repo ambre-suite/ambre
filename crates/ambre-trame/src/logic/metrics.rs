@@ -1,5 +1,5 @@
 // ambre-trame/src/logic/metrics.rs
-// Column-width / row-height data plane (`-ui.md` sec.4bis.C, `-logic.md` §9).
+// Column-width / row-height data plane (`trame-resize`, `trame-engine`).
 //
 // Resize is a synchronised CRDT mutation: widths/heights live in the per-sheet
 // `col_widths_{sheet}` / `row_heights_{sheet}` LWW maps keyed by the axis's

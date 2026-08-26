@@ -1,4 +1,4 @@
-//! Element / stroke lifecycle for [`ToileState`](super::ToileState) (§8):
+//! Element / stroke lifecycle for [`ToileState`](super::ToileState):
 //! create, move, resize, rotate, restyle, lock, delete, z-order reorder and
 //! freehand stroke commit. Split out of `state/mod.rs`; every method here is a
 //! `handle_command` target and commits exactly one undo item.
@@ -33,8 +33,8 @@ impl ToileState {
     }
 
     /// Create one element and update the incremental caches, **without**
-    /// committing (§2.E). The caller owns the `doc.commit()`, so an import can
-    /// land N creates in a single undo group (`toile-interop §1`). Returns the
+    /// committing. The caller owns the `doc.commit()`, so an import can
+    /// land N creates in a single undo group (`toile-import-export`). Returns the
     /// minted id, or the rejection reason as a plain [`ToileError`] (validation
     /// is identical to [`create_element`](Self::create_element)).
     pub(super) fn create_element_inner(
@@ -45,7 +45,7 @@ impl ToileState {
         content: InitContent,
         fill: Option<u32>,
     ) -> Result<ElementId, ToileError> {
-        // Group and Drawing are not creatable here (§8): a group is born via
+        // Group and Drawing are not creatable here: a group is born via
         // GroupElements, a stroke via CommitStroke.
         if matches!(kind, ElementKind::Group | ElementKind::Drawing) {
             return Err(ToileError::NotCreatable {
@@ -69,7 +69,7 @@ impl ToileState {
         let _ = em.insert("rot", 0.0);
         let _ = em.insert("locked", false);
         // Seed a per-kind default style (sticky = yellow card, others = white),
-        // then apply an optional creation-time fill override (§2.C / §2.E).
+        // then apply an optional creation-time fill override.
         let mut style = ElementStyle::for_kind(kind);
         if let Some(f) = fill {
             style.fill = Some(f);
@@ -90,7 +90,7 @@ impl ToileState {
         Ok(id)
     }
 
-    /// Seed the per-type payload fields (§2.C). Kept minimal for Phase 0.
+    /// Seed the per-type payload fields. Kept minimal for Phase 0.
     fn seed_payload(&self, em: &LoroMap, kind: ElementKind, content: &InitContent) {
         match (kind, content) {
             (ElementKind::Shape(sk), _) => {
@@ -122,14 +122,14 @@ impl ToileState {
                 let _ = em.insert("text", "");
             }
             (ElementKind::Frame, _) => {
-                // Frame content (§2.C): an empty membership list plus an empty
+                // Frame content: an empty membership list plus an empty
                 // speaker-notes text at birth. Notes MUST be seeded here, not
                 // lazily on first edit: seeding at creation gives every peer the
                 // same shared LoroText container (broadcast in the creation delta)
-                // before any edit, so concurrent notes edits converge (§1.D / §6).
+                // before any edit, so concurrent notes edits converge.
                 // A lazy first edit on each peer would mint two rival containers
                 // under the same map key -> LWW collision, one side's notes lost.
-                // Autolayout stays lazy (absent = free positioning, §2).
+                // Autolayout stays lazy (absent = free positioning,).
                 let _ = em.insert_container(CHILDREN, LoroMovableList::new());
                 let _ = em.insert_container(NOTES, LoroText::new());
             }
@@ -137,7 +137,7 @@ impl ToileState {
         }
     }
 
-    /// Overwrite the plaintext body of a sticky / text element (§6). Phase 0
+    /// Overwrite the plaintext body of a sticky / text element. Phase 0
     /// stores the body as a single LWW string field, so an edit is a full-body
     /// `insert` on the `"text"` key. Only sticky / text elements carry that field;
     /// a request against any other kind (or a missing element) is a rejected no-op.
@@ -162,7 +162,7 @@ impl ToileState {
 
     pub(super) fn move_elements(&mut self, ids: &[ElementId], delta: Vec2) -> ToileOutcome {
         // A group transforms as one: expand every selected group to its leaf
-        // descendants so translating a group moves its whole subtree (§2.F bis).
+        // descendants so translating a group moves its whole subtree.
         let mut leaves = HashSet::new();
         for id in ids {
             self.collect_leaves(id, &mut leaves);
@@ -173,7 +173,7 @@ impl ToileState {
                 continue;
             };
             if bool_of(&em, "locked") {
-                continue; // locked blocks edit locally (§6, advisory)
+                continue; // locked blocks edit locally (advisory)
             }
             let x = f64_of(&em, "x") + delta.x;
             let y = f64_of(&em, "y") + delta.y;
@@ -237,7 +237,7 @@ impl ToileState {
     /// Overwrite the style register of every unlocked element in `ids`, **without**
     /// committing. Returns whether anything changed. The caller owns the
     /// `doc.commit()` so an import can restyle a fresh element inside the same
-    /// undo group as its `CreateElement` (§2.E): style is an independent LWW
+    /// undo group as its `CreateElement`: style is an independent LWW
     /// register that cannot ride the create.
     pub(super) fn restyle_inner(&mut self, ids: &[ElementId], style: &ElementStyle) -> bool {
         let bytes = style.to_bytes();
@@ -284,12 +284,12 @@ impl ToileState {
 
     /// Remove `ids` (and, for groups, their whole subtree) from the CRDT and the
     /// incremental caches, without committing. Drops group membership, orphaned
-    /// connectors and layer entries, and prunes emptied groups (§2.F bis / §2.H /
-    /// §5.A). Returns whether anything was removed. The caller owns the
-    /// `doc.commit()` so a deletion can share one commit / one undo item with a
-    /// sibling mutation (e.g. a boolean op consuming its sources, §3).
+    /// connectors and layer entries, and prunes emptied groups (`toile-elements`).
+    /// Returns whether anything was removed. The caller owns the `doc.commit()`
+    /// so a deletion can share one commit / one undo item with a sibling mutation
+    /// (e.g. a boolean op consuming its sources).
     pub(super) fn delete_from_doc(&mut self, ids: &[ElementId]) -> bool {
-        // Deleting a group cascades to its members (§2.F bis): expand the request
+        // Deleting a group cascades to its members: expand the request
         // to the full subtree of every listed group before removing anything.
         let mut expanded: HashSet<ElementId> = HashSet::new();
         for id in ids {
@@ -307,14 +307,14 @@ impl ToileState {
         if !removed_any {
             return false;
         }
-        // Drop any group membership referencing a deleted node (§2.F bis / §2.H).
+        // Drop any group membership referencing a deleted node.
         for id in &expanded {
             if let Some(g) = self.enclosing_group(id) {
                 self.remove_child(&g, id);
             }
         }
-        // Drop locally-owned connectors whose endpoint was deleted (§5.A) and
-        // strip both elements and orphaned connectors from `layers` (§2.H).
+        // Drop locally-owned connectors whose endpoint was deleted and
+        // strip both elements and orphaned connectors from `layers`.
         let orphan_conns = self.connectors_touching(&del);
         let conns = self.doc.get_map(CONNECTORS);
         for cid in &orphan_conns {
@@ -329,12 +329,12 @@ impl ToileState {
             self.index.remove(id);
         }
         // A group whose members were all deleted is now empty and meaningless;
-        // prune it so the incremental caches match a full rebuild (§1).
+        // prune it so the incremental caches match a full rebuild.
         self.prune_empty_groups();
         true
     }
 
-    // -- z-order (§2.G) --------------------------------------------------------
+    // -- z-order --------------------------------------------------------
 
     pub(super) fn reorder(&mut self, node: NodeId, to: ZTarget) -> ToileOutcome {
         let Some(from_idx) = self.layers.iter().position(|n| n == &node) else {
@@ -357,7 +357,7 @@ impl ToileState {
         self.emit_with_update(vec![self.viewport_event()])
     }
 
-    // -- freehand (§4) ---------------------------------------------------------
+    // -- freehand ---------------------------------------------------------
 
     pub(super) fn commit_stroke(
         &mut self,
@@ -399,7 +399,7 @@ impl ToileState {
 
 #[cfg(test)]
 mod inner_tests {
-    //! The commit-free `*_inner` helpers (`toile-interop §2.E`): several creates,
+    //! The commit-free `*_inner` helpers (`toile-import-export`): several creates,
     //! a restyle and a group must share ONE `doc.commit()` and collapse to ONE
     //! undo item, the invariant `apply_import` relies on.
 

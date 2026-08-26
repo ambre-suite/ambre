@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 /// than scattering it over ~11 per-attribute maps -- is the convergence
 /// invariant: two peers that concurrently restyle the same cell race exactly
 /// once, so the merged style is always one writer's, never a per-attribute blend
-/// (`ambre-spec-trame-logic.md` sec.2.B).
+/// (`trame-schema`, `TRAME-016`).
 #[derive(Serialize, Deserialize, Default)]
 struct StyleRecord {
     bold: bool,
@@ -58,7 +58,7 @@ impl TrameState {
     }
 
     // -------------------------------------------------------------------------
-    // Rich manual formatting (`-ui.md` sec.5bis)
+    // Rich manual formatting (`trame-cell-styles`)
     // -------------------------------------------------------------------------
 
     /// Apply a [`StylePatch`] to every cell of the tracked selection, persist the
@@ -240,7 +240,8 @@ impl TrameState {
     }
 
     /// Apply a cell's number format to its computed display `text`. A `General` /
-    /// `Text` cell or a non-numeric value renders verbatim (`-ui.md` sec.5bis).
+    /// `Text` cell or a non-numeric value renders verbatim
+    /// (`trame-number-formats`).
     pub(super) fn format_display(
         &self,
         _row: u32,

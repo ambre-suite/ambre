@@ -1,5 +1,5 @@
 // ambre-trame/src/logic/interop.rs
-// CSV import / export (Trame interop MVP, `ambre-spec-trame-interop.md` §4).
+// CSV import / export (`trame-import-export`).
 //
 // Part of the `TrameState` impl, split out by concern. Submodule of `logic`, so
 // it reaches the private fields/helpers of the parent module through the
@@ -9,7 +9,8 @@
 use super::*;
 
 impl TrameState {
-    /// Import CSV bytes into the workbook (`§4.A`). Parses the records, resolves
+    /// Import CSV bytes into the workbook (`trame-import-export`). Parses the
+    /// records, resolves
     /// (or creates) the target sheet, writes each non-empty field as a literal
     /// cell, and recomputes -- the whole import is a single undo group.
     pub(super) fn import_csv(
@@ -96,7 +97,8 @@ impl TrameState {
         outcome
     }
 
-    /// Export a sheet (or sub-range) to CSV bytes (`§4.B`). Read-only: emits no
+    /// Export a sheet (or sub-range) to CSV bytes (`trame-import-export`).
+    /// Read-only: emits no
     /// CRDT delta. Cells are written by their displayed value (formula results
     /// included). Returns an [`TrameEvent::ExportComplete`] carrying the bytes.
     pub(super) fn export_csv(
@@ -211,7 +213,7 @@ impl TrameState {
 }
 
 /// Auto-detect the CSV field separator: comma vs semicolon, by frequency in the
-/// first kilobyte (`§4.A`). Defaults to comma on a tie.
+/// first kilobyte (`trame-import-export`). Defaults to comma on a tie.
 fn detect_csv_delimiter(data: &[u8]) -> u8 {
     let sample = &data[..data.len().min(1024)];
     let commas = sample.iter().filter(|&&b| b == b',').count();

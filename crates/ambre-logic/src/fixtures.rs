@@ -1,7 +1,6 @@
 // ambre-logic/src/fixtures.rs
 // ============================================================================
-// The document-fixture loader, registry and driver (`ambre-spec-fixtures.md`
-// §2.B).
+// The document-fixture loader, registry and driver (`ambre-spec-fixtures.md`).
 //
 // Three homes, one dependency grain: the *types* are in `ambre-core` (the orphan
 // rule puts `FixtureGen` upstream of both app crates); the *generators* sit next
@@ -14,7 +13,7 @@
 // production code and live in `lib.rs`.
 //
 // Not `#[cfg(test)]`: such a module is reachable only from its own crate's test
-// harness, whereas `just fixtures` invokes the driver from a binary (§5).
+// harness, whereas `just fixtures` invokes the driver from a binary.
 // ============================================================================
 
 use std::fs;
@@ -26,7 +25,7 @@ use ambre_core::{DocType, DocumentId, FixtureGen, FixtureManifest, FixtureShape}
 use crate::DocState;
 
 // -----------------------------------------------------------------------------
-// On-disk layout (§2.B)
+// On-disk layout
 // -----------------------------------------------------------------------------
 
 /// The corpus root, relative to the workspace root.
@@ -34,9 +33,9 @@ pub const CORPUS_DIR: &str = "fixtures";
 /// Artifacts a live generator produces; rewritten by every `just fixtures` run.
 pub const CURRENT_DIR: &str = "current";
 /// Artifacts copied out of `current/` at a version bump; **never** regenerated,
-/// because no current generator can produce them (§4).
+/// because no current generator can produce them.
 pub const FROZEN_DIR: &str = "frozen";
-/// Scale corpora: produced on demand, git-ignored (§5).
+/// Scale corpora: produced on demand, git-ignored.
 pub const BENCH_DIR: &str = "bench";
 
 /// Extension of the document artifact itself -- an ordinary plaintext `.ambre`.
@@ -64,7 +63,7 @@ pub const REGISTRY: &[&dyn FixtureGen] = &[];
 
 /// Failures of the *corpus*, distinct from failures of the *container*.
 ///
-/// [`DocFileError`] (`docfile §2.B`) stays the authority on malformed bytes; this
+/// [`DocFileError`] (`docfile`) stays the authority on malformed bytes; this
 /// wraps it and adds the conditions only a corpus has.
 #[derive(Debug, thiserror::Error)]
 pub enum FixtureError {
@@ -84,7 +83,7 @@ pub enum FixtureError {
 
     /// `DocState::new` returned `None` -- a `doc_type` whose engine does not
     /// exist yet (`Prose`, `Murmure`). Unreachable for any fixture this spec
-    /// produces (§1.A excludes both) and present so the loader degrades cleanly
+    /// produces (excludes both) and present so the loader degrades cleanly
     /// when they arrive.
     #[error("no engine for document type {doc_type:?}")]
     NoEngine { doc_type: DocType },
@@ -102,7 +101,7 @@ pub enum FixtureError {
 /// Decode a state into the coarse summary the manifest records.
 ///
 /// On the loader side rather than on [`FixtureGen`], so the manifest-integrity
-/// check of §4 has something independent to compare against: a generator
+/// check has something independent to compare against: a generator
 /// declaring its own shape would assert only that it agrees with itself.
 pub fn shape_of(state: &DocState) -> FixtureShape {
     match state {
@@ -116,7 +115,7 @@ pub fn shape_of(state: &DocState) -> FixtureShape {
 ///
 /// **Not** the CRDT -- two documents agreeing on content still differ in op
 /// history, peer ids and commit timestamps, so no byte or state comparison can
-/// express "same document by a different route" (§6). §4's frozen belt compares
+/// express "same document by a different route". 's frozen belt compares
 /// this, and text means a failure prints a readable diff rather than a length
 /// mismatch.
 ///
@@ -124,7 +123,7 @@ pub fn shape_of(state: &DocState) -> FixtureShape {
 /// materializes it, so dumping a document can register containers a sparse one
 /// had never created and change what its next `export_snapshot` emits. That is
 /// the same lazy materialization every engine reseed already performs (which is
-/// why §4 defines the round trip as a fixed point rather than as byte equality),
+/// why defines the round trip as a fixed point rather than as byte equality),
 /// and it is harmless to every consumer here -- the drift gate diffs bytes read
 /// off disk, never bytes re-exported from a state that has been dumped. It is
 /// nonetheless a reason not to dump a document and then persist it.
@@ -194,7 +193,7 @@ pub fn load_fixture_from(dir: &Path, name: &str) -> Result<(DocumentId, DocState
 }
 
 /// Parse plaintext `.ambre` bytes into a live state through the production import
-/// path (§2.A: the fixture loader **is** the production importer).
+/// path (: the fixture loader **is** the production importer).
 ///
 /// Two hops. First the header, read type-agnostically -- the file names its own
 /// app (`docfile` I2), so nothing here has to be told which importer to reach
@@ -215,7 +214,7 @@ pub fn import_fixture(bytes: &[u8]) -> Result<(DocumentId, DocState), FixtureErr
     // The same bytes, header included: each app re-reads the header through
     // `read_ambre_plaintext_as`, which is also where the dispatch rule fires.
     // That re-reads (and re-copies) the payload, which is the price of keeping
-    // one import path instead of two; nothing here is on a hot path (§5).
+    // one import path instead of two; nothing here is on a hot path.
     let document_id = match &mut state {
         DocState::Trame(trame) => trame.import_ambre_plaintext(bytes).map(|(id, _events)| id),
         DocState::Toile(toile) => toile.import_ambre_plaintext(bytes).map(|(id, _events)| id),
@@ -283,7 +282,7 @@ pub fn manifest_for(
         doc_type: generator.doc_type(),
         ambre_version: AMBRE_VERSION,
         // `ARCH P8` has not created the payload register yet; 0 is what an absent
-        // one reads as (`architecture §2.D`). The day it lands, that bump is
+        // one reads as (`architecture`). The day it lands, that bump is
         // itself a schema bump and carries a full regeneration in its own commit.
         schema_version: 0,
         digest: digest_of(bytes),
@@ -292,7 +291,7 @@ pub fn manifest_for(
 }
 
 /// BLAKE2b over the **whole `.ambre` file, header included**, so a flipped
-/// `document_id` byte is caught by the write-once check of §4.
+/// `document_id` byte is caught by the write-once check.
 ///
 /// `ambre-crypto` has no plain `hash()`; `chain_hash` with an empty parent proof
 /// degenerates to a keyless 32-byte digest, which is exactly what is wanted here.
@@ -316,7 +315,7 @@ pub fn write_fixture(
     }
     fs::write(&artifact, &bytes)?;
     // Pretty-printed with a trailing newline: the sidecar exists to be *read* in
-    // a diff (§2.A), and a single-line JSON blob would be as opaque as the binary
+    // a diff, and a single-line JSON blob would be as opaque as the binary
     // it describes.
     let mut json = serde_json::to_string_pretty(&manifest).map_err(|e| FixtureError::Manifest {
         name: generator.name().to_owned(),

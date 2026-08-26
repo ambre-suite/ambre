@@ -1,10 +1,10 @@
-//! Engine lifecycle tests and the 2-peer CRDT convergence property test (§10).
+//! Engine lifecycle tests and the 2-peer CRDT convergence property test.
 //!
 //! The convergence test drives two independent [`ToileState`]s, relaying every
 //! local `update` delta to the other peer via `apply_remote`, then asserts they
 //! reach an identical `LoroDoc` **and** identical derived caches
 //! (`bounds` / `layers`) -- the whiteboard has no computed values to compare,
-//! only state and derived structures (§6).
+//! only state and derived structures.
 
 use kurbo::{Point, Rect, Size, Vec2};
 use proptest::prelude::*;
@@ -219,7 +219,7 @@ fn selection_stats_spans_offscreen_elements() {
 
 #[test]
 fn selection_stats_empty_ids_span_whole_board() {
-    // Empty ids = whole-board extent, for View -> Fit (`toile-ui §5quinquies.E`):
+    // Empty ids = whole-board extent, for View -> Fit (`toile-viewport`):
     // the union of every element's bounds, regardless of the (UI-only) selection.
     let mut st = ToileState::new();
     let _a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
@@ -269,7 +269,7 @@ fn group_and_drawing_are_not_creatable() {
 }
 
 // -----------------------------------------------------------------------------
-// Find (board text search, §8 quater)
+// Find (board text search,)
 // -----------------------------------------------------------------------------
 
 fn create_sticky(st: &mut ToileState, at: Point, body: &str) -> ElementId {
@@ -402,7 +402,7 @@ fn find_ignores_non_text_elements_and_empty_query() {
 }
 
 // -----------------------------------------------------------------------------
-// Ephemeral presence (§7)
+// Ephemeral presence
 // -----------------------------------------------------------------------------
 
 fn peer_presence(events: Vec<ToileEvent>) -> crate::logic::command::PresenceUpdate {
@@ -449,7 +449,7 @@ fn presence_command_broadcasts_ephemeral_only() {
 
 #[test]
 fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
-    // #2 / §13 DoD: an inbound presence frame yields a PeerPresence keyed by the
+    // #2 / DoD: an inbound presence frame yields a PeerPresence keyed by the
     // resolved UserId and mutates neither the doc nor its history.
     let mut sender = ToileState::new();
     let payload = PresencePayload {
@@ -478,7 +478,7 @@ fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
     assert_eq!(update.presence, payload);
     assert_eq!(rx.peer_presence(&alice), Some(&payload));
 
-    // Non-mutating: the CRDT snapshot and element set are untouched (§7).
+    // Non-mutating: the CRDT snapshot and element set are untouched.
     assert_eq!(rx.export_snapshot(), before);
     assert_eq!(rx.element_count(), count_before);
 
@@ -504,7 +504,7 @@ fn apply_ephemeral_drops_a_malformed_frame() {
 }
 
 // -----------------------------------------------------------------------------
-// Groups (§2.F bis)
+// Groups
 // -----------------------------------------------------------------------------
 
 #[test]
@@ -592,7 +592,7 @@ fn deleting_a_group_cascades_to_members() {
 }
 
 // -----------------------------------------------------------------------------
-// Frames: membership + z-order invariant (§2.F / §2.G)
+// Frames: membership + z-order invariant
 // -----------------------------------------------------------------------------
 
 fn create_frame(st: &mut ToileState, at: Point, size: Size) -> ElementId {
@@ -691,7 +691,7 @@ fn set_frame_children_is_one_undo_item() {
 }
 
 // -----------------------------------------------------------------------------
-// Smart Animate snapshot derivation (`toile-features` §1.C)
+// Smart Animate snapshot derivation (`toile-presentation`)
 // -----------------------------------------------------------------------------
 
 #[test]
@@ -752,7 +752,7 @@ fn frame_snapshot_captures_declared_children_props() {
 }
 
 // -----------------------------------------------------------------------------
-// Clipboard: copy / paste / duplicate (§8 ter)
+// Clipboard: copy / paste / duplicate
 // -----------------------------------------------------------------------------
 
 fn clip_of(out: &crate::logic::command::ToileOutcome) -> crate::logic::command::ClipboardPayload {
@@ -893,7 +893,7 @@ fn clipboard_payload_postcard_roundtrips() {
 
 #[test]
 fn paste_reproduces_selection_on_a_separate_board() {
-    // Cross-board portability (§8 ter DoD): copy from one board, paste into a
+    // Cross-board portability (DoD): copy from one board, paste into a
     // fresh one and the selection is reproduced.
     let mut src = ToileState::new();
     let a = create_rect(&mut src, Point::new(5.0, 5.0), Size::new(10.0, 10.0));
@@ -911,7 +911,7 @@ fn paste_reproduces_selection_on_a_separate_board() {
 }
 
 // -----------------------------------------------------------------------------
-// Undo / redo (§8 bis)
+// Undo / redo
 // -----------------------------------------------------------------------------
 
 #[test]
@@ -945,7 +945,7 @@ fn undo_reverts_group_as_one_item() {
 }
 
 // -----------------------------------------------------------------------------
-// Transforms, connectors, viewport (§3 / §5 / §9)
+// Transforms, connectors, viewport
 // -----------------------------------------------------------------------------
 
 fn connect(st: &mut ToileState, from: ElementId, to: ElementId) -> ConnectorId {
@@ -977,7 +977,7 @@ fn connector_node_count(st: &ToileState) -> usize {
 fn rotate_expands_the_aabb() {
     let mut st = ToileState::new();
     // A 100x50 rect rotated 90 deg about its center (50,25) spans 50x100, so its
-    // rotation-expanded AABB is (25,-25)..(75,75) -- the §3 invariant.
+    // rotation-expanded AABB is (25,-25)..(75,75) -- the invariant.
     let id = create_rect(&mut st, Point::ZERO, Size::new(100.0, 50.0));
     st.handle_command(ToileCommand::RotateElement {
         id: id.clone(),
@@ -1042,13 +1042,13 @@ fn retarget_to_missing_element_reports_dangling() {
             .any(|e| matches!(e, ToileEvent::DanglingConnector(c) if *c == conn)),
         "retarget to a missing element must surface DanglingConnector"
     );
-    // A dangling connector routes to None and is dropped from the paint set (§5.A).
+    // A dangling connector routes to None and is dropped from the paint set.
     assert_eq!(connector_node_count(&st), 0);
 }
 
 #[test]
 fn deleting_an_endpoint_makes_the_connector_dangle() {
-    // §5.A: an endpoint deletion leaves the connector unroutable; it is skipped
+    // an endpoint deletion leaves the connector unroutable; it is skipped
     // at derivation (route -> None), never corrupting state.
     let mut st = ToileState::new();
     let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
@@ -1067,7 +1067,7 @@ fn deleting_an_endpoint_makes_the_connector_dangle() {
 
 #[test]
 fn viewport_culls_offscreen_nodes() {
-    // §9: derivation only emits the visible set. Default viewport spans
+    // derivation only emits the visible set. Default viewport spans
     // roughly (-640,-400)..(640,400), so a node at (5000,5000) is culled.
     let mut st = ToileState::new();
     let near = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
@@ -1085,7 +1085,7 @@ fn viewport_culls_offscreen_nodes() {
 }
 
 // -----------------------------------------------------------------------------
-// Presentation: slide sequence CRDT + playback (`toile-features` §1)
+// Presentation: slide sequence CRDT + playback (`toile-presentation`)
 // -----------------------------------------------------------------------------
 
 fn slide_changed(out: &crate::logic::command::ToileOutcome) -> Option<usize> {
@@ -1110,7 +1110,7 @@ fn set_slide_order_produces_delta_and_is_undoable() {
     );
     assert_eq!(st.slide_order(), vec![b.clone(), a.clone()]);
 
-    // The whole reorder collapses under a single undo (§8 bis).
+    // The whole reorder collapses under a single undo.
     st.handle_command(ToileCommand::Undo);
     assert!(
         st.slide_order().is_empty(),
@@ -1126,7 +1126,7 @@ fn slide_order_dedups_repeated_frames() {
     st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a.clone(), b.clone(), a.clone()],
     });
-    // The repeated first frame is dropped, keeping first occurrence (§1.A).
+    // The repeated first frame is dropped, keeping first occurrence.
     assert_eq!(st.slide_order(), vec![a, b]);
 }
 
@@ -1182,7 +1182,7 @@ fn slide_change(out: &crate::logic::command::ToileOutcome) -> crate::logic::comm
 #[test]
 fn slide_change_carries_snapshots_and_fit_rect() {
     // The camera pass needs both frame snapshots + the target rect in one shot,
-    // since the UI holds no board state (toile-features §1.C / §1.D).
+    // since the UI holds no board state (toile-presentation).
     let mut st = ToileState::new();
     let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
     let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
@@ -1205,7 +1205,7 @@ fn slide_change_carries_snapshots_and_fit_rect() {
 
 #[test]
 fn slide_change_carries_count_frame_and_notes() {
-    // The presenter overlay panel (toile-features §1.D) reads the deck length, the
+    // The presenter overlay panel (toile-presentation) reads the deck length, the
     // active frame id and its speaker notes straight off the enriched SlideChanged,
     // since the chrome holds no board state.
     let mut st = ToileState::new();
@@ -1242,7 +1242,7 @@ fn slide_change_carries_count_frame_and_notes() {
 #[test]
 fn enter_present_starts_from_empty_snapshot() {
     // Entering present mode has no source frame: `from` is empty so slide 0 fades
-    // in rather than tweening from a stale frame (§1.C).
+    // in rather than tweening from a stale frame.
     let mut st = ToileState::new();
     let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
     st.handle_command(ToileCommand::SetSlideOrder {
@@ -1294,7 +1294,7 @@ fn present_mode_toggle_is_local() {
 #[test]
 fn playback_is_not_synced() {
     // Two peers sharing a deck: A drives its own playback; B never sees it, since
-    // playback carries no CRDT delta (§1.B).
+    // playback carries no CRDT delta.
     let mut a = ToileState::new();
     let mut b = ToileState::new();
     let f0 = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
@@ -1322,7 +1322,7 @@ fn playback_is_not_synced() {
 }
 
 // -----------------------------------------------------------------------------
-// Follow presenter: ephemeral slide broadcast (`toile-features` §1.B)
+// Follow presenter: ephemeral slide broadcast (`toile-presentation`)
 // -----------------------------------------------------------------------------
 
 /// Decode a broadcast slide index out of an outcome's ephemeral frame, if any.
@@ -1565,7 +1565,7 @@ fn follow_state_is_not_synced() {
 }
 
 // -----------------------------------------------------------------------------
-// Speaker notes (toile-features §1.D / §5)
+// Speaker notes (toile-presentation)
 // -----------------------------------------------------------------------------
 
 /// A single-splice insertion at `at` (no deletion), the common editor edit.
@@ -1599,7 +1599,7 @@ fn edit_notes_produces_delta_and_is_undoable() {
     });
     assert_eq!(st.notes(&f), "Intro slide -- talk track");
 
-    // Each EditNotes is one undo item (§8 bis): undo drops the last splice only.
+    // Each EditNotes is one undo item: undo drops the last splice only.
     st.handle_command(ToileCommand::Undo);
     assert_eq!(st.notes(&f), "Intro slide", "one undo reverts one splice");
     st.handle_command(ToileCommand::Redo);
@@ -1671,7 +1671,7 @@ fn edit_notes_rejects_non_frame() {
 
 #[test]
 fn concurrent_notes_edits_converge() {
-    // Two peers share a frame (and thus its seeded notes LoroText, §1.D), then
+    // Two peers share a frame (and thus its seeded notes LoroText,), then
     // edit the notes concurrently at different positions. The char-CRDT must
     // converge: both peers reach the same notes string after a sync round.
     let mut a = ToileState::new();
@@ -1713,7 +1713,7 @@ fn concurrent_notes_edits_converge() {
 }
 
 // -----------------------------------------------------------------------------
-// Auto-layout spec register (toile-features §2 / §5)
+// Auto-layout spec register (toile-auto-layout)
 // -----------------------------------------------------------------------------
 
 fn a_layout(direction: Direction, gap: f64) -> AutoLayout {
@@ -1756,7 +1756,7 @@ fn set_auto_layout_add_change_clear() {
         Some(a_layout(Direction::Vertical, 12.0))
     );
 
-    // One SetAutoLayout is one undo item (§8 bis): undo reverts to the prior spec.
+    // One SetAutoLayout is one undo item: undo reverts to the prior spec.
     st.handle_command(ToileCommand::Undo);
     assert_eq!(
         st.auto_layout(&f),
@@ -1846,7 +1846,7 @@ fn concurrent_auto_layout_edits_converge() {
 }
 
 // -----------------------------------------------------------------------------
-// Reactions / votes (toile-features §4.A / §5)
+// Reactions / votes (toile-reactions)
 // -----------------------------------------------------------------------------
 
 fn emoji(s: &str) -> Reaction {
@@ -1916,7 +1916,7 @@ fn derive_viewport_carries_tally_and_skips_deleted_target() {
         reaction: Some(emoji("thumbsup")),
     });
 
-    // The derived viewport attaches the per-target tally (§4.A), keyed by target.
+    // The derived viewport attaches the per-target tally, keyed by target.
     let dv = st.debug_viewport();
     let tally = dv
         .reactions
@@ -1937,7 +1937,7 @@ fn derive_viewport_carries_tally_and_skips_deleted_target() {
 }
 
 // -----------------------------------------------------------------------------
-// doc_embed: the spatial reference to a nested document (§2.I)
+// doc_embed: the spatial reference to a nested document
 // -----------------------------------------------------------------------------
 
 /// Pull the single `DocEmbed` geometry out of the derived viewport.
@@ -1979,7 +1979,7 @@ fn doc_embed_reference_survives_the_crdt_round_trip() {
     };
     assert_eq!(document_id, child, "the child reference did not round-trip");
     assert_eq!(doc_type, ambre_core::DocType::Trame);
-    // Focus is view-local state, never CRDT (§2.I): derive always says false.
+    // Focus is view-local state, never CRDT: derive always says false.
     assert!(!focused, "focus must not be derived from the document");
 }
 
@@ -2044,7 +2044,7 @@ fn react_broadcasts_delta_and_is_undoable() {
         "a reaction emits ReactionsUpdated for its target"
     );
 
-    // One React is one undo item (§8 bis): undo drops the reaction.
+    // One React is one undo item: undo drops the reaction.
     st.handle_command(ToileCommand::Undo);
     assert_eq!(
         st.reaction_tally(&t),
@@ -2084,7 +2084,7 @@ fn tally_skips_a_deleted_target() {
     });
     assert_eq!(st.reaction_tally(&t).emoji.len(), 1);
 
-    // Deleting the target skips its reaction sub-map at derivation (§4.A): the
+    // Deleting the target skips its reaction sub-map at derivation: the
     // orphan bytes are never destroyed, only not rendered.
     st.handle_command(ToileCommand::DeleteElements {
         ids: vec![t.clone()],
@@ -2140,7 +2140,7 @@ fn concurrent_reactions_distinct_users_converge() {
 #[test]
 fn same_user_two_devices_is_one_entry() {
     // The same account reacting from two devices (two sessions / PeerIDs) must
-    // collapse to a single entry keyed by the canonical UserId (§4.A) -- never a
+    // collapse to a single entry keyed by the canonical UserId -- never a
     // double-count.
     let me = UserId::new();
     let mut a = ToileState::new();
@@ -2243,13 +2243,13 @@ enum PeerOp {
     SetSlideOrderRot {
         by: usize,
     },
-    // Auto-layout spec -- concurrent LWW register edits on a shared frame (§2).
+    // Auto-layout spec -- concurrent LWW register edits on a shared frame.
     SetAutoLayoutNth {
         nth: usize,
         dir: u8,
         gap: f64,
     },
-    // Reactions -- concurrent per-user entries on a shared target (§4.A). Each
+    // Reactions -- concurrent per-user entries on a shared target. Each
     // peer holds a distinct `UserId`, so two reactions on one target must both
     // survive and the derived tally must converge.
     ReactNth {
@@ -2401,7 +2401,7 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<Vec<u8>> {
         }),
         PeerOp::SetSlideOrderRot { by } => {
             // Rotate the current live-id set to build a permutation, so concurrent
-            // peers set overlapping-but-different slide orders (§1.A convergence).
+            // peers set overlapping-but-different slide orders (convergence).
             if ids.is_empty() {
                 return None;
             }
@@ -2483,7 +2483,7 @@ proptest! {
         let mut b = ToileState::new();
         // Distinct canonical identities (as `SessionReady` would seed), so a
         // `ReactNth` on each peer writes under its own key: concurrent reactions
-        // on one target must both survive (§4.A).
+        // on one target must both survive.
         a.set_user_id(UserId::new());
         b.set_user_id(UserId::new());
 
@@ -2525,11 +2525,11 @@ proptest! {
         prop_assert_eq!(a.layer_order(), b.layer_order(), "layer order diverged");
 
         // Identical slide sequence: concurrent `SetSlideOrder` reorders must
-        // converge on the shared `LoroMovableList<FrameId>` (§1.A).
+        // converge on the shared `LoroMovableList<FrameId>`.
         prop_assert_eq!(a.slide_order(), b.slide_order(), "slide order diverged");
 
         // Identical auto-layout spec on every surviving element: concurrent
-        // `SetAutoLayout` edits converge on the shared LWW register (§2 / §6).
+        // `SetAutoLayout` edits converge on the shared LWW register.
         for id in &la {
             prop_assert_eq!(
                 a.auto_layout(id), b.auto_layout(id),
@@ -2538,7 +2538,7 @@ proptest! {
         }
 
         // Identical derived reaction tally on every surviving target: concurrent
-        // per-user reactions converge and no vote is double-counted (§4.A / §6).
+        // per-user reactions converge and no vote is double-counted.
         for id in &la {
             prop_assert_eq!(
                 a.reaction_tally(id), b.reaction_tally(id),
@@ -2558,7 +2558,7 @@ proptest! {
         );
     }
 
-    /// The §1 invariant beyond the isolated `SpatialIndex`: every derived cache
+    /// The invariant beyond the isolated `SpatialIndex`: every derived cache
     /// held by `ToileState` (bounds, layers, group unions, routed connectors)
     /// must equal what a full rebuild from the CRDT snapshot produces. `b` is
     /// built purely through `apply_remote` (the `rebuild_caches` path), so this

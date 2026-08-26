@@ -1,6 +1,6 @@
 // ambre-toile/src/ui/reactions.rs
 // ============================================================================
-// Reaction badge overlay (toile-features §4.A). Each element carrying a derived
+// Reaction badge overlay (toile-reactions). Each element carrying a derived
 // reaction tally (in `DisplayViewport.reactions`) gets a row of chips painted
 // just below its bottom edge, in screen space above all content and never
 // culled -- the same overlay pass as presence. Badges are ALWAYS visible (edit
@@ -9,7 +9,7 @@
 // One chip per distinct emoji shows the color emoji glyph followed by its count
 // (e.g. "thumbs-up 3"); the emoji renders in full color through the shared color
 // atlas (ambre-canvas), the digits as ordinary text, both in a single layout.
-// Votes (§4.A) collapse into one trailing badge: the signed weight sum and the
+// Votes collapse into one trailing badge: the signed weight sum and the
 // voter count.
 //
 // Chips are a constant screen size regardless of Toile zoom (like presence
@@ -38,7 +38,7 @@ const ROW_MARGIN: f64 = 6.0;
 /// Corner radius of a chip pill, in logical pixels.
 const CHIP_RADIUS: f64 = 8.0;
 
-/// Paint the reaction badge row for every element with a tally (§4.A). Pure over
+/// Paint the reaction badge row for every element with a tally. Pure over
 /// `DrawSurface`: host-testable. Called from the overlay pass, unconditionally
 /// (badges are always visible), after presence so chips sit above ghosts.
 pub fn paint_reactions<S: DrawSurface>(
@@ -85,7 +85,7 @@ fn paint_chip_row<S: DrawSurface>(
         x = paint_chip(surface, &label, x, y, font_cx, text_cache, palette) + CHIP_GAP;
     }
 
-    // A single trailing vote badge when any vote exists (§4.A): signed weight sum
+    // A single trailing vote badge when any vote exists: signed weight sum
     // and voter count, e.g. "+3 (5)".
     if tally.vote_count > 0 {
         let label = format!("{:+} ({})", tally.vote_total, tally.vote_count);

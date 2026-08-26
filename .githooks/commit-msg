@@ -1,0 +1,11 @@
+#!/bin/sh
+# Refuse a commit message that breaks `ai/ambre-git-strategy.md`.
+#
+# Git never ships a hook inside a clone, deliberately: cloning a repository must
+# not run code. So this directory is versioned and each contributor turns it on
+# once, which is an adoption rather than an imposition:
+#
+#     git config core.hooksPath .githooks
+#
+# The rules and the reason each one is checked are in `scripts/commit_msg.py`.
+exec python3 "$(git rev-parse --show-toplevel)/scripts/commit_msg.py" "$1"

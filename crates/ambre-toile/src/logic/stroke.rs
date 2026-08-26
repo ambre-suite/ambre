@@ -1,13 +1,13 @@
-//! Freehand stroke smoothing (§4). The CRDT stores only the raw sampled
+//! Freehand stroke smoothing. The CRDT stores only the raw sampled
 //! [`StrokePoint`]s; the smoothed polyline is recomputed here at derivation time
-//! (and again on the GPU path in `toile-ui`), never persisted.
+//! (and again on the GPU path in `toile-board-rendering`), never persisted.
 
 use kurbo::Point;
 
 use crate::logic::model::StrokePoint;
 
 /// Number of interpolated segments per Catmull-Rom span at derivation time. The
-/// GPU path in `toile-ui` picks its own subdivision from the zoom; the Logic
+/// GPU path in `toile-board-rendering` picks its own subdivision from the zoom; the Logic
 /// thread only needs a polyline dense enough for hit-testing and bounds.
 const SEGMENTS_PER_SPAN: usize = 8;
 

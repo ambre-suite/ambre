@@ -23,7 +23,7 @@ pub struct GridRange {
     pub col_end: u32,
 }
 
-/// How [`TrameCommand::FillRange`] fills `dest \ src` (`-ui.md` sec.5.F).
+/// How [`TrameCommand::FillRange`] fills `dest \ src` (`trame-autofill`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FillMode {
     /// The Logic thread picks `Series` when a fill line's source values form an
@@ -39,7 +39,7 @@ pub enum FillMode {
 }
 
 /// One key of a multi-column sort ([`TrameCommand::SortRangeMulti`],
-/// `ambre-spec-trame-features.md §2`).
+/// `trame-sort`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SortKey {
     /// Column to sort on, as an index within the range (`0` = `col_start`).
@@ -47,7 +47,7 @@ pub struct SortKey {
     pub ascending: bool,
 }
 
-/// A conditional-formatting rule predicate (`ambre-spec-trame-features.md §3`).
+/// A conditional-formatting rule predicate (`trame-cell-styles`).
 /// `String` operands are either a literal value or a cell reference, resolved at
 /// evaluation. MVP+ kinds (value/text/formula/presets) land in Phase 2; the
 /// gradient / data-bar / top-bottom kinds are Phase 3.
@@ -82,7 +82,8 @@ pub enum CondFormatKind {
     TopNPercent(f32),
 }
 
-/// Style applied when a conditional-formatting rule matches (`§3`). Layered on
+/// Style applied when a conditional-formatting rule matches
+/// (`trame-cell-styles`). Layered on
 /// top of the base style; absent fields leave the base intact. Colours are
 /// packed `0xRRGGBB`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,7 +93,7 @@ pub struct CondStyle {
     pub bold: bool,
 }
 
-/// A data-validation predicate (`ambre-spec-trame-features.md §5`). `List` /
+/// A data-validation predicate (`trame-cell-editing`). `List` /
 /// `NumberRange` / `TextLength` are Phase 2; `ListRange` / `DateRange` / `Regex`
 /// are Phase 3.
 #[derive(Debug, Clone)]
@@ -121,7 +122,7 @@ pub enum ValidationKind {
     Formula(String),
 }
 
-/// What happens when a [`ValidationKind`] rejects an input (`§5`).
+/// What happens when a [`ValidationKind`] rejects an input (`trame-cell-editing`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValidationOnInvalid {
     /// Block the local mutation -> [`TrameEvent::ValidationError`](super::TrameEvent::ValidationError).

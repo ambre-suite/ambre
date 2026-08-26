@@ -1,5 +1,5 @@
 //! Reactive + DOM tests for the shared chrome toolkit (Epic `ET`,
-//! `ambre-spec-architecture.md` §4 "wasm" tier, `ambre-spec-testing.md`).
+//! `ambre-spec-testing.md`, "wasm" tier).
 //!
 //! The chrome components are leptos CSR built on `web-sys`/`wasm-bindgen`: the
 //! reactive store and the mounted DOM only exist on the wasm target. So these

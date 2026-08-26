@@ -93,12 +93,12 @@ impl TrameUiState {
         self.selection.active.1
     }
 
-    /// Collapse the selection to a single cell (single-cell selection, sec.8).
+    /// Collapse the selection to a single cell (`trame-selection`).
     /// Used on a plain pointer hit; no clamping -- callers pass valid grid coords.
     ///
     /// A hit inside a merged block snaps to the block's master, so the merge is
     /// always selected as a whole (its sub-cells are never individually
-    /// selectable, spec sec.2).
+    /// selectable, `trame-cell-merges`).
     pub fn select(&mut self, row: u32, col: u32) {
         let (row, col) = self.snap_to_master(row, col);
         self.selection = Selection::single(row, col);
@@ -128,7 +128,7 @@ impl TrameUiState {
 
     /// If the active cell now sits on a *covered* sub-cell of a merge, collapse
     /// the selection onto the block master and return `true`. Covered sub-cells
-    /// are never individually selectable (spec sec.2), so this is always a safe
+    /// are never individually selectable (`trame-cell-merges`), so this is a safe
     /// correction. Called after a viewport batch so a freshly-created merge
     /// re-homes the cursor on its master (top-left): the editor and range ops
     /// then target the master, not a covered cell that would reject the write as
@@ -274,7 +274,8 @@ impl TrameUiState {
 
     /// Rightmost cached non-empty column in `row`, or `None` if the row has no
     /// cached content. Backs the End key: the UI thread has no used-range model,
-    /// so the local cell cache is the only view of content available (sec.16),
+    /// so the local cell cache is the only view of content available
+    /// (`trame-grid-viewport`),
     /// making this a best-effort jump to the end of the visible data.
     pub fn last_content_col(&self, row: u32) -> Option<u32> {
         self.cell_cache
@@ -400,7 +401,7 @@ impl TrameUiState {
         self.accepted_version = version;
         // Adopt the per-axis metrics for the covered window (absolute keys). Only
         // a non-default entry is stored; a column/row reset to the default drops
-        // out of the map so it falls back to the uniform metric (sec.4bis.C).
+        // out of the map so it falls back to the uniform metric (`trame-resize`).
         for (i, w) in col_widths.iter().enumerate() {
             let col = col_start + i as u32;
             if (*w as f64 - COL_WIDTH).abs() > f64::EPSILON {

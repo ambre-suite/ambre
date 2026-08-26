@@ -15,7 +15,7 @@ pub(crate) fn expr_to_name_target(expr: Expr) -> Option<NameTarget> {
     }
 }
 
-/// Order two cell values for sorting (`ambre-spec-trame-features.md` §3). Within
+/// Order two cell values for sorting (`trame-sort`). Within
 /// a type the natural order applies; across types the precedence is
 /// `Number < Text < Boolean < Error < Empty`, so blanks sink to the bottom and
 /// errors group just above them, matching the spec. `Range` only ever appears on
@@ -52,7 +52,7 @@ pub(crate) fn clear_loro_map(map: &loro::LoroMap) {
 }
 
 /// Whether a row's filtered-column `value` passes the filter (stays visible),
-/// per [`FilterKind`] (`ambre-spec-trame-features.md` §1.A).
+/// per [`FilterKind`] (`trame-shared-filter`).
 pub(crate) fn filter_pass(kind: &FilterKind, value: &CellValue) -> bool {
     match kind {
         // "Filter by values": the listed values are the visible (checked) ones.

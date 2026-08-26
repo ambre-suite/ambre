@@ -259,7 +259,7 @@ proptest! {
     }
 }
 
-// ── TOFU fingerprint (ambre-spec-chrome.md §2.H) ─────────────────────────────
+// ── TOFU fingerprint (`ambre-spec-key-verification.md`) ────────────────────
 
 #[test]
 fn fingerprint_is_stable_grouped_base32() {

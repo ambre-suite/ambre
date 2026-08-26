@@ -31,7 +31,7 @@ impl TrameState {
         // derived side-effects such as a filtered-column recompute) and normally
         // closed by `CommitEdit` on cell exit; this is the fallback boundary when
         // the UI omits it (e.g. a non-edit command intervenes), so one cell edit
-        // is always exactly one undo item (`-ui.md` §6.C, `-logic.md` §8).
+        // is always exactly one undo item (`trame-cell-editing`, `trame-undo`).
         // `group_end` is a no-op when no group is open.
         self.undo_manager.group_end();
         match cmd {
@@ -58,7 +58,7 @@ impl TrameState {
             TrameCommand::CommitEdit => {
                 // Cell exit: the fallback seal at the top of `dispatch_command`
                 // has already closed the edit group, so the whole edit is now one
-                // undo item. No CRDT delta of its own (`-ui.md` §6.C).
+                // undo item. No CRDT delta of its own (`trame-cell-editing`).
                 TrameOutcome::display_only(vec![])
             }
             TrameCommand::SetCellText { row, col, text } => {
@@ -136,7 +136,7 @@ impl TrameState {
                             String::new()
                         } else {
                             // Apply the cell's number format to its computed value
-                            // (sec.5bis): a plain `General` cell renders verbatim.
+                            // (`trame-number-formats`): a `General` cell is verbatim.
                             self.format_display(row, col, self.cell_text(row, col), &style)
                         };
                         cells.push(DisplayCell {
@@ -147,7 +147,7 @@ impl TrameState {
                                 String::new()
                             } else {
                                 // Reconstruct cross-sheet qualifiers from the
-                                // stable id to the current display name (§2.D).
+                                // stable id to the display name (`trame-sheets`).
                                 self.formula_display(&self.cell_raw(row, col))
                             },
                             bold: self.bold.contains(&(row, col)),
@@ -170,7 +170,8 @@ impl TrameState {
                 }
 
                 // Per-axis metric slices for the requested window: the UI feeds
-                // them straight into its variable-metric GridLayout (sec.4bis.C).
+                // them straight into its variable-metric GridLayout
+                // (`trame-resize`).
                 let col_widths = (col_start..=col_end).map(|c| self.col_width(c)).collect();
                 let row_heights = (row_start..=row_end).map(|r| self.row_height(r)).collect();
 
@@ -228,18 +229,19 @@ impl TrameState {
                 self.merge_cells(r1, c1, r2, c2)
             }
             TrameCommand::UnmergeActive => self.unmerge_selection(),
-            // Single-column shared sort over the tracked selection (`-ui.md`
-            // sec.5.C). Reference column = the range's first column (`sort_col = 0`),
-            // no header row. The active sheet is the only sortable one (see
+            // Single-column shared sort over the tracked selection
+            // (`trame-sort`). Reference column = the range's first column
+            // (`sort_col = 0`), no header row. The active sheet is the only
+            // sortable one (see
             // `sort_range`).
             TrameCommand::SortSelectionAsc => self.sort_selection(true),
             TrameCommand::SortSelectionDesc => self.sort_selection(false),
             // Whole-sheet sort by the active column (whole-column selection,
-            // sec.5.C): sorts the full used range, ref column = active column.
+            // `trame-sort`): sorts the used range, ref column = active column.
             TrameCommand::SortSheetAsc => self.sort_sheet(true),
             TrameCommand::SortSheetDesc => self.sort_sheet(false),
             // Multi-column sort over the tracked selection (the "Sort range..."
-            // dialog, sec.5.C): geometry + active sheet resolved by Logic.
+            // dialog, `trame-sort`): geometry + active sheet resolved by Logic.
             TrameCommand::SortSelectionMulti {
                 sort_keys,
                 has_header,
@@ -283,7 +285,7 @@ impl TrameState {
             } => self.apply_filter(&sheet_id, col, kind),
             TrameCommand::ClearFilter { sheet_id } => self.clear_filter(&sheet_id),
             // Parameterless siblings: geometry resolved against the tracked active
-            // cell / active sheet (`-ui.md` sec.5.D), like the sort intents above.
+            // cell / active sheet (`trame-shared-filter`), like the sorts above.
             TrameCommand::RequestActiveColumnValues => self.active_column_values(),
             TrameCommand::RequestSelectionStats => self.selection_stats(),
             // Authoritative copy: serialize the tracked selection from the
@@ -367,7 +369,7 @@ impl TrameState {
                 in_formulas,
             } => self.replace_one(query, replacement, match_case, whole_cell, in_formulas),
 
-            // Deferred feature surface (`ambre-spec-trame-features.md §10`): the
+            // Deferred feature surface (`trame-engine`): the
             // command vocabulary is complete and typed, but these handlers land
             // in later phases (personal views / multi-sort -> Phase 2,
             // conditional formatting & validation -> Phase 2/3, protection ->
@@ -387,7 +389,7 @@ impl TrameState {
 
     /// Apply one undo (`undo = true`) or redo step from Loro's `UndoManager`,
     /// then rebuild every derived cache from the resulting CRDT state and
-    /// broadcast the inverse ops it produced (§8).
+    /// broadcast the inverse ops it produced (`trame-undo`).
     ///
     /// `undo()` / `redo()` commit the inverse of a past local commit as fresh
     /// ops, so the rebuild path is identical to a structural op or import: the

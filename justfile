@@ -123,15 +123,63 @@ cov:
 spec-code:
     python3 scripts/spec_code.py --check
 
-# Ledger of the per-spec invariant tables (`ambre-spec-testing.md §7`), derived
-# rather than hand-counted -- a hand-maintained roll-up is the same failure mode
-# as a hand-maintained test list, and it was already wrong by one. Also enforces
-# the two rules that keep `unimplemented` honest (architecture §4): a declared
-# status value, and a Story citation on every unbuilt row.
+# Ledger of the per-spec invariant tables (`ambre-invariant-ledger.md`), written
+# by the script and by nothing else -- a hand-maintained roll-up is the same
+# failure mode as a hand-maintained test list, and it was already wrong by one.
+# Also enforces the rules that keep `unimplemented` honest: a declared status
+# value, a Story citation on every unbuilt row, and a cited `fn` that resolves.
 
-# invariant ledger: counts per spec + the rules that keep the statuses honest.
+# invariant ledger: fail when the file on disk is not what the script would write.
 invariants:
     python3 scripts/invariants.py
+
+# Rewrite the ledger after an invariant row changed.
+invariants-write:
+    python3 scripts/invariants.py --write
+
+# How a spec is built, not what it quotes: prose share (a migrated document is
+# capped, every other spec carries a ceiling it may only fall below), production
+# markers in a feature document, the schema document's budgets, and every
+# container built in the code present in the schema table.
+
+# spec shape: prose share (words), line length, feature-document markers, schema
+# budgets, containers.
+spec-shape:
+    python3 scripts/spec_shape.py --check
+
+# Rewrite the per-spec ceilings, prose words and long lines, after a deliberate
+# change. It lowers only, so it cannot make a red check green: a rising ceiling
+# is a spec getting worse. A spec that legitimately grows needs
+# `python3 scripts/spec_shape.py --update --raise` and a reviewed diff.
+spec-shape-update:
+    python3 scripts/spec_shape.py --update
+
+# The corpus cites a document by its name and, half the time, by a section of it.
+# Nothing resolved either, so splitting a spec left every stale citation silent:
+# `prose-engine` pointed at no document for as long as three Prose specs have
+# existed, and renumbering a spec broke every coordinate aimed at it in silence.
+# This reads the name, asks whether the file is there, and asks the file whether
+# it has that section.
+
+# citation resolution: every document and section cited exists.
+spec-refs:
+    python3 scripts/spec_refs.py --check
+
+# What the product does today, one row per feature document. The roadmap holds
+# what is left to do, and a feature built by three stories across two epics
+# appears nowhere whole in it. The inventory carries no fact of its own, so it is
+# generated: this regenerates it in memory and fails when the file on disk
+# differs, which is what stops a spec edit from leaving a stale product surface.
+# It also reads the rows against the header, and fails on a document that claims
+# `implemented` beside a row that is not built.
+
+# feature inventory: generated from the feature documents, and never stale.
+inventory:
+    python3 scripts/feature_inventory.py --check
+
+# Rewrite each application's inventory after a feature document changed.
+inventory-write:
+    python3 scripts/feature_inventory.py --write
 
 # Supply chain + capability wall. `deny.toml` sets `[graph] all-features = true`,
 # so optional dependencies (the `fixtures` feature's `ambre-crypto` edge) are part

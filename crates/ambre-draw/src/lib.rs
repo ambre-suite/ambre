@@ -142,10 +142,10 @@ pub trait DrawSurface {
     /// vector geometry. `WgpuSurface` uploads the pixels to a texture and draws
     /// a textured quad; `KrillaSurface` hands them to krilla as a raster image.
     ///
-    /// Per `toile-interop §5.B`, a Toile image whose pixels have not yet arrived
-    /// from the media cache is painted as a placeholder rect by the caller (via
-    /// `fill_rect`) and repainted through this method once the pixels are known;
-    /// the trait carries no placeholder logic itself.
+    /// Per `toile-media`, a Toile image whose pixels have not yet
+    /// arrived from the media cache is painted as a placeholder rect by the
+    /// caller (via `fill_rect`) and repainted through this method once the pixels
+    /// are known; the trait carries no placeholder logic itself.
     #[allow(unused_variables)]
     fn draw_image(&mut self, image: &ImageSource<'_>, dest: Rect) {}
 

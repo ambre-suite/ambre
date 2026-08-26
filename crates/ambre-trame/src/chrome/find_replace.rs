@@ -1,6 +1,6 @@
 // ambre-trame/src/chrome/find_replace.rs
 // ============================================================================
-// The Find & Replace DOM panel (`-ui.md` sec.5.G): a single Leptos component
+// The Find & Replace DOM panel (`trame-find-replace`): a single Leptos component
 // with two modes (find / replace), pinned top-right. Ctrl+F opens find mode,
 // Ctrl+H opens/expands replace mode (the launcher sets `state` accordingly);
 // Escape closes. The panel holds the query, replacement and the search options

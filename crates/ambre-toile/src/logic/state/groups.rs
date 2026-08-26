@@ -1,5 +1,5 @@
 //! Grouping, frame membership and the group/frame tree helpers for
-//! [`ToileState`](super::ToileState) (§2.F / §2.F bis / §2.G). Split out of
+//! [`ToileState`](super::ToileState). Split out of
 //! `state/mod.rs`. A node belongs to at most one container; group geometry is
 //! derived (never in the CRDT) and lives only in the `bounds` / R-tree caches.
 
@@ -16,7 +16,7 @@ use super::codec::{em_seed_group, str_of};
 use super::{CHILDREN, ELEMENTS, LAYERS, ToileState};
 
 impl ToileState {
-    // -- groups (§2.F bis) -----------------------------------------------------
+    // -- groups -----------------------------------------------------
 
     /// Bind `ids` into a fresh group element. Members already in another group
     /// are first removed from it (a node belongs to at most one group). The group
@@ -36,7 +36,7 @@ impl ToileState {
     /// Bind `ids` into a fresh group element **without** committing, returning the
     /// group id (or `None` when fewer than two distinct members survive filtering).
     /// The caller owns the `doc.commit()` so an import rebuilds each `<g>` inside
-    /// the one import undo group (`toile-interop §2.A`). Intermediate cache reads
+    /// the one import undo group (`toile-import-export`). Intermediate cache reads
     /// (`prune_empty_groups`, `rematerialize_layers`) are pure and stay here so the
     /// `insert_at` computation sees the detached state.
     pub(super) fn group_inner(&mut self, ids: &[ElementId]) -> Option<ElementId> {
@@ -50,7 +50,7 @@ impl ToileState {
         // Drop any member that is an ancestor of another member: selecting a group
         // together with one of its own descendants is contradictory. Keep the
         // descendants (the ancestor would otherwise be emptied by the detach below
-        // and pruned mid-op, leaving a dangling child ref in the new group, §1).
+        // and pruned mid-op, leaving a dangling child ref in the new group,).
         members = members
             .iter()
             .filter(|m| {
@@ -66,7 +66,7 @@ impl ToileState {
         }
         // Detach each member from its current group, then prune any group emptied
         // by the detach so the incremental caches stay equal to a full rebuild
-        // (§1). Done before computing `insert_at` since pruning shifts `layers`.
+        // Done before computing `insert_at` since pruning shifts `layers`.
         for m in &members {
             if let Some(g) = self.enclosing_group(m) {
                 self.remove_child(&g, m);
@@ -108,7 +108,7 @@ impl ToileState {
 
     /// Drop a group's binding: remove the group node and re-parent its children
     /// to the group's own parent (an enclosing group, or the board). The children
-    /// survive with their `layers` order intact (§2.F bis).
+    /// survive with their `layers` order intact.
     pub(super) fn ungroup_elements(&mut self, group: &ElementId) -> ToileOutcome {
         let Some(gm) = self.element_map(group) else {
             return self.err_no_element(group);
@@ -125,7 +125,7 @@ impl ToileState {
 
         // Re-parent the children to the enclosing group (board parent is implicit):
         // drop the ungrouped group from the parent's `children` (else it lingers as
-        // a dangling ref, desyncing recompute_groups from a full rebuild, §1), then
+        // a dangling ref, desyncing recompute_groups from a full rebuild,), then
         // append the surviving children.
         if let Some(p) = &parent {
             self.remove_child(p, group);
@@ -144,10 +144,10 @@ impl ToileState {
         self.emit_with_update(vec![self.viewport_event()])
     }
 
-    // -- frames (§2.F) ---------------------------------------------------------
+    // -- frames ---------------------------------------------------------
 
     /// Set a frame's membership: remove then add ids on the frame's `children`
-    /// list, and enforce the §2.G frame/child z-order invariant. A node belongs
+    /// list, and enforce the frame/child z-order invariant. A node belongs
     /// to at most one container, so an added id is first detached from any group.
     /// One undo item.
     pub(super) fn set_frame_children(
@@ -193,7 +193,7 @@ impl ToileState {
         if !changed {
             return ToileOutcome::display_only(Vec::new());
         }
-        // Prune any group emptied by moving its last child into the frame (§1).
+        // Prune any group emptied by moving its last child into the frame.
         self.prune_empty_groups();
         self.doc.commit();
         self.enforce_frame_zorder(frame);
@@ -202,7 +202,7 @@ impl ToileState {
     }
 
     /// Clamp every child of `frame` to paint after (above) the frame in `layers`
-    /// (§2.G). A child sitting below the frame is moved to just above it; repeats
+    /// A child sitting below the frame is moved to just above it; repeats
     /// until the invariant holds. Commits the reordering as part of the batch.
     fn enforce_frame_zorder(&mut self, frame: &ElementId) {
         let children = self.children_of(frame);
@@ -265,7 +265,7 @@ impl ToileState {
     }
 
     /// The group whose `children` contains `id`, if any (a node belongs to at
-    /// most one group, §2.F bis).
+    /// most one group,).
     pub(super) fn enclosing_group(&self, id: &ElementId) -> Option<ElementId> {
         let elems = self.doc.get_map(ELEMENTS);
         let LoroValue::Map(m) = elems.get_deep_value() else {
@@ -332,9 +332,9 @@ impl ToileState {
     /// Delete every childless group (element + layers node + derived bounds) to a
     /// fixpoint, so pruning a group that was the last member of its parent
     /// cascades upward. An empty group is meaningless (created with >=2 members,
-    /// §2.F bis; only shrinks via re-parent or member deletion), and left behind
+    /// only shrinks via re-parent or member deletion), and left behind
     /// it desyncs the incremental caches from a full rebuild, which never
-    /// materializes one (§1): a rebuild's `recompute_groups` skips a childless
+    /// materializes one: a rebuild's `recompute_groups` skips a childless
     /// group. Runs inside the caller's single `doc.commit()` so it stays one undo
     /// item.
     pub(super) fn prune_empty_groups(&mut self) {
@@ -374,7 +374,7 @@ impl ToileState {
 
     /// Recompute every group's derived bounds as the union of its members', to a
     /// fixpoint (nested groups resolve bottom-up). Group geometry is derived and
-    /// lives only in the `bounds` / R-tree caches, never in the CRDT (§2.F bis).
+    /// lives only in the `bounds` / R-tree caches, never in the CRDT.
     pub(super) fn recompute_groups(&mut self) {
         let groups: Vec<(ElementId, Vec<ElementId>)> = {
             let mut v = Vec::new();

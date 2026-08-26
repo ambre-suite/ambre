@@ -15,7 +15,7 @@
 //     "new document" action. Opening or creating a document is a client
 //     pushState to `/trame/<id>`; the persistent canvas swaps to it in place.
 //
-// Document cards (`ambre-spec-chrome.md 2.G`) show the type icon, the DECRYPTED
+// Document cards (`ambre-spec-launcher.md`) show the type icon, the DECRYPTED
 // name (or a dimmed "Untitled" placeholder), the relative last-modified time,
 // and a discreet shared badge (member count > 1). Per-card inline rename and
 // delete (behind an irreversible-action confirmation `<dialog>`) wire the
@@ -32,7 +32,7 @@ use crate::route;
 
 /// One row in the document list, already reduced to display-ready fields.
 /// `name` is the plaintext title decrypted by the Sync thread (`None` = never
-/// named -> "Untitled" placeholder, see the ZK note in `ambre-spec-chrome.md`).
+/// named -> "Untitled" placeholder, `ambre-spec-launcher.md`, CHROME-036).
 #[derive(Clone)]
 pub struct DocItem {
     pub document_id: DocumentId,
@@ -75,7 +75,7 @@ pub fn landing_view(
         boot_is_toile,
     } = signals;
 
-    // New document (`ambre-spec-chrome.md 2.G`): the app-agnostic type picker
+    // New document (`ambre-spec-launcher.md`): the app-agnostic type picker
     // hands us the chosen `DocType`. Generate the id client-side (UUID v7); the
     // server row is created lazily on the first edit, so no request here and no
     // name prompt (the clean default is unnamed). Same-kind creates swap in place
@@ -199,7 +199,7 @@ pub fn landing_view(
 }
 
 /// Navigate to a document, choosing between an in-place router swap and a full
-/// page reload (`ambre-spec-chrome.md 2.G` "Open"). The booted `AppView` is fixed
+/// page reload (`ambre-spec-launcher.md`, CHROME-039). The booted `AppView` is fixed
 /// per page load, so a target whose render kind differs from the booted kind
 /// (`route::needs_reload`) must hard-navigate (`location.set_href`) to re-boot the
 /// right view; a same-kind target uses the router pushState `navigate`, which
@@ -220,7 +220,7 @@ fn open_document(
     }
 }
 
-/// The "new document" type picker (`ambre-spec-chrome.md 2.G`). A single header
+/// The "new document" type picker (`ambre-spec-launcher.md`, CHROME-038). A single header
 /// control that, when opened, offers one entry per launcher-creatable `DocType`
 /// ([`DocType::creatable`]), each labelled with its icon monogram + generic type
 /// label ([`DocType::generic_label`]). Picking an entry runs `on_pick` with the

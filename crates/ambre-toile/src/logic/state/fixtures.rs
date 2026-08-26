@@ -1,14 +1,14 @@
-//! Toile's half of the fixture loader surface (`ambre-spec-fixtures.md` §2.B).
+//! Toile's half of the fixture loader surface (`ambre-spec-fixtures.md`).
 //!
 //! `shape_of` and `canonical_dump` are declared in `ambre-logic` over `DocState`;
 //! their per-app bodies live here, next to the schema they read, for the same
-//! reason §6 puts generators next to their engine: a schema change and the code
+//! reason puts generators next to their engine: a schema change and the code
 //! that decodes it move in one commit. `ambre-logic` only dispatches.
 //!
 //! Fixture code (I4): the whole module sits behind the non-default `fixtures`
 //! feature and is unreachable from any client build. The determinism seam
 //! (`ToileState::with_peer`) is *not* here -- it is engine API, documented in
-//! `ambre-spec-toile-logic.md` §2 and ungated, as is
+//! `toile-engine` and ungated, as is
 //! [`ToileState::import_snapshot`].
 
 use std::collections::{BTreeMap, HashMap};
@@ -23,7 +23,7 @@ use super::{CONNECTORS, ELEMENTS, ToileState};
 impl ToileState {
     /// The coarse shape of this board, as the manifest records it.
     ///
-    /// Counted from the CRDT rather than declared by the generator: §4 checks the
+    /// Counted from the CRDT rather than declared by the generator: checks the
     /// manifest against a recomputed shape, and a generator declaring its own
     /// would assert only that it agrees with itself.
     pub fn fixture_shape(&self) -> FixtureShape {
@@ -58,8 +58,8 @@ impl ToileState {
     ///
     /// **Not** the CRDT -- two boards agreeing on content still differ in op
     /// history, peer ids and commit timestamps, so no byte or state comparison
-    /// can express "same document by a different route" (§6). This is what the
-    /// frozen belt of §4 compares, and text means a failure prints a readable
+    /// can express "same document by a different route". This is what the
+    /// frozen belt of compares, and text means a failure prints a readable
     /// diff rather than a length mismatch.
     ///
     /// **Nodes are walked in paint order and named by their position in it**, not

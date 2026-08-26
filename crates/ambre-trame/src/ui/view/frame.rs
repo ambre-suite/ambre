@@ -30,9 +30,10 @@ impl TrameView {
         self.anchor.publish(None);
     }
 
-    /// Canvas-side reaction to a single [`TrameEvent`] (`-ui.md` sec.18 "full
-    /// TrameEvent dispatch"). Exhaustive on purpose: a new variant must fail the
-    /// build here rather than be dropped silently. Variants that only affect the
+    /// Canvas-side reaction to a single [`TrameEvent`] (`trame-engine`,
+    /// the update from the Logic thread). Exhaustive on purpose: a new variant
+    /// must fail the build here rather than be dropped silently. Variants that
+    /// only affect the
     /// DOM chrome (toasts, formatting toolbar, undo/redo enablement) are explicit
     /// no-ops -- they are handled in the per-frame relay (`ambre-app`), not here.
     pub(crate) fn dispatch_trame(&mut self, te: TrameEvent) {
@@ -70,7 +71,7 @@ impl TrameView {
                 tracing::warn!("[UI] Trame rejected: {message}");
                 self.text_input.announce(&message);
             }
-            // Shared filter (sec.5.D): track the filtered column for the funnel
+            // Shared filter (`trame-shared-filter`): track the filtered column for the funnel
             // badge. The accompanying DataReset re-fetches the collapsed rows.
             TrameEvent::FilterApplied { col, .. } => {
                 self.state.filtered_col = Some(col);
@@ -80,7 +81,7 @@ impl TrameView {
                 self.state.filtered_col = None;
                 self.needs_full = true;
             }
-            // Find & Replace (sec.5.G): highlight the match set and jump the
+            // Find & Replace (`trame-find-replace`): highlight the match set and jump the
             // active cell onto the focused match (reusing the navigation path, so
             // an off-screen match scrolls into view). An empty set clears the
             // highlight without moving the cursor.
@@ -94,7 +95,8 @@ impl TrameView {
                 }
             }
             // Wholesale content change: a local snapshot restore (DataReset) or a
-            // conditional-formatting rule change (CondFormatsUpdated, §3). Both
+            // conditional-formatting rule change (CondFormatsUpdated,
+            // `trame-cell-styles`). Both
             // invalidate the cache -- re-fetch the visible region, then full-repaint
             // with the result.
             TrameEvent::DataReset | TrameEvent::CondFormatsUpdated { .. } => {
@@ -117,13 +119,14 @@ impl TrameView {
                 self.park_input_on(r1, c1);
                 self.announce_active();
             }
-            // Interop export (sec.18, `-interop.md` §3/§4): the Logic thread
+            // Interop export (`trame-import-export`): the Logic thread
             // serialized the file bytes; the UI Thread owns the DOM, so the
             // download is triggered here. No canvas state changes.
             TrameEvent::ExportComplete { filename, data } => {
                 trigger_download(&filename, &data);
             }
-            // Authoritative copy reply (sec.5.E): the Logic thread serialized the
+            // Authoritative copy reply (`trame-clipboard`): the Logic thread
+            // serialized the
             // whole tracked selection from the document (no viewport limit). Build
             // the transport blob -- TSV for cross-app `text/plain`, postcard of the
             // typed payload for the private Ambre type -- stash it in memory for a
@@ -137,7 +140,7 @@ impl TrameView {
                 self.last_clip = Some(blob.clone());
                 self.pending_clipboard = Some(blob);
             }
-            // Interop import finished (`-interop.md` §4.A): the accompanying
+            // Interop import finished (`trame-import-export`): the accompanying
             // DataReset already re-fetches the populated region, so this is purely
             // informational here (the chrome relay may toast it).
             TrameEvent::ImportComplete { .. } => {}
@@ -188,8 +191,8 @@ impl TrameView {
             }
         }
 
-        // Apply the latest grid zoom selected in the status-bar menu (`-ui.md`
-        // sec.13bis). `set_zoom` is a no-op when unchanged; on a real change it
+        // Apply the latest grid zoom selected in the status-bar menu
+        // (`trame-status-bar`). `set_zoom` is a no-op when unchanged; on a change it
         // queues the viewport re-request flushed just below.
         #[cfg(target_arch = "wasm32")]
         {
@@ -239,12 +242,12 @@ impl TrameView {
         }
 
         // While a clipboard marquee is active, dirty the overlay each frame so
-        // the marching-ants dashes crawl (sec.5.E). Cleared on Escape / next copy.
+        // the dashes crawl (`trame-clipboard`). Cleared on Escape / next copy.
         if self.state.clipboard_anchor.is_some() {
             self.edit_dirty = true;
         }
 
-        // Sync the HTML formula bar with the grid (spec sec.6).
+        // Sync the HTML formula bar with the grid (`trame-cell-editing`).
         #[cfg(target_arch = "wasm32")]
         {
             self.formula_ref.set(self.active_cell_ref());
@@ -365,7 +368,7 @@ impl TrameView {
             } else if !self.state.col_widths.is_empty() || !self.state.row_heights.is_empty() {
                 // The blit-scroll shift below assumes uniform metrics: moving `dr`
                 // rows shifts the content by `dr * ROW_HEIGHT`. With any resized
-                // axis (sec.4bis.C) that pixel distance is wrong, so repaint fully
+                // axis (`trame-resize`) that pixel distance is wrong, so repaint fully
                 // rather than tear. Resized axes are rare; the cost is bounded.
                 (ContentRepaint::Full, None)
             } else {
@@ -377,7 +380,7 @@ impl TrameView {
                 // strip moved to DOM chrome, so it no longer reserves a band here).
                 let h = self.state.grid_bottom();
                 // Top of the scrollable cell area: below the formula bar band
-                // (sec.6) and the column-header strip.
+                // (`trame-cell-editing`) and the column-header strip.
                 let hh = self.state.header_h();
                 // If the scroll exceeds the viewport, nothing useful to shift.
                 let abs_dx = dx_px.unsigned_abs();
@@ -445,7 +448,7 @@ impl TrameView {
         strip: Option<Rect>,
     ) {
         // Resolve a pending auto-fit now that the font context is in hand
-        // (sec.4bis.C): measure the column/row's cached cells and emit a resize.
+        // (`trame-resize`): measure the column/row's cached cells and emit a resize.
         if let Some(hit) = self.pending_autofit.take() {
             self.resolve_autofit(hit, font_cx, text_cache);
         }
@@ -544,7 +547,7 @@ impl TrameView {
     }
 
     /// Set the grid zoom factor (`1.0` = 100%); scales cells, header strips and
-    /// the cell font together (`-ui.md` sec.13bis). A no-op when unchanged. On a
+    /// the cell font together (`trame-status-bar`). A no-op when unchanged. On a
     /// real change the visible range shifts, so we request the new viewport and
     /// force a full repaint. Pure local view state -- never synced.
     pub fn set_zoom(&mut self, zoom: f64) -> bool {

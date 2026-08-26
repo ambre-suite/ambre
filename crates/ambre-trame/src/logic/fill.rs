@@ -1,5 +1,5 @@
 // ambre-trame/src/logic/fill.rs
-// Autofill / fill handle (`ambre-spec-trame-ui.md` sec.5.F).
+// Autofill / fill handle (`trame-autofill`).
 //
 // The UI drags the fill handle from the selection's bottom-right corner and
 // emits `FillRange { src, dest, mode }`; `dest` contains `src` and extends it
@@ -14,7 +14,7 @@ use crate::formula::shift::shift_formula;
 use ambre_bus::{FillMode, GridRange};
 
 impl TrameState {
-    /// Autofill `src` into `dest` (`-ui.md` sec.5.F). `dest` contains `src`; the
+    /// Autofill `src` into `dest` (`trame-autofill`). `dest` contains `src`; the
     /// cells of `dest \ src` are filled by extrapolating a numeric series or by
     /// tiling/copying the source values per fill line (a column for a vertical
     /// fill, a row for a horizontal one). A copied formula's relative references
@@ -52,7 +52,7 @@ impl TrameState {
 
         // A source tiled by equal merged blocks (one block or a uniform grid of
         // them) fills block by block and re-merges every tile (Excel behaviour,
-        // sec.5.F) instead of cell by cell.
+        // `trame-autofill`) instead of cell by cell.
         if let Some((bh, bw)) = self.merged_source_block(sr1, sc1, sr2, sc2) {
             return self.fill_merged(sr1, sc1, sr2, sc2, dr1, dc1, dr2, dc2, mode, bh, bw);
         }
@@ -71,8 +71,8 @@ impl TrameState {
     /// Return the block size `(rows, cols)` when the source rect
     /// `(sr1,sc1)-(sr2,sc2)` is exactly tiled by equal merged blocks -- one merge
     /// or a uniform grid of identically sized merges, each with its master at the
-    /// tile corner (sec.5.F). `None` for a plain selection or a mix of sizes,
-    /// which then falls back to the per-cell fill.
+    /// tile corner (`trame-autofill`). `None` for a plain selection or a mix of
+    /// sizes, which then falls back to the per-cell fill.
     fn merged_source_block(&self, sr1: u32, sc1: u32, sr2: u32, sc2: u32) -> Option<(u32, u32)> {
         let (bb, rb) = self.merges.get(&(sr1, sc1)).copied()?;
         let bh = bb - sr1 + 1;
@@ -95,9 +95,9 @@ impl TrameState {
     }
 
     /// Autofill a merged source (one block or a uniform grid of `bh` x `bw`
-    /// blocks) over `dest` (sec.5.F): tile the blocks along the drag axis and
-    /// re-merge every tile to the block span. Each lane perpendicular to the drag
-    /// extrapolates independently from its own source blocks: a numeric series
+    /// blocks) over `dest` (`trame-autofill`): tile the blocks along the drag axis
+    /// and re-merge every tile to the block span. Each lane perpendicular to the
+    /// drag extrapolates independently from its own source blocks: a numeric series
     /// progresses, otherwise the source blocks are copied cyclically (a copied
     /// formula's relative refs reindex by the tile offset). The UI snaps `dest` to
     /// whole blocks, so the tiles align; source tiles are skipped.

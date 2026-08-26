@@ -1,0 +1,252 @@
+# AMBRE -- SPEC: TOILE CRDT SCHEMA
+**Type:** Schema (persistence format, one document per application)
+**Implementation:** partial
+
+> The persisted shape of a Toile board: every Loro container, its key, its value, and the
+> granularity at which two peers race. It owns identity, keys, merge granularity and the convergence
+> properties that follow from that shape. It owns no gesture, no permission and no event.
+
+---
+
+## 0. SCOPE, AND THE MENTION RULE
+
+A schema decision is often justified by an action: an element identity survives a move, a reorder
+and a regroup, and its `{peer}_{counter}` shape answers concurrent minting. So an action appears
+here as a **cause**, never as a **rule**.
+
+| Position | Actions | Why |
+|---|---|---|
+| Container table (section 3), hierarchy (section 4) | forbidden | pure format |
+| Container note (section 5), `Rationale` of a decision (section 6) | allowed, as a cause | the reason is the action |
+| An invariant statement (section 1) | forbidden when it binds an action | "a locked element MUST NOT be moved by a command" belongs to the elements feature |
+
+**Budgets**, each with the destination its overflow takes:
+
+| Cap | Overflow goes to |
+|---|---|
+| 600 words of prose for the whole document, outside tables and lists | a table, or nothing |
+| 40 words for a container note (section 5) | section 6, whose `Rationale` column is not capped |
+
+---
+
+## 1. INVARIANTS
+
+Prefix `TOILE`, shared with the feature documents: one prefix, one numbering, no renumbering. `TOILE-003`
+and `TOILE-018` sit here because each states a property of the format, not of the engine. Grammar
+and status values are normative in `ambre-spec-template.md`.
+
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `TOILE-003` | Element identity MUST be a minted, move-invariant `ElementId`; a positional or slot key MUST NOT be used. | this spec section 2 | `ambre_toile::logic::convergence_tests::copy_does_not_mutate_and_paste_remints_offset`, `::paste_reproduces_selection_on_a_separate_board` | verified |
+| `TOILE-018` | An element's whole style MUST be a single LWW register; concurrent restyles MUST NOT blend per attribute. | this spec section 3; architecture section 2.D | structural, and the construction is the proof: one `LoroValue::Binary` under the `style` key per element map (`logic/state/elements.rs`), decoded whole by `ElementStyle::from_bytes`, so no attribute has a register to be elected on its own. `ambre_toile::logic::convergence_tests::two_peers_converge` drives concurrent restyles (`RestyleNth`) and holds convergence; Trame's dedicated no-blend tests have no counterpart here | verified |
+| `TOILE-027` | A Toile document MUST carry `meta.schema_version`, and a document whose version exceeds the compiled `SCHEMA_VERSION` MUST be refused whole. | architecture section 2.D; this spec section 7 | not built -- lands with `ARCH P8` | unimplemented |
+| `TOILE-028` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | not built -- lands with `ARCH P8` | unimplemented |
+| `TOILE-029` | A container under a fixed key MUST be created once, with its parent; it MUST NOT be created by the first peer that writes into it. | this spec section 5 | none, and **the rule fails today** for `presentation/order` and `presentation/config`: `order_list_or_seed` creates both on the first `SetSlideOrder`, so two peers building the deck at the same moment mint rival lists and Loro keeps one. A container under a minted key (`elements/{id}`, `comments/{id}`) is out of reach of the race, and a `media/{hash}` entry loses nothing to it: the two rival maps carry the same bytes. No test drives the concurrent seed | unverified |
+| `TOILE-030` | A sticky or text body MUST converge character by character; it MUST NOT be a register two authors race for whole. | this spec section 3; `features/ambre-spec-toile-text-editing.md section 3` | none, and **the rule fails today**: the body is a flat String under the element's `text` key, so one of two authors typing in the same note loses their sentence. The only `LoroText` in `ambre-toile` is a frame's `notes` | unverified |
+
+* **Budget.** none: a format has no operation to budget. What loading a board costs is the remote
+  change row of `ambre-spec-budgets.md section 1`, and leg 4 of `ambre-spec-budgets.md section 4`.
+* **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
+  (`ZK-001`), and the media entry holds a content hash, never the pixels
+  (`features/ambre-spec-toile-media.md section 3`).
+* **Verification.** 2 `verified`, 2 `unverified`, 2 `unimplemented`. `TOILE-029` and `TOILE-030`
+  are the gaps, and both are defects rather than blind spots: each names the code that breaks it.
+
+---
+
+## 2. IDENTITY
+
+One identity type serves elements, connectors, frames and comment threads.
+
+* `ElementId` is `"{peer:016x}_{counter:08x}"` -- 25 characters. `peer` is the document `PeerID`;
+  `counter` is a per-session monotonic counter.
+* `ConnectorId` uses the same rendering and is a distinct type, so the compiler refuses one where
+  the other is meant. `FrameId` and `TargetId` are aliases of `ElementId`.
+* A `layers` entry joins a tag and an id with `:`: `"E:{element_id}"` or `"C:{connector_id}"`.
+* A `reactions` key joins a target and a user with `/`: `"{target_id}/{user_id}"`. An id is hex and
+  `_`, a `UserId` is a hyphenated UUID, so neither half can contain the separator.
+* `crates/ambre-bus/src/app/toile.rs` holds the two id types and the `NodeId` codec.
+
+Both the id shape and the two composite keys are decisions, with their rejected alternatives in
+section 6.
+
+---
+
+## 3. CONTAINERS
+
+`State` is `built` when the container exists in `crates/ambre-toile/src/`, `design` when this schema
+declares it and no code writes it yet. `LWW` names the unit at which two concurrent writers race:
+the last writer takes that whole unit. A nested container carries its path; the leaf is the name the
+code uses.
+
+| Container | Loro type | Key | Value | LWW unit | Owning feature document | State |
+|---|---|---|---|---|---|---|
+| `meta` | Map | `schema_version` | `u32` | the key | -- (foundation; this spec section 7) | design |
+| `board` | Map | `name`, `bg_color`, `grid_size`, `grid_snap` | String, `u32`, `f64`, `bool` | the key | viewport | built |
+| `elements` | Map | `element_id` | one element map | the element entry | elements | built |
+| `elements/{id}` | Map | a field name, per the table below | per field | the field | elements | built |
+| `elements/{id}/children` | MovableList | position | `element_id` | list order, no LWW | frames, groups | built |
+| `elements/{id}/notes` | Text | -- | speaker notes | none: char-CRDT | presentation | built |
+| `connectors` | Map | `connector_id` | one connector map | the connector entry | connectors | built |
+| `connectors/{id}` | Map | a field name, per the table below | per field | the field | connectors | built |
+| `connectors/{id}/label` | Text | -- | the edge caption | none: char-CRDT | connectors | design |
+| `layers` | MovableList | position | `"E:{element_id}"` or `"C:{connector_id}"` | list order, no LWW | z-order | built |
+| `media` | Map | `blake2b` content hash | one media map | the media entry | media | built |
+| `media/{hash}` | Map | `w`, `h`, `mime`, `thumb` | `i64`, `i64`, String, Binary | the key | media | built |
+| `presentation` | Map | `order`, `config` | the two containers below | the key | presentation | built |
+| `presentation/order` | MovableList | position | `frame_id` | list order, no LWW | presentation | built |
+| `presentation/config` | Map | `transition_ms`, `autoplay`, `loop` | `f64`, `bool`, `bool` | the key | presentation | built |
+| `reactions` | Map | `"{target_id}/{user_id}"` | `Binary(postcard(Reaction))` | that user's reaction on that target | reactions | built |
+| `comments` | Map | `thread_id` | one thread map | the thread entry | comments | design |
+| `comments/{id}` | Map | `anchor`, `resolved`, `messages` | `Binary(postcard(CommentAnchor))`, `bool`, the list below | the key | comments | design |
+| `comments/{id}/messages` | MovableList | position | one message map | list order, no LWW | comments | design |
+| `comments/{id}/messages/{n}` | Map | `author`, `ts`, `body` | String, `i64`, the text below | the key | comments | design |
+| `comments/{id}/messages/{n}/body` | Text | -- | the message body | none: char-CRDT | comments | design |
+| `tags` | Map | `tag_id` | `{label, color}` | the tag entry | elements | design |
+| `timer` | Map | `ends_at`, `running` | `i64`, `bool` | the key | reactions | design |
+| `vote_session` | Map | `open`, `budget` | `bool`, `u8` | the key | reactions | design |
+
+**The element map, field by field.** `Kinds` names the element types that carry the field. A frame is
+an ordinary element and carries the whole geometry block; a **group carries no coordinates at all**,
+because its box is the derived union of its members (`TOILE-009`,
+`features/ambre-spec-toile-groups.md`), so a reader of a group's map finds the type, the rotation, the
+lock and the style, and reads the box from the derived cache.
+
+| Field | Type | Holds | Kinds | State |
+|---|---|---|---|---|
+| `type` | String | `sticky`, `shape`, `text`, `image`, `frame`, `group`, `drawing`, `embed`, `doc_embed` | every | built |
+| `x`, `y`, `w`, `h` | `f64` | the world AABB, top-left, pre-rotation | every but `group` | built |
+| `rot` | `f64` | radians, about the AABB centre | every | built |
+| `locked` | `bool` | the advisory lock | every | built |
+| `style` | Binary | `postcard(ElementStyle)`, one register per element (`TOILE-018`) | every | built |
+| `link` | Binary | `postcard(LinkTarget)`; absent means no link | every | design |
+| `name` | String | the frame title, which Find reads | `frame` | design |
+| `text` | String | the body (`TOILE-030`) | `sticky`, `text` | built |
+| `shape` | String | `rect`, `ellipse`, `triangle`, `line`, `path` | `shape` | built |
+| `path` | String | the SVG path data of a vector node | `shape` | built |
+| `points` | Binary | `postcard(Vec<StrokePoint>)`, the raw samples | `drawing` | built |
+| `hash` | String | a key into `media` | `image` | built |
+| `url` | String | the sandboxed web address | `embed` | built |
+| `doc_id`, `doc_type` | String | the nested document reference | `doc_embed` | built |
+| `autolayout` | Binary | `postcard(AutoLayout)`; absent means free positioning | `frame` | built |
+| `title`, `tags`, `assignee`, `due` | -- | the deferred card fields | `card` | design |
+
+**The connector map, field by field.**
+
+| Field | Type | Holds | State |
+|---|---|---|---|
+| `from`, `to` | String | the endpoint `element_id`s | built |
+| `from_anch`, `to_anch` | String | `t`, `b`, `l`, `r`, `c`, or `f:{u}:{v}` for a free anchor | built |
+| `path_type` | String | `s` straight, `e` elbow, `c` curved | built |
+| `arrow_start`, `arrow_end` | `bool` | the two end caps | built |
+| `style` | Binary | `postcard(ElementStyle)` | design |
+
+**Absence is a value.** No `link` key means no hyperlink; no `autolayout` key means free
+positioning; an empty `presentation` map means no deck; no `reactions` key under a target prefix
+means no reaction. No container carries a "cleared" marker.
+
+---
+
+## 4. HIERARCHY
+
+* `LoroDoc` root
+  * `meta`
+  * `board`
+  * `elements`
+    * per element, keyed by `element_id`: the geometry and payload fields, and for a frame or a
+      group `children`, `notes` and `autolayout`
+  * `connectors`
+    * per connector, keyed by `connector_id`: the endpoints, the anchors, the path kind, the end
+      caps, and `label`
+  * `layers`
+  * `media`
+    * per blob, keyed by content hash: `w`, `h`, `mime`, `thumb`
+  * `presentation`
+    * `order`, `config`
+  * `reactions`
+  * `comments`
+    * per thread, keyed by `thread_id`: `anchor`, `resolved`, `messages`
+      * per message: `author`, `ts`, `body`
+  * `tags`, `timer`, `vote_session`
+
+---
+
+## 5. CONTAINER NOTES
+
+Only where a schema decision needs a reason. 40 words each.
+
+* **`board`.** `name` is declared and unwritten: `from_doc` seeds the three display keys and no
+  command sets a board name. No rule says what a peer reads when the key is absent.
+* **`elements`.** One flat map holds every kind, frames and groups included. A parallel `frames`
+  map would need its own move, resize, delete and reorder commands, and would split paint order
+  over two structures.
+* **`elements/{id}/notes`.** Seeded empty at frame birth, not on the first edit: a container
+  broadcast in the creation delta lets two concurrent first edits target the same text. A lazy seed
+  mints rival containers and drops one side.
+* **`elements/{id}` payload.** The fields sit flat in the element map. The `payload` sub-map of the
+  earlier design is not built, and one map fewer merges per element.
+* **`connectors`.** Endpoints and a path kind, never geometry. Routing is recomputed on read, so
+  moving an element writes one register and no connector op (`TOILE-006`).
+* **`layers`.** One list for elements and connectors, so a connector can sit behind an element. A
+  tagged string keeps the list flat and order-preserving.
+* **`media`.** The entry holds the dimensions, the type and an inline thumbnail, never the pixels.
+  The full blob is content-addressed and encrypted (`features/ambre-spec-toile-media.md section 3`).
+* **`presentation`.** The root map is deterministic; `order` and `config` under it are not. Both
+  are created by the first peer to build a deck, which is the race `TOILE-029` states.
+* **`reactions`.** A flat composite key, not a sub-map per target. A per-target sub-map is created
+  on the first reaction to that target, so two peers reacting at once mint rival containers and one
+  set of reactions is dropped.
+* **`comments`.** Each thread is its own entry under a deterministic root, so two peers commenting
+  on one spot mint distinct threads. Message order is the list order; `ts` is display only, because
+  a clock is untrusted.
+* **`tags`, `timer`, `vote_session`.** Declared and unwritten. The tag palette rides with the
+  deferred `card`; the timer and the vote session are the facilitation layer, out of the MVP.
+
+---
+
+## 6. SCHEMA DECISIONS
+
+| Decision | Rationale | Rejected alternative |
+|---|---|---|
+| A minted `ElementId` carried as the map key, and as the value of every reference to it | An element is freely moved, reordered and regrouped, and every reference -- a connector endpoint, a frame child list, a `layers` entry, a reaction key -- must keep resolving. A minted id is invariant under all four | (a) a positional or slot-derived key -- invalidated by every reorder, which is the whole gesture the board exists for; (b) the Loro slot id (`ListItemId`) -- `LoroMovableList::mov` **reassigns the moved element's op id**, so every reference keyed by that slot is orphaned on the first reorder, the same call Trame reversed for its rows (`ambre-spec-trame-schema.md section 6`) |
+| `{peer:016x}_{counter:08x}`, fixed width | Two peers minting at the same moment draw a distinct `peer`, so identity needs no coordination and both creations survive | a document-global monotonic counter -- one LWW collision per concurrent create, on a board where concurrent create is the normal case |
+| One binary register for a whole element style | LWW on one blob converges every peer to one writer's whole style | one register per attribute. On a blind relay there is no cross-register atomicity, so a fill update racing a stroke update leaves a half-applied style. This is the cross-app pattern of `architecture section 2.D`, which Trame's `cellstyle_{sheet}` also follows |
+| `locked` and `link` outside `ElementStyle` | A lock is a lifecycle flag and a link is navigation; neither is a visual attribute, and neither may race with a restyle on the single style register | folding both into `ElementStyle` -- one register, three unrelated concerns, and a restyle silently reverting a lock |
+| A frame is an ordinary element | One lifecycle for every node, and one `layers` list. Frame-specific content is three payload fields, not a second entity | a parallel `frames` map -- a duplicated move, resize, delete and reorder surface, and paint order split over two structures |
+| A group is a frame without chrome | The membership machinery is the frame's, so grouping costs one element type and no new container. Its bounds are the derived union of its members | an independent `groups` container with its own membership list -- a third lifecycle, and two rules to keep in step |
+| `layers` holds a tagged string, not a sub-map | The list stays flat and order-preserving, and a `mov` is one operation on one element | a `LoroMap` per entry -- a container per z-order slot, and a reorder that touches two structures |
+| A flat `"{target_id}/{user_id}"` key for a reaction | The `reactions` root always exists, so concurrent inserts under distinct composite keys all converge. Splitting on the first `/` recovers the target | a nested sub-map per target -- created lazily by the first reactor, so two peers reacting on a fresh target mint rival containers and Loro drops one |
+| Keyed by `UserId`, never `PeerID` | A reaction is a per-user decision that must survive a reload, a key rotation and a second device. `PeerID` is per session, so one user on two devices would vote twice | keying by `PeerID` -- a double-counted tally, and a vote no later session can remove |
+| Raw stroke samples only, never the smoothed curve | Smoothing is a pure function of the samples, so replicating it costs bandwidth and can disagree with a peer's own render | storing the smoothed polyline beside the samples |
+| A nested Ambre document is a reference, never inlined | The child keeps its own `DocumentId`, `DocumentKey` and `LoroDoc`, so the relay sees no embedding table and the child's access rules stay the child's | inlining the child's content into this board -- one key for two documents, and a viewer of the board reading a document they were never granted |
+| No `styles` dictionary | A board holds far fewer distinct styles than a spreadsheet holds cells, and the deduplication is unmeasured | a shared style dictionary with an `s` indirection -- a lookup paid before its benchmark |
+
+---
+
+## 7. FORMAT DUTIES
+
+| Duty | Rule | Where |
+|---|---|---|
+| Version | root `meta`, key `schema_version` (`u32`); absent means 0 | architecture section 2.D; `TOILE-027` |
+| Read | equal proceeds, older migrates, newer is refused whole (`SchemaTooNew`) | architecture section 2.D |
+| Migration | the chain lives in `ambre-toile`; the foundation owns the protocol, never the semantics | architecture section 2.D |
+| Bump | a key or layout change raises `SCHEMA_VERSION` and freezes one named fixture in the same commit | `TOILE-028`; `ambre-spec-fixtures.md section 2` |
+| Unknown field | `postcard` decodes a blob whole and tolerates none, so a stale `ElementStyle` falls back to `Default` -- a silent downgrade, which is what `TOILE-027` exists to stop | architecture section 2.D |
+| Size, ids | an id is 25 bytes and a `layers` entry 27; a 50 000-element board is 1.3 MB of ids alone | this spec section 2 |
+| Size, blobs | `media` carries a thumbnail inline and the full blob out of band; the board never holds pixels | `features/ambre-spec-toile-media.md section 3` |
+| Deltas | a remote delta carries no version and applies blind; mixed-version live editing is bounded, not solved | architecture section 2.D |
+
+---
+
+## 8. WHAT THIS DOCUMENT DOES NOT OWN
+
+| Question | Owner |
+|---|---|
+| That nothing derived enters the document: a routed connector, a smoothed stroke, a group's bounds | the connectors, freehand and groups features; `TOILE-006`, `TOILE-008`, `TOILE-009`. Toile has three derived quantities and one row each, where Trame has one and holds it here (`TRAME-010`) |
+| What a locked element refuses, and how far the lock binds | the elements feature; `TOILE-012` |
+| When a connector goes dangling, and what the user is offered | the connectors feature; `TOILE-007` |
+| Where a comment pin anchors, and what a deleted anchor renders | the comments feature; `TOILE-024`, `TOILE-025` |
+| That a child paints after its frame | the frames feature; `TOILE-011` |
+| That one command is one undo item | the engine; `TOILE-014` |
+| How a hash becomes pixels | `features/ambre-spec-toile-media.md section 3` |
+| Who may write, and what the server enforces | architecture section 2.D; `ambre-spec-server.md` |

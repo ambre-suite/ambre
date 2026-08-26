@@ -16,7 +16,7 @@
 //! `TrameOutcome` a `TrameState` returns -- the state holds no sink itself.
 //! `CommandSink` is the **test seam**: `ambre-trame::test_support::MockSyncHandle`
 //! implements it to capture emitted `SyncCommand`s and relay CRDT deltas
-//! peer-to-peer. See `specs/2-Trame/ambre-spec-trame-logic.md` sec.8.
+//! peer-to-peer. See `trame-engine`.
 
 use crate::SyncCommand;
 

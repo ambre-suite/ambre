@@ -2,7 +2,7 @@
 //! `bounds` map, the `rstar` spatial index and the materialized `layers` order.
 //! Split out of `state/mod.rs`. The incremental helpers keep the caches in step
 //! with local edits; [`rebuild_caches`](ToileState::rebuild_caches) reseeds them
-//! wholesale after a remote import (§1).
+//! wholesale after a remote import.
 
 use std::collections::HashSet;
 
@@ -30,7 +30,7 @@ impl ToileState {
             .update(ElementBounds::from_rect(id.clone(), rect));
     }
 
-    /// Full rebuild of every derived cache from `doc` (§1). Used after a remote
+    /// Full rebuild of every derived cache from `doc`. Used after a remote
     /// import; the incremental path (local commands) keeps them in step directly.
     pub(super) fn rebuild_caches(&mut self) {
         self.bounds.clear();
@@ -63,7 +63,7 @@ impl ToileState {
     }
 
     /// Re-read the `layers` list into `self.layers`, skipping malformed tags and
-    /// de-duplicating (keep first) per §2.H.
+    /// de-duplicating (keep first) per `toile-z-order`.
     pub(super) fn rematerialize_layers(&mut self) {
         let mut seen = HashSet::new();
         let mut out = Vec::new();
@@ -81,7 +81,7 @@ impl ToileState {
     }
 
     /// Rewrite `layers` keeping only nodes for which `keep` holds. Used by
-    /// deletion cleanup (§2.H). Rebuilds the list in place.
+    /// deletion cleanup. Rebuilds the list in place.
     pub(super) fn strip_layers(&self, keep: impl Fn(&NodeId) -> bool) {
         let list = self.doc.get_movable_list(LAYERS);
         // Collect survivors from the current list value, then rewrite.

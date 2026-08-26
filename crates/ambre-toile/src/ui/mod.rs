@@ -1,6 +1,6 @@
 // ambre-toile/src/ui/mod.rs
 // ============================================================================
-// Toile UI thread (toile-ui). The `ui` module of the `ambre-toile` app crate:
+// Toile UI thread (toile-board-rendering). The `ui` module of the `ambre-toile` app crate:
 // it consumes the culled `DisplayViewport` produced by the Logic thread, paints
 // it through the shared `WgpuSurface` (from `ambre-canvas`), and turns pointer /
 // keyboard input into `ToileCommand`s. It owns no CRDT state and never touches

@@ -8,14 +8,14 @@
 
 use super::*;
 
-/// Builds a child `AppView` for a nested `doc_embed` (§2.I). Supplied by the
+/// Builds a child `AppView` for a nested `doc_embed`. Supplied by the
 /// launcher, which alone can name the concrete app views and holds the leptos
 /// owner their (throwaway) chrome signals need. Given the embedded document's id,
 /// type and child canvas size, it wires a demultiplexed Logic->UI channel and
 /// returns the view. `FrameHost` stays app-agnostic: it only calls this.
 pub type MakeChild = Rc<dyn Fn(DocumentId, DocType, Size) -> AppView>;
 
-/// Rewrite an input event for the focused child (§2.I "Input focus"). Pointer
+/// Rewrite an input event for the focused child ("Input focus"). Pointer
 /// coordinates are mapped from the canvas into the child's pixel space through
 /// the camera and the embed's transform; every other event forwards unchanged
 /// (a wheel delta and a keystroke are frame-agnostic -- a child pixel is a screen
@@ -71,7 +71,7 @@ pub struct FrameHost {
     perf: web_sys::Performance,
 
     /// The live child views behind the top-level document's visible `doc_embed`s
-    /// (§2.I), keyed by the embedded `DocumentId`. Reconciled every frame against
+    /// keyed by the embedded `DocumentId`. Reconciled every frame against
     /// [`AppView::visible_embeds`]: a child appears when its embed enters the cull
     /// set and is dropped when it leaves. Empty unless the top-level view embeds.
     children: HashMap<DocumentId, AppView>,
@@ -129,7 +129,7 @@ impl FrameHost {
     /// `preventDefault()` on the originating DOM event.
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
         // The top-level view runs first: it settles embed focus and decides
-        // whether this event belongs to a focused child (§2.I "Input focus").
+        // whether this event belongs to a focused child ("Input focus").
         let consumed = self.view.handle_input(ev);
         // If it does, forward the event into that child's own view, with pointer
         // coordinates remapped into the child's pixel space (a wheel/keystroke
@@ -144,7 +144,7 @@ impl FrameHost {
     }
 
     /// Reconcile the child views against the top-level view's visible `doc_embed`s
-    /// (§2.I) and pump each one. Creates a child when its embed enters the cull
+    /// and pump each one. Creates a child when its embed enters the cull
     /// set, resizes it when its box changes, and drops it when it leaves (dropping
     /// the child also drops its demultiplexed Logic->UI channel, so the relay
     /// reclaims the route on its next send). Returns whether any child needs the
@@ -346,7 +346,7 @@ impl FrameHost {
 
         let mut plan = self.view.plan_repaint(raf_timestamp, hud_tick);
         // Reconcile + pump the nested child views AFTER the parent's plan_repaint
-        // has issued `OpenDocument` for any newly visible embed (§2.I), so a
+        // has issued `OpenDocument` for any newly visible embed, so a
         // child's first viewport request never reaches Logic before its document
         // is open. A dirty child forces the content layer: children paint over the
         // board, so the board must recomposite even when otherwise idle.
@@ -388,10 +388,10 @@ impl FrameHost {
                         plan.content_strip,
                     );
                     // Paint each visible child over the board's placeholder,
-                    // clipped to its embed rect (§2.I "Render"). The child draws in
+                    // clipped to its embed rect ("Render"). The child draws in
                     // its own pixel space (origin at the rect's top-left, one child
                     // pixel per screen pixel at the current zoom). A rotated embed
-                    // clips to its AABB -- accepted (§2.I "Clip limitation").
+                    // clips to its AABB -- accepted ("Clip limitation").
                     for e in self.view.visible_embeds() {
                         let Some(child) = self.children.get_mut(&e.document_id) else {
                             continue;

@@ -4,7 +4,7 @@
 use super::*;
 
 /// `current_region` returns `None` on an isolated empty active cell and the
-/// bounding rectangle of an L-shaped contiguous block otherwise (sec.5.D).
+/// bounding rectangle of an L-shaped contiguous block otherwise (`trame-shared-filter`).
 #[test]
 fn current_region_bounds_the_contiguous_block() {
     let mut state = TrameUiState::new(800.0, 600.0);
@@ -24,7 +24,7 @@ fn current_region_bounds_the_contiguous_block() {
 }
 
 /// `filter_button_at` hit-tests the autofilter button drawn at the right edge
-/// of each current-region header cell, returning `(band_row, col)` (sec.5.D).
+/// of each current-region header cell, returning `(band_row, col)` (`trame-shared-filter`).
 #[test]
 fn filter_button_hit_test_matches_drawn_rect() {
     let mut state = TrameUiState::new(800.0, 600.0);
@@ -78,7 +78,7 @@ fn single_cell_selection_tracks_active() {
 }
 
 /// `col_at_x` / `row_at_y` resolve the axis band under a pointer through the
-/// variable metrics (drives a whole-axis header drag, sec.4bis.A).
+/// variable metrics (drives a whole-axis header drag, `trame-selection`).
 #[test]
 fn axis_pointer_resolution_follows_variable_metrics() {
     let mut state = TrameUiState::new(800.0, 600.0);
@@ -101,7 +101,7 @@ fn axis_pointer_resolution_follows_variable_metrics() {
 }
 
 /// The insert "+" zone sits in the top/left sliver of a boundary band, the
-/// resize grip in the rest (sec.4bis.C/D).
+/// resize grip in the rest (`trame-resize`, `trame-headers`).
 #[test]
 fn header_boundary_splits_insert_and_resize() {
     let state = TrameUiState::new(800.0, 600.0);
@@ -119,7 +119,7 @@ fn header_boundary_splits_insert_and_resize() {
 }
 
 /// `header_hit` resolves the three zones of each header strip plus the
-/// corner, with the resize band winning over the body (sec.4bis).
+/// corner, with the resize band winning over the body (`trame-headers`).
 #[test]
 fn header_hit_resolves_zones() {
     let state = TrameUiState::new(800.0, 600.0);
@@ -165,7 +165,7 @@ fn header_hit_resolves_zones() {
 }
 
 /// `Selection::axis` builds a whole-column / whole-row band whose perpendicular
-/// coordinate is irrelevant (sec.4bis.A).
+/// coordinate is irrelevant (`trame-selection`).
 #[test]
 fn axis_selection_spans_the_band() {
     let cols = Selection::axis(SelKind::Cols, 2, 4);
@@ -180,7 +180,7 @@ fn axis_selection_spans_the_band() {
 }
 
 /// A resized column / row shifts the pixel mapping: `cell_at` and
-/// `cell_pixel_rect` must agree on the variable geometry (sec.4bis.C).
+/// `cell_pixel_rect` must agree on the variable geometry (`trame-resize`).
 #[test]
 fn variable_metrics_round_trip_pixel_and_hit_test() {
     let mut state = TrameUiState::new(800.0, 600.0);
@@ -211,7 +211,7 @@ fn variable_metrics_round_trip_pixel_and_hit_test() {
 }
 
 /// Grid zoom scales every metric (header strips, cell widths/heights) so the
-/// pixel mapping and hit-testing stay self-consistent (`-ui.md` sec.13bis).
+/// pixel mapping and hit-testing stay self-consistent (`trame-status-bar`).
 #[test]
 fn zoom_scales_metrics_and_round_trips_hit_test() {
     let mut state = TrameUiState::new(800.0, 600.0);

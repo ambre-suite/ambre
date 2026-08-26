@@ -11,7 +11,7 @@
 //!   (its command + event + shared value / display types) is grouped **one
 //!   module per app** under [`app`] (`app::trame`, `app::toile`), re-exported
 //!   flat at the crate root. Document edits and viewport data, routed by
-//!   `DocumentId`. (See `ambre-spec-architecture.md` "ambre-bus layout".)
+//!   `DocumentId`. (See `ambre-spec-message-bus.md`.)
 //! - **Service** (`RestCommand`/`RestEvent` + `RequestId` in [`rest`]) — the
 //!   correlatable request/response family carried by `…::Rest { id, … }` on all
 //!   four envelopes, defined once and forwarded verbatim.
@@ -64,7 +64,7 @@ pub struct ClipboardBlob {
 }
 
 /// What a `copy`/`cut` on the focused view resolves to synchronously, inside the
-/// native clipboard event (`-ui.md` clipboard model). The authoritative payload
+/// native clipboard event (`trame-clipboard`). The authoritative payload
 /// is built asynchronously on the Logic thread, so the sync event only decides
 /// how the host should treat the browser default:
 /// - `Nothing` -- nothing selected; let the browser default proceed.

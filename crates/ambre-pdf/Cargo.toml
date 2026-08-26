@@ -11,5 +11,6 @@ kurbo = { workspace = true }
 peniko = { workspace = true }
 # default-features off: we skip the simple-text draw_text helper and rayon to
 # keep the lazy-loaded PDF chunk small on wasm. `raster-images` is enabled so
-# `KrillaSurface::draw_image` can embed Toile media (toile-interop §3.A / §5.B).
+# `KrillaSurface::draw_image` can embed Toile media (`toile-pdf-export`,
+# `toile-media`).
 krilla = { workspace = true, features = ["raster-images"] }

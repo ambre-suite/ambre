@@ -17,13 +17,13 @@ use wasm_bindgen::prelude::*;
 use web_sys::{IdbDatabase, IdbOpenDbRequest, IdbTransactionMode};
 
 const DB_NAME: &str = "ambre-persistence";
-// v2 adds the `trusted_keys` store (TOFU, ambre-spec-chrome.md §2.H). The
-// upgrade handler creates each store only if absent, so bumping the version on
-// an existing v1 database adds `trusted_keys` without touching `snapshots`.
+// v2 adds the `trusted_keys` store (`ambre-spec-key-verification.md`).
+// The upgrade handler creates each store only if absent, so bumping the version
+// on an existing v1 database adds `trusted_keys` without touching `snapshots`.
 const DB_VERSION: u32 = 2;
 const STORE_SNAPSHOTS: &str = "snapshots";
 /// TOFU pinned exchange keys: `UserId` (hex) -> the 32 raw bytes of the X25519
-/// key confirmed on first invitation (`ambre-spec-chrome.md §2.H`).
+/// key confirmed on first invitation (`ambre-spec-key-verification.md`).
 const STORE_TRUSTED_KEYS: &str = "trusted_keys";
 
 /// An open IndexedDB handle for persisting document CRDT snapshots.
@@ -201,7 +201,7 @@ impl PersistenceStore {
     /// Returns a `flume::Receiver` resolving to `Some(key)` when this user's key
     /// has been confirmed before, or `None` (first invitation / read error). The
     /// Main thread awaits it and compares against the freshly fetched key to
-    /// classify the trust state (`ambre-spec-chrome.md §2.H`).
+    /// classify the trust state (`ambre-spec-key-verification.md`).
     pub fn load_trusted_key(&self, user_id: [u8; 16]) -> flume::Receiver<Option<[u8; 32]>> {
         let (tx, rx) = flume::bounded(1);
         let key = id_to_hex(&user_id);
@@ -328,7 +328,8 @@ fn id_to_hex(id: &[u8; 16]) -> String {
 
 // ============================================================================
 // wasm tests (headless Chrome via `wasm-pack test`). Exercise the two paths the
-// TOFU store adds (ambre-spec-chrome.md 2.H) that a native test cannot reach:
+// TOFU store adds (`ambre-spec-key-verification.md`, CHROME-053) that a native
+// test cannot reach:
 // the trusted_keys roundtrip, and the DB_VERSION 1 -> 2 upgrade that must add
 // trusted_keys WITHOUT a ConstraintError on the existing snapshots store.
 // ============================================================================

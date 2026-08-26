@@ -15,7 +15,8 @@ use super::*;
 /// overflowing cell may spill its text over, walking from `col` in `step` (`+1`
 /// right, `-1` left). The walk stops at the first non-empty neighbour, the grid
 /// edge, or once `need` pixels of spill are covered -- whichever comes first
-/// (Excel/Sheets overflow, `-ui.md` sec.4.A). The result never exceeds `need`.
+/// (Excel/Sheets overflow, `trame-cell-rendering`). The result never exceeds
+/// `need`.
 pub(super) fn spill_width<E: Fn(u32, u32) -> bool>(
     layout: &GridLayout<'_>,
     row: u32,
@@ -47,7 +48,8 @@ pub(super) fn spill_width<E: Fn(u32, u32) -> bool>(
 /// i.e. a non-wrapped overflowing line may spill over it. Overflow direction
 /// follows the resolved alignment (left text spills right, right text spills
 /// left, centred text both ways); the spill stops at the first non-empty
-/// neighbour and the text is clipped there (no ellipsis in the MVP, sec.4.A).
+/// neighbour and the text is clipped there (no ellipsis in the MVP,
+/// `trame-cell-rendering`).
 ///
 /// Grid lines are *not* drawn here: call [`draw_grid_lines_on`] afterwards so
 /// the separators sit on top of the fills. Returns the number of cells that
@@ -117,8 +119,8 @@ where
         let y_off = cell_v_offset(content.v_align, row_h, text_h);
         let avail = cell_max_width as f64;
         // A non-wrapped single line wider than its column spills into empty
-        // neighbour cells (sec.4.A); wrapped or multi-line text is clipped to its
-        // own box. `single_line` guards against explicit newlines pushing a
+        // neighbour cells (`trame-cell-rendering`); wrapped or multi-line text is
+        // clipped to its own box. `single_line` guards against newlines pushing a
         // non-wrap value taller than the row -- that case clips like wrap does.
         let align = cell_alignment(content.h_align, content.text);
         let single_line = text_h <= row_h;

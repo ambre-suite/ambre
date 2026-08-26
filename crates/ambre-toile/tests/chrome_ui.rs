@@ -1,5 +1,5 @@
-//! DOM tests for the Toile chrome (Epic `ET`, `ambre-spec-architecture.md` §4
-//! "wasm" tier) -- the "wasm render / input tests" DoD item of `toile-ui §13`.
+//! DOM tests for the Toile chrome (Epic `ET`, `ambre-spec-architecture.md`
+//! "wasm" tier) -- the render and input belt of `toile-board-rendering`.
 //!
 //! The chrome (`ambre_toile::chrome`) is `cfg(target_arch = "wasm32")` -- leptos
 //! CSR + DOM (`web-sys`/`wasm-bindgen`) that does not compile on the host. So its
@@ -8,12 +8,12 @@
 //!
 //! The pure models are host-tested in `ui::{status,menu,menu_bar,palette}`; this
 //! belt mounts the real components and asserts the composed DOM plus input:
-//! - the selection status band (§8bis) -- aggregates + shared zoom/fps chips;
-//! - the right-click context menu (§5ter) end-to-end -- the entry rows a
+//! - the selection status band -- aggregates + shared zoom/fps chips;
+//! - the right-click context menu end-to-end -- the entry rows a
 //!   [`CtxScope`] renders, and that clicking a row fires its `CommandId`;
-//! - the tool palette (§5quinquies.A) -- a click switches the shared active tool;
-//! - the top menu bar zoom cluster (§5quinquies.E) and the floating selection
-//!   toolbar (§5quinquies.D) -- a click fires its `CommandId` on the shared sink.
+//! - the tool palette -- a click switches the shared active tool;
+//! - the top menu bar zoom cluster and the floating selection
+//!   toolbar -- a click fires its `CommandId` on the shared sink.
 //!
 //! On the host target the whole file is empty (the `cfg` gate below), so the
 //! native tier (`just test-native`) skips it cleanly.
@@ -108,7 +108,7 @@ fn empty_selection_shows_only_the_chips() {
     let owner = Owner::new();
     owner.set();
     // No selection reply yet: the aggregates area is empty, but the zoom chip
-    // (and fps chip) still render (§8bis).
+    // (and fps chip) still render.
     let (root, _zoom) = mount_bar(None, 1.0, 30.0);
 
     let stats = root.query_selector(".statusbar-stats").unwrap().unwrap();
@@ -131,7 +131,7 @@ fn empty_selection_shows_only_the_chips() {
 fn single_selection_shows_count_without_bounds() {
     let owner = Owner::new();
     owner.set();
-    // A lone element: the count shows, but no combined-bounds caption (§8bis).
+    // A lone element: the count shows, but no combined-bounds caption.
     let stats = SelStats {
         count: 1,
         bounds: Some(Bounds {
@@ -155,7 +155,7 @@ fn single_selection_shows_count_without_bounds() {
     root.remove();
 }
 
-// -- Context menu (§5ter) -----------------------------------------------------
+// -- Context menu -----------------------------------------------------
 // The pure `CtxScope -> entries` mapping and the `CommandId -> ToileCommand`
 // resolver are host-tested in `ui::menu`; here we mount the real
 // `ambre_chrome::ContextMenu` fed by `chrome::context_entries_for` and assert
@@ -231,7 +231,7 @@ fn click_by_aria(root: &web_sys::Element, aria: &str) -> bool {
 fn context_menu_empty_canvas_shows_only_paste_and_select_all() {
     let owner = Owner::new();
     owner.set();
-    // The empty-canvas scope offers exactly Paste + Select all (§5ter).
+    // The empty-canvas scope offers exactly Paste + Select all.
     let (root, fired) = mount_ctx_menu(CtxScope::default());
     assert_eq!(ctx_item_labels(&root), vec!["Paste", "Select all"]);
 
@@ -258,7 +258,7 @@ fn context_menu_copy_row_fires_copy_command() {
     assert!(labels.contains(&"Copy".to_owned()), "labels: {labels:?}");
     assert!(labels.contains(&"Delete".to_owned()), "labels: {labels:?}");
     // A single-element, unlocked, group-less selection offers neither grouping
-    // side nor Unlock (the omission-when-inapplicable rule of §5ter).
+    // side nor Unlock (the omission-when-inapplicable rule of).
     assert!(!labels.contains(&"Group".to_owned()), "labels: {labels:?}");
     assert!(!labels.contains(&"Unlock".to_owned()), "labels: {labels:?}");
 
@@ -292,7 +292,7 @@ fn context_menu_multi_selection_offers_group() {
 fn context_menu_locked_selection_offers_only_unlock() {
     let owner = Owner::new();
     owner.set();
-    // A wholly-locked selection: Unlock applies, Lock is omitted (§5ter).
+    // A wholly-locked selection: Unlock applies, Lock is omitted.
     let scope = CtxScope {
         over_selection: true,
         count: 1,
@@ -310,7 +310,7 @@ fn context_menu_locked_selection_offers_only_unlock() {
     root.remove();
 }
 
-// -- Tool palette (§5quinquies.A), input --------------------------------------
+// -- Tool palette, input --------------------------------------
 
 #[wasm_bindgen_test]
 fn tool_palette_click_switches_active_tool() {
@@ -336,7 +336,7 @@ fn tool_palette_click_switches_active_tool() {
     root.remove();
 }
 
-// -- Top menu bar zoom cluster (§5quinquies.E), input -------------------------
+// -- Top menu bar zoom cluster, input -------------------------
 
 #[wasm_bindgen_test]
 fn top_menu_bar_zoom_in_fires_command() {
@@ -353,7 +353,7 @@ fn top_menu_bar_zoom_in_fires_command() {
     root.remove();
 }
 
-// -- Floating selection toolbar (§5quinquies.D), input ------------------------
+// -- Floating selection toolbar, input ------------------------
 
 #[wasm_bindgen_test]
 fn selection_toolbar_delete_fires_command() {
@@ -384,7 +384,7 @@ fn selection_toolbar_delete_fires_command() {
     root.remove();
 }
 
-// -- Presenter overlay panel (toile-features §1.D), input ---------------------
+// -- Presenter overlay panel (toile-presentation), input ---------------------
 
 /// Mount a `PresenterPanel` with the given initial state, returning the container
 /// and the signal that captures emitted intents. The input signals are created
@@ -398,7 +398,7 @@ fn mount_presenter(
     mount_presenter_follow(open, index, count, notes, false, None, None)
 }
 
-/// Mount a `PresenterPanel` with full "Follow presenter" state (§1.B): the
+/// Mount a `PresenterPanel` with full "Follow presenter" state: the
 /// broadcast toggle, the active follow target, and the latest broadcasting peer
 /// (which drives whether the Follow button renders).
 fn mount_presenter_follow(
@@ -499,7 +499,7 @@ fn presenter_notes_edit_fires_minimal_delta() {
     let owner = Owner::new();
     owner.set();
     // Seeded with "abc"; appending "d" must emit the single-splice insert, not a
-    // full-text replace (toile-features §1.D char-CRDT).
+    // full-text replace (toile-text-editing char-CRDT).
     let (root, fired) = mount_presenter(true, 0, 1, "abc");
     type_into(&root, "Speaker notes", "abcd");
     assert_eq!(
@@ -517,7 +517,7 @@ fn presenter_notes_edit_fires_minimal_delta() {
 fn presenter_broadcast_button_fires_toggle() {
     let owner = Owner::new();
     owner.set();
-    // Broadcasting off: clicking the button requests turning it on (§1.B).
+    // Broadcasting off: clicking the button requests turning it on.
     let (root, fired) = mount_presenter_follow(true, 0, 3, "", false, None, None);
     assert!(click_by_aria(&root, "Broadcast position"));
     assert_eq!(
@@ -531,7 +531,7 @@ fn presenter_broadcast_button_fires_toggle() {
 fn presenter_follow_button_hidden_without_presenter() {
     let owner = Owner::new();
     owner.set();
-    // No peer is broadcasting -> the Follow affordance is absent (§1.B).
+    // No peer is broadcasting -> the Follow affordance is absent.
     let (root, _fired) = mount_presenter_follow(true, 0, 3, "", false, None, None);
     assert!(
         root.query_selector("[aria-label=\"Follow presenter\"]")
@@ -546,7 +546,7 @@ fn presenter_follow_button_fires_with_peer() {
     let owner = Owner::new();
     owner.set();
     let peer = UserId::new();
-    // A peer is broadcasting and we are not following: clicking follows it (§1.B).
+    // A peer is broadcasting and we are not following: clicking follows it.
     let (root, fired) = mount_presenter_follow(true, 0, 3, "", false, None, Some(peer));
     assert!(click_by_aria(&root, "Follow presenter"));
     assert_eq!(

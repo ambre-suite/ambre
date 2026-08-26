@@ -1,208 +1,197 @@
-# AMBRE -- SPEC: UI Thread (umbrella -- boundary, crates, commands, tokens)
-**Type:** Horizontal (Foundation -- UI Thread)
-**Status:** Draft
-**Implementation:** implemented
+# AMBRE -- FEATURE: THE UI THREAD
 
-> Umbrella of the **UI thread** (page's main thread). The UI thread has two subsystems, each with its own crate and dedicated spec: the **content** rendered in a wgpu `<canvas>` (`ambre-canvas`, `ambre-spec-canvas.md`) and the Leptos DOM **chrome** (`ambre-chrome`, `ambre-spec-chrome.md`). This document details neither: it fixes what is **cross-cutting** -- the canvas/DOM boundary, the thread's crate map, the shared command model, and the single source of design tokens. Inter-thread transport is in `ambre-spec-architecture.md`.
+**Type:** Horizontal (framework)
+**Implementation:** partial -- the boundary, the crate graph and the state split are built; the six
+behaviours every editor should share are arbitrated and unbuilt.
 
-## 1. OBJECTIVES & CONSTRAINTS
+> The page's own thread. It draws the content on a graphics surface, builds the rest of the
+> interface out of ordinary page elements, and holds nothing the document owns.
 
-* **Scope:** the **UI thread**-level contract -- boundary between content (canvas) and chrome (DOM), thread crate graph, command registry (shared UI affordance), design token generation. **Out of scope:** the GPU/text pipeline (`ambre-spec-canvas.md`), chrome components/IME/adaptive (`ambre-spec-chrome.md`), business logic (Logic thread), IPC transport (`ambre-spec-architecture.md`).
-
-* **Web-only.** Ambre targets the browser. Native is not a target; a possible desktop goes through **PWA** (installable, offline) or Tauri. This constraint enables a DOM chrome (which does not run in pure native) and the removal of winit (section 6).
-
-* **Thread-level invariants:**
-  - **Boundary rule:** the canvas owns content rendering, caret, selections, and content hit-testing; the DOM owns everything else (chrome, modals, menus, panels) and its own focus/a11y (section 2.A).
-  - **Single source of UI truth:** the UI thread dispatcher feeds *both* Leptos signals (chrome) and the canvas (content). No duplicated UI state.
-  - **The UI thread never blocks** (it runs on the page's main thread): `try_send`/`try_recv` toward the Logic thread.
-  - **No network, crypto, or persistence outbound flows** in the UI thread: chrome invokes `CommandId` which produce `LogicCommand` (`flume` channels). Sole exception: font loading (same origin), canvas side.
-  - **WebGL2-compatible by default:** stay within the common WebGPU/WebGL2 subset (no compute, no storage buffers) -- see `ambre-spec-canvas.md`.
+What this document fixes is what the two halves agree on and what the thread may never do. The
+content half is `ambre-spec-frame.md`, the interface half is `ambre-spec-chrome.md`, and neither is
+restated here.
 
 ---
 
-## 2. TECHNICAL DESIGN & STATE
+## 1. CONTRACT
 
-### A. Canvas / DOM Boundary
+The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
+status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREAD`, shared with
+`ambre-spec-clipboard.md`, `ambre-spec-commands.md` and `ambre-spec-design-tokens.md`.
 
-| Zone | Technology | Spec |
-|:---|:---|:---|
-| High-frequency content (grid, body text, whiteboard) | wgpu Canvas (`ambre-canvas`) | `ambre-spec-canvas.md` |
-| Chrome (menus, toolbars, dialogs, panels, palette, toasts, tooltips) | Leptos DOM (`ambre-chrome`) | `ambre-spec-chrome.md` |
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `UI-THREAD-001` | The drawing surface MUST own the content, the caret, the selections and content hit-testing; the page elements MUST own everything else, their own focus and their own accessibility. | this spec section 2 | none. The split holds by construction: the only page element over the surface is the transparent input. Nothing refuses an interface component that draws content | unverified |
+| `UI-THREAD-002` | The UI thread MUST NOT block on a channel, inbound or outbound. | this spec section 2; `ambre-spec-architecture.md section 2` | each application holds and types the rule for itself (`TRAME-UI-003`, `TOILE-UI-100`). Nothing holds it for a view added later: the blocking receive compiles on this thread and freezes the page | unverified |
+| `UI-THREAD-003` | A piece of interface state MUST NOT be held twice: a value the dispatcher pushes into a signal MUST NOT also live in a view's own state. | this spec section 2 | reviewer. A diff shows a duplicate and no test does: the two copies agree until one frame updates only one of them | human-review |
+| `UI-THREAD-004` | The UI thread MUST NOT open a network, cryptography or persistence path. The exceptions are same-origin font loading, the pre-session sign-in configuration read, and the local store. | `ambre-spec-zero-knowledge.md` | none. Neither the drawing crate nor the interface toolkit declares a transport or cryptography dependency, and the launcher holds the two reads plus the browser database (`ambre-spec-launcher.md`). No lint bans the next one | unverified |
+| `UI-THREAD-005` | Content rendering MUST stay inside the subset both graphics back ends share: no compute pass, no storage buffer. | `ambre-spec-frame.md` | none as a check. On the older back end a compute pass fails at device creation, so a regression is a blank surface at run time rather than a red job | unverified |
+| `UI-THREAD-012` | Every application that zooms MUST zoom through one engine -- one factor, one transform -- behind the shared status-bar control. | this spec section 2 | not built -- lands with `One zoom model` (`ambre-roadmap.md` E8) | unimplemented |
+| `UI-THREAD-013` | A two-finger pinch MUST zoom, in every application that zooms. | this spec section 2 | not built -- lands with `One zoom model` (`ambre-roadmap.md` E8) | unimplemented |
+| `UI-THREAD-015` | A row or column resize MUST go through one command, whichever table model asks for it. | this spec section 2 | not built -- lands with `One resize command` (`ambre-roadmap.md` E8) | unimplemented |
+| `UI-THREAD-016` | Undo depth MUST be one bounded cap, shared by every application. | this spec section 2 | not built -- lands with `One undo bound` (`ambre-roadmap.md` E8). The two applications that ship an undo stack today bound it nowhere | unimplemented |
+| `UI-THREAD-017` | Following a link MUST go through one host affordance; an application MUST NOT open an address by a path of its own. | this spec section 2 | not built -- lands with `Links in Trame` (`ambre-roadmap.md` E8) | unimplemented |
+| `UI-THREAD-020` | The UI thread MUST hold no document data: only view state and the display payload the Logic thread pushed. Every mutation MUST leave as a command. | this spec section 2 | each application types the rule for itself (`TRAME-UI-001`, `TOILE-UI-099`; the Prose row is unbuilt). Nothing holds it for a view added later: inside an application crate a view may still reach the document | unverified |
+| `UI-THREAD-021` | A document snapshot MUST cross this thread as opaque bytes: the thread MUST NOT decode one. | this spec section 2; `SYNC-011` | `cargo deny` -- `deny.toml` allows the engine crate in the four application crates alone, so the launcher that carries a snapshot to the local store has no way to read it | verified |
 
-Static DOM composed *around* a canvas costs one layout pass; the compositor then recomposes already rasterized layers at zero cost per frame. The only sensitive case is floating UI **anchored to content that pans/zooms** (selection toolbar on Toile): a DOM element **transform-synced** each frame.
-
-**Communication (the only two channels across the boundary):**
-- **Canvas -> DOM** via **signals**: the wgpu handler detects an event (for example right-click), computes position, triggers a Leptos signal that opens a DOM context menu at the coordinates.
-- **DOM -> Canvas** via **commands**: a button invokes a `CommandId` -> `LogicCommand` -> mutation -> `UiEvent` -> repaint (section 2.C).
-
-The only DOM element living *above* the canvas is the transparent input `<textarea>` (keyboard/IME/clipboard, detailed in `ambre-spec-chrome.md`).
-
-### B. Crate Map (UI thread)
-
-Boundaries guaranteed by the crate graph, single binary. Rule: *app-specific -> app crate* (monolith `logic` + `ui` + `chrome`); *shared -> upstream framework crate from apps*.
-
-```
-# Shared framework (UI thread), upstream of apps
-ambre-commands/   CommandId/Command/CommandState/CommandSource, keybindings.
-                  Zero UI dependency (leaf). Depended on by apps AND ambre-chrome.
-ambre-draw/       DrawSurface trait. Impls: WgpuSurface (screen), KrillaSurface (PDF).
-ambre-canvas/     Canvas render runtime: WgpuSurface/QuadRenderer/GlyphAtlas,
-                  TextCache, bootstrap_gpu/start_raf_loop, generated theme.rs. wgpu/
-                  parley/swash + accesskit (scoped to content). No app dependency.
-                  (FrameHost + AppView enum live in ambre-app, downstream of apps.)
-ambre-chrome/     Shared, app-agnostic Leptos chrome toolkit: AppShell,
-                  CommandPalette, Dialog/Menu/Toolbar/Toast/ContextMenu/Sidebar/
-                  StatusBar, shared text-format controls (ColorPopover, FontPicker,
-                  FontSizeSelect, FormatToggle, Debouncer) reused across apps'
-                  formatting UIs, keybinding manager. Depends on leptos +
-                  ambre-commands.
-
-# Application crates (monolith: logic + ui + chrome)
-ambre-trame/      logic   : *State + handlers (Logic thread)
-ambre-prose/      ui      : *View (AppView variant), content on ambre-canvas (UI thread)
-ambre-toile/      chrome  : SPECIFIC Leptos components, on ambre-chrome
-ambre-murmure/    commands: Command via ambre-commands (CommandSource)
-
-# Launcher
-ambre-app/        cdylib : mounts Leptos AppShell, creates flume channels, spawns
-                  Logic/Sync, bootstraps canvas + injects active view.
-```
-
-The launcher also owns the **`/` route home screen** (sign-in + document list, app-agnostic over every `DocType`): a DOM overlay on top of the persistent canvas. Visual + interaction contract in `ambre-spec-chrome.md section 2.G`; the E2E-encrypted document name model it displays (`name_enc` / `DocumentSummary.name`) in `ambre-spec-architecture.md section 3`.
-
-The **shared** lives in `ambre-canvas` (renderer) and `ambre-chrome` (toolkit); an app's **specific** (Trame formula bar, cell format dialog, `TrameView`...) lives in the app crate, built on top. Two pure crates per stack (`ambre-canvas` wgpu, `ambre-chrome` leptos) keep the renderer independent of Leptos.
-
-### C. Command Model -- everything is a command
-
-Menus, toolbar buttons, keyboard shortcuts, context menus, command palette are *views* of a **single command registry** -- which keeps chrome manageable with 5 apps x ~200 commands. Types live in the **`ambre-commands`** crate (leaf, framework-agnostic):
-
-```rust
-// ambre-commands/src/lib.rs
-
-/// Stable namespaced identifier, for example "prose.format.bold".
-pub struct CommandId(pub &'static str);
-
-pub struct Command {
-    pub id: CommandId,
-    pub title: fn(&Locale) -> String,           // i18n label
-    pub icon: Option<IconId>,
-    pub default_keybinding: Option<KeyBinding>,  // for example Ctrl+B
-    pub category: CommandCategory,               // palette grouping / tabs
-}
-
-/// Runtime state, derived from app state on each query.
-pub struct CommandState { pub enabled: bool, pub visible: bool, pub toggled: bool }
-
-pub trait CommandSource {
-    fn commands(&self) -> &[Command];
-    fn state(&self, id: CommandId, ctx: &AppContext) -> CommandState;
-    fn invoke(&self, id: CommandId, ctx: &mut AppContext);
-}
-```
-
-- Each app implements `CommandSource` and registers its commands. Chrome **does not know about apps**: it displays commands and their state (same dependency inversion as the `AppView` enum on the rendering side).
-- The keybinding manager is a `HashMap<KeyBinding, CommandId>`. A menu is a list of `CommandId`; a ribbon would be a tree of `CommandId` grouped by `category`.
-  - **Shared keymap rules (X26).** The `Ctrl`/`Cmd` fold (a `KeyBinding` matches interchangeably on macOS `Cmd` and other-platform `Ctrl`) and multi-chord commands (redo = `Ctrl+Shift+Z` **and** `Ctrl+Y`) are decided **once** here, so every app behaves identically instead of each folding modifiers and binding redo its own way. Tracked in the cross-app factoring Story (`ambre-roadmap.md`).
-- `Command`/`CommandId` (`ambre-commands`) is a **UI affordance**; `AppCommand`/`LogicCommand` (`ambre-bus`) is the **IPC payload**. An invoked `Command` *produces* a `LogicCommand` -- distinct layers.
-
-**Data flow (unidirectional, Elm-like):**
-
-```mermaid
-flowchart TD
-    A[chrome click / shortcut] --> B[CommandId invoked]
-    B --> C[LogicCommand to Logic thread]
-    C --> D[CRDT mutation, Loro]
-    D --> E[UiEvent in return]
-    E --> F[UI thread dispatcher]
-    F --> G[Leptos signals to chrome updates<br/>Bold button toggles]
-    F --> H[canvas renderer to content repaints]
-```
-
-### D. Design Tokens (single source)
-
-Single source `tokens.ron` -> `build.rs` generates `theme.css` (CSS custom properties for DOM chrome) **and** `theme.rs` (Rust constants for drawing themed content in the canvas). Single source -> canvas/DOM consistency **by construction**. The dark/light switch toggles the CSS variable set and the constant canvas set (repaint `dirty`). Catalog: surfaces, accent, menus, inputs, statuses (success/warning/error/info), spacings (`xs/sm/md/lg`), `border_radius`, font sizes (`body/small/heading`).
-
-> **Consumption** on the canvas side is in `ambre-spec-canvas.md section F`; **adaptive breakpoints** and the per-mode adaptation table (chrome side) are in `ambre-spec-chrome.md`.
-
-### E. Clipboard model (shared across apps)
-
-One clipboard model for **every** editor (Trame, Toile, Prose, ...): the build is
-**Logic-authoritative**, the UI carries only the selection, and there is **no best-effort
-viewport limit**. The transport across the `FrameHost <-> AppView` seam (and, serialized, across
-the OS clipboard) is the app-agnostic `ClipboardBlob { text: String, ambre: Option<Vec<u8>> }`
-(`ambre-bus`): `text` is the `text/plain` mirror for cross-app paste; `ambre` is the opaque,
-app-specific payload (postcard of the active app's typed clipboard payload) under the private
-`application/x-ambre` MIME type. Each app (de)serializes its own payload behind these bytes.
-
-**Copy flow (lazy-authoritative + activation-window write):** a native `copy`/`cut` event calls
-`view.clipboard_write(cut) -> CopyOutcome`:
-
-- `Text(String)` -- a synchronous in-cell / inline text selection: the host `setData`s it now.
-- `Deferred` -- the view emitted the authoritative copy command to Logic and remembers `cut`;
-  the host `prevent_default()`s and does **not** `setData` (so the browser does not clobber the
-  OS clipboard with empty content).
-- `Nothing` -- nothing selected; the browser default proceeds.
-
-Logic builds the full payload from the whole CRDT (never culled) and replies (for example
-`ToileEvent::Clipboard` / `TrameEvent::Clipboard`). The view drains it in `update()`, serializes
-a `ClipboardBlob`, keeps it **in memory** for a full-fidelity same-tab paste, and marks it
-pending. Right after `view.update()`, the host calls `view.poll_clipboard()`; a `Some(blob)`
-result is written to the OS clipboard via `navigator.clipboard.write`. This runs ~one frame
-(~16 ms) after the keypress -- still inside the transient user-activation window the async
-Clipboard API requires. Rationale (and the rejected prepare-ahead / prepare-on-modifier /
-promise-in-`ClipboardItem` alternatives) is in the plan; `text/plain` is reliable everywhere,
-the custom type is best-effort (Firefox may drop it), and same-tab paste never depends on it.
-
-**Paste flow:** the host decodes the OS clipboard into a `ClipboardBlob` and calls
-`view.paste_clipboard(blob)`; the view prefers its in-memory blob when the OS `text/plain`
-mirror still matches it (proof the OS clipboard holds our own last copy), else decodes
-`blob.ambre` into its typed payload. **Cut** is each app's own policy (Toile emits
-`DeleteElements` right after the copy command; Trame keeps its marching-ants delete-on-paste).
-
-**Chords (X16).** Copy / cut / paste are shared `CommandId`s in the keyboard pipe: both the modern
-`Ctrl+C` / `Ctrl+X` / `Ctrl+V` **and** the legacy `Ctrl+Insert` / `Shift+Insert` / `Shift+Delete`
-map to the same three intents, handled once here, in every app (the legacy set is ergonomic for a
-left-hander driving the mouse left-handed).
-
-> **Follow-up -- cross-app rich paste.** Today `blob.ambre` is each app's own opaque payload, so a
-> paste **across** apps falls back to `text`. A shared interchange format above these payloads --
-> letting a Trame range become a Prose table, or a Toile object a Prose image -- is a future goal
-> tracked in the cross-app factoring Story (`ambre-roadmap.md`).
+* **Budget.** the UI-thread rows of `ambre-spec-budgets.md section 1` -- the keystroke to a
+  draft, the viewport send, the render of a viewport event, the autocompletion -- plus the memory
+  total of `ambre-spec-budgets.md section 6`. Every one of those rows reads that no measurement exists.
+* **Boundary.** `UI-THREAD-004` is the boundary on this side, and it names its three exceptions.
+  The operating system clipboard is the other outbound surface and `ambre-spec-clipboard.md` fixes
+  what it may carry. Everything else leaves through the Sync thread, sealed
+  (`ambre-spec-zero-knowledge.md`).
+* **Verification.** 1 `verified`, 5 `unverified`, 1 `human-review`, 5 `unimplemented`. The one held
+  rule is held by a capability ban rather than a test, which is the strongest form available here:
+  it refuses the dependency instead of catching its use. The five loose rules are each held for one
+  application by that application's own row, and for a view added tomorrow by nothing.
 
 ---
 
-## 3. SECURITY & CONFIDENTIALITY (ZERO-KNOWLEDGE)
+## 2. MODEL
 
-The UI thread is a pure presentation layer. ZK audit carried by the two sub-specs; at the thread level:
-- **No outbound flows** outside the WASM process: chrome invokes `CommandId` -> `LogicCommand` (`flume` channels); content comes from the Logic thread. Sole exception: same-origin font `fetch`, canvas side.
-- **No direct persistence**: UI states (panel ratios, expansions) are sent up to the Logic thread, which decides.
+**CRDT containers.** none, and that is `UI-THREAD-020`. The thread holds view state and the display
+payload the Logic thread pushed; the document is one mental model and it lives on the other thread.
+
+**The boundary.** Two zones, two technologies, and two channels between them.
+
+| Zone | Drawn by | Specified in |
+|---|---|---|
+| high-frequency content: a grid, body text, a board | the graphics surface | `ambre-spec-frame.md` |
+| everything else: menus, toolbars, dialogs, panels, the palette, toasts | page elements | `ambre-spec-chrome.md` |
+
+The interface is composed **around** the surface, which costs one layout pass; the browser then
+recomposes already rasterized layers at no per-frame cost. The one sensitive case is a floating
+element anchored to content that pans and zooms, and that element is synchronized to the content's
+transform on every frame.
+
+| Direction | Carries |
+|---|---|
+| surface to elements | a signal: the surface detects a gesture, computes a position, and an element opens there |
+| elements to surface | a command: an identity produces a message, the document changes, an event returns, the surface repaints |
+
+The only page element **above** the surface is the transparent input that carries the keyboard, the
+composition and the clipboard events (`ambre-spec-text-input.md`).
+
+**The crate graph.** The boundary is enforced by the graph, in one binary. The rule is one line:
+what is specific to an application lives in that application's crate, what is shared lives upstream
+of every application.
+
+* shared, upstream of the applications:
+  * the command identities, depended on by every application and by the interface toolkit, and
+    depending on nothing itself (`ambre-spec-commands.md`);
+  * the drawing surface abstraction, with a screen back end and a document back end
+    (`ambre-spec-drawing-surface.md`);
+  * the content runtime: the render loop, the glyph cache, the generated tokens
+    (`ambre-spec-frame.md`);
+  * the interface toolkit: the shell, the palette, the dialogs, the menus, the shared formatting
+    controls (`ambre-spec-chrome.md`).
+* one crate per application, each holding its own Logic state and handlers, its own view, its own
+  interface components and its own command table.
+* the launcher, downstream of every application: it mounts the shell, creates the channels, spawns
+  the Logic and Sync threads, boots the surface and injects the active view
+  (`ambre-spec-launcher.md`).
+
+Two of the shared crates are deliberately pure -- one graphics, one page framework -- so the
+renderer never depends on the framework the interface is written in.
+
+**Where a state lives.** A state can exist in several layers. One layer owns it and every other is
+a projection.
+
+| Category | Example | Owner | Leaves the machine |
+|---|---|---|---|
+| a document mutation | a cell's text, a shape's position, a paragraph | the document, on the Logic thread | yes, as a delta |
+| shared metadata | a filter, a conditional format, a named range | the document, on the Logic thread | yes, as a delta |
+| ephemeral presence | a remote cursor, a peer's selection, a stroke in flight | the sender's Logic thread | yes, and never persisted |
+| local view state | a freeze, a personal filter, a selection, a camera, the active tool | this thread, some of it mirrored to the local store | no |
+| derived state | a formula cache, a dirty set, a spatial index, a culled viewport | the Logic thread, rebuilt from the document | no |
+| local history | the undo stack | the Logic thread, for this session | no |
+
+The consequence is `UI-THREAD-020`, and the local store is its one crossing: the launcher carries
+snapshot bytes to the browser database and back, and cannot read them (`UI-THREAD-021`).
+
+**The six behaviours every editor shares.** Each was arbitrated in the 2026-08 review, where three
+applications had given three answers to one question. Each is a Story of `ambre-roadmap.md` E8.
+
+| Behaviour | The rule | What stays each application's own |
+|---|---|---|
+| zoom | one engine -- the factor and the transform -- behind the already-shared status-bar control (`UI-THREAD-012`, `UI-THREAD-013`) | nothing. Every application zooms the same way, including the one that has no zoom today |
+| axis resize | one row and column resize command (`UI-THREAD-015`) | the table models. A spreadsheet grid and a rich-text table differ in scale and in meaning, so there is no shared table object |
+| undo depth | one bounded cap, as a shared parameter (`UI-THREAD-016`) | what merges into one step. One application commits on leaving a cell, another merges keystrokes |
+| following a link | one host affordance, shared by every application's link model (`UI-THREAD-017`) | nothing. An application-private path to open an address is what this forbids |
+| text editing | one substrate: the input pipe, the composition machine, the caret and the selection model (`ambre-spec-text-editor.md`, `CANVAS-037`) | the layout driver. An inline editor shapes one run at paint time; a paginated document shapes on the Logic thread and ships shaped runs |
+| selection endpoints | the moving end is the focus, the fixed one the anchor, everywhere (`ambre-spec-text-editor.md`) | nothing. It is a rename |
+
+**Code.** This document describes a boundary, so it names no module of its own. The crates the
+graph above lists are `crates/ambre-commands`, `crates/ambre-draw`, `crates/ambre-canvas`,
+`crates/ambre-chrome`, the four application crates and `crates/ambre-app`.
 
 ---
 
-## 4. QUALITY & PERFORMANCE
+## 3. SURFACE
 
-Testability and frame budgets are defined **per sub-spec**: render pipeline and frame budget in `ambre-spec-canvas.md section 4-5`; chrome components, IME cycle, and Prose frame in `ambre-spec-chrome.md section 4-5`. The only **cross-cutting** test is the end-to-end command: click -> `CommandId` -> `LogicCommand` -> `UiEvent` -> chrome toggle (Leptos signals) **and** canvas repaint.
+The user touches nothing here. What they see is whether the interface stays responsive.
 
----
-
-## 6. REJECTED ARCHITECTURAL DECISIONS (UI model level)
-
-> **Content rendering** rejections (Vello, `vello_hybrid`, Canvas 2D, DOM-for-content): `ambre-spec-canvas.md section 6`. **Chrome** rejections (ribbon, egui look, reimplemented `<dialog>`, CSS Anchor): `ambre-spec-chrome.md section 6`. Below, the rejections that define the **hybrid UI model** itself.
-
-- **100% canvas UI (homemade widget framework)**: catching up to Masonry (~29 widgets + focus + IME + theming) represents ~2 years solo without matching DOM ARIA a11y, and canvas a11y via AccessKit already reconstructs a hidden DOM tree. The "no HTML/CSS overhead" argument is false for static DOM composed with a canvas (the compositor recomposes rasterized layers at zero cost per frame).
-- **Xilem / Masonry for chrome**: Xilem is alpha, Masonry's web backend is not a Linebender priority, and `xilem_web` is a separate DOM backend. Even with `vello_hybrid` (which would lift the compute overhead), we would bet the chrome on experimental libs whose focus is not the web, and run two renderers or rewrite content on Vello.
-- **winit**: in web-only, indirection without benefit and event ownership conflict with DOM. Events captured directly via `web-sys` (boundary section 2.A).
-- **WebGPU-only**: staying WebGL2-compatible widens the target (institutional fleets) at no cost.
-- **Pure native (winit + wgpu + canvas chrome)**: out of scope (web-only; possible desktop via PWA/Tauri).
+| Trigger | Behaviour |
+|---|---|
+| any gesture at all | the thread never waits: a full channel drops the message with a log rather than freezing the page |
+| a document mutation | leaves as a command and comes back as an event; nothing is written locally first |
+| a right-click on content | the surface computes the position and a page element opens there |
+| a toolbar control on content that pans | the element follows the content's transform on every frame |
+| the network being down | nothing here changes: this thread never reached it |
 
 ---
 
-## 7. INTEGRATION PLAN (ROADMAP)
+## 4. DECISIONS
 
-> Detailed backlog of this spec; cross-cutting scheduling (milestones) lives in `specs/ambre-roadmap.md`.
+| Decision | Rationale | Rejected alternative |
+|---|---|---|
+| Content on a graphics surface, the rest as page elements | matching a mature widget toolkit means about two years of work and still no accessibility to match what the browser gives away, while the argument against page elements -- their composition cost -- is false for a static interface around a surface, which the browser recomposes at no per-frame cost | one interface drawn entirely on the surface, with a widget framework of our own |
+| No windowing library | the target is the browser alone, so a windowing layer is indirection with no portability to buy, and it fights the page for event ownership. Events are read from the browser directly | a windowing library between the page and the surface |
+| Both graphics back ends, not the newer one alone | staying inside the shared subset widens the reachable machines, institutional fleets included, and the subset costs nothing: the content pipeline needs no compute pass | the newer back end alone, for the features the content does not use |
+| Same-tab fidelity is not decided by comparing text | two tabs holding the same text are the case a fidelity ladder exists for, and a text match reports them as one copy. The reasoning and the rule are `ambre-spec-clipboard.md` | comparing the plain-text mirror to decide whether a paste is our own |
+| The browser is the only target | a desktop build, if it comes, is an installable page or a thin native shell. Committing to the browser is what makes an interface out of page elements possible at all | a native build, with an interface drawn entirely on the surface |
+| Three undo documents stand, and one shared row | the pattern is one and the proof is not: each application must show it over its own handlers, so collapsing three rows into one would report three implementation states as one. Only the depth cap is a single shared number, and only that is a row here -- the two application rows restating it named no mechanism of their own and were withdrawn | one undo document for the suite, with the three engines as sections of it |
+| An arbitrated behaviour with no shared component stays here | a rule belongs to the document that owns the component it constrains, and four of the six behaviours constrain a component that does not exist yet. Filing each in a document of its own would create four design-only stubs whose whole content is one row. The two whose component exists left: the editing substrate and the endpoint names are `ambre-spec-text-editor.md` | a document per arbitrated behaviour, written before the behaviour has any code |
+| The exceptions of `UI-THREAD-004` are named rather than removed | the font fetch is same-origin and carries no document data; the sign-in configuration read happens before any session exists; the local store holds bytes this thread cannot read. Each is narrower than the rule it excepts, and moving any of them off this thread buys nothing | tightening the rule to zero exceptions and moving the three paths to another thread |
 
-Per-subsystem detail is in each sub-spec; at the thread level:
+---
 
-- **UI P0 -- Content (canvas):** GPU pipeline, `FrameHost`/`AppView`, fonts, Trame grid at 60+ FPS. **Done** -- see `ambre-spec-canvas.md section 7` (`CANVAS P0`).
-- **UI P1 -- Chrome foundation:** create `ambre-commands` (registry) and `ambre-chrome` (Leptos toolkit), slim `ambre-canvas` to render runtime, Leptos app shell + `<canvas>` cell, winit-free bootstrap, **one end-to-end command**. Prerequisite: validate Leptos under `+atomics`/`shared-memory` build + nightly `build-std`. Detail in `ambre-spec-chrome.md section 7` (`CHROME P1`).
-- **UI P2+ -- Input/IME, WYSIWYG, adaptive, tokens, a11y:** `ambre-spec-chrome.md section 7` (`CHROME P2`/`P3`).
+## 5. NOT BUILT, AND NOT YET RULED
+
+* **Four of the six shared behaviours have no code at all.** One zoom engine, one resize command,
+  one undo bound and one way to open an address are arbitrated and unbuilt, so each application
+  still answers its own way (`UI-THREAD-012` to `UI-THREAD-017`).
+* **Nothing refuses the next exception to `UI-THREAD-004`.** The rule is written against what the
+  launcher does, and no lint bans a fourth path. The first three were found by reading the crate,
+  which is how a fifth will be found.
+* **Nothing refuses an interface component that draws content.** `UI-THREAD-001` holds because
+  nobody has written one, and the graph does not stop it: the toolkit can reach a canvas element as
+  easily as any other.
+* **The blocking receive still compiles on this thread.** Each application types the rule for its
+  own view and a view added tomorrow inherits nothing.
+* **No rule covers what the local store may hold.** The snapshot is opaque to this thread, and
+  nothing states how long it lives, what clears it, or what a second document does to it
+  (`ambre-spec-launcher.md`).
+* **The subset rule has no check.** Nothing in the build refuses a compute pass, and the failure
+  mode is a blank surface on the machines least likely to be tested on.
+* **Nothing rules on a touch gesture that is not a pinch.** A pinch is a row because it is part of
+  the zoom arbitration; a long press, a two-finger pan and a swipe are named nowhere.
+
+---
+
+## 6. WHAT THIS DOCUMENT DOES NOT OWN
+
+| Question | Owner |
+|---|---|
+| How the content is drawn, and what a frame costs | `ambre-spec-frame.md` |
+| The interface components, and how they are placed | `ambre-spec-chrome.md` |
+| How a command is named, resolved and described | `ambre-spec-commands.md` |
+| Where a colour, a spacing or a type size comes from | `ambre-spec-design-tokens.md` |
+| What a copy carries, and how a paste decides fidelity | `ambre-spec-clipboard.md` |
+| The keyboard, the composition and the transparent input | `ambre-spec-text-input.md` |
+| The shared inline editor, and the names of the selection ends | `ambre-spec-text-editor.md` |
+| The channels between the three threads, and what they carry | `ambre-spec-architecture.md section 2` |
+| What the sealed path is, and what the relay may read | `ambre-spec-zero-knowledge.md` |
+| The home screen, the routes and the sign-in | `ambre-spec-launcher.md` |
+| What each application's view holds and paints | each application's engine document |

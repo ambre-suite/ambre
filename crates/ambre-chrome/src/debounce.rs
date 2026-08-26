@@ -3,7 +3,7 @@
 // A tiny debounce helper for chrome controls that must coalesce a burst of rapid
 // edits into a single downstream action -- e.g. dragging the Toile style
 // inspector's opacity slider should emit ONE `RestyleElements`, not one per
-// pixel (`toile-ui sec.5quinquies.B`, "edits are debounced").
+// pixel (`toile-styles`, "edits are debounced").
 //
 // It wraps leptos' `set_timeout_with_handle` (the same timer facility the toast
 // host uses): each `call` cancels the still-pending timer and reschedules, so the

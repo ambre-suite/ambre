@@ -1,12 +1,12 @@
-//! SVG export (`toile-interop` §3.B).
+//! SVG export (`toile-import-export`).
 //!
 //! Serializes a slice of [`ExportElement`] back to a resolution-independent SVG
 //! document -- the inverse of [`super::svg_import`]. Output is **deterministic**
-//! (§1 "export is deterministic"): fixed attribute order and a single float
+//! ("export is deterministic"): fixed attribute order and a single float
 //! formatter, so the same board yields byte-identical SVG. Shapes map to SVG
 //! primitives, `Shape(Path)` to `<path d=...>` (reusing `BezPath::to_svg`, the
 //! same encoding the CRDT payload stores), text to `<text>`, and an image to an
-//! `<image>` referencing its content hash (blob bytes stay on MinIO, §5).
+//! `<image>` referencing its content hash (blob bytes stay on MinIO,).
 
 use std::fmt::Write as _;
 
@@ -22,7 +22,7 @@ pub fn export_svg(elements: &[ExportElement]) -> String {
     // The viewBox is anchored at the origin (0 0 W H), never at the content's
     // min corner: a non-zero viewBox origin makes an SVG reader translate the
     // whole document, which would shift every element on re-import and break the
-    // §1 round-trip. W/H span to the content's far corner (min 1 to stay valid).
+    // round-trip. W/H span to the content's far corner (min 1 to stay valid).
     let w = bounds.x1.max(1.0);
     let h = bounds.y1.max(1.0);
     let mut out = String::new();

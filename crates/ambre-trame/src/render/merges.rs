@@ -65,7 +65,7 @@ where
                 content.size.map(|s| s as f32).unwrap_or(BODY_SIZE) * layout.zoom as f32;
             // Wrap constrains the layout to the span width (breaking long tokens
             // within the word); otherwise the line lays out unbounded and is
-            // clipped to the span rect below (sec.4.A).
+            // clipped to the span rect below (`trame-cell-rendering`).
             let max_w = if content.wrap { avail as f32 } else { f32::MAX };
             let layout_text: &Layout<ParleyBrush> = text_cache.get_or_build_font(
                 font_cx,

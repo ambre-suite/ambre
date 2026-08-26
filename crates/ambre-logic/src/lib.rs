@@ -35,7 +35,7 @@ pub mod persistence;
 mod data;
 mod dispatch;
 
-/// Document-fixture loader, registry and driver (`ambre-spec-fixtures.md` §2.B).
+/// Document-fixture loader, registry and driver (`ambre-spec-fixtures.md`).
 ///
 /// Fixture code (I4): behind the non-default `fixtures` feature, because this
 /// crate **does** ship to wasm. `DocState::import_snapshot` / `export_snapshot`
@@ -61,8 +61,8 @@ use ambre_trame::TrameState;
 /// the `(DocState, AppCommand)` pair to route a typed command to the right
 /// document model — no trait object, no downcast.
 ///
-/// `pub` since `ambre-spec-fixtures.md` §2.B: the fixture loader hands one back
-/// and the round-trip belt of §4 quantifies over its variants, neither of which
+/// `pub` since `ambre-spec-fixtures.md`: the fixture loader hands one back
+/// and the round-trip belt of quantifies over its variants, neither of which
 /// a crate-private enum allows.
 pub enum DocState {
     // Boxed: the per-document states differ widely in size (a `TrameState` is
@@ -115,7 +115,7 @@ impl DocState {
     /// Load a full Loro snapshot into this state, returning the display events
     /// the app emits.
     ///
-    /// **Production code, ungated** (`fixtures §I4`): `ambre-logic` ships to
+    /// **Production code, ungated** (`FIXTURE-007`): `ambre-logic` ships to
     /// wasm, and this is the enum-level entry point a local restore goes through.
     /// Its Toile arm is why `ToileState::import_snapshot` is ungated too --
     /// gating that would make an ordinary client build fail to compile here.
@@ -140,8 +140,8 @@ impl DocState {
 
     /// Export this state's full Loro snapshot.
     ///
-    /// **Production code, ungated** (`fixtures §I4`), and the other half of the
-    /// round trip §4 asserts on every variant.
+    /// **Production code, ungated** (`FIXTURE-007`), and the other half of the
+    /// round trip asserts on every variant.
     /// [`LogicState::export_snapshot`] cannot serve that belt: it takes a
     /// `DocumentId` and needs a live registry entry, where the belt quantifies
     /// over a bare `DocState`.
@@ -152,9 +152,9 @@ impl DocState {
         }
     }
 
-    /// Seed the canonical `UserId` (§7) into the underlying app state once the
+    /// Seed the canonical `UserId` into the underlying app state once the
     /// session is authenticated. Only apps that key per-user state on it react;
-    /// Trame's own `my_user_id` (`trame-logic §7`) is a separate slice.
+    /// Trame's own `my_user_id` (`trame-engine`) is a separate slice.
     fn set_user_id(&mut self, user_id: UserId) {
         match self {
             DocState::Toile(state) => state.set_user_id(user_id),
@@ -168,7 +168,7 @@ impl DocState {
 // -----------------------------------------------------------------------------
 
 /// One open document: its typed state plus this client's role on **that**
-/// document (architecture §2.D).
+/// document (architecture).
 ///
 /// The role gates mutating `AppCommand`s in [`LogicState::handle_app_command`].
 /// This is a **UX gate only** -- it avoids offering edits the server would
@@ -215,19 +215,19 @@ struct LogicState {
     /// `CloseDocument` / `DeleteDocument` / `Logout`.
     docs: HashMap<DocumentId, LiveDoc>,
     /// Canonical per-user identifier, captured from `LogicEvent::SessionReady`
-    /// (§7). `None` until the session is authenticated. Seeded into every open
+    /// `None` until the session is authenticated. Seeded into every open
     /// `DocState` on arrival and into any document opened afterwards, so an app
     /// that keys per-user state (Toile reactions, presence identity) always has
     /// it before the first edit.
     my_user_id: Option<UserId>,
     /// P3 responses this Logic thread issued on behalf of a document
-    /// (`toile-interop §5`): a `RequestId` present here routes its answering
+    /// (`toile-media`): a `RequestId` present here routes its answering
     /// `RestEvent` (or correlated `ApiError`) back into the owning engine instead
     /// of forwarding it to the UI. UI-issued requests are absent from this map
     /// and forward verbatim, exactly as before. An entry is inserted when a
     /// `ToileRequest` is lowered and removed when its response arrives.
     rest_routes: HashMap<RequestId, DocumentId>,
-    /// Base fonts for PDF export (`toile-interop §3.A`), seeded once by
+    /// Base fonts for PDF export (`toile-pdf-export`), seeded once by
     /// [`LogicCommand::LoadFonts`]. `None` until the Main thread's boot-time
     /// fetch lands; a fresh `FontContext` here would have zero faces and emit no
     /// glyphs, so export waits on this. Lives on the Logic thread because that is

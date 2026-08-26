@@ -1,4 +1,4 @@
-//! Clipboard payloads (`ambre-spec-trame-ui.md` sec.5.E): the serialized cells
+//! Clipboard payloads (`trame-clipboard`): the serialized cells
 //! of a copied/cut range, moved to the Logic thread inside
 //! [`TrameCommand::PasteRange`](super::TrameCommand).
 
@@ -6,7 +6,7 @@ use super::CellStyle;
 use serde::{Deserialize, Serialize};
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Clipboard (`ambre-spec-trame-ui.md` sec.5.E)
+// Clipboard (`trame-clipboard`)
 //
 // The serialized payload of a copied/cut range. Built by the UI from its
 // viewport cache, written onto the OS clipboard (postcard, alongside a

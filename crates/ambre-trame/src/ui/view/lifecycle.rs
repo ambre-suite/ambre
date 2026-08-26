@@ -12,8 +12,9 @@ impl TrameView {
         canvas_width: f64,
         canvas_height: f64,
         text_input: TextInput,
-        // When embedded as a `doc_embed` child (§2.I), the child view must not
-        // grab the shared text pipe on construction: the top-level document owns
+        // When embedded as a `doc_embed` child (`toile-embeds`), the
+        // child view must not grab the shared text pipe on construction: the
+        // top-level document owns
         // the caret until the user clicks into the embed. A top-level view passes
         // `false` and focuses immediately, as before.
         embedded: bool,
@@ -154,7 +155,7 @@ impl TrameView {
 
     /// Enter the inert fatal state: a worker thread is gone, so no command can
     /// be answered. Logged exactly once; the page may surface a fatal screen
-    /// (see the `ambre-spec-architecture` "thread failure" section).
+    /// (see `ambre-spec-architecture.md`, `ARCH-008`).
     pub(crate) fn signal_fatal(&mut self, reason: &str) {
         if self.fatal {
             return;
@@ -183,7 +184,7 @@ impl TrameView {
         self.refresh_selection_stats();
     }
 
-    /// Refresh the status-bar selection aggregates (`-ui.md` sec.13bis) after a
+    /// Refresh the status-bar selection aggregates (`trame-status-bar`) after a
     /// selection change. A lone cell shows nothing, so we clear the signal
     /// locally; any multi-cell selection asks the Logic thread (which holds every
     /// cell, not just the viewport) for the aggregates, replied as
@@ -197,13 +198,13 @@ impl TrameView {
             self.sel_stats.set(None);
         }
         // Publish the current selection rectangle so the launcher can open the
-        // multi-column sort dialog over the selection's columns (sec.5.C).
+        // multi-column sort dialog over the selection's columns (`trame-sort`).
         #[cfg(target_arch = "wasm32")]
         self.sel_bounds.set(Some(self.state.selection.bounds()));
     }
 
     /// The active cell's spreadsheet reference (e.g. `"B2"`), shown in the
-    /// formula bar's name box (spec sec.6).
+    /// formula bar's name box (`trame-cell-editing`).
     #[cfg(target_arch = "wasm32")]
     pub(crate) fn active_cell_ref(&self) -> String {
         format!(
@@ -313,8 +314,8 @@ impl TrameView {
             tracing::error!("[UI] channel full, edit dropped — retry next frame");
         }
         // Close the undo group on cell exit so the whole edit is one undo item
-        // (§6.C). Lossless: it must not be dropped, or the group would stay open
-        // until the next command and could absorb a later edit.
+        // (`trame-cell-editing`). Lossless: it must not be dropped, or the group
+        // would stay open until the next command and could absorb a later edit.
         let _ = self.send_command_lossless(TrameCommand::CommitEdit);
         self.state.set_cell_text(editor.row, editor.col, text);
         // Content layer must repaint to show the committed text; overlay too, to

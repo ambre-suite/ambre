@@ -12,8 +12,8 @@ const MARCHING_GAP: f64 = 4.0;
 const MARCHING_PERIOD: f64 = MARCHING_DASH + MARCHING_GAP;
 
 /// Draw a small filled "+" badge centred on `(cx, cy)`: the inline-insert
-/// affordance shown on a hovered header boundary (sec.4bis.D).
-/// Radius of the inline insert pill (sec.4bis.D).
+/// affordance shown on a hovered header boundary (`trame-headers`).
+/// Radius of the inline insert pill (`trame-headers`).
 const BADGE_RADIUS: f64 = 7.5;
 
 /// Fill a disc of radius `r` centred on `(cx, cy)` with solid `color`, painted as
@@ -36,7 +36,7 @@ pub(crate) fn fill_disc<S: DrawSurface>(s: &mut S, cx: f64, cy: f64, r: f64, col
 }
 
 /// Inline insert badge: an Excel-style filled pill floating on the hovered header
-/// boundary (sec.4bis.D). A solid `fill` disc with a 1px contrasting `ring` halo
+/// boundary (`trame-headers`). A solid `fill` disc with a 1px contrasting `ring` halo
 /// (so it reads on both header and content backgrounds) and a centred `glyph`-
 /// coloured "+". Sized to sit comfortably on a header border without overlapping
 /// the neighbouring labels.
@@ -69,7 +69,7 @@ const MDI_FILTER_PATH: &str = "M14,12V19.88C14.04,20.18 13.94,20.5 13.71,20.71C1
 /// The `MdiFilter` outline, flattened to polylines and normalized into the unit
 /// box `[0,1]^2` (aspect-preserving, centred), computed once. Each inner `Vec`
 /// is one closed contour as `(x, y)` points; the GPU surface has no `fill_path`,
-/// so the glyph is reproduced by scanline-filling these contours (sec.5.D).
+/// so the glyph is reproduced by scanline-filling these contours (`trame-shared-filter`).
 pub(crate) fn mdi_filter_polygon() -> &'static Vec<Vec<(f64, f64)>> {
     static POLY: std::sync::OnceLock<Vec<Vec<(f64, f64)>>> = std::sync::OnceLock::new();
     POLY.get_or_init(|| {
@@ -150,7 +150,7 @@ pub(crate) fn fill_unit_polygon<S: DrawSurface>(
 }
 
 /// Paint the `MdiFilter` funnel glyph (filled) inside the box `(bx, by, w, h)`:
-/// the "filter active" cue (sec.5.D). A faithful reproduction of the DOM
+/// the "filter active" cue (`trame-shared-filter`). A faithful reproduction of the DOM
 /// `icondata::MdiFilter`, fitted aspect-preserving into a centred square so the
 /// proportions hold regardless of the box aspect.
 pub(crate) fn draw_funnel<S: DrawSurface>(s: &mut S, bx: f64, by: f64, w: f64, h: f64, c: Color) {
@@ -161,7 +161,7 @@ pub(crate) fn draw_funnel<S: DrawSurface>(s: &mut S, bx: f64, by: f64, w: f64, h
 }
 
 /// Stroke a downward chevron inside the box `(bx, by, w, h)`: the "filter
-/// available, none active" cue on an autofilter button (sec.5.D).
+/// available, none active" cue on an autofilter button (`trame-shared-filter`).
 pub(crate) fn draw_chevron<S: DrawSurface>(s: &mut S, bx: f64, by: f64, w: f64, h: f64, c: Color) {
     let cx = bx + w / 2.0;
     s.stroke_line(bx, by, cx, by + h, c, 1.0);
@@ -169,7 +169,7 @@ pub(crate) fn draw_chevron<S: DrawSurface>(s: &mut S, bx: f64, by: f64, w: f64, 
 }
 
 /// Stroke a horizontal dashed line from `x0` to `x1` at height `y`, the dashes
-/// offset left by `phase` (the marching-ants crawl, sec.5.E).
+/// offset left by `phase` (the marching-ants crawl, `trame-clipboard`).
 pub(crate) fn dashed_h<S: DrawSurface>(s: &mut S, x0: f64, x1: f64, y: f64, c: Color, phase: f64) {
     let mut t = x0 - phase;
     while t < x1 {
@@ -247,7 +247,7 @@ pub fn draw_overlay<S: DrawSurface>(
         text_enabled,
     );
 
-    // -- 1b. Funnel badge on the filtered column's letter header (sec.5.D), kept
+    // -- 1b. Funnel badge on the filtered column's letter header (`trame-shared-filter`), kept
     //        as a secondary cue alongside the first-row autofilter buttons below.
     //        Drawn only when the column is within the visible span.
     if let Some(fcol) = state.filtered_col
@@ -266,7 +266,7 @@ pub fn draw_overlay<S: DrawSurface>(
     }
 
     // -- 1b'. Excel-style autofilter buttons on the current region's header row
-    //         (sec.5.D): each column of the contiguous data block around the
+    //         (`trame-shared-filter`): each column of the contiguous data block around the
     //         active cell draws a small button at the right edge of its first-row
     //         cell -- a plain chevron when the column is unfiltered, a funnel
     //         when the shared filter targets it. Clicking opens the same
@@ -294,7 +294,7 @@ pub fn draw_overlay<S: DrawSurface>(
         }
     }
 
-    // -- 1c. Find matches (sec.5.G): a translucent highlight behind each matched
+    // -- 1c. Find matches (`trame-find-replace`): a translucent highlight behind each matched
     //        cell so every hit is visible at a glance; the focused match is the
     //        active cell, so it also carries the active border drawn below.
     if !state.find_matches.is_empty() {
@@ -308,7 +308,7 @@ pub fn draw_overlay<S: DrawSurface>(
         }
     }
 
-    // -- 1d. Whole-axis selection band (sec.4bis.A). A virtual column/row
+    // -- 1d. Whole-axis selection band (`trame-selection`). A virtual column/row
     //        selection has no on-screen rectangle bounding it, so fill the whole
     //        band over the grid area and tint its headers opaquely.
     let sel = &state.selection;
@@ -393,7 +393,7 @@ pub fn draw_overlay<S: DrawSurface>(
         surface.stroke_rect(Rect::new(x, y, x + cw, y + ch), palette.selection, 2.0);
     }
 
-    // -- 2b. Clipboard marching-ants marquee (sec.5.E). A dashed rectangle around
+    // -- 2b. Clipboard marching-ants marquee (`trame-clipboard`). A dashed rectangle around
     //        the copied/cut range, its dashes crawling so the marquee animates.
     if let Some((r1, c1, r2, c2)) = state.clipboard_anchor
         && let Some((x, y, w, ht)) = state.range_pixel_rect(r1, c1, r2, c2)
@@ -406,7 +406,7 @@ pub fn draw_overlay<S: DrawSurface>(
         dashed_v(surface, y, y + ht, x + w, c, phase);
     }
 
-    // -- 2c. Autofill (sec.5.F): a dashed preview outline of the destination
+    // -- 2c. Autofill (`trame-autofill`): a dashed preview outline of the destination
     //        rectangle while the handle is dragged, then the small blue handle
     //        square at the selection's bottom-right corner.
     if let Some((r1, c1, r2, c2)) = state.fill_preview
@@ -424,7 +424,7 @@ pub fn draw_overlay<S: DrawSurface>(
         surface.stroke_rect(r, palette.content_bg, 1.0);
     }
 
-    // -- 2d. Header resize guide (sec.4bis.C): a full-height/width line at the
+    // -- 2d. Header resize guide (`trame-resize`): a full-height/width line at the
     //        prospective boundary while a header border is dragged.
     match state.resize_preview {
         Some(grid::ResizePreview::Col(x)) => {
@@ -465,7 +465,7 @@ pub fn draw_overlay<S: DrawSurface>(
         _ => {}
     }
 
-    // -- 2e. Inline insert "+" badge on the hovered header boundary (sec.4bis.D).
+    // -- 2e. Inline insert "+" badge on the hovered header boundary (`trame-headers`).
     match state.insert_hint {
         // ColInsert(i) inserts left of column i, i.e. at column i's left edge.
         Some(grid::HeaderHit::ColInsert(i)) => {

@@ -1,19 +1,19 @@
-//! Media placeholder state machine + bounded local cache (`toile-interop` §5.B / §5.C).
+//! Media placeholder state machine + bounded local cache (`toile-media`).
 //!
 //! This is the **pure, host-testable** core of the media pipeline: it models the
 //! `Loading -> Ready | Failed` lifecycle of a content-addressed blob and the
 //! local LRU cache that makes zoom/pan revisits refetch-free. It deliberately
-//! does **not** hash, encrypt, compress, or touch the network: per §5 the real
+//! does **not** hash, encrypt, compress, or touch the network: per the real
 //! blake2b hashing (and all crypto) runs in the Sync thread, which owns the
 //! plaintext. The cache is keyed by a [`ContentHash`] the caller supplies, so
 //! nothing here ever inspects plaintext bytes.
 //!
 //! The state machine is what Phase 0 needs standalone; Phase 1 wires it to the
-//! `RestCommand::UploadMedia` / `DownloadMedia` service plane (§5).
+//! `RestCommand::UploadMedia` / `DownloadMedia` service plane.
 
 use std::collections::HashMap;
 
-/// Opaque content-address key for a media blob (blake2b of the plaintext, §5.A).
+/// Opaque content-address key for a media blob (blake2b of the plaintext,).
 /// A newtype so an ordinary `String` (an element id, a url) can never be mistaken
 /// for a media key. The hash itself is computed Sync-side; interop only routes it.
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -25,7 +25,7 @@ impl ContentHash {
     }
 }
 
-/// Lifecycle of one cached blob (§5.B). `Loading` is in-flight (a download was
+/// Lifecycle of one cached blob. `Loading` is in-flight (a download was
 /// issued, pixels not yet back), `Ready` holds decoded pixels, `Failed` recorded
 /// a fetch/decode error so the UI can paint a broken-image affordance without
 /// re-issuing the request in a tight loop.
@@ -37,7 +37,7 @@ pub enum MediaState {
 }
 
 /// What a [`MediaCache::request`] resolved to. `Fetch` means this hash was not
-/// known and the caller must issue a `DownloadMedia` (§5.B); `CacheHit` means an
+/// known and the caller must issue a `DownloadMedia`; `CacheHit` means an
 /// entry already exists (in-flight, ready, or failed) and **no** new fetch is due
 /// -- the content-addressing dedup that keeps identical images to a single blob.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -47,17 +47,17 @@ pub enum RequestOutcome {
 }
 
 /// One cache slot: the lifecycle state plus, once `Ready`, the decoded pixels the
-/// `toile-ui` texture path uploads. Pixels stay `None` while `Loading`/`Failed`.
+/// `toile-board-rendering` texture path uploads. Pixels stay `None` while `Loading`/`Failed`.
 struct Entry {
     state: MediaState,
     pixels: Option<Vec<u8>>,
 }
 
 /// Bounded, content-addressed LRU cache with placeholder-then-load semantics
-/// (§5.C). Eviction is least-recently-used, but an in-flight `Loading` entry is
+/// Eviction is least-recently-used, but an in-flight `Loading` entry is
 /// never evicted (its pending download would resolve into a dropped slot). The
 /// cache never holds plaintext beyond the session -- it lives in Logic-thread
-/// memory only, consistent with the confidentiality posture (§5.C).
+/// memory only, consistent with the confidentiality posture.
 pub struct MediaCache {
     capacity: usize,
     entries: HashMap<ContentHash, Entry>,
@@ -85,7 +85,7 @@ impl MediaCache {
         self.entries.is_empty()
     }
 
-    /// Request a blob's pixels (§5.B). On the first request for `hash` the slot is
+    /// Request a blob's pixels. On the first request for `hash` the slot is
     /// created `Loading` and [`RequestOutcome::Fetch`] is returned -- the caller
     /// issues a `DownloadMedia`. A repeated request (in-flight, ready, or failed)
     /// returns [`RequestOutcome::CacheHit`] and issues no fetch: the dedup that
@@ -135,7 +135,7 @@ impl MediaCache {
         was_loading
     }
 
-    /// Mark a blob's fetch/decode as failed (§5.B). Idempotent; creates the slot
+    /// Mark a blob's fetch/decode as failed. Idempotent; creates the slot
     /// if the failure races ahead of the request record.
     pub fn fail(&mut self, hash: &ContentHash) {
         match self.entries.get_mut(hash) {
@@ -162,7 +162,7 @@ impl MediaCache {
     }
 
     /// The decoded pixels of a `Ready` blob, or `None` otherwise. A cache hit here
-    /// is the §5.C "0 refetch" path.
+    /// is the "0 refetch" path.
     pub fn pixels(&self, hash: &ContentHash) -> Option<&[u8]> {
         self.entries.get(hash).and_then(|e| e.pixels.as_deref())
     }
@@ -220,7 +220,7 @@ mod tests {
     fn first_request_fetches_then_dedups() {
         let mut cache = MediaCache::new(8);
         assert_eq!(cache.request(&h("a")), RequestOutcome::Fetch);
-        // Second request for the same content does not re-fetch (dedup, §5.A/§5.B).
+        // Second request for the same content does not re-fetch (dedup,).
         assert_eq!(
             cache.request(&h("a")),
             RequestOutcome::CacheHit(MediaState::Loading)
@@ -238,7 +238,7 @@ mod tests {
         );
         assert_eq!(cache.state(&h("a")), Some(MediaState::Ready));
         assert_eq!(cache.pixels(&h("a")), Some(&[1, 2, 3][..]));
-        // Cache hit on a Ready blob is the 0-refetch path (§5.C).
+        // Cache hit on a Ready blob is the 0-refetch path.
         assert_eq!(
             cache.request(&h("a")),
             RequestOutcome::CacheHit(MediaState::Ready)

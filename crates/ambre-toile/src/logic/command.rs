@@ -1,4 +1,4 @@
-//! Toile IPC contract (§8) and the data-oriented display structures (§9).
+//! Toile IPC contract and the data-oriented display structures.
 //!
 //! The command / event / display types themselves live in `ambre-bus`
 //! (`ambre_bus::app::toile`) so the `ambre-logic` dispatcher can match on
@@ -22,11 +22,11 @@ pub use ambre_bus::app::toile::{
 pub use ambre_bus::rest::RequestId;
 
 // -----------------------------------------------------------------------------
-// Outcome (§8.C) -- engine-local, like `TrameOutcome`.
+// Outcome -- engine-local, like `TrameOutcome`.
 // -----------------------------------------------------------------------------
 
 /// A Logic->Sync service-plane request a Toile command needs to make
-/// (`toile-interop §5`). Toile allocates the [`RequestId`] (it owns the
+/// (`toile-media`). Toile allocates the [`RequestId`] (it owns the
 /// correlation, so it can match the answering `RestEvent` back to a pending
 /// import); the `ambre-logic` dispatcher supplies the `document_id` and lowers
 /// this to a `RestCommand`. Toile never constructs a `RestCommand` nor knows its
@@ -53,7 +53,7 @@ pub struct ToileOutcome {
     pub update: Option<Vec<u8>>,
     /// Ephemeral (presence) payload to encrypt and broadcast.
     pub ephemeral: Option<Vec<u8>>,
-    /// Service-plane requests to lower into `RestCommand`s (`toile-interop §5`).
+    /// Service-plane requests to lower into `RestCommand`s (`toile-media`).
     /// Empty for every command except an import that carries media.
     pub requests: Vec<ToileRequest>,
 }
@@ -70,7 +70,7 @@ impl ToileOutcome {
 
     /// An outcome that only broadcasts an ephemeral (presence) frame: no display
     /// event and no CRDT delta. The local cursor is drawn by the UI itself, so a
-    /// `Presence` command produces nothing for the local UI to repaint (§7).
+    /// `Presence` command produces nothing for the local UI to repaint.
     pub fn ephemeral_only(ephemeral: Vec<u8>) -> Self {
         Self {
             display: Vec::new(),
@@ -82,7 +82,7 @@ impl ToileOutcome {
 
     /// An outcome with local display events plus an optional ephemeral frame and
     /// no CRDT delta. Used by the playback commands when "Follow presenter"
-    /// broadcasting is on (§1.B): the local `SlideChanged` repaints this viewer
+    /// broadcasting is on: the local `SlideChanged` repaints this viewer
     /// while the ephemeral frame carries the active index to followers.
     pub fn display_and_ephemeral(display: Vec<ToileEvent>, ephemeral: Option<Vec<u8>>) -> Self {
         Self {

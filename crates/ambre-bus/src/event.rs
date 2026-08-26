@@ -57,7 +57,8 @@ pub enum LogicEvent {
     /// Decrypted ephemeral data (cursor, collaborator presence). `from_user_id`
     /// is the sender's canonical `UserId`, resolved from the authenticated
     /// `pub_key` against the document's member list before delivery, so presence
-    /// is keyed by a spoof-proof per-user identity (§7).
+    /// is keyed by a spoof-proof per-user identity (`sync`, "Presence
+    /// identity").
     RemoteEphemeral {
         document_id: DocumentId,
         from_user_id: UserId,
@@ -73,9 +74,9 @@ pub enum LogicEvent {
     DocumentReady {
         document_id: DocumentId,
         /// This client's own role on the document, resolved by Sync from the
-        /// members response (architecture §2.D). Logic keeps it beside the live
-        /// `DocState` and drops mutating commands when it is not writable. The
-        /// gate is UX only; the server remains the sole authority.
+        /// members response (`architecture`). Logic keeps it beside
+        /// the live `DocState` and drops mutating commands when it is not
+        /// writable. The gate is UX only; the server remains the sole authority.
         role: Role,
     },
 
@@ -156,9 +157,9 @@ pub enum LogicEvent {
     ///
     /// `id` echoes the originating [`RequestId`] when the failed command carried
     /// one (a `SyncCommand::Rest`), so the dispatcher can route a correlated
-    /// failure back to the document that issued it (`toile-interop §5`: a failed
-    /// media upload must reach the pending import that is waiting on it). `None`
-    /// for a spontaneous error with no originating request.
+    /// failure back to the document that issued it (`toile-media`: a
+    /// failed media upload must reach the pending import that is waiting on it).
+    /// `None` for a spontaneous error with no originating request.
     ApiError {
         id: Option<RequestId>,
         request: String,

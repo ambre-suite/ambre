@@ -24,7 +24,7 @@ use super::style::{StyleState, Toggles};
 /// slot). Bold/Italic/Undo/Redo invoke their `CommandId` through `on_command`
 /// (the shared command path); the rich-formatting controls (underline, font,
 /// size, colours, alignment, number format, borders, wrap) emit a [`StylePatch`]
-/// through `on_style`, which the launcher routes as `SetCellStyle` (sec.5bis).
+/// through `on_style`, routed as `SetCellStyle` (`trame-cell-styles`).
 #[component]
 pub fn FormatBar(
     toggles: Toggles,
@@ -36,9 +36,9 @@ pub fn FormatBar(
     on_style: Callback<StylePatch>,
 ) -> impl IntoView {
     view! {
-        // Clipboard (sec.5.E): the launcher drives the browser clipboard from
-        // these intents (copy/cut read the viewport cache, paste reads the OS
-        // clipboard). The keyboard chords Ctrl+C/X/V are serviced directly by the
+        // Clipboard (`trame-clipboard`): the launcher drives the browser
+        // clipboard from these intents (copy/cut read the viewport cache, paste
+        // reads the OS clipboard). Ctrl+C/X/V are serviced directly by the
         // DOM clipboard listeners, not through these buttons.
         //
         // `mousedown` preventDefault keeps DOM focus on the canvas text pipe: a
@@ -68,7 +68,7 @@ pub fn FormatBar(
         </button>
         <span class="sep"></span>
 
-        // Find & Replace (sec.5.G): opens the DOM `FindReplace` panel in find
+        // Find & Replace (`trame-find-replace`): opens the DOM panel in find
         // mode. The launcher intercepts FIND (UI-only) like FILTER_COLUMN.
         <button
             aria-label="Find and replace"
@@ -79,7 +79,7 @@ pub fn FormatBar(
         </button>
         <span class="sep"></span>
 
-        // Interop (sec.18, `-interop.md` §4): import a CSV into a new sheet, or
+        // Interop (`trame-import-export`): import a CSV into a new sheet, or
         // export the active sheet to CSV. UI-only intents the launcher services
         // (IMPORT_CSV opens a file picker, EXPORT_CSV triggers the download).
         <button

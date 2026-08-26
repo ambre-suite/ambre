@@ -76,8 +76,9 @@ impl DocType {
     }
 
     /// The document types the launcher "new document" picker can create, in
-    /// display order (`ambre-spec-chrome.md §2.G`). This is the single source of
-    /// truth the app-agnostic type picker iterates -- it never hardcodes a type.
+    /// display order (`ambre-spec-launcher.md`, CHROME-038). This is the single
+    /// source of truth the app-agnostic type picker iterates -- it never
+    /// hardcodes a type.
     ///
     /// Only types whose Logic state can actually be instantiated
     /// (`ambre_logic::DocState::new`) are listed: `Prose` and `Murmure` return

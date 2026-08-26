@@ -477,7 +477,7 @@ pub fn resolve_refs(expr: Expr, default_sheet: u16, ctx: &dyn FormulaCtx) -> Res
             // A display name that does not resolve is a hard parse error (user
             // typo). A canonical id that does not resolve means the sheet was
             // deleted: the reference evaluates to `#REF!`, mirroring a deleted
-            // row/column (spec section 2.D / section 5).
+            // row/column (`trame-sheets`, `trame-formula-engine`).
             let resolved = match &sheet {
                 SheetQualifier::Name(name) => Some(
                     ctx.resolve_sheet(name)

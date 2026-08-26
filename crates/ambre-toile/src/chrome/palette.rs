@@ -1,14 +1,14 @@
 // ambre-toile/src/chrome/palette.rs
 // ============================================================================
-// The tool palette / primary toolbar (toile-ui SS5quinquies.A), wasm-only. A
+// The tool palette / primary toolbar (`toile-tools`), wasm-only. A
 // floating vertical toolbar with one button per Toile tool (Select, Pen, Shape,
-// Connector, Draw, Sticky, Text, Hand -- SS5). Exactly one button reads active,
+// Connector, Draw, Sticky, Text, Hand). Exactly one button reads active,
 // reflecting the current `Tool`; clicking switches the tool.
 //
 // The Sticky button is a split affordance: clicking it opens a small colour
 // popover of pastel swatches; picking a swatch arms `Tool::Sticky(colour)` so
 // the next click places notes in that colour (folded into `CreateElement.fill`,
-// toile-logic SS2.C). This mirrors the Miro / Figma-whiteboard sticky flow.
+// `toile-elements`). This mirrors the Miro / Figma-whiteboard sticky flow.
 //
 // Styling is SHARED with the Trame command bar: the container carries the
 // `.ambre-commandbar` class (so buttons, hover, the `[aria-pressed="true"]`
@@ -18,7 +18,7 @@
 // rendered by `leptos-icons`, exactly like the Trame `FormatBar` and the Toile
 // context menu (`chrome::menu`).
 //
-// The active tool is UI-only, canvas-local state (toile-ui SS11bis): it is NOT a
+// The active tool is UI-only, canvas-local state (`toile-tools`): it is NOT a
 // `ToileCommand`. The palette writes a shared `RwSignal<Tool>` that the canvas
 // `ToileView` applies each frame; the keyboard chords (`ui::palette::bind_tool_keys`)
 // write the very same signal. The pure command surface (ids, key chords, the
@@ -37,7 +37,7 @@ use crate::ui::palette::STICKY_SWATCHES;
 
 /// One palette button. `aria-pressed` compares the active tool by variant
 /// (`mem::discriminant`), so any `Shape(kind)` reads pressed while the Shape tool
-/// is active regardless of the current kind sub-option (SS5quinquies.A). The
+/// is active regardless of the current kind sub-option (`toile-tools`). The
 /// `mousedown` `prevent_default` keeps DOM focus on the canvas text pipe -- a
 /// button stealing focus broke the next canvas click and the clipboard (the same
 /// hazard documented on the Trame `FormatBar`).
@@ -60,7 +60,7 @@ fn tool_button(
     }
 }
 
-/// The Sticky button + its colour popover (SS5quinquies.A). Clicking the button
+/// The Sticky button + its colour popover (`toile-tools`). Clicking the button
 /// opens the popover; picking a pastel swatch arms `Tool::Sticky(colour)` (which
 /// remembers the colour for the next note) and closes it. `aria-pressed` reads
 /// active for any `Sticky(_)` regardless of colour. The popover dismisses on any
@@ -150,7 +150,7 @@ pub fn ToolPalette(active: RwSignal<Tool>) -> impl IntoView {
             <span class="sep"></span>
             {tool_button(active, Tool::Pen, "Pen", icondata::MdiVectorPolyline)}
             // The Shape tool defaults to a rectangle; the kind sub-picker is a
-            // later palette signal folded into `CreateElement` (SS5quinquies.A).
+            // later palette signal folded into `CreateElement` (`toile-tools`).
             {tool_button(active, Tool::Shape(ShapeKind::Rect), "Shape", icondata::MdiShapeOutline)}
             {tool_button(active, Tool::Connector, "Connector", icondata::MdiVectorLine)}
             {tool_button(active, Tool::Draw, "Draw", icondata::MdiDraw)}

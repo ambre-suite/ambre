@@ -7,7 +7,7 @@
 //! path is the exact inverse. The version byte lives **inside** the ciphertext,
 //! so it stays opaque to the Blind Relay.
 //!
-//! Pipeline reference: ambre-spec-sync.md §2.B.
+//! Pipeline reference: `ambre-spec-sealed-envelope.md`.
 
 use std::io::Read;
 

@@ -42,8 +42,8 @@ compromises.
 ## Performance Targets (Mobile-First)
 
 All targets calibrated for a mid-range 2024 smartphone. The per-operation budgets derived from them
-are normative in [`specs/1-Foundations/ambre-spec-architecture.md`](specs/1-Foundations/ambre-spec-architecture.md),
-section 5.
+are normative in [`specs/1-Foundations/ambre-spec-budgets.md`](specs/1-Foundations/ambre-spec-budgets.md),
+which is the one register every budget of the workspace is a row of.
 
 | Requirement | Target | Justification |
 |-------------|--------|---------------|
@@ -77,7 +77,7 @@ JavaScript. WebGPU is opt-in through the `?webgpu` URL flag.
 Product and stack alternatives, evaluated and rejected. Rejected *architectural* decisions, such as
 channel topology, worker model and dispatch, are listed in
 [`specs/1-Foundations/ambre-spec-architecture.md`](specs/1-Foundations/ambre-spec-architecture.md),
-section 6.
+section 4.
 
 | Alternative | Rejected because |
 |-------------|-------------------|
@@ -118,22 +118,32 @@ The `specs/` directory is the source of truth for behaviour. Layout:
 
 | Path | Content |
 |------|---------|
-| [`specs/ambre-roadmap.md`](specs/ambre-roadmap.md) | The single entry point for scheduling: Epics, their dependency order, and the Stories they contain. |
-| [`specs/ambre-spec-template.md`](specs/ambre-spec-template.md) | The contract every spec follows: section order, header fields, and the rule that keeps implementation out of the specs. |
-| `specs/1-Foundations/` | Horizontal specs: architecture, sync, server, canvas, chrome, ui, docfile, fixtures, testing. |
+| [`specs/ambre-roadmap.md`](specs/ambre-roadmap.md) | The only place anything is scheduled: every epic and every story, one row each. No spec carries a backlog. |
+| [`specs/ambre-roadmap-journal.md`](specs/ambre-roadmap-journal.md) | Closed epics, cut here verbatim the day they closed. What shipped, and under which epic. |
+| [`specs/ambre-spec-template.md`](specs/ambre-spec-template.md) | The contract every spec follows: the header fields, the invariant table, the rule that keeps implementation out, and the section order of the two document kinds. |
+| `specs/1-Foundations/` | Horizontal specs: the three-thread stack, the message bus, the zero-knowledge boundary, the persisted schema and testing, then one document per shared subsystem -- client side, the Sync worker, the sealed envelope, delta order, membership, key rotation, the media transfer; relay side, the blind relay, the session, the sequencer, the broadcast, the blob store, organizations -- and one per shared feature: the UI thread, the frame, the render assets, the drawing surface, the inline text editor, high density, the chrome shell, the text input pipe, accessibility, the adaptive layout, the launcher, key verification, the command model, the design tokens, the clipboard, presence, the native file, the fixtures. It also holds the budget register, which is not a spec. |
 | `specs/2-Trame/`, `specs/3-Toile/`, `specs/4-Prose/` | Vertical specs, one directory per application. |
+| `specs/<app>/features/` | One document per feature, always current: its contract, its model and its whole surface. A feature is the smallest thing a user can name, ship alone and specify end to end. |
 | `specs/Todo/` | Applications not started: Murmure, Rendez-Vous. |
 | [`specs/security-audit.md`](specs/security-audit.md) | Numbered audit findings. An invariant that closes a finding cites it. |
 
-Each application directory holds the same four specs: **`-logic`** (CRDT state and computation
-engine), **`-ui`** (rendering and interaction), **`-features`** (user-facing behaviour), and
-**`-interop`** (import, export, file formats).
+An application directory holds a schema document, a generated inventory and one document per
+feature. One of those feature documents is the **engine**: it takes what no single feature owns --
+the CRDT state, the command and event planes, and the convergence rules of the document tree. The
+three started applications all follow this shape.
 
-Every spec declares its rules as an invariant table, one falsifiable rule per row. The grammar and
-the status values are normative in
-[`specs/1-Foundations/ambre-spec-architecture.md`](specs/1-Foundations/ambre-spec-architecture.md),
-section 4; the cross-spec roll-up is in
-[`specs/1-Foundations/ambre-spec-testing.md`](specs/1-Foundations/ambre-spec-testing.md), section 7.
+Every spec declares its rules as an invariant table, one falsifiable rule per row. Three documents
+govern them, and each answers one question:
+
+* **What a rule looks like** -- the grammar, the five status values, the binding of an unbuilt row to
+  a story: [`specs/ambre-spec-template.md`](specs/ambre-spec-template.md). Normative.
+* **How a rule is verified** -- the mechanism ladder, the three tiers, the regime per component
+  shape: [`specs/1-Foundations/ambre-spec-testing.md`](specs/1-Foundations/ambre-spec-testing.md).
+  Normative.
+* **What every rule's status is today** --
+  [`specs/1-Foundations/ambre-invariant-ledger.md`](specs/1-Foundations/ambre-invariant-ledger.md),
+  generated by `just invariants-write` and never edited by hand.
+
 The CI `lint` job runs `just invariants` and `just spec-code` over the corpus.
 
 ## Getting Started
@@ -183,7 +193,8 @@ reproduce a CI job bit-for-bit.
 
 ## Roadmap
 
-See [`specs/ambre-roadmap.md`](specs/ambre-roadmap.md) for detailed milestones and release planning.
+Open work is in [`specs/ambre-roadmap.md`](specs/ambre-roadmap.md), one row per story. What already
+shipped is in [`specs/ambre-roadmap-journal.md`](specs/ambre-roadmap-journal.md).
 
 ## License
 

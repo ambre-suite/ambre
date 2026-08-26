@@ -1,6 +1,6 @@
 // ambre-trame/src/chrome/sheet_tabs.rs
 // ============================================================================
-// The sheet-tab strip (`-ui.md` sec.13), as DOM Leptos chrome.
+// The sheet-tab strip (`trame-sheets`), as DOM Leptos chrome.
 //
 // Migrated off the canvas: tabs, the trailing "+" add button, in-place rename,
 // the per-tab `{ Rename, Delete }` context menu and drag-reorder are now plain

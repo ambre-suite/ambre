@@ -4,7 +4,7 @@
 
 use super::*;
 
-/// Formula references follow the data through a sort (the section 12
+/// Formula references follow the data through a sort (the `trame-formula-engine`
 /// guarantee). Each `=A{n}*10` binds to its row's `Uid` at edit time; the sort
 /// reorders rows by `mov` and the uid-anchored bytecode is preserved (no
 /// reseed/re-parse), so every formula keeps reading the *same physical* A cell
@@ -138,7 +138,7 @@ fn sort_range_noops() {
     );
 }
 
-/// The parameterless `SortSelectionAsc` intent (DOM context menu, sec.5.C)
+/// The parameterless `SortSelectionAsc` intent (DOM context menu, `trame-sort`)
 /// resolves against the tracked selection and active sheet: same outcome as an
 /// explicit `SortRange` over `selection.bounds()`.
 #[test]
@@ -178,7 +178,7 @@ fn sort_selection_resolves_against_tracked_selection() {
     );
 }
 
-/// The whole-sheet `SortSheetAsc` intent (whole-column selection, sec.5.C)
+/// The whole-sheet `SortSheetAsc` intent (whole-column selection, `trame-sort`)
 /// sorts the full used range by the active cell's column, keeping every row's
 /// other columns aligned -- even rows below the values reported by a partial
 /// selection.
@@ -221,7 +221,7 @@ fn sort_sheet_sorts_used_range_by_active_column() {
     );
 }
 
-/// Multi-column sort (`-features.md` §2): rows are ordered lexicographically by
+/// Multi-column sort (`trame-sort`): rows are ordered lexicographically by
 /// the keys in decreasing priority -- primary col 0 ascending, then secondary
 /// col 1 descending breaks ties. Whole rows travel by uid.
 #[test]
@@ -274,7 +274,7 @@ fn sort_range_multi_lexicographic_with_per_key_direction() {
 }
 
 /// The parameterless `SortSelectionMulti` intent (the "Sort range..." dialog,
-/// sec.5.C) resolves its range against the tracked selection, exactly like the
+/// `trame-sort`) resolves its range against the tracked selection, exactly like the
 /// single-column `SortSelectionAsc`. Keys are range-relative to the selection's
 /// first column.
 #[test]
@@ -470,7 +470,7 @@ fn col_alpha_basics() {
 
 /// `RequestActiveColumnValues` returns the active column's distinct visible
 /// values (deduped, sorted, empties dropped) for the popover's "by values"
-/// list (`-ui.md` sec.5.D).
+/// list (`trame-shared-filter`).
 #[test]
 fn active_column_values_are_distinct_sorted_and_visible() {
     let mut state = TrameState::new();
@@ -494,7 +494,7 @@ fn active_column_values_are_distinct_sorted_and_visible() {
 }
 
 /// `RequestSelectionStats` aggregates the tracked selection for the status bar
-/// (`-ui.md` sec.13bis): `count` tallies non-empty cells, the numeric ones feed
+/// (`trame-status-bar`): `count` tallies non-empty cells, the numeric ones feed
 /// `count_num`/`sum`/`avg`/`min`/`max`.
 #[test]
 fn selection_stats_aggregate_numeric_cells() {
@@ -531,7 +531,7 @@ fn selection_stats_aggregate_numeric_cells() {
 }
 
 /// The parameterless filter wrappers resolve the sheet/column from the tracked
-/// active cell, mirroring the sort intents (`-ui.md` sec.5.D).
+/// active cell, mirroring the sort intents (`trame-shared-filter`).
 #[test]
 fn active_column_filter_wrappers_apply_and_clear() {
     let mut state = TrameState::new();

@@ -60,7 +60,7 @@ pub enum UiEvent {
     /// any, already applied). The UI dismisses its document-loading overlay.
     /// Fires once per open, including for empty/brand-new documents.
     /// Carries this client's own role so the UI can withhold editing
-    /// affordances on a read-only document (architecture §2.D).
+    /// affordances on a read-only document (`architecture`).
     DocumentReady { document_id: DocumentId, role: Role },
 
     /// Non-fatal sync warning (quarantine overflow, decrypt failure, …).
@@ -141,21 +141,23 @@ pub enum UiEvent {
     ///
     /// This is the **graceful** path: a thread that detects an unrecoverable
     /// condition emits this before exiting. The **ungraceful** path (a panic,
-    /// which is `panic=abort` under multi-threaded WASM) is observed instead as
-    /// a channel *disconnect* on the UI Thread's inbound receiver — the UI
-    /// treats that identically to a `FatalError`. See the "thread failure"
-    /// section of `ambre-spec-architecture`.
+    /// which is `panic=abort` under multi-threaded WASM) never reaches a
+    /// receiver at all: nothing is dropped, so the sender leaks in shared
+    /// memory and the channel reads empty rather than disconnected. That path
+    /// goes through the page's fatal hook instead (`ambre-spec-architecture.md`,
+    /// `ARCH-008`).
     FatalError { message: String },
 }
 
 impl UiEvent {
     /// The `DocumentId` this event is addressed to, for the per-document fan-out
-    /// a nested `doc_embed` needs (architecture §2.D / toile-logic §2.I): a Toile
-    /// embedding another document owns a child view whose Logic->UI stream must be
-    /// demultiplexed out of the single shared channel. Only the variants a *view*
-    /// consumes carry a routing id; service-plane and app-global events
-    /// (`Rest`, `DocumentShared`, channel/meeting push, errors, `FatalError`)
-    /// return `None` and stay on the top-level path.
+    /// a nested `doc_embed` needs (`architecture` /
+    /// `toile-embeds`): a Toile embedding another document owns a child
+    /// view whose Logic->UI stream must be demultiplexed out of the single shared
+    /// channel. Only the variants a *view* consumes carry a routing id;
+    /// service-plane and app-global events (`Rest`, `DocumentShared`,
+    /// channel/meeting push, errors, `FatalError`) return `None` and stay on the
+    /// top-level path.
     pub fn routed_document_id(&self) -> Option<DocumentId> {
         match self {
             UiEvent::Viewport { document_id, .. }

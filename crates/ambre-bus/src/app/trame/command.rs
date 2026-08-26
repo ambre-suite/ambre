@@ -45,7 +45,7 @@ pub enum TrameCommand {
     /// two corners into the selection rectangle that the parameterless structural
     /// intents (`MergeSelection`, `DeleteSelectedRows`, ...) resolve against. The
     /// selection is local view state -- never persisted, never synced
-    /// (`-ui.md` sec.16).
+    /// (`trame-selection`).
     SetActiveCell {
         row: u32,
         col: u32,
@@ -70,7 +70,7 @@ pub enum TrameCommand {
     SetCellsBatch { cells: Vec<(u32, u32, String)> },
 
     /// Close the undo group opened by the cell edit, on cell exit
-    /// (`ambre-spec-trame-ui.md` §6.C, `-logic.md` §8). An interactive edit can
+    /// (`trame-cell-editing`, `trame-undo`). An interactive edit can
     /// mutate the `LoroDoc` more than once -- the cell write plus derived
     /// side-effects such as a filtered-column recompute -- and Loro records one
     /// `UndoManager` item per commit. The Logic thread groups every mutation of
@@ -82,7 +82,7 @@ pub enum TrameCommand {
     CommitEdit,
 
     /// Apply a sparse formatting [`StylePatch`] to every cell of the tracked
-    /// selection (`-ui.md` sec.5bis). The Logic thread resolves the geometry from
+    /// selection (`trame-cell-styles`). The Logic thread resolves the geometry from
     /// the selection it keeps via [`SetActiveCell`](TrameCommand::SetActiveCell)
     /// -- the same parameterless-geometry contract as the structural intents --
     /// merges the patch into each cell's stored style, persists the result in the
@@ -97,15 +97,16 @@ pub enum TrameCommand {
 
     /// Insert a blank row at grid position `at`, shifting existing rows at
     /// `>= at` down by one. One `LoroMovableList` op; cells keyed by stable id
-    /// pairs follow their row automatically (`ambre-spec-trame-logic.md` §2).
+    /// pairs follow their row automatically (`trame-rows-and-columns`).
     /// A row inserted within a range formula is naturally included; references
-    /// are never rewritten (§12). A no-op past the materialized used range
-    /// (virtual rows are already blank).
+    /// are never rewritten (`trame-formula-engine`). A no-op past the
+    /// materialized used range (virtual rows are already blank).
     InsertRow { at: u32 },
 
     /// Delete the row at grid position `at`, shifting rows at `> at` up by one.
     /// Its cells/formatting are dropped and any formula referencing the now
-    /// removed row id resolves to `#REF!` (§12). A no-op in virtual space.
+    /// removed row id resolves to `#REF!` (`trame-formula-engine`). A no-op in
+    /// virtual space.
     DeleteRow { at: u32 },
 
     /// Insert a blank column at grid position `at`, shifting existing columns at
@@ -121,9 +122,9 @@ pub enum TrameCommand {
     /// single `LoroMovableList::mov` on `rows_{sheet}`: cells keyed by the
     /// move-invariant `(row_uid, col_uid)` pair travel with their row and no
     /// reference is rewritten -- every `A1` resolves to its row's new position
-    /// (§12, the same guarantee as sort). Concurrent moves converge by LWW on the
-    /// list order. A no-op if `from == to` or either index is outside the
-    /// materialized used range.
+    /// (`trame-formula-engine`, the same guarantee as sort). Concurrent moves
+    /// converge by LWW on the list order. A no-op if `from == to` or either index
+    /// is outside the materialized used range.
     MoveRow { from: u32, to: u32 },
 
     /// Move the column at grid position `from` to grid position `to`. Column
@@ -133,7 +134,7 @@ pub enum TrameCommand {
 
     /// Merge the rectangular range `[row..=row_end] x [col..=col_end]` into a
     /// single cell, the top-left corner becoming the master
-    /// (`ambre-spec-trame-logic.md` §6). The corners may be given in any order.
+    /// (`trame-cell-merges`). The corners may be given in any order.
     /// Rejected locally with [`TrameEvent::MergeRejected`] if any covered cell
     /// (other than the master) is non-empty -- Excel/Sheets behavior. Stored in
     /// the per-sheet `merges_{sheet}` LWW map keyed by stable id pairs, so the
@@ -147,11 +148,12 @@ pub enum TrameCommand {
 
     /// Split the merge whose rectangle contains grid cell `(row, col)`, restoring
     /// the covered cells. Any value masked by the merge (a concurrent-edit
-    /// conflict, §6) reappears. A no-op if `(row, col)` is not inside a merge.
+    /// conflict, `trame-cell-merges`) reappears. A no-op if `(row, col)` is not
+    /// inside a merge.
     UnmergeCells { row: u32, col: u32 },
 
     /// Set the width (physical px) of column `col` on `sheet_id`
-    /// (`-ui.md` sec.4bis.C, `-logic.md` §9). The Logic thread writes the value
+    /// (`trame-resize`, `trame-engine`). The Logic thread writes the value
     /// into the per-sheet `col_widths_{sheet}` LWW map keyed by the column's
     /// stable `Uid`, clamped to a minimum, and replies with a [`DataReset`] so the
     /// UI re-fetches the viewport (whose [`ViewportData`] now carries the new
@@ -175,7 +177,8 @@ pub enum TrameCommand {
         height_px: f32,
     },
 
-    // -- Parameterless structural intents (grid context menu, `-ui.md` sec.5.C).
+    // -- Parameterless structural intents (grid context menu,
+    // `trame-context-menu`).
     // These carry no geometry: the Logic thread resolves them against the active
     // cell / selection rectangle it tracks (kept current by `SetActiveCell`).
     // They map one-to-one to a registry `CommandId`, so the DOM context menu, the
@@ -213,7 +216,7 @@ pub enum TrameCommand {
     SortSelectionDesc,
     /// Sort the whole sheet (its materialized used range) ascending on the active
     /// cell's column -- the "sort by column" affordance for a whole-column
-    /// selection (`-ui.md` sec.5.C). Equivalent to [`SortRange`] over the full
+    /// selection (`trame-sort`). Equivalent to [`SortRange`] over the full
     /// used range with `sort_col` resolved to the active column. The Logic thread
     /// resolves the geometry and the active sheet itself. Replies with
     /// [`TrameEvent::SortComplete`].
@@ -224,7 +227,7 @@ pub enum TrameCommand {
     /// Sort the whole sheet descending on the active cell's column
     /// (see [`SortSheetAsc`](TrameCommand::SortSheetAsc)).
     SortSheetDesc,
-    /// Multi-column sort of the current selection rectangle (`-ui.md` sec.5.C,
+    /// Multi-column sort of the current selection rectangle (`trame-sort`,
     /// the "Sort range..." dialog). Parameterless sibling of
     /// [`SortRangeMulti`](TrameCommand::SortRangeMulti): the Logic thread resolves
     /// the range and the active sheet from the tracked selection, then sorts the
@@ -237,18 +240,18 @@ pub enum TrameCommand {
     },
 
     /// Request the distinct visible values of the active cell's column, for the
-    /// shared filter popover's "by values" checkbox list (`-ui.md` sec.5.D). The
-    /// Logic thread resolves the column and active sheet itself, evaluates every
+    /// shared filter popover's "by values" checkbox list (`trame-shared-filter`).
+    /// The Logic thread resolves the column and active sheet itself, evaluates every
     /// non-hidden materialized row through the formula cache, and replies with
     /// [`TrameEvent::ColumnValues`](super::TrameEvent::ColumnValues)
     /// (deduplicated, sorted). A read-only query: no CRDT delta.
     RequestActiveColumnValues,
     /// Request the aggregates (Sum / Average / Count / Min / Max) of the tracked
-    /// selection, for the status bar (`-ui.md` sec.13bis). The selection can
+    /// selection, for the status bar (`trame-status-bar`). The selection can
     /// exceed the viewport, so only the Logic thread (which holds every cell) can
     /// compute them. Parameterless: the Logic thread resolves the active sheet and
     /// the tracked selection rectangle itself -- the same convention as the sort /
-    /// filter / [`RequestActiveColumnValues`] siblings (the sec.13bis sketch passed
+    /// filter / [`RequestActiveColumnValues`] siblings (the spec sketch passed
     /// `sheet_id`/`range`, but this codebase resolves geometry Logic-side). Replies
     /// with [`TrameEvent::SelectionStats`](super::TrameEvent::SelectionStats).
     /// A read-only query: no CRDT delta. The UI sends it only on a multi-cell
@@ -256,21 +259,21 @@ pub enum TrameCommand {
     ///
     /// [`RequestActiveColumnValues`]: TrameCommand::RequestActiveColumnValues
     RequestSelectionStats,
-    /// Build the clipboard payload for the tracked selection (`-ui.md` sec.5.E).
+    /// Build the clipboard payload for the tracked selection (`trame-clipboard`).
     /// The parameterless-geometry sibling of copy: the Logic thread is the only
     /// holder of document data, so it serializes the selected cells (never culled
     /// to a viewport) into a [`ClipboardPayload`] and replies with
     /// [`TrameEvent::Clipboard`](super::TrameEvent::Clipboard). Non-mutating.
     CopyRange,
-    /// Apply a shared filter to the active cell's column (`-ui.md` sec.5.D). The
-    /// parameterless-geometry sibling of [`ApplyFilter`]: the Logic thread
+    /// Apply a shared filter to the active cell's column (`trame-shared-filter`).
+    /// The parameterless-geometry sibling of [`ApplyFilter`]: the Logic thread
     /// resolves `sheet_id`/`col` from the tracked active cell, so the UI only
     /// supplies the user's chosen [`FilterKind`]. Replies with
     /// [`TrameEvent::FilterApplied`](super::TrameEvent::FilterApplied).
     ///
     /// [`ApplyFilter`]: TrameCommand::ApplyFilter
     ApplyFilterToActiveColumn { kind: FilterKind },
-    /// Clear the shared filter on the active sheet (`-ui.md` sec.5.D). The
+    /// Clear the shared filter on the active sheet (`trame-shared-filter`). The
     /// parameterless sibling of [`ClearFilter`]: the Logic thread resolves the
     /// active sheet itself. Replies with
     /// [`TrameEvent::FilterCleared`](super::TrameEvent::FilterCleared).
@@ -279,7 +282,7 @@ pub enum TrameCommand {
     ClearActiveFilter,
 
     /// Paste a clipboard [`ClipboardPayload`] with its top-left landing on
-    /// `(target_row, target_col)` (`-ui.md` sec.5.E). The Logic thread is the
+    /// `(target_row, target_col)` (`trame-clipboard`). The Logic thread is the
     /// only holder of document data, so the paste -- including relative-formula
     /// reindexing and style application -- happens here: every pasted cell lands
     /// at `(target_row + dr, target_col + dc)`, a formula's relative references
@@ -296,8 +299,8 @@ pub enum TrameCommand {
         payload: ClipboardPayload,
     },
 
-    /// Paste plain tab-separated `text` at the tracked active cell (`-ui.md`
-    /// sec.5.E). The parameterless-geometry sibling of
+    /// Paste plain tab-separated `text` at the tracked active cell
+    /// (`trame-clipboard`). The parameterless-geometry sibling of
     /// [`PasteRange`](TrameCommand::PasteRange): the Logic thread resolves the
     /// target from the active cell it keeps via
     /// [`SetActiveCell`](TrameCommand::SetActiveCell), so a toolbar/menu Paste
@@ -307,8 +310,8 @@ pub enum TrameCommand {
     /// Replies with a [`DataReset`](super::TrameEvent::DataReset).
     PasteText { text: String },
 
-    /// Paste a typed [`ClipboardPayload`] at the tracked active cell (`-ui.md`
-    /// sec.5.E). The parameterless-geometry sibling of
+    /// Paste a typed [`ClipboardPayload`] at the tracked active cell
+    /// (`trame-clipboard`). The parameterless-geometry sibling of
     /// [`PasteRange`](TrameCommand::PasteRange): the Logic thread resolves the
     /// target from the active cell it keeps, so the toolbar/menu Paste button --
     /// which reads the OS clipboard asynchronously via the Clipboard API and has
@@ -316,7 +319,7 @@ pub enum TrameCommand {
     /// Ctrl+V. The reindex offset is `active - payload.src`.
     PasteClipboardAtActive { payload: ClipboardPayload },
 
-    /// Autofill the `src` rectangle into `dest` (`-ui.md` sec.5.F). `dest`
+    /// Autofill the `src` rectangle into `dest` (`trame-autofill`). `dest`
     /// contains `src` and extends it along a single axis (the fill handle locks to
     /// one direction); the cells of `dest \ src` are the fill region. The Logic
     /// thread reads the source cells from its document model and, per fill line,
@@ -337,7 +340,7 @@ pub enum TrameCommand {
 
     /// Find the next cell whose displayed value matches `query`, starting from
     /// the tracked active cell and wrapping around the active sheet
-    /// (`ambre-spec-trame-ui.md` sec.5.G). Read-only: the Logic thread scans the
+    /// (`trame-find-replace`). Read-only: the Logic thread scans the
     /// materialized extent comparing each cell's *displayed* value (formula
     /// results included), case-folded unless `match_case`, by exact equality when
     /// `whole_cell` else by substring. Produces a
@@ -352,7 +355,7 @@ pub enum TrameCommand {
 
     /// Replace every match of `query` with `replacement` across the active sheet
     /// (or all sheets when `all_sheets`) in a single undo group
-    /// (`ambre-spec-trame-ui.md` sec.5.G). Matching tests the *displayed* value
+    /// (`trame-find-replace`). Matching tests the *displayed* value
     /// (case-folded unless `match_case`, exact when `whole_cell` else substring),
     /// but the rewrite edits the *raw* cell text. Cells whose raw text is a
     /// formula (`=...`) are skipped unless `in_formulas`. Replies with
@@ -368,7 +371,7 @@ pub enum TrameCommand {
     },
 
     /// Replace the single match at the tracked active cell, then advance to the
-    /// next match (`ambre-spec-trame-ui.md` sec.5.G). If the active cell matches
+    /// next match (`trame-find-replace`). If the active cell matches
     /// `query` it is rewritten (same raw-text rules as
     /// [`ReplaceAll`](TrameCommand::ReplaceAll), `in_formulas` gating included) in
     /// one undo group; whether or not it matched, the reply carries a fresh
@@ -383,7 +386,7 @@ pub enum TrameCommand {
         in_formulas: bool,
     },
 
-    /// Undo the last local edit (`ambre-spec-trame-logic.md` §8). Backed by Loro's
+    /// Undo the last local edit (`trame-undo`). Backed by Loro's
     /// `UndoManager`: it replays the inverse of this session's most recent commit
     /// as fresh CRDT ops (1 `TrameCommand` == 1 commit == 1 undo item). The
     /// inverse ops broadcast to peers like any other edit, so undo converges. A
@@ -400,7 +403,7 @@ pub enum TrameCommand {
     /// `reference` is its target written in A1 syntax, optionally sheet-qualified
     /// (`A1`, `A1:B10`, `Sheet2!A1:B10`). Stored in the shared `named_ranges`
     /// CRDT map (LWW) and resolved positionally against the current grid each
-    /// recomputation (`ambre-spec-trame-logic.md` §8, Phase 2). A reference that
+    /// recomputation (`trame-named-ranges`). A reference that
     /// fails to parse leaves any formula using the name as `#PARSE!`.
     DefineName { name: String, reference: String },
 
@@ -412,7 +415,7 @@ pub enum TrameCommand {
     /// Switch the sheet the UI is looking at to `sheet_id`. The Logic thread
     /// rebuilds its active-sheet derived caches (index, merges, formatting,
     /// formula engine) and replies with a [`DataReset`] so the UI re-fetches the
-    /// new sheet's viewport (`ambre-spec-trame-logic.md` §2.D). A no-op if the id
+    /// new sheet's viewport (`trame-sheets`). A no-op if the id
     /// is unknown.
     ///
     /// [`DataReset`]: super::TrameEvent::DataReset
@@ -422,27 +425,28 @@ pub enum TrameCommand {
     /// (`{peer:016x}_{counter:08x}`) so concurrent creates on two peers never
     /// collide, registers it in `sheets`, appends it to `sheet_order`, and
     /// replies with a refreshed [`SheetList`](super::TrameEvent::SheetList)
-    /// (`ambre-spec-trame-logic.md` §2.D). Cells are created lazily on first write.
+    /// (`trame-sheets`). Cells are created lazily on first write.
     CreateSheet { name: String },
 
     /// Rename `sheet_id`'s display label (LWW on the name field). The stable id
     /// is untouched, so same-name references keep resolving; cross-sheet formula
-    /// text bound to the old display name is the known MVP gap (§2.D).
+    /// text bound to the old display name is the known MVP gap (`trame-sheets`).
     RenameSheet { sheet_id: String, name: String },
 
     /// Move `sheet_id` to position `to_index` in the tab strip (one
     /// `LoroMovableList` move op). Pure presentation: never touches a reference
-    /// (§2.D). A no-op if the id is unknown or already at that position.
+    /// (`trame-sheets`). A no-op if the id is unknown or already at that position.
     MoveSheet { sheet_id: String, to_index: u32 },
 
     /// Sort the rows of the rectangular range `[row_start..=row_end] x
     /// [col_start..=col_end]` by the values in the column `col_start + sort_col`
-    /// (`ambre-spec-trame-features.md` §3, single-column sort). Whole rows are
+    /// (`trame-sort`, single-column sort). Whole rows are
     /// reordered, so cells outside `[col_start..=col_end]` move with their row --
     /// matching Google Sheets "sort range". `has_header` keeps the first range row
     /// pinned in place. Realized as `LoroMovableList` move ops on
     /// `rows_{sheet_id}`: cells keyed by stable id pairs follow their row, so no
-    /// cell key is rewritten and references are preserved (§12). LWW on the row
+    /// cell key is rewritten and references are preserved
+    /// (`trame-formula-engine`). LWW on the row
     /// list resolves concurrent sorts deterministically. A no-op when the range is
     /// empty/virtual. Replies with [`TrameEvent::SortComplete`].
     ///
@@ -460,15 +464,15 @@ pub enum TrameCommand {
         has_header: bool,
     },
 
-    /// Delete `sheet_id` and its per-sheet containers (§2.D). Rejected locally
-    /// with [`TrameEvent::Error`](super::TrameEvent::Error) if it is the last
+    /// Delete `sheet_id` and its per-sheet containers (`trame-sheets`). Rejected
+    /// locally with [`TrameEvent::Error`](super::TrameEvent::Error) if it is the last
     /// remaining sheet (a workbook always keeps >= 1). If the active sheet is
     /// deleted, the active sheet falls back to a neighbour. Cross-sheet formulas
     /// targeting the gone id resolve to `#REF!`.
     DeleteSheet { sheet_id: String },
 
     /// Apply a shared filter to column `col` of `sheet_id`
-    /// (`ambre-spec-trame-features.md` §1.A). The filter is stored in the document
+    /// (`trame-shared-filter`). The filter is stored in the document
     /// CRDT (`filters_{sheet}` + `filter_hidden_{sheet}`), so every collaborator
     /// sees the same hidden rows. The Logic thread evaluates the column through
     /// the formula cache, writes the failing rows' stable ids into
@@ -489,13 +493,13 @@ pub enum TrameCommand {
 
     /// Clear the shared filter on `sheet_id`: removes every `filter_hidden_{sheet}`
     /// entry and the stored `filters_{sheet}` definition, then broadcasts the
-    /// delta (`ambre-spec-trame-features.md` §1.A). Replies with
+    /// delta (`trame-shared-filter`). Replies with
     /// [`TrameEvent::FilterCleared`](super::TrameEvent::FilterCleared). A no-op
     /// when no filter is active.
     ClearFilter { sheet_id: String },
 
-    /// Import CSV bytes into the workbook (`ambre-spec-trame-interop.md` §4.A,
-    /// interop MVP). All conversion happens in the Logic thread (Zero-Knowledge):
+    /// Import CSV bytes into the workbook (`trame-import-export`). All
+    /// conversion happens in the Logic thread (Zero-Knowledge):
     /// the bytes never leave the client. When `target_sheet_id` is `None` the
     /// Logic thread creates a fresh sheet; otherwise it writes into the named
     /// sheet starting at `(start_row, start_col)`, extending the used range as
@@ -517,7 +521,7 @@ pub enum TrameCommand {
         start_col: u32,
     },
 
-    /// Export the **active** sheet to CSV (`ambre-spec-trame-interop.md` §4.B).
+    /// Export the **active** sheet to CSV (`trame-import-export`).
     /// Parameterless sibling of [`ExportCsv`](TrameCommand::ExportCsv): the Logic
     /// thread resolves the active sheet itself -- the same convention as the sort
     /// / filter / selection-stats intents -- so a toolbar/menu "Export CSV" button
@@ -526,7 +530,7 @@ pub enum TrameCommand {
     ExportActiveSheetCsv,
 
     /// Export a sheet (or a sub-range of it) to CSV bytes
-    /// (`ambre-spec-trame-interop.md` §4.B, interop MVP). Read-only: no CRDT
+    /// (`trame-import-export`). Read-only: no CRDT
     /// delta. Cells are exported by their *displayed* value (formula results
     /// included). `delimiter` defaults to comma; `range` of `None` exports the
     /// whole materialized used range. Replies with
@@ -542,7 +546,7 @@ pub enum TrameCommand {
     // Deferred feature surface (Phase 2+)
     //
     // The variants below complete the `TrameCommand` surface mandated by
-    // `ambre-spec-trame-features.md §10` ("all feature variants are in the
+    // `trame-engine` ("all feature variants are in the
     // enums"). They are part of the typed data plane now so the UI Thread and
     // the Logic dispatcher compile against a stable command vocabulary; their
     // Logic-thread handlers are no-op stubs until the corresponding phase lands
@@ -550,7 +554,7 @@ pub enum TrameCommand {
     // formatting & validation -> Phase 2/3, range protection -> Post-MVP).
     // ─────────────────────────────────────────────────────────────────────────
     /// Persist a personal (non-shared) filter view in local storage only
-    /// (`ambre-spec-trame-features.md §1.B`). Never touches the `LoroDoc`, so it
+    /// (`trame-shared-filter`). Never touches the `LoroDoc`, so it
     /// emits no CRDT delta. Replies with
     /// [`TrameEvent::FilterViewSaved`](super::TrameEvent::FilterViewSaved).
     SaveFilterView {
@@ -561,17 +565,18 @@ pub enum TrameCommand {
         kind: FilterKind,
     },
 
-    /// Activate a previously saved personal filter view (`§1.B`). Loads it from
+    /// Activate a previously saved personal filter view
+    /// (`trame-shared-filter`). Loads it from
     /// local storage, recomputes its hidden rows against the current doc state,
     /// and re-sends the viewport without them -- a purely local view change, no
     /// CRDT delta. A no-op if `view_id` is unknown.
     ActivateFilterView { view_id: String },
 
     /// Sort the rows of a range by several keys in decreasing priority
-    /// (`ambre-spec-trame-features.md §2`, multi-column sort). Like
+    /// (`trame-sort`, multi-column sort). Like
     /// [`SortRange`](TrameCommand::SortRange) but with a lexicographic
     /// comparison over `sort_keys`. Realized as `LoroMovableList` move ops on
-    /// `rows_{sheet}`; references follow the data (§12).
+    /// `rows_{sheet}`; references follow the data (`trame-formula-engine`).
     SortRangeMulti {
         sheet_id: String,
         row_start: u32,
@@ -585,7 +590,7 @@ pub enum TrameCommand {
     },
 
     /// Add a conditional-formatting rule to `sheet_id` over `range`
-    /// (`ambre-spec-trame-features.md §3`). Stored in `cond_formats_{sheet}`
+    /// (`trame-cell-styles`). Stored in `cond_formats_{sheet}`
     /// (LoroList), evaluated per-cell after each recompute into a
     /// `DisplayCell.style` override (never mutates `styles_{sheet}`). `priority`
     /// orders evaluation (smaller = higher); the first matching rule wins.
@@ -599,7 +604,8 @@ pub enum TrameCommand {
         priority: i64,
     },
 
-    /// Replace the rule identified by `id` on `sheet_id` (`§3`). A no-op if no
+    /// Replace the rule identified by `id` on `sheet_id` (`trame-cell-styles`).
+    /// A no-op if no
     /// rule with that id exists.
     UpdateCondFormat {
         sheet_id: String,
@@ -610,12 +616,12 @@ pub enum TrameCommand {
         priority: i64,
     },
 
-    /// Remove the conditional-formatting rule `id` from `sheet_id` (`§3`). A
-    /// no-op if it does not exist.
+    /// Remove the conditional-formatting rule `id` from `sheet_id`
+    /// (`trame-cell-styles`). A no-op if it does not exist.
     RemoveCondFormat { sheet_id: String, id: String },
 
     /// Attach a data-validation rule to `range` of `sheet_id`
-    /// (`ambre-spec-trame-features.md §5`). Stored in `validations_{sheet}`,
+    /// (`trame-cell-editing`). Stored in `validations_{sheet}`,
     /// checked before a local edit commits: `Reject` blocks the mutation,
     /// `Warn` lets it through with a warning, `Info` is a visual indicator only.
     /// Validations are an input aid, not a CRDT integrity barrier (a remote
@@ -628,12 +634,13 @@ pub enum TrameCommand {
         message: String,
     },
 
-    /// Remove the validation rule covering `range` on `sheet_id` (`§5`). A no-op
+    /// Remove the validation rule covering `range` on `sheet_id`
+    /// (`trame-cell-editing`). A no-op
     /// if none is attached there.
     RemoveValidation { sheet_id: String, range: GridRange },
 
     /// Protect `range` of `sheet_id` so only `allowed_user_ids` (plus the owner)
-    /// may edit it (`ambre-spec-trame-features.md §6`, Post-MVP). Soft
+    /// may edit it (`trame-cell-editing`, Post-MVP). Soft
     /// client-side enforcement: an official client respects it, the Blind Relay
     /// cannot. Empty `allowed_user_ids` means owner-only. Identified by stable
     /// [`UserId`](crate::UserId), not `pub_key` (survives key rotation).
@@ -644,14 +651,15 @@ pub enum TrameCommand {
         description: String,
     },
 
-    /// Remove the protection covering `range` on `sheet_id` (`§6`). A no-op if
+    /// Remove the protection covering `range` on `sheet_id`
+    /// (`trame-cell-editing`). A no-op if
     /// none is set there.
     RemoveProtection { sheet_id: String, range: GridRange },
 }
 
 impl TrameCommand {
     /// Whether this command can change the sheet's shared CRDT state
-    /// (architecture §2.D).
+    /// (`architecture`).
     ///
     /// Only the commands documented above as local-only or read-only are listed
     /// here; everything else is treated as mutating. That is the safe direction
@@ -662,8 +670,8 @@ impl TrameCommand {
         !matches!(
             self,
             // Local view state: selection and scrolling are never persisted
-            // (`trame-ui §16`), and switching sheet or personal filter view only
-            // rebuilds derived caches.
+            // (`trame-selection`), and switching sheet or personal filter view
+            // only rebuilds derived caches.
             Self::ScrollViewport { .. }
                 | Self::SetActiveCell { .. }
                 | Self::ActivateSheet { .. }

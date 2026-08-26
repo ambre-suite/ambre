@@ -12,7 +12,7 @@ impl LogicState {
     /// events to the UI Thread, and forward CRDT/ephemeral payloads to Sync.
     ///
     /// The registry is **flat**: a document embedded in a Toile via a `doc_embed`
-    /// (§2.I) is an ordinary entry here, keyed by its own `DocumentId`, and its
+    /// is an ordinary entry here, keyed by its own `DocumentId`, and its
     /// commands arrive addressed straight to it. Nesting adds no routing step --
     /// the child's view holds the child's id and emits through the same channel,
     /// so a command never travels through the parent.
@@ -22,7 +22,7 @@ impl LogicState {
             return;
         };
 
-        // Role gate (architecture §2.D): a read-only caller never reaches the
+        // Role gate (architecture): a read-only caller never reaches the
         // engine with a mutating command, so we do not offer an edit the server
         // would reject. UX only -- the server re-checks every write and stays the
         // sole authority. Read-only and ephemeral commands still pass, so a
@@ -116,7 +116,7 @@ impl LogicState {
         // Lower each Toile-level service request to a `RestCommand`, supplying
         // the owning `document_id` (which the engine does not hold) and recording
         // the route so the answering `RestEvent` / `ApiError` is fed back into the
-        // engine instead of forwarded to the UI (`toile-interop §5`).
+        // engine instead of forwarded to the UI (`toile-media`).
         for request in requests {
             let (id, cmd) = self.lower_request(document_id, request);
             self.rest_routes.insert(id, document_id);
@@ -152,7 +152,7 @@ impl LogicState {
     }
 
     /// Feed a service-plane response routed back to a document
-    /// (`toile-interop §5`) into its engine and fan the resulting outcome out.
+    /// (`toile-media`) into its engine and fan the resulting outcome out.
     /// Only a Toile document issues service requests, so a route pointing at any
     /// other state is a bug; we log and drop rather than panic. The engine
     /// silently ignores an id it no longer tracks (import undone / doc reopened).
@@ -183,7 +183,7 @@ impl LogicState {
     }
 
     /// Feed a correlated service-plane failure back into a document's engine
-    /// (`toile-interop §5`): a failed media upload aborts its pending import.
+    /// (`toile-media`): a failed media upload aborts its pending import.
     pub(crate) fn route_service_error(
         &mut self,
         document_id: DocumentId,
@@ -277,7 +277,7 @@ impl LogicState {
 
     /// Apply a remote ephemeral payload to a document and forward presence events.
     /// `from_user_id` is the sender's canonical `UserId`, resolved from the
-    /// authenticated `pub_key` in `ambre-sync` (§7) so presence cannot be spoofed.
+    /// authenticated `pub_key` in `ambre-sync` so presence cannot be spoofed.
     pub(crate) fn apply_ephemeral(
         &mut self,
         document_id: DocumentId,
@@ -289,7 +289,7 @@ impl LogicState {
         };
         let events: Vec<AppEvent> = match doc {
             // Trame's own `UserId`-keyed presence is a separate slice
-            // (`trame-logic §7`); it ignores the resolved id for now.
+            // (`trame-engine`); it ignores the resolved id for now.
             DocState::Trame(state) => state
                 .apply_ephemeral(payload)
                 .into_iter()

@@ -1,586 +1,310 @@
-# AMBRE -- TECHNICAL ROADMAP (EPICS)
+# AMBRE -- ROADMAP
 
-> **Role of this file.** This is the **single entry point** for cross-cutting scheduling. It carries
-> the project's **Epics** (coarse, deliverable increments) and their dependency order. The fine-grained
-> backlog (**Stories**, with `[x]`/`[ ]` progress) lives in each spec, referenced here by ID.
->
-> **Epic / Story model (Agile).**
-> - **Epic** = this file. One Epic = one increment of value. Coarse grain, no per-feature detail.
-> - **Story** = a spec's roadmap section. Fine grain, individual checkboxes.
-> - **Golden rule (derived status).** An Epic is `[x]` **only when every Story it lists is `[x]`**.
->   The Epic status is *derived*, never hand-set. This is the invariant that keeps this file and the
->   specs from contradicting each other. If a Story is open, its Epic is open.
->
-> **How to resume with no prior context.** Read this file top-to-bottom, find the first open Epic
-> (`[ ]`), open each Story it lists (spec + section), and work the open Stories. You do not need any
-> other memory.
->
-> **Strategy:** vertical delivery of Trame (validate the full stack on one product), then horizontal
-> expansion. No week estimates: the relative order of Epics and their dependencies is the only binding
-> constraint.
+**Type:** Scheduling (one file for the whole project)
+**Scope:** every epic and every story, for every application.
+
+> **Role of this file.** Nothing schedules anywhere else. A spec says what the system does; this file
+> says what work is left to reach it. A spec that carries its own backlog is a second schedule, and
+> two schedules disagree.
 
 ---
 
-## Vocabulary mapping (Epic <-> spec phases)
+## 1. THE MODEL
 
-The specs predate this file and use their own phase vocabulary. Mapping:
+| Term | What it is | Where it lives |
+| :--- | :--- | :--- |
+| **Feature** | the smallest thing a user can name, ship alone and specify end to end | one spec document, always current |
+| **Story** | one unit of production that moves one or more features forward | one row of this file |
+| **Epic** | a group of stories, one increment of value | one heading of this file |
+| **Milestone** | a release scope spanning epics | the `Milestone` column |
 
-| This file | Foundation specs (`1-Foundations/`) | Trame specs (`2-Trame/`) | Toile specs (`3-Toile/`) |
-| :--- | :--- | :--- | :--- |
-| `E0`/`E1` (done) | `ARCH P0`-`P3`, `CANVAS P0`, `CHROME P1`-`P3`, `UI P0`-`P2`, `SYNC P0`-`P3`, `SRV P0`/`P2` | engine Phase 0/1 (logic), virtual scroll + inline editor (ui Phase 1) | -- |
-| `E2` | `CANVAS P0` remaining items, `CHROME P4` (launcher) | -- | -- |
-| `E3` | -- | `trame-logic section 14`, `trame-features section 10`, `trame-ui section 18`, `trame-interop section 10` (Phase 1) | -- |
-| `ET` | `ARCH P5` (test infrastructure) | Trame "Tested DoD" debt items (logic/features/ui/interop) | -- |
-| `EF` | `FIXTURES P0`-`P2`, `DOCFILE P0`-`P2`, `ARCH P8` (persisted schema versioning) | `trame-interop` native `.ambre` scope item | `toile-interop` native `.ambre` scope item |
-| `E4` | `CANVAS P1` (paths/PDF), `ARCH P6` (composition / in-place embeds) | -- | `toile-logic section 13`, `toile-ui section 13`, `toile-features section 9`, `toile-interop section 10` (Phase 0/1) |
-| `E5` | `ARCH P2` (`ambre-prose`), `ARCH P7` (`ambre-murmure`), `SYNC P4`, `SRV P1` | -- | -- |
-| `E6` | `ARCH P4`, `CANVAS P2` | Trame Phase 2+, `trame-logic section 14 Phase 4` (scaling debt) | Toile Phase 2 (optimization) |
+**Six rules, and each one exists because it was broken.**
+
+* **A story is one row, and it says what, never how.** A checkbox, a name, its milestone, the
+  features it touches. The code says how it works and git says how it got there. A row that explains
+  an implementation is a row nobody reads, and it rots on the next commit while looking
+  authoritative.
+* **A story that needs a paragraph is two stories**, or it is design content sitting in the wrong
+  file.
+* **Finishing a story is ticking its box. Nothing else.** No note added, no wording changed, no
+  account of what was done. The row said what the work was before it started, and it still says it.
+* **Closing an epic is cutting it into `ambre-roadmap-journal.md`, verbatim. Nothing else.** Every
+  row as written, the heading as written. No summary, no retrospective, no rewrite. An epic is `[x]`
+  only when every story under it is `[x]`: the status is derived, never set. While the epic is open a
+  finished story stays, ticked, because that is what lets a reader say "eight of eleven, these three
+  remain".
+* **A milestone tags a story, never a feature.** A feature lives: it has an MVP form, then others.
+  `--` means no release scope names the story, which is why transverse work waits.
+* **An epic holds no `post-V1` story.** One such row holds an epic open for ever, so section 10
+  carries them.
+
+**An epic key is an identifier, not a rank.** `EF` precedes `E4`, and `E4` is the current objective. A
+key is minted once, because a few hundred invariant rows cite one. The `Milestone` column orders the
+work.
+
+A story is cited by its name, and the name is a join key: `invariants.py` fails on a citation this
+file does not answer (`ambre-spec-template.md` section 1, `ambre-spec-architecture.md` section 4).
 
 ---
 
-## E0 -- Technical Foundation  `[x]` (done)
+## 2. SHIPPED
 
-*The 3-thread stack runs, content renders, chrome is assembled, crypto is proven.*
+Closed epics live in `ambre-roadmap-journal.md`, whole. They are named here so a citation resolves.
 
-Stories (all `[x]`):
-- `ARCH P0` -- shared-memory threading, base crates, typed IPC.
-- `CANVAS P0` -- GPU rendering pipeline (`FrameHost`/`AppView`, fonts, Trame grid 60+ FPS).
-  *(core rendering items; remaining `CANVAS P0` items are tracked in `E2`.)*
-- `CHROME P1`->`P3`, `UI P0`->`P2` -- Leptos chrome (app shell, commands, input/IME, tokens, a11y).
-- `SYNC P0` -- standalone E2EE primitives (`ambre-crypto`, compress/seal pipeline, `MasterSeed`).
+| Epic | What it delivered |
+| :--- | :--- |
+| `E0` | the three-thread stack, the GPU pipeline, the chrome, the crypto primitives |
+| `E1` | the Trame vertical end to end: encrypted, synchronized, live through the Blind Relay |
+| `E2` | the launcher, the sharing UI, the snapshot client legs |
+| `E3` | the Trame MVP: a usable spreadsheet |
+| `ET` | CI, the three test tiers, the convergence property test, the first UI belts |
 
-## E1 -- Trame vertical: encrypted, synchronized, live-sync engine  `[x]` (done)
+---
 
-*A Trame skeleton end-to-end encrypted and synchronized via the Blind Relay. Validates the whole stack.*
+## 3. EF -- DOCUMENT CORPORA AND NATIVE FILE FORMAT  `[ ]`
 
-> **Scope note.** The real-time sync engine and the sharing/revocation flow exist at the
-> bus/sync/server layer (`SYNC P3`); the user-facing sharing UI that drives them from the chrome
-> landed under `E2` (Document sharing UI story). Genuine multi-user collaboration is now reachable
-> from the UI.
+Documents in known states, and the file they travel in. One epic because a fixture **is** an `.ambre`
+file and the fixture loader **is** the production importer.
 
-Stories (all `[x]`):
-- `ARCH P1`/`ARCH P2` -- typed Trame editing (`TrameOutcome`, lossless Logic dispatcher), real
-  multiplexed WebSocket, multi-document `Unlock`/`OpenDocument`, client document lifecycle (URL
-  routing, client-generated `DocumentId`, lazy server creation, per-document IndexedDB restore).
-- `ARCH P3` / `SRV P0` -- Blind Relay (PostgreSQL/Redis/S3, multiplexed WS, ACL, Lua clock+seq,
-  presigned URLs).
-- `SYNC P1`->`SYNC P3` -- network sync, cookie-less auth (Bearer JWT + refresh), persistent SPA
-  engine, live sync (PubSub hub, WS resilience, hydration), sharing & revocation **flow**
-  (DocumentKey rotation, media, anti-replay). *(Engine/protocol; chrome UI landed under `E2`.)*
-- `SRV P2` -- server hardening (rate limiting, organizations + Shamir, compaction; CSRF dropped
-  with the move to Bearer JWT).
-
-> Dependencies: `SRV P0` precedes the network wiring of `SYNC P2` (need a target relay);
-> `SYNC P0` precedes `SYNC P1`-`P3` (crypto before integration).
-
-## E2 -- Foundation finishing (minimal)  `[x]` (done)
-
-*Close the visible/blocking foundation gaps. Deliberately minimal: offline durability, audits and
-benchmarks are deferred to `E6`.*
-
-> Was reopened for `CHROME P4` (the `/` launcher discarded the E2E-encrypted document name and was
-> off the design tokens). Both that launcher gap and the Document sharing UI Story have since landed,
-> so the derived Epic status is `[x]` again.
-
-Stories:
-- `CHROME P4` `[x]` -- **Launcher screen** (`ambre-spec-chrome.md section 2.G`/`section 7`): Sync now decrypts
-  `name_enc` through to `DocumentSummary.name` (ECDH-unwrap each list-row doc key, AEAD-open the name;
-  server list returns `doc_key_enc` + `wrapper_exchange_pub_key` + `member_count`), document cards
-  (type-icon monogram + name/"Untitled" + relative last-modified + shared badge), create-untitled /
-  inline rename / delete (with confirmation `<dialog>`), token re-theme + empty state + sign-in
-  wordmark/tagline, and the generic-label browser tab title. Naming/encryption contract in
-  `ambre-spec-architecture.md section 3`.
-- **Document sharing UI (chrome)** `[x]` -- Share toolbar button (shown when a document is open) opens
-  a dialog that lists current members and wires the existing `InviteToDocument` /
-  `RevokeFromDocument` / `UpdateDocumentMemberRole` / `ListDocumentMembers` flow (`SYNC P3`): invite
-  by email (bare username -> `<name>@dev.local` in dev mode), per-member role select, revoke (with
-  server-side `DocumentKey` rotation), live `InviteSent` / `RevocationComplete` / `MemberRoleUpdated`
-  toasts that refresh the list, plus a `DocumentShared` toast that refreshes the launcher. Invite
-  does a real X25519 ECDH wrap of the document key for the invitee. Unblocks genuine multi-user
-  testing of Trame.
-- **Snapshot lifecycle (client legs)** `[x]` -- wired the client end of the snapshot
-  upload/download flow (`ambre-spec-sync.md section "Snapshot Flow"`, `ambre-spec-server.md section 2.B`):
-  - **Upload:** `Sync::handle_send_snapshot` now seals -> `POST /snapshot/upload-url` ->
-    S3 PUT -> `POST /snapshot` (with `covered_seq`) -> adopts the returned `snapshot_id`
-    (`SyncEvent::SnapshotUploaded`). Host path still stops after sealing.
-  - **Download + cold-start seq gating:** the open path uses the real routes
-    (`GET /snapshot` then `POST /snapshot/download-url`); the snapshot's new `covered_seq`
-    (DB column) seeds `last_seq` so the post-open `RequestMissing` replays only newer deltas
-    instead of the whole history since genesis. Server replay also parallelized
-    (`join_all` over S3 fetches). Closes the cold-start target (`ambre-spec-server.md section perf`).
-    *(Remaining post-MVP: BLAKE2b `parent_snapshot_proof` chain, still empty.)*
-- `CANVAS P0` `[x]` -- generated canvas tokens (`tokens.ron` -> `theme.rs` via `ambre-canvas/build.rs`)
-  + headless tests (`RecordingSurface`, the mock `DrawSurface` in `ambre-draw/src/testing.rs`,
-  consumed by the Trame render tests).
-- `ambreFatal` reconciliation `[x]` -- the `panic::set_hook` JS hook (`ARCH P1`) plus the canvas
-  terminal screen: `signal_fatal` is raised in `ambre-app/src/lib.rs` and `fatal_message` is painted
-  every frame in `ambre-app/src/host.rs`.
-
-## E3 -- Trame MVP (usual spreadsheet)  `[x]` (done) -- *core objective*
-
-*Turn the Trame skeleton into a usable spreadsheet. Scope = the consolidated "Phase 1 / MVP" of the
-four Trame specs, deduplicated against what `E0`/`E1` already delivered (virtual scroll + inline cell
-editor are done).*
-
-> **Reopened** (first pass) for the header/column/row UX gap -- multi-column sort, column/row resize,
-> whole-axis selection, autofilter buttons: all landed, that Story is `[x]`.
+> **Gates.** `DOCFILE P1` follows `ARCH P8`: a file on a user's disk has unbounded age and is beyond
+> our reach to migrate, so it must not ship before payload migration has a mechanism. `EF` does not
+> block `E4`.
 >
-> **Reopened again** (second pass) for a chrome UX polish round, tracked by the "Chrome UX polish
-> pass" Story below. Every item in it has now landed, so per the golden rule the derived Epic status
-> is `[x]` again.
+> **`FIXTURES P2` is the one story exempt from "green in CI".** Its benches read git-ignored corpora
+> no CI job builds, so the condition is unreachable by construction. It ships `[x]` when
+> `just fixtures-bench` runs clean on a developer machine and its baselines are committed with the
+> machine they came from. A silent exemption is how a rule stops meaning anything, so the substitute
+> is named here.
 
-Stories:
-- **View-independent merge masking (correctness)** `[x]` -- `trame-logic section 14 Phase 1`
-  (finding `trame-logic section 11 bis.E`). A masked cell (covered by a merge, non-empty -> conflict) was
-  excluded from the formula engine **only on the active sheet** (`reseed_engine` skipped
-  `masked_cells` at local index 0), so a cross-sheet reference (`=Sheet2!A1`) to a conflicted cell
-  evaluated to a **different value depending on which sheet was displayed** -- a formula result that
-  depended on view state, contradicting `trame-logic section 6` ("masked cells do not participate in any
-  computation"). Wrong at any document size, so it was an MVP correctness item, not scaling debt.
-  Fixed: masking is derived per sheet from `merges_{sheet}` at feed time (`masked_cells_for`) and
-  excluded uniformly on every sheet; the cross-sheet regression
-  `masked_cell_excluded_across_sheets_regardless_of_active_tab` proves a conflicted masked cell reads
-  identically regardless of the active tab.
-- **Chrome UX polish pass** `[x]` -- bring the grid/chrome interaction quality up to the bar set by
-  the rest of the MVP (`trame-ui section 4bis`/`section 5.C`/`section 5.D`/`section 13`):
-  - `[x]` Autofilter glyphs (button + column-letter badge + in-button inset) scale with the grid zoom.
-  - `[x]` Unified neutral hover on a single generated `--surface-hover` token (`tokens.ron`),
-    shared by every chrome control (toolbar, status bar, menus, launcher cards, sheet tabs).
-  - `[x]` **Sheet-tab strip migrated from canvas to DOM chrome**: an app-agnostic `<Tabs>` AppShell
-    slot + a `SheetTabs` component (tabs, "+", inline rename, `{Rename,Delete}` menu, HTML5
-    drag-reorder via the existing `MoveSheet`), fed by `SheetList`-mirrored signals. The canvas tab
-    rendering / hit-testing / input routing is gone; `grid_bottom` now spans the full canvas.
-  - `[x]` Header separators: hairlines at each visible column's right edge and each visible row's
-    bottom edge, so the letters/numbers read as discrete buttons (`render/headers.rs`, drawn
-    independently of `text_enabled` so the PDF path keeps them).
-  - `[x]` Context-aware right-click menu: `CtxScope::{Cell, Column, Row, Corner}` (set by the view's
-    right-click `PointerDown`, read through a launcher-owned `RwSignal`) selects the entry layout in
-    `chrome::commands::context_entries_for`, with axis-plural structural labels and the dynamic
-    `filter_entry` (**Filter by column** XOR **Remove filter**, never both). A row menu only ever
-    offers to drop an active filter, since filtering is column-oriented.
-  - `[x]` In-grid header hover feedback: `HeaderHit`-derived `hover_col` / `hover_row` /
-    `hover_corner` tint the hovered column, row or select-all corner on the canvas with the
-    `header_hover` palette entry, generated from `tokens.ron` on the same value as the chrome's
-    `surface_hover`, and always drawn under the active tint so the active axis wins.
-  - `[x]` Inter-column/row "+" insert affordance: a badge pinned to the hovered header boundary
-    (`insert_hint` -> `draw_insert_badge`), clicking it inserts at that edge and selects the new
-    column/row. *(The whole-axis drag-reorder of grid columns/rows shipped separately -- see the E6
-    story, pulled into the MVP.)*
-- **Header/column/row UX (MVP promotion)** `[x]` -- `trame-ui section 18 Phase 1` (new items) + `trame-logic section 14 Phase 1` + `trame-features section 10 Phase 1`:
-  - Header interactions (`trame-ui section 4bis`): virtual whole-column/row selection, hover cursors, **column/row resize** (`ResizeCol`/`ResizeRow` + variable-metrics `GridLayout`, `trame-logic section 9/section 14`), **double-click auto-fit** (UI-side over cached cells, reuses `ResizeCol`/`ResizeRow`; whole-column auto-fit is a V1 refinement), inline "+" insert affordance.
-  - Context-menu polish (`trame-ui section 5.C`): grouped iconed entries + separators + header-scoped menu.
-  - **Multi-column sort** (`SortRangeMulti`, `trame-features section 2`): `SortDialog` UI + logic handler. *(was V1.)*
-  - Filter feedback on the first row (`trame-ui section 5.D`): Excel-style autofilter buttons fed by `FilterApplied { col }`.
-> **Known schema deferral (does not gate `E3`).** `trame-logic section 14 Phase 0` stays `[~]`: the
-> `{v,t,s}` cell sub-map and the shared `styles` map of `section 2.B` were never implemented. The MVP is
-> functionally complete without them, and the 2026-07-09 review split the remainder in two -- the
-> style fan-out consolidation (an `E6` Story, landed) and the `styles` dictionary (deferred behind a
-> benchmark). See `trame-logic section 11 bis.F`.
+| Story | Milestone | Touches |
+| :--- | :--- | :--- |
+| `[x]` `DOCFILE P0` -- the container | -- | the `.ambre` file: one header, one version, one migration path, plaintext export and import |
+| `[x]` `FIXTURES P0` -- deterministic generation | -- | a document built from a seed is byte-identical every time, on any machine |
+| `[ ]` `FIXTURES P1` -- the corpus and its gate | -- | the committed test documents, the interop export sources, and a CI gate that fails when one drifts |
+| `[ ]` `CONTRIBUTING.md` | -- | the file, which does not exist, and the two checklists that need somewhere to live |
+| `[ ]` `ARCH P8` -- persisted schema versioning | -- | a document says which schema it holds; an older one migrates, a newer one is refused without damage, and a record the client cannot decode reaches the user instead of vanishing (`SCHEMA-003` to `SCHEMA-010`) |
+| `[ ]` `DOCFILE P1` -- user-facing export and import | V1 | save a document to a file and open one back, in any app |
+| `[ ]` `DOCFILE P2` -- passphrase-sealed files | V1 | an exported file encrypted under a passphrase |
+| `[ ]` `FIXTURES P2` -- scale corpora and benches | V1 | documents at the sizes the performance budgets name, and the benchmarks that read them |
 
-- *(Below: the original E3 scope, delivered.)*
-- `trame-logic section 14 Phase 1 & 2` -- multi-sheet `LoroDoc` + `SheetIndex`; insert/delete rows/columns; cell merges;
-  Undo/Redo (Loro `UndoManager`); complete the function set from 22 to ~50; manual cell formatting
-  (`SetCellStyle` + `NumberFormat`), clipboard paste (`PasteRange`), autofill (`FillRange`),
-  find/replace (`ReplaceAll`/`FindNext`), selection aggregates (`RequestSelectionStats`).
-  *(parser / bytecode VM / `DependencyGraph` / cycles / `#REF!` are already done -- see that section.)*
-- `trame-features section 10 Phase 1` -- shared filter, simple sort, Undo/Redo commands.
-- `trame-ui section 18 Phase 1` -- sheet tabs, keyboard navigation, formula bar, single + multi-cell selection,
-  formatting toolbar (bold/colors/H+V alignment/number format incl. currency/percent/scientific/fraction/date/time/custom/borders/wrap), copy/cut/paste, autofill,
-  find/replace, cell wrap + vertical alignment + overflow, selection status bar,
-  full `on_logic_message` `TrameEvent` dispatch. *(virtual scroll + inline editor already done.)*
-- `trame-interop section 10 Phase 1` -- CSV import/export.
+---
 
-## ET -- Testing & CI foundation  `[x]` (transverse) -- *settles the MVP test debt*
+## 4. E4 -- TOILE MVP  `[ ]`  *current core objective*
 
-*Testability is a non-negotiable pillar (`README.md` "Core Principles", template section 4, `ambre-spec-architecture.md section 4`). The Trame MVP (`E3`) shipped functional but under-tested: ~20 server DB/redis tests are bare-`#[ignore]`, there is no CI, no measured coverage, no CRDT convergence property-test, and zero Leptos UI test. This Epic makes the existing tests run and closes the gaps before stacking new apps (`E4` onward). Per the tested Definition of Done (template section 4), the apps it touches are only truly "done" once this is green.*
+An infinite collaborative whiteboard with a presentation mode. What is new is the spatial document
+model and the GPU vector canvas.
 
-Stories:
-- `ARCH P5` `[x]` -- CI GitHub Actions (`lint` / `test-host` / `test-db` / `test-wasm` / `coverage`) with postgres/redis/minio services; root `justfile` for local/CI parity.
-- `ARCH P5` `[x]` -- feature `db` on `ambre-server`; replace the ~20 bare `#[ignore = "needs postgres/redis"]` with the `cfg_attr(not(feature = "db"), ignore = ...)` gate so the already-written server tests run; `cargo-llvm-cov` host baseline + lcov artifact.
-- `trame-logic section 14` `[x]` -- 2-peer CRDT convergence property-test (`proptest`), targeting references-after-sort and structural-op reconciliation. Landed as `ambre-trame/src/logic/convergence_tests.rs::two_peers_converge_under_interleaved_ops`.
-- `trame-ui section 18` `[x]` -- Leptos UI tests (`wasm-bindgen-test`, headless Chrome): reactive headless + real DOM for the Trame chrome. Landed as `ambre-trame/tests/chrome_ui.rs` (reactive belt + DOM `StatusBar`/`FindReplace`), run via `just test-wasm` in the re-enabled CI job.
-- `trame-features section 10` / `trame-interop section 10` `[x]` -- wired the "Tested DoD" belts green in CI: the MVP filter/sort/undo `#[test]`s (added the three Phase-1 undo belts), the concurrent-filter LWW case folded into the 2-peer convergence property-test (`ApplyFilter`/`ClearFilter` ops + `is_filtered` in the converged snapshot), and the CSV roundtrip + malformed/byte-soup fuzz robustness cases. *(Conditional-formatting / validation / protection tests follow their Phase 2 / Post-MVP implementation.)*
-
-## EF -- Document corpora & native file format  `[ ]` (transverse) -- *makes the budgets measurable, and the data portable*
-
-*Two coupled foundations. `ambre-spec-fixtures.md` produces Ambre documents in known states, deterministically,
-on host, from code. `ambre-spec-docfile.md` specifies the `.ambre` container those documents are stored in --
-the only lossless round trip any app offers. They are one Epic because a fixture **is** a `.ambre` file and
-the fixture loader **is** the production importer: neither is finishable without the other.*
-
-> **Does not block `E4`.** `ET` stays `[x]` and remains the test foundation `E4` depends on. This Epic adds
-> capability rather than settling debt, and Toile needs none of it. Deliberately kept out of `ET` so that
-> Epic's derived status keeps meaning what `E4` reads it as meaning.
+> **Dependency.** `ET` precedes it: every story ships with its test belt green.
 >
-> **Why now rather than under `E6`.** Nearly every performance budget in the app specs is stated against a
-> document size, and no document of that size exists -- so those budgets are currently aspirational rather
-> than measured (`fixtures section 4`). The scaling work already scheduled in `E6` (`trame-logic section 14 Phase 4`,
-> `CANVAS P2` non-regression benchmarks) cannot show it succeeded without this corpus. Building the
-> measurement after the optimization is the wrong order.
->
-> **Internal gating.** `DOCFILE P0` carries no gate and is buildable now. **`FIXTURES P0` is gated on it**:
-> `FixtureGen::build` returns plaintext `.ambre` bytes and its belt asserts on `DocFileError` variants, so
-> the container has to exist first (`fixtures section 7`). The dependency runs one way only -- `DOCFILE P0` needs
-> nothing from the fixtures side -- which is why the container Story leads the Epic. `DOCFILE P1` is gated on
-> the `E6` Trame style consolidation (see that Epic): a file on a user's disk is a permanent migration
-> commitment, stronger than a server-side document because it is beyond our reach to migrate.
+> **Auto-layout and boolean ops are out of the MVP, frozen.** Toile is a Miro, not a Figma
+> (`features/ambre-spec-toile-engine.md section 5`), so a constraint solver and vector boolean ops
+> are another product's metier. They stay in the tree with no stabilization budget, as candidates for
+> V2 or for removal.
 
-Stories:
-- `[x]` `DOCFILE P0` -- the shared `.ambre` header helper in `ambre-core` (layout, `AmbreHeader`,
-  `DocFileError`, writer rule), the `migrate_ambre` harness and version registry, and the
-  `export_ambre_plaintext` / `import_ambre_plaintext` pair wired for Trame and Toile. **Belt:** round-trip
-  identity, full header rejection set, cross-app dispatch, non-destructive failure.
-- `[x]` `FIXTURES P0` -- the pinned-`PeerID` constructor seam on `TrameState` / `ToileState` (a public API
-  change in both, and the prerequisite for every reproducible artifact); the `fixtures` feature; `FixtureGen`
-  + registry + manifest + digest, the types in `ambre-core` so the orphan rule permits app-side impls;
-  `ToileState::import_snapshot`, `DocState::import_snapshot` and `export_snapshot` lifted to the enum,
-  `shape_of`, `canonical_dump` and `load_fixture`, with `DocState` made public; the determinism harness over
-  all three entropy sources (`PeerID`, commit clock, `document_id`), with the documented fallback to a
-  semantic digest. **Gated on `DOCFILE P0`**, soft-gated on `ARCH P8` (`schema_version` reads 0 until then).
-  **Belt:** determinism both directions, export/import round trip on every `DocState` variant, manifest
-  integrity, loader rejection. *The determinism harness passed on every axis, cross-process included, so the
-  byte diff stands and the semantic-digest fallback stays unadopted. The registry ships empty -- `P1` writes
-  the generators -- and the driver takes it as a parameter so the belt exercises the walk meanwhile. Scale is
-  asserted at 5 000 cells rather than 100 000, which moves to `P2`'s release-profile bench corpus; see
-  `fixtures section 7` for that call.*
-- `[ ]` `FIXTURES P1` -- the correctness generators (deep formula DAG; cross-sheet references with merges and
-  active filters; Toile board with connectors and nested groups; post-convergence 2-peer state) and the
-  interop export sources; `just fixtures` / `fixtures-check` / `fixtures-freeze` over the `fixtures/current/`
-  + `fixtures/frozen/` layout, with the drift gate wired into the CI `test-native` job; and `CONTRIBUTING.md`
-  itself, which does not exist yet and is where the synthetic-only rule lands. **Belt:** drift gate green in
-  CI, new-generator and orphan-golden cases included.
-- `[ ]` `FIXTURES P2` -- scale generators behind `just fixtures-bench-corpus`, sized to the budgets they serve (10k-cell DAG, 100k-cell memory,
-  50k-element board, 2 000-visible-element viewport, 10k-cell export source, 50-frame presentation);
-  `criterion` benches with committed baselines and the 20% regression criterion; the `RecordingSurface`
-  CPU-frame bench and the load-path bench (legs 2 to 5 of `architecture section 5`); generators for further apps
-  as their engines land (`ambre-prose`, `ambre-murmure`). *Feeds the end-to-end document-open budget that
-  `ambre-spec-architecture.md section 5` is to set from the resulting numbers -- no such budget exists today.*
-- `[ ]` `ARCH P8` -- **persisted schema versioning** (`ambre-spec-architecture.md section 2.D` + `section 7 ARCH P8`): the
-  `meta` / `schema_version` root register written by `DocState::new`, the read rule at every full-state entry
-  point (equal proceeds, older migrates, newer refuses non-destructively), and the per-app migration chains.
-  Discharges the pre-1.0 debt left by the style-register caveat (a `postcard` layout change silently
-  `unwrap_or_default`s an old blob to the default style), and generalizes it from one register to the whole
-  document. **Belt:** the deliberately stale fixtures of `FIXTURES P1`. *Sits in this Epic because files are
-  what make it urgent, not because it is file-specific -- the register travels through every persistence
-  path (file, server snapshot, IndexedDB restore).*
-- `[ ]` `DOCFILE P1` -- user-facing export/import: app-agnostic file download + picker routed by `doc_type`,
-  and the plaintext-at-rest statement in the export UI. **Gated on `ARCH P8` and on the `E6` style
-  consolidation** -- distinct gates: `ARCH P8` supplies the migration mechanism, `E6` lands the one schema
-  change already known while it is still free.
-- `[ ]` `DOCFILE P2` -- the passphrase-sealed variant (container version bump carrying salt + Argon2id
-  parameters, export prompt, typed wrong-passphrase error).
+| Story | Milestone | Touches |
+| :--- | :--- | :--- |
+| `[x]` The board engine | MVP | elements, connectors, freehand strokes, groups, frames, z-order, undo, clipboard, find, selection stats |
+| `[x]` `CANVAS P1` -- the vector pipeline | MVP | shapes and paths on the GPU, pan and zoom, colour text, PDF output |
+| `[x]` The board surface | MVP | the tool set, the inline text editor, the tool palette, the style inspector, the floating selection toolbar, the menu bar, the find panel, the status bar, live peer cursors |
+| `[x]` Presentation and reactions | MVP | the presenter panel, playback, Smart Animate between slides, follow the presenter, emoji reactions and their badges |
+| `[x]` Toile interop | MVP | the SVG and image converters, the SVG serializer, the media upload round trip and the PDF pages of a deck, all Logic-side |
+| `[x]` The new-document type picker | MVP | create any kind of document from the launcher, not only a spreadsheet |
+| `[x]` `ARCH P6` -- the cross-app plane | MVP | who a peer is, what they are allowed to do, and the plane that runs one document inside another: its own session, its own permission, its own event stream, painted and driven by the launcher |
+| `[ ]` Comments | MVP | anchored comment threads with replies and resolve, their pins on the board, and the side panel |
+| `[ ]` Live presence on the board | MVP | this peer's cursor, selection and stroke reach the others, the highlighter becomes a tool, a peer who leaves stops being painted, and a label is a name. The render half ships and receives nothing |
+| `[ ]` Order the deck | MVP | a panel that adds a frame to the presentation, reorders it and removes it, and a deleted frame that leaves it. Playback, the transition and the speaker notes ship and have no deck to run on |
+| `[ ]` The Toile interop surface | MVP | a file dropped or picked reaches the importer at the drop point, an export entry hands the bytes to the browser, and the lossy-import report reaches the user. Every converter ships and no gesture calls one |
+| `[ ]` Embeds on the board | MVP | a gesture places a web page or another Ambre document on the board, and a web page renders sealed off from it. The nesting plane ships -- opened, focused, painted and routed -- and nothing puts an embed there |
+| `[ ]` Connector labels | MVP | a caption on an arrow, editable in place |
+| `[ ]` Hyperlinks and go-to-frame | MVP | a link on an element, followed to a URL or to another frame |
+| `[ ]` Align and distribute | MVP | align or space a selection evenly, as one undo item |
+| `[ ]` No delta is lost on an export error | MVP | Toile drops a change when an export fails; Trame retries it. Align Toile on Trame |
 
-> **Two versions, two mechanisms.** `AMBRE_VERSION` versions the **container**; it does not version the CRDT
-> schema inside the payload, so `migrate_ambre` does not cover a schema change such as the `E6` style
-> consolidation. A file written before such a change passes every container check and then imports into an
-> engine reading containers that no longer mean what it expects -- a *successful open of a wrong document*.
-> The payload half is `ARCH P8` below, which is a **hard prerequisite of `DOCFILE P1`**.
+---
 
-## E4 -- Toile MVP (infinite whiteboard + presentations)  `[ ]` (in progress) -- *current core objective*
+## 5. E5 -- APPLICATION EXPANSION  `[ ]`
 
-*Second product on the validated stack: an infinite collaborative whiteboard with a presentation mode.
-Mirrors the `E3` model -- scope = the consolidated **Phase 0 + Phase 1** of the four Toile specs
-(`3-Toile/`). Toile reuses the whole `E0`/`E1` foundation (threading, sync, blind relay, crypto,
-launcher/sharing UI); what is new is the spatial document model and the GPU vector-canvas.*
+Prose, then Murmure. Prose is the text pilot: it validates the axis neither Trame's grid nor Toile's
+plane touches, and it unblocks Toile's inline rich text and Trame's text colours.
 
-> Dependencies: `ET` (test foundation) precedes it -- every Story ships with its test belt green, per the
-> tested DoD. Toile's PDF export and vector tools carry `CANVAS P1` (paths/transform + krilla), so that
-> foundation Story lands here rather than under `E5`.
+| Story | Milestone | Touches |
+| :--- | :--- | :--- |
+| `[ ]` `ARCH P2` -- the Prose engine core | MVP | the document model: text, blocks, marks, nesting |
+| `[ ]` Pagination | MVP | measured pages: breaks, orphans and widows, kept-together blocks, footnote placement, incremental relayout |
+| `[ ]` Styles, lists and headings | MVP | character and paragraph styles, ordered and bulleted lists, numbered headings |
+| `[ ]` Tables, table of contents and word count | MVP | tables with merged cells and styles, a generated table of contents, a live word count |
+| `[ ]` Headers, footers, find and replace | MVP | page headers and footers with dynamic fields, and find and replace |
+| `[ ]` Comments and track changes | MVP | anchored comments, and suggested changes a reviewer accepts or rejects |
+| `[ ]` Undo, footnotes and cross references | MVP | undo isolated to the local author, footnotes, cross references |
+| `[ ]` Page rendering | MVP | pages on the canvas with virtual scrolling and cached text |
+| `[ ]` Input and cursor | MVP | typing, caret navigation, click and drag selection, optimistic display |
+| `[ ]` Toolbar, slash menu and composition | MVP | the contextual format bar, the slash menu, input-method composition, double-click word selection |
+| `[ ]` Collaborative cursors and annotations | MVP | remote carets, comment highlights, track-change highlights |
+| `[ ]` Ruler, clipboard and inertial scroll | MVP | the interactive ruler, copy and paste, selection-aware editing, inertial scroll |
+| `[ ]` The native format | MVP | a Prose document saved to and read from an `.ambre` file |
+| `[ ]` Markdown interop | MVP | Markdown import and export, with a report of what was lost |
+| `[ ]` HTML interop | V1 | HTML import and export, including a paste from a web page |
+| `[ ]` DOCX interop | V1 | Word import and export, comments and track changes included |
+| `[ ]` PDF export | V1 | a paginated PDF with working links and metadata |
+| `[ ]` Images | V1 | images in the document, resolved through the shared media flow and embedded on export |
+| `[ ]` `ARCH P7` -- Murmure | V1 | chat channels, and a typed command surface in place of an opaque byte payload |
+| `[ ]` `SYNC P4` / `SRV P1` -- channels and meetings | V1 | channel membership and history, unread tracking, and meeting signalling |
 
-Stories:
-- `[x]` `toile-logic section 13 Phase 0/1` -- CRDT schema + `SpatialIndex` + element/connector/group/stroke lifecycle +
-  clipboard + `DisplayViewport`, then dispatcher/Sync wiring, `apply_ephemeral` / `apply_remote`, snapshot &
-  persistence paths, `my_user_id` from `SessionReady`, `UndoManager`, Find + selection stats, `UserId` presence.
-  Includes the 2-peer convergence property-test (**DoD**). *(Phase 0 landed: schema, index, element/connector/
-  stroke lifecycle, groups, `UndoManager`, `DisplayViewport`, convergence property-test green. Phase 1 dispatcher/
-  Sync/persistence wiring landed (dispatch arm, `SendUpdate`/`SendEphemeral`, `apply_remote`/`apply_remote_batch`,
-  snapshot + local-restore paths). Clipboard (copy/paste/duplicate, section 8 ter) and frame membership
-  (`SetFrameChildren`, section 2.F/section 2.G) landed with their convergence test belts, closing Phase 0. Phase 1 also landed:
-  Find (section 8 quater), selection stats (section 8 quinquies), `my_user_id` from `SessionReady` (section 7), and `UserId`-keyed
-  ephemeral presence (section 7, `PresencePayload`/`PresenceUpdate` + `apply_ephemeral(from_user_id, ..)` -> `PeerPresence`;
-  the `pub_key` -> `UserId` resolution that feeds it is a Sync-layer dependency tracked in `ambre-spec-sync.md`
-  "SYNC P4" / `E5`). Every section 13 Phase 0/1 checkbox is `[x]`; `EditText` is not a section 13 gating item -- it is a
-  deferred `ToileCommand` variant that lands with Prose's shared `TextDelta` (`ARCH P2` / `E5`), like the Trame
-  schema deferral did not gate `E3`. Presence **render** and the `DisplayViewport` -> `WgpuSurface` feed are UI
-  work under `toile-ui section 13`.)*
-- `[x]` `CANVAS P1` -- `lyon` / `WgpuSurface` vector pipeline (quad + path), `ViewportTransform`, glyph atlas, and
-  PDF export via `KrillaSurface` (krilla). The shared canvas foundation the vector tools and the PDF path need.
-  *(Addendum: a parallel **RGBA color-glyph atlas** + pipeline renders full-color emoji, lazily allocated on the
-  first color glyph; `LazyFont::Emoji` fetches Noto Color Emoji (CBDT) on demand. Shared cross-app capability --
-  Toile reaction badges, Murmure message reactions, inline emoji -- through the single `draw_glyphs` chokepoint.)*
-- `[x]` `toile-ui section 13 Phase 0/1` -- `ViewportTransform` / batcher / adaptive grid / hit-testing / Select tool, then
-  the full tool set (Pen/Shape/Connector/Draw/Sticky/Text), Parley inline editor, shortcuts + OS-clipboard
-  mirror, context menu / find panel / status bar, `PeerPresence` overlay with cross-app `UserId` colors,
-  wasm render/input tests. *(Phase 0 landed: `ambre-toile/src/ui/` -- `ViewportTransform` (pan/zoom, world<->screen),
-  the `DisplayViewport` content walk through `DrawSurface` (quad + `lyon` path pipeline on `WgpuSurface`), the
-  adaptive magnetic grid, exact geometry hit-testing + marquee, and the Select tool state machine (move/resize/
-  rotate/marquee), all host-tested; wired end-to-end as `AppView::Toile(ToileView)` with the six driver methods
-  and launcher routing by `DocType`. Phase 1 landed: the full tool set (Pen/Shape/Connector/Draw/Sticky/Text)
-  via `ToolMachine`, the Parley inline editor, keyboard shortcuts + OS-clipboard round-trip, grouping
-  selection-scope, the full editing chrome (tool palette / toolbar, style + property inspector, shared ARGB
-  color picker, content-anchored floating selection toolbar, top menu bar + zoom control -- `toile-ui
-  section 5quinquies`), the chrome context menu / find panel / selection status bar, the `PeerPresence` overlay
-  (`ui::presence::PeerCursors` -- cursors / name chips / selection ghosts / live strokes / faded laser trails in
-  the shared cross-app `ambre_draw::peer::peer_color`), and the wasm render/input belt. The end-to-end multi-user
-  presence demo stays gated on SYNC P4 (`pub_key` -> `UserId` resolution), so the overlay runs against synthetic
-  events until it lands.)*
-- `[x]` `toile-features section 9 Phase 0/1` -- presentation sequence CRDT + playback machine, speaker notes, Smart Animate
-  + auto-layout solvers, reactions/votes CRDT keyed by `UserId` + derived tally, boolean ops; then playback
-  wired to the camera pass, presenter overlay, reactions render, "follow presenter" ephemeral broadcast.
-  *(Every section 9 Phase 0 and Phase 1 checkbox is `[x]`. Phase 0: presentation CRDT + playback machine + speaker
-  notes, `smart_animate` + `solve_layout` solvers, reactions/votes CRDT + derived tally, boolean ops
-  (`i_overlay`), convergence belt. Phase 1: playback wired to the camera pass, top-menu Present entry, presenter
-  overlay panel, "follow presenter" ephemeral broadcast, and **reactions render** -- a screen-space badge row
-  (`ui::reactions`) painted under each element with a derived tally, always visible, plus a minimal context-menu
-  emoji picker (`REACT_*` -> `React`). Reactions render rides a new **shared color-glyph atlas** in `ambre-canvas`
-  (see `CANVAS P1` addendum) so full-color emoji works cross-app. The three remaining `section 9` items are Phase 2
-  optimizations -- incremental reflow, Smart Animate snapshot caching, sequence-panel virtualization -- out of the
-  Phase 0/1 scope.)*
-  > **Scope note -- auto-layout & boolean ops are EXPERIMENTAL, out of MVP (frozen).** Per the Toile identity
-  > (`toile-logic section 0`: a Miro, not a Figma), the `solve_layout` constraint solver and the `i_overlay` boolean
-  > ops are the Figma vector-fabrication metier, not the whiteboard job. They are implemented and stay in the
-  > tree, but receive **no MVP stabilization budget**, carry no UI/quality promise, and are V2-or-removal
-  > candidates. MVP bug-fixing goes to the core whiteboard + presentation path only.
-- `[x]` `toile-interop section 10 Phase 0/1` -- SVG import/export, raster import, safety limits, media hashing + placeholder;
-  then PDF export (presentation order), Figma/Miro converters, media pipeline on the crypto/Sync layer.
-  Golden fixtures + wasm export tests. *(Phase 0 landed: pure, host-tested `ambre-toile/src/logic/interop/` --
-  `svg_import` (usvg + `roxmltree` editable-text pass) / `svg_export` (deterministic), `raster` (PNG/JPG +
-  thumbnail), `limits` (atomic caps/clamp), `media` (Loading->Ready/Failed LRU cache + content-addressed dedup,
-  hash injected -- real blake2b stays Sync-side). Converters return an `ImportBatch`; golden fixtures +
-  reject-path + round-trip tests green. Phase 1 landed: dispatcher/Sync wiring via the existing
-  `UploadMedia`/`DownloadMedia` service plane (atomic import waits for every content hash), slot-indexed
-  `ImportBatch` restoring imported style and `<g>` groups (section 2.A), the `media` CRDT map, `DrawSurface::draw_image`
-  (`ambre-spec-canvas.md section D`) on `WgpuSurface`/`KrillaSurface`, PDF export through `KrillaSurface` one page per
-  presentation frame clipped to its spatial rect (section 3.A), Figma/Miro converters (components -> plain elements,
-  auto-layout deferred + reported), eager font fetch at Logic-worker boot, browser download path, host + wasm
-  export tests. `krilla` behind a `pdf` feature; runtime lazy-loading deferred (section 8).)*
-- `[ ]` **Toile Miro-parity (MVP gaps)** -- features present in Miro but missing from the as-built MVP, now
-  specced across the four Toile docs. **Comments** (anchored CRDT threads with replies + resolve --
-  `toile-features section 4.D`, `toile-logic section 2.J/section 9`, `toile-ui section 4/section 5sexies`); **connector labels** (edge captions,
-  `toile-logic section 5.B`); **hyperlinks / go-to-frame** (`LinkTarget`, `toile-logic section 2.K`, followed in `toile-ui section 4`);
-  **align / distribute** (`ArrangeElements`, `toile-logic section 8`, `toile-ui section 5quinquies.B`). Per-spec Phase-1b/1c
-  checkboxes track it. Comments are the structuring one (new CRDT object + panel + pins); the other three are
-  small. Belongs to Epic **E4** (Toile MVP).
-- `[ ]` **Toile facilitation & workflow layer (deferred, post-MVP)** -- Miro's next tier, out of MVP:
-  **templates** (preset boards via the import path, `toile-interop section 2.F`), **cards + tags** (agile element model,
-  `toile-logic section 2.C`), **shared timer + voting session** (`toile-features section 4.E`), **minimap** (`toile-ui section 3`).
-  Tracked under Epic **E6** (Toile Phase 2 / deferred).
-- `[x]` **New-document type picker (launcher, `CHROME P4` addendum)** -- the `E2` launcher create action was
-  hardcoded to Trame (`landing.rs`, `trame_chrome::DOC_TYPE`) while Trame was the only product. Toile is the
-  second creatable type, so the "new document" action became an app-agnostic `NewDocPicker` dropdown iterating
-  `DocType::creatable()` and passing the chosen `DocType` to `route::doc_path` (`ambre-spec-chrome.md section 2.G`).
-  Opening the new (and existing) documents goes through a shared `open_document`/`route::needs_reload` rule: a
-  same-kind target swaps in place (router pushState, keeps the Sync worker), a cross-kind target hard-navigates
-  (`location.set_href`) to re-boot the right `AppView` (`boot_is_toile` is fixed per page load). This also fixed
-  a latent bug where opening a Toile *card* from a Trame-booted launcher pushState'd into the wrong view.
-  `creatable()` is the single source of truth for the offered types, gated on `ambre_logic::DocState::new`
-  support: Trame / Toile today, Prose joins with its engine (`E5`). Unblocks creating a Toile from the UI
-  (previously only reachable by hand-typing `/toile/<uuid>`). Belt: `landing.rs` wasm/DOM tests +
-  `route::needs_reload` + `DocType::creatable` tests.
-- `[x]` `ARCH P6` (composition & cross-app plane) -- four slices, detailed in `ambre-spec-architecture.md section 7`.
-  **All four slices delivered.**
-  **(1) presence identity** `[x]` (the `signing_pub_key` -> `UserId` directory, unblocking the already-complete
-  Logic presence path), **(2) `Role` on `DocState`** `[x]` (UX gate; the server stays authoritative),
-  **(3) composition** `[x]` (a `doc_embed` **editable in place** per `toile-logic section 2.I`; the Logic registry is
-  flat so the child is addressed by its own id and no bus variant is needed -- the input-focus transform and
-  session lifecycle in `ambre-toile/src/ui/embed.rs`, the `FrameHost`-driven child input + rendering and the
-  per-document Logic->UI fan-out in `ambre-app/src/host/`), **(4) TOFU UI** `[x]`
-  (`chrome section 2.H` / `CHROME P5`: `ambre_crypto::fingerprint`, the `trusted_keys` store with a guarded
-  `DB_VERSION` 1->2 upgrade, and the two-phase pinned invite with a modal confirmation / key-changed alert). Slices 1 and 2 need **no server change**: `GET /members` already returns the
-  signing keys and the roles, and the open path already fetches it. The spatial `DocState` itself -- typed
-  `ToileState` behind the `ambre-logic` `match`, `rstar` R-tree culling, the IPC contract
-  (`ambre-bus::app::toile`, `AppCommand::Toile`/`AppEvent::Toile`, `DocState::Toile`, remote/snapshot/ephemeral
-  legs) -- and the `doc_embed` element kind land under the `toile-logic section 13` story above, not here. Sits on top
-  of the logic/canvas/ui stack.
-- `[ ]` **Toile export cursor drops a delta on export error (correctness)** -- `emit_with_update`
-  advances the exported version-vector cursor **unconditionally**, even when the Loro export fails
-  (`ambre-toile/src/logic/state/mod.rs:472-478`, `.ok().filter(...)` then `exported_vv = oplog_vv()`).
-  Trame retains the cursor on export error and retries the range (`ambre-trame/src/logic/sync.rs:18-31`),
-  so no delta is lost. Align Toile on Trame's retained-cursor guarantee: on export error keep
-  `exported_vv` unchanged and return `None` so the range is re-exported next time. Specced in
-  `toile-logic section 8` (vv-cursor data-flow note). Needs a regression test (forced export error -> next
-  export still carries the range).
+---
 
-## E5 -- Application expansion  `[ ]` (deferred)
+## 6. E6 -- V1 COMPLETION  `[ ]`
 
-*Deploy the remaining building blocks on the validated foundation.*
+### Foundations
 
-Stories:
-- `ARCH P2` -- `ambre-prose` (LoroText): the text/CRDT pilot. Also lands Toile's `EditText`/`TextDelta`
-  path and the section 6 rich-text runs it carries -- including the per-run colour binding of the shared
-  `ColorPopover` (`toile-ui section 5quinquies.C`) and the new `FontSpec` colour field. *(The element-fill
-  side of that picker is MVP-complete under `E4`; only the text-run consumer waits here.)*
-- `ARCH P7` (`ambre-murmure`) -- channels.
-- `SYNC P4` + `SRV P1` -- channels & meetings (segments managed by Sync, unread, WebRTC signaling); plus the
-  presence identity resolution (`pub_key` -> canonical `UserId` directory) that lets inbound ephemerals be
-  delivered with a spoof-proof `from_user_id`, unblocking the Toile/Trame `UserId`-keyed presence render.
+| Story | Milestone | Touches |
+| :--- | :--- | :--- |
+| `[ ]` `ARCH P4` -- offline durability | -- | edit while offline and lose nothing on reconnect |
+| `[ ]` `CANVAS P2` -- frame quality | -- | frame profiling, allocation-free painting, dynamic theme, content accessibility, translation and right-to-left |
+| `[ ]` The icon pipeline | -- | vector icons on the canvas. The last open item of `CANVAS P0` |
+| `[ ]` Clipped paths on the canvas | -- | a shape crossing a clip edge is drawn whole today. Clip it, and give a stroke a screen-constant width |
+| `[ ]` The adaptive chrome | V1 | the navigation, the side panels, the toolbar overflow and the wide data views adapt at the three declared widths. Today two labels and one bottom sheet move, and the regions the design names exist at no width |
+| `[ ]` The stylesheet reads the tokens | V1 | fifty literal colours and five undeclared custom properties in the shell stylesheet bypass the one token source, so a theme switch moves everything except them |
 
-## E6 -- Polish & hardening  `[ ]` (deferred)
+### Trame
 
-*Launch quality, public Beta, advanced Rendez-Vous.*
+| Story | Milestone | Touches |
+| :--- | :--- | :--- |
+| `[x]` One style register per cell | -- | a cell's whole style converges as one value, so no concurrent edit can tear it |
+| `[x]` Column and row reorder | MVP | drag a whole column or row to a new position, references following the data |
+| `[ ]` Incremental remote apply | -- | a remote change costs the cells it touched, and the UI re-fetches the range that changed instead of the whole viewport |
+| `[ ]` Cached sheet indexes | -- | a scroll on one sheet no longer rebuilds every other sheet's index |
+| `[ ]` Stable engine sheet indexes | -- | switching a tab no longer resets the engine |
+| `[ ]` A recompute bounded by what changed | -- | the cycle check and the topological walk cover the cells that changed, not the whole graph |
+| `[ ]` Engine completion | V1 | whole-column ranges, reference-preserving functions, the advanced function set, convergent deletion of the last sheet |
+| `[ ]` Data tools | V1 | personal filter views, conditional formatting, data validation, and a total that skips filtered rows |
+| `[ ]` Grid surface | V1 | frozen rows and columns, function autocompletion, live peer cursors, an auto-fit that measures the whole column instead of the viewport cache |
+| `[ ]` xlsx interop | V1 | Excel import and export: values, formulas, styles, merges, column widths |
+| `[ ]` Cell comments | V1 | a note anchored to a cell, surviving a sort and a reorder |
+| `[ ]` Media in a sheet | V1 | Trame declares images and resolves none. Wire it to the shared media flow |
+| `[ ]` Persisted page setup | V1 | paper size, margins and orientation stored with the document instead of asked at export |
+| `[ ]` A machine-readable error | V1 | an error carries a code a host can branch on, not only a sentence |
+| `[ ]` Bounded float objects | V1 | an absurd image or chart size cannot make layout cost unbounded |
 
-Stories:
-- `ARCH P4` -- offline durability (Loro IndexedDB persistence, flush + `RequestMissing` on reconnect);
-  key-rotation hot-path benchmarks + ZK audit (`cargo tree`); wasm-only warnings audit.
-- `CANVAS P2` -- frame budget profiling, dynamic theme, i18n/RTL, non-regression benchmarks.
-- **Trame scaling & consistency debt (2026-07 architecture review)** `[ ]` --
-  `trame-logic section 14 Phase 4` (findings detailed in `trame-logic section 11 bis`). The identity layer
-  (`Uid`/`SheetIndex`/`AxisId`) is sound; the debt is recomputation strategy, fixable without a
-  document-format migration: **incremental remote apply** via Loro subscription diffs (kill the
-  O(document) `reseed_engine` on every remote batch / undo / rename -- restores the `section 8 P3`
-  contract) + ranged display invalidation replacing the per-batch `DataReset`; **cached per-sheet
-  `SheetIndices`** (currently rebuilt on every write/scroll -- P1 budget, restores the `section 7` state
-  shape); **stable engine sheet indices** (de-pin the active sheet from index 0 so `ActivateSheet`
-  stops resetting the engine); **dependency-graph micro-fixes** (O(N) `remove`, whole-graph cycle
-  check, full-DAG topo walk, dead write-back loop, `formula_cache` `RefCell`).
-  *(View-independent merge masking, being a correctness defect rather than scaling debt, moved to
-  the `E3` Story below. Bold/italic folding is absorbed by the style-consolidation Story below.)*
-- **Trame per-cell style consolidation (schema, `trame-logic section 11 bis.F`)** `[x]` -- a cell's
-  style was scattered over up to 11 per-sheet `LoroMap`s (`format_`, `style_`, `fgcolor_`, `bgcolor_`,
-  `bordcolor{0..3}_`, `font_`, `numfmt_`) instead of the single style reference
-  `trame-logic section 2.B` prescribes. Landed as one register per cell: the per-sheet map
-  `cellstyle_{sheet}` carries the whole style, postcard-encoded (`StyleRecord { bold, italic, style }`,
-  `logic/styles.rs`). `set_cell_style` writes every register of the selection, then commits once, so a
-  restyle is one delta and one undo item. The packed mask (`pack_style_mask`, the `STYLE_*`/`FMT_*`
-  constants) is deleted.
-  **It was a correctness defect after all.** This replaces the earlier "not a correctness defect"
-  entry, which tested whole-cell rewrites only. The fan-out also tore a border edge (a concurrent
-  edit could keep one peer's border presence with another's border colour), and it dropped
-  colour-only and font-only cells on reload (`reseed_styles` iterated the `style_` mask map, and
-  those cells carry mask 0). Convergence is now whole-cell last-writer-wins (`TRAME-016`,
-  `trame-logic section 12`), locked in by
-  `logic/convergence_tests.rs::concurrent_whole_cell_style_edits_do_not_blend_across_containers` and
-  `::subset_style_edit_does_not_tear_a_whole_cell_rewrite`.
-  **Schema-version obligation, carried over.** The Story changed the persisted schema and landed
-  before `ARCH P8`, on the stated basis that no third-party document exists and every server document
-  is disposable. No Trame `SCHEMA_VERSION` exists yet, so `ARCH P8` (`EF`, `architecture section 2.D`)
-  adopts this layout as its baseline version instead of carrying a migration step for it.
-  *(The shared `styles` dictionary + `"s"` indirection and the `{v,t,s}` cell sub-map stay out of
-  scope: deferred behind a benchmark -- Loro does not GC orphaned map entries, so the indirection
-  would force a style-reclamation policy.)*
-- Trame Phase 2+ -- basic .xlsx import, conditional formatting, data validation.
-- **Trame column/row reorder (drag & drop)** `[x]` -- Excel-style drag to move a whole
-  column/row to a new position. **Pulled into the MVP** once investigation showed it was far
-  cheaper than assumed: cells are keyed by move-invariant `(row_uid, col_uid)` pairs and the
-  formula engine bytecode is uid-anchored, so a reorder is a single `LoroMovableList::mov` that
-  rewrites **no** references -- exactly the sort machinery (`realize_sort`), which already proves
-  "references follow the data" (section 12). No `formula/shift.rs` change was needed (that module is
-  paste-only). Shipped as an atomic `MoveColumn` / `MoveRow` op reusing the shared `after_reorder`
-  tail (rebuild caches + recompute, crucially *not* `reseed_engine`), plus the 2-peer convergence
-  case in `logic/convergence_tests.rs` (concurrent moves converge by LWW on list order) and a
-  header drag-and-drop with an insertion guide line. *(This is the grid column/row reorder, distinct
-  from the sheet-tab reorder, which is plain `MoveSheet` and already ships in the DOM `SheetTabs`.)*
-- Rendez-Vous -- SFrame encryption (E2EE video): `SYNC P4` / Rendez-Vous.
-- **Trame feature-parity gaps (2026-08 Prose-vs-Trame review)** `[ ]` -- subsystems and event
-  shapes Prose ships and Trame lacks, surfaced by the cross-app review. Each is a Trame **code**
-  change; the specs describe the target state and cite this Story.
-  - **Cell comments / notes** (X31): Trame has no anchored-comment container; Prose has the full
-    `annots` subsystem (`prose-features` reconcile P-68 / orphan P-69). Add a cell-anchored note
-    subsystem mirroring that model -- anchored on the move-invariant `(row_uid, col_uid)` pair, with
-    the same orphan handling when a bound row/column is deleted. Persisted-schema change (bumps the
-    Trame `SCHEMA_VERSION`).
-  - **Media resolution flow** (X35): Trame declares the `"media"` CRDT container (`trame-logic section 2.B`)
-    but no resolution/download/cache. Wire it to the **same** shared Foundation media flow Prose uses
-    (`MediaState` / `DownloadMedia` P-65 + 64 MiB LRU P-66), never a Trame-private copy.
-  - **Persisted page setup** (X67/X68): move page format (paper size, margins, orientation) out of the
-    ephemeral `PdfPageSetup` export param into a persisted per-sheet CRDT container, shared like Google
-    Sheets' print settings, with a first-class `orientation` field. Export then reads the persisted
-    setup. Persisted-schema change (bumps the Trame `SCHEMA_VERSION`).
-  - **Clipboard text/plain mirror** (X2): `TrameEvent::Clipboard` carries only the styled
-    `ClipboardPayload`; the shared `ClipboardBlob { text, ambre }` (`ambre-spec-ui.md`) also carries a
-    `text/plain` rendering for foreign-app paste. Change the event to `{ text, ambre }` like Prose
-    (`prose-logic` `Clipboard { text, ambre }`) so the host writes both flavors to the OS clipboard.
-  - **User-facing error code** (X56): `TrameEvent::Error { message }` surfaces no machine-readable
-    code; Prose's `Error { code: u16, message }` maps a typed `ProseError`. Add a typed Trame error
-    enum mapped to a `code`, so hosts branch on the code rather than parse the message.
-  - **Oversized float-object clamp** (X58): Trame declares no geometry cap on images / charts; Prose
-    clamps each image dimension to `MAX_IMAGE_DIM_PX = 10_000` before it reaches the CRDT
-    (`prose-features`). Clamp `DisplayFloatObject` / chart dimensions to the same bound so an absurd
-    size cannot make layout cost unbounded.
-  - **Version history** (X37): Trame keeps only an in-memory undo stack; Prose specs a
-    `meta.version_history` (`LoroList`, S3-backed snapshots, Post-MVP). Add the same named-snapshot
-    subsystem to Trame, reusing the SecSync S3 pipeline. Post-MVP.
+### Toile
 
-- **Cross-app shared-component factoring (2026-08 Prose-vs-Trame review, architect decisions)** `[ ]`
-  -- the NEEDS-HUMAN calls of the same review, arbitrated by the architect. Each promotes a behavior
-  that is shared **by nature** across the editors into one common model, so Prose, Trame, Toile (and,
-  where noted, Murmure) stop reinventing it divergently. Specs describe the target state and cite this
-  Story. Grouped by subsystem:
-  - **Shared Find/Replace crate** (X8/X9/X11): promote Prose's session model (full match list +
-    live match cursor: `FindResults { matches, current }` + `FindUpdated { current }`) into a common
-    crate consumed by Prose, Trame, Toile and later Murmure. Trame drops its stateless whole-grid
-    re-scan (`FindNext`/`ReplaceAll`/`ReplaceOne`) for the shared session model. This retires the X9
-    (event-shape) and X11 (factoring) findings with it.
-  - **Shared zoom model** (X4): the status-bar widget is **already** shared -- `ambre-chrome`'s
-    `ZoomChip` + `ZOOM_PRESETS` ladder (`status.rs`), used by both Trame and Toile. What is **not**
-    shared is the zoom *engine* (the factor + transform): Trame keeps its own in `grid/state.rs`,
-    Toile its own in `ui/viewport.rs` (the richest -- wheel/pinch + zoom-to-selection via
-    `fit_bounds`). The work: factor the zoom engine into one shared model, give Trame the missing
-    keyboard (`Ctrl+=/-/0`) and pinch zoom (today `Ctrl+wheel` is left to the browser) and the
-    zoom-to-selection option, and bring zoom to Prose (none today). One consistent model, one widget.
-  - **Shared interop vocabulary** (X18/X19/X20): one import/export vocabulary in Foundations,
-    Toile included. Unify the event names on Prose's (`ImportCompleted` / `ExportReady`); promote
-    Prose's `ConversionReport` (+ `ConversionWarning`) to the shared conversion-report type; adopt one
-    progress model (`ImportProgress` / `ExportProgress { percent }`, emitted past a size threshold).
-    Trame renames `ImportComplete`/`ExportComplete`, replaces its import-only off-bus `ImportWarning`,
-    and gains the progress events.
-  - **Shared text-editing substrate + two layout drivers** (X23/X24): the inline editing core is
-    already shared -- `ambre-canvas`'s `TextEditor` (Parley `PlainEditor`) wrapped by Trame's
-    `CellEditor` and Toile's `InlineEditor` (`ambre-canvas/src/editor.rs`, `text_input.rs`). The one
-    thing that legitimately differs is the **layout driver**: the inline core shapes a single run on
-    the **render thread** (cheap for a short cell / sticky; the editor buffer is the local echo, no
-    Logic round-trip to display), whereas Prose's flowing, paginated document shapes on the **Logic
-    thread** (pagination) and ships pre-shaped `ParleyRunData`. Everything under the driver is the
-    shared substrate to consolidate: the `<textarea>` input pipe, the IME/composition state machine
-    (`Compose`/`ComposeEnd` + remote-delta reanchor), the font-free `EditIntent` vocabulary, Parley +
-    `FontContext` + `ParleyRunData`, and the selection/caret model (`anchor`/`focus`, byte offsets,
-    grapheme nav; cf. X12). Target: one substrate, two drivers -- not one shaping thread.
-  - **Shared document locale** (X41): a resolved locale carried by the document (`meta.lang`) in
-    Foundations, read by Prose, Trame and Toile for all number/date formatting, so collaborators on
-    differently-configured machines see identical formatting. Trame stops leaving its locale source
-    unnamed and reads `meta.lang`.
-  - **Shared row/column resize command** (X46): the two table models stay distinct (spreadsheet grid
-    vs Prose table block -- different scale and semantics), but the row/column **resize command** is
-    factored into one shared primitive. No shared table object model.
-  - **Shared media-cache cap** (X55): every decoded-media consumer routes through the shared
-    64 MiB LRU `media_cache` (`prose-features` P-66), Trame's charts / float objects included and
-    Toile included -- Toile being the heaviest image consumer, its cap size may need revisiting, but
-    the mechanism stays common. Follows the X35 decision (Trame reuses the shared media flow).
-  - **Cell hyperlinks in Trame** (X50): real per-cell clickable links (Excel/Sheets parity), on a
-    link + open-URL model **shared** with Prose (`MARK_LINK`, X51) and Toile -- one host open-URL
-    affordance, never an app-private one. Trame code change.
-  - **Bounded undo cap** (X13): give Trame's `UndoManager` a bounded step cap (a shared parameter,
-    Toile included), matching Prose's bound (200). Merge / commit granularity stays per-domain
-    (Trame commits on cell exit; Prose merges keystrokes) -- only the cap is shared.
-  - **Legacy copy/paste chords everywhere** (X16): `Ctrl+Insert` / `Shift+Insert` / `Shift+Delete`
-    map to the same shared copy/cut/paste `CommandId`s as `Ctrl+C`/`X`/`V`, handled once in the shared
-    keyboard pipe, in every app (ergonomic for left-handers using the mouse left-handed). Prose and
-    Toile gain them.
-  - **Cross-app rich paste** (follow-up to the shared clipboard, `ambre-spec-ui.md sec.2.E`): a shared
-    interchange format above the per-app opaque `ambre` payloads, so a paste across apps keeps
-    structure (a Trame range -> a Prose table, a Toile object -> a Prose image) instead of falling
-    back to `text/plain`. Future; today cross-app paste is text-only by design.
-  - **Shared keymap** (X26): the `Ctrl`/`Cmd` fold (a Mac uses `Cmd` interchangeably) and the redo
-    chords (`Ctrl+Shift+Z` **and** `Ctrl+Y`) are decided once in the shared keyboard pipe, so every
-    app behaves identically. Extends the X16 shared-`CommandId` decision. Prose gains the `Cmd` fold;
-    Trame gains `Ctrl+Y`.
-  - **Selection endpoint naming** (X12): converge the moving endpoint of a selection on the web term
-    `focus` across every app and the shared editing core; Trame renames `active` -> `focus`. The
-    fixed endpoint stays `anchor`. Pure rename.
-  - **Shared HiDPI handling** (X5): the `device_pixel_ratio` scaling is a service of the shared
-    `ambre-canvas` surface, applied once so every app renders crisply on Retina / 4K; app specs just
-    reference it, Toile included. Trame's UI spec stops reading as if it lacked HiDPI.
-  - **Shared partial-repaint contract** (X49): Prose (and Toile) honor the Foundation Content-layer
-    `ContentRepaint { Full | Scroll | Reuse }` contract (`ambre-spec-canvas.md`); Prose's
-    `RepaintStrip` is a specialization of it (the GPU scroll-band `Scroll` mode simply unused by
-    Prose), not a parallel mechanism.
-  - **Shared floating-menu primitive** (X61): today only the right-click `ContextMenu`
-    (`ambre-chrome/src/context_menu.rs`) is a shared floating shell (Trame + Toile, via the app
-    shell); Trame's format/filter popovers (`chrome/popovers/`) and Toile's floating selection toolbar
-    (`floatbar.rs`) each roll their own shell and reuse only the shared value controls
-    (`ColorPopover`, `FontPicker`, ...). Target: one `ambre-chrome` floating-menu primitive (placement
-    + flip, up/down/Enter/Escape nav, click-outside close) underlying every floating menu -- those
-    popovers, Toile's floatbar, and Prose's future slash menu -- not a per-app shell each.
-  - **Shared perf telemetry** (X69): the `ambre-canvas::PerfPublisher` (FPS chip + timings panel) is
-    wired uniformly in every app (Prose and Toile join Trame), available at least in debug, rather
-    than surfaced by Trame alone.
+| Story | Milestone | Touches |
+| :--- | :--- | :--- |
+| `[ ]` Snap to the board grid | V1 | a drag, a resize and a nudge quantize to the grid step the board asks for, which is drawn today and magnetic nowhere |
+| `[ ]` Rich text on the board | V1 | a note body converges character by character and carries per-run formatting, on the shared text substrate Prose unblocks. Today it is one whole value and one style per element |
+| `[ ]` Engine and render optimization | -- | a large board stays fluid: bulk index updates, cheaper layer diffs, memoized routing, atlas eviction. It is where the parent-lookup scan, the paint-order rewrite and the uncalled connectors land |
+| `[ ]` Large-file import | -- | a very large import stays responsive and reports progress |
+| `[ ]` Figma and Miro import | V1 | open a board exported from either, reporting every construct it had to drop |
+| `[ ]` PNG export | V1 | a board or a frame rendered back to a raster image, without blocking the visible frame |
+| `[ ]` The standalone showcase bundle | V1 | a board exported as a self-contained page that renders without the relay. It leaves the zero-knowledge boundary, and says so |
+
+---
+
+## 7. E7 -- CORRECTNESS AND SECURITY DEBT  `[ ]`
+
+| Story | Milestone | Touches |
+| :--- | :--- | :--- |
+| `[ ]` A lost edit is never shown as applied | V1 | a full command channel drops a lossless command in both applications: Toile logs a warning inside its edit send, and Trame returns the error to a call site that logs it and then writes the same text into its own view state, so the user reads an edit the document never received. The undo group boundary is discarded outright beside it (`BUS-011`) |
+| `[ ]` One clipboard host | V1 | the asynchronous write replaces the ownership token the copy event wrote, so a same-tab paste reaches the worst rung of the fidelity ladder; and the toolbar Paste button is a second path that skips the ladder and names one application inside the launcher |
+| `[ ]` `SYNC P4` hardening | -- | backpressure on the socket, which the two-instance split made unreachable rather than unbuilt; the access token that rides the socket address into the console; the snapshot adopted as a parent before it is downloaded; and the two tokens a sign-out drops without wiping |
+| `[ ]` The production sign-in path | V1 | the two provider routes are registered under a fixed provider name while their handlers read one from the path, so every call answers an internal error and the only sign-in a deployment offers has never run; and the rate limiter sits inside the nested router, which strips the prefix its classifier matches on, so no request is ever counted against the brute-force tier |
+| `[ ]` A document is compacted as its history grows | V1 | the relay never asks anyone for a snapshot, and that request is the only trigger of the client's whole compaction path. So no document is ever compacted: every cold open replays from the first delta, the delta index is never trimmed, and the cold-start budget is unreachable |
+| `[ ]` A deleted document leaves nothing | V1 | deleting a document removes its rows and neither its sealed objects nor its ordering state, so every snapshot, delta and picture stays in storage for ever and the sequence counters stay in the ephemeral store with no expiry |
+| `[ ]` A revoke either completes or changes nothing | V1 | the removal is posted first and the rotation can fail after it, so the member is out of the list and their key still opens new content. A member whose exchange key does not parse is skipped and loses the document in silence |
+| `[ ]` The rotation re-keys the whole document | V1 | the document name and every media blob stay sealed under the previous key, so the first revoke blanks the name and every picture for everyone who stayed; and no snapshot seals the state after the rotation |
+| `[ ]` The media address is not the plaintext | V1 | a blob is addressed by the hash of its plaintext and the relay stores it, so the relay can confirm that a document holds a file it already knows. The media type travels beside it, and a blob is bound to neither its document nor its address |
+
+---
+
+## 8. E8 -- THE SHARED MODELS ACROSS THE APPS  `[ ]`
+
+Each row promotes a behaviour shared by nature into one model, so the editors stop reinventing it
+apart. Arbitrated in the 2026-08 cross-app review; the target state is in the Foundations spec that
+owns the subsystem.
+
+| Story | Milestone | Touches |
+| :--- | :--- | :--- |
+| `[ ]` One command registry | MVP | one description per command -- title, icon, category, chord -- with the menus, the keyboard and the command palette all derived from it instead of built beside it |
+| `[ ]` One find and replace | V1 | one match session with a live cursor, in every app, instead of Trame's whole-grid re-scan |
+| `[ ]` One zoom model | V1 | one zoom engine behind the shared widget: Trame gains keyboard and pinch zoom and zoom-to-selection, Prose gains zoom. Touch and pinch belong here, in every app, and to no other row |
+| `[ ]` One text-editing substrate | V1 | one editing core under both layout drivers: the input pipe, composition, the caret and selection model |
+| `[ ]` One interop vocabulary | V1 | the same import and export events, the same conversion report, the same progress model, in every app |
+| `[ ]` One document locale | V1 | the document carries its locale, so collaborators on differently configured machines read identical numbers and dates |
+| `[ ]` One resize command | V1 | one row and column resize primitive for both table models. No shared table object |
+| `[ ]` One media cache | V1 | every decoded image goes through one bounded cache, Toile and Trame included |
+| `[ ]` One repaint contract | V1 | Prose and Toile honour the shared partial-repaint modes instead of a parallel mechanism |
+| `[ ]` One high-density rule | V1 | the shared surface scales for a high-density display once, so no app spec restates it |
+| `[ ]` One undo bound | V1 | a bounded undo depth in every app. What merges into one step stays per app |
+| `[ ]` One keymap | V1 | the `Ctrl` and `Cmd` fold, both redo chords, and the legacy copy and paste chords, decided once |
+| `[ ]` One name for the moving selection end | V1 | `focus` everywhere; the fixed end stays `anchor`. A rename |
+| `[ ]` One floating-menu shell | V1 | one placement, flip and keyboard model under every popover and floating bar |
+| `[ ]` One performance read-out | V1 | the frame read-out available in every app, not in Trame alone |
+| `[ ]` Links in Trame | V1 | clickable per-cell links, on the link and open-URL model shared with Prose and Toile |
+
+---
+
+## 9. E9 -- THE VERIFICATION DEBT  `[ ]`
+
+| Story | Milestone | Touches |
+| :--- | :--- | :--- |
+| `[ ]` Hot-path benchmarks and the dependency audit | -- | measured crypto costs, and a machine check that no plaintext crate reaches the boundary |
+| `[ ]` The name resolver reads the manifests | -- | five `Cargo.toml` files justify a dependency by naming the spec that needs it, and `spec_refs.py` opens neither a manifest nor any file outside `crates/**/*.rs` and `specs/**/*.md`, so those citations are held by nothing |
+| `[ ]` The performance budgets given a mechanism | -- | about thirty budgeted operations across the seven tables of `ambre-spec-budgets.md`, held by one bench. A budget that cannot fail a build is not verified |
+| `[ ]` The review status means something | -- | every spec reads `Status: Draft`. The two other values `ambre-spec-template.md` declares are defined by no row and set by no one, so the corpus cannot tell a reviewed document from an unread one |
+| `[ ]` Visual tests of canvas content | -- | no canvas content is verifiable in CI: headless browsers read back a blank frame |
+| `[ ]` The Sync and relay belts | -- | the shipped rows no test would fail on, across the Sync worker, the sealed envelope, the delta order, the membership, the key rotation, the media transfer, the relay, its session, its sequencer and its stores |
+| `[ ]` The UI-thread belts | -- | the same debt on the frame, the chrome shell, the clipboard, the input pipe, the launcher, the key verification, the design tokens, the render assets and accessibility |
+| `[ ]` The Trame belts | -- | the same debt across the grid viewport, the cell surface, the number formats and the data tools |
+| `[ ]` The Toile belts | -- | the same debt across the board surface, the connectors, the presentation and the interop converters |
+| `[ ]` Fuzzing the untrusted readers | -- | a `cargo-fuzz` target on the wire decode, the `.ambre` container and the formula parser, each of which is fed by a relay or by a user's file |
+| `[ ]` The suite checked adversarially | -- | `cargo-mutants` over the crates whose tests are generated, so a test that asserts nothing fails |
+| `[ ]` The workspace lints | -- | `forbid(unsafe_code)` in every crate instead of two, and a workspace lint table in place of the default clippy set |
+| `[ ]` Snapshot tests of the wire and the surfaces | -- | `insta` over the recording surface's operation sequences, the wire encodings and the PDF primitives |
+| `[ ]` A coverage gate on added lines | -- | `cargo-llvm-cov` in diff mode, which turns a baseline nobody reads into a check |
+| `[ ]` The browser-driven belt | -- | a served build driven by browser automation: the `ambre-app` boot, one command across the canvas and DOM seam, and the dialogs and menus the unit runner cannot drive |
+| `[ ]` A real object-store round trip | -- | a presigned upload against a local minio in the database tier, which performs none today |
+
+---
+
+## 10. POST-V1 -- NOT SCHEDULED
+
+### Foundations
+
+| Story | Touches |
+| :--- | :--- |
+| `[ ]` Split-secret organization recovery | the escrow has a release path and no deposit path, and the quorum is clamped to one so the register advertises no guarantee the relay cannot keep. Threshold reconstruction, and a deposit, are what make the clamp liftable |
+| `[ ]` Rendez-Vous | end-to-end encrypted video |
+| `[ ]` Cross-app rich paste | a paste from one app into another keeps its structure instead of falling back to plain text |
+
+### Prose
+
+| Story | Touches |
+| :--- | :--- |
+| `[ ]` The later writing set | regular-expression find, bookmarks, version history, linked styles, pageless mode, line numbers, tables of figures, an index, a bibliography, section breaks and columns, protected zones, an equation editor |
+| `[ ]` The spell checker | misspelled words underlined, with suggestions |
+
+### Trame
+
+| Story | Touches |
+| :--- | :--- |
+| `[ ]` Range protection | a range only its owner may edit, and the refusal the others see |
+| `[ ]` Data tools, second pass | colour scales, data bars, top-N formats, and validation by range, date or pattern |
+| `[ ]` Sheet PDF export | print a sheet to a vector PDF |
+| `[ ]` Post-V1 surface | sparklines, charts, reference autocompletion, smooth scroll |
+| `[ ]` Post-V1 interop | OpenDocument import, and the Google Sheets bridge |
+| `[ ]` Version history | named snapshots a user can return to, in place of an undo stack lost on close |
+| `[ ]` Engine optimization | the indexes and parallelism a million-cell sheet needs, measured against benchmarks |
+| `[ ]` Recompute on mobile hardware | measure the recompute on a target device. Past 50 ms at P95 it must yield instead of blocking |
+| `[ ]` The shared style dictionary | the style indirection the schema prescribes and no code writes. Gated on a benchmark: it needs a reclamation policy first |
+
+### Toile
+
+| Story | Touches |
+| :--- | :--- |
+| `[ ]` The facilitation layer | template boards, cards with tags, a shared timer, a voting session and the surface that casts a vote, a minimap |
+
+---
+
+## 11. HOW TO RESUME WITH NO PRIOR CONTEXT
+
+Read section 1, then the epic marked *current core objective*, and work its open rows. Open a spec
+only when you start the row that names it. No other file schedules anything.

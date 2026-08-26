@@ -1,0 +1,197 @@
+# AMBRE -- FEATURE: SIGNING IN, AND THE TOKEN PAIR
+
+**Type:** Horizontal (framework)
+**Implementation:** partial -- the development sign-in, the account setup and the token pair all
+ship; the provider sign-in is registered so that it cannot run.
+
+> How a person proves who they are, and how the relay keeps believing it for the next fifteen
+> minutes. Nothing here touches a document, and nothing here ever sees a passphrase.
+
+An account is an address, a display name, and two public keys derived from a seed the relay only
+ever holds sealed. This document owns the ways in, the pair of tokens a way in produces, and what
+ends a session.
+
+---
+
+## 1. CONTRACT
+
+The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
+status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, shared with
+`ambre-spec-server.md` and the four other documents of this layer.
+
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `SRV-003` | A route that needs a caller MUST verify the access token, its signature and its expiry, before it reads any store. | this spec section 3 | `ambre_server::jwt::tests::expired_token_is_rejected`, `::wrong_key_is_rejected`, `::mint_then_verify_roundtrips`; `routes::tests::handler_tests::unauth_endpoints_return_401` walks the surface and asserts the refusal. One route takes an optional caller and reads first (`ambre-spec-server.md`, `SRV-018`) | verified |
+| `SRV-009` | A refresh token MUST be consumable exactly once, including by two callers at the same instant. | this spec section 3; audit `M6` | `ambre_server::redis_ops::redis_integration_tests::refresh_consume_rejects_a_replayed_token`, `::only_one_racing_caller_claims_a_refresh_token`, both on the database tier | verified |
+| `SRV-022` | A sign-in with an identity provider MUST reach that provider. | this spec section 3 | none, and **the rule fails today**: both provider routes are registered under a fixed provider name while their handlers read the provider from the path, so every call fails to extract one and answers an internal error. No test mounts either route -- section 5 | unverified |
+| `SRV-023` | The development sign-in MUST be refused unless the deployment enables it. | this spec section 3 | `ambre_server::routes::tests::handler_tests::dev_login_rejected_when_dev_mode_off`, and `::dev_login_creates_user_and_returns_token` for the enabled case | verified |
+| `SRV-024` | Any instance MUST accept a token another instance minted. | `ambre-spec-server.md`, `SRV-021` | none. The signing key comes from one seed the deployment shares, and the process refuses to start without it outside development mode; nothing boots two instances to exchange a token | unverified |
+| `SRV-025` | An access token MUST expire within fifteen minutes. | this spec section 3; `ZK-006` | none. The lifetime is one operational figure with a fifteen-minute default and no ceiling, so a deployment may set an hour with no code change -- the same absence `ZK-008` states for a presigned link | unverified |
+| `SRV-026` | A sign-out MUST revoke the caller's own refresh token, and no other. | this spec section 3 | `ambre_server::routes::tests::handler_tests::logout_clears_session`; the route refuses a token it resolves to another identity, and no test presents one | unverified |
+| `SRV-027` | A session MUST NOT be issued under a placeholder signing key. | this spec section 3; `SRV-007` | none, and **the rule fails today**: when the stored signing key does not parse, both sign-in paths fall back to an all-zero key and mint a session under it, so every account in that state shares one identity -- section 5 | unverified |
+| `SRV-028` | An address MUST resolve to exactly one account. | audit `N5` | `ambre_server::db::users::tests::create_user_duplicate_email_is_conflict`, `::get_user_by_email_is_case_insensitive`, `::verified_email_collision_is_conflict` | verified |
+| `SRV-029` | A self-asserted address MUST NOT lock out the provider-verified holder of it. | audit `#3` | `ambre_server::db::users::tests::oidc_login_reclaims_email_from_unverified_squatter`, `::verified_email_cannot_be_squatted_by_setup`, `::oidc_relogin_keeps_its_own_email` | verified |
+| `SRV-030` | The sealed master material MUST be written once; a later write MUST be refused. | this spec section 3 | `ambre_server::routes::tests::handler_tests::store_master_keys_is_first_time_only`. The re-seal route is the passphrase path and touches neither public key | verified |
+| `SRV-031` | An access token MUST NOT reach a log, a proxy record or a browser history. | `ZK-006`; audit `M15` | none, and **the rule holds only outside this process**: the relay's own request span records the path and never the query, and the token still travels in the socket address, so the reverse proxy must strip it and the client logs it (`ambre-spec-sync.md`, `SYNC-061`) | unverified |
+
+* **Budget.** the provider callback of `ambre-spec-budgets.md section 3`, under 200 ms,
+  which reads **none exists**. The token verification carries no budget of its own: it is a local
+  signature check on every request, and no row of the register measures it.
+* **Boundary.** the relay stores the sealed master material, the sealed salt and both public keys,
+  and it sees none of the three secrets behind them (`ZK-003`). What it mints is its own token, and
+  `SRV-012` refuses it every other cryptographic act. The one leak stated here is the token in the
+  socket address (`SRV-031`).
+* **Verification.** 6 `verified`, 6 `unverified`, 0 `unimplemented`. What holds is what a request
+  test can drive: the token gate, the address namespace, the one-shot key write and the refresh
+  race. What is loose is every rule about a deployment rather than a request -- the shared seed, the
+  token lifetime, the token in a proxy log. Two rules are stated as failing on a reading of the
+  code, and one of the two is the only sign-in a production deployment has.
+
+---
+
+## 2. WHAT EACH USER SEES
+
+Two people over one address namespace, which is the only state a session shares.
+
+| Alice does | Bob does | The relay holds | Each user sees | Test |
+|---|---|---|---|---|
+| signs up with an address she asserts | signs up with the same address | one account, Alice's | Bob is told the address is taken (`SRV-028`) | `db::users::tests::create_user_duplicate_email_is_conflict` |
+| signs up asserting Bob's address | signs in with his provider, on that address | one account, Bob's | Alice loses the address; Bob signs in (`SRV-029`) | `db::users::tests::oidc_login_reclaims_email_from_unverified_squatter` |
+| signs in with her provider | signs up asserting Alice's address | one account, Alice's | Bob is refused (`SRV-029`) | `db::users::tests::verified_email_cannot_be_squatted_by_setup` |
+| renews her session twice with one refresh token | watches | one live refresh token | the second renewal is refused, and Alice signs in again (`SRV-009`) | `redis_ops::redis_integration_tests::refresh_consume_rejects_a_replayed_token` |
+| signs out | holds Alice's refresh token | no refresh token for Alice | Bob's renewal is refused too (`SRV-026`) | `routes::tests::handler_tests::logout_clears_session` |
+
+---
+
+## 3. MODEL
+
+**CRDT containers.** none. A session is relay state, and none of it converges.
+
+**Three ways in, one outcome.** Each produces the same pair of tokens.
+
+| Way in | Establishes the identity by | Available |
+|---|---|---|
+| an identity provider | the provider's own assertion, over a handshake with a proof of possession and a one-time value | in every deployment that configures one (`SRV-022`) |
+| an account setup | the caller's own assertion of an address, plus the public keys it derived (`SRV-029`) | always |
+| a development sign-in | a name, from which the client derives its keys with no secret at all | only where the deployment enables it (`SRV-023`) |
+
+**The handshake with a provider.** The relay mints the state value and the one-time value, keeps
+them in the ephemeral store for ten minutes, and consumes them on the way back. A callback whose
+state does not resolve is refused before any exchange, and a provider that returns an address it has
+not verified is refused after it.
+
+**The pair.** Two tokens, two lifetimes, and only one of them revocable.
+
+| Token | Form | Lifetime | Revoked by |
+|---|---|---|---|
+| the access token | signed by the relay, carrying the identity and its signing key, verified locally (`SRV-003`) | fifteen minutes (`SRV-025`) | nothing: it dies at its expiry |
+| the refresh token | an opaque value, resolved in the ephemeral store | thirty days | a sign-out, or its own single use (`SRV-009`, `SRV-026`) |
+
+**Why the access token carries the signing key.** The live write path verifies a signature per
+frame. Reading the key from the token turns that into a local comparison, where a lookup per frame
+would put a query on the hottest path the relay has (`ambre-spec-broadcast.md`).
+
+**A renewal is a rotation.** The claim of a refresh token is atomic: read-then-delete would let two
+callers holding one token both mint a session, so a stolen token replayed after its owner used it is
+refused rather than honoured (`SRV-009`).
+
+**What the relay stores of an account.**
+
+| Field | Form on the relay |
+|---|---|
+| the address, and whether a provider verified it | plaintext (`SRV-028`, `SRV-029`) |
+| the display name | plaintext, bounded in length |
+| the master material, and the salt that derives its key | sealed by the client, opaque here (`ZK-003`) |
+| the signing key and the exchange key | plaintext public halves |
+| the provider and its subject, where a provider established the account | plaintext |
+
+The master material is written once and refused afterwards, because overwriting the public keys
+would leave every document key already sealed to the previous exchange key unopenable (`SRV-030`).
+A passphrase change re-seals the material alone and moves neither public key.
+
+**The socket's token.** A browser socket carries no header of ours, so the upgrade takes its token
+in the address and the relay verifies it exactly as it verifies a header. A refusal closes with a
+code of its own, so a client renews rather than backs off (`ambre-spec-broadcast.md`, `SRV-046`).
+
+**Code.**
+
+* `crates/ambre-server/src/routes/auth.rs` -- the three ways in, and the renewal;
+* `crates/ambre-server/src/oidc.rs` -- the provider handshake and the claim checks;
+* `crates/ambre-server/src/auth.rs` -- the extractors, and the one place a pair is minted;
+* `crates/ambre-server/src/jwt.rs` -- the signing key, the claims and the verification;
+* `crates/ambre-server/src/routes/keys.rs` -- the one-shot key write and the re-seal;
+* `crates/ambre-server/src/db/users.rs` -- the address namespace and the reclaim rule.
+
+---
+
+## 4. SURFACE
+
+| Trigger | Behaviour |
+|---|---|
+| the sign-in screen opens | it asks the relay which ways in this deployment offers (`ambre-spec-launcher.md`) |
+| a person chooses their provider | the relay answers with an address to visit, and remembers the handshake for ten minutes |
+| the provider returns | the relay exchanges the code, upserts the account and answers the pair |
+| a person signs up with a passphrase | the client derives the keys, the relay stores the sealed material and answers the pair |
+| a request is refused for an expired token | the client renews once and replays it (`ambre-spec-sync.md`, `SYNC-062`) |
+| the socket is refused on authentication | the client renews and reopens, with no action from the person (`SYNC-063`) |
+| a person signs out | the refresh token is revoked, and the access token dies at its own expiry |
+
+What a person sees of all this is a sign-in screen, a session that survives a page reload, and an
+authentication error asking them to sign in again. Where each of those is drawn is
+`ambre-spec-launcher.md`.
+
+---
+
+## 5. DECISIONS
+
+| Decision | Rationale | Rejected alternative |
+|---|---|---|
+| A signed token plus a revocable refresh token, rather than a cookie session | the client's network belongs to a worker, and the browser attaches a cookie to neither its socket nor its worker requests reliably. A cookie is also an ambient credential, so every mutating route would need protection against a forged cross-site request. A token the client attaches deliberately needs none | a cookie session, which is what the relay carried until the two-instance split |
+| Revocation lives on the refresh token, not on the access token | a token verified locally is what removes a lookup from the write path, and a token that can be revoked cannot be verified locally. Keeping the short one stateless and the long one revocable buys both, and bounds the loss to one lifetime | a single stateless token with no refresh, which nothing can revoke before its expiry |
+| The signing key comes from one seed the deployment shares | every instance must accept every other instance's token, and a key per process makes a client's session depend on which instance answers. Absent the seed, the process refuses to start outside development mode rather than minting tokens no sibling can read (`SRV-024`) | a key per process, which works until the second instance |
+| The token carries the caller's signing key | the write path verifies a signature per frame, and a lookup there is a query per keystroke burst. The claim is minted from the register at sign-in, so it is as fresh as the session (`ambre-spec-broadcast.md`) | reading the key from the register on every frame |
+| A provider-verified address wins over a self-asserted one | the address is what a share resolves against, so letting anyone assert any address turns a signup form into a way to squat a person's identity and receive documents meant for them. The verified claimant reclaims it, and the unverified account keeps everything except the address (`SRV-029`) | first claimant wins, which is what the namespace rule alone produced |
+| The master material is written once | a second write replaces both public keys, and every document key already sealed to the previous exchange key stops opening. The failure is silent and total: the account loses every shared document it had | letting the write repeat, which reads like an idempotent upload |
+| The development sign-in derives its keys from the name | a fixture account has to be the same account on every run, or no scenario can be replayed. Deriving from the name gives that with no stored secret, and the switch that enables it is off by default | a fixture account with a stored passphrase |
+
+---
+
+## 6. NOT BUILT, AND NOT YET RULED
+
+* **Neither provider route can run.** The route table registers both under a fixed provider name,
+  and both handlers ask the router for a provider segment that route does not declare. Every call
+  therefore fails to build its arguments and answers an internal error, so the only sign-in a
+  production deployment offers has never worked. Nothing catches it: the request suite mounts its
+  own route table and omits both (`SRV-022`, the `The production sign-in path` Story).
+* **One provider is configured, and the corpus names four.** The deployment reads the credentials of
+  a single provider, and the route table names that provider literally.
+* **A key that does not parse becomes an all-zero key.** Both sign-in paths fall back to it rather
+  than refusing, so an account whose stored signing key is malformed gets a session under a constant
+  identity, and every such account shares it. The write path then binds every frame to that constant
+  (`SRV-027`, `SRV-007`).
+* **The token lifetime has a default and no ceiling.** Fifteen minutes is a figure of the
+  deployment, and nothing refuses a day (`SRV-025`), which is the shape `ZK-008` states for the
+  presigned link.
+* **A sign-out revokes one token, and a person may hold several.** Each renewal mints a refresh
+  token; a sign-out revokes the one the client presents, so a session opened on another device
+  survives it, and nothing lists what a person holds.
+* **The relay never expires an account.** Nothing removes an account, its sealed material or its
+  public keys, and no route deletes one.
+* **The two ways in that work bypass the tier meant to protect them.** The rate limiter never
+  classifies a sign-in request as one (`ambre-spec-server.md`, `SRV-013`), so the account setup and
+  the development sign-in are limited as ordinary requests.
+
+---
+
+## 7. WHAT THIS DOCUMENT DOES NOT OWN
+
+| Question | Owner |
+|---|---|
+| Where the passphrase is turned into a key, and by what | `ambre-spec-zero-knowledge.md`, `ZK-003` |
+| Where the client keeps its two tokens, and what wipes them | `ambre-spec-sync.md`, `SYNC-060`, `SYNC-066` |
+| What a sign-in screen shows, and what happens after it | `ambre-spec-launcher.md` |
+| What a fingerprint of a public key is, and who compares one | `ambre-spec-key-verification.md` |
+| Which key opens a document once a caller is known | `ambre-spec-membership.md` |
+| The pipeline a verified caller then goes through | `ambre-spec-server.md` |
+| The socket the token opens, and its close codes | `ambre-spec-broadcast.md` |
+| What is verified where, and by which tier | `ambre-spec-testing.md` |

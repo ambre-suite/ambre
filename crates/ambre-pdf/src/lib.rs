@@ -11,7 +11,7 @@
 //
 // Placement: this executes in the Logic thread (not the UI thread) and the
 // krilla dependency is lazy-loaded (WASM bundle splitting). See
-// `ambre-spec-canvas.md` sec.D and `ambre-spec-architecture.md`.
+// `ambre-spec-drawing-surface.md` and `ambre-spec-architecture.md`.
 //
 // Coordinate system: krilla's surface origin is top-left with Y increasing
 // downward -- the same convention as `DrawSurface`. krilla handles the PDF

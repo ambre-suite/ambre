@@ -48,7 +48,7 @@ struct CacheKey {
     bold: bool,
     italic: bool,
     /// Allow emergency (within-word) breaking so a long unbreakable token wraps
-    /// onto multiple lines instead of overflowing (cell "wrap text", sec.4.A).
+    /// onto multiple lines instead of overflowing (`trame-cell-rendering`).
     break_word: bool,
     /// Font family name (`None` = the grid default). Part of the key so each
     /// family of the same string is cached separately.
@@ -286,7 +286,7 @@ impl TextCache {
             builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
         }
         // Cell "wrap text": let an overlong unbreakable token break within the
-        // word so it flows onto the next line instead of overflowing (sec.4.A).
+        // word so it flows onto the next line (`trame-cell-rendering`).
         if break_word {
             builder.push_default(StyleProperty::OverflowWrap(OverflowWrap::BreakWord));
         }

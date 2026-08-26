@@ -1,18 +1,18 @@
 // ambre-trame/src/logic/clipboard.rs
-// Clipboard paste (`ambre-spec-trame-ui.md` sec.5.E).
+// Clipboard paste (`trame-clipboard`).
 //
 // Copy/cut are pure UI-thread operations (they read the viewport cache and write
 // the OS clipboard); only paste reaches the Logic thread, because reindexing a
 // formula's relative references and applying styles both need the document model
-// the UI does not hold (sec.16). Submodule of `logic`, so it reaches the private
-// fields/helpers of the parent through `use super::*`.
+// the UI does not hold (`trame-clipboard`). Submodule of `logic`, so it
+// reaches the private fields/helpers of the parent through `use super::*`.
 
 use super::*;
 use crate::formula::shift::shift_formula;
 
 impl TrameState {
     /// Paste `payload` with its top-left landing on `(target_row, target_col)`
-    /// (`-ui.md` sec.5.E). Each pasted cell lands at `(target_row + dr,
+    /// (`trame-clipboard`). Each pasted cell lands at `(target_row + dr,
     /// target_col + dc)`; a formula's relative references shift by the same
     /// `(target - src)` offset (every reference is relative -- AMBRE has no `$`
     /// syntax), and the carried [`CellStyle`] (plus bold/italic) is written
@@ -50,7 +50,8 @@ impl TrameState {
             let col = target_col + cell.dc;
             // A formula's relative refs reindex by the paste offset; a literal is
             // copied verbatim. The shifted text is in display form -- `write_cell`
-            // re-canonicalizes it, so cross-sheet qualifiers survive (§2.D).
+            // re-canonicalizes it, so cross-sheet qualifiers survive
+            // (`trame-sheets`).
             let text = if cell.raw.starts_with('=') {
                 shift_formula(&cell.raw, dr, dc)
             } else {
@@ -63,9 +64,9 @@ impl TrameState {
         self.finish_cell_writes()
     }
 
-    /// Paste plain tab-separated `text` at the tracked active cell (`-ui.md`
-    /// sec.5.E), each field a literal cell. Source origin = the active cell, so
-    /// the reindex offset is zero (external text is never formula-reindexed).
+    /// Paste plain tab-separated `text` at the tracked active cell
+    /// (`trame-clipboard`), each field a literal cell. Source origin = the active
+    /// cell, so the reindex offset is zero (external text is never reindexed).
     /// Backs the toolbar/menu Paste button, which reads the OS clipboard
     /// asynchronously and holds no cursor.
     pub(super) fn paste_text(&mut self, text: &str) -> TrameOutcome {
@@ -104,7 +105,7 @@ impl TrameState {
     }
 
     /// Build the [`ClipboardPayload`] for the tracked selection from the document
-    /// (`-ui.md` sec.5.E), replied via [`TrameEvent::Clipboard`]. This is the
+    /// (`trame-clipboard`), replied via [`TrameEvent::Clipboard`]. This is the
     /// authoritative, Logic-side counterpart of the old UI viewport-cache builder
     /// (`ui/grid/geometry.rs`): the whole selection is read from the CRDT, never
     /// culled to a viewport, so a copy after `Ctrl+A` or a scroll-extend is

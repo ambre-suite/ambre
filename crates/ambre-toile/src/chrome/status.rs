@@ -1,11 +1,11 @@
 // ambre-toile/src/chrome/status.rs
 // ============================================================================
-// The Toile selection status bar (toile-ui §8bis): a thin DOM chrome band along
-// the bottom edge, the whiteboard analog of Trame's status bar (trame-ui
-// §13bis). Built on the app-agnostic `ambre-chrome` status toolkit so the two
-// apps read and behave identically.
+// The Toile selection status bar (`toile-status-bar`): a thin DOM chrome band along
+// the bottom edge, the whiteboard analog of Trame's status bar (`trame-status-bar`).
+// Built on the app-agnostic `ambre-chrome` status toolkit so the two apps read
+// and behave identically.
 //
-// Left  : app label + selection tally + combined world bounds (§8bis). An empty
+// Left: app label + selection tally + combined world bounds. An empty
 //         or single-element selection shows only the count (no meaningful
 //         multi-element bounds); the pure model + formatting live in
 //         `ui::status` and are host-tested there.
@@ -20,7 +20,7 @@ use leptos::prelude::*;
 use crate::ui::status::{SelStats, bounds_label, count_label};
 
 /// The Toile status bar component: app label + selection aggregates on the left,
-/// interactive zoom + fps chips on the right (§8bis). `stats` is `None` while no
+/// interactive zoom + fps chips on the right. `stats` is `None` while no
 /// selection reply has arrived; `zoom` is the shared board-zoom factor the canvas
 /// view publishes each frame; `perf` is the live render snapshot.
 #[component]

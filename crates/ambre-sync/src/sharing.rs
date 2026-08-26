@@ -85,7 +85,7 @@ pub(crate) fn rotate_entries_for(
 
 /// Builds the presence directory (Ed25519 signing key -> canonical `UserId`)
 /// from any members response, given each entry's `(user_id, signing_pub_key)`
-/// as raw strings (`ambre-spec-sync.md` § "Presence identity"). Both the open
+/// as raw strings (`ambre-spec-membership.md`). Both the open
 /// path and the member-list path feed it, hence the string-pair input rather
 /// than one of the two entry structs.
 ///
@@ -109,7 +109,7 @@ pub(crate) fn presence_directory<'a>(
 }
 
 /// Picks this client's own role out of a members response, given `(user_id,
-/// role)` pairs and our canonical `UserId` (architecture §2.D).
+/// role)` pairs and our canonical `UserId` (architecture).
 ///
 /// Every failure path -- no session id, no row for us, an unparsable id, an
 /// unknown role string -- yields `Role::Viewer`. That is the safe direction for
@@ -215,8 +215,9 @@ pub(crate) struct InviteParams {
     pub role: Role,
     pub exchange_key: StaticSecret,
     pub doc_key: DocumentKey,
-    /// The exchange key the user pinned in TOFU phase 1 (`ambre-spec-chrome.md
-    /// §2.H`). Sync re-fetched key must still equal it, or the wrap is refused.
+    /// The exchange key the user pinned in TOFU phase 1
+    /// (`ambre-spec-key-verification.md`). Sync re-fetched key must still equal it, or the
+    /// wrap is refused.
     pub expect_exchange_pub_key: [u8; 32],
 }
 
@@ -308,7 +309,7 @@ pub(crate) struct FetchInviteeKeyParams {
     pub invitee_email: String,
 }
 
-/// TOFU phase 1 (`ambre-spec-chrome.md §2.H`): resolve the invitee by email and
+/// TOFU phase 1 (`ambre-spec-key-verification.md`): resolve the invitee by email and
 /// fetch their exchange key, compute its fingerprint, and answer with
 /// `SyncEvent::InviteeKeyReady`. **No key is wrapped and nothing is shared** --
 /// the Main thread makes the trust decision before phase 2 (`invite_task`).
@@ -456,8 +457,8 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
     );
     match http.get_json::<http::DocumentMembersResponse>(&url).await {
         Ok(resp) => {
-            // Refresh the presence directory off the same response (§ "Presence
-            // identity"): membership just changed often enough for the UI to ask
+            // Refresh the presence directory off the same response
+            // (`ambre-spec-membership.md`): membership just changed often enough to ask
             // for the list, so this is where a new member becomes resolvable and
             // a revoked one stops resolving -- no extra round-trip.
             let signing_keys = presence_directory(
@@ -967,7 +968,7 @@ mod tests {
         ));
     }
 
-    // -- Presence directory (spec § "Presence identity") ----------------------
+    // -- Presence directory (`sync`, "Presence identity") ----------------------
 
     #[test]
     fn presence_directory_maps_valid_entries() {
@@ -999,7 +1000,7 @@ mod tests {
         );
     }
 
-    // -- Own role (architecture §2.D) -----------------------------------------
+    // -- Own role (architecture) -----------------------------------------
 
     #[test]
     fn own_role_reads_our_own_row() {

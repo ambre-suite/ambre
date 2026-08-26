@@ -20,7 +20,7 @@ use super::commands::CLEAR_FILTER;
 use super::style::StyleState;
 
 // The colour popover now lives in the shared `ambre-chrome` toolkit (promoted so
-// Toile's style inspector reuses the identical control, `toile-ui sec.5quinquies.C`);
+// Toile's style inspector reuses the identical control, `toile-styles`);
 // re-export it here so the `FormatBar` and the borders popover mount it unchanged.
 pub use ambre_chrome::ColorPopover;
 

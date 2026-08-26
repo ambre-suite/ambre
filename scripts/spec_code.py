@@ -19,10 +19,10 @@ from pathlib import Path
 
 SPECS = Path(__file__).resolve().parent.parent / "specs"
 
-# Non-normative analysis documents that live under `specs/` but are not specs: an
-# audit and an open-questions log. They quote real source on purpose, so they are
-# exempt from the "shapes only" rule, exactly like everything under `reviews/`.
-NON_NORMATIVE = {"security-audit.md", "fixtures-open-questions.md"}
+# A non-normative analysis document that lives under `specs/` but is not a spec:
+# the security audit. It quotes real source on purpose, so it is exempt from the
+# "shapes only" rule, exactly like everything under `reviews/`.
+NON_NORMATIVE = {"security-audit.md"}
 
 # `fn name(...) ... {` on one line, or a signature whose brace lands on the next.
 # A trailing `;` is a declaration, not a body.

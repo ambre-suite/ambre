@@ -47,7 +47,7 @@ const BORDER_STYLES: &[(BorderStyle, &str, &str)] = &[
     (BorderStyle::Double, "Double", "double"),
 ];
 
-/// The composed borders control (`-ui.md` sec.5bis): a single toolbar button
+/// The composed borders control (`trame-cell-styles`): a single toolbar button
 /// that toggles a popover holding the "pen" (stroke style + colour) and a grid
 /// of preset icon buttons. A preset click applies the current pen to its edges
 /// via [`StylePatch::border`] (a [`BorderEdit`]); the per-edge model lets a cell
@@ -209,7 +209,7 @@ const NUMBER_FORMATS: &[(CellFormat, &str)] = &[
     (CellFormat::Text, "Text"),
 ];
 
-/// The composed number-format control (`-ui.md` sec.5bis): a single toolbar
+/// The composed number-format control (`trame-number-formats`): a single toolbar
 /// button (the "123" icon) toggling a context-menu-style popover that lists the
 /// [`CellFormat`] families, with a check next to the active one. Picking a format
 /// emits a [`StylePatch`] through `on_style` and closes the menu.
@@ -493,4 +493,4 @@ pub(crate) fn VAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -
 // The colour popover itself now lives in `ambre-chrome` (`ambre_chrome::ColorPopover`),
 // re-exported through `super` so the call sites here and in `bars.rs` are unchanged.
 // Trame uses it in RGB mode (no `alpha` prop); Toile's inspector uses the same
-// component with `alpha=true` (`toile-ui sec.5quinquies.C`).
+// component with `alpha=true` (`toile-styles`).

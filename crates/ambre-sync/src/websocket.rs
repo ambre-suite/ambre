@@ -664,13 +664,14 @@ impl SyncState {
                     return;
                 }
 
-                // Presence is keyed by the sender's canonical `UserId` (§7),
-                // resolved from the authoring Ed25519 key before delivery so a
-                // peer cannot spoof another user's cursor. The client-side key
-                // directory (member signing keys / trusted-keys) is not wired
-                // yet, so an unattributable frame is dropped rather than shown
-                // under a guessed identity. Presence is best-effort; a dropped
-                // frame is corrected by the next one.
+                // Presence is keyed by the sender's canonical `UserId`
+                // (`ambre-spec-membership.md`), resolved from the
+                // authoring Ed25519 key before delivery so a peer cannot spoof
+                // another user's cursor. The client-side key directory (member
+                // signing keys / trusted-keys) is not wired yet, so an
+                // unattributable frame is dropped rather than shown under a
+                // guessed identity. Presence is best-effort; a dropped frame is
+                // corrected by the next one.
                 let Some(from_user_id) = doc_state.resolve_ephemeral_author(author_pk) else {
                     tracing::debug!(
                         "Sync: dropping ephemeral from unattributable author {author_pk:?}"

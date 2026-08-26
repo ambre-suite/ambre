@@ -22,7 +22,7 @@ pub const UNDO: CommandId = CommandId("trame.history.undo");
 /// The Trame "Redo" command (see [`UNDO`]).
 pub const REDO: CommandId = CommandId("trame.history.redo");
 
-// Structural / merge commands (grid context menu, `-ui.md` sec.5.C). Each is a
+// Structural / merge commands (grid context menu, `trame-context-menu`). Each is a
 // parameterless intent: the Logic thread resolves its geometry against the
 // active cell / selection it tracks (via `SetActiveCell`).
 /// Insert a row above the active cell.
@@ -49,24 +49,24 @@ pub const SORT_RANGE_DESC: CommandId = CommandId("trame.sort.range_desc");
 pub const SORT_SHEET_ASC: CommandId = CommandId("trame.sort.sheet_asc");
 /// Sort the whole sheet descending by the active cell's column.
 pub const SORT_SHEET_DESC: CommandId = CommandId("trame.sort.sheet_desc");
-/// Open the multi-column sort dialog (`-ui.md` sec.5.C, "Sort range..."). A
+/// Open the multi-column sort dialog (`trame-sort`, "Sort range..."). A
 /// UI-only intent: it has no `AppCommand` mapping; the launcher intercepts it to
 /// open the `SortDialog` over the current selection, which emits the typed
 /// [`SortRangeMulti`](ambre_bus::TrameCommand::SortRangeMulti) itself.
 pub const SORT_RANGE_MULTI: CommandId = CommandId("trame.sort.range_multi");
-/// Open the shared filter popover for the active cell's column (sec.5.D). A
+/// Open the shared filter popover for the active cell's column (`trame-shared-filter`). A
 /// UI-only intent: it has no `AppCommand` mapping; the launcher intercepts it to
 /// open the popover and request the column's distinct values.
 pub const FILTER_COLUMN: CommandId = CommandId("trame.filter.column");
-/// Clear the active sheet's shared filter (sec.5.D).
+/// Clear the active sheet's shared filter (`trame-shared-filter`).
 pub const CLEAR_FILTER: CommandId = CommandId("trame.filter.clear");
 
-// Clipboard commands (toolbar + context menu, `-ui.md` sec.5.E). UI-only
+// Clipboard commands (toolbar + context menu, `trame-clipboard`). UI-only
 // intents: copy/cut read the viewport cache and paste reads the OS clipboard, so
 // they never map to an `AppCommand`. The launcher intercepts them, driving the
 // browser clipboard (the keyboard chords Ctrl+C/X/V are serviced directly by the
 // DOM `copy`/`cut`/`paste` listeners, so they are NOT bound in the keymap here).
-// Find & Replace (`-ui.md` sec.5.G). UI-only intents: the launcher intercepts
+// Find & Replace (`trame-find-replace`). UI-only intents: the launcher intercepts
 // them to open the DOM `FindReplace` panel (find vs replace mode); neither maps
 // to an `AppCommand` (the panel sends `FindNext`/`ReplaceAll` itself).
 /// Open the find/replace panel in find mode (Ctrl+F).
@@ -74,7 +74,7 @@ pub const FIND: CommandId = CommandId("trame.find.open");
 /// Open the find/replace panel in replace mode (Ctrl+H).
 pub const REPLACE: CommandId = CommandId("trame.find.replace");
 
-// Interop (`-interop.md` §4). UI-only intents the launcher intercepts: IMPORT_CSV
+// Interop (`trame-import-export`). UI-only intents the launcher intercepts: IMPORT_CSV
 // opens a file picker and reads the bytes, EXPORT_CSV asks the Logic thread to
 // serialize the active sheet (parameterless). Neither maps to an `AppCommand`.
 /// Import a CSV file into a new sheet.
@@ -128,7 +128,7 @@ pub fn bind_keys(keymap: &mut Keymap) {
     // Ctrl+Shift+Z and Ctrl+Y both redo (Excel/Sheets convention).
     keymap.bind(KeyBinding::ctrl_shift('z'), REDO);
     keymap.bind(KeyBinding::ctrl('y'), REDO);
-    // Find & Replace (`-ui.md` sec.5.G): Ctrl+F opens find, Ctrl+H opens replace.
+    // Find & Replace (`trame-find-replace`): Ctrl+F opens find, Ctrl+H opens replace.
     keymap.bind(KeyBinding::ctrl('f'), FIND);
     keymap.bind(KeyBinding::ctrl('h'), REPLACE);
 }
@@ -286,7 +286,7 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
         TrameEvent::ReplaceDone { replaced } => {
             toasts.info(format!("{replaced} cells replaced"));
         }
-        // Interop (`-interop.md` §4): confirm an import/export finished (the
+        // Interop (`trame-import-export`): confirm an import/export finished (the
         // download itself is triggered canvas-side on ExportComplete).
         TrameEvent::ImportComplete { rows, cols, .. } => {
             toasts.info(format!("Imported {rows} rows x {cols} columns"));
@@ -298,13 +298,14 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
         TrameEvent::PasteRejected { reason } => {
             toasts.warning(format!("Paste rejected: {reason}"));
         }
-        // Validation warning (§5): the edit was applied despite failing a Warn
-        // rule -- non-blocking, unlike ValidationError above.
+        // Validation warning (`trame-cell-editing`): the edit was applied
+        // despite failing a Warn rule -- non-blocking, unlike ValidationError.
         TrameEvent::ValidationWarning { message, .. } => {
             toasts.warning(format!("Validation warning: {message}"));
         }
-        // Range protection (§6, Post-MVP): a local edit was blocked, or a remote
-        // delta violated a protection. Both inform the user; neither rolls back.
+        // Range protection (`trame-cell-editing`, Post-MVP): a local edit was
+        // blocked, or a remote delta violated a protection. Both inform the user;
+        // neither rolls back.
         TrameEvent::ProtectionDenied { description, .. } => {
             toasts.warning(format!("Edit blocked: {description}"));
         }
@@ -332,7 +333,7 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
     }
 }
 
-// -- Structural-op group (the full cell menu, sec.5.C) -------------------------
+// -- Structural-op group (the full cell menu, `trame-context-menu`) ------------
 fn structural_group() -> [MenuEntry; 6] {
     [
         MenuEntry::with_icon(
@@ -364,7 +365,7 @@ fn structural_group() -> [MenuEntry; 6] {
     ]
 }
 
-// -- Column-only structural ops (column-header menu, sec.5.C) ------------------
+// -- Column-only structural ops (column-header menu, `trame-context-menu`) -----
 fn column_structural_group() -> [MenuEntry; 3] {
     [
         MenuEntry::with_icon(
@@ -385,7 +386,7 @@ fn column_structural_group() -> [MenuEntry; 3] {
     ]
 }
 
-// -- Row-only structural ops (row-header menu, sec.5.C) ------------------------
+// -- Row-only structural ops (row-header menu, `trame-context-menu`) -----------
 fn row_structural_group() -> [MenuEntry; 3] {
     [
         MenuEntry::with_icon(
@@ -402,7 +403,7 @@ fn row_structural_group() -> [MenuEntry; 3] {
     ]
 }
 
-// -- Sort group (shared by the cell and header menus, sec.5.C) -----------------
+// -- Sort group (shared by the cell and header menus, `trame-sort`) ------------
 //
 // Single-column shared sort over the selection (reference column = the
 // selection's first column; the Logic thread no-ops an empty/single-row range)
@@ -434,7 +435,7 @@ fn sort_group() -> [MenuEntry; 5] {
     ]
 }
 
-// -- Dynamic shared-filter entry (sec.5.D) -------------------------------------
+// -- Dynamic shared-filter entry (`trame-shared-filter`) -------------------------------------
 //
 // Truly contextual: a single entry that toggles meaning with the active sheet's
 // filter state. With no filter it offers "Filter by column" (opens the popover);
@@ -449,7 +450,7 @@ fn filter_entry(filter_active: bool) -> MenuEntry {
 }
 
 /// The right-click context-menu entries Trame contributes, grouped, iconed and
-/// separated (`-ui.md` sec.5.C). `scope` selects the layout: the cell menu
+/// separated (`trame-context-menu`). `scope` selects the layout: the cell menu
 /// (clipboard + full structural + sort/filter + merge), the column- or row-header
 /// menu (axis-scoped structural + sort/filter, no clipboard/merge), or the corner
 /// menu (whole-sheet sort + filter). `filter_active` drives the dynamic
@@ -458,7 +459,7 @@ pub fn context_entries_for(scope: CtxScope, filter_active: bool) -> Vec<MenuEntr
     let mut entries = Vec::new();
     match scope {
         CtxScope::Cell => {
-            // Clipboard (sec.5.E): cell-only. The launcher drives the clipboard.
+            // Clipboard (`trame-clipboard`): cell-only, driven by the launcher.
             entries.push(MenuEntry::with_icon(CUT, "Cut", icondata::MdiContentCut));
             entries.push(MenuEntry::with_icon(COPY, "Copy", icondata::MdiContentCopy));
             entries.push(MenuEntry::with_icon(
@@ -472,8 +473,8 @@ pub fn context_entries_for(scope: CtxScope, filter_active: bool) -> Vec<MenuEntr
             entries.extend(sort_group());
             entries.push(filter_entry(filter_active));
             entries.push(MenuEntry::separator());
-            // Merge (sec.2): cell-only. Always listed; the Logic thread guards it
-            // (single-cell Merge is a no-op, a covered non-empty cell replies
+            // Merge (`trame-cell-merges`): cell-only. Always listed; the Logic
+            // thread guards it (single-cell Merge is a no-op, a covered cell replies
             // MergeRejected -> toast, Unmerge outside a merge is a no-op).
             entries.push(MenuEntry::with_icon(
                 MERGE,

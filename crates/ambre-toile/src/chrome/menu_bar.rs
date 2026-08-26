@@ -1,6 +1,6 @@
 // ambre-toile/src/chrome/menu_bar.rs
 // ============================================================================
-// The top menu bar and zoom control (toile-ui SS5quinquies.E), wasm-only. A
+// The top menu bar and zoom control (`toile-menus`), wasm-only. A
 // horizontal `.ambre-commandbar` docked top-center with one title per top-level
 // menu (File / Edit / View / Object / Present) and a zoom cluster (zoom out / %
 // readout / zoom in / Fit / Zoom-to-selection).
@@ -15,7 +15,7 @@
 // mapped to `MenuEntry`s, keybinding chips included). Every selection -- menu
 // entry or zoom button -- routes through the same `on_command` callback the
 // context menu and shortcuts use, so a menu-bar "Group" and a right-click "Group"
-// are one command (SS5quinquies). The zoom `%` readout mirrors the shared `zoom`
+// are one command (`toile-menus`). The zoom `%` readout mirrors the shared `zoom`
 // signal the canvas view publishes each frame.
 // ============================================================================
 

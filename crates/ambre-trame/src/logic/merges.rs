@@ -9,7 +9,8 @@ use super::*;
 
 impl TrameState {
     /// Merge the range with corners `(r0,c0)`-`(r1,c1)` (given in any order) into
-    /// one cell. Rejected locally if a covered cell is non-empty (§6); otherwise
+    /// one cell. Rejected locally if a covered cell is non-empty
+    /// (`trame-cell-merges`); otherwise
     /// records the master->extent entry in `merges_{sheet}` keyed by stable ids.
     pub(super) fn merge_cells(&mut self, r0: u32, c0: u32, r1: u32, c1: u32) -> TrameOutcome {
         let (top, bottom) = (r0.min(r1), r0.max(r1));
@@ -40,7 +41,8 @@ impl TrameState {
 
     /// Record one master->extent merge entry in `merges_{sheet}` for the
     /// rectangle `(top,left)`-`(bottom,right)` (corners already ordered). Shared
-    /// by the context-menu merge and the merge-aware autofill (sec.5.F); does not
+    /// by the context-menu merge and the merge-aware autofill
+    /// (`trame-autofill`); does not
     /// commit or rebuild the derived caches -- the caller batches those.
     pub(super) fn insert_merge_entry(&mut self, top: u32, left: u32, bottom: u32, right: u32) {
         // Materialize the bottom-right corner so the whole rectangle has ids.
@@ -173,7 +175,8 @@ impl TrameState {
     /// in ascending master-key order and any that intersects an already-placed
     /// one is skipped. The order is identical on every peer (it derives only
     /// from the stable keys), so all clients converge on the same layout without
-    /// mutating the CRDT (no corrective op, no conflict loop -- §6).
+    /// mutating the CRDT (no corrective op, no conflict loop --
+    /// `trame-cell-merges`).
     pub(super) fn rebuild_merges(&mut self) -> Vec<TrameEvent> {
         self.merges.clear();
         self.covered.clear();
@@ -251,7 +254,7 @@ impl TrameState {
     /// ([`Self::reseed_engine`]) uses it to exclude masked cells uniformly on
     /// every sheet, not only the displayed one -- so a cross-sheet reference to a
     /// masked conflicted cell reads the same value regardless of the active tab
-    /// (§6: "masked cells do not participate in any computation"). For the active
+    /// (`trame-cell-merges`, `TRAME-020`). For the active
     /// sheet (fed with [`Self::index`]) it returns exactly [`Self::masked_cells`].
     pub(super) fn masked_cells_for(&self, sheet_id: &str, index: &SheetIndex) -> HashSet<String> {
         let mut masked = HashSet::new();

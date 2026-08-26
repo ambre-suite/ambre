@@ -1,6 +1,6 @@
 // ambre-toile/src/ui/hit.rs
 // ============================================================================
-// Exact hit-testing (toile-ui §4). The Logic thread's R-tree pre-filters
+// Exact hit-testing (toile-selection). The Logic thread's R-tree pre-filters
 // candidates; this module refines to exact geometry (rotation, path fill, stroke
 // width). Elements store their geometry in the unrotated world frame bounded by
 // `DisplayElement.bounds`, with `transform` = rotation about that AABB's center
@@ -18,8 +18,8 @@ use kurbo::{ParamCurveNearest, Shape};
 /// miss; below it, a hit. Keeps hair-thin lines and open paths clickable.
 const MIN_STROKE_PICK: f64 = 4.0;
 
-/// Exact hit-test of one element against a world-space point (§4). `false` for a
-/// `Group` (it paints nothing; selection resolves through membership, §7).
+/// Exact hit-test of one element against a world-space point. `false` for a
+/// `Group` (it paints nothing; selection resolves through membership,).
 pub fn exact_hit(elem: &DisplayElement, world_pt: Point) -> bool {
     if elem.locked {
         return false;

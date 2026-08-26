@@ -1,6 +1,6 @@
 // ambre-toile/src/chrome/menu.rs
 // ============================================================================
-// Right-click context-menu entry builder (toile-ui SS5ter), wasm-only. Renders
+// Right-click context-menu entry builder (`toile-menus`), wasm-only. Renders
 // through the shared `ambre-chrome` `ContextMenu`, so it inherits the launcher's
 // `.ambre-ctx-*` CSS with zero style additions -- pixel-identical to the Trame
 // menu. Every entry uses `MenuEntry::with_icon` with an `icondata` glyph rendered
@@ -18,7 +18,7 @@ use crate::ui::menu::{
 };
 use ambre_chrome::MenuEntry;
 
-/// The Toile right-click context-menu entries (toile-ui SS5ter), iconed and
+/// The Toile right-click context-menu entries (`toile-menus`), iconed and
 /// separated. Inapplicable rows are omitted per `scope` (the Trame pattern):
 /// on empty canvas only Paste + Select-All; over a selection the full command set
 /// filtered to what applies (Group only for a multi-selection, Ungroup only when
@@ -57,7 +57,7 @@ pub fn context_entries_for(scope: &CtxScope) -> Vec<MenuEntry> {
     ));
     entries.push(MenuEntry::with_icon(DELETE, "Delete", icondata::MdiDelete));
 
-    // Reactions (§4.A): a minimal fixed emoji set plus a clear entry. The badge
+    // Reactions: a minimal fixed emoji set plus a clear entry. The badge
     // renders the color emoji glyph itself; these menu icons are just cues.
     entries.push(MenuEntry::separator());
     entries.push(MenuEntry::with_icon(

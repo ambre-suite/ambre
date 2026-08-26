@@ -6,9 +6,9 @@ license.workspace = true
 description = "Whiteboard & presentations application for Ambre — infinite canvas, embedded documents"
 
 [features]
-# PDF export (toile-interop §3.A). Off by default; the Logic thread turns it on.
+# PDF export (`toile-pdf-export`). Off by default; the Logic thread turns it on.
 pdf = ["dep:ambre-pdf", "dep:krilla"]
-# Document-fixture machinery (`ambre-spec-fixtures.md` §5). Non-default and
+# Document-fixture machinery (`ambre-spec-fixtures.md`, `FIXTURE-007`). Non-default and
 # host-only. Explicitly forwards `ambre-core/fixtures`: a Cargo feature never
 # enables its dependency's feature implicitly, and the gated code names
 # `ambre_core::FixtureShape`.
@@ -18,15 +18,15 @@ fixtures = ["ambre-core/fixtures"]
 ambre-core = { path = "../ambre-core" }
 ambre-bus = { path = "../ambre-bus" }
 ambre-draw = { path = "../ambre-draw" }
-# Command registry (`CommandId`): the context-menu command surface (toile-ui
-# §5ter) is pure and host-tested in `ui::menu`, so this is a host dependency, not
+# Command registry (`CommandId`): the context-menu command surface
+# (`toile-menus`) is pure and host-tested in `ui::menu`, so this is a host dependency, not
 # wasm-only like the Leptos chrome that renders it.
 ambre-commands = { path = "../ambre-commands" }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
-# PDF export (toile-interop §3.A), gated behind the `pdf` feature so krilla only
+# PDF export (`toile-pdf-export`), gated behind the `pdf` feature so krilla only
 # links when export is compiled in. `ambre-pdf` supplies the KrillaSurface
 # DrawSurface impl; krilla is named directly for the Document / page assembly.
 # raster-images is enabled so embedded Toile media survives into the PDF, and
@@ -44,8 +44,8 @@ rstar = { workspace = true }
 # Re-exported by ambre-draw, but named here directly for the Logic-thread engine.
 kurbo = { workspace = true }
 
-# 2D polygon boolean ops (union / subtract / intersect / exclude, toile-features
-# §3). kurbo has no path-vs-path booleans, so shapes are flattened to polygon
+# 2D polygon boolean ops (union / subtract / intersect / exclude,
+# `toile-vector-paths`). kurbo has no path-vs-path booleans, so shapes are flattened to polygon
 # contours and combined here. Pure Rust, WASM-friendly.
 i_overlay = { workspace = true }
 
@@ -53,8 +53,8 @@ i_overlay = { workspace = true }
 # the clipboard payload -- consistent with the inter-thread IPC protocol.
 postcard = { workspace = true }
 
-# Interop Phase 0 (toile-interop §2): pure-Rust SVG parse and raster codecs on
-# the Logic-thread import path. No plaintext ever leaves the client (§1/§6).
+# Interop Phase 0 (`toile-import-export`): pure-Rust SVG parse and raster codecs on
+# the Logic-thread import path. No plaintext ever leaves the client (`ZK-001`).
 # usvg handles vector shapes/paths/images; `<text>` is read via roxmltree and
 # kept editable (Toile owns text via Parley, not usvg glyph flattening).
 usvg = { workspace = true }
@@ -63,7 +63,8 @@ image = { workspace = true }
 
 # UI side (UI Thread): the DrawSurface renderer, GPU runtime, frame channels.
 # The heavy render crates (wgpu/lyon/parley/swash) are linked once in
-# ambre-canvas and shared; the view only paints through WgpuSurface (toile-ui §1).
+# ambre-canvas and shared; the view only paints through WgpuSurface
+# (`toile-board-rendering`).
 ambre-canvas = { path = "../ambre-canvas" }
 # UI Thread <-> Logic frame channels (shared memory, Main instance).
 flume = { workspace = true }
@@ -79,7 +80,7 @@ icondata = { workspace = true }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 ambre-chrome = { path = "../ambre-chrome" }
 leptos = { workspace = true }
-# Context-menu entry icons (toile-ui §5ter): every entry glyph comes from
+# Context-menu entry icons (`toile-menus`): every entry glyph comes from
 # `icondata`, rendered through `leptos-icons` inside `ambre-chrome::ContextMenu`.
 leptos_icons = { workspace = true }
 
@@ -87,7 +88,7 @@ leptos_icons = { workspace = true }
 # Headless render tests: RecordingSurface mock DrawSurface + FixedClock.
 ambre-draw = { path = "../ambre-draw", features = ["testing"] }
 
-# DOM tests for the Toile chrome (Epic `ET`, `ambre-spec-architecture.md` §4
+# DOM tests for the Toile chrome (Epic `ET`, `ambre-spec-testing.md`
 # "wasm" tier): leptos CSR + real `document`, run via
 # `wasm-pack test --headless --chrome crates/ambre-toile` (`just test-wasm`).
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

@@ -1,93 +1,303 @@
-# AMBRE -- SPEC: [COMPONENT_NAME]
-**Type:** [Horizontal (Layer/Engine) | Vertical (Feature/Widget)]
-**Status:** [Draft | Reviewed | Frozen]
-**Implementation:** [implemented | partial | design-only]
+# AMBRE -- SPEC TEMPLATES
 
-> Concise description of the component's single responsibility. Definition of the technical or functional problem being solved.
-> **Note:** This template is modular. Ignore or remove irrelevant sections for your scope (for example, no CRDT for a pure calculation engine).
+**Type:** Template (two document kinds, one contract)
 
----
-
-### Header fields (normative)
-
-> `Status` is about **this document** (has it been reviewed). `Implementation` is about **the code it describes**, and a reader must be able to tell within the first five lines whether they are reading a description or a wish. Two specs in the same format, one covering 30 000 shipped lines and one covering a 7-line stub, is the most expensive lie a spec corpus can tell.
-
-* **`implemented`** -- an implementing crate or module exists and this spec describes what it does. Divergences between the two are recorded **in this spec**, not discovered later.
-* **`partial`** -- part of the surface is built; the roadmap section marks which increments landed. The default for a spec under active construction.
-* **`design-only`** -- no implementing code beyond a stub. This spec is a proposal, and it carries an invariant table like any other, every row `unimplemented` and bound to the roadmap Story that will build it (architecture section 4). This is where the table earns the most: a design is far easier to review as twenty numbered, falsifiable rules than as twenty pages of prose, and contradictions inside it become visible instead of staying buried.
+> Sections 0 and 1 are the contract both templates obey. Section 2 orders a **feature document**,
+> section 3 a **schema document**: they differ by order, never by contract. Copy the shape from the
+> working examples -- `specs/2-Trame/features/ambre-spec-trame-cell-merges.md` and
+> `specs/2-Trame/ambre-spec-trame-schema.md`.
 
 ---
 
 ## 0. CODE IN SPECS (CONVENTION)
-> A spec states **what** and **why**; the source states **how**. Duplicating implementation here creates a second, uncompiled copy that silently drifts from the code. Follow this rule in every section below.
 
-* **Allowed (this is the contract):** type and data-model definitions -- `struct`, `enum`, trait signatures, public API signatures, IPC / event / message shapes, `#[derive(...)]`. These define the shape others must respect and belong in the spec.
-* **Allowed (declarative):** invariants, pre/post-conditions, and algorithms described as numbered steps or pseudo-code. Describe the algorithm, not its Rust transcription.
-* **Forbidden:** complete function bodies (`fn foo(&mut self, ...) { ... }` with real logic). Replace them with (a) a one-line description of the algorithm, (b) the invariant it upholds, and (c) a pointer to the real code (`// ambre-crate/src/module.rs`).
-* **Illustrative only:** a short example test or snippet is fine to clarify intent; the authoritative test suite lives in the repo, never mirrored here.
-* **Decision test:** if a block can be copy-pasted into a `.rs` file and compiled as behavior, it is implementation and does not belong in a spec. If it is a shape declaration or a described algorithm, it does.
-* **Fences.** Rust -- and only Rust -- goes in a ` ```rust ` fence: shapes and signatures, never a body. Everything else declares its language so the checker can pair fences and never mistake code for prose: wire layouts and pseudo-code use ` ``` ` (untagged) or ` ```text `; a rendered diagram uses ` ```mermaid ` (see the next bullet); a genuine non-Rust artefact uses its own tag (` ```sql `, ` ```toml `, ` ```yaml `, ` ```css `, ` ```json `, ` ```html `, ` ```bash `). An embedded runnable script (for example `lua`) is implementation, not a shape -- state its algorithm as pseudo-code in a ` ```text ` fence and point to the source. Every fence must be closed; a Rust shape left in an untagged fence is a tagging bug, not an exemption.
-* **Diagrams: no ASCII-art.** A relationship or a flow renders as a ` ```mermaid ` diagram (sequence, flowchart) -- ASCII source a forge renders as a real figure. Everything else is plain text, never a box drawn with `+`, `|`, `--` or Unicode box glyphs: a hierarchy (a CRDT schema, a directory layout) is a **nested bullet list**, a sequence of steps is a **numbered list**, and a mapping (key to value, entry to thread) is a **table**. Printable ASCII only (`ai/ambre-writing-style.md`), so a Unicode box or arrow is a defect. A dense, heavily annotated figure that mermaid cannot hold becomes a small mermaid graph plus prose, not a wall of boxes.
-* **Mechanised.** `just spec-code` (CI job `lint`) fails on any function body inside a ` ```rust ` fence in `specs/`, on any Rust shape sitting in a non-`rust` fence, on a disallowed fence tag (`lua`, ...), and on an unterminated fence. Keep the signature and its doc comment, collapse the body to `{ /* ... */ }`, and put the algorithm in the prose around it -- numbered steps or a table when it is a mapping. The rule was written long before it was enforced, and the corpus had accumulated 1 466 lines of bodies in the meantime.
+A spec states **what** and **why**; the source states **how**. A second, uncompiled copy of the code
+drifts from it in silence.
 
-## 1. OBJECTIVES & CONSTRAINTS
-* **Scope:** Strict definition of the component's boundaries. What it handles vs. what it delegates.
-* **Dependencies:** List of internal or external crates. Systematic justification for any new dependency.
-* **Invariants:** Numbered, falsifiable properties this component guarantees (for example, no allocation on the hot path, deterministic computation, no plaintext crossing a transport boundary). Fill the table below. The grammar, the falsifiability test and the status values are normative in `ambre-spec-architecture.md section 4` ("Invariants (normative)") -- reference it, do not redefine it.
+| Block | Verdict |
+| :--- | :--- |
+| a type or data model -- `struct`, `enum`, a trait or API signature, a message shape, `#[derive(...)]` | **this is the contract.** It belongs here |
+| an invariant, a pre or post-condition, an algorithm as numbered steps or pseudo-code | allowed: it declares, it does not execute |
+| a short snippet or example test that clarifies intent | allowed as illustration; the authoritative suite is in the repo |
+| a function body carrying real logic | **forbidden.** Replace it with the algorithm in steps, the invariant it upholds, and a path into `crates/` |
+
+**The test.** A block that compiles as behaviour is implementation. A shape, or an algorithm in
+words, is not.
+
+**Fences.** Every fence declares its language, and every fence closes.
+
+| Fence | Holds |
+| :--- | :--- |
+| `rust` | Rust shapes and signatures, never a body |
+| none, or `text` | a wire layout, pseudo-code, numbered steps |
+| `mermaid` | a flow or a relationship, which the forge renders as a figure |
+| `sql` `toml` `yaml` `css` `json` `html` `bash` | a genuine artefact of that language |
+
+A runnable script (`lua`) is implementation, not a shape: state its algorithm in a `text` fence and
+point to the source. A Rust shape in an untagged fence is a tagging bug, not an exemption.
+
+**No ASCII art**, and printable ASCII only (`ai/ambre-writing-style.md`): a box glyph or a Unicode
+arrow is a defect.
+
+| To show | Use |
+| :--- | :--- |
+| a hierarchy | a nested bullet list |
+| a sequence of steps | a numbered list |
+| a mapping | a table |
+| a flow or a relationship | a `mermaid` diagram, or a small graph plus prose when it is too dense |
+
+`spec_code.py` fails on a body inside a `rust` fence, a Rust shape outside one, a tag off the list,
+and an unterminated fence.
+
+---
+
+## 1. THE CONTRACT, SHARED BY BOTH TEMPLATES
+
+### A. The header, and the first four lines
+
+```text
+# AMBRE -- FEATURE: [NAME]        (a schema: # AMBRE -- SPEC: [APP] CRDT SCHEMA)
+**Type:** Vertical (feature) | Horizontal (framework) | Schema (persistence format)
+**Implementation:** implemented | partial | design-only
+
+> Two or three lines, in user terms: what this holds, and the problem it solves.
+```
+
+`Type` says what kind of document this is. `Implementation` is about **the code it describes**, and
+it is what stops a 7-line stub reading like a shipped subsystem.
+
+| Value | Means |
+| :--- | :--- |
+| `implemented` | the code exists and this document describes it. A divergence is recorded here, never discovered later |
+| `partial` | part of the surface is built. The default while a document is under construction |
+| `design-only` | no code beyond a stub. Every invariant row is `unimplemented` and names the story that will build it |
+
+One clause may follow the value -- `partial -- the grid behaviour is built; the file round trip is
+not`. `spec_shape.py` fails on any other value.
+
+### B. The invariant table
+
+**Both templates carry one, and the grammar below is normative.** It is the shape of a spec, so it
+lives here. How a rule is verified is `ambre-spec-testing.md`; the roll-up of every row's status is
+derived in `ambre-invariant-ledger.md`.
 
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
-| `XXX-001` | The component MUST ... | this spec section 2.B \| `derived` | `crate::module::test_name` | verified |
-| `XXX-002` | The component MUST NOT ... | README pillar "E2EE" | -- | unverified |
-| `XXX-003` | The component MUST ... | this spec section 4.A | not built -- lands with `E5` / `ARCH P2` | unimplemented |
+| `XXX-001` | The feature MUST ... | this spec section 2, row 1 | `ambre_crate::module::test_name`, `::second_test` | verified |
+| `XXX-002` | The feature MUST NOT ... | README pillar "E2EE" | none. What the test covers, and which half of the rule it leaves open | unverified |
+| `XXX-003` | The feature MUST ... | this spec section 4 | not built -- lands with `Grid surface` | unimplemented |
 
-> `XXX` is this spec's stable prefix, declared once and never renumbered -- it is the join key between spec, test name and audit finding. Prose that cannot be falsified ("the engine is robust") is an intention, not an invariant: it belongs in **Scope** above. Every row carries a `Status`; `unverified` and `unimplemented` are legitimate values, an empty cell is not. A rule for code that does not exist yet is written as a row (`unimplemented`), never held back and never left as prose -- `ambre-spec-architecture.md section 4` carries the two conditions that keep it honest.
+* **Budget.** none: the three rows above are an example, so they cost nothing and cite no row of
+  `ambre-spec-budgets.md`.
+* **Boundary.** none: a template reaches no relay, holds no key and opens no socket.
+* **Verification.** none: `invariants.py` skips this file, so no row of it is counted anywhere.
+
+**The five fields.**
+
+| Field | Rule |
+| :--- | :--- |
+| `ID` | `XXX` is the prefix, declared once and **never renumbered**: it joins document, test name and audit finding. A feature spanning two layers carries two prefixes, and the gaps each leaves are the price |
+| `Statement` | RFC 2119 -- MUST, MUST NOT, SHOULD, MAY. One rule per row, no conjunction |
+| `Sources` | where the rule comes from: this spec's own section, a README pillar, a `security-audit.md` finding by number, or `derived`. A row that closes a finding cites it, and the finding stops drifting from the code in silence |
+| `Verification` | the concrete mechanism, or the explicit absence of one. A test path, a type-level construction, a lint, a capability ban |
+| `Status` | one of the five values below. An empty cell fails |
+
+**The five status values.**
+
+| Value | Means |
+| :--- | :--- |
+| `verified` | something goes red if the rule breaks: a test, the compiler, a lint, `cargo deny` |
+| `unverified` | the code exists and nothing would go red. **Legitimate and valuable.** Silence about coverage is the failure mode, not the absence of a test |
+| `human-review` | nothing goes red automatically, and a reviewer is expected to catch it. By decision |
+| `qa-manual` | caught by using the application |
+| `unimplemented` | the code does not exist yet. **Counted apart**, never merged into `unverified`: one number is a risk, the other is planned work |
+
+**The rules that keep the grammar honest.**
+
+* **The falsifiability test.** If the way to falsify a statement cannot be stated, it is an intention,
+  not an invariant. Rejected: "sync is secure". Accepted: "no frame leaves the client with a plaintext
+  payload".
+* **One row per falsifiable consequence, never one per theme.** Five guarantees are five rows.
+* **A rule for code that does not exist yet is a row**, with `Status: unimplemented`, never prose held
+  back. A numbered falsifiable statement is cheaper to read, to review and to revise than the
+  paragraph it replaces, and it is the only form in which an unbuilt design can be checked against
+  itself.
+* **An `unimplemented` row names its story**, by name, as `specs/ambre-roadmap.md` writes it: `not
+  built -- lands with <Story>`. Never a section number, never a phase. **That story is not `[x]` until
+  the row's status has moved.** Without the binding, `unimplemented` decays into the next `Draft`:
+  true everywhere, informative nowhere. `invariants.py` resolves the name against the roadmap, so a
+  story that is ticked, renamed or moved fails the build instead of leaving the row pointing nowhere.
+* **A `Verification` cell that says `none` says what is covered and what is not.** "none" alone hides
+  which half of the rule is loose.
+* **A cited mechanism must run in CI.** A test name resolving to a `fn` behind a Cargo feature no job
+  enables is the same claim as a name resolving to nothing.
+* **A row lives in the spec of the component it constrains**, next to the design that produced it,
+  never in a central registry. It follows the code lifecycle, and it is read by whoever edits the
+  component.
+* **Extraction from existing code is a comparison, never a source.** A rule read off the code
+  describes what the code does, not what it should do, and freezes current defects into
+  specification. The spec and the README pillars stay the anchor; the code is inventory. Three
+  outcomes, all useful: the code complies (locked against regression), the code violates (a defect
+  found, the highest-value outcome), the code constrains beyond the spec (an undocumented decision to
+  write down, or an accidental constraint to remove -- the most frequent).
+
+**The three answers under the table.** A table states rules; it asks nothing. The three bullets ask,
+and they sit directly under the table in every document that carries one.
+
+| Label | Answers | An accepted answer |
+| :--- | :--- | :--- |
+| `Budget` | what this costs, and where the figure lives | a row of `ambre-spec-budgets.md`, cited; or `none`, and why |
+| `Boundary` | whether anything here reaches the relay, holds a key or opens a socket | the rule that seals it; or `none`, and why |
+| `Verification` | how much of the table is held, and by what | the counts per status, and the rows that are the gaps |
+
+* **`none`, and why is the answer for most documents.** It is what the deleted `QUALITY`,
+  `PERFORMANCE` and `SECURITY` sections answered badly, at a page each, and often not at all.
+* `spec_shape.py` fails on a label that is missing, and on one whose bullet is empty. **Whether the
+  answer is true, no script holds** -- the exact status of the `Implementation` field above.
+  Forgetting becomes impossible; a false answer becomes visible in review.
+
+### C. What no document carries
+
+| Never | Why | Where it lives instead |
+| :--- | :--- | :--- |
+| a checkbox, a phase, an integration plan, a backlog | a document per schedule is a schedule per document, and "Phase 1" named four different things | `specs/ambre-roadmap.md`, one row per story |
+| a milestone word (`MVP`) | a feature lives: it has an MVP form, then others. The increment is what carries the milestone | the roadmap, as a tag on a story |
+| production history ("landed", "used to", "was fixed") | the document says what **is**, including for behaviour not yet built | git, and the `Status` column |
+| a test list, or a coverage target | a list of intended tests has no join to the suite and no way to fail: 82 names were cited across the corpus and 23 resolved | the `Verification` column, one mechanism per rule |
+| a tier declaration, a seam list, a Definition of Done | these belong to a crate, never to a feature, which may span two | `ambre-spec-testing.md section 6`, one row per crate; the tested done condition is a roadmap rule |
+| a performance section | a budget is a rule, so it is a row | `ambre-spec-budgets.md`, cited by that row |
+| a restatement of a shared contract | the second copy is the one that goes stale | the document that owns it, cited by name |
+| an audit of a boundary it does not own | a ZK rule about this document's data is a row like any other | `ambre-spec-zero-knowledge.md`, refined by `ambre-spec-sync.md` and `ambre-spec-server.md` |
+
+### D. The pillars, and what holds each one
+
+A pillar without a script is decoration. The second column names the script that fails.
+
+| Pillar | What holds it |
+| :--- | :--- |
+| One mandatory read: a reader may stop after the Contract | `spec_shape.py` -- prose is capped at 25 % of content words. An unmigrated spec carries a **count** of prose words instead, and it may only fall |
+| No line reads as a wall | `spec_shape.py` -- a line over 110 columns, outside a table and a fence, fails: zero for a migrated document, a **count** that may only fall for an unmigrated one |
+| The header says what the reader is holding | `spec_shape.py` -- the two fields present, and `Implementation` one of three values. `feature_inventory.py`, **asymmetric**: `implemented` beside an unbuilt row fails, while claiming less than the rows show is legitimate |
+| Every claim carries its status | `invariants.py` -- a row with no `Status`, or an unknown one, fails. `feature_inventory.py` -- a feature document that declares no invariant table at all fails |
+| The table's three questions are answered | `spec_shape.py` -- a document with an invariant table carries `Budget`, `Boundary` and `Verification`, each non-empty. Whether the answer is true is a review act |
+| A cited mechanism exists | `invariants.py` -- every `fn` a built row names must resolve in the workspace, per crate when the crate is named |
+| A cited document exists | `spec_refs.py` -- a document is cited by its name, in the corpus and in the code alike, and that name must resolve to a file |
+| A cited section exists | `spec_refs.py` -- a citation carrying `section N` must name a section the target document has. The number, never the letter after it. `§N` is the same coordinate |
+| A coordinate is a corpus namespace | `spec_refs.py` -- **`crates/` carries no section number.** A name and an invariant id are minted once; a section number is the one part a renumbering breaks, and the code held 906 that named no document at all. A comment cites the document, and the id where the rule has one |
+| The numbering has no holes | `spec_shape.py` -- sections run from 0 or 1 upward, one step at a time, and `bis` is not a number. A deletion pays for itself the day it happens |
+| Derived data is generated | `invariants.py` -- `ambre-invariant-ledger.md` must match what the script would write. `feature_inventory.py` -- each application's inventory must match what it would write today |
+| Shapes, never bodies | `spec_code.py` -- section 0 |
+| Current state, never the steps | `spec_shape.py` -- a checkbox, a milestone word or a past-tense marker in a feature document fails |
+| One schedule | `spec_shape.py` -- a checkbox list or a roadmap heading **in any spec** fails |
+| An unbuilt row waits on an open story | `invariants.py` -- the story an `unimplemented` row lands with must resolve to one open row of `ambre-roadmap.md`. A name no row carries, a name two rows carry, a story already ticked and a stale epic each fail |
+| The schema document stays a schema | `spec_shape.py` -- 600 prose words for the file, 40 for a container note |
+| The schema matches the code | `spec_shape.py`, **asymmetric**: a container declared with no code is normal; one built in the code and absent from the table fails |
+| One fact, one home | `spec_shape.py` -- a quality, performance or boundary-audit section fails, by title, everywhere but in the document that owns the fact. Otherwise review, plus the container check above |
+| History lives in git | the past-tense check above |
+
+* **A cap always names where the overflow goes.** A cap without a destination produces padding:
+  sentences get cut in half, the counter improves and the reading gets worse.
+* **The table is written before the prose.** Fill the rows, then write only what refused to become
+  a row. The other order leaves a wall and a promise to tabulate it later.
 
 ---
 
-## 2. TECHNICAL DESIGN & STATE
+## 2. TEMPLATE A -- A FEATURE DOCUMENT
 
-### A. Data Modeling
-* **CRDT Structure (Loro):** If the component is collaborative, definition of primitive layout (Map, List, Text, MovableTree).
-* **Persistence Schema:** Definition of `Postcard` structures for local or remote storage.
+One feature, one file, **including its surface**. The line is not the layer: a sentence **about**
+this feature belongs here, a sentence that merely **names** it stays where it is.
 
-### B. Interface Contract (API)
-* **Traits & Public API:** Definition of public methods, implemented traits, and input/output types.
-* **Data Flow:** A ` ```mermaid ` sequence or flowchart of the message passing (flume channels) between the Logic worker and this component -- not an ASCII-art box (section 0).
+Vertical or horizontal, same skeleton:
+
+* **horizontal** when two applications or more share the behaviour -- undo, clipboard, presence,
+  virtual scrolling, PDF export, convergence. It lives in `specs/1-Foundations/`;
+* **vertical** otherwise, in the application's `features/`.
+
+**One tightly coupled engine is one document**, whichever of the two it is: the twelve formula
+features are the organs of one engine, so they are one file and not twelve. Coupling decides how
+many documents, sharing decides which directory. Reading the two as one test files an engine only
+one application has among the framework specs.
+
+| Section | Holds | The rule |
+| :--- | :--- | :--- |
+| Header | the four lines of section 1.A | in user terms, never in types |
+| 1. CONTRACT | the invariant table, complete: every guarantee, one row, then the three answers of section 1.B | **the only mandatory read.** It names no container, no type and no function: "a cell masked by a merge takes part in no computation", never "`masked_cells` is excluded from `reseed_engine`" |
+| 2. WHAT EACH USER SEES | the two-peer table: A's operation, B's operation, the converged document, what each user sees, the test | a scenario is a row, never a story. The last column joins the example to its verification. Omit the section only when the feature holds no shared state |
+| 3. MODEL | the containers it owns **cited by name**, the command and event shapes, the state fields, the algorithm in steps, then the code pointers | the design. It cites the schema document, never restates it. The shape is declared whether or not the code exists; a path into `crates/` is added once it lands |
+| 4. SURFACE | every trigger, and everything the user touches: menus, keys, selection, rendering, the events that reach them | the machinery it moves through is specified elsewhere and cited, never respecified |
+| 5. DECISIONS | one table: decision, rationale, rejected alternative | one row per decision. `Rationale` is uncapped: it is where a paragraph legitimately goes |
+| 6. NOT BUILT, AND NOT YET RULED | what is broken, what is unbuilt, what no rule covers | a behaviour with no invariant row is named here or it is invisible. This section makes a gap findable |
+
+The Contract is the need, the Model is the design. Two blocks, never two files: splitting them
+re-creates at ninety degrees the fragmentation this shape exists to remove.
+
+**Where the prose goes when it leaves.** A spec is verbose less because it explains too much than
+because its rules sit in the wrong place.
+
+| Prose shape | Destination |
+| :--- | :--- |
+| "the system must / must never" | an invariant row |
+| "because / otherwise / we chose" | the `Rationale` cell of a decision |
+| "Alice does X, Bob does Y, the result is Z" | a row in the two-peer table |
+| "the function walks, then emits" | numbered steps plus a code pointer |
+| "this is what Excel does" | the `Rejected alternative` cell of a decision |
+| "as seen above", "in other words" | deleted |
 
 ---
 
-## 3. SECURITY & CONFIDENTIALITY (ZERO-KNOWLEDGE)
-* **Boundary Audit:** Identification of outbound flows. Proof that no plaintext data reaches the Blind Relay or storage.
-* **Cryptography:** Detail of RustCrypto primitives used (XChaCha20-Poly1305, Ed25519) and local key management.
+## 3. TEMPLATE B -- A SCHEMA DOCUMENT
+
+One per application, and hand-written: a generated inventory could list `cellstyle_{sheet}` but
+never say why it is one register and not eleven, which is the decision that mattered most. A feature
+cites a container **by its name**, which is unique, stable and verbatim in the code. A numeric id on
+top of the name adds an indirection and buys nothing.
+
+| Section | Holds | The rule |
+| :--- | :--- | :--- |
+| Header | the four lines of section 1.A | it owns identity, keys and merge granularity; it owns no gesture, no permission, no event |
+| 0. SCOPE, AND THE MENTION RULE | the mention table below, and the two budgets with their overflow destinations | stated in the document, so the next writer meets it before adding to the file |
+| 1. INVARIANTS | rows about the **format**: identity, key shape, what may never enter the document, the version duty, then the three answers of section 1.B | the prefix is the application's, shared with its other documents: one numbering, no renumbering |
+| 2. IDENTITY | the identity type, its rendering, its width, and the key that joins two halves | both halves of the shape are decisions, and their rejected alternatives sit in `6. SCHEMA DECISIONS` |
+| 3. CONTAINERS | one row per container: name, Loro type, key, value, LWW unit, owning feature, `built` or `design` | the LWW unit is the column a reader comes for: it names what two concurrent writers race for. State what an absent key means |
+| 4. HIERARCHY | the container tree as a **nested bullet list** | never a diagram, never ASCII art (section 0) |
+| 5. CONTAINER NOTES | one bullet per container that needs a reason, **40 words** | only where a schema decision needs a reason. Beyond 40 words it is a decision, and it moves to `6. SCHEMA DECISIONS` |
+| 6. SCHEMA DECISIONS | decision, rationale, rejected alternative | schema-level only. A decision about a gesture belongs to the feature |
+| 7. FORMAT DUTIES | version, read, migration, bump, unknown field, size, deltas | one row per duty, each citing the rule or the row that holds it |
+| 8. WHAT THIS DOCUMENT DOES NOT OWN | one row per question, and its owner | the cheapest section in the corpus, and the one that stops the schema becoming a dumping ground |
+
+**Mention against specification.** A schema decision is often justified by an action: a row identity
+survives a sort, a delete and a reorder. So an action appears as a **cause**, never as a **rule**.
+
+| Position | Actions | Example |
+| :--- | :--- | :--- |
+| Container table, hierarchy list | forbidden | pure format |
+| Container note, `Rationale` of a decision | **allowed, as a cause** | "a `mov` reassigns the element's op id, so identity must be the value, not the slot" |
+| A normative row (MUST) | forbidden when it binds an action | "a merge MUST be refused while a covered cell is non-empty" belongs to the merges feature |
+
+The mirror rule, on the feature side: **a feature may state a rule whose cause is a format; it may
+never restate the format.**
 
 ---
 
-## 4. QUALITY & TESTABILITY
-> Prescriptive. Every spec MUST fill in each item below. See the transverse test architecture in `ambre-spec-architecture.md section 4` (test tiering, CRDT convergence, CI, coverage) -- reference it, do not redefine it.
-* **Invariant coverage:** every invariant declared in section 1 carries a `Verification` entry -- a concrete mechanism (test path, type-level construction, lint) or the explicit absence of one (`human-review`, `qa-manual`, `unverified`). The ID is the join key in both directions: the test name cites it, the invariant names the test. The cross-spec status roll-up lives in `ambre-spec-testing.md section 7`.
-* **Test tiers:** Declare which tiers this component touches -- **host** (`cargo test`, x86_64, default), **db** (server integration, feature `db` + docker compose), **wasm** (`wasm-bindgen-test`, headless Chrome, for any `cfg(target_arch = "wasm32")` / Leptos / GPU surface).
-* **Unit Tests:** Coverage strategy for pure functions and state machines. State an indicative coverage target (for example every predicate branch, every no-op guard, every error path).
-* **CRDT convergence:** If the component holds collaborative CRDT state, a 2-peer convergence property-test is **mandatory** (interleaved op sequences via `MockSyncHandle` + `apply_remote` -> identical final states). Otherwise state "N/A (no CRDT state)".
-* **Mocks & Environment:** Host seams used (`CommandSink` / `LogicSink` / `Mock*`); wasm via `wasm-bindgen-test`; DB via feature `db` + `docker compose up`. Isolated, headless, no live network.
-* **Benchmarks:** `criterion` targets and regression criteria (latency, CPU).
-* **Definition of Done (tested):** A feature/MVP is `[x]` **only when** its test belt -- unit + convergence (if CRDT) + at least one relevant integration/wasm test -- is **green in CI**, and **no invariant in section 1 is left without a `Status`**. An untested increment is not done; an invariant with an empty status is not a spec.
+## 4. WHAT IS NOT A DOCUMENT TEMPLATE
+
+| File | Shape | Rule |
+| :--- | :--- | :--- |
+| `specs/ambre-roadmap.md` | epics, then one row per story: a checkbox, a name, its milestone tag, the features it touches | the only place anything is scheduled, and one file for every application: scheduling is cross-cutting, so a roadmap per application writes each cross-application dependency twice. A ticked story stays while its epic is open, which is what lets a reader say "eight of eleven, these three remain". The checkbox is legitimate here and nowhere else |
+| `specs/ambre-roadmap-journal.md` | closed epics, cut from the roadmap verbatim the day they close | never planning |
+| `specs/<app>/ambre-<app>-inventory.md`, one per application | name, scope, and a state derived from the status of the feature's invariant rows | an aggregation with no design content, so it **is** generated, unlike the schema document. Never edited by hand: `feature_inventory.py` writes it, and fails when the file on disk is not what it would write |
+| `specs/1-Foundations/ambre-spec-budgets.md` | one section per class of budget, one row per figure: the operation, the target, the thread, and the mechanism that measures it | the one register every budget of the workspace is a row of, so no spec carries a figure of its own. It states no rule, so it declares no invariant table and carries no `Implementation` field. Hand-written, because a target is a decision: nothing can derive it. It is held to the prose cap and to the long-line rule like any document, and it is the reason `ambre-spec-architecture.md` needed no template of its own |
 
 ---
 
-## 5. PERFORMANCE & RESOURCES
-* **Performance Budget:** Maximum execution time per typical operation (for example, <16 ms for wgpu rendering at 60 FPS, <1 ms for vertex batch build in steady state).
-* **WASM Impact:** Evaluation of binary size and heap memory footprint.
+## 5. DECISIONS
 
----
+The method this file declares is a design, so its decisions live here, in the shape every document
+uses. Each rejected alternative was proposed against this corpus and measured before it was refused.
 
-## 6. REJECTED ARCHITECTURAL DECISIONS
-* List of rejected technologies or approaches.
-* Precise technical justification for rejection (misalignment with AMBRE pillars, metadata leakage, excessive complexity).
-
----
-
-## 7. INTEGRATION PLAN (ROADMAP)
-* **Phase 0 (Core):** Pure business logic and fundamental tests. Per the tested Definition of Done (section 4), no phase ships `[x]` without its test belt green in CI.
-* **Phase 1 (Integration):** Hooking into the Logic Worker, DrawSurface (WgpuSurface / KrillaSurface), or the Blind Relay.
-* **Phase 2 (Optimization):** Performance refinement and edge case handling.
+| Decision | Rationale | Rejected alternative |
+| :--- | :--- | :--- |
+| A citation names a document, plus an invariant id where the rule has one | most citations name a corpus document, so a code-path namespace makes `crates/` the source of truth for behaviour, and `README.md` gives that role to `specs/`. The decision half has nothing to read: no decision table in the corpus is numbered, and an application may carry no code at all -- `crates/ambre-prose/src/lib.rs` is 7 lines. A decision id of the form `TRAME-D-004` also matches the invariant row pattern, so one script would count a decision as a rule | a code path and a decision id as two further namespaces, with a resolver script over the three |
+| A feature's state is derived nowhere: the roadmap keeps the checkbox, `ambre-invariant-ledger.md` keeps the roll-up | a story is a unit of production and spans several documents, and one story commonly carries a dozen rows. A state derived from those rows is coarser than the checkbox the roadmap already keeps, and it restates the ledger | a generated checkbox per feature, derived from the status of its invariant rows |
+| A wall is wrapped by hand, one block at a time, with the word count as the proof that no word was dropped | four corruptions pass the proof a reflow script proposed: a lost list indent on a continuation line, an accidental bullet, a `//` comment that swallows a line inside a `rust` fence, and a split table row. A table row and a fenced line resist a wrap entirely, which is why the long-line check excludes both | a script that reflows prose to a column |
+| Two templates, one contract | the schema document differs from a feature document by its section order, never by its contract: same header fields, same invariant grammar, same ban on implementation. A third copy duplicates all three to change a table of contents. What it needs instead, and has, is its own budgets in `spec_shape.py` | a third template for the schema document |

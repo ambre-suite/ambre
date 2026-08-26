@@ -1,17 +1,17 @@
 // ambre-toile/src/ui/floatbar.rs
 // ============================================================================
 // Command surface + placement for the content-anchored floating selection
-// toolbar (toile-ui SS5quinquies.D). The host-visible half: the pure model the
+// toolbar (`toile-styles`). The host-visible half: the pure model the
 // canvas view publishes to the DOM bar each frame -- the bar's screen anchor
 // (recomputed from the `ViewportTransform`, so it follows the selection as the
 // board pans / zooms) plus the applicability flags that gate its buttons.
 //
 // Kept in the always-compiled `ui` module (not the wasm-only `chrome`) so the
-// geometry + flags are host-unit-tested (SS10), exactly like `ui::menu`,
+// geometry + flags are host-unit-tested, exactly like `ui::menu`,
 // `ui::style` and `ui::status`. The wasm-only Leptos component that renders it
 // (`chrome::SelectionToolbar`) consumes this model; its command buttons route
 // through the shared `on_command` path with `ui::menu` `CommandId`s, so the bar
-// is a strict subset of the context menu and the two never diverge (SS5ter).
+// is a strict subset of the context menu and the two never diverge (`toile-menus`).
 //
 // The bar's transient hiding (during a move/resize/rotate gesture, a pan, an
 // open inline editor, or an empty selection) is decided by the view at publish
@@ -26,7 +26,7 @@ use ambre_draw::{Point, Rect};
 
 use super::viewport::ViewportTransform;
 
-/// The floating selection toolbar's published model (toile-ui SS5quinquies.D).
+/// The floating selection toolbar's published model (`toile-styles`).
 /// `x` / `y` are the client (viewport) CSS-pixel position of the selection's
 /// top-edge midpoint -- the bar is `position: fixed` there and lifted above the
 /// selection with a CSS gap ("air", like Miro). The flags gate the applicable
@@ -52,13 +52,13 @@ pub struct FloatBar {
     pub fill: Option<u32>,
 }
 
-/// A single-field style edit the floating bar emits back (toile-ui SS5quinquies.D).
+/// A single-field style edit the floating bar emits back (`toile-styles`).
 /// Unlike the inspector's `restyle` (which carries a whole `ElementStyle` built on
 /// an accumulating working copy), each bar control emits exactly ONE changed field;
 /// the view re-derives the selection's common style LIVE at apply time and sets
 /// only that field, so successive quick edits never clobber one another (a stale
 /// working copy hazard). The view folds the result into a whole-register
-/// `RestyleElements` over the live selection (SS2.E), attaching the ids the DOM bar
+/// `RestyleElements` over the live selection (`TOILE-018`), attaching the ids the DOM bar
 /// cannot name. Colours are packed ARGB `Option<u32>` (`None` == unset / no fill);
 /// the font family is the picker label (`None` == the "Default" reset).
 #[derive(Clone, PartialEq, Debug)]

@@ -61,9 +61,9 @@ where
         text_input.clone(),
     );
     // Wrap the launcher's child factory with the shared text pipe, so `FrameHost`
-    // can build a child view (§2.I) knowing nothing about the pipe: the child
-    // reuses the one transparent textarea, but is constructed in embedded mode so
-    // it does not steal focus from the top-level document.
+    // can build a child view (`toile-embeds`) knowing nothing about the
+    // pipe: the child reuses the one transparent textarea, but is constructed in
+    // embedded mode so it does not steal focus from the top-level document.
     let make_child: MakeChild = {
         let child_pipe = text_input.clone();
         Rc::new(move |id, doc_type, size| make_child_fn(id, doc_type, size, child_pipe.clone()))
@@ -166,8 +166,9 @@ where
     // the in-cell text selection or the grid range synchronously into
     // `clipboardData`; `paste` reads it back. A grid range carries two
     // representations: tab-separated text (`text/plain`, for cross-app paste) and
-    // a base64 postcard `ClipboardPayload` under a private type (`-ui.md`
-    // sec.5.E), so an internal round-trip preserves styles and reindexes formulas.
+    // a base64 postcard `ClipboardPayload` under a private type
+    // (`ambre-spec-clipboard.md`), so a round-trip preserves styles and reindexes
+    // formulas.
     // Per-page-load token proving a same-tab copy. Written synchronously into the
     // clipboard on `copy`/`cut` and read back on `paste`; a match means the OS
     // clipboard still holds this tab's own copy (see `AMBRE_CLIPBOARD_TOKEN_TYPE`).

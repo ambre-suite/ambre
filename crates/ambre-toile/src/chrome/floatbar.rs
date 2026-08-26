@@ -1,6 +1,6 @@
 // ambre-toile/src/chrome/floatbar.rs
 // ============================================================================
-// The content-anchored floating selection toolbar (toile-ui SS5quinquies.D),
+// The content-anchored floating selection toolbar (`toile-styles`),
 // wasm-only. A compact `position: fixed` action bar that follows the selection
 // as the board pans / zooms: the canvas view recomputes its client anchor from
 // the `ViewportTransform` every frame and publishes it (`ui::floatbar::FloatBar`,
@@ -10,7 +10,7 @@
 // colour, font, size, bold, italic), duplicate, delete, group / ungroup, lock /
 // unlock. The command buttons (duplicate / delete / group / lock) are `ui::menu`
 // `CommandId`s routed through the shared `on_command` path, so the bar is a
-// strict subset of the context menu (SS5ter) and the two never diverge. The style
+// strict subset of the context menu (`toile-menus`) and the two never diverge. The style
 // controls reuse the shared `ambre_chrome` value controls (`ColorPopover` in ARGB
 // mode, `FontPicker`) and emit a single-field `StyleEdit` the view folds into a
 // whole-register `RestyleElements` over the live selection.

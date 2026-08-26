@@ -1,5 +1,5 @@
 // ambre-trame/src/logic/docfile.rs
-// The `.ambre` native container, Trame side (`ambre-spec-docfile.md` §2.B).
+// The `.ambre` native container, Trame side (`ambre-spec-docfile.md`).
 //
 // Trame's half of the pair: the payload is this workbook's `LoroDoc` snapshot.
 // The header is not built here -- layout, version registry and both normative
@@ -20,8 +20,8 @@ use super::*;
 /// Plaintext `.ambre` bytes for a Trame document: the current-version header
 /// followed by an uncompressed, unencrypted Loro snapshot.
 ///
-/// Pure and crypto-free (I4). Protection, when it applies, is a separate stage
-/// owned by `ambre-sync` (`docfile §3`).
+/// Pure and crypto-free (`FIXTURE-007`). Protection, when it applies, is a
+/// separate stage owned by `ambre-sync` (`docfile`).
 pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: Uuid) -> Vec<u8> {
     let payload = doc.export(ExportMode::Snapshot).unwrap_or_else(|e| {
         // Same treatment as `TrameState::export_snapshot`: never silently, since
@@ -40,7 +40,7 @@ pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: Uuid) -> Vec<u8> {
 /// is refused non-destructively, and a valid file belonging to another app comes
 /// back as [`DocFileError::WrongDocType`] carrying the type, so the caller
 /// re-dispatches those same bytes rather than coercing the document into a
-/// spreadsheet (dispatch rule, `docfile §2.B`).
+/// spreadsheet (dispatch rule, `docfile`).
 pub fn import_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
     read_ambre_plaintext_as(DocType::Trame, data)
 }
@@ -50,7 +50,7 @@ impl TrameState {
     ///
     /// `doc_id` is supplied by the caller because the engine does not hold the
     /// document's identity -- the registry does (`ambre-logic`), and a fixture
-    /// generator pins it from its seed (`ambre-spec-fixtures.md` §2.A).
+    /// generator pins it from its seed (`ambre-spec-fixtures.md`).
     pub fn export_ambre_plaintext(&self, doc_id: Uuid) -> Vec<u8> {
         export_ambre_plaintext(&self.doc, doc_id)
     }

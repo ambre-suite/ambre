@@ -7,15 +7,15 @@
 // *value* (a string), NOT a Loro cursor id. Cells are keyed in `cells_{sheet}`
 // by the *pair* of uids `"{row_uid}:{col_uid}"`, so a row insert is one Loro op
 // and never rewrites a cell key, and a reorder (`mov`) leaves every key intact
-// because the uid travels with the value (`ambre-spec-trame-logic.md` §2.A).
+// because the uid travels with the value (`trame-rows-and-columns`).
 //
 // The lists are **dense over the used range** `[0..hwm]`: list index == grid
 // position. There is exactly one element per row/column up to the high-water
 // mark; rows/columns beyond it are virtual (no element). This keeps `resolve`
 // an O(1) index lookup and keeps concurrent inserts convergent and
 // intent-preserving (each insert mints an independent uid, no shared counter).
-// See §2.A bis and the rejected "sparse run-length" / "Loro slot id as key"
-// entries in §13.
+// See `trame-rows-and-columns`, and the rejected "sparse run-length" / "Loro
+// slot id as key" entries in `trame-schema`.
 //
 // `SheetIndex` is the *only* translation layer between grid positions and uids.
 // ============================================================================
@@ -24,7 +24,8 @@ use std::collections::HashMap;
 
 use loro::{LoroMovableList, LoroValue};
 
-/// Our own, move-invariant row/column identity (§2.A). Minted as
+/// Our own, move-invariant row/column identity (`trame-rows-and-columns`).
+/// Minted as
 /// `{peer = document PeerID, counter = per-session monotonic}` and stored as the
 /// value of an element in a `rows_/cols_` `LoroMovableList`. `Copy + Eq + Hash`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -52,7 +53,7 @@ impl Uid {
 }
 
 /// Build the 51-char fixed-length cell key from a `(row, col)` uid pair, per
-/// `ambre-spec-trame-logic.md` §2.A: `"{row_uid}:{col_uid}"`.
+/// `trame-schema`: `"{row_uid}:{col_uid}"`.
 pub fn cell_key(row: Uid, col: Uid) -> String {
     format!("{}:{}", row.to_key_part(), col.to_key_part())
 }
@@ -76,7 +77,7 @@ pub struct SheetIndex {
 impl SheetIndex {
     /// O(N_used) reconstruction from the two `LoroMovableList`s at load time
     /// (N_used = materialized rows + columns, never the 100k virtual grid). Reads
-    /// each element's uid *value* in list order (§2.C).
+    /// each element's uid *value* in list order (`trame-engine`).
     pub fn build(rows: &LoroMovableList, cols: &LoroMovableList) -> Self {
         let (row_by_pos, row_to_pos) = collect_ids(rows);
         let (col_by_pos, col_to_pos) = collect_ids(cols);
@@ -183,7 +184,7 @@ impl SheetIndex {
     /// Permute the row order to mirror a `rows_{sheet}.mov(from, to)` (sort,
     /// reorder). The uid is move-invariant, so cells keyed by it follow for
     /// free; only the position mapping shifts. No-op if either index is out of
-    /// range. See §2.A / §12.
+    /// range. See `trame-rows-and-columns` and `trame-formula-engine`.
     pub fn apply_move_row(&mut self, from: usize, to: usize) {
         if from >= self.row_by_pos.len() || to >= self.row_by_pos.len() {
             return;
@@ -205,7 +206,7 @@ impl SheetIndex {
     }
 
     /// Zero-based column index -> spreadsheet letters (0 -> "A", 25 -> "Z",
-    /// 26 -> "AA"). From `ambre-spec-trame-logic.md` §2.C.
+    /// 26 -> "AA"). From `trame-headers`.
     pub fn col_letter(index: usize) -> String {
         crate::columns::col_to_alpha(index as u32)
     }
@@ -219,7 +220,8 @@ impl SheetIndex {
     }
 }
 
-/// Read a movable list in order and parse each element's uid *value* (§2.A).
+/// Read a movable list in order and parse each element's uid *value*
+/// (`trame-rows-and-columns`).
 /// Each element holds a `"{peer:016x}_{counter:08x}"` string; a missing or
 /// malformed value would be a corruption, logged and skipped (it must not
 /// desync the dense `Vec`, so we never push a gap).

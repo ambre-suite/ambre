@@ -1,5 +1,5 @@
 //! The `.ambre` container -- the shared header of the native document file
-//! (`ambre-spec-docfile.md` §2).
+//! (`ambre-spec-docfile.md`).
 //!
 //! This module owns the *container* half of the format and nothing else: the
 //! fixed 22-byte header, the version registry and its forward migrations, the
@@ -9,7 +9,7 @@
 //! interop module, which calls in here rather than re-deriving the layout (I5:
 //! one container, every app).
 //!
-//! Layout, offsets fixed (§2.A):
+//! Layout, offsets fixed:
 //!
 //! ```text
 //!   0   4   magic       0x414D4252 ("AMBR")
@@ -38,7 +38,7 @@ pub const AMBRE_MAGIC: [u8; 4] = *b"AMBR";
 
 /// The container version this build writes, and the only one it parses without
 /// migrating first. Bumping it obliges a [`MIGRATIONS`] row and a fixture freeze
-/// (`ambre-spec-fixtures.md` §4).
+/// (`ambre-spec-fixtures.md`).
 pub const AMBRE_VERSION: u8 = 0x01;
 
 /// Fixed header size; the payload starts at this offset.
@@ -68,7 +68,7 @@ pub struct AmbreHeader {
 }
 
 /// Container-level failures. Fatal by nature: a header failure means no document
-/// can be produced (§2.B).
+/// can be produced.
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum DocFileError {
     /// Fewer than [`HEADER_LEN`] bytes -- not a container at all.
@@ -110,7 +110,7 @@ pub enum DocFileError {
 /// Assemble a plaintext `.ambre`: the current-version header, then `payload`.
 ///
 /// The writer rule lives here and nowhere else -- there is no parameter for the
-/// version, because there is no backward-compatible write mode (§2.B).
+/// version, because there is no backward-compatible write mode.
 pub fn write_ambre_plaintext(doc_type: DocType, document_id: Uuid, payload: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(HEADER_LEN + payload.len());
     out.extend_from_slice(&AMBRE_MAGIC);
@@ -163,7 +163,7 @@ pub fn parse_header(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
 }
 
 /// Read a plaintext `.ambre` of any [`DocType`], applying the version-recovery
-/// rule (§2.B): an older container is migrated then re-parsed, a newer one is
+/// rule: an older container is migrated then re-parsed, a newer one is
 /// refused with the file left untouched (I3).
 ///
 /// Type-agnostic on purpose -- this is what an "open this file" caller wants:
@@ -210,14 +210,14 @@ pub fn read_ambre_plaintext_as(
 /// A step owns the *entire* transformation, header byte included: it returns
 /// bytes that parse at `to`. Payload contents are not its business -- the CRDT
 /// schema inside the snapshot is versioned separately by the `meta`
-/// / `schema_version` register (`ambre-spec-architecture.md` §2.D, `ARCH P8`).
+/// / `schema_version` register (`ambre-spec-schema-version.md`, `ARCH P8`).
 struct Migration {
     from: u8,
     to: u8,
     apply: fn(&[u8]) -> Result<Vec<u8>, DocFileError>,
 }
 
-/// The version registry (§2.A): one row per container version bump, appended
+/// The version registry: one row per container version bump, appended
 /// never rewritten.
 ///
 /// Empty at `0x01` -- nothing precedes the initial layout. The walk that
@@ -441,7 +441,7 @@ mod tests {
         );
     }
 
-    // -- the synthetic registry (§4) ------------------------------------------
+    // -- the synthetic registry ------------------------------------------
     //
     // The shipping registry is empty at 0x01, so the walk above has no real step
     // to run. These tests drive it with a two-row synthetic registry: the day a

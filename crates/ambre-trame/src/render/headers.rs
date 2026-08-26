@@ -66,7 +66,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     surface.stroke_line(0.0, top + hh, w, top + hh, palette.header_border, 1.0);
 
     // Per-column separators: a vertical hairline at each column's right edge, so
-    // the letter cells read as discrete buttons (spec sec.13). Walks the same
+    // the letter cells read as discrete buttons (`trame-headers`). Walks the same
     // visible columns as the label loop below, independent of `text_enabled`.
     {
         let mut col = layout.origin_col;
@@ -182,7 +182,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     surface.stroke_line(hw, top, hw, h, palette.header_border, 1.0);
 
     // Per-row separators: a horizontal hairline at each visible row's bottom edge,
-    // so the numbers read as discrete buttons (spec sec.13). Walks the collapsed
+    // so the numbers read as discrete buttons (`trame-headers`). Walks the collapsed
     // (filtered) row space like the number loop, independent of `text_enabled`.
     {
         let mut slot = 0u32;
@@ -205,7 +205,8 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     let max_width = (hw - 8.0) as f32;
     // Clip every row label to the strip: the last visible row is usually
     // partial, and its vertically centred number would otherwise spill below
-    // the grid bottom and bleed through onto the sheet-tab strip (spec sec.13).
+    // the grid bottom and bleed through onto the sheet-tab strip
+    // (`trame-sheets`).
     surface.push_clip(Rect::new(0.0, cells_top, hw, h));
     // Walk the visible rows, accumulating their variable heights. `slot` only
     // tracks how many visible rows we have drawn (for `row_at_slot`); `row_y` is

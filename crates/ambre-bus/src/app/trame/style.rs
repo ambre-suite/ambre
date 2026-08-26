@@ -1,5 +1,5 @@
 //! Shared filter definitions and the manual cell-formatting vocabulary
-//! (`ambre-spec-trame-ui.md` sec.5 / sec.5bis): filter kinds, alignment, number
+//! (`trame-shared-filter`, `trame-cell-styles`): filter kinds, alignment, number
 //! formats, borders, and the resolved [`CellStyle`] / sparse [`StylePatch`].
 
 use serde::{Deserialize, Serialize};
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// How a shared filter decides whether a row's value in the filtered column is
-/// kept (visible) or hidden (`ambre-spec-trame-features.md` §1.A). MVP covers
+/// kept (visible) or hidden (`trame-shared-filter`). MVP covers
 /// the "by values" and "by condition" modes; colour filters are Phase 2.
 #[derive(Debug, Clone)]
 pub enum FilterKind {
@@ -28,7 +28,7 @@ pub enum FilterKind {
 }
 
 /// Condition operators for a [`FilterKind::Condition`]
-/// (`ambre-spec-trame-features.md` §1.A).
+/// (`trame-shared-filter`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FilterOp {
     Eq,
@@ -45,7 +45,7 @@ pub enum FilterOp {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Manual cell formatting (`ambre-spec-trame-ui.md` sec.5bis)
+// Manual cell formatting (`trame-cell-styles`)
 //
 // The toolbar's typed style vocabulary. `CellStyle` is the resolved formatting of
 // a single cell (the toolbar reflects the active cell's); `StylePatch` is the
@@ -54,7 +54,7 @@ pub enum FilterOp {
 // rest of the data plane. Colours are packed `0xRRGGBB`.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Horizontal text alignment of a cell (`-ui.md` sec.5bis). [`Auto`](Self::Auto)
+/// Horizontal text alignment of a cell (`trame-cell-styles`). [`Auto`](Self::Auto)
 /// is the spreadsheet default: numbers align right, everything else left.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum HAlign {
@@ -65,7 +65,7 @@ pub enum HAlign {
     Right,
 }
 
-/// Vertical text alignment of a cell (`-ui.md` sec.5bis).
+/// Vertical text alignment of a cell (`trame-cell-styles`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum VAlign {
     Top,
@@ -74,7 +74,7 @@ pub enum VAlign {
     Bottom,
 }
 
-/// A cell number-format family (`-ui.md` sec.5bis). The number of decimal places
+/// A cell number-format family (`trame-number-formats`). The decimal places
 /// rides alongside in [`CellStyle::decimals`]; [`Custom`](Self::Custom) carries
 /// its own pattern string (applied verbatim by the Logic thread).
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -113,9 +113,9 @@ impl CellFormat {
     }
 }
 
-/// A border preset naming a set of edges within the selection (`-ui.md`
-/// sec.5bis). Resolved per cell (merge-aware) by the Logic thread into the
-/// concrete edges of [`Borders`] the chosen stroke is applied to. Every preset
+/// A border preset naming a set of edges within the selection
+/// (`trame-cell-styles`). Resolved per cell (merge-aware) by the Logic thread
+/// into the concrete edges of [`Borders`] the chosen stroke is applied to. Every preset
 /// except [`BorderPreset::None`] is additive: it sets only its own edges and
 /// leaves the others untouched; `None` clears all four.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -139,7 +139,7 @@ pub enum BorderPreset {
 }
 
 /// Border edge bits for [`CellStyle::border_edges`] / [`DisplayCell::border_edges`]
-/// (`-ui.md` sec.5bis). A [`BorderPreset`] applied over a selection is resolved by
+/// (`trame-cell-styles`). A [`BorderPreset`] applied over a selection is resolved by
 /// the Logic thread into the per-cell set of edges these bits represent, so a
 /// selection-level "Outline" lands only on the perimeter cells, not the interior.
 pub const BORDER_EDGE_TOP: u8 = 1 << 0;
@@ -151,7 +151,7 @@ pub const BORDER_EDGE_ALL: u8 =
     BORDER_EDGE_TOP | BORDER_EDGE_RIGHT | BORDER_EDGE_BOTTOM | BORDER_EDGE_LEFT;
 
 /// The stroke style of a cell border, conflating line pattern and weight into a
-/// single choice (`-ui.md` sec.5bis).
+/// single choice (`trame-cell-styles`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum BorderStyle {
     /// A solid line border.
@@ -179,7 +179,7 @@ pub struct CellBorder {
     pub color: Option<u32>,
 }
 
-/// The four independent edges of a cell border (`-ui.md` sec.5bis). Each edge
+/// The four independent edges of a cell border (`trame-cell-styles`). Each edge
 /// carries its own stroke style and colour, so a cell can mix, e.g., a thick
 /// red top with a dotted blue left. `None` on an edge means no border there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -191,13 +191,13 @@ pub struct Borders {
 }
 
 /// The resolved manual formatting of a single cell, the value the toolbar
-/// reflects (`-ui.md` sec.5bis). Bold/italic are tracked by their dedicated
+/// reflects (`trame-cell-styles`). Bold/italic are tracked by their dedicated
 /// toggle commands and reported separately ([`TrameEvent::StyleApplied`]); the
 /// underline run lives here with the rest of the patchable attributes.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct CellStyle {
     pub underline: bool,
-    /// Strikethrough run drawn through the glyphs (`-ui.md` sec.5bis).
+    /// Strikethrough run drawn through the glyphs (`trame-cell-styles`).
     pub strikethrough: bool,
     pub h_align: HAlign,
     pub v_align: VAlign,
@@ -221,7 +221,7 @@ pub struct CellStyle {
 }
 
 /// A sparse formatting delta emitted by a toolbar control over the current
-/// selection ([`TrameCommand::SetCellStyle`], `-ui.md` sec.5bis). Every `None`
+/// selection ([`TrameCommand::SetCellStyle`], `trame-cell-styles`). Every `None`
 /// field leaves the existing cell value intact; a `Some` overwrites it. The
 /// nested `Option<Option<_>>` colour/font/size fields distinguish "leave alone"
 /// (`None`) from "clear" (`Some(None)`) and "set" (`Some(Some(v))`).
@@ -246,7 +246,7 @@ pub struct StylePatch {
 /// A border edit emitted by the toolbar's borders popover: apply the chosen
 /// stroke `style` and `color` to the edges named by `preset` (or, for
 /// [`BorderPreset::None`], clear every edge). Resolved per cell, merge-aware,
-/// by the Logic thread (`-ui.md` sec.5bis).
+/// by the Logic thread (`trame-cell-styles`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct BorderEdit {
     pub preset: BorderPreset,

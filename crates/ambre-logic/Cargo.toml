@@ -6,11 +6,11 @@ license.workspace = true
 description = "Logic thread — typed command dispatch, per-document state registry, viewport computation. Runs as a dedicated thread sharing the WASM heap."
 
 [features]
-# Document-fixture machinery (`ambre-spec-fixtures.md` §5). Non-default and
+# Document-fixture machinery (`ambre-spec-fixtures.md`). Non-default and
 # host-only -- this crate ships to wasm, so the gate matters most here: the
 # loader, `shape_of`, `canonical_dump` and the driver are all behind it, while
 # `DocState::import_snapshot` / `export_snapshot` are ungated production code
-# (I4). Every downstream feature is named explicitly: a Cargo feature never
+# (`FIXTURE-007`). Every downstream feature is named explicitly: a Cargo feature never
 # enables its dependency's feature implicitly.
 fixtures = [
     "ambre-core/fixtures",
@@ -23,13 +23,14 @@ fixtures = [
 
 [dependencies]
 ambre-bus       = { path = "../ambre-bus" }
-# `DocType` / `Uuid`, the `.ambre` container error taxonomy (`docfile §2.B`) and,
-# under `fixtures`, the manifest types (`fixtures §2.B`).
+# `DocType` / `Uuid`, the `.ambre` container error taxonomy
+# (`ambre-spec-docfile.md`) and, under `fixtures`, the manifest types
+# (`ambre-spec-fixtures.md`).
 ambre-core      = { path = "../ambre-core" }
 ambre-trame     = { path = "../ambre-trame" }
 ambre-toile     = { path = "../ambre-toile" }
 
-# Fixture-only, host-only (§1.B). `ambre-crypto` supplies `hash::chain_hash` for
+# Fixture-only, host-only. `ambre-crypto` supplies `hash::chain_hash` for
 # the manifest digest; `serde_json` encodes the sidecar. `serde_json` is a
 # workspace dependency but was not yet one of this crate's, which is the one new
 # dependency edge `FIXTURES P0` carries.
@@ -44,7 +45,7 @@ flume           = { workspace = true }
 
 tracing       = { workspace = true }
 futures-util  = { workspace = true }
-# The PDF-export FontContext lives on this thread (`toile-interop §3.A`), seeded
+# The PDF-export FontContext lives on this thread (`toile-pdf-export`), seeded
 # by `LogicCommand::LoadFonts`. Only parley -- not the whole GPU canvas crate --
 # so the Logic worker's wasm stays lean.
 parley        = { workspace = true }
@@ -70,9 +71,10 @@ web-sys             = { workspace = true, features = [
 
 [dev-dependencies]
 # Host tests craft a tiny PNG to drive a real Toile media import through the
-# dispatcher (service-plane routing, `toile-interop §5`).
+# dispatcher (service-plane routing, `toile-media`).
 image = { workspace = true }
-# The geometry the Toile commands of the dispatch belt carry (`docfile §4`).
+# The geometry the Toile commands of the dispatch belt carry
+# (`ambre-spec-toile-schema.md`).
 kurbo = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

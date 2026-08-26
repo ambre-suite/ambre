@@ -9,7 +9,7 @@
 // Mirrors `ambre_trame::ui::TrameView` but with a true world<->screen camera
 // (`ViewportTransform`) instead of a virtual-scroll grid. Holds NO document data
 // -- every mutation leaves as a `ToileCommand`; the board lives in `LoroDoc` on
-// the Logic thread (§11bis).
+// the Logic thread (`toile-board-rendering`).
 // ============================================================================
 
 use std::collections::HashMap;
@@ -40,9 +40,9 @@ use super::tool::{
 };
 use super::viewport::ViewportTransform;
 
-// Context-menu bridge (toile-ui §5ter): the DOM `ContextMenu` reads the published
-// selection scope and writes back the chosen `CommandId`; both are leptos signals,
-// so the handles and their access traits are wasm-only.
+// Context-menu bridge (`toile-menus`): the DOM `ContextMenu` reads the
+// published selection scope and writes back the chosen `CommandId`; both are
+// leptos signals, so the handles and their access traits are wasm-only.
 #[cfg(target_arch = "wasm32")]
 use ambre_commands::CommandId;
 #[cfg(target_arch = "wasm32")]
@@ -53,10 +53,11 @@ const ZOOM_PER_WHEEL_PX: f64 = 0.0018;
 
 /// A wheel `|dy|` at or above this (physical px, `delta_mode == pixel`) reads as a
 /// discrete mouse notch rather than a fine trackpad glide -- the auto heuristic's
-/// mouse threshold (`toile-ui §3`).
+/// mouse threshold (`toile-tools`).
 const WHEEL_MOUSE_NOTCH_PX: f64 = 40.0;
 
-/// Pure device classifier for one wheel event in `Auto` mode (`toile-ui §3`).
+/// Pure device classifier for one wheel event in `Auto` mode
+/// (`toile-viewport`).
 /// `Some(true)` = mouse, `Some(false)` = trackpad, `None` = signal too weak to
 /// change the latched guess. Signals, strongest first: a non-pixel `delta_mode`
 /// is a classic line/page wheel; a non-zero `dx` is a two-axis trackpad glide; a
@@ -73,7 +74,7 @@ fn wheel_device(dx: f64, dy: f64, delta_mode: u32) -> Option<bool> {
     }
 }
 
-/// How the wheel navigates the board (`toile-ui §3`). A whiteboard is a 2D
+/// How the wheel navigates the board (`toile-viewport`). A whiteboard is a 2D
 /// infinite plane, so the natural gestures differ by device: on a mouse the wheel
 /// should zoom (map-like), on a trackpad two-finger scroll should pan and pinch
 /// should zoom. `Auto` classifies the device per event from the `WheelEvent`
@@ -93,19 +94,22 @@ pub enum PointerMode {
 }
 
 /// Keyboard-nudge step in world units: a fine 1-unit tap, or a coarse 10-unit
-/// jump with Shift held (`toile-ui §5`).
+/// jump with Shift held (`toile-elements`).
 const NUDGE_SMALL: f64 = 1.0;
 const NUDGE_LARGE: f64 = 10.0;
 /// Diagonal offset applied to a `Ctrl/Cmd+D` duplicate so the copy is visibly
-/// distinct from its source (§8 ter), matching the alt-drag nudge.
+/// distinct from its source (`toile-clipboard`), matching the alt-drag
+/// nudge.
 const DUPLICATE_NUDGE: f64 = 10.0;
 
 /// Inline-edit caret blink half-period (ms): the caret shows for one interval,
-/// hides for the next (§6). ~530 ms is the familiar desktop cadence.
+/// hides for the next (`toile-tools`). ~530 ms is the familiar desktop
+/// cadence.
 const CARET_BLINK_MS: f64 = 530.0;
 
 /// Max press-to-release travel (screen px) still treated as a click, not a drag,
-/// for click-to-edit (§6): beyond it the gesture is a move and edit is not armed.
+/// for click-to-edit (`toile-text-editing`): beyond it the gesture is a move and
+/// edit is not armed.
 const CLICK_SLOP: f64 = 4.0;
 
 pub struct ToileView {
@@ -120,32 +124,36 @@ pub struct ToileView {
 
     /// Active tool + the gesture state machine (Select + creation tools).
     machine: ToolMachine,
-    /// Local selection (never persisted; a peer's selection is presence, §7).
+    /// Local selection (never persisted; a peer's selection is presence,
+    /// `toile-selection`).
     selection: Vec<ElementId>,
-    /// Entered group scope (§2.F bis / §7): while `Some(g)`, a click selects a
-    /// member inside `g` rather than the whole group. Entered by double-clicking a
-    /// grouped element (peels one nesting level per double-click), left by
-    /// `Escape` or a document swap. Pure-UI state, never synced.
+    /// Entered group scope (`toile-groups` / `toile-selection`):
+    /// while `Some(g)`, a click selects a member inside `g` rather than the whole
+    /// group. Entered by double-clicking a grouped element (peels one nesting level
+    /// per double-click), left by `Escape` or a document swap. Pure-UI state, never
+    /// synced.
     group_scope: Option<ElementId>,
     /// Live gesture preview (marquee / rubber-band / pen / stroke), world space.
     preview: Option<Preview>,
 
-    /// Find-on-board highlight state (§5quater), driven by `FindResults` from
-    /// Logic. `find_hits` are all matching ids (only those in the culled set get
-    /// an outline); `find_focus` is the current match. Local view state, never
-    /// synced and never an undo item (§11bis).
+    /// Find-on-board highlight state (`toile-find`), driven by
+    /// `FindResults` from Logic. `find_hits` are all matching ids (only those in
+    /// the culled set get an outline); `find_focus` is the current match. Local
+    /// view state, never synced and never an undo item
+    /// (`toile-find`).
     find_hits: Vec<ElementId>,
     find_focus: Option<ElementId>,
     /// The focus id awaiting a `SelectionStats` reply so the camera can recenter
-    /// on it (§5quater). `FindResults` carries no geometry and the focus may be
-    /// off-screen, so the view asks Logic for its bounds via `RequestSelectionStats`
-    /// and recenters when the answer lands. Distinguishes a find-driven stats
-    /// request from a future status-bar one.
+    /// on it (`toile-find`). `FindResults` carries no geometry and
+    /// the focus may be off-screen, so the view asks Logic for its bounds via
+    /// `RequestSelectionStats` and recenters when the answer lands. Distinguishes
+    /// a find-driven stats request from a future status-bar one.
     pending_find_focus: Option<ElementId>,
 
-    /// Active inline text editor (sticky / text body, §6). `None` when not
-    /// editing. Font-free edit intents are queued here at input time and applied
-    /// during paint, when the `FontContext` is available (see `edit.rs`).
+    /// Active inline text editor (sticky / text body, `toile-text-editing`).
+    /// `None` when not editing. Font-free edit intents are queued here at input
+    /// time and applied during paint, when the `FontContext` is available (see
+    /// `edit.rs`).
     editor: Option<InlineEditor>,
     /// A freshly-created element (Sticky / Text tool) whose editor must open once
     /// the matching `DisplayViewport` has landed (its geometry is only known
@@ -157,29 +165,31 @@ pub struct ToileView {
     /// Deferred close: the editor commits its buffer as `SetText` and closes on
     /// the next paint (so any intents typed since the last paint flush first).
     edit_closing: bool,
-    /// A queued edit intent / open / close marked the editor overlay dirty (§9).
+    /// A queued edit intent / open / close marked the editor overlay dirty
+    /// (`toile-text-editing`).
     edit_dirty: bool,
     /// Whether a pointer is down inside the editor (text selection drag).
     edit_pointer_down: bool,
-    /// Click-to-edit arming (Miro-style, §6): set on a left press that lands on an
-    /// already-selected Sticky / Text element (id + press position). A release
-    /// near that position with the selection unchanged enters edit; a drag past the
-    /// slop (a move gesture) clears it. `None` when the press did not qualify.
+    /// Click-to-edit arming (Miro-style, `toile-text-editing`): set on a left press
+    /// that lands on an already-selected Sticky / Text element (id + press
+    /// position). A release near that position with the selection unchanged enters
+    /// edit; a drag past the slop (a move gesture) clears it. `None` when the press
+    /// did not qualify.
     click_edit_candidate: Option<(ElementId, Point)>,
 
     /// Last pointer position in screen (physical) pixels -- the zoom anchor.
     last_pointer: Point,
     /// While panning (space-drag / Hand tool): the previous screen position.
     panning: Option<Point>,
-    /// Space held: a drag pans in any tool (§5).
+    /// Space held: a drag pans in any tool (`toile-viewport`).
     space_down: bool,
 
-    /// Wheel navigation preference (§3): `Auto` (default), or a forced `Mouse` /
-    /// `Trackpad` set from the View menu.
+    /// Wheel navigation preference (`toile-viewport`): `Auto` (default), or a
+    /// forced `Mouse` / `Trackpad` set from the View menu.
     pointer_mode: PointerMode,
     /// Latched device guess while `pointer_mode == Auto`. Starts `false` (trackpad,
-    /// the gentler wrong default, §3) and flips to `true` on a confident mouse-wheel
-    /// signature, back on a two-axis trackpad glide.
+    /// the gentler wrong default, `toile-viewport`) and flips to `true` on a
+    /// confident mouse-wheel signature, back on a two-axis trackpad glide.
     detected_mouse: bool,
 
     text_input: TextInput,
@@ -187,7 +197,7 @@ pub struct ToileView {
     theme_ctl: ThemeControl,
     theme: Theme,
 
-    // Dirty-flag bookkeeping (§9).
+    // Dirty-flag bookkeeping (`toile-board-rendering`).
     needs_full: bool,
     viewport_changed: bool,
     data_dirty: bool,
@@ -198,30 +208,34 @@ pub struct ToileView {
 
     /// A [`ClipboardBlob`] built from a `ToileEvent::Clipboard` reply, awaiting the
     /// host's per-frame [`poll_clipboard`](ToileView::poll_clipboard) which mirrors
-    /// it to the OS clipboard inside the transient-activation window (§5ter).
+    /// it to the OS clipboard inside the transient-activation window
+    /// (`toile-clipboard`).
     pending_clipboard: Option<ambre_bus::ClipboardBlob>,
     /// The last authoritative clipboard blob copied this session, kept in memory
     /// for a full-fidelity same-tab paste that never depends on the OS custom MIME
-    /// type surviving the round-trip (§5ter).
+    /// type surviving the round-trip (`toile-clipboard`).
     last_clip: Option<ambre_bus::ClipboardBlob>,
 
-    /// Selection scope published to the DOM context menu each right-click (§5ter):
-    /// the view writes it, the chrome's entry `Memo` reads it to omit inapplicable
-    /// rows. Leptos signal, so wasm-only.
+    /// Selection scope published to the DOM context menu each right-click
+    /// (`toile-menus`): the view writes it, the chrome's entry `Memo`
+    /// reads it to omit inapplicable rows. Leptos signal, so wasm-only.
     #[cfg(target_arch = "wasm32")]
     ctx_scope: RwSignal<super::menu::CtxScope>,
-    /// The context-menu command the shell forwards back into the view (§5ter): the
-    /// menu id is drained in `update` and resolved against the live selection (the
-    /// Logic thread never sees the selection, so the view attaches it). Wasm-only.
+    /// The context-menu command the shell forwards back into the view
+    /// (`toile-menus`): the menu id is drained in `update` and resolved
+    /// against the live selection (the Logic thread never sees the selection, so
+    /// the view attaches it). Wasm-only.
     #[cfg(target_arch = "wasm32")]
     menu_cmd: RwSignal<Option<CommandId>>,
-    /// The active tool, shared with the DOM tool palette (§5quinquies.A): the
-    /// palette buttons and the bare-key tool chords both write it, and the view
-    /// applies it each frame in `update`. Tool selection is UI-only, canvas-local
-    /// state (§11bis), never a `ToileCommand`. Leptos signal, so wasm-only.
+    /// The active tool, shared with the DOM tool palette
+    /// (`toile-tools`): the palette buttons and the bare-key tool
+    /// chords both write it, and the view applies it each frame in `update`. Tool
+    /// selection is UI-only, canvas-local state (`toile-tools`), never a
+    /// `ToileCommand`. Leptos signal, so wasm-only.
     #[cfg(target_arch = "wasm32")]
     active_tool: RwSignal<Tool>,
-    /// Position-dependent canvas cursor, shared with the chrome (§5quinquies.A).
+    /// Position-dependent canvas cursor, shared with the chrome
+    /// (`toile-tools`).
     /// The base cursor is a pure function of the active tool (`cursor_css`), but a
     /// resting hover over a selection edge / corner -- and any resize / rotate /
     /// move in flight -- overrides it with a directional resize / grab cursor. The
@@ -230,37 +244,41 @@ pub struct ToileView {
     #[cfg(target_arch = "wasm32")]
     cursor: RwSignal<Option<std::borrow::Cow<'static, str>>>,
     /// Live zoom factor published to the DOM zoom control / status bar each frame
-    /// (§5quinquies.E / §8bis): `1.0` = 100%. The view owns the camera, so it is
-    /// the source; the chip mirrors it. Written only on change. Wasm-only.
+    /// (`toile-menus` / `toile-status-bar`): `1.0` = 100%.
+    /// The view owns the camera, so it is the source; the chip mirrors it. Written
+    /// only on change. Wasm-only.
     #[cfg(target_arch = "wasm32")]
     zoom: RwSignal<f64>,
-    /// Status-bar selection aggregates (§8bis), shared with the DOM band. The
-    /// view clears it to `None` on an empty selection (an empty-ids stats request
-    /// would mean "whole board" to Logic, so it must not go through the round
-    /// trip); a non-empty selection is filled by the shell from the
+    /// Status-bar selection aggregates (`toile-status-bar`), shared with the
+    /// DOM band. The view clears it to `None` on an empty selection (an empty-ids
+    /// stats request would mean "whole board" to Logic, so it must not go through
+    /// the round trip); a non-empty selection is filled by the shell from the
     /// `SelectionStats` reply. Leptos signal, so wasm-only.
     #[cfg(target_arch = "wasm32")]
     sel_stats: RwSignal<Option<super::status::SelStats>>,
     /// The selection's common style published to the DOM style inspector
-    /// (§5quinquies.B): the view derives it from its selection x last display and
-    /// writes it (alongside `ctx_scope`); the inspector reads it to show values and
-    /// mixed-state. `None` hides the panel. Leptos signal, so wasm-only.
+    /// (`toile-styles`): the view derives it from its selection x
+    /// last display and writes it (alongside `ctx_scope`); the inspector reads it
+    /// to show values and mixed-state. `None` hides the panel. Leptos signal, so
+    /// wasm-only.
     #[cfg(target_arch = "wasm32")]
     style_model: RwSignal<Option<super::style::StyleModel>>,
-    /// A whole `ElementStyle` the inspector emits back (§5quinquies.B): drained in
-    /// `update` and turned into one `RestyleElements` over the live selection (the
-    /// register is written whole, §2.E; the view attaches the ids the DOM lacks).
+    /// A whole `ElementStyle` the inspector emits back
+    /// (`toile-styles`): drained in `update` and turned into one
+    /// `RestyleElements` over the live selection (the register is written whole,
+    /// `toile-styles`; the view attaches the ids the DOM lacks).
     /// Wasm-only.
     #[cfg(target_arch = "wasm32")]
     restyle: RwSignal<Option<ambre_bus::app::toile::ElementStyle>>,
     /// The content-anchored floating selection toolbar's placement + flags
-    /// (§5quinquies.D), republished every frame so the bar follows the selection
-    /// as the board pans / zooms (transform-synced). `None` hides it: an empty
-    /// selection, an active gesture (move/resize/rotate), a pan, or an open inline
-    /// editor. Leptos signal, so wasm-only.
+    /// (`toile-styles`), republished every frame so the bar
+    /// follows the selection as the board pans / zooms (transform-synced). `None`
+    /// hides it: an empty selection, an active gesture (move/resize/rotate), a pan,
+    /// or an open inline editor. Leptos signal, so wasm-only.
     #[cfg(target_arch = "wasm32")]
     float_bar: RwSignal<Option<super::floatbar::FloatBar>>,
-    /// A single-field style edit the floating bar emits back (§5quinquies.D):
+    /// A single-field style edit the floating bar emits back
+    /// (`toile-styles`):
     /// drained in `update` and folded into one `RestyleElements` over the live
     /// selection (the changed field applied on top of the freshly-derived common
     /// style), the same seam as `restyle`. Wasm-only.
@@ -268,83 +286,89 @@ pub struct ToileView {
     quick_style: RwSignal<Option<super::floatbar::StyleEdit>>,
 
     /// Set while a Fit / Zoom-to-selection awaits the `SelectionStats` reply whose
-    /// bounds it will frame (§5quinquies.E). The reply treats both the same way
-    /// (fit the returned bounds), so a flag suffices; it is checked before the
-    /// find-focus recenter that shares the same stats channel. `cfg`-agnostic so
-    /// the dispatch arm stays uniform.
+    /// bounds it will frame (`toile-viewport`). The reply treats
+    /// both the same way (fit the returned bounds), so a flag suffices; it is
+    /// checked before the find-focus recenter that shares the same stats channel.
+    /// `cfg`-agnostic so the dispatch arm stays uniform.
     pending_fit: bool,
 
-    /// The selection last reported to the status bar (§8bis). `plan_repaint`
-    /// re-requests `SelectionStats` whenever the live selection differs, so the
-    /// band's count/bounds track every selection change (marquee, click, nudge)
-    /// without threading a request through each mutation site.
+    /// The selection last reported to the status bar (`toile-status-bar`).
+    /// `plan_repaint` re-requests `SelectionStats` whenever the live selection
+    /// differs, so the band's count/bounds track every selection change (marquee,
+    /// click, nudge) without threading a request through each mutation site.
     last_stats_sel: Vec<ElementId>,
 
-    /// The render-thread mirror of remote peer presence (§8): cursors, selection
-    /// ghosts, live strokes and laser trails, keyed by canonical `UserId`. Fed by
-    /// `ToileEvent::PeerPresence` and painted in the overlay pass. End-to-end
-    /// multi-user is gated on SYNC P4 (the `pub_key` -> `UserId` resolution that
-    /// keys inbound frames); the render pass is exercised against synthetic events.
+    /// The render-thread mirror of remote peer presence (`toile-presence`):
+    /// cursors, selection ghosts, live strokes and laser trails, keyed by
+    /// canonical `UserId`. Fed by `ToileEvent::PeerPresence` and painted in the
+    /// overlay pass. End-to-end multi-user is gated on SYNC P4 (the `pub_key` ->
+    /// `UserId` resolution that keys inbound frames); the render pass is exercised
+    /// against synthetic events.
     presence: PeerCursors,
 
-    /// Presentation focus mode (`toile-features` §1.D): driven by
+    /// Presentation focus mode (`toile-presentation`): driven by
     /// `PresentModeChanged`, it makes the content pass hide the board grid so the
     /// audience sees only the slide. Pure-UI, never synced.
     present: bool,
-    /// The in-flight slide transition (§1.C / §1.D), built on a `SlideChanged`
-    /// event and advanced each `plan_repaint` until done: it glides the camera to
-    /// the active frame and drives the Smart Animate content overrides. `None`
-    /// when the deck is idle.
+    /// The in-flight slide transition (`toile-presentation`), built on a
+    /// `SlideChanged` event and advanced each
+    /// `plan_repaint` until done: it glides the camera to the active frame and
+    /// drives the Smart Animate content overrides. `None` when the deck is idle.
     transition: Option<Transition>,
     /// Smart Animate overrides to paint this frame, keyed by element id, rebuilt
     /// from the active `transition` each frame and cleared when it completes. The
     /// content pass looks each element up here before falling back to its static
-    /// display (§1.C).
+    /// display (`toile-presentation`).
     anim_overrides: HashMap<ElementId, AnimatedElement>,
 
-    /// Live transform overrides for the in-flight Select gesture (§5): the resized
-    /// / rotated / moved element(s) painted at their preview transform before the
-    /// command commits on release. Rebuilt each pointer event from
-    /// `machine.gesture_overrides`, cleared on release / cancel / tool switch. It
-    /// is 100% local (no `send_edit` during the drag), so the preview is instant
-    /// and never touches the CRDT; the single command still commits on `pointer_up`.
-    /// Mutually exclusive with `anim_overrides` (a slide transition and a manual
-    /// gesture never run together).
+    /// Live transform overrides for the in-flight Select gesture
+    /// (`toile-tools`): the resized / rotated / moved element(s) painted at
+    /// their preview transform before the command commits on release. Rebuilt each
+    /// pointer event from `machine.gesture_overrides`, cleared on release / cancel
+    /// / tool switch. It is 100% local (no `send_edit` during the drag), so the
+    /// preview is instant and never touches the CRDT; the single command still
+    /// commits on `pointer_up`. Mutually exclusive with `anim_overrides` (a slide
+    /// transition and a manual gesture never run together).
     gesture_overrides: HashMap<ElementId, AnimatedElement>,
 
     /// True between committing a transform gesture on release and the arrival of
-    /// the recomputed `ViewportData` that carries the new geometry (§5). While set,
-    /// `gesture_overrides` is held as an *optimistic* preview so the object keeps
-    /// its released position/size instead of snapping back to the pre-commit
-    /// geometry for the frames the Logic round-trip takes -- which read as a
-    /// flicker. Cleared (with the overrides) on the next display update.
+    /// the recomputed `ViewportData` that carries the new geometry
+    /// (`toile-tools`). While set, `gesture_overrides` is held as an
+    /// *optimistic* preview so the object keeps its released position/size instead
+    /// of snapping back to the pre-commit geometry for the frames the Logic
+    /// round-trip takes -- which read as a flicker. Cleared (with the overrides) on
+    /// the next display update.
     gesture_commit_pending: bool,
 
     /// Decoded image pixels keyed by media hash, passed to the content walk so
-    /// `Image` elements paint real pixels (`toile-interop §5.B`). Empty until the
-    /// media cache resolves a hash: an unresolved image paints a placeholder box.
-    /// The screen-side population (from `MediaDownloaded`) lands with the media
-    /// cache slice; the field is here so the walk has a stable source today.
+    /// `Image` elements paint real pixels (`toile-media`). Empty
+    /// until the media cache resolves a hash: an unresolved image paints a
+    /// placeholder box. The screen-side population (from `MediaDownloaded`) lands
+    /// with the media cache slice; the field is here so the walk has a stable
+    /// source today.
     images: render::ImageStore,
 
     /// Which `doc_embed` holds input focus, and the click-vs-drag arbitration
-    /// that decides it (§2.I "Input focus"). View-local, never CRDT. While an
-    /// embed is focused, `FrameHost` maps canvas input into that child and calls
-    /// the child view's own `handle_input`; this view forwards nothing itself,
-    /// because it cannot name the child's command type (§2.I "Command routing").
+    /// that decides it (`toile-embeds`, "Input focus"). View-local,
+    /// never CRDT. While an embed is focused, `FrameHost` maps canvas input into
+    /// that child and calls the child view's own `handle_input`; this view forwards
+    /// nothing itself, because it cannot name the child's command type
+    /// (`toile-embeds`, "Command routing").
     embed_focus: embed::EmbedFocus,
     /// The child sync sessions behind the visible `doc_embed`s, with the close
-    /// debounce that keeps a pan from thrashing them (§2.I "Opening the child").
+    /// debounce that keeps a pan from thrashing them (`toile-embeds`,
+    /// "Opening the child").
     embed_sessions: embed::EmbedSessions,
-    /// The child document the last input event was routed into (§2.I "Input
-    /// focus"), or `None` when the board consumed it. Set by `handle_input`,
-    /// read once by `FrameHost` right after, which forwards the (coordinate-
-    /// remapped) event to that child's own view. View-local, never CRDT.
+    /// The child document the last input event was routed into
+    /// (`toile-embeds`, "Input focus"), or `None` when the board
+    /// consumed it. Set by `handle_input`, read once by `FrameHost` right after,
+    /// which forwards the (coordinate-remapped) event to that child's own view.
+    /// View-local, never CRDT.
     child_route: Option<DocumentId>,
 
     /// The latest frame timestamp (ms), captured in `plan_repaint`, used to blink
-    /// the inline-edit caret (§6). Paint has no clock of its own, so the per-frame
-    /// hook stashes it here.
+    /// the inline-edit caret (`toile-text-editing`). Paint has no clock of its own,
+    /// so the per-frame hook stashes it here.
     frame_now_ms: f64,
 }
 
@@ -357,10 +381,10 @@ impl ToileView {
         canvas_width: f64,
         canvas_height: f64,
         text_input: TextInput,
-        // When embedded as a `doc_embed` child (§2.I), the child view must not
-        // grab the shared text pipe on construction: the top-level document owns
-        // the caret until the user clicks into the embed. A top-level view passes
-        // `false` and focuses immediately, as before.
+        // When embedded as a `doc_embed` child (`toile-embeds`), the
+        // child view must not grab the shared text pipe on construction: the
+        // top-level document owns the caret until the user clicks into the embed.
+        // A top-level view passes `false` and focuses immediately, as before.
         embedded: bool,
         perf_pub: PerfPublisher,
         theme_ctl: ThemeControl,
@@ -518,20 +542,21 @@ impl ToileView {
                 self.display = dv;
                 self.data_dirty = true;
                 // The recomputed frame now carries the committed transform, so drop
-                // the optimistic post-release preview (§5): the real geometry takes
-                // over seamlessly, with no snap-back flicker.
+                // the optimistic post-release preview (`toile-tools`): the
+                // real geometry takes over seamlessly, with no snap-back flicker.
                 if self.gesture_commit_pending && !self.machine.is_active() {
                     self.gesture_overrides.clear();
                     self.gesture_commit_pending = false;
                     self.needs_full = true;
                 }
             }
-            // Authoritative copy reply (§5ter): the Logic thread built a
-            // self-contained, id-free snapshot of the selection from the whole
-            // board (no viewport limit). Stash it in memory for a full-fidelity
-            // same-tab paste and mark it pending so the host mirrors it to the OS
-            // clipboard next frame. Paste into a foreign app is out of MVP, so the
-            // `text/plain` mirror is empty (the private Ambre bytes carry it all).
+            // Authoritative copy reply (`toile-clipboard`): the Logic thread
+            // built a self-contained, id-free snapshot of the selection from the
+            // whole board (no viewport limit). Stash it in memory for a
+            // full-fidelity same-tab paste and mark it pending so the host mirrors
+            // it to the OS clipboard next frame. Paste into a foreign app is out of
+            // MVP, so the `text/plain` mirror is empty (the private Ambre bytes
+            // carry it all).
             ToileEvent::Clipboard(payload) => {
                 let blob = ambre_bus::ClipboardBlob {
                     text: String::new(),
@@ -541,16 +566,18 @@ impl ToileView {
                 self.pending_clipboard = Some(blob);
             }
             // A Sticky / Text tool just created an element: capture its id so the
-            // inline editor opens on it once its `DisplayViewport` lands (§6).
+            // inline editor opens on it once its `DisplayViewport` lands
+            // (`toile-text-editing`).
             ToileEvent::ElementCreated(id) => {
                 if self.edit_open_on_create {
                     self.edit_open_on_create = false;
                     self.edit_pending_open = Some(id);
                 }
             }
-            // Find results (§5quater): stash the highlight set and request the
-            // focus element's geometry so the camera can recenter on it (the
-            // reply may concern an off-screen match absent from `display`).
+            // Find results (`toile-find`): stash the highlight set
+            // and request the focus element's geometry so the camera can recenter
+            // on it (the reply may concern an off-screen match absent from
+            // `display`).
             ToileEvent::FindResults(fr) => {
                 self.find_hits = fr.hits;
                 self.find_focus = fr.focus.clone();
@@ -561,12 +588,14 @@ impl ToileView {
                 self.needs_full = true;
             }
             // A `SelectionStats` reply we asked for to recenter on a find focus
-            // (§5quater). Move the camera center onto the element's bounds center
-            // and re-cull; ignore replies not tied to a pending find focus (a
-            // future status-bar request, §8bis).
+            // (`toile-find`). Move the camera center onto the
+            // element's bounds center and re-cull; ignore replies not tied to a
+            // pending find focus (a future status-bar request,
+            // `toile-find`).
             ToileEvent::SelectionStats(stats) => {
                 // A pending Fit / Zoom-to-selection consumes the reply first
-                // (§5quinquies.E): frame the returned bounds (center + scale).
+                // (`toile-viewport`): frame the returned bounds
+                // (center + scale).
                 if std::mem::take(&mut self.pending_fit) {
                     if let Some(bounds) = stats.bounds {
                         self.cam.fit_bounds(bounds, super::viewport::FIT_PAD);
@@ -581,28 +610,31 @@ impl ToileView {
                     self.queue_viewport();
                 }
             }
-            // Remote presence (§8): fold the peer's latest sample into the render
-            // mirror and mark the overlay dirty so the cursor / ghosts / laser
-            // repaint. Keyed by the sender's canonical `UserId` (spoof-proof, §7).
+            // Remote presence (`toile-presence`): fold the peer's latest sample
+            // into the render mirror and mark the overlay dirty so the cursor /
+            // ghosts / laser repaint. Keyed by the sender's canonical `UserId`
+            // (spoof-proof, `toile-presence`).
             ToileEvent::PeerPresence(update) => {
                 self.presence.update(update.user_id, update.presence);
                 self.data_dirty = true;
             }
             ToileEvent::Error(e) => {
                 tracing::warn!("Toile rejected: {e}");
-                // A rejected transform never yields a new frame; drop the optimistic
-                // preview so the object reverts to its real (unchanged) geometry.
+                // A rejected transform never yields a new frame; drop the
+                // optimistic preview so the object reverts to its real (unchanged)
+                // geometry.
                 if self.gesture_commit_pending {
                     self.gesture_overrides.clear();
                     self.gesture_commit_pending = false;
                     self.needs_full = true;
                 }
             }
-            // A slide change (§1.C / §1.D): start a transition that glides the
-            // camera to the active frame and Smart Animates its content. The
-            // camera target is the fitted frame rect; a slide with no resolvable
-            // frame keeps the camera where it is (index-only move). Advanced each
-            // `plan_repaint` against the frame clock.
+            // A slide change (`toile-presentation`): start
+            // a transition that glides the camera to the active frame and Smart
+            // Animates its content. The camera target is the fitted frame rect; a
+            // slide with no resolvable frame keeps the camera where it is
+            // (index-only move). Advanced each `plan_repaint` against the frame
+            // clock.
             ToileEvent::SlideChanged(change) => {
                 let cam_from = self.cam;
                 let (to_center, to_zoom) = change
@@ -619,9 +651,10 @@ impl ToileView {
                 ));
                 self.needs_full = true;
             }
-            // Present (focus) mode toggled (§1.D): the content pass hides the grid
-            // while `present`. Leaving it drops any in-flight transition so the
-            // board returns to its plain camera + full-opacity content.
+            // Present (focus) mode toggled (`toile-presentation`): the
+            // content pass hides the grid while `present`. Leaving it drops any
+            // in-flight transition so the board returns to its plain camera +
+            // full-opacity content.
             ToileEvent::PresentModeChanged(present) => {
                 self.present = present;
                 if !present {
@@ -630,21 +663,22 @@ impl ToileView {
                 }
                 self.needs_full = true;
             }
-            // A local reaction changed the tally (§4.A). The tally rides in
-            // `DisplayViewport.reactions`, derived on the Logic thread, so we
-            // request a fresh viewport for the current camera: the resulting
-            // `ViewportData` carries the updated badges. (Remote reactions
-            // already push a fresh `ViewportData` via `apply_remote`.)
+            // A local reaction changed the tally (`toile-reactions`).
+            // The tally rides in `DisplayViewport.reactions`, derived on the Logic
+            // thread, so we request a fresh viewport for the current camera: the
+            // resulting `ViewportData` carries the updated badges. (Remote
+            // reactions already push a fresh `ViewportData` via `apply_remote`.)
             ToileEvent::ReactionsUpdated(_) => self.queue_viewport(),
-            // "Follow presenter" role changes (§1.B) are chrome-panel state, not
-            // camera-pass state: the presenter panel reflects them via its own
-            // signals. The WebGPU view has nothing to repaint for these.
+            // "Follow presenter" role changes (`toile-presentation`) are
+            // chrome-panel state, not camera-pass state: the presenter panel
+            // reflects them via its own signals. The WebGPU view has nothing to
+            // repaint for these.
             ToileEvent::PresentBroadcastChanged(_) | ToileEvent::FollowingChanged(_) => {}
             ToileEvent::DanglingConnector(_) | ToileEvent::UndoState { .. } => {}
-            // A foreign-file import landed (§2.C). The accompanying `ViewportData`
-            // already triggered the repaint; log the lossy-import summary so a
-            // dropped construct is visible in diagnostics. UI toasts are the app
-            // shell's job.
+            // A foreign-file import landed (`toile-import-export`). The
+            // accompanying `ViewportData` already triggered the repaint; log the
+            // lossy-import summary so a dropped construct is visible in
+            // diagnostics. UI toasts are the app shell's job.
             ToileEvent::ImportReport { imported, skipped } => {
                 tracing::info!(
                     "Toile import: {imported} elements, {} construct(s) dropped",
@@ -660,8 +694,9 @@ impl ToileView {
     // -- Input handling --------------------------------------------------------
 
     fn handle_wheel(&mut self, dx: f64, dy: f64, delta_mode: u32, ctrl_key: bool) -> bool {
-        // Zoom vs pan is decided by the pointer mode (§3). Ctrl (or a trackpad
-        // pinch, which the browser reports as a ctrl-wheel) always zooms.
+        // Zoom vs pan is decided by the pointer mode (`toile-viewport`). Ctrl
+        // (or a trackpad pinch, which the browser reports as a ctrl-wheel) always
+        // zooms.
         let zoom = match self.pointer_mode {
             PointerMode::Mouse => true,
             PointerMode::Trackpad => ctrl_key,
@@ -687,7 +722,8 @@ impl ToileView {
     /// latched guess (`detected_mouse`). Signals, strongest first: a non-pixel
     /// `delta_mode` is a classic line/page wheel (mouse); a non-zero `dx` is a
     /// two-axis trackpad glide; a large `|dy|` with no `dx` is a discrete mouse
-    /// notch. Ambiguous fine glides leave the latch unchanged (§3).
+    /// notch. Ambiguous fine glides leave the latch unchanged
+    /// (`toile-viewport`).
     fn classify_wheel(&mut self, dx: f64, dy: f64, delta_mode: u32) {
         if let Some(mouse) = wheel_device(dx, dy, delta_mode) {
             self.detected_mouse = mouse;
@@ -703,7 +739,8 @@ impl ToileView {
             }
             ToolOutcome::Command(cmd) => {
                 // A Sticky / Text placement opens the inline editor on the new
-                // element once its id comes back via `ElementCreated` (§6).
+                // element once its id comes back via `ElementCreated`
+                // (`toile-text-editing`).
                 if let ToileCommand::CreateElement {
                     kind: ElementKind::Sticky | ElementKind::Text,
                     ..
@@ -712,13 +749,15 @@ impl ToileView {
                     self.edit_open_on_create = true;
                     // A placement is a one-shot action: revert to Select so the
                     // just-created note is selected and ready to edit, rather than
-                    // the next click dropping another note (§5 / feedback). The
-                    // editor opens on the new id when `ElementCreated` lands.
+                    // the next click dropping another note (`toile-tools` /
+                    // feedback). The editor opens on the new id when
+                    // `ElementCreated` lands.
                     self.set_tool(Tool::Select);
                 }
-                // A transform commit (release of a move / resize / rotate) keeps its
-                // optimistic preview until the recomputed frame lands, so the object
-                // holds its released geometry instead of snapping back for a frame.
+                // A transform commit (release of a move / resize / rotate) keeps
+                // its optimistic preview until the recomputed frame lands, so the
+                // object holds its released geometry instead of snapping back for
+                // a frame.
                 if matches!(
                     &cmd,
                     ToileCommand::MoveElements { .. }
@@ -736,13 +775,15 @@ impl ToileView {
     }
 
     /// Rebuild the live gesture overrides from the machine's in-flight transform
-    /// (§5): the resized / rotated / moved element(s) painted at their preview
-    /// bounds / rotation, keeping each one's committed opacity / fill. Empty when
-    /// no gesture is in flight (after release / cancel), which clears the preview.
+    /// (`toile-tools`): the resized / rotated / moved element(s) painted at
+    /// their preview bounds / rotation, keeping each one's committed opacity /
+    /// fill. Empty when no gesture is in flight (after release / cancel), which
+    /// clears the preview.
     fn rebuild_gesture_overrides(&mut self) {
         let live = self.machine.gesture_overrides(&self.display);
-        // No live gesture: clear -- unless a commit is pending, where the overrides
-        // are the optimistic post-release preview held until the new frame lands.
+        // No live gesture: clear -- unless a commit is pending, where the
+        // overrides are the optimistic post-release preview held until the new
+        // frame lands.
         if live.is_empty() {
             if !self.gesture_commit_pending {
                 self.gesture_overrides.clear();
@@ -770,9 +811,10 @@ impl ToileView {
         }
     }
 
-    // -- Nested document embeds (§2.I) -----------------------------------------
+    // -- Nested document embeds (`toile-embeds`) --------------------
 
-    /// The visible `doc_embed`s in screen space, for `FrameHost` (§2.I "Render").
+    /// The visible `doc_embed`s in screen space, for `FrameHost`
+    /// (`toile-embeds`, "Render").
     /// It owns the child `AppView`s: it paints each one clipped to `screen_rect`
     /// over this view's content pass, and -- for the focused one -- maps canvas
     /// input into the child and calls the child's own `handle_input`. This view
@@ -790,9 +832,10 @@ impl ToileView {
         Some(embed::to_child_space(elem, &self.cam, screen))
     }
 
-    /// The nested document currently holding input focus (§2.I), resolved from
-    /// the focused board element to its embedded `DocumentId` -- the key into
-    /// `FrameHost`'s child views. `None` when the board itself has focus.
+    /// The nested document currently holding input focus
+    /// (`toile-embeds`), resolved from the focused board element to its
+    /// embedded `DocumentId` -- the key into `FrameHost`'s child views. `None`
+    /// when the board itself has focus.
     pub fn focused_child(&self) -> Option<DocumentId> {
         let id = self.embed_focus.current()?;
         match &self.find_element(id)?.geom {
@@ -802,8 +845,9 @@ impl ToileView {
     }
 
     /// The child the last `handle_input` routed into, for `FrameHost` to forward
-    /// the (coordinate-remapped) event to (§2.I "Input focus"). Cleared at the
-    /// start of every `handle_input`, so it reflects only the latest event.
+    /// the (coordinate-remapped) event to (`toile-embeds`, "Input
+    /// focus"). Cleared at the start of every `handle_input`, so it reflects only
+    /// the latest event.
     pub fn child_route(&self) -> Option<DocumentId> {
         self.child_route
     }
@@ -819,11 +863,12 @@ impl ToileView {
     }
 
     /// Decide whether the just-arrived event belongs to the focused embed `id`
-    /// and so must be handed to the child instead of the board (§2.I "Input
-    /// focus"). Keystrokes / text / composition / wheel go to the child while it
-    /// holds focus; a pointer event goes to it only while the cursor is inside
-    /// its quad, so a click that lands outside still returns focus to the board.
-    /// `Escape` is never captured -- the board needs it to blur (see `handle_key`).
+    /// and so must be handed to the child instead of the board
+    /// (`toile-embeds`, "Input focus"). Keystrokes / text / composition
+    /// / wheel go to the child while it holds focus; a pointer event goes to it
+    /// only while the cursor is inside its quad, so a click that lands outside
+    /// still returns focus to the board. `Escape` is never captured -- the board
+    /// needs it to blur (see `handle_key`).
     fn route_to_child(&self, ev: &InputEvent, id: &ElementId) -> bool {
         match ev {
             InputEvent::Key { key, .. } => key != "Escape",
@@ -850,8 +895,9 @@ impl ToileView {
 
     /// A release landed at `screen`: settle the armed press (a click focuses the
     /// embed, a release elsewhere returns focus to the board). The click that
-    /// focuses does not reach the child (§2.I "Input focus"), so entering a
-    /// document never lands a stray edit on the first cell it happens to hit.
+    /// focuses does not reach the child (`toile-embeds`, "Input
+    /// focus"), so entering a document never lands a stray edit on the first cell
+    /// it happens to hit.
     fn settle_embed_press(&mut self, screen: Point) {
         if self.embed_focus.on_release(screen) {
             self.needs_full = true;
@@ -869,8 +915,9 @@ impl ToileView {
     }
 
     /// Open every `doc_embed` that entered the culled set and close those that
-    /// have stayed out past the debounce (§2.I "Opening the child"). Driven from
-    /// `plan_repaint`, the one per-frame hook carrying the frame clock.
+    /// have stayed out past the debounce (`toile-embeds`, "Opening the
+    /// child"). Driven from `plan_repaint`, the one per-frame hook carrying the
+    /// frame clock.
     fn drive_embed_lifecycle(&mut self, now_ms: f64) {
         for cmd in self.embed_sessions.sync(&self.display, now_ms) {
             self.send_open(cmd);
@@ -892,9 +939,9 @@ impl ToileView {
         }
     }
 
-    /// Send a document-session control command (child open / close, §2.I). Unlike
-    /// `send_edit` this is not addressed to a document via `LogicCommand::App`:
-    /// it manages the child's session itself.
+    /// Send a document-session control command (child open / close,
+    /// `toile-embeds`). Unlike `send_edit` this is not addressed to a
+    /// document via `LogicCommand::App`: it manages the child's session itself.
     fn send_open(&self, cmd: LogicCommand) {
         if self.fatal {
             return;
@@ -915,8 +962,8 @@ impl ToileView {
         }
     }
 
-    /// Close every child session this view opened (§2.I: "Closing the Toile
-    /// closes every child immediately, no debounce").
+    /// Close every child session this view opened (`toile-embeds`:
+    /// "Closing the Toile closes every child immediately, no debounce").
     fn close_all_embeds(&mut self) {
         for cmd in self.embed_sessions.close_all() {
             self.send_open(cmd);
@@ -928,15 +975,16 @@ impl ToileView {
         let screen = Point::new(x, y);
         self.last_pointer = screen;
         // A press in the canvas returns keyboard focus to the transparent text
-        // pipe (Trame parity, `trame-ui`). After interacting with the DOM chrome
+        // pipe (Trame parity, `trame-cell-editing`). After interacting with the DOM chrome
         // (e.g. picking a sticky colour in the palette), focus sits on a chrome
         // button; without this, the board would feel one click behind -- the first
         // canvas click only refocusing, the second acting. The gesture still runs
         // in this same call, so a single click both refocuses and places.
         self.text_input.focus();
-        // Right button: select under the cursor and publish the menu scope (§5ter).
-        // The DOM `contextmenu` listener opens the menu; pointerdown fires first, so
-        // the scope signal is fresh when the entry `Memo` recomputes.
+        // Right button: select under the cursor and publish the menu scope
+        // (`toile-menus`). The DOM `contextmenu` listener opens the menu;
+        // pointerdown fires first, so the scope signal is fresh when the entry
+        // `Memo` recomputes.
         if button == 2 {
             self.handle_right_click(screen);
             return true;
@@ -947,12 +995,14 @@ impl ToileView {
             return true;
         }
         let world = self.cam.screen_to_world() * screen;
-        // Arm a possible embed focus (§2.I). Consumes nothing: the board's own
-        // gesture runs below either way, and the grant is settled on release --
-        // a drag from here moves the embed instead of entering it.
+        // Arm a possible embed focus (`toile-embeds`). Consumes
+        // nothing: the board's own gesture runs below either way, and the grant is
+        // settled on release -- a drag from here moves the embed instead of
+        // entering it.
         self.arm_embed_press(world, screen);
         // Capture the selection before the click settles it, to detect a press on
-        // an already-selected element (the click-to-edit trigger, §6).
+        // an already-selected element (the click-to-edit trigger,
+        // `toile-text-editing`).
         let prev_selection = self.selection.clone();
         let out = self.machine.pointer_down(
             world,
@@ -963,10 +1013,11 @@ impl ToileView {
             self.group_scope.as_ref(),
         );
         self.apply_outcome(out);
-        // Click-to-edit (Miro-style, §6): a left press on a Sticky / Text element
-        // that was ALREADY the sole selection arms an edit. A first click only
-        // selects (the element was not selected before, so nothing is armed); a
-        // second click enters edit on release, unless a drag turns it into a move.
+        // Click-to-edit (Miro-style, `toile-text-editing`): a left press on a
+        // Sticky / Text element that was ALREADY the sole selection arms an edit.
+        // A first click only selects (the element was not selected before, so
+        // nothing is armed); a second click enters edit on release, unless a drag
+        // turns it into a move.
         self.click_edit_candidate = (button == 0 && self.machine.tool() == Tool::Select)
             .then(|| match self.selection.as_slice() {
                 [id] if *prev_selection == *self.selection && self.is_text_editable(id) => {
@@ -986,12 +1037,13 @@ impl ToileView {
             .is_some_and(|e| matches!(e.kind, ElementKind::Sticky | ElementKind::Text))
     }
 
-    // -- Context menu bridge (§5ter) -------------------------------------------
+    // -- Context menu bridge (`toile-menus`) -------------------------
 
     /// React to a right-click: resolve the topmost hit to its group-selection
-    /// target (§7) and, unless it is already part of the current selection, select
-    /// just it; an empty hit clears the selection (empty-canvas menu). Then publish
-    /// the selection scope for the DOM menu. Emits no command and starts no gesture.
+    /// target (`toile-menus`) and, unless it is already part of the current
+    /// selection, select just it; an empty hit clears the selection (empty-canvas
+    /// menu). Then publish the selection scope for the DOM menu. Emits no command
+    /// and starts no gesture.
     fn handle_right_click(&mut self, screen: Point) {
         let world = self.cam.screen_to_world() * screen;
         match hit_topmost(&self.display.nodes, world) {
@@ -1007,15 +1059,17 @@ impl ToileView {
         self.publish_ctx_scope();
     }
 
-    /// Publish the current selection scope to the DOM context menu (§5ter). Wasm-only
-    /// (leptos signal); a host no-op keeps the input path `cfg`-agnostic.
+    /// Publish the current selection scope to the DOM context menu
+    /// (`toile-menus`). Wasm-only (leptos signal); a host no-op keeps
+    /// the input path `cfg`-agnostic.
     #[cfg(target_arch = "wasm32")]
     fn publish_ctx_scope(&self) {
         let scope =
             super::menu::ctx_scope_for(&self.selection, self.group_scope.as_ref(), &self.display);
         self.ctx_scope.set(scope);
-        // The style inspector shares the same publish point (§5quinquies.B): both
-        // are pure functions of the selection x the current display.
+        // The style inspector shares the same publish point
+        // (`toile-menus`): both are pure functions of the
+        // selection x the current display.
         self.style_model.set(super::style::style_scope_for(
             &self.selection,
             &self.display,
@@ -1024,8 +1078,9 @@ impl ToileView {
     #[cfg(not(target_arch = "wasm32"))]
     fn publish_ctx_scope(&self) {}
 
-    /// Clear the status-bar aggregates (§8bis) on an empty selection. Wasm-only
-    /// (leptos signal); a host no-op keeps `plan_repaint` cfg-agnostic.
+    /// Clear the status-bar aggregates (`toile-status-bar`) on an empty
+    /// selection. Wasm-only (leptos signal); a host no-op keeps `plan_repaint`
+    /// cfg-agnostic.
     #[cfg(target_arch = "wasm32")]
     fn clear_sel_stats(&self) {
         self.sel_stats.set(None);
@@ -1034,7 +1089,8 @@ impl ToileView {
     fn clear_sel_stats(&self) {}
 
     /// Drain a context-menu command the shell forwarded and apply it against the
-    /// live selection (§5ter). Wasm-only; a host no-op keeps `update` cfg-agnostic.
+    /// live selection (`toile-status-bar`). Wasm-only; a host no-op keeps
+    /// `update` cfg-agnostic.
     #[cfg(target_arch = "wasm32")]
     fn drain_menu_cmd(&mut self) {
         let Some(id) = self.menu_cmd.get_untracked() else {
@@ -1047,9 +1103,10 @@ impl ToileView {
     fn drain_menu_cmd(&mut self) {}
 
     /// Drain a whole-style edit the inspector emitted and apply it to the live
-    /// selection as one `RestyleElements` (§5quinquies.B / §2.E). The DOM inspector
-    /// cannot name the selection, so the view attaches it here. Wasm-only; a host
-    /// no-op keeps `update` cfg-agnostic.
+    /// selection as one `RestyleElements` (`toile-styles` /
+    /// `toile-styles`). The DOM inspector cannot name the selection, so
+    /// the view attaches it here. Wasm-only; a host no-op keeps `update`
+    /// cfg-agnostic.
     #[cfg(target_arch = "wasm32")]
     fn drain_restyle(&mut self) {
         let Some(style) = self.restyle.get_untracked() else {
@@ -1068,12 +1125,13 @@ impl ToileView {
     #[cfg(not(target_arch = "wasm32"))]
     fn drain_restyle(&mut self) {}
 
-    /// Republish the floating selection toolbar's placement + flags (§5quinquies.D).
-    /// Transform-synced: recomputed every frame from the live selection x camera so
-    /// the bar tracks pan/zoom. Hidden (`None`) on an empty selection, an active
-    /// gesture (move/resize/rotate), a pan, or an open inline editor. Written only on
-    /// change to avoid needless reactive churn while idle. Wasm-only; a host no-op
-    /// keeps `update` cfg-agnostic.
+    /// Republish the floating selection toolbar's placement + flags
+    /// (`toile-styles`). Transform-synced: recomputed every frame
+    /// from the live selection x camera so the bar tracks pan/zoom. Hidden
+    /// (`None`) on an empty selection, an active gesture (move/resize/rotate), a
+    /// pan, or an open inline editor. Written only on change to avoid needless
+    /// reactive churn while idle. Wasm-only; a host no-op keeps `update`
+    /// cfg-agnostic.
     #[cfg(target_arch = "wasm32")]
     fn publish_float_bar(&self) {
         let next = if self.selection.is_empty()
@@ -1098,12 +1156,13 @@ impl ToileView {
     #[cfg(not(target_arch = "wasm32"))]
     fn publish_float_bar(&self) {}
 
-    /// Drain a single-field style edit the floating bar emitted (§5quinquies.D) and
-    /// apply it to the live selection as one whole-register `RestyleElements` (§2.E).
-    /// The base is the selection's freshly-derived common style so the untouched
-    /// attributes are preserved; only the emitted field is overwritten, so back-to-
-    /// back bar edits never clobber one another. The view attaches the ids the DOM
-    /// bar cannot name. Wasm-only; a host no-op keeps `update` cfg-agnostic.
+    /// Drain a single-field style edit the floating bar emitted
+    /// (`toile-styles`) and apply it to the live selection as one
+    /// whole-register `RestyleElements` (`toile-styles`). The base is
+    /// the selection's freshly-derived common style so the untouched attributes are
+    /// preserved; only the emitted field is overwritten, so back-to-back bar edits
+    /// never clobber one another. The view attaches the ids the DOM bar cannot
+    /// name. Wasm-only; a host no-op keeps `update` cfg-agnostic.
     #[cfg(target_arch = "wasm32")]
     fn drain_quick_style(&mut self) {
         let Some(edit) = self.quick_style.get_untracked() else {
@@ -1128,10 +1187,10 @@ impl ToileView {
     #[cfg(not(target_arch = "wasm32"))]
     fn drain_quick_style(&mut self) {}
 
-    /// Apply the tool the DOM palette / keyboard selected (§5quinquies.A): if the
-    /// shared signal differs from the machine's current tool, switch (which cancels
-    /// any in-flight gesture and marks a full repaint). Wasm-only; a host no-op
-    /// keeps `update` cfg-agnostic.
+    /// Apply the tool the DOM palette / keyboard selected
+    /// (`toile-tools`): if the shared signal differs from the
+    /// machine's current tool, switch (which cancels any in-flight gesture and
+    /// marks a full repaint). Wasm-only; a host no-op keeps `update` cfg-agnostic.
     #[cfg(target_arch = "wasm32")]
     fn apply_active_tool(&mut self) {
         let tool = self.active_tool.get_untracked();
@@ -1143,9 +1202,9 @@ impl ToileView {
     fn apply_active_tool(&mut self) {}
 
     /// Publish the camera's current zoom to the shared `zoom` signal so the DOM
-    /// zoom control / status bar readout tracks pan/zoom (§5quinquies.E). Written
-    /// only on change to avoid needless reactive churn. Wasm-only; a host no-op
-    /// keeps `update` cfg-agnostic.
+    /// zoom control / status bar readout tracks pan/zoom
+    /// (`toile-tools`). Written only on change to avoid needless
+    /// reactive churn. Wasm-only; a host no-op keeps `update` cfg-agnostic.
     #[cfg(target_arch = "wasm32")]
     fn publish_zoom(&self) {
         if (self.zoom.get_untracked() - self.cam.zoom).abs() > f64::EPSILON {
@@ -1155,19 +1214,20 @@ impl ToileView {
     #[cfg(not(target_arch = "wasm32"))]
     fn publish_zoom(&self) {}
 
-    /// Turn a menu `CommandId` into board mutation(s). `Paste` and `Select all` are
-    /// UI-only intents serviced here (the same-session clipboard / local selection);
-    /// every other id is resolved against the selection by `menu::resolve_menu_command`
-    /// and emitted. Wasm-only (reached only from `drain_menu_cmd`).
+    /// Turn a menu `CommandId` into board mutation(s). `Paste` and `Select all`
+    /// are UI-only intents serviced here (the same-session clipboard / local
+    /// selection); every other id is resolved against the selection by
+    /// `menu::resolve_menu_command` and emitted. Wasm-only (reached only from
+    /// `drain_menu_cmd`).
     #[cfg(target_arch = "wasm32")]
     fn apply_menu_command(&mut self, id: CommandId) {
         use super::menu_bar as mb;
 
-        // Top menu bar / zoom control ids (§5quinquies.E). Undo / redo and the
-        // presentation entry point resolve to a direct board command via the
-        // host-tested `menu_bar_edit`; the zoom actions below are local-transform
-        // intents that never reach Logic (only the resulting `SetViewport` cull
-        // request does).
+        // Top menu bar / zoom control ids (`toile-menus`). Undo
+        // / redo and the presentation entry point resolve to a direct board
+        // command via the host-tested `menu_bar_edit`; the zoom actions below are
+        // local-transform intents that never reach Logic (only the resulting
+        // `SetViewport` cull request does).
         if let Some(cmd) = mb::menu_bar_edit(id) {
             self.send_edit(cmd);
             return;
@@ -1207,8 +1267,9 @@ impl ToileView {
                 }
                 return;
             }
-            // Wheel navigation preference (§3): pure view-local state, no viewport
-            // change and no Logic round-trip. A forced mode overrides auto-detect.
+            // Wheel navigation preference (`toile-viewport`): pure view-local
+            // state, no viewport change and no Logic round-trip. A forced mode
+            // overrides auto-detect.
             mb::POINTER_AUTO => {
                 self.pointer_mode = PointerMode::Auto;
                 return;
@@ -1230,7 +1291,8 @@ impl ToileView {
         }
         if id == super::menu::PASTE {
             // Menu paste uses the in-memory same-session blob; a cross-tab paste
-            // still rides the native Ctrl+V `paste` DOM event (§5ter).
+            // still rides the native Ctrl+V `paste` DOM event
+            // (`toile-viewport`).
             if let Some(blob) = self.last_clip.clone() {
                 self.paste_clipboard(blob, true);
             }
@@ -1249,7 +1311,7 @@ impl ToileView {
     }
 
     /// Select every displayed element (local, never synced). Shared by `Ctrl+A`
-    /// and the context-menu "Select all" entry (§5).
+    /// and the context-menu "Select all" entry (`toile-selection`).
     fn select_all(&mut self) {
         self.selection = self
             .display
@@ -1281,7 +1343,8 @@ impl ToileView {
             return true;
         }
         // At rest: refresh the directional resize cursor from the hovered edge /
-        // corner (§5quinquies.A). No repaint -- only the DOM cursor changes.
+        // corner (`toile-tools`). No repaint -- only the DOM
+        // cursor changes.
         self.publish_cursor(screen);
         false
     }
@@ -1294,10 +1357,10 @@ impl ToileView {
         if self.panning.take().is_some() {
             return true;
         }
-        // Settle the embed focus armed at press time (§2.I): a click on an embed
-        // enters it, a release anywhere else returns focus to the board. Runs
-        // before the gesture end below so a click that only focuses still lets
-        // the Select tool finish its selection normally.
+        // Settle the embed focus armed at press time (`toile-embeds`):
+        // a click on an embed enters it, a release anywhere else returns focus to
+        // the board. Runs before the gesture end below so a click that only
+        // focuses still lets the Select tool finish its selection normally.
         self.settle_embed_press(screen);
         let mut consumed = false;
         if self.machine.is_active() {
@@ -1308,10 +1371,11 @@ impl ToileView {
             self.needs_full = true;
             consumed = true;
         }
-        // Click-to-edit (Miro-style, §6): a press on an already-selected Sticky /
-        // Text element released without a drag (a click, not a move) enters inline
-        // edit. Checked after the gesture settles, so a real move does not trigger
-        // it and the selection is still the armed element.
+        // Click-to-edit (Miro-style, `toile-text-editing`): a press on an
+        // already-selected Sticky / Text element released without a drag (a click,
+        // not a move) enters inline edit. Checked after the gesture settles, so a
+        // real move does not trigger it and the selection is still the armed
+        // element.
         if let Some((id, down)) = edit_candidate
             && self.editor.is_none()
             && self.selection.as_slice() == std::slice::from_ref(&id)
@@ -1329,7 +1393,8 @@ impl ToileView {
         self.last_pointer = screen;
         let world = self.cam.screen_to_world() * screen;
         // Select tool: a double-click on a Sticky / Text element opens the inline
-        // editor on it (§6), taking precedence over group entering.
+        // editor on it (`toile-text-editing`), taking precedence over group
+        // entering.
         if self.machine.tool() == Tool::Select {
             let editable = hit_topmost(&self.display.nodes, world).filter(|hit| {
                 self.find_element(hit)
@@ -1342,8 +1407,9 @@ impl ToileView {
         }
         let out = self.machine.double_click(world);
         // Select tool: a double-click on a grouped element enters its scope,
-        // peeling one nesting level so the next click selects a member (§2.F bis /
-        // §7). Only when the tool produced nothing of its own (e.g. pen finish).
+        // peeling one nesting level so the next click selects a member
+        // (`toile-groups` / `toile-selection`). Only when the
+        // tool produced nothing of its own (e.g. pen finish).
         if matches!(out, ToolOutcome::None)
             && self.machine.tool() == Tool::Select
             && let Some(hit) = hit_topmost(&self.display.nodes, world)
@@ -1361,11 +1427,12 @@ impl ToileView {
         true
     }
 
-    /// Switch the active tool (driven by the chrome tool palette, §1bis, or by the
-    /// view itself, e.g. Escape reverting to Select, §5). Publishes the shared
-    /// active-tool signal so the palette's pressed state follows a view-initiated
-    /// switch; without this, `apply_active_tool` would read the stale signal next
-    /// frame and re-arm the old tool.
+    /// Switch the active tool (driven by the chrome tool palette,
+    /// `toile-tools`, or by the view itself, e.g. Escape reverting to
+    /// Select, `toile-tools`). Publishes the shared active-tool signal so
+    /// the palette's pressed state follows a view-initiated switch; without this,
+    /// `apply_active_tool` would read the stale signal next frame and re-arm the
+    /// old tool.
     pub fn set_tool(&mut self, tool: Tool) {
         self.machine.set_tool(tool);
         self.preview = None;
@@ -1375,8 +1442,9 @@ impl ToileView {
         self.needs_full = true;
     }
 
-    /// Mirror the machine's active tool back into the shared signal (§5quinquies.A).
-    /// Wasm-only (leptos signal); a host no-op keeps `set_tool` cfg-agnostic.
+    /// Mirror the machine's active tool back into the shared signal
+    /// (`toile-tools`). Wasm-only (leptos signal); a host no-op
+    /// keeps `set_tool` cfg-agnostic.
     #[cfg(target_arch = "wasm32")]
     fn publish_active_tool(&self) {
         if self.active_tool.get_untracked() != self.machine.tool() {
@@ -1386,11 +1454,12 @@ impl ToileView {
     #[cfg(not(target_arch = "wasm32"))]
     fn publish_active_tool(&self) {}
 
-    /// Publish the position-dependent canvas cursor (§5quinquies.A). An in-flight
-    /// resize / rotate / move shows its stable directional / grab cursor; at rest,
-    /// a hover over a single selection's edge / corner shows the matching resize
-    /// cursor; otherwise `None` lets the chrome fall back to the tool's base
-    /// cursor. Wasm-only (leptos signal); a host no-op keeps callers cfg-agnostic.
+    /// Publish the position-dependent canvas cursor
+    /// (`toile-tools`). An in-flight resize / rotate / move shows
+    /// its stable directional / grab cursor; at rest, a hover over a single
+    /// selection's edge / corner shows the matching resize cursor; otherwise `None`
+    /// lets the chrome fall back to the tool's base cursor. Wasm-only (leptos
+    /// signal); a host no-op keeps callers cfg-agnostic.
     #[cfg(target_arch = "wasm32")]
     fn publish_cursor(&self, screen: Point) {
         let cursor = self.cursor_at(screen);
@@ -1407,7 +1476,7 @@ impl ToileView {
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     fn cursor_at(&self, screen: Point) -> Option<std::borrow::Cow<'static, str>> {
         // A single selected element rotates its handles, so the directional resize
-        // cursor rotates with them (toile-ui §5quinquies.A).
+        // cursor rotates with them (`toile-tools`).
         let theta = self
             .selection
             .first()
@@ -1424,27 +1493,30 @@ impl ToileView {
             .map(|h| super::palette::resize_cursor(h, theta))
     }
 
-    /// Keyboard shortcuts (`toile-ui §5`). Modifiers ride the event: `ctrl || meta`
-    /// is the command chord (Ctrl on Windows/Linux, Cmd on macOS). Ctrl+C/X/V are
-    /// intentionally NOT decoded here -- they ride the native clipboard events
-    /// (Phase A). Returns `true` when the key was consumed (host `preventDefault`).
+    /// Keyboard shortcuts (`toile-tools`). Modifiers ride the event:
+    /// `ctrl || meta` is the command chord (Ctrl on Windows/Linux, Cmd on macOS).
+    /// Ctrl+C/X/V are intentionally NOT decoded here -- they ride the native
+    /// clipboard events (Phase A). Returns `true` when the key was consumed (host
+    /// `preventDefault`).
     fn handle_key(&mut self, key: &str, ctrl: bool, _alt: bool, shift: bool, meta: bool) -> bool {
         let cmd = ctrl || meta;
         // Command chords first, so a bare-key fallthrough never shadows them.
         if cmd {
             match key {
-                // Undo / redo (§8 bis). Ctrl+Shift+Z and Ctrl+Y both redo.
+                // Undo / redo (`toile-undo`). Ctrl+Shift+Z and
+                // Ctrl+Y both redo.
                 "z" | "Z" if shift => self.send_edit(ToileCommand::Redo),
                 "z" | "Z" => self.send_edit(ToileCommand::Undo),
                 "y" | "Y" => self.send_edit(ToileCommand::Redo),
-                // Duplicate the selection with a small diagonal nudge (§8 ter).
+                // Duplicate the selection with a small diagonal nudge
+                // (`toile-undo`).
                 "d" | "D" if !self.selection.is_empty() => {
                     self.send_edit(ToileCommand::DuplicateElements {
                         ids: self.selection.clone(),
                         delta: Vec2::new(DUPLICATE_NUDGE, DUPLICATE_NUDGE),
                     });
                 }
-                // Group / ungroup the selection (§2.F bis).
+                // Group / ungroup the selection (`toile-groups`).
                 "g" | "G" if shift => {
                     for id in self.selection.clone() {
                         self.send_edit(ToileCommand::UngroupElements { group: id });
@@ -1485,7 +1557,8 @@ impl ToileView {
             "Escape" => {
                 // Leaving a focused embed is the whole action: the board's
                 // selection survives, so Escape steps out one level at a time
-                // rather than also clearing what was selected (§2.I).
+                // rather than also clearing what was selected
+                // (`toile-embeds`).
                 //
                 // This arm is reachable while an embed holds focus because
                 // `FrameHost` routes every input into the focused child EXCEPT
@@ -1494,9 +1567,10 @@ impl ToileView {
                 if self.blur_embed() {
                     return true;
                 }
-                // Cancel any in-flight gesture and revert an armed creation tool to
-                // Select so it stops silently placing elements (§5). Republish the
-                // shared signal when the tool changed, so the palette follows.
+                // Cancel any in-flight gesture and revert an armed creation tool
+                // to Select so it stops silently placing elements
+                // (`toile-tools`). Republish the shared signal when the
+                // tool changed, so the palette follows.
                 if self.machine.escape() {
                     self.publish_active_tool();
                 }
@@ -1506,8 +1580,8 @@ impl ToileView {
                 if !self.selection.is_empty() {
                     self.selection.clear();
                 }
-                // Leave any entered group scope (§2.F bis): the next click selects
-                // whole groups again.
+                // Leave any entered group scope (`toile-groups`):
+                // the next click selects whole groups again.
                 self.group_scope = None;
                 self.needs_full = true;
                 true
@@ -1520,7 +1594,8 @@ impl ToileView {
                 }
                 true
             }
-            // Nudge the selection by 1 world unit (10 with Shift), §5.
+            // Nudge the selection by 1 world unit (10 with Shift),
+            // `toile-elements`.
             "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight" if !self.selection.is_empty() => {
                 let step = if shift { NUDGE_LARGE } else { NUDGE_SMALL };
                 let delta = match key {
@@ -1540,7 +1615,7 @@ impl ToileView {
         }
     }
 
-    // -- Inline text editor (§6) ----------------------------------------------
+    // -- Inline text editor (`toile-text-editing`) -----------------------------
 
     /// Find a displayed element by id (linear over the culled set; the set is
     /// small and this runs only on edit open / paint of the edited element).
@@ -1553,7 +1628,8 @@ impl ToileView {
 
     /// Optimistically set an element's body text in the local display, so the
     /// static render matches a just-committed value before the model round-trip
-    /// delivers a fresh viewport (avoids a one-frame flash of the old body, §6).
+    /// delivers a fresh viewport (avoids a one-frame flash of the old body,
+    /// `toile-text-editing`).
     fn patch_element_text(&mut self, id: &ElementId, text: &str) {
         if let Some(DisplayNode::Element(e)) = self
             .display
@@ -1579,8 +1655,8 @@ impl ToileView {
     }
 
     /// The single selected Sticky / Text element, if the selection is exactly one
-    /// such element (the target of type-to-edit, §6). `None` for an empty, multi,
-    /// or non-text selection.
+    /// such element (the target of type-to-edit, `toile-text-editing`). `None` for
+    /// an empty, multi, or non-text selection.
     fn single_editable_selection(&self) -> Option<ElementId> {
         let [id] = self.selection.as_slice() else {
             return None;
@@ -1590,8 +1666,8 @@ impl ToileView {
             .map(|_| id.clone())
     }
 
-    /// Open the inline editor on a Sticky / Text element (§6). No-op for any
-    /// other kind or an unknown id.
+    /// Open the inline editor on a Sticky / Text element (`toile-text-editing`).
+    /// No-op for any other kind or an unknown id.
     fn open_editor(&mut self, id: ElementId) {
         let editor = {
             let Some(e) = self.find_element(&id) else {
@@ -1609,7 +1685,8 @@ impl ToileView {
         };
         self.editor = Some(editor);
         // The edited element is the selection, so leaving edit (Escape) leaves it
-        // selected (§6, feedback) and the style/float chrome tracks it.
+        // selected (`toile-text-editing`, feedback) and the style/float chrome
+        // tracks it.
         self.selection = vec![id];
         self.edit_closing = false;
         self.edit_pointer_down = false;
@@ -1637,7 +1714,7 @@ impl ToileView {
         let (origin, _w, sb) = self.edit_geometry(e);
         // Unrotate the pointer about the element center into its axis-aligned
         // frame, so clicks land on the rotated in-edit text (mirror of the overlay
-        // rotation in `drive_editor`, §5quinquies.A).
+        // rotation in `drive_editor`, `toile-text-editing`).
         let rot = super::tool::element_rotation(&self.display, &id);
         let p = if rot != 0.0 {
             render::rotate_about(sb.center(), -rot) * screen
@@ -1792,21 +1869,22 @@ impl ToileView {
                 let palette = self.theme.palette();
                 // A rotated element keeps its rotation while editing: rotate the
                 // whole overlay about the element's screen-space center, matching
-                // the static text pass (`render::text_rotation`, §5quinquies.A).
+                // the static text pass (`render::text_rotation`,
+                // `toile-text-editing`).
                 let rot = super::tool::element_rotation(&self.display, &id);
                 // Blink the caret on a ~1s cycle so it visibly signals "you can
-                // type here" (§6). `editor.is_some()` keeps the overlay redrawing
-                // every frame, so the toggle animates.
+                // type here" (`toile-text-editing`). `editor.is_some()` keeps the
+                // overlay redrawing every frame, so the toggle animates.
                 let caret_on = (self.frame_now_ms / CARET_BLINK_MS) as i64 % 2 == 0;
                 let ed = self.editor.as_mut().unwrap();
                 ed.flush(font_cx, wrap_w, zoom);
-                // Always paint the body -- including the closing frame. The content
-                // pass already ran this frame with the element's static text
-                // suppressed (the editor was still live), so skipping the overlay
-                // here would leave one blank frame before the static text returns
-                // next frame. Painting the committed text bridges that gap. The
-                // caret + IME anchor are for active editing only, so they are gated
-                // off while closing.
+                // Always paint the body -- including the closing frame. The
+                // content pass already ran this frame with the element's static
+                // text suppressed (the editor was still live), so skipping the
+                // overlay here would leave one blank frame before the static text
+                // returns next frame. Painting the committed text bridges that
+                // gap. The caret + IME anchor are for active editing only, so they
+                // are gated off while closing.
                 let rotated = rot != 0.0;
                 if rotated {
                     surface.push_transform(render::rotate_about(sb.center(), rot));
@@ -1827,10 +1905,11 @@ impl ToileView {
 
         if self.edit_closing {
             if let Some(text) = self.editor.as_ref().unwrap().committed_text() {
-                // Optimistic local update: reflect the committed text in the static
-                // pass immediately, so dropping the editor does not flash the
-                // pre-edit body for the frames before the CRDT round-trip returns a
-                // fresh viewport (§6). The incoming viewport carries the same text.
+                // Optimistic local update: reflect the committed text in the
+                // static pass immediately, so dropping the editor does not flash
+                // the pre-edit body for the frames before the CRDT round-trip
+                // returns a fresh viewport (`toile-viewport`). The incoming
+                // viewport carries the same text.
                 self.patch_element_text(&id, &text);
                 self.send_edit(ToileCommand::SetText { id, text });
             }
@@ -1867,26 +1946,32 @@ impl ToileView {
             }
         }
 
-        // Apply any context-menu command the shell forwarded this frame (§5ter).
+        // Apply any context-menu command the shell forwarded this frame
+        // (`toile-menus`).
         self.drain_menu_cmd();
 
-        // Apply any style edit the inspector emitted this frame (§5quinquies.B).
+        // Apply any style edit the inspector emitted this frame
+        // (`toile-styles`).
         self.drain_restyle();
 
-        // Apply any quick-colour pick the floating bar emitted (§5quinquies.D).
+        // Apply any quick-colour pick the floating bar emitted
+        // (`toile-styles`).
         self.drain_quick_style();
 
-        // Apply the tool the DOM palette / keyboard selected this frame (§5quinquies.A).
+        // Apply the tool the DOM palette / keyboard selected this frame
+        // (`toile-tools`).
         self.apply_active_tool();
 
-        // Publish the live zoom % to the DOM zoom control / status bar (§5quinquies.E).
+        // Publish the live zoom % to the DOM zoom control / status bar
+        // (`toile-menus`).
         self.publish_zoom();
 
-        // Republish the floating selection toolbar, transform-synced (§5quinquies.D).
+        // Republish the floating selection toolbar, transform-synced
+        // (`toile-styles`).
         self.publish_float_bar();
 
         // A freshly-created Sticky / Text element: open its editor now that its
-        // geometry has landed in `display` (§6).
+        // geometry has landed in `display` (`toile-text-editing`).
         if let Some(id) = self.edit_pending_open.take() {
             self.open_editor(id);
         }
@@ -1912,18 +1997,21 @@ impl ToileView {
     }
 
     pub fn plan_repaint(&mut self, now_ms: f64, hud_tick: bool) -> RepaintPlan {
-        // Stash the frame clock for paint-time use (inline-edit caret blink, §6).
+        // Stash the frame clock for paint-time use (inline-edit caret blink,
+        // `toile-text-editing`).
         self.frame_now_ms = now_ms;
         // Open / close the nested documents behind the visible `doc_embed`s
-        // (§2.I). Driven here rather than in `update` because this is the one
-        // per-frame hook carrying the frame clock the close debounce needs.
+        // (`toile-embeds`). Driven here rather than in `update` because
+        // this is the one per-frame hook carrying the frame clock the close
+        // debounce needs.
         self.drive_embed_lifecycle(now_ms);
 
-        // Advance an in-flight presentation transition (§1.C / §1.D): glide the
-        // camera and rebuild the Smart Animate overrides from the frame clock,
-        // until it completes. Each active frame is a full repaint (the camera and
-        // content both change) and re-culls (`queue_viewport`) so elements entering
-        // the fitted frame are painted.
+        // Advance an in-flight presentation transition
+        // (`toile-presentation`): glide the camera and
+        // rebuild the Smart Animate overrides from the frame clock, until it
+        // completes. Each active frame is a full repaint (the camera and content
+        // both change) and re-culls (`queue_viewport`) so elements entering the
+        // fitted frame are painted.
         if self.transition.is_some() {
             let frame = self.transition.as_mut().unwrap().advance(now_ms);
             self.cam = frame.cam;
@@ -1940,10 +2028,11 @@ impl ToileView {
             }
         }
 
-        // Keep the status-bar aggregates (§8bis) in step with the selection: on a
-        // change, ask Logic for the fresh count/bounds (the reply is mirrored into
-        // the band's signal by the shell; this view ignores it unless a Fit /
-        // find-focus is pending). Cheap -- fires only when the selection differs.
+        // Keep the status-bar aggregates (`toile-status-bar`) in step with the
+        // selection: on a change, ask Logic for the fresh count/bounds (the reply
+        // is mirrored into the band's signal by the shell; this view ignores it
+        // unless a Fit / find-focus is pending). Cheap -- fires only when the
+        // selection differs.
         if self.selection != self.last_stats_sel {
             self.last_stats_sel = self.selection.clone();
             if self.selection.is_empty() {
@@ -2008,7 +2097,8 @@ impl ToileView {
             self.editor.as_ref().map(|e| e.id()),
             &self.images,
             // A manual gesture preview and a slide transition are mutually
-            // exclusive (§5); prefer the gesture override while one is in flight.
+            // exclusive (`toile-tools`); prefer the gesture override while
+            // one is in flight.
             if self.gesture_overrides.is_empty() {
                 &self.anim_overrides
             } else {
@@ -2037,15 +2127,17 @@ impl ToileView {
             &self.gesture_overrides,
         );
 
-        // Remote presence overlay (§8): cursors, selection ghosts, live strokes
-        // and laser trails, above content, in each peer's cross-app colour.
+        // Remote presence overlay (`toile-presence`): cursors, selection
+        // ghosts, live strokes and laser trails, above content, in each peer's
+        // cross-app colour.
         if !self.presence.is_empty() {
             self.presence
                 .paint(surface, &self.display, &self.cam, font_cx, text_cache);
         }
 
-        // Reaction badges (§4.A): a chip row under each element carrying a tally.
-        // Always visible (edit + present), above content and presence.
+        // Reaction badges (`toile-reactions`): a chip row under each
+        // element carrying a tally. Always visible (edit + present), above content
+        // and presence.
         reactions::paint_reactions(
             surface,
             &self.display,
@@ -2056,7 +2148,8 @@ impl ToileView {
         );
 
         // Inline text editor: flush queued intents, draw caret/selection/glyphs,
-        // and perform a deferred commit + close (§6). Drawn above content.
+        // and perform a deferred commit + close (`toile-text-editing`). Drawn
+        // above content.
         self.drive_editor(surface, font_cx);
 
         self.perf_pub.publish(PerfSnapshot {
@@ -2080,20 +2173,22 @@ impl ToileView {
         // the board consumes early (e.g. an open inline editor below): `FrameHost`
         // reads `child_route()` after every `handle_input`.
         self.child_route = None;
-        // While an inline editor is open it gets first refusal on input (§6):
-        // `Some(consumed)` settles the event, `None` falls through to the board
-        // handlers below (chords, wheel pan/zoom keep working mid-edit).
+        // While an inline editor is open it gets first refusal on input
+        // (`toile-tools`): `Some(consumed)` settles the event, `None` falls
+        // through to the board handlers below (chords, wheel pan/zoom keep working
+        // mid-edit).
         if self.editor.is_some()
             && let Some(consumed) = self.edit_input(ev)
         {
             return consumed;
         }
-        // Nested-document capture (§2.I "Input focus"): while an embed holds
-        // focus, input aimed at it belongs to the child, not the board. We record
-        // the route and consume the event without running any board handler;
-        // `FrameHost` reads `child_route()` and forwards the remapped event into
-        // the child's own view. The focusing click itself is NOT captured (focus
-        // is still on the board at that point) and `Escape` never is.
+        // Nested-document capture (`toile-embeds`, "Input focus"):
+        // while an embed holds focus, input aimed at it belongs to the child, not
+        // the board. We record the route and consume the event without running any
+        // board handler; `FrameHost` reads `child_route()` and forwards the
+        // remapped event into the child's own view. The focusing click itself is
+        // NOT captured (focus is still on the board at that point) and `Escape`
+        // never is.
         if let Some(focused) = self.embed_focus.current().cloned()
             && self.route_to_child(ev, &focused)
         {
@@ -2133,7 +2228,8 @@ impl ToileView {
         }
     }
 
-    /// Resolve a copy/cut synchronously inside the native clipboard event (§5ter).
+    /// Resolve a copy/cut synchronously inside the native clipboard event
+    /// (`toile-clipboard`).
     /// The clipboard is authoritative: with a non-empty selection we emit
     /// [`ToileCommand::CopyElements`] (Logic builds the id-free payload from the
     /// whole board and replies with `ToileEvent::Clipboard`) and return
@@ -2144,9 +2240,10 @@ impl ToileView {
     /// An empty selection returns [`CopyOutcome::Nothing`].
     pub fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
         // An open inline edit takes precedence over the board selection: copy /
-        // cut act on the text selection, not the elements (§6). `selected_text`
-        // is font-free, so it resolves synchronously here; a cut queues a
-        // font-bound `DeleteSelection` intent applied at the next paint flush.
+        // cut act on the text selection, not the elements (`toile-text-editing`).
+        // `selected_text` is font-free, so it resolves synchronously here; a cut
+        // queues a font-bound `DeleteSelection` intent applied at the next paint
+        // flush.
         if let Some(ed) = self.editor.as_mut() {
             let Some(text) = ed.selected_text() else {
                 return ambre_bus::CopyOutcome::Nothing;
@@ -2172,22 +2269,25 @@ impl ToileView {
 
     /// Drain the clipboard blob built from the last `ToileEvent::Clipboard` reply,
     /// so the host can mirror it to the OS clipboard within the transient user
-    /// activation window (§5ter). Yields the blob at most once per copy.
+    /// activation window (`toile-clipboard`). Yields the blob at most once
+    /// per copy.
     pub fn poll_clipboard(&mut self) -> Option<ambre_bus::ClipboardBlob> {
         self.pending_clipboard.take()
     }
 
     /// Service a paste from the shared [`ClipboardBlob`](ambre_bus::ClipboardBlob)
-    /// transport (§5ter). When `own_copy` (the synchronous ownership token was
-    /// still on the clipboard) it prefers the in-memory `last_clip` at full
-    /// fidelity -- immune to the async OS write having failed on Firefox; else it
-    /// decodes the blob's Ambre bytes. Either way, `PasteElements` lands the id-free
-    /// payload at the cursor's world position. A blob with no decodable Ambre
-    /// payload is ignored (plain-text paste into a board is out of MVP).
+    /// transport (`toile-clipboard`). When `own_copy` (the synchronous
+    /// ownership token was still on the clipboard) it prefers the in-memory
+    /// `last_clip` at full fidelity -- immune to the async OS write having failed
+    /// on Firefox; else it decodes the blob's Ambre bytes. Either way,
+    /// `PasteElements` lands the id-free payload at the cursor's world position. A
+    /// blob with no decodable Ambre payload is ignored (plain-text paste into a
+    /// board is out of MVP).
     pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
-        // An open inline edit consumes the paste as text at the caret (§6): an
-        // Ambre element payload is meaningless inside a text field, so route the
-        // plain-text mirror through the same insertion path as typing.
+        // An open inline edit consumes the paste as text at the caret
+        // (`toile-clipboard`): an Ambre element payload is meaningless inside a
+        // text field, so route the plain-text mirror through the same insertion
+        // path as typing.
         if self.editor.is_some() {
             if !blob.text.is_empty() {
                 self.push_intent(EditIntent::Insert(blob.text));
@@ -2215,9 +2315,10 @@ impl ToileView {
         if self.document_id == document_id {
             return;
         }
-        // Closing the board closes every child immediately, no debounce (§2.I):
-        // the embeds belong to the board we are leaving, and holding their
-        // sessions open for 5 s past a route change would leak them.
+        // Closing the board closes every child immediately, no debounce
+        // (`toile-embeds`): the embeds belong to the board we are
+        // leaving, and holding their sessions open for 5 s past a route change
+        // would leak them.
         self.close_all_embeds();
         self.document_id = document_id;
         self.display = DisplayViewport {
@@ -2254,8 +2355,9 @@ impl ToileView {
 }
 
 /// Position the transparent `<textarea>` pipe at the editor caret so the IME
-/// candidate box anchors there (§6). `origin` is the editor's text origin in
-/// physical screen pixels; `caret` is the caret box in the editor's local frame.
+/// candidate box anchors there (`toile-text-editing`). `origin` is the editor's
+/// text origin in physical screen pixels; `caret` is the caret box in the
+/// editor's local frame.
 /// The pipe wants CSS pixels, so both are divided by the device pixel ratio.
 fn set_caret_pipe(pipe: &ambre_canvas::TextInput, origin: ambre_draw::Point, caret: BoundingBox) {
     let dpr = device_pixel_ratio();
@@ -2280,7 +2382,8 @@ fn device_pixel_ratio() -> f64 {
 }
 
 /// The canvas element's top-left client offset (CSS px), so a canvas-local anchor
-/// maps into viewport coordinates for a `position: fixed` overlay (§5quinquies.D).
+/// maps into viewport coordinates for a `position: fixed` overlay
+/// (`toile-board-rendering`).
 /// The canvas sits below the header / toolbar chrome, so this offset is non-zero.
 /// Off the web, or before the canvas mounts, it is `(0, 0)`.
 #[cfg(target_arch = "wasm32")]

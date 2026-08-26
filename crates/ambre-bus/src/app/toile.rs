@@ -1,4 +1,4 @@
-//! Toile (whiteboard) IPC contract (`ambre-spec-toile-logic.md` §2 / §8 / §9).
+//! Toile (whiteboard) IPC contract (`ambre-spec-toile-schema.md`).
 //!
 //! Mirrors the Trame split: the typed command / event / display data-plane types
 //! live here in `ambre-bus` so the `ambre-logic` dispatcher can match on
@@ -21,7 +21,7 @@ use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};
 use serde::{Deserialize, Serialize};
 
 // =============================================================================
-// Identity -- minted, move-invariant ids (§2.A)
+// Identity -- minted, move-invariant ids (`ambre-spec-toile-schema.md`)
 // =============================================================================
 
 /// Stable identity of an element / connector / frame / group, minted once as
@@ -29,7 +29,8 @@ use serde::{Deserialize, Serialize};
 /// Loro op id), so `LoroMovableList::mov` reorders leave every reference valid.
 ///
 /// Two peers that concurrently create a node mint distinct ids (distinct
-/// `PeerID`): both survive, neither overwrites the other (§2.A / §6).
+/// `PeerID`): both survive, neither overwrites the other
+/// (`ambre-spec-toile-schema.md`).
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct ElementId(pub String);
 
@@ -38,13 +39,14 @@ pub struct ElementId(pub String);
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct ConnectorId(pub String);
 
-/// A frame's identity in a presentation sequence (§5). A frame is an ordinary
-/// element (`type = "frame"`), so this is a plain [`ElementId`] alias -- a
-/// naming aid at call sites, not a distinct type.
+/// A frame's identity in a presentation sequence (`toile-presentation`). A
+/// frame is an ordinary element (`type = "frame"`), so this is a plain
+/// [`ElementId`] alias -- a naming aid at call sites, not a distinct type.
 pub type FrameId = ElementId;
 
-/// The element an auto-layout / boolean / reaction command targets (§5). Aliased
-/// to [`ElementId`] for the same reason as [`FrameId`].
+/// The element an auto-layout / boolean / reaction command targets
+/// (`toile-presentation`). Aliased to [`ElementId`] for the same reason as
+/// [`FrameId`].
 pub type TargetId = ElementId;
 
 impl ElementId {
@@ -67,8 +69,9 @@ impl ConnectorId {
     }
 }
 
-/// Z-order node identity (§2.G): `layers` interleaves elements and connectors in
-/// a single back-to-front paint order, so a connector can sit behind an element.
+/// Z-order node identity (`toile-z-order`): `layers` interleaves
+/// elements and connectors in a single back-to-front paint order, so a connector
+/// can sit behind an element.
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub enum NodeId {
     Element(ElementId),
@@ -99,14 +102,15 @@ impl NodeId {
 }
 
 // =============================================================================
-// Element kinds (§2.C)
+// Element kinds (`toile-elements`)
 // =============================================================================
 
 /// Discriminant of a board node. Also tags a [`DisplayElement`].
 ///
 /// `Drawing` and `Group` are valid *types* but are **not** creatable via
-/// `CreateElement` (§8): a stroke is born only through `CommitStroke`, a group
-/// only through `GroupElements`. `handle_command` rejects such a `kind`.
+/// `CreateElement` (`toile-elements`): a stroke is born only through
+/// `CommitStroke`, a group only through `GroupElements`. `handle_command` rejects
+/// such a `kind`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum ElementKind {
     Sticky,
@@ -129,10 +133,10 @@ pub enum ShapeKind {
     Path,
 }
 
-/// Vector boolean rule for [`ToileCommand::BooleanOp`] (toile-features §3), run
-/// over the selected shape / path elements. `Subtract` treats the first element
-/// as the subject and removes the union of the rest; the others fold left to
-/// right over all selected elements.
+/// Vector boolean rule for [`ToileCommand::BooleanOp`]
+/// (`toile-vector-paths`), run over the selected shape / path elements.
+/// `Subtract` treats the first element as the subject and removes the union of
+/// the rest; the others fold left to right over all selected elements.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum BoolOp {
     Union,
@@ -142,8 +146,9 @@ pub enum BoolOp {
 }
 
 impl ElementKind {
-    /// The persisted `"type"` tag (§2.B). A shape stores its `ShapeKind`
-    /// separately in the payload, so every shape maps to `"shape"` here.
+    /// The persisted `"type"` tag (`ambre-spec-toile-schema.md`). A shape stores its
+    /// `ShapeKind` separately in the payload, so every shape maps to `"shape"`
+    /// here.
     pub fn type_tag(&self) -> &'static str {
         match self {
             ElementKind::Sticky => "sticky",
@@ -183,12 +188,12 @@ impl ShapeKind {
 }
 
 // =============================================================================
-// Style register -- one LWW binary per element (§2.E)
+// Style register -- one LWW binary per element (`toile-styles`)
 // =============================================================================
 
-/// Font attributes for sticky / text bodies. `underline` / `strikethrough` are the
-/// text decorations, matching Trame's cell font attributes so the shared format
-/// controls (`ambre_chrome`) drive the same field set in both apps.
+/// Font attributes for sticky / text bodies. `underline` / `strikethrough` are
+/// the text decorations, matching Trame's cell font attributes so the shared
+/// format controls (`ambre_chrome`) drive the same field set in both apps.
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct FontSpec {
     pub family: String,
@@ -222,12 +227,12 @@ pub struct Shadow {
 }
 
 /// The whole visual style of an element, stored as **one** postcard-encoded LWW
-/// register (§2.E) so a fill update racing a stroke update cannot leave a
-/// half-applied tear. Schema note: postcard decodes the blob whole and does NOT
-/// tolerate a missing or extra field, so ANY layout change (a new field here or in
-/// `FontSpec`) makes a blob written by an older binary fall back to `default()`
-/// (`from_bytes` -> `unwrap_or_default`). Acceptable pre-1.0 (no persisted-format
-/// guarantee yet); a versioned register is owed before GA.
+/// register (`toile-styles`) so a fill update racing a stroke update
+/// cannot leave a half-applied tear. Schema note: postcard decodes the blob whole
+/// and does NOT tolerate a missing or extra field, so ANY layout change (a new
+/// field here or in `FontSpec`) makes a blob written by an older binary fall back
+/// to `default()` (`from_bytes` -> `unwrap_or_default`). Acceptable pre-1.0 (no
+/// persisted-format guarantee yet); a versioned register is owed before GA.
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct ElementStyle {
     pub fill: Option<u32>, // ARGB, None = no fill
@@ -237,9 +242,9 @@ pub struct ElementStyle {
     pub corner: f32,  // corner radius for rect / sticky
     pub font: FontSpec,
     pub shadow: Option<Shadow>,
-    /// Text (foreground) colour, ARGB. `None` = the kind's default ink (a sticky's
-    /// fixed readable ink, or the theme text colour for a free text element).
-    /// Distinct from `fill`, which is the card / shape background.
+    /// Text (foreground) colour, ARGB. `None` = the kind's default ink (a
+    /// sticky's fixed readable ink, or the theme text colour for a free text
+    /// element). Distinct from `fill`, which is the card / shape background.
     pub text_color: Option<u32>,
 }
 
@@ -260,7 +265,7 @@ impl Default for ElementStyle {
 
 /// The default sticky-note card colour (ARGB): a warm pastel yellow, the Miro /
 /// Figma-whiteboard default. Used as the seeded fill for a `sticky` element and
-/// as the Sticky tool's default colour (`toile-ui §5quinquies.A`).
+/// as the Sticky tool's default colour (`toile-tools`).
 pub const STICKY_DEFAULT_FILL: u32 = 0xFFFE_F08A;
 
 /// Corner radius (world units) of a sticky-note card. A sticky is a plain
@@ -270,16 +275,17 @@ pub const STICKY_CORNER: f32 = 0.0;
 
 /// Sentinel `FontSpec.size` meaning "auto-size to the note" for a sticky: the
 /// renderer computes the body size from the card bounds instead of a fixed value
-/// (`toile-ui §6`). A positive size set from the style inspector overrides it.
+/// (`toile-styles`). A positive size set from the style inspector overrides
+/// it.
 pub const STICKY_AUTO_FONT_SIZE: f32 = 0.0;
 
 impl ElementStyle {
-    /// The style seeded at element birth (`toile-logic §2.E` "Per-kind defaults").
-    /// Every kind uses [`ElementStyle::default`] EXCEPT `sticky`, which gets the
-    /// sticky yellow, no border, `corner = 0` (a plain card) and the auto-size
-    /// font sentinel so a fresh, still-empty note is immediately visible and its
-    /// text tracks the card size. The Sticky tool overrides the fill per placement
-    /// via `CreateElement.fill`.
+    /// The style seeded at element birth (`toile-styles`, "Per-kind
+    /// defaults"). Every kind uses [`ElementStyle::default`] EXCEPT `sticky`,
+    /// which gets the sticky yellow, no border, `corner = 0` (a plain card) and
+    /// the auto-size font sentinel so a fresh, still-empty note is immediately
+    /// visible and its text tracks the card size. The Sticky tool overrides the
+    /// fill per placement via `CreateElement.fill`.
     pub fn for_kind(kind: ElementKind) -> Self {
         match kind {
             ElementKind::Sticky => Self {
@@ -312,7 +318,7 @@ impl ElementStyle {
 }
 
 // =============================================================================
-// Freehand stroke sample (§2.C / §4)
+// Freehand stroke sample (`toile-freehand`)
 // =============================================================================
 
 /// One sampled point of a freehand stroke. 12 bytes, fixed layout.
@@ -324,7 +330,7 @@ pub struct StrokePoint {
 }
 
 // =============================================================================
-// Connector anchoring (§5)
+// Connector anchoring (`toile-connectors`)
 // =============================================================================
 
 /// Where a connector attaches on an element's AABB. `Free` is a normalized
@@ -355,7 +361,7 @@ pub struct EndCaps {
 }
 
 // =============================================================================
-// Viewport / camera (§3)
+// Viewport / camera (`toile-viewport`)
 // =============================================================================
 
 /// The camera: a world-space center, a zoom factor, and the physical screen
@@ -387,12 +393,14 @@ impl Viewport {
 }
 
 // =============================================================================
-// Clipboard payload -- id-free, slot-indexed, portable across boards (§8 ter)
+// Clipboard payload -- id-free, slot-indexed, portable across boards
+// (`toile-elements`)
 // =============================================================================
 
 /// One captured CRDT scalar field value. Covers the four `LoroValue` leaf kinds
-/// an element / connector map stores (§2.B); container fields (a group's
-/// `children` list) are never captured here -- membership is remapped to slots.
+/// an element / connector map stores (`ambre-spec-toile-schema.md`); container
+/// fields (a group's `children` list) are never captured here -- membership is
+/// remapped to slots.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ClipValue {
     F64(f64),
@@ -429,10 +437,11 @@ pub struct ClipMembership {
 }
 
 /// Self-contained, id-free snapshot of a selection produced by `CopyElements`
-/// (§8 ter). Portable across boards and sessions (postcard round-trips for the
-/// OS clipboard). Media are referenced by content hash only (blobs stay on
-/// MinIO, `toile-interop §5`); a `doc_embed` copies the same `document_id` (a
-/// second reference to the one nested document, not a clone).
+/// (`toile-clipboard`). Portable across boards and sessions (postcard
+/// round-trips for the OS clipboard). Media are referenced by content hash only
+/// (blobs stay on MinIO, `toile-media`); a `doc_embed` copies the
+/// same `document_id` (a second reference to the one nested document, not a
+/// clone).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ClipboardPayload {
     pub elements: Vec<ClipElement>,
@@ -457,11 +466,11 @@ pub enum InitContent {
     DocEmbed {
         document_id: DocumentId,
         doc_type: DocType,
-    }, // nested Ambre document (§2.I)
+    }, // nested Ambre document (`toile-embeds`)
     Text(String),  // initial plain body (sticky / text)
 }
 
-/// Z-order target for `Reorder` (§2.G).
+/// Z-order target for `Reorder` (`toile-z-order`).
 #[derive(Clone, Copy, Debug)]
 pub enum ZTarget {
     Front,
@@ -478,31 +487,32 @@ pub enum End {
     To,
 }
 
-/// Options for a board `Find` (§8 quater). Search runs against each element's
-/// plaintext body (sticky / text) and frame title; `match_case` toggles case
-/// folding, `whole_word` requires a word-boundary match. Replace is out of MVP
-/// scope (§12).
+/// Options for a board `Find` (`toile-find`). Search runs against
+/// each element's plaintext body (sticky / text) and frame title; `match_case`
+/// toggles case folding, `whole_word` requires a word-boundary match. Replace is
+/// out of MVP scope (`toile-find`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FindOptions {
     pub match_case: bool,
     pub whole_word: bool,
 }
 
-/// Result of a board `Find` (§8 quater). `hits` are the matching elements in
-/// stable z-order; `focus` is the element to recenter the camera on (the next
-/// hit after `from`, wrapping around). Purely local view state -- never synced.
+/// Result of a board `Find` (`toile-find`). `hits` are the matching
+/// elements in stable z-order; `focus` is the element to recenter the camera on
+/// (the next hit after `from`, wrapping around). Purely local view state -- never
+/// synced.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FindResults {
     pub hits: Vec<ElementId>,
     pub focus: Option<ElementId>,
 }
 
-/// A single char-CRDT splice on a `LoroText` (§1.D speaker notes). Encodes any
-/// editor edit as "at codepoint `at`, remove `delete` codepoints, then insert
-/// `insert`". Indices are loro unicode-codepoint positions; the engine clamps
-/// them to the current length. This is the `TextDelta` the specs defer for
-/// element text -- introduced here for notes only, where char-CRDT convergence
-/// is required (§6).
+/// A single char-CRDT splice on a `LoroText` (`toile-text-editing`,
+/// speaker notes). Encodes any editor edit as "at codepoint `at`, remove `delete`
+/// codepoints, then insert `insert`". Indices are loro unicode-codepoint
+/// positions; the engine clamps them to the current length. This is the
+/// `TextDelta` the specs defer for element text -- introduced here for notes
+/// only, where char-CRDT convergence is required (`toile-text-editing`).
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct TextDelta {
     pub at: usize,
@@ -510,26 +520,27 @@ pub struct TextDelta {
     pub insert: String,
 }
 
-/// One user's persisted reaction on a target (`toile-features` §4.A): an emoji
-/// OR a signed vote weight, plus a wall-clock `ts` kept only as a display
+/// One user's persisted reaction on a target (`toile-reactions`): an
+/// emoji OR a signed vote weight, plus a wall-clock `ts` kept only as a display
 /// tiebreak. The LWW on a user's own key is handled by Loro (the map key is the
 /// canonical `UserId`), not by this `ts`. Postcard-encoded into the reactions
-/// sub-map value (§4.A).
+/// sub-map value (`toile-reactions`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Reaction {
     pub kind: ReactionKind,
     pub ts: i64,
 }
 
-/// The two reaction flavours (§4.A): a free-form emoji or a signed vote weight
-/// (e.g. `+1` / `-1` / a weighted ballot).
+/// The two reaction flavours (`toile-reactions`): a free-form emoji or
+/// a signed vote weight (e.g. `+1` / `-1` / a weighted ballot).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ReactionKind {
     Emoji(String),
     Vote(i32),
 }
 
-/// Read-time tally derived from a target's reaction sub-map (§4.A). Never stored
+/// Read-time tally derived from a target's reaction sub-map
+/// (`toile-reactions`). Never stored
 /// -- recomputed on read so it can never drift from the per-user entry set.
 /// `emoji` is sorted for a stable render order; `vote_total` / `vote_count`
 /// aggregate the `Vote` entries.
@@ -541,14 +552,16 @@ pub struct ReactionTally {
 }
 
 // -----------------------------------------------------------------------------
-// Auto-layout spec (§2) -- the CRDT design intent carried by a frame. The pure
-// `solve_layout` solver that turns this spec + child sizes into positions lives
-// in the engine (`ambre_toile::logic::autolayout`); only the shared value types
-// live here so `SetAutoLayout` can carry them across `AppCommand::Toile`.
+// Auto-layout spec (`toile-auto-layout`) -- the CRDT design intent carried
+// by a frame. The pure `solve_layout` solver that turns this spec + child sizes
+// into positions lives in the engine (`ambre_toile::logic::autolayout`); only the
+// shared value types live here so `SetAutoLayout` can carry them across
+// `AppCommand::Toile`.
 // -----------------------------------------------------------------------------
 
-/// Main-axis flow of an [`AutoLayout`] (§2). `Wrap` is a horizontal flow that
-/// breaks into rows when a child would overflow the content box width.
+/// Main-axis flow of an [`AutoLayout`] (`toile-auto-layout`). `Wrap` is a
+/// horizontal flow that breaks into rows when a child would overflow the content
+/// box width.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Direction {
     Horizontal,
@@ -556,7 +569,8 @@ pub enum Direction {
     Wrap,
 }
 
-/// Distribution of children along the main axis within the free space (§2).
+/// Distribution of children along the main axis within the free space
+/// (`toile-auto-layout`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Align {
     Start,
@@ -565,9 +579,10 @@ pub enum Align {
     SpaceBetween,
 }
 
-/// How a child is sized on the main axis (§2). `Hug` and `Fill` are the Figma
-/// resize modes; from the pure solver's view `Hug` == `Fixed` (the frame rect is
-/// an input, so "hug content" changes nothing about the children).
+/// How a child is sized on the main axis (`toile-auto-layout`). `Hug` and
+/// `Fill` are the Figma resize modes; from the pure solver's view `Hug` ==
+/// `Fixed` (the frame rect is an input, so "hug content" changes nothing about
+/// the children).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Sizing {
     Hug,
@@ -575,10 +590,10 @@ pub enum Sizing {
     Fixed,
 }
 
-/// Auto-layout spec carried by a frame (§2). Serialized with `postcard` into the
-/// frame element's `autolayout` CRDT register (absent = free positioning). The
-/// spec is shared design intent; the solved positions are derived, never
-/// persisted (§8).
+/// Auto-layout spec carried by a frame (`toile-auto-layout`). Serialized
+/// with `postcard` into the frame element's `autolayout` CRDT register (absent =
+/// free positioning). The spec is shared design intent; the solved positions are
+/// derived, never persisted (`toile-auto-layout`).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AutoLayout {
     /// Main-axis flow.
@@ -593,11 +608,12 @@ pub struct AutoLayout {
     pub sizing: Sizing,
 }
 
-/// Per-viewer presentation playback (§1.B). Purely local, momentary-gesture
-/// state: which slide this viewer is on and whether focus (present) mode hides
-/// the chrome. Never a CRDT value and never synced -- only the slide *sequence*
-/// (which frames, in what order) is shared (§0/§1). Mirrors the durable-intent
-/// vs momentary-gesture split already used for presence (`toile-logic §7`).
+/// Per-viewer presentation playback (`toile-presentation`). Purely local,
+/// momentary-gesture state: which slide this viewer is on and whether focus
+/// (present) mode hides the chrome. Never a CRDT value and never synced -- only
+/// the slide *sequence* (which frames, in what order) is shared
+/// (`toile-presentation`). Mirrors the durable-intent vs
+/// momentary-gesture split already used for presence (`toile-presence`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PlaybackState {
     /// Index into the shared slide `order`; clamped to the deck length.
@@ -607,15 +623,15 @@ pub struct PlaybackState {
 }
 
 // =============================================================================
-// Smart Animate snapshots (toile-features §1.C)
+// Smart Animate snapshots (`toile-presentation`)
 // =============================================================================
 
-/// Animatable properties of one element captured for a slide (§1.C). A frame's
-/// snapshot holds one of these per declared child, in `children` order. Pure
-/// data: it lives here so the enriched [`SlideChange`] event can carry both
-/// frame snapshots across `AppEvent::Toile` to the render thread, which owns no
-/// board state. The `smart_animate` solver that consumes these stays in the
-/// engine (`ambre_toile::logic::animate`).
+/// Animatable properties of one element captured for a slide
+/// (`toile-presentation`). A frame's snapshot holds one of these per
+/// declared child, in `children` order. Pure data: it lives here so the enriched
+/// [`SlideChange`] event can carry both frame snapshots across `AppEvent::Toile`
+/// to the render thread, which owns no board state. The `smart_animate` solver
+/// that consumes these stays in the engine (`ambre_toile::logic::animate`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SnapElement {
     pub id: ElementId,
@@ -639,17 +655,19 @@ pub struct FrameSnapshot {
 
 impl FrameSnapshot {
     /// The captured element with `id`, if this frame contains it. Linear scan --
-    /// the test-facing accessor mirroring the §1.C pseudo-code.
+    /// the test-facing accessor mirroring the `toile-presentation`
+    /// pseudo-code.
     pub fn by_id(&self, id: &ElementId) -> Option<&SnapElement> {
         self.elements.iter().find(|e| &e.id == id)
     }
 }
 
-/// Payload of a [`ToileEvent::SlideChanged`]: everything the `toile-ui` camera
-/// pass needs to glide to the new slide and Smart Animate its content (§1.C /
-/// §1.D). The Logic thread owns the board, so it captures the two frame
-/// snapshots and the target frame rect here in one shot; the UI holds no board
-/// state and cannot derive them itself. Local view state, never crosses the wire.
+/// Payload of a [`ToileEvent::SlideChanged`]: everything the `toile-presentation` camera
+/// pass needs to glide to the new slide and Smart Animate its content
+/// (`toile-presentation`). The Logic thread owns the
+/// board, so it captures the two frame snapshots and the target frame rect here
+/// in one shot; the UI holds no board state and cannot derive them itself. Local
+/// view state, never crosses the wire.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SlideChange {
     /// The new `0`-based active slide index.
@@ -664,14 +682,15 @@ pub struct SlideChange {
     /// where it is.
     pub to_rect: Option<Rect>,
     /// Total number of slides in the deck: drives the presenter panel's `k / n`
-    /// counter (§1.D).
+    /// counter (`toile-presentation`).
     pub count: usize,
     /// The new active frame's element id, or `None` when the slide has no
     /// resolvable frame (dangling id / empty deck). The presenter panel uses it
     /// as the target of `EditNotes`.
     pub frame: Option<ElementId>,
     /// The new active frame's speaker notes as plain text, seeding the presenter
-    /// panel's editor (§1.D). Empty when the frame has no notes yet or is absent.
+    /// panel's editor (`toile-presentation`). Empty when the frame has no
+    /// notes yet or is absent.
     pub notes: String,
 }
 
@@ -685,11 +704,11 @@ pub enum ToileCommand {
         size: Size,
         content: InitContent,
         /// Optional creation-time override of the seeded `style.fill` (ARGB). The
-        /// engine seeds a per-kind default style at birth (sticky = yellow, others
-        /// = white); `Some(argb)` overwrites just that fill, the rest of the
-        /// default is kept. The Sticky tool uses it to place a note in the picked
-        /// palette colour atomically (one element, one undo item). `None` keeps
-        /// the per-kind default. See `toile-logic §2.C / §2.E`.
+        /// engine seeds a per-kind default style at birth (sticky = yellow,
+        /// others = white); `Some(argb)` overwrites just that fill, the rest of
+        /// the default is kept. The Sticky tool uses it to place a note in the
+        /// picked palette colour atomically (one element, one undo item). `None`
+        /// keeps the per-kind default. See `toile-styles`.
         fill: Option<u32>,
     },
     MoveElements {
@@ -711,12 +730,13 @@ pub enum ToileCommand {
     DeleteElements {
         ids: Vec<ElementId>,
     },
-    /// Replace the plaintext body of a sticky / text element (§6). Phase 0 stores
-    /// the body as a single LWW string field, so a text edit is a full-body
-    /// overwrite -- the inline Parley editor holds the authoritative buffer and
-    /// commits the final string here. The char-wise `LoroText` + `TextDelta`
-    /// upgrade (a `EditText { id, delta }` variant) is a later slice (see the
-    /// `DisplayGeom::Text` note). A non-text element id is rejected.
+    /// Replace the plaintext body of a sticky / text element
+    /// (`toile-text-editing`). Phase 0 stores the body as a single LWW string
+    /// field, so a text edit is a full-body overwrite -- the inline Parley editor
+    /// holds the authoritative buffer and commits the final string here. The
+    /// char-wise `LoroText` + `TextDelta` upgrade (a `EditText { id, delta }`
+    /// variant) is a later slice (see the `DisplayGeom::Text` note). A non-text
+    /// element id is rejected.
     SetText {
         id: ElementId,
         text: String,
@@ -726,87 +746,94 @@ pub enum ToileCommand {
         locked: bool,
     },
 
-    // -- Z-order (over the unified NodeId layer list, §2.G) --
+    // -- Z-order (over the unified NodeId layer list,
+    // `toile-elements`) --
     Reorder {
         node: NodeId,
         to: ZTarget,
     },
 
-    // -- Groups (§2.F bis) --
+    // -- Groups (`toile-groups`) --
     /// Bind a set of elements into a fresh group element (selects/transforms as
     /// one). One undo item.
     GroupElements {
         ids: Vec<ElementId>,
     },
     /// Drop a group's binding, re-parenting its children to the group's own
-    /// parent. The children survive; only the group node is removed. One undo item.
+    /// parent. The children survive; only the group node is removed. One undo
+    /// item.
     UngroupElements {
         group: ElementId,
     },
 
-    // -- Frames (§2.F) --
+    // -- Frames (`toile-frames`) --
     /// Set a frame's membership: add / remove children on the frame's `children`
     /// list. The frame itself is an ordinary element (created via
     /// `CreateElement { kind: Frame, .. }`); only its content is frame-specific.
-    /// The engine keeps the §2.G invariant (a child paints after its frame).
-    /// One undo item.
+    /// The engine keeps the `toile-frames` invariant (a child paints
+    /// after its frame). One undo item.
     SetFrameChildren {
         frame: ElementId,
         add: Vec<ElementId>,
         remove: Vec<ElementId>,
     },
 
-    // -- Presentation (§1 / §5) --
-    /// Set the shared slide sequence: the frames, in playback order (§1.A). CRDT
-    /// (a `LoroMovableList<FrameId>`), convergent and undoable (§8 bis). Repeated
-    /// ids are de-duplicated; a dangling FrameId is skipped at derivation like a
-    /// dangling connector (§5.A), so no frame-existence check happens here.
+    // -- Presentation (`toile-presentation`) --
+    /// Set the shared slide sequence: the frames, in playback order
+    /// (`toile-presentation`). CRDT (a `LoroMovableList<FrameId>`),
+    /// convergent and undoable (`toile-undo`). Repeated ids are
+    /// de-duplicated; a dangling FrameId is skipped at derivation like a dangling
+    /// connector (`toile-z-order`), so no frame-existence check happens
+    /// here.
     SetSlideOrder {
         order: Vec<FrameId>,
     },
     /// Step the local playback cursor to the next / previous slide, saturating at
-    /// the deck bounds (§1.B). Local only -- no CRDT delta, not an undo item.
+    /// the deck bounds (`toile-presentation`). Local only -- no CRDT
+    /// delta, not an undo item.
     NextSlide,
     PrevSlide,
     /// Jump the local playback cursor to `0`-based slide index, clamped to the
-    /// deck length (§1.B). Local only.
+    /// deck length (`toile-presentation`). Local only.
     GotoSlide(usize),
     /// Enter presentation (focus) mode, resetting the cursor to the first slide;
-    /// `focus` drives whether the UI hides its chrome (§1.B). Local only.
+    /// `focus` drives whether the UI hides its chrome
+    /// (`toile-presentation`). Local only.
     EnterPresent {
         focus: bool,
     },
-    /// Leave presentation mode (§1.B). Local only.
+    /// Leave presentation mode (`toile-presentation`). Local only.
     ExitPresent,
     /// Toggle whether this viewer broadcasts its active slide index to peers
-    /// (§1.B "Follow presenter"). Local role only -- no CRDT delta. When on, the
-    /// playback commands additionally emit an ephemeral presence frame carrying
-    /// `present_slide`.
+    /// (`toile-presentation`, "Follow presenter"). Local role only -- no
+    /// CRDT delta. When on, the playback commands additionally emit an ephemeral
+    /// presence frame carrying `present_slide`.
     SetPresentBroadcast(bool),
     /// Follow the given presenter's broadcast playback position, or stop following
-    /// with `None` (§1.B "Follow presenter"). Local role only -- no CRDT delta.
-    /// While following, an inbound presence frame from that `UserId` moves this
-    /// viewer's active slide; a manual navigation clears the follow ("take
-    /// control").
+    /// with `None` (`toile-presentation`, "Follow presenter"). Local role
+    /// only -- no CRDT delta. While following, an inbound presence frame from that
+    /// `UserId` moves this viewer's active slide; a manual navigation clears the
+    /// follow ("take control").
     FollowPresenter(Option<UserId>),
-    /// Apply a char-CRDT edit to a frame's collaborative speaker notes (§1.D).
-    /// Notes live in the frame element's payload as a LoroText, seeded on first
-    /// edit. CRDT, convergent, one commit = one undo item. A missing / non-frame
-    /// id is a rejected no-op.
+    /// Apply a char-CRDT edit to a frame's collaborative speaker notes
+    /// (`toile-presentation`). Notes live in the frame element's payload as
+    /// a LoroText, seeded on first edit. CRDT, convergent, one commit = one undo
+    /// item. A missing / non-frame id is a rejected no-op.
     EditNotes {
         frame: FrameId,
         delta: TextDelta,
     },
-    /// Set (or clear, with `None`) a frame's auto-layout spec (§2). The spec is a
-    /// single LWW CRDT register on the frame element; the solved child positions
-    /// are derived on render, never persisted (§8). Convergent and undoable; a
-    /// missing / non-frame id is a rejected no-op.
+    /// Set (or clear, with `None`) a frame's auto-layout spec
+    /// (`toile-auto-layout`). The spec is a single LWW CRDT register on the
+    /// frame element; the solved child positions are derived on render, never
+    /// persisted (`toile-auto-layout`). Convergent and undoable; a missing /
+    /// non-frame id is a rejected no-op.
     SetAutoLayout {
         frame: FrameId,
         layout: Option<AutoLayout>,
     },
 
-    // -- Reactions / votes (§4.A) --
+    // -- Reactions / votes (`toile-reactions`) --
     /// Place, change or remove the local user's reaction on a target (element or
     /// frame). Shared, persisted CRDT: a sub-map keyed by target + canonical
     /// `UserId`, so one user has exactly one entry per target (a re-vote is LWW on
@@ -817,21 +844,22 @@ pub enum ToileCommand {
         reaction: Option<Reaction>,
     },
 
-    // -- Vector boolean ops (§3) --
-    /// Combine the selected shape / path elements with a boolean rule (§3),
-    /// producing one new `shape:path` element whose geometry is the result. The
-    /// inputs are flattened to polygon contours and combined client-side (kurbo
-    /// has no path booleans; see toile-features §3). Needs at least two eligible
-    /// (shape or path) elements; other kinds are ignored. If `keep_sources` is
-    /// false the inputs are deleted in the same commit, so the whole operation is
-    /// one undo item. An empty result (fully cancelled geometry) is a no-op.
+    // -- Vector boolean ops (`toile-vector-paths`) --
+    /// Combine the selected shape / path elements with a boolean rule
+    /// (`toile-vector-paths`), producing one new `shape:path` element whose
+    /// geometry is the result. The inputs are flattened to polygon contours and
+    /// combined client-side (kurbo has no path booleans). Needs at least two
+    /// eligible (shape or path) elements; other kinds are ignored. If
+    /// `keep_sources` is false the inputs are deleted in the same commit, so the
+    /// whole operation is one undo item. An empty result (fully cancelled
+    /// geometry) is a no-op.
     BooleanOp {
         op: BoolOp,
         ids: Vec<ElementId>,
         keep_sources: bool,
     },
 
-    // -- Undo / redo (local-only, §8 bis) --
+    // -- Undo / redo (local-only, `toile-undo`) --
     Undo,
     Redo,
 
@@ -860,7 +888,7 @@ pub enum ToileCommand {
         style: ElementStyle,
     },
 
-    // -- Clipboard (§8 ter) --
+    // -- Clipboard (`toile-clipboard`) --
     /// Read the selection into a self-contained, id-free [`ClipboardPayload`]
     /// (does not mutate the doc); answered by `ToileEvent::Clipboard`. Cut is the
     /// UI issuing this then `DeleteElements` on the same selection.
@@ -880,12 +908,12 @@ pub enum ToileCommand {
         delta: Vec2,
     },
 
-    // -- Find (search on board, §8 quater) --
+    // -- Find (search on board, `toile-find`) --
     /// Non-mutating text search over the text-bearing elements (sticky / text
     /// bodies, frame titles); answered by `ToileEvent::FindResults`. `from` is the
     /// current match to resume from; `backward` picks the previous hit rather than
-    /// the next (both wrapping). A `None` `from` starts a fresh search focusing the
-    /// first hit. No CRDT effect.
+    /// the next (both wrapping). A `None` `from` starts a fresh search focusing
+    /// the first hit. No CRDT effect.
     Find {
         query: String,
         options: FindOptions,
@@ -893,17 +921,17 @@ pub enum ToileCommand {
         backward: bool,
     },
 
-    // -- Selection aggregates for the status bar (§8 quinquies) --
+    // -- Selection aggregates for the status bar (`toile-status-bar`) --
     RequestSelectionStats {
         ids: Vec<ElementId>,
     },
 
-    // -- Interop import (`toile-interop` §1/§5) --
+    // -- Interop import (`toile-import-export`) --
     /// Import an SVG document dropped onto the board. The bytes are converted to
     /// an `ImportBatch` and applied as one undo group; any embedded raster media
     /// is encrypted + uploaded via the Sync media plane before the batch lands
-    /// (§5). Answered by [`ToileEvent::ImportReport`] on success or
-    /// [`ToileEvent::ImportFailed`] if the file never mapped.
+    /// (`toile-import-export`). Answered by [`ToileEvent::ImportReport`] on
+    /// success or [`ToileEvent::ImportFailed`] if the file never mapped.
     ImportSvg {
         bytes: Vec<u8>,
     },
@@ -927,7 +955,8 @@ pub enum ToileCommand {
     // -- Viewport (drives culling; no CRDT effect) --
     SetViewport(Viewport),
 
-    // -- Ephemeral presence (never persisted, never in history; §7) --
+    // -- Ephemeral presence (never persisted, never in history;
+    // `toile-engine`) --
     /// A local presence sample (cursor move, live-stroke sample, laser point,
     /// selection) to broadcast to peers. Produces a `SendEphemeral` payload and
     /// no display event / CRDT delta: the local cursor is drawn by the UI itself.
@@ -936,7 +965,7 @@ pub enum ToileCommand {
 
 impl ToileCommand {
     /// Whether this command can change the board's shared CRDT state
-    /// (architecture §2.D).
+    /// (`architecture`).
     ///
     /// Only the commands documented above as local-only or read-only are listed
     /// here; everything else is treated as mutating. That is the safe direction
@@ -946,7 +975,8 @@ impl ToileCommand {
     pub fn is_mutating(&self) -> bool {
         !matches!(
             self,
-            // Local playback / presentation state (§1.B): no CRDT delta.
+            // Local playback / presentation state
+            // (`toile-presentation`): no CRDT delta.
             Self::NextSlide
                 | Self::PrevSlide
                 | Self::GotoSlide(_)
@@ -960,23 +990,25 @@ impl ToileCommand {
                 | Self::RequestSelectionStats { .. }
                 | Self::RequestSnapshot
                 | Self::CopyElements { .. }
-                // Ephemeral only: a viewer still shows a cursor (§7).
+                // Ephemeral only: a viewer still shows a cursor
+                // (`toile-presence`).
                 | Self::Presence(_)
         )
     }
 }
 
 // =============================================================================
-// Presence (ephemeral, §7) -- never persisted, never in Loro history.
+// Presence (ephemeral, `toile-presence`) -- never persisted, never in Loro
+// history.
 // =============================================================================
 
-/// One ephemeral presence sample the local peer broadcasts (§7): pointer
-/// position, current selection, an in-flight stroke, and/or a laser point. All
-/// fields are optional so a bare cursor move need not resend the selection.
-/// Postcard-encoded into the `SendEphemeral` payload. Identity is deliberately
-/// NOT carried here: the receiver keys presence off the sender's canonical
-/// `UserId`, resolved from the authenticated `pub_key` in `ambre-sync`, so a peer
-/// cannot spoof another user's cursor.
+/// One ephemeral presence sample the local peer broadcasts
+/// (`toile-presence`): pointer position, current selection, an in-flight
+/// stroke, and/or a laser point. All fields are optional so a bare cursor move
+/// need not resend the selection. Postcard-encoded into the `SendEphemeral`
+/// payload. Identity is deliberately NOT carried here: the receiver keys presence
+/// off the sender's canonical `UserId`, resolved from the authenticated `pub_key`
+/// in `ambre-sync`, so a peer cannot spoof another user's cursor.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct PresencePayload {
     /// World-space pointer; `None` means the pointer left the board.
@@ -984,24 +1016,27 @@ pub struct PresencePayload {
     /// The peer's current selection, drawn as halos. Empty = nothing selected.
     pub selection: Vec<ElementId>,
     /// In-flight freehand stroke samples (world space), streamed before the
-    /// stroke commits to a `"drawing"` element (§4). `None` = not drawing.
+    /// stroke commits to a `"drawing"` element (`toile-freehand`). `None` =
+    /// not drawing.
     pub live_stroke: Option<Vec<StrokePoint>>,
     /// Laser / highlighter point (a momentary, fading trail on the render side,
-    /// `toile-ui`). `None` = laser off.
+    /// `toile-presence`). `None` = laser off.
     pub laser: Option<Point>,
-    /// The sender's broadcast active slide index while presenting (§1.B "Follow
-    /// presenter"). `Some(idx)` means the sender is broadcasting this position; a
-    /// viewer following the sender adopts it. `None` = not broadcasting. Purely
-    /// ephemeral, like every other field here (the playback position is never
-    /// CRDT -- see the rejected-decisions table).
+    /// The sender's broadcast active slide index while presenting
+    /// (`toile-presentation`, "Follow presenter"). `Some(idx)` means the
+    /// sender is broadcasting this position; a viewer following the sender adopts
+    /// it. `None` = not broadcasting. Purely ephemeral, like every other field
+    /// here (the playback position is never CRDT -- see the rejected-decisions
+    /// table).
     pub present_slide: Option<usize>,
 }
 
-/// A remote peer's latest presence, keyed by the canonical `UserId` (§7). The UI
-/// derives the peer color / name label by hashing `user_id` with the shared
-/// cross-app algorithm (`ambre_draw::peer::peer_color`), so a collaborator keeps the same
-/// color across Prose, Trame and Toile. Emitted as `ToileEvent::PeerPresence`;
-/// the render side is `toile-ui`'s overlay pass.
+/// A remote peer's latest presence, keyed by the canonical `UserId`
+/// (`toile-presence`). The UI derives the peer color / name label by
+/// hashing `user_id` with the shared cross-app algorithm
+/// (`ambre_draw::peer::peer_color`), so a collaborator keeps the same color across
+/// Prose, Trame and Toile. Emitted as `ToileEvent::PeerPresence`; the render side
+/// is `toile-presence`'s overlay pass.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PresenceUpdate {
     pub user_id: UserId,
@@ -1032,7 +1067,8 @@ pub enum ToileError {
 // Events (ToileState -> UI)
 // =============================================================================
 
-/// Selection aggregates (§8 quinquies): element tally + union AABB (world).
+/// Selection aggregates (`toile-status-bar`): element tally + union AABB
+/// (world).
 #[derive(Clone, Debug, PartialEq)]
 pub struct SelectionStats {
     pub count: u32,
@@ -1044,69 +1080,75 @@ pub enum ToileEvent {
     ViewportData(DisplayViewport),
     ElementCreated(ElementId),
     /// Result of `CopyElements`: the UI stashes it and may mirror it to the OS
-    /// clipboard for cross-tab paste (§8 ter).
+    /// clipboard for cross-tab paste (`toile-clipboard`).
     Clipboard(ClipboardPayload),
     SelectionStats(SelectionStats),
-    /// Text-search hits + recenter target (§8 quater). Local view state, never
-    /// synced and never an undo item.
+    /// Text-search hits + recenter target (`toile-find`). Local view
+    /// state, never synced and never an undo item.
     FindResults(FindResults),
     DanglingConnector(ConnectorId),
     /// A remote peer's cursor / live stroke / laser / selection to render,
-    /// keyed by the canonical `UserId` (§7). Ephemeral, never persisted.
+    /// keyed by the canonical `UserId` (`toile-presence`). Ephemeral, never
+    /// persisted.
     PeerPresence(PresenceUpdate),
-    /// Local undo/redo stack availability, driving the chrome affordances (§8 bis).
+    /// Local undo/redo stack availability, driving the chrome affordances
+    /// (`toile-undo`).
     UndoState {
         can_undo: bool,
         can_redo: bool,
     },
-    /// The local playback cursor moved to a new slide (§5). Carries the enriched
-    /// [`SlideChange`] the `toile-ui` camera pass consumes to glide + Smart
-    /// Animate. Local view state: emitted by the playback commands, never crosses
-    /// the wire.
+    /// The local playback cursor moved to a new slide
+    /// (`toile-presentation`). Carries the enriched [`SlideChange`] the
+    /// `toile-presentation` camera pass consumes to glide + Smart Animate. Local view state:
+    /// emitted by the playback commands, never crosses the wire.
     SlideChanged(SlideChange),
-    /// Presentation (focus) mode was entered (`true`) or left (`false`) (§5).
-    /// Local view state, like [`SlideChanged`](Self::SlideChanged).
+    /// Presentation (focus) mode was entered (`true`) or left (`false`)
+    /// (`toile-presentation`). Local view state, like
+    /// [`SlideChanged`](Self::SlideChanged).
     PresentModeChanged(bool),
-    /// This viewer's slide-position broadcast toggle changed (§1.B "Follow
-    /// presenter"): the presenter panel reflects it. Local view state.
+    /// This viewer's slide-position broadcast toggle changed
+    /// (`toile-presentation`, "Follow presenter"): the presenter panel
+    /// reflects it. Local view state.
     PresentBroadcastChanged(bool),
-    /// This viewer's follow target changed (§1.B "Follow presenter"): `Some(u)`
-    /// = now following `u`, `None` = stopped following (e.g. after taking control
-    /// with a manual navigation). Local view state.
+    /// This viewer's follow target changed (`toile-presentation`, "Follow
+    /// presenter"): `Some(u)` = now following `u`, `None` = stopped following
+    /// (e.g. after taking control with a manual navigation). Local view state.
     FollowingChanged(Option<UserId>),
-    /// A target's reaction set changed (§4.A): the UI re-reads the derived tally
-    /// for this target. Emitted on a local `React`; the derived tally is never
-    /// carried in the CRDT, only recomputed on read.
+    /// A target's reaction set changed (`toile-reactions`): the UI
+    /// re-reads the derived tally for this target. Emitted on a local `React`; the
+    /// derived tally is never carried in the CRDT, only recomputed on read.
     ReactionsUpdated(TargetId),
-    /// A foreign-file import applied successfully (`toile-interop` §2.C). Carries
-    /// the lossy-import summary the UI surfaces: how many elements landed and
-    /// which unsupported constructs were dropped. The whole import is one undo
-    /// item (§1).
+    /// A foreign-file import applied successfully
+    /// (`toile-import-export`). Carries the lossy-import summary the UI
+    /// surfaces: how many elements landed and which unsupported constructs were
+    /// dropped. The whole import is one undo item (`toile-import-export`).
     ImportReport {
         imported: usize,
         skipped: Vec<String>,
     },
     /// A foreign-file import aborted before touching the board (a parse error, a
     /// safety-limit breach, or a media upload failure): the board is unchanged
-    /// (`toile-interop` §1 atomicity). Carries a human-facing reason.
+    /// (`toile-import-export`, atomicity). Carries a human-facing reason.
     ImportFailed(String),
     Error(ToileError),
 }
 
 // =============================================================================
-// Data-oriented display structures (§9)
+// Data-oriented display structures (`toile-engine`)
 // =============================================================================
 
 /// One frame of "what to paint", already culled and z-ordered. The CRDT visible
-/// set only -- presence rides its own event path (§8.B).
+/// set only -- presence rides its own event path (`toile-engine`).
 #[derive(Clone, Debug)]
 pub struct DisplayViewport {
     pub viewport: Viewport,
-    /// Back-to-front sequence mirroring the `layers` walk (§2.G): elements and
-    /// connectors interleaved by z-order, painted in one pass.
+    /// Back-to-front sequence mirroring the `layers` walk
+    /// (`toile-z-order`): elements and connectors interleaved by
+    /// z-order, painted in one pass.
     pub nodes: Vec<DisplayNode>,
-    /// Derived reaction tallies (§4.A), keyed by target, for the visible,
-    /// still-existing targets that carry at least one reaction. Derived on read
+    /// Derived reaction tallies (`toile-reactions`), keyed by target,
+    /// for the visible, still-existing targets that carry at least one reaction.
+    /// Derived on read
     /// (never stored in the CRDT); a deleted target's orphan entries are skipped.
     /// The reaction badge pass paints one chip row per entry. A `BTreeMap` (not
     /// `HashMap`) so iteration order is deterministic -- the derived viewport
@@ -1126,14 +1168,17 @@ pub struct DisplayElement {
     pub kind: ElementKind,
     pub transform: Affine, // world transform incl. rotation
     pub bounds: Rect,
-    pub locked: bool, // top-level element flag (§2.B), NOT from ElementStyle
+    /// Top-level element flag (`toile-elements`), NOT from
+    /// `ElementStyle`.
+    pub locked: bool,
     pub style: ElementStyle,
     pub geom: DisplayGeom,
     /// The immediate enclosing group node, if this element is a group member
-    /// (§2.F bis / §7). `None` for a top-level element. Group-selection resolution
-    /// is a pure-UI concern (walk this edge upward through the group chain to the
-    /// top-most enclosing group), so the display carries the edge rather than a
-    /// command round-trip; a group node itself carries its own parent group here.
+    /// (`toile-groups`). `None` for a top-level
+    /// element. Group-selection resolution is a pure-UI concern (walk this edge
+    /// upward through the group chain to the top-most enclosing group), so the
+    /// display carries the edge rather than a command round-trip; a group node
+    /// itself carries its own parent group here.
     pub group: Option<ElementId>,
 }
 
@@ -1146,28 +1191,38 @@ pub enum DisplayGeom {
     /// Sticky note: a filled, rounded card (background = `style.fill`) with the
     /// body string drawn on top in a fixed readable ink. Distinct from `Text`
     /// (which has no card). Phase 0 carries a plain string; a later slice upgrades
-    /// it to `LoroText` + `Vec<TextRun>` for char-wise convergence (§2.D).
+    /// it to `LoroText` + `Vec<TextRun>` for char-wise convergence
+    /// (`toile-text-editing`).
     Sticky(String),
     /// Free text body, no card background. Phase 0 carries a plain string (a
     /// single LWW field); a later slice upgrades it to `LoroText` + `Vec<TextRun>`
-    /// for char-wise convergence (§2.D) and Parley-ready runs.
+    /// for char-wise convergence (`toile-text-editing`) and Parley-ready
+    /// runs.
     Text(String),
-    Image(String),      // media blob hash (toile-interop resolves the pixels)
-    Stroke(Vec<Point>), // Logic-smoothed polyline (§4)
-    Frame,              // background + border only; children are separate DisplayElements
-    Group,              // paints nothing; carried for group-selection resolution (§2.F bis)
-    Embed(String),      // web url (sandboxed iframe)
+    /// Media blob hash (`toile-media` resolves the pixels).
+    Image(String),
+    /// Logic-smoothed polyline (`toile-freehand`).
+    Stroke(Vec<Point>),
+    /// Background + border only; children are separate `DisplayElement`s.
+    Frame,
+    /// Paints nothing; carried for group-selection resolution
+    /// (`toile-embeds`).
+    Group,
+    /// Web url (sandboxed iframe).
+    Embed(String),
+    /// Nested Ambre document (`toile-embeds`).
     DocEmbed {
         document_id: DocumentId,
         doc_type: DocType,
         focused: bool,
-    }, // nested Ambre doc (§2.I)
+    },
 }
 
 #[derive(Clone, Debug)]
 pub struct DisplayConnector {
     pub id: ConnectorId,
-    pub path: BezPath, // already routed against current bounds (§5)
+    /// Already routed against the current bounds (`toile-connectors`).
+    pub path: BezPath,
     pub style: ElementStyle,
     pub arrows: EndCaps,
 }

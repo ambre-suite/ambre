@@ -1,5 +1,6 @@
 // ambre-logic/tests/docfile_dispatch.rs
-// The cross-app half of the `.ambre` belt (`ambre-spec-docfile.md` §4).
+// The cross-app half of the `.ambre` belt (`ambre-spec-docfile.md`,
+// `DOCFILE-002`).
 //
 // The dispatch rule is a statement about two apps at once -- "a Toile file
 // handed to the Trame importer yields `WrongDocType { found: Toile }` and is

@@ -1,5 +1,5 @@
 // ambre-trame/src/logic/find.rs
-// Find & Replace (`ambre-spec-trame-ui.md` sec.5.G).
+// Find & Replace (`trame-find-replace`).
 //
 // The DOM `FindReplace` chrome panel (Leptos, in `trame_chrome`) emits two
 // parameterless-origin commands; the Logic thread -- the sole holder of document
@@ -14,7 +14,8 @@ use crate::formula::types::CellId;
 
 impl TrameState {
     /// Scan the active sheet for cells whose **displayed** value matches `query`
-    /// and reply with a [`TrameEvent::FindResult`] (sec.5.G). Read-only: no CRDT
+    /// and reply with a [`TrameEvent::FindResult`] (`trame-find-replace`).
+    /// Read-only: no CRDT
     /// delta. `matches` lists every hit in row-major order; `active` is the index
     /// of the first hit strictly after the tracked active cell, wrapping to the
     /// top. The UI moves the active cell onto that hit, so a repeated `FindNext`
@@ -55,7 +56,8 @@ impl TrameState {
     }
 
     /// Replace every match of `query` with `replacement` across the active sheet
-    /// (or all sheets when `all_sheets`) in one undo group (sec.5.G). A cell
+    /// (or all sheets when `all_sheets`) in one undo group (`trame-find-replace`).
+    /// A cell
     /// matches on its **displayed** value (`whole_cell` = exact equality, else
     /// substring; `match_case` toggles folding); the rewrite edits the **raw**
     /// cell text -- the whole cell for `whole_cell`, else each occurrence of
@@ -128,7 +130,8 @@ impl TrameState {
     }
 
     /// Replace the single match at the active cell, then reply with a fresh
-    /// `FindResult` advancing to the following match (sec.5.G). The active cell is
+    /// `FindResult` advancing to the following match (`trame-find-replace`). The
+    /// active cell is
     /// rewritten only if it matches `query`; either way the UI moves to the next
     /// match. One undo group.
     pub(super) fn replace_one(

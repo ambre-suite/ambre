@@ -1,5 +1,5 @@
-//! Leptos UI tests for the Trame chrome (Epic `ET`, `ambre-spec-trame-ui.md`
-//! sec.14/18, `ambre-spec-architecture.md` §4 "wasm" tier).
+//! Leptos UI tests for the Trame chrome (Epic `ET`,
+//! `ambre-spec-testing.md`, the "wasm" tier).
 //!
 //! The chrome (`ambre_trame::chrome`) is `cfg(target_arch = "wasm32")` -- leptos
 //! CSR + DOM (`web-sys`/`wasm-bindgen`) that does not compile on the host. So its
@@ -268,7 +268,7 @@ fn find_replace_panel_opens_in_find_mode() {
     container.remove();
 }
 
-// Multi-column sort dialog (`-ui.md` sec.5.C): opens over a selection snapshot,
+// Multi-column sort dialog (`trame-sort`): opens over a selection snapshot,
 // offers one level per "Add sort level", and emits the chosen levels on Sort.
 #[wasm_bindgen_test]
 fn sort_dialog_adds_levels_and_emits_on_apply() {
@@ -343,7 +343,7 @@ fn sort_dialog_adds_levels_and_emits_on_apply() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Context-menu scope (`-ui.md` sec.5.C): the grouped/iconed entries and the
+// Context-menu scope (`trame-context-menu`): the grouped/iconed entries and the
 // header-scoped layout that drops the cell-only clipboard + merge groups.
 // ─────────────────────────────────────────────────────────────────────────────
 

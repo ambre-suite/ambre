@@ -43,7 +43,7 @@ fn batch_write_is_one_undo_item() {
 
 /// A cell edit that also rewrites the active filter's hidden set commits the
 /// `LoroDoc` twice (the cell write + the filter recompute), yet the edit must
-/// stay a single undo item (`-ui.md` §6.C). `SetCellText` opens an undo group
+/// stay a single undo item (`trame-cell-editing`). `SetCellText` opens a group
 /// that `CommitEdit` seals on cell exit, so both commits collapse into one
 /// step: a single `Undo` restores the pre-edit value and the prior hidden set.
 #[test]
@@ -140,7 +140,7 @@ fn undo_with_empty_stack_is_a_noop() {
     ));
 }
 
-/// Undo is local-only (features spec §4): `UndoManager` tracks only this peer's
+/// Undo is local-only (`trame-undo`): `UndoManager` tracks only this peer's
 /// commits, never imported remote ops. Peer B writes its own cell, receives a
 /// remote edit from A, then undoes -- only B's own edit is reverted; A's remote
 /// value stays put (Google Sheets / collaborative-editor behavior).
@@ -229,7 +229,7 @@ fn undo_insert_row_rebuilds_sheet_index() {
     assert_eq!(read_cell(&mut state, 2, 0), "", "inserted row removed");
 }
 
-/// The undo stack lives for the open-document session only (features spec §4:
+/// The undo stack lives for the open-document session only (`trame-undo`:
 /// "no undo stack persistence between sessions"). Reopening a document from its
 /// persisted snapshot starts with a fresh, empty `UndoManager`: a prior edit is
 /// not undoable, so Ctrl+Z is a no-op on the reopened doc.
@@ -350,7 +350,7 @@ fn insert_and_delete_column_shift_cells() {
 }
 
 /// Drag reorder moves a whole row by uid: its cells travel with it, and a
-/// formula referencing the moved data follows it to the new position (§12, the
+/// formula referencing the moved data follows it to the new position (`trame-formula-engine`, the
 /// same guarantee as sort -- no reference rewrite, no reseed).
 #[test]
 fn move_row_carries_cells_and_formula_follows_data() {
@@ -400,7 +400,8 @@ fn move_column_carries_cells() {
     assert_eq!(read_cell(&mut state, 0, 2), "y");
 }
 
-/// References are positional and never rewritten (§12): after deleting the
+/// References are positional and never rewritten (`trame-formula-engine`):
+/// after deleting the
 /// row that held a formula's source, the formula reads whatever now sits at
 /// that grid position -- here an emptied cell. (Full id-based `#REF!` on
 /// delete is a separate broken-references story.)
@@ -487,7 +488,7 @@ fn merge_marks_master_span_and_blanks_covered() {
 }
 
 /// A merge is rejected locally when a covered cell is non-empty, and no CRDT
-/// delta is produced (Excel/Sheets behavior, §6).
+/// delta is produced (Excel/Sheets behavior, `trame-cell-merges`).
 #[test]
 fn merge_rejected_when_covered_cell_non_empty() {
     let mut state = TrameState::new();

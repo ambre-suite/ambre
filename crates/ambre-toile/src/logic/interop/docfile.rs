@@ -1,4 +1,4 @@
-//! The `.ambre` native container, Toile side (`ambre-spec-docfile.md` §2.B).
+//! The `.ambre` native container, Toile side (`ambre-spec-docfile.md`).
 //!
 //! Toile's half of the pair: the payload is this board's `LoroDoc` snapshot. The
 //! header is not built here -- layout, version registry and both normative read
@@ -20,7 +20,7 @@ use ambre_core::{
 /// followed by an uncompressed, unencrypted Loro snapshot.
 ///
 /// Pure and crypto-free (I4). Protection, when it applies, is a separate stage
-/// owned by `ambre-sync` (`docfile §3`).
+/// owned by `ambre-sync` (`docfile`).
 pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: Uuid) -> Vec<u8> {
     let payload = doc.export(ExportMode::Snapshot).unwrap_or_else(|e| {
         // Never silent: the caller is about to write these bytes to a file the
@@ -38,7 +38,7 @@ pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: Uuid) -> Vec<u8> {
 /// is refused non-destructively, and a valid file belonging to another app comes
 /// back as [`DocFileError::WrongDocType`] carrying the type, so the caller
 /// re-dispatches those same bytes rather than coercing the document onto a board
-/// (dispatch rule, `docfile §2.B`).
+/// (dispatch rule, `docfile`).
 pub fn import_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
     read_ambre_plaintext_as(DocType::Toile, data)
 }

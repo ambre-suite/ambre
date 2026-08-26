@@ -1,6 +1,6 @@
 // ambre-chrome/src/context_menu.rs
 // ============================================================================
-// DOM context menu (ambre-spec-chrome.md, 2.B).
+// DOM context menu (ambre-spec-chrome.md, CHROME-003).
 //
 // Opened from the canvas right-click: the launcher's wgpu-side handler reads
 // the click point and sets `pos` (the Canvas -> DOM signal channel). This
@@ -23,7 +23,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 
 /// One row of the context menu: either a selectable command item (optionally
-/// iconed) or a non-interactive group separator (`-ui.md` sec.5.C "grouped,
+/// iconed) or a non-interactive group separator (`trame-context-menu`, "grouped,
 /// iconed entries with separators"). A separator is skipped by keyboard
 /// navigation and carries no command.
 #[derive(Clone, PartialEq)]
@@ -63,7 +63,7 @@ impl MenuEntry {
 
     /// Attach a trailing keybinding chip to an `Item` (no-op on a separator).
     /// Chainable on `new` / `with_icon`, so a menu-bar row can show its
-    /// accelerator (SS5quinquies.E) while a context-menu row stays chip-less.
+    /// accelerator (`toile-menus`) while a context-menu row stays chip-less.
     pub fn shortcut(mut self, binding: KeyBinding) -> Self {
         if let Self::Item { shortcut, .. } = &mut self {
             *shortcut = Some(binding);
@@ -84,7 +84,7 @@ impl MenuEntry {
 pub fn ContextMenu(
     pos: RwSignal<Option<(f64, f64)>>,
     /// The menu rows, reactive so the launcher can swap a cell-scoped layout for
-    /// a header-scoped one between right-clicks (`-ui.md` sec.5.C).
+    /// a header-scoped one between right-clicks (`trame-context-menu`).
     #[prop(into)]
     entries: Signal<Vec<MenuEntry>>,
     on_command: Callback<CommandId>,

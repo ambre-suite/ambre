@@ -127,7 +127,8 @@ pub fn apply_style_event(s: &StyleState, ev: &UiEvent) {
         // The borders pen (line style + colour) is user-owned and sticky: it is
         // NOT reseeded from the selected cell. Seeding it here would clobber an
         // explicit pick every time the selection emits `StyleApplied`, making the
-        // line-style picker revert to the cell's current edge (`-ui.md` sec.5bis).
+        // line-style picker revert to the cell's current edge
+        // (`trame-cell-styles`).
         s.fg.set(style.fg);
         s.bg.set(style.bg);
         s.font.set(style.font.clone());

@@ -1,6 +1,6 @@
 // ambre-trame/src/chrome/mod.rs
 // ============================================================================
-// Trame-SPECIFIC chrome (ambre-spec-architecture.md, 1: per-app chrome lives in
+// Trame-SPECIFIC chrome (ambre-spec-architecture.md: per-app chrome lives in
 // the app crate, NOT the launcher). Built on the app-agnostic `ambre-chrome`
 // toolkit, this module owns everything the launcher used to hard-code about
 // Trame:

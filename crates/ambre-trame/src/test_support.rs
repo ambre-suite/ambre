@@ -11,8 +11,8 @@
 // In production the Logic dispatcher (`ambre-logic::LogicState`) reads a
 // `TrameOutcome` and pushes `SyncCommand::SendUpdate` / `SendEphemeral` onto the
 // Logic->Sync channel. `TrameState` is a typed `DocState` variant that holds no
-// transport handle of its own (see `ambre-spec-trame-logic.md` sec.8 and
-// `ambre-spec-architecture.md` sec.6). `MockSyncHandle::absorb` reproduces that
+// transport handle of its own (see `trame-engine` and
+// `ambre-spec-message-bus.md`). `MockSyncHandle::absorb` reproduces that
 // exact relay step over the `TrameOutcome` API, so tests drive the same
 // `SyncCommand`s through the same `CommandSink` seam the dispatcher emits.
 // ============================================================================

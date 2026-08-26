@@ -478,8 +478,8 @@ pub(crate) async fn handle_request_missing(
 // to real data, so this is intentional, NOT an oversight -- do not re-flag it in
 // audits. The MANDATORY hardening to apply before Murmure lands (channel_members
 // ACL, `verify_update_signature` on every ChannelUpdate/Ephemeral, and the
-// `verify_clock_and_assign_seq` Lua path per segment) is specified in
-// `specs/Todo/ambre-murmure.md` sec.3 "Server-side authorization".
+// `verify_clock_and_assign_seq` Lua path per segment) is `SRV-047` and `SRV-048`
+// in `ambre-spec-broadcast.md`, with the channel design in `ambre-murmure.md`.
 pub(crate) async fn handle_subscribe_channel(
     _state: &Arc<AppState>,
     conn: &mut WsConnectionState,
@@ -487,7 +487,7 @@ pub(crate) async fn handle_subscribe_channel(
     outbound_tx: &mpsc::Sender<Vec<u8>>,
 ) {
     // TODO(murmure): enforce the channel_members subscription ACL here, mirroring
-    // `handle_subscribe`/`verify_document_access`. See ambre-murmure.md sec.3.
+    // `handle_subscribe`/`verify_document_access`. `SRV-047`.
     conn.channel_subscriptions.insert(channel_id);
     let ack = encode_server_msg(&WsServerMsg::ChannelSubscribed { channel_id });
     let _ = outbound_tx.send(ack).await;
@@ -501,7 +501,7 @@ pub(crate) async fn handle_channel_update(
     // TODO(murmure): before Murmure lands, gate this on `verify_update_signature`
     // and the `verify_clock_and_assign_seq` path exactly like `handle_update`, and
     // persist the delta. Rebroadcasting unsigned, unsequenced updates is only safe
-    // while no channel is wired to real data. See ambre-murmure.md sec.3.
+    // while no channel is wired to real data. `SRV-048`.
     let broadcast = encode_server_msg(&WsServerMsg::ChannelUpdate {
         channel_id,
         seq: ambre_protocol::messages::Seq(0),
@@ -516,7 +516,7 @@ pub(crate) async fn handle_channel_ephemeral(
     ephemeral: ambre_protocol::Ephemeral,
 ) {
     // TODO(murmure): signature-check the ephemeral (typing/presence carries the
-    // anti-replay counter) once channel ACLs exist. See ambre-murmure.md sec.3.
+    // anti-replay counter) once channel ACLs exist. `SRV-048`.
     let broadcast = encode_server_msg(&WsServerMsg::ChannelEphemeral {
         channel_id,
         ephemeral,

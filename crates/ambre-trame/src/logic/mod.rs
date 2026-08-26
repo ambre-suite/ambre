@@ -108,7 +108,7 @@ pub struct TrameState {
     /// parameterless structural intents (`MergeSelection`, `DeleteSelectedRows`,
     /// ...) resolve their geometry against it. Like [`active`](Self::active) it
     /// is ephemeral, in-memory only, never in Loro, never synced (a local view
-    /// state, `-ui.md` sec.16). Defaults to the single active cell.
+    /// state, `trame-selection`). Defaults to the single active cell.
     selection: (u32, u32, u32, u32),
     /// Id of the sheet the UI is currently looking at. Step 1 always holds the
     /// implicit [`DEFAULT_SHEET`]; multi-sheet switching arrives with the tabs.
@@ -120,12 +120,13 @@ pub struct TrameState {
     /// Cells carrying an italic run on the active sheet.
     italic: HashSet<(u32, u32)>,
     /// Rich manual formatting (underline, alignment, colours, font, number
-    /// format, borders, wrap) per cell on the active sheet (`-ui.md` sec.5bis).
+    /// format, borders, wrap) per cell on the active sheet (`trame-cell-styles`).
     /// Keyed by grid `(row, col)`; absence means the default style. Mirrors the
     /// persisted per-sheet style containers (the CRDT source of truth); reseeded
     /// on import. Bold/italic stay in their own sets above.
     styles: HashMap<(u32, u32), CellStyle>,
-    /// The whole workbook CRDT: multi-sheet schema (§2.B). Cells are keyed by
+    /// The whole workbook CRDT: multi-sheet schema (`trame-schema`). Cells are
+    /// keyed by
     /// stable `(row_lid, col_lid)` pairs -- see [`crate::model`].
     doc: LoroDoc,
     /// Position <-> stable-id cache for the **active sheet**'s rows/columns.
@@ -140,12 +141,13 @@ pub struct TrameState {
     engine: FormulaEngine,
     /// Active-sheet merges, master grid position -> bottom-right grid position.
     /// Derived cache of `merges_{sheet}`, rebuilt by [`Self::rebuild_merges`]
-    /// after any import or structural op (§6).
+    /// after any import or structural op (`trame-cell-merges`).
     merges: HashMap<(u32, u32), (u32, u32)>,
     /// Grid positions covered by a merge but not the master (rendered blank,
     /// swallowed by the master cell). Derived alongside [`Self::merges`].
     covered: HashSet<(u32, u32)>,
-    /// Active-sheet grid row positions hidden by the shared filter (§1.A).
+    /// Active-sheet grid row positions hidden by the shared filter
+    /// (`trame-shared-filter`).
     /// Derived cache of `filter_hidden_{sheet}` (a `{row_uid -> true}` map),
     /// rebuilt by [`Self::rebuild_filter`] after any import or structural op.
     /// Cells in these rows are flagged [`DisplayCell::is_filtered`] but still
@@ -155,13 +157,14 @@ pub struct TrameState {
     /// derived cache of `col_widths_{sheet}` (a `{col_uid -> width}` map),
     /// rebuilt by [`Self::reseed_metrics`] after any import or structural op.
     /// Absence means the uniform [`DEFAULT_COL_WIDTH`]; the viewport response
-    /// fills the gap so the UI gets a complete slice (sec.4bis.C, §9).
+    /// fills the gap so the UI gets a complete slice (`trame-resize`).
     col_widths: HashMap<u32, f32>,
     /// Active-sheet row heights (physical px) per grid row position. Row analogue
     /// of [`col_widths`](Self::col_widths); derived from `row_heights_{sheet}`.
     row_heights: HashMap<u32, f32>,
     /// Stable cell keys of covered cells that still hold a non-empty value -- a
-    /// concurrent-edit conflict (§6). Masked: excluded from the formula engine
+    /// concurrent-edit conflict (`trame-cell-merges`). Masked: excluded from the
+    /// formula engine
     /// and not displayed, but never destroyed; reappear on unmerge.
     masked_cells: HashSet<String>,
     /// CRDT sheet id per local engine index (`sheets_by_idx[i]` has index `i`).
@@ -173,7 +176,8 @@ pub struct TrameState {
     /// references in formulas. Derived alongside [`Self::sheets_by_idx`].
     sheet_name_to_u16: HashMap<String, u16>,
     /// Stable `sheet_id` -> local engine index, for resolving the canonical
-    /// `#s0!A1` form persisted in the CRDT `v` text (rename-stable, §2.D).
+    /// `#s0!A1` form persisted in the CRDT `v` text (rename-stable,
+    /// `trame-sheets`).
     /// Derived alongside [`Self::sheets_by_idx`].
     sheet_id_to_u16: HashMap<String, u16>,
     /// Stable `sheet_id` -> current display name, for reconstructing formula-bar
@@ -182,7 +186,8 @@ pub struct TrameState {
     /// Resolved named ranges: defined name -> target cell/range. Rebuilt from the
     /// `named_ranges` CRDT map by [`Self::rebuild_named`] on every reseed.
     named: HashMap<String, NameTarget>,
-    /// Local undo/redo history (§8). Subscribes to [`Self::doc`] and records one
+    /// Local undo/redo history (`trame-undo`). Subscribes to [`Self::doc`] and
+    /// records one
     /// item per commit; each `TrameCommand` handler commits exactly once, so one
     /// command maps to one undo step. Scope is the open-document session: it only
     /// knows this peer's commits, not imported remote ops. `undo`/`redo` mutate
@@ -191,11 +196,13 @@ pub struct TrameState {
     undo_manager: UndoManager,
     /// Per-session monotonic counter for minting explicit `sheet_id`s. Combined
     /// with the document `PeerID` so two peers that concurrently add a sheet mint
-    /// distinct ids that both survive (§2.D). Not persisted: ids, once minted,
+    /// distinct ids that both survive (`trame-sheets`). Not persisted: ids, once
+    /// minted,
     /// live in the CRDT; the counter only needs to be unique within this session.
     sheet_counter: u32,
     /// Per-session monotonic counter for minting row/column [`Uid`]s. Same
-    /// peer-scoped convergence argument as `sheet_counter` (§2.A): two peers that
+    /// peer-scoped convergence argument as `sheet_counter`
+    /// (`trame-rows-and-columns`): two peers that
     /// concurrently materialize/insert a line mint distinct uids that both
     /// survive. Not persisted -- once minted, a uid lives in the CRDT as the list
     /// element's value.
@@ -213,7 +220,7 @@ impl TrameState {
     }
 
     /// A workbook whose CRDT identity and commit clock are **pinned**, so the
-    /// same command sequence produces the same bytes twice (`fixtures §I1`).
+    /// same command sequence produces the same bytes twice (`FIXTURE-001`).
     ///
     /// Two of the three entropy sources of a Trame document are closed here; the
     /// third, `document_id`, belongs to the caller and is supplied to
@@ -240,7 +247,7 @@ impl TrameState {
         doc.set_peer_id(peer)
             .expect("a fresh LoroDoc accepts a peer id");
         // No wall clock in the ops: a recorded timestamp would differ between two
-        // runs of the same generator and defeat the byte diff of `fixtures §4`.
+        // runs of the same generator and defeat the byte diff of `fixtures`.
         doc.set_record_timestamp(false);
         Self::from_doc(doc)
     }
@@ -313,7 +320,7 @@ impl Default for TrameState {
 //   - filters    : shared filter apply / clear / recompute;
 //   - styles     : cell formatting;
 //   - sync       : CRDT delta flush, remote apply, snapshot import/export;
-//   - docfile    : the native `.ambre` container, Trame side (`docfile §2.B`).
+// - docfile: the native `.ambre` container, Trame side (`docfile`).
 // -----------------------------------------------------------------------------
 mod cells;
 mod clipboard;
@@ -322,7 +329,7 @@ pub mod docfile;
 mod fill;
 mod filters;
 mod find;
-/// The per-app half of `shape_of` / `canonical_dump` (`fixtures §2.B`). Fixture
+/// The per-app half of `shape_of` / `canonical_dump` (`fixtures`). Fixture
 /// code (I4): behind the non-default `fixtures` feature, never in a client build.
 #[cfg(feature = "fixtures")]
 mod fixtures;

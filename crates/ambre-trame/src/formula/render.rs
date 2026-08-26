@@ -1,6 +1,6 @@
 //! AST-to-text rendering and sheet-qualifier rewriting.
 //!
-//! Used for two host flows around the CRDT `v` text (spec section 2.D):
+//! Used for two host flows around the CRDT `v` text (`trame-formula-engine`):
 //!
 //! - **Canonicalization** (user input -> stored `v`): [`canonicalize`] rewrites
 //!   every display-name sheet qualifier into its stable id, then [`render`]

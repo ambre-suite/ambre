@@ -1,5 +1,4 @@
 # AMBRE -- APP: MURMURE (COLLABORATIVE MESSAGING)
-**Status:** Draft
 **Implementation:** design-only
 
 > Specifications for real-time communication, channels, and E2EE persistence.
@@ -79,7 +78,8 @@ Channel storage layout (`channel_{id}/`):
 
 ### Object Storage
 
-See **section 11** for the full hierarchy. Summary of messaging keys:
+See `ambre-spec-object-store.md` for the layout that exists. The channel branches below exist in no
+code and in no object name today. Summary of messaging keys:
 
 Object storage paths:
 
@@ -106,7 +106,7 @@ More aggressive than for documents: compaction every **1-2 min** (vs 5 min for d
 
 ### Unread tracking
 
-The only real server-side addition. The server tracks a "last read seq" cursor per user per channel -- unencrypted metadata (Postgres, see section 9 `channel_read_cursors`).
+The only real server-side addition. The server tracks a "last read seq" cursor per user per channel -- unencrypted metadata (Postgres, `channel_read_cursors`, `ambre-spec-server.md section 3`).
 
 ### Typing indicators
 

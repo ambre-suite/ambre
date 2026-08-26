@@ -1,6 +1,6 @@
 // ambre-chrome/src/font.rs
 // ============================================================================
-// Shared, app-agnostic font-family picker (ambre-spec-chrome.md 2.B). A single
+// Shared, app-agnostic font-family picker (ambre-spec-chrome.md). A single
 // toolbar trigger (the current family name + caret) toggling a context-menu
 // popover that lists the families, each rendered in its OWN typeface so the user
 // previews the font before picking. A `<select>` cannot reliably style its

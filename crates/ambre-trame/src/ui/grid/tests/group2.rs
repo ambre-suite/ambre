@@ -81,7 +81,7 @@ fn snap_keeps_multi_block_fill_selection() {
 }
 
 /// Feed a single column of cells, flagging `filtered` rows as collapsed
-/// (`-ui.md` sec.5.D), then assert the row axis collapses over them: the
+/// (`trame-shared-filter`), then assert the row axis collapses over them: the
 /// hidden set, vertical offsets, hit-testing, and navigation all skip them.
 #[test]
 fn filtered_rows_collapse_geometry_and_nav() {

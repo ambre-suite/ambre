@@ -44,11 +44,11 @@ pub use overlay::draw_overlay;
 use overlay::mdi_filter_polygon;
 
 /// Build the shared [`GridLayout`] for the current screen viewport. Carries the
-/// per-axis width/height maps (sec.4bis.C) so resized columns/rows reflow; the
+/// per-axis width/height maps (`trame-resize`) so resized axes reflow; the
 /// cell-aligned scroll position is the layout origin.
 fn screen_layout(state: &TrameUiState) -> GridLayout<'_> {
     GridLayout {
-        // Collapse the row axis over filter-hidden rows (sec.5.D).
+        // Collapse the row axis over filter-hidden rows (`trame-shared-filter`).
         hidden_rows: &state.hidden_rows,
         // Header strips zoom with the grid: pass the already-scaled sizes (the
         // layout multiplies only the content-area metrics by `zoom`).
@@ -62,7 +62,7 @@ fn screen_layout(state: &TrameUiState) -> GridLayout<'_> {
         origin_col: state.left_col,
         origin_row: state.top_row,
         width: state.canvas_width,
-        // The grid stops above the bottom sheet-tab strip (sec.13).
+        // The grid stops above the bottom sheet-tab strip (`trame-sheets`).
         height: state.grid_bottom(),
         total_cols: TOTAL_COLS,
         total_rows: TOTAL_ROWS,
@@ -89,7 +89,7 @@ pub struct DrawStats {
     /// Number of cells with non-empty text actually drawn this frame.
     pub cells_drawn: u32,
     /// Latest measured input->caret latency (keydown to caret paint), in ms.
-    /// Target < 50 ms, acceptable < 100 ms (ambre-spec-chrome 7, Phase 3).
+    /// Read against the keystroke-to-draft budget of `ambre-spec-budgets.md`.
     pub input_latency_ms: f32,
 }
 

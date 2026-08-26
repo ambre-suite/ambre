@@ -1,4 +1,4 @@
-// ambre-bus host tests (tier `host`, ambre-spec-architecture.md sec.4).
+// ambre-bus host tests (tier `host`, `ambre-spec-message-bus.md`).
 // ============================================================================
 // Pure, native (`cargo test -p ambre-bus`) coverage of the bus data plane:
 //   - the two pure helpers carried on the content plane (`to_tsv`,
@@ -234,7 +234,7 @@ fn request_id_echo_is_preserved_across_the_hop() {
     assert_eq!(id.0, back.0);
 }
 
-// ── Role gate: AppCommand::is_mutating (architecture sec.2.D) ───────────────
+// ── Role gate: AppCommand::is_mutating (`architecture`) ─────────
 //
 // The classification decides what a viewer may still do. Getting it wrong is
 // silent in both directions -- a misclassified read-only command costs a viewer
@@ -270,7 +270,7 @@ fn read_only_and_local_commands_are_not_mutating() {
         AppCommand::Toile(ToileCommand::ExitPresent),
         AppCommand::Toile(ToileCommand::SetViewport(ToileViewport::default())),
         AppCommand::Toile(ToileCommand::RequestSnapshot),
-        // Toile: ephemeral only -- a viewer still shows a cursor (sec.7).
+        // Toile: ephemeral only -- a viewer still shows a cursor (`toile-presence`).
         AppCommand::Toile(ToileCommand::Presence(PresencePayload::default())),
     ];
     for cmd in cases {
@@ -298,7 +298,7 @@ fn writing_commands_are_mutating() {
             delta: Default::default(),
         }),
         AppCommand::Toile(ToileCommand::Undo),
-        // Reacting writes a per-user CRDT entry (sec.4.A): not presence.
+        // Reacting writes a per-user CRDT entry (`toile-reactions`): not presence.
         AppCommand::Toile(ToileCommand::React {
             target: ElementId::mint(1, 1),
             reaction: None,

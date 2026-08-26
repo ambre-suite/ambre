@@ -1,9 +1,9 @@
 //! Document-fixture types -- the generator contract and the sidecar manifest
-//! (`ambre-spec-fixtures.md` §2.B).
+//! (`ambre-spec-fixtures.md`).
 //!
 //! **Why here.** Implementors live next to the engine whose commands they drive
 //! (`ambre-trame/src/fixtures/`, `ambre-toile/src/fixtures/`), so a schema change
-//! and its generator move in one commit (§6). Rust's orphan rule then forbids
+//! and its generator move in one commit. Rust's orphan rule then forbids
 //! defining [`FixtureGen`] anywhere downstream of them: `ambre-logic` depends on
 //! the apps, never the reverse. `ambre-core` is upstream of everything, already
 //! owns [`DocType`], and already carries `serde` and `hex` -- so the trait and
@@ -32,7 +32,7 @@ use crate::{DocType, Uuid};
 /// still a well-formed v7 that the container and the registry accept -- its
 /// timestamp field simply carries seed material rather than a clock.
 ///
-/// Crypto-free, per §1.A: the mixer is SplitMix64, a finalizer chosen for being
+/// Crypto-free by design: the mixer is SplitMix64, a finalizer chosen for being
 /// short and dependency-free. It is **not** a hash and nothing here relies on it
 /// being one -- a fixture's identity is public by construction.
 pub fn seeded_document_id(seed: u64) -> Uuid {
@@ -67,7 +67,7 @@ pub fn seeded_document_id(seed: u64) -> Uuid {
 pub trait FixtureGen {
     /// Stable identity: the manifest's [`FixtureManifest::generator`] and the
     /// artifact **stem** -- the whole filename in `current/`, the part before the
-    /// `@` in `frozen/` (§2.A).
+    /// `@` in `frozen/`.
     fn name(&self) -> &'static str;
 
     /// Which app's engine this generator drives, and therefore which importer
@@ -84,8 +84,8 @@ pub trait FixtureGen {
     /// Bumped by the author when the produced document changes on purpose; the
     /// driver copies it into the manifest, having no other source for it. No
     /// recipe reads it -- it exists for the reviewer looking at the manifest diff
-    /// (§4), and for the frozen belt, which retires its semantic comparison when
-    /// this no longer matches (§4).
+    /// and for the frozen belt, which retires its semantic comparison when
+    /// this no longer matches.
     fn generator_version(&self) -> u32;
 
     /// Build the document and return the plaintext `.ambre` bytes, i.e. the
@@ -118,12 +118,12 @@ pub trait FixtureGen {
 pub struct FixtureManifest {
     /// Generator identity, e.g. `"trame/formula_dag_deep"`. Also the artifact
     /// **stem**: the whole filename in `current/`, the part before the `@` in
-    /// `frozen/` (§2.B). `String` because `fixtures-check` reads manifests back
+    /// `frozen/`. `String` because `fixtures-check` reads manifests back
     /// off disk, and owned deserialization cannot borrow `'static`.
     pub generator: String,
 
     /// Bumped by the generator author when the produced document changes on
-    /// purpose. Frozen into the artifact too: that is how §4 detects a frozen
+    /// purpose. Frozen into the artifact too: that is how detects a frozen
     /// fixture and the current one are no longer comparable.
     pub generator_version: u32,
 
@@ -133,18 +133,18 @@ pub struct FixtureManifest {
 
     pub doc_type: DocType,
 
-    /// Container version (`docfile §2.A`) at write time -- current for a
-    /// generated artifact, superseded for a frozen one (§4).
+    /// Container version (`docfile`) at write time -- current for a
+    /// generated artifact, superseded for a frozen one.
     pub ambre_version: u8,
 
-    /// Payload schema version (`architecture §2.D`). Distinct from
+    /// Payload schema version (`architecture`). Distinct from
     /// [`generator_version`](Self::generator_version), which tracks authorial
     /// intent rather than format. Generators write `0` until `ARCH P8` creates
     /// the register, 0 being what an absent one reads as.
     pub schema_version: u32,
 
     /// BLAKE2b over the **whole `.ambre` file, header included**, so a flipped
-    /// `document_id` byte is caught by the write-once check of §4. `ambre-crypto`
+    /// `document_id` byte is caught by the write-once check. `ambre-crypto`
     /// has no plain `hash()`; the call is `hash::chain_hash(&[], bytes)`, an
     /// empty parent proof degenerating to a keyless 32-byte digest. Hex, not 32
     /// raw integers, which would defeat the readable diff this sidecar exists
@@ -156,9 +156,9 @@ pub struct FixtureManifest {
 }
 
 /// Coarse size/complexity summary: when the bytes move, this says whether the
-/// document grew, lost a sheet, or is unchanged in shape, and §4 checks it
+/// document grew, lost a sheet, or is unchanged in shape, and checks it
 /// against `shape_of` to catch a manifest committed out of sync with its
-/// artifact. **Not** a selection index -- lookup is by name (§2.B).
+/// artifact. **Not** a selection index -- lookup is by name.
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct FixtureShape {
     /// Number of distinct peers whose ops are present (1 for a solo document).
@@ -255,7 +255,7 @@ mod tests {
     #[test]
     fn the_shape_body_is_tagged_by_app() {
         // The Toile variant carries no Trame field and vice versa: a later app
-        // adds a variant rather than widening every row (§2.A).
+        // adds a variant rather than widening every row.
         let toile = ShapeBody::Toile {
             elements: 5,
             frames: 1,

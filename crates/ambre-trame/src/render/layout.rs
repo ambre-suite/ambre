@@ -23,7 +23,8 @@ use super::*;
 /// breaking callers.
 #[derive(Clone, Copy, Debug)]
 pub struct GridLayout<'a> {
-    /// Absolute grid rows hidden by the shared filter (`-ui.md` sec.5.D), sorted
+    /// Absolute grid rows hidden by the shared filter (`trame-shared-filter`),
+    /// sorted
     /// ascending. Such rows occupy no vertical space: the row axis collapses over
     /// them, so a hidden row's successors slide up by one `row_height`. Empty
     /// (the common case and PDF export) means a plain uniform layout. The slice
@@ -47,7 +48,7 @@ pub struct GridLayout<'a> {
     /// Per-column widths (physical px) keyed by absolute grid column. A column
     /// with no entry (the common case, and PDF export with an empty map) falls
     /// back to the uniform [`col_width`](Self::col_width). Fed by the Logic
-    /// thread's `col_widths_{sheet}` map (`-ui.md` sec.4bis.C, `-logic.md` §9).
+    /// thread's `col_widths_{sheet}` map (`trame-resize`).
     pub col_widths: &'a HashMap<u32, f32>,
     /// Per-row heights keyed by absolute grid row. Row analogue of
     /// [`col_widths`](Self::col_widths).
@@ -129,7 +130,7 @@ impl GridLayout<'_> {
 
     /// Y of row `row`'s top edge relative to the surface, summing the variable
     /// heights of the *visible* rows from [`origin_row`](Self::origin_row) (the
-    /// row axis collapses over filtered rows, sec.5.D).
+    /// row axis collapses over filtered rows, `trame-shared-filter`).
     pub fn row_top(&self, row: u32) -> f64 {
         let mut y = self.top + self.header_height;
         if row >= self.origin_row {

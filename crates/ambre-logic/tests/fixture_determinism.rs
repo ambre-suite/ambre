@@ -1,11 +1,11 @@
 // crates/ambre-logic/tests/fixture_determinism.rs
 // ============================================================================
-// The determinism and round-trip belts of `ambre-spec-fixtures.md` §4 -- the two
+// The determinism and round-trip belts of `ambre-spec-fixtures.md` -- the two
 // that gate `FIXTURES P0`'s Definition of Done.
 //
 // **Ungated on purpose.** Everything asserted here is production API:
 // `TrameState::with_peer` / `ToileState::with_peer` (the I1 seams, documented in
-// `trame-logic §2` / `toile-logic §2`), `export_ambre_plaintext`, and
+// `ambre-spec-fixtures.md` / `toile-engine`), `export_ambre_plaintext`, and
 // `DocState::import_snapshot` / `export_snapshot` (I4's three ungated symbols).
 // So this belt runs under a bare `cargo test --workspace`, i.e. inside the CI
 // `test-native` job, which is what "green in CI" requires of P0. The corpus
@@ -24,7 +24,7 @@ use kurbo::{Point, Size};
 
 /// The seed every single-peer case in this file builds from. A constant, like a
 /// real generator's `seed()`: a seed supplied from outside could differ between
-/// runs and turn the drift gate into noise (§2.B).
+/// runs and turn the drift gate into noise.
 const SEED: u64 = 0x0BAD_C0FF_EE0D_D00D;
 
 /// The `document_id` the header carries. Pinned rather than minted: a UUID v7 is
@@ -112,7 +112,7 @@ fn a_generator_rebuilt_in_the_same_process_is_byte_identical() {
 
 #[test]
 fn a_generator_that_ignores_its_seed_is_caught() {
-    // §4's "test-only pair": two builds sharing one body and differing only in
+    // 's "test-only pair": two builds sharing one body and differing only in
     // their seed must produce different bytes. Without this half, the test above
     // passes vacuously on a generator that hardcodes its content -- a fixture
     // whose `seed` field would then be a lie in every manifest.
@@ -220,7 +220,7 @@ fn the_commit_clock_is_not_recorded() {
 
 #[test]
 fn a_two_peer_merge_is_deterministic() {
-    // One of the two cases the spike left open (§7). Two pinned peers edit
+    // One of the two cases the spike left open. Two pinned peers edit
     // disjoint cells, exchange full snapshots, and the merged document is
     // exported: the result must be reproducible, or no post-convergence fixture
     // (`FIXTURES P1`) can ever be committed.
@@ -253,13 +253,13 @@ fn a_two_peer_merge_is_deterministic() {
     );
     assert_eq!(bob_1, bob_2);
     // Convergence itself is `convergence_tests.rs`'s subject and is not restated
-    // here (§4): what this asserts is only that a *merged* document is
+    // here: what this asserts is only that a *merged* document is
     // reproducible, which is what a post-convergence fixture needs.
 }
 
 #[test]
 fn a_large_document_is_deterministic() {
-    // The other case the spike left open (§7): scale. An encoder iterating a hash
+    // The other case the spike left open: scale. An encoder iterating a hash
     // map would stay stable at four cells and drift at a few thousand, so the
     // invariant is asserted on a document wide enough for the encoder to take its
     // wide paths -- 5 000 cells over 250 rows and 20 columns, which also
@@ -267,7 +267,7 @@ fn a_large_document_is_deterministic() {
     //
     // Not the spec's 100k: this belt runs on every `cargo test --workspace` and a
     // 100k-cell build is tens of seconds in a debug profile, which is exactly the
-    // "corpus developers stop regenerating" failure §5 warns about. The 100k case
+    // "corpus developers stop regenerating" failure warns about. The 100k case
     // is `FIXTURES P2`'s benchmark corpus, which builds it under `criterion` in
     // release and can afford it.
     let build = |()| {
@@ -285,11 +285,11 @@ fn a_large_document_is_deterministic() {
 }
 
 // -----------------------------------------------------------------------------
-// The round trip, on every `DocState` variant (§4)
+// The round trip, on every `DocState` variant
 // -----------------------------------------------------------------------------
 
 /// `export_snapshot -> import_snapshot -> export_snapshot` is **stable** on one
-/// variant (§4).
+/// variant.
 ///
 /// Stability, not byte equality with the source: a fresh state commits its own
 /// scaffolding under its own peer *before* the import, and both engines

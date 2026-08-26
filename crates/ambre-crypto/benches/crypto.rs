@@ -1,6 +1,6 @@
 //! Criterion benchmarks for the crypto envelope.
 //!
-//! Targets (desktop; mobile measured later) from ambre-spec-sync.md §5:
+//! Targets (desktop; mobile measured later) from `architecture`:
 //!   seal 1 KB  < 200 us (P95), open 1 KB < 350 us (P95).
 
 use ambre_crypto::keys::{DocumentKey, MasterSeed};

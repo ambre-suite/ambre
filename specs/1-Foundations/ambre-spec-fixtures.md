@@ -1,243 +1,177 @@
-# AMBRE -- SPEC: FIXTURES (deterministic document corpora)
-**Type:** Horizontal (Foundation -- Quality / Tooling)
-**Status:** Draft
-**Implementation:** partial
+# AMBRE -- FEATURE: THE FIXTURE CORPUS
 
-> Producing Ambre documents in known, representative states -- deterministically, on the host target, from
-> code. A fixture is a document the test suite and the benchmarks start from instead of building by hand.
->
-> **Problem solved.** Today an Ambre document only comes into existence by a human clicking in the WASM SPA.
-> Two consequences: the performance budgets of `ambre-spec-trame-logic.md` and `ambre-spec-toile-logic.md`
-> are **unmeasurable**, because no large document exists to measure against; and every state-dependent
-> defect is reproduced by hand-written setup inside individual tests, repeated and unshared. The
-> reference case is Trame's view-dependent merge masking: a merge-masked cell computed differently
-> depending on which sheet was active (`trame-logic section 11 bis.E`, fixed).
->
-> **Not the interop fixtures.** `ambre-toile/src/logic/interop/fixtures/*.svg` are **input** files --
-> third-party formats fed to a converter. These are **document-state** fixtures: serialized Ambre CRDT
-> states, output of our own engine. Import consumes theirs, export consumes ours (section 4); neither substitutes
-> for the other.
+**Type:** Horizontal (framework)
+**Implementation:** partial -- generation and the loader ship; no artifact is committed, no gate reads one.
+
+> Ambre documents in known states, built from a seed instead of by hand. A fixture is what a test or
+> a benchmark starts from, and it is an ordinary `.ambre` file.
+
+Without one, an Ambre document comes into existence only when a person clicks in the application.
+Two consequences follow: the budgets of `ambre-spec-budgets.md` are unmeasurable,
+because no large document exists to measure; and every state-dependent defect is reproduced by
+hand-written setup inside one test, shared with nothing.
+
+**Not the interop fixtures.** `crates/ambre-toile/src/logic/interop/fixtures/` holds **input** files,
+third-party formats fed to a converter. These are document-state fixtures, the output of our own
+engine. Import consumes theirs, export consumes ours; neither substitutes for the other.
 
 ---
 
-## 1. OBJECTIVES & CONSTRAINTS
+## 1. CONTRACT
 
-### A. Scope
+The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
+status values are normative in `ambre-spec-template.md`.
 
-**Handles:** building document states by driving the app engines; serializing them through the existing
-`export_ambre_plaintext`; a manifest and digest per artifact; a CI drift gate; the loader side of the round
-trip, including the `load_fixture` entry point consumers call.
-The corpora it produces serve three consumers: **correctness** tests that need a hard-to-reach state,
-**interop export** tests that need a rich source document, and **benchmarks** that need scale (section 4).
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `FIXTURE-001` | For a generator and a seed, `build` MUST produce byte-identical output, across runs and across processes. | this spec section 2 | `fixture_determinism::a_generator_rebuilt_in_the_same_process_is_byte_identical`, `::a_generator_is_byte_identical_across_processes`, `::a_generator_that_ignores_its_seed_is_caught`; `fixtures_corpus::regenerating_rewrites_the_same_bytes` | verified |
+| `FIXTURE-002` | A generator MUST pin all three sources of entropy -- the `PeerID`, the commit clock and the `document_id`. None is optional. | this spec section 2 | `fixture_determinism::an_unpinned_peer_is_not_deterministic`, `::the_commit_clock_is_not_recorded`, `::the_document_id_is_part_of_what_the_digest_covers`; `ambre_core::fixtures::tests::a_seeded_document_id_is_stable_distinct_and_well_formed` | verified |
+| `FIXTURE-003` | Determinism MUST hold at the scale a fixture is built at, and on a document that has been through a merge. | this spec section 2 | `fixture_determinism::a_large_document_is_deterministic` (5 000 cells, wide enough for the encoder's wide paths), `::a_two_peer_merge_is_deterministic`. Two edges stay open by choice. The 100k-cell case belongs to the `FIXTURES P2` benchmark corpus, because it is too slow for a per-commit belt. No test exercises an architecture other than x86_64 | verified |
+| `FIXTURE-004` | A generator MUST build through `handle_command` on the app state; it MUST NOT write CRDT containers directly. | this spec section 2 | none. Every generator obeys the rule, and nothing stops the next one from writing to the `LoroDoc` directly. Such a fixture holds a state that no user action can reach, so it proves nothing | unverified |
+| `FIXTURE-005` | Every committed artifact MUST trace to a generator run from a seed, and MUST NOT come from a real user document. | this spec section 2 | none is possible: a real document and a generated one are both Loro bytes, so no gate can tell them apart. It is a **review rule**, and it belongs in the contribution checklist. A committed real document would place plaintext user content in a public AGPL repository, permanently, in git history; a fixture that is interesting *because* it came from real data is exactly the one that must not be committed -- write a generator that reproduces its shape instead | human-review |
+| `FIXTURE-006` | A committed fixture whose bytes drift MUST fail CI. | this spec section 3 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). Nothing is committed and no recipe compares a corpus against a regeneration | unimplemented |
+| `FIXTURE-007` | Fixture machinery MUST NOT reach a client build. The three production symbols named in section 2 are the whole exception. | this spec section 2; section 3 | crate graph: `ambre-app` names no `fixtures` feature, and Cargo never enables a dependency feature implicitly. The surface is therefore unreachable from the wasm artifact today. Nothing refuses the manifest line that would change that | unverified |
+| `FIXTURE-008` | Loading a fixture MUST go through the production importer; no test-only reader MUST read a `.ambre`. | this spec section 2 | `fixtures_corpus::a_written_fixture_loads_back_through_the_production_importer` | verified |
+| `FIXTURE-009` | A generator whose declared document type contradicts the bytes it built MUST be refused. | this spec section 2 | `fixtures_corpus::a_generator_whose_doc_type_contradicts_its_bytes_is_refused` | verified |
+| `FIXTURE-010` | Two generators MUST NOT share a name: the name is the artifact's identity on disk. | this spec section 2 | `fixtures_corpus::the_shipping_registry_has_no_duplicate_names`, `::the_driver_walks_a_whole_registry_and_creates_its_subdirectories` | verified |
+| `FIXTURE-011` | A manifest MUST describe the artifact beside it, and its digest MUST cover the whole file, header included. | this spec section 2 | `fixtures_corpus::the_manifest_describes_the_artifact_beside_it`, `::a_flipped_header_byte_moves_the_digest`, `::the_shape_counts_what_the_document_holds`, `::a_solo_document_reports_one_peer_and_a_merged_one_reports_two` | verified |
+| `FIXTURE-012` | A manifest MUST be readable as text and MUST read back equal to what was written. | this spec section 2 | `fixtures_corpus::the_sidecar_is_readable_json_and_reads_back_equal` | verified |
+| `FIXTURE-013` | A document that has been through the export and import cycle MUST be a fixed point of it, on every document type with an engine. | this spec section 2 | `fixture_determinism::the_round_trip_is_stable_on_every_doc_state_variant`, `::every_variant_reports_its_own_doc_type` | verified |
+| `FIXTURE-014` | Every corpus and container failure MUST reach the caller typed, and MUST NOT panic. | this spec section 2 | `fixtures_corpus::every_header_failure_is_typed_and_none_of_them_panics`, `::a_container_failure_arrives_intact_never_flattened_into_a_string`, `::a_missing_name_is_not_found_not_an_io_error`, `::an_unreadable_corpus_root_is_an_io_error`, `::a_malformed_sidecar_is_reported_as_a_manifest_failure`, `::a_doc_type_with_no_engine_degrades_cleanly` | verified |
+| `FIXTURE-015` | The corpus root MUST be resolved from the workspace, never from the process working directory. | this spec section 2 | `fixtures_corpus::the_corpus_root_is_resolved_from_the_manifest_dir_not_the_cwd` | verified |
+| `FIXTURE-016` | The canonical dump MUST be blind to the route a document took to its content. | this spec section 2 | `fixtures_corpus::the_canonical_dump_is_blind_to_the_route_a_document_took`, `::a_toile_dump_names_nodes_by_paint_order_not_by_element_id` | verified |
+| `FIXTURE-017` | The canonical dump of a formula cell MUST carry both the stored source and the evaluated result. | this spec section 2 | `fixtures_corpus::the_canonical_dump_carries_both_representations_of_a_formula` | verified |
+| `FIXTURE-018` | A frozen artifact MUST NOT be regenerated. | this spec section 2; `ambre-spec-docfile.md section 3` | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF) | unimplemented |
+| `FIXTURE-019` | A migrated frozen artifact MUST produce the canonical dump of the live artifact its manifest names. | this spec section 2 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF) | unimplemented |
+| `FIXTURE-020` | That comparison MUST be retired, not failed, when the frozen manifest and the live generator disagree on `generator_version`. | this spec section 2 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF) | unimplemented |
+| `FIXTURE-021` | The frozen set MUST keep the newest three artifacts per document type, and drop the rest. | this spec section 2 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF) | unimplemented |
+| `FIXTURE-022` | A benchmark corpus MUST NOT be committed. | this spec section 3 | not built -- lands with `FIXTURES P2 -- scale corpora and benches` (`ambre-roadmap.md` EF). The `.gitignore` entry lands with the recipe that writes the corpus | unimplemented |
+| `FIXTURE-023` | A committed benchmark baseline MUST name the machine it was measured on. | this spec section 3 | not built -- lands with `FIXTURES P2 -- scale corpora and benches` (`ambre-roadmap.md` EF) | unimplemented |
+| `FIXTURE-024` | A benchmark built on a fixture MUST NOT be reported as a frame-rate validation. | this spec section 3; `ambre-spec-testing.md section 5` | none, and none is possible: the claim is made in a pull request, not in a test. The reviewer refuses it, and section 3 states what the corpus does measure so the honest claim is at hand | human-review |
+| `FIXTURE-025` | The committed corpus and the generator registry MUST match one for one: an artifact whose generator is gone, and a generator with no committed artifact, MUST each fail the gate. | this spec section 3 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). A byte diff alone reports neither, because each case is missing the term the diff would compare, so both pass silently on the very run that introduces them | unimplemented |
+| `FIXTURE-026` | A frozen artifact whose manifest names a generator that no longer exists MUST report as degraded, and MUST be dropped at the next retention pass. | this spec section 2 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). The outcome of `FIXTURE-020` for a different cause: a renamed or deleted generator leaves the comparison without a second term rather than with a stale one | unimplemented |
 
-**Delegates:**
-* Document semantics -- owned by the app specs (`2-Trame/`, `3-Toile/`).
-* Test assertions -- owned by each crate's own belt. This spec produces the corpus, not the expectations.
-* Test tiering, CI shape and the tested Definition of Done -- normative in `ambre-spec-architecture.md section 4`,
-  realization tracked in `ambre-spec-testing.md`. Referenced, never redefined.
+* **Budget.** the tooling targets of `ambre-spec-budgets.md`: `just fixtures` in
+  ~30 s, `just fixtures-check` in ~10 s, and the committed artifact cap. `FIXTURE-021` is what keeps
+  the second inside its figure as bumps accumulate. The binary cost is zero, and `FIXTURE-007` is
+  the rule that keeps it there.
+* **Boundary.** none: the machinery is host-only and gated behind a non-default `fixtures` feature
+  that `ambre-app` never names (`FIXTURE-007`), so it links into no shipped binary and reaches no
+  relay. The one key it touches is derived at test setup, guards nothing, and is never written to
+  disk (section 2).
+* **Verification.** 13 `verified`, 2 `unverified`, 2 `human-review`, 9 `unimplemented`. Determinism
+  is held on four axes including the cross-process one, and the whole loader is held: the round
+  trip, every typed failure, the root resolution and both canonical-dump rules. The two
+  `unverified` are the same shape -- a rule nothing refuses breaking, one on how a generator builds
+  and one on what a manifest may declare. Every `unimplemented` row is the corpus itself, which does
+  not exist: `fixtures/` is not in the tree, so freezing, retention, drift and the match against the
+  registry are specified and unbuilt.
 
-**Out of scope, explicitly:**
-* **Any network.** Generators run in-process on host and write to disk. Nothing here opens a socket.
-* **Any cryptography inside generation.** `FixtureGen::build` is crypto-free; a document fixture is
-  plaintext (section 2.A). The one crypto touch is the *derived* sealed blob seeding the db tier (section 2.A), which
-  calls the existing `ambre-sync` seal pipeline -- test setup, not generation.
-* **Interop fixtures** (third-party input files) -- see the note above.
-* **Fixtures for apps that have no engine.** `ambre-prose` and `ambre-murmure` are stubs
-  (`ambre-spec-testing.md section 2`); they join when `DocState::new` supports them.
+---
 
-### B. Dependencies
+## 2. MODEL
 
-**No new external dependency.** Only workspace crates that already build and test on host:
+**CRDT containers.** none. This feature holds no collaborative state: it serializes and
+deserializes the applications' own, and every container belongs to their schema documents.
 
-| Crate | Used for | Scope |
+**Three homes, one dependency grain.** The trait must sit upstream of its implementors, and Rust's
+orphan rule decides which crate that is.
+
+| Home | Holds | Why there |
 |---|---|---|
-| `ambre-core` | Home of `FixtureGen`, `FixtureManifest`, `FixtureShape` (section 2.B); already holds `DocType` and already depends on `serde` + `hex` | Definition |
-| `ambre-trame`, `ambre-toile` | Driving the engines; the `FixtureGen` impls | Generation |
-| `ambre-logic`, `ambre-bus` | The loader, the driver and the artifact types they carry | Loading |
-| each app's `interop` module | `export_ambre_plaintext` / `import_ambre_plaintext` -- the `.ambre` container (section 2.A) | Generation + loading |
-| `ambre-crypto` | `hash::chain_hash` -- the manifest digest | Generation |
-| `ambre-sync` | `pipeline::seal_snapshot` -- the derived db-tier blob (section 2.A) | Test setup only, not generation |
+| `ambre-core` | `FixtureGen`, `FixtureManifest`, `FixtureShape`, `ShapeBody`, the seeded `document_id` | upstream of everything: `ambre-bus` depends on it and both applications depend on `ambre-bus`. It already owns `DocType`, `serde` and `hex` |
+| `ambre-trame`, `ambre-toile` | the generators, and the pinned-peer constructor | a generator drives the engine's own `handle_command`, so it moves in the same commit as the schema it exercises |
+| `ambre-logic` | the loader, the driver, `shape_of`, `canonical_dump` | the lowest crate that sees every document type |
 
-**One new dependency edge, no new external crate.** `serde_json` is a workspace dependency but not yet one
-of `ambre-logic`'s, where the driver lives; that `Cargo.toml` edit rides with `FIXTURES P0`. `ambre-core`
-already has `serde` and `hex`.
+**The three sources of entropy.** For a generator and a seed, `build` must produce the same bytes on
+any machine. Three sources must be pinned, none of them optional (`FIXTURE-002`).
 
-`TrameState` alone already carries a few hundred host tests, so a fixture generator is ordinary host code
-calling the same public API those tests call. If an implementation needs a **third-party** crate, that is a
-signal it is reaching outside the engine instead of driving it.
+| Source | Why it is not deterministic | Pinned by |
+|---|---|---|
+| `PeerID` | `LoroDoc::new()` draws one at random, and it reaches the **content**: Trame builds sheet ids from the peer id, and `ToileState` caches the peer at construction | `TrameState::with_peer`, `ToileState::with_peer` |
+| the commit clock | Loro records a timestamp per commit | `set_record_timestamp(false)`, applied by the same constructor |
+| `document_id` | the exporter takes a UUID v7, which is time-ordered and partly random | derived from the seed rather than minted |
 
-### C. Invariants
+**A semantic digest is not an escape hatch for the first of those.** Peer-derived ids are part of the
+decoded state, so an unpinned `PeerID` defeats a semantic digest exactly as it defeats a byte one.
 
-* **I1 -- Determinism.** For a given generator and seed, `build` produces **byte-identical** output across
-  runs and machines. Three sources of entropy must be pinned, none of them optional.
-  * **`PeerID`.** `LoroDoc::new()` draws one at random, and neither `TrameState::new()` nor
-    `ToileState::new()` exposes a seam to fix it -- adding one is a **public API change in both engines**
-    (section 7). Not merely an encoding concern: Trame builds sheet ids from the peer id
-    (`format!("{:016x}_{:08x}", doc.peer_id(), counter)`, `ambre-trame/src/logic/sheets.rs`) and `ToileState`
-    caches `peer` at construction, so an unpinned peer changes the document's **content**, not only its bytes.
-  * **Commit timestamps.** Loro records one per commit; the generator pins the clock source.
-  * **`document_id`.** `export_ambre_plaintext` takes a UUID v7 -- time-ordered and partly random. A
-    generator derives it from the seed rather than minting one.
+**The two constructors are production code, and deliberately.** `TrameState::with_peer` and
+`ToileState::with_peer` exist for this document alone, and what asserts on them is the determinism
+belt, which runs under a bare `cargo test --workspace`. Gating them would put the belt out of CI's
+reach. They cost a client nothing: `ambre-app` calls neither, and neither pulls in a fixture type.
+**Never for a live document:** two concurrent writers sharing a `PeerID` mint colliding op ids and
+corrupt the history.
 
-  A **semantic** digest over the decoded state is *not* an escape hatch for the first of those: peer-derived
-  ids are part of the decoded state, so an unpinned `PeerID` defeats it exactly as it defeats a byte digest.
-  Never silently ship a non-deterministic golden.
+**The artifact is a `.ambre` file, and this document invents no container**
+(`ambre-spec-docfile.md section 3`). A committed fixture is the plaintext form, taken before the
+compression and encryption `ambre-sync` applies downstream: same format, same parser, two ends of
+one pipe. Committing the pre-Sync form is what `FIXTURE-001` requires, because zstd output is not
+guaranteed stable across a dependency bump or a level change, which would turn that bump into drift
+unrelated to the document.
 
-  **Measured, not assumed** (Loro 1.13.6, host x86_64). With `set_peer_id` and `set_record_timestamp(false)`
-  -- both present in the API -- a document of maps, lists and text exports **byte-identically across separate
-  processes**, and so do `TrameState` and `ToileState` driven through `handle_command`. The cross-process
-  half is the one that matters: Rust reseeds `HashMap` state per process, so an encoder iterating a hash map
-  would be stable within a run and unstable between runs. It is not.
-
-  **Why the seam opens the phase.** Without it, two builds in the *same process* already differ, for the
-  plainest of reasons: `LoroDoc::new()` mints a fresh random `PeerID` per document, so identical command
-  sequences produce ops attributed to different peers. Nothing subtler is involved -- no map ordering, no
-  clock. The divergence then shows up three ways: every op id is `(peer, counter)`; Trame's sheet ids carry
-  the peer into the **content**, which is what rules out a semantic digest as an escape hatch; and Loro
-  varint-encodes the id, so even the snapshot *length* tracks its magnitude (measured: 12 286 bytes at
-  `PeerID` 1, 12 320 at `0xFFFF_FFFF`, same document).
-
-  Untested and therefore still open: 100k-cell scale, the 2-peer merge path, and any architecture other than
-  x86_64. A failure there reopens this invariant and makes a semantic digest the fallback contract.
-* **I2 -- One document model.** Generators drive `handle_command` on the app state, exactly as the UI does.
-  Writing CRDT containers directly is forbidden: it would produce documents no user action can produce, and
-  fixtures would stop being representative of anything.
-* **I3 -- Synthetic only.** Every committed artifact traces to a generator run from a seed -- directly for
-  `fixtures/current/`, by copy for `fixtures/frozen/` (section 4), which no current generator can reproduce. Never
-  from a real user document -- see section 3.
-* **I4 -- Host only, and the boundary is by symbol, not by crate.** `ambre-logic` ships to wasm, so "no
-  fixture code in the client binary" has to say what counts. Three symbols this spec introduces are
-  **production** code and ship ungated: `DocState::import_snapshot`, `DocState::export_snapshot`, and
-  `ToileState::import_snapshot`. The last is not optional -- `DocState::import_snapshot` dispatches to it for
-  the Toile variant, so gating it would make an ordinary client build fail to compile, taking Toile's local
-  restore with it. Everything else is **fixture code** and sits behind the `fixtures` feature (section 5).
-
-  **The two determinism seams are on the production side of that line**, and deliberately:
-  `TrameState::with_peer` / `ToileState::with_peer` are engine constructors, documented in
-  `trame-logic section 2` / `toile-logic section 2` rather than here, and the belt that asserts on them is the one
-  section 4 makes P0's Definition of Done. That belt has to run under a bare `cargo test --workspace` -- the
-  CI `test-native` job passes no `--features` -- so gating the seams would put P0's own gate out of
-  CI's reach. They cost the client nothing: `ambre-app` never calls them, and neither pulls in a
-  fixture type.
-* **I5 -- No `unsafe`** in our code, per the Security pillar.
-
----
-
-## 2. TECHNICAL DESIGN & STATE
-
-### A. Data Modeling
-
-**CRDT structure: N/A.** This component holds no CRDT state of its own. It serializes and deserializes the
-existing app states; every collaborative structure belongs to `trame-logic section 2` / `toile-logic section 2`.
-
-**Artifact: a `.ambre` file. This spec invents no container.** The native format -- header, payload,
-`export_ambre_plaintext()` / `import_ambre_plaintext()` and the `migrate_ambre` path -- is normative in
-**`ambre-spec-docfile.md`** and consumed here without restatement. A fixture is one of those files, and the
-fixture loader **is** the production importer (section 6 rejects the alternative).
-
-**Sidecar manifest.** The `.ambre` header carries `doc_type` and `document_id` but no **provenance**, which
-a drift gate needs. Each committed fixture therefore keeps a sidecar next to it, **JSON-encoded**
-(`serde_json`, already a workspace dependency): the manifest exists because an opaque binary has no
-reviewable diff, so a binary encoding would defeat its only purpose. It lets CI and a human reviewer tell
-"regenerated, identical meaning" apart from "the schema drifted".
+**The sidecar manifest.** The header carries the document type and id but no provenance, which a
+drift gate needs. Each artifact keeps a JSON sidecar beside it: an opaque binary has no reviewable
+diff, so a binary encoding would defeat the sidecar's only purpose.
 
 ```rust
-#[derive(Serialize, Deserialize, PartialEq)]
-struct FixtureManifest {
-    /// Generator identity, for example "trame/formula_dag_deep". Also the artifact
-    /// **stem**: the whole filename in `current/`, the part before the `@` in
-    /// `frozen/` (section 2.B). `String` because `fixtures-check` reads manifests back
-    /// off disk, and owned deserialization cannot borrow `'static`.
-    generator: String,
+// ambre-core
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
+pub struct FixtureManifest {
+    /// Generator identity, for example "trame/formula_dag_deep". Also the
+    /// artifact **stem**: the whole filename in `current/`, the part before the
+    /// `@` in `frozen/`. Owned, because a manifest is read back off disk.
+    pub generator: String,
     /// Bumped by the generator author when the produced document changes on
-    /// purpose. Frozen into the artifact too: that is how section 4 detects a frozen
-    /// fixture and the current one are no longer comparable.
-    generator_version: u32,
-    /// Declared by the generator (`FixtureGen::seed`), and pins the `PeerID`
-    /// and `document_id` (I1).
-    seed: u64,
-    doc_type: DocType,
+    /// purpose. Frozen into the artifact too: that is how a frozen fixture and
+    /// the current one are found to be no longer comparable (`FIXTURE-020`).
+    pub generator_version: u32,
+    /// Declared by the generator, and pins the `PeerID` and the `document_id`.
+    pub seed: u64,
+    pub doc_type: DocType,
     /// The document's two independent versions at write time -- current for a
-    /// generated artifact, superseded for a frozen one (section 4). Distinct from
-    /// `generator_version`, which tracks authorial intent rather than format.
-    /// Generators write `schema_version: 0` until `ARCH P8` creates the register,
-    /// 0 being what an absent one reads as (`architecture section 2.D`).
-    ambre_version: u8,   // container, `docfile section 2.A`
-    schema_version: u32, // payload, `architecture section 2.D`
-    /// BLAKE2b over the **whole `.ambre` file, header included**, so a flipped
-    /// `document_id` byte is caught by the write-once check of section 4. `ambre-crypto`
-    /// has no plain `hash()`; the call is `hash::chain_hash(&[], bytes)`, an empty
-    /// parent proof degenerating to a keyless 32-byte digest. Hex, not 32 raw
-    /// integers, which would defeat the readable diff this sidecar exists for.
+    /// generated artifact, superseded for a frozen one. Generators write
+    /// `schema_version: 0` until the payload register exists, 0 being what an
+    /// absent one reads as (`ambre-spec-architecture.md section 2`).
+    pub ambre_version: u8,
+    pub schema_version: u32,
+    /// BLAKE2b over the whole file, header included (`FIXTURE-011`). Hex, not
+    /// 32 raw integers, which would defeat the readable diff this sidecar
+    /// exists for.
     #[serde(with = "hex")]
-    digest: [u8; 32],
-    shape: FixtureShape,
+    pub digest: [u8; 32],
+    pub shape: FixtureShape,
 }
 
-/// Coarse size/complexity summary: when the bytes move, this says whether the
-/// document grew, lost a sheet, or is unchanged in shape, and section 4 checks it
-/// against `shape_of` to catch a manifest committed out of sync with its
-/// artifact. Not a selection index -- lookup is by name (section 2.B).
-#[derive(Serialize, Deserialize, PartialEq)]
-struct FixtureShape {
-    /// Number of distinct peers whose ops are present (1 for a solo document).
-    peers: u8,
-    body: ShapeBody,
+/// Coarse size summary: when the bytes move, this says whether the document
+/// grew, lost a sheet, or is unchanged in shape. Not a selection index --
+/// lookup is by name.
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
+pub struct FixtureShape {
+    /// Distinct peers whose ops are present; 1 for a solo document.
+    pub peers: u8,
+    pub body: ShapeBody,
 }
 
-/// Per-app rather than a union of nullable counters: the apps that join later
-/// (`ambre-prose`, `ambre-murmure` -- `FIXTURES P2`) add a variant instead of
-/// widening every existing row with a field that means nothing to them.
-#[derive(Serialize, Deserialize, PartialEq)]
-enum ShapeBody {
+/// Per-application rather than a union of nullable counters: an application
+/// that joins later adds a variant instead of widening every existing row with
+/// a field that means nothing to it.
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
+pub enum ShapeBody {
     Trame { cells: u32, sheets: u16, formulas: u32 },
     Toile { elements: u32, frames: u16, connectors: u32 },
 }
 ```
 
-**A committed fixture is the plaintext `.ambre`, not the user-facing one.** `export_ambre_plaintext()` emits
-header + raw snapshot, and **`ambre-sync` applies zstd and XChaCha20-Poly1305 downstream**
-(`prose-interop section 2.B`). A user's exported `.ambre` therefore carries compression and encryption; a
-committed fixture is the same file taken before that stage. Same format, same parser, two ends of one pipe.
-
-Committing the pre-Sync form is also what `I1` requires: zstd output is not guaranteed stable across
-`ruzstd` versions or a compression-level change, so committing compressed bytes would turn a dependency bump
-into golden drift unrelated to the document. (Git also compresses blobs in the packfile, so the disk saving
-would be near zero anyway. This is a *repository* argument; it does not apply to a user's local copy, where
-compression is plainly right.)
-
-**Feeding the db tier is the same fixture, not a second artifact.** Where a server-side test needs stored
-bytes, the fixture takes the ordinary client path: `import_ambre_plaintext` strips the header -- the network
-carries a **bare** snapshot, the server already holding `document_id` and `doc_type` as routing metadata
-(`docfile section 2.A`) -- then `seal_snapshot(payload, public_data, doc_key, signing_key)` compresses and seals it
-into what a real client would upload. The setup therefore derives **two** secrets from the fixture seed, a
-`DocumentKey` and a `SigningKey`, and synthesizes the `SnapshotPublicData` the AAD is built from -- copying
-what the real client does today, `parent_snapshot_proof` and `parent_snapshot_update_clocks` both empty
-(`ambre-sync/src/updates.rs`), the BLAKE2b parent chain being post-MVP. There is no parent to pick. Neither
-`seal_snapshot` nor `open_snapshot` is wasm-gated (`ambre-sync/src/pipeline.rs`), so this runs on host
-today. Those bytes are **derived at setup and never committed** (section 3). Hand-rolled bytes would prove only
-that the server serves *something*, not that it serves what a client produces.
-
-### B. Interface Contract (API)
-
-**The trait lives in `ambre-core`, and it has to.** Implementors sit in the app crates
-(`ambre-trame/src/fixtures/`), so a schema change and its generator move in one commit (section 6). Rust's orphan
-rule then forbids defining the trait anywhere downstream of them: `ambre-logic` depends on the apps, never
-the reverse. `ambre-core` is upstream of everything -- `ambre-bus` depends on it, both apps depend on
-`ambre-bus` -- it already owns `DocType`, and it already carries `serde` and `hex`. The artifact types go
-with it, so `ambre-logic` can read a manifest without either app in scope.
+**The generator.** Method-based rather than all-associated-item: the driver iterates a registry of
+trait objects, and a trait of bare constants is not object-safe.
 
 ```rust
 // ambre-core
 
-/// One parametric document generator.
-///
-/// Method-based rather than all-associated-item: the driver iterates a
-/// `&[&dyn FixtureGen]` registry, and a trait of bare consts and free functions
-/// is not object-safe -- it would force a hand-maintained table of function
-/// pointers, one more place to forget a generator.
-trait FixtureGen {
-    /// Stable identity: the manifest's `generator` and the artifact stem (section 2.A).
+pub trait FixtureGen {
+    /// Stable identity: the manifest's `generator` and the artifact stem. Unique
+    /// across the registry (`FIXTURE-010`).
     fn name(&self) -> &'static str;
     fn doc_type(&self) -> DocType;
 
@@ -251,132 +185,159 @@ trait FixtureGen {
     /// driver copies it into the manifest, having no other source for it.
     fn generator_version(&self) -> u32;
 
-    /// Build the document and return the plaintext `.ambre` bytes, that is the
-    /// output of the app's `export_ambre_plaintext()`. Not a raw snapshot: the
-    /// header makes the artifact self-describing and loadable through the
-    /// production importer.
+    /// Build the document and return the plaintext `.ambre` bytes. Not a raw
+    /// snapshot: the header makes the artifact self-describing and loadable
+    /// through the production importer (`FIXTURE-008`).
     ///
-    /// Implemented by driving `handle_command` on the app state (I2). `seed()`
-    /// pins the `PeerID`, the commit clock and the `document_id` (I1).
+    /// Implemented by driving `handle_command` on the app state (`FIXTURE-004`);
+    /// `seed` pins the three entropy sources (`FIXTURE-002`).
     ///
     /// Infallible: a generator drives commands it chose itself, so a rejected
     /// one is a bug, not a runtime condition. It **panics** rather than emit a
     /// half-built document -- a corpus that silently lost a merge is worse than
-    /// a failed `just fixtures`.
+    /// a failed run.
     fn build(&self) -> Vec<u8>;
 }
 ```
 
-**Loading a fixture is the production import path**, in two hops:
-`import_ambre_plaintext(bytes)` validates magic / version / `doc_type` and yields an `AmbreHeader`
--- `version`, `doc_type`, `document_id`, `payload` -- or a typed `DocFileError` (`docfile section 2.B`); the payload
-then goes into the state. That second hop is where a gap sits.
+**The driver, and why generation is a round trip.** `build` returns bytes and `shape_of` needs a
+decoded state, so writing a manifest means importing what was just generated. The extra import is
+the point rather than a cost: it proves the artifact loads through the production importer before it
+is ever committed. The driver writes the sidecar; a generator has no method that could.
 
-**Required normalization -- the loader side.** `TrameState::import_snapshot` exists
-(`ambre-trame/src/logic/sync.rs`); `ToileState` has **no** counterpart -- restore goes through
-`apply_remote` -> `LoroDoc::import` (`ambre-toile/src/logic/state/mod.rs`). Both funnel into the same Loro
-call, but the entry point is spelled differently per app, so a loader cannot address them uniformly. This
-spec adds `ToileState::import_snapshot` and exposes one entry point per variant:
+**The loader.** Two hops: the container yields a header, then the payload fills an empty state.
 
 ```rust
-// ambre-logic -- production, ungated (I4)
+// ambre-logic -- production, ungated (FIXTURE-007)
 
 impl DocState {
     /// Load a full Loro snapshot into a state, returning the display events the
-    /// app emits.
-    fn import_snapshot(&mut self, payload: &[u8]) -> Vec<AppEvent>;
+    /// application emits.
+    pub fn import_snapshot(&mut self, payload: &[u8]) -> Vec<AppEvent>;
 
-    /// Lift the per-app `export_snapshot` to the enum. `LogicState`'s takes a
-    /// `DocumentId` and needs a live registry entry, so it cannot serve the bare
-    /// `DocState` the round-trip belt of section 4 quantifies over.
-    fn export_snapshot(&self) -> Vec<u8>;
+    /// Lift the per-application `export_snapshot` to the enum. `LogicState`'s
+    /// takes a `DocumentId` and needs a live registry entry, so it cannot serve
+    /// the bare `DocState` the round trip quantifies over (`FIXTURE-013`).
+    pub fn export_snapshot(&self) -> Vec<u8>;
 }
 
-// ambre-logic -- fixture code, behind the `fixtures` feature (I4, section 5)
+// ambre-logic -- fixture code, behind the `fixtures` feature
 
-/// Decode a state into the coarse summary the manifest records. On the loader
-/// side rather than on `FixtureGen`, so the manifest-integrity check of section 4 has
-/// something independent to compare against: a generator declaring its own
-/// shape would assert only that it agrees with itself. `peers` comes from
-/// `LoroDoc::oplog_vv()`, whose `VersionVector` derefs to a map keyed by
-/// `PeerID` -- the codebase already calls it in both engines' sync paths.
-fn shape_of(state: &DocState) -> FixtureShape;
+/// Decode a state into the summary the manifest records. On the loader side
+/// rather than on `FixtureGen`, so manifest integrity has something independent
+/// to compare against: a generator declaring its own shape would assert only
+/// that it agrees with itself (`FIXTURE-011`).
+pub fn shape_of(state: &DocState) -> FixtureShape;
+
+/// The canonical semantic form: every user-visible value, in a deterministic
+/// order, as text. **Not** the CRDT -- two documents agreeing on content still
+/// differ in op history, peer ids and commit timestamps, so no byte or state
+/// comparison can express "the same document by a different route"
+/// (`FIXTURE-016`). Text, so a failure prints a readable diff.
+pub fn canonical_dump(state: &DocState) -> String;
+
+/// `<workspace root>/fixtures`, resolved from the compiled crate's own
+/// directory (`FIXTURE-015`).
+pub fn corpus_root() -> Result<PathBuf, FixtureError>;
 
 /// Load a committed fixture by name -- the entry point every consumer uses.
-/// Resolves `<corpus root>/current/<name>.ambre`, then: `read_ambre_plaintext`
-/// for the header, `DocState::new(doc_type)` for the empty state, and the
-/// **app's own** `import_ambre_plaintext` to fill it.
-///
-/// That last hop is the app importer, not `DocState::import_snapshot`, and the
-/// difference is load-bearing: `import_snapshot` returns display events, and the
-/// two engines disagree about how a refused payload appears in them -- Trame
-/// returns none, Toile returns an error *event*. A loader reading rejection off
-/// that vector would accept a corrupt Toile artifact and hand back an empty
-/// board. The app importer returns a typed `DocFileError::PayloadRejected`
-/// instead, which is carried out verbatim. `DocState::import_snapshot` stays
-/// what it was introduced for: the enum-level restore path, and the half of the
-/// round trip section 4 quantifies over.
-///
-/// The corpus root is resolved from `CARGO_MANIFEST_DIR` walked up to the
-/// workspace root, never from the process working directory: `cargo test` runs
-/// a test binary with the CWD at its own package root, so a bare relative
-/// `fixtures/` would resolve differently for every consumer crate.
-fn load_fixture(name: &str) -> Result<(DocumentId, DocState), FixtureError>;
+pub fn load_fixture(name: &str) -> Result<(DocumentId, DocState), FixtureError>;
 
-/// Failures of the corpus, distinct from failures of the container. `DocFileError`
-/// (`docfile section 2.B`) stays the authority on malformed bytes; this wraps it and adds
-/// the two conditions only a corpus has.
-enum FixtureError {
+/// The same, against a caller-supplied directory: what a test drives.
+pub fn load_fixture_from(dir: &Path, name: &str) -> Result<(DocumentId, DocState), FixtureError>;
+
+/// The production import path over bytes already in hand: `read_ambre_plaintext`
+/// for the header, `DocState::new(doc_type)` for the empty state, then the
+/// **application's own** `import_ambre_plaintext` to fill it.
+///
+/// That last hop is the application importer, not `DocState::import_snapshot`,
+/// and the difference is load-bearing: `import_snapshot` returns display events,
+/// and the two engines disagree about how a refused payload appears in them --
+/// one returns none, the other returns an error *event*. A loader reading
+/// rejection off that vector would accept a corrupt artifact and hand back an
+/// empty document. The application importer returns a typed error instead,
+/// carried out verbatim (`FIXTURE-014`).
+pub fn import_fixture(bytes: &[u8]) -> Result<(DocumentId, DocState), FixtureError>;
+
+pub fn artifact_path(dir: &Path, name: &str) -> PathBuf;
+pub fn manifest_path(dir: &Path, name: &str) -> PathBuf;
+pub fn read_manifest(dir: &Path, name: &str) -> Result<FixtureManifest, FixtureError>;
+pub fn manifest_for(gen: &dyn FixtureGen, bytes: &[u8], state: &DocState) -> FixtureManifest;
+pub fn digest_of(bytes: &[u8]) -> [u8; 32];
+pub fn write_fixture(dir: &Path, gen: &dyn FixtureGen) -> Result<FixtureManifest, FixtureError>;
+pub fn generate_into(dir: &Path, registry: &[&dyn FixtureGen]) -> Result<(), FixtureError>;
+
+/// Failures of the corpus, distinct from failures of the container.
+/// `DocFileError` stays the authority on malformed bytes; this wraps it and
+/// adds the conditions only a corpus has (`ambre-spec-docfile.md section 3`).
+pub enum FixtureError {
     /// No such artifact under the corpus root.
     NotFound { name: String },
     /// Unreadable corpus root, permissions, IO.
     Io(std::io::Error),
     /// The bytes are not a valid `.ambre`. Carried verbatim, never reinterpreted.
     Container(DocFileError),
-    /// `DocState::new` returned `None` -- a `doc_type` whose engine does not exist
-    /// yet (`Prose`, `Murmure`). Unreachable for any fixture this spec produces
-    /// (section 1.A excludes both) and present so the loader degrades cleanly when they
-    /// arrive.
+    /// `DocState::new` returned `None` -- a document type whose engine does not
+    /// exist yet. Unreachable for any fixture this document produces, and
+    /// present so the loader degrades cleanly when they arrive.
     NoEngine { doc_type: DocType },
+    /// The sidecar is missing, or is not the JSON the manifest describes.
+    Manifest { name: String, reason: String },
 }
-
-/// The canonical semantic form of a document: every user-visible value, in a
-/// deterministic order, as text. **Not** the CRDT -- two documents agreeing on
-/// content still differ in op history, peer ids and commit timestamps, so no
-/// byte or state comparison can express "same document by a different route".
-/// section 4's frozen belt compares this, and text means a failure prints a readable
-/// diff rather than a length mismatch.
-///
-/// Two rules the comparison does not work without:
-/// * **Formula cells carry both representations** -- the stored source and the
-///   evaluated result (`trame-logic`'s `raw` and `text`). Dumping only the source
-///   would let an evaluation regression pass unnoticed; dumping only the result
-///   would hide a change in what is persisted. The failure mode section 4 warns about is
-///   exactly the silent one, so both go in.
-/// * **Floats are formatted shortest-round-trip** (Rust's `{}` for `f64`), which
-///   is deterministic for a given value. It is *not* a tolerance: two paths that
-///   compute Toile geometry differently to the last bit will differ here, and
-///   that is intended -- a migration is not supposed to move geometry at all.
-fn canonical_dump(state: &DocState) -> String;
 ```
 
-`DocState::new` returns `Option` -- `None` for `Prose` and `Murmure` -- which surfaces as
-`FixtureError::NoEngine`. Unreachable for any fixture this spec produces (section 1.A excludes both apps), and
-there so the loader degrades cleanly when they arrive. `import_snapshot` is independently valuable: it makes
-the export/import round trip assertable on **every** app, not just Trame.
+**The boundary is by symbol, not by crate** (`FIXTURE-007`). `ambre-logic` ships to wasm, so "no
+fixture code in the client binary" has to say which symbols count.
 
-**Three homes, one dependency grain.** Types in `ambre-core`; **generators** next to the app whose commands
-they drive, needing only its `handle_command` and `export_ambre_plaintext`; **loader and driver** in
-`ambre-logic`, the lowest crate that sees every variant. `DocState` becomes `pub` for this, which the
-round-trip belt of section 4 needs regardless.
+| Symbol | Gated | Why |
+|---|---|---|
+| `DocState::import_snapshot` | no | the enum-level restore path, which dispatches to the Toile one |
+| `DocState::export_snapshot` | no | the other half of the round trip, and a save path in its own right |
+| `ToileState::import_snapshot` | no | gating it makes an ordinary client build fail to compile, and takes Toile's local restore with it |
+| everything else here | yes | behind the non-default `fixtures` feature, which `ambre-app` never names |
 
-**The driver, and why generation is a round trip.** `build` returns bytes; `shape_of` needs a decoded
-state. So writing a manifest means importing what was just generated -- the driver does exactly that, and
-the extra import is the point rather than a cost: it proves the artifact loads through the production
-importer before it is ever committed. The driver, not the generator, writes the `.manifest`; a `FixtureGen`
-has no method that could.
+**Two trees, and their lifecycles differ.**
 
-**Data flow.** No worker, no channel, no transport:
+| Path | Written by | Regenerated | Committed |
+|---|---|---|---|
+| `fixtures/current/<name>.ambre` and `.manifest` | the driver, from a live generator | every run | yes |
+| `fixtures/frozen/<name>@v<ambre>-s<schema>.ambre` and `.manifest` | the freeze recipe, once | never (`FIXTURE-018`) | yes |
+| `fixtures/bench/<name>.ambre` and `.manifest` | the bench recipe | on demand | no (`FIXTURE-022`) |
+
+The `@v...-s...` suffix records the **outgoing** versions, the ones the artifact was written at
+before the bump that froze it. Membership is positional: a frozen artifact is one that sits in
+`fixtures/frozen/`. No flag in the manifest, which could only ever contradict the path.
+
+**Why a frozen tree exists at all.** A writer emits the current container version only, and
+`handle_command` builds at the current schema version, so once a version is superseded no generator
+can produce an artifact at the old one. A frozen fixture is outside the generator set, not a golden
+we declined to refresh, which is what reconciles it with the drift gate. Freezing is therefore a
+step of the version bump itself (`ambre-spec-docfile.md section 3`).
+
+**The belt on a frozen artifact is semantic, in strengthening order:** its digest still matches its
+bytes; it still loads through the migration chain; and its migrated canonical dump equals that of
+the live artifact its manifest names (`FIXTURE-019`). The third is the one with teeth, and it is
+retired rather than repaired on a `generator_version` mismatch (`FIXTURE-020`): nothing can
+reconstruct what the old generator would have produced at the new schema, so the artifact reports as
+degraded and re-freezing at the next bump restores the coverage. A generator that has been renamed
+or deleted degrades the same way and stays degraded, since the manifest then names nothing at all
+(`FIXTURE-026`).
+
+**"Newest" is the lexicographic order of the version pair** the filename already carries
+(`FIXTURE-021`). The two axes are independent, but a freeze only ever happens at a bump of one of
+them and neither ever decreases, so the pair is strictly increasing across freezes of a given
+document type and orders them totally. No timestamp is stored, and none is needed.
+
+**The db tier reuses the same fixture, never a second artifact.** Where a server-side test needs
+stored bytes, the fixture takes the ordinary client path: the importer strips the header, because
+the network carries a bare snapshot, then `seal_snapshot` compresses and seals it into what a real
+client would upload. The setup derives two secrets from the fixture seed, a document key and a
+signing key, and synthesizes the public data the AAD is built from. Both keys are **test keys over
+synthetic content**: they guard nothing, the plaintext they seal is committed in the clear beside
+them, and neither is written to disk. Hand-rolled bytes would prove that the server serves
+something, not that it serves what a client produces.
+
+**Data flow.** No worker, no channel, no transport.
 
 ```
   FixtureGen::build()               seed() is the generator's own constant
@@ -389,16 +350,15 @@ has no method that could.
         v
    plaintext .ambre bytes
         |
-        |  the driver re-imports them to compute `shape_of`,
+        |  the driver re-imports them to compute the shape,
         |  which also proves they load before anything is committed
         v
-   .ambre file + FixtureManifest  ->  disk
+   .ambre file + manifest  ->  disk
         |
-        |  load_fixture(name):
-        |    read_ambre_plaintext()        (the header, type-agnostic)
+        |  load_fixture(name) -> import_fixture(bytes)
+        |    read_ambre_plaintext            (the header, type-agnostic)
         |    DocState::new(doc_type)
-        |    <app>::import_ambre_plaintext (production importer, typed payload
-        |                                   rejection -- see load_fixture above)
+        |    <app>::import_ambre_plaintext   (production importer, typed refusal)
         v
    a test or a benchmark, starting from a known state
 
@@ -408,414 +368,114 @@ has no method that could.
    would carry. Derived at setup, never committed.
 ```
 
-**On-disk layout.** One corpus root, `fixtures/`, holding two trees whose lifecycles differ (section 4):
-
-| Path | Written by | Regenerated | Committed |
-|---|---|---|---|
-| `fixtures/current/<name>.ambre` + `.manifest` | the driver, from a live generator | every run | yes, under the section 5 cap |
-| `fixtures/frozen/<name>@v<ambre>-s<schema>.ambre` + `.manifest` | `just fixtures-freeze`, once | **never** -- no generator can produce it (section 4) | yes |
-| `fixtures/bench/<name>.ambre` + `.manifest` | `just fixtures-bench-corpus` | on demand | **no**, git-ignored (section 5) |
-
-The `@v...-s...` suffix records the **outgoing** versions -- the ones the artifact was written at, before the
-bump that froze it. Bench corpora carry manifests like everything else: they are not committed, but a bench
-still needs to know the shape and seed of what it just generated.
-
-Membership is positional: a frozen artifact is one that sits in `fixtures/frozen/`. No `frozen` flag in the
-manifest, which could only ever contradict the path.
-
-**Invocation.** Five `just` recipes, matching the existing local/CI parity convention (`justfile` header):
-* `just fixtures` -- regenerate `fixtures/current/` in place, and **delete any artifact whose generator no
-  longer exists**. Detecting an orphan is `fixtures-check`'s job; removing one is this recipe's, so the fix
-  for a red gate is always "run `just fixtures`", never a manual `rm`. Committed artifacts only, which keeps
-  it inside the ~30 s budget of section 5.
-* `just fixtures-check` -- regenerate `fixtures/current/` into a temporary directory and diff against the
-  committed goldens; then, separately, load every `fixtures/frozen/` artifact and assert its migration (section 4).
-  Runs in the CI `test-native` job and fails on drift.
-* `just fixtures-freeze <name>` -- copy **the named artifact** out of `fixtures/current/` into
-  `fixtures/frozen/`, deriving the `@v...-s...` suffix from its manifest rather than from a human typing it.
-  Takes a generator name, not a `doc_type`: several generators share a `doc_type` (`FIXTURES P1` alone plans
-  four Trame ones), and which lineage gets migration coverage is a deliberate choice, not a lucky pick. Run
-  during a version bump (section 4); a recipe rather than a documented `cp` because the filename is load-bearing and
-  the versions in it are what a tired committer gets wrong.
-* `just fixtures-bench-corpus` -- produce the large, git-ignored scale corpora into `fixtures/bench/`.
-* `just fixtures-bench` -- run the `criterion` benches, invoking `fixtures-bench-corpus` first if the corpus
-  is absent. The two are split because generating is minutes and re-running benches against an existing
-  corpus is not.
-
-**Feature flags, explicitly.** All five pass `--features fixtures`; the two bench recipes pass
-`--features fixtures,pdf`, because Toile's PDF writer is behind `ambre-toile`'s existing non-default `pdf`
-feature (`#[cfg(feature = "pdf")]` on the export path) and the 50-slide bench of section 4 cannot otherwise be
-compiled in. A bare `cargo test` sees none of this, which is why `fixtures-check` cannot ride along inside
-`just test-native`'s existing `cargo test --workspace` -- `test-native` gains an explicit
-`just fixtures-check` line.
-
-None of them touches the network, a database, or a browser.
+**Code:** `crates/ambre-core/src/fixtures.rs` holds the trait and the manifest types;
+`crates/ambre-logic/src/fixtures.rs` the loader and the driver; `crates/ambre-trame/src/logic/fixtures.rs`
+and `crates/ambre-toile/src/logic/state/fixtures.rs` the generators and the shape decoders. The belt
+is `crates/ambre-logic/tests/fixture_determinism.rs` and `tests/fixtures_corpus.rs`.
 
 ---
 
-## 3. SECURITY & CONFIDENTIALITY (ZERO-KNOWLEDGE)
+## 3. SURFACE
 
-**Boundary audit: no outbound flow exists.** Generators run in-process on host and write to the repository.
-No socket is opened; generation derives no key and links `ambre-crypto` only for `hash::chain_hash` (the
-manifest digest). The Blind Relay contract (`architecture section 3`) is untouched because nothing here can reach
-it.
+The surface is a contributor's, not a user's: five recipes and one feature flag.
 
-**The one crypto path, and why it is not a weakening.** The db-tier sealed blob derives two secrets from the
-fixture seed (section 2.A): a `DocumentKey` to seal under and a `SigningKey` to sign with. Both are **test keys
-protecting synthetic content** -- they guard nothing, the plaintext they seal is already committed in the
-clear next to them, and the signing identity authenticates a document nobody owns. Neither is written to
-disk or committed, and both live only for the duration of a test setup -- derived rather than stored
-precisely because committing either would be a real weakening.
-
-**The rule is absolute: a fixture is synthetic.** Committing a snapshot derived from a real document --
-imported, exported, captured from a session, or copied out of a running client -- is **forbidden**: it would
-place plaintext user content in a public AGPL repository, permanently, in git history. A fixture that is
-interesting because it came from real data is exactly the fixture that must not be committed; write a
-generator that reproduces its shape instead.
-
-`fixtures-check` cannot detect a violation -- a real document and a generated one are both just Loro bytes.
-It is therefore a **review rule**, belonging in the contribution checklist rather than in CI.
-
-**Cryptography used:** BLAKE2b (`ambre_crypto::hash::chain_hash`) for the manifest digest. Nothing else;
-this component introduces no primitive.
-
----
-
-## 4. QUALITY & TESTABILITY
-
-> Tiering, CI shape and the tested Definition of Done are normative in `ambre-spec-architecture.md section 4`;
-> realization state is tracked in `ambre-spec-testing.md`. Referenced, not redefined.
-
-* **Test tiers.** **host** for everything this component produces and for every consumer of it.
-  The derived sealed blobs (section 2.A) additionally feed the **db** tier, where `ambre-server` tests seed S3 +
-  Postgres and exercise the read path; those tests belong to `ambre-server` and follow the existing
-  `cfg_attr(not(feature = "db"), ignore = ...)` convention. No **wasm** tier: the `fixtures` feature is off
-  in every client build, so none of this code is in a wasm artifact to test (I4).
-
-* **Unit Tests.**
-  * **Determinism (I1):** every generator, built twice, yields byte-identical output. The other direction --
-    that a generator actually *uses* its seed rather than hardcoding its content -- can no longer be written
-    by rebuilding one generator with a different seed, since `seed()` is now a constant the generator owns
-    (section 2.B). It is written instead with a **test-only pair**: two `FixtureGen` impls sharing one build body
-    and differing only in `seed()`, asserted to produce different bytes. Without that second half the first
-    passes vacuously on a generator that ignores its seed entirely.
-  * **Golden drift:** `fixtures-check` regenerates and diffs; drift fails CI. So do the two asymmetric
-    cases -- a generator with no committed golden (added but never committed) and a golden with no generator
-    (left behind by a deletion).
-  * **Manifest integrity:** `digest` matches the whole `.ambre` file; `shape` matches `shape_of` recomputed
-    from the decoded state, which catches a manifest committed out of sync with its artifact;
-    `ambre_version` and `schema_version` match the versions the artifact itself carries.
-
-    **What the gate cannot enforce.** `just fixtures` rewrites the goldens with no ceremony, so a developer
-    can regenerate, commit, and see a green `fixtures-check`: the gate compares the corpus against the code,
-    never against the corpus's own history. Nothing makes a refresh *impossible*; the manifest makes it
-    **visible**, moving `digest` and usually `shape` in a committed JSON file read as plain text. Same
-    posture as I3 (section 3) -- a review rule with a legible artifact, not a machine check pretending to be one.
-    `generator_version` is the author's declaration that the change was intended: no recipe reads it, and it
-    exists for the reviewer looking at that diff.
-  * **Round trip:** `export_snapshot` -> `import_snapshot` -> `export_snapshot` is stable, on **every**
-    `DocState` variant -- which needs both halves lifted to the enum (section 2.B), not just the new
-    `ToileState::import_snapshot`.
-
-    **"Stable" is a fixed point, not byte equality with the source**, and the distinction is not a
-    weakening -- byte equality is false here for two reasons that are both correct behaviour.
-    `DocState::new` commits its own scaffolding (Trame's implicit sheet, Toile's board metadata) under
-    its own fresh peer *before* the import, so a restored document legitimately carries an op the
-    source never had; and both engines materialize their derived Loro containers lazily, on the first
-    read of a restored document, so the first re-export names containers the source snapshot did not.
-    Neither is a lost round trip. What must hold -- and what a regression in an import path would
-    break -- is that **once a document has been through the cycle, going through it again changes
-    nothing**: import a document's own exported bytes back into the state that produced them, and the
-    next export is identical.
-  * **Loader rejection**, asserted on `import_ambre_plaintext` directly, not through `load_fixture`: the
-    latter takes a corpus name and has no way to be handed byte soup. `load_fixture` gets its own, smaller
-    belt -- missing name, unreadable root, and a `DocFileError` arriving intact as `FixtureError::Container`
-    rather than flattened into a string. Every `.ambre` header failure is exercised -- truncated header, bad magic,
-    `UnsupportedVersion` in both directions (older triggers `migrate_ambre`, newer is a clean unrecoverable
-    error), `WrongDocType` re-dispatch -- plus byte soup, all without panicking. A fixture loader is a
-    deserializer and gets a deserializer's robustness belt, in the spirit of the CSV fuzz cases already
-    green under `trame-interop` -- and since it is the production importer, that belt covers shipping code.
-  * **Migration, on both axes.** A document carries two independent versions and the corpus must exercise
-    both:
-    * **Container** -- an artifact written at `AMBRE_VERSION = N` still loads after the bump to `N+1`,
-      through `migrate_ambre` (`docfile section 2.B`).
-    * **Payload schema** -- an artifact written at `schema_version = N` still loads after the app's
-      `SCHEMA_VERSION` reaches `N+1`, through that app's migration chain, and the migrated state matches a
-      document built natively at `N+1` (`architecture section 2.D`, `ARCH P8`).
-
-    **Neither artifact can be generated, which is what reconciles them with the drift gate.** Writers only
-    ever emit `AMBRE_VERSION` (`docfile section 2.B`) and `handle_command` builds at the current `SCHEMA_VERSION`,
-    so once a version is superseded no generator can produce an artifact at the old one -- a frozen fixture
-    is outside the generator set, not a golden we declined to refresh. Hence `fixtures/frozen/`, which
-    `just fixtures` does not walk. Freezing is consequently a step in the **version-bump** checklist -- one
-    small artifact per affected `doc_type`, copied out of `fixtures/current/` in the bump's own commit, the
-    last moment the outgoing version can be written at all. The obligation is recorded against the version
-    registry (`docfile section 2.A`) and `ARCH P8`, where whoever performs a bump will meet it.
-
-    **The belt on a frozen artifact is semantic, not a diff.** Three assertions, in strengthening order:
-    its digest still matches its bytes (write-once, so any change is a bug); it still loads through the
-    migration chain; and `canonical_dump` of the migrated state equals `canonical_dump` of the live artifact
-    its manifest names in `fixtures/current/`. The third is the one with teeth, and section 2.B says why it cannot
-    be a state or byte comparison.
-
-    **When a generator's content changes, that third assertion is retired, not repaired.** A
-    `generator_version` bump means the live artifact deliberately no longer matches what was frozen, so the
-    comparison would fail for a reason unrelated to migration. When the frozen manifest's
-    `generator_version` differs from the current generator's, `fixtures-check` **keeps the first two
-    assertions and skips the third**, reporting the artifact as degraded. That is a real loss of coverage
-    and the honest one -- nothing can reconstruct what the old generator would have produced at the new
-    schema. Re-freezing at the next bump restores it.
-
-    This is why an always-current corpus proves nothing: the payload axis fails *silently* -- an unmigrated
-    document imports cleanly and reads wrong -- and the frozen set is the only place that surfaces before a
-    user hits it.
-
-    **Retention: keep the newest three per `doc_type`**, drop the rest. `fixtures-check` loads and migrates
-    every one of them, so an unbounded set walks into section 5's 10 s budget one bump at a time. What the cap costs
-    is coverage of documents older than three bumps -- an explicit statement of how far back migration is
-    exercised, rather than a limit discovered when CI slows down. A frozen artifact whose generator was
-    renamed or deleted has no counterpart to compare against; it degrades exactly as a `generator_version`
-    mismatch does and is dropped at the next pass.
-
-    "Newest" is the lexicographic order of `(ambre_version, schema_version)`, the pair the filename already
-    carries. The two axes are independent, but a freeze only ever happens *at* a bump of one of them, and
-    neither ever decreases -- so the pair is strictly increasing across freezes of a given `doc_type` and
-    orders them totally. No timestamp is stored, and none is needed.
-  * Indicative target: every predicate branch and every error path in the fixture code itself. The component
-    is thin -- there is no excuse for an uncovered branch.
-
-* **Interop export corpora.** The export half of interop is untestable at any realistic size for the same
-  reason the benchmarks are: no rich document exists to export. A fixture is that source, and it unlocks
-  three things owned elsewhere -- **fidelity round trips** (export to .xlsx / .csv / .svg, re-import, assert
-  the surviving subset; what is *expected* to be lost belongs in the interop specs), the **export budgets**
-  in the bench table below, and **golden-testable exporters**, the same document exported twice having to
-  produce the same bytes. This spec guarantees only that the corpus is there and stable.
-
-* **CRDT convergence.** **N/A -- this component holds no CRDT state**, and it neither replaces nor weakens
-  the 2-peer property-tests in `convergence_tests.rs`, which remain the sole authority. One planned generator
-  *emits* a post-convergence state (two simulated peers, interleaved ops); that is a fixture **produced by**
-  the converged engine, not a proof of convergence, and must never be cited as one.
-
-* **Mocks & Environment.** Generators are pure and need no double. The 2-peer generator reuses the existing
-  `MockSyncHandle` seam (`ambre-trame/src/test_support.rs`, a plain `pub mod` so a feature-gated generator
-  can reach it), which already replays the Sync relay step without a network. That seam is **Trame-only
-  today**: `ambre-toile` has no counterpart, so the post-convergence fixture is a Trame document until one
-  exists. Isolated, headless, no live network.
-
-* **Benchmarks.** `criterion`. A **primary motivation**, not a follow-up: nearly every budget in the app
-  specs is stated against a document size no document reaches, leaving them **aspirational rather than
-  measured**. Each fixture below is sized to the number its owning spec already states -- no new target
-  here, none restated:
-
-  | Budget (owner) | Fixture the bench needs |
-  |---|---|
-  | 10k-cell DAG recomputation < 50 ms (`trame-logic section 11`) | Deep formula DAG, 10k formula cells |
-  | `LoroDoc` < 10 MB / 100k cells, DAG + cache < 50 MB / 100k formula cells (`trame-logic section 11`) | 100k-cell sheet, dense and formula-heavy variants |
-  | `doc.import` < 2 ms, 50-cell batch < 1 ms, `SheetIndex` rebuild 10k rows < 10 ms (`trame-logic section 11`) | The same corpora, plus recorded delta batches |
-  | `query_visible` @ N=50 000 < 1 ms, incremental `SpatialIndex::update` < 50 us (`toile-logic section 11`) | 50k-element board |
-  | Frame time at 2 000 visible elements < 16 ms (`toile-ui section 11`) | Dense board with 2 000 elements inside one viewport |
-  | Export .xlsx 10k cells < 1 s, CSV 10k lines < 100 ms (`trame-interop section 7`) | 10k-cell sheet |
-  | PDF export 50 slides < 3 s (`toile-interop section 8`) | 50-frame presentation sequence |
-
-  **Who runs them.** No CI job: the corpora are git-ignored and minutes to build (section 5). Benches are **local
-  and on demand**, behind `just fixtures-bench`, which generates the corpus if absent and runs `criterion`
-  over it. The author of a performance-relevant change produces the numbers and puts them in the PR.
-
-  **A baseline is machine-relative, so the criterion is too.** `criterion` measures wall clock, so a number
-  committed from one machine means nothing on another. What is committed is a baseline **plus the machine it
-  came from**, and the 20% rule compares runs **on that same machine** -- in practice the author's own
-  before/after. Treating a committed baseline as an absolute target would fail on hardware rather than code.
-
-* **Document load path.** Opening a large document is the one user-visible operation with no end-to-end
-  target; `architecture section 5` now tabulates its five legs and owns the missing figure. This spec contributes
-  the ability to measure it: legs 2 to 5 are pure functions of a snapshot, so a fixture makes them benchable
-  on host with no network and no browser (`FIXTURES P2`), and leg 1 becomes a db-tier bench once a sealed
-  blob (section 2.A) seeds the server's storage.
-
-  **How far that reaches, precisely.** A db-tier test seeds storage and exercises the real read path --
-  `GET /snapshot`, `POST /snapshot/download-url`, the `RequestMissing` replay with its `covered_seq` gating
-  and `join_all` fan-out (`server section 2.B`) -- asserting the bytes return byte-identical and open through
-  `open_snapshot`. The server never parses a document; it is a blind relay over opaque blobs
-  (`architecture section 3`). Combined with the host legs that covers the chain **except one link**: a real client
-  speaking WebSocket to a running server, which needs a native transport for `ambre-sync` (browser-bound
-  today: `gloo-net` + `web_sys::WebSocket`, no trait seam) and is **out of scope here**. Named so it is not
-  mistaken for coverage.
-
-* **What fixtures do NOT measure -- the GPU half of the frame.** The 60+ FPS / < 16 ms budget
-  (`canvas section 5.A`) is GPU-bound and stays validated visually, per `ambre-spec-testing.md section 5.3`. A bench built
-  on fixtures must never be reported as "60 FPS validated". What they **do** unlock is the **CPU half** --
-  the half the pillars make a correctness claim about ("the render thread must never be blocked by
-  computation"): content walk, culling, hit-testing, tessellation, text layout, batch build, all measurable
-  on host, in CI with no GPU, through `RecordingSurface` (`ambre-draw/src/testing.rs`), the mock
-  `DrawSurface` already backing `ambre-trame/src/render/tests.rs` and `ambre-toile/src/ui/render.rs`.
-
-* **Definition of Done (tested).** Per architecture section 4, no phase below ships `[x]` without its belt green in
-  CI. Concretely: `FIXTURES P0` is not done until the determinism and round-trip tests are green, and
-  `FIXTURES P1` is not done until `fixtures-check` runs in the CI `test-native` job.
-
-  **`FIXTURES P2` is carved out, with a substitute.** Its benches run on git-ignored corpora no CI job
-  produces, so "green in CI" is unreachable by construction rather than by neglect: P2 ships `[x]` when
-  `just fixtures-bench` runs clean on a developer machine and its baselines are committed with their machine
-  identity. Naming the substitute is the point -- a phase silently exempt is how a DoD stops meaning anything.
-
----
-
-## 5. PERFORMANCE & RESOURCES
-
-* **Performance Budget.** No hot path: nothing here runs during a frame or on a network round trip. The
-  binding budgets are ergonomic and scoped to the **committed** corpus -- `just fixtures` under ~30 s,
-  `just fixtures-check` under ~10 s in CI. A slow corpus is a corpus developers stop regenerating. The scale
-  corpora are minutes rather than seconds and sit outside this budget, hence their own recipe (section 2.B). The
-  10 s figure holds only because section 4 caps the frozen set at three per `doc_type`, every one of which that
-  check loads and migrates.
-
-* **Repository size.** Goldens are committed artifacts and git keeps them forever. Rule: **generators are
-  the deliverable, goldens are a sample.** Commit only the small ones (indicative cap: 256 KB per artifact,
-  ~5 MB total across `fixtures/current/` and `fixtures/frozen/`, covering every correctness fixture, the
-  **small** interop export sources of `FIXTURES P1`, and the frozen migration set). The large corpora --
-  the 100k-cell sheet, the 50k-element board, and the budget-sized export sources of `FIXTURES P2` -- exist
-  to feed benchmarks, are produced on demand into `fixtures/bench/`, and are **git-ignored**; that path
-  needs a `.gitignore` entry, added with the recipe.
-
-* **WASM Impact: zero.** Host-only. Everything I4 calls fixture code sits behind a non-default `fixtures`
-  feature, declared in `ambre-core`, `ambre-trame`, `ambre-toile` and `ambre-logic` **and wired to
-  propagate** -- each downstream crate declares `fixtures = ["ambre-core/fixtures"]` (and `ambre-logic`
-  additionally `"ambre-trame/fixtures", "ambre-toile/fixtures"`), because a Cargo feature never enables its
-  dependency's feature implicitly and the gated code references `ambre_core::FixtureGen`. `ambre-app` never
-  names it, so the only way it reaches a client build is a workspace-wide `--features fixtures`; the recipes
-  of section 2.B are therefore package-scoped rather than workspace-wide. None of it can be
-  pulled into a client build by accident and none of it touches the 2 MB gzipped budget
-  (`README.md` "Performance Targets"). This matters most in `ambre-logic`, which **does** ship to wasm: `shape_of`,
-  `load_fixture`, `canonical_dump` and the driver are gated there, while `DocState::import_snapshot` and
-  `export_snapshot` are ungated production code. **Not `#[cfg(test)]`:** such a module is reachable only
-  from its own crate's test harness, whereas `just fixtures` invokes the generators from a binary.
-
----
-
-## 6. REJECTED ARCHITECTURAL DECISIONS
-
-| Rejected | Justification |
+| Trigger | Behaviour |
 |---|---|
-| **LLM-generated fixtures** | Fixtures must be deterministic, replayable, diffable and runnable in CI. Generated output is none of those: the same prompt yields a different document each run, so no golden can be committed and no drift gate can exist. Generators are code, seeded and versioned. |
-| **Writing CRDT containers directly** (bypassing `handle_command`) | Faster to write, and it produces documents no user action can produce -- including states the engine's own invariants forbid. A fixture built that way tests the test, not the product. Violates I2. |
-| **A textual fixture format (RON / JSON) instead of Loro snapshots** | Readable in a diff, and it would be a second, uncompiled copy of the Trame/Toile schema, drifting from the CRDT exactly as `ambre-spec-template.md section 0` warns. The snapshot is the real persisted format; the `FixtureManifest` covers the reviewability need without a parallel schema. |
-| **A bespoke fixture container instead of `.ambre`** | An earlier draft of this spec invented one. It would carry the same bytes as the native format through a second, test-only reader and writer -- unexercised by users, free to drift from the shipping importer, and a duplicated migration surface. Reusing `.ambre` instead means every test run exercises the production import path, and the fixture corpus becomes the regression belt for the format itself (section 4). |
-| **Committing the large benchmark corpora** | Multi-megabyte binaries in git history, forever, for artifacts fully reproducible from a seed. Generated on demand and git-ignored instead (section 5). |
-| **Capturing a fixture from a real document** | Plaintext user content in a public AGPL repository, irreversibly. See section 3. |
-| **One corpus tree, with a `frozen` flag in the manifest** | Would fix the mechanics of section 4 while leaving the manifest free to disagree with reality. Two trees make membership positional and therefore unfalsifiable. |
-| **A separate `ambre-fixtures` crate** | A generator depends on the engine's command surface and must change in the same commit as the schema it exercises. Housed next to each app (`ambre-trame/src/fixtures/`), that coupling is enforced by proximity; in a separate crate it drifts silently, which is the failure this spec exists to prevent elsewhere. |
-| **Defining `FixtureGen` in `ambre-logic`, next to the loader** | The natural reading of "the machinery lives in `ambre-logic`", and impossible: the orphan rule requires an implementing crate to depend on the trait's home, and `ambre-trame` / `ambre-toile` sit *upstream* of `ambre-logic`. Types go to `ambre-core`, behaviour stays in `ambre-logic` (section 2.B). |
-| **Comparing a migrated frozen document against the current one by state or bytes** | Cannot work: two documents agreeing on every user-visible value still differ in op history, peer ids and commit timestamps -- the same fact I1 has to pin around. `canonical_dump` compares the content, and prints a readable diff when it fails (section 4). |
-| **Letting the drift gate enforce "no silent golden refresh"** | It cannot: the gate compares the corpus against the code, never against the corpus's own history, so any regenerate-and-commit passes. Pretending otherwise would put a machine check's name on a review rule. The manifest makes a refresh *visible* in a text diff instead (section 4). |
+| `just fixtures` | regenerate `fixtures/current/` in place, and delete any artifact whose generator no longer exists. Detecting an orphan is the gate's job; removing one is this recipe's, so the fix for a red gate is always to run this, never a manual delete |
+| `just fixtures-check` | regenerate into a temporary directory and diff against the committed goldens, refuse a golden whose generator is gone and a generator with no golden (`FIXTURE-025`), then load every frozen artifact and assert its migration (`FIXTURE-006`). Runs in the CI host job |
+| `just fixtures-freeze <name>` | copy the **named** artifact out of `current/` into `frozen/`, deriving the version suffix from its manifest rather than from a person typing it. A name, not a document type: several generators share one, and which lineage keeps migration coverage is a deliberate choice |
+| `just fixtures-bench-corpus` | produce the large, git-ignored scale corpora into `fixtures/bench/` (`FIXTURE-022`) |
+| `just fixtures-bench` | run the `criterion` benches, building the corpus first when it is absent. Split from the recipe above because generating is minutes and re-running benches is not |
+
+All five pass `--features fixtures`, and the two bench recipes add `pdf`, because Toile's PDF writer
+is behind that non-default feature and the presentation bench cannot otherwise be compiled in. A
+bare `cargo test` sees none of this, which is why the gate cannot ride inside the existing
+`cargo test --workspace` and the host job carries an explicit line for it. None of the five touches
+the network, a database or a browser.
+
+**What the benches read.** Each corpus is sized to a figure its owning budget already states; no
+target is set or restated here.
+
+| Budget, in `ambre-spec-budgets.md` | The corpus the bench needs |
+|---|---|
+| 10k-cell DAG recomputation | a deep formula DAG, 10k formula cells |
+| document size and cache size at 100k cells | a 100k-cell sheet, dense and formula-heavy variants |
+| snapshot import, delta batch, sheet index rebuild | the same corpora, plus recorded delta batches |
+| visible-set query and index update at 50k elements | a 50k-element board |
+| board paint at 2 000 visible elements | a dense board with 2 000 elements in one viewport |
+| xlsx and CSV export at 10k cells | a 10k-cell sheet |
+| PDF export of 50 slides | a 50-frame presentation sequence |
+
+**No CI job runs a bench.** The corpora are git-ignored and minutes to build, so benches are local
+and on demand. The author of a performance-relevant change produces the numbers and puts them in the
+pull request, with the machine they came from (`FIXTURE-023`): `criterion` measures wall clock, so a
+number from one machine means nothing on another, and a committed baseline read as an absolute
+target fails on hardware rather than on code.
+
+**What a bench on fixtures does not measure.** The frame-rate budget is GPU-bound and stays
+validated visually (`ambre-spec-testing.md section 5`), so no fixture bench may be reported as
+holding it (`FIXTURE-024`). What fixtures do unlock is the **CPU half** of the frame -- the half the
+pillars make a correctness claim about, that the render thread is never blocked by computation:
+content walk, culling, hit-testing, tessellation, text layout and batch build, all measurable on
+host with no GPU through the recording surface.
 
 ---
 
-## 7. INTEGRATION PLAN (ROADMAP)
+## 4. DECISIONS
 
-> **Epic:** these phases are Stories of **`EF` -- Document corpora & native file format**
-> (`ambre-roadmap.md`), shared with `ambre-spec-docfile.md`. `EF` is transverse and explicitly does not
-> block `E4`.
+| Decision | Rationale | Rejected alternative |
+|---|---|---|
+| A fixture is an `.ambre` file | every test run then exercises the production import path, and the corpus becomes the regression belt for the format itself. An earlier draft of this document invented a container: it would carry the same bytes through a second, test-only reader and writer, unexercised by users, free to drift from the shipping importer, and a duplicated migration surface (`FIXTURE-008`) | a bespoke fixture container; and a textual format, RON or JSON, which is readable in a diff and is a second, uncompiled copy of each schema, drifting exactly as `ambre-spec-template.md section 0` warns |
+| Generators are code, seeded and versioned | a fixture must be deterministic, replayable, diffable and runnable in CI. Generated prose output is none of those: the same prompt yields a different document each run, so no golden can be committed and no gate can exist | a document produced by a language model |
+| A generator drives `handle_command` | writing CRDT containers directly is faster and produces documents no user action can produce, including states the engine's own invariants forbid. Such a fixture tests the test (`FIXTURE-004`) | writing the containers directly, bypassing the command surface |
+| The seed is the generator's own constant | a seed supplied from outside could differ between runs, which turns the drift gate into noise. Changing it is a content change and takes a `generator_version` bump with it | a seed passed to `build` by the driver |
+| The trait is defined in `ambre-core` | the orphan rule requires an implementing crate to depend on the trait's home, and both applications sit *upstream* of `ambre-logic`. Types go to `ambre-core`, behaviour stays in `ambre-logic` | defining `FixtureGen` in `ambre-logic` next to the loader, which is the natural reading of "the machinery lives in `ambre-logic`" and is impossible |
+| The generators sit next to their engine | a generator depends on the engine's command surface and must change in the same commit as the schema it exercises. Proximity enforces that coupling; a separate crate lets it drift silently, which is the failure this document exists to prevent elsewhere | a separate `ambre-fixtures` crate |
+| Two trees, membership positional | a flag in the manifest is free to disagree with reality, and nothing could adjudicate. A directory cannot (`FIXTURE-018`) | one corpus tree with a `frozen` flag in each manifest |
+| A frozen artifact is compared by canonical dump | two documents agreeing on every user-visible value still differ in op history, peer ids and commit timestamps, which is the same fact `FIXTURE-001` pins around. The dump compares content and prints a readable diff when it fails (`FIXTURE-019`) | comparing the migrated frozen document against the current one by state or by bytes |
+| The retention cap is three per document type | the gate loads and migrates every frozen artifact, so an unbounded set walks into its 10 s budget one bump at a time. The cap states how far back migration is exercised, rather than leaving it to be discovered when CI slows down (`FIXTURE-021`) | keeping every frozen artifact, and discovering the cost as a CI regression |
+| Only the small corpora are committed | git keeps a committed artifact forever, and the scale corpora are multi-megabyte and fully reproducible from a seed. Generated on demand and git-ignored instead (`FIXTURE-022`) | committing the benchmark corpora, for a convenience a seed already provides |
+| "No silent golden refresh" is a review rule | the gate compares the corpus against the code, never against the corpus's own history, so any regenerate-and-commit passes. The manifest makes a refresh **visible** instead, moving a digest and usually a shape in a JSON file read as plain text, and `generator_version` is the author's declaration that the change was intended | a gate that claims to enforce it, which would put a machine check's name on a review rule |
+| A real document is never committed | plaintext user content in a public AGPL repository, irreversibly, and a fixture that is interesting *because* it came from real data is exactly the one that must not be committed. No check can hold the rule, and `FIXTURE-005` says so rather than implying otherwise | capturing a fixture from a real document, and trusting the gate to notice |
 
-> **Scheduling note.** This component is **unaffected** by the Trame per-cell style consolidation
-> (`ambre-roadmap.md` E6 / `trame-logic section 11 bis.F`), which gates work that would create third-party
-> documents. Fixtures are regenerated from source rather than migrated: when the schema changes, the bump
-> freezes one artifact per `doc_type` (section 4) and `just fixtures` rewrites the rest, with the drift gate making
-> the change visible. That argues for building them **before** the consolidation: the drift gate is
-> precisely the tool that makes a schema migration reviewable.
+---
 
-### `FIXTURES P0` -- Core  `[x]`
-> **Gated on `DOCFILE P0`.** `FixtureGen::build` returns plaintext `.ambre` bytes (section 2.B), so it cannot be
-> written before `export_ambre_plaintext` exists; the loader-rejection belt below asserts on `DocFileError`
-> variants that `DOCFILE P0` defines. The gate is real and one-directional -- `DOCFILE P0` depends on nothing
-> here -- so within `EF` the container Story is built first.
->
-> **Soft-gated on `ARCH P8`, not blocked by it.** The manifest records `schema_version`, whose register
-> arrives with `ARCH P8`; until then generators write 0, which is what an absent register reads as
-> (`architecture section 2.D`). So P0 ships first and the field starts telling the truth when `ARCH P8` lands. What
-> genuinely waits for it is section 4's **payload** migration axis, not the container one.
->
-> **`ARCH P8` writing its first register is itself a schema bump**, so it carries the freeze step and a full
-> `just fixtures` in its own commit: every artifact starts carrying a real `schema_version` that day, and
-> every committed manifest still says 0. Regenerating is the whole fix -- but it has to be *in* that commit,
-> or the drift gate goes red across the entire corpus for a reason no one will connect to `ARCH P8`.
+## 5. NOT BUILT, AND NOT YET RULED
 
-* `[x]` **Determinism seams in the engines (I1):** a constructor taking a pinned `PeerID` on `TrameState`
-  and `ToileState`, plus a pinned commit clock. Leads the phase -- nothing else here is reproducible without
-  it -- and carries the matching update to `trame-logic section 2` / `toile-logic section 2`, which own those constructors.
-  *Done: `TrameState::with_peer` / `ToileState::with_peer`, both `set_peer_id` + `set_record_timestamp(false)`
-  before the scaffolding commit, both documented in the engine specs, both ungated (I4).*
-* `[x]` The `fixtures` feature in `ambre-core`, `ambre-trame`, `ambre-toile` and `ambre-logic`, plus
-  `serde_json` on `ambre-logic` (section 1.B). Everything below sits behind it except the two `DocState` methods.
-  *Done, with two additions section 1.B did not anticipate: `ambre-crypto` on `ambre-logic` (the manifest digest,
-  which section 1.B's own table already assigned to the driver) and `thiserror` (`FixtureError` wraps `DocFileError`
-  rather than flattening it). Both optional, both pulled in by the feature only. `hex` gains its `serde`
-  feature in `ambre-core`, without which `#[serde(with = "hex")]` does not resolve.*
-* `[x]` `FixtureGen` (with `seed()` and `generator_version()`), `FixtureManifest` / `FixtureShape` and the
-  hex-encoded JSON sidecar, **in `ambre-core`** (section 2.B); the generator registry and the driver in
-  `ambre-logic`. *Done. The registry is empty until `P1` writes the generators; the driver takes it as a
-  parameter (`generate_into`) so the belt drives the same walk with a synthetic registry meanwhile -- the
-  pattern `docfile section 2.A`'s equally-empty migration registry already uses. `ambre-core` also gains
-  `seeded_document_id(seed)`, which I1's third entropy source needs and section 2.B named without siting.*
-* `[x]` `ToileState::import_snapshot`; `DocState::import_snapshot` **and `export_snapshot`** lifted to the
-  enum -- all three ungated (I4); `shape_of`, `canonical_dump`, `load_fixture` and `FixtureError` behind the
-  feature; `DocState` made public (section 2.B). *Done. `shape_of` / `canonical_dump` dispatch in `ambre-logic` over
-  per-app bodies in the app crates, for section 6's reason: the code that decodes a schema moves in the same commit
-  as the schema. `DocState` also gains `doc_type()` (the inverse of `new`, which the driver writes into a
-  manifest) and a `Debug` printing the variant only -- neither engine is `Debug`, and dumping a `LoroDoc`
-  into a log line is not something the zero-knowledge posture allows.*
-* `[x]` Determinism harness (I1) over the three entropy sources -- `PeerID`, commit clock, `document_id` --
-  extended to the cases the spike left open: 100k-cell scale and the 2-peer merge path. Should either fail,
-  the fallback to a semantic digest **also redefines what `fixtures-check` compares** (section 2.B leaves that
-  byte-diff as written until then). *Done, and **neither failed**: the byte diff stands and the semantic
-  fallback stays unadopted. The harness also asserts the **cross-process** half, which is the one that
-  matters (a hash-map-iterating encoder is stable within a run and unstable between runs), by re-execing its
-  own test binary. Two deliberate narrowings: **scale is asserted at 5 000 cells, not 100 000** -- this belt
-  runs on every `cargo test --workspace` and a 100k debug build is tens of seconds, exactly the "corpus
-  developers stop regenerating" failure section 5 warns about; the 100k case is `FIXTURES P2`'s benchmark corpus,
-  built in release under `criterion`, and the invariant is reopened there if it breaks. And the 2-peer case
-  exchanges snapshots directly rather than through `MockSyncHandle`, which `P1`'s post-convergence generator
-  brings in.*
-* `[x]` **Belt:** determinism -- rebuild-identical, plus the test-only generator pair that proves a seed is
-  actually used (section 4); export/import round trip on every `DocState` variant; manifest integrity; loader
-  rejection on `import_ambre_plaintext`, and the smaller `load_fixture` belt beside it. *Done, split by gate:
-  `ambre-logic/tests/fixture_determinism.rs` is **ungated** and runs inside `cargo test --workspace`, which
-  is what makes P0's Definition of Done reachable in CI; `ambre-logic/tests/fixtures_corpus.rs` is gated and
-  runs from the one `--features ambre-logic/fixtures` line `test-native` gains (replaced by
-  `just fixtures-check` at `P1`). "Stable" above is now pinned to a **fixed point** rather than left to the
-  reader; section 4 carries the definition and the two reasons byte equality with the source is the wrong reading.
-  That second `test-native` line makes the job build the workspace under two feature sets before the native
-  server stack, which overflowed a hosted runner's disk on the first push; the job now frees the image's
-  unused toolchains first, and prints `df` so the next squeeze is diagnosable rather than guessed at.*
+* **The corpus does not exist.** There is no `fixtures/` directory in the tree, so ten rows of
+  section 1 describe a corpus, a gate, a freeze and a retention cap that nothing performs. The
+  machinery underneath them is built and held by its own belt.
+* **None of the five recipes exists.** The host job carries a package-scoped `cargo test` line in
+  place of `just fixtures-check`, so the loader and the driver are exercised while the corpus rules
+  are not.
+* **No generator is registered outside a test.** Both engines carry a fixture module and the driver
+  walks a registry, and the only registries that exist are built inside the belt.
+* **Determinism has been measured on one architecture.** Every figure and every determinism test
+  runs on x86_64. A failure elsewhere reopens `FIXTURE-001`, and the fallback is a semantic digest,
+  which is weaker because it cannot see a peer-derived id.
+* **Nothing refuses a generator that writes containers directly**, and nothing refuses a manifest
+  line that would pull the fixture feature into a client build. Both are `unverified` rows rather
+  than gaps, because the rule is stated and the mechanism is missing.
+* **The 2-peer generator is Trame-only.** It reuses the mock sync seam that replays the relay step
+  without a network, and `ambre-toile` has no counterpart, so a post-convergence fixture is a Trame
+  document until one exists.
+* **A fixture proves no convergence.** One planned generator emits a post-convergence state; that
+  is a fixture **produced by** the converged engine, never a proof of it. The 2-peer property tests
+  remain the sole authority.
+* **One link of the load path stays out of reach.** A db-tier test exercises the real read path over
+  opaque blobs, and the host legs are pure functions of a snapshot. What neither covers is a real
+  client speaking WebSocket to a running server, which needs a native transport for `ambre-sync`.
+  Named so it is not mistaken for coverage.
 
-### `FIXTURES P1` -- Integration  `[ ]`
-* `[ ]` **Correctness generators** (small, committed): deep formula DAG; cross-sheet references with merges
-  and active filters (the `trame-logic section 11 bis.E` shape); Toile board with connectors and nested groups;
-  post-convergence 2-peer state via `MockSyncHandle` (Trame only -- Toile has no such seam, section 4).
-* `[ ]` **Interop export sources** (small, committed): a styled multi-sheet Trame exercising the .xlsx and
-  .csv writers, and a multi-frame Toile presentation exercising the .svg and PDF writers. Consumed by the
-  export fidelity round trips of section 4.
-* `[ ]` `just fixtures`, `just fixtures-check` and `just fixtures-freeze` over the `fixtures/current/` +
-  `fixtures/frozen/` layout of section 2.B, all passing `--features fixtures`; `test-native` gains an explicit
-  `just fixtures-check` line, since `cargo test --workspace` cannot reach gated code.
-* `[ ]` **`CONTRIBUTING.md`, which does not exist yet** (`README.md` links it as "to be written"). The
-  synthetic-only rule of section 3 and the freeze step of section 4 both need a checklist to live in; creating that file
-  is part of this phase rather than an assumed precondition.
-* `[x]` Freeze step recorded against the `docfile section 2.A` version registry and `ARCH P8` rather than here
-  (section 4). *Done: both carry it in normative language.*
-* `[ ]` **Belt:** golden drift gate green in CI, including the new-generator and orphan-golden cases.
+---
 
-### `FIXTURES P2` -- Extension  `[ ]`
-* `[ ]` **Scale generators** (git-ignored, benchmark-only) behind `just fixtures-bench-corpus`, each sized to
-  the budget it serves (section 4): 10k-cell formula DAG; 100k-cell sheet (memory); 50k-element board;
-  2 000-visible-element viewport; 10k-cell export source; 50-frame presentation.
-* `[ ]` `just fixtures-bench` and `criterion` benches on those corpora, with baselines committed **alongside
-  the machine that produced them** and the 20% same-machine regression criterion (section 4). No CI job: P2's
-  Definition of Done is the local substitute stated in section 4.
-* `[ ]` **CPU-frame bench** through `RecordingSurface`: per-frame content walk / culling / tessellation /
-  layout cost on a dense fixture, on host, no GPU. Explicitly **not** a 60 FPS validation (section 4).
-* `[ ]` **Load-path bench** on legs 2 to 5 of `architecture section 5`: AEAD open + decompress, full-snapshot
-  `LoroDoc` import, engine rebuild (Trame reseed, Toile `SpatialIndex` bulk load), first-frame CPU cost --
-  on the 100k-cell and 50k-element corpora. Feeds the end-to-end open budget that `architecture section 5` is to
-  set from those numbers.
-* `[ ]` Generators for further apps as their engines land (`ambre-prose`, `ambre-murmure`), gated on
-  `DocState::new` supporting them.
+## 6. WHAT THIS DOCUMENT DOES NOT OWN
+
+| Question | Owner |
+|---|---|
+| The container a fixture is written in, and its two version rules | `ambre-spec-docfile.md section 3` |
+| What a document means: containers, commands, convergence | the applications' schema and engine documents |
+| Which crate holds which belt, what runs in CI, and where the mechanism gaps are | `ambre-spec-testing.md section 6` |
+| What each operation may cost | `ambre-spec-budgets.md` |
+| How a snapshot is compressed, sealed and uploaded | `ambre-spec-sealed-envelope.md` |
+| What a test asserts about a document loaded from a fixture | the feature that owns the behaviour; this document produces the corpus, never the expectations |

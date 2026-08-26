@@ -88,7 +88,7 @@ impl TrameUiState {
 
     /// Y of row `row`'s top edge relative to the canvas, summing the *visible*
     /// rows' variable heights from [`top_row`](Self::top_row) (collapsing hidden
-    /// rows, sec.5.D). Mirrors `GridLayout::row_top`.
+    /// rows, `trame-shared-filter`). Mirrors `GridLayout::row_top`.
     pub fn row_y(&self, row: u32) -> f64 {
         let cells_top = self.header_h();
         let mut y = cells_top;
@@ -213,8 +213,8 @@ impl TrameUiState {
         Some((row, col))
     }
 
-    /// Resolve a pointer at physical `(x, y)` to a header zone (`-ui.md`
-    /// sec.4bis), or `None` when the point is over the scrollable grid body (not a
+    /// Resolve a pointer at physical `(x, y)` to a header zone
+    /// (`trame-headers`), or `None` when the point is over the grid body (not a
     /// header strip). The resize bands (a +/- [`RESIZE_BAND`] zone around a
     /// boundary) take priority over the body so a grab on the edge resizes rather
     /// than selects. Variable-metric aware (walks the per-axis widths/heights).
@@ -365,7 +365,7 @@ impl TrameUiState {
     }
 
     /// Grow `rect` so it fully contains every merged block it intersects. A
-    /// merge is one logical cell (spec sec.2): a selection that touches any part
+    /// merge is one logical cell (`trame-cell-merges`): a selection touching part
     /// of a block must cover the whole block -- both for drawing (the drag reads
     /// as selecting the merge at once, not cell by cell) and for the autofill
     /// handle (anchored on the block's extent corner). Iterates to a fixpoint
@@ -396,9 +396,9 @@ impl TrameUiState {
     }
 
     /// The fill granularity `(rows, cols)` of an autofill source `bounds`
-    /// (sec.5.F). When the source is tiled by equal merged blocks (one block or a
-    /// uniform grid of identically sized merges), returns the block span so the
-    /// drag snaps block by block and the release re-merges each tile (Excel
+    /// (`trame-autofill`). When the source is tiled by equal merged blocks (one
+    /// block or a uniform grid of identically sized merges), returns the span so
+    /// the drag snaps block by block and the release re-merges each tile (Excel
     /// behaviour); otherwise `(1, 1)` keeps the plain per-cell fill. A source that
     /// mixes merges of different sizes or a merge with extra cells is not
     /// block-aligned and falls back to `(1, 1)`.
@@ -445,7 +445,7 @@ impl TrameUiState {
     }
 
     /// Screen pixel rect (x, y, w, h) of the autofill handle: a small square
-    /// centred on the bottom-right corner of the selection (`-ui.md` sec.5.F).
+    /// centred on the bottom-right corner of the selection (`trame-autofill`).
     /// When the selection's corner falls in a merge, the handle anchors on the
     /// block's extent corner so it hugs the whole block. `None` when that corner
     /// cell is scrolled out of view.
@@ -465,7 +465,7 @@ impl TrameUiState {
         })
     }
 
-    /// Excel-style "current region" around the active cell (`-ui.md` sec.5.D):
+    /// Excel-style "current region" around the active cell (`trame-shared-filter`):
     /// the contiguous rectangle of non-empty cells, grown one line at a time
     /// until the bordering row/column is fully empty. Resolved from the viewport
     /// `cell_cache` (cells beyond the cache read as empty -- acceptable for the
@@ -509,7 +509,7 @@ impl TrameUiState {
     }
 
     /// Screen pixel rect (x, y, w, h) of the autofilter button for column `col`
-    /// on the current region's header row `band_row` (`-ui.md` sec.5.D): a small
+    /// on the current region's header row `band_row` (`trame-shared-filter`): a small
     /// square hugging the right edge of cell `(band_row, col)`. `None` when that
     /// cell is hidden or scrolled out of view.
     pub fn filter_button_rect(&self, band_row: u32, col: u32) -> Option<(f64, f64, f64, f64)> {

@@ -12,8 +12,9 @@
 * **Never push to a branch the user did not name.**
 * **The author is the human who owns the working copy**, read from the configured `user.name` and
   `user.email`. Never an agent identity, a bot account or a model name.
-* **`Co-Authored-by` is forbidden.** The last trailer names the agent instead:
-  `Assisted-by: Claude Code`.
+* **`Co-Authored-by` is forbidden.** The last trailer names the tool that assisted, and the tool
+  writes its own name: `Assisted-by: <tool name>`. **No rule of this repository names a vendor**, so
+  a contributor picks the assistant they want and the repository stays portable between them.
 * **Pre-commit, mandatory when the commit touches Rust.** Run `cargo fmt --all`, then clear every
   compilation warning, then every `cargo clippy` warning. Commit only once the tree is clean.
   `./run_tests.sh lint` checks it.
@@ -23,4 +24,19 @@
   `npx --yes @mermaid-js/mermaid-cli -i block.mmd -o /dev/null`. `just spec-code` checks the fence
   tag, not the diagram, so a broken diagram passes the lint and fails only on the forge.
 * **Commit message.** Imperative subject, 72 characters maximum, no final period. The body explains
-  why. Rest of the rules in `ai/ambre-writing-style.md`.
+  why, in 1 000 characters maximum, trailer excluded -- about four paragraphs. A body that needs
+  more is a commit that does more than one thing: split it. Rest of the rules in
+  `ai/ambre-writing-style.md`.
+* **A hook holds the two rules that carry a number**, because an author estimates a character count
+  instead of measuring it. Turn it on once per clone -- git never ships a hook inside a clone, so
+  this is an adoption, not an imposition:
+
+  ```bash
+  git config core.hooksPath .githooks
+  ```
+
+  It refuses a subject over 72 characters, a subject ending on a period, a body over 1 000
+  characters, a `Co-Authored-by` trailer and a character outside printable ASCII.
+  `scripts/commit_msg.py` holds the rules and the reason for each, and runs standalone on any
+  message file. It checks shape and never vocabulary: no rule of it names a person or a tool.
+  Whether the subject is imperative stays a review rule.

@@ -1,4 +1,4 @@
-//! Ephemeral presence for [`ToileState`](super::ToileState) (§7).
+//! Ephemeral presence for [`ToileState`](super::ToileState).
 //!
 //! Presence (cursors, in-flight strokes, laser points, selections) is relayed
 //! as **ephemeral** Sync payloads: it never enters the CRDT, never persists, and
@@ -7,7 +7,7 @@
 //! is no display event to emit. Inbound, a frame is keyed by the sender's
 //! canonical `UserId` -- resolved from the authenticated `pub_key` in
 //! `ambre-sync` before it reaches this thread, so a peer cannot spoof another
-//! user's cursor (§7). The render side is `toile-ui`'s overlay pass.
+//! user's cursor. The render side is `toile-presence`'s overlay pass.
 
 use ambre_bus::UserId;
 
@@ -17,7 +17,7 @@ use super::ToileState;
 
 impl ToileState {
     /// Encode the local peer's presence sample into an ephemeral frame to
-    /// broadcast (§7). No display event and no CRDT delta: the local cursor is
+    /// broadcast. No display event and no CRDT delta: the local cursor is
     /// painted by the UI. A failed encode yields an empty outcome -- presence is
     /// best-effort and a dropped sample is corrected by the next one.
     pub(super) fn broadcast_presence(&self, payload: &PresencePayload) -> ToileOutcome {
@@ -31,7 +31,7 @@ impl ToileState {
     }
 
     /// Apply a decrypted remote ephemeral (presence) frame, keyed by the sender's
-    /// canonical `UserId` (resolved in `ambre-sync`, §7). Records the peer's
+    /// canonical `UserId` (resolved in `ambre-sync`,). Records the peer's
     /// latest presence and returns the `PeerPresence` event for the overlay to
     /// render. Never mutates the CRDT or history; a malformed frame is dropped.
     pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &[u8]) -> Vec<ToileEvent> {
@@ -48,7 +48,7 @@ impl ToileState {
             user_id: from_user_id,
             presence,
         })];
-        // "Follow presenter" (§1.B): if we follow this sender and the frame carries
+        // "Follow presenter": if we follow this sender and the frame carries
         // a broadcast slide, adopt it -- clamp to the deck and glide via
         // `SlideChanged`. A frame from anyone else, or without `present_slide`,
         // never moves us. Purely local: no CRDT / history mutation.

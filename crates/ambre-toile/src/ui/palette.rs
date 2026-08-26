@@ -1,15 +1,15 @@
 // ambre-toile/src/ui/palette.rs
 // ============================================================================
-// Command surface for the Toile tool palette / primary toolbar (toile-ui
-// SS5quinquies.A). The host-visible half: the `CommandId`s the palette
+// Command surface for the Toile tool palette / primary toolbar
+// (`toile-tools`). The host-visible half: the `CommandId`s the palette
 // contributes, the pure `CommandId -> Tool` map, the bare-key tool chords, and
 // the pure focus-guard predicate the launcher applies before stealing a key.
 //
 // Kept in the always-compiled `ui` module (not the wasm-only `chrome`) so it is
-// host-unit-tested (SS10), exactly like `ui::find` and `ui::menu`. The wasm-only
+// host-unit-tested, exactly like `ui::find` and `ui::menu`. The wasm-only
 // Leptos component that renders these (`chrome::ToolPalette`) consumes them.
 //
-// The active tool is UI-only, canvas-local state (toile-ui SS11bis, "Local
+// The active tool is UI-only, canvas-local state (`toile-tools`, "Local
 // view"): it never becomes a `ToileCommand` and never reaches the Logic thread.
 // A tool `CommandId` is therefore NOT mapped through `command_to_app`; the
 // palette (and the keyboard) write a shared `RwSignal<Tool>` the view applies.
@@ -27,12 +27,12 @@ use super::tool::{Handle, Tool};
 // so the shell can round-trip an id through a signal without carrying the
 // `Command` table.
 
-/// Select / move / resize / rotate / marquee (SS5).
+/// Select / move / resize / rotate / marquee (`toile-tools`).
 pub const TOOL_SELECT: CommandId = CommandId("toile.tool.select");
 /// Vector pen (Bezier path).
 pub const TOOL_PEN: CommandId = CommandId("toile.tool.pen");
 /// Shape drag-rect (defaults to a rectangle; the kind sub-option is a local
-/// palette signal folded into `CreateElement`, SS5quinquies.A).
+/// palette signal folded into `CreateElement`, `toile-tools`).
 pub const TOOL_SHAPE: CommandId = CommandId("toile.tool.shape");
 /// Connector (anchor to anchor).
 pub const TOOL_CONNECTOR: CommandId = CommandId("toile.tool.connector");
@@ -60,7 +60,7 @@ pub const TOOL_COMMANDS: &[CommandId] = &[
 
 /// Map a tool `CommandId` to the [`Tool`] it selects, or `None` for any id that
 /// is not a tool (a non-tool Toile command such as `FIND`, or an unknown id).
-/// `TOOL_SHAPE` selects the rectangle by default (SS5quinquies.A).
+/// `TOOL_SHAPE` selects the rectangle by default (`toile-tools`).
 pub fn tool_for_command(id: CommandId) -> Option<Tool> {
     match id {
         TOOL_SELECT => Some(Tool::Select),
@@ -69,7 +69,7 @@ pub fn tool_for_command(id: CommandId) -> Option<Tool> {
         TOOL_CONNECTOR => Some(Tool::Connector),
         TOOL_DRAW => Some(Tool::Draw),
         // The bare command / keyboard chord arms the default sticky yellow; the
-        // palette's colour picker arms Sticky(colour) directly (§5quinquies.A).
+        // palette's colour picker arms Sticky(colour) directly.
         TOOL_STICKY => Some(Tool::Sticky(STICKY_DEFAULT_FILL)),
         TOOL_TEXT => Some(Tool::Text),
         TOOL_HAND => Some(Tool::Hand),
@@ -78,7 +78,7 @@ pub fn tool_for_command(id: CommandId) -> Option<Tool> {
 }
 
 /// The sticky-note colour swatches offered by the palette's colour picker
-/// (`toile-ui §5quinquies.A`), ARGB. The first entry is [`STICKY_DEFAULT_FILL`]
+/// (`toile-tools`), ARGB. The first entry is [`STICKY_DEFAULT_FILL`]
 /// (the bare-key / default colour); the rest are the standard whiteboard pastels
 /// (blue, green, pink, orange, purple, grey). Shared with the chrome popover so
 /// the offered set is host-tested here rather than buried in wasm-only code.
@@ -93,7 +93,7 @@ pub const STICKY_SWATCHES: &[u32] = &[
 ];
 
 /// Bind the bare-key tool chords into the launcher keymap. These are the de-facto
-/// whiteboard letters (V/P/R/C/D/N/T/H); SS5quinquies.A promises the palette click
+/// whiteboard letters (V/P/R/C/D/N/T/H); `toile-tools` promises the palette click
 /// and the keyboard resolve to the same tool selection. The launcher guards them
 /// with [`is_editable_tag`] so a letter typed into an inline editor is not stolen.
 pub fn bind_tool_keys(keymap: &mut Keymap) {
@@ -117,13 +117,13 @@ pub fn bind_tool_keys(keymap: &mut Keymap) {
 }
 
 /// A note-shaped CSS cursor (inlined SVG data URI) shown while the Sticky tool is
-/// armed, so it is obvious a click will drop a note (`toile-ui §5quinquies.A`,
+/// armed, so it is obvious a click will drop a note (`toile-tools`,
 /// feedback). `%23` encodes `#` inside the URI; the hotspot is the note's
 /// top-left corner. Falls back to `crosshair` if the data URI is unsupported.
 pub const STICKY_CURSOR: &str = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'><rect x='4' y='4' width='18' height='18' fill='%23FEF08A' stroke='%23333333' stroke-width='1'/><path d='M17 22 L22 22 L22 17 Z' fill='%23E4CE5C'/></svg>\") 4 4, crosshair";
 
-/// The CSS `cursor` value for the canvas while `tool` is active (`toile-ui
-/// §5quinquies.A` "Cursor feedback"): a note-shaped cursor while the Sticky tool
+/// The CSS `cursor` value for the canvas while `tool` is active
+/// (`toile-tools`, "Cursor feedback"): a note-shaped cursor while the Sticky tool
 /// is armed, a crosshair for the other creation tools (so a click visibly means
 /// "place here"), a grab hand for the pan-only Hand tool, and the default arrow
 /// for Select. Pure so the chrome can bind it to the active-tool signal without
@@ -138,7 +138,7 @@ pub fn cursor_css(tool: Tool) -> &'static str {
 }
 
 /// A rotation cursor (inlined SVG data URI) shown on the rotate handle so it is
-/// obvious the drag will rotate rather than resize (`toile-ui §5quinquies.A`).
+/// obvious the drag will rotate rather than resize (`toile-tools`).
 /// Built from the shared `icondata::LuRotateCw` glyph (Lucide "rotate-cw", a
 /// clockwise circular arrow): its paths are wrapped in a full `<svg>` and painted
 /// twice -- a white under-stroke then a dark top-stroke -- so it stays legible on
@@ -226,7 +226,7 @@ fn rotated_resize_cursor(deg: f64, fallback: &str) -> String {
 }
 
 /// The CSS `cursor` value for hovering / dragging a selection transform handle
-/// (`toile-ui §5quinquies.A`, "Cursor feedback"): a directional double-arrow that
+/// (`toile-tools`, "Cursor feedback"): a directional double-arrow that
 /// matches the axis a corner or side resizes along, and a rotation cursor on the
 /// rotate handle. `theta` is the element's rotation (radians). For an axis-aligned
 /// element (`theta == 0`) it returns the crisp **native** CSS keyword; for a

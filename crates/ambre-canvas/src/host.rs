@@ -12,7 +12,7 @@
 // DRIVER (`FrameHost`), the closed `AppView` registry, and the DOM event wiring
 // live in the launcher (`ambre-app`), which depends on every app crate -- a
 // closed view enum naming `TrameView` cannot live upstream here without a
-// dependency cycle (ambre-spec-architecture.md 6). The launcher reads/writes the
+// dependency cycle (ambre-spec-architecture.md). The launcher reads/writes the
 // `GpuState` it gets from `bootstrap_gpu` and drives `start_raf_loop`.
 //
 // wasm32-only: surface creation from an HTMLCanvasElement

@@ -1,13 +1,13 @@
-//! `ToileState` -- the per-document Toile engine (Logic thread side, §7/§8).
+//! `ToileState` -- the per-document Toile engine (Logic thread side,).
 //!
 //! Owns the single-board `LoroDoc`, the derived `SpatialIndex` and bounds /
 //! layers caches, and turns typed [`ToileCommand`]s into a [`ToileOutcome`]
 //! (display events + CRDT / ephemeral bytes). The `LoroDoc` never leaves this
-//! thread; it exits only as exported bytes (§1).
+//! thread; it exits only as exported bytes.
 //!
 //! **Phase 0 scope.** Element / connector / stroke lifecycle, z-order, groups
-//! (§2.F bis), frame membership (§2.F/§2.G), local undo/redo (§8 bis), clipboard
-//! (§8 ter), selection stats, viewport-culled `DisplayViewport` derivation, and
+//! frame membership, local undo/redo, clipboard
+//! selection stats, viewport-culled `DisplayViewport` derivation, and
 //! the remote-apply / snapshot paths. Rich text (`EditText`, blocked on Prose's
 //! shared `TextDelta`), find and nested-doc editing are subsequent slices; every
 //! command handled here is complete.
@@ -16,15 +16,15 @@
 //! persistence paths; the `impl` is split by responsibility across the sibling
 //! modules below (each reaches the struct's fields, consts and shared helpers via
 //! `super::`):
-//! - [`elements`] -- element / stroke lifecycle and z-order (§8, §4, §2.G)
-//! - [`groups`] -- grouping, frame membership, the group/frame tree (§2.F)
-//! - [`presentation`] -- slide sequence CRDT + local playback (`toile-features` §1)
-//! - [`connectors`] -- connector lifecycle and queries (§5)
-//! - [`clipboard`] -- copy / paste / duplicate (§8 ter)
-//! - [`import`] -- atomic foreign-file import + media map seeding (`toile-interop`)
-//! - [`docfile`] -- native `.ambre` export / import (`ambre-spec-docfile.md` §2.B)
-//! - [`caches`] -- derived `bounds` / index / `layers` maintenance (§1)
-//! - [`derive`] -- read-only `DisplayViewport` derivation (§9)
+//! - [`elements`] -- element / stroke lifecycle and z-order
+//! - [`groups`] -- grouping, frame membership, the group/frame tree
+//! - [`presentation`] -- slide sequence CRDT + local playback (`toile-presentation`)
+//! - [`connectors`] -- connector lifecycle and queries
+//! - [`clipboard`] -- copy / paste / duplicate
+//! - [`import`] -- atomic foreign-file import + media map seeding (`toile-import-export`)
+//! - [`docfile`] -- native `.ambre` export / import (`ambre-spec-docfile.md`)
+//! - [`caches`] -- derived `bounds` / index / `layers` maintenance
+//! - [`derive`] -- read-only `DisplayViewport` derivation
 //! - [`codec`] -- pure geometry / (de)serialization helpers
 
 mod autolayout;
@@ -37,7 +37,7 @@ mod derive;
 mod docfile;
 mod elements;
 mod find;
-/// The per-app half of `shape_of` / `canonical_dump` (`fixtures §2.B`). Fixture
+/// The per-app half of `shape_of` / `canonical_dump` (`fixtures`). Fixture
 /// code (I4): behind the non-default `fixtures` feature, never in a client build.
 #[cfg(feature = "fixtures")]
 mod fixtures;
@@ -60,27 +60,27 @@ use crate::logic::command::{
 use crate::logic::index::{SpatialIndex, Viewport};
 use crate::logic::model::{ConnectorId, ElementId, NodeId, PlaybackState};
 
-// Root container names (§2.B).
+// Root container names.
 const ELEMENTS: &str = "elements";
 const CONNECTORS: &str = "connectors";
 const LAYERS: &str = "layers";
 const BOARD: &str = "board";
-/// Per-group / per-frame membership list key inside an element map (§2.F bis).
+/// Per-group / per-frame membership list key inside an element map.
 const CHILDREN: &str = "children";
-/// Collaborative speaker-notes LoroText key inside a frame element map (§1.D).
+/// Collaborative speaker-notes LoroText key inside a frame element map.
 const NOTES: &str = "notes";
-/// Auto-layout spec LWW register key inside a frame element map (§2).
+/// Auto-layout spec LWW register key inside a frame element map.
 const AUTOLAYOUT: &str = "autolayout";
-/// Presentation root map key (`toile-features` §1.A).
+/// Presentation root map key (`toile-presentation`).
 const PRESENTATION: &str = "presentation";
-/// Slide sequence movable-list key inside the `presentation` map (§1.A).
+/// Slide sequence movable-list key inside the `presentation` map.
 const ORDER: &str = "order";
-/// Presentation config map key inside the `presentation` map (§1.A).
+/// Presentation config map key inside the `presentation` map.
 const CONFIG: &str = "config";
-/// Reactions root map key: `reactions[target_id][user_id]` (§4.A).
+/// Reactions root map key: `reactions[target_id][user_id]`.
 const REACTIONS: &str = "reactions";
 /// Media root map key: `media[blake2b(plaintext)]` -> `{w, h, mime, thumb}`
-/// (`toile-logic §2.B`). Created and populated by `toile-interop` (§5); an
+/// (`ambre-spec-toile-schema.md`). Created and populated by `toile-media`; an
 /// `image` element's `hash` field is a key here. Dedup: N elements may share one
 /// entry, so `seed_media` never overwrites an existing key.
 const MEDIA: &str = "media";
@@ -92,50 +92,50 @@ pub struct ToileState {
     /// Rotation-expanded world AABB per element; feeds culling + connector
     /// routing. Derived, never authoritative.
     bounds: HashMap<ElementId, Rect>,
-    /// Materialized paint order (§2.G), mirrored from the `layers` list.
+    /// Materialized paint order, mirrored from the `layers` list.
     layers: Vec<NodeId>,
-    /// Per-session monotonic id-minting counter (§2.A).
+    /// Per-session monotonic id-minting counter.
     counter: u32,
     peer: u64,
     /// Last viewport the UI reported; drives culling.
     viewport: Viewport,
     /// Version vector already exported to Sync; deltas are `export(Updates{from})`.
     exported_vv: VersionVector,
-    /// Local-only undo/redo (§8 bis): undoes only this peer's operations, one
+    /// Local-only undo/redo: undoes only this peer's operations, one
     /// item per atomic user action (one `doc.commit()` per mutating command).
     undo: UndoManager,
     /// Canonical per-user identifier, seeded from `LogicEvent::SessionReady`
-    /// (§7) by the dispatcher. `None` until the session is authenticated. A
+    /// by the dispatcher. `None` until the session is authenticated. A
     /// stable `UserId`, NOT `peer` (which is per-session/per-device and only
     /// mints element ids); used to key this peer's own persisted reactions
-    /// (`toile-features §4.A`) and to tag outbound presence with a stable
-    /// identity. Same field as `trame-logic §7`.
+    /// (`toile-reactions`) and to tag outbound presence with a stable
+    /// identity. Same field as `trame-engine`.
     my_user_id: Option<UserId>,
     /// Remote peers' latest presence (cursors, live strokes, lasers, selections),
-    /// keyed by canonical `UserId` (§7). Ephemeral: never in Loro, never
+    /// keyed by canonical `UserId`. Ephemeral: never in Loro, never
     /// persisted, rebuilt from inbound frames. The local peer's own presence is
     /// not stored here (the UI draws its own cursor).
     presence: HashMap<UserId, PresencePayload>,
-    /// Presentation (focus) mode toggle (`toile-features` §1.B). Local/per-viewer,
+    /// Presentation (focus) mode toggle (`toile-presentation`). Local/per-viewer,
     /// never in Loro and never synced -- only the slide sequence is shared.
     present: bool,
-    /// Local playback cursor + focus flag (§1.B). Momentary-gesture state, like
+    /// Local playback cursor + focus flag. Momentary-gesture state, like
     /// [`present`](Self::present); reset on `EnterPresent`, clamped by
     /// `SetSlideOrder`.
     playback: PlaybackState,
-    /// "Follow presenter" broadcast toggle (§1.B): when set, the playback commands
+    /// "Follow presenter" broadcast toggle: when set, the playback commands
     /// additionally emit an ephemeral frame carrying the active slide index so
     /// followers glide along. Local role, never in Loro and never synced.
     broadcasting: bool,
-    /// The presenter this viewer is following (§1.B), or `None`. When `Some(u)`,
+    /// The presenter this viewer is following, or `None`. When `Some(u)`,
     /// an inbound presence frame from `u` that carries a `present_slide` moves this
     /// viewer's active slide; a manual navigation clears it ("take control").
     /// Local role, never in Loro and never synced.
     following: Option<UserId>,
-    /// Imports awaiting media-upload confirmations (`toile-interop §5`). An
+    /// Imports awaiting media-upload confirmations (`toile-media`). An
     /// import that carries raster media is NOT applied until every blob's real
     /// blake2b returns from Sync, so the whole import stays one atomic undo group
-    /// (§1). Rare and short-lived; dies with the `DocState`. See `state::import`.
+    /// Rare and short-lived; dies with the `DocState`. See `state::import`.
     pending_imports: Vec<import::PendingImport>,
 }
 
@@ -151,7 +151,7 @@ impl ToileState {
     }
 
     /// A board whose CRDT identity and commit clock are **pinned**, so the same
-    /// command sequence produces the same bytes twice (`fixtures §I1`).
+    /// command sequence produces the same bytes twice (`FIXTURE-001`).
     ///
     /// Two of the three entropy sources of a Toile document are closed here; the
     /// third, `document_id`, belongs to the caller and is supplied to
@@ -159,7 +159,7 @@ impl ToileState {
     ///
     /// * **`PeerID`** -- `LoroDoc::new()` draws one at random, and
     ///   [`peer`](Self::peer) is cached at construction and minted into every
-    ///   [`ElementId`] / [`ConnectorId`] (§2.A), so an unpinned peer changes the
+    ///   [`ElementId`] / [`ConnectorId`], so an unpinned peer changes the
     ///   board's *content*, not merely its encoding.
     /// * **Commit timestamps** -- Loro records one per commit unless told not to.
     ///
@@ -177,7 +177,7 @@ impl ToileState {
         doc.set_peer_id(peer)
             .expect("a fresh LoroDoc accepts a peer id");
         // No wall clock in the ops: a recorded timestamp would differ between two
-        // runs of the same generator and defeat the byte diff of `fixtures §4`.
+        // runs of the same generator and defeat the byte diff of `fixtures`.
         doc.set_record_timestamp(false);
         Self::from_doc(doc)
     }
@@ -216,12 +216,12 @@ impl ToileState {
         }
     }
 
-    // -- session identity (§7) -------------------------------------------------
+    // -- session identity -------------------------------------------------
 
-    /// Seed the canonical `UserId` from `LogicEvent::SessionReady` (§7). Called
+    /// Seed the canonical `UserId` from `LogicEvent::SessionReady`. Called
     /// by the dispatcher once the session is authenticated; idempotent (a
     /// re-login with the same account is a no-op). Keys this peer's reactions
-    /// (`toile-features §4.A`) and tags outbound presence.
+    /// (`toile-reactions`) and tags outbound presence.
     pub fn set_user_id(&mut self, user_id: UserId) {
         self.my_user_id = Some(user_id);
     }
@@ -231,19 +231,19 @@ impl ToileState {
         self.my_user_id
     }
 
-    /// Whether this viewer is broadcasting its playback position (§1.B). Test /
+    /// Whether this viewer is broadcasting its playback position. Test /
     /// integration accessor.
     pub fn is_broadcasting(&self) -> bool {
         self.broadcasting
     }
 
-    /// The presenter this viewer is currently following, if any (§1.B). Test /
+    /// The presenter this viewer is currently following, if any. Test /
     /// integration accessor.
     pub fn following(&self) -> Option<UserId> {
         self.following
     }
 
-    // -- id minting (§2.A) -----------------------------------------------------
+    // -- id minting -----------------------------------------------------
 
     pub(super) fn mint_element_id(&mut self) -> ElementId {
         self.counter += 1;
@@ -327,7 +327,7 @@ impl ToileState {
             ToileCommand::ImportImage { bytes, mime: _ } => self.import_image_bytes(&bytes),
             ToileCommand::ImportFigma { .. } | ToileCommand::ImportMiro { .. } => {
                 // Figma / Miro converters land in a later interop slice; the board
-                // is untouched until then (§1 atomicity).
+                // is untouched until then (atomicity).
                 ToileOutcome::display_only(vec![ToileEvent::ImportFailed(
                     "Figma / Miro import is not yet available".to_owned(),
                 )])
@@ -341,7 +341,7 @@ impl ToileState {
         }
     }
 
-    // -- remote / persistence (§8) --------------------------------------------
+    // -- remote / persistence --------------------------------------------
 
     /// Apply a remote delta batch or full snapshot (`doc.import` accepts both),
     /// rebuild the derived caches, and return the display events to repaint. A
@@ -388,7 +388,7 @@ impl ToileState {
     ///
     /// The counterpart of [`export_snapshot`](Self::export_snapshot), and the
     /// Toile half of `DocState::import_snapshot` -- **production code, ungated**
-    /// (`fixtures §I4`): the enum method dispatches here for the Toile variant,
+    /// (`FIXTURE-007`): the enum method dispatches here for the Toile variant,
     /// so putting this behind the `fixtures` feature would make an ordinary
     /// client build fail to compile and take Toile's local restore with it.
     ///
@@ -401,7 +401,7 @@ impl ToileState {
         self.apply_remote(payload)
     }
 
-    // -- undo / redo (§8 bis) --------------------------------------------------
+    // -- undo / redo --------------------------------------------------
 
     /// Apply one undo or redo step. The inverse ops are committed by
     /// `undo()`/`redo()`; reseed the derived caches and broadcast the delta like
@@ -427,16 +427,16 @@ impl ToileState {
         }
     }
 
-    // -- selection aggregates (§8 quinquies) -----------------------------------
+    // -- selection aggregates -----------------------------------
 
     fn selection_stats(&self, ids: &[ElementId]) -> ToileOutcome {
         let mut union: Option<Rect> = None;
         let mut count = 0u32;
         // Empty ids = whole-board extent: the union of every element's bounds.
-        // Used by the View -> Fit action (`toile-ui §5quinquies.E`), which needs
+        // Used by the View -> Fit action (`toile-viewport`), which needs
         // the full board rect the UI does not hold (it sees only the culled
         // viewport). A non-empty selection keeps the per-selection aggregate the
-        // status bar consumes (§8bis).
+        // status bar consumes.
         if ids.is_empty() {
             for r in self.bounds.values() {
                 union = Some(match union {

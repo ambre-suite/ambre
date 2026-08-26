@@ -1,6 +1,6 @@
 // ambre-toile/src/ui/render.rs
 // ============================================================================
-// The Toile content walk (toile-ui §2). Toile owns only "what to draw": it walks
+// The Toile content walk (toile-board-rendering). Toile owns only "what to draw": it walks
 // the culled, z-ordered `DisplayViewport` and emits ABSTRACT `DrawSurface` calls;
 // tessellation, the glyph atlas and GPU submission are `ambre-canvas`'s job. So
 // the walk is host-testable against `RecordingSurface` (a mock `DrawSurface`):
@@ -40,9 +40,9 @@ use super::viewport::ViewportTransform;
 ///
 /// Keyed by the element's blake2b media hash (`DisplayGeom::Image`). The
 /// screen renderer fills this from its media cache and the PDF export path
-/// decodes it from the `media` LoroMap (`toile-interop §5.B`); a hash absent
+/// decodes it from the `media` LoroMap (`toile-media`); a hash absent
 /// from the map means the pixels have not arrived yet, so the element paints a
-/// placeholder box instead (§5.B) until a later frame carries them.
+/// placeholder box instead until a later frame carries them.
 pub struct DecodedImage {
     pub pixels: Vec<u8>,
     pub width: u32,
@@ -55,12 +55,12 @@ pub type ImageStore = HashMap<String, DecodedImage>;
 
 /// Fixed ink (ARGB) for a sticky-note body: a near-black that stays readable on
 /// any pastel card colour, so the body is legible regardless of the card fill
-/// (`toile-logic §2.C`). Independent of the theme (the card is not). Shared with
+/// (`toile-styles`). Independent of the theme (the card is not). Shared with
 /// the inline editor so an in-edit sticky uses the same ink (`edit.rs`).
 pub(crate) const STICKY_INK: u32 = 0xFF1A_1A1A;
 
 /// Sticky drop-shadow colour (ARGB): a soft translucent black offset to the
-/// bottom-right so the note reads as a physical card (§2.C, feedback).
+/// bottom-right so the note reads as a physical card (feedback).
 const STICKY_SHADOW: u32 = 0x3300_0000;
 /// Drop-shadow offset in world units (bottom-right).
 const STICKY_SHADOW_OFFSET: f64 = 4.0;
@@ -77,7 +77,7 @@ pub(crate) fn sticky_font_size(bounds: Rect) -> f32 {
 /// The effective body font size (world units) for a sticky / text element: a
 /// sticky auto-sizes from its bounds while `style.font.size` is the auto sentinel
 /// (`STICKY_AUTO_FONT_SIZE`, i.e. not positive), but a positive size set from the
-/// style inspector overrides it; a text element always uses its style size (§6).
+/// style inspector overrides it; a text element always uses its style size.
 pub(crate) fn sticky_or_style_font_size(
     is_sticky: bool,
     style: &ElementStyle,
@@ -91,7 +91,7 @@ pub(crate) fn sticky_or_style_font_size(
 }
 
 /// Resolve a sticky / text body's ink (ARGB), or `None` to fall back to the theme
-/// text colour (§2.E). An explicit `text_color` always wins; otherwise a sticky
+/// text colour. An explicit `text_color` always wins; otherwise a sticky
 /// uses its fixed ink (its `fill` is the card background, not the text), and a free
 /// text element falls back to its `fill` (legacy: a text element's fill was its
 /// glyph colour) then, if unset, the theme colour. Pure and host-tested; shared
@@ -108,7 +108,7 @@ pub(crate) fn resolved_text_ink(
     }
 }
 
-/// Convert an ARGB `u32` (Toile style register, §2.E) to a `peniko::Color`,
+/// Convert an ARGB `u32` (Toile style register,) to a `peniko::Color`,
 /// pre-multiplying the element `opacity` into the alpha channel.
 fn argb(v: u32, opacity: f32) -> Color {
     let a = ((v >> 24) & 0xff) as f32 / 255.0;
@@ -194,15 +194,15 @@ pub fn paint_content<S: DrawSurface>(
     editing: Option<&ElementId>,
     // Decoded image pixels for this frame, keyed by media hash. An `Image`
     // element whose hash is present paints real pixels via `draw_image`; one
-    // absent paints a placeholder box (`toile-interop §5.B`). Empty on a board
+    // absent paints a placeholder box (`toile-media`). Empty on a board
     // with no images or whose media has not yet been decoded.
     images: &ImageStore,
-    // Smart Animate overrides for an in-flight slide transition (§1.C): keyed by
+    // Smart Animate overrides for an in-flight slide transition: keyed by
     // element id, each replaces the element's transform / bounds / opacity / fill
     // for this frame. Empty when no transition is active. Fade-only ids (a new /
     // gone element) still appear here so their opacity ramp is honored.
     anim: &HashMap<ElementId, AnimatedElement>,
-    // Presentation focus mode (§1.D): the UI hides the board grid so the audience
+    // Presentation focus mode: the UI hides the board grid so the audience
     // sees only the slide content.
     present: bool,
 ) {
@@ -226,7 +226,7 @@ pub fn paint_content<S: DrawSurface>(
     // 3. Text pass in screen space (crisp glyphs; font size scales with zoom).
     // Both sticky notes and free text carry a body string here; a sticky draws
     // its body in a fixed readable ink (its `fill` is the card colour), a text
-    // element draws in its `fill` (§2.C).
+    // element draws in its `fill`.
     for node in &vp.nodes {
         let DisplayNode::Element(e) = node else {
             continue;
@@ -237,7 +237,7 @@ pub fn paint_content<S: DrawSurface>(
             _ => continue,
         };
         // Skip the element under inline edit: its live buffer is painted by the
-        // editor overlay instead (§6).
+        // editor overlay instead.
         if editing == Some(&e.id) {
             continue;
         }
@@ -311,7 +311,7 @@ fn selection_rotation(
 }
 
 /// The style an element paints with this frame: its own, or the base overlaid
-/// with the animation override's opacity / fill (§1.C interpolates only those
+/// with the animation override's opacity / fill (interpolates only those
 /// visual attributes; the rest of the register is held).
 fn anim_style(base: &ElementStyle, a: Option<&AnimatedElement>) -> ElementStyle {
     match a {
@@ -328,7 +328,7 @@ fn anim_style(base: &ElementStyle, a: Option<&AnimatedElement>) -> ElementStyle 
 /// applied by pushing the element's own transform, so geometry is expressed in
 /// the unrotated world frame (matching hit-testing, `hit.rs`). When `anim` is
 /// `Some`, the element is mid-transition: its transform, bounds and opacity /
-/// fill come from the Smart Animate override instead of the static display (§1.C).
+/// fill come from the Smart Animate override instead of the static display.
 fn paint_element<S: DrawSurface>(
     surface: &mut S,
     e: &DisplayElement,
@@ -357,7 +357,7 @@ fn paint_element<S: DrawSurface>(
             }
         }
         // An image paints its decoded pixels when they have arrived, scaled to
-        // the element AABB (the rect is stored at the imported aspect, §5.B); a
+        // the element AABB (the rect is stored at the imported aspect,); a
         // hash not yet in the store paints a placeholder box until a later frame
         // carries the media. `draw_image` maps through the active element
         // transform, so a rotated image rotates with its box.
@@ -378,7 +378,7 @@ fn paint_element<S: DrawSurface>(
             fill_and_stroke(surface, &rect_path(bounds), &style);
         }
         // A sticky note paints a small drop shadow, then its coloured card here;
-        // the body string is drawn on top in the screen-space text pass (§2.C). A
+        // the body string is drawn on top in the screen-space text pass. A
         // free `Text` element has no card, so it paints nothing in the geometry
         // pass. `style.corner` is 0 (Miro-style rectangle), so `roundrect_path`
         // degenerates to a plain rectangle.
@@ -395,7 +395,7 @@ fn paint_element<S: DrawSurface>(
             );
         }
         DisplayGeom::Text(_) => {}
-        DisplayGeom::Group => {} // paints nothing (§2.F bis)
+        DisplayGeom::Group => {} // paints nothing
     }
     surface.pop_transform();
 }
@@ -426,7 +426,7 @@ fn paint_text<S: DrawSurface>(
     if text.is_empty() {
         return;
     }
-    // Mid-transition, the body follows the tweened bounds and opacity (§1.C); the
+    // Mid-transition, the body follows the tweened bounds and opacity; the
     // font attributes and (when unset) color are held from the static style.
     let bounds = anim.map(|a| a.bounds).unwrap_or(e.bounds);
     let opacity = anim.map(|a| a.opacity).unwrap_or(e.style.opacity);
@@ -434,15 +434,15 @@ fn paint_text<S: DrawSurface>(
     let sb = world_rect_to_screen(bounds, cam);
     // A sticky's font tracks the note size unless the style carries an explicit
     // override (size > 0); a text element uses its own style size. Zoom is applied
-    // on top for crisp glyphs (§6).
+    // on top for crisp glyphs.
     let base_size = sticky_or_style_font_size(is_sticky, &e.style, bounds);
     let font_size = (base_size as f64 * cam.zoom) as f32;
     // Body inset: the same padding the inline editor applies, so the static text
     // and the in-edit text share one origin + wrap width and the body does not
-    // jump / re-wrap when entering or leaving edit (§6). Single source of truth.
+    // jump / re-wrap when entering or leaving edit. Single source of truth.
     let pad = super::edit::InlineEditor::pad(cam.zoom);
     let wrap_w = (sb.width() - 2.0 * pad).max(1.0) as f32;
-    // Text (foreground) colour, §2.E (see `resolved_text_ink`): `None` means "use
+    // Text (foreground) colour, (see `resolved_text_ink`): `None` means "use
     // the theme text colour" (only a text element with neither text_color nor fill).
     let color = resolved_text_ink(is_sticky, e.style.text_color, fill)
         .map(|c| argb(c, opacity))
@@ -464,7 +464,7 @@ fn paint_text<S: DrawSurface>(
     // A rotated element rotates its body too: the glyph run origins and the
     // decoration endpoints are mapped through a rotation about the note's
     // screen-space center, so the text follows the card instead of staying
-    // axis-aligned (toile-ui §5quinquies.A). `None` (no rotation) keeps the fast
+    // axis-aligned (toile-board-rendering). `None` (no rotation) keeps the fast
     // pure-translation path.
     let rot = text_rotation(e, anim);
     let rot_tf = (rot != 0.0).then(|| rotate_about(sb.center(), rot));
@@ -504,8 +504,8 @@ fn paint_text<S: DrawSurface>(
 }
 
 /// Paint the transient overlay: find highlights, the selection bounding box + 8
-/// resize handles + the rotate handle, in screen space (toile-ui §2 pass 3, §7,
-/// §5quater). The selection box is skipped for an empty selection, but find
+/// resize handles + the rotate handle, in screen space (`toile-selection`, pass 3).
+/// The selection box is skipped for an empty selection, but find
 /// highlights are painted regardless (a search can be active with nothing
 /// selected).
 #[allow(clippy::too_many_arguments)]
@@ -518,7 +518,7 @@ pub fn paint_overlay<S: DrawSurface>(
     preview: Option<&Preview>,
     find_hits: &[ElementId],
     find_focus: Option<&ElementId>,
-    // Live transform overrides for an in-flight resize / rotate / move (§5): when
+    // Live transform overrides for an in-flight resize / rotate / move: when
     // an entry exists for a selected id, the selection box + handles follow its
     // preview bounds instead of the committed geometry, so they stay glued to the
     // object during the drag. Empty at rest.
@@ -529,7 +529,7 @@ pub fn paint_overlay<S: DrawSurface>(
         paint_preview(surface, p, cam, palette);
     }
 
-    // Find highlights (§5quater): outline every matching element visible in the
+    // Find highlights: outline every matching element visible in the
     // culled set, with a heavier outline on the focused hit. Off-screen hits
     // simply have no box until the camera (recentered on `focus`) brings them in.
     paint_find_highlights(surface, find_hits, find_focus, vp, cam, palette);
@@ -605,7 +605,7 @@ pub fn paint_overlay<S: DrawSurface>(
     }
 }
 
-/// Paint an in-flight gesture preview (§5). Marquee is a thin screen-space
+/// Paint an in-flight gesture preview. Marquee is a thin screen-space
 /// outline; the shape / connector / pen / stroke previews are drawn in world
 /// space under the camera transform with a zoom-compensated 1.5 px line so they
 /// track the geometry they will commit to.
@@ -660,7 +660,7 @@ fn element_bounds(vp: &DisplayViewport, id: &ElementId) -> Option<Rect> {
 }
 
 /// World union AABB of the selection for the overlay box, honoring any in-flight
-/// gesture override (§5): a selected id present in `gesture` contributes its live
+/// gesture override: a selected id present in `gesture` contributes its live
 /// preview bounds, otherwise its committed display bounds. `None` when nothing
 /// selected is in the culled set.
 fn selection_preview_bounds(
@@ -687,7 +687,7 @@ fn selection_preview_bounds(
     acc
 }
 
-/// Outline the find matches present in the culled set (§5quater). Every hit gets
+/// Outline the find matches present in the culled set. Every hit gets
 /// a light box; the focused hit gets a heavier one in the selection accent so it
 /// stands out as the current match.
 fn paint_find_highlights<S: DrawSurface>(
@@ -792,7 +792,7 @@ mod tests {
         assert_eq!(fills, 2);
     }
 
-    // The §6 "camera pass" test, host-run against the mock surface: with a Smart
+    // The "camera pass" test, host-run against the mock surface: with a Smart
     // Animate override in the map, the animated element paints with the tweened
     // opacity / fill instead of its static style, while an un-overridden element
     // keeps its own. Exercises the render side of the playback -> camera wiring.
@@ -894,7 +894,7 @@ mod tests {
 
     // A sticky note paints a coloured card in the geometry pass: exactly the bug
     // behind "clicking Sticky does nothing" -- an empty sticky used to derive as
-    // Text and paint no background, so it was invisible (toile-logic §2.C).
+    // Text and paint no background, so it was invisible (toile-styles).
     #[test]
     fn sticky_paints_a_colored_card() {
         let fill = 0xFFFE_F08A; // sticky yellow
@@ -924,7 +924,7 @@ mod tests {
         );
         assert!(shadow, "a sticky must paint a drop shadow behind its card");
         // Any glyphs the body produces use the fixed ink, never the card colour
-        // (the ink is independent of `fill`, §2.C). Font-availability agnostic:
+        // (the ink is independent of `fill`,). Font-availability agnostic:
         // if no glyphs are shaped this simply holds vacuously.
         let card_color = argb(fill, 1.0);
         let ink = argb(STICKY_INK, 1.0);
@@ -1001,7 +1001,7 @@ mod tests {
 
     // A free `Text` element has no card: the geometry pass paints nothing for it,
     // so it emits no FillPath (only its glyphs, in the text pass). This is what
-    // keeps Sticky and Text visually distinct (toile-logic §2.C).
+    // keeps Sticky and Text visually distinct (toile-styles).
     #[test]
     fn text_element_paints_no_card() {
         let vp = DisplayViewport {
@@ -1025,7 +1025,7 @@ mod tests {
 
     // An `Image` element whose hash is in the store paints real pixels
     // (`DrawImage`), scaled to its AABB; one whose hash is absent falls back to
-    // a placeholder box (a path fill), per toile-interop §5.B.
+    // a placeholder box (a path fill), per toile-media.
     #[test]
     fn image_paints_pixels_when_resolved_else_placeholder() {
         let bounds = Rect::new(0.0, 0.0, 40.0, 20.0);
@@ -1107,7 +1107,7 @@ mod tests {
             None,
             &HashMap::new(),
         );
-        // 4 corner handles + 1 rotate handle = 5 filled squares (corners-only §7).
+        // 4 corner handles + 1 rotate handle = 5 filled squares (corners-only).
         let handle_fills = surface
             .ops()
             .iter()

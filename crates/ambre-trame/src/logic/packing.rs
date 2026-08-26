@@ -1,5 +1,5 @@
 // ambre-trame/src/logic/packing.rs
-// Style helpers for the Logic thread (`-ui.md` sec.5bis): merging a toolbar
+// Style helpers for the Logic thread (`trame-cell-styles`): merging a toolbar
 // `StylePatch` into a cell's `CellStyle`, and rendering a numeric value per its
 // number format. The CRDT no longer packs style into an i64 bit-mask: a cell's
 // whole style is one atomic `cellstyle_{sheet}` register (see `schema.rs` /

@@ -121,7 +121,7 @@ impl LogicState {
                 self.docs.remove(&document_id);
                 // Drop any in-flight service routes for this document: a response
                 // arriving after close has no engine to feed and must not forward
-                // to the UI as a stray API event (`toile-interop §5`).
+                // to the UI as a stray API event (`toile-media`).
                 self.rest_routes.retain(|_, d| *d != document_id);
                 self.send_to_sync(SyncCommand::CloseDocument { document_id });
             }
@@ -142,7 +142,7 @@ impl LogicState {
             }
             LogicCommand::LoadFonts { faces } => {
                 // Seed the PDF-export FontContext once with the base faces the
-                // Main thread fetched (`toile-interop §3.A`). Local-only: nothing
+                // Main thread fetched (`toile-pdf-export`). Local-only: nothing
                 // is sent to Sync. A second seeding is ignored -- the faces are
                 // already registered and export needs them exactly once.
                 if self.export_cx.is_none() {
@@ -171,14 +171,14 @@ impl LogicState {
             // (which carries the `doc_type`), so no event here mutates state.
             LogicEvent::Rest { id, evt } => {
                 // A response to a request this Logic thread issued on behalf of a
-                // document (`toile-interop §5`) is fed back into the owning engine
+                // document (`toile-media`) is fed back into the owning engine
                 // instead of forwarded to the UI. UI-issued requests are absent
                 // from `rest_routes` and fall through to the verbatim forward.
                 if let Some(document_id) = self.rest_routes.remove(&id) {
                     self.route_service_event(document_id, id, evt);
                     return;
                 }
-                // `SessionReady` also seeds the canonical `UserId` (§7): capture
+                // `SessionReady` also seeds the canonical `UserId`: capture
                 // it for later opens and push it into every already-open document
                 // before forwarding the event verbatim to the UI.
                 if let RestEvent::SessionReady { user_id, .. } = &evt {
@@ -247,7 +247,7 @@ impl LogicState {
             LogicEvent::DocumentReady { document_id, role } => {
                 // Sync has now resolved our real role from the members response;
                 // it supersedes the optimistic `Owner` the slot was opened with
-                // (architecture §2.D). A ready for a document already closed is
+                // (architecture). A ready for a document already closed is
                 // simply nothing to record.
                 if let Some(doc) = self.docs.get_mut(&document_id) {
                     doc.role = role;
@@ -353,10 +353,10 @@ impl LogicState {
                 code,
                 message,
             } => {
-                // A failure correlated to a document's own request (`toile-interop
-                // §5`) aborts its pending import rather than surfacing a raw API
-                // error to the UI. Uncorrelated errors (id absent, or not routed)
-                // forward verbatim, exactly as before.
+                // A failure correlated to a document's own request
+                // (`toile-media`) aborts its pending import rather than
+                // surfacing a raw API error to the UI. Uncorrelated errors (id
+                // absent, or not routed) forward verbatim, exactly as before.
                 if let Some(id) = id
                     && let Some(document_id) = self.rest_routes.remove(&id)
                 {
@@ -378,7 +378,7 @@ impl LogicState {
 // Tests — the dispatcher is 100% pure Rust (no wasm glue), so the whole routing
 // layer is exercisable on the host with mock flume channels. These pin the
 // command/event mapping that is otherwise hand-written boilerplate (see the
-// "P3 pass-through" open question in ambre-spec-architecture).
+// service plane of ambre-spec-message-bus.md).
 // -----------------------------------------------------------------------------
 
 #[cfg(test)]
@@ -480,7 +480,7 @@ mod tests {
 
     #[test]
     fn session_ready_seeds_user_id_into_open_and_future_toile_docs() {
-        // #1 (§7): SessionReady seeds `my_user_id` into every already-open
+        // #1: SessionReady seeds `my_user_id` into every already-open
         // document and into any opened afterwards.
         let (mut state, _ui, _sync) = harness();
         let already_open = DocumentId::new();
@@ -652,7 +652,7 @@ mod tests {
         });
 
         // The engine is never reached: no display event, and above all no CRDT
-        // delta on its way to the server (architecture §2.D).
+        // delta on its way to the server (architecture).
         assert!(ui_rx.try_recv().is_err(), "viewer edit produced a UI event");
         assert!(
             sync_rx.try_recv().is_err(),
@@ -723,7 +723,7 @@ mod tests {
         );
     }
 
-    // -- Composition: the registry is flat (§2.I) ------------------------------
+    // -- Composition: the registry is flat ------------------------------
     //
     // A `doc_embed` child is an ordinary entry in `docs`, keyed by its own id, so
     // a command for it is addressed straight to it and never travels through the
@@ -767,7 +767,7 @@ mod tests {
         });
 
         // Exactly one delta, keyed on the child. Gating this on the board's role
-        // would deny a viewer an edit to a document they own inside it (§2.D).
+        // would deny a viewer an edit to a document they own inside it.
         assert_eq!(updated_docs(&sync_rx), vec![child]);
     }
 
@@ -819,7 +819,7 @@ mod tests {
         ));
     }
 
-    // -- Service-plane routing: interop media uploads (`toile-interop §5`) ------
+    // -- Service-plane routing: interop media uploads (`toile-media`) ------
     //
     // A Toile media import issues `UploadMedia` requests the dispatcher lowers to
     // `RestCommand`s and whose answering `RestEvent`s it feeds back into the
@@ -1010,7 +1010,7 @@ mod tests {
 
     /// `LoadFonts` seeds the export `FontContext` once and is local-only: it
     /// touches neither the UI nor the Sync plane, and a second seeding is a
-    /// no-op (`toile-interop §3.A`).
+    /// no-op (`toile-media`).
     #[test]
     fn load_fonts_seeds_export_context_once() {
         let (mut state, ui_rx, sync_rx) = harness();

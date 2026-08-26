@@ -120,7 +120,7 @@ pub(crate) fn mount_shell(
             connected: false,
         });
         *chrome_status_slot.borrow_mut() = Some(chrome_status);
-        // Multi-column sort dialog state (`-ui.md` sec.5.C): opened by `on_command`
+        // Multi-column sort dialog state (`trame-sort`): opened by `on_command`
         // and rendered in `AppRoot`, both inside this owner, so it needs no slot.
         let sort_dialog = RwSignal::new(None::<trame_chrome::SortDialogState>);
 

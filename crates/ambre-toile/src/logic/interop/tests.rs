@@ -1,5 +1,5 @@
 //! Integration tests for the interop converters against golden fixtures
-//! (`toile-interop` §7 DoD). Host tier only: pure functions, no network / MinIO.
+//! (`toile-import-export`). Host tier only: pure functions, no network / MinIO.
 //!
 //! Covers each mapped SVG node type -> expected command batch, an SVG round-trip
 //! (import -> export -> import stability), every safety-limit reject path aborting
@@ -27,7 +27,7 @@ fn only_cmd(batch: &ImportBatch) -> &ToileCommand {
 }
 
 // -----------------------------------------------------------------------------
-// Node-type mapping (§2.A)
+// Node-type mapping
 // -----------------------------------------------------------------------------
 
 #[test]
@@ -156,7 +156,7 @@ fn unstyled_kinds_keep_the_default_style() {
 }
 
 // -----------------------------------------------------------------------------
-// Safety limits (§2.D) -- each reject path aborts atomically (no commands)
+// Safety limits -- each reject path aborts atomically (no commands)
 // -----------------------------------------------------------------------------
 
 #[test]
@@ -230,7 +230,7 @@ fn malformed_svg_fails_to_parse() {
 }
 
 // -----------------------------------------------------------------------------
-// Embedded raster in SVG (§2.B) -> Image element + MediaBlob
+// Embedded raster in SVG -> Image element + MediaBlob
 // -----------------------------------------------------------------------------
 
 #[test]
@@ -251,7 +251,7 @@ fn embedded_png_maps_to_image_and_media_blob() {
 }
 
 // -----------------------------------------------------------------------------
-// SVG round-trip stability (§1 "deterministic export")
+// SVG round-trip stability ("deterministic export")
 // -----------------------------------------------------------------------------
 
 #[test]

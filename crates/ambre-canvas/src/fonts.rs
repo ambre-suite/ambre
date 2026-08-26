@@ -11,7 +11,7 @@
 // Flow (UI thread, single-threaded):
 //   1. `observe(text)` scans each shaped string for a codepoint belonging to a
 //      lazy script. The first sighting of a script kicks off an async
-//      `fetch()` of its face (same origin, no CDN -- see spec sec.3).
+//      `fetch()` of its face (same origin, no CDN -- `UI-THREAD-004`).
 //   2. The fetch resolves on this same thread (spawn_local) and drops the bytes
 //      into a shared inbox.
 //   3. Each frame `drain_into(font_cx)` registers any arrived faces into the
@@ -34,9 +34,9 @@ use rustc_hash::FxHashSet;
 /// The base font faces registered at startup: Noto Sans (regular / bold /
 /// italic / bold-italic, real faces selected by `FontWeight` / `FontStyle`) plus
 /// the alternate DejaVu serif and monospace families for the formatting toolbar
-/// picker (`-ui.md` sec.5bis). Together they cover Latin, Latin-Extended,
+/// picker (`trame-cell-styles`). Together they cover Latin, Latin-Extended,
 /// Cyrillic, and Greek; scripts outside that are fetched on demand by
-/// [`LazyFontLoader`]. Same-origin URLs (no CDN, see spec sec.3); a missing file
+/// [`LazyFontLoader`]. Same-origin URLs (no CDN, `UI-THREAD-004`); a missing file
 /// logs a warning and leaves that face absent rather than failing boot.
 #[cfg(target_arch = "wasm32")]
 const BASE_FONTS: [(&str, &str); 6] = [

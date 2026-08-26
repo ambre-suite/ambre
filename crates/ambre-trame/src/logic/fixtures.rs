@@ -1,15 +1,15 @@
 // ambre-trame/src/logic/fixtures.rs
-// Trame's half of the fixture loader surface (`ambre-spec-fixtures.md` §2.B).
+// Trame's half of the fixture loader surface (`ambre-spec-fixtures.md`).
 //
 // `shape_of` and `canonical_dump` are declared in `ambre-logic` over `DocState`;
 // their per-app bodies live here, next to the schema they read, for the same
-// reason §6 puts generators next to their engine: a schema change and the code
+// reason puts generators next to their engine: a schema change and the code
 // that decodes it move in one commit. `ambre-logic` only dispatches.
 //
 // Fixture code (I4): the whole module sits behind the non-default `fixtures`
 // feature and is unreachable from any client build. The determinism seam
-// (`TrameState::with_peer`) is *not* here -- it is engine API, documented in
-// `ambre-spec-trame-logic.md` §2 and ungated.
+// (`TrameState::with_peer`) is *not* here -- it is engine API, ungated, and
+// specified with the rest of the fixture surface in `ambre-spec-fixtures.md`.
 //
 // Part of the `TrameState` impl, split out by concern like `sync` and `docfile`.
 
@@ -22,7 +22,7 @@ use super::*;
 impl TrameState {
     /// The coarse shape of this workbook, as the manifest records it.
     ///
-    /// Counted from the CRDT rather than declared by the generator: §4 checks
+    /// Counted from the CRDT rather than declared by the generator: checks
     /// the manifest against a recomputed shape, and a generator declaring its own
     /// would assert only that it agrees with itself.
     ///
@@ -58,8 +58,8 @@ impl TrameState {
     ///
     /// **Not** the CRDT -- two workbooks agreeing on content still differ in op
     /// history, peer ids and commit timestamps, so no byte or state comparison
-    /// can express "same document by a different route" (§6). This is what the
-    /// frozen belt of §4 compares, and text means a failure prints a readable
+    /// can express "same document by a different route". This is what the
+    /// frozen belt of compares, and text means a failure prints a readable
     /// diff rather than a length mismatch.
     ///
     /// **Formula cells carry both representations** -- the stored source and the

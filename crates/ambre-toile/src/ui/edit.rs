@@ -1,6 +1,6 @@
 // ambre-toile/src/ui/edit.rs
 // ============================================================================
-// Inline text editor for sticky / text elements (toile-ui §6). A thin Toile
+// Inline text editor for sticky / text elements (toile-text-editing). A thin Toile
 // wrapper over the shared `ambre_canvas::TextEditor` core (parley `PlainEditor`
 // + font-free `EditIntent` queue, driven at paint time when a `FontContext` is
 // live). Trame's cell editor wraps the same core.
@@ -38,13 +38,13 @@ impl InlineEditor {
     /// note size, matching the static render (`render.rs`).
     pub fn open(elem: &DisplayElement, text: &str, palette: &Palette, is_sticky: bool) -> Self {
         let font = &elem.style.font;
-        // Text colour: same precedence as the static render (§2.E) so the in-edit
+        // Text colour: same precedence as the static render so the in-edit
         // body matches its committed look.
         let color =
             super::render::resolved_text_ink(is_sticky, elem.style.text_color, elem.style.fill)
                 .map(argb_text)
                 .unwrap_or(palette.cell_text);
-        // Size: sticky auto-sizes from bounds unless overridden (§6).
+        // Size: sticky auto-sizes from bounds unless overridden.
         let base_size =
             super::render::sticky_or_style_font_size(is_sticky, &elem.style, elem.bounds).max(1.0);
         let style = TextEditorStyle {
@@ -83,7 +83,7 @@ impl InlineEditor {
 
     /// The currently selected text, or `None` when the selection is collapsed
     /// (or an IME composition is active). Font-free: safe inside a native
-    /// clipboard `copy` / `cut` event (§5ter).
+    /// clipboard `copy` / `cut` event.
     pub fn selected_text(&self) -> Option<String> {
         self.core.selected_text()
     }
@@ -104,7 +104,7 @@ impl InlineEditor {
     /// Draw the selection band, glyphs and caret over the element (screen space).
     /// `origin` is the element's top-left screen corner + padding; the editor's
     /// local coordinates are offset by it. `show_caret` gates the blinking caret
-    /// bar (the caller toggles it on a timer, §6). Call after [`flush`](Self::flush).
+    /// bar (the caller toggles it on a timer,). Call after [`flush`](Self::flush).
     pub fn render<S: DrawSurface>(
         &mut self,
         surface: &mut S,

@@ -124,7 +124,7 @@ mod websocket;
 mod worker;
 
 // -----------------------------------------------------------------------------
-// Quarantine bounds (ambre-spec-sync.md §E)
+// Quarantine bounds (`ambre-spec-delta-order.md`)
 // -----------------------------------------------------------------------------
 
 /// Soft threshold: once this many updates are quarantined for a document, we ask
@@ -231,12 +231,12 @@ enum SyncEvent {
         server_created: bool,
         /// Members' Ed25519 signing keys -> canonical `UserId`, harvested from
         /// the same members response that carried the wrapped DocumentKey
-        /// (§ "Presence identity"). Seeds `SyncDocumentState::signing_keys` so
+        /// (`ambre-spec-membership.md`). Seeds `SyncDocumentState::signing_keys` so
         /// inbound ephemerals resolve to a spoof-proof author. Empty for a
         /// local-only open (no members response, hence no peers to resolve).
         signing_keys: Vec<([u8; 32], UserId)>,
         /// This client's own role on this document, read from its entry in the
-        /// same members response (architecture §2.D). `Role::Owner` for a
+        /// same members response (architecture). `Role::Owner` for a
         /// local-only open. Gates mutating commands in Logic as a UX measure;
         /// the server remains the sole authority.
         role: Role,
@@ -264,7 +264,7 @@ enum SyncEvent {
         id: RequestId,
         message: String,
     },
-    /// TOFU phase 1 (`ambre-spec-chrome.md §2.H`): the invitee was resolved and
+    /// TOFU phase 1 (`ambre-spec-key-verification.md`): the invitee was resolved and
     /// their exchange key fetched, with a formatted fingerprint. No key wrapped
     /// yet -- the Main thread decides trust before phase 2 wraps.
     InviteeKeyReady {
@@ -297,7 +297,7 @@ enum SyncEvent {
         id: RequestId,
         document_id: DocumentId,
         members: Vec<MemberInfo>,
-        /// Refreshed presence directory (§ "Presence identity"), harvested from
+        /// Refreshed presence directory (`ambre-spec-membership.md`), harvested from
         /// the same response. Membership just changed often enough for someone to
         /// ask for the list, so this is where a new member becomes resolvable and
         /// a revoked one stops. Ignored when the document is not open locally.
@@ -393,14 +393,14 @@ struct SyncDocumentState {
     /// value is silently dropped.
     ephemeral_remote_counters: HashMap<[u8; 32], u64>,
     /// Directory of this document's members' Ed25519 signing keys, mapping an
-    /// ephemeral author's verifying key to their canonical `UserId` (§ "Presence
-    /// identity"). Built from the members response already fetched at open and
+    /// ephemeral author's verifying key to their canonical `UserId`
+    /// (`ambre-spec-membership.md`). Built from the members response already fetched at open and
     /// rebuilt when membership changes. A key absent here is not resolved, so the
     /// frame is dropped rather than attributed to a guessed identity.
     ///
     /// This is a *membership* directory, not a *trust* store: it trusts the
     /// server's key mapping. Detecting a server that substitutes a member's keys
-    /// is the TOFU trusted-keys store's job (architecture §3) and is orthogonal.
+    /// is the TOFU trusted-keys store's job (architecture) and is orthogonal.
     signing_keys: HashMap<[u8; 32], UserId>,
     /// This client's own role on this document, resolved from the members
     /// response at open. Carried here rather than emitted straight through
@@ -410,7 +410,7 @@ struct SyncDocumentState {
     ///
     /// Defaults to `Role::Owner`: a document with no members response is
     /// local-only, and its creator owns it. The server stays authoritative
-    /// either way (architecture §2.D) -- this drives UX only.
+    /// either way (architecture) -- this drives UX only.
     role: Role,
     /// True between sending the post-open `RequestMissing` and receiving its
     /// `MissingUpdates` reply. The initial catch-up replay is the point at which
@@ -516,7 +516,7 @@ impl SyncDocumentState {
         true
     }
 
-    /// Replace the members' signing-key directory (§ "Presence identity").
+    /// Replace the members' signing-key directory (`ambre-spec-membership.md`).
     /// Called with the members response fetched at open, and again whenever
     /// membership changes, so a revoked member stops resolving.
     ///
@@ -528,7 +528,7 @@ impl SyncDocumentState {
     }
 
     /// Resolve the canonical `UserId` behind an ephemeral's authoring Ed25519
-    /// key (§ "Presence identity"). Presence must be keyed by a per-user
+    /// key (`ambre-spec-membership.md`). Presence must be keyed by a per-user
     /// identity, not by the per-device signing key, and the sender-supplied
     /// payload can never be trusted for identity -- so the key is matched
     /// against the members directory, on this trusted side.
@@ -1127,7 +1127,7 @@ mod ephemeral_tests {
         assert!(d.ephemeral_remote_counters.len() <= MAX_EPHEMERAL_REMOTE_AUTHORS);
     }
 
-    // -- Presence identity resolution (spec § "Presence identity") ------------
+    // -- Presence identity resolution (`sync`, "Presence identity") ------------
 
     #[test]
     fn author_resolves_to_the_member_behind_the_signing_key() {

@@ -1,6 +1,6 @@
 // ambre-chrome/src/app_shell.rs
 // ============================================================================
-// AppShell -- the CSS-grid chrome layout (ambre-spec-chrome.md, 2.B).
+// AppShell -- the CSS-grid chrome layout (ambre-spec-chrome.md, CHROME-009).
 //
 // Rows: header, command bar (contextual toolbar), content, status bar. The
 // content row hosts the wgpu `<canvas>` cell; the shell OWNS that element so

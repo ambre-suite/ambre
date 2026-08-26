@@ -1,27 +1,27 @@
 // ambre-toile/src/ui/viewport.rs
 // ============================================================================
-// ViewportTransform: the render thread's world <-> screen camera (toile-ui §3).
+// ViewportTransform: the render thread's world <-> screen camera (toile-viewport).
 //
 // Deliberately a distinct type from `ambre_bus::app::toile::Viewport` (the Logic
 // culling input): they carry identical fields but this one is the GPU transform,
 // updated locally and immediately on every pan / zoom for a jank-free gesture
-// (toile-ui §2). The UI forwards each change to Logic as `SetViewport`, but never
+// (toile-viewport). The UI forwards each change to Logic as `SetViewport`, but never
 // waits on it to paint. Pure geometry -- host-unit-tested, no `cfg(wasm32)`.
 // ============================================================================
 
 use ambre_bus::app::toile::Viewport;
 use ambre_draw::{Affine, Point, Rect, Size, Vec2};
 
-/// Minimum / maximum zoom, matching the Logic-side clamp (`Viewport`, §3).
+/// Minimum / maximum zoom, matching the Logic-side clamp (`Viewport`,).
 pub const MIN_ZOOM: f64 = 0.1;
 pub const MAX_ZOOM: f64 = 10.0;
 
 /// One press of the zoom-in / zoom-out button multiplies (or divides) the zoom
-/// by this factor (§5quinquies.E). A discrete notch, coarser than a wheel tick.
+/// by this factor. A discrete notch, coarser than a wheel tick.
 pub const ZOOM_STEP: f64 = 1.2;
 
 /// Fractional breathing room left around the fitted content on a Fit /
-/// Zoom-to-selection (§5quinquies.E): the content occupies `1 / (1 + FIT_PAD)`
+/// Zoom-to-selection: the content occupies `1 / (1 + FIT_PAD)`
 /// of each axis so it never touches the viewport edge.
 pub const FIT_PAD: f64 = 0.08;
 
@@ -76,7 +76,7 @@ impl ViewportTransform {
     }
 
     /// Zoom by `factor` about a screen anchor (typically the cursor), keeping the
-    /// world point currently under the anchor fixed on screen (§3). A factor > 1
+    /// world point currently under the anchor fixed on screen. A factor > 1
     /// zooms in. The zoom is clamped; at a clamp boundary the anchor still holds
     /// (the recomputed center uses the clamped zoom).
     pub fn zoom_about(&mut self, screen_anchor: Point, factor: f64) {
@@ -91,7 +91,7 @@ impl ViewportTransform {
     }
 
     /// Zoom by `factor` about the viewport center (the zoom-in / zoom-out button
-    /// affordance, §5quinquies.E): unlike `zoom_about` this keeps the world point
+    /// affordance,): unlike `zoom_about` this keeps the world point
     /// under the screen center fixed, so the board scales in place. Clamped.
     pub fn zoom_by_center(&mut self, factor: f64) {
         let center_screen = Point::new(self.size.width / 2.0, self.size.height / 2.0);
@@ -99,13 +99,13 @@ impl ViewportTransform {
     }
 
     /// Reset to 100% (1 screen-pixel per world-unit) keeping the current center
-    /// under the screen center (the `%` chip click, §5quinquies.E).
+    /// under the screen center (the `%` chip click,).
     pub fn reset_zoom(&mut self) {
         self.zoom = 1.0;
     }
 
     /// Fit `world` into the viewport with `pad_frac` breathing room on each axis,
-    /// centering the camera on the rect (Fit / Zoom-to-selection, §5quinquies.E).
+    /// centering the camera on the rect (Fit / Zoom-to-selection,).
     /// A zero-area or non-finite rect is a no-op (nothing to frame); the fit zoom
     /// is clamped to the supported range so a tiny rect does not blow past
     /// `MAX_ZOOM`. `pad_frac` grows the target extent so the content occupies
@@ -120,7 +120,7 @@ impl ViewportTransform {
     /// The `(center, zoom)` a [`fit_bounds`](Self::fit_bounds) would settle on,
     /// without mutating the camera: the pure fit solver. `None` for a zero-area
     /// or non-finite rect (nothing to frame). Shared by the instant Fit and by
-    /// the presentation camera glide, which lerps toward this target (§1.D).
+    /// the presentation camera glide, which lerps toward this target.
     pub fn fit_target(&self, world: Rect, pad_frac: f64) -> Option<(Point, f64)> {
         let (bw, bh) = (world.width(), world.height());
         if !(bw.is_finite() && bh.is_finite()) || bw <= 0.0 || bh <= 0.0 {
@@ -133,8 +133,9 @@ impl ViewportTransform {
     }
 
     /// Interpolate the camera from `from` toward a target center + zoom at phase
-    /// `t` (already eased), keeping the current `size` (the presentation glide,
-    /// §1.D). `t = 0` reproduces `from`, `t = 1` lands exactly on the target.
+    /// `t` (already eased), keeping the current `size` (the presentation glide of
+    /// `toile-presentation`). `t = 0` reproduces `from`, `t = 1` lands exactly on the
+    /// target.
     /// Pure -- host-tested; the caller assigns the result to `self`.
     pub fn glide(
         from: ViewportTransform,
@@ -165,7 +166,7 @@ impl ViewportTransform {
     }
 
     /// Project to the Logic-side `Viewport` for a `SetViewport` forward (the
-    /// culling input). Identical fields, a distinct type by design (§3).
+    /// culling input). Identical fields, a distinct type by design.
     pub fn to_bus_viewport(&self) -> Viewport {
         Viewport {
             center: self.center,

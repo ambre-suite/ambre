@@ -10,17 +10,18 @@
 /// snapshot -- address the *same* per-sheet containers (`cells_s0`, `rows_s0`,
 /// ...) and merge cleanly. Explicit additional sheets (a later step) get unique
 /// ids and populate `sheet_order`; with one sheet, `sheet_order` is left empty
-/// to avoid a duplicate `push` on merge (see `ambre-spec-trame-logic.md` §2).
+/// to avoid a duplicate `push` on merge (see `trame-schema`).
 pub(crate) const DEFAULT_SHEET: &str = "s0";
 
-/// Loro map holding sheet metadata: `{sheet_id -> name}`. Step 1 stores the
-/// name flat; the `{name: LoroText, hidden, tab_color}` sub-map of §2.B lands
-/// with the sheet-tabs UI.
+/// Loro map holding sheet metadata: `{sheet_id -> name}`. Step 1 stores the name
+/// flat; the `{name: LoroText, hidden, tab_color}` sub-map of `trame-schema`
+/// lands with the sheet-tabs UI.
 pub(crate) const SHEETS_MAP: &str = "sheets";
 
 /// `LoroMovableList` holding the tab-strip order as a sequence of `sheet_id`s
-/// (§2.B/§2.D). The implicit [`DEFAULT_SHEET`] is *not* eagerly pushed here (two
-/// fresh peers would each push it and converge to a duplicate); it is treated as
+/// (`trame-schema`, `trame-sheets`). The implicit [`DEFAULT_SHEET`] is *not*
+/// eagerly pushed here (two fresh peers would each push it and converge to a
+/// duplicate); it is treated as
 /// the implicit first tab by [`TrameState::sheet_order_ids`]. Explicit sheets
 /// are appended on [`TrameCommand::CreateSheet`].
 pub(crate) const SHEET_ORDER: &str = "sheet_order";
@@ -28,13 +29,13 @@ pub(crate) const SHEET_ORDER: &str = "sheet_order";
 /// Loro map holding workbook named ranges: `{name -> reference}` where the
 /// reference is an A1-syntax string, optionally sheet-qualified (`Sheet2!A1:B2`).
 /// LWW: the last writer of a given name wins. Resolved positionally at reseed
-/// time into [`TrameState::named`] (`ambre-spec-trame-logic.md` §8, Phase 2).
+/// time into [`TrameState::named`] (`trame-named-ranges`).
 pub(crate) const NAMED_RANGES_MAP: &str = "named_ranges";
 
 /// Maximum number of rows/columns a single write may materialize past the
 /// current used-range high-water mark. Bounds the pathological "lone value far
 /// down the grid" case that would otherwise create ~100k placeholder elements
-/// (see `ambre-spec-trame-logic.md` §2.A bis). A write beyond it is dropped.
+/// (see `trame-rows-and-columns`). A write beyond it is dropped.
 pub(crate) const MATERIALIZE_CAP: usize = 10_000;
 
 /// Commit origin tagging the implicit row/column scaffolding that a cell edit
@@ -46,11 +47,11 @@ pub(crate) const MATERIALIZE_ORIGIN: &str = "mat";
 
 /// Per-sheet container names (`cells_{sheet}`, etc.). Keyed by sheet id so a
 /// multi-sheet document keeps each sheet's cells/rows/columns/formatting
-/// isolated (§2.B).
+/// isolated (`trame-schema`).
 pub(crate) fn cells_map_name(sheet: &str) -> String {
     format!("cells_{sheet}")
 }
-/// Per-sheet cell-style map (`cellstyle_{sheet}`, `-ui.md` sec.5bis): one atomic
+/// Per-sheet cell-style map (`cellstyle_{sheet}`, `trame-cell-styles`): one atomic
 /// LWW register per styled cell, keyed by the stable id pair so the style follows
 /// its cell across structural ops. The value is the whole visual style of the
 /// cell -- bold/italic plus the full [`CellStyle`] (alignments, wrap, colours,
@@ -58,7 +59,7 @@ pub(crate) fn cells_map_name(sheet: &str) -> String {
 /// register's binary value. One register per cell (not one per attribute) is the
 /// convergence invariant: two peers that concurrently restyle the same cell race
 /// exactly once, so the merged style is always one writer's, never a per-attribute
-/// blend across containers (`ambre-spec-trame-logic.md` sec.2.B). Absence = the
+/// blend across containers (`trame-schema`, `TRAME-016`). Absence = the
 /// grid default style.
 pub(crate) fn cellstyle_map_name(sheet: &str) -> String {
     format!("cellstyle_{sheet}")
@@ -71,7 +72,7 @@ pub(crate) fn cols_list_name(sheet: &str) -> String {
 }
 /// Per-sheet merge map (`merges_{sheet}`): a LWW `LoroMap` keyed by the master
 /// (top-left) cell's stable id pair, with the bottom-right corner's id pair as
-/// value (`ambre-spec-trame-logic.md` §6). Keyed by stable ids so a merge
+/// value (`trame-cell-merges`). Keyed by stable ids so a merge
 /// follows its cells across inserts/deletes.
 pub(crate) fn merges_map_name(sheet: &str) -> String {
     format!("merges_{sheet}")
@@ -79,7 +80,7 @@ pub(crate) fn merges_map_name(sheet: &str) -> String {
 
 /// Per-sheet shared-filter definition map (`filters_{sheet}`): the active filter
 /// (column uid + kind), stored flat so it converges via LWW
-/// (`ambre-spec-trame-features.md` §1.A). Empty map = no filter.
+/// (`trame-shared-filter`). Empty map = no filter.
 pub(crate) fn filters_map_name(sheet: &str) -> String {
     format!("filters_{sheet}")
 }
@@ -87,14 +88,14 @@ pub(crate) fn filters_map_name(sheet: &str) -> String {
 /// Per-sheet hidden-row set (`filter_hidden_{sheet}`): `{row_uid -> true}` for
 /// every row the active filter hides. Kept separate from `rows_{sheet}` to avoid
 /// polluting the order list, and keyed by stable `row_uid` so the hidden set
-/// follows the data across a sort/insert (§1.A).
+/// follows the data across a sort/insert (`trame-shared-filter`).
 pub(crate) fn filter_hidden_map_name(sheet: &str) -> String {
     format!("filter_hidden_{sheet}")
 }
 
 /// Per-sheet column-width map (`col_widths_{sheet}`): `{col_uid -> width_px}` as
 /// an f64, keyed by the column's stable `Uid` so the width follows its column
-/// across inserts/deletes/reorders (`-logic.md` §9). Absence = the uniform
+/// across inserts/deletes/reorders (`trame-resize`). Absence = the uniform
 /// default [`DEFAULT_COL_WIDTH`]. LWW: concurrent resizes of the same column
 /// converge on the last writer, like any cell.
 pub(crate) fn col_widths_map_name(sheet: &str) -> String {

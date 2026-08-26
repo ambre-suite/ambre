@@ -6,8 +6,8 @@
 // seed bytes of their canonical `UserId`. Because the mapping is a pure
 // function of those 16 bytes -- no per-app state, no random salt -- the same
 // user keeps one colour across Prose, Trame and Toile, and a single colour
-// even when signed in from two devices (`ambre-spec-toile-ui.md` §8). Its home
-// is `ambre-draw` because that is the render-primitives crate every app's
+// even when signed in from two devices (`toile-presence`). Its
+// home is `ambre-draw` because that is the render-primitives crate every app's
 // canvas already depends on. It is seeded on the canonical `UserId` (not a raw
 // `Uuid`) so the newtype is preserved end-to-end through presence; this is the
 // sole reason `ambre-draw` takes a scoped `ambre-core` dependency (types only).

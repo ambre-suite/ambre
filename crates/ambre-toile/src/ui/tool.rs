@@ -1,6 +1,6 @@
 // ambre-toile/src/ui/tool.rs
 // ============================================================================
-// Tool state machine (toile-ui §5). `SelectTool` implements the Select tool
+// Tool state machine (toile-tools). `SelectTool` implements the Select tool
 // fully (move / resize / rotate / marquee); `ToolMachine` wraps it and the
 // creation tools (Shape / Connector / Draw / Pen / Sticky / Text), dispatching
 // each pointer event to the active tool and emitting exactly one `ToileCommand`
@@ -8,7 +8,7 @@
 //
 // The machine is pure: it maps (pointer event, current selection, DisplayViewport,
 // ViewportTransform) to an outcome, holding only in-flight draft state. Selection
-// itself is local UI state owned by the view (§7). Host-tested with synthetic
+// itself is local UI state owned by the view. Host-tested with synthetic
 // pointer sequences.
 // ============================================================================
 
@@ -32,7 +32,7 @@ pub enum Tool {
     Pen,
     /// Sticky note. Carries the card colour (ARGB) picked from the palette so a
     /// click places the note in that colour atomically (folded into
-    /// `CreateElement.fill`, toile-ui §5quinquies.A). `aria-pressed` compares by
+    /// `CreateElement.fill`, toile-tools). `aria-pressed` compares by
     /// discriminant, so any `Sticky(_)` reads active regardless of colour.
     Sticky(u32),
     Shape(ShapeKind),
@@ -46,14 +46,14 @@ pub enum Tool {
 const HANDLE_PICK_PX: f64 = 9.0;
 /// Screen-space grab band (physical px) around a selection edge: the whole side
 /// resizes (with a directional cursor), even though only the corners draw a
-/// visual square (toile-ui §7).
+/// visual square (toile-tools).
 const EDGE_GRAB_PX: f64 = 6.0;
 /// Rotate handle offset above the selection's top edge (physical px).
 pub const ROTATE_OFFSET_PX: f64 = 26.0;
 /// Drawn size of a square resize handle (physical px), used by the overlay.
 pub const HANDLE_SIZE_PX: f64 = 8.0;
 
-/// The cursor an in-flight Select gesture calls for (§5quinquies.A): a directional
+/// The cursor an in-flight Select gesture calls for: a directional
 /// resize / grab on a transform `Handle`, or a closed-hand move. Mapped to a CSS
 /// cursor string by the view (via `palette::resize_cursor`) so the cursor stays
 /// stable for the whole drag.
@@ -84,7 +84,7 @@ pub enum Handle {
 pub enum SelectOutcome {
     /// Nothing observable (idle move, or a drag step the view just repaints).
     None,
-    /// Local selection changed to this set (never a command / never synced, §7).
+    /// Local selection changed to this set (never a command / never synced,).
     SelectionChanged(Vec<ElementId>),
     /// A committed document mutation to forward to Logic.
     Command(ToileCommand),
@@ -163,7 +163,7 @@ impl SelectTool {
             let rot = element_rotation(display, &selection[0]);
             // The drawn box is `screen_b` rotated by `rot` about its center, so a
             // point hits a handle iff its de-rotated image hits the axis-aligned
-            // box (toile-ui §7). Press and hover share this de-rotation so they
+            // box (toile-selection). Press and hover share this de-rotation so they
             // always agree.
             let pick = unrotate_point(screen, screen_b.center(), rot);
             if let Some(h) = edge_handle_at(screen_b, pick) {
@@ -309,7 +309,7 @@ impl SelectTool {
         }
     }
 
-    /// The handle a resting hover targets, for the directional cursor (§5quinquies.A).
+    /// The handle a resting hover targets, for the directional cursor.
     /// Same hit-test as `pointer_down`, but pure (no drag started): returns `None`
     /// unless the selection is exactly one element and the pointer is on its edge /
     /// corner / rotate handle. Never called while a drag is in flight.
@@ -329,7 +329,7 @@ impl SelectTool {
         edge_handle_at(screen_b, unrotate_point(screen, screen_b.center(), rot))
     }
 
-    /// The cursor the in-flight drag calls for (§5quinquies.A), so it stays stable
+    /// The cursor the in-flight drag calls for, so it stays stable
     /// for the whole gesture regardless of where the pointer wanders. `None` at
     /// rest or during a marquee.
     pub fn gesture_cursor(&self) -> Option<GestureCursor> {
@@ -341,7 +341,7 @@ impl SelectTool {
         }
     }
 
-    /// Per-element live transform for the in-flight gesture (§5): `(id, bounds,
+    /// Per-element live transform for the in-flight gesture: `(id, bounds,
     /// rotation)` in world space, so the view can paint the real object being
     /// resized / rotated / moved before the command commits on release. Empty when
     /// no gesture (or a marquee) is in flight.
@@ -383,7 +383,7 @@ impl SelectTool {
 }
 
 // =============================================================================
-// Tool machine (§5): the canvas-side consumer of the active tool. Owns the
+// Tool machine: the canvas-side consumer of the active tool. Owns the
 // Select gesture machine plus the in-flight state of the creation tools (Shape /
 // Connector / Draw / Pen / Sticky / Text) and maps a pointer sequence to exactly
 // one `ToileCommand` on gesture end. Pure: it holds only in-flight draft state,
@@ -408,13 +408,13 @@ const PEN_DEDUP: f64 = 2.0;
 pub enum ToolOutcome {
     /// Nothing to act on (idle move, or a draft step the view just repaints).
     None,
-    /// Local selection changed to this set (never a command, never synced, §7).
+    /// Local selection changed to this set (never a command, never synced,).
     SelectionChanged(Vec<ElementId>),
     /// A committed document mutation to forward to Logic.
     Command(ToileCommand),
 }
 
-/// A local, unsynced overlay to paint while a gesture is in flight (§5).
+/// A local, unsynced overlay to paint while a gesture is in flight.
 #[derive(Clone, Debug)]
 pub enum Preview {
     /// Select rubber-band on empty canvas (world space).
@@ -468,7 +468,7 @@ enum Draft {
     Draw { points: Vec<StrokePoint> },
     /// A click-placed sticky / text element, committed on release. `fill` carries
     /// the sticky's picked card colour (`None` for a text element, which keeps its
-    /// per-kind default, §5quinquies.A).
+    /// per-kind default,).
     Place {
         kind: ElementKind,
         at: Point,
@@ -484,7 +484,7 @@ pub struct ToolMachine {
     select: SelectTool,
     /// Single-commit creation gesture in flight (Shape / Connector / Draw / Place).
     draft: Option<Draft>,
-    /// Vector pen nodes committed so far (built across clicks; §5bis).
+    /// Vector pen nodes committed so far (built across clicks;).
     pen: Vec<PenNode>,
     /// True while a pen node's control handle is being dragged.
     pen_dragging: bool,
@@ -536,10 +536,10 @@ impl ToolMachine {
         self.pen_dragging = false;
     }
 
-    /// Handle Escape at the tool layer (§5): cancel any in-flight gesture and, if
+    /// Handle Escape at the tool layer: cancel any in-flight gesture and, if
     /// a creation tool is armed, revert to Select so it stops silently placing
     /// elements on the next click. Returns `true` when the active tool changed, so
-    /// the caller can republish the shared active-tool signal (§5quinquies.A).
+    /// the caller can republish the shared active-tool signal.
     pub fn escape(&mut self) -> bool {
         self.cancel();
         if self.tool != Tool::Select {
@@ -721,7 +721,7 @@ impl ToolMachine {
         map_select(self.select.pointer_up(world, display))
     }
 
-    /// Double-click. Finishes the vector pen path (§5bis); a no-op otherwise.
+    /// Double-click. Finishes the vector pen path; a no-op otherwise.
     pub fn double_click(&mut self, _world: Point) -> ToolOutcome {
         if self.tool == Tool::Pen {
             self.finish_pen()
@@ -730,7 +730,7 @@ impl ToolMachine {
         }
     }
 
-    /// Build the pen path and emit it as a single `CreateElement` (§5bis).
+    /// Build the pen path and emit it as a single `CreateElement`.
     fn finish_pen(&mut self) -> ToolOutcome {
         self.pen_dragging = false;
         let mut nodes = std::mem::take(&mut self.pen);
@@ -758,7 +758,7 @@ impl ToolMachine {
         })
     }
 
-    /// The current overlay preview, derived from in-flight state (§5).
+    /// The current overlay preview, derived from in-flight state.
     pub fn preview(&self) -> Option<Preview> {
         if let Some(d) = &self.draft {
             return match d {
@@ -798,7 +798,7 @@ impl ToolMachine {
     }
 
     /// The handle a resting hover targets, for the directional resize cursor
-    /// (§5quinquies.A). `None` unless the Select tool is armed, no gesture is in
+    /// `None` unless the Select tool is armed, no gesture is in
     /// flight, and the pointer is on a single selection's edge / corner.
     pub fn hover_handle(
         &self,
@@ -813,13 +813,13 @@ impl ToolMachine {
         self.select.hover_handle(selection, display, cam, screen)
     }
 
-    /// Per-element live transform for the in-flight Select gesture (§5), forwarded
+    /// Per-element live transform for the in-flight Select gesture, forwarded
     /// so the view can preview the real object during resize / rotate / move.
     pub fn gesture_overrides(&self, display: &DisplayViewport) -> Vec<(ElementId, Rect, f64)> {
         self.select.gesture_overrides(display)
     }
 
-    /// The cursor the in-flight Select drag calls for (§5quinquies.A); `None`
+    /// The cursor the in-flight Select drag calls for; `None`
     /// unless a resize / rotate / move is in flight on the Select tool.
     pub fn gesture_cursor(&self) -> Option<GestureCursor> {
         if self.tool != Tool::Select {
@@ -848,7 +848,7 @@ fn stroke_point(world: Point) -> StrokePoint {
     }
 }
 
-/// Default freehand style: a solid stroke, no fill (§4).
+/// Default freehand style: a solid stroke, no fill.
 fn draw_style() -> ambre_bus::app::toile::ElementStyle {
     ambre_bus::app::toile::ElementStyle {
         fill: None,
@@ -864,7 +864,7 @@ fn element_bounds(display: &DisplayViewport, id: &ElementId) -> Option<Rect> {
 }
 
 /// The immediate enclosing group of `id` in the current display, if any (the
-/// `DisplayElement.group` edge, §2.F bis / §7). `None` for a top-level element or
+/// `DisplayElement.group` edge,). `None` for a top-level element or
 /// an id absent from the culled frame.
 fn enclosing_group_of(id: &ElementId, display: &DisplayViewport) -> Option<ElementId> {
     display.nodes.iter().find_map(|n| match n {
@@ -874,7 +874,7 @@ fn enclosing_group_of(id: &ElementId, display: &DisplayViewport) -> Option<Eleme
 }
 
 /// Whether `id` names a group node in the current display (its geometry is the
-/// derived member union; it paints nothing, §2.F bis).
+/// derived member union; it paints nothing,).
 pub(crate) fn is_group(id: &ElementId, display: &DisplayViewport) -> bool {
     display.nodes.iter().any(|n| {
         matches!(n, DisplayNode::Element(e) if &e.id == id
@@ -883,7 +883,7 @@ pub(crate) fn is_group(id: &ElementId, display: &DisplayViewport) -> bool {
 }
 
 /// Resolve a raw hit element to the selection target under the current group
-/// `scope` (§2.F bis / §7). Walk the enclosing-group chain from the hit upward:
+/// `scope`. Walk the enclosing-group chain from the hit upward:
 /// - no scope -> the top-most enclosing group (the whole group selects/transforms
 ///   as one), or the element itself if it is ungrouped.
 /// - inside a scope `s` -> the chain member one level below `s` (so a scoped click
@@ -911,7 +911,7 @@ pub(crate) fn resolve_group_target(
     }
 }
 
-/// The world point of an anchor on an element's AABB (§5).
+/// The world point of an anchor on an element's AABB.
 fn anchor_point(b: Rect, a: Anchor) -> Point {
     let c = b.center();
     match a {
@@ -939,7 +939,7 @@ fn nearest_anchor(b: Rect, p: Point) -> Anchor {
 }
 
 /// Build a `BezPath` from pen nodes: a cubic segment when either endpoint has a
-/// control handle, a straight line otherwise (§5bis).
+/// control handle, a straight line otherwise.
 fn pen_bezpath(nodes: &[PenNode]) -> BezPath {
     let mut p = BezPath::new();
     let Some(first) = nodes.first() else {
@@ -983,7 +983,7 @@ pub fn world_rect_to_screen(r: Rect, cam: &ViewportTransform) -> Rect {
 /// The 4 corner resize-handle centers (screen space) for a selection's screen
 /// bounds -- the only handles drawn as a **visual square**. The sides are still
 /// grabbable / resizable (see `edge_handle_at`), they just show no square, which
-/// keeps the box light (toile-ui §7).
+/// keeps the box light (toile-selection).
 pub fn resize_handle_points(b: Rect) -> [(Handle, Point); 4] {
     [
         (Handle::Nw, Point::new(b.x0, b.y0)),
@@ -1003,7 +1003,7 @@ pub fn rotate_handle_point(b: Rect) -> Point {
 /// proximity to their point (`HANDLE_PICK_PX`), while the 4 sides test by a grab
 /// band (`EDGE_GRAB_PX`) along the full length of the side -- so a side resizes
 /// (with a directional cursor) even though only the corners draw a visual square
-/// (toile-ui §7). Corners win over sides (tested first), so a corner press always
+/// (toile-selection). Corners win over sides (tested first), so a corner press always
 /// resizes diagonally. Used by both `pointer_down` (start a resize/rotate) and
 /// `hover_handle` (pick the cursor), so press and hover always agree.
 fn edge_handle_at(screen_b: Rect, screen: Point) -> Option<Handle> {
@@ -1528,7 +1528,7 @@ mod tests {
     #[test]
     fn resize_preview_then_release_emits_exactly_one_command() {
         // A move step feeds the live preview, but the gesture still commits a
-        // single ResizeElement on release (undo granularity, toile-logic §949).
+        // single ResizeElement on release (undo granularity, toile-undo).
         let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
         let disp = viewport(vec![rect_elem("a", bounds)]);
         let cam = cam();
@@ -1607,7 +1607,7 @@ mod tests {
     fn sticky_click_creates_sticky_with_empty_text_and_picked_fill() {
         let mut m = ToolMachine::new();
         // The tool carries the picked card colour; a click must place the sticky
-        // in that colour (folded into CreateElement.fill, §5quinquies.A).
+        // in that colour (folded into CreateElement.fill,).
         let picked = 0xFFFF_00FF;
         m.set_tool(Tool::Sticky(picked));
         let disp = empty_display();

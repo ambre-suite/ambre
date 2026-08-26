@@ -40,15 +40,8 @@ pub(crate) fn dispatch_to_current(
     }
 }
 
-/// Service the toolbar/menu Paste button by reading the OS clipboard with the
-/// async Clipboard API (`-ui.md` sec.5.E). `read()` recovers the private Ambre
-/// payload (full styled / formula-reindexed paste) when present, else the plain
-/// text; on a browser without `read()` it falls back to `readText()`. The chosen
-/// content is handed to the Logic thread, which resolves the target from the
-/// tracked active cell. Best-effort: a clipboard the browser will not surface
-/// (permission denied, unsupported) is logged, not fatal -- Ctrl+V still works.
 /// Open a transient `<input type="file">` picker for a CSV import
-/// (`-interop.md` §4.A). On selection it reads the file bytes off the main
+/// (`trame-import-export`). On selection it reads the file bytes off the main
 /// thread (`File::array_buffer`) and sends a [`TrameCommand::ImportCsv`] to the
 /// Logic thread, which converts them into a new sheet client-side. The picker
 /// element is never attached to the DOM; the change closure is leaked because the
@@ -102,6 +95,18 @@ pub(crate) fn open_csv_picker(
     input.click();
 }
 
+/// Service the toolbar/menu Paste button by reading the OS clipboard with the
+/// async Clipboard API. `read()` recovers the private Ambre payload (full styled
+/// / formula-reindexed paste) when present, else the plain text; on a browser
+/// without `read()` it falls back to `readText()`. Best-effort: a clipboard the
+/// browser will not surface (permission denied, unsupported) is logged, not
+/// fatal -- Ctrl+V still works.
+///
+/// **This is a second paste path and it is a known defect** -- it takes neither
+/// the ownership token nor the view's in-memory copy, so it cannot reach the two
+/// best rungs of the fidelity ladder, and it names Trame inside the launcher, so
+/// the button does nothing in any other application (`ambre-spec-clipboard.md`,
+/// `UI-THREAD-024`, `UI-THREAD-025`).
 pub(crate) async fn paste_from_clipboard(
     read_promise: js_sys::Promise,
     clipboard: web_sys::Clipboard,
@@ -391,7 +396,7 @@ pub(crate) fn install_canvas_context_menu(ctx_menu: RwSignal<Option<(f64, f64)>>
 
 /// Whether a keyboard event targets an editable element (a text `<input>` /
 /// `<textarea>` or a contenteditable host), in which case a bare tool chord must
-/// not be stolen (`toile-ui §5quinquies.A`). The pure decision lives in
+/// not be stolen (`toile-tools`). The pure decision lives in
 /// `ambre_toile::ui::palette::is_editable_tag` (host-tested); this only reads the
 /// tag name and contenteditable flag off the event target.
 fn target_is_editable(event: &web_sys::KeyboardEvent) -> bool {
@@ -436,9 +441,10 @@ pub(crate) fn install_command_keys(
             let Some(id) = keymap.resolve(chord) else {
                 return;
             };
-            // Toile board: the tool chords (§5quinquies.A) and Find (§5quater) are
-            // UI-only intents handled here; every other Toile id is decoded canvas-
-            // side in `ToileView::handle_key`, so it is left for that listener.
+            // Toile board: the tool chords (`toile-tools`) and
+            // Find (`toile-find`) are UI-only intents handled here;
+            // every other Toile id is decoded canvas-side in
+            // `ToileView::handle_key`, so it is left for that listener.
             if boot_is_toile {
                 if let Some(tool) = toile_chrome::tool_for_command(id) {
                     // Don't steal a bare tool key while the user is typing (the
@@ -458,8 +464,8 @@ pub(crate) fn install_command_keys(
                 return;
             }
             event.prevent_default();
-            // Find & Replace (sec.5.G) are UI-only intents: open the DOM panel in
-            // the matching mode rather than dispatching to the Logic thread.
+            // Find & Replace (`trame-find-replace`) are UI-only intents: open the
+            // DOM panel in the matching mode, not dispatch to the Logic thread.
             if id == trame_chrome::FIND {
                 find_state.set(Some(trame_chrome::FindReplaceState {
                     mode: trame_chrome::FindMode::Find,

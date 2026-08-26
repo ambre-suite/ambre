@@ -1,10 +1,10 @@
 // ambre-toile/src/chrome/presenter.rs
 // ============================================================================
-// The presenter overlay panel (toile-features §1.D): a floating Leptos chrome
+// The presenter overlay panel (toile-presentation): a floating Leptos chrome
 // panel shown while presentation mode is active. It surfaces the active slide's
 // speaker notes (editable, char-CRDT via `EditNotes`) plus a `k / n` counter and
 // Prev / Next / Exit navigation. It is chrome, not a WebGPU overlay
-// (`ambre-spec-toile-ui.md` lines 72-74) -- the same split as the Find panel:
+// (`toile-presentation`) -- the same split as the Find panel:
 // a pure model in `ui::presenter` (host-tested) and this wasm-only `#[component]`.
 //
 // The launcher feeds it four signals (open / index / count / notes) mirrored
@@ -24,7 +24,7 @@ use crate::ui::presenter::{notes_delta, slide_counter_label};
 /// `Exit` -> `ExitPresent`, `EditNotes` -> `EditNotes { frame, delta }` (the
 /// launcher supplies the active `frame` from the last slide change),
 /// `ToggleBroadcast` -> `SetPresentBroadcast`, `Follow` -> `FollowPresenter`
-/// (§1.B "Follow presenter").
+/// ("Follow presenter").
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PresenterIntent {
     Prev,
@@ -42,7 +42,7 @@ pub enum PresenterIntent {
 /// change. `broadcasting` reflects the local broadcast toggle; `following` the
 /// active follow target; `presenter_peer` the latest peer seen broadcasting (it
 /// drives whether the Follow affordance is shown). `on_intent` emits navigation,
-/// note edits, and the broadcast / follow toggles (§1.B "Follow presenter").
+/// note edits, and the broadcast / follow toggles ("Follow presenter").
 #[component]
 pub fn PresenterPanel(
     open: RwSignal<bool>,
@@ -102,7 +102,7 @@ pub fn PresenterPanel(
                         >
                             "Exit"
                         </button>
-                        // Broadcast my playback position to peers (§1.B). Active
+                        // Broadcast my playback position to peers. Active
                         // styling reflects the current toggle.
                         <button
                             class="ambre-presenter-broadcast"
@@ -114,7 +114,7 @@ pub fn PresenterPanel(
                         >
                             "Broadcast"
                         </button>
-                        // Follow the current broadcaster (§1.B). Shown only when a
+                        // Follow the current broadcaster. Shown only when a
                         // peer is actively broadcasting; toggles follow on / off.
                         {move || {
                             presenter_peer.get().map(|peer| {

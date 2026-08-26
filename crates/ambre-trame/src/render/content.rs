@@ -18,7 +18,7 @@ pub struct CellContent<'a> {
     pub text: &'a str,
     pub bold: bool,
     pub italic: bool,
-    /// Underline run drawn under the glyphs (`-ui.md` sec.5bis).
+    /// Underline run drawn under the glyphs (`trame-cell-styles`).
     pub underline: bool,
     /// Strikethrough run drawn through the glyphs.
     pub strikethrough: bool,

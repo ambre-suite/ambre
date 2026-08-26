@@ -1,12 +1,12 @@
-//! Raster image import (`toile-interop` §2.B / §5.B).
+//! Raster image import (`toile-import-export`).
 //!
 //! Decodes PNG/JPG bytes with the pure-Rust `image` crate, bounds the decoded
-//! dimensions against [`Limits`] (§2.D), builds a small placeholder thumbnail for
-//! the §5.B first paint, and emits a single `image` `CreateElement` plus the
+//! dimensions against [`Limits`], builds a small placeholder thumbnail for
+//! the first paint, and emits a single `image` `CreateElement` plus the
 //! plaintext [`MediaBlob`] the Sync layer will encrypt/upload. Interop never
 //! hashes: the blob's content address is a **pre-upload placeholder token**
 //! (`pending:{n}`) that Phase 1 rewrites to the real blake2b once Sync returns
-//! `MediaUploaded { content_hash }` (§5.A).
+//! `MediaUploaded { content_hash }`.
 
 use std::io::Cursor;
 
@@ -18,17 +18,17 @@ use crate::logic::command::{InitContent, ToileCommand};
 use crate::logic::model::ElementKind;
 
 /// Largest edge (px) of the placeholder thumbnail stored inline in the media
-/// entry (§5.B). Small enough to paint instantly, large enough to preview.
+/// entry. Small enough to paint instantly, large enough to preview.
 const THUMB_MAX_EDGE: u32 = 256;
 
 /// The placeholder content-address token minted for the `n`-th media blob of an
-/// import. Not a hash -- interop does not hash (§5). Phase 1 replaces it with the
+/// import. Not a hash -- interop does not hash. Phase 1 replaces it with the
 /// blake2b `content_hash` the Sync thread returns.
 pub(super) fn pending_hash(index: usize) -> ContentHash {
     ContentHash(format!("pending:{index}"))
 }
 
-/// Import a single raster file (§2.B): decode, bound, thumbnail, and place one
+/// Import a single raster file: decode, bound, thumbnail, and place one
 /// `image` element at the origin sized to the native (clamped) resolution. The
 /// full-res plaintext rides in the returned [`MediaBlob`]; the element references
 /// it by the placeholder token.
@@ -50,7 +50,7 @@ pub fn import_raster(bytes: &[u8], limits: &Limits) -> Result<ImportBatch, Impor
 }
 
 /// Decode raster bytes into a [`MediaBlob`] under `hash`, enforcing the image
-/// dimension bound (§2.D). Shared by [`import_raster`] and the SVG `<image>` path.
+/// dimension bound. Shared by [`import_raster`] and the SVG `<image>` path.
 pub(super) fn decode_media(
     bytes: &[u8],
     limits: &Limits,
@@ -63,7 +63,7 @@ pub(super) fn decode_media(
 
     // Downscale to a placeholder thumbnail (preserves aspect ratio). PNG-encoded
     // so it round-trips losslessly and the UI can paint it before the full-res
-    // blob arrives (§5.B).
+    // blob arrives.
     let thumb_img = decoded.thumbnail(THUMB_MAX_EDGE, THUMB_MAX_EDGE);
     let mut thumb = Vec::new();
     thumb_img

@@ -48,7 +48,7 @@ impl fmt::Display for CellRef {
 ///
 /// Bounds are inclusive (`row_start..=row_end`, `col_start..=col_end`).
 /// MVP: positional only. Phase 1+ adds `RangeEndpoint::Specific(ListItemId)`
-/// and `EntireAxis` for whole-column/whole-row ranges (see spec §3.A).
+/// and `EntireAxis` for whole-column/whole-row ranges (`trame-formula-engine`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RangeDep {
     /// Local sheet index (see [`CellRef::sheet`]). Defaults to 0 via
@@ -124,14 +124,15 @@ impl RangeDep {
 // compiler resolves those against the current `SheetIndex` into the uid-anchored
 // forms below, which are what the bytecode, dependency graph, bytecode cache and
 // VM are keyed by. Binding to the row/column `Uid` is what makes a reference
-// follow the data through inserts, deletes and sorts (spec section 4.B / section 12).
+// follow the data through inserts, deletes and sorts
+// (`trame-formula-engine`).
 
 /// Engine-side identity of one axis (a row or a column) inside a compiled
 /// reference.
 ///
 /// Within the used range a reference binds to the row/column `Uid`, so it tracks
 /// the physical line through any reorder. Beyond the used range -- a *virtual*
-/// row/column that has no list element yet (spec section 2.A bis) -- there is no
+/// row/column that has no list element yet (`trame-rows-and-columns`) -- there is no
 /// `Uid` to bind, so the reference keeps the grid position it was typed at and
 /// evaluates `Empty` until that line is materialized (at which point a re-edit
 /// re-binds it to the new `Uid`).
@@ -395,7 +396,8 @@ impl fmt::Display for FormulaError {
 
 /// A single instruction in the stack VM bytecode.
 ///
-/// Compiled once per formula, executed on every recomputation (spec §4).
+/// Compiled once per formula, executed on every recomputation
+/// (`trame-formula-engine`).
 #[derive(Debug, Clone)]
 pub enum Op {
     // -- Stack literals --------------------------------------------------------
@@ -517,7 +519,7 @@ pub enum NameTarget {
 /// User input and named-range definitions carry a [`SheetQualifier::Name`]
 /// (display name). The canonical form persisted in the CRDT `v` text carries a
 /// [`SheetQualifier::Id`] (the stable `sheet_id`), so rename/reorder never
-/// invalidate the reference (spec section 2.D).
+/// invalidate the reference (`trame-sheets`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SheetQualifier {
     /// A display name (`Sheet2`, `'My Sheet'`).

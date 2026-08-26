@@ -1,8 +1,7 @@
 // ambre-trame/src/logic/convergence_tests.rs
 // ============================================================================
-// CRDT convergence property tests (Epic `ET`, `ambre-spec-trame-logic.md` §14;
-// `ambre-spec-architecture.md` §4 "Generalize proptest convergence beyond
-// ambre-crypto -- Trame first").
+// CRDT convergence property tests (Epic `ET`). Mandatory for every collaborative
+// CRDT state: `ambre-spec-testing.md`.
 //
 // `proptest` generates interleaved sequences of the document-mutating
 // `TrameCommand`s (`SetCellText` / insert-delete row-column / `SortRange` /
@@ -10,7 +9,8 @@
 // full CRDT history both ways. The invariant: after the exchange the two peers
 // observe an *identical* materialized grid -- same text, same formula results
 // (recompute determinism), same merge geometry. This exercises the own-uid cell
-// model (§2.A/§12): references must follow data across a concurrent sort, and
+// model (`trame-rows-and-columns`, `trame-formula-engine`): references must
+// follow data across a concurrent sort, and
 // structural ops on both peers must reconcile to one converged order.
 //
 // The exchange uses full snapshots rather than incremental `SendUpdate` deltas:
@@ -160,7 +160,8 @@ impl Op {
 
 /// Cell contents the generator picks from: plain numbers, short strings, and a
 /// few formulas that reference other window cells (so a concurrent sort can
-/// move the data out from under them -- the §12 guarantee under test).
+/// move the data out from under them -- the `trame-formula-engine` guarantee
+/// under test).
 fn text_strategy() -> impl Strategy<Value = String> {
     prop_oneof![
         (0i64..20).prop_map(|n| n.to_string()),
@@ -310,24 +311,22 @@ proptest! {
 }
 
 // ============================================================================
-// Concurrent whole-cell style edits (§2.B schema divergence).
+// Concurrent whole-cell style edits (`trame-schema`, `TRAME-016`).
 //
-// A cell's style does not live in one CRDT container: it is scattered over
-// `format_` (bold/italic mask), `style_` (packed rich mask), `fgcolor_`,
-// `bgcolor_`, `bordcolor{0..3}_`, `font_` and `numfmt_` -- up to 11 per-sheet
-// LoroMaps, each an independent LWW register keyed by the cell id pair.
+// A cell's whole style is one atomic LWW register in `cellstyle_{sheet}`, keyed
+// by the cell's stable id pair. An earlier schema scattered it over up to 11
+// per-attribute maps, where two peers restyling the same cell raced once per
+// container and nothing forced one writer to win every register.
 //
-// Two peers that concurrently rewrite the *same* cell's style as a whole
-// therefore race once per container, not once per cell. Nothing forces the
-// same writer to win every register. The invariant under test is atomicity of
-// a whole-cell style edit: the converged cell must carry a style one of the
-// two peers actually wrote -- never a per-attribute blend of both.
+// The invariant under test is the atomicity that replaced it: the converged
+// cell must carry a style one of the two peers actually wrote -- never a
+// per-attribute blend of both.
 // ============================================================================
 
 /// The observable style of a cell, as a peer renders it. Number format and
 /// decimals are absent on purpose: `DisplayCell` does not surface them (the
 /// Logic thread folds them into `text`), so they cannot be asserted here even
-/// though they occupy their own `numfmt_` container.
+/// though the register carries them.
 type StyleView = (
     bool,
     bool,

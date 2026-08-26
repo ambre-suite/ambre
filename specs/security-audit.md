@@ -33,6 +33,22 @@ Verified against the current tree. IDs are preserved for traceability.
 | M6 | Rate limiter fail-open + fixed-window burst | **OPEN** -- still fail-open (`allowing request`) and a fixed-window counter. |
 | M7 | OIDC discovery failure silently ignored | **OPEN** -- `main.rs` still `.ok().unwrap_or_default()`. |
 | M8 | `ambre-logic` persistence.rs dead code | **RESOLVED** -- `pub mod persistence;` is now declared in `lib.rs`. |
+
+### Re-verified against the tree, 2026-08-26
+
+The column above is dated and stays as written. Four of its `OPEN` entries were fixed in the code
+and the ledger was never updated, so a reader of the table alone would act on four findings that no
+longer exist. Each line below names the code that closes the entry.
+
+| ID | Now | Evidence |
+| :-- | :-- | :-- |
+| C1 | **RESOLVED** | `s3.rs` logs `blob_len` and carries the ban above the loop: "Never log `blob_str`: it carries `update_b64`, the E2EE ciphertext". |
+| C4 | **RESOLVED** | `db::get_snapshot` takes the path `document_id` and filters on it, which is the fix the section below prescribes. |
+| H2 | **RESOLVED** | `get_document` answers `NotFound` when the caller is neither a member nor the owner, so a non-member reads no routing metadata. |
+| H5 | **RESOLVED** | `ambre-bus/src/rest.rs` carries `SecretBytes` and `SecretString` with `Zeroizing` and a redacted `Debug`. |
+
+`H3` stays open, and it is the one an invariant row now holds: `SYNC-012` in
+`ambre-spec-membership.md` states the rule and reports what it now holds.
 | M9 | No HTTP timeouts in Sync thread | **OPEN** -- `sync/http.rs` still sets no per-request timeout. |
 | M10 | `WsError` does not trigger reconnection | **OPEN** -- `sync/lib.rs:1466` still only logs; no `schedule_reconnect()`. |
 
@@ -45,6 +61,10 @@ still `tracing::info!`-only no-ops, which is expected -- they are `Todo/` specs.
 ## CRITICAL (2)
 
 ### C4 -- Cross-document snapshot access (IDOR) in `snapshot_download_url`
+
+> **Resolved since this pass**, see the re-verification above. The report below is kept as written,
+> because the reasoning is what a reader needs the day the same shape appears elsewhere -- and the
+> section itself names two places to check for it.
 
 **Crate:** `ambre-server`
 **File:** `crates/ambre-server/src/routes/sync.rs:172-203`, `db.rs get_snapshot`
@@ -276,7 +296,7 @@ secret (`CryptoError::WeakPublicKey`). Cheap, and it future-proofs the wrap path
 **Files:** `ws/handler.rs:50-78`, `main.rs:315` (`TraceLayer::new_for_http()`)
 
 The access JWT is passed as `GET /api/ws?token=<jwt>`. This is a documented,
-justified choice (the browser WS API forbids custom headers -- spec `server section 478`).
+justified choice (the browser WS API forbids custom headers -- `server section 3`).
 The residual risk the spec does *not* call out: query strings land in reverse-
 proxy access logs, browser history, and `Referer`, and `TraceLayer` will log the
 request URI at DEBUG. A short-lived access token limits the window, but it's
@@ -473,7 +493,7 @@ Confirmed against the current tree:
   `ambre-canvas`, `ambre-bus` remain `unsafe`-free.
 - **`ambre-crypto` is NOT a dependency of `ambre-server`** -- the server verifies
   Ed25519 via `ed25519-dalek` directly and never links `DocumentKey`/`MasterSeed`/
-  Argon2 into its process. Least-privilege boundary held (spec `server section 948`).
+  Argon2 into its process. Least-privilege boundary held (`server section 6`).
 - **476 test functions** across unit/integration/wasm targets.
 
 ---
@@ -728,8 +748,8 @@ Each story carries its finding ID, the file to touch, and the concrete action.
 - [x] **M15** -- the server `TraceLayer` span records only the URI *path*, never
       the query string (the WS `?token=` JWT no longer reaches the access log);
       the reverse-proxy log-stripping requirement and a future one-time-ticket
-      option are documented in `ambre-spec-server.md` sec.3 and on `WsQuery`.
-      (`server/main.rs`, `ws/handler/mod.rs`, `spec-server.md`)
+      option are documented in `ambre-spec-session.md`, `SRV-031`, and on `WsQuery`.
+      (`server/main.rs`, `ws/handler/mod.rs`, `ambre-spec-session.md`)
 - [x] **M17** -- CORS is config-driven and default-deny: `CORS_ALLOWED_ORIGINS`
       (comma-separated) drives an explicit allow-list; `allow_origin(Any)` is only
       reachable behind `DEV_MODE` (logged at startup). Parsing guard:

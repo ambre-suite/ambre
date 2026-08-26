@@ -1,5 +1,5 @@
 //! Auto-layout spec register for [`ToileState`](super::ToileState)
-//! (`toile-features` §2). A frame can carry an [`AutoLayout`] spec so its
+//! (`toile-auto-layout`). A frame can carry an [`AutoLayout`] spec so its
 //! children are positioned by the pure `solve_layout` solver
 //! ([`crate::logic::autolayout`]) rather than by absolute coordinates.
 //!
@@ -8,8 +8,8 @@
 //! value register (not a container), concurrent sets from two peers converge by
 //! Loro's map register LWW, so no birth-seeding is needed (absent = free
 //! positioning). The **solved positions are derived on render, never persisted**
-//! (§8): persisting them would be redundant derived state that could desync from
-//! the spec, exactly like connector routing (`toile-logic §5`).
+//! persisting them would be redundant derived state that could desync from
+//! the spec, exactly like connector routing (`toile-connectors`).
 
 use loro::LoroValue;
 
@@ -21,10 +21,10 @@ use super::codec::str_of;
 use super::{AUTOLAYOUT, ToileState};
 
 impl ToileState {
-    /// Set (or clear, with `None`) a frame's auto-layout spec (§2). A single LWW
+    /// Set (or clear, with `None`) a frame's auto-layout spec. A single LWW
     /// register on the frame element; convergent and undoable (one `doc.commit()`
-    /// is one undo item, §8 bis). A missing element or a non-frame element is a
-    /// rejected no-op, mirroring `edit_notes` / `set_text`'s kind guard (§6). A
+    /// is one undo item,). A missing element or a non-frame element is a
+    /// rejected no-op, mirroring `edit_notes` / `set_text`'s kind guard. A
     /// pure no-op (clearing an absent spec, or re-writing a byte-identical spec)
     /// produces neither a commit nor a delta.
     pub(super) fn set_auto_layout(
@@ -78,7 +78,7 @@ impl ToileState {
     }
 
     /// The current auto-layout spec of `frame`, or `None` if it has none / is not
-    /// a frame / does not exist (§2). Test / derivation accessor.
+    /// a frame / does not exist. Test / derivation accessor.
     pub fn auto_layout(&self, frame: &FrameId) -> Option<AutoLayout> {
         let em = self.element_map(frame)?;
         let LoroValue::Binary(bytes) = em.get(AUTOLAYOUT)?.into_value().ok()? else {

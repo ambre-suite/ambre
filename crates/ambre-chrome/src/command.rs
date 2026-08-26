@@ -1,6 +1,6 @@
 // ambre-chrome/src/command.rs
 // ============================================================================
-// Chrome side of the command model (ambre-spec-ui.md, 2.C):
+// Chrome side of the command model (ambre-spec-commands.md):
 //
 //   CommandStates          reactive store of per-command runtime state, fed
 //                          ONLY by the UI-thread dispatcher (authoritative

@@ -2,13 +2,13 @@
 
 > Ambre is testable by design. Every new line must be reachable by an automated check, the UI
 > included. The doctrine, the verification regimes and the mechanism ladder are normative in
-> `specs/1-Foundations/ambre-spec-architecture.md`, section 4. This file routes you to a mechanism.
+> `specs/1-Foundations/ambre-spec-testing.md`. This file routes you to a mechanism.
 
 An invariant is written before the code, as `unimplemented`, and its `Verification` cell reads
 `not built -- lands with <Story>`, naming the roadmap Story that will build it. The day that code
 ships, the row names a `Verification` that runs in CI, or it turns `unverified` and counts as debt.
 A mechanism that no CI job reaches verifies nothing. Status values and the full grammar are
-normative in `specs/1-Foundations/ambre-spec-architecture.md`, section 4.
+normative in `specs/ambre-spec-template.md`, section 1.
 
 ## What you just wrote, and what proves it
 

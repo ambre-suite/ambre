@@ -21,7 +21,7 @@ impl SyncState {
                             .map(|e| {
                                 // E2EE: the name arrives as `name_enc`. Decrypt it
                                 // here (Sync) so the Logic/UI threads only ever see
-                                // plaintext (`ambre-spec-chrome.md 2.G` ZK note). A
+                                // plaintext (`ambre-spec-launcher.md`, CHROME-044). A
                                 // failed unwrap/decrypt renders as `None` ("Untitled").
                                 let name = e.name_enc.as_deref().and_then(|name_enc| {
                                     exchange_key.as_ref().and_then(|ek| {

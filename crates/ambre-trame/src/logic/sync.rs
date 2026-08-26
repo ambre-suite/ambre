@@ -177,7 +177,7 @@ impl TrameState {
         self.reseed_metrics();
         // Adopt the (possibly remote) hidden-row set directly: a peer's filter
         // arrives as `filter_hidden_{sheet}` ops and is applied without recompute
-        // (§1.A -- only the filter author recomputes).
+        // (`trame-shared-filter` -- only the filter author recomputes).
         self.rebuild_filter();
         // Refresh the toolbar / context-menu toggles for the active cell: after a
         // reload its formatting is only known once the `format` map is restored.

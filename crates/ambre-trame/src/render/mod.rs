@@ -8,7 +8,7 @@
 //   - the UI thread, via `WgpuSurface` (live GPU rendering), called from
 //     `ui::renderer` inside its dirty-rect / layer orchestration;
 //   - the Logic thread, via `KrillaSurface` (vector PDF export, lazy-loaded),
-//     once the PDF pipeline lands (see spec-ambre-trame-logic.md 9 / 14).
+//     once the PDF pipeline lands (see `trame-pdf-export`).
 //
 // Everything here is geometry-driven through `GridLayout` and plain cell data
 // (`CellContent`), with no knowledge of scroll state, dirty rects, the HUD, or

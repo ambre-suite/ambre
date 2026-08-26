@@ -6,7 +6,7 @@ license.workspace = true
 description = "Trame (spreadsheet) application -- IPC types, logic controller, and UI renderer"
 
 [features]
-# Document-fixture machinery (`ambre-spec-fixtures.md` §5). Non-default and
+# Document-fixture machinery (`ambre-spec-fixtures.md`, `FIXTURE-007`). Non-default and
 # host-only. Explicitly forwards `ambre-core/fixtures`: a Cargo feature never
 # enables its dependency's feature implicitly, and the gated code names
 # `ambre_core::FixtureShape`.
@@ -17,13 +17,13 @@ tracing  = { workspace = true }
 
 # Logic side (Logic thread): TrameState, CRDT / formula engine.
 ambre-bus = { path = "../ambre-bus" }
-# `DocType` / `Uuid` and the shared `.ambre` container header (`docfile §2`):
+# `DocType` / `Uuid` and the shared `.ambre` container header (`DOCFILE-007`):
 # Trame supplies the payload, never its own header variant.
 ambre-core = { path = "../ambre-core" }
 loro      = { workspace = true }
 petgraph  = { workspace = true }
 nom       = { workspace = true }
-# CSV import/export (Trame interop MVP, `ambre-spec-trame-interop.md` §4).
+# CSV import/export (`trame-import-export`).
 csv       = { workspace = true }
 # One atomic per-cell style record (`cellstyle_{sheet}`): serde-derived
 # `CellStyle` postcard-encoded into a single CRDT binary register, so concurrent
@@ -63,11 +63,11 @@ ambre-draw = { path = "../ambre-draw", features = ["testing"] }
 # `wasm32-unknown-unknown`; gating it to the host target keeps the wasm tier
 # (`just test-wasm`, the chrome tests below) building. The CRDT convergence
 # property tests that use it are host-only anyway (Epic `ET`,
-# `ambre-spec-trame-logic.md` §14).
+# `ambre-spec-testing.md`).
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }
 
-# Leptos UI tests (Epic `ET`, `ambre-spec-trame-ui.md` sec.14/18): the chrome is
+# Leptos UI tests (Epic `ET`, `ambre-spec-testing.md`): the chrome is
 # `cfg(target_arch = "wasm32")` (leptos CSR + DOM), so its tests run under the
 # wasm target via `wasm-pack test --headless --chrome` (`just test-wasm`). These
 # dev-deps let the integration test name the chrome's public types directly

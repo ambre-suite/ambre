@@ -245,7 +245,7 @@ impl DrawSurface for WgpuSurface<'_> {
             // Clip the glyph quad to the active clip rect. A glyph straddling an
             // edge must be *trimmed* (with its UVs remapped proportionally), not
             // drawn whole -- otherwise an overflowing cell's last glyph spills a
-            // full character into its neighbour (sec.4.A).
+            // full character into its neighbour (`trame-cell-rendering`).
             let (x0, y0, x1, y1) = (sx, sy, sx + sw, sy + sh);
             if let Some(clip) = clip {
                 let (cx0, cy0) = (clip.x0 as f32, clip.y0 as f32);

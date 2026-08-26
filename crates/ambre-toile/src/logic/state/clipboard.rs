@@ -1,5 +1,5 @@
 //! Clipboard copy / paste / duplicate for [`ToileState`](super::ToileState)
-//! (§8 ter). Split out of `state/mod.rs`. A selection is snapshotted into an
+//! Split out of `state/mod.rs`. A selection is snapshotted into an
 //! id-free [`ClipboardPayload`] (subtrees, slot-referenced connectors and
 //! membership) and rematerialized with fresh ids.
 
@@ -29,7 +29,7 @@ impl ToileState {
         self.insert_clipboard(payload, offset)
     }
 
-    /// Copy + paste fused into a single undo item, offset by `delta` (§8 ter).
+    /// Copy + paste fused into a single undo item, offset by `delta`.
     pub(super) fn duplicate_elements(&mut self, ids: &[ElementId], delta: Vec2) -> ToileOutcome {
         let payload = self.build_clipboard(ids);
         self.insert_clipboard(&payload, delta)
@@ -38,7 +38,7 @@ impl ToileState {
     /// Snapshot a selection (its full subtrees) into an id-free [`ClipboardPayload`].
     /// Elements are captured in z-order and referenced by slot; connectors survive
     /// only when both endpoints are captured; group / frame membership is remapped
-    /// to slots (§8 ter).
+    /// to slots.
     fn build_clipboard(&self, ids: &[ElementId]) -> ClipboardPayload {
         // A copied group carries its members: expand every id to its full subtree.
         let mut set: HashSet<ElementId> = HashSet::new();
@@ -99,7 +99,7 @@ impl ToileState {
             }
         }
 
-        // Connectors whose BOTH endpoints are captured (§8 ter): a half-copied
+        // Connectors whose BOTH endpoints are captured: a half-copied
         // connector would dangle, so it is dropped.
         let mut connectors = Vec::new();
         if let LoroValue::Map(m) = self.doc.get_map(CONNECTORS).get_deep_value() {

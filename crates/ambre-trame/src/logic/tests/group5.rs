@@ -5,7 +5,7 @@
 use super::*;
 
 /// Hidden rows are excluded from the viewport but still counted by `=SUM`
-/// (features spec §8): the filter is a display concern, not a data concern.
+/// (`trame-shared-filter`): the filter is a display concern, not a data one.
 #[test]
 fn shared_filter_does_not_affect_sum() {
     let mut state = TrameState::new();
@@ -161,7 +161,7 @@ fn shared_filter_applies_on_remote_import() {
 }
 
 /// Concurrent different filters converge: Loro LWW picks a single hidden set,
-/// identical on both peers (features spec §1.A "deterministic behavior").
+/// identical on both peers (`trame-shared-filter`, deterministic behaviour).
 #[test]
 fn concurrent_filters_converge_lww() {
     // Shared base so both peers address the same row uids.
@@ -203,7 +203,7 @@ fn concurrent_filters_converge_lww() {
     );
 }
 
-/// A filter is a plain CRDT mutation, so Ctrl+Z removes it (features spec §4).
+/// A filter is a plain CRDT mutation, so Ctrl+Z removes it (`trame-undo`).
 #[test]
 fn shared_filter_is_undoable() {
     let mut state = TrameState::new();
@@ -308,7 +308,7 @@ fn filter_pass_values_and_op_string_roundtrip() {
 }
 
 /// A pasted formula's relative references reindex by the paste offset, and a
-/// plain literal is copied verbatim (`-ui.md` sec.5.E). Copy A1:B1 (A1=10,
+/// plain literal is copied verbatim (`trame-clipboard`). Copy A1:B1 (A1=10,
 /// B1==A1*2) and paste with the top-left landing on A3: B3 must store the
 /// reindexed `=A3*2` and compute `20`.
 #[test]
@@ -378,7 +378,7 @@ fn paste_reindexes_relative_formula() {
 }
 
 /// Autofill in `Auto` mode extrapolates a numeric arithmetic series down a
-/// column (`-ui.md` sec.5.F): A1=1, A2=2 dragged to A5 yields 3, 4, 5.
+/// column (`trame-autofill`): A1=1, A2=2 dragged to A5 yields 3, 4, 5.
 #[test]
 fn fill_auto_extrapolates_numeric_series() {
     use crate::{FillMode, GridRange};

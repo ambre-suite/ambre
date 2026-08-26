@@ -10,10 +10,10 @@ impl SyncState {
     ///
     /// On the WASM path, the async HTTP work is spawned via `spawn_local` and
     /// the result flows back as [`SyncEvent::InviteSent`].
-    /// TOFU phase 1 (`ambre-spec-chrome.md §2.H`): resolve the invitee and fetch
-    /// their exchange key + fingerprint, without wrapping anything. Delegates to
-    /// [`sharing::fetch_invitee_key_task`], generic over the transport so it is
-    /// unit-tested natively.
+    /// TOFU phase 1 (`ambre-spec-key-verification.md`): resolve the invitee and
+    /// fetch their exchange key + fingerprint, without wrapping anything.
+    /// Delegates to [`sharing::fetch_invitee_key_task`], generic over the
+    /// transport so it is unit-tested natively.
     pub(crate) fn handle_fetch_invitee_key(
         &self,
         id: RequestId,

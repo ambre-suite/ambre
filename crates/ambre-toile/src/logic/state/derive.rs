@@ -1,4 +1,4 @@
-//! Read-only derivation for [`ToileState`](super::ToileState) (§9): turning the
+//! Read-only derivation for [`ToileState`](super::ToileState): turning the
 //! CRDT + derived caches into the culled, z-ordered [`DisplayViewport`] the UI
 //! thread paints. Split out of `state/mod.rs`; this impl block only reads
 //! `self` and never mutates the document. Shared helpers come from
@@ -36,7 +36,7 @@ impl ToileState {
 
     /// Build the culled, z-ordered `DisplayViewport` for an **arbitrary** camera
     /// `vp`, without touching `self.viewport`. The presentation / PDF-export
-    /// passes drive one board through a sequence of slide cameras (§1.D / §3.A):
+    /// passes drive one board through a sequence of slide cameras:
     /// they must not mutate-then-restore `self.viewport`, which would race a
     /// concurrent `SetViewport` from the live UI thread. Read-only, so the same
     /// `ToileState` can be walked from any camera.
@@ -66,7 +66,7 @@ impl ToileState {
     }
 
     /// Capture a frame's animatable set as a [`FrameSnapshot`] for Smart Animate
-    /// (`toile-features` §1.C). The elements are the frame's **declared**
+    /// (`toile-presentation`). The elements are the frame's **declared**
     /// `children` (membership is explicit, not spatial), each carrying the
     /// unrotated element rect, its rotation and style opacity / fill the solver
     /// interpolates. The rect is the raw `x/y/w/h` (not the rotation-expanded
@@ -82,7 +82,7 @@ impl ToileState {
                 let em = self.element_map(&id)?;
                 let style = ElementStyle::from_bytes(&bin_of(&em, "style"));
                 // A group carries no stored geometry: its rect is the derived
-                // member-union AABB (§2.F bis), read from the bounds cache.
+                // member-union AABB, read from the bounds cache.
                 let bounds = if str_of(&em, "type") == "group" {
                     self.bounds.get(&id).copied().unwrap_or_default()
                 } else {
@@ -109,7 +109,7 @@ impl ToileState {
     /// The unrotated world rect (`x/y/w/h`, or the derived member union for a
     /// group) of `id`, or `None` if the element map is gone. Mirrors the geometry
     /// branch of [`display_element`](Self::display_element); used by the
-    /// presentation camera pass as the fit target for a slide (§1.D).
+    /// presentation camera pass as the fit target for a slide.
     pub(crate) fn element_rect(&self, id: &ElementId) -> Option<Rect> {
         let em = self.element_map(id)?;
         if str_of(&em, "type") == "group" {
@@ -128,7 +128,7 @@ impl ToileState {
     fn display_element(&self, id: &ElementId) -> Option<DisplayElement> {
         let em = self.element_map(id)?;
         // A group has no stored geometry: its bounds are the derived member union
-        // (§2.F bis). Read them from the derived cache.
+        // Read them from the derived cache.
         let is_group = str_of(&em, "type") == "group";
         let (x, y, w, h) = if is_group {
             let r = self.bounds.get(id).copied().unwrap_or_default();
@@ -163,7 +163,7 @@ impl ToileState {
             style,
             geom,
             // The immediate enclosing group (if any): the UI resolves group-scope
-            // selection by walking this edge upward (§2.F bis / §7).
+            // selection by walking this edge upward.
             group: self.enclosing_group(id),
         })
     }
@@ -216,7 +216,7 @@ impl ToileState {
     fn display_connector(&self, id: &ConnectorId) -> Option<DisplayConnector> {
         let cm = self.connector_map(id)?;
         let conn = read_connector(id.clone(), &cm)?;
-        let path = conn.route(&self.bounds)?; // dropped if an endpoint is gone (§5.A)
+        let path = conn.route(&self.bounds)?; // dropped if an endpoint is gone
         Some(DisplayConnector {
             id: id.clone(),
             path,
@@ -245,7 +245,7 @@ mod tests {
     }
 
     /// `derive_viewport_at` culls against the camera it is handed, not
-    /// `self.viewport`, and leaves `self.viewport` untouched (§1.D / §3.A).
+    /// `self.viewport`, and leaves `self.viewport` untouched.
     #[test]
     fn derive_viewport_at_uses_the_given_camera() {
         let mut st = ToileState::new();

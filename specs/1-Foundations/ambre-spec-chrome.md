@@ -1,324 +1,204 @@
-# AMBRE -- SPEC: Chrome (Leptos DOM) + canvas cohabitation (`ambre-chrome`)
-**Type:** Horizontal (Foundation -- UI Thread)
-**Status:** Draft
-**Implementation:** partial
+# AMBRE -- FEATURE: THE CHROME SHELL
 
-> The application **chrome** (menus, toolbars, dialogs, panels, command palette) rendered in **DOM via Leptos** (`ambre-chrome` crate), and its cohabitation with the wgpu `<canvas>` that renders the **content** (`ambre-canvas` crate). This spec covers the chrome stack, its components, text/IME input, and adaptive design. **Cross-cutting** UI thread concerns -- canvas/DOM boundary, crate map, command model, single source of tokens -- are in the umbrella `ambre-spec-ui.md`. The GPU pipeline is in `ambre-spec-canvas.md`; inter-thread transport in `ambre-spec-architecture.md`.
+**Type:** Horizontal (framework)
+**Implementation:** partial -- the layout, the menu, the modal, the toasts and the shared controls
+ship; the command palette and the one floating shell do not.
 
-## 1. OBJECTIVES & CONSTRAINTS
+> Everything around the document: the frame the canvas sits in, the menus, the modals, the toasts,
+> the status bar and the controls a formatting toolbar is built from. It is DOM, it is written once,
+> and every application dresses the same toolkit.
 
-* **Scope:** DOM chrome (Leptos), its cohabitation with the canvas, text/IME input, theming, and adaptive design. **Out of scope:** the canvas/DOM boundary, crate map, command registry, and token generation (`ambre-spec-ui.md`); the GPU pipeline (`ambre-spec-canvas.md`); business logic (Logic thread); IPC transport (`ambre-spec-architecture.md`).
-
-* **Web-only.** Ambre targets the browser. Native is not a target; a possible desktop goes through **PWA** (installable, offline) or Tauri. This constraint enables a DOM chrome (which does not run in pure native) and the removal of winit (section 6).
-
-* **Dependencies:**
-
-  | Crate | Role | Rationale |
-  |:---|:---|:---|
-  | `leptos` | Chrome DOM framework | Fine-grained reactivity (signals), no VDOM diffing, compact WASM binary. Chrome reflects selection state in real time without massive re-renders. |
-  | `nucleo-matcher` | Fuzzy matching | Filters the command palette over the registry. Pure Rust. |
-  | `ambre-commands` | Shared command registry | `CommandId`/`Command`/`CommandSource`. Leaf crate, zero UI dependency. Model in `ambre-spec-ui.md section 2.C`. |
-  | `wgpu`, `parley`, `swash` | Content rendering | Detail in `ambre-spec-canvas.md`. |
-  | `accesskit` | Canvas **content** a11y | Content a11y tree exposed to screen readers. DOM chrome is natively accessible (section 2.F). |
-
-* **Invariants:**
-  - **Thread-level** invariants (boundary rule, single source of truth, non-blocking, WebGL2-compatible) are in `ambre-spec-ui.md section 1`.
-  - **Chrome does not own the content:** it never writes into the `<canvas>` nor hit-tests content; it invokes `CommandId` and receives state via signals (boundary `ambre-spec-ui.md section 2.A`).
-  - **`ambre-chrome` does not depend on apps**: it displays `Command` and their state (dependency inversion, symmetrical to the `AppView` enum on the rendering side).
+The chrome draws nothing and knows no application. It invokes a command and it shows what the Logic
+thread reported, which is what keeps one toolkit serving a spreadsheet, a board and a page.
 
 ---
 
-## 2. TECHNICAL DESIGN & STATE
+## 1. CONTRACT
 
-### A. Chrome Technical Stack
+The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
+status values are normative in `ambre-spec-template.md`. The prefix is `CHROME`, shared with
+`ambre-spec-text-input.md`, `ambre-spec-accessibility.md`, `ambre-spec-adaptive-layout.md`,
+`ambre-spec-launcher.md` and `ambre-spec-key-verification.md`: one numbering over the six documents
+the DOM side produces.
 
-| Element | Choice | Rationale |
-|:---|:---|:---|
-| Modals | Native `<dialog>` + Leptos content | `showModal()` provides focus trap, inertness, Escape, backdrop for free. |
-| Theming | Generated design tokens | Single source `tokens.ron` -> `theme.css` (DOM) + `theme.rs` (canvas), consistency by construction (`ambre-spec-ui.md section 2.D`). |
-| Menu/popover positioning | Manual calculation (position + flip if overflow) | CSS Anchor Positioning too recent cross-browser; ~80 lines of Rust. |
-| Fuzzy palette | `nucleo-matcher` | Pure Rust. |
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `CHROME-001` | The chrome MUST NOT draw content nor hit-test it: it invokes a command and reads state from signals. | `ambre-spec-ui.md section 2` | crate graph: `ambre-chrome` declares neither `wgpu` nor `ambre-draw`, so no drawing surface is reachable from it | verified |
+| `CHROME-002` | The shared toolkit MUST NOT depend on an application crate. | this spec section 2 | crate graph: the manifest names `ambre-commands`, `leptos`, the two icon crates and the DOM bindings, and no application | verified |
+| `CHROME-003` | A floating menu MUST stay inside the viewport: it flips at an edge, and pins to the origin when it is larger than the viewport. | this spec section 2 | `ambre_chrome::context_menu::tests::no_overflow_keeps_click_point`, `::right_overflow_flips_horizontally`, `::bottom_overflow_flips_vertically`, `::corner_overflow_flips_both_axes`, `::menu_larger_than_viewport_pins_to_origin` | verified |
+| `CHROME-004` | Every popover and floating bar MUST take its placement, flip and keyboard model from one shell. | this spec section 2 | not built -- lands with `One floating-menu shell` (`ambre-roadmap.md` E8). Four shells exist: the shared menu, Trame's filter popover, Trame's find panel and Toile's selection toolbar | unimplemented |
+| `CHROME-005` | A key event MUST resolve to a modelled key or be rejected; an unmodelled key MUST NOT reach a command. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::command::tests::named_keys_map`, `::function_keys_in_range`, `::function_keys_out_of_range_rejected`, `::single_printable_char_maps`, `::unmodelled_keys_rejected` | verified |
+| `CHROME-008` | The command palette MUST search every command the active application declares, not the subset some menu happens to show. | this spec section 2; `ambre-spec-commands.md` | not built -- lands with `One command registry` (`ambre-roadmap.md` E8, `UI-THREAD-019`). The palette is the first view that cannot borrow its labels from a menu, so it needs the registry and not a story of its own | unimplemented |
+| `CHROME-009` | The content surface MUST be a cell of the chrome layout, so it is sized by the layout and never by the viewport. | this spec section 2 | `ambre_chrome::chrome_ui::app_shell_owns_the_named_canvas_cell` -- wasm tier, real `document` | verified |
+| `CHROME-010` | A control MUST show the state the Logic thread reported: it MUST NOT set its own toggle from the click that raised it. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::chrome_ui::command_states_defaults`, `::command_states_single_writer_propagates`, `::command_states_unknown_id_is_noop` prove the store has one writer and that a view only subscribes. Nothing refuses a control that writes the signal itself | verified |
+| `CHROME-011` | A modal MUST suspend the frame loop while it is open, and resume it on close. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-012` | none. Three modals pass a pause callback and a resume callback, and the launcher's own confirmation dialog passes neither. Nothing joins opening a modal to the state of the loop | unverified |
+| `CHROME-012` | A modal's open state MUST follow the element in both directions: Escape and a click on the backdrop MUST close it. | this spec section 2 | none. One effect drives the element from the signal and two handlers drive the signal from the element. A regression leaves a closed modal whose signal still reads open, which blocks the next open | unverified |
+| `CHROME-013` | A shared formatting control MUST report a change and MUST NOT apply it. | this spec section 2 | `ambre_chrome::chrome_ui::format_toggle_reflects_pressed_and_reports_clicks`, `::font_size_select_lists_presets_plus_auto_entry` | verified |
+| `CHROME-014` | A status-bar chip MUST read its value live from a signal, and MUST start collapsed. | this spec section 2 | `ambre_chrome::chrome_ui::zoom_chip_renders_readout_from_signal_and_starts_collapsed`, `::perf_chip_renders_fps_from_signal_and_starts_collapsed` | verified |
+| `CHROME-015` | A control driven by a drag MUST coalesce the burst into one command. | this spec section 2 | none. A debouncer reschedules its timer on each call, and each caller decides whether to use it. Nothing refuses a slider wired straight to a command, which is one command per pixel of travel | unverified |
 
-### B. Chrome Components
-
-- **App shell**: CSS grid layout -- header (title, sync status, avatar), command bar, optional sidebar, **canvas in the center**, status bar. The `<canvas>` resizes via `ResizeObserver` -> wgpu swap chain reconfiguration. (Provided by `ambre-chrome`, parameterized by the app.)
-- **Command bar -- contextual toolbar**: a single bar showing commands relevant to the selection (text -> formatting; image -> image tools; cell -> formulas); secondary commands in an overflow menu (`...`); on mobile, bottom sheet. A ribbon can still be generated from the registry (one `category` = one tab) as a user option.
-- **Menus & context menus**: `role="menu"`/`menuitem"`, keyboard navigation (arrows, Home/End, first letter), Escape/click-outside close, flip-positioned. The canvas context menu is triggered by the wgpu handler (right-click -> signal -> open at coordinates). Today the shared `ContextMenu` (right-click) is the only shared floating shell (Trame + Toile). **Target state (X61):** this placement/flip + keyboard-nav + click-outside-close primitive becomes the single floating-menu shell for **all** floating menus -- Trame's format/filter popovers and Toile's floating selection toolbar (which currently roll their own shell and reuse only the shared value controls), and Prose's future slash menu -- rather than a per-app shell each. Tracked in the cross-app factoring Story (`ambre-roadmap.md`).
-- **Dialogs**: native `<dialog>` + Leptos content. When a fullscreen modal is open, the canvas `requestAnimationFrame` is **suspended** (`cancelAnimationFrame`) -- battery saving, and `backdrop-filter: blur()` becomes free (canvas frozen). rAF restarted on close.
-- **Sidebar / panels**: pure DOM, native `overflow: auto`, resizable via splitter drag.
-- **Status bar**: cursor position, zoom, word count, sync status -- reactive DOM on signals.
-- **Command palette**: centered overlay, input + list filtered by `nucleo-matcher` over the registry, keyboard navigation.
-- **Toasts**: `position: fixed` container, CSS `transform`/`opacity` animations run by the compositor **outside the canvas rAF** -- zero ms stolen from the frame budget.
-
-### C. Canvas Cohabitation
-
-> The canvas/DOM **boundary** and the two communication channels (signals / commands) are defined in `ambre-spec-ui.md section 2.A`. This section covers the DOM-side wiring for the chrome.
-
-**Winit-free bootstrap.** The canvas is obtained via `web-sys` (`HtmlCanvasElement`) and `wgpu::Surface` configured on it. Events are captured by DOM listeners (`pointerdown/move/up`, `keydown`, `wheel`, `ResizeObserver`); `window.devicePixelRatio` + `matchMedia("(resolution: ...)")` for DPI. Clean boundary: DOM captures chrome, the canvas listener captures the content area -- no event ownership conflict. (Code in `ambre-canvas::host`.)
-
-**Event routing.** Events on chrome -> Leptos/DOM. Events on canvas -> listener -> content hit-tests. Editing keyboard focus belongs to the `<textarea>` overlay; a click in the canvas calls `textarea.focus()` from the wgpu handler.
-
-**The transparent textarea (input + IME).** A technically invisible `<textarea>` serves as the keyboard + IME + clipboard pipe; it **displays nothing** (the canvas renders caret and selections).
-
-```css
-textarea.ambre-input {
-  color: transparent; caret-color: transparent;  /* caret drawn by wgpu */
-  background: transparent; outline: none; resize: none;
-}
-textarea.ambre-input::selection { background: transparent; color: transparent; }
-```
-
-In Latin input the textarea is **empty**: `keydown`/`beforeinput` -> apply to Loro model -> Parley re-layout on the dirty portion -> re-render -> clear the textarea. During **IME composition** (CJK, Korean, Vietnamese: `compositionstart -> compositionupdate* -> compositionend`) the text is rendered in the canvas with a "composition" style (dotted underline) while the textarea stays invisible; the IME popup positions relative to the textarea, placed under the caret via `transform: translate(x, y)` (never `top/left`), `will-change: transform`, minimal dimensions. On `compositionend`, the final text is transferred to the model and the textarea cleared.
-
-Constraints to uphold: hidden native caret (`caret-color: transparent`); `user-select: none` on the canvas; textarea positioned at its **real** position (never `left: -9999px`, otherwise the IME popup displays there); interception of `ArrowUp/Down`, `Home/End`, `Ctrl+A/C/V/X` in `keydown` (clipboard via `copy`/`paste` + `event.clipboardData` from the model); the textarea follows canvas scroll.
-
-**WYSIWYG (Prose).** The textarea carries only **plaintext**; style lives in the Loro model (`LoroText` + attributes) and the canvas renders via Parley. Cross-device fidelity rests on fonts served by Ambre (Noto Sans/Mono) and deterministic Skrifa metrics -- shared with krilla PDF export via `DrawSurface`.
-
-### D. Content Rendering (reference -- detail in `ambre-spec-canvas.md`)
-
-Graphics pipeline wgpu: instanced quads, vertex/fragment shaders, standard textures, **no compute** on the hot path. Text: Parley (layout/shaping) -> Swash/Skrifa (CPU rasterization) -> glyph atlas texture (R8, LRU) -> quads. WebGL2 remains a functional GPU rendering backend (atlas <= 4096^2).
-
-### E. Adaptive Design
-
-> **Design tokens** (single source `tokens.ron` -> `theme.css` + `theme.rs`) are defined in `ambre-spec-ui.md section 2.D`. This section covers chrome `DisplayMode` and adaptive breakpoints.
-
-**Breakpoints** (achieved via CSS/media queries for chrome; read on the canvas side via logical width for content layout):
-
-```
-Mobile: < 600 dp   |   Tablet: 600-1024 dp   |   Desktop: > 1024 dp
-```
-
-| Component | Mobile | Tablet | Desktop |
-|:---|:---|:---|:---|
-| Navigation | Drawer + bottom bar | Collapsible sidebar | Persistent sidebar |
-| Toolbar | Icons only, aggressive overflow | Icons + short labels | Icons + labels + shortcuts |
-| Side panels | Hidden, swipe/button | Collapsible | Persistent |
-| Context menus | Full-width bottom sheet | Popover | Popover |
-| CommandPalette | Fullscreen | 70% modal | 50% modal |
-| Data views | Priority columns + H scroll | All columns | All columns + freeze |
-
-### F. Accessibility
-
-The DOM provides a11y primitives natively (ARIA, focus, screen readers). **Interaction patterns** are implemented in `ambre-chrome`: roving tabindex of menus, focus trap (except `<dialog>`), `aria-expanded`/`aria-controls`, live regions for toasts. Territory mapped by WAI-ARIA Authoring Practices, written **once** for shared chrome components. Canvas **content** a11y goes through **AccessKit**, on a perimeter reduced to content.
-
-### G. Launcher Screen (the `/` route)
-
-The launcher is the **app-agnostic** home shown on the `/` route: a full-bleed Leptos DOM overlay rendered **on top of** the persistent canvas (the canvas is never unmounted, only covered and its rAF paused -- `ambre-spec-architecture.md section 6`). It hosts no document content, only chrome, so it lives here and **not** in any app crate (`ambre-trame`, ...): every `DocType` is listed through the same view. Implemented in `ambre-app` (the launcher crate) on the shared `ambre-chrome` toolkit, **driven entirely by design tokens** (`ambre-spec-ui.md section 2.D`) -- no ad-hoc colours.
-
-It has two faces, switched on the session state (`username: Option<String>` filled by `RestEvent::SessionReady`):
-
-**Signed out -- sign-in panel.** A centered panel carrying the Ambre wordmark and a one-line product tagline, then:
-- **OIDC** (production): a "Sign in with Google" button -> `window.location = /api/auth/google/login`.
-- **Dev login** (server reports `dev_mode`): a username field dispatching `RestCommand::DevLogin` to the live Logic thread (no page reload -- the Sync worker keeps its keys, `ambre-spec-architecture.md section 6`).
-- A neutral "Connecting..." placeholder until `/api/auth/config` answers.
-
-**Signed in -- document list.** A header (Ambre wordmark, current user, "new document" action) over a list of **document cards**. Each card is one `DocumentSummary` and shows:
-
-| Field | Source | Notes |
-|:---|:---|:---|
-| **Type icon** | `DocType` | One glyph per type (Prose / Trame / Toile / Murmure), from the icon set. |
-| **Name** | `DocumentSummary.name` | The **decrypted** title (see ZK note below). `None` -> a dimmed/italic **"Untitled"** placeholder -- **never** the raw `document_id` / a short hash, and **never** the document type word (the icon already carries the type). |
-| **Last modified** | `DocumentSummary.updated_at` | Relative time ("2 h ago"); routing metadata, plaintext, no crypto cost. |
-| **Shared badge** | member count > 1 | Discreet chip; member count is routing metadata (plaintext). |
-
-- **Open**: opening a document navigates to `/{doc_type}/{id}`, but **how** depends on whether its render kind matches the page's booted `AppView` (`lib.rs`, `boot_is_toile`, fixed per page load), because `AppView::set_document` swaps the document id **within one app kind** but cannot switch kinds (Trame <-> Toile):
-  - **Same kind** (for example a Trame launcher opening another Trame): client `pushState`; the persistent canvas swaps document in place via `AppView::set_document` (no full-page nav, no worker respawn -- `ambre-spec-architecture.md section 6`). This is the fast path that keeps the Sync worker/session.
-  - **Cross kind** (for example opening a Toile from a Trame-booted launcher, or vice-versa): a **hard navigation** (`location.set_href`) that re-boots the page so it binds the right `AppView`. The router pushState cannot serve this case -- `set_document` would leave the wrong view mounted. The single predicate is `route::needs_reload(target, boot_is_toile)`, shared by the document cards **and** the new-document type picker below.
-- **New document**: the "new document" action is a **type picker** -- the header control offers one entry per creatable `DocType` (`DocType::creatable()`, the single source of truth: Prose / Trame / Toile; Murmure is not a launcher-created document), each labelled with its icon + generic type label (`DocType::generic_label`). `creatable()` lists only types whose engine can be instantiated (`ambre_logic::DocState::new`): **Trame / Toile** until Prose's Logic state lands (Epic `E5`), which adds Prose with no picker change. Picking a type generates the id client-side (UUID v7) and **opens it immediately** -- **no name prompt** (friction on every create; the clean default is unnamed). The document opens **untitled** (`name = None`); the server row is created lazily on first edit. `CreateDocument { doc_type, name }` carries the chosen `doc_type` (and a name, once set) up to Sync (which encrypts the name). The picker is **app-agnostic** (it lives in the launcher, `ambre-app`, driving every `DocType` through the same `doc_path`/`CreateDocument` path) -- it never hardcodes a single type.
-- **Rename / Delete**: per-card actions -> `RestCommand::RenameDocument` / `DeleteDocument`. Renaming is also available inline from the open document's header, at any time. **Delete is irreversible** (E2EE: no server-side trash -- the ciphertext and the keys are gone), so it goes through a confirmation `<dialog>` (`section 2.B`) naming the document ("Untitled" when unnamed) before dispatching `DeleteDocument`; the card is removed optimistically on `DocumentDeleted`.
-- **Empty state**: a polished placeholder ("No documents yet -- create one above"), not a bare list.
-
-**Naming strategy (normative).** The default of a new document is the **absence of a name**, not a generated string:
-- Stored: `name = None` until the user renames. A placeholder is **never** persisted into `name_enc` (a stored "Untitled" / "Trame 1" is indistinguishable from a user who typed it, breaks "is this named yet?", and pollutes the ciphertext).
-- **No counters** ("Trame 1"): counter state collides across offline devices (each device has its own client-decrypted list, no server authority over names -- `ambre-spec-architecture.md section 3`) and rots after deletes.
-- **No type word in the name** ("Trame - ..."): the type is carried by the **icon** (and a small type chip) -- repeating it is the redundant pattern this redesign removes.
-- **Icon-less contexts** (browser tab title, share invitations, future global search) compose the placeholder with the **generic, localized** type label (for example tab = "Untitled -- Spreadsheet"), **at the point of use, never stored**. This generic label is distinct from the brand `DocType::name()` ("Trame") used as the type chip.
-- *(Deferred, see section 6)* auto-suggesting a title from first content (A1 for Trame, first heading for Prose) -- type-specific, out of MVP.
-
-**MVP scope (normative).** Type icon + name (or "Untitled" placeholder) + last-modified + shared badge; new-document **type picker** (Prose / Trame / Toile), inline rename, delete; sign-in; empty state; full token theming. **Deferred (see section 6):** document thumbnails/previews, content stats (cell/word/page counts), folders / favorites / custom ordering, auto-suggested titles.
-
-**ZK note.** Document names are **end-to-end encrypted**: the launcher only ever renders `DocumentSummary.name` already decrypted by the Sync thread (`name_enc` + `doc_key_enc` -> Document Key -> plaintext, `ambre-spec-architecture.md section 3`). The chrome itself performs no crypto and no `fetch` (section 3). Names being absent (`None`) is a normal state (never named, never opened, or key not yet available) and renders as the "Untitled" placeholder.
+* **Budget.** none: the chrome renders in the DOM, off the frame loop, and
+  `ambre-spec-budgets.md` budgets no chrome operation. What the chrome does spend on
+  the frame is the pause of `CHROME-011`, which saves rather than costs.
+* **Boundary.** none: `UI-THREAD-004` bans a network, crypto and persistence path on the UI thread,
+  and the toolkit adds no exception. Its manifest names no transport and no crypto crate, which is
+  the same crate-graph fact `CHROME-001` and `CHROME-002` are read off.
+* **Verification.** 8 `verified`, 3 `unverified`, 2 `unimplemented`. The verified half is either a
+  crate-graph fact, placement arithmetic the code extracted out of the DOM, or a component mounted
+  in a real headless document. The unverified three are one shape three times: a behaviour that
+  spans two owners -- a modal and the frame loop, a control and its command -- with no seam either
+  side can assert alone.
 
 ---
 
-### H. TOFU key verification (the share dialog)
+## 2. MODEL
 
-Inviting someone means **ECDH-wrapping the Document Key to a public key the server handed us**
-(`ambre-spec-sync.md section 3`). A malicious server can substitute that key and read everything shared afterwards.
-The MVP countermeasure is TOFU with an out-of-band fingerprint (`ambre-spec-server.md` "Public Key Trust
-Model (TOFU)", `ambre-spec-architecture.md section 3`); this section is its **UI surface**. It extends the share
-dialog (section 2.B `Dialog`), which is the only place an invite is issued.
+**CRDT containers.** none. The chrome holds view state and the display payload the Logic thread
+pushed; every mutation leaves it as a command (`UI-THREAD-020`).
 
-**Fingerprint (normative).** `BLAKE2b-256(domain || exchange_pubkey)` truncated to its **first 20 bytes**,
-base32-encoded (RFC 4648, no padding), rendered **grouped in 4-char blocks** so it can be read aloud over the
-phone. 20 bytes = 160 bits: far beyond collision reach, and it fits one line. Computed in the **Sync thread**
-(the sole crypto consumer, section 3) and carried up as an already-formatted `String` -- the chrome never hashes
-anything.
+**The layout.** One CSS grid, five rows, each a slot the application fills. The toolkit lays out
+whatever it is handed and names no application.
 
-**Trust states.** Keyed by `UserId` in the `trusted_keys` IndexedDB store, owned by the **Main thread**
-(which already owns the persistence store; `ambre-spec-architecture.md section 2.B`):
+| Row | Holds | Optional |
+|---|---|---|
+| header | the title, the sync state, the share action, the account | no |
+| command bar | the contextual toolbar the application builds from its commands | no |
+| formula bar | a reference box and a content input | yes |
+| content | the canvas element, plus the input pipe of `ambre-spec-text-input.md` | no |
+| tab strip | a band of document tabs, such as a spreadsheet's sheets | yes |
+| status bar | the caption, the counters, the zoom chip and the frame chip | no |
 
-| State | Condition | UI |
-|:---|:---|:---|
-| **New** | no entry for this `UserId` | Fingerprint confirmation step; the invite does **not** proceed until the user confirms. |
-| **Trusted** | entry == fetched key | No interruption; the invite proceeds. The fingerprint stays available, not in the way. |
-| **Changed** | entry != fetched key | **Blocking alert.** The invite is refused by default. |
+The content row owns the canvas element, so the drawing buffer is sized to a grid cell rather than
+to the window (`CHROME-009`). An absent optional row collapses and costs no height.
 
-**Flow (normative).** The invite is **two-phase** -- a key is never wrapped to before the trust decision:
-1. UI -> `RestCommand::FetchInviteeKey { document_id, invitee_email }`. Sync resolves the user, fetches their
-   pubkeys, computes the fingerprint, answers `RestEvent::InviteeKey { user_id, display_name, email,
-   exchange_pub_key, fingerprint }`. **No wrapping, no `POST /share` yet.**
-2. Main compares `exchange_pub_key` against `trusted_keys[user_id]` (a byte comparison, not crypto) and
-   renders the state above. On confirmation it writes `trusted_keys[user_id] = exchange_pub_key`, then
-   dispatches `RestCommand::InviteToDocument { ..., expect_exchange_pub_key }`.
+**What the toolkit ships.**
 
-**The pin is normative.** `InviteToDocument` carries `expect_exchange_pub_key`; Sync re-fetches the key (it
-holds no cache) and **wraps only if it still matches**, else fails the invite with an explicit error. Without
-this the server could serve an honest key to phase 1 and a substituted one to phase 2 -- the confirmation
-would be theatre (a TOCTOU hole).
+| Component | Behaviour | State |
+|---|---|---|
+| the shell | the grid above, and the canvas cell | built |
+| the floating menu | placement, flip, roving focus, first-letter typeahead, Escape and click-outside | built |
+| the modal | the native dialog element, plus the pause and resume of the frame loop | built |
+| the toasts | four severities, a dwell per severity, dismiss on click, one live region | built |
+| the status chips | the caption, the zoom read-out with its preset menu, the frame read-out with a panel the application supplies | built |
+| the formatting controls | a toggle, a size select, a family picker, a colour popover, and a debouncer for a drag | built |
+| the keybinding half | a key event to a modelled chord, for a keymap to resolve | built |
+| the shortcut chip | one chord, rendered the same way in a menu, a tooltip and a palette | built |
+| the command palette | one overlay listing every command the application declares | design |
+| the sidebar and the panels | a resizable region beside the content | design |
 
-**The displayed limit is normative** (`ambre-spec-server.md` requires it): the confirmation step states, in
-plain words, that **without out-of-band verification the protection reduces to trusting the server**. It is
-not a footnote and not a tooltip. Verifying means comparing the fingerprint over a channel the server does not
-control (in person, phone, SMS) -- the dialog says so and offers a copy action.
+**The command path, and the one direction it runs.** A trigger names a command; the command reaches
+the Logic thread; the mutation comes back as an event; the dispatcher writes the store; the control
+redraws. The chrome never shortens that loop by writing the store itself (`CHROME-010`).
 
-**A key change is a `Dialog`, never a toast.** Toasts auto-dismiss (section 2.B, 7 s for errors) and are only
-`aria-live="polite"` -- a user who blinks misses a possible server MITM. The alert is modal, focus-trapped,
-and names the user; proceeding requires re-confirming the **new** fingerprint out of band. A legitimate cause
-exists (the peer reinstalled, losing their keys), so the flow allows re-pinning -- it must not, however, be
-the path of least resistance: the default action is **Cancel**.
+1. a click, a chord or a menu entry invokes a command identifier;
+2. the launcher maps it to a command for the Logic thread, and sends it;
+3. the mutation returns as an event the dispatcher drains;
+4. the dispatcher writes the toggle and enabled signals -- it is their single writer;
+5. every view of that command redraws, whichever trigger started it.
 
-**Scope.** MVP pins the **X25519 `exchange_pubkey`** -- the key that actually receives wrapped Document Keys,
-that is the one whose substitution breaks confidentiality. The Ed25519 `signing_pub_key` (which authenticates
-ephemeral frames, `ambre-spec-sync.md` "Presence identity") is **not** pinned in the MVP: presence is
-best-effort and spoofing it forges a cursor, not a key. **Deferred (section 6):** a key-transparency log (V2),
-pinning the signing key, and a standalone contact/key manager outside the share dialog.
+The identifier, the keymap and the registry that will describe a command once are
+`ambre-spec-commands.md`, and are not restated here.
 
----
+**The floating menu, and the arithmetic under it.** Placement is a pure function of the click point,
+the menu size and the viewport size: each axis that would overflow anchors at `point - size`,
+clamped to zero. The DOM read stays in the effect and the decision is a host-tier function, which is
+why `CHROME-003` has five tests and no browser.
 
-## 3. SECURITY & CONFIDENTIALITY (ZERO-KNOWLEDGE)
+**The modal.** The native dialog element supplies the focus trap, the inertness of the page behind
+it, Escape and the backdrop. The component adds two things and no more: it keeps the open signal and
+the element agreeing in both directions (`CHROME-012`), and it fires the callbacks that pause and
+resume the frame loop (`CHROME-011`). A blur over a frozen canvas then costs nothing.
 
-Pure presentation layer:
-- **No network outbound flows**: chrome invokes `CommandId` -> `LogicCommand` (`flume` channels); content comes from the Logic thread. No direct `fetch`/WebSocket (exception: same-origin fonts, rendering side).
-- **No direct persistence**: UI states (panel ratios, accordions) are sent up to the Logic thread, which decides.
-- **Tokens/theme**: colors and metrics only, no user data.
-- **Invariant**: zero calls outside the WASM process in this layer.
+**The application's own chrome.** An application builds its specific components on this toolkit, in
+its own crate: a formula bar, a filter popover, a find panel, a selection toolbar, a style
+inspector. The rule is one line -- shared upstream, specific in the application crate -- and the
+crate graph holds it (`CHROME-002`).
 
----
-
-## 4. QUALITY & TESTABILITY
-
-- **`ambre-commands`**: registry lookup, keybinding resolution, `CommandState` derivation. Pure functions, testable on host.
-- **`ambre-chrome`**: Leptos components via `wasm-bindgen-test` (DOM) -- a11y patterns (roving tabindex, focus trap, `aria-*`), menu positioning (flip on viewport overflow).
-- **Canvas cohabitation**: an end-to-end command (click -> `CommandId` -> `LogicCommand` -> `UiEvent` -> toggle chrome + canvas repaint); an IME composition cycle; rAF suspension/resumption behind a modal.
-- **Mocks & environment**: `RecordingSurface` (the mock `DrawSurface` in `ambre-draw`, feature `testing`) for headless content rendering; native `ambre-commands` tests outside WASM.
-
----
-
-## 5. PERFORMANCE & RESOURCES
-
-### A. Nominal Prose Frame (target 16.6 ms @ 60 FPS)
-
-> **Thread attribution.** For Prose, `LoroText::insert` and **Parley shaping/layout run in the
-> Logic thread** (they are already required by pagination, `ambre-spec-prose-logic.md section 2.B`);
-> the UI thread receives **pre-shaped `ParleyRunData`** and never shapes. The UI **render
-> frame** below is therefore only raster + vertex + submit on pre-shaped runs; the two
-> Logic-thread rows are shown for end-to-end keystroke latency, not as UI-frame cost. (The
-> generic UI-thread `TextCache` shaping path in `ambre-spec-canvas.md section D` applies to the
-> single-line editor case -- Trame cells -- not to Prose.)
-
-| Phase | Budget | Thread | Notes |
-|:---|:---|:---|:---|
-| Keypress -> beforeinput -> dispatch | ~0.1 ms | UI | Negligible |
-| Round-trip to logic (`flume` channels) | low | UI->Logic | Typed inter-thread transport |
-| `LoroText::insert` | < 0.1 ms | Logic | Sequential insert (off the render frame) |
-| Parley shaping/layout on **dirty paragraph only** | 0.5-2 ms | Logic | Hot spot; shipped up as `ParleyRunData` |
-| Glyph rasterization (Swash) if new glyph | ~0 ms nominal | UI | Atlas hit |
-| Vertex/instance buffer build | 0.2-0.5 ms | UI | On pre-shaped runs |
-| wgpu submit + present | 0.5-1 ms | UI | Textured quads |
-| **Total typical** | **~2-5 ms** | -- | Large margin under 16.6 ms |
-
-### B. Threats to 60 FPS (and countermeasures)
-1. **Parley without incremental layout** -> atomicity at the **paragraph** (one `Layout` per paragraph). For Prose this shaping is in the **Logic thread**; a monster paragraph (> N KB) is split internally and deferred via the Logic **P1-P4 priority scheduler** (`ambre-spec-prose-logic.md`) -- **not** `requestIdleCallback`, which does not exist in the `wasm_thread` Logic worker. (`requestIdleCallback` remains available for opportunistic work on the UI thread.)
-2. **Glyph atlas overflow** -> LRU per 256^2/512^2 slot, separate cache per size. (UI thread.)
-3. **Long document scroll** -> **per-paragraph virtualization** (render visible + buffer, pre-shaped runs cached in the UI `RunCache`; Prose additionally culls by page, `ambre-spec-prose-ui.md section B`).
-4. **Multi-paragraph selection** -> reuse cached `Layout` to extract rectangles.
-5. **Mid-range mobile** -> wgpu quads holds 60 FPS; the risk is CPU (Parley + Loro + dispatch, ~6-8 usable ms).
-
-**Regularity target:** prioritize **p99** (a stable 45 FPS is perceived as smoother than 60 FPS with stutters) over max FPS. Guaranteed 60 FPS mobile everywhere is not a goal.
+**Code:** `crates/ambre-chrome/src/app_shell.rs` holds the grid,
+`crates/ambre-chrome/src/context_menu.rs` the menu and its placement function,
+`crates/ambre-chrome/src/dialog.rs` the modal, `crates/ambre-chrome/src/toast.rs` the toasts,
+`crates/ambre-chrome/src/status.rs` the chips, `crates/ambre-chrome/src/format.rs`,
+`font.rs` and `color.rs` the formatting controls, `crates/ambre-chrome/src/debounce.rs` the
+debouncer, and `crates/ambre-chrome/src/command.rs` the store and the key translation. The wiring
+that mounts them is `crates/ambre-app/src/shell/app_root.rs`, and the belt is
+`crates/ambre-chrome/tests/chrome_ui.rs`.
 
 ---
 
-## 6. REJECTED ARCHITECTURAL DECISIONS
+## 3. SURFACE
 
-> **UI model** rejections (100% canvas UI, Xilem/Masonry, winit, WebGPU-only, pure native): `ambre-spec-ui.md section 6`. **Content rendering** rejections (Vello, `vello_hybrid`, Canvas 2D): `ambre-spec-canvas.md section 6`. Below, **chrome**-specific rejections.
+| Trigger | Behaviour |
+|---|---|
+| a right-click on the content | the menu opens under the pointer, flipped at an edge |
+| an arrow key in an open menu | the highlight moves and the DOM focus follows it |
+| a letter typed in an open menu | the highlight jumps to the next entry starting with it |
+| Escape, or a click outside an open menu | the menu closes, and the click still reaches what is under it |
+| a menu entry, a toolbar button or a chord | the same command runs, whichever of the three raised it |
+| a modal opens | the page behind it goes inert and the canvas freezes on its last frame |
+| Escape or a backdrop click on a modal | the modal closes and the canvas resumes |
+| an action reports something | a toast appears, and dismisses itself after four seconds, seven for an error |
+| a click on a toast | it dismisses immediately |
+| a click on the zoom chip | the preset ladder opens, and the current factor is marked |
+| a click on the frame chip | the panel the application supplied unfolds under it |
+| a formatting control is used | it reports the change, and it redraws once the document confirms it |
 
-- **egui for the entire app**: a uniform look does not suit a premium product (egui remains a reference for the text pipeline: atlas + quads).
-- **Office-style ribbon as default**: dense, poorly responsive, hostile to mobile. Adaptive contextual toolbar instead (still generable from the registry).
-- **Reimplementing focus trap / backdrop for modals**: native `<dialog>` provides them.
-- **CSS Anchor Positioning for menus**: cross-browser support too recent; manual positioning.
-- **All apps' chrome in `ambre-chrome`**: `ambre-chrome` only carries **shared** chrome; app-specific lives in each app crate (`ambre-spec-ui.md section 2.B`).
-- **Launcher document previews / thumbnails (deferred, not rejected)**: an encrypted thumbnail is a full mini-pipeline -- offscreen render on save (hot path), cross-peer invalidation policy, an extra encrypted blob per doc (S3, wrapped under the Document Key), and decrypt-N-images on list load (mobile memory/latency, against the < 3 s on 4G target). Purely cosmetic gain over icon + name + date. Reconsider only with Toile (the one type where a preview beats an icon). MVP shows **icon + name + last-modified + shared badge** (section 2.G).
-- **Launcher content stats (cell/word/page counts) (deferred)**: unlike `updated_at` / role / member count (routing metadata, plaintext, free), content stats must be computed client-side and stored **encrypted** like the name -- another coherent blob to maintain for low value. Out of MVP.
+**A command in no menu has no label today.** The palette is the view that would ask for one, and it
+is the view that does not exist (`CHROME-008`).
 
 ---
 
-## 7. INTEGRATION PLAN (ROADMAP)
+## 4. DECISIONS
 
-> Detailed backlog of this spec; cross-cutting scheduling (milestones) lives in `specs/ambre-roadmap.md`.
-> Content rendering (canvas, `CANVAS P0`) is a prerequisite **done** -- see `ambre-spec-canvas.md section 7`.
+| Decision | Rationale | Rejected alternative |
+|---|---|---|
+| The chrome is DOM, and the content is not | a menu, a modal and a toolbar are what a browser is good at: focus, tab order, screen readers, text selection and input methods all come free and correct, and none of them is on a frame path. Recomposing a rasterized DOM layer beside a canvas costs the compositor nothing per frame, so the argument against it was never a performance one | a canvas widget framework, which is roughly two years of work to reach parity with an existing toolkit and still has to rebuild a hidden DOM tree for accessibility |
+| A modal is the native dialog element | the focus trap, the inertness of the rest of the page, Escape and the backdrop are four behaviours that are hard to get right and already correct in every browser. Reimplementing them buys a styling hook and costs four bugs | a component that traps focus and paints its own backdrop |
+| A menu is placed by arithmetic, not by the browser | anchor positioning is too recent to rely on across browsers, and the decision is two comparisons and a clamp. Keeping it a pure function is what makes it the one piece of floating-menu behaviour with a test | CSS anchor positioning, and a positioning library |
+| The toggle store has one writer | a control that flips itself on click is right until the command fails, is refused, or is undone from elsewhere -- and then it lies, silently, until something else repaints it. One writer means the interface can only show what the document actually holds | optimistic local state in each control, reconciled on the event |
+| The contextual bar, never a ribbon | a ribbon is dense, adapts badly to a narrow window and is hostile on a phone. One bar showing what the selection can do carries the same commands in less space, and a ribbon remains generable from the registry later as an option | an office-style ribbon as the default |
+| The shared toolkit carries only what two applications share | a component in the shared crate that one application uses is a dependency inversion with no payoff, and it is how a shared crate learns the name of an application. The line is the crate graph, which the compiler holds | every application's chrome in the shared crate |
+| A drag is debounced by the caller, not by the command | a slider and a text field want different quiet periods, and a command that debounced itself would have to guess one. The debouncer is a value a component keeps, which is why it is a rule about the caller and not about the command | debouncing inside the command dispatch |
+| The frame chip is shared and its panel is not | the frame rate reads the same everywhere and the timings behind it are per renderer, so the chip is one component and the panel is a slot. This is what stops each application inventing its own read-out | a per-application status bar built from scratch |
 
-### CHROME P1 -- Chrome Foundation
-- [x] **Lift the integration risk**: validate Leptos on the main thread under the `+atomics`/`shared-memory` build + nightly `build-std` of `wasm_thread`
-- [x] `ambre-commands` (registry, keybindings) and `ambre-chrome` (shared Leptos toolkit) crates
-- [x] Restrict `ambre-canvas` to render runtime (remove widget framework: `widget`/`widget_pod`/`constraints`/`focus`/`layer`/`context`/`display_mode`/`theme` widgets; deps taffy/slotmap/smallvec)
-- [x] Leptos app shell (header + contextual toolbar + status bar) with central `<canvas>` cell
-- [x] Canvas bootstrap + wgpu **without winit**: surface, `ResizeObserver`, event routing via `web-sys`
-- [x] **One end-to-end command**: Bold button -> `CommandId` -> `LogicCommand` -> `UiEvent` -> button toggle + canvas reaction
-- [x] `<dialog>` modal suspending rAF; context menu triggered by canvas right-click
+---
 
-### CHROME P2 -- Input & Editing
-- [x] Transparent `<textarea>`: Latin input + IME composition cycle
-- [x] Trame WYSIWYG on a cell (plaintext textarea -> Loro attributes -> Parley rendering)
-- [x] Floating UI anchored to pan/zoom (transform-synced selection toolbar)
+## 5. NOT BUILT, AND NOT YET RULED
 
-### CHROME P3 -- Adaptive, Tokens & A11y
-- [x] Design tokens: `tokens.ron` -> `theme.css` + `theme.rs` (build.rs), dark/light switch
-- [x] CSS Mobile/Tablet/Desktop breakpoints on the chrome
-- [x] ARIA a11y patterns in `ambre-chrome` (roving tabindex, focus trap, live regions); content a11y = DOM mirror (accessible textarea + live region announcing active cell). *AccessKit ruled out on the web: the a11y tree is the DOM, no web adapter -- the DOM mirror replaces it.*
-- [x] `performance.mark`/`measure` profiling desktop **and** mobile (keydown -> caret < 50 ms target / < 100 ms acceptable; sustained FPS while typing; paste 10 KB)
+* **Four floating shells exist and `CHROME-004` names one.** The shared menu has the placement
+  arithmetic and the keyboard model; Trame's filter popover, Trame's find panel and Toile's
+  selection toolbar each have their own, and reuse only the value controls. The three keyboard
+  models are not the same model.
+* **Closing a menu does not restore focus.** The roving tabindex moves the DOM focus into the menu
+  and nothing puts it back on Escape, so a keyboard user lands on the document body. No row covers
+  it, and `ambre-spec-accessibility.md` is where the rule would go.
+* **The launcher's confirmation dialog is not the shared modal.** It opens the element directly, so
+  it gets the focus trap and misses the pause of `CHROME-011`. It is harmless where it sits, because
+  the loop is already paused behind the launcher, and it is the counter-example that shows nothing
+  enforces the rule.
+* **The command palette needs the registry, and the registry is a decision that was made against
+  itself.** `ambre-spec-commands.md` records why 68 identifiers do not pay for a registry, and
+  `CHROME-008` is the one view that cannot work without one.
+* **The sidebar and the resizable panels have no code.** The layout has no row for them, so an
+  application that wants one has nowhere to put it.
+* **Nothing bounds the toasts.** They stack without limit and each one holds its own timer, so a
+  burst of errors covers the interface for seven seconds.
+* **A menu entry carries its label, so a command in two menus has two.** That is `UI-THREAD-019`,
+  and it is stated there rather than here.
 
-### CHROME P4 -- Launcher screen (section 2.G)
-*The `/` home screen exists but is bare: it discards `DocumentSummary.name` and renders `doc_type` + a short id, off the design tokens. This Story makes it a real document home (section 2.G). App-agnostic, drives every `DocType`.*
-- [x] Decrypt `name_enc` in the Sync thread (`doc_key_enc` -> Document Key -> plaintext) and propagate it through `DocumentSummary.name` to the launcher (Sync now ECDH-unwraps each wrapped doc key from the list response and AEAD-opens the name; the server list endpoint returns `doc_key_enc` + `wrapper_exchange_pub_key`). See `ambre-spec-architecture.md section 3`.
-- [x] Document cards: type icon (`DocType::icon` monogram tile, one per type) + name (or dimmed italic "Untitled" placeholder, never id/type word) + last-modified (relative time from `updated_at`) + shared badge (server-computed `member_count > 1`)
-- [x] Create-untitled (no name prompt; lazy server row) + inline rename + delete, wiring `CreateDocument`/`RenameDocument`/`DeleteDocument` (`RenameDocument` fetches+unwraps the key when the doc is closed, for launcher rename); delete behind a confirmation `<dialog>` (irreversible, no server-side trash) naming the target
-- [x] Re-theme the launcher on the generated design tokens (removed the ad-hoc `--color-*` fallbacks that matched nothing; now `--bg`/`--surface`/`--accent`/...); polished empty state; sign-in panel with Ambre wordmark + tagline
-- [x] Generic localized type labels (`DocType::generic_label`, distinct from the brand `DocType::name()`) for icon-less contexts (wired into the browser tab title; available for share invitations)
-- [x] **New-document type picker** *(E4 addendum -- the P4 create action was hardcoded to Trame while it was the only product; the second product reopens the choice)*: replaced the single hardcoded-Trame "new document" button (`landing.rs`, `trame_chrome::DOC_TYPE`) with an app-agnostic `NewDocPicker` dropdown that iterates `DocType::creatable()` (icon monogram + `generic_label` per entry) and hands the chosen `DocType` to `route::doc_path`. Opening the new document goes through the shared `open_document`/`route::needs_reload` path (same as the document cards): a same-kind create swaps in place, a cross-kind create hard-navigates (`location.set_href`) to re-boot the right `AppView` (`boot_is_toile` is fixed per page load). Fixing the cards' open path to the same rule closed a latent cross-kind bug (a Toile card opened from a Trame-booted launcher used to pushState into the wrong view). `DocType::creatable()` is the single source of truth for the offered types and lists only what `ambre_logic::DocState::new` can instantiate -- **Trame / Toile today**; **Prose** joins the moment its Logic state exists (Epic `E5`), a one-line change with no picker rework (`Murmure` is never launcher-created). Belt: `landing.rs` wasm/DOM tests (menu lists one entry per creatable type, pick reports the type and closes), `route::needs_reload` wasm test (same-kind swap vs cross-kind reload), and the `DocType::creatable` unit test.
+---
 
-### CHROME P5 -- TOFU key verification (section 2.H)
-*Scheduled under `ARCH P6` in `ambre-spec-architecture.md section 7`. The share dialog wraps the Document Key to a
-public key the server hands us, with no trust check whatsoever today: a substituted key is invisible and
-silently readable. `ambre-spec-server.md` has required a displayed fingerprint since the MVP; this is the
-Story that ships it.*
-- [x] `ambre_crypto::fingerprint(pub_key) -> String`: BLAKE2b-256 truncated to 20 bytes, base32 (RFC 4648, no
-  padding), grouped in 4-char blocks. Follows the crate's house style (BLAKE2b-256 = truncated `Blake2b512`,
-  own domain tag `ambre-fingerprint-v1`). Uses `data-encoding` (`BASE32_NOPAD`), promoted to a workspace dep.
-- [x] `trusted_keys` IndexedDB store (`UserId -> [u8; 32]`), owned by the **Main** thread beside the snapshot
-  store (`ambre_logic::persistence`). `DB_VERSION` 1 -> 2 -- the `onupgradeneeded` now guards each
-  `create_object_store` on `object_store_names().contains(..)`, so the v1 -> v2 upgrade adds `trusted_keys`
-  without a `ConstraintError` on the existing `snapshots` store.
-- [x] Two-phase invite (section 2.H): `RestCommand::FetchInviteeKey` -> `RestEvent::InviteeKey { .., fingerprint }`,
-  the Main-thread relay resolves the trust state against the pin, then `InviteToDocument { ..,
-  expect_exchange_pub_key }`. Sync re-fetches and wraps **only** if the key still matches the pin (TOCTOU
-  guard); a mismatch fails the invite with an explicit error and never wraps.
-- [x] Share-dialog UI: fingerprint confirmation step (copy action + the normative "trusting the server" limit),
-  Trusted fast path (relay dispatches phase 2 directly), and the **modal** key-changed alert (default action
-  Cancel; reuses `chrome::Dialog`, never a toast).
-- [x] Belt: `ambre-crypto` frozen fingerprint golden vector + grouping/discrimination tests; `ambre-sync`
-  `FakeHttp` tests (phase-1 fetch emits the key + matching fingerprint, pin match wraps, pin mismatch refuses
-  and never wraps); `ambre-logic` wasm tests (trusted_keys roundtrip, and the `DB_VERSION` 1 -> 2 upgrade
-  adds `trusted_keys` while preserving an existing `snapshots` row). The trust *classification* runs in the
-  Main-thread relay's async IndexedDB path (`ambre-app`, wasm-only glue); it is covered by the four-tier gate
-  + manual end-to-end rather than a standalone DOM unit test.
+## 6. WHAT THIS DOCUMENT DOES NOT OWN
+
+| Question | Owner |
+|---|---|
+| What the canvas and the DOM each own, and the two channels between them | `ambre-spec-ui.md section 2` |
+| The command identifier, the keymap and the registry a command is described in | `ambre-spec-commands.md` |
+| Where the design tokens come from, and how a theme switch reaches both sides | `ambre-spec-design-tokens.md` |
+| What a copy and a paste carry | `ambre-spec-clipboard.md` |
+| The keyboard, the input method and the clipboard events over the canvas | `ambre-spec-text-input.md` |
+| The roving focus, the live regions and what a screen reader is told | `ambre-spec-accessibility.md` |
+| What a narrow window changes, and where the breakpoints are | `ambre-spec-adaptive-layout.md` |
+| The home screen, the sign-in panel and the document list | `ambre-spec-launcher.md` |
+| The share dialog's trust step, and the fingerprint it shows | `ambre-spec-key-verification.md` |
+| When a frame runs, and what a paused loop holds | `ambre-spec-frame.md` |
+| How a command reaches the Logic thread, and what comes back | `ambre-spec-architecture.md section 2` |

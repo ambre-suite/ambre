@@ -9,7 +9,7 @@
 //! resolved against the current per-sheet [`SheetIndex`] into the uid-anchored
 //! engine forms ([`CellId`] / [`RangeId`]): a position inside the used range
 //! binds to the row/column `Uid` (so it follows the data), a position beyond it
-//! stays a [`AxisId::Virtual`] grid coordinate (spec section 4.B).
+//! stays a [`AxisId::Virtual`] grid coordinate (`trame-formula-engine`).
 
 use std::collections::HashMap;
 
@@ -55,7 +55,7 @@ fn resolve_cell(r: &CellRef, indices: &SheetIndices) -> CellId {
 /// scatter and invert, collapsing the range -- and it matches Excel/Sheets, where
 /// sorting the rows inside `SUM(A1:A3)` leaves the block (and its total) intact.
 /// Single-cell references, by contrast, bind to their row/column `Uid` and follow
-/// the data (see [`resolve_cell`] and spec section 12).
+/// the data (see [`resolve_cell`] and `trame-formula-engine`).
 fn resolve_range(r: &RangeDep, _indices: &SheetIndices) -> RangeId {
     let row = |p: u32| RangeEndpoint::Specific(AxisId::Virtual(p));
     let col = |p: u32| RangeEndpoint::Specific(AxisId::Virtual(p));

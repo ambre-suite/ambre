@@ -1,4 +1,4 @@
-//! Connector geometry (§5). A connector references a source and target
+//! Connector geometry. A connector references a source and target
 //! [`ElementId`] plus an [`Anchor`] on each; its path is **pure client compute**
 //! -- recomputed at derivation from the current element bounds, never a CRDT
 //! mutation on element move. This keeps drags to a single register write and
@@ -39,7 +39,7 @@ pub fn anchor_point(r: &Rect, anchor: Anchor) -> Point {
 impl Connector {
     /// Route against the current element bounds. `None` when an endpoint element
     /// was deleted -- the connector is then dropped from the `DisplayViewport`
-    /// and, if the deletion was local, garbage-collected (§5.A).
+    /// and, if the deletion was local, garbage-collected.
     pub fn route(&self, bounds: &HashMap<ElementId, Rect>) -> Option<BezPath> {
         let a = anchor_point(bounds.get(&self.from)?, self.from_anch);
         let b = anchor_point(bounds.get(&self.to)?, self.to_anch);

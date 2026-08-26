@@ -1,6 +1,6 @@
 // ambre-canvas/tokens.ron
 // ============================================================================
-// SINGLE SOURCE of Ambre's design tokens (ambre-spec-ui 2.D). `build.rs` reads
+// SINGLE SOURCE of Ambre's design tokens (ambre-spec-design-tokens.md). `build.rs` reads
 // this file and generates BOTH:
 //   - theme.css : CSS custom properties for the DOM chrome (ambre-chrome).
 //   - theme.rs  : Rust `Palette` constants for the wgpu content (ambre-canvas).

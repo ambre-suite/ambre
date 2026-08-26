@@ -1,6 +1,6 @@
 // ambre-chrome/src/dialog.rs
 // ============================================================================
-// Native <dialog> modal (ambre-spec-chrome.md, 2.A/2.B).
+// Native <dialog> modal (ambre-spec-chrome.md, CHROME-011 / CHROME-012).
 //
 // `showModal()` gives focus trap, inertness of the rest of the page, Escape to
 // close and a `::backdrop` for free -- no need to reimplement any of it. The

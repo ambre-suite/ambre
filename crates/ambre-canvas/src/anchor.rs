@@ -1,7 +1,7 @@
 // ambre-canvas/src/anchor.rs
 // ============================================================================
-// Selection anchor: the canvas->DOM channel for floating chrome UI glued to
-// content (ambre-spec-chrome 2.E "UI flottante ancree au pan/zoom").
+// Selection anchor: the canvas->DOM channel for floating chrome glued to content
+// that pans and zooms with it (`ambre-spec-ui.md`, the canvas/DOM boundary).
 //
 // The canvas view owns the scroll/zoom and the selection, so it -- and only it
 // -- knows where the selection sits on screen. It publishes that point each

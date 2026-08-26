@@ -1,9 +1,10 @@
 /* ambre-app/styles.css
    ---------------------------------------------------------------------------
-   App-shell chrome styling. Hand-authored for Phase 1; the dark/light token
-   sets (tokens.ron -> theme.css) land in Phase 3 and will supersede the raw
-   colours here with CSS custom properties. Class names mirror the elements
-   emitted by ambre-chrome::AppShell.
+   App-shell chrome styling. The dark/light token sets (tokens.ron -> theme.css)
+   are injected at startup and are the single source of every colour, spacing,
+   radius and type size (ambre-spec-design-tokens.md). The fifty literal colours
+   still in this file bypass that source and are the open defect UI-THREAD-029
+   states. Class names mirror the elements emitted by ambre-chrome::AppShell.
    --------------------------------------------------------------------------- */
 
 /* Colour, spacing, radius and font tokens come from the generated theme.css
@@ -74,7 +75,7 @@ input[type="radio"] {
     background: var(--success);
 }
 
-/* Sync status modifiers (-chrome.md 2.G): "Syncing" (hydrating / catching up)
+/* Sync status modifiers (ambre-spec-chrome.md): "Syncing" (hydrating / catching up)
    pulses amber, "Offline" (no WS link) shows a muted dot. */
 .ambre-sync .dot.syncing {
     background: var(--warning, #d9a441);
@@ -455,7 +456,7 @@ input[type="radio"] {
     touch-action: none;
 }
 
-/* Document-loading overlay (-chrome.md 2.G): full-viewport spinner shown while a
+/* Document-loading overlay (ambre-spec-launcher.md): full-viewport spinner shown while a
    freshly opened document hydrates, reusing the boot loader's look (index.html).
    z-index sits above the canvas/popovers but below modal dialogs (z 1000+) and
    the landing overlay (z 100); it is only ever visible on a document route. */
@@ -492,7 +493,7 @@ input[type="radio"] {
     }
 }
 
-/* Transparent <textarea> keyboard/IME/clipboard pipe (ambre-spec-chrome 2.C).
+/* Transparent <textarea> keyboard/IME/clipboard pipe (ambre-spec-text-input.md).
    It renders NOTHING: the canvas draws caret, selection and the IME composition
    string. Positioned at the caret via `transform` (never top/left) so the IME
    popup anchors under the caret; pointer-events disabled so it never steals a
@@ -554,14 +555,14 @@ input[type="radio"] {
     flex: 1;
 }
 
-/* Status bar: selection aggregates (sec.13bis). A label per aggregate, spaced. */
+/* Status bar: selection aggregates (trame-status-bar). One label each. */
 .ambre-statusbar .statusbar-stats {
     display: flex;
     align-items: center;
     gap: 14px;
 }
 
-/* Sheet-tab strip (Trame, sec.13): the app-agnostic <Tabs> slot, sitting below
+/* Sheet-tab strip (Trame, trame-sheets): the app-agnostic <Tabs> slot, below
    the canvas and above the status bar. Trame fills it with its SheetTabs DOM
    component (migrated off the canvas so it shares the chrome's hover/tokens). */
 .ambre-tabstrip {
@@ -972,7 +973,7 @@ input[type="radio"] {
     cursor: pointer;
 }
 
-/* TOFU key verification modal (ambre-spec-chrome.md 2.H). */
+/* TOFU key verification modal (ambre-spec-key-verification.md). */
 .ambre-tofu-panel {
     max-width: 420px;
     display: flex;
@@ -1128,7 +1129,7 @@ input[type="radio"] {
 }
 
 /* Leading icon column: a fixed gutter so labels align whether or not a given
-   entry carries an icon (grouped/iconed menu, `-ui.md` sec.5.C). */
+   entry carries an icon (grouped/iconed menu, `trame-context-menu`). */
 .ambre-ctx-icon {
     display: inline-flex;
     align-items: center;
@@ -1218,15 +1219,16 @@ input[type="radio"] {
 }
 
 /* ============================================================================
-   Adaptive breakpoints (ambre-spec-chrome 2.E)
+   Adaptive breakpoints (ambre-spec-adaptive-layout.md, CHROME-030)
      Mobile  : < 600 dp   |   Tablet : 600-1024 dp   |   Desktop : > 1024 dp
    Mobile-first: the rules above target the smallest screen; the queries below
-   progressively enhance. "dp" == CSS px (device-independent pixels). The canvas
-   reads its logical width separately for content layout (ambre-spec-chrome 2.E).
+   progressively enhance (CHROME-031). "dp" == CSS px (device-independent
+   pixels). The canvas lays out from the size it is given, and reads no
+   threshold at all (CHROME-034).
    ============================================================================ */
 
 /* -- Mobile defaults: shown everywhere, restored upward ---------------------
-   Mobile = icons only (no shortcut hints, no sync label) per the 2.E table. */
+   Mobile = icons only: no shortcut hints, no sync label. */
 .ambre-kbd {
     display: none;
 }
@@ -1236,7 +1238,7 @@ input[type="radio"] {
 }
 
 /* Phone-only: tighten the chrome and turn the context menu into a full-width
-   bottom sheet with larger touch targets (2.E: "Bottom sheet plein width"). */
+   bottom sheet with larger touch targets (CHROME-032). */
 @media (max-width: 599px) {
     .ambre-header {
         gap: 6px;
@@ -1341,8 +1343,8 @@ input[type="radio"] {
     filter: brightness(1.1);
 }
 
-/* New-document type picker (chrome 2.G): the trigger anchors a dropdown menu
-   listing one entry per creatable DocType (Prose/Trame/Toile). */
+/* New-document type picker (ambre-spec-launcher.md, CHROME-038): the trigger
+   anchors a dropdown menu listing one entry per creatable DocType. */
 .ambre-new-doc-picker {
     position: relative;
 }
@@ -1639,7 +1641,7 @@ input[type="radio"] {
 }
 
 /* ---------------------------------------------------------------------------
-   Shared filter popover (-ui.md sec.5.D): anchored under the active column
+   Shared filter popover (trame-shared-filter): anchored under the active column
    header, with a "by values" checkbox list and a "by condition" op+value form.
    --------------------------------------------------------------------------- */
 .ambre-filter-popover {
@@ -1661,7 +1663,7 @@ input[type="radio"] {
 }
 
 /* ---------------------------------------------------------------------------
-   Borders popover (-ui.md sec.5bis): a toolbar button toggling a small panel
+   Borders popover (trame-cell-styles): a toolbar button toggling a small panel
    with the "pen" (line style + colour) over a grid of preset icon buttons.
    Each preset applies the current pen to its edges; the per-edge model lets a
    cell carry a different style/colour on each side.
@@ -2195,7 +2197,7 @@ input[type="radio"] {
 }
 
 /* ---------------------------------------------------------------------------
-   Find & Replace panel (ambre-spec-trame-ui.md sec.5.G). A DOM chrome panel
+   Find & Replace panel (trame-find-replace). A DOM chrome panel
    pinned top-right over the canvas; opened by Ctrl+F (find) / Ctrl+H (replace)
    or the toolbar search button, dismissed by Escape.
    --------------------------------------------------------------------------- */
@@ -2308,7 +2310,7 @@ input[type="radio"] {
     margin-left: 28px;
 }
 
-/* Multi-column sort dialog (`-ui.md` sec.5.C, "Sort range..."). A centered modal
+/* Multi-column sort dialog (`trame-sort`, "Sort range..."). A centered modal
    over a dimmed click-to-close backdrop; ordered sort levels each pick a column
    and a direction, with add/remove and a header-row toggle. */
 .ambre-sort-backdrop {

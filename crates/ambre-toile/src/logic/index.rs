@@ -1,7 +1,7 @@
-//! Spatial index (§3): an `rstar` R-tree over element AABBs for O(log N + k)
+//! Spatial index: an `rstar` R-tree over element AABBs for O(log N + k)
 //! viewport culling and point hit pre-filtering.
 //!
-//! The tree is a **derived cache**, never authoritative (§1): it is rebuilt from
+//! The tree is a **derived cache**, never authoritative: it is rebuilt from
 //! `LoroDoc` on load and maintained incrementally on every mutation. A full
 //! rebuild must yield the same visible set as the incremental path -- the
 //! index-equivalence invariant, proven by the property test at the bottom.
@@ -67,7 +67,7 @@ impl SpatialIndex {
     }
 
     /// Point hit pre-filter (screen->world done by caller). Exact hit-test
-    /// (rotation, path fill, stroke width) is refined in `toile-ui`.
+    /// (rotation, path fill, stroke width) is refined in `toile-selection`.
     pub fn query_point<'a>(&'a self, p: Point) -> impl Iterator<Item = ElementId> + 'a {
         // Our leaves are rectangles, not points, so `locate_all_at_point` (which
         // needs a `Point` object) does not apply; a degenerate point-envelope
@@ -151,7 +151,7 @@ mod tests {
     }
 }
 
-/// Index-equivalence property test (§10, mandatory): for a random op sequence,
+/// Index-equivalence property test (mandatory): for a random op sequence,
 /// the incrementally maintained tree must return the same visible set as a
 /// from-scratch bulk rebuild. Host-only (proptest does not build on wasm32).
 #[cfg(all(test, not(target_arch = "wasm32")))]

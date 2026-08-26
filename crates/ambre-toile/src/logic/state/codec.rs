@@ -16,7 +16,7 @@ use crate::logic::model::{
 };
 
 /// Rotation-expanded axis-aligned bounds of a rect rotated by `rot` about its
-/// center (§3). For `rot == 0` this is the rect itself.
+/// center. For `rot == 0` this is the rect itself.
 pub(super) fn expanded_aabb(x: f64, y: f64, w: f64, h: f64, rot: f64) -> Rect {
     let r = Rect::new(x, y, x + w, y + h);
     if rot == 0.0 {
@@ -64,7 +64,7 @@ pub(super) fn stroke_aabb(points: &[StrokePoint]) -> Rect {
     )
 }
 
-/// Seed a group element's scalar fields (§2.F bis). A group paints nothing and
+/// Seed a group element's scalar fields. A group paints nothing and
 /// its geometry is a derived union, so it carries no x/y/w/h: only the type flag,
 /// lock state, rotation and default style live in the CRDT; the `children` list
 /// is attached by the caller.
@@ -79,7 +79,7 @@ pub(super) fn em_seed_group(em: &LoroMap) {
 }
 
 /// Capture the scalar (non-container) fields of a map deep-value into an id-free
-/// clipboard field list (§8 ter). Container fields (a group's `children` list)
+/// clipboard field list. Container fields (a group's `children` list)
 /// are naturally skipped -- they arrive as `LoroValue::List` / `Map`, which do
 /// not match a leaf kind. `skip` drops named fields the caller remaps itself
 /// (connector endpoints).

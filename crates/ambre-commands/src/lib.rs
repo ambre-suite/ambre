@@ -4,7 +4,7 @@
 //
 // Menus, toolbar buttons, keyboard shortcuts, context menus and the command
 // palette are all *views* of one registry of `Command`s. This keeps the chrome
-// tractable across 5 apps x ~200 commands (ambre-spec-ui.md 2.C).
+// tractable across 5 apps x ~200 commands (ambre-spec-commands.md).
 //
 // Layering: a `Command`/`CommandId` here is a UI *affordance*. It is distinct
 // from the `AppCommand`/`LogicCommand` IPC payloads in `ambre-bus`: invoking a

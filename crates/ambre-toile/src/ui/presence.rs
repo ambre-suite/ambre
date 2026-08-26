@@ -1,7 +1,7 @@
 // ambre-toile/src/ui/presence.rs
 // ============================================================================
-// Multi-user presence overlay (toile-ui §8). Remote presence arrives as
-// `ToileEvent::PeerPresence` (ephemeral, `toile-logic 7`), keyed by the
+// Multi-user presence overlay (toile-presence). Remote presence arrives as
+// `ToileEvent::PeerPresence` (ephemeral, `toile-presence`), keyed by the
 // sender's canonical `UserId`. This module owns the render-thread mirror of
 // every peer's latest presence and paints it in the top overlay pass, above
 // all content and never culled:
@@ -14,11 +14,11 @@
 //
 // Every peer's colour comes from the shared cross-app `ambre_draw::peer_color`
 // hashed over the canonical `UserId`, so a collaborator keeps one colour across
-// Prose, Trame and Toile (§8). The paint entry point is a pure function over
+// Prose, Trame and Toile. The paint entry point is a pure function over
 // `DrawSurface`, so it is host-testable against `RecordingSurface` with no GPU.
 //
 // End-to-end multi-user is gated on SYNC P4 (the `pub_key` -> `UserId`
-// resolution that keys inbound frames, `toile-logic 9`): until it lands, remote
+// resolution that keys inbound frames, `toile-presence`): until it lands, remote
 // frames never reach this thread. The render pass itself is complete and
 // exercised now against synthetic `PeerPresence` events.
 // ============================================================================
@@ -38,7 +38,7 @@ use super::viewport::ViewportTransform;
 
 /// Maximum laser-trail samples kept per peer. The trail is a short ring buffer
 /// stroked as a fading polyline; older samples decay to transparent so the trail
-/// "melts" behind the moving highlighter without any wall-clock timer (§8).
+/// "melts" behind the moving highlighter without any wall-clock timer.
 const LASER_TRAIL_MAX: usize = 24;
 
 /// Screen size of a remote cursor arrow, in logical pixels.
@@ -47,7 +47,7 @@ const CURSOR_SIZE_PX: f64 = 14.0;
 /// Name-label font size, in logical pixels.
 const LABEL_FONT_PX: f32 = 12.0;
 
-/// The render-thread mirror of every peer's latest presence (§8). Fed by
+/// The render-thread mirror of every peer's latest presence. Fed by
 /// `ToileEvent::PeerPresence`, drained each overlay frame by [`Self::paint`].
 #[derive(Default)]
 pub struct PeerCursors {
@@ -100,7 +100,7 @@ impl PeerCursors {
     }
 
     /// Paint every known peer's presence into the top overlay pass, in screen
-    /// space above all content (§8). Pure over `DrawSurface`: host-testable.
+    /// space above all content. Pure over `DrawSurface`: host-testable.
     pub fn paint<S: DrawSurface>(
         &self,
         surface: &mut S,
@@ -138,14 +138,14 @@ fn paint_peer<S: DrawSurface>(
     let p = &state.presence;
 
     // 1. Selection ghosts: outline each of the peer's selected elements that is
-    //    in the culled set, in the peer's colour (§8).
+    // in the culled set, in the peer's colour.
     for id in &p.selection {
         if let Some(wb) = element_bounds(vp, id) {
             surface.stroke_rect(rect_to_screen(wb, w2s), *color, 1.5);
         }
     }
 
-    // 2. Live stroke: the in-flight freehand polyline, before it commits (§8).
+    // 2. Live stroke: the in-flight freehand polyline, before it commits.
     if let Some(pts) = &p.live_stroke
         && pts.len() >= 2
     {
@@ -154,7 +154,7 @@ fn paint_peer<S: DrawSurface>(
     }
 
     // 3. Laser trail: a fading highlighter trail, oldest -> newest, each segment
-    //    a touch more opaque so the trail melts behind the moving point (§8).
+    // a touch more opaque so the trail melts behind the moving point.
     paint_laser(surface, &state.laser_trail, color, w2s);
 
     // 4. Cursor + name chip at the peer's pointer, if the pointer is on-board.
@@ -164,7 +164,7 @@ fn paint_peer<S: DrawSurface>(
     }
 }
 
-/// Stroke the laser ring buffer as a recency-faded polyline (§8). Each segment's
+/// Stroke the laser ring buffer as a recency-faded polyline. Each segment's
 /// alpha rises toward the head so the trail decays smoothly without a timer.
 fn paint_laser<S: DrawSurface>(
     surface: &mut S,

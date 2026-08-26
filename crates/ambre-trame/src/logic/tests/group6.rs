@@ -5,7 +5,8 @@
 use super::*;
 
 /// Autofill of a merged-cell source fills block by block and re-merges every
-/// tile (sec.5.F). A 2x1 merge at A1:A2 holding "x", dragged down to A6, yields
+/// tile (`trame-autofill`). A 2x1 merge at A1:A2 holding "x", dragged to A6,
+/// yields
 /// merged blocks A3:A4 and A5:A6 each carrying "x"; the in-between covered cells
 /// stay blank and unmerged.
 #[test]
@@ -488,7 +489,8 @@ fn csv_import_export_roundtrip() {
     assert_eq!(String::from_utf8(bytes).unwrap(), "a,b\nc,d\n");
 }
 
-/// Malformed CSV input must never panic the Logic thread (interop §10 DoD):
+/// Malformed CSV input must never panic the Logic thread
+/// (`trame-import-export`, and the CSV fuzz belt of `ambre-spec-fixtures.md`):
 /// ragged rows, embedded quotes/newlines, mixed delimiters, lone quotes and
 /// random bytes all parse to *some* graceful result -- no `unwrap` blow-up.
 #[test]
@@ -530,7 +532,7 @@ fn csv_import_malformed_never_panics() {
 
 /// Pseudo-random byte fuzz over `ImportCsv`: a deterministic LCG generates a few
 /// hundred arbitrary inputs; none may panic. Complements the crafted cases above
-/// with broad coverage of byte soup (interop §10 robustness DoD).
+/// with broad coverage of byte soup (`trame-import-export`).
 #[test]
 fn csv_import_random_bytes_never_panics() {
     // Deterministic linear-congruential generator -- no external rng dependency.

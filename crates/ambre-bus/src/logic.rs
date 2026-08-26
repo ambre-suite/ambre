@@ -120,10 +120,11 @@ pub enum LogicCommand {
 
     // ── Local — Logic-thread resource seeding (no Sync involvement) ────────────
     /// Seed the Logic thread's PDF-export `FontContext` with base font faces
-    /// (`toile-interop §3.A`). Fetched by the Main thread at boot and delivered
-    /// here because the Logic worker cannot fetch: it blocks on its inbound
-    /// selector and has no browser event loop. Local-only -- it never reaches
-    /// Sync or the server. Each entry is one already-fetched font file's bytes.
+    /// (`toile-pdf-export`). Fetched by the Main thread at boot and
+    /// delivered here because the Logic worker cannot fetch: it blocks on its
+    /// inbound selector and has no browser event loop. Local-only -- it never
+    /// reaches Sync or the server. Each entry is one already-fetched font file's
+    /// bytes.
     LoadFonts { faces: Vec<Vec<u8>> },
 }
 
@@ -150,9 +151,10 @@ pub enum AppCommand {
 impl AppCommand {
     /// Whether this command can change the document's shared CRDT state.
     ///
-    /// Used by the Logic dispatcher to gate a read-only caller (architecture
-    /// §2.D). Ephemeral presence and local view state are *not* mutating: a
-    /// viewer still scrolls, selects, copies and broadcasts a cursor.
+    /// Used by the Logic dispatcher to gate a read-only caller
+    /// (`architecture`). Ephemeral presence and local view state are
+    /// *not* mutating: a viewer still scrolls, selects, copies and broadcasts a
+    /// cursor.
     pub fn is_mutating(&self) -> bool {
         match self {
             Self::Trame(cmd) => cmd.is_mutating(),

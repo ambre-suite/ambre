@@ -1,16 +1,16 @@
-//! Import safety limits (`toile-interop` §2.D / §6 "Import trust").
+//! Import safety limits (`toile-import-export` "Import trust").
 //!
 //! A foreign file is untrusted input: a hostile or merely huge SVG/raster must
 //! not exhaust client memory or the R-tree. Every importer threads a [`Limits`]
 //! and, on exceeding any bound, aborts the **whole** import atomically -- nothing
-//! is applied (§1 invariant). Coordinates are clamped rather than rejected so a
+//! is applied (invariant). Coordinates are clamped rather than rejected so a
 //! merely large (not malicious) drawing still imports, just bounded to the world.
 
 use kurbo::{Point, Rect};
 
 use super::ImportError;
 
-/// The per-import bounds. Defaults are generous headroom over the §8 performance
+/// The per-import bounds. Defaults are generous headroom over the performance
 /// budget (a 5 000-node SVG) while still bounding a pathological file.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
@@ -24,14 +24,14 @@ pub struct Limits {
     /// outside `[-coord_clamp, coord_clamp]` is clamped to the bound.
     pub coord_clamp: f64,
     /// Maximum decoded image dimension (width or height, in pixels). A larger
-    /// image aborts the import (memory-exhaustion vector, §2.D).
+    /// image aborts the import (memory-exhaustion vector,).
     pub max_image_dim: u32,
 }
 
 impl Default for Limits {
     fn default() -> Self {
         Self {
-            // ~2x the 5 000-node budget (§8): comfortable for real files, still a bound.
+            // ~2x the 5 000-node budget: comfortable for real files, still a bound.
             max_elements: 10_000,
             max_depth: 64,
             // +/- 1e6 world units: far past any real board, safely inside f32 range
@@ -53,7 +53,7 @@ impl Limits {
         v.clamp(-self.coord_clamp, self.coord_clamp)
     }
 
-    /// Clamp a point to the world bound (§2.D).
+    /// Clamp a point to the world bound.
     pub fn clamp_point(&self, p: Point) -> Point {
         Point::new(self.clamp_coord(p.x), self.clamp_coord(p.y))
     }

@@ -98,7 +98,7 @@ fn formatting_survives_snapshot_roundtrip() {
 /// `SetCellStyle` applies a [`StylePatch`] over the selection, persists it in
 /// the CRDT (survives a snapshot round-trip), reformats numeric display text
 /// per the number format, and reports the active cell's resolved style for the
-/// toolbar (`-ui.md` sec.5bis).
+/// toolbar (`trame-cell-styles`).
 #[test]
 fn set_cell_style_round_trips_and_formats_numbers() {
     use crate::{CellFormat, HAlign, StylePatch};
@@ -497,7 +497,7 @@ fn multi_sheet_isolation_and_name_lookup() {
 /// A cross-sheet formula is stored bound to the stable `sheet_id` (`#id`
 /// form), so a later rename keeps it computing and its formula-bar text
 /// follows the new name; a reorder is inert; deleting the target sheet turns
-/// it into `#REF!` (spec section 2.D / section 12).
+/// it into `#REF!` (`trame-sheets`).
 #[test]
 fn cross_sheet_reference_survives_rename_and_breaks_on_delete() {
     let mut state = TrameState::new();
@@ -614,7 +614,7 @@ fn undo_then_redo_round_trips_a_cell_edit() {
 /// A `SetCellStyle` over a multi-cell selection is a single undo step: one Undo
 /// must clear the whole selection, not just the last cell. `persist_cell_style`
 /// commits per cell and Loro records one undo item per commit, so the selection
-/// loop is wrapped in one `UndoManager` group (`-ui.md` §6.C, `-logic.md` §8).
+/// loop is wrapped in one `UndoManager` group (`trame-undo`).
 #[test]
 fn selection_style_is_a_single_undo() {
     let mut state = TrameState::new();

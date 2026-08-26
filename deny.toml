@@ -15,7 +15,7 @@
 #     instead of one silent line in a `Cargo.toml`.
 #
 # Invariants mechanised here: `ZK-002`, `ZK-003`, `ZK-004`, `SRV-012`, `SYNC-011`
-# (`ambre-spec-architecture.md §3`, `ambre-spec-server.md §1`, `ambre-spec-sync.md §1`).
+# (`ambre-spec-zero-knowledge.md`, `ambre-spec-server.md`, `ambre-spec-sync.md`).
 
 [graph]
 targets = [

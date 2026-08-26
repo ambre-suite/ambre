@@ -1,9 +1,9 @@
-//! PDF export for Toile decks (`toile-interop §3.A`), gated behind the `pdf`
+//! PDF export for Toile decks (`toile-pdf-export`), gated behind the `pdf`
 //! feature so the krilla dependency only links when export is compiled in.
 //!
 //! One presentation frame becomes one PDF page. The export drives the **same**
 //! [`paint_content`](crate::ui::render::paint_content) walk the screen uses --
-//! the reuse §3.A demands ("the same `DrawSurface` code as the screen") -- but
+//! the reuse demands ("the same `DrawSurface` code as the screen") -- but
 //! against a [`KrillaSurface`](ambre_pdf::KrillaSurface) instead of the GPU
 //! surface, so screen and PDF render identically. This is why `logic::interop`
 //! reaches into `ui::render` / `ui::viewport`: both are pure, wgpu-free geometry.
@@ -77,16 +77,16 @@ pub enum PdfExportError {
     Serialize(String),
 }
 
-/// Render `pages` into a single PDF document (`toile-interop §3.A`).
+/// Render `pages` into a single PDF document (`toile-pdf-export`).
 ///
 /// Every page runs the screen content walk against a fresh krilla page surface,
 /// clipped to its frame rect. `font_cx` must already carry the base faces
 /// (`LogicState::export_cx`, seeded at boot) or text emits no glyphs; `images`
 /// carries the decoded media pixels an `Image` element paints (an absent hash
-/// falls back to a placeholder box, §5.B). `editing` and Smart Animate overrides
+/// falls back to a placeholder box,). `editing` and Smart Animate overrides
 /// have no meaning off-screen, so the walk runs with none.
 ///
-/// Deterministic (§1): krilla assembles the same bytes for the same input, so
+/// Deterministic: krilla assembles the same bytes for the same input, so
 /// two runs of identical `pages` are byte-stable.
 pub fn export_pdf(
     pages: &[PdfPage],
@@ -214,7 +214,7 @@ mod tests {
         assert!(bytes.len() > 400, "content stream should be non-trivial");
     }
 
-    /// Export is deterministic (§1): two runs of the same pages produce identical
+    /// Export is deterministic: two runs of the same pages produce identical
     /// bytes.
     #[test]
     fn export_is_byte_stable() {

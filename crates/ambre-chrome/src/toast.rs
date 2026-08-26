@@ -1,10 +1,11 @@
 // ambre-chrome/src/toast.rs
 // ============================================================================
-// Toasts -- transient notifications in an ARIA live region (ambre-spec-chrome
-// 2.B/2.F). The host is a `position: fixed` container marked
-// `role="status" aria-live="polite"`, so screen readers announce each new toast
-// without stealing focus. Entrance/exit are CSS transform/opacity animations run
-// by the compositor, off the canvas rAF budget (2.B "zero ms volees").
+// Toasts -- transient notifications in an ARIA live region
+// (ambre-spec-accessibility.md, CHROME-006). The host is a `position: fixed`
+// container marked `role="status" aria-live="polite"`, so screen readers
+// announce each new toast without stealing focus. Entrance/exit are CSS
+// transform/opacity animations run by the compositor, off the canvas rAF budget:
+// zero millisecond stolen from the frame (ambre-spec-chrome.md).
 //
 // Shared, app-agnostic: an app pushes messages through the `Toasts` handle; the
 // `ToastHost` renders + auto-dismisses them. Written once for every Ambre app.

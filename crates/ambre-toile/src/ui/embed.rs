@@ -1,6 +1,6 @@
 // ambre-toile/src/ui/embed.rs
 // ============================================================================
-// Nested Ambre documents in the view layer (`toile-logic §2.I`, `toile-ui §4`).
+// Nested Ambre documents in the view layer (`toile-embeds`).
 //
 // A `doc_embed` element is a rectangle on the board whose content is another
 // Ambre document with its own `DocumentId`, `DocumentKey` and `LoroDoc`. This
@@ -9,7 +9,7 @@
 //   - `visible_embeds`: the culled `doc_embed`s projected to screen space, which
 //     the view PUBLISHES for `FrameHost`. `ambre-toile` cannot paint a child, nor
 //     route input into one: both need `AppView`, the closed enum that lives in
-//     the launcher, downstream of every app crate (architecture §6 / ARCH P2). So
+// the launcher, downstream of every app crate (architecture / ARCH P2). So
 //     the composition inverts -- the view describes its embeds, the launcher acts
 //     on them.
 //   - `to_child_space`: the pointer transform. Screen -> world -> the element's
@@ -30,9 +30,9 @@ use ambre_draw::{Point, Rect, Size};
 use super::viewport::ViewportTransform;
 
 /// How long a `doc_embed` must stay out of the culled set before its child
-/// document's sync session is closed (§2.I "Opening the child").
+/// document's sync session is closed ("Opening the child").
 ///
-/// Visibility comes from the Logic R-tree cull set (§3), which flips on every
+/// Visibility comes from the Logic R-tree cull set, which flips on every
 /// pan. Binding the session lifecycle straight to it would thrash the WebSocket:
 /// a scroll oscillation would storm open/close, and each re-open costs a members
 /// fetch, a key unwrap and a snapshot hydration. So an embed opens the instant it
@@ -41,7 +41,7 @@ use super::viewport::ViewportTransform;
 pub const EMBED_CLOSE_DEBOUNCE_MS: f64 = 5_000.0;
 
 /// One `doc_embed` in the current culled frame, projected to screen space and
-/// published for `FrameHost` (`toile-logic §2.I` "Render").
+/// published for `FrameHost` (`toile-embeds` "Render").
 #[derive(Clone, Debug, PartialEq)]
 pub struct VisibleEmbed {
     /// The board element carrying the reference (the focus / hit-test key).
@@ -52,14 +52,14 @@ pub struct VisibleEmbed {
     pub doc_type: DocType,
     /// Where to paint the child, in physical screen pixels. The axis-aligned
     /// bounding box of the element's (possibly rotated) quad: `push_clip` is
-    /// rect-only, so a rotated embed clips to its AABB -- accepted, see §2.I
+    /// rect-only, so a rotated embed clips to its AABB -- accepted, see
     /// "Clip limitation".
     pub screen_rect: Rect,
     /// The child's own canvas size in physical pixels. A child pixel is a screen
     /// pixel by construction (both are world units scaled by the camera's zoom),
     /// so this is just the element's world size at the current zoom.
     pub child_size: Size,
-    /// View-local focus (§2.I "Input focus"): while true, `FrameHost` maps canvas
+    /// View-local focus ("Input focus"): while true, `FrameHost` maps canvas
     /// input into this child and hands it to the child's own `handle_input`.
     pub focused: bool,
 }
@@ -145,11 +145,11 @@ pub fn visible_embeds(
 
 /// How far (physical pixels) the pointer may travel between press and release
 /// and still count as a click that focuses a `doc_embed` rather than a drag that
-/// moves it (§2.I "Input focus").
+/// moves it ("Input focus").
 pub const CLICK_SLOP: f64 = 4.0;
 
 /// Which `doc_embed`, if any, holds input focus, and the press-to-release
-/// arbitration that decides it (§2.I "Input focus"). View-local state, never
+/// arbitration that decides it ("Input focus"). View-local state, never
 /// CRDT: a peer's focus is not ours, and `derive.rs` always emits
 /// `focused: false`.
 ///
@@ -234,7 +234,7 @@ impl EmbedFocus {
 }
 
 /// The child sync sessions this board has open, and the debounce that keeps a
-/// pan from thrashing them (§2.I "Opening the child").
+/// pan from thrashing them ("Opening the child").
 ///
 /// Pure: it is told what is visible and what time it is, and answers with the
 /// session commands to send. `ToileView` owns one and forwards its output.
@@ -293,7 +293,7 @@ impl EmbedSessions {
     }
 
     /// Close every child at once, with no debounce: the board itself is going
-    /// away (a route change), so its embeds go with it (§2.I).
+    /// away (a route change), so its embeds go with it.
     pub fn close_all(&mut self) -> Vec<LogicCommand> {
         std::mem::take(&mut self.open)
             .into_keys()
@@ -328,7 +328,7 @@ fn references(display: &DisplayViewport, document_id: &DocumentId) -> bool {
 }
 
 /// The `doc_embed` under a world point, if any: the topmost one whose bounds
-/// contain it. Used to resolve a click to a focus target (§2.I "Input focus").
+/// contain it. Used to resolve a click to a focus target ("Input focus").
 /// Mirrors `hit::exact_hit`'s rule for this geometry (bounds in the local frame),
 /// including the `locked` skip -- a locked embed is not interactive.
 pub fn embed_at(display: &DisplayViewport, world: Point) -> Option<&DisplayElement> {
@@ -371,7 +371,7 @@ mod tests {
             geom: DisplayGeom::DocEmbed {
                 document_id,
                 doc_type: DocType::Trame,
-                // Never true off the CRDT: focus is view-local (§2.I).
+                // Never true off the CRDT: focus is view-local.
                 focused: false,
             },
             group: None,

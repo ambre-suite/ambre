@@ -1,7 +1,7 @@
 use super::*;
 
 impl SyncState {
-    // -- Causal quarantine (ambre-spec-sync.md §E) -----------------------------
+    // -- Causal quarantine (`ambre-spec-delta-order.md`) ------------
 
     /// Ingest one server-sequenced [`Update`]. If its parent snapshot is known,
     /// it is decrypted and delivered immediately; otherwise it is held in
@@ -218,12 +218,13 @@ impl SyncState {
                 .await
                 {
                     Ok(Some(resp)) => {
-                        // Our own role rides the same response (architecture
-                        // §2.D). An absent or unparseable row means we cannot
-                        // establish write access, so fall back to the safest
-                        // client-side assumption rather than the most permissive
-                        // one: `Viewer` merely hides affordances, whereas a wrong
-                        // `Owner` would offer edits the server then rejects.
+                        // Our own role rides the same response
+                        // (`architecture`). An absent or unparseable
+                        // row means we cannot establish write access, so fall back
+                        // to the safest client-side assumption rather than the
+                        // most permissive one: `Viewer` merely hides affordances,
+                        // whereas a wrong `Owner` would offer edits the server
+                        // then rejects.
                         let role = crate::sharing::own_role(
                             resp.members
                                 .iter()
@@ -233,7 +234,8 @@ impl SyncState {
                         // Harvest the presence directory from the same response
                         // that carries our wrapped key: every member's Ed25519
                         // signing key is already here, so resolving an ephemeral
-                        // author needs no extra round-trip (§ "Presence identity").
+                        // author needs no extra round-trip
+                        // (`ambre-spec-membership.md`).
                         let signing_keys = crate::sharing::presence_directory(
                             resp.members
                                 .iter()
@@ -589,7 +591,7 @@ impl SyncState {
             pub_key,
             snapshot_id: doc_state.current_snapshot_id,
             // The BLAKE2b parent chain is a post-MVP hardening (see
-            // ambre-spec-sync.md): an empty proof seals a standalone snapshot,
+            // ambre-spec-sealed-envelope.md): an empty proof seals a standalone snapshot,
             // which the compaction model accepts for the genesis-parented MVP.
             parent_snapshot_proof: Vec::new(),
             parent_snapshot_update_clocks: Vec::new(),
@@ -1035,10 +1037,11 @@ mod tests {
         })
     }
 
-    /// The role resolved at open must reach Logic on `DocumentReady` (architecture
-    /// §2.D) -- on BOTH emission paths. The deferred one is the fragile case: the
-    /// event fires from the replay handler, long after the open, so the role has to
-    /// survive on `SyncDocumentState` rather than ride the call stack.
+    /// The role resolved at open must reach Logic on `DocumentReady`
+    /// (`architecture`) -- on BOTH emission paths. The deferred one is
+    /// the fragile case: the event fires from the replay handler, long after the
+    /// open, so the role has to survive on `SyncDocumentState` rather than ride
+    /// the call stack.
     #[test]
     fn document_ready_carries_the_role_on_both_paths() {
         // Deferred path: server document over a live WS, ready only after replay.

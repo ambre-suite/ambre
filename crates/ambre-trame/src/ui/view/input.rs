@@ -13,9 +13,9 @@ impl TrameView {
             // Ctrl adds it as a disjoint range; a plain click collapses to it and
             // arms a drag-to-select.
             // A press on the fill handle (bottom-right of the selection) arms an
-            // autofill drag instead of a new selection (sec.5.F). Checked before
+            // autofill drag instead of a new selection (`trame-autofill`). Checked before
             // the plain selection press so the ~7px handle wins the hit.
-            // A click on an in-canvas autofilter button (sec.5.D) selects the
+            // A click on an in-canvas autofilter button (`trame-shared-filter`) selects the
             // button's column on the region's header row, then raises the one-shot
             // intent so the launcher opens the FilterPopover for that column --
             // the same path as the context-menu entry (one filter code path).
@@ -60,9 +60,9 @@ impl TrameView {
                 self.end_fill_drag(*ctrl);
                 true
             }
-            // A press on a header strip (sec.4bis): body -> whole-column/row
+            // A press on a header strip (`trame-headers`): body -> whole-column/row
             // select (Shift extends, drag sweeps); corner -> select-all; a border
-            // band -> arm a resize drag (sec.4bis.C). Checked before the grid-cell
+            // band -> arm a resize drag (`trame-resize`). Checked before the grid-cell
             // press since headers sit outside the cell area anyway.
             InputEvent::PointerDown {
                 x,
@@ -99,7 +99,7 @@ impl TrameView {
                     }
                     HeaderHit::Corner => self.select_all(),
                     // Resize bands / inline-insert affordance: handled in the
-                    // resize-drag wiring (sec.4bis.C/D).
+                    // resize-drag wiring (`trame-resize`, `trame-headers`).
                     HeaderHit::ColBorder(c) => self.arm_col_resize(c, *x),
                     HeaderHit::RowBorder(r) => self.arm_row_resize(r, *y),
                     HeaderHit::ColInsert(c) => self.insert_col_at(c),
@@ -152,7 +152,7 @@ impl TrameView {
                 self.end_reorder_drag();
                 true
             }
-            // Dragging a header boundary moves the live guide line (sec.4bis.C);
+            // Dragging a header boundary moves the live guide line (`trame-resize`);
             // the release emits the resize and clears the preview.
             InputEvent::PointerMove { x, y } if self.resize_drag.is_some() => {
                 self.update_resize_preview(*x, *y);
@@ -163,7 +163,7 @@ impl TrameView {
                 true
             }
             // Double-click on a header boundary auto-fits the column/row to its
-            // cached content (sec.4bis.C).
+            // cached content (`trame-resize`).
             InputEvent::DoubleClick { x, y }
                 if matches!(
                     self.state.header_hit(*x, *y),
@@ -211,7 +211,7 @@ impl TrameView {
                 true
             }
             // Bare hover (no button held): advertise the affordance under the
-            // cursor (sec.4bis.B / sec.5.F) -- a header boundary shows the
+            // cursor (`trame-resize`, `trame-autofill`) -- a header boundary shows the
             // col/row-resize cursor, a header body the select pointer, the fill
             // handle the crosshair, everything else the default. Pure feedback.
             InputEvent::PointerMove { x, y } => {
@@ -253,8 +253,8 @@ impl TrameView {
             }
             // A right-click on a header selects the whole column/row (or all, on
             // the corner) before the DOM context menu opens, and flags the menu
-            // as header-scoped (sec.5.C). A border/insert band keeps the existing
-            // selection -- the header-scoped menu still acts on it. We don't
+            // as header-scoped (`trame-context-menu`). A border/insert band keeps
+            // the existing selection -- the header menu still acts on it. We don't
             // preventDefault here; the `contextmenu` listener owns the menu.
             InputEvent::PointerDown {
                 x, y, button: 2, ..
@@ -353,7 +353,7 @@ impl TrameView {
                     "ArrowLeft" => self.nav_move(0, -1, ext),
                     "ArrowRight" => self.nav_move(0, 1, ext),
                     // Tab / Shift+Tab walk columns; Enter / Shift+Enter walk rows
-                    // (spreadsheet convention, sec.5.A) -- these always collapse the
+                    // (convention, `trame-selection`) -- these always collapse the
                     // selection (Shift is the reverse-direction modifier here, not
                     // a range extender). preventDefault keeps the browser from
                     // moving focus off the canvas.
@@ -369,7 +369,7 @@ impl TrameView {
                     // of the used (cached) range. With Shift the range grows to that
                     // target (Shift+Ctrl+End = select to the last non-empty cell).
                     // Best-effort -- the UI thread has no used-range model, so it
-                    // scans its local cache (sec.16).
+                    // scans its local cache (`trame-grid-viewport`).
                     "End" if chord => {
                         let (row, col) = self
                             .state
@@ -385,7 +385,7 @@ impl TrameView {
                             .unwrap_or(self.state.active_col());
                         self.nav_goto(row, col, ext)
                     }
-                    // Escape clears the marching-ants clipboard marquee (sec.5.E),
+                    // Escape clears the marching-ants clipboard marquee (`trame-clipboard`),
                     // if any; otherwise it is not ours.
                     "Escape" if self.state.clipboard_anchor.take().is_some() => {
                         self.cut_pending = false;
@@ -393,7 +393,7 @@ impl TrameView {
                         true
                     }
                     // Shift+Delete is Cut: don't consume it, so the browser fires
-                    // the native `cut` clipboard event the host services (sec.5.E).
+                    // the native `cut` clipboard event the host services (`trame-clipboard`).
                     "Delete" if *shift => false,
                     // Delete / Backspace clear the active cell.
                     "Delete" | "Backspace" => self.clear_active_cell(),
@@ -676,7 +676,7 @@ impl TrameView {
     }
 
     /// Set the canvas cursor to the autofill crosshair (`on == true`) or back to
-    /// the default (`-ui.md` sec.5.F): the thin "+" Excel/Sheets show over the
+    /// the default (`trame-autofill`): the thin "+" Excel/Sheets show over the
     /// fill handle. A DOM write on the `#ambre-canvas` element; a no-op off-wasm.
     #[cfg(target_arch = "wasm32")]
     pub(crate) fn set_fill_cursor(&self, on: bool) {
@@ -696,7 +696,7 @@ impl TrameView {
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn set_fill_cursor(&self, _on: bool) {}
 
-    /// Set an arbitrary CSS cursor on `#ambre-canvas` (`-ui.md` sec.4bis.B):
+    /// Set an arbitrary CSS cursor on `#ambre-canvas` (`trame-resize`):
     /// `"col-resize"` / `"row-resize"` over a header boundary, `"pointer"` over a
     /// header body, `""` to reset. Generalises [`set_fill_cursor`]. No-op off-wasm.
     #[cfg(target_arch = "wasm32")]
@@ -715,7 +715,7 @@ impl TrameView {
     pub(crate) fn set_cursor(&self, _css: &str) {}
 
     /// Publish the surface the latest right-click landed on so the launcher picks
-    /// the cell vs header context-menu layout (`-ui.md` sec.5.C). Only re-writes
+    /// the cell vs header menu layout (`trame-context-menu`). Only re-writes
     /// the signal on a change (cheap). No-op off-wasm (headless tests).
     #[cfg(target_arch = "wasm32")]
     pub(crate) fn set_ctx_scope(&self, scope: crate::ui::grid::CtxScope) {
@@ -765,7 +765,7 @@ impl TrameView {
 
     /// Finish a resize drag: emit `ResizeCol` / `ResizeRow` for the new size and
     /// clear the guide. When the dragged column/row is part of a whole-axis
-    /// selection, the size is applied to every band in the selection (sec.4bis.C).
+    /// selection, the size is applied to every band in the selection (`trame-resize`).
     pub(crate) fn end_resize_drag(&mut self) {
         let drag = self.resize_drag.take();
         let preview = self.state.resize_preview.take();

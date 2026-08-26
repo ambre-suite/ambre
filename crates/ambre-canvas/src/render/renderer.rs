@@ -740,8 +740,9 @@ impl QuadRenderer {
     /// (screen space, CCW from the top-left in glyph-local orientation), for a
     /// **rotated** glyph run: the caller has already mapped the quad corners
     /// through the run transform, so the glyph bitmap rotates with the text rather
-    /// than staying upright (`toile-ui §5quinquies.A`). `corners` are `[tl, tr, br,
-    /// bl]`, matching the `uv_min`/`uv_max` mapping of [`push_glyph`].
+    /// than staying upright (`toile-tools`). `corners` are
+    /// `[tl, tr, br, bl]`, matching the `uv_min`/`uv_max` mapping of
+    /// [`push_glyph`].
     pub fn push_glyph_quad(
         &mut self,
         corners: [[f32; 2]; 4],

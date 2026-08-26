@@ -20,10 +20,9 @@ const FINGERPRINT_DOMAIN: &[u8] = b"ambre-fingerprint-v1";
 const FINGERPRINT_LEN: usize = 20;
 
 /// Human-verifiable fingerprint of a public key for the TOFU trust check
-/// (`ambre-spec-server.md` "Public Key Trust Model (TOFU)",
-/// `ambre-spec-chrome.md §2.H`).
+/// (`ambre-spec-key-verification.md`, CHROME-048).
 ///
-/// Computes `BLAKE2b-256(domain || pub_key)`, keeps the first 20 bytes, and
+/// Computes `BLAKE2b-512(domain || pub_key)`, keeps the first 20 bytes, and
 /// base32-encodes them (RFC 4648, no padding), grouping the 32 output characters
 /// into 4-char blocks separated by spaces so the string reads cleanly aloud for
 /// out-of-band verification. The output is stable for a given key: the same key

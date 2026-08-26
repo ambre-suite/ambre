@@ -1,8 +1,8 @@
 //! Atomic foreign-file import into [`ToileState`](super::ToileState)
-//! (`toile-interop` §1/§5). An [`ImportBatch`](crate::logic::interop::ImportBatch)
+//! (`toile-import-export`). An [`ImportBatch`](crate::logic::interop::ImportBatch)
 //! produced by a pure converter is applied here as ONE undo group: every
 //! `CreateElement`, style, group, connector and media seed shares a single
-//! `doc.commit()` via the commit-free `*_inner` helpers (§2.E). The pass order
+//! `doc.commit()` via the commit-free `*_inner` helpers. The pass order
 //! (creates -> styles -> groups -> connectors -> media -> one commit ->
 //! `rebuild_caches`) resolves every slot / group reference before it is used.
 
@@ -24,7 +24,7 @@ use super::{MEDIA, ToileState};
 
 /// Rewrite the `pending:{slot}` placeholder to the real blake2b `hash` in both
 /// the `media` blob at `slot` and every `image` element that referenced it
-/// (`toile-interop §5`). Called as each upload confirmation lands, so by the time
+/// (`toile-media`). Called as each upload confirmation lands, so by the time
 /// the batch is applied no placeholder survives.
 fn rewrite_hash(batch: &mut ImportBatch, slot: usize, hash: &str) {
     let placeholder = format!("pending:{slot}");
@@ -44,7 +44,7 @@ fn rewrite_hash(batch: &mut ImportBatch, slot: usize, hash: &str) {
 }
 
 /// An import applied only once every embedded media blob has a real content hash
-/// back from Sync (`toile-interop §5`). Holds the fully converted batch and the
+/// back from Sync (`toile-media`). Holds the fully converted batch and the
 /// set of upload `RequestId`s still outstanding, each mapped to the `media` slot
 /// (and the `pending:{slot}` placeholder) it will resolve.
 pub(super) struct PendingImport {
@@ -54,12 +54,12 @@ pub(super) struct PendingImport {
 }
 
 impl ToileState {
-    /// Convert a dropped SVG document and apply it (`toile-interop §1`).
+    /// Convert a dropped SVG document and apply it (`toile-import-export`).
     pub(super) fn import_svg_bytes(&mut self, bytes: &[u8]) -> ToileOutcome {
         self.begin_import(import_svg(bytes, &Limits::default()))
     }
 
-    /// Convert a dropped raster image and apply it (`toile-interop §1`). The mime
+    /// Convert a dropped raster image and apply it (`toile-import-export`). The mime
     /// is re-derived from the bytes by the decoder; the parameter is accepted for
     /// the command surface but not needed here.
     pub(super) fn import_image_bytes(&mut self, bytes: &[u8]) -> ToileOutcome {
@@ -67,10 +67,10 @@ impl ToileState {
     }
 
     /// Route a converted batch: a parse / limit failure aborts with `ImportFailed`
-    /// (nothing applied, §1); a media-free batch takes the FAST PATH and lands
+    /// (nothing applied,); a media-free batch takes the FAST PATH and lands
     /// now in one undo group; a media-bearing batch is stashed as a
     /// [`PendingImport`] and issues one `UploadMedia` request per blob, applying
-    /// nothing until every real hash returns (`toile-interop §5`).
+    /// nothing until every real hash returns (`toile-media`).
     fn begin_import(&mut self, converted: Result<ImportBatch, ImportError>) -> ToileOutcome {
         let batch = match converted {
             Ok(b) => b,
@@ -115,7 +115,7 @@ impl ToileState {
     }
 
     /// Handle a service-plane response routed back to this document
-    /// (`toile-interop §5`): a `MediaUploaded` fills one outstanding upload of a
+    /// (`toile-media`): a `MediaUploaded` fills one outstanding upload of a
     /// pending import with its real hash. When the last blob resolves, the batch
     /// lands atomically. An id matching no pending import is a stale response
     /// (the import was undone / the doc reopened) and is dropped.
@@ -146,8 +146,8 @@ impl ToileState {
     }
 
     /// Handle a service-plane failure routed back to this document
-    /// (`toile-interop §5`): a failed media upload aborts the whole pending import
-    /// (§1 atomicity), leaving the board untouched. An id matching no pending
+    /// (`toile-media`): a failed media upload aborts the whole pending import
+    /// (atomicity), leaving the board untouched. An id matching no pending
     /// import is dropped.
     pub fn handle_service_error(&mut self, id: RequestId, reason: String) -> ToileOutcome {
         let Some(pos) = self
@@ -169,16 +169,16 @@ impl ToileState {
     }
 
     /// Apply a converted [`ImportBatch`] as ONE atomic undo group
-    /// (`toile-interop` §1/§2.E). The pass is strictly ordered so every slot /
+    /// (`toile-import-export`). The pass is strictly ordered so every slot /
     /// group reference resolves before it is used:
     ///
     /// 1. **creates** -> `create_element_inner`, minting an [`ElementId`] per slot;
     /// 2. **styles** -> `restyle_inner` on the slot's fresh element (style is an
-    ///    independent LWW register, §2.E, so it cannot ride the create);
+    ///    independent LWW register, so it cannot ride the create);
     /// 3. **groups** -> `group_inner`, innermost-first, so a `Group(i)` member
-    ///    always resolves to an already-built group (§2.A);
+    ///    always resolves to an already-built group;
     /// 4. **connectors** -> `create_connector_inner`, endpoints resolved by ref;
-    /// 5. **media** -> `seed_media` (dedup, §5);
+    /// 5. **media** -> `seed_media` (dedup);
     /// 6. a single `doc.commit()` + one `rebuild_caches`.
     ///
     /// Returns the finalized [`ImportReport`] (its `imported` count is the number
@@ -245,7 +245,7 @@ impl ToileState {
             if built.is_some() {
                 // Seed the fresh group's derived bounds now, so a later
                 // `Group(i)` member passes `group_inner`'s existence check
-                // (bounds-keyed) before the final `rebuild_caches` (§2.F bis).
+                // (bounds-keyed) before the final `rebuild_caches`.
                 self.recompute_groups();
             }
             group_ids.push(built);
@@ -296,9 +296,9 @@ impl ToileState {
         }
     }
     /// Populate the `media` root map from a batch's plaintext blobs
-    /// (`toile-logic §2.B`), **without** committing. Each blob's `hash` (the real
+    /// (`toile-elements`), **without** committing. Each blob's `hash` (the real
     /// blake2b, resolved Sync-side by the time this runs) keys a `{w, h, mime,
-    /// thumb}` map. Dedup is content-addressed (§5): a hash already present is
+    /// thumb}` map. Dedup is content-addressed: a hash already present is
     /// left untouched, so N elements sharing one image seed exactly one entry.
     /// Returns the count of NEW entries created (existing keys are skipped).
     ///
@@ -310,7 +310,7 @@ impl ToileState {
         for blob in blobs {
             let key = blob.hash.as_str();
             if key.is_empty() || media.get(key).is_some() {
-                // No real hash yet, or the entry already exists (dedup, §5).
+                // No real hash yet, or the entry already exists (dedup,).
                 continue;
             }
             let Ok(entry) = media.insert_container(key, LoroMap::new()) else {
@@ -495,7 +495,7 @@ mod tests {
     #[test]
     fn seed_media_dedups_repeated_hashes() {
         let mut st = ToileState::new();
-        // Two blobs with the same content hash collapse to one entry (§5 dedup).
+        // Two blobs with the same content hash collapse to one entry (dedup).
         let n = st.seed_media(&[
             blob("dup", 10, 10, "image/png"),
             blob("dup", 10, 10, "image/png"),

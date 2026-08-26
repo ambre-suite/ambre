@@ -1,6 +1,6 @@
 // ambre-chrome/src/format.rs
 // ============================================================================
-// Shared, app-agnostic text-format controls (ambre-spec-chrome.md 2.B), the rest
+// Shared, app-agnostic text-format controls (ambre-spec-chrome.md), the rest
 // of the text-format cluster promoted out of Trame's cell toolbar so Trame cells
 // and Toile elements drive the SAME controls (mirrors `FontPicker` / `ColorPopover`):
 //

@@ -1,7 +1,7 @@
 // ambre-canvas/src/intent.rs
 // ============================================================================
 // One-shot UI intents: canvas->DOM channel for "open a floating chrome surface
-// now" pulses (ambre-spec-trame-ui sec.5.D). Unlike `AnchorPublisher`, which
+// now" pulses (`trame-shared-filter`). Unlike `AnchorPublisher`, which
 // the view re-publishes every frame and the chrome reads non-destructively,
 // these carry a single edge: the view raises the flag on a click, the launcher
 // consumes it once per frame and resets it.

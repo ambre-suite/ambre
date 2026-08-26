@@ -1,15 +1,15 @@
 // ambre-toile/src/ui/menu_bar.rs
 // ============================================================================
-// Command surface for the Toile top menu bar and zoom control (toile-ui
-// SS5quinquies.E). The host-visible half: the `CommandId`s that only the menu
+// Command surface for the Toile top menu bar and zoom control
+// (`toile-menus`). The host-visible half: the `CommandId`s that only the menu
 // bar contributes (Undo / Redo / Present and the five zoom actions), the
 // `MenuId` grouping, and the pure per-menu layout the DOM builder renders.
 //
 // Kept in the always-compiled `ui` module (not the wasm-only `chrome`) so it is
-// host-unit-tested (SS10), exactly like `ui::menu`, `ui::palette` and `ui::find`.
+// host-unit-tested, exactly like `ui::menu`, `ui::palette` and `ui::find`.
 // The wasm-only Leptos component that renders these (`chrome::TopMenuBar`)
 // consumes them and routes every selection through the same `on_command` path as
-// the context menu (the shared command channel of SS5quinquies).
+// the context menu (the shared command channel of the chrome surfaces).
 //
 // The Edit / Object rows REUSE the ids already declared for the context menu
 // (`ui::menu`): a menu id is minted once and shared by every trigger, so a menu-
@@ -30,7 +30,7 @@ use super::menu;
 pub const UNDO: CommandId = CommandId("toile.edit.undo");
 /// Redo the last undone mutation (-> `ToileCommand::Redo`).
 pub const REDO: CommandId = CommandId("toile.edit.redo");
-/// Zoom in one notch about the viewport center (local transform, SS5quinquies.E).
+/// Zoom in one notch about the viewport center (local transform, `toile-menus`).
 pub const ZOOM_IN: CommandId = CommandId("toile.view.zoom_in");
 /// Zoom out one notch about the viewport center.
 pub const ZOOM_OUT: CommandId = CommandId("toile.view.zoom_out");
@@ -40,13 +40,13 @@ pub const ZOOM_RESET: CommandId = CommandId("toile.view.zoom_reset");
 pub const ZOOM_FIT: CommandId = CommandId("toile.view.zoom_fit");
 /// Fit the current selection into the viewport (Zoom-to-selection).
 pub const ZOOM_TO_SELECTION: CommandId = CommandId("toile.view.zoom_to_selection");
-/// Wheel navigation preference (§3), all view-local: `Auto` detects the device
+/// Wheel navigation preference, all view-local: `Auto` detects the device
 /// per event, `Mouse` makes the wheel zoom, `Trackpad` makes it pan (Ctrl/pinch
 /// still zooms).
 pub const POINTER_AUTO: CommandId = CommandId("toile.view.pointer_auto");
 pub const POINTER_MOUSE: CommandId = CommandId("toile.view.pointer_mouse");
 pub const POINTER_TRACKPAD: CommandId = CommandId("toile.view.pointer_trackpad");
-/// Enter presentation mode (the sequence panel of `toile-features SS9`). A stub
+/// Enter presentation mode (the deck panel of `toile-presentation`). A stub
 /// here: the panel is owned by that feature, not this surface.
 pub const PRESENT: CommandId = CommandId("toile.present.start");
 
@@ -68,7 +68,7 @@ pub const MENU_BAR_COMMANDS: &[CommandId] = &[
 
 // -- Menu grouping -------------------------------------------------------------
 
-/// The five top-level menus (SS5quinquies.E), in bar order.
+/// The five top-level menus (`toile-menus`), in bar order.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MenuId {
     File,
@@ -120,7 +120,7 @@ impl MenuRow {
 /// The Delete accelerator (the bare `Del` key, matching the view's shortcut).
 const DEL: KeyBinding = KeyBinding::new(Modifiers::NONE, Key::Delete);
 
-/// The rows of one menu (SS5quinquies.E), grouped with separators. Inapplicable-
+/// The rows of one menu (`toile-menus`), grouped with separators. Inapplicable-
 /// row hiding by selection state is NOT done here (unlike the context menu): a
 /// menu bar shows a stable layout and relies on the command's registry state to
 /// disable an entry, so the layout is a pure function of the `MenuId`.
@@ -179,7 +179,7 @@ pub fn menu_bar_edit(id: CommandId) -> Option<ToileCommand> {
         UNDO => Some(ToileCommand::Undo),
         REDO => Some(ToileCommand::Redo),
         // Enter presentation (focus) mode; the presenter overlay / playback
-        // controls of toile-features §9 will layer on the resulting
+        // controls of toile-presentation will layer on the resulting
         // PresentModeChanged signal later.
         PRESENT => Some(ToileCommand::EnterPresent { focus: true }),
         _ => None,

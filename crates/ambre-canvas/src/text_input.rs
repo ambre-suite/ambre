@@ -1,17 +1,17 @@
 // ambre-canvas/src/text_input.rs
 // ============================================================================
-// The transparent `<textarea>` keyboard/IME/clipboard pipe (ambre-spec-chrome
-// 2.C) and the content a11y mirror (2.F). The textarea renders NOTHING -- the
+// The transparent `<textarea>` keyboard/IME/clipboard pipe
+// (`ambre-spec-text-input.md`) and the content a11y mirror
+// (`ambre-spec-accessibility.md`). The textarea renders NOTHING -- the
 // canvas draws caret, selection and the IME composition string -- but it is the
 // real keyboard FOCUS, so it doubles as the accessibility entry point to the
 // canvas content: an accessible textbox plus a paired polite live region that
 // announces the focused cell as the selection moves.
 //
-// This is the web-pragmatic stand-in for "AccessKit scoped to content": on the
-// web the accessibility tree IS the DOM, so content a11y means mirroring the
-// focused content into the DOM rather than pushing a tree to a platform adapter
-// (AccessKit has no web adapter). Scope is deliberately the focused cell, not a
-// full 100k-row mirror.
+// On the web the accessibility tree IS the DOM, so content a11y means mirroring
+// the focused content into the DOM rather than pushing a tree to a platform
+// adapter. Scope is deliberately the focused unit, not a full 100k-row mirror
+// (`ambre-spec-accessibility.md`).
 //
 // Ownership: created and positioned by the launcher's frame host under the
 // canvas's positioned container; the per-app view (an `AppView` variant) drives
@@ -33,7 +33,8 @@ use web_sys::{Document, Element, HtmlTextAreaElement};
 pub struct TextInput {
     textarea: HtmlTextAreaElement,
     /// Visually-hidden `aria-live="polite"` region announcing the focused cell
-    /// to screen readers as the selection moves (content a11y, 2.F).
+    /// to screen readers as the selection moves (`ambre-spec-accessibility.md`,
+    /// CHROME-023).
     live: Element,
     /// True between `compositionstart` and `compositionend`. Shared with the
     /// host's `input` listener so it skips the half-formed value mid-composition
@@ -129,7 +130,7 @@ impl TextInput {
 
     /// Announce the focused content (e.g. `"B2, 42"`) to screen readers via the
     /// polite live region. Called by the view when the selection moves or a cell
-    /// edit commits -- the content a11y mirror (2.F). Replacing the text content
+    /// edit commits (`ambre-spec-accessibility.md`). Replacing the text content
     /// of an `aria-live` region is what triggers the announcement.
     pub fn announce(&self, text: &str) {
         self.live.set_text_content(Some(text));

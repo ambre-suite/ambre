@@ -320,7 +320,7 @@ fn concurrent_resize_of_same_col_converges_lww() {
 }
 
 /// `CopyRange` builds the clipboard payload from the whole document, not a
-/// viewport cache (`-ui.md` sec.5.E). The selection spans a range far larger
+/// viewport cache (`trame-clipboard`). The selection spans a range far larger
 /// than any single viewport, with a populated cell near its bottom edge: the
 /// authoritative Logic-side build must include it, proving the old best-effort
 /// out-of-viewport limit is gone.

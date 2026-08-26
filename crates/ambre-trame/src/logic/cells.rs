@@ -52,7 +52,7 @@ impl TrameState {
     /// Rewrite user-entered formula text into its canonical CRDT form: each
     /// cross-sheet qualifier is bound to the stable `sheet_id`
     /// (`Sheet2!A1` -> `#s0!A1`), so a later rename/reorder never invalidates the
-    /// reference (§2.D). Plain text, formulas without a sheet qualifier, and
+    /// reference (`trame-sheets`). Plain text, formulas without a qualifier, and
     /// formulas that fail to parse are stored verbatim (the user's exact input).
     pub(super) fn canonicalize_input(&self, text: &str) -> String {
         let Some(body) = text.strip_prefix('=') else {
@@ -105,7 +105,8 @@ impl TrameState {
     /// cell with. Extends the dense used range by pushing placeholder elements,
     /// capturing each new element's stable id. Returns `None` -- dropping the
     /// write -- if the jump past the high-water mark exceeds [`MATERIALIZE_CAP`].
-    /// Mint a fresh, peer-scoped row/column [`Uid`] (§2.A). The pair
+    /// Mint a fresh, peer-scoped row/column [`Uid`] (`trame-rows-and-columns`).
+    /// The pair
     /// `(document PeerID, per-session counter)` is unique across peers, so
     /// concurrent materialize/insert ops never collide.
     pub(super) fn mint_uid(&mut self) -> Uid {
@@ -248,7 +249,7 @@ impl TrameState {
                 return;
             };
             // Persist the canonical (`sheet_id`-bound) form so cross-sheet
-            // references survive rename/reorder (§2.D).
+            // references survive rename/reorder (`trame-sheets`).
             let stored = self.canonicalize_input(text);
             let _ = self
                 .doc
@@ -274,7 +275,8 @@ impl TrameState {
         let indices = self.engine_indices();
         self.engine.compute_all_dirty(&indices);
         // The edit may change the filtered column's value: recompute the active
-        // filter so the row's hidden status tracks the data (§1.A).
+        // filter so the row's hidden status tracks the data
+        // (`trame-shared-filter`).
         self.recompute_active_filter();
         let update = self.flush_delta();
         // Ask the UI to re-fetch its viewport so the edit (and any formula it

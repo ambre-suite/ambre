@@ -1,6 +1,6 @@
 // ambre-toile/src/ui/presenter.rs
 // ============================================================================
-// Pure model for the presenter overlay panel (toile-features §1.D). Two host-
+// Pure model for the presenter overlay panel (toile-presentation). Two host-
 // testable helpers the wasm-only `chrome::PresenterPanel` builds on:
 //   - `slide_counter_label`: the "k / n" slide counter text.
 //   - `notes_delta`: a full-textarea replacement reduced to one char-CRDT splice

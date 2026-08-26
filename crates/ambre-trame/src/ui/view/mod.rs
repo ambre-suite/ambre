@@ -39,7 +39,7 @@ use crate::render::{CommitDirection, FormulaAction};
 const BLINK_MS: f64 = 530.0;
 
 /// Compute the autofill destination rectangle from the source selection `src`
-/// and the cell `(row, col)` under the dragged handle (`-ui.md` sec.5.F). The
+/// and the cell `(row, col)` under the dragged handle (`trame-autofill`). The
 /// fill handle locks to a single axis: whichever direction the pointer extends
 /// farthest from the source wins, and the destination always contains the
 /// source. Returns the normalized rectangle `(r1, c1, r2, c2)`.
@@ -154,7 +154,7 @@ fn formula_input_focused() -> bool {
 }
 
 /// Trigger a browser download of `data` named `filename` (interop export,
-/// `ambre-spec-trame-interop.md` §3/§4). Wraps the bytes in a `Blob`, mints an
+/// `trame-import-export`). Wraps the bytes in a `Blob`, mints an
 /// object URL, and clicks a synthetic `<a download>`; the URL is revoked right
 /// after so it does not leak. Best-effort: any missing DOM handle is logged and
 /// skipped (the export bytes are already computed, only the download is lost).
@@ -232,28 +232,28 @@ pub struct TrameView {
     /// Last anchor published, so it is only re-published on change.
     last_anchor: Option<Anchor>,
     /// Publishes the per-frame perf snapshot (fps + timings) so the DOM status
-    /// bar can render it -- the HUD migrated off the wgpu overlay (sec.13bis).
+    /// bar can render it -- the HUD left the wgpu overlay (`trame-status-bar`).
     perf_pub: PerfPublisher,
     /// One-shot canvas->launcher channel raised when an in-canvas autofilter
-    /// button is clicked (`-ui.md` sec.5.D). The launcher consumes it to open the
+    /// button is clicked (`trame-shared-filter`). The launcher consumes it to open the
     /// DOM `FilterPopover` over the active cell -- the same path as the
     /// context-menu "Filter by column" entry, so there is one filter code path.
     filter_open: FilterOpenPublisher,
-    /// Status-bar selection aggregates signal (`-ui.md` sec.13bis). The view
+    /// Status-bar selection aggregates signal (`trame-status-bar`). The view
     /// clears it to `None` on a single-cell selection; the Logic round-trip
     /// (`RequestSelectionStats` -> `SelectionStats`) sets it from the launcher's
     /// event loop on a multi-cell one. Browser-only, like the formula signals.
     #[cfg(target_arch = "wasm32")]
     sel_stats: RwSignal<Option<crate::chrome::SelStats>>,
     /// Which surface the last right-click landed on (cell vs header), published
-    /// so the launcher swaps the context-menu layout (`-ui.md` sec.5.C). Set in
+    /// so the launcher swaps the context-menu layout (`trame-context-menu`). Set in
     /// the right-click `PointerDown` handler, which runs synchronously before the
     /// DOM `contextmenu` listener opens the menu. Browser-only.
     #[cfg(target_arch = "wasm32")]
     ctx_scope: RwSignal<crate::ui::grid::CtxScope>,
     /// Current selection rectangle `(r1, c1, r2, c2)`, published on every
     /// selection change so the launcher can open the multi-column `SortDialog`
-    /// over the selection's columns (`-ui.md` sec.5.C). Browser-only.
+    /// over the selection's columns (`trame-sort`). Browser-only.
     #[cfg(target_arch = "wasm32")]
     sel_bounds: RwSignal<Option<(u32, u32, u32, u32)>>,
 
@@ -270,7 +270,7 @@ pub struct TrameView {
     #[cfg(target_arch = "wasm32")]
     formula_action: RwSignal<Option<FormulaAction>>,
     /// Grid zoom factor (`1.0` = 100%) shared with the status-bar zoom menu
-    /// (`-ui.md` sec.13bis): the menu writes it, the view polls it each frame and
+    /// (`trame-status-bar`): the menu writes it, the view polls it each frame and
     /// applies it via [`set_zoom`](Self::set_zoom). Browser-only, like the formula
     /// signals; pure local view state, never synced.
     #[cfg(target_arch = "wasm32")]
@@ -290,21 +290,22 @@ pub struct TrameView {
     /// moves while set extend the live selection rectangle.
     selecting_drag: bool,
     /// In-progress whole-axis (column/row) selection drag from a header body
-    /// (`-ui.md` sec.4bis.A), or `None`. Holds which axis is being swept; pointer
+    /// (`trame-selection`), or `None`. Holds which axis is being swept; pointer
     /// moves extend the band to the column/row under the cursor.
     axis_drag: Option<crate::ui::grid::SelKind>,
-    /// In-progress header-boundary resize drag (`-ui.md` sec.4bis.C), or `None`.
+    /// In-progress header-boundary resize drag (`trame-resize`), or `None`.
     /// Holds the [`HeaderHit::ColBorder`] / [`HeaderHit::RowBorder`] being dragged
     /// so the release knows which column/row to resize; pointer moves update the
     /// live guide line ([`TrameUiState::resize_preview`]).
     resize_drag: Option<HeaderHit>,
-    /// A pending column/row auto-fit (`-ui.md` sec.4bis.C) awaiting the parley
+    /// A pending column/row auto-fit (`trame-resize`) awaiting the parley
     /// font context: set on a border double-click, resolved and cleared by the
     /// next [`paint_content`](Self::paint_content) which owns the measurement.
     pending_autofit: Option<HeaderHit>,
-    /// In-progress autofill drag from the fill handle, or `None` (`-ui.md`
-    /// sec.5.F). Holds the source rectangle the drag started from and the source
-    /// block granularity `(rows, cols)` -- `(1, 1)` for a plain cell, the merge
+    /// In-progress autofill drag from the fill handle, or `None`
+    /// (`trame-autofill`). Holds the source rectangle the drag started from and
+    /// the source block granularity `(rows, cols)` -- `(1, 1)` for a plain cell,
+    /// the merge
     /// span for a merged-cell source so the drag snaps block by block. Ctrl is
     /// read at *release* time (forces Copy on a multi-cell source and a +1 numeric
     /// Series on a single-cell one, Excel-style), so toggling it mid-drag counts.
@@ -319,8 +320,9 @@ pub struct TrameView {
     /// header body, so a plain click still selects/extends the axis.
     reorder_drag: Option<(crate::ui::grid::SelKind, u32)>,
     /// The CSS cursor currently set on `#ambre-canvas` from bare hover feedback
-    /// (sec.4bis.B / sec.5.F): `"col-resize"` / `"row-resize"` / `"pointer"` /
-    /// `"crosshair"` / `""`. Tracked to avoid redundant DOM writes every move.
+    /// (`trame-resize`, `trame-autofill`): `"col-resize"` / `"row-resize"` /
+    /// `"pointer"` / `"crosshair"` / `""`. Tracked to avoid redundant DOM writes
+    /// every move.
     hover_cursor: String,
     /// The edit overlay changed this frame (keystroke, caret move, IME pass).
     edit_dirty: bool,
@@ -331,7 +333,8 @@ pub struct TrameView {
     last_blink_ms: f64,
     /// `performance.now()` of the input awaiting its caret paint, set by an edit
     /// interaction and consumed once the caret is next drawn -- the keydown->caret
-    /// latency probe (ambre-spec-chrome 7, Phase 3 profiling). `None` when idle.
+    /// latency probe, against the keystroke-to-draft budget of
+    /// `ambre-spec-budgets.md`. `None` when idle.
     pending_input_mark: Option<f64>,
 
     /// `performance.now()` handle for the renderer's sub-phase timings.
@@ -382,17 +385,17 @@ pub struct TrameView {
 
     /// The last grid copy/cut was a cut: the source range
     /// ([`TrameUiState::clipboard_anchor`]) is cleared after the next paste
-    /// (`-ui.md` sec.5.E). UI-only view state.
+    /// (`trame-clipboard`). UI-only view state.
     cut_pending: bool,
 
     /// A [`ClipboardBlob`] built from a `TrameEvent::Clipboard` reply, awaiting
     /// the host's per-frame [`poll_clipboard`](TrameView::poll_clipboard) which
     /// mirrors it to the OS clipboard inside the transient-activation window
-    /// (`-ui.md` sec.5.E). `None` between a drain and the next copy.
+    /// (`trame-clipboard`). `None` between a drain and the next copy.
     pending_clipboard: Option<ambre_bus::ClipboardBlob>,
     /// The last authoritative clipboard blob copied this session, kept in memory
     /// for a full-fidelity same-tab paste that never depends on the OS custom
-    /// MIME type surviving the round-trip (`-ui.md` sec.5.E).
+    /// MIME type surviving the round-trip (`trame-clipboard`).
     last_clip: Option<ambre_bus::ClipboardBlob>,
 }
 

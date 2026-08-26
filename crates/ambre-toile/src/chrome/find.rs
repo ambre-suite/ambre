@@ -1,8 +1,8 @@
 // ambre-toile/src/chrome/find.rs
 // ============================================================================
-// The Find panel (toile-ui §5quater): a single Leptos component pinned to a
+// The Find panel (toile-find): a single Leptos component pinned to a
 // board corner, opened by Ctrl+F. Find-only -- Replace is out of MVP on a
-// free-form canvas (§12). The panel owns the query and the two options
+// free-form canvas. The panel owns the query and the two options
 // (match_case / whole_word) as its own signals and emits one intent, `on_find`
 // (-> ToileCommand::Find), whenever the query changes or the user steps through
 // matches with Enter / Shift+Enter.
@@ -25,7 +25,7 @@ use crate::ui::find::active_index;
 /// resume from (`None` = a fresh search focusing the first hit), and the step
 /// direction. The launcher forwards it as
 /// [`ambre_bus::app::toile::ToileCommand::Find`]; Logic steps `focus` forward or
-/// backward from `from` itself (toile-logic §8 quater).
+/// backward from `from` itself (toile-find).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FindQuery {
     pub query: String,
@@ -77,7 +77,7 @@ pub fn FindPanel(
     let run_fresh = move || emit(None, false);
 
     // Step to the next (or previous) match, resuming from the current focus.
-    // Logic advances or rewinds from `from` and wraps (toile-logic §8 quater).
+    // Logic advances or rewinds from `from` and wraps (toile-find).
     let step = move |backward: bool| {
         let from = result.with_untracked(|r| r.as_ref().and_then(|fr| fr.focus.clone()));
         emit(from, backward);

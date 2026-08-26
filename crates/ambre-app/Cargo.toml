@@ -37,7 +37,7 @@ tracing-wasm = { workspace = true }
 # UI <-> Logic channels (shared memory, this Main instance).
 flume        = { workspace = true }
 # Encode SyncCommand / decode LogicEvent across the Sync-worker postMessage hop,
-# and the clipboard ClipboardPayload onto the OS clipboard (sec.5.E).
+# and the clipboard ClipboardPayload onto the OS clipboard (`trame-clipboard`).
 postcard     = { workspace = true }
 # Base64 for transporting the postcard clipboard payload as a UTF-8 string.
 base64       = { workspace = true }
@@ -57,6 +57,6 @@ console_error_panic_hook = { workspace = true }
 # even its pure helpers (route parsing, base64, FPS window) can only be exercised
 # on the wasm target. Tests run via `wasm-pack test --headless --chrome
 # crates/ambre-app` (`just test-wasm`); on host the crate is empty and the native
-# tier skips it. See ambre-spec-architecture.md §4 + ambre-spec-testing.md.
+# tier skips it. See ambre-spec-testing.md.
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"

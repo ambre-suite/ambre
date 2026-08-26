@@ -1,7 +1,7 @@
 // ambre-toile/src/ui/status.rs
 // ============================================================================
-// Pure status-bar model + formatting for the selection status band (toile-ui
-// §8bis). Kept in the always-compiled `ui` module (like `ui::find`) so the
+// Pure status-bar model + formatting for the selection status band
+// (`toile-status-bar`). Kept in the always-compiled `ui` module (like `ui::find`) so the
 // count/bounds formatting is host-unit-tested; the DOM `StatusBar` component
 // (chrome/status.rs) is a thin wasm-only view over these helpers.
 //
@@ -9,12 +9,12 @@
 // bounds (x / y / w / h); the right side hosts the shared zoom + fps chips
 // (`ambre-chrome`). An empty or single-element selection shows only the count
 // (no meaningful multi-element bounds), matching Trame's "lone cell shows
-// nothing" rule (trame-ui §13bis).
+// nothing" rule (`trame-status-bar`).
 // ============================================================================
 
 use ambre_draw::Rect;
 
-/// Selection aggregates rendered by the status bar (§8bis), mirrored from
+/// Selection aggregates rendered by the status bar, mirrored from
 /// [`ToileEvent::SelectionStats`](ambre_bus::app::toile::ToileEvent::SelectionStats).
 /// `count` is the number of selected elements; `bounds` is their union AABB in
 /// world units, `None` when the selection is empty (nothing to frame).
@@ -62,7 +62,7 @@ pub fn fmt_world(v: f64) -> String {
 }
 
 /// The selection-count caption, e.g. `"1 element"` / `"3 elements"`. `None` on
-/// an empty selection so the band shows only the zoom chip (§8bis).
+/// an empty selection so the band shows only the zoom chip.
 pub fn count_label(stats: &SelStats) -> Option<String> {
     match stats.count {
         0 => None,
@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn single_element_shows_count_only() {
-        // A lone element: count is shown, but no combined bounds (§8bis).
+        // A lone element: count is shown, but no combined bounds.
         let s = SelStats::from_reply(1, Some(Rect::new(0.0, 0.0, 10.0, 20.0)));
         assert_eq!(count_label(&s).as_deref(), Some("1 element"));
         assert_eq!(bounds_label(&s), None);

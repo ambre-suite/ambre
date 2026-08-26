@@ -136,7 +136,7 @@ pub fn draw_cells<S: DrawSurface>(
     );
 
     // -- 3ter. Cell borders LAST, so a deliberate border is never overpainted by a
-    // faint grid separator nor by the merge repaint (`-ui.md` sec.5bis). A merged
+    // faint grid separator nor by the merge repaint (`trame-cell-styles`). A merged
     // master's border wraps the whole span (merge_rect); plain cells use their own
     // rect. Second pass over the strip (the first iterator was consumed by
     // draw_cells_on); plus the cache for merge masters pinned just outside it.

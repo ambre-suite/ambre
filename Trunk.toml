@@ -35,7 +35,7 @@ backend = "http://127.0.0.1:3000/api/"
 
 # Cross-Origin Isolation: required to enable SharedArrayBuffer (and therefore
 # WebAssembly.Memory shared = true), the bedrock for the multi-threaded WASM
-# model described in specs/ambre-multithreaded-wasm-migration.md.
+# model described in specs/1-Foundations/ambre-spec-architecture.md.
 #
 # COOP=same-origin isolates this top-level browsing context from popups/openers.
 # COEP=credentialless strips credentials from cross-origin sub-resource fetches

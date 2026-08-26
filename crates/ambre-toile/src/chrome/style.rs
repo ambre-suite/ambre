@@ -1,12 +1,12 @@
 // ambre-toile/src/chrome/style.rs
 // ============================================================================
-// The style / property inspector (toile-ui SS5quinquies.B), wasm-only. A DOM side
+// The style / property inspector (`toile-styles`), wasm-only. A DOM side
 // panel shown only when the selection is non-empty; it edits the selected
 // elements' `ElementStyle` -- fill, stroke, stroke width, opacity -- plus the
 // z-order and Lock / Unlock actions.
 //
 // Style edits are DEBOUNCED and emitted as ONE `RestyleElements` over the whole
-// selection (the style register is written whole, SS2.E): the panel keeps a local
+// selection (the style register is written whole, `TOILE-018`): the panel keeps a local
 // working `ElementStyle` seeded from the published common style, mutates it on
 // each control, and (after a quiet interval) writes it to the shared `restyle`
 // signal the canvas view drains. Selection is UI-only state the view owns, so the
@@ -18,7 +18,7 @@
 // differ across the selection show a "Mixed" hint (the mask from `ui::style`).
 //
 // Colour editing uses the shared `ambre_chrome::ColorPopover` in ARGB mode
-// (`alpha=true`), the very control Trame's cell fg/bg picker uses (SS5quinquies.C).
+// (`alpha=true`), the very control Trame's cell fg/bg picker uses (`toile-styles`).
 // Every control does `on:mousedown prevent_default` to keep DOM focus on the
 // canvas text pipe -- the palette / FormatBar hazard.
 // ============================================================================
@@ -42,7 +42,7 @@ use crate::ui::menu::CtxScope;
 use crate::ui::style::StyleModel;
 
 /// How long the inspector waits after the last edit before emitting the coalesced
-/// `RestyleElements` (SS5quinquies.B, "edits are debounced"). Short enough to feel
+/// `RestyleElements` (`toile-styles`, "edits are debounced"). Short enough to feel
 /// live, long enough to fold a slider drag into a single command.
 const RESTYLE_DEBOUNCE: Duration = Duration::from_millis(120);
 
@@ -65,7 +65,7 @@ pub fn StyleInspector(
     let stroke = RwSignal::new(None::<u32>);
     let stroke_w = RwSignal::new(1.0_f32);
     let opacity = RwSignal::new(1.0_f32);
-    // Text (foreground) colour + font controls (§5quinquies.B / §6).
+    // Text (foreground) colour + font controls.
     let text_color = RwSignal::new(None::<u32>);
     let font_family = RwSignal::new(None::<String>);
     let font_size = RwSignal::new(0.0_f32);
@@ -252,7 +252,7 @@ pub fn StyleInspector(
                     </div>
                 </div>
 
-                // -- Text: colour / font / size / bold / italic (§6) --
+                // -- Text: colour / font / size / bold / italic --
                 <div class="ambre-inspector-section">
                     <div class="ambre-inspector-row">
                         <ColorPopover

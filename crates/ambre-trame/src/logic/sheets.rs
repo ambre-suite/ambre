@@ -44,7 +44,8 @@ impl TrameState {
             // Masking is derived per sheet from that sheet's `merges_{sheet}` map,
             // so a masked conflicted cell is excluded from the DAG on *every*
             // sheet -- a cross-sheet reference to it converges regardless of the
-            // active tab (§6). For the active sheet this equals `self.masked_cells`.
+            // active tab (`trame-cell-merges`). For the active sheet this equals
+            // `self.masked_cells`.
             let masked = self.masked_cells_for(&sheet_id, index);
             // Feed the cells in stable key order. The map iterates in hash order,
             // and the feed order decides which cell of a cycle gets rejected: a
@@ -191,7 +192,8 @@ impl TrameState {
     }
 
     // -------------------------------------------------------------------------
-    // Sheet lifecycle (create / rename / reorder / delete / activate) -- §2.D
+    // Sheet lifecycle (create / rename / reorder / delete / activate) --
+    // `trame-sheets`
     // -------------------------------------------------------------------------
 
     /// Every sheet id registered in the `sheets` CRDT map (unordered).
@@ -272,7 +274,8 @@ impl TrameState {
         conflicts
     }
 
-    /// Switch the active sheet and re-derive its caches (§2.D). A no-op if the id
+    /// Switch the active sheet and re-derive its caches (`trame-sheets`). A no-op
+    /// if the id
     /// is unknown or already active.
     pub(super) fn activate_sheet(&mut self, sheet_id: &str) -> TrameOutcome {
         if sheet_id == self.active_sheet || !self.all_sheet_ids().iter().any(|id| id == sheet_id) {
@@ -286,7 +289,8 @@ impl TrameState {
         TrameOutcome::display_only(display)
     }
 
-    /// Add a sheet with a freshly minted peer-scoped id (§2.D). The new sheet is
+    /// Add a sheet with a freshly minted peer-scoped id (`trame-sheets`). The new
+    /// sheet is
     /// empty; its containers are created lazily on first write. Does not switch
     /// the active sheet (the UI sends [`TrameCommand::ActivateSheet`] for that).
     pub(super) fn create_sheet(&mut self, name: &str) -> TrameOutcome {
@@ -307,7 +311,8 @@ impl TrameState {
 
     /// Rename a sheet's display label (LWW on the name). The stable id is
     /// untouched. The name -> index map changes, so reseed to recompile any
-    /// cross-sheet reference (the display-name binding is the §2.D MVP gap).
+    /// cross-sheet reference (the display-name binding is the `trame-sheets` MVP
+    /// gap).
     /// A no-op if the id is unknown.
     pub(super) fn rename_sheet(&mut self, sheet_id: &str, name: &str) -> TrameOutcome {
         if !self.all_sheet_ids().iter().any(|id| id == sheet_id) {
@@ -324,7 +329,8 @@ impl TrameState {
         }
     }
 
-    /// Move a sheet to `to_index` in the tab strip (§2.D). Pure presentation, no
+    /// Move a sheet to `to_index` in the tab strip (`trame-sheets`). Pure
+    /// presentation, no
     /// recompute. Materializes the canonical order into `sheet_order` first (the
     /// implicit default and unmerged entries are otherwise absent) so positions
     /// are well-defined, then issues one move op. A no-op if the id is unknown or
@@ -367,7 +373,8 @@ impl TrameState {
         }
     }
 
-    /// Delete a sheet and its per-sheet containers (§2.D). Rejected locally if it
+    /// Delete a sheet and its per-sheet containers (`trame-sheets`). Rejected
+    /// locally if it
     /// is the last remaining sheet. If the active sheet is deleted, the active
     /// sheet falls back to the previous tab (else the first remaining). The sheet
     /// set changed, so a full reseed remaps engine indices and lets cross-sheet

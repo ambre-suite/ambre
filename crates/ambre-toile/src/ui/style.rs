@@ -1,20 +1,20 @@
 // ambre-toile/src/ui/style.rs
 // ============================================================================
-// Command surface for the Toile style / property inspector (toile-ui
-// SS5quinquies.B). The host-visible half: the pure model the canvas view
+// Command surface for the Toile style / property inspector
+// (`toile-styles`). The host-visible half: the pure model the canvas view
 // publishes to the DOM inspector -- the selection's common `ElementStyle` plus a
 // per-field "mixed" mask flagging attributes that differ across the selection.
 //
 // Kept in the always-compiled `ui` module (not the wasm-only `chrome`) so it is
-// host-unit-tested (SS10), exactly like `ui::menu`, `ui::palette` and `ui::find`.
+// host-unit-tested, exactly like `ui::menu`, `ui::palette` and `ui::find`.
 // The wasm-only Leptos component that renders it (`chrome::StyleInspector`)
 // consumes this model and emits `RestyleElements` back through the view.
 //
-// Selection is UI-only state living in `ToileView` (toile-ui SS7 / SS11bis): the
+// Selection is UI-only state living in `ToileView` (`toile-selection`): the
 // DOM inspector cannot read it, so the view derives this model from its selection
 // x its last `DisplayViewport` and pushes it, mirroring how it publishes the
 // context-menu `CtxScope` (`ui::menu`). The style register is written whole
-// (SS2.E), so the inspector edits on top of `base` and emits one `RestyleElements`.
+// (`TOILE-018`), so the inspector edits on top of `base` and emits one `RestyleElements`.
 // ============================================================================
 
 use ambre_bus::app::toile::{DisplayNode, DisplayViewport, ElementId, ElementStyle};
@@ -22,7 +22,7 @@ use ambre_bus::app::toile::{DisplayNode, DisplayViewport, ElementId, ElementStyl
 /// Which style attributes differ across the current selection. A set flag means
 /// the inspector shows a mixed-state indicator for that field rather than a value;
 /// editing the field still writes it to every selected element (whole-register
-/// restyle, SS2.E). Only the fields the inspector exposes are tracked.
+/// restyle, `TOILE-018`). Only the fields the inspector exposes are tracked.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct MixedFlags {
     pub fill: bool,
@@ -55,7 +55,7 @@ impl MixedFlags {
     }
 }
 
-/// The inspector's view model for the current selection (toile-ui SS5quinquies.B).
+/// The inspector's view model for the current selection (`toile-styles`).
 /// `base` is a representative full style (the first selected element's), used both
 /// as the displayed value where fields agree and as the base the inspector mutates
 /// to build its whole-register `RestyleElements`. `mixed` marks the diverging

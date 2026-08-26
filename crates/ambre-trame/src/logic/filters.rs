@@ -9,10 +9,11 @@ use super::*;
 
 impl TrameState {
     // -------------------------------------------------------------------------
-    // Shared filter (apply / clear / recompute) -- features spec §1.A
+    // Shared filter (apply / clear / recompute) -- `trame-shared-filter`
     // -------------------------------------------------------------------------
 
-    /// Apply a shared filter to grid column `col` of the active sheet (§1.A).
+    /// Apply a shared filter to grid column `col` of the active sheet
+    /// (`trame-shared-filter`).
     ///
     /// Evaluates each materialized row's cell in that column through the formula
     /// cache, writes the rows failing the filter into `filter_hidden_{sheet}`
@@ -55,7 +56,7 @@ impl TrameState {
     }
 
     /// Collect the distinct visible values of the active cell's column for the
-    /// filter popover's "by values" list (`-ui.md` sec.5.D). Evaluates every
+    /// filter popover's "by values" list (`trame-shared-filter`). Evaluates every
     /// non-hidden materialized row through the formula cache, dedups by display
     /// text, sorts, and replies with [`TrameEvent::ColumnValues`]. A read-only
     /// query (no delta); replies with an empty list for a virtual column.
@@ -91,7 +92,7 @@ impl TrameState {
         TrameOutcome::display_only(vec![TrameEvent::ColumnValues { col, values }])
     }
 
-    /// Aggregate the tracked selection for the status bar (`-ui.md` sec.13bis).
+    /// Aggregate the tracked selection for the status bar (`trame-status-bar`).
     /// Walks the selection rectangle (skipping filter-hidden rows, like
     /// [`active_column_values`](Self::active_column_values)), pulling each cell's
     /// evaluated value through the formula cache. `count` tallies non-empty cells;
@@ -151,7 +152,8 @@ impl TrameState {
     }
 
     /// Clear the active shared filter: drop every `filter_hidden_{sheet}` entry
-    /// and the stored `filters_{sheet}` definition, then broadcast (§1.A). A no-op
+    /// and the stored `filters_{sheet}` definition, then broadcast
+    /// (`trame-shared-filter`). A no-op
     /// (no delta) when nothing is filtered.
     pub(super) fn clear_filter(&mut self, sheet_id: &str) -> TrameOutcome {
         if sheet_id != self.active_sheet {
@@ -176,7 +178,8 @@ impl TrameState {
         }
     }
 
-    /// Recompute the active filter's hidden rows after a data change (§1.A). Reads
+    /// Recompute the active filter's hidden rows after a data change
+    /// (`trame-shared-filter`). Reads
     /// the stored definition; a no-op when no filter is active. Commits the
     /// updated `filter_hidden_{sheet}` so the caller's [`flush_delta`] broadcasts
     /// it. Assumes the formula cache is already current.

@@ -1,11 +1,11 @@
-//! SVG import (`toile-interop` §2.A).
+//! SVG import (`toile-import-export`).
 //!
 //! `usvg` parses the document into a normalized render tree; we walk it and map
 //! each node to a Toile `CreateElement`. usvg flattens every primitive
 //! (`<rect>`, `<circle>`, `<line>`, ...) into a `Path`, so vector nodes map to
 //! `Shape(Path)` carrying a `kurbo::BezPath`; an axis-aligned rectangle contour
 //! is recognized back into `Shape(Rect)` (the common, safe case). `<image>` maps
-//! to an `Image` element plus a plaintext [`MediaBlob`] (§5), and `<g>` becomes
+//! to an `Image` element plus a plaintext [`MediaBlob`], and `<g>` becomes
 //! an [`ImportGroup`] rebuilt after apply -- see the note on groups below.
 //!
 //! **Text (why not usvg).** usvg only exposes `<text>` by flattening it to glyph
@@ -16,7 +16,7 @@
 //! renders through its own Parley stack. Phase 0 reads top-level `x`/`y` only (no
 //! transform / `tspan` offset resolution), noted where it matters.
 //!
-//! **Groups (§2.A).** The spec maps `<g>` to a Toile `group`. A group is created
+//! **Groups.** The spec maps `<g>` to a Toile `group`. A group is created
 //! only via `GroupElements { ids }`, which needs the `ElementId`s the engine mints
 //! *after* `CreateElement` is applied -- ids an offline converter cannot know. So
 //! the converter speaks in slots: it imports the children as elements (the group's
@@ -28,8 +28,8 @@
 //! group, reconstructing the hierarchy. No group is flattened or reported as lost.
 //!
 //! All geometry is clamped to the world bound and the element/depth counts are
-//! enforced while walking (§2.D); any breach aborts the whole import atomically
-//! (§1) -- the returned `Err` carries no commands.
+//! enforced while walking; any breach aborts the whole import atomically
+//! -- the returned `Err` carries no commands.
 
 use kurbo::{BezPath, PathEl, Point, Rect, Shape, Size};
 use usvg::tiny_skia_path::PathSegment;
@@ -39,9 +39,9 @@ use super::{ImportBatch, ImportError, ImportGroup, ImportRef, Limits};
 use crate::logic::command::{InitContent, ToileCommand};
 use crate::logic::model::{ElementKind, ElementStyle, ShapeKind};
 
-/// Parse SVG `bytes` and convert to an atomic [`ImportBatch`] (§2.A). Returns
+/// Parse SVG `bytes` and convert to an atomic [`ImportBatch`]. Returns
 /// `Err` (and no commands) on a parse failure, an exceeded safety limit, or an
-/// SVG that maps to zero elements (§1 atomicity).
+/// SVG that maps to zero elements (atomicity).
 pub fn import_svg(bytes: &[u8], limits: &Limits) -> Result<ImportBatch, ImportError> {
     let opt = usvg::Options::default();
     let tree = usvg::Tree::from_data(bytes, &opt).map_err(|e| ImportError::Parse(e.to_string()))?;
@@ -190,7 +190,7 @@ fn import_path(
 }
 
 /// Map a usvg `<image>` to an `Image` element plus a plaintext [`MediaBlob`].
-/// Only raster PNG/JPEG are decoded (§2.B); nested SVG / GIF / WebP are noted and
+/// Only raster PNG/JPEG are decoded; nested SVG / GIF / WebP are noted and
 /// skipped in Phase 0.
 fn import_image(
     image: &usvg::Image,
@@ -235,7 +235,7 @@ fn import_image(
 /// pass will resolve to a freshly minted `ElementId`.
 ///
 /// Style rides a separate `styles` slot rather than `CreateElement` because the
-/// CRDT stores `ElementStyle` as an independent LWW register (§2.E): the apply
+/// CRDT stores `ElementStyle` as an independent LWW register: the apply
 /// pass creates the element, then restyles it inside the same undo group. `None`
 /// keeps the engine default (used for text/image, which import unstyled).
 fn push_element(
@@ -262,7 +262,7 @@ fn push_element(
 // -----------------------------------------------------------------------------
 
 /// Convert a tiny-skia path (local coords) to a world-space `kurbo::BezPath`,
-/// applying the node's absolute transform and clamping every point (§2.D).
+/// applying the node's absolute transform and clamping every point.
 fn to_bezpath(path: &usvg::tiny_skia_path::Path, tf: &usvg::Transform, limits: &Limits) -> BezPath {
     let map = |x: f32, y: f32| -> Point {
         // tiny-skia Transform: [sx kx tx; ky sy ty]. Row-major point mapping.
@@ -337,7 +337,7 @@ fn distinct(it: impl Iterator<Item = f64>) -> Vec<f64> {
 
 /// Build an [`ElementStyle`] from a usvg path's fill/stroke. Non-solid paints
 /// (gradients, patterns) are not representable in `ElementStyle`; they are dropped
-/// and noted in the report (the §2.A image-fallback rasterization is deferred).
+/// and noted in the report (the image-fallback rasterization is deferred).
 fn style_from_path(path: &usvg::Path, batch: &mut ImportBatch) -> ElementStyle {
     let mut style = ElementStyle {
         fill: None,

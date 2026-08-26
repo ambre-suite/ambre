@@ -1,20 +1,20 @@
-//! Smart Animate transition solver (`toile-features` §1.C).
+//! Smart Animate transition solver (`toile-presentation`).
 //!
 //! Moving between slide A and slide B, Toile interpolates the animatable
 //! properties of elements that appear in **both** frames and share the same
 //! stable [`ElementId`] -- position, size, rotation, opacity, fill -- with an
 //! eased `lerp`; elements only in A fade out, only in B fade in. Matching is by
 //! **stable id**, so an element the author moved / resized between two frames
-//! animates smoothly "for free" (the Figma Smart Animate model, §1.C); geometry
-//! / heuristic matching is the rejected alternative (§8, fragile).
+//! animates smoothly "for free" (the Figma Smart Animate model,); geometry
+//! / heuristic matching is the rejected alternative (fragile).
 //!
 //! This module is **pure and deterministic**: given two [`FrameSnapshot`]s and a
 //! phase `t` it returns the [`AnimatedElement`]s to paint, with no CRDT mutation
 //! -- it animates the *presentation* of existing elements. The two snapshots are
 //! derived by the engine (`ToileState::frame_snapshot`); consuming the output in
-//! the `toile-ui` camera pass is Phase 1 (roadmap §9).
+//! the `toile-presentation` camera pass is Phase 1 (roadmap).
 //!
-//! Frame membership is **explicit, not spatial** (§1.C note): a snapshot's
+//! Frame membership is **explicit, not spatial** (note): a snapshot's
 //! elements are the frame's declared `children`, not whatever overlaps its rect.
 
 use std::collections::HashMap;
@@ -25,7 +25,7 @@ use crate::logic::model::ElementId;
 
 // The `SnapElement` / `FrameSnapshot` capture DTOs live in `ambre-bus` so the
 // enriched `SlideChanged` event can carry them to the render thread (which owns
-// no board state); this solver stays here as the sole consumer (§1.C).
+// no board state); this solver stays here as the sole consumer.
 pub use ambre_bus::app::toile::{FrameSnapshot, SnapElement};
 
 /// The interpolated presentation of one element for a single transition frame.
@@ -42,9 +42,9 @@ pub struct AnimatedElement {
 
 impl AnimatedElement {
     /// Tween a shared-id element from its A-state `a` to its B-state `b` at phase
-    /// `t` (§1.C). Every property is a plain `lerp`, so `t = 0` reproduces `a`
+    /// `t`. Every property is a plain `lerp`, so `t = 0` reproduces `a`
     /// exactly and `t = 1` reproduces `b` exactly (the endpoint guarantee tested
-    /// in §6). `t` arrives already eased (see [`ease_in_out_cubic`]).
+    /// in). `t` arrives already eased (see [`ease_in_out_cubic`]).
     pub fn lerp(a: &SnapElement, b: &SnapElement, t: f64) -> Self {
         Self {
             // The id is shared by construction; keep it as the animated identity.
@@ -57,7 +57,7 @@ impl AnimatedElement {
     }
 
     /// An element new in B: hold its geometry, ramp opacity from 0 up to its own
-    /// target with `t` (§1.C). `t = 0` -> invisible, `t = 1` -> full.
+    /// target with `t`. `t = 0` -> invisible, `t = 1` -> full.
     pub fn fade_in(e: &SnapElement, t: f64) -> Self {
         Self {
             id: e.id.clone(),
@@ -69,7 +69,7 @@ impl AnimatedElement {
     }
 
     /// An element gone in B: hold its geometry, ramp opacity down from its own
-    /// value to 0 with `t` (§1.C). `t = 0` -> full, `t = 1` -> invisible.
+    /// value to 0 with `t`. `t = 0` -> full, `t = 1` -> invisible.
     pub fn fade_out(a: &SnapElement, t: f64) -> Self {
         Self {
             id: a.id.clone(),
@@ -81,14 +81,14 @@ impl AnimatedElement {
     }
 }
 
-/// Solve the Smart Animate transition from `from` to `to` at phase `t` (§1.C).
+/// Solve the Smart Animate transition from `from` to `to` at phase `t`.
 ///
 /// Elements shared by stable id are tweened; elements only in `to` fade in;
 /// elements only in `from` fade out. Deterministic and allocation-light: each
 /// side is indexed once (`HashMap<&str, &SnapElement>`) rather than an O(n*m)
-/// `by_id` scan, to fit the < 4 ms / 500-element transition-frame budget (§7).
+/// `by_id` scan, to fit the < 4 ms / 500-element transition-frame budget.
 /// The output paint order is `to`'s order (tweens + fade-ins) followed by the
-/// fade-outs, matching the pseudo-code map/chain in §1.C.
+/// fade-outs, matching the pseudo-code map/chain of `toile-presentation`.
 pub fn smart_animate(from: &FrameSnapshot, to: &FrameSnapshot, t: f64) -> Vec<AnimatedElement> {
     let from_by_id: HashMap<&str, &SnapElement> =
         from.elements.iter().map(|e| (e.id.as_str(), e)).collect();
@@ -111,7 +111,7 @@ pub fn smart_animate(from: &FrameSnapshot, to: &FrameSnapshot, t: f64) -> Vec<An
 }
 
 /// The standard ease-in-out cubic curve the camera pass applies before feeding
-/// `t` to [`smart_animate`] (§1.C "eased lerp"). Kept here so Phase 1 reuses the
+/// `t` to [`smart_animate`] ("eased lerp"). Kept here so Phase 1 reuses the
 /// same easing the tests pin. Input is clamped to `0.0 ..= 1.0`; the curve is
 /// symmetric (`ease(0.5) == 0.5`) and monotonic.
 pub fn ease_in_out_cubic(t: f64) -> f64 {

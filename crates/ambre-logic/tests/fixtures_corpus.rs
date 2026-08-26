@@ -1,6 +1,6 @@
 // crates/ambre-logic/tests/fixtures_corpus.rs
 // ============================================================================
-// The corpus belts of `ambre-spec-fixtures.md` §4: manifest integrity, the
+// The corpus belts of `ambre-spec-fixtures.md`: manifest integrity, the
 // driver, the loader-rejection belt and the smaller `load_fixture` one beside
 // it, plus `shape_of` / `canonical_dump`.
 //
@@ -29,7 +29,7 @@ use ambre_trame::TrameState;
 use kurbo::{Point, Size};
 
 // -----------------------------------------------------------------------------
-// A synthetic registry (§2.B)
+// A synthetic registry
 // -----------------------------------------------------------------------------
 //
 // `FIXTURES P0` ships the mechanism, not the corpus, so the shipping `REGISTRY`
@@ -127,7 +127,7 @@ const TOILE: ToileGen = ToileGen {
 // -----------------------------------------------------------------------------
 
 /// A directory removed when the test drops it. Local rather than a `tempfile`
-/// dependency: §1.B is explicit that this component adds no external crate, and
+/// dependency: is explicit that this component adds no external crate, and
 /// a test needing one would be a signal it is reaching outside the engine.
 struct TempCorpus(PathBuf);
 
@@ -153,7 +153,7 @@ impl Drop for TempCorpus {
 }
 
 // -----------------------------------------------------------------------------
-// Manifest integrity (§4)
+// Manifest integrity
 // -----------------------------------------------------------------------------
 
 #[test]
@@ -206,7 +206,7 @@ fn the_sidecar_is_readable_json_and_reads_back_equal() {
 
 #[test]
 fn a_flipped_header_byte_moves_the_digest() {
-    // The write-once check of §4 works only if the digest covers the header, so
+    // The write-once check of works only if the digest covers the header, so
     // this is the assertion that C8's "header included" is real.
     let bytes = TRAME.build();
     let mut tampered = bytes.clone();
@@ -246,7 +246,7 @@ fn a_generator_whose_doc_type_contradicts_its_bytes_is_refused() {
 }
 
 // -----------------------------------------------------------------------------
-// The driver (§2.B)
+// The driver
 // -----------------------------------------------------------------------------
 
 #[test]
@@ -293,7 +293,7 @@ fn the_shipping_registry_has_no_duplicate_names() {
 }
 
 // -----------------------------------------------------------------------------
-// The `load_fixture` belt (§4)
+// The `load_fixture` belt
 // -----------------------------------------------------------------------------
 
 #[test]
@@ -370,7 +370,7 @@ fn a_malformed_sidecar_is_reported_as_a_manifest_failure() {
 
 #[test]
 fn the_corpus_root_is_resolved_from_the_manifest_dir_not_the_cwd() {
-    // C4/§2.B: `cargo test` runs each test binary with the CWD at its own package
+    // C4/: `cargo test` runs each test binary with the CWD at its own package
     // root, so a bare relative `fixtures/` would resolve differently for every
     // consumer crate. The root must be an absolute path under the workspace.
     let root = fixtures::corpus_root().expect("a workspace root above this crate");
@@ -383,7 +383,7 @@ fn the_corpus_root_is_resolved_from_the_manifest_dir_not_the_cwd() {
 }
 
 // -----------------------------------------------------------------------------
-// Loader rejection, on the byte entry point (§4)
+// Loader rejection, on the byte entry point
 // -----------------------------------------------------------------------------
 
 /// Every `.ambre` header failure, plus byte soup, through the fixture loader.
@@ -480,7 +480,7 @@ fn every_header_failure_is_typed_and_none_of_them_panics() {
 
 #[test]
 fn a_doc_type_with_no_engine_degrades_cleanly() {
-    // Unreachable for any fixture this spec produces (§1.A excludes Prose and
+    // Unreachable for any fixture this spec produces (excludes Prose and
     // Murmure) and present so the loader degrades when they arrive -- a panic
     // here would be a corpus that cannot be inspected at all.
     let prose = write_ambre_plaintext(DocType::Prose, Uuid::from_bytes([0x44; 16]), b"payload");
@@ -491,7 +491,7 @@ fn a_doc_type_with_no_engine_degrades_cleanly() {
 }
 
 // -----------------------------------------------------------------------------
-// `shape_of` and `canonical_dump` (§2.B)
+// `shape_of` and `canonical_dump`
 // -----------------------------------------------------------------------------
 
 #[test]
@@ -552,7 +552,7 @@ fn a_solo_document_reports_one_peer_and_a_merged_one_reports_two() {
 
 #[test]
 fn the_canonical_dump_carries_both_representations_of_a_formula() {
-    // §2.B: dumping only the source would let an evaluation regression pass
+    // dumping only the source would let an evaluation regression pass
     // unnoticed; dumping only the result would hide a change in what is
     // persisted. Both go in.
     let (_id, state) = fixtures::import_fixture(&TRAME.build()).expect("loads");
@@ -572,7 +572,7 @@ fn the_canonical_dump_carries_both_representations_of_a_formula() {
 
 #[test]
 fn the_canonical_dump_is_blind_to_the_route_a_document_took() {
-    // The property the frozen belt of §4 rests on, and the reason §6 rejects a
+    // The property the frozen belt of rests on, and the reason rejects a
     // byte or state comparison: two documents agreeing on every user-visible
     // value still differ in op history, peer ids and commit timestamps.
     let build = |peer: u64, reversed: bool| {

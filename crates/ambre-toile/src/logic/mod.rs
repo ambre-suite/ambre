@@ -31,6 +31,6 @@ pub use model::{
 };
 pub use state::ToileState;
 
-/// 2-peer CRDT convergence property test (§10, DoD). Host-only.
+/// 2-peer CRDT convergence property test (DoD). Host-only.
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod convergence_tests;

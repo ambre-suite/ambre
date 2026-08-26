@@ -113,7 +113,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         move |()| raf.resume()
     });
 
-    // TOFU verification modal (`ambre-spec-chrome.md §2.H`). `tofu_open` mirrors
+    // TOFU verification modal (`ambre-spec-key-verification.md`). `tofu_open` mirrors
     // `tofu_prompt` (Some => open): the relay sets the prompt on a New/Changed
     // key, and this effect drives the native `<dialog>` accordingly. Same rAF
     // suspend/resume as the other modals.
@@ -143,7 +143,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let ctx_menu = RwSignal::new(None::<(f64, f64)>);
     install_canvas_context_menu(ctx_menu);
 
-    // Toile cursor feedback (toile-ui §5quinquies.A): reflect the active tool on
+    // Toile cursor feedback (toile-tools): reflect the active tool on
     // the canvas element as a CSS cursor (crosshair while a creation tool is
     // armed, grab for Hand, arrow for Select). A pure function of the shared
     // active-tool signal, applied here in the chrome -- it never touches the
@@ -152,7 +152,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         Effect::new(move |_| {
             // Position-dependent override (a directional resize / grab cursor over
             // a selection edge / corner, or during a transform) wins; otherwise the
-            // cursor is the pure function of the active tool (§5quinquies.A).
+            // cursor is the pure function of the active tool.
             let cursor = toile_cursor.get().unwrap_or_else(|| {
                 std::borrow::Cow::Borrowed(ambre_toile::ui::palette::cursor_css(
                     toile_active_tool.get(),
@@ -174,7 +174,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         let tx = to_logic.clone();
         move |id: CommandId| {
             // Toile board: every context-menu id is forwarded into the canvas view,
-            // which resolves it against its (UI-only) selection (`toile-ui §5ter`).
+            // which resolves it against its (UI-only) selection (`toile-menus`).
             // The Toile Find command still opens the Toile panel, handled below.
             if boot_is_toile {
                 if id == toile_chrome::FIND {
@@ -189,7 +189,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             // values (it resolves the active column itself). Everything else flows
             // through the shared CommandId -> AppCommand path.
             if id == trame_chrome::FIND || id == trame_chrome::REPLACE {
-                // UI-only intents (sec.5.G): open the find/replace panel in the
+                // UI-only intents (`trame-find-replace`): open the find/replace panel in the
                 // matching mode. The panel emits FindNext/ReplaceAll itself.
                 let mode = if id == trame_chrome::FIND {
                     trame_chrome::FindMode::Find
@@ -198,7 +198,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 };
                 find_state.set(Some(trame_chrome::FindReplaceState { mode }));
             } else if id == trame_chrome::SORT_RANGE_MULTI {
-                // UI-only intent (sec.5.C): open the multi-column sort dialog over
+                // UI-only intent (`trame-sort`): open the sort dialog over
                 // the current selection (published by the canvas view). The dialog
                 // emits the typed `SortRangeMulti` itself via `on_sort_apply`.
                 let (r1, c1, r2, c2) = sel_bounds.get_untracked().unwrap_or((0, 0, 0, 0));
@@ -216,7 +216,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 }
             } else if id == trame_chrome::BOLD || id == trame_chrome::ITALIC {
                 // Bold/Italic are part of the single style channel: toggle the
-                // tracked toolbar state and emit a `SetCellStyle` patch (sec.5bis).
+                // toolbar state and emit a `SetCellStyle` (`trame-cell-styles`).
                 let is_bold = id == trame_chrome::BOLD;
                 let cur = if is_bold {
                     style_state.bold.get_untracked()
@@ -236,7 +236,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     });
                 }
             } else if id == trame_chrome::COPY || id == trame_chrome::CUT {
-                // Copy/cut (sec.5.E): focus the canvas text pipe and ask the
+                // Copy/cut (`trame-clipboard`): focus the canvas text pipe and ask the
                 // browser to fire the `copy`/`cut` DOM event the host listeners
                 // service (they write both the TSV and the typed payload).
                 if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
@@ -255,7 +255,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     }
                 }
             } else if id == trame_chrome::PASTE {
-                // Paste (sec.5.E): `execCommand("paste")` is blocked by browsers,
+                // Paste (`trame-clipboard`): `execCommand("paste")` is blocked by browsers,
                 // so read the OS clipboard via the async Clipboard API (allowed in
                 // this click gesture). `read()` recovers the private Ambre payload
                 // (full styled / formula-reindexed paste, like Ctrl+V) when
@@ -293,7 +293,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     }
                 }
             } else if id == trame_chrome::IMPORT_CSV {
-                // Interop (`-interop.md` §4.A): open a file picker, read the chosen
+                // Interop (`trame-import-export`): open a file picker, read the chosen
                 // CSV bytes, and send them to the Logic thread, which creates a new
                 // sheet and converts client-side (Zero-Knowledge).
                 if let Some(document_id) = current_doc.get_untracked() {
@@ -306,7 +306,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     });
 
     // Formatting toolbar: a control's `StylePatch` -> `SetCellStyle` over the
-    // tracked selection (`-ui.md` sec.5bis). The Logic thread resolves the
+    // tracked selection (`trame-cell-styles`). The Logic thread resolves the
     // geometry from the selection it keeps via `SetActiveCell`.
     let on_style = Callback::new({
         let tx = to_logic.clone();
@@ -333,7 +333,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             }
         }
     });
-    // Multi-column sort (sec.5.C): the dialog emits the chosen levels; forward
+    // Multi-column sort (`trame-sort`): the dialog emits the levels; forward
     // them as the parameterless `SortSelectionMulti`, like the single-column sort
     // intents -- the Logic thread resolves the range and active sheet from the
     // tracked selection. The dialog's snapshotted bounds are used only to label
@@ -352,7 +352,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             }
         }
     });
-    // Find & Replace (sec.5.G): the panel emits these requests; the Logic thread
+    // Find & Replace (`trame-find-replace`): the panel emits these requests; the Logic thread
     // resolves the search origin from the tracked active cell.
     let on_find = Callback::new({
         let tx = to_logic.clone();
@@ -369,10 +369,10 @@ pub(crate) fn AppRoot() -> impl IntoView {
             }
         }
     });
-    // Toile Find (`toile-ui §5quater`): the panel emits a `Find` with the query,
+    // Toile Find (`toile-find`): the panel emits a `Find` with the query,
     // options and resume point; Logic scans the whole board (off-screen matches
     // included) and replies with `FindResults`. Find-only -- no Replace on a
-    // free-form canvas (§12).
+    // free-form canvas.
     let on_find_toile = Callback::new({
         let tx = to_logic.clone();
         move |q: toile_chrome::FindQuery| {
@@ -389,7 +389,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             }
         }
     });
-    // Presenter overlay panel intents (toile-features §1.D): navigation maps to
+    // Presenter overlay panel intents (toile-presentation): navigation maps to
     // the local playback commands; note edits target the active slide's frame
     // (captured from the last SlideChanged into `presenter_frame`).
     let on_present_intent = Callback::new({
@@ -456,7 +456,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         }
     });
 
-    // Sheet-tab strip (sec.13): each DOM `SheetTabs` intent maps onto its sheet
+    // Sheet-tab strip (`trame-sheets`): each DOM intent maps onto its sheet
     // `TrameCommand`. The Logic thread mints ids / resolves geometry and replies
     // with a fresh `SheetList` that re-feeds the `sheets`/`active_sheet` signals.
     let on_sheet_activate = Callback::new({
@@ -519,12 +519,12 @@ pub(crate) fn AppRoot() -> impl IntoView {
         }
     });
 
-    // The menu layout follows the right-click scope the view published (`-ui.md`
-    // sec.5.C): a cell right-click gets the full menu, a header right-click the
+    // The menu layout follows the right-click scope the view published
+    // (`trame-context-menu`): a cell right-click gets the full menu, a header the
     // header-scoped one (no clipboard / merge).
     // A Toile board builds its menu from the selection scope the canvas view
-    // publishes (`toile-ui §5ter`); a Trame sheet from the cell/header scope
-    // (`-ui.md` sec.5.C). Both return `ambre_chrome::MenuEntry` rows, so the one
+    // publishes (`toile-menus`); a Trame sheet from the cell/header scope
+    // (`trame-context-menu`). Both return `ambre_chrome::MenuEntry` rows, so one
     // `<ContextMenu>` renders either.
     let ctx_entries = Memo::new(move |_| {
         if boot_is_toile {
@@ -617,9 +617,10 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 </span>
             </Header>
             // The toolbar / formula bar / sheet tabs / status bar are Trame chrome
-            // (`-ui.md`); a Toile board renders none of them -- its own tool palette,
-            // status bar and panels are separate roadmap items (`toile-ui §5quinquies
-            // / §8bis`). Gated on the booted app kind, fixed per page load.
+            // (`trame-cell-styles`, `trame-cell-editing`, `trame-sheets`,
+            // `trame-status-bar`); a Toile board renders none of them -- its tool palette,
+            // status bar and panels are separate roadmap items (`toile-tools`,
+            // `toile-status-bar`). Gated on the booted app kind, fixed per page load.
             <Toolbar slot>
                 {(!boot_is_toile).then(|| view! {
                     <trame_chrome::FormatBar
@@ -655,7 +656,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             </Tabs>
             <StatusBar slot>
                 {if boot_is_toile {
-                    // Toile selection status bar (§8bis): count/bounds + shared
+                    // Toile selection status bar: count/bounds + shared
                     // zoom & fps chips, styled identically to Trame's band.
                     view! {
                         <toile_chrome::StatusBar
@@ -789,7 +790,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                             } else {
                                 raw.to_owned()
                             };
-                            // TOFU phase 1 (`ambre-spec-chrome.md §2.H`): fetch the
+                            // TOFU phase 1 (`ambre-spec-key-verification.md`): fetch the
                             // invitee's key + fingerprint without wrapping. The role
                             // is kept in `invite_role`; the relay dispatches phase 2
                             // (the actual share) once the trust decision is made.
@@ -839,7 +840,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             </div>
         </Dialog>
 
-        // TOFU key verification (`ambre-spec-chrome.md §2.H`). A modal `Dialog`,
+        // TOFU key verification (`ambre-spec-key-verification.md`). A modal `Dialog`,
         // never a toast: a possible server MITM must not auto-dismiss. Shown only
         // for a New key (confirm before the first share) or a Changed key (a
         // blocking alert whose default action is Cancel).
@@ -898,7 +899,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                                      with the recipient over a channel the server does not control."
                                 </p>
                                 <div class="ambre-dialog-actions">
-                                    // Cancel is the default action (§2.H): closing
+                                    // Cancel is the default action: closing
                                     // the modal pins nothing and sends no key.
                                     <button
                                         r#type="button"
@@ -928,7 +929,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
 
         <ContextMenu pos=ctx_menu entries=ctx_entries on_command=on_command />
 
-        // Shared filter popover (sec.5.D), anchored under the active column.
+        // Shared filter popover (`trame-shared-filter`), under the active column.
         <trame_chrome::FilterPopover
             state=filter_popover
             values=filter_values
@@ -936,8 +937,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
             on_command=on_command
         />
 
-        // Find panel, pinned top-right. Trame ships Find & Replace (sec.5.G);
-        // Toile ships a find-only panel (`toile-ui §5quater`). The booted app kind
+        // Find panel, pinned top-right. Trame ships `trame-find-replace`;
+        // Toile ships a find-only panel (`toile-find`). The booted app kind
         // is fixed per page load, so exactly one is mounted.
         {(!boot_is_toile).then(|| view! {
             <trame_chrome::FindReplace
@@ -955,7 +956,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 on_find=on_find_toile
             />
         })}
-        // Toile presenter overlay panel (toile-features §1.D): speaker notes +
+        // Toile presenter overlay panel (toile-presentation): speaker notes +
         // navigation, shown while presentation mode is active. Visibility is
         // driven by the `present_toile` signal (mirrored from PresentModeChanged);
         // the slide payload feeds the counter + notes editor.
@@ -971,13 +972,13 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 on_intent=on_present_intent
             />
         })}
-        // Toile tool palette / primary toolbar (toile-ui §5quinquies.A): a floating
+        // Toile tool palette / primary toolbar (toile-tools): a floating
         // vertical bar, mounted only for a Toile board. It writes the shared active-
         // tool signal the canvas view applies; the keyboard chords write the same one.
         {boot_is_toile.then(|| view! {
             <toile_chrome::ToolPalette active=toile_active_tool />
         })}
-        // Toile top menu bar + zoom control (toile-ui §5quinquies.E): the low-
+        // Toile top menu bar + zoom control (toile-menus): the low-
         // frequency menus (File/Edit/View/Object/Present) and the zoom cluster.
         // Every entry routes through the shared `on_command` path (the same channel
         // the context menu uses); the zoom readout mirrors the `zoom` signal the
@@ -985,7 +986,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         {boot_is_toile.then(|| view! {
             <toile_chrome::TopMenuBar zoom=zoom on_command=on_command />
         })}
-        // Toile style / property inspector (toile-ui §5quinquies.B): a side panel
+        // Toile style / property inspector (toile-styles): a side panel
         // shown only for a non-empty selection. It reads the common style the canvas
         // view publishes, reuses `toile_ctx_scope` for the lock buttons and the shared
         // `on_command` path for z-order / lock, and writes debounced whole-style edits
@@ -998,7 +999,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 restyle=toile_restyle
             />
         })}
-        // Toile content-anchored floating selection toolbar (toile-ui §5quinquies.D):
+        // Toile content-anchored floating selection toolbar (toile-styles):
         // follows the selection as the board pans/zooms (the canvas view republishes
         // its client anchor into `toile_float_bar` each frame). Its command buttons
         // reuse the shared `on_command` path (a strict subset of the context menu);
@@ -1016,7 +1017,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             />
         })}
 
-        // Multi-column sort dialog (sec.5.C), opened from "Sort range...".
+        // Multi-column sort dialog (`trame-sort`), from "Sort range...".
         <trame_chrome::SortDialog state=sort_dialog on_apply=on_sort_apply />
 
         // Live-region toast host (announces transient messages politely).

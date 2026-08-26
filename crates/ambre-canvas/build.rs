@@ -1,6 +1,6 @@
 // ambre-canvas/build.rs
 // ============================================================================
-// Token codegen (ambre-spec-ui 2.D). Reads `tokens.ron` and emits, into
+// Token codegen (ambre-spec-design-tokens.md). Reads `tokens.ron` and emits, into
 // OUT_DIR:
 //   - theme_gen.rs : the canvas `Palette` struct + LIGHT/DARK consts + scales.
 //   - theme.css    : CSS custom properties (`:root` light, `[data-theme=dark]`).

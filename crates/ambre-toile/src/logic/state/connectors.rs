@@ -1,4 +1,4 @@
-//! Connector lifecycle for [`ToileState`](super::ToileState) (§5): create,
+//! Connector lifecycle for [`ToileState`](super::ToileState): create,
 //! retarget, delete, plus the map handle and the "which connectors touch these
 //! elements" query used by element deletion. Split out of `state/mod.rs`.
 
@@ -39,7 +39,7 @@ impl ToileState {
     /// Create one connector and push it onto the incremental layer cache, **without**
     /// committing. Returns the minted id (or `None` if the container insert failed).
     /// The caller owns the `doc.commit()` so an import lands its connectors inside
-    /// the one import undo group (`toile-interop §5`).
+    /// the one import undo group (`toile-import-export`).
     #[allow(clippy::too_many_arguments)]
     pub(super) fn create_connector_inner(
         &mut self,

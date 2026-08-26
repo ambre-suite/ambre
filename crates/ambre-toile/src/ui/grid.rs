@@ -1,6 +1,6 @@
 // ambre-toile/src/ui/grid.rs
 // ============================================================================
-// Adaptive magnetic grid (toile-ui §3). The grid step is chosen so the on-screen
+// Adaptive magnetic grid (toile-viewport). The grid step is chosen so the on-screen
 // spacing stays in a comfortable pixel band as `zoom` changes (powers of the
 // board `grid_size`); `snap_world` quantizes a world point to the current step
 // for drag / resize snapping. Step selection is pure and host-tested; the paint
@@ -49,7 +49,7 @@ pub fn snap_world(p: Point, step: f64) -> Point {
 /// emitted in screen space (the surface transform stack is left untouched here so
 /// the hairline width does not scale with zoom).
 /// Fill the board background only, without grid lines. Used by presentation
-/// focus mode (`toile-features` §1.D), which hides the grid so the audience sees
+/// focus mode (`toile-presentation`), which hides the grid so the audience sees
 /// a clean slide.
 pub fn paint_background<S: DrawSurface>(
     surface: &mut S,

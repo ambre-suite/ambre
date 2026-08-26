@@ -6,7 +6,7 @@
 // engine (which addresses cells positionally, by grid `(row, col)`) and the
 // CRDT (which keys cells by our own move-invariant `Uid` pairs so that inserting
 // a row is a single Loro op and a reorder never orphans a cell -- see
-// `ambre-spec-trame-logic.md` §2.A).
+// `trame-rows-and-columns`).
 //
 // `SheetIndex` is the bidirectional position <-> `Uid` cache; it is the only
 // place that translates between the two address spaces.

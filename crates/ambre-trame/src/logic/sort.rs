@@ -8,7 +8,7 @@
 use super::*;
 
 impl TrameState {
-    /// Single-column sort of a row range (`ambre-spec-trame-features.md` §3).
+    /// Single-column sort of a row range (`trame-sort`).
     ///
     /// Reorders whole rows of the active sheet by the typed value in column
     /// `col_start + sort_col`. Cells of a row outside `[col_start..=col_end]`
@@ -18,12 +18,13 @@ impl TrameState {
     /// sortable row is keyed by its own move-invariant `Uid` (the list element
     /// *value*, not a Loro slot id), and the desired order is replayed with
     /// `LoroMovableList::mov`. Cells keyed by `(row_uid, col_uid)` travel with
-    /// their row for free -- no cell content is read or rewritten (§2.A, §12).
+    /// their row for free -- no cell content is read or rewritten
+    /// (`trame-rows-and-columns`, `trame-formula-engine`).
     ///
     /// References then **follow the data**: the formula engine's bytecode is
     /// uid-anchored, so the sort preserves it (no reseed/re-parse) and merely
     /// recomputes -- every `A1` resolves to its row/column's new position, the
-    /// section 12 guarantee. The `mov` ops produce a CRDT delta like any edit;
+    /// `trame-formula-engine` guarantee. The `mov` ops produce a CRDT delta like any edit;
     /// LWW on the row order resolves concurrent sorts deterministically.
     ///
     /// Sorting only ever targets the **active sheet** (the UI sends an
@@ -87,7 +88,7 @@ impl TrameState {
         self.realize_sort(sort_start, &before, target)
     }
 
-    /// Multi-column sort of a row range (`ambre-spec-trame-features.md` §2).
+    /// Multi-column sort of a row range (`trame-sort`).
     ///
     /// Same pure row-order permutation as [`sort_range`](Self::sort_range), only
     /// the comparator changes: rows are ordered lexicographically by `sort_keys`
@@ -95,7 +96,7 @@ impl TrameState {
     /// own ascending/descending direction. Each `SortKey::col` is an index within
     /// the range (`0` = `col_start`). Keys whose column falls outside the range are
     /// skipped. Cells follow their move-invariant row `Uid`, references follow the
-    /// data (§12); LWW resolves concurrent sorts.
+    /// data (`trame-formula-engine`); LWW resolves concurrent sorts.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn sort_range_multi(
         &mut self,
@@ -181,7 +182,8 @@ impl TrameState {
         }
 
         // Realize the permutation as `mov` ops on `rows_{sheet}`: cells keyed by
-        // the move-invariant uid follow for free (§2.A, §12). Move each desired
+        // the move-invariant uid follow for free (`trame-rows-and-columns`).
+        // Move each desired
         // uid into place left-to-right over the sortable region; `cur` mirrors the
         // list's evolving order so the `mov` indices stay correct.
         let list = self
@@ -213,7 +215,7 @@ impl TrameState {
     /// formatting, filter) for the new order. Crucially, do NOT reseed (re-parse)
     /// the formula engine: the compiled bytecode is uid-anchored, so preserving it
     /// and merely recomputing lets every reference resolve to its row/column's NEW
-    /// position -- references follow the moved data, the section 12 guarantee. A
+    /// position -- references follow the moved data, the `trame-formula-engine` guarantee. A
     /// full reseed would re-bind each `A1` against the post-move index and collapse
     /// the engine back to positional semantics.
     pub(super) fn after_reorder(&mut self) -> TrameOutcome {

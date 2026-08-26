@@ -1,13 +1,13 @@
 //! Vector boolean operations for [`ToileState`](super::ToileState)
-//! (`toile-features` §3): union / subtract / intersect / exclude over the
+//! (`toile-vector-paths`): union / subtract / intersect / exclude over the
 //! selected shape / path elements, producing one new `shape:path` element.
 //!
 //! The geometry math is the pure [`boolean_op`](crate::logic::boolean::boolean_op)
 //! solver; this handler only resolves the selection to world-space paths, writes
 //! the result element, and (unless the caller keeps them) deletes the sources --
-//! all in a **single commit**, so the whole operation is one undo item (§8 bis).
+//! all in a **single commit**, so the whole operation is one undo item.
 //! A boolean is an ordinary geometry edit: the result is a plain element, no
-//! special CRDT state (`toile-logic §2.C`).
+//! special CRDT state (`toile-elements`).
 
 use kurbo::{Affine, BezPath, Ellipse, Rect, Shape};
 use loro::{LoroMap, LoroValue};
@@ -20,7 +20,7 @@ use super::codec::{bin_of, bool_of, f64_of, str_of};
 use super::{ELEMENTS, LAYERS, ToileState};
 
 impl ToileState {
-    /// Combine the selected shape / path elements with `op` (§3). Needs at least
+    /// Combine the selected shape / path elements with `op`. Needs at least
     /// two eligible (unlocked shape / path) elements; other kinds and locked
     /// elements are ignored. The result is one new `shape:path` element carrying
     /// the combined geometry and the first source's style. When `keep_sources` is
@@ -88,7 +88,7 @@ impl ToileState {
             .get_movable_list(LAYERS)
             .push(NodeId::Element(id.clone()).encode().as_str());
 
-        // Consume the sources in the same commit so the op is one undo item (§3).
+        // Consume the sources in the same commit so the op is one undo item.
         if !keep_sources {
             self.delete_from_doc(&sources);
         }
@@ -100,7 +100,7 @@ impl ToileState {
 }
 
 /// Build the world-space outline of a shape / path element as a [`BezPath`], or
-/// `None` if the element is not a shape kind (§3 accepts only shape / path
+/// `None` if the element is not a shape kind (accepts only shape / path
 /// elements). The local outline per [`ShapeKind`] is transformed by the same
 /// rotation-about-center affine the renderer uses (`derive::display_element`).
 fn element_world_path(em: &LoroMap) -> Option<BezPath> {

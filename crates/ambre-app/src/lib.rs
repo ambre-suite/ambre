@@ -22,7 +22,7 @@
 //     relay AND the dispatcher, whatever the route -- paused (frozen frame)
 //     while the landing overlay covers the canvas.
 //
-// Command model (ambre-spec-ui.md 2.C): every trigger -- toolbar button,
+// Command model (ambre-spec-commands.md): every trigger -- toolbar button,
 // keyboard shortcut, context menu -- produces the SAME `CommandId` ->
 // `LogicCommand`, targeting the currently routed document (`current_doc`).
 //
@@ -90,9 +90,10 @@ const CHANNEL_CAPACITY: usize = 1024;
 /// store is driven by the per-frame relay and the canvas swap by the route poll,
 /// both outside the reactive tree. The shell sees only the toggle signals the
 /// store exposes.
-/// A pending TOFU trust decision for the share dialog (`ambre-spec-chrome.md
-/// §2.H`). Built by the per-frame relay from a `RestEvent::InviteeKey` (phase 1)
-/// once the fetched key has been compared against the `trusted_keys` store, and
+/// A pending TOFU trust decision for the share dialog
+/// (`ambre-spec-key-verification.md`). Built by the per-frame relay from a
+/// `RestEvent::InviteeKey` (phase 1) once the fetched key has been compared
+/// against the `trusted_keys` store, and
 /// consumed by the confirmation / key-changed dialog in `AppRoot`.
 ///
 /// Only the states that interrupt the user reach `AppRoot`: a **New** key
@@ -124,7 +125,7 @@ struct Wiring {
     toggles: trame_chrome::Toggles,
     /// The active cell's rich formatting, driving the formatting toolbar's
     /// font/size selects, colour pickers, alignment, number format, borders, wrap
-    /// and underline controls (`-ui.md` sec.5bis). Fed by `TrameEvent::StyleApplied`.
+    /// and underline controls (`trame-cell-styles`). Fed by `TrameEvent::StyleApplied`.
     style_state: trame_chrome::StyleState,
     /// Floating selection-toolbar anchor (canvas-relative CSS px).
     anchor_pos: RwSignal<Option<(f64, f64)>>,
@@ -137,7 +138,7 @@ struct Wiring {
     /// Members of the active document (share dialog). Populated by the per-frame
     /// relay on `DocumentMembers`; empty until the dialog requests the list.
     members: RwSignal<Vec<MemberInfo>>,
-    /// Pending TOFU trust prompt (`ambre-spec-chrome.md §2.H`), or `None` when no
+    /// Pending TOFU trust prompt (`ambre-spec-key-verification.md`), or `None` when no
     /// invitation is awaiting the user's fingerprint decision. Set by the relay on
     /// a New/Changed key; the confirmation dialog in `AppRoot` reads it.
     tofu_prompt: RwSignal<Option<TofuPrompt>>,
@@ -145,7 +146,7 @@ struct Wiring {
     /// pins the key in `trusted_keys`, and dispatches phase 2 of the invite.
     tofu_confirm: RwSignal<Option<TofuPrompt>>,
     /// Role selected in the invite form, carried across the two-phase invite (the
-    /// phase-1 `FetchInviteeKey` does not carry it, per §2.H) so both the confirm
+    /// phase-1 `FetchInviteeKey` does not carry it, per) so both the confirm
     /// path and the auto-proceed (Trusted) path grant the intended role.
     invite_role: RwSignal<Role>,
     /// Whether the server enables dev login; `None` until `/api/auth/config` answers.
@@ -159,27 +160,27 @@ struct Wiring {
     formula_text: RwSignal<String>,
     /// Formula bar: commit/cancel action from the HTML input.
     formula_action: RwSignal<Option<FormulaAction>>,
-    /// Shared filter popover open state (`-ui.md` sec.5.D); `None` = closed.
+    /// Shared filter popover open state (`trame-shared-filter`); `None` = closed.
     filter_popover: RwSignal<Option<trame_chrome::FilterPopoverState>>,
     /// The active column's distinct visible values, feeding the popover's "by
     /// values" list. Set by the per-frame relay on `TrameEvent::ColumnValues`.
     filter_values: RwSignal<Vec<String>>,
-    /// Find/replace panel open state (`-ui.md` sec.5.G); `None` = closed.
+    /// Find/replace panel open state (`trame-find-replace`); `None` = closed.
     find_state: RwSignal<Option<trame_chrome::FindReplaceState>>,
     /// Last `FindResult` summarized as `(active_1based, total)` for the panel's
     /// "k/n" counter. Set by the per-frame relay on `TrameEvent::FindResult`.
     find_result: RwSignal<Option<(usize, usize)>>,
     /// Whether the booted document is a Toile board. The chrome layer is still
     /// largely Trame-shaped; this gates the Toile-specific panels (the Find panel,
-    /// `toile-ui §5quater`) which replace their Trame equivalents. Cross-type
+    /// `toile-find`) which replace their Trame equivalents. Cross-type
     /// in-session navigation reloads the page, so it is fixed per page load.
     boot_is_toile: bool,
-    /// Toile Find panel open flag (`toile-ui §5quater`); Ctrl+F sets it.
+    /// Toile Find panel open flag (`toile-find`); Ctrl+F sets it.
     find_state_toile: RwSignal<bool>,
     /// Last Toile `FindResults` (hits + focus), feeding the panel's counter and
     /// step origin. Set by the per-frame relay on `ToileEvent::FindResults`.
     find_result_toile: RwSignal<Option<ambre_bus::app::toile::FindResults>>,
-    /// Presenter overlay panel open flag (`toile-features` §1.D). Driven by the
+    /// Presenter overlay panel open flag (`toile-presentation`). Driven by the
     /// relay on `ToileEvent::PresentModeChanged`; the panel is chrome, so its
     /// visibility lives here rather than canvas-side.
     present_toile: RwSignal<bool>,
@@ -193,73 +194,73 @@ struct Wiring {
     /// Active slide's frame id: the target of the panel's `EditNotes` intent.
     /// `None` when the deck is empty or the slide is dangling (edits skipped).
     presenter_frame: RwSignal<Option<ambre_bus::app::toile::ElementId>>,
-    /// "Follow presenter" role signals (`toile-features` §1.B). `broadcasting`
+    /// "Follow presenter" role signals (`toile-presentation`). `broadcasting`
     /// mirrors the local broadcast toggle, `following` the active follow target,
     /// and `presenter_peer` the latest peer seen broadcasting (drives the panel's
     /// Follow affordance).
     broadcasting_toile: RwSignal<bool>,
     following_toile: RwSignal<Option<ambre_bus::UserId>>,
     presenter_peer_toile: RwSignal<Option<ambre_bus::UserId>>,
-    /// Toile right-click context-menu scope (`toile-ui §5ter`): the canvas view
+    /// Toile right-click context-menu scope (`toile-menus`): the canvas view
     /// publishes it on each right-click; the shell's entry `Memo` reads it to build
     /// the menu, omitting inapplicable rows.
     toile_ctx_scope: RwSignal<ambre_toile::ui::menu::CtxScope>,
     /// The Toile context-menu command the shell forwards back into the canvas view
-    /// (`toile-ui §5ter`): the view drains it and resolves it against its selection
+    /// (`toile-menus`): the view drains it and resolves it against its selection
     /// (the Logic thread never sees the selection).
     toile_menu_cmd: RwSignal<Option<ambre_chrome::commands::CommandId>>,
-    /// Toile active tool (`toile-ui §5quinquies.A`): the shared source of truth for
+    /// Toile active tool (`toile-tools`): the shared source of truth for
     /// the DOM tool palette and the bare-key tool chords; the canvas view reads it
     /// each frame and applies it. Tool selection is UI-only, canvas-local state.
     toile_active_tool: RwSignal<ambre_toile::ui::Tool>,
-    /// Toile canvas cursor (`toile-ui §5quinquies.A`): the position-dependent CSS
+    /// Toile canvas cursor (`toile-tools`): the position-dependent CSS
     /// cursor the view publishes (directional resize on a selection edge / corner,
     /// grab on the rotate handle, `grabbing` while moving). `None` falls back to
     /// the tool's base `cursor_css`. Read by the chrome's cursor `Effect`.
     toile_cursor: RwSignal<Option<std::borrow::Cow<'static, str>>>,
-    /// Toile style-inspector model (`toile-ui §5quinquies.B`): the selection's
+    /// Toile style-inspector model (`toile-styles`): the selection's
     /// common `ElementStyle` + mixed-field mask, published by the canvas view; the
     /// DOM inspector reads it to render values and mixed-state. `None` hides it.
     toile_style_model: RwSignal<Option<toile_chrome::StyleModel>>,
-    /// Whole-style edit the inspector emits back (`toile-ui §5quinquies.B`): the
+    /// Whole-style edit the inspector emits back (`toile-styles`): the
     /// canvas view drains it into one `RestyleElements` over the live selection.
     toile_restyle: RwSignal<Option<ambre_bus::app::toile::ElementStyle>>,
-    /// Floating selection toolbar placement + flags (`toile-ui §5quinquies.D`),
+    /// Floating selection toolbar placement + flags (`toile-styles`),
     /// republished every frame by the canvas view so the bar tracks pan/zoom;
     /// `None` hides it.
     toile_float_bar: RwSignal<Option<toile_chrome::FloatBar>>,
-    /// Single-field style edit the floating bar emits back (`toile-ui §5quinquies.D`):
+    /// Single-field style edit the floating bar emits back (`toile-styles`):
     /// the canvas view applies it on top of the live common style as one
     /// `RestyleElements` over the selection.
     toile_quick_style: RwSignal<Option<toile_chrome::StyleEdit>>,
-    /// Status-bar selection aggregates (`-ui.md` sec.13bis); `None` on a single
+    /// Status-bar selection aggregates (`trame-status-bar`); `None` on a single
     /// cell. Set by the per-frame relay on `TrameEvent::SelectionStats`, cleared
     /// by the canvas view on a single-cell selection.
     sel_stats: RwSignal<Option<trame_chrome::SelStats>>,
-    /// Toile status-bar selection aggregates (toile-ui §8bis): element tally +
+    /// Toile status-bar selection aggregates (toile-status-bar): element tally +
     /// combined world bounds; `None` on an empty selection. Set by the per-frame
     /// relay on `ToileEvent::SelectionStats`.
     sel_stats_toile: RwSignal<Option<toile_chrome::SelStats>>,
     /// Status-bar perf snapshot (fps + frame timings), pumped from the canvas
     /// view's `PerfPublisher` by the per-frame relay (~2 Hz).
     perf_snap: RwSignal<ambre_canvas::PerfSnapshot>,
-    /// Grid zoom factor (`1.0` = 100%, `-ui.md` sec.13bis): the status-bar menu
+    /// Grid zoom factor (`1.0` = 100%, `trame-status-bar`): the status-bar menu
     /// writes it, the canvas view polls it each frame. Local view state, not synced.
     zoom: RwSignal<f64>,
-    /// Right-click context-menu scope (`-ui.md` sec.5.C): the canvas view sets it
+    /// Right-click context-menu scope (`trame-context-menu`): the view sets it
     /// (cell vs header) before the DOM menu opens; the shell derives the layout.
     ctx_scope: RwSignal<trame_chrome::CtxScope>,
-    /// Whether the active sheet currently has a shared filter (`-ui.md` sec.5.D):
+    /// Whether the active sheet currently has a shared filter (`trame-shared-filter`):
     /// mirrored from `TrameEvent::FilterApplied`/`FilterCleared`. Drives the
     /// context menu's dynamic filter entry (Filter by column XOR Remove filter).
     filter_active: RwSignal<bool>,
     /// Current selection rectangle `(r1, c1, r2, c2)`, published by the canvas
     /// view on each selection change; read when opening the multi-column sort
-    /// dialog so it offers the selection's columns (`-ui.md` sec.5.C).
+    /// dialog so it offers the selection's columns (`trame-sort`).
     sel_bounds: RwSignal<Option<(u32, u32, u32, u32)>>,
-    /// Multi-column sort dialog open state (`-ui.md` sec.5.C); `None` = closed.
+    /// Multi-column sort dialog open state (`trame-sort`); `None` = closed.
     sort_dialog: RwSignal<Option<trame_chrome::SortDialogState>>,
-    /// Sheet-tab strip model (`-ui.md` sec.13): `(id, name)` in display order.
+    /// Sheet-tab strip model (`trame-sheets`): `(id, name)` in display order.
     /// Mirrored from `TrameEvent::SheetList` by the per-frame relay; drives the
     /// DOM `SheetTabs` slot (the tabs no longer live on the canvas).
     sheets: RwSignal<Vec<(String, String)>>,
@@ -368,7 +369,7 @@ pub fn main() {
     // dispatcher has mirrored command-state events into the chrome.
     let (view_tx, view_rx) = flume::bounded::<UiEvent>(CHANNEL_CAPACITY);
 
-    // Per-document Logic->UI fan-out for nested `doc_embed` children (§2.I). A
+    // Per-document Logic->UI fan-out for nested `doc_embed` children. A
     // child view built by `make_child` (below) registers a demultiplexed sender
     // here; the relay routes every doc-tagged event whose `document_id` is a live
     // child to that channel instead of the shared top-level `view_tx`, so a
@@ -394,11 +395,11 @@ pub fn main() {
 
     // Canvas->DOM perf channel: the view publishes the per-frame perf snapshot
     // (fps + timings), the dispatcher mirrors it into the `perf_snap` signal the
-    // status bar renders. The HUD migrated off the wgpu overlay (`-ui.md`
-    // sec.13bis) -- no point shaping debug glyphs on the GPU every frame.
+    // status bar renders. The HUD left the wgpu overlay (`trame-status-bar`)
+    // -- no point shaping debug glyphs on the GPU every frame.
     let perf_pub = ambre_canvas::PerfPublisher::new();
 
-    // Canvas->DOM filter-open channel (`-ui.md` sec.5.D): the view raises this
+    // Canvas->DOM filter-open channel (`trame-shared-filter`): the view raises this
     // one-shot intent when an in-canvas autofilter button is clicked; the
     // per-frame relay consumes it (after mirroring the anchor) and opens the DOM
     // FilterPopover through the same path as the context-menu "Filter by column"
@@ -411,22 +412,22 @@ pub fn main() {
     let formula_text = RwSignal::new(String::new());
     let formula_action = RwSignal::new(None::<FormulaAction>);
 
-    // TOFU share-dialog signals (`ambre-spec-chrome.md §2.H`), created here in the
+    // TOFU share-dialog signals (`ambre-spec-key-verification.md`), created here in the
     // launcher owner and shared with both `AppRoot` (dialog) and the per-frame
     // relay (trust decision + phase-2 dispatch).
     let tofu_prompt = RwSignal::new(None::<TofuPrompt>);
     let tofu_confirm = RwSignal::new(None::<TofuPrompt>);
     let invite_role = RwSignal::new(Role::Editor);
 
-    // Status-bar signals (`-ui.md` sec.13bis): selection aggregates (set from the
+    // Status-bar signals (`trame-status-bar`): selection aggregates (set from the
     // `SelectionStats` event / cleared by the view on a single cell) and the live
     // perf snapshot pumped from `perf_pub` below.
     let sel_stats = RwSignal::new(None::<trame_chrome::SelStats>);
-    // Toile selection aggregates (toile-ui §8bis): element tally + world bounds,
+    // Toile selection aggregates (toile-status-bar): element tally + world bounds,
     // mirrored from `ToileEvent::SelectionStats`. Cleared to `None` on an empty
     // selection so the band shows only the zoom chip.
     let sel_stats_toile = RwSignal::new(None::<toile_chrome::SelStats>);
-    // Presenter overlay panel signals (toile-features §1.D), mirrored from the
+    // Presenter overlay panel signals (toile-presentation), mirrored from the
     // enriched `SlideChanged` + `PresentModeChanged` events by the per-frame
     // relay. Created here (like `sel_stats_toile`) and passed to the shell.
     let present_toile = RwSignal::new(false);
@@ -434,7 +435,7 @@ pub fn main() {
     let presenter_count = RwSignal::new(0usize);
     let presenter_notes = RwSignal::new(String::new());
     let presenter_frame = RwSignal::new(None::<ambre_bus::app::toile::ElementId>);
-    // "Follow presenter" role signals (toile-features §1.B), mirrored from the
+    // "Follow presenter" role signals (toile-presentation), mirrored from the
     // `PresentBroadcastChanged` / `FollowingChanged` events and from a peer's
     // broadcasting presence. `presenter_peer_toile` is the latest peer seen
     // broadcasting a slide; it drives the panel's Follow affordance.
@@ -443,48 +444,48 @@ pub fn main() {
     let presenter_peer_toile = RwSignal::new(None::<ambre_bus::UserId>);
     let perf_snap = RwSignal::new(ambre_canvas::PerfSnapshot::default());
 
-    // Sheet-tab strip model (`-ui.md` sec.13): mirrored from `TrameEvent::SheetList`
+    // Sheet-tab strip model (`trame-sheets`): mirrored from `TrameEvent::SheetList`
     // by the relay below and fed to the DOM `SheetTabs` slot (off the canvas now).
     let sheets = RwSignal::new(Vec::<(String, String)>::new());
     let active_sheet = RwSignal::new(String::new());
-    // Grid zoom factor selected in the status-bar menu (`-ui.md` sec.13bis),
+    // Grid zoom factor selected in the status-bar menu (`trame-status-bar`),
     // polled by the canvas view each frame. Defaults to 100%.
     let zoom = RwSignal::new(1.0_f64);
 
-    // Context-menu scope (`-ui.md` sec.5.C): the view sets it on each right-click
+    // Context-menu scope (`trame-context-menu`): the view sets it per right-click
     // (cell vs header) before the DOM `contextmenu` listener opens the menu; the
     // shell derives the menu layout from it. Created here (like the formula
     // signals) so both the view and the Leptos shell share the one signal.
     let ctx_scope = RwSignal::new(trame_chrome::CtxScope::Cell);
-    // Active-filter flag (`-ui.md` sec.5.D), mirrored from the Logic thread's
+    // Active-filter flag (`trame-shared-filter`), mirrored from the Logic thread's
     // FilterApplied/FilterCleared. Drives the context menu's dynamic filter entry.
     let filter_active = RwSignal::new(false);
-    // Selection rectangle published by the canvas view (`-ui.md` sec.5.C), read
+    // Selection rectangle published by the canvas view (`trame-sort`), read
     // when opening the multi-column sort dialog. Created here (like `ctx_scope`)
     // so the view and the Leptos shell share the one signal.
     let sel_bounds = RwSignal::new(None::<(u32, u32, u32, u32)>);
 
-    // Toile context-menu bridge (`toile-ui §5ter`): the canvas view publishes the
+    // Toile context-menu bridge (`toile-menus`): the canvas view publishes the
     // selection scope on each right-click; the DOM menu reads it to build its
     // entries and writes the chosen `CommandId` back for the view to resolve
     // against its (UI-only) selection. Created here so the view and the Leptos
     // shell share the one pair of signals, exactly like Trame's `ctx_scope`.
     let toile_ctx_scope = RwSignal::new(ambre_toile::ui::menu::CtxScope::default());
     let toile_menu_cmd = RwSignal::new(None::<ambre_chrome::commands::CommandId>);
-    // Toile active tool (`toile-ui §5quinquies.A`): shared by the DOM tool palette,
+    // Toile active tool (`toile-tools`): shared by the DOM tool palette,
     // the keyboard tool chords and the canvas view, exactly like the context-menu
     // pair above. Starts on the default tool (Select).
     let toile_active_tool = RwSignal::new(ambre_toile::ui::Tool::default());
-    // Toile canvas cursor (`toile-ui §5quinquies.A`): the view publishes the
+    // Toile canvas cursor (`toile-tools`): the view publishes the
     // position-dependent cursor here (directional resize on a selection edge, grab
     // on the rotate handle); `None` falls back to the tool's base cursor.
     let toile_cursor = RwSignal::new(None::<std::borrow::Cow<'static, str>>);
-    // Toile style inspector (`toile-ui §5quinquies.B`): the view publishes the
+    // Toile style inspector (`toile-styles`): the view publishes the
     // selection's common style into `toile_style_model` and drains a whole-style
     // edit from `toile_restyle`, exactly like the context-menu pair above.
     let toile_style_model = RwSignal::new(None::<toile_chrome::StyleModel>);
     let toile_restyle = RwSignal::new(None::<ambre_bus::app::toile::ElementStyle>);
-    // Floating selection toolbar (`toile-ui §5quinquies.D`): the view republishes
+    // Floating selection toolbar (`toile-styles`): the view republishes
     // its placement into `toile_float_bar` each frame and drains single-field style
     // edits from `toile_quick_style`, mirroring the inspector's model / restyle pair.
     let toile_float_bar = RwSignal::new(None::<toile_chrome::FloatBar>);
@@ -538,7 +539,7 @@ pub fn main() {
         .expect("spawn Logic thread");
 
     // Eagerly fetch the base fonts and seed the Logic thread's PDF-export
-    // FontContext (`toile-interop §3.A`). The Logic worker cannot fetch -- it
+    // FontContext (`toile-pdf-export`). The Logic worker cannot fetch -- it
     // blocks on its inbound selector and has no browser event loop -- so the
     // Main thread, which has both, fetches on its behalf and ships the raw bytes
     // across as `LogicCommand::LoadFonts`. Fire-and-forget on a `spawn_local`:
@@ -696,7 +697,7 @@ pub fn main() {
     let current_doc = current_doc_slot
         .borrow()
         .expect("current_doc signal created during mount");
-    // Shared filter popover signals (`-ui.md` sec.5.D), created in the mount owner
+    // Shared filter popover signals (`trame-shared-filter`), created in the mount owner
     // and read back here for the per-frame relay (which sets them on
     // `TrameEvent::ColumnValues` / `FilterApplied` / `FilterCleared`).
     let filter_popover = filter_popover_slot
@@ -705,7 +706,7 @@ pub fn main() {
     let filter_values = filter_values_slot
         .borrow()
         .expect("filter_values signal created during mount");
-    // Find/replace panel signals (`-ui.md` sec.5.G), read back for the keyboard
+    // Find/replace panel signals (`trame-find-replace`), read back for the keyboard
     // listener (Ctrl+F/Ctrl+H open the panel) and the per-frame relay (which sets
     // `find_result` on `TrameEvent::FindResult`).
     let find_state = find_state_slot
@@ -714,7 +715,7 @@ pub fn main() {
     let find_result = find_result_slot
         .borrow()
         .expect("find_result signal created during mount");
-    // Toile Find panel signals (`toile-ui §5quater`), read back for the keyboard
+    // Toile Find panel signals (`toile-find`), read back for the keyboard
     // listener (Ctrl+F opens the panel) and the per-frame relay (which sets
     // `find_result_toile` on `ToileEvent::FindResults`).
     let find_state_toile = find_state_toile_slot
@@ -723,7 +724,7 @@ pub fn main() {
     let find_result_toile = find_result_toile_slot
         .borrow()
         .expect("find_result_toile signal created during mount");
-    // Formatting-toolbar style state (`-ui.md` sec.5bis), read back for the
+    // Formatting-toolbar style state (`trame-cell-styles`), read back for the
     // per-frame relay (which updates it on `TrameEvent::StyleApplied`).
     let style_state = style_slot
         .borrow()
@@ -805,7 +806,7 @@ pub fn main() {
     let mut last_perf_push_ms: f64 = 0.0;
     let mut list_requested = false;
     let relay_tx = ui_to_logic_tx.clone();
-    // The relay's view of the child fan-out registry (§2.I): read to route a
+    // The relay's view of the child fan-out registry: read to route a
     // nested document's events, pruned when a child receiver has been dropped.
     let child_routes_relay = Rc::clone(&child_routes);
 
@@ -864,8 +865,9 @@ pub fn main() {
 
         // Browser tab title. Icon-less context: compose the document's plaintext
         // name (decrypted into `docs`) with the generic localized type label
-        // (`DocType::generic_label`, not the brand `name()`) -- `ambre-spec-chrome.md
-        // 2.G`. Recomputed each frame so a rename or a late-arriving document list
+        // (`DocType::generic_label`, not the brand `name()`) --
+        // `ambre-spec-launcher.md`, CHROME-043. Recomputed each frame so a rename
+        // or a late-arriving document list
         // updates the tab; the DOM write happens only when the title changes. An
         // open doc with no resolved name falls back to "Untitled - <label>"; the
         // landing is "Ambre".
@@ -900,7 +902,7 @@ pub fn main() {
         }
 
         // TOFU: a confirmed prompt -> pin the fetched key in `trusted_keys` and
-        // fire phase 2 of the invite (`ambre-spec-chrome.md §2.H`). Handled here
+        // fire phase 2 of the invite (`ambre-spec-key-verification.md`). Handled here
         // rather than in `AppRoot` because the trusted-key store is Main-thread
         // owned (this relay). Writing the pin before dispatch is normative.
         if let Some(p) = tofu_confirm.get_untracked() {
@@ -935,7 +937,7 @@ pub fn main() {
         }
 
         while let Ok(ev) = logic_to_ui_rx.try_recv() {
-            // Fan a nested child's stream out to its own view channel (§2.I) and
+            // Fan a nested child's stream out to its own view channel and
             // skip every top-level chrome mirror below: a child's events must not
             // drive the parent's formula bar, zoom chip or status band. Only a
             // document that is a LIVE child is diverted; the top-level document's
@@ -956,7 +958,7 @@ pub fn main() {
             // no content event variant.
             trame_chrome::mirror_event(&store, &ev);
             // Mirror the active cell's rich style into the formatting toolbar
-            // (`-ui.md` sec.5bis). A no-op for non-style events.
+            // (`trame-cell-styles`). A no-op for non-style events.
             trame_chrome::apply_style_event(&style_state, &ev);
             // Surface Trame's user-facing notifications (rejections, validation
             // errors, sheet-lifecycle errors, sort/filter completion) as toasts.
@@ -1037,7 +1039,7 @@ pub fn main() {
                         },
                     });
                 }
-                // TOFU phase 1 answer (§2.H): classify the fetched key against the
+                // TOFU phase 1 answer: classify the fetched key against the
                 // pinned one. Trusted (same key) -> dispatch phase 2 straight away;
                 // New (no pin) or Changed (divergence) -> raise the modal prompt.
                 UiEvent::Rest {
@@ -1152,7 +1154,7 @@ pub fn main() {
                 // Relayed service failures (e.g. unknown invitee) surface as a
                 // warning toast so the share action gives feedback.
                 UiEvent::ApiError { message, .. } => toasts.warning(message.clone()),
-                // Shared filter popover (`-ui.md` sec.5.D): the distinct values of
+                // Shared filter popover (`trame-shared-filter`): the distinct values of
                 // the active column landed -> populate the "by values" list and pin
                 // the popover to the real column index.
                 UiEvent::Viewport {
@@ -1183,7 +1185,7 @@ pub fn main() {
                     filter_popover.set(None);
                     filter_active.set(false);
                 }
-                // Sheet-tab strip (sec.13): the sheet list / active id changed ->
+                // Sheet-tab strip (`trame-sheets`): the list / active id changed ->
                 // mirror it to the DOM `SheetTabs` signals. The canvas no longer
                 // draws the tabs, so this is the only consumer now.
                 UiEvent::Viewport {
@@ -1197,7 +1199,7 @@ pub fn main() {
                     sheets.set(list.clone());
                     active_sheet.set(active.clone());
                 }
-                // Status bar (sec.13bis): selection aggregates for a multi-cell
+                // Status bar (`trame-status-bar`): aggregates for a multi-cell
                 // selection. The view clears the signal on a single cell; here we
                 // fill it from the Logic-computed totals.
                 UiEvent::Viewport {
@@ -1219,9 +1221,10 @@ pub fn main() {
                     min: *min,
                     max: *max,
                 })),
-                // Find & Replace (sec.5.G): summarize the match set for the panel's
-                // "k/n" counter. The view (canvas) consumes the same event to move
-                // the active cell onto the focused match and highlight the set.
+                // Find & Replace (`trame-find-replace`): summarize the match set
+                // for the panel's "k/n" counter. The view (canvas) consumes the
+                // same event to move the active cell onto the focused match and
+                // highlight the set.
                 UiEvent::Viewport {
                     event: AppEvent::Trame(ambre_bus::TrameEvent::FindResult { matches, active }),
                     ..
@@ -1232,14 +1235,14 @@ pub fn main() {
                         _ => Some((0, total)),
                     });
                 }
-                // Toile Find (§5quater): feed the panel's counter and step origin.
+                // Toile Find: feed the panel's counter and step origin.
                 // The canvas view consumes the same event (forwarded below) to
                 // highlight the hits and recenter the camera on `focus`.
                 UiEvent::Viewport {
                     event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::FindResults(fr)),
                     ..
                 } => find_result_toile.set(Some(fr.clone())),
-                // Toile status bar (§8bis): selection aggregates for the band.
+                // Toile status bar: selection aggregates for the band.
                 // The canvas view requests them on each selection change and also
                 // receives this event (forwarded below), consuming it only for a
                 // pending Fit / find-focus recenter; here we mirror count/bounds
@@ -1250,7 +1253,7 @@ pub fn main() {
                 } => {
                     sel_stats_toile.set(Some(toile_chrome::SelStats::from_reply(s.count, s.bounds)))
                 }
-                // Presenter overlay panel (§1.D): show / hide it with focus mode,
+                // Presenter overlay panel: show / hide it with focus mode,
                 // and mirror the enriched slide payload into the panel signals.
                 // The canvas view consumes the same events (forwarded below) for
                 // the camera glide + Smart Animate pass.
@@ -1268,7 +1271,7 @@ pub fn main() {
                     presenter_notes.set(c.notes.clone());
                     presenter_frame.set(c.frame.clone());
                 }
-                // "Follow presenter" role changes (§1.B): reflect the local
+                // "Follow presenter" role changes: reflect the local
                 // broadcast toggle and follow target in the panel signals.
                 UiEvent::Viewport {
                     event:
@@ -1279,7 +1282,7 @@ pub fn main() {
                     event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::FollowingChanged(who)),
                     ..
                 } => following_toile.set(*who),
-                // A peer broadcasting its playback position (§1.B): remember it as
+                // A peer broadcasting its playback position: remember it as
                 // the current presenter so the Follow affordance appears. The event
                 // still flows to the view below for the overlay pass.
                 UiEvent::Viewport {
@@ -1305,7 +1308,7 @@ pub fn main() {
         }
 
         // Open the shared filter popover when the canvas raised the one-shot
-        // intent (`-ui.md` sec.5.D): a click on an in-canvas autofilter button.
+        // intent (`trame-shared-filter`): a click on an in-canvas autofilter button.
         // The view already moved the active cell onto the button's column (so the
         // anchor mirrored just above points at it) and asked nothing else; this
         // runs the exact body of the context-menu `FILTER_COLUMN` branch, so the
@@ -1343,7 +1346,7 @@ pub fn main() {
     let formula_text_tv = formula_text;
     let formula_action_tv = formula_action;
 
-    // Child-view factory for nested `doc_embed`s (§2.I). `FrameHost` cannot build
+    // Child-view factory for nested `doc_embed`s. `FrameHost` cannot build
     // an `AppView` (it is app-agnostic, and the chrome signals need a reactive
     // owner it does not have), so the launcher supplies this. Each call registers
     // a demultiplexed Logic->UI channel and returns a view in embedded mode (it

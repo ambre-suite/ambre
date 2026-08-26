@@ -53,8 +53,17 @@ jobs:
       # Doc-side check, milliseconds: derives the invariant ledger and fails on a
       # status value or a missing Story citation (`ambre-spec-architecture.md §4`).
       - run: just invariants
-      # Same idea, other half: no function body in a spec (template §0).
+      # What a spec quotes: no function body in a spec (template §0).
       - run: just spec-code
+      # How a spec is built: prose share, production markers in a feature
+      # document, the schema budgets, and the container cross-check.
+      - run: just spec-shape
+      # What a spec points at: every document name cited, in the code and in the
+      # corpus, names a document that exists (`ambre-spec-template.md` §1.D).
+      - run: just spec-refs
+      # What the corpus derives: the feature inventory of each application must
+      # be what the feature documents say today (`ambre-spec-template.md` §4).
+      - run: just inventory
 
   # ---------------------------------------------------------------------------
   # deny -- supply chain (advisories, licences, sources) plus the zero-knowledge
@@ -182,7 +191,7 @@ jobs:
   # CSR + DOM) under headless Chrome via `wasm-pack test`. The pinned nightly +
   # rust-src (rust-toolchain.toml) supply `-Z build-std` for multi-threaded wasm.
   # Tests live in `crates/ambre-trame/tests/chrome_ui.rs` (Epic `ET`, Leptos UI
-  # tests, `ambre-spec-trame-ui.md` sec.14/18).
+  # tests, `ambre-spec-architecture.md` section 4).
   # ---------------------------------------------------------------------------
   test-wasm:
     runs-on: ubuntu-latest

@@ -112,7 +112,7 @@ fn is_toile_kind(doc_type: DocType) -> bool {
 /// (Trame <-> Toile). So a target whose render kind differs from the booted kind
 /// must hard-navigate (`location.set_href`) to re-boot the right `AppView`;
 /// a same-kind target uses a router pushState that keeps the Sync worker/session
-/// (`ambre-spec-chrome.md 2.G` "Open").
+/// (`ambre-spec-launcher.md`, CHROME-039).
 pub fn needs_reload(target: DocType, boot_is_toile: bool) -> bool {
     is_toile_kind(target) != boot_is_toile
 }

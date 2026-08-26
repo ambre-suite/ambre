@@ -39,7 +39,8 @@ fn col_label(col: u32) -> String {
 
 /// The shared filter popover: anchored under the active column header, it offers
 /// the "by values" (checkbox list of the column's distinct visible values) and a
-/// minimal "by condition" (operator + value) modes (`-ui.md` sec.5.D). Applying
+/// minimal "by condition" (operator + value) modes (`trame-shared-filter`).
+/// Applying
 /// fires `on_apply` with the chosen [`FilterKind`]; "Clear filter" routes through
 /// `on_command` (the shared command path). `values` is fed by the launcher from
 /// [`ambre_bus::TrameEvent::ColumnValues`].

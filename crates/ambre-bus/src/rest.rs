@@ -281,7 +281,7 @@ pub enum RestCommand {
     },
 
     // ── Sharing ──────────────────────────────────────────────────────────────
-    /// Phase 1 of the TOFU two-phase invite (`ambre-spec-chrome.md §2.H`):
+    /// Phase 1 of the TOFU two-phase invite (`ambre-spec-key-verification.md`):
     /// resolve the invitee and fetch their public key **without wrapping**, so
     /// the user can verify the fingerprint before any Document Key is shared.
     /// → `InviteeKey`.
@@ -423,10 +423,10 @@ pub enum RestEvent {
     },
 
     // ── Sharing ──────────────────────────────────────────────────────────────
-    /// Phase 1 answer of the TOFU invite (`ambre-spec-chrome.md §2.H`). Carries
-    /// the invitee's raw X25519 `exchange_pub_key` (for the byte comparison
-    /// against the `trusted_keys` store, done on the Main thread) and the
-    /// already-formatted `fingerprint` string (the chrome never hashes).
+    /// Phase 1 answer of the TOFU invite (`ambre-spec-key-verification.md`).
+    /// Carries the invitee's raw X25519 `exchange_pub_key` (for the byte
+    /// comparison against the `trusted_keys` store, done on the Main thread) and
+    /// the already-formatted `fingerprint` string (the chrome never hashes).
     InviteeKey {
         document_id: DocumentId,
         user_id: UserId,

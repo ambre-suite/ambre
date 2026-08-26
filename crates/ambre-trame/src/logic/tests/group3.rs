@@ -148,7 +148,7 @@ fn merge_selection_single_cell_is_noop() {
 
 /// A concurrent edit that lands a value in a covered cell is masked, not
 /// destroyed: the value is hidden while the merge is active and reappears on
-/// unmerge (§6, data is never destroyed).
+/// unmerge (`trame-cell-merges`, data is never destroyed).
 #[test]
 fn concurrent_value_under_merge_is_masked_then_restored() {
     // Shared base so both peers address rows 0/1 by the *same* stable ids
@@ -306,7 +306,7 @@ fn two_peers_converge_via_mock_sync() {
 /// Two peers sharing a cross-sheet formula converge when one renames the
 /// target sheet: the reference is bound to the stable `sheet_id` (same id on
 /// both peers via sync), so both keep computing and reconstruct identical
-/// formula-bar text (spec section 2.D).
+/// formula-bar text (`trame-sheets`).
 #[test]
 fn cross_sheet_reference_converges_across_peers_on_rename() {
     let mut a = TrameState::new();
@@ -475,7 +475,8 @@ fn cross_sheet_formula_evaluates_end_to_end() {
 }
 
 /// A masked cell (covered by a merge, non-empty -> concurrent conflict) is
-/// excluded from computation on *every* sheet, not only the displayed one (§6).
+/// excluded from computation on *every* sheet, not only the displayed one
+/// (`trame-cell-merges`, `TRAME-020`).
 /// Regression for the view-dependent masking bug: masking was applied to the
 /// engine feed only at local index 0 (the active sheet), so a cross-sheet
 /// reference to a masked cell on a *non-active* sheet leaked the hidden value,
@@ -571,7 +572,7 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
     );
     assert_eq!(
         target_inactive, target_active,
-        "a masked cell reads identically whether or not its sheet is the active tab (view-independent, §6)"
+        "a masked cell reads identically whether or not its sheet is the active tab (TRAME-020)"
     );
 }
 

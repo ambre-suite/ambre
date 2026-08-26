@@ -1,4 +1,4 @@
-//! Core value types of the Toile CRDT model (`ambre-spec-toile-logic.md` §2).
+//! Core value types of the Toile CRDT model (`ambre-spec-toile-schema.md`).
 //!
 //! These pure-data types (identity, element kinds, the single per-element style
 //! register, freehand strokes, connector anchoring) live in `ambre-bus` so the

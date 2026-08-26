@@ -1,13 +1,13 @@
 //! Presentation sequence + playback for [`ToileState`](super::ToileState)
-//! (`toile-features` §1 / §5). A presentation is not a separate app: a frame is
+//! (`toile-presentation`). A presentation is not a separate app: a frame is
 //! an ordinary element and this side panel orders frames into a slide thread.
 //!
-//! The split that drives this module (§0/§1): the **sequence** (which frames, in
+//! The split that drives this module: the **sequence** (which frames, in
 //! what order) is **CRDT** -- a `LoroMovableList<FrameId>` under a `presentation`
 //! map, shared and convergent; the **playback** (which slide this viewer is on,
 //! focus mode) is **local/ephemeral** -- a plain field on `ToileState`, never in
 //! Loro and never synced. This mirrors the durable-intent vs momentary-gesture
-//! split already used for presence (`toile-logic §7`).
+//! split already used for presence (`toile-presence`).
 
 use ambre_bus::UserId;
 use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
@@ -28,16 +28,16 @@ use crate::logic::model::{ElementId, FrameId};
 use super::{CHILDREN, CONFIG, NOTES, ORDER, PRESENTATION, ToileState};
 
 impl ToileState {
-    // -- sequence (CRDT, §1.A) -------------------------------------------------
+    // -- sequence (CRDT,) -------------------------------------------------
 
-    /// Replace the shared slide sequence with `order` (§1.A). Repeated frame ids
+    /// Replace the shared slide sequence with `order`. Repeated frame ids
     /// are de-duplicated (idempotent membership); a dangling FrameId is left in
-    /// the list and skipped at derivation like a dangling connector (§5.A), so no
+    /// the list and skipped at derivation like a dangling connector, so no
     /// frame-existence check happens here. CRDT and undoable: one `doc.commit()`
-    /// is one undo item (§8 bis). The local playback cursor is clamped to the new
+    /// is one undo item. The local playback cursor is clamped to the new
     /// deck length.
     pub(super) fn set_slide_order(&mut self, order: &[FrameId]) -> ToileOutcome {
-        // De-duplicate, keeping first occurrence (§1.A idempotent membership).
+        // De-duplicate, keeping first occurrence (idempotent membership).
         let mut target: Vec<&str> = Vec::new();
         for id in order {
             if !target.contains(&id.as_str()) {
@@ -82,11 +82,11 @@ impl ToileState {
             .collect()
     }
 
-    // -- playback (local, §1.B) ------------------------------------------------
+    // -- playback (local,) ------------------------------------------------
 
-    /// Step to the next slide, saturating at the last (§1.B). Local only. A
+    /// Step to the next slide, saturating at the last. Local only. A
     /// manual navigation takes control: any active follow is cleared first
-    /// (§1.B "Follow presenter"). Broadcasts the new position when broadcasting.
+    /// ("Follow presenter"). Broadcasts the new position when broadcasting.
     pub(super) fn next_slide(&mut self) -> ToileOutcome {
         let old = self.playback.active;
         let len = self.slide_len();
@@ -96,7 +96,7 @@ impl ToileState {
         self.manual_nav_outcome(old)
     }
 
-    /// Step to the previous slide, saturating at the first (§1.B). Local only.
+    /// Step to the previous slide, saturating at the first. Local only.
     /// Takes control (clears any follow) and broadcasts, like [`next_slide`].
     pub(super) fn prev_slide(&mut self) -> ToileOutcome {
         let old = self.playback.active;
@@ -104,7 +104,7 @@ impl ToileState {
         self.manual_nav_outcome(old)
     }
 
-    /// Jump to `idx`, clamped to the deck length (§1.B). Local only. Takes
+    /// Jump to `idx`, clamped to the deck length. Local only. Takes
     /// control (clears any follow) and broadcasts, like [`next_slide`].
     pub(super) fn goto_slide(&mut self, idx: usize) -> ToileOutcome {
         let old = self.playback.active;
@@ -114,7 +114,7 @@ impl ToileState {
     }
 
     /// Build the outcome for a manual navigation from `old` to the just-updated
-    /// `playback.active` (§1.B): emit the `SlideChanged` glide, clear any active
+    /// `playback.active`: emit the `SlideChanged` glide, clear any active
     /// follow first ("take control", prepending `FollowingChanged(None)`), and
     /// attach a broadcast frame when broadcasting.
     fn manual_nav_outcome(&mut self, old: usize) -> ToileOutcome {
@@ -128,7 +128,7 @@ impl ToileState {
         ToileOutcome::display_and_ephemeral(display, self.slide_broadcast_frame())
     }
 
-    /// Enter presentation (focus) mode, resetting to the first slide (§1.B).
+    /// Enter presentation (focus) mode, resetting to the first slide.
     /// Local only. Broadcasts slide 0 when already broadcasting.
     pub(super) fn enter_present(&mut self, focus: bool) -> ToileOutcome {
         self.present = true;
@@ -146,7 +146,7 @@ impl ToileState {
     }
 
     /// Postcard-encode an ephemeral presence frame carrying the current active
-    /// slide index, but only when broadcasting is on (§1.B "Follow presenter").
+    /// slide index, but only when broadcasting is on ("Follow presenter").
     /// The frame carries `present_slide: Some(active)` and no cursor / selection:
     /// it transiently clears this presenter's cursor halo on followers until the
     /// next cursor sample, which is acceptable (presenters emit cursor / laser
@@ -168,7 +168,7 @@ impl ToileState {
         }
     }
 
-    /// Toggle whether this viewer broadcasts its playback position (§1.B). Local
+    /// Toggle whether this viewer broadcasts its playback position. Local
     /// role only, no CRDT delta. When turning on while in present mode, the
     /// current slide is broadcast immediately so followers snap without waiting
     /// for the next navigation.
@@ -185,7 +185,7 @@ impl ToileState {
         )
     }
 
-    /// Follow the presenter `who` (or stop with `None`), a local role only (§1.B).
+    /// Follow the presenter `who` (or stop with `None`), a local role only.
     /// No CRDT delta. If `Some(u)` and a broadcast slide from `u` is already known,
     /// snap to it at once (glide via `SlideChanged`); otherwise the follower snaps
     /// on the next inbound frame.
@@ -208,7 +208,7 @@ impl ToileState {
     }
 
     /// Build the [`SlideChange`] payload for a transition from `from_idx` (absent
-    /// on `EnterPresent`) to `to_idx` (§1.C / §1.D): the two frame snapshots the
+    /// on `EnterPresent`) to `to_idx`: the two frame snapshots the
     /// Smart Animate solver tweens plus the target frame's world rect the camera
     /// fits. An out-of-range or dangling index yields an empty snapshot / `None`
     /// rect, so a missing frame degrades to a plain fade rather than a panic.
@@ -232,7 +232,7 @@ impl ToileState {
         }
     }
 
-    /// Leave presentation mode (§1.B). Local only. Broadcasting is turned off on
+    /// Leave presentation mode. Local only. Broadcasting is turned off on
     /// exit (a viewer no longer presenting has no position to share); `following`
     /// is independent of present mode and left untouched.
     pub(super) fn exit_present(&mut self) -> ToileOutcome {
@@ -260,20 +260,20 @@ impl ToileState {
         (self.present, self.playback.active, self.playback.focus)
     }
 
-    // -- speaker notes (CRDT, §1.D) --------------------------------------------
+    // -- speaker notes (CRDT,) --------------------------------------------
 
-    /// Apply a char-CRDT splice to a frame's collaborative speaker notes (§1.D).
+    /// Apply a char-CRDT splice to a frame's collaborative speaker notes.
     /// Notes are a `LoroText` in the frame element's payload, seeded lazily on the
     /// first edit (like the deck's `order` list). The splice indices are clamped
     /// to the current length, so an out-of-range editor edit is bounded rather
     /// than rejected. CRDT and undoable: one `doc.commit()` is one undo item
-    /// (§8 bis). A missing element or a non-frame element (no `children` field) is
-    /// a rejected no-op, mirroring `set_text`'s kind guard (§6).
+    /// A missing element or a non-frame element (no `children` field) is
+    /// a rejected no-op, mirroring `set_text`'s kind guard.
     pub(super) fn edit_notes(&mut self, frame: &FrameId, delta: &TextDelta) -> ToileOutcome {
         let Some(em) = self.element_map(frame) else {
             return self.err_no_element(frame);
         };
-        // Only a frame carries notes; `children` is seeded at frame birth (§2.C).
+        // Only a frame carries notes; `children` is seeded at frame birth.
         if em.get(CHILDREN).is_none() {
             return ToileOutcome::display_only(vec![ToileEvent::Error(
                 ToileError::ContentKindMismatch,
@@ -311,14 +311,14 @@ impl ToileState {
             .unwrap_or_default()
     }
 
-    // -- PDF export pages (toile-interop §3.A / §7) ----------------------------
+    // -- PDF export pages (toile-pdf-export) ----------------------------
 
     /// Build one [`PdfPage`] per presentation slide for an export at `page` size
-    /// (`toile-interop §3.A` / §7). Each page's camera fits the frame's world
+    /// (`toile-pdf-export`). Each page's camera fits the frame's world
     /// rect into the page with the same `FIT_PAD` the on-screen present glide
     /// uses (`ui::view`), and the page is clipped to that frame rect, so the PDF
     /// matches what the audience sees. A dangling `FrameId` (present in the deck
-    /// but with no element) is skipped like a dangling connector (§5.A). An empty
+    /// but with no element) is skipped like a dangling connector. An empty
     /// deck falls back to a single, unclipped page fitted to the whole board
     /// content; a board with no content at all yields no pages, and the caller's
     /// [`export_pdf`](crate::logic::interop::export_pdf) reports
@@ -397,7 +397,7 @@ impl ToileState {
             return list;
         }
         let pres = self.doc.get_map(PRESENTATION);
-        // Default config (§1.A): the fields exist so later slices can edit them.
+        // Default config: the fields exist so later slices can edit them.
         if pres.get(CONFIG).is_none()
             && let Ok(cfg) = pres.insert_container(CONFIG, LoroMap::new())
         {
@@ -410,7 +410,7 @@ impl ToileState {
     }
 }
 
-/// The frame's `notes` LoroText, seeding an empty one on first use (§1.D). The
+/// The frame's `notes` LoroText, seeding an empty one on first use. The
 /// `em` map is already known to be a frame (checked by the caller).
 fn notes_text_or_seed(em: &LoroMap) -> LoroText {
     if let Some(text) = em
@@ -465,7 +465,7 @@ mod pdf_tests {
     }
 
     /// One page is produced per slide in the deck, in playback order, each
-    /// clipped to its frame rect (§7).
+    /// clipped to its frame rect.
     #[test]
     fn one_page_per_slide() {
         let mut st = ToileState::new();
@@ -482,7 +482,7 @@ mod pdf_tests {
     }
 
     /// A dangling `FrameId` in the deck (no such element) is skipped at
-    /// derivation, so it produces no page (§5.A).
+    /// derivation, so it produces no page.
     #[test]
     fn dangling_frame_is_skipped() {
         let mut st = ToileState::new();

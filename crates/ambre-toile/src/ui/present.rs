@@ -1,6 +1,6 @@
 // ambre-toile/src/ui/present.rs
 // ============================================================================
-// Presentation transition core (toile-features §1.C Smart Animate + §1.D Focus
+// Presentation transition core (toile-presentation Smart Animate + Focus
 // Mode). Pure and host-testable: given the endpoints of a slide change and a
 // wall-clock timestamp, it produces the camera transform (an eased glide toward
 // the fitted target frame) and the per-element content overrides (the Smart
@@ -17,14 +17,14 @@ use crate::logic::animate::{AnimatedElement, ease_in_out_cubic, smart_animate};
 
 use super::viewport::ViewportTransform;
 
-/// Default slide transition length in milliseconds (§1.A `transition_ms`). The
+/// Default slide transition length in milliseconds (`transition_ms`). The
 /// deck config carries an editable value; Phase 1 uses this constant until the
 /// config is threaded through the event.
 pub const DEFAULT_TRANSITION_MS: f64 = 300.0;
 
 /// One in-flight slide transition. Built by the view on a `SlideChanged` event
 /// and advanced each frame. The camera glides from `cam_from` to `(cam_to_center,
-/// cam_to_zoom)`; the content tweens from `from` to `to` (§1.C). `start_ms` is
+/// cam_to_zoom)`; the content tweens from `from` to `to`. `start_ms` is
 /// stamped lazily on the first `advance` so the transition is measured from the
 /// first frame it is actually shown, not from event dispatch.
 pub struct Transition {
@@ -73,7 +73,7 @@ impl Transition {
     /// Advance to wall-clock `now_ms`, stamping the start on the first call. The
     /// raw phase `t` is `(now - start) / dur` clamped to `0..=1`; it is eased
     /// before both the camera glide and the content solve, so the whole
-    /// transition shares one easing curve (§1.C). `done` uses the raw (un-eased)
+    /// transition shares one easing curve. `done` uses the raw (un-eased)
     /// phase so the end is reached exactly at `dur`.
     pub fn advance(&mut self, now_ms: f64) -> TransitionFrame {
         let start = *self.start_ms.get_or_insert(now_ms);

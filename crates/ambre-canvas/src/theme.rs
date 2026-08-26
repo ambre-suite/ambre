@@ -1,6 +1,6 @@
 // ambre-canvas/src/theme.rs
 // ============================================================================
-// Design tokens, consumed (ambre-spec-ui 2.D, ambre-spec-canvas F). The colour
+// Design tokens, consumed (ambre-spec-design-tokens.md, ambre-spec-frame.md). The colour
 // palettes and scales are generated from `tokens.ron` by `build.rs`; this module
 // wraps them in the runtime theme switch shared across the canvas/DOM boundary:
 //

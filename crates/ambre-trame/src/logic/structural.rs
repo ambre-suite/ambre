@@ -25,7 +25,8 @@ impl TrameState {
             Axis::Row => rows_list_name(&self.active_sheet),
             Axis::Col => cols_list_name(&self.active_sheet),
         };
-        // The new line carries a freshly minted, move-invariant uid value (§2.A).
+        // The new line carries a freshly minted, move-invariant uid value
+        // (`trame-rows-and-columns`).
         let uid = self.mint_uid();
         if self
             .doc
@@ -43,7 +44,7 @@ impl TrameState {
     /// up/left and purging the removed element's cells and formatting. Any
     /// formula whose referenced cell was below the deletion now reads the
     /// shifted (or emptied) position -- references are not rewritten
-    /// (`ambre-spec-trame-logic.md` §12). Full id-based `#REF!` on delete is a
+    /// (`trame-formula-engine`). Full id-based `#REF!` on delete is a
     /// separate broken-references story. A no-op in virtual space.
     pub(super) fn delete_axis(&mut self, at: u32, axis: Axis) -> TrameOutcome {
         let at = at as usize;
@@ -70,7 +71,8 @@ impl TrameState {
     /// (Excel-style drag reorder), realized as a single `LoroMovableList::mov` on
     /// `rows_/cols_{sheet}`. Cells keyed by the move-invariant `(row_uid, col_uid)`
     /// pair travel with their line for free; the formula engine is NOT reseeded, so
-    /// every reference resolves to its line's new position (`after_reorder`, §12).
+    /// every reference resolves to its line's new position (`after_reorder`,
+    /// `trame-formula-engine`).
     /// A no-op if `from == to` or either index is outside the materialized used
     /// range (virtual lines carry nothing to move).
     pub(super) fn move_axis(&mut self, from: u32, to: u32, axis: Axis) -> TrameOutcome {
@@ -96,7 +98,7 @@ impl TrameState {
     /// Delete every row/column spanned by the current selection rectangle,
     /// iterating from the far edge inward so earlier positions stay valid as the
     /// list shifts. Each line is its own [`delete_axis`](Self::delete_axis) commit
-    /// (hence its own undo item, matching `-ui.md` sec.5.C); the final outcome
+    /// (hence its own undo item, matching `trame-context-menu`); the final outcome
     /// carries the refreshed display. The selection is left untouched -- the UI
     /// owns it and re-reports it on the next cursor move.
     pub(super) fn delete_selected_axis(&mut self, axis: Axis) -> TrameOutcome {
@@ -113,7 +115,7 @@ impl TrameState {
     }
 
     /// Single-column shared sort resolved against the tracked selection
-    /// rectangle (`-ui.md` sec.5.C). Sorts on the range's first column with no
+    /// rectangle (`trame-sort`). Sorts on the range's first column with no
     /// header row, exactly the parameterless context-menu intent: whole rows are
     /// permuted so cells outside the selection move with their row (Google Sheets
     /// "sort range"). Delegates to [`sort_range`](Self::sort_range) on the active
@@ -125,8 +127,8 @@ impl TrameState {
         self.sort_range(&sheet, r1, r2, c1, c2, 0, ascending, false)
     }
 
-    /// Whole-sheet single-column sort by the active cell's column (`-ui.md`
-    /// sec.5.C, the "sort by column" affordance for a whole-column selection).
+    /// Whole-sheet single-column sort by the active cell's column (`trame-sort`,
+    /// the "sort by column" affordance for a whole-column selection).
     /// Sorts every materialized row of the sheet across the full used-column span,
     /// so a row's cells outside the active column travel with it. The active
     /// column is passed as `sort_col` over a range anchored at column 0, with no
@@ -140,7 +142,7 @@ impl TrameState {
         self.sort_range(&sheet, 0, row_end, 0, col_end, sort_col, ascending, false)
     }
 
-    /// Multi-column sort over the tracked selection rectangle (`-ui.md` sec.5.C,
+    /// Multi-column sort over the tracked selection rectangle (`trame-sort`,
     /// the "Sort range..." dialog). Parameterless sibling of
     /// [`sort_selection`](Self::sort_selection): resolves the range against the
     /// tracked selection and delegates to

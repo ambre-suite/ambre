@@ -1,11 +1,11 @@
-//! Board text search for [`ToileState`](super::ToileState) (§8 quater).
+//! Board text search for [`ToileState`](super::ToileState).
 //!
 //! `Find` is **non-mutating** and runs entirely on the Logic thread: the UI only
 //! holds the culled `DisplayViewport`, so a match on an off-screen sticky is
 //! invisible to it. The handler walks the text-bearing elements (sticky / text
 //! bodies, frame titles) in z-order and returns their ids plus the next hit to
 //! recenter on. Matches are local view state, never synced and never an undo
-//! item (§8 quater / §12).
+//! item.
 
 use crate::logic::command::{FindOptions, FindResults, ToileEvent, ToileOutcome};
 use crate::logic::model::{ElementId, NodeId};
@@ -15,7 +15,7 @@ use super::codec::str_of;
 
 impl ToileState {
     /// Scan the text-bearing elements for `query`, returning the matching ids in
-    /// z-order and the recenter target (§8 quater). Read-only: no CRDT mutation,
+    /// z-order and the recenter target. Read-only: no CRDT mutation,
     /// no sync payload. An empty query yields no hits (the UI's "clear" signal).
     pub(super) fn find(
         &self,
@@ -33,9 +33,9 @@ impl ToileState {
         ToileOutcome::display_only(vec![ToileEvent::FindResults(FindResults { hits, focus })])
     }
 
-    /// Text-bearing element ids matching `query`, in paint order (§2.G): the
+    /// Text-bearing element ids matching `query`, in paint order: the
     /// `layers` walk first, then any element absent from `layers` appended in
-    /// `ElementId` order (the §2.H well-formedness fallback), so a concurrently
+    /// `ElementId` order (the well-formedness fallback), so a concurrently
     /// dropped `layers` entry never hides a hit.
     fn find_hits(&self, query: &str, options: FindOptions) -> Vec<ElementId> {
         let mut hits = Vec::new();
@@ -80,7 +80,7 @@ impl ToileState {
 /// The hit to recenter on: the first hit for a fresh search, otherwise the hit
 /// adjacent to `from` in the requested direction (`backward` steps to the
 /// previous hit, else the next), wrapping around. A `from` that is no longer a
-/// hit restarts at the first (§8 quater).
+/// hit restarts at the first.
 fn next_focus(hits: &[ElementId], from: Option<&ElementId>, backward: bool) -> Option<ElementId> {
     let first = hits.first().cloned();
     let Some(from) = from else {

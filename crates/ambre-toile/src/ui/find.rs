@@ -1,13 +1,13 @@
 // ambre-toile/src/ui/find.rs
 // ============================================================================
-// Find-on-board view helper (toile-ui §5quater). The DOM `FindPanel` (chrome)
+// Find-on-board view helper (toile-find). The DOM `FindPanel` (chrome)
 // owns the query and options; Logic runs the scan and replies with
 // `FindResults { hits, focus }`, stepping `focus` forward or backward itself
-// (toile-logic §8 quater). The panel only needs to know where `focus` sits in
+// (toile-find). The panel only needs to know where `focus` sits in
 // `hits` for its "k/n" counter -- that is this helper.
 //
 // Kept in the always-compiled `ui` module (not the wasm-only `chrome`) so it is
-// host-unit-tested (§10): the chrome panel is Leptos/DOM and only reachable
+// host-unit-tested: the chrome panel is Leptos/DOM and only reachable
 // under the wasm target.
 // ============================================================================
 

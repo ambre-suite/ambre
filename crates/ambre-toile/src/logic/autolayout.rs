@@ -1,21 +1,21 @@
-//! Auto-layout constraint solver (`toile-features` §2).
+//! Auto-layout constraint solver (`toile-auto-layout`).
 //!
 //! A **frame** can carry an [`AutoLayout`] spec so its children are positioned by
 //! this solver rather than by absolute coordinates (the Figma model). The **spec
 //! is CRDT** (shared design intent, a single LWW register under the frame element
 //! map's `autolayout` key -- see `state::autolayout`); the **solved positions are
 //! derived, never persisted** -- like connector geometry
-//! (`toile-logic §5`). Persisting solved positions is the rejected alternative
-//! (§8): redundant derived state that could desync from the spec.
+//! (`toile-connectors`). Persisting solved positions is the rejected alternative
+//! redundant derived state that could desync from the spec.
 //!
 //! This module is **pure and deterministic**: given the frame rect, the layout
 //! spec and the children sizes (in `children` LoroMovableList order) it returns
 //! one [`kurbo::Rect`] per child. Determinism is mandatory -- every peer derives
-//! identical positions from identical CRDT state (§2). It runs at derivation on
+//! identical positions from identical CRDT state. It runs at derivation on
 //! every child edit, so it stays allocation-light for the < 1 ms / 200-child
-//! budget (§7).
+//! budget.
 //!
-//! ## Semantics (pinned; the spec §2 leaves the fine details to the solver)
+//! ## Semantics (pinned; the spec leaves the fine details to the solver)
 //!
 //! - **Content box** = `frame` inset by `padding` `[top, right, bottom, left]`.
 //!   Children lay out inside it; the origin is the content-box top-left.
@@ -49,7 +49,7 @@ use kurbo::{Rect, Size};
 pub use ambre_bus::app::toile::{Align, AutoLayout, Direction, Sizing};
 
 /// Solve the auto-layout of `frame` for the given `children` sizes (in
-/// `children` order), returning one world-space [`Rect`] per child (§2).
+/// `children` order), returning one world-space [`Rect`] per child.
 ///
 /// Pure and deterministic. See the module docs for the pinned semantics of each
 /// [`Direction`] / [`Align`] / [`Sizing`] combination.
@@ -157,7 +157,7 @@ fn solve_axis(content: Rect, layout: &AutoLayout, children: &[Size], axis: Axis)
         .collect()
 }
 
-/// Horizontal wrapping flow (§2): pack children left-to-right, breaking to a new
+/// Horizontal wrapping flow: pack children left-to-right, breaking to a new
 /// row when the next child would overflow the content width. Rows stack
 /// top-to-bottom separated by `gap`; each row's band height is its tallest child,
 /// and [`Align`] applies per row on the main axis.

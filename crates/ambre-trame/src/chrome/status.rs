@@ -1,10 +1,11 @@
 // ambre-trame/src/chrome/status.rs
 // ============================================================================
-// The status bar (`-ui.md` sec.13bis): a thin band above the sheet-tab strip.
+// The status bar (`trame-status-bar`): a thin band above the sheet-tab strip.
 //
 // Left  : selection aggregates (Sum / Average / Count / Min / Max), Excel/Sheets
 //         style. A lone cell shows nothing; the Logic thread computes the totals
-//         for a multi-cell selection (the UI holds only the viewport, sec.16) and
+//         for a multi-cell selection (the UI holds only the viewport,
+//         `trame-status-bar`) and
 //         they arrive as `SelectionStats`.
 // Right : a live perf chip (`<fps> fps`) that is clickable to expand a small
 //         panel with the full frame timings. The perf HUD migrated here out of
@@ -78,7 +79,8 @@ pub fn StatusBar(
         <StatusLabel label=status_label() />
         <span class="statusbar-stats">{aggregates}</span>
         <span class="spacer"></span>
-        // Shared interactive zoom + fps chips (identical to Toile, §8bis). The
+        // Shared interactive zoom + fps chips (identical to Toile,
+        // `toile-status-bar`). The
         // grid-zoom ladder stays Trame's own so it never diverges from the
         // sheet's virtual-scroll steps; the perf panel shows Trame's grid detail.
         <ZoomChip

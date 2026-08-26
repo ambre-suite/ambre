@@ -45,7 +45,7 @@ openidconnect     = { workspace = true }
 reqwest           = { workspace = true }
 url               = { workspace = true }
 
-# Least privilege (ZK-004 / SRV-012, `ambre-spec-architecture.md §3`): the server
+# Least privilege (ZK-004 / SRV-012, `ambre-spec-zero-knowledge.md`): the server
 # verifies Ed25519 signatures and mints its own access tokens -- nothing else.
 # `chacha20poly1305`, `x25519-dalek` and `sharks` were declared here without a
 # single use in `src/`, which handed the relay process AEAD, key-exchange and

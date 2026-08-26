@@ -41,7 +41,7 @@ pub const MIN_COL_WIDTH: f64 = 24.0;
 pub const MIN_ROW_HEIGHT: f64 = 12.0;
 
 /// Half-width (physical px) of the grab band straddling a header boundary that
-/// arms a resize drag (sec.4bis.C). A press within +/- this of a column's right
+/// arms a resize drag (`trame-resize`). A press within +/- this of a column's right
 /// edge (resp. a row's bottom edge) resizes instead of selecting.
 pub const RESIZE_BAND: f64 = 4.0;
 
@@ -58,7 +58,7 @@ pub struct CellData {
     pub raw: String,
     pub bold: bool,
     pub italic: bool,
-    /// Rich manual formatting (`-ui.md` sec.5bis): underline run, alignments,
+    /// Rich manual formatting (`trame-cell-styles`): underline run, alignments,
     /// wrap, text/fill colours, font family/size, border preset. Pinned to the
     /// cell, fed by [`DisplayCell`](crate::DisplayCell).
     pub underline: bool,
@@ -74,7 +74,7 @@ pub struct CellData {
     /// `Some((col_span, row_span))` on a merge master, `None` otherwise. Covered
     /// cells arrive with empty text and are simply rendered blank.
     pub merge_span: Option<(u32, u32)>,
-    /// The cell's row is hidden by the active shared filter (`-ui.md` sec.5.D):
+    /// The cell's row is hidden by the active shared filter (`trame-shared-filter`):
     /// the row axis collapses over it. Drives [`TrameUiState::hidden_rows`].
     pub is_filtered: bool,
 }
@@ -170,14 +170,14 @@ impl std::ops::DerefMut for CellEditor {
 /// selection and as the return type of [`Selection::bounds`].
 pub type CellRect = (u32, u32, u32, u32);
 
-/// The grid selection (spec sec.8). A single-cell selection has `anchor ==
+/// The grid selection (`trame-selection`). A single-cell selection has `anchor ==
 /// active` and no extra ranges. A contiguous range keeps `anchor` fixed and
 /// moves `active` (drag, Shift+click, Shift+arrows). Disjoint ranges
 /// (Ctrl+click) push the live rectangle into `extra` and start a fresh one.
 ///
 /// `active` is the cell the cursor, the inline editor and the formatting
 /// commands target; `anchor` is the opposite corner of the live rectangle.
-/// Selection is local view state -- never synced (sec.16).
+/// Selection is local view state -- never synced (`trame-selection`).
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Selection {
     /// Fixed corner of the live rectangle (where this range started).
@@ -189,13 +189,13 @@ pub struct Selection {
     /// `extra` plus that rectangle (see [`rects`](Self::rects)).
     pub extra: Vec<CellRect>,
     /// Whether the live selection spans whole cells, columns, or rows
-    /// (`-ui.md` sec.4bis.A). For `Cols`/`Rows` the perpendicular coordinate of
+    /// (`trame-selection`). For `Cols`/`Rows` the perpendicular coordinate of
     /// `anchor`/`active` is ignored (the band runs the full axis); the Logic
     /// thread resolves the band to the used-range rectangle. UI-only view state.
     pub kind: SelKind,
 }
 
-/// Shape of the live selection (`-ui.md` sec.4bis.A). `Cells` is the ordinary
+/// Shape of the live selection (`trame-selection`). `Cells` is the ordinary
 /// rectangle; `Cols`/`Rows` are virtual whole-axis bands selected from a header.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum SelKind {
@@ -206,7 +206,7 @@ pub enum SelKind {
 }
 
 /// Which surface a right-click landed on, choosing the context-menu layout
-/// (`-ui.md` sec.5.C). Each header scope drops the cell-only entries (clipboard /
+/// (`trame-context-menu`). Each header scope drops the cell-only entries (clipboard /
 /// merge) and keeps only the structural + sort/filter ops relevant to the axis
 /// the click already selected: a column header offers column insert/delete, a row
 /// header row insert/delete, and the corner the whole-sheet ops. Lives here
@@ -225,7 +225,7 @@ pub enum CtxScope {
     Corner,
 }
 
-/// A resolved pointer hit inside a header strip (`-ui.md` sec.4bis). The body
+/// A resolved pointer hit inside a header strip (`trame-headers`). The body
 /// zones select a whole column/row; the border zones (a +/- [`RESIZE_BAND`] band
 /// around a boundary) arm a resize; the insert zones host the inline "+"; the
 /// top-left corner selects the whole sheet.
@@ -247,7 +247,7 @@ pub enum HeaderHit {
     Corner,
 }
 
-/// Live guide line shown while dragging a header boundary (`-ui.md` sec.4bis.C):
+/// Live guide line shown while dragging a header boundary (`trame-resize`):
 /// a vertical guide at physical x for a column resize, a horizontal guide at y
 /// for a row resize.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -273,7 +273,7 @@ impl Selection {
         }
     }
 
-    /// A whole-axis band selection from a header (`-ui.md` sec.4bis.A): the band
+    /// A whole-axis band selection from a header (`trame-selection`): the band
     /// spans columns `anchor.1..=active.1` (`SelKind::Cols`) or rows
     /// `anchor.0..=active.0` (`SelKind::Rows`); the perpendicular coordinate is
     /// irrelevant (set to 0). `active` carries the clicked band so Shift extends
@@ -401,7 +401,7 @@ pub struct TrameUiState {
     pub left_col: u32,
 
     /// Current selection. Single-cell for now (`anchor == active`); the active
-    /// cell drives the cursor, inline editor and formatting commands (sec.8).
+    /// cell drives the cursor, inline editor and formatting commands (`trame-selection`).
     pub selection: Selection,
 
     /// Number of full rows visible in the grid area (recomputed on resize).
@@ -414,7 +414,7 @@ pub struct TrameUiState {
     pub canvas_height: f64,
 
     /// Application zoom factor for the grid (1.0 = 100%). Scales cells, the
-    /// row/col header strips and the cell font together (`-ui.md` sec.13bis).
+    /// row/col header strips and the cell font together (`trame-status-bar`).
     /// Pure local view state -- never persisted, never synced (like the scroll
     /// position). The browser's own page zoom (Ctrl+wheel / Ctrl+/-) is left
     /// untouched and zooms the whole page incl. chrome; this scales the grid only.
@@ -451,19 +451,19 @@ pub struct TrameUiState {
     next_version: u64,
 
     /// Grid column carrying the active shared filter, drawn with a funnel badge on
-    /// its header (`-ui.md` sec.5.D). `None` when no filter is active. Tracked from
+    /// its header (`trame-shared-filter`). `None` when no filter is active. Tracked from
     /// `TrameEvent::FilterApplied` / `FilterCleared`; UI-only derived state.
     pub filtered_col: Option<u32>,
 
     /// Absolute grid rows hidden by the active shared filter, sorted ascending
-    /// (`-ui.md` sec.5.D). Derived from the `is_filtered` flag of cached cells and
+    /// (`trame-shared-filter`). Derived from the `is_filtered` flag of cached cells and
     /// rebuilt whenever the cache changes. The row axis collapses over these (see
     /// [`visible_offset`](Self::visible_offset)); fed to the renderer's
     /// `GridLayout`. UI-only derived state.
     pub hidden_rows: Vec<u32>,
 
     /// Per-column widths (physical px) keyed by absolute grid column, fed by the
-    /// Logic thread's `col_widths` viewport slice (`-ui.md` sec.4bis.C). A column
+    /// Logic thread's `col_widths` viewport slice (`trame-resize`). A column
     /// with no entry uses the uniform [`COL_WIDTH`]. Drives every pixel mapping
     /// (the renderer's `GridLayout` and the hit-testing helpers below). UI-only
     /// derived state, mirrors the CRDT `col_widths_{sheet}` map.
@@ -473,30 +473,30 @@ pub struct TrameUiState {
     pub row_heights: HashMap<u32, f32>,
 
     /// The range last copied/cut, drawn with animated marching-ants until the
-    /// next copy or an Escape (`-ui.md` sec.5.E). `None` when nothing is on the
+    /// next copy or an Escape (`trame-clipboard`). `None` when nothing is on the
     /// clipboard. Stored as the normalized rectangle `(r1, c1, r2, c2)` in
     /// absolute grid coordinates. UI-only view state.
     pub clipboard_anchor: Option<CellRect>,
 
     /// While the fill handle is being dragged, the destination rectangle the
-    /// release will fill (`-ui.md` sec.5.F), normalized and always containing the
+    /// release will fill (`trame-autofill`), normalized and always containing the
     /// source selection. `None` when no fill drag is in progress. Drawn as a
     /// dashed preview outline. UI-only view state.
     pub fill_preview: Option<CellRect>,
 
-    /// While a header boundary is being dragged (`-ui.md` sec.4bis.C), the live
+    /// While a header boundary is being dragged (`trame-resize`), the live
     /// guide line position: `Col(x)` for a column resize (a vertical guide at
     /// physical x), `Row(y)` for a row resize (a horizontal guide at y). `None`
     /// when no resize is in progress. UI-only view state.
     pub resize_preview: Option<ResizePreview>,
 
     /// The header boundary the pointer is hovering over the inline "+" zone of
-    /// (`-ui.md` sec.4bis.D), drawn as a small "+" badge. `Some(ColInsert(i))` /
+    /// (`trame-headers`), drawn as a small "+" badge. `Some(ColInsert(i))` /
     /// `Some(RowInsert(i))` while hovered, `None` otherwise. UI-only view state.
     pub insert_hint: Option<HeaderHit>,
 
     /// The column/row header body the pointer is hovering over, tinted with
-    /// `header_hover` for chrome-consistent hover feedback (`-ui.md` sec.13).
+    /// `header_hover` for chrome-consistent hover feedback (`trame-sheets`).
     /// Only ever `Some(ColBody(_))` / `Some(RowBody(_))`; `None` otherwise.
     /// UI-only view state.
     pub hover_header: Option<HeaderHit>,
@@ -508,7 +508,7 @@ pub struct TrameUiState {
     /// reorder drag is in progress. UI-only view state.
     pub reorder_preview: Option<(SelKind, u32)>,
 
-    /// Cells matched by the active Find query (`-ui.md` sec.5.G), drawn with a
+    /// Cells matched by the active Find query (`trame-find-replace`), drawn with a
     /// translucent highlight. Absolute grid `(row, col)` pairs from the last
     /// `TrameEvent::FindResult`; empty when the panel is closed or there is no
     /// match. UI-only view state, never synced.
@@ -516,12 +516,12 @@ pub struct TrameUiState {
 }
 
 /// Side of the square autofill handle drawn at the selection's bottom-right
-/// corner, in device pixels (`-ui.md` sec.5.F).
+/// corner, in device pixels (`trame-autofill`).
 pub const FILL_HANDLE_SIZE: f64 = 7.0;
 
 /// Side of the square Excel-style autofilter button drawn at the right edge of
-/// each current-region header cell, in device pixels at 100% zoom (`-ui.md`
-/// sec.5.D). Scaled by the grid zoom in [`filter_button_rect`].
+/// each current-region header cell, in device pixels at 100% zoom
+/// (`trame-shared-filter`). Scaled by the grid zoom in [`filter_button_rect`].
 pub const FILTER_BUTTON_SIZE: f64 = 13.0;
 
 #[cfg(test)]

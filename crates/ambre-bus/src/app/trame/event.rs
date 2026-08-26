@@ -28,7 +28,7 @@ pub enum TrameEvent {
         cells: Vec<DisplayCell>,
         /// Per-column widths (physical px) for the requested column window,
         /// `col_widths[i]` being the width of column `col_start + i`
-        /// (`-ui.md` sec.4bis.C, `-logic.md` §9). A column never resized carries
+        /// (`trame-resize`, `trame-engine`). A column never resized carries
         /// the uniform default, so the UI can feed the slice straight into the
         /// variable-metric `GridLayout`. Empty only on an out-of-range request.
         col_widths: Vec<f32>,
@@ -44,7 +44,7 @@ pub enum TrameEvent {
     /// whole formatting toolbar (bold/italic/underline toggles, font/size selects,
     /// colour swatches, align buttons, cell-format / border menus, wrap). Bold and
     /// italic ride alongside the [`CellStyle`] -- they are now part of the single
-    /// style channel, not a separate per-flag event (`-ui.md` sec.5bis).
+    /// style channel, not a separate per-flag event (`trame-cell-styles`).
     ///
     /// [`CellStyle`]: super::CellStyle
     StyleApplied {
@@ -75,13 +75,14 @@ pub enum TrameEvent {
     SelectRange { r1: u32, c1: u32, r2: u32, c2: u32 },
 
     /// A local [`MergeCells`](super::TrameCommand::MergeCells) was refused
-    /// because a covered cell is non-empty (`ambre-spec-trame-logic.md` §6). The
+    /// because a covered cell is non-empty (`trame-cell-merges`). The
     /// chrome surfaces `reason` to the user; no CRDT mutation was produced.
     MergeRejected { reason: String },
 
     /// A merge ended up covering a non-empty cell after a concurrent edit
-    /// converged (§6). The covered value is masked (not destroyed) while the
-    /// merge is active; it reappears on unmerge. Purely informational for the UI.
+    /// converged (`trame-cell-merges`). The covered value is masked (not
+    /// destroyed) while the merge is active; it reappears on unmerge. Purely
+    /// informational for the UI.
     MergeConflictDetected {
         master_row: u32,
         master_col: u32,
@@ -102,7 +103,7 @@ pub enum TrameEvent {
     /// [`RenameSheet`](super::TrameCommand::RenameSheet) /
     /// [`MoveSheet`](super::TrameCommand::MoveSheet) /
     /// [`DeleteSheet`](super::TrameCommand::DeleteSheet)) and on load, so
-    /// the tab strip stays in sync (`ambre-spec-trame-logic.md` §2.D). `active`
+    /// the tab strip stays in sync (`trame-sheets`). `active`
     /// is the id of the sheet currently shown.
     SheetList {
         sheets: Vec<(String, String)>,
@@ -114,30 +115,30 @@ pub enum TrameEvent {
     Error { message: String },
 
     /// A local [`SortRange`](super::TrameCommand::SortRange) finished
-    /// reordering the rows (`ambre-spec-trame-features.md` §3). The accompanying
+    /// reordering the rows (`trame-sort`). The accompanying
     /// [`DataReset`](Self::DataReset) prompts the UI to re-fetch the viewport with
     /// the new ordering; this event is the explicit completion signal (e.g. to
     /// clear a "sorting..." affordance). A no-op sort emits nothing.
     SortComplete,
 
     /// A local [`ApplyFilter`](super::TrameCommand::ApplyFilter) finished
-    /// recomputing the hidden rows (`ambre-spec-trame-features.md` §1.A).
+    /// recomputing the hidden rows (`trame-shared-filter`).
     /// `hidden_row_count` is how many rows the filter hides. The accompanying
     /// [`DataReset`](Self::DataReset) prompts the UI to re-fetch the viewport,
     /// where the hidden rows now carry [`DisplayCell::is_filtered`]. A no-op
     /// filter (non-active sheet / virtual column) emits nothing. `col` is the
     /// grid column the filter targets, so the UI can draw the funnel badge on its
-    /// header (`-ui.md` sec.5.D).
+    /// header (`trame-shared-filter`).
     FilterApplied { hidden_row_count: u32, col: u32 },
 
     /// The distinct visible values of a column, replying to
     /// [`RequestActiveColumnValues`](super::TrameCommand::RequestActiveColumnValues).
-    /// Feeds the shared filter popover's "by values" checkbox list (`-ui.md`
-    /// sec.5.D). `col` is the grid column the values belong to; `values` is the
-    /// deduplicated, sorted display text of every non-hidden row.
+    /// Feeds the shared filter popover's "by values" checkbox list
+    /// (`trame-shared-filter`). `col` is the grid column the values belong to;
+    /// `values` is the deduplicated, sorted display text of every non-hidden row.
     ColumnValues { col: u32, values: Vec<String> },
 
-    /// Selection aggregates for the status bar (`-ui.md` sec.13bis), replying to
+    /// Selection aggregates for the status bar (`trame-status-bar`), replying to
     /// [`RequestSelectionStats`](super::TrameCommand::RequestSelectionStats).
     /// `count` is the number of non-empty cells in the selection; `count_num` is
     /// the number of numeric cells, and drives whether the UI shows `sum`/`avg`/
@@ -153,13 +154,13 @@ pub enum TrameEvent {
     },
 
     /// A local [`ClearFilter`](super::TrameCommand::ClearFilter) removed the
-    /// active shared filter (`ambre-spec-trame-features.md` §1.A). The accompanying
+    /// active shared filter (`trame-shared-filter`). The accompanying
     /// [`DataReset`](Self::DataReset) prompts a viewport re-fetch with every row
     /// visible again. A no-op clear (no active filter) emits nothing.
     FilterCleared,
 
     /// The matches of a [`FindNext`](super::TrameCommand::FindNext) on the
-    /// active sheet (`-ui.md` sec.5.G). `matches` lists every matching cell as a
+    /// active sheet (`trame-find-replace`). `matches` lists every matching cell as a
     /// `(row, col)` grid pair in scan order; `active` is the index within
     /// `matches` of the cell to focus (`None` when there is no match). Local view
     /// state: the UI highlights the set and scrolls the focused cell into view; it
@@ -170,19 +171,19 @@ pub enum TrameEvent {
     },
 
     /// A [`ReplaceAll`](super::TrameCommand::ReplaceAll) finished, having
-    /// rewritten `replaced` cells (`-ui.md` sec.5.G). Paired with a
+    /// rewritten `replaced` cells (`trame-find-replace`). Paired with a
     /// [`DataReset`](Self::DataReset) that prompts the viewport re-fetch; the
     /// chrome surfaces the count as a toast.
     ReplaceDone { replaced: u32 },
 
     /// A local [`PasteRange`](super::TrameCommand::PasteRange) was refused
     /// because the destination overlaps a protected range the current user may
-    /// not edit (`-ui.md` sec.5.E, range protection is Post-MVP). No CRDT
+    /// not edit (`trame-clipboard`, range protection is Post-MVP). No CRDT
     /// mutation occurred; the chrome surfaces `reason` as a toast.
     PasteRejected { reason: String },
 
     /// The authoritative clipboard payload for a
-    /// [`CopyRange`](super::TrameCommand::CopyRange) (`-ui.md` sec.5.E). Built
+    /// [`CopyRange`](super::TrameCommand::CopyRange) (`trame-clipboard`). Built
     /// Logic-side from the full document (no viewport limit); the UI stashes it in
     /// memory and mirrors it to the OS clipboard. Non-mutating, never synced.
     Clipboard(super::ClipboardPayload),
@@ -191,26 +192,27 @@ pub enum TrameEvent {
     // Deferred feature surface (Phase 2+)
     //
     // Completes the `TrameEvent` surface mandated by
-    // `ambre-spec-trame-features.md §7 / §10` ("all feature variants are in the
+    // `trame-engine` ("all feature variants are in the
     // enums"). Emitted once the matching command handlers land (personal filter
     // views / conditional formatting -> Phase 2/3, validation -> Phase 2/3,
     // range protection -> Post-MVP).
     // ─────────────────────────────────────────────────────────────────────────
     /// A personal filter view was persisted to local storage
     /// ([`SaveFilterView`](super::TrameCommand::SaveFilterView),
-    /// `ambre-spec-trame-features.md §1.B`). `view_id` is its stable local id.
+    /// `trame-shared-filter`). `view_id` is its stable local id.
     FilterViewSaved { view_id: String },
 
     /// The sheet's conditional-formatting rules changed
     /// ([`AddCondFormat`](super::TrameCommand::AddCondFormat) /
     /// [`UpdateCondFormat`](super::TrameCommand::UpdateCondFormat) /
-    /// [`RemoveCondFormat`](super::TrameCommand::RemoveCondFormat), §3).
+    /// [`RemoveCondFormat`](super::TrameCommand::RemoveCondFormat),
+    /// `trame-cell-styles`).
     /// The accompanying [`DataReset`](Self::DataReset) prompts a viewport
     /// re-fetch with the new style overrides applied.
     CondFormatsUpdated { version: u64 },
 
     /// A local edit was rejected by a [`ValidationOnInvalid::Reject`] rule
-    /// (`ambre-spec-trame-features.md §5`). No CRDT delta was produced; the
+    /// (`trame-cell-editing`). No CRDT delta was produced; the
     /// chrome surfaces `message`. `version` echoes the originating edit.
     ///
     /// [`ValidationOnInvalid::Reject`]: super::ValidationOnInvalid::Reject
@@ -222,8 +224,8 @@ pub enum TrameEvent {
     },
 
     /// A local edit passed through despite failing a
-    /// [`ValidationOnInvalid::Warn`] rule (`§5`). The mutation was applied; the
-    /// chrome surfaces `message` as a non-blocking warning.
+    /// [`ValidationOnInvalid::Warn`] rule (`trame-cell-editing`). The mutation was
+    /// applied; the chrome surfaces `message` as a non-blocking warning.
     ///
     /// [`ValidationOnInvalid::Warn`]: super::ValidationOnInvalid::Warn
     ValidationWarning {
@@ -234,7 +236,7 @@ pub enum TrameEvent {
     },
 
     /// A local edit was blocked by a range protection the current user may not
-    /// edit (`ambre-spec-trame-features.md §6`, Post-MVP). No CRDT delta was
+    /// edit (`trame-cell-editing`, Post-MVP). No CRDT delta was
     /// produced; the chrome surfaces `description`.
     ProtectionDenied {
         version: u64,
@@ -244,7 +246,7 @@ pub enum TrameEvent {
     },
 
     /// A [`ImportCsv`](super::TrameCommand::ImportCsv) finished writing
-    /// the parsed rows into the workbook (`ambre-spec-trame-interop.md` §4.A).
+    /// the parsed rows into the workbook (`trame-import-export`).
     /// Rides alongside a [`DataReset`](Self::DataReset) so the UI re-fetches the
     /// populated region. `rows` / `cols` are the dimensions actually written;
     /// `sheet_id` is the (possibly freshly created) target sheet.
@@ -255,15 +257,16 @@ pub enum TrameEvent {
     },
 
     /// An export ([`ExportCsv`](super::TrameCommand::ExportCsv)) produced
-    /// a file for download (`ambre-spec-trame-interop.md` §3/§4). The Logic thread
+    /// a file for download (`trame-import-export`). The Logic thread
     /// holds the document, so it serializes the bytes; the UI Thread receives them
     /// and triggers the browser download. `filename` already carries the right
     /// extension.
     ExportComplete { filename: String, data: Vec<u8> },
 
     /// A remote delta edited a protected range its author was not allowed to
-    /// (`§6`). The delta IS applied (CRDT convergence is mandatory) but the UI
-    /// is warned. `from_user_id` is the offending author's stable
+    /// (`trame-cell-editing`). The delta IS applied (CRDT convergence is
+    /// mandatory) but the UI is warned. `from_user_id` is the offending author's
+    /// stable
     /// [`UserId`](crate::UserId).
     ProtectionViolationWarning {
         row: u32,
@@ -292,7 +295,7 @@ pub struct DisplayCell {
     pub bold: bool,
     /// Italic run applied to this cell.
     pub italic: bool,
-    /// Underline run applied to this cell (`-ui.md` sec.5bis).
+    /// Underline run applied to this cell (`trame-cell-styles`).
     pub underline: bool,
     /// Strikethrough run applied to this cell.
     pub strikethrough: bool,
@@ -312,7 +315,7 @@ pub struct DisplayCell {
     pub size: Option<u16>,
     /// Per-edge border (style + colour each); `None` edges are undrawn.
     pub borders: super::Borders,
-    /// Part of a merged range (`ambre-spec-trame-logic.md` §6). `true` for both
+    /// Part of a merged range (`trame-cell-merges`). `true` for both
     /// the master cell and the cells it covers; the UI distinguishes them via
     /// [`merge_span`](DisplayCell::merge_span).
     pub is_merged: bool,
@@ -321,7 +324,7 @@ pub struct DisplayCell {
     /// blank, swallowed by the master) and on any non-merged cell.
     pub merge_span: Option<(u32, u32)>,
     /// The cell's row is hidden by the active shared filter
-    /// (`ambre-spec-trame-features.md` §1.A / §8). The UI Thread collapses such
+    /// (`trame-shared-filter`). The UI Thread collapses such
     /// rows; the value is still present (and still counted by `=SUM`, etc.).
     pub is_filtered: bool,
 }

@@ -101,24 +101,24 @@ bytemuck = { version = "1", features = ["derive"] }
 # Path tessellation (phase 1: fill_path / stroke_path)
 lyon = "1"
 # 2D polygon boolean ops (union / subtract / intersect / exclude) for the
-# Toile vector boolean feature (toile-features §3). Pure Rust, WASM-friendly;
+# Toile vector boolean feature (`toile-vector-paths`). Pure Rust, WASM-friendly;
 # kurbo has no path-vs-path booleans, so shapes are flattened to polygons here.
 i_overlay = "7.0"
 # Glyph rasterization (phase 2: GlyphAtlas) -- match parley's transitive dep
 swash = "0.2"
 
-# Toile interop (toile-interop §2). Pure-Rust SVG parse -> normalized tree that
+# Toile interop (`toile-import-export`). Pure-Rust SVG parse -> normalized tree that
 # the SVG importer walks into ToileCommands; pure-Rust raster codecs for PNG/JPG
 # image import + thumbnail encoding. Both are WASM-compatible and loaded only on
-# the interop path (toile-interop §8). `image` keeps a tight codec set (png/jpeg)
+# the interop path (`toile-media`). `image` keeps a tight codec set (png/jpeg)
 # to limit the WASM binary contribution.
 #
 # usvg drops its default font stack (`text`, `system-fonts`, `memmap-fonts`): the
 # browser has no system fonts, so usvg's text-to-glyph-path flattening cannot run
 # in WASM and would also destroy editable text. Toile keeps `<text>` editable by
 # extracting the raw string/position via `roxmltree` and rendering it through its
-# own Parley text stack (toile-interop §2.A). Dropping the font stack also trims
-# the WASM binary contribution (§8).
+# own Parley text stack (`toile-import-export`). Dropping the font stack also trims
+# the WASM binary contribution.
 usvg = { version = "0.47", default-features = false }
 roxmltree = "0.20"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
@@ -183,7 +183,7 @@ wasm-bindgen-futures = "0.4"
 console_error_panic_hook = "0.1"
 # Multi-threaded WASM — std::thread replacement that spawns Web Workers under
 # the hood. Required for the shared-linear-memory threading model documented
-# in specs/ambre-multithreaded-wasm-migration.md.
+# in specs/1-Foundations/ambre-spec-architecture.md.
 wasm_thread = "0.3"
 # Inter-thread channels for the shared-memory UI <-> Logic link (both in the
 # Main wasm instance). Logic blocks on `flume::Selector` (Atomics-backed, works

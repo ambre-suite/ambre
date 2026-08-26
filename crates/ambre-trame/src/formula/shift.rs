@@ -1,5 +1,5 @@
-//! Relative-reference shifting for clipboard paste (`ambre-spec-trame-ui.md`
-//! sec.5.E). When a range is copied and pasted elsewhere, every reference in a
+//! Relative-reference shifting for clipboard paste (`trame-clipboard`).
+//! When a range is copied and pasted elsewhere, every reference in a
 //! pasted formula moves by the same offset as the cell that carries it -- the
 //! standard "relative reference" behaviour. AMBRE has no absolute (`$A$1`)
 //! syntax, so every cell/range reference is relative and shifts.

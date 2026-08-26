@@ -7,7 +7,7 @@
 // The frame DRIVER (`FrameHost`) and the closed `AppView` registry that names
 // the concrete per-app view (`ambre_trame::ui::TrameView`) live in the launcher
 // (`ambre-app`): a closed enum naming an app view cannot sit upstream here
-// without a dependency cycle (ambre-spec-architecture.md 6). This module only
+// without a dependency cycle (ambre-spec-architecture.md). This module only
 // defines the shared value types both sides exchange; app views consume them
 // directly (inherent methods), so the types stay GPU-agnostic at the type level
 // (they only name `WgpuSurface`/`TextCache`, which compile on every target) and

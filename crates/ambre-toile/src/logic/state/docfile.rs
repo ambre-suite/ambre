@@ -1,4 +1,4 @@
-//! `ToileState` <-> `.ambre` container (`ambre-spec-docfile.md` §2.B).
+//! `ToileState` <-> `.ambre` container (`ambre-spec-docfile.md`).
 //!
 //! The state-side half of the pair: the container functions themselves live in
 //! [`crate::logic::interop::docfile`] (they need only a `LoroDoc`), and these two
@@ -16,7 +16,7 @@ impl ToileState {
     ///
     /// `doc_id` is supplied by the caller because the engine does not hold the
     /// document's identity -- the registry does (`ambre-logic`), and a fixture
-    /// generator pins it from its seed (`ambre-spec-fixtures.md` §2.A).
+    /// generator pins it from its seed (`ambre-spec-fixtures.md`).
     pub fn export_ambre_plaintext(&self, doc_id: Uuid) -> Vec<u8> {
         export_ambre_plaintext(&self.doc, doc_id)
     }

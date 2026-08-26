@@ -1,4 +1,4 @@
-//! Vector boolean-operation solver (`toile-features` §3).
+//! Vector boolean-operation solver (`toile-vector-paths`).
 //!
 //! Combine the geometry of selected shape / path elements with a boolean rule
 //! (union / subtract / intersect / exclude), producing one result path. kurbo
@@ -7,13 +7,13 @@
 //! each input `BezPath` is flattened to closed polygon contours and combined via
 //! [`i_overlay`], and the polygon result is rebuilt as a line-segment `BezPath`.
 //! Curves are lost (the result is a polyline); that is the accepted trade-off of
-//! the flatten approach for a whiteboard (§3).
+//! the flatten approach for a whiteboard.
 //!
 //! This module is **pure and deterministic**: given the same input paths,
 //! rule and tolerance it returns a byte-identical result. It runs client-side,
-//! off the render frame, within the < 5 ms typical-pair budget (§7).
+//! off the render frame, within the < 5 ms typical-pair budget.
 //!
-//! ## Multi-input semantics (pinned; the spec §3 leaves the fold to the solver)
+//! ## Multi-input semantics (pinned; the spec leaves the fold to the solver)
 //!
 //! Inputs fold **left to right** in the given order, so the accumulator combines
 //! with each successive path:
@@ -23,7 +23,7 @@
 //!   removed from it. `((a - b) - c)` equals `a - (b ∪ c)`, so folding difference
 //!   left to right matches "subject minus the union of the rest".
 //!
-//! Fills use the non-zero rule, matching how shapes are painted (§9).
+//! Fills use the non-zero rule, matching how shapes are painted.
 
 use i_overlay::core::fill_rule::FillRule;
 use i_overlay::core::overlay_rule::OverlayRule;
@@ -40,10 +40,10 @@ type Shape = Vec<Contour>;
 /// Flatten tolerance (world units) for turning curves into polylines before the
 /// boolean runs. Sub-pixel at typical board zoom; small enough that the result
 /// tracks the source outline, large enough to keep the contour point count (and
-/// so the solve cost, §7) bounded.
+/// so the solve cost,) bounded.
 pub const FLATTEN_TOL: f64 = 0.25;
 
-/// Combine world-space `paths` with a boolean `op` (§3). Each path is flattened
+/// Combine world-space `paths` with a boolean `op`. Each path is flattened
 /// to closed contours at `tol`, the paths fold left to right via [`i_overlay`],
 /// and the result is rebuilt as a line-segment [`BezPath`]. Returns an empty path
 /// when fewer than two paths are given or the geometry fully cancels (the caller
@@ -78,7 +78,7 @@ fn overlay_rule(op: BoolOp) -> OverlayRule {
 /// Flatten a `BezPath` into closed polygon contours. Curves become line segments
 /// at `tol`; each subpath becomes one contour. i_overlay auto-closes contours, so
 /// open subpaths are combined as if closed (a whiteboard boolean over an open
-/// path treats it as its filled region, §3).
+/// path treats it as its filled region,).
 fn flatten_to_contours(path: &BezPath, tol: f64) -> Shape {
     let mut contours: Shape = Vec::new();
     let mut current: Contour = Vec::new();

@@ -3,9 +3,8 @@
 // Shared, app-agnostic colour control: a single toolbar button toggling a
 // popover that combines a reset entry ("Automatic" / "No fill"), a curated
 // swatch palette, and an embedded native `<input type="color">` for arbitrary
-// colours. Originally Trame's cell fg/bg picker (`trame-ui sec.5bis`); promoted
-// here so Toile's style inspector (`toile-ui sec.5quinquies.B/C`) shares the very
-// same control.
+// colours. Originally Trame's cell fg/bg picker (`trame-cell-styles`); promoted
+// here so Toile's style inspector (`toile-styles`) shares the very same control.
 //
 // The value is a packed `u32`. With `alpha = false` (default) it is a plain
 // `0xRRGGBB` (Trame's cells): the native picker covers the whole colour. With

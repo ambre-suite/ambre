@@ -64,7 +64,7 @@ impl TrameView {
         self.needs_full = true;
     }
 
-    /// Request a column auto-fit (double-click on the border, sec.4bis.C). The
+    /// Request a column auto-fit (double-click on the border, `trame-resize`). The
     /// measurement needs the parley font context, so it is deferred to the next
     /// paint, which owns it (mirrors the editor's deferred click resolution).
     pub(crate) fn auto_fit_col(&mut self, c: u32) {
@@ -78,7 +78,7 @@ impl TrameView {
     }
 
     /// Measure a column/row's cached cells and emit a resize sized to its content
-    /// (sec.4bis.C). UI-side over the viewport cache: the parley layouts of every
+    /// (`trame-resize`). UI-side over the viewport cache: the parley layouts of every
     /// cached cell of the axis are measured and the max natural extent (plus
     /// padding, clamped to the minimum) becomes the new width/height. A column
     /// with no cached content snaps to the default.
@@ -155,7 +155,7 @@ impl TrameView {
         }
     }
 
-    /// Inline "+" insert at a column boundary (sec.4bis.D): move the tracked
+    /// Inline "+" insert at a column boundary (`trame-headers`): move the tracked
     /// active cell onto column `c`, then fire the existing `InsertColLeft` intent
     /// so the Logic thread resolves the position exactly as from the menu.
     pub(crate) fn insert_col_at(&mut self, c: u32) {
@@ -173,7 +173,7 @@ impl TrameView {
         self.select_axis(crate::ui::grid::SelKind::Rows, r);
     }
 
-    /// Finish an autofill drag (sec.5.F): emit `FillRange` over the source +
+    /// Finish an autofill drag (`trame-autofill`): emit `FillRange` over the source +
     /// dragged extent, grow the selection to cover the filled range, then clear
     /// the drag/preview. A drag that never left the source (no extension) is a
     /// no-op beyond clearing the state.
@@ -275,9 +275,10 @@ impl TrameView {
         self.announce_active();
     }
 
-    /// Build the active-cell report for a whole-axis selection (`-ui.md`
-    /// sec.4bis.A). The band has no on-screen rectangle, so the perpendicular
-    /// extent is bounded by the UI's used-range cache (sec.16): a column band
+    /// Build the active-cell report for a whole-axis selection
+    /// (`trame-selection`). The band has no on-screen rectangle, so the
+    /// perpendicular extent is bounded by the UI's used-range cache
+    /// (`trame-grid-viewport`): a column band
     /// spans rows `0..=last_used_row`, a row band spans cols `0..=last_used_col`.
     /// The Logic thread then resolves sort / filter / delete / style against that
     /// rectangle, and tracks the clicked column/row as the active cell.
@@ -348,7 +349,7 @@ impl TrameView {
         self.select_axis(kind, to);
     }
 
-    /// Select a whole column/row band from a header click (sec.4bis.A) and report
+    /// Select a whole column/row band from a header click (`trame-selection`) and report
     /// it to Logic as a used-range rectangle.
     pub(crate) fn select_axis(&mut self, kind: crate::ui::grid::SelKind, idx: u32) {
         self.state.selection = Selection::axis(kind, idx, idx);
@@ -374,7 +375,7 @@ impl TrameView {
         }
     }
 
-    /// Select the whole sheet from the header corner (sec.4bis.A): a column band
+    /// Select the whole sheet from the header corner (`trame-selection`): a column band
     /// spanning every column.
     pub(crate) fn select_all(&mut self) {
         self.state.selection = Selection::axis(crate::ui::grid::SelKind::Cols, 0, TOTAL_COLS - 1);
@@ -415,7 +416,7 @@ impl TrameView {
     }
 
     /// Resolve a copy/cut synchronously inside the native clipboard event
-    /// (`-ui.md` sec.5.E). An open in-cell text selection wins and returns its
+    /// (`trame-clipboard`). An open in-cell text selection wins and returns its
     /// text directly ([`CopyOutcome::Text`]); otherwise the grid copy is
     /// authoritative: the whole selection is built Logic-side (no viewport limit),
     /// so we only emit [`TrameCommand::CopyRange`], arm the marching-ants anchor
@@ -465,13 +466,13 @@ impl TrameView {
 
     /// Drain the clipboard blob built from the last `TrameEvent::Clipboard` reply,
     /// so the host can mirror it to the OS clipboard within the transient user
-    /// activation window (`-ui.md` sec.5.E). Yields the blob at most once per copy.
+    /// activation window (`trame-clipboard`). Yields the blob at most once per copy.
     pub fn poll_clipboard(&mut self) -> Option<ambre_bus::ClipboardBlob> {
         self.pending_clipboard.take()
     }
 
     /// Service a paste from the shared [`ClipboardBlob`](ambre_bus::ClipboardBlob)
-    /// transport (`-ui.md` sec.5.E). Fidelity order: an open in-cell edit takes
+    /// transport (`trame-clipboard`). Fidelity order: an open in-cell edit takes
     /// the plain text to the caret; else, when `own_copy` (the synchronous
     /// ownership token was still on the clipboard), the in-memory `last_clip` at
     /// full fidelity -- immune to the async OS write having failed; else the blob's
@@ -502,7 +503,7 @@ impl TrameView {
         }
     }
 
-    /// Paste a typed Ambre payload at the active cell (`-ui.md` sec.5.E). The
+    /// Paste a typed Ambre payload at the active cell (`trame-clipboard`). The
     /// Logic thread reindexes relative formulas and applies styles; a pending cut
     /// then clears the source range.
     pub fn grid_paste_payload(&mut self, payload: ambre_bus::ClipboardPayload) {
@@ -516,13 +517,13 @@ impl TrameView {
             tracing::error!("Trame: UI->Logic channel full, paste dropped");
         }
         // Select the whole destination rectangle, not just the landing cell, so
-        // the pasted block reads back as a single selection (sec.5.E).
+        // the pasted block reads back as a single selection (`trame-clipboard`).
         self.select_pasted_region(row, col, rows, cols);
         self.finish_paste();
         self.needs_full = true;
     }
 
-    /// Paste external tab-separated text at the active cell (`-ui.md` sec.5.E):
+    /// Paste external tab-separated text at the active cell (`trame-clipboard`):
     /// each field becomes a literal cell (`src == target`, so no relative-formula
     /// shift). Used when the clipboard carries no Ambre payload.
     pub fn grid_paste_text(&mut self, text: &str) {
@@ -572,7 +573,7 @@ impl TrameView {
     /// extending `rows` x `cols` (the payload's dimensions), clamped to the grid.
     /// A single-cell paste collapses to a plain single selection. The active
     /// corner stays on the top-left so subsequent typing overwrites there, while
-    /// the whole pasted block is highlighted (sec.5.E).
+    /// the whole pasted block is highlighted (`trame-clipboard`).
     fn select_pasted_region(&mut self, row: u32, col: u32, rows: u32, cols: u32) {
         let r2 = (row + rows.saturating_sub(1)).min(crate::TOTAL_ROWS - 1);
         let c2 = (col + cols.saturating_sub(1)).min(TOTAL_COLS - 1);
@@ -748,7 +749,7 @@ impl TrameView {
                     }
                     // Enter / Tab commit and move (spreadsheet). The commit is
                     // deferred to the paint flush so the queued edits are applied
-                    // before the buffer is read (§ shared editor).
+                    // before the buffer is read (`trame-cell-editing`).
                     "Enter" => {
                         self.pending_commit = Some(PendingCommit::Nav(1, 0));
                         self.edit_dirty = true;

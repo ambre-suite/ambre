@@ -1,8 +1,8 @@
 // ambre-toile/src/chrome/mod.rs
 // ============================================================================
-// Toile-SPECIFIC chrome (ambre-spec-architecture.md §1: per-app chrome lives in
+// Toile-SPECIFIC chrome (ambre-spec-architecture.md: per-app chrome lives in
 // the app crate, NOT the launcher). Built on the app-agnostic `ambre-chrome`
-// toolkit, like `ambre-trame::chrome`. Phase 1 ships the Find panel (§5quater);
+// toolkit, like `ambre-trame::chrome`. Phase 1 ships the Find panel;
 // the tool palette, context menu and status bar land alongside their roadmap
 // items.
 //
@@ -58,7 +58,7 @@ pub use crate::ui::palette::{
 use ambre_bus::DocType;
 use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
 
-/// Open the Find panel (§5quater). A UI-only intent: the launcher intercepts it
+/// Open the Find panel. A UI-only intent: the launcher intercepts it
 /// to toggle the panel open rather than dispatching to Logic (the panel emits
 /// `ToileCommand::Find` itself).
 pub const FIND: CommandId = CommandId("toile.find.open");
@@ -72,9 +72,9 @@ pub fn new_doc_label() -> &'static str {
 }
 
 /// Bind the Toile command chords into the launcher keymap. Ctrl+F opens Find and
-/// the bare-key tool chords (V/P/R/... -> `SetTool`, §5quinquies.A) switch tools;
+/// the bare-key tool chords (V/P/R/... -> `SetTool`,) switch tools;
 /// the remaining board shortcuts (undo/redo, clipboard, nudge, ...) are decoded
-/// canvas-side in `ToileView::handle_key` (toile-ui §5), not here.
+/// canvas-side in `ToileView::handle_key` (toile-tools), not here.
 pub fn bind_keys(keymap: &mut Keymap) {
     keymap.bind(KeyBinding::ctrl('f'), FIND);
     crate::ui::palette::bind_tool_keys(keymap);

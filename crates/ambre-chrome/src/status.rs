@@ -1,6 +1,7 @@
 // ambre-chrome/src/status.rs
 // ============================================================================
-// Shared status-bar building blocks (app-agnostic, ambre-spec-chrome.md 2.B).
+// Shared status-bar building blocks (app-agnostic, ambre-spec-chrome.md,
+// CHROME-014).
 //
 // The status bar itself is app-specific (its left side shows Trame's cell
 // aggregates or Toile's selection count/bounds), but three pieces are identical
@@ -30,7 +31,8 @@ pub fn StatusLabel(#[prop(into)] label: String) -> impl IntoView {
 /// Interactive zoom chip: a button showing `<pct> %` that opens a preset menu.
 /// `zoom` is the shared zoom factor (`1.0` = 100%) the canvas view publishes
 /// each frame; the menu writes it and the view polls it. Shared by Trame (grid
-/// zoom) and Toile (board zoom, §8bis) so the two read identically.
+/// zoom) and Toile (board zoom, `toile-status-bar`) so the two read
+/// identically.
 #[component]
 pub fn ZoomChip(
     /// The live zoom factor (`1.0` = 100%). The menu sets it; the view mirrors it.

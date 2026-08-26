@@ -52,7 +52,7 @@ pub(crate) fn user_pubsub_channel(user_id: &UserId) -> String {
 /// Operational note (M15): this is a bearer credential in a URL. The server's
 /// `TraceLayer` span logs only the URI path (never the query), and the reverse
 /// proxy MUST strip `?token=` from its access logs; the short access-token TTL
-/// bounds the residual exposure. See `ambre-spec-server.md` sec.3.
+/// bounds the residual exposure. See `ambre-spec-session.md`, `SRV-031`.
 #[derive(serde::Deserialize)]
 pub struct WsQuery {
     token: Option<String>,

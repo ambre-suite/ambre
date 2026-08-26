@@ -1,8 +1,8 @@
-//! Reactions / votes for [`ToileState`](super::ToileState) (`toile-features`
-//! §4.A). Placing an emoji reaction or a vote on an element or frame is shared,
-//! persisted state, keyed by target + canonical `UserId`: one user has exactly
-//! one entry per target (a re-vote is LWW on their own key) and tallies are
-//! convergent.
+//! Reactions / votes for [`ToileState`](super::ToileState)
+//! (`toile-reactions`). Placing an emoji reaction or a vote on an element or
+//! frame is shared, persisted state, keyed by target + canonical `UserId`: one
+//! user has exactly one entry per target (a re-vote is LWW on their own key) and
+//! tallies are convergent.
 //!
 //! **Physical layout.** A single `reactions` root `LoroMap`, keyed by the
 //! composite `"{target_id}/{user_id}"` and holding `Binary(postcard(Reaction))`:
@@ -22,7 +22,7 @@
 //! and `UserId`s are hyphenated UUIDs, so neither contains `/`: the composite key
 //! is unambiguous and `target` is recovered by splitting on the first `/`.
 //!
-//! Keyed by `UserId`, never `PeerID` (§4.A / §8): a reaction is a per-user
+//! Keyed by `UserId`, never `PeerID`: a reaction is a per-user
 //! decision that must survive reload and multi-device use. The tally (count per
 //! emoji, vote totals) is **derived on read**
 //! ([`reaction_tally`](ToileState::reaction_tally)), never stored, so it can
@@ -60,12 +60,12 @@ fn accumulate(kind: ReactionKind, emoji: &mut BTreeMap<String, u32>, tally: &mut
 }
 
 impl ToileState {
-    /// Place, change or remove the local user's reaction on `target` (§4.A).
+    /// Place, change or remove the local user's reaction on `target`.
     /// Keyed by the canonical `UserId`, so a re-vote is LWW on this peer's own
     /// key. `reaction: None` deletes the user's own entry. No target-existence
     /// check happens here (a dangling target is skipped only at derivation, like
-    /// a dangling connector §5.A). CRDT and undoable: one `doc.commit()` is one
-    /// undo item (§8 bis). A pure no-op (removing an absent entry, or re-writing a
+    /// a dangling connector). CRDT and undoable: one `doc.commit()` is one
+    /// undo item. A pure no-op (removing an absent entry, or re-writing a
     /// byte-identical value) produces neither a commit nor a delta.
     pub(super) fn react(&mut self, target: &TargetId, reaction: Option<Reaction>) -> ToileOutcome {
         // Without an authenticated identity there is no key to write the per-user
@@ -107,12 +107,12 @@ impl ToileState {
         self.emit_with_update(vec![ToileEvent::ReactionsUpdated(target.clone())])
     }
 
-    /// The read-time reaction tally of `target` (§4.A), aggregated from the
+    /// The read-time reaction tally of `target`, aggregated from the
     /// per-user entries. A deleted target (no element map) yields an empty tally:
     /// its orphan entries are skipped at derivation, never rendered, never
     /// destroyed. Scans the shared `reactions` map for the target's prefix.
     pub fn reaction_tally(&self, target: &TargetId) -> ReactionTally {
-        // Skip a deleted / never-created target (§4.A "reactions on a deleted
+        // Skip a deleted / never-created target ("reactions on a deleted
         // target"): its entries may still exist but are not rendered.
         if self.element_map(target).is_none() {
             return ReactionTally::default();
@@ -139,7 +139,7 @@ impl ToileState {
     }
 
     /// Derive the reaction tallies of every `visible`, still-existing target in
-    /// one scan of the `reactions` map (§4.A), for the display viewport. Keyed
+    /// one scan of the `reactions` map, for the display viewport. Keyed
     /// only by targets that carry at least one reaction; a target absent from
     /// `visible` (culled or deleted) is skipped, so its orphan entries never
     /// render. This is O(reactions), not O(elements x reactions): the whole map
@@ -182,7 +182,7 @@ impl ToileState {
         tallies
     }
 
-    /// The local user's own reaction on `target`, if any (§4.A). UI toggle / test
+    /// The local user's own reaction on `target`, if any. UI toggle / test
     /// accessor.
     pub fn my_reaction(&self, target: &TargetId) -> Option<Reaction> {
         let user_id = self.my_user_id?;

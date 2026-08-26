@@ -1,145 +1,132 @@
-# AMBRE -- SPEC: DOCUMENT FILE FORMAT (`.ambre`)
-**Type:** Horizontal (Foundation -- Interop / Persistence)
-**Status:** Draft
-**Implementation:** partial
+# AMBRE -- FEATURE: THE NATIVE FILE (`.ambre`)
 
-> The native, lossless, cross-app on-disk representation of an Ambre document. One container, every app.
->
-> **Problem solved.** Every other export Ambre offers -- .xlsx, .csv, .docx, .svg, PDF -- is lossy by
-> construction: formulas collapse to values, CRDT identity and history are dropped, presentation sequence
-> and comments have no target. A user who wants a local copy of their own document, an offline backup, or a
-> clean way to leave, currently has no lossless option. For a product whose pitch is that the server cannot
-> read your data, "and you can only get it out through a lossy converter" is a weak ending.
->
-> **Provenance.** The container was first defined in `ambre-spec-prose-interop.md section B`. It is cross-app -- it
-> carries a `DocType` byte and its own `WrongDocType` path re-dispatches to another app's importer -- so
-> defining it inside a vertical spec, for an app that is still a stub, put a foundation-level contract in the
-> wrong place. This spec is now normative for the container; `prose-interop section B` references it and keeps only
-> Prose's own concerns.
+**Type:** Horizontal (framework)
+**Implementation:** partial -- the container ships; no gesture reaches it, and the sealed variant is a design.
+
+> The file a user saves a document into, and opens back. One container for every application: a
+> spreadsheet, a board and a text document differ by one byte of the header.
+
+Every other export drops something. A formula collapses to its value, a comment loses its target,
+identity and history leave. This file drops nothing, so it is the local backup and the way out.
+What travels inside belongs to each application's import and export feature; the container is here,
+and no application respecifies it.
 
 ---
 
-## 1. OBJECTIVES & CONSTRAINTS
+## 1. CONTRACT
 
-### A. Scope
+The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
+status values are normative in `ambre-spec-template.md`.
 
-**Handles:** the container layout; the version registry and migration policy; `DocType` dispatch on read;
-the at-rest protection policy (section 3); the error taxonomy; the round-trip invariants.
+| ID | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|
+| `DOCFILE-001` | A `.ambre` round trip MUST be the identity on document state, and MUST NOT need a warning list: the payload **is** the document. | this spec section 3 | `ambre_core::docfile::tests::round_trip_is_the_identity_on_the_container`; `ambre_trame::logic::docfile::tests::round_trip_preserves_the_document_state`, `::round_trip_is_byte_identical_on_a_bare_document`; `ambre_toile::logic::state::docfile::tests::round_trip_preserves_the_document_state`, `::round_trip_is_byte_identical_on_a_bare_document`; `fixture_determinism::the_round_trip_is_stable_on_every_doc_state_variant` | verified |
+| `DOCFILE-002` | A reader MUST identify the file from `doc_type` and `version`, before any app-specific parsing and without consulting the extension. | this spec section 3 | `ambre_core::docfile::tests::header_layout_is_the_spec_layout`, `::dispatch_reports_the_type_that_wrote_the_file`, `::an_unknown_doc_type_byte_is_not_a_dispatch_target`; `ambre_trame::logic::docfile::tests::a_toile_file_is_re_dispatched_not_coerced` | verified |
+| `DOCFILE-003` | An older version MUST migrate on read; a newer one MUST be refused cleanly. | this spec section 3 | `ambre_core::docfile::tests::a_newer_version_is_refused_and_an_older_one_is_attempted`, `::migrating_from_a_newer_version_is_refused`, `::the_walk_applies_one_step_per_version`, `::the_walk_chains_steps_in_order`, `::a_gap_in_the_registry_stops_the_walk_at_the_missing_row`, `::a_failing_step_fails_the_whole_migration` | verified |
+| `DOCFILE-004` | No error path MUST mutate the bytes it was handed. | this spec section 3 | `ambre_core::docfile::tests::every_error_path_leaves_the_input_untouched`; `ambre_trame::logic::docfile::tests::a_rejected_file_leaves_both_the_input_and_the_state_alone` | verified |
+| `DOCFILE-005` | A malformed file MUST produce a typed error, never a panic. | this spec section 3 | `ambre_core::docfile::tests::truncated_header_is_rejected_at_every_length`, `::bad_magic_is_rejected`; `ambre_trame::logic::docfile::tests::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic` | verified |
+| `DOCFILE-006` | The container layer MUST NOT compress or encrypt: the two entry points are pure functions over bytes, and protection is a separate stage. | this spec section 5 | crate graph: `ambre-core` declares no crypto and no compression dependency, so neither is reachable from the container | verified |
+| `DOCFILE-007` | There MUST be one container for every app: the only app-dependent value in the header is the `doc_type` byte. | this spec section 3 | `ambre_core::docfile::tests::header_layout_is_the_spec_layout` pins the 22-byte layout. One writer takes the type as a parameter, so a per-app variant has nowhere to be written | verified |
+| `DOCFILE-008` | A version bump MUST freeze one named artifact per `doc_type` in the same commit that adds the registry row. | this spec section 3; `ambre-spec-fixtures.md` | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). The recipe that performs the freeze does not exist, and no check reads the registry against the frozen corpus | unimplemented |
+| `DOCFILE-009` | The export surface MUST state that a plaintext file carries no encryption of its own. | this spec section 5 | not built -- lands with `DOCFILE P1 -- user-facing export and import` (`ambre-roadmap.md` EF) | unimplemented |
+| `DOCFILE-010` | A passphrase-sealed file MUST carry its own container version; it MUST NOT be a flag on an existing one. | this spec section 5 | not built -- lands with `DOCFILE P2 -- passphrase-sealed files` (`ambre-roadmap.md` EF) | unimplemented |
+| `DOCFILE-011` | A snapshot on the wire MUST NOT carry this header: the container is a file format, never a wire format. | this spec section 5 | none. `ambre-sync` names neither entry point and seals a bare `export_snapshot()`, so the rule holds today by construction. Nothing refuses the line that would change it, and no test asserts the magic bytes are absent from a sealed payload | unverified |
 
-**Delegates:**
-* Producing and consuming the payload -- each app's interop module owns `export_ambre_plaintext()` /
-  `import_ambre_plaintext()` against its own `LoroDoc`.
-* Compression and encryption -- `ambre-sync`, the sole compression/crypto consumer
-  (`ambre-spec-architecture.md section 1`). The container layer carries none (I4).
-* The CRDT schema inside the payload -- the app logic specs.
-
-**Out of scope:** third-party format conversion (the per-app interop specs); the wire protocol
-(`ambre-protocol`, `ambre-spec-sync.md`); server-side storage (`ambre-spec-server.md`).
-
-### B. Dependencies
-
-**No new dependency.** `ambre-core` for `DocType` and `Uuid`; each app's interop module for the payload;
-`ambre-sync` for the downstream protection stage when one applies.
-
-### C. Invariants
-
-* **I1 -- Lossless.** A `.ambre` round trip is the identity on document state. Unlike every other export
-  path there is no `ConversionReport` and no warning list, because there is nothing to lose: the payload
-  **is** the document. A `.ambre` export that needed to warn about anything would be a bug in the container,
-  not a fidelity trade-off.
-* **I2 -- Self-describing.** `doc_type` and `version` precede any app-specific parsing. A reader identifies a
-  file without guessing from its extension or content.
-* **I3 -- Forward-compatible reads, non-destructive failures.** An older version migrates on read; a newer
-  version is refused cleanly. The original bytes are never mutated in place, under any error.
-* **I4 -- No cryptography in the container layer.** `export_ambre_plaintext` / `import_ambre_plaintext` are
-  pure functions over bytes. Protection is a separate, explicit stage (section 3).
-* **I5 -- One container, every app.** No per-app header variant. The only app-dependent value is the
-  `doc_type` byte.
+* **Budget.** none, and `ambre-spec-budgets.md` records that as a result: the
+  container adds a 22-byte write and a 22-byte parse, and its binary contribution is a few dozen
+  bytes in `ambre-core`, shared rather than duplicated per application.
+* **Boundary.** none: `DOCFILE-006` bans compression and encryption in this layer, so it holds no
+  key, and `DOCFILE-011` keeps the bytes it produces on a local disk rather than on the relay.
+* **Verification.** 7 `verified`, 1 `unverified`, 3 `unimplemented`. The container is the one
+  Foundations subsystem where the first count is honest: it does pure byte handling on the host
+  tier, so a test can reach every rule it makes about bytes. The four gaps are the rules that reach
+  outside it -- a bump obligation on a recipe that is unbuilt, two rules about a surface no gesture
+  has yet, and one about what another crate must refrain from putting on the wire. The fixture
+  corpus (`ambre-spec-fixtures.md`) widens the belt further, because it exercises this reader and
+  this writer on every run.
 
 ---
 
-## 2. TECHNICAL DESIGN & STATE
+## 2. WHAT EACH USER SEES
 
-### A. Data Modeling
+Two users and one file, not one document: nothing here is shared state, and that is `DOCFILE-011`.
+Alice writes the file and hands it over; the third column is what the bytes carry.
 
-**Container layout.** Fixed 22-byte header, then the payload.
+| Alice does | Bob does | The file holds | Each user sees | Test |
+|---|---|---|---|---|
+| saves a workbook | opens it | a Trame payload under the Trame type byte | the same cells, formulas and styles | `ambre_trame::logic::docfile::tests::round_trip_preserves_the_document_state` |
+| saves a workbook | opens it with a board in front | the same file | the workbook, opened by the spreadsheet, never a coerced board | `ambre_toile::logic::state::docfile::tests::a_trame_file_is_re_dispatched_not_coerced` |
+| saves from a newer client | opens it | a version byte this build does not know | a request to update the client, and the file untouched | `ambre_core::docfile::tests::a_newer_version_is_refused_and_an_older_one_is_attempted` |
+| saves from an older client | opens it | a superseded version byte | the document, migrated on read | `ambre_core::docfile::tests::the_walk_applies_one_step_per_version` |
+| saves from a client shipping a document type this build lacks | opens it | a type byte no application claims | one error, and no dispatch attempt | `ambre_core::docfile::tests::an_unknown_doc_type_byte_is_not_a_dispatch_target` |
+| sends a truncated or corrupt file | opens it | bytes that parse to nothing | a typed error, and the document already open unchanged | `ambre_trame::logic::docfile::tests::a_rejected_file_leaves_both_the_input_and_the_state_alone` |
+| mails a plaintext file | reads it without Ambre | the snapshot in the clear | every value of the document, to anyone holding the file | none -- `DOCFILE-009` |
 
-| Offset | Size | Field | Notes |
+---
+
+## 3. MODEL
+
+**CRDT containers.** none. The file carries a snapshot of the application's own containers and
+declares none of its own; the word *container* below names the file layout.
+
+**The layout.** A fixed 22-byte header, then the payload.
+
+| Offset | Size | Field | Holds |
 |---|---|---|---|
-| 0 | 4 | `magic` | `0x414D4252` (`"AMBR"`) |
-| 4 | 1 | `version` | Container version. Current: `0x01`. |
-| 5 | 1 | `doc_type` | `DocType as u8` -- `Prose` 0, `Trame` 1, `Toile` 2, `Murmure` 3 (`ambre-core::DocType`). |
-| 6 | 16 | `document_id` | UUID v7. |
-| 22 | rest | `payload` | `LoroDoc::export_snapshot()`, uncompressed and unencrypted at this layer. |
+| 0 | 4 | `magic` | `0x414D4252`, that is `AMBR` |
+| 4 | 1 | `version` | the container version. Current: `0x01` |
+| 5 | 1 | `doc_type` | `DocType as u8` -- `Prose` 0, `Trame` 1, `Toile` 2, `Murmure` 3 |
+| 6 | 16 | `document_id` | a UUID v7 |
+| 22 | rest | `payload` | `LoroDoc::export_snapshot()`, uncompressed and unencrypted (`DOCFILE-006`) |
 
-**Version registry.** One row per container version, appended never rewritten. A bump is a container change
-only -- it does **not** track the CRDT schema inside the payload (see section 7 for why that distinction matters).
+**The version registry.** One row per container version, appended and never rewritten. A bump is a
+container change alone: it does not track the CRDT schema inside the payload, which each
+application raises on its own (`ambre-spec-architecture.md section 2`).
 
 | Version | Status | Change |
 |---|---|---|
-| `0x01` | current | Initial layout. |
+| `0x01` | current | the initial layout |
 
-> **Adding a row obliges a freeze (normative).** Writers only ever emit the current version, so the moment a
-> row is added is the **last** moment the outgoing version can be written at all. The same commit therefore
-> runs `just fixtures-freeze <name>` for one **named** artifact per `doc_type` -- several generators share a
-> `doc_type`, so which lineage keeps migration coverage is a choice, not a default -- moving it from
-> `fixtures/current/` into `fixtures/frozen/`
-> (`ambre-spec-fixtures.md section 4`). Skip it and the version that just left becomes untestable forever: no
-> generator can produce it again, and `migrate_ambre` loses the only input that proves it works.
+**Adding a row freezes an artifact, in the same commit** (`DOCFILE-008`). A writer emits the current
+version only, so the commit that adds a row is the last moment the outgoing version can be written
+at all. Three steps:
 
-**Two stages, and they are not interchangeable.** The container is stage one; protection is stage two, and
-which protection applies depends on **where the file is going** (section 3):
+1. add the registry row and the migration step that reads the outgoing version;
+2. run `just fixtures-freeze <name>` for one **named** artifact per `doc_type`. Several generators
+   share a `doc_type`, so which lineage keeps migration coverage is a choice, not a default;
+3. commit the frozen artifact with the bump (`ambre-spec-fixtures.md`).
+
+Skip step 2 and the version that just left becomes untestable for good: no generator can produce it
+again, and `migrate_ambre` loses the only input that proves it works.
+
+**The three reader and writer rules**, all normative.
+
+| Rule | What it says | Why it is this way |
+|---|---|---|
+| Dispatch | a reader never coerces a document across applications. On `WrongDocType` the caller routes the same bytes to the importer the error names, and surfaces an error only when no application claims that type | it makes "open a `.ambre`" one user action rather than four (`DOCFILE-002`) |
+| Version recovery | below the current version, apply `migrate_ambre` in order and retry the import. Above it, refuse, leave the file untouched, and ask the user to update the client | a partial or best-effort read of a format this build does not know produces a document nobody can trust (`DOCFILE-003`) |
+| Writer | a writer emits the current version only. There is no backward-compatible write mode and no negotiation: compatibility is a **read-side** duty | one writer and N readers stays testable as versions accumulate; N writers does not (`DOCFILE-007`) |
+
+**Two stages, and they are not interchangeable.** The container is stage one; protection is stage
+two, and which protection applies depends on where the file is going (section 5).
 
 ```
    app state
-      |  export_ambre_plaintext()          Logic thread, no crypto (I4)
+      |  export_ambre_plaintext()          Logic thread, no crypto (DOCFILE-006)
       v
    .ambre plaintext  = header || snapshot
       |
-      +---> local file: written as-is, or passphrase-sealed on explicit opt-in (section 3)
+      +---> local file: written as-is, or passphrase-sealed on opt-in (section 5)
       |
-      +---> fixtures corpus: committed as-is (ambre-spec-fixtures.md section 2.A)
+      +---> fixtures corpus: committed as-is (ambre-spec-fixtures.md)
 ```
 
-> **The network path does not use this container.** As built, `SyncCommand::SendSnapshot` carries a **bare**
-> `export_snapshot()` payload with no header, which `ambre-sync` compresses and seals under the
-> `DocumentKey`. That is correct and stays: the server already holds `document_id` and `doc_type` as routing
-> metadata, so a header would duplicate them inside the ciphertext for nothing. `prose-interop section B` described
-> the container as "the reference persistence **and sharing** format", conflating the two destinations; that
-> conflation is the root of the at-rest question resolved in section 3. **`.ambre` is a file format, not a wire
-> format.**
-
-### B. Interface Contract (API)
-
-Each app's interop module exposes the pair. The functions are per-app because the payload comes from that
-app's `LoroDoc`, but the header handling is identical and must not be reimplemented per app -- it lives in
-one shared helper in `ambre-core`, called by each app.
+**The shared helper.** Each application binds to it in two lines and re-derives neither the layout
+nor either read rule (`DOCFILE-007`).
 
 ```rust
-/// Header + uncompressed, unencrypted snapshot. Pure; no crypto (I4).
-pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: Uuid) -> Vec<u8>;
+// ambre-core
 
-/// Validates magic / version / doc_type, returns the payload.
-/// The caller compares the returned `DocType` against its own and re-dispatches
-/// on mismatch rather than coercing (see the dispatch rule below).
-pub fn import_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError>;
-
-pub struct AmbreHeader {
-    pub version: u8,
-    pub doc_type: DocType,
-    pub document_id: Uuid,
-    /// Offset 22 onward: the raw Loro snapshot.
-    pub payload: Vec<u8>,
-}
-
-/// Forward migration, one step per version bump. Added when a version is added.
-pub fn migrate_ambre(from: u8, bytes: &[u8]) -> Result<Vec<u8>, DocFileError>;
-```
-
-**The shared helper (`ambre_core::docfile`, as built).** Each app's pair above is a two-line binding over
-these; no app re-derives the layout or either read rule (I5).
-
-```rust
 /// The writer rule: no version parameter, because there is no write mode to pick.
 pub fn write_ambre_plaintext(doc_type: DocType, document_id: Uuid, payload: &[u8]) -> Vec<u8>;
 
@@ -152,26 +139,49 @@ pub fn read_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError>;
 pub fn read_ambre_plaintext_as(expected: DocType, data: &[u8]) -> Result<AmbreHeader, DocFileError>;
 
 /// The strict layout parse: current version only, no recovery. Used by the two
-/// above and by anything reading raw bytes (a header dump, a migration step
-/// checking its own output).
+/// above and by anything reading raw bytes -- a header dump, a migration step
+/// checking its own output.
 pub fn parse_header(data: &[u8]) -> Result<AmbreHeader, DocFileError>;
+
+/// Forward migration, one step per version bump. A step is added with its row.
+pub fn migrate_ambre(from: u8, bytes: &[u8]) -> Result<Vec<u8>, DocFileError>;
+
+pub struct AmbreHeader {
+    pub version: u8,
+    pub doc_type: DocType,
+    pub document_id: Uuid,
+    /// Offset 22 onward: the raw Loro snapshot.
+    pub payload: Vec<u8>,
+}
 ```
 
-An app owns the payload half only: its `export_ambre_plaintext` is `write_ambre_plaintext` over its own
-`export_snapshot()`, its `import_ambre_plaintext` is `read_ambre_plaintext_as` for its own `DocType`.
-`PayloadRejected` is raised there and nowhere else -- the container layer never touches a `LoroDoc` (I4).
-Each engine also carries the state-level pair (`TrameState` / `ToileState`: `export_ambre_plaintext(doc_id)`,
-and `import_ambre_plaintext(bytes)` returning the file's `document_id` with the display events of the
-reload), so a caller holding a live document does not reach for its `LoroDoc` to save it.
+**The per-application pair.** The functions are per-application because the payload comes from that
+application's `LoroDoc`; the header handling is not reimplemented per application.
 
-**Error taxonomy.** Fatal by nature: a header failure means no document can be produced.
+```rust
+/// Header + uncompressed, unencrypted snapshot. Pure; no crypto (`DOCFILE-006`).
+pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: Uuid) -> Vec<u8>;
+
+/// Validates magic, version and doc_type, and returns the payload. The caller
+/// compares the returned `DocType` against its own and re-dispatches on
+/// mismatch rather than coercing.
+pub fn import_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError>;
+```
+
+An application owns the payload half alone: its `export_ambre_plaintext` is `write_ambre_plaintext`
+over its own `export_snapshot()`, its `import_ambre_plaintext` is `read_ambre_plaintext_as` for its
+own `DocType`. `PayloadRejected` is raised there and nowhere else, because the container layer never
+touches a `LoroDoc`. Each engine also carries the state-level pair, so a caller holding a live
+document does not reach for its `LoroDoc` to save it.
+
+**The error taxonomy.** Fatal by nature: a header failure means no document can be produced.
 
 ```rust
 pub enum DocFileError {
     TruncatedHeader,
     InvalidMagic,
-    /// `found < AMBRE_VERSION` -> recoverable via `migrate_ambre`.
-    /// `found > AMBRE_VERSION` -> unrecoverable, prompt the user to update.
+    /// `found < AMBRE_VERSION` -> recoverable through `migrate_ambre`.
+    /// `found > AMBRE_VERSION` -> unrecoverable; prompt the user to update.
     UnsupportedVersion { found: u8 },
     /// The `doc_type` byte names no app this build knows -- a file from a client
     /// that shipped a new document type, or corruption. Distinct from
@@ -186,163 +196,77 @@ pub enum DocFileError {
 }
 ```
 
-**Dispatch rule (normative).** A reader never coerces a document across apps. On `WrongDocType`, the caller
-routes the same bytes to the importer named by `found`; only if no app claims that `DocType` does it surface
-an error. This is what makes "open a `.ambre`" a single user action rather than four.
-
-**Version-recovery rule (normative).** `found < AMBRE_VERSION`: apply `migrate_ambre` steps in order, then
-retry the import. `found > AMBRE_VERSION`: refuse, leave the file untouched, and tell the user to update the
-client -- never a partial or best-effort read.
-
-**Writer rule (normative).** Writers always emit `AMBRE_VERSION`, the current one. There is no
-backward-compatible write mode and no version negotiation: compatibility is a **read-side** obligation. One
-writer path, N reader paths, is the only combination that stays testable as versions accumulate.
+**Code:** `crates/ambre-core/src/docfile.rs` holds the layout, the five entry points and the
+migration walk. The per-application bindings are `crates/ambre-trame/src/logic/docfile.rs`,
+`crates/ambre-toile/src/logic/interop/docfile.rs` and its state-level pair in
+`crates/ambre-toile/src/logic/state/docfile.rs`. `crates/ambre-logic/tests/docfile_dispatch.rs`
+drives the dispatch rule across both.
 
 ---
 
-## 3. SECURITY & CONFIDENTIALITY (ZERO-KNOWLEDGE)
+## 4. SURFACE
 
-**Boundary audit.** The container layer opens no socket and touches no key (I4). Nothing in this spec can
-reach the Blind Relay; the network path is a different payload entirely (section 2.A).
-
-### At-rest protection of a local file -- the decision
-
-`prose-interop section B` said the native format is "encrypted XChaCha20-Poly1305 by `ambre-sync`" **without
-naming the key**. Read the obvious way -- the `DocumentKey`, the key Sync already holds for that document --
-that is a trap, and it is the reason this section exists.
-
-| Option | Verdict |
+| Trigger | Behaviour |
 |---|---|
-| **Sealed under the `DocumentKey`** | **Rejected.** The `DocumentKey` is rotated server-side on every revocation (`RevokeFromDocument`, `ambre-spec-sync.md` sharing flow). A file sealed under a since-rotated key is permanently unreadable -- and it fails *silently and late*: the user discovers it months after the export, when the backup is the only copy left. A local backup whose validity depends on future membership changes to a server-side document is not a backup. |
-| **Plaintext** | **Accepted as the default.** It is what every other export already does: an .xlsx, a .csv, a PDF exported from Ambre lands on the user's disk in the clear today. The Zero-Knowledge pillar is a statement about the **server**, not about the user's own filesystem. Consistency matters more than a partial gesture here. |
-| **Passphrase-sealed** (Argon2id -> XChaCha20-Poly1305) | **Accepted as an explicit opt-in.** The right answer for a backup that leaves the machine. Its key is derived from a passphrase the user types at export time, so it is independent of the `DocumentKey` lifecycle and immune to the rotation hazard. |
+| save a document to a file | the current state is written at the current version, whatever version it was opened from |
+| open a file | the header decides the application, then that application fills an empty state |
+| open a file another application wrote | the bytes are routed to that application, with no prompt and no conversion |
+| open a file no application claims | one error naming the type byte, and no partial document |
+| open a file a newer client wrote | one error asking the user to update, and the file untouched |
+| export a plaintext file | a statement that the file carries no encryption of its own (`DOCFILE-009`) |
+| export a sealed file | a passphrase prompt, and a file a reader can tell from a plaintext one by its header alone (`DOCFILE-010`) |
 
-**Decision: plaintext by default, passphrase-sealed on explicit opt-in, never the `DocumentKey`.**
-
-Two obligations follow, and neither is optional:
-* The export UI states plainly that a plaintext `.ambre` is readable by anything with access to the file. It
-  must not imply that a file inherits the document's end-to-end encryption, because it does not.
-* The passphrase-sealed variant is a **container version bump**, not a flag on `0x01`: a reader must be able
-  to tell a sealed file from a plaintext one from the header alone, before attempting to parse a payload.
-  Its salt and Argon2id parameters live in the header, so the file stays self-describing (I2) and the
-  parameters can be strengthened later without breaking old files.
-
-**Cryptography used.** None at version `0x01`. The passphrase-sealed variant reuses `ambre-crypto`
-(Argon2id, XChaCha20-Poly1305) and introduces no primitive.
+**Nothing in the suite reaches this surface.** There is no save gesture, no open gesture and no file
+picker in any application: every row above is what `DOCFILE P1` builds, and the two sealed rows what
+`DOCFILE P2` builds. The container beneath them ships and is exercised by its own tests and by the
+fixture corpus.
 
 ---
 
-## 4. QUALITY & TESTABILITY
+## 5. DECISIONS
 
-> Tiering, CI shape and the tested Definition of Done are normative in `ambre-spec-architecture.md section 4`.
-> Referenced, not redefined.
-
-* **Test tiers.** **host** only. Pure byte handling; no `cfg(target_arch = "wasm32")` surface, no database.
-
-* **Unit Tests.**
-  * **Round-trip identity (I1):** export -> import -> export is byte-identical, and the reloaded state is
-    equal to the original, on every `DocType` with an engine.
-  * **Header rejection:** truncated header (at every length below 22), bad magic, `UnsupportedVersion` in
-    both directions, an unknown `doc_type` byte, `WrongDocType`, and a valid header over a corrupt payload
-    -- each producing the right typed error and **never** a panic.
-  * **Dispatch:** a Toile file handed to the Trame importer yields `WrongDocType { found: Toile }` and is
-    accepted by the Toile importer unchanged.
-  * **Non-destructive failure (I3):** after every error path, the input buffer is unmodified.
-  * **Migration:** once `0x02` exists, a `0x01` file still loads through `migrate_ambre`. Until then, the
-    harness exists and is exercised with a synthetic step so the path is not dead code on the day it is
-    needed.
-
-* **The regression belt for this format is the fixture corpus.** `ambre-spec-fixtures.md` commits `.ambre`
-  files and gates drift in CI, so every fixture run exercises this reader and writer, and a set of
-  deliberately stale fixtures keeps the migration path honest. That is a deliberate dependency in both
-  directions: this spec owns the container, the fixtures spec owns the corpus that proves it stable.
-
-* **CRDT convergence.** N/A -- the container holds no CRDT state, it transports one.
-
-* **Benchmarks.** Export and import cost is dominated by the Loro snapshot, not by the 22-byte header;
-  measured through the load-path benches of `ambre-spec-fixtures.md section 4` rather than duplicated here.
-
-* **Definition of Done (tested).** Per architecture section 4, no phase in section 7 ships `[x]` without its belt green in
-  CI.
+| Decision | Rationale | Rejected alternative |
+|---|---|---|
+| A plaintext file by default | it is what every other export already does: an .xlsx, a .csv and a PDF exported from Ambre land on the user's disk in the clear today. The Zero-Knowledge pillar is a statement about the **server**, never about the user's own filesystem, and a partial gesture on one export of six buys the user nothing while suggesting a protection the file lacks (`DOCFILE-009`) | sealing every file, which makes the honest default invisible and still leaves five lossy exports in the clear |
+| A passphrase-sealed variant, on explicit opt-in | the right answer for a backup that leaves the machine. Argon2id then XChaCha20-Poly1305, over a passphrase the user types at export time, so the key is independent of any server-side lifecycle. Its salt and Argon2id parameters live in the header, so the file stays self-describing and the parameters can be strengthened later without breaking old files (`DOCFILE-010`) | no sealed variant at all, which leaves a user carrying a document off the machine with nothing but the filesystem |
+| Never the `DocumentKey` | the `DocumentKey` is rotated server-side on every revocation (`ambre-spec-key-rotation.md`). A file sealed under a since-rotated key is permanently unreadable, and it fails silently and late: the user finds out months after the export, when the backup is the only copy left. A local backup whose validity depends on a future membership change is not a backup | sealing under the key Sync already holds for the document, which is the reading a reader reaches for first and the reason this row exists |
+| The sealed variant is a version, not a flag | a reader must tell a sealed file from a plaintext one from the header alone, before it attempts to parse a payload. A flag on the current version makes the two indistinguishable to every reader already shipped (`DOCFILE-010`) | a bit in the current header, which every existing client reads as a plaintext file and fails on |
+| A file format, never a wire format | the server already holds `document_id` and `doc_type` as routing metadata, so a header inside the ciphertext duplicates them for nothing. Calling the container a persistence **and sharing** format conflates two destinations, and that conflation is what produced the at-rest question the three rows above answer (`DOCFILE-011`) | one format for the disk and the socket, which is what put an unnamed key at the centre of the at-rest question |
+| No compression and no encryption in this layer | the two entry points stay pure functions over bytes, testable on host with no key and no dependency, and `ambre-sync` stays the sole compression and crypto consumer (`ambre-spec-architecture.md section 2`, `DOCFILE-006`) | protection inside the container, which puts a crypto dependency in `ambre-core` and a key in every caller |
+| One container for every application | four headers to keep in step, and "open this file" stops being one user action. The type byte plus the dispatch rule cover the whole need (`DOCFILE-007`) | a per-application container variant |
+| A 22-byte binary header | the payload is one opaque CRDT blob, so a packaging format buys nothing. A fixed layout is trivially inspectable with any hex viewer, and it adds no parser to the Logic thread and no attack surface on untrusted input | a zip or OPC-style container, which OOXML uses and which buys multi-part packaging Ambre does not need; and a JSON or RON wrapper around base64, which inflates every file for a readability that is illusory while the payload stays binary |
+| The document name stays out of the header | the name is E2EE metadata (`ambre-spec-zero-knowledge.md`) and the filename already serves the purpose. In the header it would leak into a plaintext file whose contents the user may have chosen not to expose | carrying the name in the header, for a convenience the filename already provides |
+| Compatibility is a read-side duty | one writer and N readers stays testable as versions accumulate, and every reader path has an input to prove it: the frozen corpus. N writers has no such input, because nothing can produce a document at a version the build no longer writes | version negotiation, or a backward-compatible write mode |
 
 ---
 
-## 5. PERFORMANCE & RESOURCES
+## 6. NOT BUILT, AND NOT YET RULED
 
-* **Performance Budget.** The container adds a 22-byte write and a 22-byte parse. It carries **no** budget
-  of its own: export is `export_snapshot()` plus a header, import is a header parse plus `import_snapshot`,
-  and both of those legs are budgeted where they belong (`ambre-spec-fixtures.md section 4`, load path legs 3 and
-  4). Adding a target here would duplicate one.
-
-* **WASM Impact.** Negligible: header handling is a few dozen bytes of code in `ambre-core`, shared by every
-  app rather than duplicated per app. The compression and crypto of the passphrase-sealed variant are
-  already linked in `ambre-sync` / `ambre-crypto` and counted there.
+* **No gesture reaches the container.** No application has a save, an open or a file picker, so
+  every row of section 4 is unbuilt (`DOCFILE P1`). What ships is the reader, the writer and the
+  migration walk, driven by their own tests and by the fixture corpus.
+* **The migration walk has never migrated anything.** The registry holds one row, so
+  `migrate_ambre` is exercised by synthetic steps alone (`ambre-spec-testing.md section 6`). The
+  first real bump is the first honest test of it, and `DOCFILE-008` is what stops that bump from
+  destroying its own input.
+* **`DOCFILE-008` binds a recipe that does not exist.** `just fixtures-freeze` lands with
+  `FIXTURES P1`, so a bump performed before it has no mechanical way to obey the rule.
+* **The sealed variant has no design beyond its two rules.** Nothing says where the passphrase is
+  entered, how a wrong one is reported, or what the Argon2id parameters are. `DOCFILE P2` owes all
+  three.
+* **Nothing rules on a file larger than memory.** Both entry points take and return a `Vec<u8>`, so
+  a document is read whole. No row bounds the size a reader accepts, and no budget names one.
+* **Nothing fuzzes the header.** It is a parser on untrusted input and it has no fuzz target
+  (`ambre-spec-testing.md section 8`); the belt is a corpus of malformed inputs as unit tests.
 
 ---
 
-## 6. REJECTED ARCHITECTURAL DECISIONS
+## 7. WHAT THIS DOCUMENT DOES NOT OWN
 
-| Rejected | Justification |
+| Question | Owner |
 |---|---|
-| **Sealing a local file under the `DocumentKey`** | A revocation-triggered key rotation makes the file permanently unreadable, silently and long after export. Detailed in section 3. |
-| **Using `.ambre` as the wire/snapshot format too** | The server already holds `document_id` and `doc_type` as routing metadata; putting them inside the ciphertext duplicates them and buys nothing. Conflating the two destinations is what produced the at-rest ambiguity in the first place (section 2.A). |
-| **A per-app container variant** | Four headers to keep in step, and "open this file" stops being one user action. The `doc_type` byte plus the dispatch rule cover the whole need. |
-| **A zip / OPC-style container** (OOXML's approach) | Buys multi-part packaging Ambre does not need -- the payload is one opaque CRDT blob -- at the cost of a zip dependency in the Logic thread and a much larger attack surface on untrusted input. |
-| **A text-based container (JSON/RON wrapper around base64)** | Inflates every file, and readability is illusory: the payload stays opaque binary. The header is the only part worth reading, and a 22-byte layout is trivially inspectable with any hex viewer. |
-| **Carrying the document name in the header** | The name is E2EE metadata (`name_enc`, `architecture section 3`), and the filename already serves the purpose. Putting it in the header would leak it into a plaintext file whose contents the user may have chosen not to expose. |
-| **Version negotiation / backward-compatible writes** | Writers emit the current version only; compatibility is a read-side obligation. One writer and N readers stays testable as versions accumulate; N writers does not. |
-
----
-
-## 7. INTEGRATION PLAN (ROADMAP)
-
-> **Epic:** these phases are Stories of **`EF` -- Document corpora & native file format**
-> (`ambre-roadmap.md`), shared with `ambre-spec-fixtures.md`. `EF` is transverse and explicitly does not
-> block `E4`.
-
-> **Sequencing constraint (binding).** The *user-facing* export must not ship before the Trame per-cell
-> style consolidation (`ambre-roadmap.md` E6 / `trame-logic section 11 bis.F`) -- **discharged**: that
-> Story has landed. It changed the schema while **no third-party document existed**; a file on a
-> user's disk is a stronger and more permanent commitment than a server-side document, because it is
-> beyond our reach to migrate. The same argument that defers other third-party-document work applies
-> here with more force, and it applies to `P1`, not to `P0`.
->
-> **Two independent versions, both checked.** `AMBRE_VERSION` versions the **container** -- the 22-byte
-> header. It does **not** version the CRDT schema inside the payload, and `migrate_ambre` does not address
-> it: a schema change like the E6 style consolidation leaves the header at `0x01`, so a file written before
-> it passes every check in this spec and then imports into an engine reading containers that no longer mean
-> what it expects. That is a *successful open of a wrong document*, which is worse than a rejection.
->
-> The payload half is solved separately, by the `meta` / `schema_version` register specified in
-> `ambre-spec-architecture.md section 2.D` and built under `ARCH P8`. Both checks run, in order: the header first
-> (is this an `.ambre` this client can parse?), then the schema (is this a document this client understands?).
-> They are deliberately the same shape -- equal proceeds, older migrates, newer refuses non-destructively --
-> so there is one rule to learn.
->
-> **`ARCH P8` is a hard prerequisite of `DOCFILE P1`.** Container versioning alone would ship files whose
-> payloads have no migration story, and a file on a user's disk has unbounded age.
-
-### `DOCFILE P0` -- Container  `[x]`
-* `[x]` Shared header helper in `ambre-core`: layout, `AmbreHeader`, `DocFileError`, writer rule
-  (`ambre-core/src/docfile.rs`).
-* `[x]` `migrate_ambre` harness with the version registry, exercised via a synthetic step. The registry is
-  empty at `0x01` -- nothing precedes the initial layout -- so the walk it drives is proven by a synthetic
-  two-row registry: adding a real row is then the whole change.
-* `[x]` `export_ambre_plaintext` / `import_ambre_plaintext` wired for Trame and Toile (Prose and Murmure
-  join with their engines).
-* `[x]` **Belt:** round-trip identity, full header rejection set, dispatch, non-destructive failure. The
-  cross-app dispatch case lives in `ambre-logic` (`tests/docfile_dispatch.rs`), the first crate that links
-  both engines, with a real file from each app rather than a hand-assembled header.
-
-### `DOCFILE P1` -- User-facing export/import  `[ ]`
-* `[ ]` Chrome: export to file (download) and import from file (picker), app-agnostic, routed by `doc_type`.
-* `[ ]` Plaintext-at-rest statement in the export UI (section 3).
-* `[ ]` **Belt:** the fixtures corpus drift gate (`ambre-spec-fixtures.md`) covering this reader/writer.
-* **Gated on** `ARCH P8` (persisted schema versioning) and on the E6 style consolidation, per the constraints
-  above. The two gates are distinct: `ARCH P8` gives payload migration a mechanism, E6 makes the one schema
-  change we already know about land while it is still free.
-
-### `DOCFILE P2` -- Passphrase-sealed variant  `[ ]`
-* `[ ]` Container version bump carrying salt + Argon2id parameters in the header.
-* `[ ]` Export-time passphrase prompt; import-time unlock with a typed wrong-passphrase error.
-* `[ ]` **Belt:** seal/open round trip, wrong passphrase, parameter upgrade on an old file.
+| What goes inside the payload, and what each application drops on every other export | `2-Trame/features/ambre-spec-trame-import-export.md`, `3-Toile/features/ambre-spec-toile-import-export.md`, `4-Prose/features/ambre-spec-prose-import-export.md` |
+| How a snapshot is compressed, sealed and relayed | `ambre-spec-sealed-envelope.md` |
+| How the payload's own schema is versioned and migrated | `ambre-spec-architecture.md section 2` |
+| What a committed artifact is, how it is frozen and what its migration belt asserts | `ambre-spec-fixtures.md` |
+| Which crate holds which belt, and what runs in CI | `ambre-spec-testing.md section 6` |
