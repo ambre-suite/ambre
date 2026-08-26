@@ -91,7 +91,7 @@ A thin band along the bottom edge. It is Toile's parameterization of the shared 
 | the label | the application name |
 | the tally | the number of selected elements, absent on an empty selection (`TOILE-UI-053`) |
 | the bounds | the combined origin and extent, shown from two elements up |
-| the zoom chip | the board zoom, the same value the zoom control reports (`features/ambre-spec-toile-menus.md`) |
+| the zoom chip | the shared zoom model (`ambre-spec-zoom.md`), rendered by the chrome chip (`ambre-spec-chrome.md`, `CHROME-014`) |
 | the frame chip | the frame rate, expanding on click into the frame timings |
 
 **How a number reads.** A whole number shows with no decimals, any other with one, so the band keeps

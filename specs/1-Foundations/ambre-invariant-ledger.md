@@ -15,7 +15,7 @@
   `qa-manual`. That number is the coverage debt of the product.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**1147 rows: 774 shipped, of which 355 loose. 373 unbuilt.**
+**1154 rows: 774 shipped, of which 355 loose. 380 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
@@ -23,7 +23,7 @@
 | `unverified` | 188 | 83 | 79 |  | 350 |
 | `human-review` | 5 |  |  |  | 5 |
 | `qa-manual` |  |  |  |  | 0 |
-| `unimplemented` | 47 | 48 | 48 | 230 | 373 |
+| `unimplemented` | 54 | 48 | 48 | 230 | 380 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 

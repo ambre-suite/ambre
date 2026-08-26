@@ -95,7 +95,7 @@ band specified in `ambre-spec-chrome.md`, which owns the slots below.
 |---|---|
 | the label | the application name |
 | the aggregates | `Count`, and `Sum`, `Avg`, `Min` and `Max` when the selection holds a number (`TRAME-UI-107`) |
-| the zoom chip | the grid zoom menu, owned by `features/ambre-spec-trame-grid-viewport.md section 4` |
+| the zoom chip | the shared zoom model (`ambre-spec-zoom.md`), rendered by the chrome chip (`ambre-spec-chrome.md`, `CHROME-014`) |
 | the frame chip | the frame rate, expanding on click into the frame timings |
 
 **How a number reads.** A whole number shows with no decimals, any other with two, so the band
