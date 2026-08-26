@@ -29,21 +29,23 @@ that component's prefix instead.
 | `ZK-007` | What the relay may learn MUST be limited to `{document_id, pub_key, clock, seq, snapshot_id, nonce, blob size, timestamp, source IP}`; anything outside that set is a leak. | this spec section 2, the boundary table and its accepted leak | none. A whitelist has no natural test -- candidate for an `insta` snapshot over the `WsClientMsg` / `WsServerMsg` shapes | unverified |
 | `ZK-008` | A presigned S3 URL MUST be issued only after the ACL check, and MUST expire within 15 minutes. | `ambre-spec-object-store.md`, `SRV-002`, `SRV-052` | the lifetime is one operational figure with a 900 s default and no upper bound enforced; no test asserts a non-member is refused a URL | unverified |
 | `ZK-009` | The two key-derivation domains MUST stay frozen at `ambre-sign-v1` and `ambre-exch-v1`, one context each. | this spec section 2; derived | `ambre_crypto::tests::derive_keys_deterministic` proves the derivation is deterministic and that the two domains are independent. It pins **no vector**: a renamed domain keeps the test green and gives every existing account a different key pair | unverified |
-| `ZK-010` | A passphrase MUST cross the client bus in a type that wipes its own bytes when it is dropped. | pillar "Zero-Knowledge"; audit `H4` | type-level: `RestCommand::Unlock`, `SetupAccount`, `ChangePassphrase` and `RecoverAccount` carry `SecretBytes`, a `Zeroizing` newtype, so a plain `Vec<u8>` on that path does not compile | verified |
+| `ZK-010` | A passphrase MUST cross the client bus in a type that wipes its own bytes when it is dropped. | pillar "Zero-Knowledge"; audit `H4`, `H5` | type-level: `RestCommand::Unlock`, `SetupAccount`, `ChangePassphrase` and `RecoverAccount` carry `SecretBytes`, a `Zeroizing` newtype, so a plain `Vec<u8>` on that path does not compile | verified |
 | `ZK-011` | The Master Seed MUST be moved and never copied: no path may leave a second copy behind. | this spec section 2; derived | type-level: `MasterSeed` derives no `Clone`, so a duplicate is a compile error rather than a review finding | verified |
+| `ZK-012` | A passphrase MUST NOT appear in a request the client sends to the relay. | pillar "Zero-Knowledge"; audit `N4` | none. Neither the client request type nor the relay one declares a passphrase field, so the rule holds by absence, and nothing fails the day a writer adds one back | unverified |
 
 * **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1` -- the outbound seal, the
   inbound open, the full round trip and the snapshot compression -- all measured by `criterion` in
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
-  eleven rows on its own side, or answers `none` and says why.
-* **Verification.** 6 `verified`, 4 `unverified`, 1 `human-review`. What holds is what the crate
+  twelve rows on its own side, or answers `none` and says why.
+* **Verification.** 6 `verified`, 5 `unverified`, 1 `human-review`. What holds is what the crate
   graph, `deny.toml` and the type system can refuse: a key type nameable on the wire, `argon2`
   outside `ambre-crypto`, a decrypting crate linked into the relay, an unsealed presence frame, a
   passphrase in a type that does not wipe itself, a copied seed. What is loose is every rule stated
   as an absence -- `ZK-001` covers the nominal path and forbids no unsealed send, `ZK-007` is a
   whitelist with no natural test, `ZK-008` has no test for the refusal a non-member must get,
-  `ZK-009` is a constant no vector pins, and `ZK-006` is a comment plus reviewer attention.
+  `ZK-009` is a constant no vector pins, `ZK-012` holds by the absence of a field nothing guards,
+  and `ZK-006` is a comment plus reviewer attention.
 
 ---
 

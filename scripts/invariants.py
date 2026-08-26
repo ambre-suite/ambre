@@ -28,6 +28,14 @@ The rules it enforces, beyond generating the file:
     `TRAME-UI-011` cited `::editor_preview_display`, which never existed, under
     status `verified`. An `unimplemented` row is exempt: its Verification cell
     names a Story, not a test;
+  * **every audit finding a row cites must exist, and every finding must be
+    cited.** The template makes the citation the join between a finding and the
+    rule that closes it -- "the finding stops drifting from the code in silence"
+    -- and nothing held either end. Both rotted: `SRV-029` cited `audit #3`,
+    which is not a finding id, and eight findings that a remediation wave closed
+    had no rule at all, so nothing would go red the day the fix was reverted. A
+    finding with no rule to state is declared in `NO_RULE` below, with its
+    reason;
   * an id is never reused, and a prefix has no gap in its numbering;
   * **the counts under a table are the table's own.** The `Verification` answer
     is written by hand, beside a table that is not, so the two drift: nine
@@ -58,6 +66,7 @@ TEMPLATE = "ambre-spec-template.md"  # carries example rows, not real invariants
 LEDGER = "1-Foundations/ambre-invariant-ledger.md"  # generated here, nowhere else
 ROADMAP = "ambre-roadmap.md"  # the one schedule: every Story is a row of it
 JOURNAL = "ambre-roadmap-journal.md"  # closed epics, cut there verbatim
+AUDIT = "security-audit.md"  # numbered findings, cited by the rows that close them
 STATUSES = ("verified", "unverified", "human-review", "qa-manual", "unimplemented")
 LOOSE = ("unverified", "human-review", "qa-manual")  # built, and no test would fail
 APPS = ("1-Foundations", "2-Trame", "3-Toile", "4-Prose")
@@ -82,6 +91,26 @@ RETIRED = {
     "TRAME-122": "UI-THREAD-016",
     "TOILE-077": "UI-THREAD-016",
 }
+
+# A finding that states no rule, and why. It is the `RETIRED` register applied to
+# the audit: the coverage check below reads it, so a finding lands here by
+# decision instead of passing as a hole. Nothing else belongs here -- a finding
+# about behaviour is a row in the spec of the component it constrains.
+NO_RULE = {
+    "C3": "false positive: the comparison it reports is already constant-time",
+    "M8": "a module declared and unreachable, which states no behaviour to hold",
+}
+
+# What a Sources cell writes to cite a finding: ``audit `H9` ``, or a list of
+# them. The ids inside are read back and checked, so ``audit `#3` `` fails as a
+# malformed citation rather than resolving to nothing in silence.
+AUDIT_CITE = re.compile(r"audit\s+(`[^`]+`(?:\s*,\s*`[^`]+`)*)")
+FINDING = re.compile(r"^[CHMN]\d{1,2}$")
+# Where the audit declares one: a section heading, a row of a status table, or a
+# story of a remediation wave. A finding named in running prose is a mention.
+FINDING_HEAD = re.compile(r"^###\s+(.*)$")
+FINDING_ROW = re.compile(r"^\|\s*`?([CHMN]\d{1,2})`?\s*\|")
+FINDING_STORY = re.compile(r"^-\s*\[[ x]\]\s*\*\*([CHMN]\d{1,2})\*\*")
 
 ROW = re.compile(
     r"^\|\s*`(?P<id>[A-Z][A-Z0-9-]*-\d{3})`\s*\|"
@@ -316,6 +345,66 @@ def unresolved_citations(cell: str, per_crate: dict[str, set[str]], pooled: set[
             yield f"cites `{token}`, and no `fn {name}` exists{where}"
 
 
+def declared_findings() -> dict[str, int]:
+    """Every finding the audit declares, per id, with the line declaring it.
+
+    Three shapes declare one: the heading of its section, a row of a status
+    table, and a story of a remediation wave. Only the part of a heading before
+    the dash is read, so `### H4 / H5 -- ...` declares two findings and the title
+    beside them declares none.
+    """
+    found: dict[str, int] = {}
+    for lineno, line in enumerate((SPECS / AUDIT).read_text().splitlines(), 1):
+        ids: list[str] = []
+        head = FINDING_HEAD.match(line)
+        if head:
+            title = head.group(1).split(" -- ")[0]
+            ids = [t for t in re.split(r"[^A-Za-z0-9]+", title) if FINDING.match(t)]
+        row = FINDING_ROW.match(line)
+        if row:
+            ids = [row.group(1)]
+        story = FINDING_STORY.match(line)
+        if story:
+            ids = [story.group(1)]
+        for fid in ids:
+            found.setdefault(fid, lineno)
+    return found
+
+
+def cited_findings(line: str) -> list[str]:
+    """Every token one row hands the word `audit`, whether or not it is an id."""
+    tokens: list[str] = []
+    for m in AUDIT_CITE.finditer(line):
+        tokens += re.findall(r"`([^`]+)`", m.group(1))
+    return tokens
+
+
+def audit_coverage_defects(findings: dict[str, int], cited: set[str]) -> list[str]:
+    """Whether every finding is held by a rule, or declared as holding none."""
+    defects = []
+    for fid, lineno in sorted(findings.items()):
+        if fid in cited:
+            if fid in NO_RULE:
+                defects.append(
+                    f"{AUDIT}:{lineno}: finding `{fid}` is cited by an invariant "
+                    f"row and declared in `NO_RULE` -- one or the other"
+                )
+            continue
+        if fid in NO_RULE:
+            continue
+        defects.append(
+            f"{AUDIT}:{lineno}: finding `{fid}` is cited by no invariant row -- "
+            f"state the rule that closes it in the spec of the component it "
+            f"constrains, or declare it in `NO_RULE` with its reason"
+        )
+    for fid in sorted(NO_RULE):
+        if fid not in findings:
+            defects.append(
+                f"`NO_RULE` carries `{fid}`, and {AUDIT} declares no such finding"
+            )
+    return defects
+
+
 # The `Verification` answer under an invariant table, and the counts it opens
 # on: `7 `verified`, 1 `unverified`, 1 `unimplemented`.` Both separators the
 # corpus uses are read, the comma and the final "and".
@@ -443,6 +532,8 @@ def main() -> int:
     schedule = read_schedule(SPECS / ROADMAP)
     closed = read_schedule(SPECS / JOURNAL)
     errors += duplicate_stories(SPECS / ROADMAP)
+    findings = declared_findings()
+    cited_audit: set[str] = set()
 
     for path in sorted(SPECS.rglob("*.md")):
         if path.name == TEMPLATE:
@@ -475,6 +566,20 @@ def main() -> int:
                 errors.append(f"{where}: duplicate id, already in {seen[rid]}")
             seen[rid] = str(path.relative_to(SPECS))
 
+            for token in cited_findings(line):
+                if not FINDING.match(token):
+                    errors.append(
+                        f"{where}: cites audit `{token}`, which is not a finding "
+                        f"id -- a finding is cited by its number, `H9` or `N4`"
+                    )
+                elif token not in findings:
+                    errors.append(
+                        f"{where}: cites audit `{token}`, and {AUDIT} declares no "
+                        f"finding of that number"
+                    )
+                else:
+                    cited_audit.add(token)
+
             verification = rest.rsplit("|", 1)[-1]
             if status == "unimplemented":
                 errors += story_defects(where, verification, schedule, closed)
@@ -488,6 +593,8 @@ def main() -> int:
         if counts:
             per_spec[str(path.relative_to(SPECS))] = counts
             errors += answer_defects(str(path.relative_to(SPECS)), answer, counts)
+
+    errors += audit_coverage_defects(findings, cited_audit)
 
     # gaps in a prefix's numbering: an id that was renumbered or dropped
     by_prefix: dict[str, list[int]] = defaultdict(list)

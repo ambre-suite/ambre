@@ -34,6 +34,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-062` | A request refused for an expired token MUST be retried once, after a silent renewal. | `ambre-spec-session.md`, `SRV-025` | none. Every request helper renews once and replays, and no test drives a refusal: the helpers are the browser fetch path, and the transport the host tier substitutes is above them | unverified |
 | `SYNC-063` | A socket the relay refuses on authentication MUST be renewed, not merely retried. | this spec section 2 | none. The refusal has its own close code, and the handler renews on that code alone and backs off on every other. No host test drives a close event | unverified |
 | `SYNC-064` | The reconnect delay MUST grow until a frame arrives, and MUST reset on a frame, never on a bare open. | this spec section 2 | none. The reset is the first statement of the inbound handler, so a refused connection never reaches it. Nothing observes the delay | unverified |
+| `SYNC-070` | A socket error MUST tear the connection down and schedule a reconnect, exactly as a close does. | audit `M10`; this spec section 2 | none. The error handler takes the same teardown and backoff path as the close handler, and no host test raises a socket error: the event belongs to a browser | unverified |
+| `SYNC-071` | A request that receives no answer MUST be abandoned, never awaited without end. | audit `M9`; this spec section 2 | none. Every call attaches a thirty-second abort signal, and no test drives a request that never answers: the request path is the browser fetch | unverified |
 | `SYNC-065` | An edit made before the session is ready MUST be held, never dropped. | this spec section 2 | none. The edit is buffered and replayed once the document is open, and no test issues an edit before a session: the host path seeds its keys before anything runs | unverified |
 | `SYNC-066` | A sign-out MUST close the socket and wipe every key and every token. | `ZK-002` | none. The keys are cleared and wipe themselves on drop; the two tokens are plain strings that are dropped and not wiped, and nothing asserts either | unverified |
 | `SYNC-067` | A document name MUST reach the relay sealed under the document key. | `ZK-001`; this spec section 2 | none. The name is sealed on create and on rename and opened for the list, and no test seals one: the three legs run in a browser. `CHROME-036` holds the half about what a card shows | unverified |
@@ -49,7 +51,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
   `ambre-spec-zero-knowledge.md` draws. It holds every key, opens the one socket the client
   has, and makes every request. `SYNC-002` keeps the keys in, `SYNC-060` and `SYNC-061` keep the
   tokens in, and `SYNC-067` seals the one field of a document that is content rather than routing.
-* **Verification.** 2 `verified`, 15 `unverified`, 0 `unimplemented`. What holds is what the crate
+* **Verification.** 2 `verified`, 17 `unverified`, 0 `unimplemented`. What holds is what the crate
   graph refuses: no key crate outside this worker, no CRDT inside it. Everything else is a property
   of a browser -- a worker boot, an event loop, a socket close, a token renewal -- and the wasm tier
   boots neither this worker nor its pair (`ambre-spec-testing.md section 9`). Four rules are stated

@@ -32,6 +32,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-039` | The delta index MUST be trimmed to what every retained snapshot already contains. | this spec section 3 | `ambre_server::db::tests::purge_superseded_updates_trims_covered_deltas`, `::purge_horizon_is_min_covered_seq`, `::create_snapshot_roundtrips_covered_seq`. The pass is correct and unreachable while `SRV-038` fails: with no snapshot there is no horizon | verified |
 | `SRV-040` | A replay MUST answer every request it accepts, including one with nothing to send. | this spec section 3 | `ambre_server::ws::handler::message::delta_size_cap_tests::empty_replay_still_sends_missing_updates`. The refusals before the replay -- not subscribed, too soon, membership gone -- answer nothing, deliberately | verified |
 | `SRV-041` | A replay MUST deliver the whole history the caller asked for, in order. | this spec section 3 | none. The replay pages the index and re-sorts each page by number after a concurrent fetch, and a delta it cannot locate is skipped with a log rather than refused, so a page can be short and the caller cannot tell | unverified |
+| `SRV-075` | A replay MUST NOT return more deltas than the cap the relay declares. | audit `M16`; this spec section 3 | none. The handler clamps the count the caller asks for to one thousand, and no test asks for more than that | unverified |
 
 * **Budget.** three rows of `ambre-spec-budgets.md section 3`: the live receive and broadcast
   under 5 ms, the ordering check under 1 ms, and the flush batch under 2 s for a thousand deltas.
@@ -40,7 +41,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 * **Boundary.** the relay orders bytes it cannot read. What it learns here is exactly the routing
   set of `ZK-007`: which key wrote to which document, at which clock, and how large the frame was.
   Nothing here opens a payload, and `SRV-001` keeps the frame out of the logs.
-* **Verification.** 5 `verified`, 6 `unverified`, 0 `unimplemented`. What holds is the ordering
+* **Verification.** 5 `verified`, 7 `unverified`, 0 `unimplemented`. What holds is the ordering
   itself: the script's four cases, the rebuild after a reset, the drain lock and the trim. What is
   loose is every recovery path -- an index that refuses a write, a queue that refuses an append, a
   partial batch -- because each needs a store that fails on demand. Two rules are stated as failing,

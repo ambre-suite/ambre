@@ -24,13 +24,14 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-003` | A route that needs a caller MUST verify the access token, its signature and its expiry, before it reads any store. | this spec section 3 | `ambre_server::jwt::tests::expired_token_is_rejected`, `::wrong_key_is_rejected`, `::mint_then_verify_roundtrips`; `routes::tests::handler_tests::unauth_endpoints_return_401` walks the surface and asserts the refusal. One route takes an optional caller and reads first (`ambre-spec-server.md`, `SRV-018`) | verified |
 | `SRV-009` | A refresh token MUST be consumable exactly once, including by two callers at the same instant. | this spec section 3; audit `M6` | `ambre_server::redis_ops::redis_integration_tests::refresh_consume_rejects_a_replayed_token`, `::only_one_racing_caller_claims_a_refresh_token`, both on the database tier | verified |
 | `SRV-022` | A sign-in with an identity provider MUST reach that provider. | this spec section 3 | none, and **the rule fails today**: both provider routes are registered under a fixed provider name while their handlers read the provider from the path, so every call fails to extract one and answers an internal error. No test mounts either route -- section 5 | unverified |
+| `SRV-074` | A configured provider the relay cannot reach at startup MUST stop the start, never disable sign-in in silence. | audit `M7`; this spec section 3 | none. The start logs the failure and exits when the credentials are configured, and warns and disables provider sign-in when they are absent; no test boots the relay against a provider that does not answer | unverified |
 | `SRV-023` | The development sign-in MUST be refused unless the deployment enables it. | this spec section 3 | `ambre_server::routes::tests::handler_tests::dev_login_rejected_when_dev_mode_off`, and `::dev_login_creates_user_and_returns_token` for the enabled case | verified |
 | `SRV-024` | Any instance MUST accept a token another instance minted. | `ambre-spec-server.md`, `SRV-021` | none. The signing key comes from one seed the deployment shares, and the process refuses to start without it outside development mode; nothing boots two instances to exchange a token | unverified |
 | `SRV-025` | An access token MUST expire within fifteen minutes. | this spec section 3; `ZK-006` | none. The lifetime is one operational figure with a fifteen-minute default and no ceiling, so a deployment may set an hour with no code change -- the same absence `ZK-008` states for a presigned link | unverified |
 | `SRV-026` | A sign-out MUST revoke the caller's own refresh token, and no other. | this spec section 3 | `ambre_server::routes::tests::handler_tests::logout_clears_session`; the route refuses a token it resolves to another identity, and no test presents one | unverified |
 | `SRV-027` | A session MUST NOT be issued under a placeholder signing key. | this spec section 3; `SRV-007` | none, and **the rule fails today**: when the stored signing key does not parse, both sign-in paths fall back to an all-zero key and mint a session under it, so every account in that state shares one identity -- section 5 | unverified |
 | `SRV-028` | An address MUST resolve to exactly one account. | audit `N5` | `ambre_server::db::users::tests::create_user_duplicate_email_is_conflict`, `::get_user_by_email_is_case_insensitive`, `::verified_email_collision_is_conflict` | verified |
-| `SRV-029` | A self-asserted address MUST NOT lock out the provider-verified holder of it. | audit `#3` | `ambre_server::db::users::tests::oidc_login_reclaims_email_from_unverified_squatter`, `::verified_email_cannot_be_squatted_by_setup`, `::oidc_relogin_keeps_its_own_email` | verified |
+| `SRV-029` | A self-asserted address MUST NOT lock out the provider-verified holder of it. | audit `N3` | `ambre_server::db::users::tests::oidc_login_reclaims_email_from_unverified_squatter`, `::verified_email_cannot_be_squatted_by_setup`, `::oidc_relogin_keeps_its_own_email` | verified |
 | `SRV-030` | The sealed master material MUST be written once; a later write MUST be refused. | this spec section 3 | `ambre_server::routes::tests::handler_tests::store_master_keys_is_first_time_only`. The re-seal route is the passphrase path and touches neither public key | verified |
 | `SRV-031` | An access token MUST NOT reach a log, a proxy record or a browser history. | `ZK-006`; audit `M15` | none, and **the rule holds only outside this process**: the relay's own request span records the path and never the query, and the token still travels in the socket address, so the reverse proxy must strip it and the client logs it (`ambre-spec-sync.md`, `SYNC-061`) | unverified |
 
@@ -41,11 +42,12 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   and it sees none of the three secrets behind them (`ZK-003`). What it mints is its own token, and
   `SRV-012` refuses it every other cryptographic act. The one leak stated here is the token in the
   socket address (`SRV-031`).
-* **Verification.** 6 `verified`, 6 `unverified`, 0 `unimplemented`. What holds is what a request
+* **Verification.** 6 `verified`, 7 `unverified`, 0 `unimplemented`. What holds is what a request
   test can drive: the token gate, the address namespace, the one-shot key write and the refresh
   race. What is loose is every rule about a deployment rather than a request -- the shared seed, the
-  token lifetime, the token in a proxy log. Two rules are stated as failing on a reading of the
-  code, and one of the two is the only sign-in a production deployment has.
+  token lifetime, the token in a proxy log, the provider the start cannot reach. Two rules are
+  stated as failing on a reading of the code, and one of the two is the only sign-in a production
+  deployment has.
 
 ---
 

@@ -15,12 +15,12 @@
   `qa-manual`. That number is the coverage debt of the product.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**1139 rows: 766 shipped, of which 348 loose. 373 unbuilt.**
+**1147 rows: 774 shipped, of which 355 loose. 373 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 129 | 155 | 134 |  | 418 |
-| `unverified` | 181 | 83 | 79 |  | 343 |
+| `verified` | 130 | 155 | 134 |  | 419 |
+| `unverified` | 188 | 83 | 79 |  | 350 |
 | `human-review` | 5 |  |  |  | 5 |
 | `qa-manual` |  |  |  |  | 0 |
 | `unimplemented` | 47 | 48 | 48 | 230 | 373 |
@@ -34,7 +34,7 @@
 | `ambre-spec-accessibility.md` | 9 | 7 | 2 | 5 | 2 |
 | `ambre-spec-adaptive-layout.md` | 5 | 4 | 0 | 4 | 1 |
 | `ambre-spec-architecture.md` | 12 | 12 | 3 | 9 |  |
-| `ambre-spec-broadcast.md` | 12 | 9 | 3 | 6 | 3 |
+| `ambre-spec-broadcast.md` | 13 | 10 | 3 | 7 | 3 |
 | `ambre-spec-chrome.md` | 13 | 11 | 8 | 3 | 2 |
 | `ambre-spec-clipboard.md` | 9 | 9 | 0 | 9 |  |
 | `ambre-spec-commands.md` | 5 | 3 | 2 | 1 | 2 |
@@ -49,22 +49,22 @@
 | `ambre-spec-key-verification.md` | 10 | 10 | 3 | 7 |  |
 | `ambre-spec-launcher.md` | 11 | 11 | 4 | 7 |  |
 | `ambre-spec-media.md` | 7 | 7 | 0 | 7 |  |
-| `ambre-spec-membership.md` | 13 | 13 | 9 | 4 |  |
+| `ambre-spec-membership.md` | 14 | 14 | 10 | 4 |  |
 | `ambre-spec-message-bus.md` | 12 | 12 | 7 | 5 |  |
 | `ambre-spec-object-store.md` | 10 | 10 | 3 | 7 |  |
 | `ambre-spec-organizations.md` | 9 | 8 | 5 | 3 | 1 |
 | `ambre-spec-presence.md` | 10 | 7 | 5 | 2 | 3 |
 | `ambre-spec-render-assets.md` | 10 | 7 | 2 | 5 | 3 |
 | `ambre-spec-schema-version.md` | 10 | 3 | 0 | 3 | 7 |
-| `ambre-spec-sealed-envelope.md` | 12 | 12 | 6 | 6 |  |
-| `ambre-spec-sequencer.md` | 11 | 11 | 5 | 6 |  |
+| `ambre-spec-sealed-envelope.md` | 13 | 13 | 6 | 7 |  |
+| `ambre-spec-sequencer.md` | 12 | 12 | 5 | 7 |  |
 | `ambre-spec-server.md` | 18 | 18 | 10 | 8 |  |
-| `ambre-spec-session.md` | 12 | 12 | 6 | 6 |  |
-| `ambre-spec-sync.md` | 17 | 17 | 2 | 15 |  |
+| `ambre-spec-session.md` | 13 | 13 | 6 | 7 |  |
+| `ambre-spec-sync.md` | 19 | 19 | 2 | 17 |  |
 | `ambre-spec-text-editor.md` | 9 | 7 | 3 | 4 | 2 |
 | `ambre-spec-text-input.md` | 7 | 7 | 0 | 7 |  |
 | `ambre-spec-ui.md` | 12 | 7 | 1 | 6 | 5 |
-| `ambre-spec-zero-knowledge.md` | 11 | 11 | 6 | 5 |  |
+| `ambre-spec-zero-knowledge.md` | 12 | 12 | 6 | 6 |  |
 | `ambre-spec-trame-schema.md` | 5 | 3 | 2 | 1 | 2 |
 | `ambre-spec-trame-autofill.md` | 8 | 8 | 4 | 4 |  |
 | `ambre-spec-trame-cell-editing.md` | 19 | 12 | 6 | 6 | 7 |

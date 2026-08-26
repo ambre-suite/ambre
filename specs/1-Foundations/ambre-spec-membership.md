@@ -29,7 +29,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-016` | The role carried on the ready signal MUST be this client's own row in the members answer. | this spec section 3; `ambre-spec-message-bus.md` | `ambre_sync::sharing::tests::own_role_reads_our_own_row`, `::own_role_reads_writable_roles`; `ambre_sync::updates::tests::document_ready_carries_the_role_on_both_paths` | verified |
 | `SYNC-017` | A role that cannot be resolved MUST default to the read-only one, never to a writable one. | this spec section 3 | `ambre_sync::sharing::tests::own_role_falls_back_to_viewer_when_unresolvable` | verified |
 | `SYNC-034` | A recipient MUST unwrap against the exchange key of whoever wrapped, never against its own. | this spec section 3 | `ambre_crypto::tests::ecdh_symmetric`, `::kek_binds_peer_identity` hold the primitive. The choice of which key to use is a branch in the client with a fallback for an older relay, and no test takes either side of it | unverified |
-| `SYNC-035` | A wrap MUST be refused for a peer key with no contribution, rather than sealed under a predictable secret. | this spec section 3 | `ambre_crypto::tests::weak_peer_public_key_rejected`; `ambre_sync::sharing::tests::invite_request_propagates_bad_pubkey`, `::decode_exchange_pubkey_rejects_bad_input` | verified |
+| `SYNC-035` | A wrap MUST be refused for a peer key with no contribution, rather than sealed under a predictable secret. | audit `M14`; this spec section 3 | `ambre_crypto::tests::weak_peer_public_key_rejected`; `ambre_sync::sharing::tests::invite_request_propagates_bad_pubkey`, `::decode_exchange_pubkey_rejects_bad_input` | verified |
+| `SYNC-073` | The key that wraps a document key MUST bind the two identities the wrap travels between. | audit `M14`; this spec section 3 | `ambre_crypto::tests::kek_binds_peer_identity` | verified |
 | `SYNC-036` | The re-fetched invitee key MUST equal the one the user confirmed, before anything is wrapped. | `ambre-spec-key-verification.md` | `ambre_sync::sharing::tests::invite_pin_mismatch_refuses_and_never_wraps`, `::fetch_invitee_key_emits_key_and_matching_fingerprint` | verified |
 | `SYNC-037` | The member directory MUST be rebuilt whenever membership changes, so a revoked member stops resolving. | this spec section 3 | `ambre_sync::sharing::tests::list_members_refreshes_the_presence_directory`; `ambre_sync::ephemeral_tests::refreshing_the_directory_drops_revoked_members` | verified |
 | `SYNC-038` | The member list shown to the user MUST NOT carry an invented identity. | this spec section 3 | none, and **the rule fails today**: a member row whose identifier does not parse is given a freshly generated one, so the list shows a person nothing can act on and a revoke aimed at that row addresses nobody -- section 6 | unverified |
@@ -43,10 +44,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
   seals each copy for one exchange key. What the relay learns is who is a member of what, which is
   the membership metadata `ambre-spec-zero-knowledge.md` accepts. No plaintext key and no
   private key ever leaves the Sync worker (`SYNC-002`, `SYNC-039`).
-* **Verification.** 9 `verified`, 4 `unverified`, 0 `unimplemented`. What holds is every pure
-  transform: the wrap for one invitee, the refusal of a weak key, the pin comparison, the directory
-  build and the role resolution, all extracted out of the browser and all covered. What is loose is
-  the four branches that only run against a live relay -- and two of them are stated as failing.
+* **Verification.** 10 `verified`, 4 `unverified`, 0 `unimplemented`. What holds is every pure
+  transform: the wrap for one invitee, the identity pair it binds, the refusal of a weak key, the
+  pin comparison, the directory build and the role resolution, all extracted out of the browser and
+  all covered. What is loose is the four branches that only run against a live relay -- and two of
+  them are stated as failing.
 
 ---
 

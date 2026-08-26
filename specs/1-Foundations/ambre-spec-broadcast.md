@@ -25,6 +25,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-043` | A member removed while connected MUST stop being served within thirty seconds. | audit `H8`; this spec section 3 | none. The membership is re-read past a thirty-second mark on every write, presence and replay, and the subscription is dropped when it is gone; no test removes a member on a live connection | unverified |
 | `SRV-044` | One connection MUST NOT exceed the message rate the deployment declares. | this spec section 3 | `ambre_server::ws::handler::token_bucket::tests::starts_full_and_allows_a_full_burst`, `::refills_at_the_configured_rate`, `::refill_is_capped_at_capacity`, `::sustained_rate_below_refill_is_never_rejected` | verified |
 | `SRV-045` | One process MUST hold one live subscription per channel, whatever the number of connections watching it. | this spec section 3 | none, and none is possible without a second connection: the hub is one task holding one stream, which the type makes true, and nothing in continuous integration opens two sockets on one document to observe it | unverified |
+| `SRV-073` | A frame one instance accepts MUST reach every subscriber, whichever instance holds their connection. | audit `C2`; `SRV-021` | none. Each process runs one subscriber task on the shared channel and fans the frames out to its own connections, and nothing in continuous integration runs a second instance to watch a frame cross | unverified |
 | `SRV-046` | An upgrade refused on authentication MUST close with a code of its own, never with a generic drop. | `ambre-spec-session.md`; `ambre-spec-sync.md`, `SYNC-063` | none. The upgrade always completes and the handler then closes with the authentication code, so the client can renew instead of backing off; no host test drives a close frame | unverified |
 | `SRV-047` | A channel subscription MUST be refused to a caller who is not a member of that channel. | this spec section 3 | not built -- lands with the `SYNC P4` / `SRV P1` -- channels and meetings Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-048` | A channel frame MUST carry a verified signature and a number before it is relayed. | this spec section 3; `SRV-006`, `SRV-007` | not built -- lands with the `SYNC P4` / `SRV P1` -- channels and meetings Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -43,11 +44,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   it. What it reads is the routing metadata of `ZK-007`, plus the presence entry it stores under an
   author key -- opaque, and `ZK-005` is the rule (`SRV-050`). The token that opens the socket
   travels in its address, which is the leak `SRV-031` states.
-* **Verification.** 3 `verified`, 6 `unverified`, 3 `unimplemented`. What holds is what a handler
+* **Verification.** 3 `verified`, 7 `unverified`, 3 `unimplemented`. What holds is what a handler
   test can drive: the two caps, the rate bucket and the presence entry's own expiry. What is loose
   is everything about the connection rather than the message -- the subscription gate, the
-  mid-session removal, the single subscription per channel, the close code -- because each needs a
-  live socket, and the suite drives handlers rather than sockets
+  mid-session removal, the single subscription per channel, the fan-out between instances, the
+  close code -- because each needs a live socket, and the suite drives handlers rather than sockets
   (`ambre-spec-testing.md section 9`).
 
 ---

@@ -3,6 +3,10 @@
 > Full-codebase audit across 16 crates, ~51 000 lines of Rust. Findings grouped by severity.
 > **Date:** 2026-07-05 (supersedes the 2026-06-07 pass on 7 crates / ~15 000 lines)
 >
+> **State, 2026-08-27.** Every numbered finding below is closed. The report is kept as written; the
+> ledger in "Status of previous findings" carries the state, and names the invariant row that holds
+> each fix.
+>
 > **Scope.** `crates/*` (server, sync, crypto, protocol, bus, core, logic, trame,
 > canvas, chrome, commands, draw, app; `murmure`/`prose`/`toile` are still stubs)
 > plus `specs/**`. Cross-checked against the specifications; deviations are called out.
@@ -33,24 +37,52 @@ Verified against the current tree. IDs are preserved for traceability.
 | M6 | Rate limiter fail-open + fixed-window burst | **OPEN** -- still fail-open (`allowing request`) and a fixed-window counter. |
 | M7 | OIDC discovery failure silently ignored | **OPEN** -- `main.rs` still `.ok().unwrap_or_default()`. |
 | M8 | `ambre-logic` persistence.rs dead code | **RESOLVED** -- `pub mod persistence;` is now declared in `lib.rs`. |
-
-### Re-verified against the tree, 2026-08-26
-
-The column above is dated and stays as written. Four of its `OPEN` entries were fixed in the code
-and the ledger was never updated, so a reader of the table alone would act on four findings that no
-longer exist. Each line below names the code that closes the entry.
-
-| ID | Now | Evidence |
-| :-- | :-- | :-- |
-| C1 | **RESOLVED** | `s3.rs` logs `blob_len` and carries the ban above the loop: "Never log `blob_str`: it carries `update_b64`, the E2EE ciphertext". |
-| C4 | **RESOLVED** | `db::get_snapshot` takes the path `document_id` and filters on it, which is the fix the section below prescribes. |
-| H2 | **RESOLVED** | `get_document` answers `NotFound` when the caller is neither a member nor the owner, so a non-member reads no routing metadata. |
-| H5 | **RESOLVED** | `ambre-bus/src/rest.rs` carries `SecretBytes` and `SecretString` with `Zeroizing` and a redacted `Debug`. |
-
-`H3` stays open, and it is the one an invariant row now holds: `SYNC-012` in
-`ambre-spec-membership.md` states the rule and reports what it now holds.
 | M9 | No HTTP timeouts in Sync thread | **OPEN** -- `sync/http.rs` still sets no per-request timeout. |
 | M10 | `WsError` does not trigger reconnection | **OPEN** -- `sync/lib.rs:1466` still only logs; no `schedule_reconnect()`. |
+
+### Re-verified against the tree, 2026-08-27
+
+The column above is dated and stays as written, and it is no longer the state: every numbered
+finding of this report is closed today. A reader of that column alone acts on findings that the
+remediation waves removed. This ledger is the state; each section below is kept as written, because
+the reasoning is what a reader needs the day the same shape appears elsewhere.
+
+`Held by` names the invariant row that goes red if the fix is reverted. A finding that states no
+behaviour rule holds none, and `scripts/invariants.py` carries the reason in its `NO_RULE` register.
+The script reads this ledger from both ends: a row cannot cite a finding this report does not
+declare, and a finding cannot sit here uncited.
+
+| ID | Now | Closed by | Held by |
+| :-- | :-- | :-- | :-- |
+| C1 | closed | wave R2 -- the flusher error paths log `blob_len`, never `blob_str` | `ZK-006` |
+| C2 | closed | before this pass -- `ws/pubsub_hub.rs` subscribes and fans out per process | `SRV-073` |
+| C3 | false positive | the comparison it reports is already constant-time | none, and by decision |
+| C4 | closed | wave R0 -- a snapshot is fetched by its id and its document | `SRV-004`, `SRV-054` |
+| C5 | closed | wave R0 -- a content hash is refused unless it is sixty-four hexadecimal characters | `SRV-054` |
+| H1 | closed | wave R4 -- a failed append is logged and dead-lettered for replay | `SRV-033`, `SRV-034` |
+| H2 | closed | wave R2 -- a non-member reads a not-found answer | `SRV-005` |
+| H3 | closed | wave R2 -- a failed unwrap surfaces an authentication error, and generates no key | `SYNC-012` |
+| H4 | closed | wave R2 -- both handlers take a type that wipes itself | `ZK-010` |
+| H5 | closed | wave R2 -- the bus carries `SecretBytes` and `SecretString` | `ZK-010` |
+| H6 | closed | before this pass -- the engine applies a remote payload and reseeds | `TRAME-015` |
+| H7 | closed | before this pass -- a cell cleared of its formula drops its cache entry | `TRAME-038` |
+| H8 | closed | wave R1 -- membership is re-read on a thirty-second ceiling | `SRV-043` |
+| H9 | closed | wave R1 -- decompression stops at a ceiling drawn from the compressed length | `SYNC-009` |
+| M6 | closed | wave R4 -- one sliding window, and the sign-in tier fails closed | `SRV-009`, `SRV-013`, `SRV-019` |
+| M7 | closed | wave R4 -- a configured provider that does not answer stops the start | `SRV-074` |
+| M8 | closed | before this pass -- the module is declared, and it states no behaviour rule | none, and by decision |
+| M9 | closed | wave R4 -- every request carries a thirty-second abort signal | `SYNC-071` |
+| M10 | closed | wave R4 -- a socket error takes the teardown and backoff path | `SYNC-070` |
+| M13 | closed | wave R3 -- both verifiers take the strict form | `SYNC-072` |
+| M14 | closed | wave R3 -- the key derivation binds the identity pair, and refuses a weak key | `SYNC-035`, `SYNC-073` |
+| M15 | closed | wave R4 -- the request span records the path alone | `SRV-031` |
+| M16 | closed | wave R1 -- the count a caller asks for is clamped to a thousand | `SRV-075` |
+| M17 | closed | wave R4 -- the origin list comes from the deployment, and defaults to none | `SRV-068` |
+| N1 | closed | wave R6 -- recovery is the owner's alone, and a threshold above one is refused | `SRV-062`, `SRV-065` |
+| N2 | closed | wave R6 -- a granted role is clamped to the caller's own | `SRV-016`, `SRV-061`, `SRV-070`, `SRV-071` |
+| N3 | closed | wave R6 -- the account carries the address the client supplies, bounded | `SRV-029` |
+| N4 | closed | wave R7 -- neither request type declares a passphrase field | `ZK-012` |
+| N5 | closed | wave R7 -- one address, one account, whatever the letter case | `SRV-028` |
 
 The stub-related MEDIUM/OTHER findings from the previous pass (channel handlers,
 meeting handlers, Murmure/Rendez-Vous) remain accurate: those subsystems are
@@ -188,7 +220,7 @@ compressed length and a max ratio). Reject before allocating the full output.
 
 ---
 
-### H2 -- Document metadata leaked to non-members *(carried over, still open)*
+### H2 -- Document metadata leaked to non-members *(closed, see the ledger)*
 
 **Crate:** `ambre-server`
 **File:** `crates/ambre-server/src/routes/documents.rs:295-319`
@@ -203,7 +235,7 @@ document UUID is an unnecessary metadata disclosure.
 
 ---
 
-### H3 -- Silent fallback to a random DocumentKey on unwrap failure *(carried over)*
+### H3 -- Silent fallback to a random DocumentKey on unwrap failure *(closed, see the ledger)*
 
 **Crate:** `ambre-sync`
 **File:** `crates/ambre-sync/src/lib.rs:2200-2210`
@@ -220,7 +252,7 @@ substitute a random key for a failed unwrap.
 
 ---
 
-### H4 / H5 -- Passphrase & recovery-word material not zeroized *(carried over)*
+### H4 / H5 -- Passphrase & recovery-word material not zeroized *(closed, see the ledger)*
 
 **Crates:** `ambre-sync`, `ambre-bus`
 **Files:** `sync/lib.rs:1168-1176`, `bus/rest.rs:129-153`
@@ -326,7 +358,7 @@ bounded by the document's history) but it's a trivial amplification vector.
 
 ---
 
-### M6 -- Rate limiter fail-open + fixed-window burst *(carried over)*
+### M6 -- Rate limiter fail-open + fixed-window burst *(closed, see the ledger)*
 
 **Crate:** `ambre-server`
 **File:** `crates/ambre-server/src/middleware/rate_limit.rs:131-197`
@@ -360,15 +392,20 @@ default-deny. Keep `Any` only behind an explicit dev flag.
 
 ---
 
-### M7 -- OIDC discovery failure silently swallowed at startup *(carried over)*
-### M9 -- No HTTP timeouts in the Sync thread *(carried over)*
-### M10 -- `WsError` does not trigger reconnection *(carried over)*
+### M7 -- OIDC discovery failure silently swallowed at startup *(closed, see the ledger)*
+### M9 -- No HTTP timeouts in the Sync thread *(closed, see the ledger)*
+### M10 -- `WsError` does not trigger reconnection *(closed, see the ledger)*
 
-Unchanged from the previous audit; see that pass for the writeups and fixes.
+Carried from the previous audit, which holds the three writeups. Wave R4 closed all three.
 
 ---
 
 ## OTHER NOTABLE FINDINGS
+
+> **State, 2026-08-27.** These items carry no number, so no ledger row names them. Waves R3 to R6
+> closed or settled every one: two are a recorded WON'T DO -- pruning the clock hash, and the single
+> Argon2 lane -- and the channel and meeting handlers stay stubs while Murmure and Rendez-Vous are
+> `Todo/` specs. The reports below are kept as written.
 
 ### ambre-crypto
 
@@ -545,7 +582,7 @@ arbitrary user as `owner`; that new owner can then `revoke_from_document` /
 **Fix:** clamp the invitable role to `<= caller.role` (only an `owner` may grant
 `owner`).
 
-### N3 (LOW, carried) -- `setup_account` hardcoded placeholder identity
+### N3 (LOW, carried) -- `setup_account` hardcoded placeholder identity *(closed, see the ledger)*
 
 `routes/documents.rs:74-75` still creates accounts as `temp@ambre.app` / `"User"`,
 rate-limited only by the global auth tier. Unchanged from the previous pass's
@@ -553,11 +590,11 @@ rate-limited only by the global auth tier. Unchanged from the previous pass's
 
 ### Residuals from 2026-07-05 "OTHER NOTABLE FINDINGS" no wave covered
 
-Still open, re-confirmed: `signature.rs` positional (non-length-prefixed)
-`ciphertext || aad` transcript; `MasterSeed`/`DocumentKey` `Clone` (DocumentKey by
-design, documented); sync `AuthError` messages still carry crypto detail
-(`auth.rs` sends raw `e`); ephemeral remote-counter map has no eviction. None are
-exploitable in isolation; track them or explicitly close as WON'T-DO.
+Four were listed here, and wave R6 closed three of them: `signature::message` frames each field with
+its length, so the `ciphertext || aad` boundary is unambiguous; the sync `AuthError` messages carry
+two generic strings and log the cause at WARN; the ephemeral counter map evicts the least-active
+author at its ceiling. `MasterSeed` no longer derives `Clone`, and `DocumentKey` keeps it by design,
+documented on the type: each copy wipes itself on drop.
 
 ---
 
@@ -620,7 +657,7 @@ Security-first ordering, grouped into waves. Same `[ ]`/`[x]` convention as
 `ambre-roadmap.md` -- a wave is `[x]` only when every story under it is `[x]`.
 Each story carries its finding ID, the file to touch, and the concrete action.
 
-### Wave R0 -- Authorization holes (do first; small diffs, real bypasses)
+### Wave R0 -- Authorization holes (do first; small diffs, real bypasses) [x]
 
 - [x] **C4** -- `db::get_snapshot` takes `document_id` and filters
       `WHERE id = $1 AND document_id = $2`; `snapshot_download_url` passes the
@@ -645,7 +682,7 @@ Each story carries its finding ID, the file to touch, and the concrete action.
       hash only as an S3 key (never as an integrity proof) is acceptable given
       those guarantees. (`server/routes/media.rs`)
 
-### Wave R1 -- Peer-triggered DoS & live-session authz
+### Wave R1 -- Peer-triggered DoS & live-session authz [x]
 
 - [x] **H9** -- `decompress_zstd_bounded` streams the zstd body through a
       `Read::take(ceiling + 1)` cap and rejects with `DecompressTooLarge` before
