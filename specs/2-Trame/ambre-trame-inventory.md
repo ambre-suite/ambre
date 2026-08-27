@@ -36,10 +36,10 @@
 | `trame-grid-viewport` | A user scrolls a sheet of 100 000 rows. | partial | 12 | 4 |
 | `trame-import-export` | A user opens a table that came from somewhere else, and hands one back to someone who does not use Ambre. | partial | 24 | 3 |
 | `trame-number-formats` | A user picks Percent. | partial | 9 | 5 |
-| `trame-pdf-export` | A user prints a sheet to a file anyone can open, and the page looks like the screen. | partial | 7 |  |
 | `trame-selection` | A user points at a cell, sweeps a rectangle, adds a second one with a modifier, or takes a whole column from its header. | partial | 7 | 1 |
 | `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 15 | 3 |
 | `trame-sheets` | A workbook is several sheets, shown as tabs along the bottom edge. | partial | 11 | 4 |
 | `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 4 | 1 |
+| `trame-pdf-export` | Trame's half of the shared PDF export (`ambre-spec-pdf-export.md`): the persisted page setup, and the pagination that cuts a grid into pages. | design-only | 2 |  |
 
-**25 features: 11 implemented, 14 partial, 0 design-only. 275 invariant rows, 82 loose.**
+**25 features: 11 implemented, 13 partial, 1 design-only. 270 invariant rows, 82 loose.**

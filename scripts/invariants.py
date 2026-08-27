@@ -105,6 +105,15 @@ RETIRED = {
     "PROSE-022": "UNDO-001",
     "PROSE-FEAT-012": "UNDO-001",
     "PROSE-FEAT-032": "UNDO-002",
+    "TRAME-IO-020": "PDF-001",
+    "TRAME-IO-021": "PDF-001",
+    "TRAME-IO-024": "PDF-004",
+    "TRAME-UI-022": "PDF-003",
+    "TRAME-UI-023": "PDF-006",
+    "TOILE-IO-032": "PDF-002",
+    "TOILE-IO-033": "PDF-005",
+    "PROSE-IO-015": "PDF-001",
+    "PROSE-IO-030": "PDF-005",
 }
 
 # A finding that states no rule, and why. It is the `RETIRED` register applied to

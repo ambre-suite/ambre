@@ -31,7 +31,7 @@
 | `prose-lists` | Bulleted, numbered and checkbox lists, nested to any depth. | design-only | 5 |  |
 | `prose-page-rendering` | What a page looks like on the canvas: the text of every visible block, the caret, the selections, the remote carets and the inline highlights, painted from runs the engine shaped once. | design-only | 7 |  |
 | `prose-pagination` | A document becomes a sequence of measured pages. | design-only | 14 |  |
-| `prose-pdf-export` | A user hands the document to someone who has no Ambre: the same pages, in the same order, with the links still working and the words still selectable. | design-only | 6 |  |
+| `prose-pdf-export` | Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file reuses, the links it carries, and the language it declares. | design-only | 4 |  |
 | `prose-ruler` | A horizontal scale above the page, carrying three handles: where the first line starts, where the rest of the paragraph starts, and where every line ends. | design-only | 3 |  |
 | `prose-selection` | Where the caret is, where it goes, and what a drag selects. | design-only | 14 |  |
 | `prose-slash-command` | Type a slash at the start of an empty line and a short list appears: a heading, a list, a table, a page break. | design-only | 5 |  |
@@ -45,4 +45,4 @@
 | `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | design-only | 7 |  |
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | design-only | 4 |  |
 
-**28 features: 0 implemented, 0 partial, 28 design-only. 218 invariant rows, 0 loose.**
+**28 features: 0 implemented, 0 partial, 28 design-only. 216 invariant rows, 0 loose.**

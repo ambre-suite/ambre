@@ -233,6 +233,7 @@ owns the subsystem.
 | `[ ]` One media cache | V1 | every decoded image goes through one bounded cache, Toile and Trame included |
 | `[ ]` One repaint contract | V1 | Prose and Toile honour the shared partial-repaint modes instead of a parallel mechanism |
 | `[ ]` One high-density rule | V1 | the shared surface scales for a high-density display once, so no app spec restates it |
+| `[ ]` One selectable PDF | V1 | one glyph-to-character mapping in the shared surface, so exported text is selectable and searchable in every app instead of drawn shapes alone |
 | `[ ]` One undo bound | V1 | a bounded undo depth in every app. What merges into one step stays per app |
 | `[ ]` One keymap | V1 | the `Ctrl` and `Cmd` fold, both redo chords, and the legacy copy and paste chords, decided once |
 | `[ ]` One name for the moving selection end | V1 | `focus` everywhere; the fixed end stays `anchor`. A rename |

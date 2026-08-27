@@ -161,6 +161,7 @@ MIGRATED_DOCS = {
     "1-Foundations/ambre-spec-clipboard.md",
     "1-Foundations/ambre-spec-zoom.md",
     "1-Foundations/ambre-spec-undo.md",
+    "1-Foundations/ambre-spec-pdf-export.md",
     "1-Foundations/ambre-spec-commands.md",
     "1-Foundations/ambre-spec-design-tokens.md",
     "1-Foundations/ambre-spec-sync.md",

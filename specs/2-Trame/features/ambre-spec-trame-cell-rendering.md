@@ -73,7 +73,7 @@ on neither. The same code path therefore serves the canvas and, in time, a print
 a UI crate of its own, so the Logic thread reaches the same walk for a PDF page. Every entry point
 is generic over the `DrawSurface` of `ambre-spec-drawing-surface.md section 2`, and the caller chooses the
 implementation: the UI thread hands it a `WgpuSurface` in its frame, the PDF path a `KrillaSurface`
-(`features/ambre-spec-trame-pdf-export.md`, `TRAME-IO-021`).
+(`ambre-spec-pdf-export.md`, `PDF-001`).
 
 | Entry point | Draws |
 |---|---|

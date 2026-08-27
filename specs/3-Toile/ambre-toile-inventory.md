@@ -35,7 +35,7 @@
 | `toile-elements` | Everything on a board is an element: a note, a shape, a picture, a frame, a stroke. | partial | 9 | 3 |
 | `toile-embeds` | A board holds more than shapes: a web page, and another Ambre document a user edits in place without leaving the board. | partial | 19 | 4 |
 | `toile-import-export` | A user brings a drawing that came from somewhere else onto the board, and hands the board back as a file someone without Ambre can open. | partial | 22 | 7 |
-| `toile-pdf-export` | A user hands the deck to an audience that has no Ambre: one page per slide, showing exactly what the audience would have seen on screen. | partial | 6 | 4 |
+| `toile-pdf-export` | Toile's half of the shared PDF export (`ambre-spec-pdf-export.md`): one page per slide, and the clip that keeps a page to its own frame. | partial | 4 | 2 |
 | `toile-presence` | A user sees where the others are: a pointer in their colour, the elements they hold, the stroke they are drawing and the trail of their highlighter. | partial | 8 | 1 |
 | `toile-presentation` | A user orders a few frames into a deck and presents them: the board walks the audience from one frame to the next, animating what two neighbouring slides share. | partial | 15 | 4 |
 | `toile-reactions` | A user drops an emoji on a note and everyone sees it, with a count. | partial | 12 | 2 |
@@ -46,4 +46,4 @@
 | `toile-comments` | A user pins a remark on an element or on empty board, and a teammate answers it hours later. | design-only | 14 |  |
 | `toile-links` | A user makes an element clickable: it opens a web address, jumps the camera to a frame on this board, or opens another Ambre document. | design-only | 5 |  |
 
-**29 features: 15 implemented, 12 partial, 2 design-only. 249 invariant rows, 73 loose.**
+**29 features: 15 implemented, 12 partial, 2 design-only. 247 invariant rows, 71 loose.**

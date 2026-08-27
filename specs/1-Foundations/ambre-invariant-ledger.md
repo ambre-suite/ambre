@@ -15,15 +15,15 @@
   `qa-manual`. That number is the coverage debt of the product.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**1145 rows: 768 shipped, of which 355 loose. 377 unbuilt.**
+**1142 rows: 770 shipped, of which 356 loose. 372 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 132 | 149 | 132 |  | 413 |
-| `unverified` | 192 | 83 | 75 |  | 350 |
+| `verified` | 134 | 148 | 132 |  | 414 |
+| `unverified` | 195 | 83 | 73 |  | 351 |
 | `human-review` | 5 |  |  |  | 5 |
 | `qa-manual` |  |  |  |  | 0 |
-| `unimplemented` | 54 | 48 | 48 | 227 | 377 |
+| `unimplemented` | 55 | 44 | 48 | 225 | 372 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -53,6 +53,7 @@
 | `ambre-spec-message-bus.md` | 12 | 12 | 7 | 5 |  |
 | `ambre-spec-object-store.md` | 10 | 10 | 3 | 7 |  |
 | `ambre-spec-organizations.md` | 9 | 8 | 5 | 3 | 1 |
+| `ambre-spec-pdf-export.md` | 6 | 5 | 2 | 3 | 1 |
 | `ambre-spec-presence.md` | 10 | 7 | 5 | 2 | 3 |
 | `ambre-spec-render-assets.md` | 10 | 7 | 2 | 5 | 3 |
 | `ambre-spec-schema-version.md` | 10 | 3 | 0 | 3 | 7 |
@@ -83,7 +84,6 @@
 | `ambre-spec-trame-import-export.md` | 24 | 13 | 10 | 3 | 11 |
 | `ambre-spec-trame-named-ranges.md` | 8 | 8 | 3 | 5 |  |
 | `ambre-spec-trame-number-formats.md` | 9 | 8 | 3 | 5 | 1 |
-| `ambre-spec-trame-pdf-export.md` | 7 | 1 | 1 |  | 6 |
 | `ambre-spec-trame-resize.md` | 7 | 7 | 3 | 4 |  |
 | `ambre-spec-trame-rows-and-columns.md` | 12 | 12 | 9 | 3 |  |
 | `ambre-spec-trame-selection.md` | 7 | 6 | 5 | 1 | 1 |
@@ -107,7 +107,7 @@
 | `ambre-spec-toile-import-export.md` | 22 | 14 | 7 | 7 | 8 |
 | `ambre-spec-toile-media.md` | 9 | 9 | 5 | 4 |  |
 | `ambre-spec-toile-menus.md` | 7 | 7 | 5 | 2 |  |
-| `ambre-spec-toile-pdf-export.md` | 6 | 5 | 1 | 4 | 1 |
+| `ambre-spec-toile-pdf-export.md` | 4 | 3 | 1 | 2 | 1 |
 | `ambre-spec-toile-presence.md` | 8 | 4 | 3 | 1 | 4 |
 | `ambre-spec-toile-presentation.md` | 15 | 14 | 10 | 4 | 1 |
 | `ambre-spec-toile-reactions.md` | 12 | 9 | 7 | 2 | 3 |

@@ -170,7 +170,7 @@ on screen and in an exported page alike.
   timestamp, and the third field of its kind in this application.
 * **So every picture is a grey box.** The two absences compose: no download, no thumbnail read. A
   user who imports a photograph sees the placeholder, and so does the PDF export
-  (`features/ambre-spec-toile-pdf-export.md section 6`). The import path that produces the picture is
+  (`features/ambre-spec-toile-pdf-export.md section 5`). The import path that produces the picture is
   itself unreachable, which is why nobody has met the defect.
 * **An entry outlives its last element, and no rule says what should happen.** Deleting a picture
   drops the element and leaves the entry in `media` for good. Eager removal is wrong -- a delete is
