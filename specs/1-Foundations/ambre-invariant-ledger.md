@@ -15,15 +15,15 @@
   `qa-manual`. That number is the coverage debt of the product.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**1142 rows: 770 shipped, of which 356 loose. 372 unbuilt.**
+**1138 rows: 769 shipped, of which 356 loose. 369 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 134 | 148 | 132 |  | 414 |
-| `unverified` | 195 | 83 | 73 |  | 351 |
+| `verified` | 140 | 144 | 129 |  | 413 |
+| `unverified` | 196 | 82 | 73 |  | 351 |
 | `human-review` | 5 |  |  |  | 5 |
 | `qa-manual` |  |  |  |  | 0 |
-| `unimplemented` | 55 | 44 | 48 | 225 | 372 |
+| `unimplemented` | 55 | 44 | 48 | 222 | 369 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -42,6 +42,7 @@
 | `ambre-spec-design-tokens.md` | 4 | 4 | 1 | 3 |  |
 | `ambre-spec-docfile.md` | 11 | 8 | 7 | 1 | 3 |
 | `ambre-spec-drawing-surface.md` | 7 | 7 | 6 | 1 |  |
+| `ambre-spec-find.md` | 7 | 7 | 6 | 1 |  |
 | `ambre-spec-fixtures.md` | 26 | 17 | 13 | 4 | 9 |
 | `ambre-spec-frame.md` | 13 | 12 | 2 | 10 | 1 |
 | `ambre-spec-high-density.md` | 5 | 3 | 0 | 3 | 2 |
@@ -76,7 +77,7 @@
 | `ambre-spec-trame-clipboard.md` | 7 | 7 | 3 | 4 |  |
 | `ambre-spec-trame-context-menu.md` | 6 | 6 | 2 | 4 |  |
 | `ambre-spec-trame-engine.md` | 11 | 11 | 9 | 2 |  |
-| `ambre-spec-trame-find-replace.md` | 10 | 10 | 9 | 1 |  |
+| `ambre-spec-trame-find-replace.md` | 5 | 5 | 5 |  |  |
 | `ambre-spec-trame-formula-engine.md` | 26 | 25 | 23 | 2 | 1 |
 | `ambre-spec-trame-function-library.md` | 14 | 9 | 7 | 2 | 5 |
 | `ambre-spec-trame-grid-viewport.md` | 12 | 10 | 6 | 4 | 2 |
@@ -100,7 +101,7 @@
 | `ambre-spec-toile-elements.md` | 9 | 8 | 5 | 3 | 1 |
 | `ambre-spec-toile-embeds.md` | 19 | 16 | 12 | 4 | 3 |
 | `ambre-spec-toile-engine.md` | 14 | 14 | 9 | 5 |  |
-| `ambre-spec-toile-find.md` | 6 | 6 | 4 | 2 |  |
+| `ambre-spec-toile-find.md` | 3 | 3 | 1 | 2 |  |
 | `ambre-spec-toile-frames.md` | 5 | 5 | 3 | 2 |  |
 | `ambre-spec-toile-freehand.md` | 5 | 5 | 4 | 1 |  |
 | `ambre-spec-toile-groups.md` | 7 | 7 | 4 | 3 |  |

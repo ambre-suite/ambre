@@ -40,7 +40,7 @@ state (`features/ambre-spec-prose-engine.md section 3`) recording local transact
 **Where the caret lands.** The confirming change carries the delta, and the view reads the edit
 point from it: the caret moves there and a selection collapses to it (`PROSE-UI-045`).
 
-**What is one undo item.** A replace-all is one (`PROSE-FEAT-015`,
+**What is one undo item.** A replace-all is one (`ambre-spec-find.md`, `FIND-006`;
 `features/ambre-spec-prose-find-replace.md`); everything else is section 4.
 
 **Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.

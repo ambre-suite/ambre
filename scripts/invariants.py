@@ -114,6 +114,17 @@ RETIRED = {
     "TOILE-IO-033": "PDF-005",
     "PROSE-IO-015": "PDF-001",
     "PROSE-IO-030": "PDF-005",
+    "TRAME-UI-075": "FIND-002",
+    "TRAME-UI-076": "FIND-003",
+    "TRAME-UI-081": "FIND-007",
+    "TRAME-UI-082": "FIND-006",
+    "TRAME-UI-084": "FIND-001",
+    "TOILE-019": "FIND-001",
+    "TOILE-078": "FIND-002",
+    "TOILE-081": "FIND-003",
+    "PROSE-FEAT-015": "FIND-006",
+    "PROSE-FEAT-016": "FIND-001",
+    "PROSE-FEAT-037": "FIND-004",
 }
 
 # A finding that states no rule, and why. It is the `RETIRED` register applied to

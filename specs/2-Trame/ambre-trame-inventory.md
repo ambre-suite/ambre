@@ -20,7 +20,7 @@
 | `trame-clipboard` | A user selects a thousand rows, scrolls past them and copies. | implemented | 7 | 4 |
 | `trame-context-menu` | A user right-clicks. | implemented | 6 | 4 |
 | `trame-engine` | A user types into a cell, and every value that depended on it changes before the next frame. | implemented | 11 | 2 |
-| `trame-find-replace` | A user looks for a value in a sheet of 100 000 rows. | implemented | 10 | 1 |
+| `trame-find-replace` | A user looks for a value in a sheet of 100 000 rows. | implemented | 5 |  |
 | `trame-headers` | Two fixed strips name the rows and the columns, show where the selection is, and carry the gestures that act on a whole axis: take it, size it, reorder it, insert beside it. | implemented | 6 | 2 |
 | `trame-named-ranges` | A user gives a range a name -- `TOTAL` for `A1:A3` -- and writes `=SUM(TOTAL)` instead of the coordinates. | implemented | 8 | 5 |
 | `trame-resize` | A user drags the boundary of a column header and the column takes the new width, for everyone. | implemented | 7 | 4 |
@@ -42,4 +42,4 @@
 | `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 4 | 1 |
 | `trame-pdf-export` | Trame's half of the shared PDF export (`ambre-spec-pdf-export.md`): the persisted page setup, and the pagination that cuts a grid into pages. | design-only | 2 |  |
 
-**25 features: 11 implemented, 13 partial, 1 design-only. 270 invariant rows, 82 loose.**
+**25 features: 11 implemented, 13 partial, 1 design-only. 265 invariant rows, 81 loose.**

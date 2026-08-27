@@ -21,7 +21,7 @@
 | `prose-comments` | A discussion attached to a passage of the text. | design-only | 11 |  |
 | `prose-cross-references` | A pointer from one place in the document to another: "see page 4", "see section 2.1", or a label the author chose. | design-only | 5 |  |
 | `prose-engine` | An author types a word and every collaborator reads it. | design-only | 14 |  |
-| `prose-find-replace` | Searching the document, walking the matches, and replacing one or all of them. | design-only | 7 |  |
+| `prose-find-replace` | Searching the document, walking the matches, and replacing one or all of them. | design-only | 4 |  |
 | `prose-footnotes` | A note at the foot of the page, called from a mark in the text. | design-only | 4 |  |
 | `prose-headers-footers` | A band at the top of every page and a band at the bottom, each holding ordinary text. | design-only | 8 |  |
 | `prose-headings` | Six levels of section title. | design-only | 3 |  |
@@ -45,4 +45,4 @@
 | `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | design-only | 7 |  |
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | design-only | 4 |  |
 
-**28 features: 0 implemented, 0 partial, 28 design-only. 216 invariant rows, 0 loose.**
+**28 features: 0 implemented, 0 partial, 28 design-only. 213 invariant rows, 0 loose.**

@@ -20,7 +20,7 @@
 | `toile-board-rendering` | The board paints what the Logic thread says is visible, in the order it says, and nothing else. | implemented | 10 | 2 |
 | `toile-clipboard` | A user copies a selection and pastes it, on this board or another, in this tab or another. | implemented | 6 | 1 |
 | `toile-engine` | A user drags a note across an endless plane, and every collaborator sees it move. | implemented | 14 | 5 |
-| `toile-find` | A user types a word and the board takes them to it, wherever it is -- including far off screen. | implemented | 6 | 2 |
+| `toile-find` | A user types a word and the board takes them to it, wherever it is -- including far off screen. | implemented | 3 | 2 |
 | `toile-frames` | A frame is a titled region of the board. | implemented | 5 | 2 |
 | `toile-freehand` | A user drags with the pen and a line follows the pointer. | implemented | 5 | 1 |
 | `toile-groups` | A user selects several elements and binds them: from then on one click takes the set, and one drag moves it. | implemented | 7 | 3 |
@@ -46,4 +46,4 @@
 | `toile-comments` | A user pins a remark on an element or on empty board, and a teammate answers it hours later. | design-only | 14 |  |
 | `toile-links` | A user makes an element clickable: it opens a web address, jumps the camera to a frame on this board, or opens another Ambre document. | design-only | 5 |  |
 
-**29 features: 15 implemented, 12 partial, 2 design-only. 247 invariant rows, 71 loose.**
+**29 features: 15 implemented, 12 partial, 2 design-only. 244 invariant rows, 71 loose.**

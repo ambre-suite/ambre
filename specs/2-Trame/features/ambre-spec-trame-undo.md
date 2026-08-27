@@ -63,7 +63,7 @@ The engine field is the shared `undo_manager` (`ambre-spec-undo.md section 3`).
 | a style applied to a whole selection | one (`TRAME-093`) |
 | inserting a row, a column, or a sort | one each |
 | applying or clearing a shared filter | one (`TRAME-FEAT-007`) |
-| replacing every match in the sheet | one (`TRAME-UI-082`) |
+| replacing every match in the sheet | one (`ambre-spec-find.md`, `FIND-006`) |
 | activating a personal filter view | none: it changes no document (`TRAME-FEAT-016`) |
 | adding or removing a validation or a protection | none: a rule over the cells is configuration, not data (`features/ambre-spec-trame-cell-editing.md section 3`) |
 | deleting a selection of five rows | five, and the rule says one (`TRAME-088`) |
