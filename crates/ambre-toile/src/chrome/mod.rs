@@ -78,7 +78,7 @@ pub fn new_doc_label() -> &'static str {
 /// Every chord comes from the registry, which declares what each affordance
 /// announces. Only these two families are routed through the keymap: binding
 /// the board chords here too would decode them twice, once here and once on the
-/// canvas (`ambre-spec-commands.md` section 5, and the `One keymap` Story).
+/// canvas (`ambre-spec-commands.md` section 5).
 pub fn bind_keys(keymap: &mut Keymap) {
     for id in [FIND, crate::ui::commands::PALETTE] {
         if let Some(chord) = crate::ui::commands::chord(id) {

@@ -18,11 +18,13 @@
 // routes it. Toile binds Ctrl+F and the bare tool letters in the launcher
 // keymap; the board chords (undo, redo, clipboard, nudge) are decoded
 // canvas-side in `ToileView::handle_key`, and the menu bar displays them.
-// `One keymap` is where the split is decided.
+// Undo, Redo and the three clipboard intents take the chord lists the shared
+// crate declares, so the two applications announce the same chords for the same
+// operation and Ctrl+Y redoes on both.
 // ============================================================================
 
 use ambre_commands::{
-    Command, CommandCategory, CommandId, IconId, Key, KeyBinding, Locale, Modifiers,
+    Command, CommandCategory, CommandId, IconId, Key, KeyBinding, Locale, Modifiers, shared,
 };
 
 use crate::ui::find::FIND;
@@ -38,7 +40,7 @@ use crate::ui::palette;
 /// from one line each is what makes the single declaration site real -- a second
 /// label for a command cannot be written without a second line here.
 macro_rules! describe {
-    ($($title_fn:ident: $id:expr, $label:literal, $icon:expr, $chord:expr, $category:expr;)*) => {
+    ($($title_fn:ident: $id:expr, $label:literal, $icon:expr, $chords:expr, $category:expr;)*) => {
         // The generated title functions. Named after the identities, so the
         // module carries the case exemption rather than every call site.
         #[allow(non_snake_case)]
@@ -57,7 +59,7 @@ macro_rules! describe {
                 id: $id,
                 title: titles::$title_fn,
                 icon: $icon,
-                default_keybinding: $chord,
+                keybindings: $chords,
                 category: $category,
             },)*
         ];
@@ -94,48 +96,48 @@ pub const PALETTE: CommandId = CommandId("toile.palette.open");
 // tool buttons of `chrome::palette`. Nine of them were written twice, once for
 // the menu bar and once for the right-click menu.
 describe! {
-    CUT: menu::CUT, "Cut", Some(IconId("content-cut")), Some(KeyBinding::ctrl('x')), CLIPBOARD;
-    COPY: menu::COPY, "Copy", Some(IconId("content-copy")), Some(KeyBinding::ctrl('c')), CLIPBOARD;
-    PASTE: menu::PASTE, "Paste", Some(IconId("content-paste")), Some(KeyBinding::ctrl('v')), CLIPBOARD;
-    DUPLICATE: menu::DUPLICATE, "Duplicate", Some(IconId("content-duplicate")), Some(KeyBinding::ctrl('d')), CLIPBOARD;
-    DELETE: menu::DELETE, "Delete", Some(IconId("delete")), Some(DEL), CLIPBOARD;
-    GROUP: menu::GROUP, "Group", Some(IconId("group")), Some(KeyBinding::ctrl('g')), OBJECT;
-    UNGROUP: menu::UNGROUP, "Ungroup", Some(IconId("ungroup")), Some(KeyBinding::ctrl_shift('g')), OBJECT;
-    BRING_FRONT: menu::BRING_FRONT, "Bring to front", Some(IconId("arrange-bring-to-front")), None, OBJECT;
-    FORWARD: menu::FORWARD, "Bring forward", Some(IconId("arrange-bring-forward")), None, OBJECT;
-    BACKWARD: menu::BACKWARD, "Send backward", Some(IconId("arrange-send-backward")), None, OBJECT;
-    SEND_BACK: menu::SEND_BACK, "Send to back", Some(IconId("arrange-send-to-back")), None, OBJECT;
-    LOCK: menu::LOCK, "Lock", Some(IconId("lock")), None, OBJECT;
-    UNLOCK: menu::UNLOCK, "Unlock", Some(IconId("lock-open-variant")), None, OBJECT;
-    ADD_TO_FRAME: menu::ADD_TO_FRAME, "Add to frame", Some(IconId("image-frame")), None, OBJECT;
-    REMOVE_FROM_FRAME: menu::REMOVE_FROM_FRAME, "Remove from frame", Some(IconId("selection-drag")), None, OBJECT;
-    SELECT_ALL: menu::SELECT_ALL, "Select all", Some(IconId("select-all")), Some(KeyBinding::ctrl('a')), SELECTION;
-    REACT_THUMBSUP: menu::REACT_THUMBSUP, "React: thumbs up", Some(IconId("thumb-up")), None, REACTION;
-    REACT_HEART: menu::REACT_HEART, "React: heart", Some(IconId("heart")), None, REACTION;
-    REACT_CHECK: menu::REACT_CHECK, "React: check", Some(IconId("check")), None, REACTION;
-    REACT_PARTY: menu::REACT_PARTY, "React: celebrate", Some(IconId("party-popper")), None, REACTION;
-    REACT_CLEAR: menu::REACT_CLEAR, "Clear my reaction", Some(IconId("close")), None, REACTION;
-    UNDO: menu_bar::UNDO, "Undo", None, Some(KeyBinding::ctrl('z')), HISTORY;
-    REDO: menu_bar::REDO, "Redo", None, Some(KeyBinding::ctrl_shift('z')), HISTORY;
-    ZOOM_IN: menu_bar::ZOOM_IN, "Zoom in", Some(IconId("plus")), None, VIEW;
-    ZOOM_OUT: menu_bar::ZOOM_OUT, "Zoom out", Some(IconId("minus")), None, VIEW;
-    ZOOM_RESET: menu_bar::ZOOM_RESET, "Zoom to 100%", None, None, VIEW;
-    ZOOM_FIT: menu_bar::ZOOM_FIT, "Fit to content", Some(IconId("fit-to-screen-outline")), None, VIEW;
-    ZOOM_TO_SELECTION: menu_bar::ZOOM_TO_SELECTION, "Zoom to selection", Some(IconId("selection-search")), None, VIEW;
-    POINTER_AUTO: menu_bar::POINTER_AUTO, "Pointer: automatic", None, None, VIEW;
-    POINTER_MOUSE: menu_bar::POINTER_MOUSE, "Pointer: mouse (wheel zooms)", None, None, VIEW;
-    POINTER_TRACKPAD: menu_bar::POINTER_TRACKPAD, "Pointer: trackpad (wheel pans)", None, None, VIEW;
-    PRESENT_START: menu_bar::PRESENT, "Start presentation", None, None, PRESENT;
-    TOOL_SELECT: palette::TOOL_SELECT, "Select", Some(IconId("cursor-default")), Some(letter('v')), TOOL;
-    TOOL_PEN: palette::TOOL_PEN, "Pen", Some(IconId("vector-polyline")), Some(letter('p')), TOOL;
-    TOOL_SHAPE: palette::TOOL_SHAPE, "Shape", Some(IconId("shape-outline")), Some(letter('r')), TOOL;
-    TOOL_CONNECTOR: palette::TOOL_CONNECTOR, "Connector", Some(IconId("vector-line")), Some(letter('c')), TOOL;
-    TOOL_DRAW: palette::TOOL_DRAW, "Draw", Some(IconId("draw")), Some(letter('d')), TOOL;
-    TOOL_STICKY: palette::TOOL_STICKY, "Sticky note", Some(IconId("note-outline")), Some(letter('n')), TOOL;
-    TOOL_TEXT: palette::TOOL_TEXT, "Text", Some(IconId("format-text")), Some(letter('t')), TOOL;
-    TOOL_HAND: palette::TOOL_HAND, "Hand", Some(IconId("hand-back-right")), Some(letter('h')), TOOL;
-    FIND_OPEN: FIND, "Find", None, Some(KeyBinding::ctrl('f')), FIND_REPLACE;
-    PALETTE_OPEN: PALETTE, "Command palette", None, Some(KeyBinding::ctrl('k')), GENERAL;
+    CUT: menu::CUT, "Cut", Some(IconId("content-cut")), shared::CUT_CHORDS, CLIPBOARD;
+    COPY: menu::COPY, "Copy", Some(IconId("content-copy")), shared::COPY_CHORDS, CLIPBOARD;
+    PASTE: menu::PASTE, "Paste", Some(IconId("content-paste")), shared::PASTE_CHORDS, CLIPBOARD;
+    DUPLICATE: menu::DUPLICATE, "Duplicate", Some(IconId("content-duplicate")), &[KeyBinding::primary('d')], CLIPBOARD;
+    DELETE: menu::DELETE, "Delete", Some(IconId("delete")), &[DEL], CLIPBOARD;
+    GROUP: menu::GROUP, "Group", Some(IconId("group")), &[KeyBinding::primary('g')], OBJECT;
+    UNGROUP: menu::UNGROUP, "Ungroup", Some(IconId("ungroup")), &[KeyBinding::primary_shift('g')], OBJECT;
+    BRING_FRONT: menu::BRING_FRONT, "Bring to front", Some(IconId("arrange-bring-to-front")), &[], OBJECT;
+    FORWARD: menu::FORWARD, "Bring forward", Some(IconId("arrange-bring-forward")), &[], OBJECT;
+    BACKWARD: menu::BACKWARD, "Send backward", Some(IconId("arrange-send-backward")), &[], OBJECT;
+    SEND_BACK: menu::SEND_BACK, "Send to back", Some(IconId("arrange-send-to-back")), &[], OBJECT;
+    LOCK: menu::LOCK, "Lock", Some(IconId("lock")), &[], OBJECT;
+    UNLOCK: menu::UNLOCK, "Unlock", Some(IconId("lock-open-variant")), &[], OBJECT;
+    ADD_TO_FRAME: menu::ADD_TO_FRAME, "Add to frame", Some(IconId("image-frame")), &[], OBJECT;
+    REMOVE_FROM_FRAME: menu::REMOVE_FROM_FRAME, "Remove from frame", Some(IconId("selection-drag")), &[], OBJECT;
+    SELECT_ALL: menu::SELECT_ALL, "Select all", Some(IconId("select-all")), &[KeyBinding::primary('a')], SELECTION;
+    REACT_THUMBSUP: menu::REACT_THUMBSUP, "React: thumbs up", Some(IconId("thumb-up")), &[], REACTION;
+    REACT_HEART: menu::REACT_HEART, "React: heart", Some(IconId("heart")), &[], REACTION;
+    REACT_CHECK: menu::REACT_CHECK, "React: check", Some(IconId("check")), &[], REACTION;
+    REACT_PARTY: menu::REACT_PARTY, "React: celebrate", Some(IconId("party-popper")), &[], REACTION;
+    REACT_CLEAR: menu::REACT_CLEAR, "Clear my reaction", Some(IconId("close")), &[], REACTION;
+    UNDO: menu_bar::UNDO, "Undo", None, shared::UNDO_CHORDS, HISTORY;
+    REDO: menu_bar::REDO, "Redo", None, shared::REDO_CHORDS, HISTORY;
+    ZOOM_IN: menu_bar::ZOOM_IN, "Zoom in", Some(IconId("plus")), &[], VIEW;
+    ZOOM_OUT: menu_bar::ZOOM_OUT, "Zoom out", Some(IconId("minus")), &[], VIEW;
+    ZOOM_RESET: menu_bar::ZOOM_RESET, "Zoom to 100%", None, &[], VIEW;
+    ZOOM_FIT: menu_bar::ZOOM_FIT, "Fit to content", Some(IconId("fit-to-screen-outline")), &[], VIEW;
+    ZOOM_TO_SELECTION: menu_bar::ZOOM_TO_SELECTION, "Zoom to selection", Some(IconId("selection-search")), &[], VIEW;
+    POINTER_AUTO: menu_bar::POINTER_AUTO, "Pointer: automatic", None, &[], VIEW;
+    POINTER_MOUSE: menu_bar::POINTER_MOUSE, "Pointer: mouse (wheel zooms)", None, &[], VIEW;
+    POINTER_TRACKPAD: menu_bar::POINTER_TRACKPAD, "Pointer: trackpad (wheel pans)", None, &[], VIEW;
+    PRESENT_START: menu_bar::PRESENT, "Start presentation", None, &[], PRESENT;
+    TOOL_SELECT: palette::TOOL_SELECT, "Select", Some(IconId("cursor-default")), &[letter('v')], TOOL;
+    TOOL_PEN: palette::TOOL_PEN, "Pen", Some(IconId("vector-polyline")), &[letter('p')], TOOL;
+    TOOL_SHAPE: palette::TOOL_SHAPE, "Shape", Some(IconId("shape-outline")), &[letter('r')], TOOL;
+    TOOL_CONNECTOR: palette::TOOL_CONNECTOR, "Connector", Some(IconId("vector-line")), &[letter('c')], TOOL;
+    TOOL_DRAW: palette::TOOL_DRAW, "Draw", Some(IconId("draw")), &[letter('d')], TOOL;
+    TOOL_STICKY: palette::TOOL_STICKY, "Sticky note", Some(IconId("note-outline")), &[letter('n')], TOOL;
+    TOOL_TEXT: palette::TOOL_TEXT, "Text", Some(IconId("format-text")), &[letter('t')], TOOL;
+    TOOL_HAND: palette::TOOL_HAND, "Hand", Some(IconId("hand-back-right")), &[letter('h')], TOOL;
+    FIND_OPEN: FIND, "Find", None, &[KeyBinding::primary('f')], FIND_REPLACE;
+    PALETTE_OPEN: PALETTE, "Command palette", None, &[KeyBinding::primary('k')], GENERAL;
 }
 
 /// The label a view shows for `id`, in `locale`. `None` for a command Toile does
@@ -155,7 +157,7 @@ pub fn icon(id: CommandId) -> Option<IconId> {
 /// The chord `id` announces, if it has one. What a menu displays beside a row;
 /// which chords the launcher keymap actually routes is `chrome::bind_keys`.
 pub fn chord(id: CommandId) -> Option<KeyBinding> {
-    ambre_commands::find(COMMANDS, id).and_then(|c| c.default_keybinding)
+    ambre_commands::find(COMMANDS, id).and_then(|c| c.chord())
 }
 
 #[cfg(test)]
@@ -183,6 +185,44 @@ mod tests {
         }
     }
 
+    /// The three clipboard intents are described under the shared identities
+    /// and announce the shared chords, the modern one and the legacy one, so a
+    /// copy is one command in every application (`UI-THREAD-011`).
+    #[test]
+    fn the_clipboard_intents_carry_the_shared_identity() {
+        let intents = [
+            (shared::CUT, shared::CUT_CHORDS),
+            (shared::COPY, shared::COPY_CHORDS),
+            (shared::PASTE, shared::PASTE_CHORDS),
+        ];
+        for (id, chords) in intents {
+            let cmd = ambre_commands::find(COMMANDS, id).expect("described");
+            assert_eq!(cmd.keybindings, chords, "{id:?} announces both chords");
+        }
+        // And no keymap seeded from this table resolves one of them: the
+        // browser raises the event itself.
+        let keymap = ambre_commands::Keymap::from_commands([COMMANDS]);
+        for (_, chords) in intents {
+            for chord in chords {
+                assert_eq!(
+                    keymap.resolve(*chord),
+                    None,
+                    "{chord} must reach no command"
+                );
+            }
+        }
+    }
+
+    /// Redo announces Ctrl+Shift+Z and answers Ctrl+Y as well, the pair the
+    /// shared crate decides for every application. The board decodes it
+    /// canvas-side, so the table is where Toile carries the decision.
+    #[test]
+    fn redo_announces_both_chords() {
+        let redo = ambre_commands::find(COMMANDS, menu_bar::REDO).expect("described");
+        assert_eq!(redo.keybindings, shared::REDO_CHORDS);
+        assert_eq!(redo.chord(), Some(KeyBinding::primary_shift('z')));
+    }
+
     /// Every identity the three surfaces expose is described. An identity with
     /// no description is a row no view can label.
     #[test]
@@ -206,7 +246,7 @@ mod tests {
     fn declared_chords_are_distinct() {
         let chords: Vec<KeyBinding> = COMMANDS
             .iter()
-            .filter_map(|c| c.default_keybinding)
+            .flat_map(|c| c.keybindings.iter().copied())
             .collect();
         for (i, chord) in chords.iter().enumerate() {
             assert!(

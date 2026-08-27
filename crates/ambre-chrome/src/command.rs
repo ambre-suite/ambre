@@ -91,15 +91,15 @@ impl CommandStates {
 
 /// Translate a DOM `keydown`/`keyup` event into a [`KeyBinding`].
 ///
+/// This is where the control key and the command key fold into the primary
+/// accelerator: past this point one chord serves every platform, and no table
+/// can name one machine's accelerator (`ambre-spec-commands.md`,
+/// `UI-THREAD-028`).
+///
 /// Returns `None` for keys not modelled by [`Key`] (dead keys, IME, unknown
 /// named keys), which the caller treats as "no command chord".
 pub fn keybinding_from_event(ev: &web_sys::KeyboardEvent) -> Option<KeyBinding> {
-    let mods = Modifiers {
-        ctrl: ev.ctrl_key(),
-        alt: ev.alt_key(),
-        shift: ev.shift_key(),
-        meta: ev.meta_key(),
-    };
+    let mods = Modifiers::from_event(ev.ctrl_key(), ev.alt_key(), ev.shift_key(), ev.meta_key());
     Some(KeyBinding::new(mods, key_from_dom(&ev.key())?))
 }
 
@@ -112,6 +112,7 @@ fn key_from_dom(s: &str) -> Option<Key> {
         "Backspace" => Key::Backspace,
         "Delete" | "Del" => Key::Delete,
         " " | "Spacebar" => Key::Space,
+        "Insert" => Key::Insert,
         "ArrowUp" => Key::ArrowUp,
         "ArrowDown" => Key::ArrowDown,
         "ArrowLeft" => Key::ArrowLeft,
@@ -159,6 +160,7 @@ mod tests {
         assert_eq!(key_from_dom("Delete"), Some(Key::Delete));
         assert_eq!(key_from_dom(" "), Some(Key::Space));
         assert_eq!(key_from_dom("Spacebar"), Some(Key::Space));
+        assert_eq!(key_from_dom("Insert"), Some(Key::Insert));
         assert_eq!(key_from_dom("ArrowUp"), Some(Key::ArrowUp));
         assert_eq!(key_from_dom("PageDown"), Some(Key::PageDown));
     }

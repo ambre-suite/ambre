@@ -52,8 +52,63 @@ pub struct Command {
     /// without the registry owning a translation table.
     pub title: fn(&Locale) -> String,
     pub icon: Option<IconId>,
-    pub default_keybinding: Option<KeyBinding>,
+    /// Every chord the command answers, the announced one first. A slice and
+    /// not one chord because a command may answer two: Redo takes
+    /// Ctrl+Shift+Z and Ctrl+Y, and each clipboard intent takes a modern chord
+    /// and a legacy one. Empty for a command no chord triggers.
+    pub keybindings: &'static [KeyBinding],
     pub category: CommandCategory,
+}
+
+impl Command {
+    /// The chord a surface announces beside the command: the first it
+    /// declares. `None` for a command no chord triggers.
+    pub fn chord(&self) -> Option<KeyBinding> {
+        self.keybindings.first().copied()
+    }
+}
+
+/// What every application shares, decided once: the clipboard identities and
+/// the chords the universal operations answer (`ambre-spec-commands.md`,
+/// `UI-THREAD-011`).
+pub mod shared {
+    use super::{CommandId, Key, KeyBinding, Modifiers};
+
+    /// The clipboard identities. One intent, one identity, in every
+    /// application: a menu entry, a toolbar button and the browser's own event
+    /// name the same command, so a paste is one operation whichever raised it.
+    /// They carry no application prefix because they belong to no application.
+    pub const CUT: CommandId = CommandId("clipboard.cut");
+    pub const COPY: CommandId = CommandId("clipboard.copy");
+    pub const PASTE: CommandId = CommandId("clipboard.paste");
+
+    /// The identities the browser services itself. It raises `cut`, `copy` and
+    /// `paste` with the clipboard attached, on the modern and the legacy chords
+    /// alike, so a keymap declares those chords and decodes none of them
+    /// (`ambre-spec-text-input.md`, `CHROME-021`).
+    pub const BROWSER_SERVICED: [CommandId; 3] = [CUT, COPY, PASTE];
+
+    /// Undo answers one chord.
+    pub const UNDO_CHORDS: &[KeyBinding] = &[KeyBinding::primary('z')];
+
+    /// Redo answers two: Ctrl+Shift+Z, and Ctrl+Y after Excel and Sheets. Both
+    /// reach the same identity, in every application.
+    pub const REDO_CHORDS: &[KeyBinding] =
+        &[KeyBinding::primary_shift('z'), KeyBinding::primary('y')];
+
+    /// Cut: the modern chord, then the legacy one.
+    pub const CUT_CHORDS: &[KeyBinding] =
+        &[KeyBinding::primary('x'), KeyBinding::shift(Key::Delete)];
+
+    /// Copy: the modern chord, then the legacy one.
+    pub const COPY_CHORDS: &[KeyBinding] = &[
+        KeyBinding::primary('c'),
+        KeyBinding::new(Modifiers::PRIMARY, Key::Insert),
+    ];
+
+    /// Paste: the modern chord, then the legacy one.
+    pub const PASTE_CHORDS: &[KeyBinding] =
+        &[KeyBinding::primary('v'), KeyBinding::shift(Key::Insert)];
 }
 
 /// Runtime state of a command, derived from app state on each interrogation
@@ -107,8 +162,8 @@ pub fn find(commands: &[Command], id: CommandId) -> Option<&Command> {
 
 /// Resolves keyboard chords to commands: a `HashMap<KeyBinding, CommandId>`.
 ///
-/// Seeded from each command's `default_keybinding`; the chrome may later
-/// rebind entries from user preferences via [`Keymap::bind`].
+/// Seeded from each command's declared chords; the chrome may later rebind
+/// entries from user preferences via [`Keymap::bind`].
 #[derive(Default)]
 pub struct Keymap {
     map: HashMap<KeyBinding, CommandId>,
@@ -119,19 +174,32 @@ impl Keymap {
         Self::default()
     }
 
-    /// Build from one or more command tables, registering every command that
-    /// declares a `default_keybinding`. Later tables override earlier ones on
-    /// a chord collision; same-table collisions keep the last seen.
+    /// Build from one or more command tables. Later tables override earlier
+    /// ones on a chord collision; same-table collisions keep the last seen.
     pub fn from_commands<'a>(tables: impl IntoIterator<Item = &'a [Command]>) -> Self {
         let mut km = Self::new();
         for table in tables {
-            for cmd in table {
-                if let Some(kb) = cmd.default_keybinding {
-                    km.map.insert(kb, cmd.id);
-                }
-            }
+            km.bind_table(table);
         }
         km
+    }
+
+    /// Register every chord a table declares, except the chords of the
+    /// identities the browser services itself: the table announces those and
+    /// the keymap never resolves them, so no path decodes a copy twice
+    /// (`ambre-spec-commands.md`, `UI-THREAD-011`).
+    ///
+    /// The one seeding path an application calls, so the exception holds
+    /// wherever a table is loaded.
+    pub fn bind_table(&mut self, commands: &[Command]) {
+        for cmd in commands
+            .iter()
+            .filter(|c| !shared::BROWSER_SERVICED.contains(&c.id))
+        {
+            for &kb in cmd.keybindings {
+                self.map.insert(kb, cmd.id);
+            }
+        }
     }
 
     /// Bind (or rebind) a chord to a command. Returns the command it displaced,
@@ -184,14 +252,41 @@ mod tests {
             id: CommandId("prose.format.bold"),
             title: bold_title,
             icon: Some(IconId("bold")),
-            default_keybinding: Some(KeyBinding::ctrl('b')),
+            keybindings: &[KeyBinding::primary('b')],
             category: FORMAT,
         },
         Command {
             id: CommandId("prose.format.italic"),
             title: italic_title,
             icon: Some(IconId("italic")),
-            default_keybinding: Some(KeyBinding::ctrl('i')),
+            keybindings: &[KeyBinding::primary('i')],
+            category: FORMAT,
+        },
+    ];
+
+    /// A table shaped like a real application's clipboard and history rows: the
+    /// shared identities and the shared chords, which is what every table
+    /// declares once this crate owns them.
+    const EDITING: &[Command] = &[
+        Command {
+            id: CommandId("prose.history.redo"),
+            title: bold_title,
+            icon: None,
+            keybindings: shared::REDO_CHORDS,
+            category: FORMAT,
+        },
+        Command {
+            id: shared::COPY,
+            title: bold_title,
+            icon: None,
+            keybindings: shared::COPY_CHORDS,
+            category: FORMAT,
+        },
+        Command {
+            id: shared::PASTE,
+            title: bold_title,
+            icon: None,
+            keybindings: shared::PASTE_CHORDS,
             category: FORMAT,
         },
     ];
@@ -209,28 +304,56 @@ mod tests {
         let km = Keymap::from_commands([COMMANDS]);
         assert_eq!(km.len(), 2);
         assert_eq!(
-            km.resolve(KeyBinding::ctrl('b')),
+            km.resolve(KeyBinding::primary('b')),
             Some(CommandId("prose.format.bold"))
         );
         // Shift state matters: Ctrl+Shift+B is not bound.
-        assert_eq!(km.resolve(KeyBinding::ctrl_shift('b')), None);
-        assert_eq!(km.resolve(KeyBinding::ctrl('z')), None);
+        assert_eq!(km.resolve(KeyBinding::primary_shift('b')), None);
+        assert_eq!(km.resolve(KeyBinding::primary('z')), None);
     }
 
     #[test]
     fn rebinding_reports_the_displaced_command() {
         let mut km = Keymap::from_commands([COMMANDS]);
-        let displaced = km.bind(KeyBinding::ctrl('b'), CommandId("prose.format.italic"));
+        let displaced = km.bind(KeyBinding::primary('b'), CommandId("prose.format.italic"));
         assert_eq!(displaced, Some(CommandId("prose.format.bold")));
         assert_eq!(
-            km.resolve(KeyBinding::ctrl('b')),
+            km.resolve(KeyBinding::primary('b')),
             Some(CommandId("prose.format.italic"))
         );
         assert_eq!(
-            km.unbind(KeyBinding::ctrl('b')),
+            km.unbind(KeyBinding::primary('b')),
             Some(CommandId("prose.format.italic"))
         );
-        assert!(km.resolve(KeyBinding::ctrl('b')).is_none());
+        assert!(km.resolve(KeyBinding::primary('b')).is_none());
+    }
+
+    #[test]
+    fn both_redo_chords_reach_the_same_command() {
+        let km = Keymap::from_commands([EDITING]);
+        let redo = Some(CommandId("prose.history.redo"));
+        assert_eq!(km.resolve(KeyBinding::primary_shift('z')), redo);
+        assert_eq!(km.resolve(KeyBinding::primary('y')), redo);
+    }
+
+    #[test]
+    fn the_keymap_binds_no_browser_serviced_chord() {
+        // The table declares the four clipboard chords, so a surface announces
+        // them; the keymap resolves none, so the browser's own event stays the
+        // one path (`UI-THREAD-011`, `CHROME-021`).
+        let km = Keymap::from_commands([EDITING]);
+        for chord in shared::COPY_CHORDS.iter().chain(shared::PASTE_CHORDS) {
+            assert_eq!(km.resolve(*chord), None, "{chord} must reach no command");
+        }
+        assert_eq!(km.len(), shared::REDO_CHORDS.len());
+    }
+
+    #[test]
+    fn a_command_announces_the_first_chord_it_declares() {
+        let redo = find(EDITING, CommandId("prose.history.redo")).unwrap();
+        assert_eq!(redo.chord(), Some(KeyBinding::primary_shift('z')));
+        let bold = find(COMMANDS, CommandId("prose.format.bold")).unwrap();
+        assert_eq!(bold.chord(), Some(KeyBinding::primary('b')));
     }
 
     #[test]

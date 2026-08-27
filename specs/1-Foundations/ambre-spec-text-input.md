@@ -27,16 +27,17 @@ other five documents of the DOM side.
 | `CHROME-018` | While a composition is running, the buffer MUST NOT be read: the preview MUST come from the composition events. | this spec section 2 | none. A shared flag is raised on the first composition event and lowered on the last, and the buffer listener returns early while it is up. Nothing asserts the two stay in step, and a stuck flag silences typing altogether | unverified |
 | `CHROME-019` | A composition MUST end by committing its final text and clearing the preview. | this spec section 2; `ambre-spec-text-editor.md`, `CANVAS-040` | none. The last composition event forwards the final run and the editing core replaces the preview with it. No test drives an input method, in any tier | unverified |
 | `CHROME-020` | A key aimed at another editable element MUST NOT reach the content. | this spec section 2 | none. The document listener tests the event's target against the pipe and against the editable tags, and returns early. Nothing refuses a listener added later without that test, which is a formula-bar Enter committing the cell twice | unverified |
-| `CHROME-021` | A copy, a cut and a paste MUST be serviced as the events the browser already sends; the chords MUST NOT be decoded again. | this spec section 2; `ambre-spec-clipboard.md` | none. Three listeners sit on the pipe and no chord for them is bound in the keymap, so the legacy chords work for free. Nothing refuses a fourth binding that would double-handle a paste | unverified |
+| `CHROME-021` | A copy, a cut and a paste MUST be serviced as the events the browser already sends; the chords MUST NOT be decoded again. | this spec section 2; `ambre-spec-clipboard.md` | `ambre_commands::tests::the_keymap_binds_no_browser_serviced_chord`, `ambre_trame::ui::commands::tests::the_keymap_binds_no_clipboard_chord`, `ambre_toile::ui::commands::tests::the_clipboard_intents_carry_the_shared_identity`. The seeding refuses the three identities, so a table that declares their chords still binds none of them and a second decoder fails the belt. That the three listeners sit on the pipe is held by no test | verified |
 
 * **Budget.** the keystroke-to-draft row of `ambre-spec-budgets.md section 1`. This element
   is the first hop of that path, and the figure is measured nowhere.
 * **Boundary.** the operating system clipboard, and nothing else. What the copy and the paste may
   carry is `UI-THREAD-006`; the pipe opens no socket, holds no key and writes no store.
-* **Verification.** 0 `verified`, 7 `unverified`, 0 `unimplemented`. Nothing holds a single row, and
-  the reason is one reason: every rule here is a property of a live browser with an input method
-  attached, and the wasm tier drives a document but not an input method
-  (`ambre-spec-testing.md section 8`). The gap is one gap, not seven.
+* **Verification.** 1 `verified`, 6 `unverified`, 0 `unimplemented`. The one held row is the one
+  that is pure data: which chords a table may bind. The reason the other six are loose is one
+  reason: each is a property of a live browser with an input method attached, and the wasm tier
+  drives a document but not an input method (`ambre-spec-testing.md section 8`). The gap is one gap,
+  not six.
 
 ---
 

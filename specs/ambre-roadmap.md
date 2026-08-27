@@ -235,7 +235,7 @@ owns the subsystem.
 | `[ ]` One high-density rule | V1 | the shared surface scales for a high-density display once, so no app spec restates it |
 | `[ ]` One selectable PDF | V1 | one glyph-to-character mapping in the shared surface, so exported text is selectable and searchable in every app instead of drawn shapes alone |
 | `[ ]` One undo bound | V1 | a bounded undo depth in every app. What merges into one step stays per app |
-| `[ ]` One keymap | MVP | the `Ctrl` and `Cmd` fold, both redo chords, and the legacy copy and paste chords, decided once |
+| `[x]` One keymap | MVP | the `Ctrl` and `Cmd` fold, both redo chords, and the legacy copy and paste chords, decided once |
 | `[ ]` One name for the moving selection end | V1 | `focus` everywhere; the fixed end stays `anchor`. A rename |
 | `[ ]` One floating-menu shell | V1 | one placement, flip and keyboard model under every popover and floating bar |
 | `[ ]` One performance read-out | V1 | the frame read-out available in every app, not in Trame alone |

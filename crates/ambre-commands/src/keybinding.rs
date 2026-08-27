@@ -10,53 +10,66 @@
 
 /// Modifier set of a chord. A plain struct of bools so it is `Copy + Hash` and
 /// constructible in `const` command tables.
+///
+/// One accelerator modifier, `primary`, carries both the control key and the
+/// command key: the two fold into it where a browser event becomes a chord
+/// (`ambre-chrome`), which is the only place they are still apart. A table
+/// therefore cannot name one machine's accelerator, so one table serves every
+/// platform (`ambre-spec-commands.md`, `UI-THREAD-028`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Modifiers {
-    pub ctrl: bool,
+    /// The primary accelerator: Ctrl on Windows and Linux, Cmd on macOS.
+    pub primary: bool,
     pub alt: bool,
     pub shift: bool,
-    /// Command key on macOS / Windows key. Kept distinct from `ctrl` so the
-    /// chrome can map either to the primary accelerator per platform.
-    pub meta: bool,
 }
 
 impl Modifiers {
     pub const NONE: Self = Self {
-        ctrl: false,
+        primary: false,
         alt: false,
         shift: false,
-        meta: false,
     };
-    pub const CTRL: Self = Self {
-        ctrl: true,
+    pub const PRIMARY: Self = Self {
+        primary: true,
         alt: false,
         shift: false,
-        meta: false,
     };
     pub const ALT: Self = Self {
-        ctrl: false,
+        primary: false,
         alt: true,
         shift: false,
-        meta: false,
     };
     pub const SHIFT: Self = Self {
-        ctrl: false,
+        primary: false,
         alt: false,
         shift: true,
-        meta: false,
     };
-    pub const CTRL_SHIFT: Self = Self {
-        ctrl: true,
+    pub const PRIMARY_SHIFT: Self = Self {
+        primary: true,
         alt: false,
         shift: true,
-        meta: false,
     };
-    pub const CTRL_ALT: Self = Self {
-        ctrl: true,
+    pub const PRIMARY_ALT: Self = Self {
+        primary: true,
         alt: true,
         shift: false,
-        meta: false,
     };
+
+    /// Fold a browser event's modifier bits into a chord's modifier set. The
+    /// control key and the command key both answer the primary accelerator, so
+    /// a table declares one chord and both machines resolve it
+    /// (`UI-THREAD-028`).
+    ///
+    /// The pure seam of the chrome's event translation, so the fold is host
+    /// testable without a `KeyboardEvent`.
+    pub const fn from_event(ctrl: bool, alt: bool, shift: bool, meta: bool) -> Self {
+        Self {
+            primary: ctrl || meta,
+            alt,
+            shift,
+        }
+    }
 }
 
 impl Default for Modifiers {
@@ -77,6 +90,9 @@ pub enum Key {
     Backspace,
     Delete,
     Space,
+    /// Carries the legacy clipboard chords: Shift+Insert pastes and
+    /// Primary+Insert copies (`ambre-spec-commands.md`, `UI-THREAD-011`).
+    Insert,
     ArrowUp,
     ArrowDown,
     ArrowLeft,
@@ -109,31 +125,42 @@ impl KeyBinding {
         Self { mods, key }
     }
 
-    /// `Ctrl + <char>` convenience for the common accelerator shape.
-    pub const fn ctrl(c: char) -> Self {
+    /// `Primary + <char>` convenience for the common accelerator shape.
+    pub const fn primary(c: char) -> Self {
         Self {
-            mods: Modifiers::CTRL,
+            mods: Modifiers::PRIMARY,
             key: Key::char(c),
         }
     }
 
-    /// `Ctrl + Shift + <char>` convenience.
-    pub const fn ctrl_shift(c: char) -> Self {
+    /// `Primary + Shift + <char>` convenience.
+    pub const fn primary_shift(c: char) -> Self {
         Self {
-            mods: Modifiers::CTRL_SHIFT,
+            mods: Modifiers::PRIMARY_SHIFT,
             key: Key::char(c),
+        }
+    }
+
+    /// `Shift + <key>` convenience, for the legacy clipboard chords.
+    pub const fn shift(key: Key) -> Self {
+        Self {
+            mods: Modifiers::SHIFT,
+            key,
         }
     }
 }
 
 /// Human-readable rendering, e.g. "Ctrl+Shift+B". Order is fixed
-/// (Ctrl, Alt, Shift, Meta) so equal chords format identically. This is the
-/// canonical form; locale-specific symbol substitution (macOS glyphs) is a
-/// chrome concern layered on top.
+/// (Primary, Alt, Shift) so equal chords format identically.
+///
+/// The primary accelerator is written "Ctrl", which the fold makes true on
+/// every platform: a machine whose accelerator is the command key answers the
+/// control key as well. Writing the macOS glyph instead is a chrome concern
+/// layered on top, and no surface asks for it today.
 impl core::fmt::Display for KeyBinding {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let m = self.mods;
-        if m.ctrl {
+        if m.primary {
             f.write_str("Ctrl+")?;
         }
         if m.alt {
@@ -141,9 +168,6 @@ impl core::fmt::Display for KeyBinding {
         }
         if m.shift {
             f.write_str("Shift+")?;
-        }
-        if m.meta {
-            f.write_str("Meta+")?;
         }
         match self.key {
             Key::Char(c) => write!(f, "{}", c.to_ascii_uppercase()),
@@ -153,6 +177,7 @@ impl core::fmt::Display for KeyBinding {
             Key::Backspace => f.write_str("Backspace"),
             Key::Delete => f.write_str("Del"),
             Key::Space => f.write_str("Space"),
+            Key::Insert => f.write_str("Insert"),
             Key::ArrowUp => f.write_str("Up"),
             Key::ArrowDown => f.write_str("Down"),
             Key::ArrowLeft => f.write_str("Left"),
@@ -182,14 +207,34 @@ mod tests {
     fn chords_are_shift_state_independent_in_the_key() {
         // The only difference between these two is the modifier set, never the
         // case of the key, so they hash and compare distinctly but cleanly.
-        assert_eq!(KeyBinding::ctrl('B'), KeyBinding::ctrl('b'));
-        assert_ne!(KeyBinding::ctrl('b'), KeyBinding::ctrl_shift('b'));
+        assert_eq!(KeyBinding::primary('B'), KeyBinding::primary('b'));
+        assert_ne!(KeyBinding::primary('b'), KeyBinding::primary_shift('b'));
+    }
+
+    #[test]
+    fn the_control_key_and_the_command_key_fold_into_one_chord() {
+        // The same chord on a Windows machine and on a Mac: the table declares
+        // it once and both events resolve it (`UI-THREAD-028`).
+        let control = Modifiers::from_event(true, false, false, false);
+        let command = Modifiers::from_event(false, false, false, true);
+        assert_eq!(control, command);
+        assert_eq!(control, Modifiers::PRIMARY);
+        // Alt and Shift stay themselves, and a bare key stays bare.
+        assert_eq!(
+            Modifiers::from_event(true, false, true, false),
+            Modifiers::PRIMARY_SHIFT
+        );
+        assert_eq!(
+            Modifiers::from_event(false, false, false, false),
+            Modifiers::NONE
+        );
     }
 
     #[test]
     fn display_uses_fixed_modifier_order() {
-        assert_eq!(KeyBinding::ctrl_shift('b').to_string(), "Ctrl+Shift+B");
-        assert_eq!(KeyBinding::ctrl('s').to_string(), "Ctrl+S");
+        assert_eq!(KeyBinding::primary_shift('b').to_string(), "Ctrl+Shift+B");
+        assert_eq!(KeyBinding::primary('s').to_string(), "Ctrl+S");
+        assert_eq!(KeyBinding::shift(Key::Insert).to_string(), "Shift+Insert");
         assert_eq!(
             KeyBinding::new(Modifiers::NONE, Key::Escape).to_string(),
             "Esc"

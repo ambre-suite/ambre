@@ -38,12 +38,17 @@ const DUPLICATE_NUDGE: f64 = 10.0;
 // string, so the shell can round-trip an id through a signal without carrying the
 // `Command` table.
 
+// The three clipboard intents carry the shared identity, not one of Toile's:
+// a cut is the same command in every application, whether a menu entry, a
+// toolbar button or the browser's own event raised it
+// (`ambre-spec-commands.md`, `UI-THREAD-011`).
+
 /// Cut the selection (copy + delete).
-pub const CUT: CommandId = CommandId("toile.clipboard.cut");
+pub const CUT: CommandId = ambre_commands::shared::CUT;
 /// Copy the selection to the shared clipboard.
-pub const COPY: CommandId = CommandId("toile.clipboard.copy");
+pub const COPY: CommandId = ambre_commands::shared::COPY;
 /// Paste the clipboard at the cursor / viewport center.
-pub const PASTE: CommandId = CommandId("toile.clipboard.paste");
+pub const PASTE: CommandId = ambre_commands::shared::PASTE;
 /// Duplicate the selection in place with a small nudge.
 pub const DUPLICATE: CommandId = CommandId("toile.edit.duplicate");
 /// Delete the selection.

@@ -19,15 +19,15 @@
   `human-review` and `qa-manual` carry no ceiling: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**1138 rows: 771 shipped, of which 356 loose. 367 unbuilt.**
+**1138 rows: 772 shipped, of which 353 loose. 366 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 142 | 144 | 129 |  | 415 |
-| `unverified` | 196 | 82 | 73 |  | 351 |
+| `verified` | 145 | 145 | 129 |  | 419 |
+| `unverified` | 194 | 81 | 73 |  | 348 |
 | `human-review` | 5 |  |  |  | 5 |
 | `qa-manual` |  |  |  |  | 0 |
-| `unimplemented` | 53 | 44 | 48 | 222 | 367 |
+| `unimplemented` | 52 | 44 | 48 | 222 | 366 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -41,7 +41,7 @@
 | `ambre-spec-broadcast.md` | 13 | 10 | 3 | 7 | 3 |
 | `ambre-spec-chrome.md` | 13 | 12 | 9 | 3 | 1 |
 | `ambre-spec-clipboard.md` | 9 | 9 | 0 | 9 |  |
-| `ambre-spec-commands.md` | 5 | 4 | 3 | 1 | 1 |
+| `ambre-spec-commands.md` | 5 | 5 | 5 |  |  |
 | `ambre-spec-delta-order.md` | 12 | 12 | 4 | 8 |  |
 | `ambre-spec-design-tokens.md` | 4 | 4 | 1 | 3 |  |
 | `ambre-spec-docfile.md` | 11 | 8 | 7 | 1 | 3 |
@@ -68,7 +68,7 @@
 | `ambre-spec-session.md` | 13 | 13 | 6 | 7 |  |
 | `ambre-spec-sync.md` | 19 | 19 | 2 | 17 |  |
 | `ambre-spec-text-editor.md` | 9 | 7 | 3 | 4 | 2 |
-| `ambre-spec-text-input.md` | 7 | 7 | 0 | 7 |  |
+| `ambre-spec-text-input.md` | 7 | 7 | 1 | 6 |  |
 | `ambre-spec-ui.md` | 12 | 7 | 1 | 6 | 5 |
 | `ambre-spec-undo.md` | 6 | 6 | 2 | 4 |  |
 | `ambre-spec-zero-knowledge.md` | 12 | 12 | 6 | 6 |  |
@@ -96,7 +96,7 @@
 | `ambre-spec-trame-sheets.md` | 11 | 10 | 6 | 4 | 1 |
 | `ambre-spec-trame-sort.md` | 12 | 12 | 8 | 4 |  |
 | `ambre-spec-trame-status-bar.md` | 8 | 8 | 3 | 5 |  |
-| `ambre-spec-trame-undo.md` | 4 | 2 | 1 | 1 | 2 |
+| `ambre-spec-trame-undo.md` | 4 | 2 | 2 |  | 2 |
 | `ambre-spec-toile-schema.md` | 6 | 4 | 2 | 2 | 2 |
 | `ambre-spec-toile-auto-layout.md` | 6 | 6 | 3 | 3 |  |
 | `ambre-spec-toile-board-rendering.md` | 10 | 10 | 8 | 2 |  |

@@ -120,8 +120,9 @@ other one (`PROSE-UI-044`). The deletion is the ordinary cross-paragraph one
 | a paste over a selection | deletes it first (`PROSE-UI-030`) |
 | dropping text into the page | not ruled on: see section 6 |
 
-The legacy chords and the fold of `Ctrl` and `Cmd` are one decision for every application, and it
-is the "One keymap" Story.
+The legacy chords and the fold of `Ctrl` and `Cmd` are decided for every application in
+`1-Foundations/ambre-spec-commands.md section 2`: Prose takes the shared clipboard identities and
+their chord lists, and decodes none of the three itself.
 
 ---
 

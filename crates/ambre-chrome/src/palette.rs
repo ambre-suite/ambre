@@ -86,7 +86,7 @@ pub fn CommandPalette(
     let rows = Memo::new(move |_| {
         filter(table, &query.get(), &Locale::En)
             .into_iter()
-            .map(|c| (c.id, (c.title)(&Locale::En), c.default_keybinding))
+            .map(|c| (c.id, (c.title)(&Locale::En), c.chord()))
             .collect::<Vec<_>>()
     });
 
@@ -196,21 +196,21 @@ mod tests {
             id: CommandId("t.format.bold"),
             title: bold,
             icon: Some(IconId("format-bold")),
-            default_keybinding: Some(KeyBinding::ctrl('b')),
+            keybindings: &[KeyBinding::primary('b')],
             category: CommandCategory("format"),
         },
         Command {
             id: CommandId("t.sort.asc"),
             title: sort_asc,
             icon: None,
-            default_keybinding: None,
+            keybindings: &[],
             category: CommandCategory("sort"),
         },
         Command {
             id: CommandId("t.interop.export"),
             title: export,
             icon: None,
-            default_keybinding: None,
+            keybindings: &[],
             category: CommandCategory("interop"),
         },
     ];

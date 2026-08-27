@@ -16,7 +16,9 @@
 // ============================================================================
 
 use ambre_bus::{AppCommand, TrameCommand};
-use ambre_commands::{Command, CommandCategory, CommandId, IconId, KeyBinding, Locale};
+use ambre_commands::{
+    Command, CommandCategory, CommandId, IconId, KeyBinding, Keymap, Locale, shared,
+};
 
 use crate::ui::grid::CtxScope;
 
@@ -29,8 +31,8 @@ use crate::ui::grid::CtxScope;
 /// declaration site real -- a second label for a command cannot be written
 /// without a second line here.
 macro_rules! commands {
-    ($($name:ident = $id:literal, $label:literal, $icon:expr, $chord:expr, $category:expr;)*) => {
-        $(pub const $name: CommandId = CommandId($id);)*
+    ($($name:ident = $id:expr, $label:literal, $icon:expr, $chords:expr, $category:expr;)*) => {
+        $(pub const $name: CommandId = $id;)*
 
         // The generated title functions. Named after the constants, so the
         // module carries the case exemption rather than every call site.
@@ -51,7 +53,7 @@ macro_rules! commands {
                 id: $name,
                 title: titles::$name,
                 icon: $icon,
-                default_keybinding: $chord,
+                keybindings: $chords,
                 category: $category,
             },)*
         ];
@@ -73,37 +75,38 @@ const GENERAL: CommandCategory = CommandCategory("general");
 // `chrome::commands` and the toolbar `aria-label`s of `chrome::bars`, which
 // carried "Copy", "Bold" and "Undo" twice over.
 //
-// Redo answers two chords, Ctrl+Shift+Z and Ctrl+Y (the Excel and Sheets
-// convention). A description holds one default chord, so the table carries the
-// first and `chrome::commands::bind_keys` still binds the alias.
+// The clipboard rows name the shared identities and the shared chords, so a
+// copy is the same command in every application and answers the legacy chord
+// as well (`UI-THREAD-011`). Undo and Redo take the shared chord lists, which
+// is where Ctrl+Y is declared beside Ctrl+Shift+Z.
 commands! {
-    BOLD = "trame.format.bold", "Bold", Some(IconId("format-bold")), Some(KeyBinding::ctrl('b')), FORMAT;
-    ITALIC = "trame.format.italic", "Italic", Some(IconId("format-italic")), Some(KeyBinding::ctrl('i')), FORMAT;
-    UNDO = "trame.history.undo", "Undo", Some(IconId("undo")), Some(KeyBinding::ctrl('z')), HISTORY;
-    REDO = "trame.history.redo", "Redo", Some(IconId("redo")), Some(KeyBinding::ctrl_shift('z')), HISTORY;
-    INSERT_ROW_ABOVE = "trame.row.insert_above", "Insert row above", Some(IconId("table-row-plus-before")), None, STRUCTURE;
-    INSERT_ROW_BELOW = "trame.row.insert_below", "Insert row below", Some(IconId("table-row-plus-after")), None, STRUCTURE;
-    INSERT_COL_LEFT = "trame.col.insert_left", "Insert column left", Some(IconId("table-column-plus-before")), None, STRUCTURE;
-    INSERT_COL_RIGHT = "trame.col.insert_right", "Insert column right", Some(IconId("table-column-plus-after")), None, STRUCTURE;
-    DELETE_ROWS = "trame.row.delete", "Delete rows", Some(IconId("table-row-remove")), None, STRUCTURE;
-    DELETE_COLS = "trame.col.delete", "Delete columns", Some(IconId("table-column-remove")), None, STRUCTURE;
-    MERGE = "trame.merge", "Merge cells", Some(IconId("table-merge-cells")), None, STRUCTURE;
-    UNMERGE = "trame.unmerge", "Unmerge cells", Some(IconId("table-split-cell")), None, STRUCTURE;
-    SORT_RANGE_ASC = "trame.sort.range_asc", "Sort range ascending", Some(IconId("sort-ascending")), None, SORT;
-    SORT_RANGE_DESC = "trame.sort.range_desc", "Sort range descending", Some(IconId("sort-descending")), None, SORT;
-    SORT_SHEET_ASC = "trame.sort.sheet_asc", "Sort sheet by column (asc)", Some(IconId("sort")), None, SORT;
-    SORT_SHEET_DESC = "trame.sort.sheet_desc", "Sort sheet by column (desc)", Some(IconId("sort")), None, SORT;
-    SORT_RANGE_MULTI = "trame.sort.range_multi", "Sort range...", Some(IconId("sort-variant")), None, SORT;
-    FILTER_COLUMN = "trame.filter.column", "Filter by column", Some(IconId("filter")), None, FILTER;
-    CLEAR_FILTER = "trame.filter.clear", "Remove filter", Some(IconId("filter-off")), None, FILTER;
-    FIND = "trame.find.open", "Find and replace", Some(IconId("search")), Some(KeyBinding::ctrl('f')), FIND_REPLACE;
-    REPLACE = "trame.find.replace", "Replace", None, Some(KeyBinding::ctrl('h')), FIND_REPLACE;
-    COPY = "trame.clipboard.copy", "Copy", Some(IconId("content-copy")), None, CLIPBOARD;
-    CUT = "trame.clipboard.cut", "Cut", Some(IconId("content-cut")), None, CLIPBOARD;
-    PASTE = "trame.clipboard.paste", "Paste", Some(IconId("content-paste")), None, CLIPBOARD;
-    IMPORT_CSV = "trame.interop.import_csv", "Import CSV", Some(IconId("import")), None, INTEROP;
-    EXPORT_CSV = "trame.interop.export_csv", "Export CSV", Some(IconId("export")), None, INTEROP;
-    PALETTE = "trame.palette.open", "Command palette", None, Some(KeyBinding::ctrl('k')), GENERAL;
+    BOLD = CommandId("trame.format.bold"), "Bold", Some(IconId("format-bold")), &[KeyBinding::primary('b')], FORMAT;
+    ITALIC = CommandId("trame.format.italic"), "Italic", Some(IconId("format-italic")), &[KeyBinding::primary('i')], FORMAT;
+    UNDO = CommandId("trame.history.undo"), "Undo", Some(IconId("undo")), shared::UNDO_CHORDS, HISTORY;
+    REDO = CommandId("trame.history.redo"), "Redo", Some(IconId("redo")), shared::REDO_CHORDS, HISTORY;
+    INSERT_ROW_ABOVE = CommandId("trame.row.insert_above"), "Insert row above", Some(IconId("table-row-plus-before")), &[], STRUCTURE;
+    INSERT_ROW_BELOW = CommandId("trame.row.insert_below"), "Insert row below", Some(IconId("table-row-plus-after")), &[], STRUCTURE;
+    INSERT_COL_LEFT = CommandId("trame.col.insert_left"), "Insert column left", Some(IconId("table-column-plus-before")), &[], STRUCTURE;
+    INSERT_COL_RIGHT = CommandId("trame.col.insert_right"), "Insert column right", Some(IconId("table-column-plus-after")), &[], STRUCTURE;
+    DELETE_ROWS = CommandId("trame.row.delete"), "Delete rows", Some(IconId("table-row-remove")), &[], STRUCTURE;
+    DELETE_COLS = CommandId("trame.col.delete"), "Delete columns", Some(IconId("table-column-remove")), &[], STRUCTURE;
+    MERGE = CommandId("trame.merge"), "Merge cells", Some(IconId("table-merge-cells")), &[], STRUCTURE;
+    UNMERGE = CommandId("trame.unmerge"), "Unmerge cells", Some(IconId("table-split-cell")), &[], STRUCTURE;
+    SORT_RANGE_ASC = CommandId("trame.sort.range_asc"), "Sort range ascending", Some(IconId("sort-ascending")), &[], SORT;
+    SORT_RANGE_DESC = CommandId("trame.sort.range_desc"), "Sort range descending", Some(IconId("sort-descending")), &[], SORT;
+    SORT_SHEET_ASC = CommandId("trame.sort.sheet_asc"), "Sort sheet by column (asc)", Some(IconId("sort")), &[], SORT;
+    SORT_SHEET_DESC = CommandId("trame.sort.sheet_desc"), "Sort sheet by column (desc)", Some(IconId("sort")), &[], SORT;
+    SORT_RANGE_MULTI = CommandId("trame.sort.range_multi"), "Sort range...", Some(IconId("sort-variant")), &[], SORT;
+    FILTER_COLUMN = CommandId("trame.filter.column"), "Filter by column", Some(IconId("filter")), &[], FILTER;
+    CLEAR_FILTER = CommandId("trame.filter.clear"), "Remove filter", Some(IconId("filter-off")), &[], FILTER;
+    FIND = CommandId("trame.find.open"), "Find and replace", Some(IconId("search")), &[KeyBinding::primary('f')], FIND_REPLACE;
+    REPLACE = CommandId("trame.find.replace"), "Replace", None, &[KeyBinding::primary('h')], FIND_REPLACE;
+    COPY = shared::COPY, "Copy", Some(IconId("content-copy")), shared::COPY_CHORDS, CLIPBOARD;
+    CUT = shared::CUT, "Cut", Some(IconId("content-cut")), shared::CUT_CHORDS, CLIPBOARD;
+    PASTE = shared::PASTE, "Paste", Some(IconId("content-paste")), shared::PASTE_CHORDS, CLIPBOARD;
+    IMPORT_CSV = CommandId("trame.interop.import_csv"), "Import CSV", Some(IconId("import")), &[], INTEROP;
+    EXPORT_CSV = CommandId("trame.interop.export_csv"), "Export CSV", Some(IconId("export")), &[], INTEROP;
+    PALETTE = CommandId("trame.palette.open"), "Command palette", None, &[KeyBinding::primary('k')], GENERAL;
 }
 
 /// The label a view shows for `id`, in `locale`. `None` for a command Trame
@@ -119,6 +122,20 @@ pub fn title(id: CommandId, locale: &Locale) -> Option<String> {
 /// asset (`chrome::icons`).
 pub fn icon(id: CommandId) -> Option<IconId> {
     ambre_commands::find(COMMANDS, id).and_then(|c| c.icon)
+}
+
+/// Bind Trame's chords into the launcher's keymap.
+///
+/// Every chord comes from the table, so a chord is declared beside the command
+/// it triggers and nowhere else. The clipboard chords are the exception the
+/// shared crate holds: the table declares them so a surface announces them, and
+/// `Keymap::bind_table` leaves them out because the browser raises those events
+/// itself (`ambre-spec-commands.md`, `UI-THREAD-011`).
+///
+/// Host-compiled, beside the table it reads, so a test resolves a chord without
+/// a browser.
+pub fn bind_keys(keymap: &mut Keymap) {
+    keymap.bind_table(COMMANDS);
 }
 
 // -- Context-menu layouts (`trame-context-menu`) -------------------------------
@@ -313,12 +330,64 @@ mod tests {
     fn declared_chords_are_distinct() {
         let chords: Vec<KeyBinding> = COMMANDS
             .iter()
-            .filter_map(|c| c.default_keybinding)
+            .flat_map(|c| c.keybindings.iter().copied())
             .collect();
         for (i, chord) in chords.iter().enumerate() {
             assert!(
                 !chords[i + 1..].contains(chord),
                 "{chord:?} is declared twice"
+            );
+        }
+    }
+
+    /// Undo takes one chord and Redo takes two, Ctrl+Shift+Z and Ctrl+Y
+    /// (`TRAME-121`). The test resolves them through the keymap the launcher
+    /// builds, so a chord dropped from the table fails here.
+    #[test]
+    fn the_keymap_binds_both_redo_chords() {
+        let mut keymap = Keymap::new();
+        bind_keys(&mut keymap);
+        assert_eq!(keymap.resolve(KeyBinding::primary('z')), Some(UNDO));
+        assert_eq!(keymap.resolve(KeyBinding::primary_shift('z')), Some(REDO));
+        assert_eq!(keymap.resolve(KeyBinding::primary('y')), Some(REDO));
+    }
+
+    /// The three clipboard intents are described under the shared identities
+    /// and announce the shared chords, the modern one and the legacy one, so a
+    /// copy is one command in every application (`UI-THREAD-011`).
+    #[test]
+    fn the_clipboard_intents_carry_the_shared_identity() {
+        for (id, chords) in [
+            (shared::CUT, shared::CUT_CHORDS),
+            (shared::COPY, shared::COPY_CHORDS),
+            (shared::PASTE, shared::PASTE_CHORDS),
+        ] {
+            let cmd = ambre_commands::find(COMMANDS, id).expect("described");
+            assert_eq!(cmd.keybindings, chords, "{id:?} announces both chords");
+        }
+        // The identities Trame's surfaces name are those same three.
+        assert_eq!(
+            [CUT, COPY, PASTE],
+            [shared::CUT, shared::COPY, shared::PASTE]
+        );
+    }
+
+    /// The four clipboard chords reach no command: the browser raises `cut`,
+    /// `copy` and `paste` itself, on the modern and the legacy chords alike, so
+    /// a second decoder here would double-handle them (`UI-THREAD-011`).
+    #[test]
+    fn the_keymap_binds_no_clipboard_chord() {
+        let mut keymap = Keymap::new();
+        bind_keys(&mut keymap);
+        for chord in shared::CUT_CHORDS
+            .iter()
+            .chain(shared::COPY_CHORDS)
+            .chain(shared::PASTE_CHORDS)
+        {
+            assert_eq!(
+                keymap.resolve(*chord),
+                None,
+                "{chord} must reach no command"
             );
         }
     }

@@ -183,8 +183,9 @@ converge by the format's own rule, `PROSE-027`.
 | an undo or a redo | places the caret at the change (`features/ambre-spec-prose-undo.md`) |
 
 `Ctrl` with `A` is the chord Trame binds for the same purpose
-(`2-Trame/features/ambre-spec-trame-selection.md section 4`); the fold of `Ctrl` and `Cmd` is one
-decision for every application, and it is the "One keymap" Story.
+(`2-Trame/features/ambre-spec-trame-selection.md section 4`); the fold of `Ctrl` and `Cmd` is
+decided for every application in `1-Foundations/ambre-spec-commands.md section 2`, so the chord is
+declared once and the command key answers it.
 
 ---
 

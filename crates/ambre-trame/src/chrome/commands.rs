@@ -15,7 +15,7 @@
 // ============================================================================
 
 use ambre_bus::{AppEvent, DocType, TrameEvent, UiEvent};
-use ambre_chrome::commands::{CommandId, KeyBinding, Keymap, Locale};
+use ambre_chrome::commands::{CommandId, Keymap, Locale};
 use ambre_chrome::{CommandStates, MenuEntry, Toasts};
 
 use super::icons;
@@ -31,17 +31,11 @@ pub use crate::ui::grid::CtxScope;
 
 /// Bind Trame's command chords into the launcher's keymap.
 ///
-/// Every default comes from the table, so a chord is declared beside the
-/// command it triggers and nowhere else. One alias is left here: a description
-/// holds a single chord, and Ctrl+Y redoes as well as Ctrl+Shift+Z (the Excel
-/// and Sheets convention).
+/// The table is the one declaration site, chords included, so the seeding is
+/// host-compiled beside it (`registry::bind_keys`) and a test resolves a chord
+/// without a browser. Nothing is bound here on the side.
 pub fn bind_keys(keymap: &mut Keymap) {
-    for cmd in COMMANDS {
-        if let Some(chord) = cmd.default_keybinding {
-            keymap.bind(chord, cmd.id);
-        }
-    }
-    keymap.bind(KeyBinding::ctrl('y'), REDO);
+    registry::bind_keys(keymap);
 }
 
 /// Mirror authoritative toggle state from an inbound `UiEvent` into the command

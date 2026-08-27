@@ -17,7 +17,7 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
 | `TRAME-017` | Every mutating `TrameCommand` handler MUST end with `doc.commit()`, so that one command is one undo item. | this spec section 2; architecture section 2.D | `ambre_trame::logic::tests::group2::batch_write_is_one_undo_item`, `::filtered_column_edit_is_one_undo_item`, `group1::selection_style_is_a_single_undo`, `group6::replace_all_rewrites_and_undoes_as_one_group` | verified |
-| `TRAME-121` | A redo MUST be reachable by `Ctrl+Shift+Z` and by `Ctrl+Y`. | this spec section 3 | none. The keymap binds both chords beside `Ctrl+Z` (`chrome/commands.rs`), and no test reads the keymap back | unverified |
+| `TRAME-121` | A redo MUST be reachable by `Ctrl+Shift+Z` and by `Ctrl+Y`. | this spec section 3 | `ambre_trame::ui::commands::tests::the_keymap_binds_both_redo_chords` seeds the keymap the launcher builds and resolves the three chords back, so a chord dropped from the table fails. The pair is declared once for every application (`1-Foundations/ambre-spec-commands.md section 2`) | verified |
 | `TRAME-123` | A named snapshot MUST be restorable after the session that made it. | this spec section 4 | not built -- lands with the "Version history" Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TRAME-124` | Restoring a snapshot MUST be an ordinary change to the document: undoable, and convergent. | this spec section 4 | not built -- lands with the "Version history" Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
@@ -26,8 +26,8 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
   `ambre-spec-budgets.md section 6`, and the cap is `UI-THREAD-016`.
 * **Boundary.** none of its own: an undo emits the reverting operations into the document, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 1 `verified`, 1 `unverified`, 2 `unimplemented`. The granularity rule is held
-  four ways; the keymap is never read back; version history is unbuilt. The shared rules and their
+* **Verification.** 2 `verified`, 0 `unverified`, 2 `unimplemented`. The granularity rule is held
+  four ways and the keymap is read back; version history is unbuilt. The shared rules and their
   coverage are in `ambre-spec-undo.md`.
 
 ---
@@ -96,8 +96,6 @@ The shared gaps are in `ambre-spec-undo.md section 6`. Trame's own:
 * **A five-row delete takes five undos** (`TRAME-088`). The rule is written in
   `features/ambre-spec-trame-rows-and-columns.md`, and it is the one place the granularity table
   above says one item and the code produces several.
-* **The keymap is never read back** (`TRAME-121`). The three bindings are set in one function that
-  no test calls, so a removed chord would fail nothing.
 * **Version history does not exist** (`TRAME-123`, `TRAME-124`). No container, no command, no
   surface. A user who closes a document loses every step of it, and the roadmap's answer is a named
   snapshot rather than a longer stack. Prose carries a design for the same feature and Trame carries
