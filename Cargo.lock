@@ -354,6 +354,7 @@ dependencies = [
  "ambre-bus",
  "ambre-canvas",
  "ambre-chrome",
+ "ambre-commands",
  "ambre-core",
  "ambre-draw",
  "csv",

@@ -45,7 +45,12 @@ impl CommandStates {
     /// Create a store with a toggle signal (initially `false`) and an enabled
     /// signal (initially `true`) for each id. Must run inside a Leptos reactive
     /// owner (e.g. the mount closure).
-    pub fn new(ids: &[ambre_commands::CommandId]) -> Self {
+    ///
+    /// Takes identities rather than a slice so an app passes them straight from
+    /// its command table (`ambre-spec-commands.md`, UI-THREAD-019) without
+    /// building a second list beside it.
+    pub fn new(ids: impl IntoIterator<Item = ambre_commands::CommandId>) -> Self {
+        let ids: Vec<_> = ids.into_iter().collect();
         let toggled = ids.iter().map(|&id| (id, RwSignal::new(false))).collect();
         let enabled = ids.iter().map(|&id| (id, RwSignal::new(true))).collect();
         Self {

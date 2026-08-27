@@ -37,7 +37,7 @@ const B: CommandId = CommandId("test.b");
 fn command_states_defaults() {
     let owner = Owner::new();
     owner.set();
-    let store = CommandStates::new(&[A, B]);
+    let store = CommandStates::new([A, B]);
     // Toggles start `false`, enabled starts `true` (actionable until told else).
     assert!(!store.toggled_signal(A).unwrap().get_untracked());
     assert!(store.enabled_signal(A).unwrap().get_untracked());
@@ -47,7 +47,7 @@ fn command_states_defaults() {
 fn command_states_single_writer_propagates() {
     let owner = Owner::new();
     owner.set();
-    let store = CommandStates::new(&[A, B]);
+    let store = CommandStates::new([A, B]);
 
     store.set_toggled(A, true);
     store.set_enabled(B, false);
@@ -67,7 +67,7 @@ fn command_states_single_writer_propagates() {
 fn command_states_unknown_id_is_noop() {
     let owner = Owner::new();
     owner.set();
-    let store = CommandStates::new(&[A]);
+    let store = CommandStates::new([A]);
     assert!(store.toggled_signal(B).is_none());
     assert!(store.enabled_signal(B).is_none());
     // Writing an unregistered id must not panic.

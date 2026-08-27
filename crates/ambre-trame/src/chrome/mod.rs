@@ -32,6 +32,7 @@ mod color;
 mod commands;
 mod find_replace;
 mod formula_bar;
+mod icons;
 mod popovers;
 mod sheet_tabs;
 mod sort_dialog;

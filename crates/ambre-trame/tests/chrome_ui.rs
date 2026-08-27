@@ -131,7 +131,7 @@ fn undo_state_mirrors_into_command_store() {
     let owner = Owner::new();
     owner.set();
 
-    let store = CommandStates::new(chrome::COMMANDS);
+    let store = CommandStates::new(chrome::COMMANDS.iter().map(|c| c.id));
     chrome::init_command_states(&store);
     // A fresh document starts with an empty history.
     assert!(!store.enabled_signal(UNDO).unwrap().get());

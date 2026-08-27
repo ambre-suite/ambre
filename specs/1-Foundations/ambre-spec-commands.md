@@ -78,15 +78,20 @@ pub struct CommandState { pub enabled: bool, pub visible: bool, pub toggled: boo
 pub trait CommandSource { type Context; }
 ```
 
-**What is built.** Each application exposes a list of identities and a function that fills a shared
-chord table; the launcher calls both and names no command itself. Two applications declare 68
-identities between them -- 26 and 42. Today a label and an icon sit at the view: a menu entry pairs
-an identity with the words it shows.
+**What is built.** Each application exposes its commands and a function that fills a shared chord
+table; the launcher calls both and names no command itself. Two applications declare 68 identities
+between them -- 26 and 42.
 
-**The description is the target state.** Nothing constructs `Command` or `CommandSource` outside
-their own tests. A label at the view lives in as many places as the command has views, nothing finds
-a command no menu shows, and every surface still to be written pays that duplication again
-(`UI-THREAD-019`).
+**Trame describes its 26 commands, and Toile does not.** Trame's table is a `Command` per
+affordance -- label, icon, default chord, category -- and its context menu reads every word from it;
+its chord defaults come from the same table. Toile still exposes bare identities, and a label sits
+at each of its views. Trame's own toolbar is the other half left: it repeats "Copy", "Bold" and
+"Undo" as `aria-label`s beside the table that declares them.
+
+**The description is the target state.** Until every view derives, a label lives in as many places
+as the command has views, nothing finds a command no menu shows, and every surface still to be
+written pays that duplication again (`UI-THREAD-019`). `CommandSource` is constructed nowhere: the
+palette is its first reader.
 
 **The chord.** A chord is a modifier set plus a logical key, normalized so a letter is compared in
 one case. The table is a map from chord to identity, seeded from the declared defaults and
@@ -114,8 +119,12 @@ flowchart TD
 * `crates/ambre-commands/src/lib.rs` -- the identity, the description, the state, the chord table;
 * `crates/ambre-commands/src/keybinding.rs` -- the chord and the logical key;
 * `crates/ambre-chrome/src/command.rs` -- the reactive state store and the browser translation;
-* `crates/ambre-trame/src/chrome/commands.rs`, `crates/ambre-toile/src/ui/menu.rs` -- the two
-  declared tables and their chord bindings.
+* `crates/ambre-trame/src/ui/commands.rs` -- Trame's descriptions and its context-menu layouts,
+  host-compiled so a test reaches a label without a browser;
+* `crates/ambre-trame/src/chrome/commands.rs` -- the menu rows built from them, the chord bindings
+  and the inbound event mirrors; `crates/ambre-trame/src/chrome/icons.rs` -- `IconId` to the icon
+  asset, which keeps one application's icon set out of the shared crate;
+* `crates/ambre-toile/src/ui/menu.rs` -- Toile's identities and their chord bindings.
 
 ---
 
@@ -159,6 +168,12 @@ changes nothing does not refresh them.
   chords are the one table a test drives.
 * **The two declared tables have no common namespace rule.** The identities read
   `trame.<area>.<verb>` and `toile.<area>.<verb>` by habit, and nothing refuses a third shape.
+* **Nothing supplies the active language.** A description carries `title: fn(&Locale) -> String`,
+  and no document says who holds the locale a view passes. Trame's table answers both variants with
+  the English label it shows today, so the function is a shape with one language behind it.
+* **A description holds one chord, and a command may answer two.** Trame redoes on Ctrl+Shift+Z and
+  on Ctrl+Y, the Excel and Sheets convention, so the second chord is bound beside the table
+  (`One keymap` is where the pair is decided).
 * **Nothing rules on a user rebinding.** The table accepts one and reports the displacement, and no
   document says where a rebinding is stored, whether it survives a reload, or how a conflict is
   shown.

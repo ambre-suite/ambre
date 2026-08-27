@@ -1,183 +1,47 @@
 // ambre-trame/src/chrome/commands.rs
 // ============================================================================
-// Command surface: the Trame `CommandId`s, their keybindings, the CommandId ->
-// `AppCommand` IPC mapping, and the inbound `UiEvent` mirroring (toggle state,
-// toasts, context menu). The launcher reaches in here for `COMMANDS`,
-// `bind_keys`, `command_to_app`, `mirror_event`, ... naming no command itself.
+// Chrome half of Trame's command surface: the wasm-only pieces that need the
+// DOM or a Leptos signal.
+//
+//   - the context-menu layouts, built from the registry;
+//   - the keymap aliases the registry cannot hold;
+//   - the inbound `UiEvent` mirroring (toggle state, toasts).
+//
+// The registry itself -- the identities, the descriptions and the
+// `CommandId -> AppCommand` mapping -- is `crate::ui::commands`, which is
+// host-compiled so a test reaches a label without a browser. The identities are
+// re-exported here so the launcher and the chrome components keep naming
+// `chrome::BOLD` (`ambre-spec-commands.md`).
 // ============================================================================
 
-use ambre_bus::{AppCommand, AppEvent, DocType, TrameCommand, TrameEvent, UiEvent};
-use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
+use ambre_bus::{AppEvent, DocType, TrameEvent, UiEvent};
+use ambre_chrome::commands::{CommandId, KeyBinding, Keymap, Locale};
 use ambre_chrome::{CommandStates, MenuEntry, Toasts};
 
+use super::icons;
+use crate::ui::commands as registry;
+
+pub use crate::ui::commands::{
+    BOLD, CLEAR_FILTER, COMMANDS, COPY, CUT, DELETE_COLS, DELETE_ROWS, EXPORT_CSV, FILTER_COLUMN,
+    FIND, IMPORT_CSV, INSERT_COL_LEFT, INSERT_COL_RIGHT, INSERT_ROW_ABOVE, INSERT_ROW_BELOW,
+    ITALIC, MERGE, PASTE, REDO, REPLACE, SORT_RANGE_ASC, SORT_RANGE_DESC, SORT_RANGE_MULTI,
+    SORT_SHEET_ASC, SORT_SHEET_DESC, UNDO, UNMERGE, command_to_app,
+};
 pub use crate::ui::grid::CtxScope;
 
-/// The Trame "Bold" command. A UI affordance id (ambre-commands); the launcher
-/// intercepts it into a `SetCellStyle` patch toggled against the tracked style.
-pub const BOLD: CommandId = CommandId("trame.format.bold");
-/// The Trame "Italic" command (see [`BOLD`]).
-pub const ITALIC: CommandId = CommandId("trame.format.italic");
-/// The Trame "Undo" command (Loro `UndoManager`, document-session scope).
-pub const UNDO: CommandId = CommandId("trame.history.undo");
-/// The Trame "Redo" command (see [`UNDO`]).
-pub const REDO: CommandId = CommandId("trame.history.redo");
-
-// Structural / merge commands (grid context menu, `trame-context-menu`). Each is a
-// parameterless intent: the Logic thread resolves its geometry against the
-// active cell / selection it tracks (via `SetActiveCell`).
-/// Insert a row above the active cell.
-pub const INSERT_ROW_ABOVE: CommandId = CommandId("trame.row.insert_above");
-/// Insert a row below the active cell.
-pub const INSERT_ROW_BELOW: CommandId = CommandId("trame.row.insert_below");
-/// Insert a column left of the active cell.
-pub const INSERT_COL_LEFT: CommandId = CommandId("trame.col.insert_left");
-/// Insert a column right of the active cell.
-pub const INSERT_COL_RIGHT: CommandId = CommandId("trame.col.insert_right");
-/// Delete the rows spanned by the selection.
-pub const DELETE_ROWS: CommandId = CommandId("trame.row.delete");
-/// Delete the columns spanned by the selection.
-pub const DELETE_COLS: CommandId = CommandId("trame.col.delete");
-/// Merge the selection into a single cell.
-pub const MERGE: CommandId = CommandId("trame.merge");
-/// Unmerge the merge containing the active cell.
-pub const UNMERGE: CommandId = CommandId("trame.unmerge");
-/// Sort the selection ascending on its first column (single-column shared sort).
-pub const SORT_RANGE_ASC: CommandId = CommandId("trame.sort.range_asc");
-/// Sort the selection descending on its first column.
-pub const SORT_RANGE_DESC: CommandId = CommandId("trame.sort.range_desc");
-/// Sort the whole sheet ascending by the active cell's column.
-pub const SORT_SHEET_ASC: CommandId = CommandId("trame.sort.sheet_asc");
-/// Sort the whole sheet descending by the active cell's column.
-pub const SORT_SHEET_DESC: CommandId = CommandId("trame.sort.sheet_desc");
-/// Open the multi-column sort dialog (`trame-sort`, "Sort range..."). A
-/// UI-only intent: it has no `AppCommand` mapping; the launcher intercepts it to
-/// open the `SortDialog` over the current selection, which emits the typed
-/// [`SortRangeMulti`](ambre_bus::TrameCommand::SortRangeMulti) itself.
-pub const SORT_RANGE_MULTI: CommandId = CommandId("trame.sort.range_multi");
-/// Open the shared filter popover for the active cell's column (`trame-shared-filter`). A
-/// UI-only intent: it has no `AppCommand` mapping; the launcher intercepts it to
-/// open the popover and request the column's distinct values.
-pub const FILTER_COLUMN: CommandId = CommandId("trame.filter.column");
-/// Clear the active sheet's shared filter (`trame-shared-filter`).
-pub const CLEAR_FILTER: CommandId = CommandId("trame.filter.clear");
-
-// Clipboard commands (toolbar + context menu, `trame-clipboard`). UI-only
-// intents: copy/cut read the viewport cache and paste reads the OS clipboard, so
-// they never map to an `AppCommand`. The launcher intercepts them, driving the
-// browser clipboard (the keyboard chords Ctrl+C/X/V are serviced directly by the
-// DOM `copy`/`cut`/`paste` listeners, so they are NOT bound in the keymap here).
-// Find & Replace (`trame-find-replace`). UI-only intents: the launcher intercepts
-// them to open the DOM `FindReplace` panel (find vs replace mode); neither maps
-// to an `AppCommand` (the panel sends `FindNext`/`ReplaceAll` itself).
-/// Open the find/replace panel in find mode (Ctrl+F).
-pub const FIND: CommandId = CommandId("trame.find.open");
-/// Open the find/replace panel in replace mode (Ctrl+H).
-pub const REPLACE: CommandId = CommandId("trame.find.replace");
-
-// Interop (`trame-import-export`). UI-only intents the launcher intercepts: IMPORT_CSV
-// opens a file picker and reads the bytes, EXPORT_CSV asks the Logic thread to
-// serialize the active sheet (parameterless). Neither maps to an `AppCommand`.
-/// Import a CSV file into a new sheet.
-pub const IMPORT_CSV: CommandId = CommandId("trame.interop.import_csv");
-/// Export the active sheet to a CSV file.
-pub const EXPORT_CSV: CommandId = CommandId("trame.interop.export_csv");
-
-/// Copy the selection to the clipboard.
-pub const COPY: CommandId = CommandId("trame.clipboard.copy");
-/// Cut the selection to the clipboard.
-pub const CUT: CommandId = CommandId("trame.clipboard.cut");
-/// Paste the clipboard at the active cell.
-pub const PASTE: CommandId = CommandId("trame.clipboard.paste");
-
-/// Every command Trame contributes to the registry. The launcher builds the
-/// `CommandStates` store and the keymap from this list, naming no command itself.
-pub const COMMANDS: &[CommandId] = &[
-    BOLD,
-    ITALIC,
-    UNDO,
-    REDO,
-    INSERT_ROW_ABOVE,
-    INSERT_ROW_BELOW,
-    INSERT_COL_LEFT,
-    INSERT_COL_RIGHT,
-    DELETE_ROWS,
-    DELETE_COLS,
-    MERGE,
-    UNMERGE,
-    SORT_RANGE_ASC,
-    SORT_RANGE_DESC,
-    SORT_SHEET_ASC,
-    SORT_SHEET_DESC,
-    SORT_RANGE_MULTI,
-    FILTER_COLUMN,
-    CLEAR_FILTER,
-    FIND,
-    REPLACE,
-    COPY,
-    CUT,
-    PASTE,
-    IMPORT_CSV,
-    EXPORT_CSV,
-];
-
 /// Bind Trame's command chords into the launcher's keymap.
+///
+/// Every default comes from the table, so a chord is declared beside the
+/// command it triggers and nowhere else. One alias is left here: a description
+/// holds a single chord, and Ctrl+Y redoes as well as Ctrl+Shift+Z (the Excel
+/// and Sheets convention).
 pub fn bind_keys(keymap: &mut Keymap) {
-    keymap.bind(KeyBinding::ctrl('b'), BOLD);
-    keymap.bind(KeyBinding::ctrl('i'), ITALIC);
-    keymap.bind(KeyBinding::ctrl('z'), UNDO);
-    // Ctrl+Shift+Z and Ctrl+Y both redo (Excel/Sheets convention).
-    keymap.bind(KeyBinding::ctrl_shift('z'), REDO);
+    for cmd in COMMANDS {
+        if let Some(chord) = cmd.default_keybinding {
+            keymap.bind(chord, cmd.id);
+        }
+    }
     keymap.bind(KeyBinding::ctrl('y'), REDO);
-    // Find & Replace (`trame-find-replace`): Ctrl+F opens find, Ctrl+H opens replace.
-    keymap.bind(KeyBinding::ctrl('f'), FIND);
-    keymap.bind(KeyBinding::ctrl('h'), REPLACE);
-}
-
-/// Translate a Trame `CommandId` into the `AppCommand` IPC payload the Logic
-/// thread expects. `None` for a command Trame does not own (the launcher logs it).
-pub fn command_to_app(id: CommandId) -> Option<AppCommand> {
-    let cmd = if id == UNDO {
-        TrameCommand::Undo
-    } else if id == REDO {
-        TrameCommand::Redo
-    } else if id == INSERT_ROW_ABOVE {
-        TrameCommand::InsertRowAbove
-    } else if id == INSERT_ROW_BELOW {
-        TrameCommand::InsertRowBelow
-    } else if id == INSERT_COL_LEFT {
-        TrameCommand::InsertColLeft
-    } else if id == INSERT_COL_RIGHT {
-        TrameCommand::InsertColRight
-    } else if id == DELETE_ROWS {
-        TrameCommand::DeleteSelectedRows
-    } else if id == DELETE_COLS {
-        TrameCommand::DeleteSelectedCols
-    } else if id == MERGE {
-        TrameCommand::MergeSelection
-    } else if id == UNMERGE {
-        TrameCommand::UnmergeActive
-    } else if id == SORT_RANGE_ASC {
-        TrameCommand::SortSelectionAsc
-    } else if id == SORT_RANGE_DESC {
-        TrameCommand::SortSelectionDesc
-    } else if id == SORT_SHEET_ASC {
-        TrameCommand::SortSheetAsc
-    } else if id == SORT_SHEET_DESC {
-        TrameCommand::SortSheetDesc
-    } else if id == CLEAR_FILTER {
-        TrameCommand::ClearActiveFilter
-    } else if id == EXPORT_CSV {
-        // Parameterless: the Logic thread serializes the active sheet itself.
-        TrameCommand::ExportActiveSheetCsv
-    } else {
-        // BOLD / ITALIC (style toggles), FILTER_COLUMN, FIND / REPLACE and the
-        // clipboard commands are UI-only intents the launcher intercepts:
-        // BOLD/ITALIC become a `SetCellStyle` patch toggled against the tracked
-        // style state, FILTER_COLUMN opens the popover, FIND/REPLACE open the
-        // find/replace panel. None has a direct AppCommand here.
-        return None;
-    };
-    Some(AppCommand::Trame(cmd))
 }
 
 /// Mirror authoritative toggle state from an inbound `UiEvent` into the command
@@ -333,195 +197,37 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
     }
 }
 
-// -- Structural-op group (the full cell menu, `trame-context-menu`) ------------
-fn structural_group() -> [MenuEntry; 6] {
-    [
-        MenuEntry::with_icon(
-            INSERT_ROW_ABOVE,
-            "Insert row above",
-            icondata::MdiTableRowPlusBefore,
-        ),
-        MenuEntry::with_icon(
-            INSERT_ROW_BELOW,
-            "Insert row below",
-            icondata::MdiTableRowPlusAfter,
-        ),
-        MenuEntry::with_icon(
-            INSERT_COL_LEFT,
-            "Insert column left",
-            icondata::MdiTableColumnPlusBefore,
-        ),
-        MenuEntry::with_icon(
-            INSERT_COL_RIGHT,
-            "Insert column right",
-            icondata::MdiTableColumnPlusAfter,
-        ),
-        MenuEntry::with_icon(DELETE_ROWS, "Delete rows", icondata::MdiTableRowRemove),
-        MenuEntry::with_icon(
-            DELETE_COLS,
-            "Delete columns",
-            icondata::MdiTableColumnRemove,
-        ),
-    ]
-}
-
-// -- Column-only structural ops (column-header menu, `trame-context-menu`) -----
-fn column_structural_group() -> [MenuEntry; 3] {
-    [
-        MenuEntry::with_icon(
-            INSERT_COL_LEFT,
-            "Insert column left",
-            icondata::MdiTableColumnPlusBefore,
-        ),
-        MenuEntry::with_icon(
-            INSERT_COL_RIGHT,
-            "Insert column right",
-            icondata::MdiTableColumnPlusAfter,
-        ),
-        MenuEntry::with_icon(
-            DELETE_COLS,
-            "Delete columns",
-            icondata::MdiTableColumnRemove,
-        ),
-    ]
-}
-
-// -- Row-only structural ops (row-header menu, `trame-context-menu`) -----------
-fn row_structural_group() -> [MenuEntry; 3] {
-    [
-        MenuEntry::with_icon(
-            INSERT_ROW_ABOVE,
-            "Insert row above",
-            icondata::MdiTableRowPlusBefore,
-        ),
-        MenuEntry::with_icon(
-            INSERT_ROW_BELOW,
-            "Insert row below",
-            icondata::MdiTableRowPlusAfter,
-        ),
-        MenuEntry::with_icon(DELETE_ROWS, "Delete rows", icondata::MdiTableRowRemove),
-    ]
-}
-
-// -- Sort group (shared by the cell and header menus, `trame-sort`) ------------
+// -- Context-menu rendering (`trame-context-menu`) -----------------------------
 //
-// Single-column shared sort over the selection (reference column = the
-// selection's first column; the Logic thread no-ops an empty/single-row range)
-// and the whole-sheet sort by the active column (whole-column selection: sorts
-// the full used range so rows stay aligned).
-fn sort_group() -> [MenuEntry; 5] {
-    [
-        MenuEntry::with_icon(
-            SORT_RANGE_ASC,
-            "Sort range ascending",
-            icondata::MdiSortAscending,
-        ),
-        MenuEntry::with_icon(
-            SORT_RANGE_DESC,
-            "Sort range descending",
-            icondata::MdiSortDescending,
-        ),
-        MenuEntry::with_icon(
-            SORT_SHEET_ASC,
-            "Sort sheet by column (asc)",
-            icondata::MdiSort,
-        ),
-        MenuEntry::with_icon(
-            SORT_SHEET_DESC,
-            "Sort sheet by column (desc)",
-            icondata::MdiSort,
-        ),
-        MenuEntry::with_icon(SORT_RANGE_MULTI, "Sort range...", icondata::MdiSortVariant),
-    ]
-}
+// The layout is `ui::commands::context_layout`, host-tested. This half turns
+// one row into the `MenuEntry` the DOM menu renders, reading the label and the
+// icon from the registry (`UI-THREAD-019`): a menu declares an order and a
+// grouping, never a word the user reads.
 
-// -- Dynamic shared-filter entry (`trame-shared-filter`) -------------------------------------
-//
-// Truly contextual: a single entry that toggles meaning with the active sheet's
-// filter state. With no filter it offers "Filter by column" (opens the popover);
-// with a filter active it offers "Remove filter" (drops it). Never both -- the
-// user complained the old menu always listed a clear-filter that did nothing.
-fn filter_entry(filter_active: bool) -> MenuEntry {
-    if filter_active {
-        MenuEntry::with_icon(CLEAR_FILTER, "Remove filter", icondata::MdiFilterOff)
-    } else {
-        MenuEntry::with_icon(FILTER_COLUMN, "Filter by column", icondata::MdiFilter)
-    }
+/// The menu entry for one layout row, labelled and iconed from the registry.
+/// `None` for an identity the registry does not declare, which no layout
+/// produces.
+fn entry(row: registry::MenuRow) -> Option<MenuEntry> {
+    let id = match row {
+        registry::MenuRow::Separator => return Some(MenuEntry::separator()),
+        registry::MenuRow::Command(id) => id,
+    };
+    let cmd = ambre_chrome::commands::find(COMMANDS, id)?;
+    let label = (cmd.title)(&Locale::En);
+    Some(match cmd.icon.and_then(icons::resolve) {
+        Some(icon) => MenuEntry::with_icon(id, label, icon),
+        None => MenuEntry::new(id, label),
+    })
 }
 
 /// The right-click context-menu entries Trame contributes, grouped, iconed and
-/// separated (`trame-context-menu`). `scope` selects the layout: the cell menu
-/// (clipboard + full structural + sort/filter + merge), the column- or row-header
-/// menu (axis-scoped structural + sort/filter, no clipboard/merge), or the corner
-/// menu (whole-sheet sort + filter). `filter_active` drives the dynamic
-/// [`filter_entry`] (Filter by column XOR Remove filter).
+/// separated (`trame-context-menu`). `scope` and `filter_active` select the
+/// layout; see [`registry::context_layout`].
 pub fn context_entries_for(scope: CtxScope, filter_active: bool) -> Vec<MenuEntry> {
-    let mut entries = Vec::new();
-    match scope {
-        CtxScope::Cell => {
-            // Clipboard (`trame-clipboard`): cell-only, driven by the launcher.
-            entries.push(MenuEntry::with_icon(CUT, "Cut", icondata::MdiContentCut));
-            entries.push(MenuEntry::with_icon(COPY, "Copy", icondata::MdiContentCopy));
-            entries.push(MenuEntry::with_icon(
-                PASTE,
-                "Paste",
-                icondata::MdiContentPaste,
-            ));
-            entries.push(MenuEntry::separator());
-            entries.extend(structural_group());
-            entries.push(MenuEntry::separator());
-            entries.extend(sort_group());
-            entries.push(filter_entry(filter_active));
-            entries.push(MenuEntry::separator());
-            // Merge (`trame-cell-merges`): cell-only. Always listed; the Logic
-            // thread guards it (single-cell Merge is a no-op, a covered cell replies
-            // MergeRejected -> toast, Unmerge outside a merge is a no-op).
-            entries.push(MenuEntry::with_icon(
-                MERGE,
-                "Merge cells",
-                icondata::MdiTableMergeCells,
-            ));
-            entries.push(MenuEntry::with_icon(
-                UNMERGE,
-                "Unmerge cells",
-                icondata::MdiTableSplitCell,
-            ));
-        }
-        CtxScope::Column => {
-            entries.extend(column_structural_group());
-            entries.push(MenuEntry::separator());
-            entries.extend(sort_group());
-            entries.push(filter_entry(filter_active));
-        }
-        CtxScope::Row => {
-            entries.extend(row_structural_group());
-            entries.push(MenuEntry::separator());
-            entries.extend(sort_group());
-            // Filtering is column-oriented, so a row menu only ever offers to drop
-            // an active filter (never to create one from a row).
-            if filter_active {
-                entries.push(filter_entry(true));
-            }
-        }
-        CtxScope::Corner => {
-            // The corner selects the whole sheet: only whole-sheet ops apply.
-            entries.push(MenuEntry::with_icon(
-                SORT_SHEET_ASC,
-                "Sort sheet by column (asc)",
-                icondata::MdiSort,
-            ));
-            entries.push(MenuEntry::with_icon(
-                SORT_SHEET_DESC,
-                "Sort sheet by column (desc)",
-                icondata::MdiSort,
-            ));
-            if filter_active {
-                entries.push(MenuEntry::separator());
-                entries.push(filter_entry(true));
-            }
-        }
-    }
-    entries
+    registry::context_layout(scope, filter_active)
+        .into_iter()
+        .filter_map(entry)
+        .collect()
 }
 
 /// The default (cell-scoped, no active filter) right-click context menu. Kept as
