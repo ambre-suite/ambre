@@ -6,7 +6,7 @@
 // ============================================================================
 
 use ambre_bus::StylePatch;
-use ambre_chrome::commands::CommandId;
+use ambre_chrome::commands::{CommandId, Locale};
 use ambre_chrome::{FontSizeSelect, FormatToggle};
 use leptos::prelude::*;
 use leptos_icons::Icon;
@@ -15,6 +15,19 @@ use super::color::{theme_bg_default, theme_fg_default};
 use super::commands::{
     BOLD, COPY, CUT, EXPORT_CSV, FIND, IMPORT_CSV, ITALIC, MERGE, PASTE, REDO, UNDO, UNMERGE,
 };
+use super::icons;
+use crate::ui::commands as registry;
+
+/// The label a control shows for `id`. Reads the registry and never a literal
+/// (`UI-THREAD-019`), so the toolbar and the context menu name a command alike.
+fn label(id: CommandId) -> String {
+    registry::title(id, &Locale::En).unwrap_or_default()
+}
+
+/// The glyph `id` declares, resolved to its asset.
+fn glyph(id: CommandId) -> Option<icondata::Icon> {
+    registry::icon(id).and_then(icons::resolve)
+}
 use super::popovers::{
     BordersPopover, ColorPopover, FontPopover, HAlignPopover, NumberFormatPopover, VAlignPopover,
 };
@@ -46,36 +59,36 @@ pub fn FormatBar(
         // click to reselect) and made `navigator.clipboard.read()` throw "Document
         // is not focused", so the Paste button did nothing.
         <button
-            aria-label="Copy"
+            aria-label=label(COPY)
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_command.run(COPY)
         >
-            <Icon icon=icondata::MdiContentCopy />
+            {glyph(COPY).map(|ic| view! { <Icon icon=ic /> })}
         </button>
         <button
-            aria-label="Cut"
+            aria-label=label(CUT)
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_command.run(CUT)
         >
-            <Icon icon=icondata::MdiContentCut />
+            {glyph(CUT).map(|ic| view! { <Icon icon=ic /> })}
         </button>
         <button
-            aria-label="Paste"
+            aria-label=label(PASTE)
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_command.run(PASTE)
         >
-            <Icon icon=icondata::MdiContentPaste />
+            {glyph(PASTE).map(|ic| view! { <Icon icon=ic /> })}
         </button>
         <span class="sep"></span>
 
         // Find & Replace (`trame-find-replace`): opens the DOM panel in find
         // mode. The launcher intercepts FIND (UI-only) like FILTER_COLUMN.
         <button
-            aria-label="Find and replace"
+            aria-label=label(FIND)
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_command.run(FIND)
         >
-            <Icon icon=icondata::AiSearchOutlined />
+            {glyph(FIND).map(|ic| view! { <Icon icon=ic /> })}
         </button>
         <span class="sep"></span>
 
@@ -83,18 +96,18 @@ pub fn FormatBar(
         // export the active sheet to CSV. UI-only intents the launcher services
         // (IMPORT_CSV opens a file picker, EXPORT_CSV triggers the download).
         <button
-            aria-label="Import CSV"
+            aria-label=label(IMPORT_CSV)
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_command.run(IMPORT_CSV)
         >
-            <Icon icon=icondata::BiImportRegular />
+            {glyph(IMPORT_CSV).map(|ic| view! { <Icon icon=ic /> })}
         </button>
         <button
-            aria-label="Export CSV"
+            aria-label=label(EXPORT_CSV)
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_command.run(EXPORT_CSV)
         >
-            <Icon icon=icondata::BiExportRegular />
+            {glyph(EXPORT_CSV).map(|ic| view! { <Icon icon=ic /> })}
         </button>
         <span class="sep"></span>
 
@@ -103,14 +116,14 @@ pub fn FormatBar(
         // bar use. Bold/Italic route through the shared command path; underline /
         // strikethrough emit a `StylePatch` (they have no `CommandId`).
         <FormatToggle
-            label="Bold"
-            icon=icondata::BsTypeBold
+            label=label(BOLD)
+            icon=glyph(BOLD)
             pressed=style.bold.into()
             on_toggle=Callback::new(move |()| on_command.run(BOLD))
         />
         <FormatToggle
-            label="Italic"
-            icon=icondata::BsTypeItalic
+            label=label(ITALIC)
+            icon=glyph(ITALIC)
             pressed=style.italic.into()
             on_toggle=Callback::new(move |()| on_command.run(ITALIC))
         />
@@ -221,32 +234,36 @@ pub fn FormatBar(
         // plain selection it merges the range (MERGE). The Logic thread guards
         // both (single-cell merge is a no-op, non-empty covered cell rejects).
         <button
-            aria-label="Merge cells"
+            // The label names the command the click will send, so a merged cell
+            // announces "Unmerge cells" instead of the action it will not do.
+            aria-label=move || label(if style.merged.get() { UNMERGE } else { MERGE })
             aria-pressed=move || style.merged.get().then_some("true")
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| {
                 on_command.run(if style.merged.get_untracked() { UNMERGE } else { MERGE })
             }
         >
-            <Icon icon=icondata::AiMergeCellsOutlined />
+            // One glyph for both states: the button is a toggle, so it must not
+            // change shape under the pointer.
+            {glyph(MERGE).map(|ic| view! { <Icon icon=ic /> })}
         </button>
         <span class="sep"></span>
 
         <button
-            aria-label="Undo"
+            aria-label=label(UNDO)
             disabled=move || !toggles.undo_enabled.get()
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_command.run(UNDO)
         >
-            <Icon icon=icondata::BiUndoRegular />
+            {glyph(UNDO).map(|ic| view! { <Icon icon=ic /> })}
         </button>
         <button
-            aria-label="Redo"
+            aria-label=label(REDO)
             disabled=move || !toggles.redo_enabled.get()
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_command.run(REDO)
         >
-            <Icon icon=icondata::BiRedoRegular />
+            {glyph(REDO).map(|ic| view! { <Icon icon=ic /> })}
         </button>
     }
 }

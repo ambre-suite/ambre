@@ -66,22 +66,28 @@ pub fn FontSizeSelect(
 /// strikethrough). `pressed` drives the `aria-pressed` state (and the CSS active
 /// look); `on_toggle` fires on click. The caller decides what the toggle does --
 /// the control only reflects state and reports intent.
+/// `label` and `icon` are owned rather than static, so a caller can hand over
+/// what a command registry describes instead of a literal
+/// (`ambre-spec-commands.md`, UI-THREAD-019). A control that backs no command --
+/// underline, strikethrough -- still passes its own, having no description to
+/// read.
 #[component]
 pub fn FormatToggle(
-    label: &'static str,
-    icon: icondata::Icon,
+    #[prop(into)] label: String,
+    #[prop(into)] icon: Option<icondata::Icon>,
     pressed: Signal<bool>,
     on_toggle: Callback<()>,
 ) -> impl IntoView {
+    let title = label.clone();
     view! {
         <button
             aria-label=label
-            title=label
+            title=title
             aria-pressed=move || pressed.get().then_some("true")
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_toggle.run(())
         >
-            <Icon icon=icon />
+            {icon.map(|ic| view! { <Icon icon=ic /> })}
         </button>
     }
 }

@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
 | `UI-THREAD-011` | Copy, cut and paste MUST resolve through shared identities, on the modern and the legacy chords alike, in every application. | this spec section 2 | not built -- lands with `One keymap` (`ambre-roadmap.md` E8). The three intents ride the browser's own events today and no chord table names them, so the legacy set reaches whatever the browser decides to raise | unimplemented |
-| `UI-THREAD-019` | A command MUST be described once -- its label, its icon, its chord, its grouping -- and every view of it MUST be derived from that description; a view MUST NOT declare one of its own. | this spec section 2 | not built -- lands with `One command registry` (`ambre-roadmap.md` E8). A label belongs to the menu entry that shows it, so a command in two menus has two labels and a command in no menu has none | unimplemented |
+| `UI-THREAD-019` | A command MUST be described once -- its label, its icon, its chord, its grouping -- and every view of it MUST be derived from that description; a view MUST NOT declare one of its own. | this spec section 2 | `ambre_trame::ui::commands::tests::every_layout_row_resolves_in_the_registry`, `::every_command_has_a_label`; `ambre_toile::ui::commands::tests::every_exposed_identity_is_described`, `ambre_toile::ui::menu_bar::tests::every_dropdown_row_is_described`; the DOM belt `chrome_ui::the_toolbar_announces_the_registry_labels` reads the rendered `aria-label` back, so a literal written into the markup fails | verified |
 | `UI-THREAD-026` | A chord MUST resolve to at most one command, and a rebinding MUST report the command it displaced. | this spec section 2 | `ambre_commands::tests::keymap_resolves_default_bindings`, `::rebinding_reports_the_displaced_command`; `ambre_toile::ui::palette::tests::tool_chords_are_distinct` drives a real application's table and fails on a collision | verified |
 | `UI-THREAD-027` | The crate that owns command identity MUST depend on no user-interface framework. | this spec section 2 | type-level: its dependency table is empty, so a framework type has no path into it and the crate builds and tests on the host | verified |
 | `UI-THREAD-028` | One chord table MUST serve every platform: the primary accelerator MUST fold the control and the command modifiers. | this spec section 2 | none, and **the rule fails today**: the browser event is translated with the two modifiers kept apart, and every table in the suite declares the control one, so no chord resolves on a machine whose accelerator is the command key -- section 5 | unverified |
@@ -33,10 +33,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 * **Boundary.** none: an identity is a string in memory. It reaches no relay, holds no key and
   opens no socket, and the payload it produces is sealed by the thread that sends it
   (`ambre-spec-zero-knowledge.md`).
-* **Verification.** 2 `verified`, 1 `unverified`, 2 `unimplemented`. What is held is the part that
-  is pure data: the resolution, the collision report and the crate's isolation, all on the host
-  tier. What is loose is the one place the model meets the browser, and it is the place it is
-  wrong.
+* **Verification.** 3 `verified`, 1 `unverified`, 1 `unimplemented`. What is held is the part that
+  is pure data -- the resolution, the collision report and the crate's isolation, all on the host
+  tier -- plus the single description, which the host tier holds per application and one DOM belt
+  holds where a label reaches the user. What is loose is the one place the model meets the browser,
+  and it is the place it is wrong.
 
 ---
 
@@ -82,14 +83,14 @@ pub trait CommandSource { type Context; }
 table; the launcher calls both and names no command itself. Two applications declare 68 identities
 between them -- 26 and 42.
 
-**Both applications describe their commands.** A table holds a `Command` per affordance -- label,
-icon, default chord, category. Trame's context menu derives from it and so do its chord defaults.
-Toile's context menu, menu bar, zoom cluster, tool palette and floating selection bar all derive
-from it; nine of its labels had been written twice, once for the menu bar and once for the
-right-click menu.
+**Both applications describe their commands, and every view derives.** A table holds a `Command`
+per affordance -- label, icon, default chord, category. Trame's context menu, its format toolbar and
+its chord defaults read it; Toile's context menu, menu bar, zoom cluster, tool palette and floating
+selection bar read it. Nine of Toile's labels had been written twice, once for the menu bar and once
+for the right-click menu, and Trame's toolbar repeated eleven more.
 
-**One surface still declares its own words: Trame's toolbar.** It repeats "Copy", "Bold" and "Undo"
-as `aria-label`s beside the table that declares them, so `UI-THREAD-019` does not hold yet.
+**A control that backs no command keeps its own words**, having no description to read: underline,
+strikethrough, wrap and the decimal steppers emit a `StylePatch` and name no identity.
 `CommandSource` is constructed nowhere: the palette is its first reader.
 
 **The chord.** A chord is a modifier set plus a logical key, normalized so a letter is compared in

@@ -75,10 +75,10 @@ const INTEROP: CommandCategory = CommandCategory("interop");
 // convention). A description holds one default chord, so the table carries the
 // first and `chrome::commands::bind_keys` still binds the alias.
 commands! {
-    BOLD = "trame.format.bold", "Bold", None, Some(KeyBinding::ctrl('b')), FORMAT;
-    ITALIC = "trame.format.italic", "Italic", None, Some(KeyBinding::ctrl('i')), FORMAT;
-    UNDO = "trame.history.undo", "Undo", None, Some(KeyBinding::ctrl('z')), HISTORY;
-    REDO = "trame.history.redo", "Redo", None, Some(KeyBinding::ctrl_shift('z')), HISTORY;
+    BOLD = "trame.format.bold", "Bold", Some(IconId("format-bold")), Some(KeyBinding::ctrl('b')), FORMAT;
+    ITALIC = "trame.format.italic", "Italic", Some(IconId("format-italic")), Some(KeyBinding::ctrl('i')), FORMAT;
+    UNDO = "trame.history.undo", "Undo", Some(IconId("undo")), Some(KeyBinding::ctrl('z')), HISTORY;
+    REDO = "trame.history.redo", "Redo", Some(IconId("redo")), Some(KeyBinding::ctrl_shift('z')), HISTORY;
     INSERT_ROW_ABOVE = "trame.row.insert_above", "Insert row above", Some(IconId("table-row-plus-before")), None, STRUCTURE;
     INSERT_ROW_BELOW = "trame.row.insert_below", "Insert row below", Some(IconId("table-row-plus-after")), None, STRUCTURE;
     INSERT_COL_LEFT = "trame.col.insert_left", "Insert column left", Some(IconId("table-column-plus-before")), None, STRUCTURE;
@@ -94,13 +94,13 @@ commands! {
     SORT_RANGE_MULTI = "trame.sort.range_multi", "Sort range...", Some(IconId("sort-variant")), None, SORT;
     FILTER_COLUMN = "trame.filter.column", "Filter by column", Some(IconId("filter")), None, FILTER;
     CLEAR_FILTER = "trame.filter.clear", "Remove filter", Some(IconId("filter-off")), None, FILTER;
-    FIND = "trame.find.open", "Find and replace", None, Some(KeyBinding::ctrl('f')), FIND_REPLACE;
+    FIND = "trame.find.open", "Find and replace", Some(IconId("search")), Some(KeyBinding::ctrl('f')), FIND_REPLACE;
     REPLACE = "trame.find.replace", "Replace", None, Some(KeyBinding::ctrl('h')), FIND_REPLACE;
     COPY = "trame.clipboard.copy", "Copy", Some(IconId("content-copy")), None, CLIPBOARD;
     CUT = "trame.clipboard.cut", "Cut", Some(IconId("content-cut")), None, CLIPBOARD;
     PASTE = "trame.clipboard.paste", "Paste", Some(IconId("content-paste")), None, CLIPBOARD;
-    IMPORT_CSV = "trame.interop.import_csv", "Import CSV", None, None, INTEROP;
-    EXPORT_CSV = "trame.interop.export_csv", "Export CSV", None, None, INTEROP;
+    IMPORT_CSV = "trame.interop.import_csv", "Import CSV", Some(IconId("import")), None, INTEROP;
+    EXPORT_CSV = "trame.interop.export_csv", "Export CSV", Some(IconId("export")), None, INTEROP;
 }
 
 /// The label a view shows for `id`, in `locale`. `None` for a command Trame
@@ -110,6 +110,12 @@ commands! {
 /// and never writes one of its own (`UI-THREAD-019`).
 pub fn title(id: CommandId, locale: &Locale) -> Option<String> {
     ambre_commands::find(COMMANDS, id).map(|c| (c.title)(locale))
+}
+
+/// The icon handle `id` declares, if it has one. The chrome resolves it to the
+/// asset (`chrome::icons`).
+pub fn icon(id: CommandId) -> Option<IconId> {
+    ambre_commands::find(COMMANDS, id).and_then(|c| c.icon)
 }
 
 // -- Context-menu layouts (`trame-context-menu`) -------------------------------

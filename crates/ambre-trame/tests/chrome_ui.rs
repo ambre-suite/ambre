@@ -23,11 +23,13 @@ use ambre_bus::{
 };
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
+use ambre_commands::Locale;
 use ambre_trame::chrome::{
-    self, BOLD, FindMode, FindQuery, FindReplace, FindReplaceState, REDO, ReorderSheet,
-    ReplaceRequest, SelStats, SheetTabs, SortApply, SortDialog, SortDialogState, StatusBar,
-    StyleState, UNDO,
+    self, BOLD, COPY, CUT, EXPORT_CSV, FIND, FindMode, FindQuery, FindReplace, FindReplaceState,
+    FormatBar, IMPORT_CSV, ITALIC, MERGE, PASTE, REDO, ReorderSheet, ReplaceRequest, SelStats,
+    SheetTabs, SortApply, SortDialog, SortDialogState, StatusBar, StyleState, Toggles, UNDO,
 };
+use ambre_trame::ui::commands as registry;
 use leptos::mount::mount_to;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
@@ -503,6 +505,45 @@ fn sheet_tabs_render_active_and_emit_intents() {
         .unwrap();
     add.click();
     assert_eq!(created.get_untracked(), 1);
+
+    container.remove();
+}
+
+/// DOM test: every command button of the `FormatBar` announces the label the
+/// registry declares (`ambre-spec-commands.md`, UI-THREAD-019).
+///
+/// This is the belt over the toolbar, the surface that repeated "Copy", "Bold"
+/// and "Undo" as literals beside the table that declares them. It reads the
+/// rendered `aria-label` out of the DOM, so a literal written back into the
+/// markup fails here rather than drifting in silence.
+#[wasm_bindgen_test]
+fn the_toolbar_announces_the_registry_labels() {
+    let container = mount_in_container(|| {
+        let store = CommandStates::new(chrome::COMMANDS.iter().map(|c| c.id));
+        chrome::init_command_states(&store);
+        let toggles = Toggles::from_store(&store);
+        let style = StyleState::new();
+        let theme = RwSignal::new(ambre_canvas::Theme::Dark);
+        view! {
+            <FormatBar
+                toggles=toggles
+                style=style
+                theme=theme
+                on_command=Callback::new(|_| {})
+                on_style=Callback::new(|_| {})
+            />
+        }
+    });
+
+    for id in [
+        COPY, CUT, PASTE, FIND, IMPORT_CSV, EXPORT_CSV, BOLD, ITALIC, MERGE, UNDO, REDO,
+    ] {
+        let expected = registry::title(id, &Locale::En).expect("described");
+        let found = container
+            .query_selector(&format!("[aria-label=\"{expected}\"]"))
+            .unwrap();
+        assert!(found.is_some(), "{id:?}: no control announces {expected:?}");
+    }
 
     container.remove();
 }

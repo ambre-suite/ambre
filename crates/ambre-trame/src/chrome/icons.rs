@@ -35,6 +35,14 @@ pub fn resolve(id: IconId) -> Option<icondata::Icon> {
         "content-cut" => icondata::MdiContentCut,
         "content-copy" => icondata::MdiContentCopy,
         "content-paste" => icondata::MdiContentPaste,
+        // Toolbar-only glyphs, from families the grid menu does not use.
+        "format-bold" => icondata::BsTypeBold,
+        "format-italic" => icondata::BsTypeItalic,
+        "undo" => icondata::BiUndoRegular,
+        "redo" => icondata::BiRedoRegular,
+        "search" => icondata::AiSearchOutlined,
+        "import" => icondata::BiImportRegular,
+        "export" => icondata::BiExportRegular,
         _ => return None,
     };
     Some(icon)
