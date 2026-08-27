@@ -19,56 +19,55 @@
 // signal the canvas view publishes each frame.
 // ============================================================================
 
-use ambre_chrome::commands::CommandId;
+use ambre_chrome::commands::{CommandId, Locale};
 use ambre_chrome::{ContextMenu, MenuEntry};
 use leptos::prelude::*;
 use leptos_icons::Icon;
 use wasm_bindgen::JsCast;
 
+use crate::ui::commands as registry;
 use crate::ui::menu_bar::{
     MenuId, MenuRow, TOP_MENUS, ZOOM_FIT, ZOOM_IN, ZOOM_OUT, ZOOM_RESET, ZOOM_TO_SELECTION,
     menu_layout,
 };
 
+use super::icons;
+
 /// Map the pure `MenuRow` layout to the chrome `MenuEntry` rows `ContextMenu`
-/// renders (labels + optional keybinding chip; the menu bar shows no leading
-/// icons, keeping the dropdowns text-first).
+/// renders. The label and the accelerator chip come from the registry
+/// (`UI-THREAD-019`); the menu bar shows no leading icons, keeping the dropdowns
+/// text-first. A row the registry does not describe contributes nothing, which
+/// no layout produces.
 fn entries_for(id: MenuId) -> Vec<MenuEntry> {
     menu_layout(id)
         .into_iter()
-        .map(|row| match row {
-            MenuRow::Separator => MenuEntry::separator(),
-            MenuRow::Item {
-                command,
-                label,
-                shortcut,
-            } => {
-                let entry = MenuEntry::new(command, label);
-                match shortcut {
+        .filter_map(|row| match row {
+            MenuRow::Separator => Some(MenuEntry::separator()),
+            MenuRow::Command(command) => {
+                let entry = MenuEntry::new(command, registry::title(command, &Locale::En)?);
+                Some(match registry::chord(command) {
                     Some(kb) => entry.shortcut(kb),
                     None => entry,
-                }
+                })
             }
         })
         .collect()
 }
 
 /// A zoom-cluster button: a plain `.ambre-commandbar` icon button that emits
-/// `command` through the shared path. `mousedown` `prevent_default` keeps DOM
-/// focus on the canvas text pipe (the palette / FormatBar hazard).
-fn zoom_button(
-    on_command: Callback<CommandId>,
-    command: CommandId,
-    label: &'static str,
-    icon: icondata::Icon,
-) -> impl IntoView {
+/// `command` through the shared path. Its tooltip and its glyph are the ones
+/// the command declares (`UI-THREAD-019`). `mousedown` `prevent_default` keeps
+/// DOM focus on the canvas text pipe (the palette / FormatBar hazard).
+fn zoom_button(on_command: Callback<CommandId>, command: CommandId) -> impl IntoView {
+    let label = registry::title(command, &Locale::En).unwrap_or_default();
+    let icon = registry::icon(command).and_then(icons::resolve);
     view! {
         <button
             aria-label=label
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_command.run(command)
         >
-            <Icon icon=icon />
+            {icon.map(|ic| view! { <Icon icon=ic /> })}
         </button>
     }
 }
@@ -133,24 +132,19 @@ pub fn TopMenuBar(zoom: RwSignal<f64>, on_command: Callback<CommandId>) -> impl 
             {titles}
         </div>
         <div class="ambre-commandbar ambre-toile-zoom" role="toolbar" aria-label="Zoom">
-            {zoom_button(on_command, ZOOM_OUT, "Zoom out", icondata::MdiMinus)}
+            {zoom_button(on_command, ZOOM_OUT)}
             <button
                 class="ambre-zoom-readout"
-                aria-label="Zoom to 100%"
+                aria-label=registry::title(ZOOM_RESET, &Locale::En).unwrap_or_default()
                 on:mousedown=move |ev| ev.prevent_default()
                 on:click=move |_| on_command.run(ZOOM_RESET)
             >
                 {move || format!("{:.0}%", (zoom.get() * 100.0).round())}
             </button>
-            {zoom_button(on_command, ZOOM_IN, "Zoom in", icondata::MdiPlus)}
+            {zoom_button(on_command, ZOOM_IN)}
             <span class="sep"></span>
-            {zoom_button(on_command, ZOOM_FIT, "Fit to content", icondata::MdiFitToScreenOutline)}
-            {zoom_button(
-                on_command,
-                ZOOM_TO_SELECTION,
-                "Zoom to selection",
-                icondata::MdiSelectionSearch,
-            )}
+            {zoom_button(on_command, ZOOM_FIT)}
+            {zoom_button(on_command, ZOOM_TO_SELECTION)}
         </div>
         <ContextMenu pos=pos entries=entries on_command=on_command />
     }

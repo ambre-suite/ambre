@@ -25,7 +25,10 @@
 // selection the bar acts on.
 // ============================================================================
 
-use ambre_chrome::commands::CommandId;
+use ambre_chrome::commands::{CommandId, Locale};
+
+use super::icons;
+use crate::ui::commands as registry;
 use ambre_chrome::{ColorPopover, FontPicker, FontSizeSelect, FormatToggle};
 use leptos::prelude::*;
 
@@ -131,15 +134,19 @@ pub fn SelectionToolbar(
 
     // A command button routing through the shared sink (identical to the inspector
     // / context menu). `prevent_default` on mousedown keeps the canvas focused.
-    let cmd_button = move |command: CommandId, label: &'static str, icon: icondata::Icon| {
+    // The tooltip and the glyph are the ones the command declares
+    // (`UI-THREAD-019`), so this bar and the right-click menu never disagree.
+    let cmd_button = move |command: CommandId| {
+        let label = registry::title(command, &Locale::En).unwrap_or_default();
+        let icon = registry::icon(command).and_then(icons::resolve);
         view! {
             <button
-                aria-label=label
+                aria-label=label.clone()
                 title=label
                 on:mousedown=move |ev| ev.prevent_default()
                 on:click=move |_| on_command.run(command)
             >
-                <leptos_icons::Icon icon=icon />
+                {icon.map(|ic| view! { <leptos_icons::Icon icon=ic /> })}
             </button>
         }
     };
@@ -206,17 +213,17 @@ pub fn SelectionToolbar(
                                 alpha=true
                             />
                             // -- Structural actions (strict subset of the context menu) --
-                            {cmd_button(menu::DUPLICATE, "Duplicate", icondata::MdiContentDuplicate)}
-                            {cmd_button(menu::DELETE, "Delete", icondata::MdiDelete)}
+                            {cmd_button(menu::DUPLICATE)}
+                            {cmd_button(menu::DELETE)}
                             {b.multi
-                                .then(|| cmd_button(menu::GROUP, "Group", icondata::MdiGroup))}
+                                .then(|| cmd_button(menu::GROUP))}
                             {b.has_group
-                                .then(|| cmd_button(menu::UNGROUP, "Ungroup", icondata::MdiUngroup))}
+                                .then(|| cmd_button(menu::UNGROUP))}
                             {b.any_unlocked
-                                .then(|| cmd_button(menu::LOCK, "Lock", icondata::MdiLock))}
+                                .then(|| cmd_button(menu::LOCK))}
                             {b.any_locked
                                 .then(|| {
-                                    cmd_button(menu::UNLOCK, "Unlock", icondata::MdiLockOpenVariant)
+                                    cmd_button(menu::UNLOCK)
                                 })}
                         </div>
                     }

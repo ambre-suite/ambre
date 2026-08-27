@@ -18,7 +18,7 @@
 use std::borrow::Cow;
 
 use ambre_bus::app::toile::{STICKY_DEFAULT_FILL, ShapeKind};
-use ambre_commands::{CommandId, Key, KeyBinding, Keymap, Modifiers};
+use ambre_commands::{CommandId, Keymap};
 
 use super::tool::{Handle, Tool};
 
@@ -97,23 +97,11 @@ pub const STICKY_SWATCHES: &[u32] = &[
 /// and the keyboard resolve to the same tool selection. The launcher guards them
 /// with [`is_editable_tag`] so a letter typed into an inline editor is not stolen.
 pub fn bind_tool_keys(keymap: &mut Keymap) {
-    keymap.bind(
-        KeyBinding::new(Modifiers::NONE, Key::char('v')),
-        TOOL_SELECT,
-    );
-    keymap.bind(KeyBinding::new(Modifiers::NONE, Key::char('p')), TOOL_PEN);
-    keymap.bind(KeyBinding::new(Modifiers::NONE, Key::char('r')), TOOL_SHAPE);
-    keymap.bind(
-        KeyBinding::new(Modifiers::NONE, Key::char('c')),
-        TOOL_CONNECTOR,
-    );
-    keymap.bind(KeyBinding::new(Modifiers::NONE, Key::char('d')), TOOL_DRAW);
-    keymap.bind(
-        KeyBinding::new(Modifiers::NONE, Key::char('n')),
-        TOOL_STICKY,
-    );
-    keymap.bind(KeyBinding::new(Modifiers::NONE, Key::char('t')), TOOL_TEXT);
-    keymap.bind(KeyBinding::new(Modifiers::NONE, Key::char('h')), TOOL_HAND);
+    for &id in TOOL_COMMANDS {
+        if let Some(chord) = crate::ui::commands::chord(id) {
+            keymap.bind(chord, id);
+        }
+    }
 }
 
 /// A note-shaped CSS cursor (inlined SVG data URI) shown while the Sticky tool is
@@ -267,6 +255,9 @@ pub fn is_editable_tag(tag_name: &str, content_editable: bool) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // The chord types are the tests' business now: the module itself reads
+    // every binding from the registry.
+    use ambre_commands::{Key, KeyBinding, Modifiers};
 
     #[test]
     fn tool_for_command_maps_every_tool_id() {

@@ -82,16 +82,15 @@ pub trait CommandSource { type Context; }
 table; the launcher calls both and names no command itself. Two applications declare 68 identities
 between them -- 26 and 42.
 
-**Trame describes its 26 commands, and Toile does not.** Trame's table is a `Command` per
-affordance -- label, icon, default chord, category -- and its context menu reads every word from it;
-its chord defaults come from the same table. Toile still exposes bare identities, and a label sits
-at each of its views. Trame's own toolbar is the other half left: it repeats "Copy", "Bold" and
-"Undo" as `aria-label`s beside the table that declares them.
+**Both applications describe their commands.** A table holds a `Command` per affordance -- label,
+icon, default chord, category. Trame's context menu derives from it and so do its chord defaults.
+Toile's context menu, menu bar, zoom cluster, tool palette and floating selection bar all derive
+from it; nine of its labels had been written twice, once for the menu bar and once for the
+right-click menu.
 
-**The description is the target state.** Until every view derives, a label lives in as many places
-as the command has views, nothing finds a command no menu shows, and every surface still to be
-written pays that duplication again (`UI-THREAD-019`). `CommandSource` is constructed nowhere: the
-palette is its first reader.
+**One surface still declares its own words: Trame's toolbar.** It repeats "Copy", "Bold" and "Undo"
+as `aria-label`s beside the table that declares them, so `UI-THREAD-019` does not hold yet.
+`CommandSource` is constructed nowhere: the palette is its first reader.
 
 **The chord.** A chord is a modifier set plus a logical key, normalized so a letter is compared in
 one case. The table is a map from chord to identity, seeded from the declared defaults and
@@ -124,7 +123,9 @@ flowchart TD
 * `crates/ambre-trame/src/chrome/commands.rs` -- the menu rows built from them, the chord bindings
   and the inbound event mirrors; `crates/ambre-trame/src/chrome/icons.rs` -- `IconId` to the icon
   asset, which keeps one application's icon set out of the shared crate;
-* `crates/ambre-toile/src/ui/menu.rs` -- Toile's identities and their chord bindings.
+* `crates/ambre-toile/src/ui/commands.rs` -- Toile's descriptions, over the identities that stay
+  beside the resolver of each surface (`ui::menu`, `ui::menu_bar`, `ui::palette`, `ui::find`);
+  `crates/ambre-toile/src/chrome/icons.rs` -- the same handle-to-asset map as Trame's.
 
 ---
 

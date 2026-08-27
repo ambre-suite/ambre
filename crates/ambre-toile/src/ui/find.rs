@@ -12,6 +12,16 @@
 // ============================================================================
 
 use ambre_bus::app::toile::ElementId;
+use ambre_commands::CommandId;
+
+/// Open the Find panel. A UI-only intent: the launcher intercepts it to toggle
+/// the panel open rather than dispatching to Logic (the panel emits
+/// `ToileCommand::Find` itself).
+///
+/// Declared here rather than in the chrome, which is wasm-only: an identity the
+/// registry describes must be reachable from a host test
+/// (`ambre-spec-commands.md`).
+pub const FIND: CommandId = CommandId("toile.find.open");
 
 /// Index of `focus` within `hits`, or `None` when there is no focus or it is no
 /// longer a hit (a query change can drop the previously focused element). The

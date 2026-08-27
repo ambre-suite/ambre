@@ -24,6 +24,7 @@ pub use find::{FindPanel, FindQuery};
 pub use floatbar::SelectionToolbar;
 pub use menu::context_entries_for;
 pub use menu_bar::TopMenuBar;
+mod icons;
 pub use palette::ToolPalette;
 pub use presenter::{PresenterIntent, PresenterPanel};
 pub use status::StatusBar;
@@ -58,10 +59,7 @@ pub use crate::ui::palette::{
 use ambre_bus::DocType;
 use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
 
-/// Open the Find panel. A UI-only intent: the launcher intercepts it
-/// to toggle the panel open rather than dispatching to Logic (the panel emits
-/// `ToileCommand::Find` itself).
-pub const FIND: CommandId = CommandId("toile.find.open");
+pub use crate::ui::find::FIND;
 
 /// The document type Toile's landing "new document" button creates.
 pub const DOC_TYPE: DocType = DocType::Toile;
@@ -75,7 +73,14 @@ pub fn new_doc_label() -> &'static str {
 /// the bare-key tool chords (V/P/R/... -> `SetTool`,) switch tools;
 /// the remaining board shortcuts (undo/redo, clipboard, nudge, ...) are decoded
 /// canvas-side in `ToileView::handle_key` (toile-tools), not here.
+///
+/// Every chord comes from the registry, which declares what each affordance
+/// announces. Only these two families are routed through the keymap: binding
+/// the board chords here too would decode them twice, once here and once on the
+/// canvas (`ambre-spec-commands.md` section 5, and the `One keymap` Story).
 pub fn bind_keys(keymap: &mut Keymap) {
-    keymap.bind(KeyBinding::ctrl('f'), FIND);
+    if let Some(chord) = crate::ui::commands::chord(FIND) {
+        keymap.bind(chord, FIND);
+    }
     crate::ui::palette::bind_tool_keys(keymap);
 }

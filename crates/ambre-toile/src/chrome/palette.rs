@@ -26,14 +26,20 @@
 // `ui::palette`.
 // ============================================================================
 
-use ambre_bus::app::toile::ShapeKind;
+use ambre_chrome::commands::{CommandId, Locale};
 use leptos::html;
 use leptos::prelude::*;
 use leptos_icons::Icon;
 use wasm_bindgen::JsCast;
 
 use crate::ui::Tool;
-use crate::ui::palette::STICKY_SWATCHES;
+use crate::ui::commands as registry;
+use crate::ui::palette::{
+    STICKY_SWATCHES, TOOL_CONNECTOR, TOOL_DRAW, TOOL_HAND, TOOL_PEN, TOOL_SELECT, TOOL_SHAPE,
+    TOOL_STICKY, TOOL_TEXT, tool_for_command,
+};
+
+use super::icons;
 
 /// One palette button. `aria-pressed` compares the active tool by variant
 /// (`mem::discriminant`), so any `Shape(kind)` reads pressed while the Shape tool
@@ -41,12 +47,14 @@ use crate::ui::palette::STICKY_SWATCHES;
 /// `mousedown` `prevent_default` keeps DOM focus on the canvas text pipe -- a
 /// button stealing focus broke the next canvas click and the clipboard (the same
 /// hazard documented on the Trame `FormatBar`).
-fn tool_button(
-    active: RwSignal<Tool>,
-    tool: Tool,
-    label: &'static str,
-    icon: icondata::Icon,
-) -> impl IntoView {
+/// `command` names the tool: its tooltip and its glyph come from the registry
+/// (`UI-THREAD-019`), and `tool_for_command` says which tool the click arms, so
+/// the button, the keyboard chord and the command palette all agree.
+fn tool_button(active: RwSignal<Tool>, command: CommandId) -> impl IntoView {
+    let label = registry::title(command, &Locale::En).unwrap_or_default();
+    let icon = registry::icon(command).and_then(icons::resolve);
+    // An id absent from the tool map arms nothing rather than failing the bar.
+    let tool = tool_for_command(command).unwrap_or(Tool::Select);
     let is_active = move || std::mem::discriminant(&active.get()) == std::mem::discriminant(&tool);
     view! {
         <button
@@ -55,7 +63,7 @@ fn tool_button(
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| active.set(tool)
         >
-            <Icon icon=icon />
+            {icon.map(|ic| view! { <Icon icon=ic /> })}
         </button>
     }
 }
@@ -97,7 +105,7 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
     view! {
         <span class="ambre-color" node_ref=root_ref>
             <button
-                aria-label="Sticky note"
+                aria-label=registry::title(TOOL_STICKY, &Locale::En).unwrap_or_default()
                 aria-haspopup="true"
                 aria-expanded=move || open.get().then_some("true")
                 aria-pressed=move || is_active().then_some("true")
@@ -146,18 +154,18 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
 pub fn ToolPalette(active: RwSignal<Tool>) -> impl IntoView {
     view! {
         <div class="ambre-commandbar ambre-tool-palette" role="toolbar" aria-label="Tools">
-            {tool_button(active, Tool::Select, "Select", icondata::MdiCursorDefault)}
+            {tool_button(active, TOOL_SELECT)}
             <span class="sep"></span>
-            {tool_button(active, Tool::Pen, "Pen", icondata::MdiVectorPolyline)}
+            {tool_button(active, TOOL_PEN)}
             // The Shape tool defaults to a rectangle; the kind sub-picker is a
             // later palette signal folded into `CreateElement` (`toile-tools`).
-            {tool_button(active, Tool::Shape(ShapeKind::Rect), "Shape", icondata::MdiShapeOutline)}
-            {tool_button(active, Tool::Connector, "Connector", icondata::MdiVectorLine)}
-            {tool_button(active, Tool::Draw, "Draw", icondata::MdiDraw)}
+            {tool_button(active, TOOL_SHAPE)}
+            {tool_button(active, TOOL_CONNECTOR)}
+            {tool_button(active, TOOL_DRAW)}
             {sticky_button(active)}
-            {tool_button(active, Tool::Text, "Text", icondata::MdiFormatText)}
+            {tool_button(active, TOOL_TEXT)}
             <span class="sep"></span>
-            {tool_button(active, Tool::Hand, "Hand", icondata::MdiHandBackRight)}
+            {tool_button(active, TOOL_HAND)}
         </div>
     }
 }

@@ -18,7 +18,7 @@
 // ============================================================================
 
 use ambre_bus::app::toile::ToileCommand;
-use ambre_commands::{CommandId, Key, KeyBinding, Modifiers};
+use ambre_commands::CommandId;
 
 use super::menu;
 
@@ -87,86 +87,66 @@ pub const TOP_MENUS: &[(MenuId, &str)] = &[
     (MenuId::Present, "Present"),
 ];
 
-/// One row of a dropdown: a selectable command (with an optional accelerator to
-/// display) or a group separator. Pure data; the wasm builder turns it into an
-/// `ambre_chrome::MenuEntry`.
-#[derive(Clone, PartialEq, Eq, Debug)]
+/// One row of a dropdown: a selectable command, or a group separator. Pure
+/// data; the wasm builder turns it into an `ambre_chrome::MenuEntry`, reading
+/// the label and the accelerator from `ui::commands` (`UI-THREAD-019`), so a
+/// layout declares an order and a grouping and never a word the user reads.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MenuRow {
-    Item {
-        command: CommandId,
-        label: &'static str,
-        shortcut: Option<KeyBinding>,
-    },
+    /// A selectable command, shown with the label and chord it declares.
+    Command(CommandId),
+    /// A divider between two groups.
     Separator,
 }
-
-impl MenuRow {
-    const fn item(command: CommandId, label: &'static str, shortcut: KeyBinding) -> Self {
-        Self::Item {
-            command,
-            label,
-            shortcut: Some(shortcut),
-        }
-    }
-    const fn bare(command: CommandId, label: &'static str) -> Self {
-        Self::Item {
-            command,
-            label,
-            shortcut: None,
-        }
-    }
-}
-
-/// The Delete accelerator (the bare `Del` key, matching the view's shortcut).
-const DEL: KeyBinding = KeyBinding::new(Modifiers::NONE, Key::Delete);
 
 /// The rows of one menu (`toile-menus`), grouped with separators. Inapplicable-
 /// row hiding by selection state is NOT done here (unlike the context menu): a
 /// menu bar shows a stable layout and relies on the command's registry state to
 /// disable an entry, so the layout is a pure function of the `MenuId`.
 pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
+    let row = MenuRow::Command;
     match id {
         // File is thin in the MVP: the share dialog is app-agnostic chrome (E2),
         // and there is no local "save" (the board lives in `LoroDoc`). Only the
         // presentation entry point lands here for now.
-        MenuId::File => vec![MenuRow::bare(PRESENT, "Start presentation")],
+        MenuId::File => vec![row(PRESENT)],
         MenuId::Edit => vec![
-            MenuRow::item(UNDO, "Undo", KeyBinding::ctrl('z')),
-            MenuRow::item(REDO, "Redo", KeyBinding::ctrl_shift('z')),
+            row(UNDO),
+            row(REDO),
             MenuRow::Separator,
-            MenuRow::item(menu::CUT, "Cut", KeyBinding::ctrl('x')),
-            MenuRow::item(menu::COPY, "Copy", KeyBinding::ctrl('c')),
-            MenuRow::item(menu::PASTE, "Paste", KeyBinding::ctrl('v')),
-            MenuRow::item(menu::DUPLICATE, "Duplicate", KeyBinding::ctrl('d')),
-            MenuRow::item(menu::DELETE, "Delete", DEL),
+            row(menu::CUT),
+            row(menu::COPY),
+            row(menu::PASTE),
+            row(menu::DUPLICATE),
+            row(menu::DELETE),
             MenuRow::Separator,
-            MenuRow::item(menu::SELECT_ALL, "Select all", KeyBinding::ctrl('a')),
+            row(menu::SELECT_ALL),
         ],
         MenuId::View => vec![
-            MenuRow::bare(ZOOM_IN, "Zoom in"),
-            MenuRow::bare(ZOOM_OUT, "Zoom out"),
-            MenuRow::bare(ZOOM_RESET, "Zoom to 100%"),
+            row(ZOOM_IN),
+            row(ZOOM_OUT),
+            row(ZOOM_RESET),
             MenuRow::Separator,
-            MenuRow::bare(ZOOM_FIT, "Fit to content"),
-            MenuRow::bare(ZOOM_TO_SELECTION, "Zoom to selection"),
+            row(ZOOM_FIT),
+            row(ZOOM_TO_SELECTION),
             MenuRow::Separator,
-            MenuRow::bare(POINTER_AUTO, "Pointer: automatic"),
-            MenuRow::bare(POINTER_MOUSE, "Pointer: mouse (wheel zooms)"),
-            MenuRow::bare(POINTER_TRACKPAD, "Pointer: trackpad (wheel pans)"),
+            row(POINTER_AUTO),
+            row(POINTER_MOUSE),
+            row(POINTER_TRACKPAD),
         ],
         MenuId::Object => vec![
-            MenuRow::item(menu::GROUP, "Group", KeyBinding::ctrl('g')),
-            MenuRow::item(menu::UNGROUP, "Ungroup", KeyBinding::ctrl_shift('g')),
+            row(menu::GROUP),
+            row(menu::UNGROUP),
             MenuRow::Separator,
-            MenuRow::bare(menu::BRING_FRONT, "Bring to front"),
-            MenuRow::bare(menu::FORWARD, "Bring forward"),
-            MenuRow::bare(menu::BACKWARD, "Send backward"),
-            MenuRow::bare(menu::SEND_BACK, "Send to back"),
+            row(menu::BRING_FRONT),
+            row(menu::FORWARD),
+            row(menu::BACKWARD),
+            row(menu::SEND_BACK),
             MenuRow::Separator,
-            MenuRow::bare(menu::LOCK, "Lock"),
-            MenuRow::bare(menu::UNLOCK, "Unlock"),
+            row(menu::LOCK),
+            row(menu::UNLOCK),
         ],
-        MenuId::Present => vec![MenuRow::bare(PRESENT, "Start presentation")],
+        MenuId::Present => vec![row(PRESENT)],
     }
 }
 
@@ -193,7 +173,7 @@ mod tests {
     fn item_commands(rows: &[MenuRow]) -> Vec<CommandId> {
         rows.iter()
             .filter_map(|r| match r {
-                MenuRow::Item { command, .. } => Some(*command),
+                MenuRow::Command(command) => Some(*command),
                 MenuRow::Separator => None,
             })
             .collect()
@@ -239,14 +219,24 @@ mod tests {
     #[test]
     fn shortcuts_render_canonically() {
         // The Display form the DOM chip shows must match the view's real chord.
-        let rows = menu_layout(MenuId::Edit);
-        let undo = rows.iter().find_map(|r| match r {
-            MenuRow::Item {
-                command, shortcut, ..
-            } if *command == UNDO => *shortcut,
-            _ => None,
-        });
+        // The chip reads the registry, so that is what the test reads.
+        let undo = crate::ui::commands::chord(UNDO);
         assert_eq!(undo.map(|k| k.to_string()).as_deref(), Some("Ctrl+Z"));
+        assert!(item_commands(&menu_layout(MenuId::Edit)).contains(&UNDO));
+    }
+
+    /// A dropdown row shows the label the registry declares (`UI-THREAD-019`).
+    /// A literal written back into a layout would break this.
+    #[test]
+    fn every_dropdown_row_is_described() {
+        for (id, _) in TOP_MENUS {
+            for command in item_commands(&menu_layout(*id)) {
+                assert!(
+                    crate::ui::commands::title(command, &ambre_commands::Locale::En).is_some(),
+                    "{id:?} lists {command:?}, which the registry does not describe"
+                );
+            }
+        }
     }
 
     #[test]
