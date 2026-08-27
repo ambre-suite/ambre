@@ -13,6 +13,10 @@
   split is the whole point: one number is a debt, the other is a plan.
 * **Loose** counts a shipped row that nothing would fail on: `unverified`, `human-review`,
   `qa-manual`. That number is the coverage debt of the product.
+* **`unverified` may only fall.** Each document's count is a ceiling in
+  `scripts/invariant_ceilings.json`, and `invariants.py` fails when one grows. A
+  deliberate growth is `just invariants-ceilings-raise`, one line of reviewed diff.
+  `human-review` and `qa-manual` carry no ceiling: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
 **1138 rows: 769 shipped, of which 356 loose. 369 unbuilt.**

@@ -193,6 +193,7 @@ A pillar without a script is decoration. The second column names the script that
 | Current state, never the steps | `spec_shape.py` -- a checkbox, a milestone word or a past-tense marker in a feature document fails |
 | One schedule | `spec_shape.py` -- a checkbox list or a roadmap heading **in any spec** fails |
 | An unbuilt row waits on an open story | `invariants.py` -- the story an `unimplemented` row lands with must resolve to one open row of `ambre-roadmap.md`. A name no row carries, a name two rows carry, a story already ticked and a stale epic each fail |
+| The coverage debt only falls | `invariants.py` -- a ceiling per document on its `unverified` rows, in `scripts/invariant_ceilings.json`, zero for a document the file does not name. An unbuilt row is held by its story; a shipped row nothing would fail on was held by nothing, and adding one cost an author a regeneration. A growth is `just invariants-ceilings-raise`, one reviewed line. `human-review` and `qa-manual` carry no ceiling: they are decisions |
 | The schema document stays a schema | `spec_shape.py` -- 600 prose words for the file, 40 for a container note |
 | The schema matches the code | `spec_shape.py`, **asymmetric**: a container declared with no code is normal; one built in the code and absent from the table fails |
 | One fact, one home | `spec_shape.py` -- a quality, performance or boundary-audit section fails, by title, everywhere but in the document that owns the fact. Otherwise review, plus the container check above |

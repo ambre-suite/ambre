@@ -137,6 +137,17 @@ invariants:
 invariants-write:
     python3 scripts/invariants.py --write
 
+# Rewrite the per-document ceiling on `unverified` rows after a deliberate
+# change. It lowers only, so it cannot make a red check green: a rising ceiling
+# is shipped code losing its last mechanism. A document that legitimately grows
+# loose needs the target below, and a reviewed diff.
+invariants-ceilings:
+    python3 scripts/invariants.py --ceilings
+
+# A deliberate growth of the coverage debt, recorded rather than silent.
+invariants-ceilings-raise:
+    python3 scripts/invariants.py --ceilings --raise
+
 # How a spec is built, not what it quotes: prose share (a migrated document is
 # capped, every other spec carries a ceiling it may only fall below), production
 # markers in a feature document, the schema document's budgets, and every

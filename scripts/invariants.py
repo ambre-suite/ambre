@@ -37,6 +37,15 @@ The rules it enforces, beyond generating the file:
     finding with no rule to state is declared in `NO_RULE` below, with its
     reason;
   * an id is never reused, and a prefix has no gap in its numbering;
+  * **a document's `unverified` count may only fall.** An unbuilt row is bound to
+    an open Story and cannot be forgotten; a shipped row nothing would fail on is
+    bound to nothing. It was counted here, rolled into a total of 355, and adding
+    one more cost an author nothing: regenerate, and the ledger reports the
+    larger number in green. So each document carries a ceiling in
+    `invariant_ceilings.json`, and a document absent from that file has a ceiling
+    of zero. Growth is still allowed -- `--ceilings --raise` -- as one reviewed
+    line of diff instead of silence. `human-review` and `qa-manual` carry no
+    ceiling: they are decisions, and a ceiling over them would never reach zero;
   * **the counts under a table are the table's own.** The `Verification` answer
     is written by hand, beside a table that is not, so the two drift: nine
     documents were wrong the day this check landed, and `ambre-spec-membership.md`
@@ -51,9 +60,10 @@ test the rule. That is `TRAME-FEAT-004`'s defect, and it needs a probe or
 Run: `just invariants` (fail when the file on disk is not what this would
 write), `just invariants-write` (rewrite it). The check compares the whole text,
 so a spec edited without a regeneration turns CI red instead of leaving a stale
-roll-up behind.
+roll-up behind. `just invariants-ceilings` rewrites the ceilings, lowering only.
 """
 
+import json
 import re
 import sys
 from collections import Counter, defaultdict
@@ -67,6 +77,7 @@ LEDGER = "1-Foundations/ambre-invariant-ledger.md"  # generated here, nowhere el
 ROADMAP = "ambre-roadmap.md"  # the one schedule: every Story is a row of it
 JOURNAL = "ambre-roadmap-journal.md"  # closed epics, cut there verbatim
 AUDIT = "security-audit.md"  # numbered findings, cited by the rows that close them
+CEILINGS = Path(__file__).resolve().parent / "invariant_ceilings.json"
 STATUSES = ("verified", "unverified", "human-review", "qa-manual", "unimplemented")
 LOOSE = ("unverified", "human-review", "qa-manual")  # built, and no test would fail
 APPS = ("1-Foundations", "2-Trame", "3-Toile", "4-Prose")
@@ -495,6 +506,66 @@ def answer_defects(spec: str, answer: tuple[int, str] | None, counts: Counter) -
     return defects
 
 
+def load_ceilings() -> dict[str, int]:
+    """`{spec: n}` -- the `unverified` rows a document is still allowed to carry.
+
+    A spec the file does not name has a ceiling of zero, so a document that
+    arrives loose declares it in the same commit rather than inheriting silence.
+    """
+    return json.loads(CEILINGS.read_text()) if CEILINGS.exists() else {}
+
+
+def ceiling_defects(per_spec: dict[str, Counter], ceilings: dict[str, int]) -> list[str]:
+    """Whether any document carries more `unverified` rows than it may."""
+    defects = []
+    for spec, counts in sorted(per_spec.items()):
+        ceiling = ceilings.get(spec, 0)
+        if counts["unverified"] > ceiling:
+            defects.append(
+                f"{spec}: {counts['unverified']} `unverified` rows, ceiling {ceiling}"
+                " -- it may only fall. Write the mechanism, or record the debt with"
+                " `just invariants-ceilings`"
+            )
+    return defects
+
+
+def write_ceilings(
+    per_spec: dict[str, Counter], ceilings: dict[str, int], allow_raise: bool
+) -> int:
+    """Rewrite the ceilings from what the corpus holds today, lowering only.
+
+    A ceiling that rises on its own is a ceiling that holds nothing, which is why
+    a growth needs `--raise` and shows up as a line of diff. A document back to
+    zero leaves the file: an entry of zero and no entry are the same ceiling.
+    """
+    out: dict[str, int] = {}
+    refused: list[str] = []
+    for spec, counts in sorted(per_spec.items()):
+        measured = counts["unverified"]
+        if not measured:
+            continue
+        recorded = ceilings.get(spec, 0)
+        if measured > recorded:
+            refused.append(f"{spec}: {recorded} -> {measured}")
+            if allow_raise:
+                out[spec] = measured
+            elif recorded:
+                out[spec] = recorded
+        else:
+            out[spec] = measured
+    CEILINGS.write_text(json.dumps(out, indent=2, sort_keys=True) + "\n")
+    print(f"ceilings rewritten: {len(out)} specs, {sum(out.values())} unverified rows")
+    for line in refused:
+        print(f"{'RAISED' if allow_raise else 'KEPT'} {line}", file=sys.stderr)
+    if refused and not allow_raise:
+        print(
+            f"{len(refused)} ceilings would have risen and were kept: a ceiling only"
+            " falls. Use `--ceilings --raise` for a deliberate growth.",
+            file=sys.stderr,
+        )
+    return 0
+
+
 def app_of(spec: str) -> str:
     """The application a spec belongs to, from the first component of its path."""
     head = spec.split("/", 1)[0]
@@ -525,6 +596,10 @@ def render_ledger(per_spec: dict[str, Counter], total: Counter) -> str:
         "  split is the whole point: one number is a debt, the other is a plan.",
         "* **Loose** counts a shipped row that nothing would fail on: `unverified`, `human-review`,",
         "  `qa-manual`. That number is the coverage debt of the product.",
+        "* **`unverified` may only fall.** Each document's count is a ceiling in",
+        "  `scripts/invariant_ceilings.json`, and `invariants.py` fails when one grows. A",
+        "  deliberate growth is `just invariants-ceilings-raise`, one line of reviewed diff.",
+        "  `human-review` and `qa-manual` carry no ceiling: they are decisions, not debt.",
         "* How each layer is tested is `ambre-spec-testing.md`.",
         "",
         f"**{sum(total.values())} rows: {shipped} shipped, of which {loose} loose. "
@@ -628,6 +703,10 @@ def main() -> int:
         if counts:
             per_spec[str(path.relative_to(SPECS))] = counts
             errors += answer_defects(str(path.relative_to(SPECS)), answer, counts)
+
+    if "--ceilings" in sys.argv:
+        return write_ceilings(per_spec, load_ceilings(), "--raise" in sys.argv)
+    errors += ceiling_defects(per_spec, load_ceilings())
 
     errors += audit_coverage_defects(findings, cited_audit)
 
