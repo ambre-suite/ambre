@@ -156,6 +156,10 @@ web-sys = { version = "0.3.85", features = [
     "InputEvent",
     "KeyboardEvent",
     "Node",
+    # `query_selector_all`. The DOM belts already call it; it built only because
+    # a larger dependency graph unified the feature in, so a crate tested alone
+    # lost the method. Declared here, it is no longer an accident.
+    "NodeList",
     "Location",
     "MediaQueryList",
     "MediaQueryListEvent",

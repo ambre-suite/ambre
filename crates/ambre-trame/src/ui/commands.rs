@@ -66,6 +66,8 @@ const FILTER: CommandCategory = CommandCategory("filter");
 const FIND_REPLACE: CommandCategory = CommandCategory("find");
 const CLIPBOARD: CommandCategory = CommandCategory("clipboard");
 const INTEROP: CommandCategory = CommandCategory("interop");
+/// Commands that belong to the application shell rather than the document.
+const GENERAL: CommandCategory = CommandCategory("general");
 
 // The labels are the ones the chrome shows today: the context-menu entries of
 // `chrome::commands` and the toolbar `aria-label`s of `chrome::bars`, which
@@ -101,6 +103,7 @@ commands! {
     PASTE = "trame.clipboard.paste", "Paste", Some(IconId("content-paste")), None, CLIPBOARD;
     IMPORT_CSV = "trame.interop.import_csv", "Import CSV", Some(IconId("import")), None, INTEROP;
     EXPORT_CSV = "trame.interop.export_csv", "Export CSV", Some(IconId("export")), None, INTEROP;
+    PALETTE = "trame.palette.open", "Command palette", None, Some(KeyBinding::ctrl('k')), GENERAL;
 }
 
 /// The label a view shows for `id`, in `locale`. `None` for a command Trame

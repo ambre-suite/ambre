@@ -2463,3 +2463,91 @@ input[type="radio"] {
     color: #fff;
     border-color: var(--accent);
 }
+
+/* ── Command palette (ambre-chrome::CommandPalette, CHROME-008) ───────────────
+   One overlay listing every command the active application declares. It sits
+   above the context menu (z-index 1001) because it can be opened over one, and
+   its own backdrop closes it on a click outside. */
+.ambre-palette-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1010;
+    /* The same veil the shared modal paints, so the two overlays read alike. */
+    background: rgba(10, 10, 20, 0.45);
+    backdrop-filter: blur(3px);
+}
+
+.ambre-palette {
+    position: fixed;
+    z-index: 1011;
+    top: 12vh;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(560px, calc(100vw - 32px));
+    display: flex;
+    flex-direction: column;
+    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+}
+
+.ambre-palette-query {
+    padding: 12px 14px;
+    font-size: 15px;
+    color: var(--text);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    outline: none;
+}
+
+.ambre-palette-list {
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    /* A long table scrolls inside the overlay rather than off the viewport. */
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+.ambre-palette-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: 5px;
+    font-size: 14px;
+    color: var(--text);
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Neutral highlight, the token the context menu uses: amber is reserved for the
+   cell-selection signature, not standard chrome interaction. */
+.ambre-palette-row.focused,
+.ambre-palette-row:hover {
+    background: var(--border);
+}
+
+.ambre-palette-kbd {
+    margin-left: auto;
+    padding-left: 16px;
+}
+
+/* Narrow viewports: the palette takes the width and drops the top inset. */
+@media (max-width: 600px) {
+    .ambre-palette {
+        top: 0;
+        left: 0;
+        transform: none;
+        width: 100vw;
+        border-radius: 0;
+    }
+
+    .ambre-palette-row {
+        padding: 12px 14px;
+    }
+}

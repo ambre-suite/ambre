@@ -73,6 +73,8 @@ const VIEW: CommandCategory = CommandCategory("view");
 const TOOL: CommandCategory = CommandCategory("tool");
 const PRESENT: CommandCategory = CommandCategory("present");
 const FIND_REPLACE: CommandCategory = CommandCategory("find");
+/// Commands that belong to the application shell rather than the board.
+const GENERAL: CommandCategory = CommandCategory("general");
 
 /// The Delete accelerator: the bare `Del` key, matching the view's shortcut.
 const DEL: KeyBinding = KeyBinding::new(Modifiers::NONE, Key::Delete);
@@ -81,6 +83,11 @@ const DEL: KeyBinding = KeyBinding::new(Modifiers::NONE, Key::Delete);
 const fn letter(c: char) -> KeyBinding {
     KeyBinding::new(Modifiers::NONE, Key::char(c))
 }
+
+/// Open the command palette. A UI-only intent the launcher intercepts, and the
+/// one command that belongs to no surface: it is the surface
+/// (`ambre-spec-chrome.md`, `CHROME-008`).
+pub const PALETTE: CommandId = CommandId("toile.palette.open");
 
 // The labels are the ones the chrome shows today: the context-menu entries of
 // `chrome::menu`, the dropdown rows of `ui::menu_bar`, the zoom cluster and the
@@ -128,6 +135,7 @@ describe! {
     TOOL_TEXT: palette::TOOL_TEXT, "Text", Some(IconId("format-text")), Some(letter('t')), TOOL;
     TOOL_HAND: palette::TOOL_HAND, "Hand", Some(IconId("hand-back-right")), Some(letter('h')), TOOL;
     FIND_OPEN: FIND, "Find", None, Some(KeyBinding::ctrl('f')), FIND_REPLACE;
+    PALETTE_OPEN: PALETTE, "Command palette", None, Some(KeyBinding::ctrl('k')), GENERAL;
 }
 
 /// The label a view shows for `id`, in `locale`. `None` for a command Toile does

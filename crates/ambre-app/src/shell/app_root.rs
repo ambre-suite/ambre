@@ -170,9 +170,19 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // The single command path shared by every trigger (toolbar, selection bar,
     // context menu): a `CommandId` -> the routed document. `Callback` is `Copy`,
     // so it is handed to each app-chrome component below.
+    // The command palette is a launcher-level overlay: no relay drives it, so
+    // the signal lives here rather than in the wiring.
+    let palette_open = RwSignal::new(false);
+
     let on_command = Callback::new({
         let tx = to_logic.clone();
         move |id: CommandId| {
+            // The palette is a UI-only intent in both applications: it opens an
+            // overlay and reaches no Logic thread (`CHROME-008`).
+            if id == trame_chrome::PALETTE || id == toile_chrome::PALETTE {
+                palette_open.set(true);
+                return;
+            }
             // Toile board: every context-menu id is forwarded into the canvas view,
             // which resolves it against its (UI-only) selection (`toile-menus`).
             // The Toile Find command still opens the Toile panel, handled below.
@@ -937,6 +947,18 @@ pub(crate) fn AppRoot() -> impl IntoView {
             on_command=on_command
         />
 
+        // The command palette (`CHROME-008`): every command the booted
+        // application declares, searchable, whether or not a menu shows it. One
+        // overlay for both, fed by the app's own table.
+        <ambre_chrome::CommandPalette
+            open=palette_open
+            table=if boot_is_toile {
+                ambre_toile::ui::commands::COMMANDS
+            } else {
+                trame_chrome::COMMANDS
+            }
+            on_command=on_command
+        />
         // Find panel, pinned top-right. Trame ships `trame-find-replace`;
         // Toile ships a find-only panel (`toile-find`). The booted app kind
         // is fixed per page load, so exactly one is mounted.

@@ -59,6 +59,7 @@ pub use crate::ui::palette::{
 use ambre_bus::DocType;
 use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
 
+pub use crate::ui::commands::PALETTE;
 pub use crate::ui::find::FIND;
 
 /// The document type Toile's landing "new document" button creates.
@@ -79,8 +80,10 @@ pub fn new_doc_label() -> &'static str {
 /// the board chords here too would decode them twice, once here and once on the
 /// canvas (`ambre-spec-commands.md` section 5, and the `One keymap` Story).
 pub fn bind_keys(keymap: &mut Keymap) {
-    if let Some(chord) = crate::ui::commands::chord(FIND) {
-        keymap.bind(chord, FIND);
+    for id in [FIND, crate::ui::commands::PALETTE] {
+        if let Some(chord) = crate::ui::commands::chord(id) {
+            keymap.bind(chord, id);
+        }
     }
     crate::ui::palette::bind_tool_keys(keymap);
 }

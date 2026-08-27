@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: THE CHROME SHELL
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the layout, the menu, the modal, the toasts and the shared controls
-ship; the command palette and the one floating shell do not.
+**Implementation:** partial -- the layout, the menu, the modal, the toasts, the command palette and
+the shared controls ship; the one floating shell does not.
 
 > Everything around the document: the frame the canvas sits in, the menus, the modals, the toasts,
 > the status bar and the controls a formatting toolbar is built from. It is DOM, it is written once,
@@ -28,7 +28,7 @@ the DOM side produces.
 | `CHROME-003` | A floating menu MUST stay inside the viewport: it flips at an edge, and pins to the origin when it is larger than the viewport. | this spec section 2 | `ambre_chrome::context_menu::tests::no_overflow_keeps_click_point`, `::right_overflow_flips_horizontally`, `::bottom_overflow_flips_vertically`, `::corner_overflow_flips_both_axes`, `::menu_larger_than_viewport_pins_to_origin` | verified |
 | `CHROME-004` | Every popover and floating bar MUST take its placement, flip and keyboard model from one shell. | this spec section 2 | not built -- lands with `One floating-menu shell` (`ambre-roadmap.md` E8). Four shells exist: the shared menu, Trame's filter popover, Trame's find panel and Toile's selection toolbar | unimplemented |
 | `CHROME-005` | A key event MUST resolve to a modelled key or be rejected; an unmodelled key MUST NOT reach a command. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::command::tests::named_keys_map`, `::function_keys_in_range`, `::function_keys_out_of_range_rejected`, `::single_printable_char_maps`, `::unmodelled_keys_rejected` | verified |
-| `CHROME-008` | The command palette MUST search every command the active application declares, not the subset some menu happens to show. | this spec section 2; `ambre-spec-commands.md` | not built -- lands with `One command registry` (`ambre-roadmap.md` E8, `UI-THREAD-019`). The palette is the first view that cannot borrow its labels from a menu, so it needs the registry and not a story of its own | unimplemented |
+| `CHROME-008` | The command palette MUST search every command the active application declares, not the subset some menu happens to show. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::palette::tests::an_empty_query_lists_every_declared_command`, `::a_query_matches_any_case_and_any_position`, `::a_query_that_answers_nothing_lists_nothing`, `::rows_keep_the_declaration_order`; the DOM belt `ambre_chrome::chrome_ui::palette_lists_every_declared_command` mounts a table holding a command no menu shows and counts the rendered rows | verified |
 | `CHROME-009` | The content surface MUST be a cell of the chrome layout, so it is sized by the layout and never by the viewport. | this spec section 2 | `ambre_chrome::chrome_ui::app_shell_owns_the_named_canvas_cell` -- wasm tier, real `document` | verified |
 | `CHROME-010` | A control MUST show the state the Logic thread reported: it MUST NOT set its own toggle from the click that raised it. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::chrome_ui::command_states_defaults`, `::command_states_single_writer_propagates`, `::command_states_unknown_id_is_noop` prove the store has one writer and that a view only subscribes. Nothing refuses a control that writes the signal itself | verified |
 | `CHROME-011` | A modal MUST suspend the frame loop while it is open, and resume it on close. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-012` | none. Three modals pass a pause callback and a resume callback, and the launcher's own confirmation dialog passes neither. Nothing joins opening a modal to the state of the loop | unverified |
@@ -43,7 +43,7 @@ the DOM side produces.
 * **Boundary.** none: `UI-THREAD-004` bans a network, crypto and persistence path on the UI thread,
   and the toolkit adds no exception. Its manifest names no transport and no crypto crate, which is
   the same crate-graph fact `CHROME-001` and `CHROME-002` are read off.
-* **Verification.** 8 `verified`, 3 `unverified`, 2 `unimplemented`. The verified half is either a
+* **Verification.** 9 `verified`, 3 `unverified`, 1 `unimplemented`. The verified half is either a
   crate-graph fact, placement arithmetic the code extracted out of the DOM, or a component mounted
   in a real headless document. The unverified three are one shape three times: a behaviour that
   spans two owners -- a modal and the frame loop, a control and its command -- with no seam either
@@ -83,7 +83,7 @@ to the window (`CHROME-009`). An absent optional row collapses and costs no heig
 | the formatting controls | a toggle, a size select, a family picker, a colour popover, and a debouncer for a drag | built |
 | the keybinding half | a key event to a modelled chord, for a keymap to resolve | built |
 | the shortcut chip | one chord, rendered the same way in a menu, a tooltip and a palette | built |
-| the command palette | one overlay listing every command the application declares | design |
+| the command palette | one overlay listing every command the application declares, filtered by a substring of the label | built |
 | the sidebar and the panels | a resizable region beside the content | design |
 
 **The command path, and the one direction it runs.** A trigger names a command; the command reaches
@@ -116,6 +116,7 @@ crate graph holds it (`CHROME-002`).
 
 **Code:** `crates/ambre-chrome/src/app_shell.rs` holds the grid,
 `crates/ambre-chrome/src/context_menu.rs` the menu and its placement function,
+`crates/ambre-chrome/src/palette.rs` the command palette and its filter,
 `crates/ambre-chrome/src/dialog.rs` the modal, `crates/ambre-chrome/src/toast.rs` the toasts,
 `crates/ambre-chrome/src/status.rs` the chips, `crates/ambre-chrome/src/format.rs`,
 `font.rs` and `color.rs` the formatting controls, `crates/ambre-chrome/src/debounce.rs` the
@@ -142,8 +143,10 @@ that mounts them is `crates/ambre-app/src/shell/app_root.rs`, and the belt is
 | a click on the frame chip | the panel the application supplied unfolds under it |
 | a formatting control is used | it reports the change, and it redraws once the document confirms it |
 
-**A command in no menu has no label today.** The palette is the view that would ask for one, and it
-is the view that does not exist (`CHROME-008`).
+**A command in no menu is reachable through the palette, and only there.** Ctrl+K opens the palette
+in both applications. It lists the whole table of the booted application, and a substring of the
+label narrows the list (`CHROME-008`). The palette is why every command carries a label
+(`ambre-spec-commands.md`, `UI-THREAD-019`).
 
 ---
 
@@ -175,9 +178,13 @@ is the view that does not exist (`CHROME-008`).
   it gets the focus trap and misses the pause of `CHROME-011`. It is harmless where it sits, because
   the loop is already paused behind the launcher, and it is the counter-example that shows nothing
   enforces the rule.
-* **The command palette needs the registry, and the registry is a decision that was made against
-  itself.** `ambre-spec-commands.md` records why 68 identifiers do not pay for a registry, and
-  `CHROME-008` is the one view that cannot work without one.
+* **The palette offers a command the document cannot run.** The command store is `Rc` and stays in
+  the mount owner, outside the `Send` router subtree. The overlay cannot subscribe to the store, so
+  it lists Undo on an empty history. A layout omits what does not apply, which is how a menu hides
+  the same gap.
+* **Nothing rules on what the palette does beyond the label.** The palette matches a substring of
+  the label, in declaration order. It searches neither a command's category nor its identity, and it
+  keeps no list of recent commands. No rule asks for any of the three.
 * **The sidebar and the resizable panels have no code.** The layout has no row for them, so an
   application that wants one has nowhere to put it.
 * **Nothing bounds the toasts.** They stack without limit and each one holds its own timer, so a

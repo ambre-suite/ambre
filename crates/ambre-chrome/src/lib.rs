@@ -19,6 +19,7 @@
 //   command      -- command-state store + keybinding manager
 //   dialog       -- native <dialog> modal (rAF-suspending)
 //   context_menu -- canvas right-click DOM menu (flip, keyboard nav)
+//   palette      -- the command palette: every declared command, filtered
 //   toast/status/format/font/color/debounce -- the shared controls
 // ============================================================================
 
@@ -34,6 +35,7 @@ mod debounce;
 mod dialog;
 mod font;
 mod format;
+mod palette;
 mod shortcut;
 mod status;
 mod toast;
@@ -46,6 +48,7 @@ pub use debounce::Debouncer;
 pub use dialog::Dialog;
 pub use font::{FONT_FAMILIES, FontPicker};
 pub use format::{FONT_SIZES, FontSizeSelect, FormatToggle};
+pub use palette::{CommandPalette, filter as filter_commands, matches as command_matches};
 pub use shortcut::Kbd;
 pub use status::{PerfChip, PerfDetail, StatusLabel, ZOOM_PRESETS, ZoomChip};
 pub use toast::{ToastHost, ToastKind, Toasts};

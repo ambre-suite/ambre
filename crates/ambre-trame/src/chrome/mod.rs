@@ -43,10 +43,10 @@ pub use bars::FormatBar;
 pub use commands::{
     BOLD, CLEAR_FILTER, COMMANDS, COPY, CUT, CtxScope, DELETE_COLS, DELETE_ROWS, DOC_TYPE,
     EXPORT_CSV, FILTER_COLUMN, FIND, IMPORT_CSV, INSERT_COL_LEFT, INSERT_COL_RIGHT,
-    INSERT_ROW_ABOVE, INSERT_ROW_BELOW, ITALIC, MERGE, PASTE, REDO, REPLACE, SORT_RANGE_ASC,
-    SORT_RANGE_DESC, SORT_RANGE_MULTI, SORT_SHEET_ASC, SORT_SHEET_DESC, UNDO, UNMERGE, bind_keys,
-    command_to_app, context_entries, context_entries_for, init_command_states, mirror_event,
-    new_doc_label, notify_event, status_label,
+    INSERT_ROW_ABOVE, INSERT_ROW_BELOW, ITALIC, MERGE, PALETTE, PASTE, REDO, REPLACE,
+    SORT_RANGE_ASC, SORT_RANGE_DESC, SORT_RANGE_MULTI, SORT_SHEET_ASC, SORT_SHEET_DESC, UNDO,
+    UNMERGE, bind_keys, command_to_app, context_entries, context_entries_for, init_command_states,
+    mirror_event, new_doc_label, notify_event, status_label,
 };
 pub use find_replace::{FindMode, FindQuery, FindReplace, FindReplaceState, ReplaceRequest};
 pub use formula_bar::FormulaBar;

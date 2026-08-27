@@ -260,3 +260,113 @@ fn font_size_select_lists_presets_plus_auto_entry() {
 
     root.remove();
 }
+
+// ── DOM belt: the command palette (CHROME-008) ──────────────────────────────
+
+fn palette_title(l: &ambre_commands::Locale) -> String {
+    let _ = l;
+    "Command palette".into()
+}
+fn hidden_title(l: &ambre_commands::Locale) -> String {
+    let _ = l;
+    "Recalculate everything".into()
+}
+fn shown_title(l: &ambre_commands::Locale) -> String {
+    let _ = l;
+    "Merge cells".into()
+}
+
+/// A table whose second command appears in no menu: exactly the case
+/// `CHROME-008` is about.
+const PALETTE_TABLE: &[ambre_commands::Command] = &[
+    ambre_commands::Command {
+        id: CommandId("t.palette.open"),
+        title: palette_title,
+        icon: None,
+        default_keybinding: None,
+        category: ambre_commands::CommandCategory("general"),
+    },
+    ambre_commands::Command {
+        id: CommandId("t.engine.recalc"),
+        title: hidden_title,
+        icon: None,
+        default_keybinding: None,
+        category: ambre_commands::CommandCategory("engine"),
+    },
+    ambre_commands::Command {
+        id: CommandId("t.merge"),
+        title: shown_title,
+        icon: None,
+        default_keybinding: None,
+        category: ambre_commands::CommandCategory("structure"),
+    },
+];
+
+/// The visible labels of the palette rows, top to bottom.
+fn palette_labels(root: &web_sys::Element) -> Vec<String> {
+    let nodes = root.query_selector_all(".ambre-palette-label").unwrap();
+    (0..nodes.length())
+        .filter_map(|i| nodes.item(i).and_then(|n| n.text_content()))
+        .collect()
+}
+
+/// DOM test: an opened palette renders one row per command the table declares,
+/// including a command no menu shows (`ambre-spec-chrome.md`, CHROME-008).
+///
+/// Mounted already open: a reactive re-render flushes on a later microtask, so
+/// only the synchronous initial render is asserted -- the same rule the chip
+/// tests above follow. What a query does to the list is the pure `filter`, and
+/// its assertions are the host tests in `src/palette.rs`.
+#[wasm_bindgen_test]
+fn palette_lists_every_declared_command() {
+    let owner = Owner::new();
+    owner.set();
+    let open = RwSignal::new(true);
+    let root = mount_in_container(move || {
+        view! {
+            <ambre_chrome::CommandPalette
+                open=open
+                table=PALETTE_TABLE
+                on_command=Callback::new(move |_| {})
+            />
+        }
+    });
+
+    let labels = palette_labels(&root);
+    assert_eq!(labels.len(), PALETTE_TABLE.len(), "labels: {labels:?}");
+    assert!(
+        labels.contains(&"Recalculate everything".to_owned()),
+        "a command no menu shows must still be listed: {labels:?}"
+    );
+
+    root.remove();
+}
+
+/// DOM test: selecting a row invokes that command through the shared sink and
+/// closes the overlay. A click handler runs synchronously, so both are readable
+/// straight after it.
+#[wasm_bindgen_test]
+fn palette_row_invokes_its_command_and_closes() {
+    let owner = Owner::new();
+    owner.set();
+    let open = RwSignal::new(true);
+    let invoked: RwSignal<Option<CommandId>> = RwSignal::new(None);
+    let root = mount_in_container(move || {
+        view! {
+            <ambre_chrome::CommandPalette
+                open=open
+                table=PALETTE_TABLE
+                on_command=Callback::new(move |id| invoked.set(Some(id)))
+            />
+        }
+    });
+
+    let rows = root.query_selector_all(".ambre-palette-row").unwrap();
+    let last: web_sys::HtmlElement = rows.item(rows.length() - 1).unwrap().dyn_into().unwrap();
+    last.click();
+
+    assert_eq!(invoked.get_untracked(), Some(CommandId("t.merge")));
+    assert!(!open.get_untracked(), "selecting a row closes the palette");
+
+    root.remove();
+}
