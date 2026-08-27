@@ -37,7 +37,7 @@ prefix is `BUS`.
 * **Boundary.** none of its own. The bus carries plaintext and reaches no relay: every byte that
   leaves does so through the Sync worker, sealed. `ZK-002` is what forbids a key type here, and the
   worker hop itself is the accepted internal boundary of `ambre-spec-zero-knowledge.md`.
-* **Verification.** 6 `verified`, 6 `unverified`. What holds is what the dispatcher can be driven
+* **Verification.** 7 `verified`, 5 `unverified`. What holds is what the dispatcher can be driven
   through on host: an unknown document, a viewer's edit, a child's own role, a service round trip.
   What is loose is every rule about a path nobody exercises -- the encode of a variant no test
   names, a full channel, and a handler that captures a sender.

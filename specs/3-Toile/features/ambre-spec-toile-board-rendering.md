@@ -38,7 +38,7 @@ status values are normative in `ambre-spec-template.md`.
   a bench, which is why that row is `unverified`.
 * **Boundary.** none: the walk paints view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. It reads no document and holds no key (`TOILE-UI-001`).
-* **Verification.** 7 `verified`, 2 `unverified`. Both gaps are the frame itself rather than what it
+* **Verification.** 8 `verified`, 2 `unverified`. Both gaps are the frame itself rather than what it
   draws: the dirty flag and the background branch are the two behaviours the render tests step over,
   because each is a decision of the loop and not of the walk.
 

@@ -152,9 +152,12 @@ and they sit directly under the table in every document that carries one.
 
 * **`none`, and why is the answer for most documents.** It is what the deleted `QUALITY`,
   `PERFORMANCE` and `SECURITY` sections answered badly, at a page each, and often not at all.
-* `spec_shape.py` fails on a label that is missing, and on one whose bullet is empty. **Whether the
-  answer is true, no script holds** -- the exact status of the `Implementation` field above.
-  Forgetting becomes impossible; a false answer becomes visible in review.
+* `spec_shape.py` fails on a label that is missing, and on one whose bullet is empty. `invariants.py`
+  fails when the counts the `Verification` answer opens on are not the counts of the table above it,
+  and a status the answer leaves out claims zero. **Whether a `Budget` or a `Boundary` answer is
+  true, no script holds** -- the exact status of the `Implementation` field above. The sentence that
+  names the gaps stays a review act too. Forgetting becomes impossible; a false answer becomes
+  visible in review.
 
 ### C. What no document carries
 
@@ -179,7 +182,7 @@ A pillar without a script is decoration. The second column names the script that
 | No line reads as a wall | `spec_shape.py` -- a line over 110 columns, outside a table and a fence, fails: zero for a migrated document, a **count** that may only fall for an unmigrated one |
 | The header says what the reader is holding | `spec_shape.py` -- the two fields present, and `Implementation` one of three values. `feature_inventory.py`, **asymmetric**: `implemented` beside an unbuilt row fails, while claiming less than the rows show is legitimate |
 | Every claim carries its status | `invariants.py` -- a row with no `Status`, or an unknown one, fails. `feature_inventory.py` -- a feature document that declares no invariant table at all fails |
-| The table's three questions are answered | `spec_shape.py` -- a document with an invariant table carries `Budget`, `Boundary` and `Verification`, each non-empty. Whether the answer is true is a review act |
+| The table's three questions are answered | `spec_shape.py` -- a document with an invariant table carries `Budget`, `Boundary` and `Verification`, each non-empty. `invariants.py` -- the counts the `Verification` answer opens on are the table's own, nine documents having drifted from theirs. Whether the other two answers are true is a review act |
 | A cited mechanism exists | `invariants.py` -- every `fn` a built row names must resolve in the workspace, per crate when the crate is named |
 | A cited document exists | `spec_refs.py` -- a document is cited by its name, in the corpus and in the code alike, and that name must resolve to a file |
 | A cited section exists | `spec_refs.py` -- a citation carrying `section N` must name a section the target document has. The number, never the letter after it. `§N` is the same coordinate |

@@ -29,8 +29,8 @@ status values are normative in `ambre-spec-template.md`.
   board rather than to the deletion, and no bench measures it.
 * **Boundary.** none of its own: the order is a list in the Logic thread's document and leaves as
   bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 2 `verified`, 4 `unverified`. The order itself and the skipping of a dead entry
-  are held. Everything about its edges is loose, and two of the four are rules the code answers with
+* **Verification.** 2 `verified`, 3 `unverified`. The order itself and the skipping of a dead entry
+  are held. Everything about its edges is loose, and two of the three are rules the code answers with
   the opposite.
 
 ---

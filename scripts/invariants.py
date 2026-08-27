@@ -28,7 +28,13 @@ The rules it enforces, beyond generating the file:
     `TRAME-UI-011` cited `::editor_preview_display`, which never existed, under
     status `verified`. An `unimplemented` row is exempt: its Verification cell
     names a Story, not a test;
-  * an id is never reused, and a prefix has no gap in its numbering.
+  * an id is never reused, and a prefix has no gap in its numbering;
+  * **the counts under a table are the table's own.** The `Verification` answer
+    is written by hand, beside a table that is not, so the two drift: nine
+    documents were wrong the day this check landed, and `ambre-spec-membership.md`
+    claimed one `verified` row fewer than it carries. A status the answer leaves
+    out claims zero, so an omission is compared like a figure. The presence of
+    the label stays `spec_shape.py`, which holds the three answers together.
 
 What this still cannot see: a row citing a test that runs, passes, and does not
 test the rule. That is `TRAME-FEAT-004`'s defect, and it needs a probe or
@@ -310,6 +316,61 @@ def unresolved_citations(cell: str, per_crate: dict[str, set[str]], pooled: set[
             yield f"cites `{token}`, and no `fn {name}` exists{where}"
 
 
+# The `Verification` answer under an invariant table, and the counts it opens
+# on: `7 `verified`, 1 `unverified`, 1 `unimplemented`.` Both separators the
+# corpus uses are read, the comma and the final "and".
+ANSWER = re.compile(r"^\*\s+\*\*Verification\.\*\*\s+(?P<text>.*)$")
+COUNT = re.compile(r"(?P<n>\d+)\s+`(?P<status>[a-z-]+)`")
+COUNT_SEP = re.compile(r",\s+(?:and\s+)?")
+
+
+def stated_counts(text: str) -> dict[str, int]:
+    """The counts one `Verification` answer opens on, empty when it opens on none.
+
+    Only the head of the bullet is read. What follows the counts names the gaps
+    in prose and carries figures of its own -- "two of the four are rules the
+    code answers with the opposite" -- and those figures are a review act, not a
+    parse.
+    """
+    counts: dict[str, int] = {}
+    pos = 0
+    while (m := COUNT.match(text, pos)) is not None:
+        counts[m["status"]] = int(m["n"])
+        pos = m.end()
+        sep = COUNT_SEP.match(text, pos)
+        if sep is None:
+            break
+        pos = sep.end()
+    return counts
+
+
+def answer_defects(spec: str, answer: tuple[int, str] | None, counts: Counter) -> list[str]:
+    """Whether the answer's counts are the counts of the table above it."""
+    if answer is None:
+        return []  # a missing label is `spec_shape.py`: one rule, one home
+    lineno, text = answer
+    where = f"{spec}:{lineno}"
+    stated = stated_counts(text)
+    if not stated:
+        return [
+            f"{where}: the `Verification` answer states no count -- it opens on "
+            f"the count per status, then names the rows that are the gaps"
+        ]
+    defects = []
+    for status in sorted(set(stated) | set(counts)):
+        if status not in STATUSES:
+            defects.append(
+                f"{where}: the `Verification` answer counts {status!r}, which is "
+                f"no status of the five"
+            )
+        elif stated.get(status, 0) != counts.get(status, 0):
+            defects.append(
+                f"{where}: the `Verification` answer says {stated.get(status, 0)} "
+                f"`{status}` and the table holds {counts.get(status, 0)}"
+            )
+    return defects
+
+
 def app_of(spec: str) -> str:
     """The application a spec belongs to, from the first component of its path."""
     head = spec.split("/", 1)[0]
@@ -387,6 +448,7 @@ def main() -> int:
         if path.name == TEMPLATE:
             continue
         counts: Counter = Counter()
+        answer: tuple[int, str] | None = None
         for lineno, line in enumerate(path.read_text().splitlines(), 1):
             m = ROW.match(line)
             # a story the row's own binding already answers for, checked below
@@ -398,6 +460,9 @@ def main() -> int:
             errors += loose_citation_defects(
                 line, f"{path.relative_to(SPECS)}:{lineno}", bound, schedule, closed
             )
+            bullet = ANSWER.match(line)
+            if bullet:
+                answer = (lineno, bullet["text"])
             if not m:
                 continue
             rid, status, rest = m["id"], m["status"], m["rest"]
@@ -422,6 +487,7 @@ def main() -> int:
             counts[status] += 1
         if counts:
             per_spec[str(path.relative_to(SPECS))] = counts
+            errors += answer_defects(str(path.relative_to(SPECS)), answer, counts)
 
     # gaps in a prefix's numbering: an id that was renumbered or dropped
     by_prefix: dict[str, list[int]] = defaultdict(list)

@@ -37,12 +37,13 @@ that component's prefix instead.
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   eleven rows on its own side, or answers `none` and says why.
-* **Verification.** 5 `verified`, 5 `unverified`, 1 `human-review`. What holds is what the crate
+* **Verification.** 6 `verified`, 4 `unverified`, 1 `human-review`. What holds is what the crate
   graph, `deny.toml` and the type system can refuse: a key type nameable on the wire, `argon2`
-  outside `ambre-crypto`, a decrypting crate linked into the relay, a passphrase in a type that does
-  not wipe itself, a copied seed. What is loose is every rule stated as an absence -- `ZK-001`
-  covers the nominal path and forbids no unsealed send, `ZK-007` is a whitelist with no natural
-  test, `ZK-009` is a constant no vector pins, and `ZK-006` is a comment plus reviewer attention.
+  outside `ambre-crypto`, a decrypting crate linked into the relay, an unsealed presence frame, a
+  passphrase in a type that does not wipe itself, a copied seed. What is loose is every rule stated
+  as an absence -- `ZK-001` covers the nominal path and forbids no unsealed send, `ZK-007` is a
+  whitelist with no natural test, `ZK-008` has no test for the refusal a non-member must get,
+  `ZK-009` is a constant no vector pins, and `ZK-006` is a comment plus reviewer attention.
 
 ---
 

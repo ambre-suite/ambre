@@ -42,7 +42,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this is the boundary `ambre-spec-zero-knowledge.md` draws, on the client
   side. Every byte of user content that leaves the client leaves through the seal here, and
   `SYNC-001` and `SYNC-020` are what keep the metadata down to the whitelist `ZK-007` names.
-* **Verification.** 4 `verified`, 8 `unverified`, 0 `unimplemented`. What holds is refusal: a
+* **Verification.** 6 `verified`, 6 `unverified`, 0 `unimplemented`. What holds is refusal: a
   tampered byte, a wrong document, a wrong key, a bad signature, a replayed counter and a
   decompression bomb each fail closed, and the two crates test them apart. What is loose is every
   rule stated as an absence -- nothing forbids an unsealed send, nothing asserts a nonce is fresh,

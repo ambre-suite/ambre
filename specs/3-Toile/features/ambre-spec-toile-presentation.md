@@ -42,7 +42,7 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 * **Boundary.** one outbound flow, and only while the presenter broadcasts: the slide index rides an
   ephemeral presence frame, which `ZK-005` seals with the `DocumentKey`. The deck and the notes are
   document data like any other, sealed by `ZK-001`.
-* **Verification.** 9 `verified`, 5 `unverified`, 1 `unimplemented`. The machinery is the
+* **Verification.** 10 `verified`, 4 `unverified`, 1 `unimplemented`. The machinery is the
   best-covered subject of the application: convergence, playback, follow, the solver endpoints, the
   camera and the panel are each held. Every gap is on the way in and the way out -- no gesture builds
   a deck, a dead slide is still presented, the mode hides one surface of six, and a fade stops when

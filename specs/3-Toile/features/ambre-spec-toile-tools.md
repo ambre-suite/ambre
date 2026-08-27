@@ -36,7 +36,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the machine is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What it emits is a command; what it streams mid-gesture is
   presence, sealed by the Sync worker like any other frame (`ZK-005`).
-* **Verification.** 5 `verified`, 2 `unverified`, 1 `unimplemented`. Every gesture that ends in a
+* **Verification.** 6 `verified`, 2 `unverified`, 1 `unimplemented`. Every gesture that ends in a
   command is covered; both gaps are on the view above the machine -- the revert after a placement,
   and the space-drag -- and each is a flag a host test can drive.
 

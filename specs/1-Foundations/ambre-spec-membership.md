@@ -43,10 +43,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
   seals each copy for one exchange key. What the relay learns is who is a member of what, which is
   the membership metadata `ambre-spec-zero-knowledge.md` accepts. No plaintext key and no
   private key ever leaves the Sync worker (`SYNC-002`, `SYNC-039`).
-* **Verification.** 8 `verified`, 5 `unverified`, 0 `unimplemented`. What holds is every pure
+* **Verification.** 9 `verified`, 4 `unverified`, 0 `unimplemented`. What holds is every pure
   transform: the wrap for one invitee, the refusal of a weak key, the pin comparison, the directory
   build and the role resolution, all extracted out of the browser and all covered. What is loose is
-  the three branches that only run against a live relay -- and two of them are stated as failing.
+  the four branches that only run against a live relay -- and two of them are stated as failing.
 
 ---
 

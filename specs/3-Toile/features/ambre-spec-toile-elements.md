@@ -35,7 +35,7 @@ status values are normative in `ambre-spec-template.md`.
   multiplier (`features/ambre-spec-toile-tools.md`).
 * **Boundary.** none of its own: an element lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`). No lifecycle command opens a socket or holds a key.
-* **Verification.** 4 `verified`, 4 `unverified`, 1 `unimplemented`. The happy path of every
+* **Verification.** 5 `verified`, 3 `unverified`, 1 `unimplemented`. The happy path of every
   operation is held, including the cache equivalence the whole engine rests on. What is loose is the
   refusals: the lock is proven for one operation out of six, and a missing id is proven for none.
 
