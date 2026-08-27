@@ -35,7 +35,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `ZOOM`.
 * **Boundary.** none: a zoom is local view state. It writes no document, so nothing here reaches the
   relay, holds a key or opens a socket, and `ambre-spec-zero-knowledge.md` seals every payload that
   does leave the client.
-* **Verification.** 0 verified, 0 unverified, 7 unimplemented. The one engine is unbuilt: Toile
+* **Verification.** 0 `verified`, 0 `unverified`, 7 `unimplemented`. The one engine is unbuilt: Toile
   clamps and maps its own zoom today, Trame zooms its render without keys or pinch, and Prose has no
   zoom at all -- the three per-application states are named in section 5.
 
