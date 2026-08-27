@@ -90,6 +90,21 @@ RETIRED = {
     "TRAME-UI-066": "UI-THREAD-009",
     "TRAME-122": "UI-THREAD-016",
     "TOILE-077": "UI-THREAD-016",
+    "TRAME-018": "UNDO-001",
+    "TRAME-116": "UNDO-002",
+    "TRAME-117": "UNDO-005",
+    "TRAME-118": "UNDO-003",
+    "TRAME-119": "UNDO-004",
+    "TRAME-120": "UNDO-006",
+    "TOILE-015": "UNDO-001",
+    "TOILE-072": "UNDO-005",
+    "TOILE-073": "UNDO-002",
+    "TOILE-074": "UNDO-003",
+    "TOILE-075": "UNDO-006",
+    "TOILE-076": "UNDO-004",
+    "PROSE-022": "UNDO-001",
+    "PROSE-FEAT-012": "UNDO-001",
+    "PROSE-FEAT-032": "UNDO-002",
 }
 
 # A finding that states no rule, and why. It is the `RETIRED` register applied to

@@ -40,6 +40,6 @@
 | `trame-selection` | A user points at a cell, sweeps a rectangle, adds a second one with a modifier, or takes a whole column from its header. | partial | 7 | 1 |
 | `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 15 | 3 |
 | `trame-sheets` | A workbook is several sheets, shown as tabs along the bottom edge. | partial | 11 | 4 |
-| `trame-undo` | A user presses `Ctrl+Z` and their last action comes back. | partial | 10 | 1 |
+| `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 4 | 1 |
 
-**25 features: 11 implemented, 14 partial, 0 design-only. 281 invariant rows, 82 loose.**
+**25 features: 11 implemented, 14 partial, 0 design-only. 275 invariant rows, 82 loose.**

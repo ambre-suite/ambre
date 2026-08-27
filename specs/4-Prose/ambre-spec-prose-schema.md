@@ -289,6 +289,6 @@ Only where a schema decision needs a reason. 40 words each.
 | What an orphaned comment, suggestion or footnote renders | the comments, track-changes and footnotes features |
 | How a content hash becomes pixels, and what a failed download shows | `features/ambre-spec-prose-images.md` |
 | That a suggestion accepts and rejects as one unit, whatever its span count | the track-changes feature |
-| That undo reverts local operations only | the undo feature; `PROSE-022` |
+| That undo reverts local operations only | the shared undo model; `ambre-spec-undo.md`, `UNDO-001` |
 | That the `LoroDoc` leaves the Logic thread as bytes alone | the engine; `PROSE-001`, `PROSE-003` |
 | Who may write, and what the server enforces | architecture section 2.D; `ambre-spec-server.md` |

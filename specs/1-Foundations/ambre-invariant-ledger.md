@@ -15,15 +15,15 @@
   `qa-manual`. That number is the coverage debt of the product.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**1154 rows: 774 shipped, of which 355 loose. 380 unbuilt.**
+**1145 rows: 768 shipped, of which 355 loose. 377 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 130 | 155 | 134 |  | 419 |
-| `unverified` | 188 | 83 | 79 |  | 350 |
+| `verified` | 132 | 149 | 132 |  | 413 |
+| `unverified` | 192 | 83 | 75 |  | 350 |
 | `human-review` | 5 |  |  |  | 5 |
 | `qa-manual` |  |  |  |  | 0 |
-| `unimplemented` | 54 | 48 | 48 | 230 | 380 |
+| `unimplemented` | 54 | 48 | 48 | 227 | 377 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -64,6 +64,7 @@
 | `ambre-spec-text-editor.md` | 9 | 7 | 3 | 4 | 2 |
 | `ambre-spec-text-input.md` | 7 | 7 | 0 | 7 |  |
 | `ambre-spec-ui.md` | 12 | 7 | 1 | 6 | 5 |
+| `ambre-spec-undo.md` | 6 | 6 | 2 | 4 |  |
 | `ambre-spec-zero-knowledge.md` | 12 | 12 | 6 | 6 |  |
 | `ambre-spec-trame-schema.md` | 5 | 3 | 2 | 1 | 2 |
 | `ambre-spec-trame-autofill.md` | 8 | 8 | 4 | 4 |  |
@@ -90,7 +91,7 @@
 | `ambre-spec-trame-sheets.md` | 11 | 10 | 6 | 4 | 1 |
 | `ambre-spec-trame-sort.md` | 12 | 12 | 8 | 4 |  |
 | `ambre-spec-trame-status-bar.md` | 8 | 8 | 3 | 5 |  |
-| `ambre-spec-trame-undo.md` | 10 | 8 | 7 | 1 | 2 |
+| `ambre-spec-trame-undo.md` | 4 | 2 | 1 | 1 | 2 |
 | `ambre-spec-toile-schema.md` | 6 | 4 | 2 | 2 | 2 |
 | `ambre-spec-toile-auto-layout.md` | 6 | 6 | 3 | 3 |  |
 | `ambre-spec-toile-board-rendering.md` | 10 | 10 | 8 | 2 |  |
@@ -115,7 +116,7 @@
 | `ambre-spec-toile-styles.md` | 7 | 7 | 5 | 2 |  |
 | `ambre-spec-toile-text-editing.md` | 7 | 6 | 1 | 5 | 1 |
 | `ambre-spec-toile-tools.md` | 9 | 8 | 6 | 2 | 1 |
-| `ambre-spec-toile-undo.md` | 7 | 7 | 3 | 4 |  |
+| `ambre-spec-toile-undo.md` | 1 | 1 | 1 |  |  |
 | `ambre-spec-toile-vector-paths.md` | 4 | 4 | 2 | 2 |  |
 | `ambre-spec-toile-viewport.md` | 10 | 8 | 6 | 2 | 2 |
 | `ambre-spec-toile-z-order.md` | 5 | 5 | 2 | 3 |  |

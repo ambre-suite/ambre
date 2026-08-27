@@ -138,7 +138,7 @@ fn take_selection(state: &mut ProseUiState, to_logic: &flume::Sender<LogicComman
 
 The channel keeps the order it was sent in, so the deletion of a selection always applies before
 the insertion that replaced it. Whether the two are one undo item is undecided
-(`features/ambre-spec-prose-undo.md section 5`).
+(`features/ambre-spec-prose-undo.md section 4`).
 
 **The join, in one primitive.** A deletion across paragraphs keeps the head block, appends the
 tail's surviving suffix to it and removes what it emptied (`PROSE-037`). Backspace at offset zero

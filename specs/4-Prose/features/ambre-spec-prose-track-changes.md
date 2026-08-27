@@ -167,7 +167,7 @@ suggestion through a signal the view raises (`PROSE-UI-052`).
   rule above is about what happens once it is on.
 * **The merge window is set from an interval no document defines.** The grouping window is stated as
   two seconds, "aligned with the undo merge interval", and
-  `features/ambre-spec-prose-undo.md section 6` records that the undo interval is undefined. One
+  `features/ambre-spec-prose-undo.md section 4` records that the undo interval is undefined. One
   undefined number is the source of two.
 * **The engine names two module paths for one feature.** The interception and the accept and reject
   entry points were written under `features/track_changes.rs`, and the three queries beside them
@@ -181,7 +181,8 @@ suggestion through a signal the view raises (`PROSE-UI-052`).
   (`ambre-spec-prose-schema.md section 1`). The query that lists pending suggestions is specified as
   a filter over that field, so this feature is the one that pays for the defect.
 * **Nothing rules on suggestion mode against undo.** Undo reverts the local peer's operations
-  (`PROSE-022`), and an interception turns one typed operation into a marked one. Whether undo
+  (`ambre-spec-undo.md`, `UNDO-001`), and an interception turns one typed operation into a marked
+  one. Whether undo
   reverts the mark, the text or both is unstated.
 * **Nothing rules on who may accept.** Any collaborator may accept or reject any suggestion,
   including their own, and no rule says whether that is intended.

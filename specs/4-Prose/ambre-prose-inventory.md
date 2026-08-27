@@ -41,8 +41,8 @@
 | `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | design-only | 9 |  |
 | `prose-toolbar` | Select a few words and a small bar appears above them, showing what the selection already is -- bold, italic, a heading -- and letting the author change it. | design-only | 5 |  |
 | `prose-track-changes` | A reviewer edits without changing the document: what they type is marked as a suggested insertion, what they delete is marked as a suggested deletion, and the author accepts or rejects each change as one unit. | design-only | 13 |  |
-| `prose-undo` | Undo takes back what this author did, and never what anybody else did. | design-only | 4 |  |
+| `prose-undo` | Prose's half of the shared undo model (`ambre-spec-undo.md`): where the caret lands, and what one item is in running text. | design-only | 1 |  |
 | `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | design-only | 7 |  |
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | design-only | 4 |  |
 
-**28 features: 0 implemented, 0 partial, 28 design-only. 221 invariant rows, 0 loose.**
+**28 features: 0 implemented, 0 partial, 28 design-only. 218 invariant rows, 0 loose.**

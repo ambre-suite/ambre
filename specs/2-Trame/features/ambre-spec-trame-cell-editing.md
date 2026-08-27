@@ -174,7 +174,7 @@ The command variants exist in `ambre-bus`; `logic/commands.rs` answers them with
 **Keys, while a session is open.** An open editor claims the keyboard: every key below acts on the
 buffer, and the grid map of `features/ambre-spec-trame-selection.md section 4` applies only when no
 session is open. The two undo chords are read before that split and reach the document either way
-(`features/ambre-spec-trame-undo.md section 4`).
+(`features/ambre-spec-trame-undo.md section 3`).
 
 | Key | Effect |
 |---|---|

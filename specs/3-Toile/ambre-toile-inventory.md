@@ -28,7 +28,7 @@
 | `toile-menus` | A user right-clicks and gets what applies to what is under the cursor. | implemented | 7 | 2 |
 | `toile-status-bar` | A user selects a handful of elements and reads how many there are and what box they occupy, without drawing a rectangle to find out. | implemented | 5 | 1 |
 | `toile-styles` | A user picks a colour, a border, a thickness, a font, and the selection takes it. | implemented | 7 | 2 |
-| `toile-undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 7 | 4 |
+| `toile-undo` | Toile's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a board, and which caches an undo reseeds. | implemented | 1 |  |
 | `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | implemented | 4 | 2 |
 | `toile-z-order` | What overlaps what. | implemented | 5 | 3 |
 | `toile-connectors` | A user drags from one shape to another and gets an arrow. | partial | 8 | 4 |
@@ -46,4 +46,4 @@
 | `toile-comments` | A user pins a remark on an element or on empty board, and a teammate answers it hours later. | design-only | 14 |  |
 | `toile-links` | A user makes an element clickable: it opens a web address, jumps the camera to a frame on this board, or opens another Ambre document. | design-only | 5 |  |
 
-**29 features: 15 implemented, 12 partial, 2 design-only. 255 invariant rows, 77 loose.**
+**29 features: 15 implemented, 12 partial, 2 design-only. 249 invariant rows, 73 loose.**
