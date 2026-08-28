@@ -165,6 +165,29 @@ spec-shape:
 spec-shape-update:
     python3 scripts/spec_shape.py --update
 
+# `ai/ambre-writing-style.md` ended on "No script checks this file [...] It is a
+# review rule, and review rules drift." It drifted: a Rust comment reached the
+# tree with a metaphor, a passive and a 33-word sentence, and no check saw any of
+# it. This holds the half a script can hold -- printable ASCII, Latin
+# abbreviations, sentence and paragraph length, the passive -- as a per-file
+# ceiling that only falls. A file the table does not name has a ceiling of zero,
+# so a new file and a new comment start clean. Metaphor, ambiguous pronoun and
+# "why, never what" stay a human read.
+
+# writing style: the mechanical half of `ai/ambre-writing-style.md`.
+prose:
+    python3 scripts/prose.py --check
+
+# Every breach, with its line, so a red check says what to rewrite.
+prose-detail:
+    python3 scripts/prose.py --verbose
+
+# Rewrite the per-file ceilings after a deliberate change. It lowers only, so it
+# cannot make a red check green. A file that legitimately grows needs
+# `python3 scripts/prose.py --ceilings --raise` and a reviewed diff.
+prose-ceilings:
+    python3 scripts/prose.py --ceilings
+
 # The corpus cites a document by its name and, half the time, by a section of it.
 # Nothing resolved either, so splitting a spec left every stale citation silent:
 # `prose-engine` pointed at no document for as long as three Prose specs have

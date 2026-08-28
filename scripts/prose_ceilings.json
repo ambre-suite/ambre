@@ -1,0 +1,3089 @@
+{
+  "AGENTS.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 1
+  },
+  "README.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 7
+  },
+  "ai/ambre-engagement.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 0
+  },
+  "ai/ambre-git-strategy.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 0
+  },
+  "ai/ambre-rust-style.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 2
+  },
+  "ai/ambre-testing.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 2
+  },
+  "ai/ambre-writing-style.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-app/fonts/LICENSES.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-app/src/host/frame.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 9,
+    "para": 0,
+    "passive": 13
+  },
+  "crates/ambre-app/src/host/mod.rs": {
+    "ascii": 5,
+    "latin": 0,
+    "long": 14,
+    "para": 2,
+    "passive": 5
+  },
+  "crates/ambre-app/src/host/run.rs": {
+    "ascii": 0,
+    "latin": 2,
+    "long": 7,
+    "para": 0,
+    "passive": 6
+  },
+  "crates/ambre-app/src/landing.rs": {
+    "ascii": 1,
+    "latin": 0,
+    "long": 10,
+    "para": 0,
+    "passive": 6
+  },
+  "crates/ambre-app/src/lib.rs": {
+    "ascii": 0,
+    "latin": 2,
+    "long": 47,
+    "para": 2,
+    "passive": 27
+  },
+  "crates/ambre-app/src/platform.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 11,
+    "para": 0,
+    "passive": 11
+  },
+  "crates/ambre-app/src/route.rs": {
+    "ascii": 1,
+    "latin": 1,
+    "long": 4,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-app/src/shell/app_root.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 18,
+    "para": 0,
+    "passive": 14
+  },
+  "crates/ambre-app/src/shell/mod.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-bus/src/app/mod.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-bus/src/app/toile.rs": {
+    "ascii": 0,
+    "latin": 2,
+    "long": 19,
+    "para": 0,
+    "passive": 23
+  },
+  "crates/ambre-bus/src/app/trame/clipboard.rs": {
+    "ascii": 2,
+    "latin": 2,
+    "long": 3,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-bus/src/app/trame/command.rs": {
+    "ascii": 6,
+    "latin": 0,
+    "long": 25,
+    "para": 4,
+    "passive": 23
+  },
+  "crates/ambre-bus/src/app/trame/event.rs": {
+    "ascii": 5,
+    "latin": 5,
+    "long": 4,
+    "para": 0,
+    "passive": 16
+  },
+  "crates/ambre-bus/src/app/trame/features.rs": {
+    "ascii": 2,
+    "latin": 1,
+    "long": 1,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-bus/src/app/trame/style.rs": {
+    "ascii": 5,
+    "latin": 3,
+    "long": 3,
+    "para": 0,
+    "passive": 7
+  },
+  "crates/ambre-bus/src/command.rs": {
+    "ascii": 9,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-bus/src/event.rs": {
+    "ascii": 12,
+    "latin": 3,
+    "long": 5,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-bus/src/lib.rs": {
+    "ascii": 10,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-bus/src/logic.rs": {
+    "ascii": 20,
+    "latin": 3,
+    "long": 5,
+    "para": 1,
+    "passive": 1
+  },
+  "crates/ambre-bus/src/rest.rs": {
+    "ascii": 67,
+    "latin": 1,
+    "long": 7,
+    "para": 0,
+    "passive": 9
+  },
+  "crates/ambre-bus/src/sink.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 1,
+    "passive": 0
+  },
+  "crates/ambre-bus/src/sync_warning.rs": {
+    "ascii": 1,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-bus/src/ui.rs": {
+    "ascii": 23,
+    "latin": 2,
+    "long": 6,
+    "para": 1,
+    "passive": 6
+  },
+  "crates/ambre-bus/tests/host.rs": {
+    "ascii": 5,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-canvas/src/editor.rs": {
+    "ascii": 0,
+    "latin": 2,
+    "long": 10,
+    "para": 2,
+    "passive": 12
+  },
+  "crates/ambre-canvas/src/fatal.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 1,
+    "passive": 2
+  },
+  "crates/ambre-canvas/src/fonts.rs": {
+    "ascii": 10,
+    "latin": 1,
+    "long": 7,
+    "para": 1,
+    "passive": 14
+  },
+  "crates/ambre-canvas/src/host.rs": {
+    "ascii": 1,
+    "latin": 0,
+    "long": 6,
+    "para": 1,
+    "passive": 4
+  },
+  "crates/ambre-canvas/src/intent.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 1,
+    "passive": 0
+  },
+  "crates/ambre-canvas/src/lib.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 1,
+    "passive": 1
+  },
+  "crates/ambre-canvas/src/perf.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-canvas/src/render/atlas.rs": {
+    "ascii": 0,
+    "latin": 3,
+    "long": 10,
+    "para": 1,
+    "passive": 12
+  },
+  "crates/ambre-canvas/src/render/mod.rs": {
+    "ascii": 1,
+    "latin": 0,
+    "long": 2,
+    "para": 1,
+    "passive": 5
+  },
+  "crates/ambre-canvas/src/render/renderer.rs": {
+    "ascii": 3,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-canvas/src/render/surface.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 9,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-canvas/src/request_registry.rs": {
+    "ascii": 8,
+    "latin": 0,
+    "long": 0,
+    "para": 2,
+    "passive": 4
+  },
+  "crates/ambre-canvas/src/text_cache.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 11,
+    "para": 0,
+    "passive": 6
+  },
+  "crates/ambre-canvas/src/text_input.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 4,
+    "para": 1,
+    "passive": 0
+  },
+  "crates/ambre-canvas/src/theme.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-canvas/src/view.rs": {
+    "ascii": 1,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-chrome/src/app_shell.rs": {
+    "ascii": 0,
+    "latin": 2,
+    "long": 1,
+    "para": 1,
+    "passive": 0
+  },
+  "crates/ambre-chrome/src/color.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-chrome/src/command.rs": {
+    "ascii": 1,
+    "latin": 4,
+    "long": 2,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-chrome/src/context_menu.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 6,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-chrome/src/debounce.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 3,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-chrome/src/dialog.rs": {
+    "ascii": 0,
+    "latin": 2,
+    "long": 2,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-chrome/src/font.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 1,
+    "passive": 0
+  },
+  "crates/ambre-chrome/src/format.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 1,
+    "passive": 4
+  },
+  "crates/ambre-chrome/src/lib.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 1,
+    "passive": 1
+  },
+  "crates/ambre-chrome/src/palette.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 1,
+    "passive": 2
+  },
+  "crates/ambre-chrome/src/shortcut.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 1,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-chrome/src/status.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 1,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-chrome/tests/chrome_ui.rs": {
+    "ascii": 5,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-commands/src/keybinding.rs": {
+    "ascii": 0,
+    "latin": 2,
+    "long": 3,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-commands/src/lib.rs": {
+    "ascii": 0,
+    "latin": 2,
+    "long": 8,
+    "para": 1,
+    "passive": 2
+  },
+  "crates/ambre-core/src/doc_type.rs": {
+    "ascii": 8,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 6
+  },
+  "crates/ambre-core/src/docfile.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 8,
+    "para": 0,
+    "passive": 13
+  },
+  "crates/ambre-core/src/error.rs": {
+    "ascii": 3,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-core/src/fixtures.rs": {
+    "ascii": 0,
+    "latin": 2,
+    "long": 10,
+    "para": 1,
+    "passive": 2
+  },
+  "crates/ambre-core/src/id.rs": {
+    "ascii": 2,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-core/src/lib.rs": {
+    "ascii": 1,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-core/src/public_key.rs": {
+    "ascii": 6,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-core/src/role.rs": {
+    "ascii": 2,
+    "latin": 1,
+    "long": 0,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-core/src/uuid.rs": {
+    "ascii": 3,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-core/src/version.rs": {
+    "ascii": 3,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-crypto/src/aead.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-crypto/src/ecdh.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-crypto/src/envelope.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-crypto/src/error.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-crypto/src/hash.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-crypto/src/keys.rs": {
+    "ascii": 0,
+    "latin": 2,
+    "long": 2,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-crypto/src/lib.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-crypto/src/passphrase.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-crypto/src/signature.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-crypto/src/tests.rs": {
+    "ascii": 7,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-draw/src/lib.rs": {
+    "ascii": 2,
+    "latin": 1,
+    "long": 2,
+    "para": 1,
+    "passive": 12
+  },
+  "crates/ambre-draw/src/peer.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-draw/src/testing.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 2,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-draw/src/types.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-logic/src/data.rs": {
+    "ascii": 1,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-logic/src/dispatch.rs": {
+    "ascii": 6,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 19
+  },
+  "crates/ambre-logic/src/fixtures.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 15,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-logic/src/lib.rs": {
+    "ascii": 15,
+    "latin": 0,
+    "long": 9,
+    "para": 0,
+    "passive": 10
+  },
+  "crates/ambre-logic/src/persistence.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 6
+  },
+  "crates/ambre-logic/tests/docfile_dispatch.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-logic/tests/fixture_determinism.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 15,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-logic/tests/fixtures_corpus.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 10,
+    "para": 0,
+    "passive": 8
+  },
+  "crates/ambre-murmure/src/lib.rs": {
+    "ascii": 2,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-pdf/src/lib.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 1,
+    "passive": 9
+  },
+  "crates/ambre-prose/src/lib.rs": {
+    "ascii": 1,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-protocol/src/error.rs": {
+    "ascii": 1,
+    "latin": 2,
+    "long": 1,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-protocol/src/lib.rs": {
+    "ascii": 2,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-protocol/src/messages.rs": {
+    "ascii": 23,
+    "latin": 1,
+    "long": 1,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-protocol/src/public_data.rs": {
+    "ascii": 2,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-protocol/src/signaling.rs": {
+    "ascii": 4,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-protocol/src/version.rs": {
+    "ascii": 2,
+    "latin": 1,
+    "long": 0,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-protocol/src/ws.rs": {
+    "ascii": 2,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-server/examples/goose_load_test.rs": {
+    "ascii": 4,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-server/src/auth.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-server/src/db/content.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 6,
+    "para": 0,
+    "passive": 7
+  },
+  "crates/ambre-server/src/db/documents.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-server/src/db/members.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-server/src/db/mod.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-server/src/db/orgs.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-server/src/db/users.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 1,
+    "passive": 5
+  },
+  "crates/ambre-server/src/error.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-server/src/jwt.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-server/src/main.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-server/src/middleware/rate_limit.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-server/src/oidc.rs": {
+    "ascii": 1,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 8
+  },
+  "crates/ambre-server/src/redis_ops.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 22,
+    "para": 0,
+    "passive": 21
+  },
+  "crates/ambre-server/src/routes/auth.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 6
+  },
+  "crates/ambre-server/src/routes/documents.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-server/src/routes/keys.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-server/src/routes/media.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-server/src/routes/orgs.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 1,
+    "passive": 5
+  },
+  "crates/ambre-server/src/routes/share.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-server/src/routes/sync.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-server/src/routes/tests.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 9,
+    "para": 0,
+    "passive": 9
+  },
+  "crates/ambre-server/src/s3.rs": {
+    "ascii": 1,
+    "latin": 1,
+    "long": 11,
+    "para": 0,
+    "passive": 13
+  },
+  "crates/ambre-server/src/state.rs": {
+    "ascii": 1,
+    "latin": 4,
+    "long": 6,
+    "para": 0,
+    "passive": 7
+  },
+  "crates/ambre-server/src/test_helpers.rs": {
+    "ascii": 1,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-server/src/ws/handler/message.rs": {
+    "ascii": 0,
+    "latin": 2,
+    "long": 26,
+    "para": 0,
+    "passive": 32
+  },
+  "crates/ambre-server/src/ws/handler/mod.rs": {
+    "ascii": 0,
+    "latin": 2,
+    "long": 11,
+    "para": 0,
+    "passive": 14
+  },
+  "crates/ambre-server/src/ws/handler/token_bucket.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 1,
+    "para": 0,
+    "passive": 7
+  },
+  "crates/ambre-server/src/ws/pubsub_hub.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-sync/src/auth.rs": {
+    "ascii": 1,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 6
+  },
+  "crates/ambre-sync/src/documents.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-sync/src/http.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-sync/src/lib.rs": {
+    "ascii": 14,
+    "latin": 5,
+    "long": 20,
+    "para": 1,
+    "passive": 60
+  },
+  "crates/ambre-sync/src/media.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 0,
+    "para": 2,
+    "passive": 0
+  },
+  "crates/ambre-sync/src/members.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 0,
+    "para": 2,
+    "passive": 3
+  },
+  "crates/ambre-sync/src/mock.rs": {
+    "ascii": 5,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-sync/src/mock_relay.rs": {
+    "ascii": 3,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-sync/src/pipeline.rs": {
+    "ascii": 7,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 6
+  },
+  "crates/ambre-sync/src/sharing.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 10,
+    "para": 0,
+    "passive": 12
+  },
+  "crates/ambre-sync/src/updates.rs": {
+    "ascii": 3,
+    "latin": 3,
+    "long": 16,
+    "para": 1,
+    "passive": 13
+  },
+  "crates/ambre-sync/src/websocket.rs": {
+    "ascii": 1,
+    "latin": 2,
+    "long": 15,
+    "para": 0,
+    "passive": 17
+  },
+  "crates/ambre-sync/src/worker.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-sync/tests/integration.rs": {
+    "ascii": 9,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-toile/src/chrome/find.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-toile/src/chrome/floatbar.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 7,
+    "para": 1,
+    "passive": 0
+  },
+  "crates/ambre-toile/src/chrome/icons.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-toile/src/chrome/menu.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-toile/src/chrome/menu_bar.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 1,
+    "passive": 0
+  },
+  "crates/ambre-toile/src/chrome/mod.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-toile/src/chrome/palette.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 6,
+    "para": 1,
+    "passive": 1
+  },
+  "crates/ambre-toile/src/chrome/presenter.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-toile/src/chrome/status.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-toile/src/chrome/style.rs": {
+    "ascii": 0,
+    "latin": 2,
+    "long": 4,
+    "para": 1,
+    "passive": 2
+  },
+  "crates/ambre-toile/src/lib.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-toile/src/logic/animate.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-toile/src/logic/autolayout.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 1,
+    "passive": 4
+  },
+  "crates/ambre-toile/src/logic/boolean.rs": {
+    "ascii": 1,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-toile/src/logic/command.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-toile/src/logic/connector.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-toile/src/logic/convergence_tests.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 17
+  },
+  "crates/ambre-toile/src/logic/index.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-toile/src/logic/interop/docfile.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-toile/src/logic/interop/limits.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-toile/src/logic/interop/media.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 8
+  },
+  "crates/ambre-toile/src/logic/interop/mod.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 10
+  },
+  "crates/ambre-toile/src/logic/interop/pdf_export.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 1,
+    "passive": 5
+  },
+  "crates/ambre-toile/src/logic/interop/raster.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-toile/src/logic/interop/svg_export.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-toile/src/logic/interop/svg_import.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 18
+  },
+  "crates/ambre-toile/src/logic/interop/tests.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-toile/src/logic/mod.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-toile/src/logic/model.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-toile/src/logic/state/autolayout.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-toile/src/logic/state/boolean.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-toile/src/logic/state/caches.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-toile/src/logic/state/clipboard.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 7
+  },
+  "crates/ambre-toile/src/logic/state/codec.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-toile/src/logic/state/derive.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-toile/src/logic/state/docfile.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-toile/src/logic/state/elements.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 3,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-toile/src/logic/state/find.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-toile/src/logic/state/fixtures.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 7
+  },
+  "crates/ambre-toile/src/logic/state/groups.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-toile/src/logic/state/import.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 1,
+    "passive": 14
+  },
+  "crates/ambre-toile/src/logic/state/mod.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 10,
+    "para": 0,
+    "passive": 13
+  },
+  "crates/ambre-toile/src/logic/state/presence.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 6
+  },
+  "crates/ambre-toile/src/logic/state/presentation.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 9,
+    "para": 0,
+    "passive": 12
+  },
+  "crates/ambre-toile/src/logic/state/reactions.rs": {
+    "ascii": 1,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 10
+  },
+  "crates/ambre-toile/src/logic/stroke.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-toile/src/ui/commands.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 1,
+    "passive": 5
+  },
+  "crates/ambre-toile/src/ui/edit.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-toile/src/ui/embed.rs": {
+    "ascii": 1,
+    "latin": 1,
+    "long": 15,
+    "para": 0,
+    "passive": 12
+  },
+  "crates/ambre-toile/src/ui/find.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-toile/src/ui/floatbar.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 9,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-toile/src/ui/grid.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-toile/src/ui/hit.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-toile/src/ui/menu.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 1,
+    "passive": 7
+  },
+  "crates/ambre-toile/src/ui/menu_bar.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 1,
+    "passive": 2
+  },
+  "crates/ambre-toile/src/ui/mod.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-toile/src/ui/palette.rs": {
+    "ascii": 3,
+    "latin": 0,
+    "long": 15,
+    "para": 1,
+    "passive": 13
+  },
+  "crates/ambre-toile/src/ui/presence.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-toile/src/ui/present.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 7
+  },
+  "crates/ambre-toile/src/ui/presenter.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-toile/src/ui/reactions.rs": {
+    "ascii": 0,
+    "latin": 2,
+    "long": 3,
+    "para": 1,
+    "passive": 1
+  },
+  "crates/ambre-toile/src/ui/render.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 30,
+    "para": 0,
+    "passive": 27
+  },
+  "crates/ambre-toile/src/ui/status.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 3,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-toile/src/ui/style.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 1,
+    "passive": 2
+  },
+  "crates/ambre-toile/src/ui/tool.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 18,
+    "para": 0,
+    "passive": 13
+  },
+  "crates/ambre-toile/src/ui/view.rs": {
+    "ascii": 0,
+    "latin": 4,
+    "long": 63,
+    "para": 0,
+    "passive": 40
+  },
+  "crates/ambre-toile/src/ui/viewport.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-toile/tests/chrome_ui.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 6
+  },
+  "crates/ambre-trame/src/chrome/bars.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-trame/src/chrome/color.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-trame/src/chrome/commands.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-trame/src/chrome/find_replace.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-trame/src/chrome/formula_bar.rs": {
+    "ascii": 0,
+    "latin": 2,
+    "long": 0,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-trame/src/chrome/icons.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-trame/src/chrome/mod.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-trame/src/chrome/popovers/filter.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-trame/src/chrome/popovers/mod.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-trame/src/chrome/popovers/style.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-trame/src/chrome/sheet_tabs.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-trame/src/chrome/sort_dialog.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-trame/src/chrome/status.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 1,
+    "passive": 2
+  },
+  "crates/ambre-trame/src/chrome/style.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-trame/src/columns.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-trame/src/formula/cache.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-trame/src/formula/compile.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 2,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-trame/src/formula/dag.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 7,
+    "para": 0,
+    "passive": 15
+  },
+  "crates/ambre-trame/src/formula/engine.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-trame/src/formula/functions/builtins_a.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 1,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-trame/src/formula/functions/builtins_b.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 7
+  },
+  "crates/ambre-trame/src/formula/functions/builtins_c.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-trame/src/formula/functions/mod.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-trame/src/formula/functions/tests.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-trame/src/formula/parser/mod.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 3,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-trame/src/formula/prop_tests.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-trame/src/formula/render.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-trame/src/formula/shift.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-trame/src/formula/test_index.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-trame/src/formula/types.rs": {
+    "ascii": 5,
+    "latin": 2,
+    "long": 5,
+    "para": 0,
+    "passive": 13
+  },
+  "crates/ambre-trame/src/formula/vm.rs": {
+    "ascii": 0,
+    "latin": 4,
+    "long": 7,
+    "para": 1,
+    "passive": 10
+  },
+  "crates/ambre-trame/src/lib.rs": {
+    "ascii": 3,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-trame/src/logic/cells.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 9,
+    "para": 0,
+    "passive": 6
+  },
+  "crates/ambre-trame/src/logic/clipboard.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 8
+  },
+  "crates/ambre-trame/src/logic/commands.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 7,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-trame/src/logic/convergence_tests.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 12,
+    "para": 1,
+    "passive": 3
+  },
+  "crates/ambre-trame/src/logic/docfile.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 7
+  },
+  "crates/ambre-trame/src/logic/fill.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 11,
+    "para": 0,
+    "passive": 13
+  },
+  "crates/ambre-trame/src/logic/filters.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-trame/src/logic/find.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 8,
+    "para": 0,
+    "passive": 6
+  },
+  "crates/ambre-trame/src/logic/fixtures.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-trame/src/logic/helpers.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-trame/src/logic/interop.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-trame/src/logic/merges.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-trame/src/logic/metrics.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-trame/src/logic/mod.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 12
+  },
+  "crates/ambre-trame/src/logic/packing.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-trame/src/logic/schema.rs": {
+    "ascii": 0,
+    "latin": 2,
+    "long": 7,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-trame/src/logic/sheets.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 9
+  },
+  "crates/ambre-trame/src/logic/sort.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 9
+  },
+  "crates/ambre-trame/src/logic/structural.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-trame/src/logic/styles.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 10,
+    "para": 0,
+    "passive": 7
+  },
+  "crates/ambre-trame/src/logic/sync.rs": {
+    "ascii": 1,
+    "latin": 1,
+    "long": 11,
+    "para": 0,
+    "passive": 6
+  },
+  "crates/ambre-trame/src/logic/tests/group1.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 8
+  },
+  "crates/ambre-trame/src/logic/tests/group2.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 9,
+    "para": 0,
+    "passive": 10
+  },
+  "crates/ambre-trame/src/logic/tests/group3.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 10,
+    "para": 0,
+    "passive": 10
+  },
+  "crates/ambre-trame/src/logic/tests/group4.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 10
+  },
+  "crates/ambre-trame/src/logic/tests/group5.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-trame/src/logic/tests/group6.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-trame/src/logic/tests/group7.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-trame/src/model/mod.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-trame/src/model/sheet_index.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 1,
+    "passive": 5
+  },
+  "crates/ambre-trame/src/render/cells.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 5,
+    "para": 1,
+    "passive": 4
+  },
+  "crates/ambre-trame/src/render/content.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-trame/src/render/headers.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-trame/src/render/layout.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 3,
+    "para": 0,
+    "passive": 8
+  },
+  "crates/ambre-trame/src/render/merges.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 1,
+    "passive": 2
+  },
+  "crates/ambre-trame/src/render/mod.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-trame/src/render/tests.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-trame/src/render/text.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-trame/src/test_support.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-trame/src/ui/commands.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 16,
+    "para": 0,
+    "passive": 5
+  },
+  "crates/ambre-trame/src/ui/grid/geometry.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 12,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-trame/src/ui/grid/mod.rs": {
+    "ascii": 1,
+    "latin": 2,
+    "long": 9,
+    "para": 0,
+    "passive": 13
+  },
+  "crates/ambre-trame/src/ui/grid/state.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 14,
+    "para": 0,
+    "passive": 9
+  },
+  "crates/ambre-trame/src/ui/grid/tests/editor_parity.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 1,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-trame/src/ui/grid/tests/group1.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 1
+  },
+  "crates/ambre-trame/src/ui/grid/tests/group2.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 3
+  },
+  "crates/ambre-trame/src/ui/mod.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 0,
+    "para": 1,
+    "passive": 0
+  },
+  "crates/ambre-trame/src/ui/renderer/cells.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 4
+  },
+  "crates/ambre-trame/src/ui/renderer/edit.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 0
+  },
+  "crates/ambre-trame/src/ui/renderer/mod.rs": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 10
+  },
+  "crates/ambre-trame/src/ui/renderer/overlay.rs": {
+    "ascii": 0,
+    "latin": 1,
+    "long": 6,
+    "para": 0,
+    "passive": 7
+  },
+  "crates/ambre-trame/src/ui/view/frame.rs": {
+    "ascii": 2,
+    "latin": 3,
+    "long": 8,
+    "para": 0,
+    "passive": 11
+  },
+  "crates/ambre-trame/src/ui/view/input.rs": {
+    "ascii": 2,
+    "latin": 0,
+    "long": 12,
+    "para": 0,
+    "passive": 2
+  },
+  "crates/ambre-trame/src/ui/view/interact.rs": {
+    "ascii": 1,
+    "latin": 1,
+    "long": 12,
+    "para": 0,
+    "passive": 10
+  },
+  "crates/ambre-trame/src/ui/view/lifecycle.rs": {
+    "ascii": 5,
+    "latin": 2,
+    "long": 8,
+    "para": 0,
+    "passive": 9
+  },
+  "crates/ambre-trame/src/ui/view/mod.rs": {
+    "ascii": 2,
+    "latin": 0,
+    "long": 15,
+    "para": 0,
+    "passive": 14
+  },
+  "crates/ambre-trame/tests/chrome_ui.rs": {
+    "ascii": 6,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 5
+  },
+  "specs/1-Foundations/ambre-invariant-ledger.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 2
+  },
+  "specs/1-Foundations/ambre-spec-accessibility.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 7
+  },
+  "specs/1-Foundations/ambre-spec-adaptive-layout.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 13
+  },
+  "specs/1-Foundations/ambre-spec-architecture.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 10,
+    "para": 0,
+    "passive": 14
+  },
+  "specs/1-Foundations/ambre-spec-broadcast.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 14,
+    "para": 0,
+    "passive": 18
+  },
+  "specs/1-Foundations/ambre-spec-budgets.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 9,
+    "para": 0,
+    "passive": 6
+  },
+  "specs/1-Foundations/ambre-spec-chrome.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 13,
+    "para": 0,
+    "passive": 6
+  },
+  "specs/1-Foundations/ambre-spec-clipboard.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 9,
+    "para": 0,
+    "passive": 14
+  },
+  "specs/1-Foundations/ambre-spec-commands.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 16,
+    "para": 0,
+    "passive": 20
+  },
+  "specs/1-Foundations/ambre-spec-delta-order.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 15,
+    "para": 0,
+    "passive": 19
+  },
+  "specs/1-Foundations/ambre-spec-design-tokens.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 9,
+    "para": 0,
+    "passive": 10
+  },
+  "specs/1-Foundations/ambre-spec-docfile.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 9
+  },
+  "specs/1-Foundations/ambre-spec-drawing-surface.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 8,
+    "para": 0,
+    "passive": 12
+  },
+  "specs/1-Foundations/ambre-spec-find.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 15,
+    "para": 0,
+    "passive": 4
+  },
+  "specs/1-Foundations/ambre-spec-fixtures.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 20,
+    "para": 0,
+    "passive": 26
+  },
+  "specs/1-Foundations/ambre-spec-frame.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 9,
+    "para": 0,
+    "passive": 12
+  },
+  "specs/1-Foundations/ambre-spec-high-density.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 8,
+    "para": 0,
+    "passive": 11
+  },
+  "specs/1-Foundations/ambre-spec-key-rotation.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 17
+  },
+  "specs/1-Foundations/ambre-spec-key-verification.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 13,
+    "para": 0,
+    "passive": 19
+  },
+  "specs/1-Foundations/ambre-spec-launcher.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 9,
+    "para": 0,
+    "passive": 12
+  },
+  "specs/1-Foundations/ambre-spec-media.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 8,
+    "para": 0,
+    "passive": 8
+  },
+  "specs/1-Foundations/ambre-spec-membership.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 9,
+    "para": 0,
+    "passive": 15
+  },
+  "specs/1-Foundations/ambre-spec-message-bus.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 12
+  },
+  "specs/1-Foundations/ambre-spec-object-store.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 11,
+    "para": 0,
+    "passive": 11
+  },
+  "specs/1-Foundations/ambre-spec-organizations.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 9,
+    "para": 0,
+    "passive": 12
+  },
+  "specs/1-Foundations/ambre-spec-pdf-export.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 8,
+    "para": 0,
+    "passive": 8
+  },
+  "specs/1-Foundations/ambre-spec-presence.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 11,
+    "para": 0,
+    "passive": 11
+  },
+  "specs/1-Foundations/ambre-spec-render-assets.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 12,
+    "para": 0,
+    "passive": 12
+  },
+  "specs/1-Foundations/ambre-spec-schema-version.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 12
+  },
+  "specs/1-Foundations/ambre-spec-sealed-envelope.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 11,
+    "para": 0,
+    "passive": 12
+  },
+  "specs/1-Foundations/ambre-spec-sequencer.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 16,
+    "para": 0,
+    "passive": 21
+  },
+  "specs/1-Foundations/ambre-spec-server.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 15,
+    "para": 0,
+    "passive": 6
+  },
+  "specs/1-Foundations/ambre-spec-session.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 12,
+    "para": 0,
+    "passive": 11
+  },
+  "specs/1-Foundations/ambre-spec-sync.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 16,
+    "para": 0,
+    "passive": 12
+  },
+  "specs/1-Foundations/ambre-spec-testing.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 1,
+    "passive": 7
+  },
+  "specs/1-Foundations/ambre-spec-text-editor.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 13,
+    "para": 0,
+    "passive": 5
+  },
+  "specs/1-Foundations/ambre-spec-text-input.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 12,
+    "para": 0,
+    "passive": 7
+  },
+  "specs/1-Foundations/ambre-spec-ui.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 12,
+    "para": 0,
+    "passive": 14
+  },
+  "specs/1-Foundations/ambre-spec-undo.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 7
+  },
+  "specs/1-Foundations/ambre-spec-zero-knowledge.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 8,
+    "para": 0,
+    "passive": 9
+  },
+  "specs/1-Foundations/ambre-spec-zoom.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 6
+  },
+  "specs/2-Trame/ambre-spec-trame-schema.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 5
+  },
+  "specs/2-Trame/ambre-trame-inventory.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 3
+  },
+  "specs/2-Trame/features/ambre-spec-trame-autofill.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 4
+  },
+  "specs/2-Trame/features/ambre-spec-trame-cell-editing.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 11,
+    "para": 0,
+    "passive": 9
+  },
+  "specs/2-Trame/features/ambre-spec-trame-cell-merges.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 9
+  },
+  "specs/2-Trame/features/ambre-spec-trame-cell-rendering.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 8
+  },
+  "specs/2-Trame/features/ambre-spec-trame-cell-styles.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 8
+  },
+  "specs/2-Trame/features/ambre-spec-trame-clipboard.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 2,
+    "para": 0,
+    "passive": 4
+  },
+  "specs/2-Trame/features/ambre-spec-trame-context-menu.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 8
+  },
+  "specs/2-Trame/features/ambre-spec-trame-engine.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 11,
+    "para": 1,
+    "passive": 9
+  },
+  "specs/2-Trame/features/ambre-spec-trame-find-replace.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 4
+  },
+  "specs/2-Trame/features/ambre-spec-trame-formula-engine.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 11,
+    "para": 0,
+    "passive": 8
+  },
+  "specs/2-Trame/features/ambre-spec-trame-function-library.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 3
+  },
+  "specs/2-Trame/features/ambre-spec-trame-grid-viewport.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 11,
+    "para": 0,
+    "passive": 9
+  },
+  "specs/2-Trame/features/ambre-spec-trame-headers.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 10
+  },
+  "specs/2-Trame/features/ambre-spec-trame-import-export.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 11,
+    "para": 0,
+    "passive": 12
+  },
+  "specs/2-Trame/features/ambre-spec-trame-named-ranges.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 8
+  },
+  "specs/2-Trame/features/ambre-spec-trame-number-formats.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 5
+  },
+  "specs/2-Trame/features/ambre-spec-trame-pdf-export.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 0,
+    "para": 0,
+    "passive": 2
+  },
+  "specs/2-Trame/features/ambre-spec-trame-resize.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 9
+  },
+  "specs/2-Trame/features/ambre-spec-trame-rows-and-columns.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 8
+  },
+  "specs/2-Trame/features/ambre-spec-trame-selection.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 20,
+    "para": 0,
+    "passive": 12
+  },
+  "specs/2-Trame/features/ambre-spec-trame-shared-filter.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 9
+  },
+  "specs/2-Trame/features/ambre-spec-trame-sheets.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 3
+  },
+  "specs/2-Trame/features/ambre-spec-trame-sort.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 8
+  },
+  "specs/2-Trame/features/ambre-spec-trame-status-bar.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 6
+  },
+  "specs/2-Trame/features/ambre-spec-trame-undo.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 5
+  },
+  "specs/3-Toile/ambre-spec-toile-schema.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 7
+  },
+  "specs/3-Toile/ambre-toile-inventory.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 3
+  },
+  "specs/3-Toile/features/ambre-spec-toile-auto-layout.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 12
+  },
+  "specs/3-Toile/features/ambre-spec-toile-board-rendering.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 8,
+    "para": 0,
+    "passive": 8
+  },
+  "specs/3-Toile/features/ambre-spec-toile-clipboard.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 9,
+    "para": 0,
+    "passive": 13
+  },
+  "specs/3-Toile/features/ambre-spec-toile-comments.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 15
+  },
+  "specs/3-Toile/features/ambre-spec-toile-connectors.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 8,
+    "para": 0,
+    "passive": 11
+  },
+  "specs/3-Toile/features/ambre-spec-toile-elements.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 10
+  },
+  "specs/3-Toile/features/ambre-spec-toile-embeds.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 20,
+    "para": 0,
+    "passive": 18
+  },
+  "specs/3-Toile/features/ambre-spec-toile-engine.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 14,
+    "para": 0,
+    "passive": 12
+  },
+  "specs/3-Toile/features/ambre-spec-toile-find.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 7
+  },
+  "specs/3-Toile/features/ambre-spec-toile-frames.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 9
+  },
+  "specs/3-Toile/features/ambre-spec-toile-freehand.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 12
+  },
+  "specs/3-Toile/features/ambre-spec-toile-groups.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 5
+  },
+  "specs/3-Toile/features/ambre-spec-toile-import-export.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 11,
+    "para": 0,
+    "passive": 17
+  },
+  "specs/3-Toile/features/ambre-spec-toile-links.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 11
+  },
+  "specs/3-Toile/features/ambre-spec-toile-media.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 10
+  },
+  "specs/3-Toile/features/ambre-spec-toile-menus.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 13
+  },
+  "specs/3-Toile/features/ambre-spec-toile-pdf-export.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 10
+  },
+  "specs/3-Toile/features/ambre-spec-toile-presence.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 9,
+    "para": 0,
+    "passive": 13
+  },
+  "specs/3-Toile/features/ambre-spec-toile-presentation.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 8,
+    "para": 0,
+    "passive": 14
+  },
+  "specs/3-Toile/features/ambre-spec-toile-reactions.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 10
+  },
+  "specs/3-Toile/features/ambre-spec-toile-selection.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 7
+  },
+  "specs/3-Toile/features/ambre-spec-toile-status-bar.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 7
+  },
+  "specs/3-Toile/features/ambre-spec-toile-styles.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 10,
+    "para": 0,
+    "passive": 11
+  },
+  "specs/3-Toile/features/ambre-spec-toile-text-editing.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 9
+  },
+  "specs/3-Toile/features/ambre-spec-toile-tools.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 8,
+    "para": 0,
+    "passive": 9
+  },
+  "specs/3-Toile/features/ambre-spec-toile-undo.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 2
+  },
+  "specs/3-Toile/features/ambre-spec-toile-vector-paths.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 14
+  },
+  "specs/3-Toile/features/ambre-spec-toile-viewport.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 12,
+    "para": 0,
+    "passive": 15
+  },
+  "specs/3-Toile/features/ambre-spec-toile-z-order.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 7
+  },
+  "specs/4-Prose/ambre-prose-inventory.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 3
+  },
+  "specs/4-Prose/ambre-spec-prose-schema.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 8,
+    "para": 0,
+    "passive": 13
+  },
+  "specs/4-Prose/features/ambre-spec-prose-accessibility.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 9
+  },
+  "specs/4-Prose/features/ambre-spec-prose-clipboard.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 13
+  },
+  "specs/4-Prose/features/ambre-spec-prose-comments.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 10,
+    "para": 0,
+    "passive": 26
+  },
+  "specs/4-Prose/features/ambre-spec-prose-cross-references.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 8,
+    "para": 0,
+    "passive": 17
+  },
+  "specs/4-Prose/features/ambre-spec-prose-engine.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 27,
+    "para": 0,
+    "passive": 17
+  },
+  "specs/4-Prose/features/ambre-spec-prose-find-replace.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 4
+  },
+  "specs/4-Prose/features/ambre-spec-prose-footnotes.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 17
+  },
+  "specs/4-Prose/features/ambre-spec-prose-headers-footers.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 8,
+    "para": 0,
+    "passive": 24
+  },
+  "specs/4-Prose/features/ambre-spec-prose-headings.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 12
+  },
+  "specs/4-Prose/features/ambre-spec-prose-images.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 19,
+    "para": 0,
+    "passive": 18
+  },
+  "specs/4-Prose/features/ambre-spec-prose-import-export.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 22,
+    "para": 0,
+    "passive": 12
+  },
+  "specs/4-Prose/features/ambre-spec-prose-inline-styles.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 12
+  },
+  "specs/4-Prose/features/ambre-spec-prose-lists.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 10
+  },
+  "specs/4-Prose/features/ambre-spec-prose-page-rendering.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 13
+  },
+  "specs/4-Prose/features/ambre-spec-prose-pagination.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 24,
+    "para": 0,
+    "passive": 27
+  },
+  "specs/4-Prose/features/ambre-spec-prose-pdf-export.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 0,
+    "passive": 3
+  },
+  "specs/4-Prose/features/ambre-spec-prose-ruler.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 9,
+    "para": 0,
+    "passive": 5
+  },
+  "specs/4-Prose/features/ambre-spec-prose-selection.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 12,
+    "para": 0,
+    "passive": 10
+  },
+  "specs/4-Prose/features/ambre-spec-prose-slash-command.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 10
+  },
+  "specs/4-Prose/features/ambre-spec-prose-spell-check.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 18
+  },
+  "specs/4-Prose/features/ambre-spec-prose-table-of-contents.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 8,
+    "para": 0,
+    "passive": 13
+  },
+  "specs/4-Prose/features/ambre-spec-prose-tables.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 8,
+    "para": 0,
+    "passive": 16
+  },
+  "specs/4-Prose/features/ambre-spec-prose-text-editing.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 7,
+    "para": 0,
+    "passive": 9
+  },
+  "specs/4-Prose/features/ambre-spec-prose-toolbar.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 11,
+    "para": 0,
+    "passive": 5
+  },
+  "specs/4-Prose/features/ambre-spec-prose-track-changes.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 12,
+    "para": 0,
+    "passive": 24
+  },
+  "specs/4-Prose/features/ambre-spec-prose-undo.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 8
+  },
+  "specs/4-Prose/features/ambre-spec-prose-viewport.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 12,
+    "para": 0,
+    "passive": 8
+  },
+  "specs/4-Prose/features/ambre-spec-prose-word-count.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 11
+  },
+  "specs/Todo/ambre-murmure.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 4,
+    "para": 0,
+    "passive": 9
+  },
+  "specs/Todo/ambre-rendez-vous.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 1,
+    "para": 0,
+    "passive": 0
+  },
+  "specs/ambre-roadmap-journal.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 0,
+    "para": 1,
+    "passive": 1
+  },
+  "specs/ambre-roadmap.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 3,
+    "para": 1,
+    "passive": 6
+  },
+  "specs/ambre-spec-template.md": {
+    "ascii": 1,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 11
+  },
+  "specs/security-audit.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 71,
+    "para": 1,
+    "passive": 60
+  }
+}

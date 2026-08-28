@@ -64,6 +64,9 @@ jobs:
       # What the corpus derives: the feature inventory of each application must
       # be what the feature documents say today (`ambre-spec-template.md` §4).
       - run: just inventory
+      # How the English is written: the mechanical half of
+      # `ai/ambre-writing-style.md`, held as a ceiling that only falls.
+      - run: just prose
 
   # ---------------------------------------------------------------------------
   # deny -- supply chain (advisories, licences, sources) plus the zero-knowledge
