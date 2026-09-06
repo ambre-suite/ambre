@@ -688,6 +688,10 @@ impl ToileView {
             ToileEvent::ImportFailed(reason) => {
                 tracing::warn!("Toile import failed: {reason}");
             }
+            // A thread changed or asks for the focus (`toile-comments`). The
+            // pins travel on `DisplayViewport`, and a later slice of the Story
+            // opens the panel. The canvas repaints for neither event today.
+            ToileEvent::CommentsUpdated(_) | ToileEvent::CommentThreadOpened(_) => {}
         }
     }
 

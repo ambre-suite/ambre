@@ -9,5 +9,5 @@
 
 pub use ambre_bus::app::toile::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, FontSpec, FrameId, NodeId,
-    PathType, PlaybackState, Shadow, ShapeKind, StrokePoint, TargetId,
+    PathType, PlaybackState, Shadow, ShapeKind, StrokePoint, TargetId, ThreadId,
 };

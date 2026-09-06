@@ -13,11 +13,11 @@
 //! division of labour as Trame.
 
 pub use ambre_bus::app::toile::{
-    BoolOp, ClipConnector, ClipElement, ClipMembership, ClipValue, ClipboardPayload,
-    DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, End, FindOptions,
-    FindResults, InitContent, PresencePayload, PresenceUpdate, Reaction, ReactionKind,
-    ReactionTally, SelectionStats, SlideChange, TextDelta, ToileCommand, ToileError, ToileEvent,
-    Viewport, ZTarget,
+    BoolOp, ClipConnector, ClipElement, ClipMembership, ClipValue, ClipboardPayload, CommentAnchor,
+    CommentMessage, CommentThread, DisplayConnector, DisplayElement, DisplayGeom, DisplayNode,
+    DisplayViewport, End, FindOptions, FindResults, InitContent, PresencePayload, PresenceUpdate,
+    Reaction, ReactionKind, ReactionTally, SelectionStats, SlideChange, TextDelta, ToileCommand,
+    ToileError, ToileEvent, Viewport, ZTarget,
 };
 pub use ambre_bus::rest::RequestId;
 

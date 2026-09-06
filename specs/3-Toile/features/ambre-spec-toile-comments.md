@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: COMMENTS
 
 **Type:** Vertical (feature)
-**Implementation:** design-only -- no container, no command, no surface.
+**Implementation:** partial -- the model ships, no pin and no panel.
 
 > A user pins a remark on an element or on empty board, and a teammate answers it hours later. The
 > thread is resolved when the point is settled, and it stays readable afterwards.
@@ -14,23 +14,23 @@ synchronous half, and they vanish; a thread must not.
 ## 1. CONTRACT
 
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
-status values are normative in `ambre-spec-template.md`. Nothing below is built: the rows are the
-design, checkable against itself and against the format. One rule of this feature lives with the
+status values are normative in `ambre-spec-template.md`. The model below holds; the pin, the tool
+and the panel do not. One rule of this feature lives with the
 machine it belongs to and is not restated: the comment tool drops a thread where it clicks
 (`TOILE-UI-042`, `features/ambre-spec-toile-tools.md section 1`).
 
 | ID | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|
-| `TOILE-024` | A comment thread MUST be anchored either to a stable `ElementId` or to a free world point, never to a viewport coordinate. | this spec section 3 | not built -- lands with the "Comments" Story (`ambre-roadmap.md` E4) | unimplemented |
+| `TOILE-024` | A comment thread MUST be anchored either to a stable `ElementId` or to a free world point, never to a viewport coordinate. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_thread_anchors_to_an_element_or_to_a_world_point` | verified |
 | `TOILE-025` | A pin whose anchor element is deleted MUST go dangling like a connector: it MUST NOT be rendered and MUST NOT be destroyed. | this spec section 3; `features/ambre-spec-toile-connectors.md section 3` | not built -- lands with the "Comments" Story (`ambre-roadmap.md` E4) | unimplemented |
 | `TOILE-026` | The `DisplayViewport` MUST carry pins and their badges, and MUST NOT stream thread bodies: those are fetched on demand. | this spec section 3; `features/ambre-spec-toile-engine.md section 3` | not built -- lands with the "Comments" Story (`ambre-roadmap.md` E4) | unimplemented |
-| `TOILE-FEAT-011` | Two peers dropping a comment on the same spot MUST mint distinct threads; neither MUST overwrite the other. | this spec section 3 | not built -- lands with the "Comments" Story (`ambre-roadmap.md` E4) | unimplemented |
-| `TOILE-FEAT-012` | Message order in a thread MUST be the `LoroMovableList` order, never the `ts` register: clocks are untrusted. | this spec section 3 | not built -- lands with the "Comments" Story (`ambre-roadmap.md` E4) | unimplemented |
-| `TOILE-FEAT-013` | A message body MUST be a `LoroText`, so a self-edit converges character-wise rather than by whole-string LWW. | this spec section 3 | not built -- lands with the "Comments" Story (`ambre-roadmap.md` E4) | unimplemented |
-| `TOILE-FEAT-014` | A message author MUST be the canonical `UserId` resolved by `ambre-sync`, never a `PeerID`. | this spec section 3; `features/ambre-spec-toile-reactions.md section 5` | not built -- lands with the "Comments" Story (`ambre-roadmap.md` E4) | unimplemented |
-| `TOILE-FEAT-015` | Resolving and reopening a thread MUST be idempotent and convergent, and MUST NOT destroy the thread or its messages. | this spec section 3 | not built -- lands with the "Comments" Story (`ambre-roadmap.md` E4) | unimplemented |
+| `TOILE-FEAT-011` | Two peers dropping a comment on the same spot MUST mint distinct threads; neither MUST overwrite the other. | this spec section 3 | `ambre_toile::logic::convergence_tests::two_peers_commenting_on_one_spot_mint_distinct_threads` | verified |
+| `TOILE-FEAT-012` | Message order in a thread MUST be the `LoroMovableList` order, never the `ts` register: clocks are untrusted. | this spec section 3 | `ambre_toile::logic::convergence_tests::concurrent_replies_converge_in_list_order_not_clock_order`, which gives the earlier reply the later clock | verified |
+| `TOILE-FEAT-013` | A message body MUST be a `LoroText`, so a self-edit converges character-wise rather than by whole-string LWW. | this spec section 3 | `ambre_toile::logic::convergence_tests::concurrent_edits_of_one_message_converge_character_wise` | verified |
+| `TOILE-FEAT-014` | A message author MUST be the canonical `UserId` resolved by `ambre-sync`, never a `PeerID`. | this spec section 3; `features/ambre-spec-toile-reactions.md section 5` | `ambre_toile::logic::convergence_tests::a_message_author_is_the_user_id_of_the_session` | verified |
+| `TOILE-FEAT-015` | Resolving and reopening a thread MUST be idempotent and convergent, and MUST NOT destroy the thread or its messages. | this spec section 3 | `ambre_toile::logic::convergence_tests::concurrent_resolves_converge_and_keep_the_messages` | verified |
 | `TOILE-FEAT-016` | A thread anchored to a deleted element MUST stay valid and simply not render; it MUST NOT be auto-deleted. | this spec section 3 | not built -- lands with the "Comments" Story (`ambre-roadmap.md` E4) | unimplemented |
-| `TOILE-FEAT-017` | A comment command MUST NOT enter the undo stack: `Ctrl+Z` on the board MUST NOT retract a teammate-visible message. | this spec section 3; `features/ambre-spec-toile-undo.md section 1` | not built -- lands with the "Comments" Story (`ambre-roadmap.md` E4) | unimplemented |
+| `TOILE-FEAT-017` | A comment command MUST NOT enter the undo stack: `Ctrl+Z` on the board MUST NOT retract a teammate-visible message. | this spec section 3; `features/ambre-spec-toile-undo.md section 1` | `ambre_toile::logic::convergence_tests::undo_reverts_the_drawing_and_never_the_comment` | verified |
 | `TOILE-UI-022` | A comment pin MUST be painted in screen space and MUST NOT be occluded by board content, whatever the z-order. | this spec section 4; `features/ambre-spec-toile-engine.md section 3` | not built -- lands with the "Comments" Story (`ambre-roadmap.md` E4) | unimplemented |
 | `TOILE-UI-023` | The comments panel MUST hold no authoritative state: it re-reads a thread on `CommentsUpdated` and emits commands for every change. | this spec section 4 | not built -- lands with the "Comments" Story (`ambre-roadmap.md` E4) | unimplemented |
 | `TOILE-UI-024` | A pin badge MUST come from `DisplayViewport.comments` and MUST NOT require reading the panel or the thread bodies. | this spec section 4 | not built -- lands with the "Comments" Story (`ambre-roadmap.md` E4) | unimplemented |
@@ -42,10 +42,9 @@ machine it belongs to and is not restated: the comment tool drops a thread where
 * **Boundary.** none of its own: a thread is written to the document, and `ZK-001` seals every payload
   before it leaves the client. A message body is document content like any other, so the relay reads
   none of it.
-* **Verification.** 0 `verified`, 0 `unverified`, 14 `unimplemented`. Nothing here exists: no
-  container is written, no command name appears in the workspace, and the display viewport carries no
-  pin field. Three sections of three specs described the feature as designed and none said it was
-  unbuilt until the rows did.
+* **Verification.** 7 `verified`, 0 `unverified`, 7 `unimplemented`. Seven two-peer convergence tests
+  hold the model. The seven open rows are the pin, the tool and the panel. `TOILE-025` and
+  `TOILE-FEAT-016` stay open on their rendering clause alone: a thread already outlives its anchor.
 
 ---
 
@@ -55,12 +54,12 @@ The rows describe what the design owes, and each names the rule the Story must b
 
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
-| drops a comment on a note | drops one on the same note | two threads, distinct | both pins, neither overwritten (`TOILE-FEAT-011`) | none -- unbuilt |
-| replies to a thread | replies to it at the same moment | both replies, in list order | the same two replies in the same order on both screens (`TOILE-FEAT-012`) | none -- unbuilt |
-| edits her own message | reads it | one body, merged character-wise | Alice's correction, without losing Bob's read position (`TOILE-FEAT-013`) | none -- unbuilt |
-| resolves a thread | resolves it at the same moment | one resolved flag | one resolved thread, its messages intact (`TOILE-FEAT-015`) | none -- unbuilt |
-| deletes the element a thread is pinned to | reads that thread in the panel | the thread, its anchor pointing at nothing | no pin on the board, and the thread still in the list (`TOILE-FEAT-016`, `TOILE-025`) | none -- unbuilt |
-| posts a message, then presses `Ctrl+Z` | reads the message | the message | the message on both screens, and Alice's last drawing action reverted (`TOILE-FEAT-017`) | none -- unbuilt |
+| drops a comment on a note | drops one on the same note | two threads, distinct | both pins, neither overwritten (`TOILE-FEAT-011`) | `two_peers_commenting_on_one_spot_mint_distinct_threads` |
+| replies to a thread | replies to it at the same moment | both replies, in list order | the same two replies in the same order on both screens (`TOILE-FEAT-012`) | `concurrent_replies_converge_in_list_order_not_clock_order` |
+| edits her own message | reads it | one body, merged character-wise | Alice's correction, without losing Bob's read position (`TOILE-FEAT-013`) | `concurrent_edits_of_one_message_converge_character_wise` |
+| resolves a thread | resolves it at the same moment | one resolved flag | one resolved thread, its messages intact (`TOILE-FEAT-015`) | `concurrent_resolves_converge_and_keep_the_messages` |
+| deletes the element a thread is pinned to | reads that thread in the panel | the thread, its anchor pointing at nothing | no pin on the board, and the thread still in the list (`TOILE-FEAT-016`, `TOILE-025`) | `a_thread_survives_the_deletion_of_its_anchor_element`, for the thread half |
+| posts a message, then presses `Ctrl+Z` | reads the message | the message | the message on both screens, and Alice's last drawing action reverted (`TOILE-FEAT-017`) | `undo_reverts_the_drawing_and_never_the_comment` |
 
 ---
 
@@ -68,9 +67,10 @@ The rows describe what the design owes, and each names the rule the Story must b
 
 **Containers.** The `comments` map, one entry per thread under a minted thread id, each holding its
 anchor, its resolved flag and its ordered messages, every message body a text container
-(`ambre-spec-toile-schema.md section 3`). All five rows of the format are declared `design`.
+(`ambre-spec-toile-schema.md section 3`). The engine seeds the whole thread in one write, so no
+reply mints a rival container (`TOILE-029`).
 
-**The anchor** (`ambre-bus`, to be added):
+**The anchor** (`ambre-bus`):
 
 ```rust
 pub enum CommentAnchor {
@@ -79,11 +79,11 @@ pub enum CommentAnchor {
 }
 ```
 
-**Commands** (`ambre-bus`, to be added): `CreateComment { anchor, body }`, `ReplyComment
-{ thread, body }`, `EditComment { thread, message, body }` and `ResolveThread { thread, resolved }`.
-None enters the history (`TOILE-FEAT-017`).
+**Commands** (`ambre-bus`): `CreateComment { anchor, body, ts }`, `ReplyComment
+{ thread, body, ts }`, `EditComment { thread, message, delta }` and `ResolveThread
+{ thread, resolved }`. None enters the history (`TOILE-FEAT-017`).
 
-**Events** (`ambre-bus`, to be added): `CommentsUpdated(thread)` and `CommentThreadOpened(thread)`.
+**Events** (`ambre-bus`): `CommentsUpdated(thread)` and `CommentThreadOpened(thread)`.
 
 **Steps, when a thread is created:**
 
@@ -108,7 +108,8 @@ as a reaction, and it is written once in
 open on machines nobody controls. The list order is the order the CRDT converges on, and the
 timestamp is shown to the reader and used for nothing else (`TOILE-FEAT-012`).
 
-**Code:** none. No container, no command, no event and no field.
+**Code:** `ambre_toile::logic::state::comments`, and the four commands of
+`ambre_bus::app::toile::ToileCommand`. The viewport derivation carries no pin field yet.
 
 ---
 
@@ -147,21 +148,22 @@ thread when the board says the thread changed (`TOILE-UI-023`).
 | Order is the list order, not the timestamp | a clock is untrusted and unsynchronized, so ordering by it lets a wrong clock rewrite a conversation | sorting by the author's timestamp |
 | A comment is outside the history | `Ctrl+Z` reverts what the user drew. Withdrawing a message a teammate has already read is not an undo, it is a deletion nobody asked for | commenting like any other write |
 | Mentions and notifications are out | a mention needs a notification channel, which is Murmure's subject. Routing between the two applications does not exist | a mention that mails or notifies |
+| The author's clock rides the command | the Logic thread holds no clock, which is why a reaction carries its own `ts` (`features/ambre-spec-toile-reactions.md section 5`) | the engine stamping the message it writes |
+| An edit carries a `TextDelta`, never a whole body | the body is a text container, and a whole body would settle two concurrent edits by replacing one | the edit command of the design sketch |
 
 ---
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The whole feature is unbuilt.** Three specs held its design -- the anchoring, the thread schema
-  and the panel -- and one of them listed a mandatory test belt for it. No command name of it appears
-  in the workspace.
+* **The surface is unbuilt.** The pins, the comment tool and the panel are open rows: the model
+  answers a command and no gesture emits one.
 * **The precedent the body rule cites does not exist** (`TOILE-FEAT-013`). A sticky body is a
-  whole-string register today, not a text container, so building comments on "the sticky pattern"
-  would reproduce the defect rather than the pattern (`TOILE-030`,
-  `ambre-spec-toile-text-editing.md`).
+  whole-string register today, not a text container, so a comment body is the first one of the
+  application (`TOILE-030`, `ambre-spec-toile-text-editing.md`).
 * **Nothing says who may comment.** Whether a viewer may open a thread, and whether a member may
   resolve someone else's, is a permission question no row covers
-  (`ambre-spec-membership.md`).
+  (`ambre-spec-membership.md`). The engine takes the one decision that needs no rule: an edit on
+  another author's message writes nothing.
 * **Nothing says what a resolved thread costs.** A board of a thousand resolved threads carries them
   all in the document and in every export, and no rule prunes or archives them.
 * **A comment reaches no export.** Neither the file round trip nor the image and page exports name a

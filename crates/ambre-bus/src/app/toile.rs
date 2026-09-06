@@ -552,6 +552,52 @@ pub struct ReactionTally {
 }
 
 // -----------------------------------------------------------------------------
+// Comment threads (`toile-comments`) -- the asynchronous half of collaborating
+// on a board. A thread is its own entry under a minted id, so two peers
+// commenting on one spot mint distinct threads (`TOILE-FEAT-011`).
+// -----------------------------------------------------------------------------
+
+/// A comment thread's identity (`toile-comments`). Minted like an
+/// [`ElementId`], and aliased to it for the same reason as [`FrameId`]: one
+/// identity type serves elements, connectors, frames and threads
+/// (`ambre-spec-toile-schema.md section 2`).
+pub type ThreadId = ElementId;
+
+/// What a comment thread hangs on (`toile-comments`, `TOILE-024`). An element
+/// anchor tracks the element through every move; a point anchor carries a remark
+/// on empty board. A viewport coordinate is never an anchor: it means nothing on
+/// the second screen.
+///
+/// Postcard-encoded into the thread map's `anchor` key.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum CommentAnchor {
+    Element(ElementId),
+    Point { x: f64, y: f64 },
+}
+
+/// One message of a thread, read from the CRDT (`toile-comments`). The
+/// `author` is the canonical `UserId`, never a `PeerID` (`TOILE-FEAT-014`). The
+/// reader sees the `ts`, and nothing orders by it (`TOILE-FEAT-012`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommentMessage {
+    pub author: UserId,
+    pub ts: i64,
+    pub body: String,
+}
+
+/// A whole thread, read on demand (`toile-comments`). Derived on read, never
+/// stored: the display viewport carries the pins alone, so a body reaches the UI
+/// only through this projection (`TOILE-026`). `messages` is in the
+/// `LoroMovableList` order.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CommentThread {
+    pub id: ThreadId,
+    pub anchor: CommentAnchor,
+    pub resolved: bool,
+    pub messages: Vec<CommentMessage>,
+}
+
+// -----------------------------------------------------------------------------
 // Auto-layout spec (`toile-auto-layout`) -- the CRDT design intent carried
 // by a frame. The pure `solve_layout` solver that turns this spec + child sizes
 // into positions lives in the engine (`ambre_toile::logic::autolayout`); only the
@@ -844,6 +890,44 @@ pub enum ToileCommand {
         reaction: Option<Reaction>,
     },
 
+    // -- Comment threads (`toile-comments`) --
+    /// Open a thread at `anchor`, seeded with its first message
+    /// (`TOILE-024`). The thread id is minted by the engine, so two peers
+    /// commenting on one spot mint distinct threads (`TOILE-FEAT-011`). `ts` is
+    /// the author's wall clock, shown to the reader and used for nothing else:
+    /// the Logic thread has no clock, and a clock orders nothing
+    /// (`TOILE-FEAT-012`). Outside the undo stack (`TOILE-FEAT-017`); a
+    /// no-op before the session carries a `UserId`.
+    CreateComment {
+        anchor: CommentAnchor,
+        body: String,
+        ts: i64,
+    },
+    /// Append a message to `thread`. Same clock rule and same history exemption
+    /// as [`CreateComment`](Self::CreateComment). A missing thread is a rejected
+    /// no-op.
+    ReplyComment {
+        thread: ThreadId,
+        body: String,
+        ts: i64,
+    },
+    /// Splice the body of the author's own message `message` (its index in the
+    /// thread's message list). The body is a `LoroText`, so a self-edit
+    /// converges character by character (`TOILE-FEAT-013`); the delta is the
+    /// `EditNotes` one. Another author's message, or a missing index, is a
+    /// rejected no-op.
+    EditComment {
+        thread: ThreadId,
+        message: usize,
+        delta: TextDelta,
+    },
+    /// Resolve `thread`, or reopen it. Idempotent and convergent, and it
+    /// destroys neither the thread nor its messages (`TOILE-FEAT-015`).
+    ResolveThread {
+        thread: ThreadId,
+        resolved: bool,
+    },
+
     // -- Vector boolean ops (`toile-vector-paths`) --
     /// Combine the selected shape / path elements with a boolean rule
     /// (`toile-vector-paths`), producing one new `shape:path` element whose
@@ -1118,6 +1202,14 @@ pub enum ToileEvent {
     /// re-reads the derived tally for this target. Emitted on a local `React`; the
     /// derived tally is never carried in the CRDT, only recomputed on read.
     ReactionsUpdated(TargetId),
+    /// A thread changed (`toile-comments`): created, replied to, edited or
+    /// resolved. The panel holds no authoritative state, so it re-reads the
+    /// thread on this event (`TOILE-UI-023`). The bodies never ride the display
+    /// viewport (`TOILE-026`), so the event carries the id alone.
+    CommentsUpdated(ThreadId),
+    /// A thread must take the focus (`toile-comments`): the comment tool just
+    /// dropped it, or a click landed on its pin. The panel opens on it.
+    CommentThreadOpened(ThreadId),
     /// A foreign-file import applied successfully
     /// (`toile-import-export`). Carries the lossy-import summary the UI
     /// surfaces: how many elements landed and which unsupported constructs were

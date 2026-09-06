@@ -42,7 +42,7 @@ and status values are normative in `ambre-spec-template.md`.
 | `TOILE-027` | A Toile document MUST carry `meta.schema_version`, and a document whose version exceeds the compiled `SCHEMA_VERSION` MUST be refused whole. | architecture section 2.D; this spec section 7 | not built -- lands with `ARCH P8` | unimplemented |
 | `TOILE-028` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | not built -- lands with `ARCH P8` | unimplemented |
 | `TOILE-029` | A container under a fixed key MUST be created once, with its parent; it MUST NOT be created by the first peer that writes into it. | this spec section 5 | none, and **the rule fails today** for `presentation/order` and `presentation/config`: `order_list_or_seed` creates both on the first `SetSlideOrder`, so two peers building the deck at the same moment mint rival lists and Loro keeps one. A container under a minted key (`elements/{id}`, `comments/{id}`) is out of reach of the race, and a `media/{hash}` entry loses nothing to it: the two rival maps carry the same bytes. No test drives the concurrent seed | unverified |
-| `TOILE-030` | A sticky or text body MUST converge character by character; it MUST NOT be a register two authors race for whole. | this spec section 3; `features/ambre-spec-toile-text-editing.md section 3` | none, and **the rule fails today**: the body is a flat String under the element's `text` key, so one of two authors typing in the same note loses their sentence. The only `LoroText` in `ambre-toile` is a frame's `notes` | unverified |
+| `TOILE-030` | A sticky or text body MUST converge character by character; it MUST NOT be a register two authors race for whole. | this spec section 3; `features/ambre-spec-toile-text-editing.md section 3` | none, and **the rule fails today** for a sticky and a text element: the body is a flat String under the element's `text` key, so one of two authors typing in the same note loses their sentence. The two `LoroText` bodies of `ambre-toile` are a frame's `notes` and a comment message | unverified |
 
 * **Budget.** none: a format has no operation to budget. What loading a board costs is the remote
   change row of `ambre-spec-budgets.md section 1`, and leg 4 of `ambre-spec-budgets.md section 4`.
@@ -97,11 +97,11 @@ code uses.
 | `presentation/order` | MovableList | position | `frame_id` | list order, no LWW | presentation | built |
 | `presentation/config` | Map | `transition_ms`, `autoplay`, `loop` | `f64`, `bool`, `bool` | the key | presentation | built |
 | `reactions` | Map | `"{target_id}/{user_id}"` | `Binary(postcard(Reaction))` | that user's reaction on that target | reactions | built |
-| `comments` | Map | `thread_id` | one thread map | the thread entry | comments | design |
-| `comments/{id}` | Map | `anchor`, `resolved`, `messages` | `Binary(postcard(CommentAnchor))`, `bool`, the list below | the key | comments | design |
-| `comments/{id}/messages` | MovableList | position | one message map | list order, no LWW | comments | design |
-| `comments/{id}/messages/{n}` | Map | `author`, `ts`, `body` | String, `i64`, the text below | the key | comments | design |
-| `comments/{id}/messages/{n}/body` | Text | -- | the message body | none: char-CRDT | comments | design |
+| `comments` | Map | `thread_id` | one thread map | the thread entry | comments | built |
+| `comments/{id}` | Map | `anchor`, `resolved`, `messages` | `Binary(postcard(CommentAnchor))`, `bool`, the list below | the key | comments | built |
+| `comments/{id}/messages` | MovableList | position | one message map | list order, no LWW | comments | built |
+| `comments/{id}/messages/{n}` | Map | `author`, `ts`, `body` | String, `i64`, the text below | the key | comments | built |
+| `comments/{id}/messages/{n}/body` | Text | -- | the message body | none: char-CRDT | comments | built |
 | `tags` | Map | `tag_id` | `{label, color}` | the tag entry | elements | design |
 | `timer` | Map | `ends_at`, `running` | `i64`, `bool` | the key | reactions | design |
 | `vote_session` | Map | `open`, `budget` | `bool`, `u8` | the key | reactions | design |

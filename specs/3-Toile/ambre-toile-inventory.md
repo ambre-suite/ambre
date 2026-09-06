@@ -31,6 +31,7 @@
 | `toile-undo` | Toile's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a board, and which caches an undo reseeds. | implemented | 1 |  |
 | `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | implemented | 4 | 2 |
 | `toile-z-order` | What overlaps what. | implemented | 5 | 3 |
+| `toile-comments` | A user pins a remark on an element or on empty board, and a teammate answers it hours later. | partial | 14 |  |
 | `toile-connectors` | A user drags from one shape to another and gets an arrow. | partial | 8 | 4 |
 | `toile-elements` | Everything on a board is an element: a note, a shape, a picture, a frame, a stroke. | partial | 9 | 3 |
 | `toile-embeds` | A board holds more than shapes: a web page, and another Ambre document a user edits in place without leaving the board. | partial | 19 | 4 |
@@ -43,7 +44,6 @@
 | `toile-text-editing` | A user double-clicks a note and types into it, where it sits, at the size it will keep. | partial | 7 | 5 |
 | `toile-tools` | A user picks a tool and the board obeys one rule: the gesture shows what it will make, and the release makes it once. | partial | 9 | 2 |
 | `toile-viewport` | A user pans and zooms an endless plane. | partial | 10 | 2 |
-| `toile-comments` | A user pins a remark on an element or on empty board, and a teammate answers it hours later. | design-only | 14 |  |
 | `toile-links` | A user makes an element clickable: it opens a web address, jumps the camera to a frame on this board, or opens another Ambre document. | design-only | 5 |  |
 
-**29 features: 15 implemented, 12 partial, 2 design-only. 244 invariant rows, 71 loose.**
+**29 features: 15 implemented, 13 partial, 1 design-only. 244 invariant rows, 71 loose.**

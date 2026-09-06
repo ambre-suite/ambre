@@ -23,6 +23,7 @@
 //! - [`clipboard`] -- copy / paste / duplicate
 //! - [`import`] -- atomic foreign-file import + media map seeding (`toile-import-export`)
 //! - [`docfile`] -- native `.ambre` export / import (`ambre-spec-docfile.md`)
+//! - [`comments`] -- anchored comment threads (`toile-comments`)
 //! - [`caches`] -- derived `bounds` / index / `layers` maintenance
 //! - [`derive`] -- read-only `DisplayViewport` derivation
 //! - [`codec`] -- pure geometry / (de)serialization helpers
@@ -32,6 +33,7 @@ mod boolean;
 mod caches;
 mod clipboard;
 mod codec;
+mod comments;
 mod connectors;
 mod derive;
 mod docfile;
@@ -79,6 +81,12 @@ const ORDER: &str = "order";
 const CONFIG: &str = "config";
 /// Reactions root map key: `reactions[target_id][user_id]`.
 const REACTIONS: &str = "reactions";
+/// Comment threads root map key: `comments[thread_id]` (`toile-comments`).
+const COMMENTS: &str = "comments";
+/// The commit origin every comment write carries. The `UndoManager` excludes
+/// the prefix, so `Ctrl+Z` on the board never retracts a message a teammate has
+/// already read (`TOILE-FEAT-017`).
+const COMMENT_ORIGIN: &str = "cmt";
 /// Media root map key: `media[blake2b(plaintext)]` -> `{w, h, mime, thumb}`
 /// (`ambre-spec-toile-schema.md`). Created and populated by `toile-media`; an
 /// `image` element's `hash` field is a key here. Dedup: N elements may share one
@@ -195,7 +203,10 @@ impl ToileState {
         let peer = doc.peer_id();
         // Create the undo manager AFTER the initial commit: the board scaffolding
         // is document setup, not a user edit, so it must not sit on the stack.
-        let undo = UndoManager::new(&doc);
+        let mut undo = UndoManager::new(&doc);
+        // Keep every comment write off the undo stack (`TOILE-FEAT-017`): undo
+        // reverts what the user drew, never a message a teammate has read.
+        undo.add_exclude_origin_prefix(COMMENT_ORIGIN);
         Self {
             doc,
             index: SpatialIndex::default(),
@@ -290,6 +301,20 @@ impl ToileState {
             ToileCommand::EditNotes { frame, delta } => self.edit_notes(&frame, &delta),
             ToileCommand::SetAutoLayout { frame, layout } => self.set_auto_layout(&frame, layout),
             ToileCommand::React { target, reaction } => self.react(&target, reaction),
+            ToileCommand::CreateComment { anchor, body, ts } => {
+                self.create_comment(&anchor, &body, ts)
+            }
+            ToileCommand::ReplyComment { thread, body, ts } => {
+                self.reply_comment(&thread, &body, ts)
+            }
+            ToileCommand::EditComment {
+                thread,
+                message,
+                delta,
+            } => self.edit_comment(&thread, message, &delta),
+            ToileCommand::ResolveThread { thread, resolved } => {
+                self.resolve_thread(&thread, resolved)
+            }
             ToileCommand::BooleanOp {
                 op,
                 ids,

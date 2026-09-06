@@ -13,12 +13,12 @@ use ambre_bus::UserId;
 
 use crate::logic::autolayout::{Align, AutoLayout, Direction, Sizing};
 use crate::logic::command::{
-    DisplayGeom, DisplayNode, End, InitContent, PresencePayload, Reaction, ReactionKind, TextDelta,
-    ToileCommand, ToileError, ToileEvent, ZTarget,
+    CommentAnchor, DisplayGeom, DisplayNode, End, InitContent, PresencePayload, Reaction,
+    ReactionKind, TextDelta, ToileCommand, ToileError, ToileEvent, ZTarget,
 };
 use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, NodeId, PathType,
-    ShapeKind, StrokePoint,
+    ShapeKind, StrokePoint, ThreadId,
 };
 use crate::logic::state::ToileState;
 
@@ -2178,6 +2178,370 @@ fn same_user_two_devices_is_one_entry() {
     assert_eq!(
         ta.vote_count, 1,
         "two devices of one user is a single entry, not two votes"
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Comment threads (toile-comments)
+// -----------------------------------------------------------------------------
+
+/// The thread the last command opened. Only `CreateComment` emits
+/// `CommentThreadOpened`, so the event names a freshly minted thread.
+fn opened_thread(out: &crate::logic::command::ToileOutcome) -> ThreadId {
+    out.display
+        .iter()
+        .find_map(|e| match e {
+            ToileEvent::CommentThreadOpened(t) => Some(t.clone()),
+            _ => None,
+        })
+        .expect("expected a CommentThreadOpened event")
+}
+
+/// Open a thread on `anchor` and return its minted id.
+fn comment_on(st: &mut ToileState, anchor: CommentAnchor, body: &str, ts: i64) -> ThreadId {
+    let out = st.handle_command(ToileCommand::CreateComment {
+        anchor,
+        body: body.to_owned(),
+        ts,
+    });
+    assert!(out.update.is_some(), "a comment must produce a CRDT delta");
+    opened_thread(&out)
+}
+
+/// The bodies of a thread's messages, in list order.
+fn bodies(st: &ToileState, thread: &ThreadId) -> Vec<String> {
+    st.comment_thread(thread)
+        .map(|t| t.messages.into_iter().map(|m| m.body).collect())
+        .unwrap_or_default()
+}
+
+#[test]
+fn a_thread_anchors_to_an_element_or_to_a_world_point() {
+    // TOILE-024: both anchor shapes survive the CRDT round trip, and neither is
+    // a viewport coordinate.
+    let mut st = ToileState::new();
+    st.set_user_id(UserId::new());
+    let e = create_sticky(&mut st, Point::ZERO, "note");
+
+    let on_element = comment_on(&mut st, CommentAnchor::Element(e.clone()), "on the note", 0);
+    let on_board = comment_on(
+        &mut st,
+        CommentAnchor::Point { x: 40.0, y: -12.5 },
+        "on the board",
+        0,
+    );
+
+    assert_eq!(
+        st.comment_thread(&on_element).map(|t| t.anchor),
+        Some(CommentAnchor::Element(e)),
+    );
+    assert_eq!(
+        st.comment_thread(&on_board).map(|t| t.anchor),
+        Some(CommentAnchor::Point { x: 40.0, y: -12.5 }),
+    );
+}
+
+#[test]
+fn a_message_author_is_the_user_id_of_the_session() {
+    // TOILE-FEAT-014: the message carries the person, not the session. A board
+    // with no authenticated session writes nothing at all.
+    let me = UserId::new();
+    let mut st = ToileState::new();
+    let out = st.handle_command(ToileCommand::CreateComment {
+        anchor: CommentAnchor::Point { x: 0.0, y: 0.0 },
+        body: "too early".to_owned(),
+        ts: 0,
+    });
+    assert!(
+        out.update.is_none(),
+        "a comment before SessionReady writes nothing"
+    );
+    assert!(st.comment_thread_ids().is_empty());
+
+    st.set_user_id(me);
+    let t = comment_on(&mut st, CommentAnchor::Point { x: 0.0, y: 0.0 }, "hello", 7);
+    let thread = st.comment_thread(&t).expect("the thread reads back");
+    assert_eq!(thread.messages.len(), 1);
+    assert_eq!(thread.messages[0].author, me);
+    assert_eq!(thread.messages[0].ts, 7);
+    assert!(!thread.resolved);
+}
+
+#[test]
+fn two_peers_commenting_on_one_spot_mint_distinct_threads() {
+    // TOILE-FEAT-011: a minted id per thread makes the collision
+    // unrepresentable. Keyed by the anchor element, one of the two would lose.
+    let mut a = ToileState::new();
+    a.set_user_id(UserId::new());
+    let e = create_sticky(&mut a, Point::ZERO, "note");
+
+    let mut b = ToileState::new();
+    b.set_user_id(UserId::new());
+    b.apply_remote(&a.export_snapshot());
+
+    let out_a = a.handle_command(ToileCommand::CreateComment {
+        anchor: CommentAnchor::Element(e.clone()),
+        body: "from A".to_owned(),
+        ts: 0,
+    });
+    let out_b = b.handle_command(ToileCommand::CreateComment {
+        anchor: CommentAnchor::Element(e),
+        body: "from B".to_owned(),
+        ts: 0,
+    });
+    let (ta, tb) = (opened_thread(&out_a), opened_thread(&out_b));
+    assert_ne!(ta, tb, "two peers must mint two thread ids");
+
+    b.apply_remote(&out_a.update.expect("A's comment broadcasts a delta"));
+    a.apply_remote(&out_b.update.expect("B's comment broadcasts a delta"));
+
+    assert_eq!(a.comment_thread_ids(), b.comment_thread_ids());
+    assert_eq!(
+        a.comment_thread_ids().len(),
+        2,
+        "neither thread overwrote the other"
+    );
+    assert_eq!(bodies(&a, &ta), vec!["from A".to_owned()]);
+    assert_eq!(bodies(&a, &tb), vec!["from B".to_owned()]);
+}
+
+#[test]
+fn concurrent_replies_converge_in_list_order_not_clock_order() {
+    // TOILE-FEAT-012: the order both readers see is the list order. The clocks
+    // here disagree with it on purpose: A's reply carries the later timestamp.
+    let mut a = ToileState::new();
+    a.set_user_id(UserId::new());
+    let t = comment_on(&mut a, CommentAnchor::Point { x: 0.0, y: 0.0 }, "first", 50);
+
+    let mut b = ToileState::new();
+    b.set_user_id(UserId::new());
+    b.apply_remote(&a.export_snapshot());
+
+    let da = a
+        .handle_command(ToileCommand::ReplyComment {
+            thread: t.clone(),
+            body: "from A".to_owned(),
+            ts: 900,
+        })
+        .update
+        .expect("A's reply broadcasts a delta");
+    let db = b
+        .handle_command(ToileCommand::ReplyComment {
+            thread: t.clone(),
+            body: "from B".to_owned(),
+            ts: 1,
+        })
+        .update
+        .expect("B's reply broadcasts a delta");
+
+    b.apply_remote(&da);
+    a.apply_remote(&db);
+
+    let seen = bodies(&a, &t);
+    assert_eq!(seen, bodies(&b, &t), "concurrent replies diverged");
+    assert_eq!(seen.len(), 3, "both replies survived");
+    assert_eq!(seen[0], "first", "the seed message stays first");
+}
+
+#[test]
+fn concurrent_edits_of_one_message_converge_character_wise() {
+    // TOILE-FEAT-013: one author on two devices edits their own message. A
+    // whole-string register would drop one edit in silence.
+    let me = UserId::new();
+    let mut a = ToileState::new();
+    a.set_user_id(me);
+    let t = comment_on(&mut a, CommentAnchor::Point { x: 0.0, y: 0.0 }, "typo", 0);
+
+    let mut b = ToileState::new();
+    b.set_user_id(me);
+    b.apply_remote(&a.export_snapshot());
+
+    let da = a
+        .handle_command(ToileCommand::EditComment {
+            thread: t.clone(),
+            message: 0,
+            delta: insert_notes(0, "AAA"),
+        })
+        .update
+        .expect("device A's edit broadcasts a delta");
+    let db = b
+        .handle_command(ToileCommand::EditComment {
+            thread: t.clone(),
+            message: 0,
+            delta: insert_notes(0, "BBB"),
+        })
+        .update
+        .expect("device B's edit broadcasts a delta");
+
+    b.apply_remote(&da);
+    a.apply_remote(&db);
+
+    let merged = bodies(&a, &t);
+    assert_eq!(merged, bodies(&b, &t), "concurrent body edits diverged");
+    let body = merged.first().cloned().unwrap_or_default();
+    assert!(
+        body.contains("AAA") && body.contains("BBB") && body.contains("typo"),
+        "both edits and the original text must survive, got {body:?}"
+    );
+}
+
+#[test]
+fn editing_another_authors_message_is_refused() {
+    // No rule says who may edit whose message
+    // (`features/ambre-spec-toile-comments.md section 6`), so the engine allows
+    // the one case that needs no rule: the author's own message.
+    let mut a = ToileState::new();
+    a.set_user_id(UserId::new());
+    let t = comment_on(&mut a, CommentAnchor::Point { x: 0.0, y: 0.0 }, "mine", 0);
+
+    let mut b = ToileState::new();
+    b.set_user_id(UserId::new());
+    b.apply_remote(&a.export_snapshot());
+
+    let out = b.handle_command(ToileCommand::EditComment {
+        thread: t.clone(),
+        message: 0,
+        delta: insert_notes(0, "hijacked"),
+    });
+    assert!(
+        out.update.is_none(),
+        "a refused edit must not mutate the doc"
+    );
+    assert_eq!(bodies(&b, &t), vec!["mine".to_owned()]);
+}
+
+#[test]
+fn concurrent_resolves_converge_and_keep_the_messages() {
+    // TOILE-FEAT-015: resolving is idempotent and convergent, and it destroys
+    // neither the thread nor its messages.
+    let mut a = ToileState::new();
+    a.set_user_id(UserId::new());
+    let t = comment_on(
+        &mut a,
+        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        "settled?",
+        0,
+    );
+
+    let mut b = ToileState::new();
+    b.set_user_id(UserId::new());
+    b.apply_remote(&a.export_snapshot());
+
+    let da = a
+        .handle_command(ToileCommand::ResolveThread {
+            thread: t.clone(),
+            resolved: true,
+        })
+        .update
+        .expect("A's resolve broadcasts a delta");
+    let db = b
+        .handle_command(ToileCommand::ResolveThread {
+            thread: t.clone(),
+            resolved: true,
+        })
+        .update
+        .expect("B's resolve broadcasts a delta");
+
+    b.apply_remote(&da);
+    a.apply_remote(&db);
+
+    let ra = a.comment_thread(&t).expect("A still holds the thread");
+    let rb = b.comment_thread(&t).expect("B still holds the thread");
+    assert_eq!(ra, rb, "concurrent resolves diverged");
+    assert!(ra.resolved, "the thread reads resolved on both peers");
+    assert_eq!(ra.messages.len(), 1, "resolving keeps the messages");
+
+    // Idempotent: resolving an already-resolved thread writes nothing.
+    let again = a.handle_command(ToileCommand::ResolveThread {
+        thread: t.clone(),
+        resolved: true,
+    });
+    assert!(again.update.is_none(), "a redundant resolve is not a write");
+
+    // Reopening restores the thread whole.
+    a.handle_command(ToileCommand::ResolveThread {
+        thread: t.clone(),
+        resolved: false,
+    });
+    let reopened = a.comment_thread(&t).expect("the thread survives a reopen");
+    assert!(!reopened.resolved);
+    assert_eq!(reopened.messages.len(), 1);
+}
+
+#[test]
+fn a_thread_survives_the_deletion_of_its_anchor_element() {
+    // TOILE-FEAT-016 / TOILE-025: the element may come back through an undo.
+    // Deleting the discussion because the drawing changed destroys the record of
+    // why it changed. The board stops painting the pin, and that half belongs to
+    // the derived viewport.
+    let mut st = ToileState::new();
+    st.set_user_id(UserId::new());
+    let e = create_sticky(&mut st, Point::ZERO, "note");
+    let t = comment_on(
+        &mut st,
+        CommentAnchor::Element(e.clone()),
+        "about the note",
+        0,
+    );
+
+    st.handle_command(ToileCommand::DeleteElements {
+        ids: vec![e.clone()],
+    });
+
+    let thread = st
+        .comment_thread(&t)
+        .expect("the thread outlives its anchor");
+    assert_eq!(thread.anchor, CommentAnchor::Element(e));
+    assert_eq!(thread.messages.len(), 1);
+    assert_eq!(st.comment_thread_ids(), vec![t]);
+}
+
+#[test]
+fn undo_reverts_the_drawing_and_never_the_comment() {
+    // TOILE-FEAT-017: Ctrl+Z reverts what the user drew. Withdrawing a message a
+    // teammate has already read is a deletion nobody asked for.
+    let mut st = ToileState::new();
+    st.set_user_id(UserId::new());
+    let e = create_sticky(&mut st, Point::ZERO, "note");
+    let t = comment_on(&mut st, CommentAnchor::Element(e), "already read", 0);
+
+    st.handle_command(ToileCommand::Undo);
+
+    assert_eq!(
+        st.element_count(),
+        0,
+        "undo reverts the last drawing action"
+    );
+    assert_eq!(
+        bodies(&st, &t),
+        vec!["already read".to_owned()],
+        "the message stays on the board"
+    );
+
+    // The comment left no item of its own either: a second undo finds an empty
+    // stack rather than the thread.
+    let out = st.handle_command(ToileCommand::Undo);
+    assert!(out.update.is_none(), "the undo stack holds no comment item");
+    assert_eq!(bodies(&st, &t).len(), 1);
+}
+
+#[test]
+fn replying_to_a_missing_thread_is_a_rejected_no_op() {
+    let mut st = ToileState::new();
+    st.set_user_id(UserId::new());
+    let out = st.handle_command(ToileCommand::ReplyComment {
+        thread: ElementId("ghost".to_owned()),
+        body: "nobody".to_owned(),
+        ts: 0,
+    });
+    assert!(
+        out.update.is_none(),
+        "a rejected reply must not mutate the doc"
+    );
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::Error(ToileError::NoSuchElement(_)))),
     );
 }
 
